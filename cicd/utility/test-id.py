@@ -10,6 +10,7 @@
 ##		test-id.py --at WHEN [N]  the same for a past time, "YYYY-MM-DD HH:MM[:SS]" local
 ##		test-id.py --decode ID    the time an ID stands for
 ##		test-id.py --check        every test has a well-formed ID and no two share one
+##		test-id.py --annotate     copy cargo test output, each result line as status, ID, name
 ##	Exit: 0 fine, 1 --check found a problem, 2 bad arguments.
 ##	History: At bottom of script.
 
@@ -31,6 +32,9 @@ ROOT = Path(__file__).resolve().parents[2]
 ID_RE = re.compile(r"^\s*(?://|#+)\s*(?:-\s*)?Test ID:\s*(\S*)\s*$")
 TEST_ATTR_RE = re.compile(r"^\s*#\[test\]\s*$")
 ATTR_RE = re.compile(r"^\s*#\[.*\]\s*$")
+MOD_RE = re.compile(r"^(\t*)(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*\{")
+FN_RE = re.compile(r"\bfn\s+(\w+)")
+RESULT_RE = re.compile(r"^test (\S+) \.\.\. (.*)$")
 SCRIPT_EXTS = {".bash", ".py", ".ps1"}
 
 ## Scripts under cicd/tests that are not tests themselves: drivers, fixtures
@@ -84,25 +88,64 @@ def fScriptTests():
 			yield path
 
 
-def fFindIds():
-	##	Every test as (where, id or None). A Rust test's ID sits above its whole
-	##	attribute block, so a #[cfg] ahead of #[test] does not hide it.
-	found = []
+def fRustTests():
+	##	Every Rust test as (where, id or None, name as cargo prints it). A
+	##	test's ID sits above its whole attribute block, so a #[cfg] ahead of
+	##	#[test] does not hide it. The module path comes from the indent of each
+	##	"mod x {", which rustfmt keeps exact.
 	for path in fRustFiles():
 		lines = path.read_text(encoding="utf-8").splitlines()
+		base = [] if path.stem == "main" else [path.stem]
+		mods = []
 		for n, line in enumerate(lines):
+			m = MOD_RE.match(line)
+			if m:
+				mods.append((m.group(1), m.group(2)))
+				continue
+			if mods and line.startswith(mods[-1][0] + "}"):
+				mods.pop()
+				continue
 			if not TEST_ATTR_RE.match(line):
 				continue
 			top = n
 			while top > 0 and ATTR_RE.match(lines[top - 1]):
 				top -= 1
 			m = ID_RE.match(lines[top - 1]) if top else None
-			found.append((f"{path.relative_to(ROOT)}:{n + 1}", m.group(1) if m else None))
+			fn = next((f.group(1) for f in map(FN_RE.search, lines[n + 1:n + 20]) if f), "?")
+			name = "::".join(base + [mod for _, mod in mods] + [fn])
+			yield f"{path.relative_to(ROOT)}:{n + 1}", m.group(1) if m else None, name
+
+
+def fFindIds():
+	##	Every test as (where, id or None).
+	found = [(where, tid) for where, tid, _ in fRustTests()]
 	for path in fScriptTests():
 		head = path.read_text(encoding="utf-8").splitlines()[:60]
 		ids = [m.group(1) for m in map(ID_RE.match, head) if m]
 		found.append((str(path.relative_to(ROOT)), ids[0] if ids else None))
 	return found
+
+
+def fAnnotate():
+	##	A filter on cargo test's stdout, so every other line goes through as is.
+	##	It reads to the end, so cargo never sees a closed pipe.
+	ids = {name: tid for _, tid, name in fRustTests()}
+	sys.stdin.reconfigure(errors="surrogateescape")
+	sys.stdout.reconfigure(errors="surrogateescape")
+	missing = 0
+	for line in sys.stdin:
+		m = RESULT_RE.match(line.rstrip("\n"))
+		if not m:
+			print(line, end="", flush=True)
+			continue
+		name, status = m.groups()
+		tid = ids.get(name)
+		missing += tid is None
+		status, _, why = status.partition(", ")
+		print(f"{status:<7} {tid or '-------':<7}  {name}{'  (' + why + ')' if why else ''}", flush=True)
+	if missing:
+		print(f"WARNING: {missing} test(s) above have no ID found for them", flush=True)
+	return 0
 
 
 def fCheck():
@@ -133,10 +176,13 @@ def main():
 	ap.add_argument("--at", metavar="WHEN")
 	ap.add_argument("--decode", metavar="ID")
 	ap.add_argument("--check", action="store_true")
+	ap.add_argument("--annotate", action="store_true")
 	args = ap.parse_args()
 
 	if args.check:
 		return fCheck()
+	if args.annotate:
+		return fAnnotate()
 	if args.decode:
 		if not re.fullmatch(r"[0-9A-Za-z]+", args.decode):
 			ap.error(f"not base 62: {args.decode}")
@@ -167,3 +213,4 @@ if __name__ == "__main__":
 
 ##	History:
 ##		- 20260926: Created.
+##		- 20260927: --annotate, for the test lines cicd prints.

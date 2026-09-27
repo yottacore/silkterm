@@ -163,6 +163,17 @@ fEcho_Force(){ fEcho_ResetBlankCounter; fEcho "$*"; }
 _letterbox="••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
 fSection(){ fEcho_Clean; fEcho_Clean "${_letterbox}"; fEcho "$*"; }
 fDie(){ { fEcho_Force "FAILED: $*"; echo; } >&2; exit 1; }
+## A test script's ID, from the "Test ID:" line in its header.
+fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/$1" 2>/dev/null || true; }
+## Runs cargo test with each result line as status, test ID and name. Every other
+## line goes through untouched, and the command's own exit status is kept.
+fTestLines(){
+	if [[ -x "${root}/cicd/utility/test-id.py" ]] && command -v python3 >/dev/null 2>&1; then
+		"$@" | "${root}/cicd/utility/test-id.py" --annotate
+	else
+		"$@"
+	fi
+}
 ## True when a process here is running the file at $1. Reads /proc, since fuser is
 ## not on every distro. A Windows build in the synced dir is never run from there.
 fInUse(){ local want exe; want="$(readlink -f "$1" 2>/dev/null)" || return 1; [[ -n "$want" ]] || return 1
@@ -327,7 +338,7 @@ if ((gate)); then
 		fEcho_Clean "lints skipped (clippy unavailable)"
 	fi
 	fSection "Gate 3/3  Tests"
-	"${TEST_CMD[@]}"
+	fTestLines "${TEST_CMD[@]}"
 	fEcho "OK: tests passed"
 	fSection "${APP_NAME} gate: PASSED."
 	fEcho_Clean
@@ -553,7 +564,7 @@ fSection "3/8  Regression tests"
 fCorpusHashes(){ find "${root}/cicd/tests/fuzz-corpus" -type f -exec sha256sum {} + 2>/dev/null | sort; }
 corpusBefore=""
 if [[ -d "${root}/cicd/tests/fuzz-corpus" ]]; then corpusBefore="$(fCorpusHashes)"; fi
-"${TEST_CMD[@]}"
+fTestLines "${TEST_CMD[@]}"
 if [[ -n "${LINT_CMD+x}" ]] && ((${#LINT_CMD[@]})); then
 	if "${LINT_PROBE[@]}" >/dev/null 2>&1; then
 		"${LINT_CMD[@]}"
@@ -597,7 +608,7 @@ fi
 ## reproduces it.
 if [[ -n "${FUZZ_CMD+x}" ]] && ((${#FUZZ_CMD[@]})) && ((${FUZZ_SECS:-0} > 0)); then
 	fEcho "Fuzzing, ${FUZZ_SECS}s per target ..."
-	env "SILK_FUZZ_SECS=${FUZZ_SECS}" "${FUZZ_CMD[@]}" || fDie "fuzz found something"
+	fTestLines env "SILK_FUZZ_SECS=${FUZZ_SECS}" "${FUZZ_CMD[@]}" || fDie "fuzz found something"
 	fEcho "OK: fuzz clean"
 fi
 if [[ -n "${DENY_CMD+x}" ]] && ((${#DENY_CMD[@]})); then
@@ -612,130 +623,130 @@ fi
 ## A release may only publish what was built from the source being tagged.
 if [[ -x "${root}/cicd/tests/release/run.bash" ]]; then
 	fEcho_Clean "release provenance ..."
-	"${root}/cicd/tests/release/run.bash" >/dev/null || fDie "release provenance test failed"
-	fEcho "OK: release provenance"
+	"${root}/cicd/tests/release/run.bash" >/dev/null || fDie "release provenance test failed ($(fTestId cicd/tests/release/run.bash))"
+	fEcho "OK: release provenance ($(fTestId cicd/tests/release/run.bash))"
 fi
 ## Installer and rig hygiene: no secret on a command line, no plain-http
 ## redirect, no adopting somebody else's directory in a shared temp folder.
 if [[ -x "${root}/cicd/tests/install/run.bash" ]]; then
 	fEcho_Clean "installer hygiene ..."
-	"${root}/cicd/tests/install/run.bash" >/dev/null || fDie "installer hygiene test failed"
-	fEcho "OK: installer hygiene"
+	"${root}/cicd/tests/install/run.bash" >/dev/null || fDie "installer hygiene test failed ($(fTestId cicd/tests/install/run.bash))"
+	fEcho "OK: installer hygiene ($(fTestId cicd/tests/install/run.bash))"
 fi
 ## The packaging step and the Windows pipeline both look for binaries stage 5
 ## built, and CARGO_TARGET_DIR decides where those are.
 if [[ -x "${root}/cicd/tests/packaging/run.bash" ]]; then
 	fEcho_Clean "packaging paths ..."
-	"${root}/cicd/tests/packaging/run.bash" >/dev/null || fDie "packaging path test failed"
-	fEcho "OK: packaging paths"
+	"${root}/cicd/tests/packaging/run.bash" >/dev/null || fDie "packaging path test failed ($(fTestId cicd/tests/packaging/run.bash))"
+	fEcho "OK: packaging paths ($(fTestId cicd/tests/packaging/run.bash))"
 fi
 ## Renaming the project has to leave a tree that still builds. Skipped under
 ## --quick: it clones the repository.
 if ((! quick)) && [[ -x "${root}/cicd/tests/rename/run.bash" ]]; then
 	fEcho_Clean "project rename ..."
-	"${root}/cicd/tests/rename/run.bash" >/dev/null || fDie "project rename test failed"
-	fEcho "OK: project rename"
+	"${root}/cicd/tests/rename/run.bash" >/dev/null || fDie "project rename test failed ($(fTestId cicd/tests/rename/run.bash))"
+	fEcho "OK: project rename ($(fTestId cicd/tests/rename/run.bash))"
 fi
 ## The git hooks act on a commit or a push, where a mistake is awkward to undo.
 if [[ -x "${root}/cicd/tests/hooks/run.bash" ]]; then
 	fEcho_Clean "git hooks ..."
-	"${root}/cicd/tests/hooks/run.bash" >/dev/null || fDie "git hook test failed"
-	fEcho "OK: git hooks"
+	"${root}/cicd/tests/hooks/run.bash" >/dev/null || fDie "git hook test failed ($(fTestId cicd/tests/hooks/run.bash))"
+	fEcho "OK: git hooks ($(fTestId cicd/tests/hooks/run.bash))"
 fi
 ## The publish script commits and pushes, so nothing may reach a shell inside it.
 if [[ -x "${root}/cicd/tests/publish/run.bash" ]]; then
 	fEcho_Clean "publish script safety ..."
-	"${root}/cicd/tests/publish/run.bash" >/dev/null || fDie "publish script safety test failed"
-	fEcho "OK: publish script safety"
+	"${root}/cicd/tests/publish/run.bash" >/dev/null || fDie "publish script safety test failed ($(fTestId cicd/tests/publish/run.bash))"
+	fEcho "OK: publish script safety ($(fTestId cicd/tests/publish/run.bash))"
 fi
 ## The harness's own exit code, which once printed OK after running no scenes.
 if [[ -x "${root}/cicd/tests/scroll/verdict-test.bash" ]]; then
 	fEcho_Clean "scroll harness verdict ..."
-	"${root}/cicd/tests/scroll/verdict-test.bash" >/dev/null || fDie "scroll harness verdict test failed"
-	fEcho "OK: scroll harness verdict"
+	"${root}/cicd/tests/scroll/verdict-test.bash" >/dev/null || fDie "scroll harness verdict test failed ($(fTestId cicd/tests/scroll/verdict-test.bash))"
+	fEcho "OK: scroll harness verdict ($(fTestId cicd/tests/scroll/verdict-test.bash))"
 fi
 ## The demo recorder's own window manager session, which once wrote over the
 ## desktop's settings and outlived the recording.
 if [[ -x "${root}/cicd/tests/demo/run.py" ]]; then
 	fEcho_Clean "demo recorder session ..."
-	"${root}/cicd/tests/demo/run.py" >/dev/null || fDie "demo recorder session test failed"
-	fEcho "OK: demo recorder session"
+	"${root}/cicd/tests/demo/run.py" >/dev/null || fDie "demo recorder session test failed ($(fTestId cicd/tests/demo/run.py))"
+	fEcho "OK: demo recorder session ($(fTestId cicd/tests/demo/run.py))"
 fi
 ## The showdown table writers, which once took quick, scaled and wrong-grid runs.
 if [[ -x "${root}/cicd/tests/showdown/run.py" ]]; then
 	fEcho_Clean "showdown table writers ..."
-	"${root}/cicd/tests/showdown/run.py" >/dev/null || fDie "showdown table test failed"
-	fEcho "OK: showdown table writers"
+	"${root}/cicd/tests/showdown/run.py" >/dev/null || fDie "showdown table test failed ($(fTestId cicd/tests/showdown/run.py))"
+	fEcho "OK: showdown table writers ($(fTestId cicd/tests/showdown/run.py))"
 fi
 ## The startup gates, which once marked a run as seen while it was being written.
 if [[ -x "${root}/cicd/tests/gates/run.bash" ]]; then
 	fEcho_Clean "startup gates ..."
-	"${root}/cicd/tests/gates/run.bash" >/dev/null || fDie "startup gate test failed"
-	fEcho "OK: startup gates"
+	"${root}/cicd/tests/gates/run.bash" >/dev/null || fDie "startup gate test failed ($(fTestId cicd/tests/gates/run.bash))"
+	fEcho "OK: startup gates ($(fTestId cicd/tests/gates/run.bash))"
 fi
 ## This script's own steps: the build retry, the dogfood tag, the options, the
 ## running-copy check, the build number and the host line.
 if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
 	fEcho_Clean "pipeline steps ..."
-	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed"
-	fEcho "OK: pipeline steps"
+	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed ($(fTestId cicd/tests/engine/run.bash))"
+	fEcho "OK: pipeline steps ($(fTestId cicd/tests/engine/run.bash))"
 fi
 ## Stage 0, which has to stop a diverged tree before anything is built.
 if [[ -x "${root}/cicd/tests/sync/run.bash" ]]; then
 	fEcho_Clean "remote sync ..."
-	"${root}/cicd/tests/sync/run.bash" >/dev/null || fDie "remote sync test failed"
-	fEcho "OK: remote sync"
+	"${root}/cicd/tests/sync/run.bash" >/dev/null || fDie "remote sync test failed ($(fTestId cicd/tests/sync/run.bash))"
+	fEcho "OK: remote sync ($(fTestId cicd/tests/sync/run.bash))"
 fi
 ## The rotation that prunes run logs and flamegraphs.
 if [[ -x "${root}/cicd/tests/rotate/run.bash" ]]; then
 	fEcho_Clean "log rotation ..."
-	"${root}/cicd/tests/rotate/run.bash" >/dev/null || fDie "log rotation test failed"
-	fEcho "OK: log rotation"
+	"${root}/cicd/tests/rotate/run.bash" >/dev/null || fDie "log rotation test failed ($(fTestId cicd/tests/rotate/run.bash))"
+	fEcho "OK: log rotation ($(fTestId cicd/tests/rotate/run.bash))"
 fi
 ## One tool pin list for both pipelines, and the docs quoting it.
 if [[ -x "${root}/cicd/tests/pins/run.bash" ]]; then
 	fEcho_Clean "tool pins ..."
-	"${root}/cicd/tests/pins/run.bash" >/dev/null || fDie "tool pin test failed"
-	fEcho "OK: tool pins"
+	"${root}/cicd/tests/pins/run.bash" >/dev/null || fDie "tool pin test failed ($(fTestId cicd/tests/pins/run.bash))"
+	fEcho "OK: tool pins ($(fTestId cicd/tests/pins/run.bash))"
 fi
 ## The PowerShell lint this stage gates on has to fail on a finding.
 if [[ -x "${root}/cicd/tests/pslint/run.bash" ]]; then
 	fEcho_Clean "PowerShell lint ..."
-	"${root}/cicd/tests/pslint/run.bash" >/dev/null || fDie "PowerShell lint test failed"
-	fEcho "OK: PowerShell lint"
+	"${root}/cicd/tests/pslint/run.bash" >/dev/null || fDie "PowerShell lint test failed ($(fTestId cicd/tests/pslint/run.bash))"
+	fEcho "OK: PowerShell lint ($(fTestId cicd/tests/pslint/run.bash))"
 fi
 ## The Windows runner, which steps over a box that is off.
 if [[ -x "${root}/cicd/tests/win-remote/run.bash" ]]; then
 	fEcho_Clean "windows runner ..."
-	"${root}/cicd/tests/win-remote/run.bash" >/dev/null || fDie "windows runner test failed"
-	fEcho "OK: windows runner"
+	"${root}/cicd/tests/win-remote/run.bash" >/dev/null || fDie "windows runner test failed ($(fTestId cicd/tests/win-remote/run.bash))"
+	fEcho "OK: windows runner ($(fTestId cicd/tests/win-remote/run.bash))"
 fi
 ## The parts of the Windows pipeline that run anywhere.
 if [[ -x "${root}/cicd/tests/cicd-win/run.bash" ]]; then
 	fEcho_Clean "windows pipeline pieces ..."
-	"${root}/cicd/tests/cicd-win/run.bash" >/dev/null || fDie "windows pipeline test failed"
-	fEcho "OK: windows pipeline pieces"
+	"${root}/cicd/tests/cicd-win/run.bash" >/dev/null || fDie "windows pipeline test failed ($(fTestId cicd/tests/cicd-win/run.bash))"
+	fEcho "OK: windows pipeline pieces ($(fTestId cicd/tests/cicd-win/run.bash))"
 fi
 ## Every table of contents, which no markdown linter regenerates. design.md had
 ## been missing eight of its headings.
 if [[ -x "${root}/cicd/tests/toc/run.py" ]]; then
 	fEcho_Clean "tables of contents ..."
-	"${root}/cicd/tests/toc/run.py" >/dev/null || fDie "a table of contents is out of date - run cicd/tests/toc/run.py --fix"
-	fEcho "OK: tables of contents"
+	"${root}/cicd/tests/toc/run.py" >/dev/null || fDie "a table of contents is out of date - run cicd/tests/toc/run.py --fix ($(fTestId cicd/tests/toc/run.py))"
+	fEcho "OK: tables of contents ($(fTestId cicd/tests/toc/run.py))"
 fi
 ## Every markdown table, laid out as the README's generated one is. Hand-written
 ## ones had drifted to trailing pipes and ragged columns.
 if [[ -x "${root}/cicd/tests/tables/run.py" ]]; then
 	fEcho_Clean "markdown tables ..."
-	"${root}/cicd/tests/tables/run.py" >/dev/null || fDie "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
-	fEcho "OK: markdown tables"
+	"${root}/cicd/tests/tables/run.py" >/dev/null || fDie "a markdown table is not canonical - run cicd/tests/tables/run.py --fix ($(fTestId cicd/tests/tables/run.py))"
+	fEcho "OK: markdown tables ($(fTestId cicd/tests/tables/run.py))"
 fi
 ## Blank lines between top-level bullets and around headings, which no markdown
 ## linter here checks. The README and style guide had drifted.
 if [[ -x "${root}/cicd/tests/docs/run.py" ]]; then
 	fEcho_Clean "markdown spacing ..."
-	docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fDie "a markdown file is missing a blank line - see above"; }
-	fEcho "OK: markdown spacing"
+	docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fDie "a markdown file is missing a blank line - see above ($(fTestId cicd/tests/docs/run.py))"; }
+	fEcho "OK: markdown spacing ($(fTestId cicd/tests/docs/run.py))"
 fi
 ## Every test carries an ID, and no two share one.
 if [[ -x "${root}/cicd/utility/test-id.py" ]]; then
@@ -747,14 +758,14 @@ fi
 ## and stopped every SilkTerm on a shared box.
 if [[ -x "${root}/cicd/tests/wingui/harness-test.bash" ]]; then
 	fEcho_Clean "windows scenario harness ..."
-	"${root}/cicd/tests/wingui/harness-test.bash" >/dev/null || fDie "windows scenario harness test failed"
-	fEcho "OK: windows scenario harness"
+	"${root}/cicd/tests/wingui/harness-test.bash" >/dev/null || fDie "windows scenario harness test failed ($(fTestId cicd/tests/wingui/harness-test.bash))"
+	fEcho "OK: windows scenario harness ($(fTestId cicd/tests/wingui/harness-test.bash))"
 fi
 ## The wine launcher, which once left dead file types on the desktop.
 if [[ -x "${root}/cicd/tests/wine/run.bash" ]]; then
 	fEcho_Clean "wine launcher ..."
-	"${root}/cicd/tests/wine/run.bash" >/dev/null || fDie "wine launcher test failed"
-	fEcho "OK: wine launcher"
+	"${root}/cicd/tests/wine/run.bash" >/dev/null || fDie "wine launcher test failed ($(fTestId cicd/tests/wine/run.bash))"
+	fEcho "OK: wine launcher ($(fTestId cicd/tests/wine/run.bash))"
 fi
 ## The wallpaper gallery and contact sheet are rendered, so they go stale in
 ## silence when the pack changes. Nine removed images sat in both for a month.
@@ -781,7 +792,7 @@ if ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})); t
 	fEcho_Clean "scroll regression harness (headless, X11) ..."
 	scrollRc=0; "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" || scrollRc=$?
 	case "${scrollRc}" in
-		0) fEcho "OK: scroll harness (X11)" ;;
+		0) fEcho "OK: scroll harness (X11) ($(fTestId "${SCROLL_HARNESS[0]}"))" ;;
 		3) fEcho "WARNING: scroll harness (X11) skipped, nothing was measured" ;;
 		*) fDie "scroll regression harness reported a regression (X11)" ;;
 	esac
@@ -789,7 +800,7 @@ if ((! quick)) && [[ -n "${SCROLL_HARNESS+x}" ]] && ((${#SCROLL_HARNESS[@]})); t
 		fEcho_Clean "scroll regression harness (headless, Wayland) ..."
 		scrollRc=0; "${root}/${SCROLL_HARNESS[0]}" "${SCROLL_HARNESS[@]:1}" --wayland || scrollRc=$?
 		case "${scrollRc}" in
-			0) fEcho "OK: scroll harness (Wayland)" ;;
+			0) fEcho "OK: scroll harness (Wayland) ($(fTestId "${SCROLL_HARNESS[0]}"))" ;;
 			3) fEcho "WARNING: scroll harness (Wayland) skipped, nothing was measured" ;;
 			*) fDie "scroll regression harness reported a regression (Wayland)" ;;
 		esac
@@ -803,7 +814,7 @@ if [[ -n "${LAUNCHER_HARNESS+x}" ]] && ((${#LAUNCHER_HARNESS[@]})); then
 	if command -v pwsh >/dev/null 2>&1; then
 		fEcho_Clean "dogfood launcher harness ..."
 		if pwsh -NoProfile -File "${root}/${LAUNCHER_HARNESS[0]}" "${LAUNCHER_HARNESS[@]:1}"; then
-			fEcho "OK: launcher harness"
+			fEcho "OK: launcher harness ($(fTestId "${LAUNCHER_HARNESS[0]}"))"
 		else
 			fDie "dogfood launcher harness failed"
 		fi
