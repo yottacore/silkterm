@@ -377,7 +377,8 @@ rows:
 		label: File or folder
 		kind: text
 		indent: 1
-		setting: wallpaper.image
+		setting: wallpaper.image, wallpaper.rotate.folder
+		help: "An image, or with Rotate folder on, a folder of them. A named image wins over the folder."
 
 	BgFit:
 		label: Fit

@@ -463,8 +463,10 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		if key != Key::None
 			&& !matches!(kind, Kind::Dual { .. } | Kind::Buttons(_) | Kind::ShellList)
 		{
-			match paths.len() {
-				1 => settings.push((key, keep_all(paths))),
+			// A text box may stand for more than one setting, as "File or folder"
+			// does, so a revert comments out each. Anything else holds one value.
+			match (paths.len(), &kind) {
+				(1, _) | (2.., Kind::Text) => settings.push((key, keep_all(paths))),
 				_ => problems.push(format!("rows.{name}: needs exactly one setting path")),
 			}
 		}
