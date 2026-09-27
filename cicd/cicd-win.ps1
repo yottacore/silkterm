@@ -346,6 +346,14 @@ function fHasLocalPaths {
 	return $false
 }
 
+## Keep the newest $Keep - 1 run logs in $Dir, leaving room for the one about to
+## be written.
+function fRotateLogs {
+	param([Parameter(Mandatory)][string]$Dir, [Parameter(Mandatory)][int]$Keep)
+	Get-ChildItem -LiteralPath $Dir -Filter "run_*.log" -File | Sort-Object Name -Descending |
+		Select-Object -Skip ($Keep - 1) | Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
 ## Build one release target. Returns a result object on success, or $null when an
 ## ARM target is skipped (x86_64 failures abort - house rule: always build both).
 function fBuildTarget {
@@ -806,8 +814,7 @@ function fMain {
 	## Start the transcript once past the preflight, dropping all but the newest
 	## few from earlier runs. The names sort by time.
 	New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
-	Get-ChildItem -LiteralPath $LogDir -Filter "run_*.log" -File | Sort-Object Name -Descending |
-		Select-Object -Skip ($LogKeep - 1) | Remove-Item -Force -ErrorAction SilentlyContinue
+	fRotateLogs $LogDir $LogKeep
 	try { Start-Transcript -LiteralPath (Join-Path $LogDir "run_$stamp.log") | Out-Null } catch {}
 
 	## Stage 0: remote sync.

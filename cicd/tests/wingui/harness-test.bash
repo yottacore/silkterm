@@ -32,7 +32,7 @@ cat > "${work}/win-remote" <<'STUB'
 while [[ "${1:-}" == --* ]]; do [[ "$1" == --host ]] && shift; shift; done
 echo "$*" >> "${STUB_LOG}"
 case "${1:-}" in
-	hosts) echo "box      up    192.0.2.1" ;;
+	hosts) if [[ -n "${STUB_DOWN:-}" ]]; then echo "box      down  192.0.2.1"; else echo "box      up    192.0.2.1"; fi ;;
 	run) cp "$2" "${STUB_DIR}/launcher-$(date +%s%N).ps1"; echo "VERDICT pass" ;;
 esac
 STUB
@@ -48,6 +48,14 @@ fNamesCommit(){ grep -qF "testing ${commit}" <<< "${out}" ;}
 fCheck "the binary under test is sent to the box" fSent
 fCheck "the scenario runs the binary sent, not the box's own build" fRunsSent
 fCheck "the result names the commit tested" fNamesCommit
+
+## A box that is off is a skip: the run passes, and nothing is sent or run.
+rc=0
+out="$(STUB_DOWN=1 STUB_LOG="${work}/calls-down" STUB_DIR="${work}" WINRIG_HELD=1 WINGUI_WIN_REMOTE="${work}/win-remote" \
+	WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
+fCheck "with no box up, the run passes" test "${rc}" -eq 0
+fCheck "and says it skipped" grep -qFx "wingui: no box up, skipped" <<< "${out}"
+fCheck "without sending or running anything" bash -c '! grep -qE "^(push|run) " "$1"' _ "${work}/calls-down"
 
 ## The cleanup. Two processes named silkterm: one a run started, with a child of
 ## its own, and one somebody else's. Only the first two may stop.
@@ -91,3 +99,4 @@ echo "all passed"
 
 ##	Script history:
 ##		- 20260918: Created.
+##		- 20260926: A box that is down is a skip.
