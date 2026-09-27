@@ -286,6 +286,10 @@ struct EditState {
 	blink_t: f32, // seconds since the last caret/text activity (drives the blink)
 	// (cur, sel, buf.len()) at the last animate pass - a change resets the blink
 	last_sig: (usize, Option<usize>, usize),
+	// "File or folder" only: which of the two the field was opened on. Fixed for
+	// the life of the field, or emptying the box on the way to typing an image
+	// sends the rest of the typing to the folder.
+	wallpaper_folder: bool,
 }
 impl EditState {
 	// A field opened on `buf`, caret at the end. `row` is `usize::MAX` for the
@@ -302,6 +306,7 @@ impl EditState {
 			caret_vis: None,
 			blink_t: 0.0,
 			last_sig: (usize::MAX, None, usize::MAX),
+			wallpaper_folder: false,
 		}
 	}
 	// Smooth blink: solid just after activity, then a soft cosine pulse (never a
@@ -1945,6 +1950,7 @@ impl SettingsDialog {
 	fn open_edit(&mut self, i: usize, select_all: bool) {
 		let mut edit = EditState::new(i, self.edit_buf(i));
 		edit.sel = (select_all && edit.cur > 0).then_some(0);
+		edit.wallpaper_folder = self.wallpaper_box_is_folder();
 		self.edit = Some(edit);
 	}
 
@@ -3316,9 +3322,31 @@ impl SettingsDialog {
 			_ => {}
 		}
 	}
+	// "File or folder" is where the picture comes from. A named image wins at
+	// run time, so it shows whenever there is one. Otherwise the box follows the
+	// Rotate switch: the folder with it on, the image with it off.
+	fn wallpaper_box_is_folder(&self) -> bool {
+		match &self.edit {
+			Some(edit)
+				if self
+					.specs
+					.get(edit.row)
+					.is_some_and(|s| s.key == Key::BgImage) =>
+			{
+				edit.wallpaper_folder
+			}
+			_ => {
+				self.edited.wallpaper_raw.trim().is_empty() && self.edited.wallpaper_rotate_enabled
+			}
+		}
+	}
+
 	// Current value of a Text field (background image path / font family).
 	fn get_text(&self, key: Key) -> String {
 		match key {
+			Key::BgImage if self.wallpaper_box_is_folder() => {
+				self.edited.wallpaper_folder_raw.clone()
+			}
 			// the configured text, not the resolved path (auto-detect still shows
 			// the path it found, since there is no configured text to show)
 			Key::BgImage => {
@@ -3341,12 +3369,33 @@ impl SettingsDialog {
 	fn set_text(&mut self, key: Key, text: &str) {
 		let trimmed = text.trim();
 		match key {
+			Key::BgImage if self.wallpaper_box_is_folder() => {
+				// an emptied box goes back to the usual place
+				self.edited.wallpaper_folder_raw = if trimmed.is_empty() {
+					crate::config::WALLPAPER_DIR_TOKEN.to_string()
+				} else {
+					trimmed.to_string()
+				};
+				(
+					self.edited.wallpaper_folder,
+					self.edited.wallpaper_folder_auto,
+				) = crate::config::rotation_folder_for(&self.edited.wallpaper_folder_raw, false);
+			}
 			Key::BgImage => {
 				self.edited.wallpaper_raw = trimmed.to_string();
 				// resolve like the loader does (relative to the config dir),
 				// so a typed relative name live-applies instead of missing
 				self.edited.wallpaper = crate::config::resolve_wallpaper(
 					(!trimmed.is_empty()).then(|| trimmed.to_string()),
+				);
+				// a named image hides a folder found by convention, and clearing
+				// it brings that folder back
+				(
+					self.edited.wallpaper_folder,
+					self.edited.wallpaper_folder_auto,
+				) = crate::config::rotation_folder_for(
+					&self.edited.wallpaper_folder_raw,
+					!trimmed.is_empty(),
 				);
 			}
 			Key::FontFamily => {
@@ -3730,7 +3779,11 @@ impl SettingsDialog {
 					&& !edited.remote_override
 					&& edited.stepped_profile.is_none()
 			}
-			Key::BgImage => edited.wallpaper == defaults.wallpaper,
+			Key::BgImage => {
+				edited.wallpaper == defaults.wallpaper
+					&& edited.wallpaper_raw == defaults.wallpaper_raw
+					&& edited.wallpaper_folder_raw == defaults.wallpaper_folder_raw
+			}
 			Key::FontFamily => edited.font_family == defaults.font_family,
 			Key::LinkOpenCommand => {
 				edited.hyperlink_open_command == defaults.hyperlink_open_command
@@ -3888,6 +3941,13 @@ impl SettingsDialog {
 			Key::BgImage => {
 				self.edited.wallpaper = self.defaults.wallpaper.clone();
 				self.edited.wallpaper_raw = self.defaults.wallpaper_raw.clone();
+				self.edited
+					.wallpaper_folder_raw
+					.clone_from(&self.defaults.wallpaper_folder_raw);
+				(
+					self.edited.wallpaper_folder,
+					self.edited.wallpaper_folder_auto,
+				) = crate::config::rotation_folder_for(&self.edited.wallpaper_folder_raw, false);
 			}
 			Key::Theme => {
 				self.edited.theme = self.defaults.theme.clone();
@@ -8640,6 +8700,73 @@ mod tests {
 		assert_eq!(super::word_at(s, 3), (3, 4)); // the separator run
 		assert_eq!(super::word_at("", 0), (0, 0));
 		assert_eq!(super::word_at(s, s.len()), (16, 19)); // clamps to last word (png)
+	}
+
+	// "File or folder" says where the picture comes from. With Rotate folder on
+	// that is the folder, shipped as the usual place; with it off, the image. A
+	// named image wins at run time, so it shows whichever way the switch is set.
+	#[test]
+	fn the_wallpaper_box_follows_the_rotate_switch() {
+		use super::Key;
+		let token = crate::config::WALLPAPER_DIR_TOKEN;
+		let mut d = mk_dialog(4000.0);
+		d.edited.wallpaper_raw = String::new();
+		d.edited.wallpaper = None;
+		d.edited.wallpaper_folder_raw = token.to_string();
+		d.edited.wallpaper_rotate_enabled = true;
+		assert_eq!(d.get_text(Key::BgImage), token, "pre-filled");
+		assert!(d.is_default(Key::BgImage));
+
+		d.set_text(Key::BgImage, "/pics");
+		assert_eq!(d.edited.wallpaper_folder_raw, "/pics");
+		assert_eq!(
+			d.edited.wallpaper_folder,
+			Some(std::path::PathBuf::from("/pics"))
+		);
+		assert!(!d.edited.wallpaper_folder_auto);
+		assert!(d.edited.wallpaper_raw.is_empty(), "the image is untouched");
+		assert!(!d.is_default(Key::BgImage));
+		d.set_text(Key::BgImage, " ");
+		assert_eq!(
+			d.edited.wallpaper_folder_raw, token,
+			"emptied is the usual place"
+		);
+
+		d.edited.wallpaper_rotate_enabled = false;
+		assert_eq!(d.get_text(Key::BgImage), "", "off, it is the image");
+		d.set_text(Key::BgImage, "/a.png");
+		assert_eq!(d.edited.wallpaper_raw, "/a.png");
+		assert_eq!(
+			d.edited.wallpaper_folder_raw, token,
+			"the folder is untouched"
+		);
+		d.edited.wallpaper_rotate_enabled = true;
+		assert_eq!(
+			d.get_text(Key::BgImage),
+			"/a.png",
+			"a named image shows either way"
+		);
+
+		d.edited.wallpaper_folder_raw = "/pics".to_string();
+		d.revert(Key::BgImage);
+		assert!(d.edited.wallpaper_raw.is_empty());
+		assert_eq!(d.edited.wallpaper_folder_raw, token);
+		assert_eq!(d.get_text(Key::BgImage), token);
+		assert!(d.is_default(Key::BgImage));
+
+		// emptying a named image on the way to typing another one keeps typing
+		// the image, though an empty box with Rotate on would be the folder
+		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
+		d.tab = d.specs[i].tab;
+		d.edited.wallpaper_raw = "/a.png".to_string();
+		d.focus = Some(super::Focus::Row(i, 0));
+		d.set_mods(false, false, false);
+		d.key_space();
+		d.select_all();
+		d.delete_selection();
+		d.insert_str("/b.png");
+		assert_eq!(d.edited.wallpaper_raw, "/b.png");
+		assert_eq!(d.edited.wallpaper_folder_raw, token);
 	}
 
 	// open the Background image text field for editing, focused, with a value

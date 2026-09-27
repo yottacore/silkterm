@@ -359,10 +359,11 @@ pub struct Settings {
 	pub wallpaper_fallback_builtin: bool, // no image/folder configured: show the built-in one
 	pub wallpaper_rotate_enabled: bool, // master switch for folder rotation
 	pub wallpaper_folder: Option<PathBuf>, // rotate the wallpaper through this folder's images (overrides wallpaper)
-	pub wallpaper_folder_auto: bool,       // the folder above was found by convention, not configured
-	pub wallpaper_rotate_random: bool,     // rotate randomly instead of in filename order
-	pub wallpaper_rotate_interval_s: f32,  // seconds between rotations (0 = pick one at startup only)
-	pub wallpaper_opacity: f32,            // image visibility 0..1
+	pub wallpaper_folder_raw: String, // the folder as configured; WALLPAPER_DIR_TOKEN is the usual place
+	pub wallpaper_folder_auto: bool,  // the folder above was found by convention, not configured
+	pub wallpaper_rotate_random: bool, // rotate randomly instead of in filename order
+	pub wallpaper_rotate_interval_s: f32, // seconds between rotations (0 = pick one at startup only)
+	pub wallpaper_opacity: f32,       // image visibility 0..1
 	pub wallpaper_even: f32, // hold every picture to the same visibility whatever its own brightness, 0..1
 	pub wallpaper_default_fit: Fit, // used unless the image's own tags say otherwise
 	pub wallpaper_honor_xmp: bool, // let a wallpaper's own Fit/Anchor tags win
@@ -528,6 +529,7 @@ impl Default for Settings {
 			wallpaper_fallback_builtin: true,
 			wallpaper_rotate_enabled: true,
 			wallpaper_folder: None,
+			wallpaper_folder_raw: WALLPAPER_DIR_TOKEN.to_string(),
 			wallpaper_folder_auto: false,
 			wallpaper_rotate_random: true,
 			wallpaper_rotate_interval_s: 0.0,
@@ -1891,6 +1893,17 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	if s.hyperlink_open_command != orig.hyperlink_open_command {
 		doc.put_string("hyperlinks.open_command", &s.hyperlink_open_command);
 	}
+	if s.wallpaper_folder_raw != orig.wallpaper_folder_raw {
+		let folder = s.wallpaper_folder_raw.trim();
+		doc.put_string(
+			"wallpaper.rotate.folder",
+			if folder.is_empty() {
+				WALLPAPER_DIR_TOKEN
+			} else {
+				folder
+			},
+		);
+	}
 	if s.wallpaper != orig.wallpaper || s.wallpaper_raw != orig.wallpaper_raw {
 		// the file keeps whatever form the user wrote (bare/relative/absolute)
 		if s.wallpaper_raw.trim().is_empty() {
@@ -2755,10 +2768,14 @@ fn resolve(raw: RawConfig) -> Settings {
 		.wallpaper
 		.as_deref()
 		.is_some_and(|value| !value.trim().is_empty());
-	let configured_folder = resolve_wallpaper_folder(raw.wallpaper_folder);
-	let folder = configured_folder
-		.clone()
-		.or_else(|| (!pinned_wallpaper).then(default_wallpaper_folder).flatten());
+	let wallpaper_folder_raw = raw
+		.wallpaper_folder
+		.as_deref()
+		.map(str::trim)
+		.filter(|value| !value.is_empty())
+		.unwrap_or(WALLPAPER_DIR_TOKEN)
+		.to_string();
+	let (folder, folder_auto) = rotation_folder_for(&wallpaper_folder_raw, pinned_wallpaper);
 	let wallpaper_enabled = raw.wallpaper_enabled.unwrap_or(d.wallpaper_enabled);
 	let wallpaper_rotate_enabled = raw
 		.wallpaper_rotate_enabled
@@ -2773,7 +2790,7 @@ fn resolve(raw: RawConfig) -> Settings {
 	Settings {
 		// only the convention folder is "auto"; whether it holds anything is the
 		// scan's business, and the scan runs off this thread
-		wallpaper_folder_auto: configured_folder.is_none(),
+		wallpaper_folder_auto: folder_auto,
 		use_system_font,
 		// absent = follow the face toggle, so configs predating the split (and an
 		// explicit font_size, which used to imply off) keep their exact behavior
@@ -2850,6 +2867,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			.unwrap_or(d.wallpaper_fallback_builtin),
 		wallpaper_rotate_enabled,
 		wallpaper_folder: folder,
+		wallpaper_folder_raw,
 		wallpaper_rotate_random: raw
 			.wallpaper_rotate_random
 			.unwrap_or(d.wallpaper_rotate_random),
@@ -3165,7 +3183,10 @@ pub fn resolve_wallpaper(explicit: Option<String>) -> Option<PathBuf> {
 // runs off the startup thread and reports an unreadable folder itself, so a typo
 // still just leaves rotation off.
 pub fn resolve_wallpaper_folder(explicit: Option<String>) -> Option<PathBuf> {
-	let given = explicit.filter(|value| !value.trim().is_empty())?;
+	let given = explicit.filter(|value| {
+		let value = value.trim();
+		!value.is_empty() && value != WALLPAPER_DIR_TOKEN
+	})?;
 	let path = PathBuf::from(expand_vars(given.trim()));
 	if path.is_absolute() {
 		return Some(path);
@@ -3286,6 +3307,22 @@ pub fn is_image_file(path: &std::path::Path) -> bool {
 	path.extension()
 		.and_then(|ext| ext.to_str())
 		.is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg"))
+}
+
+// The rotation folder a configured value comes to, and whether it was found by
+// convention. Empty and the shipped default both mean the usual place, which is
+// looked up rather than expanded: it holds the older spellings, and on Windows
+// a pack left beside the config, and it follows `--config` and XDG_CONFIG_HOME.
+// A named image outranks a folder found that way but not one configured. The
+// loader and the Settings dialog both come here, so the two cannot disagree.
+pub fn rotation_folder_for(raw: &str, pinned_wallpaper: bool) -> (Option<PathBuf>, bool) {
+	match resolve_wallpaper_folder(Some(raw.to_string())) {
+		Some(folder) => (Some(folder), false),
+		None => (
+			(!pinned_wallpaper).then(default_wallpaper_folder).flatten(),
+			true,
+		),
+	}
 }
 
 // The rotation folder to use when none is configured: the conventional
@@ -3463,6 +3500,8 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("transparency.blur_behind", "true  ## Default"),
 	("wallpaper.image", "\"wallpaper.png\"  ## Default"),
 	("wallpaper.rotate.folder", "\"wallpaper/\"  ## Default"),
+	// then empty, which meant the same place without naming it
+	("wallpaper.rotate.folder", "\"\"  ## Default"),
 	(
 		"selection.word_separators",
 		"\",|\\\"' ()[]{}<>\"  ## Default",
@@ -5426,14 +5465,25 @@ pub fn config_dir() -> Option<PathBuf> {
 // sharing the default ones - that isolation is the point of the flag), and an
 // explicit XDG_CONFIG_HOME (somebody who asks for one tree means one tree).
 pub fn data_dir() -> Option<PathBuf> {
-	if CONFIG_OVERRIDE.get().is_some() || env_path("XDG_CONFIG_HOME").is_some() {
-		return config_dir();
-	}
-	match host_layout() {
-		Layout::Windows => env_path("LOCALAPPDATA")
-			.map(|dir| dir.join(APP_DIR))
-			.or_else(config_dir),
-		_ => config_dir(),
+	data_dir_for(
+		host_layout(),
+		CONFIG_OVERRIDE.get().is_some() || env_path("XDG_CONFIG_HOME").is_some(),
+		env_path("LOCALAPPDATA").as_deref(),
+		config_dir(),
+	)
+}
+
+// The decision above with its inputs passed in, so every platform's answer can
+// be checked from any box (G15).
+fn data_dir_for(
+	layout: Layout,
+	one_tree: bool,
+	local_appdata: Option<&std::path::Path>,
+	config_dir: Option<PathBuf>,
+) -> Option<PathBuf> {
+	match layout {
+		Layout::Windows if !one_tree => local_appdata.map(|dir| dir.join(APP_DIR)).or(config_dir),
+		_ => config_dir,
 	}
 }
 
@@ -5525,8 +5575,11 @@ fn adopt_legacy_config() {
 // Everything that compares a config against the template (backfill, the
 // superseded-default refresh, the group walk) reads it through here, so the
 // text is assembled once and every one of them sees the same bytes.
-static DEFAULT_CONFIG_TEXT: std::sync::LazyLock<String> =
-	std::sync::LazyLock::new(|| DEFAULT_CONFIG_TEMPLATE.replace("{HOME}", HOME_TOKEN));
+static DEFAULT_CONFIG_TEXT: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+	DEFAULT_CONFIG_TEMPLATE
+		.replace("{HOME}", HOME_TOKEN)
+		.replace("{WPDIR}", WALLPAPER_DIR_TOKEN)
+});
 
 fn default_config() -> &'static str {
 	DEFAULT_CONFIG_TEXT.as_str()
@@ -5539,6 +5592,17 @@ fn default_config() -> &'static str {
 pub const HOME_TOKEN: &str = "%USERPROFILE%";
 #[cfg(not(windows))]
 pub const HOME_TOKEN: &str = "$HOME";
+
+// The wallpaper folder's shipped default: the usual place on this platform, in
+// the same spelling. It is looked up rather than expanded (`rotation_folder_for`),
+// so it is right even where XDG_CONFIG_HOME is unset. The backslashes stay as
+// written inside double quotes, since shcl keeps a pair it has no escape for.
+#[cfg(windows)]
+pub const WALLPAPER_DIR_TOKEN: &str = r"%LOCALAPPDATA%\silkterm\wallpaper";
+#[cfg(target_os = "macos")]
+pub const WALLPAPER_DIR_TOKEN: &str = "$HOME/Library/Application Support/silkterm/wallpaper";
+#[cfg(not(any(windows, target_os = "macos")))]
+pub const WALLPAPER_DIR_TOKEN: &str = "$XDG_CONFIG_HOME/silkterm/wallpaper";
 
 const DEFAULT_CONFIG_TEMPLATE: &str = r##"# SilkTerm configuration file.
 #
@@ -5584,8 +5648,9 @@ wallpaper:
 	## picks one at launch and keeps it.
 	rotate:
 		# enabled: true  ## Default
-		## Empty looks for a wallpaper, wallpapers or backgrounds folder.
-		# folder: ""  ## Default
+		## The default is the usual place on this system. A wallpapers or
+		## backgrounds folder there is found too.
+		# folder: "{WPDIR}"  ## Default
 		# interval_s: 0.0  ## Default
 		# random: true  ## Default
 
@@ -10390,6 +10455,134 @@ mod tests {
 			let noted = nest(path, &format!("# {leaf}: {stale}  ## mine"));
 			assert!(migrate_config_text(&noted).is_none(), "{path}");
 		}
+	}
+
+	// The shipped folder names the usual place in this platform's spelling, and
+	// the template's commented line has to say the same, or the first save
+	// rewrites the file just written (G69, G72).
+	#[test]
+	fn the_shipped_wallpaper_folder_is_this_platforms_usual_place() {
+		let want = if cfg!(windows) {
+			r"%LOCALAPPDATA%\silkterm\wallpaper"
+		} else if cfg!(target_os = "macos") {
+			"$HOME/Library/Application Support/silkterm/wallpaper"
+		} else {
+			"$XDG_CONFIG_HOME/silkterm/wallpaper"
+		};
+		assert_eq!(WALLPAPER_DIR_TOKEN, want);
+		assert!(WALLPAPER_DIR_TOKEN.contains(APP_DIR));
+		assert_eq!(
+			Settings::default().wallpaper_folder_raw,
+			WALLPAPER_DIR_TOKEN
+		);
+		let line = format!("folder: \"{WALLPAPER_DIR_TOKEN}\"  ## Default");
+		assert!(
+			default_config().contains(&line),
+			"template says something else"
+		);
+		// the Windows spelling keeps its backslashes through a read, whatever
+		// box reads it
+		let doc = shcl::Document::parse("folder: \"%LOCALAPPDATA%\\silkterm\\wallpaper\"\n");
+		assert_eq!(
+			doc.get_string("folder").unwrap(),
+			r"%LOCALAPPDATA%\silkterm\wallpaper"
+		);
+	}
+
+	// Where the usual place is: the data dir, which on Windows is Local, since a
+	// pack is bulk and has no business roaming. `--config` and XDG_CONFIG_HOME
+	// keep everything in one tree.
+	#[test]
+	fn each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data() {
+		let config = PathBuf::from("/c/silkterm");
+		let local = PathBuf::from("C:/Users/u/AppData/Local");
+		let answer = |layout, one_tree, local: Option<&std::path::Path>| {
+			data_dir_for(layout, one_tree, local, Some(config.clone()))
+		};
+		assert_eq!(
+			answer(Layout::Windows, false, Some(&local)),
+			Some(local.join(APP_DIR))
+		);
+		assert_eq!(
+			answer(Layout::Windows, true, Some(&local)),
+			Some(config.clone())
+		);
+		assert_eq!(answer(Layout::Windows, false, None), Some(config.clone()));
+		assert_eq!(
+			answer(Layout::MacOs, false, Some(&local)),
+			Some(config.clone())
+		);
+		assert_eq!(
+			answer(Layout::Xdg, false, Some(&local)),
+			Some(config.clone())
+		);
+	}
+
+	// The same on this box, end to end. A stocked folder in the usual place is
+	// found with the value at its default, commented, uncommented or emptied, and
+	// under the older spellings. A named image outranks it, and a named folder
+	// outranks the image.
+	#[test]
+	fn the_default_wallpaper_folder_is_found_in_the_usual_place() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = std::env::temp_dir().join(format!("silkterm_wpdir_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let write = |text: &str| std::fs::write(&path, text).unwrap();
+		let folder = |text: &str| format!("wallpaper:\n\trotate:\n\t\tfolder: \"{text}\"\n");
+
+		write(default_config());
+		assert_eq!(
+			load().wallpaper_folder,
+			None,
+			"nothing there, nothing found"
+		);
+		for spelling in ["wallpaper", "wallpapers", "backgrounds"] {
+			let stocked = dir.join(spelling);
+			std::fs::create_dir_all(&stocked).unwrap();
+			for (how, text) in [
+				("commented", default_config().to_string()),
+				("uncommented", folder(WALLPAPER_DIR_TOKEN)),
+				("emptied", folder("")),
+			] {
+				write(&text);
+				let s = load();
+				assert_eq!(
+					s.wallpaper_folder.as_ref(),
+					Some(&stocked),
+					"{spelling}, {how}"
+				);
+				assert!(s.wallpaper_folder_auto, "{spelling}, {how}");
+				assert_eq!(s.wallpaper_folder_raw, WALLPAPER_DIR_TOKEN, "{how}");
+			}
+			if spelling != "backgrounds" {
+				std::fs::remove_dir(&stocked).unwrap();
+			}
+		}
+
+		write("wallpaper:\n\timage: /x.png\n");
+		assert_eq!(load().wallpaper_folder, None, "a named image outranks it");
+		write("wallpaper:\n\timage: /x.png\n\trotate:\n\t\tfolder: /elsewhere\n");
+		let s = load();
+		assert_eq!(s.wallpaper_folder, Some(PathBuf::from("/elsewhere")));
+		assert!(!s.wallpaper_folder_auto);
+		assert_eq!(s.wallpaper_folder_raw, "/elsewhere");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// An existing config's commented line names the old empty default, and is
+	// refreshed to the place it meant.
+	#[test]
+	fn an_existing_config_learns_where_the_wallpaper_folder_is() {
+		let out = migrate_config_text("wallpaper:\n\trotate:\n\t\t# folder: \"\"  ## Default\n")
+			.expect("the outgoing default should be refreshed");
+		assert!(
+			out.contains(&format!("# folder: \"{WALLPAPER_DIR_TOKEN}\"  ## Default")),
+			"{out:?}"
+		);
 	}
 
 	// The table above is kept by hand, so nothing can catch an entry that was
