@@ -119,7 +119,7 @@ DECO_GLYPH    = "#e8eefa"                   # button glyphs
 DECO_TEXT     = "#eef3fb"                   # title text
 
 # cap_fps == out_fps == what the app paints, and all three are now WELDED: the
-# run exports SILK_MAX_FPS=cap_fps (see launch_app), which pins the app's
+# run exports SILK_MAX_FPS=cap_fps (see app_env), which pins the app's
 # animation loop to that rate and takes vblank out of the picture.
 #
 # The welding is the whole point, and the shipped gif is what proved it matters.
@@ -409,7 +409,7 @@ class Rec:
 				self.ff.kill()
 			self.ff = None
 
-	def launch_app(self, shell_cmd):
+	def app_env(self):
 		e = self.env()
 		e.pop("LIBGL_ALWAYS_SOFTWARE", None)      # the app runs on the GPU (see gpu_prefix)
 		# the pop-out dialogs (Settings/About) are static wgpu/Vulkan windows; pin
@@ -431,6 +431,10 @@ class Rec:
 				"\\[\\e[38;2;222;178;134m\\]vela\\[\\e[38;2;150;156;162m\\]:\\w\\$ "
 				"\\[\\e[0m\\]" + gray_flag,
 			HISTFILE="/dev/null")
+		return e
+
+	def launch_app(self, shell_cmd):
+		e = self.app_env()
 		cmd = [self.bin, "--config", str(self.home / ".config/silkterm/config.shcl"),
 			"--shell", shell_cmd]
 		cmd = gpu_prefix(e) + cmd

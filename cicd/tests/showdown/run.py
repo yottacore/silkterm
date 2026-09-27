@@ -5,7 +5,8 @@
 ##		rows beside them. A quick run, a scaled run and a run at another grid each
 ##		used to rewrite their row anyway. This drives both table writers with the
 ##		terminal and the measuring faked out, against a scratch README. It also
-##		checks the rigs find the build where CARGO_TARGET_DIR puts it.
+##		checks the rigs find the build where CARGO_TARGET_DIR puts it, and that
+##		the payloads repeat and the score counts weighted cells.
 ##	- Test ID: EqBnA5g
 ##	- History: At bottom of file.
 
@@ -14,6 +15,7 @@
 
 import importlib.util
 import io
+import math
 import os
 import shutil
 import subprocess
@@ -46,6 +48,29 @@ scratch = Path(tempfile.mkdtemp(prefix="silk-showdown-"))
 readme = scratch / "README.md"
 shutil.copyfile(REPO / "README.md", readme)
 original = readme.read_text(encoding="utf-8")
+
+## The measuring core, untouched: two terminals are only comparable on the same
+## bytes, and the score is cells per second weighted toward plain ASCII.
+core = load("termbench_core", UTILITY / "include/termbench.py")
+for scene in core.SCENES:
+	first = core.build_payload(scene, 0.01, 160)
+	check(f"the {scene.name} payload is the same bytes every time",
+		first[0] and first == core.build_payload(scene, 0.01, 160))
+
+def score_with(name, kcells):
+	per = {s.name: {"kcells": 1.0, "mbs": 1.0} for s in core.SCENES}
+	per[name]["kcells"] = kcells
+	return core.score_of(per)
+
+## Weights 4, 2, 1, 1, 1 sum to 9, so e^9 in one scene lifts the score to e^weight.
+for name, weight in (("ascii", 4), ("latin", 2), ("cjk", 1), ("emoji", 1), ("mixed", 1)):
+	got = score_with(name, math.exp(9))
+	check(f"the {name} scene weighs {weight} in the score",
+		math.isclose(got, math.exp(weight)), f"{got} against {math.exp(weight)}")
+row = core.summarize([2.0, 2.0], 8_000_000, 1_000_000, 2_000_000)
+check("a scene's rate is cells per second", math.isclose(row["kcells"], 1000.0), str(row["kcells"]))
+per = {s.name: {"kcells": 500.0, "mbs": 1.0 + i} for i, s in enumerate(core.SCENES)}
+check("and the score reads cells, not bytes", math.isclose(core.score_of(per), 500.0), str(core.score_of(per)))
 
 ## termbench.py, with everything that touches a terminal replaced.
 tb = load("termbench", UTILITY / "include/termbench.py")
@@ -341,3 +366,4 @@ print("all passed")
 ##	History:
 ##		- 20260917 JC: Created.
 ##		- 20260918 JC: Both rigs start SilkTerm on settings of their own.
+##		- 20260926 JC: Payloads, scene weights and cell rates.
