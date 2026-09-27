@@ -1347,4 +1347,88 @@ mod tests {
 			}
 		}
 	}
+
+	// The cell width is the text's real pitch, unrounded. Everything placed on
+	// the grid - cursor, cell backgrounds, fallback glyphs - sits at column times
+	// cell width, so a rounded width drifted further off the text the longer the
+	// line, and the cursor sat visibly past the end of it.
+	// Test ID: Er2VGXK
+	#[test]
+	fn the_cell_width_is_the_texts_real_pitch() {
+		let mut fs = FontSystem::new();
+		pin_mono_family(&fs);
+		if mono_family().is_none() {
+			eprintln!("no concrete mono family on this box; skipping");
+			return;
+		}
+		for size in [13.0, 15.0, 17.0] {
+			let metrics = Metrics::new(size, (size * 1.2).round());
+			let cw = measure_cell(&mut fs, metrics);
+			let mut buf = Buffer::new(&mut fs, metrics);
+			buf.set_size(&mut fs, None, None);
+			buf.set_text(
+				&mut fs,
+				&"M".repeat(120),
+				&mono_attrs(),
+				Shaping::Advanced,
+				None,
+			);
+			buf.shape_until_scroll(&mut fs, false);
+			let line_w = buf.layout_runs().next().map_or(0.0, |run| run.line_w);
+			assert!(
+				(line_w - 120.0 * cw).abs() < 0.5,
+				"at {size}px 120 cells of {cw} miss the text's {line_w}"
+			);
+		}
+	}
+
+	// The glow is drawn from a copy of the text with bold taken out. Where bold
+	// shapes wider than the cell (some Windows faces ignore the fixed pitch),
+	// that copy drifts from the text along the line, so it is used only when a
+	// bold run lands on the cell pitch exactly.
+	// Test ID: Er2VGXL
+	#[test]
+	fn bold_is_stripped_for_the_glow_only_where_it_keeps_the_pitch() {
+		let mut fs = FontSystem::new();
+		pin_mono_family(&fs);
+		if mono_family().is_none() {
+			eprintln!("no concrete mono family on this box; skipping");
+			return;
+		}
+		let metrics = Metrics::new(15.0, 18.0);
+		let cell_w = measure_cell(&mut fs, metrics);
+		assert!(bold_matches_cell(&mut fs, metrics, cell_w));
+		assert!(!bold_matches_cell(&mut fs, metrics, cell_w + 3.0));
+	}
+
+	// A mono face can carry a double-width char at its ordinary one-cell advance.
+	// Laid out in the shared row buffer it takes one column where the grid gave
+	// it two, and everything after it on the row sits a cell to the left. Only a
+	// char whose advance matches the grid's cell count may ride the row buffer.
+	// Test ID: Er2VGXM
+	#[test]
+	fn a_char_the_face_draws_one_cell_wide_is_not_taken_for_two() {
+		let mut ctx = TextCtx::new_cpu(1.0);
+		if mono_family().is_none() {
+			eprintln!("no concrete mono family on this box; skipping");
+			return;
+		}
+		assert!(ctx.covered_at('A', 1));
+		// chars the grid gives two cells
+		let wide = [
+			'\u{FF01}', '\u{FF21}', '\u{2705}', '\u{26A1}', '\u{231B}', '\u{2615}', '\u{4E2D}',
+		];
+		let Some(ch) = wide.into_iter().find(|&ch| ctx.face_cells(ch) == 1) else {
+			eprintln!("the mono face draws none of {wide:?} at one cell; skipping");
+			return;
+		};
+		assert!(
+			ctx.covered_at(ch, 1),
+			"{ch:?} rides the row buffer as one cell"
+		);
+		assert!(
+			!ctx.covered_at(ch, 2),
+			"{ch:?} at one cell must not fill the grid's two"
+		);
+	}
 }
