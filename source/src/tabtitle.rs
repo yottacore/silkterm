@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
 //! What a tab says, and how it is shortened to fit.
 //!
 //! A tab reads "<shell> [<task>] <path>": the shell's friendly name, the command

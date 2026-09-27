@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
 // What a double-click takes when the text under the pointer is a shape we can
 // name: a URL, a Windows or posix path, an scp target. Word selection cuts those
 // in the wrong places - a space in a folder name ends the path early, a `:12`
