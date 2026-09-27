@@ -1367,6 +1367,20 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		assert_eq!(SNIPPET.matches("__SilkTermPrompt }").count(), 2);
 	}
 
+	// A light check beside a heavy cross looked mismatched in the prompt. The
+	// light pair is the same weight, and neither is one an emoji face takes.
+	// Test ID: Er2UJef
+	#[test]
+	fn the_prompt_marks_are_the_light_pair() {
+		let glyphs = SNIPPET
+			.lines()
+			.find(|l| l.contains("$global:__SilkTermGlyphs = @{"))
+			.expect("the glyph table");
+		assert!(glyphs.contains("Yes = [string][char]0x2713;"), "{glyphs}");
+		assert!(glyphs.contains("No = [string][char]0x2717;"), "{glyphs}");
+		assert!(!SNIPPET.contains("0x2714") && !SNIPPET.contains("0x2718"));
+	}
+
 	// The block people are told to paste in by hand has to be the block that
 	// gets installed, or one of the two quietly stops being true.
 	// Test ID: EnalvtV

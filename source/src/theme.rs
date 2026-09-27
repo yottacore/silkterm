@@ -476,6 +476,48 @@ mod tests {
 		}
 	}
 
+	fn luma(c: [u8; 3]) -> f32 {
+		0.2126 * f32::from(c[0]) + 0.7152 * f32::from(c[1]) + 0.0722 * f32::from(c[2])
+	}
+
+	// The three the project started with. Matrix and Retro Amber are monochrome,
+	// and a color that wandered off the hue would break that in either mode.
+	// Test ID: Er2UJeJ
+	#[test]
+	fn the_first_three_built_ins_keep_their_names_and_hues() {
+		let first: Vec<&str> = names().take(3).collect();
+		assert_eq!(first, ["SilkTerm", "Matrix", "Retro Amber"]);
+		for pal in [find("Matrix").dark, find("Matrix").light] {
+			for c in std::iter::once(pal.fg).chain(pal.ansi) {
+				assert!(c[1] > c[0] && c[1] > c[2], "Matrix {c:02x?} is not green");
+			}
+		}
+		for pal in [find("Retro Amber").dark, find("Retro Amber").light] {
+			for c in std::iter::once(pal.fg).chain(pal.ansi) {
+				assert!(
+					c[0] > c[1] && c[1] > c[2],
+					"Retro Amber {c:02x?} is not amber"
+				);
+			}
+		}
+	}
+
+	// Dark mode is light on dark for the terminal and the dialogs alike, light
+	// mode the reverse, and the dialog panel never matches the terminal behind it.
+	// Test ID: Er2UJeK
+	#[test]
+	fn dark_mode_is_light_on_dark_and_light_mode_the_reverse() {
+		for (name, t) in THEMES {
+			let (d, l) = (t.dark, t.light);
+			assert!(luma(d.bg) < luma(d.fg), "{name} dark text");
+			assert!(luma(l.bg) > luma(l.fg), "{name} light text");
+			assert!(luma(d.dialog_bg) < luma(d.dialog_fg), "{name} dark dialog");
+			assert!(luma(l.dialog_bg) > luma(l.dialog_fg), "{name} light dialog");
+			assert_ne!(d.dialog_bg, d.bg, "{name} dark dialog shade");
+			assert_ne!(l.dialog_bg, l.bg, "{name} light dialog shade");
+		}
+	}
+
 	fn find(name: &str) -> &'static Theme {
 		THEMES
 			.iter()
