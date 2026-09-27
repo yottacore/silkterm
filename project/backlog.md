@@ -31,6 +31,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## New format
 
+- cicd shows one line per test, with its status and test ID
+	- ID: 2026092711142900
+	- Type: Enhancement
+	- Status: Testing
+	- Priority: Avg
+	- Opened: 20260927-111429
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Each regression and fuzz test shows its status and ID on one line, as part of a cicd run.
+		- No large or risky change to the pipeline.
+	- Decisions:
+		- Rust tests: cargo's result lines go through `test-id.py --annotate`, which prints status, ID and name. Every other line passes through as is, and a failing test still stops the run.
+		- Script tests keep one line each, with the ID added to the OK line and to the failure message.
+		- The scroll harness scenes have no IDs of their own, so they keep their PASS lines, and the harness line carries its script's ID.
+		- A test whose ID cannot be found shows dashes, with a warning line after the run.
+	- Branch: testlines
+	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
+
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
 	- Type: Bug
