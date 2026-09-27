@@ -1002,9 +1002,11 @@ fn launched_from_shell() -> bool {
 
 // Parse `selection_pairs` into (open, close) char pairs, in precedence order.
 pub fn selection_pairs() -> Vec<(char, char)> {
-	settings()
-		.selection_pairs
-		.split_whitespace()
+	parse_pairs(&settings().selection_pairs)
+}
+
+fn parse_pairs(text: &str) -> Vec<(char, char)> {
+	text.split_whitespace()
 		.filter_map(|pair| {
 			let mut chars = pair.chars();
 			Some((chars.next()?, chars.next()?))
@@ -6462,6 +6464,42 @@ mod tests {
 		assert!(d.word_separators.contains(','));
 	}
 
+	// Word separators are read from the file, not only defaulted.
+	// Test ID: Er2UFeR
+	#[test]
+	fn word_separators_come_from_the_file() {
+		let s = resolve(read_raw(
+			"selection:\n\tword_separators: \" ,;\"\n",
+			std::path::Path::new("test.shcl"),
+		));
+		assert_eq!(s.word_separators, " ,;");
+	}
+
+	// Pairs are two characters each, in precedence order; a lone character is
+	// not a pair and is dropped.
+	// Test ID: Er2UFeS
+	#[test]
+	fn selection_pairs_parse_in_order_and_come_from_the_file() {
+		assert_eq!(
+			parse_pairs(DEFAULT_SELECTION_PAIRS),
+			[
+				('`', '`'),
+				('"', '"'),
+				('\'', '\''),
+				('{', '}'),
+				('(', ')'),
+				('[', ']'),
+				('<', '>'),
+			]
+		);
+		assert_eq!(parse_pairs("() ab x"), [('(', ')'), ('a', 'b')]);
+		let s = resolve(read_raw(
+			"selection:\n\tpairs: \"()\"\n",
+			std::path::Path::new("test.shcl"),
+		));
+		assert_eq!(s.selection_pairs, "()");
+	}
+
 	// A bare-decimal float (`.1`, missing leading zero) must not stop persist from
 	// saving. Regressed once under TOML, where persist strict-parsed the raw file,
 	// bailed on `.1`, and silently dropped every dialog change (relaunch reverted).
@@ -8919,6 +8957,70 @@ mod tests {
 		);
 	}
 
+	// The remembered size is live from the first write, never a commented
+	// default, since the window rewrites it on every resize.
+	// Test ID: Er2UFeN
+	#[test]
+	fn the_template_carries_the_remembered_size_as_live_lines() {
+		for want in ["window.remembered_columns", "window.remembered_rows"] {
+			let active = walk_settings(default_config())
+				.into_iter()
+				.find_map(|w| match w {
+					WalkLine::Setting { path, active, .. } if path == want => Some(active),
+					_ => None,
+				});
+			assert_eq!(active, Some(true), "{want} is not a live line");
+		}
+		let s = resolve(read_raw(
+			default_config(),
+			std::path::Path::new("test.shcl"),
+		));
+		let d = Settings::default();
+		assert_eq!(
+			(s.remembered_columns, s.remembered_rows),
+			(d.remembered_columns, d.remembered_rows)
+		);
+	}
+
+	// A new file follows the Settings dialog's tabs: Background, Text, Cursor,
+	// Movement, Themes, Window, Shell. The Silk tab borrows rows from the others,
+	// so its performance block leads and the rest keep their home tab's place.
+	// Test ID: Er2UFeO
+	#[test]
+	fn the_template_blocks_follow_the_dialog() {
+		let mut roots: Vec<&str> = Vec::new();
+		for line in default_config().lines() {
+			if line.starts_with(|c: char| c.is_whitespace() || c == '#') {
+				continue;
+			}
+			let Some((key, _)) = line.split_once(':') else {
+				continue;
+			};
+			if roots.last() != Some(&key) {
+				roots.push(key);
+			}
+		}
+		assert_eq!(
+			roots,
+			[
+				"performance",
+				"transparency",
+				"wallpaper",
+				"font",
+				"text",
+				"cursor",
+				"selection",
+				"scroll",
+				"theme",
+				"theme_mode",
+				"colors",
+				"window",
+				"hyperlinks",
+				"shell",
+			]
+		);
+	}
+
 	// The template's own header says a line starting with '# ' is a setting at
 	// its default, so removing the '# ' must change nothing. Seven lines named
 	// an example instead, and uncommenting any of them quietly changed what
@@ -9166,6 +9268,15 @@ mod tests {
 		// rotation, when a folder turns up, varies instead of pinning image one
 		assert!(d.wallpaper_rotate_random, "rotation defaults to shuffled");
 		assert_eq!(d.cursor_animation_resume_s, 1.0);
+		assert!(d.minimap, "the minimap defaults on");
+		assert_eq!(d.cursor_animation, "pulse_vertical");
+		// fills the window, ignoring aspect; a file that names no fit gets it too
+		assert_eq!(d.wallpaper_default_fit, Fit::Stretch);
+		let p = std::path::Path::new("test.shcl");
+		assert_eq!(resolve(read_raw("", p)).wallpaper_default_fit, Fit::Stretch);
+		assert_eq!((d.columns, d.rows), (160, 48));
+		assert_eq!(d.margin, 8.0);
+		assert_eq!(d.bg, [0, 0, 0], "an all-black background");
 	}
 
 	// Scrim function + the five falloff curves resolve; unknown values fall to the
@@ -9192,6 +9303,34 @@ mod tests {
 		assert_eq!(s.text_scrim_function, "sdf", "unknown -> default");
 		let s = resolve(read_raw("text.scrim.ramp: \"bogus\"\n", p));
 		assert_eq!(s.text_scrim_ramp, "exp", "unknown -> default");
+	}
+
+	// Each zoom step is a pixel on the configured size. Stepping past the floor
+	// banks nothing, so the first step back up leaves it at once. The zoom is
+	// process-wide, hence the store lock.
+	// Test ID: Er2UFeP
+	#[test]
+	fn font_zoom_steps_a_pixel_and_stops_at_the_floor() {
+		let _store = test_store_lock();
+		let before = settings();
+		let mut s = (*before).clone();
+		s.font_size = 12.0;
+		s.use_system_font_size = false;
+		update(s);
+		reset_font_zoom();
+		assert_eq!(effective_font_size(), 12.0);
+		nudge_font_zoom(1);
+		nudge_font_zoom(1);
+		assert_eq!(effective_font_size(), 14.0);
+		for _ in 0..20 {
+			nudge_font_zoom(-1);
+		}
+		assert_eq!(effective_font_size(), 4.0, "held at the floor");
+		nudge_font_zoom(1);
+		assert_eq!(effective_font_size(), 5.0, "no offset banked below it");
+		reset_font_zoom();
+		assert_eq!(effective_font_size(), 12.0);
+		update((*before).clone());
 	}
 
 	// The face/size split's inference for configs predating use_system_font_size:
@@ -9481,6 +9620,7 @@ mod tests {
 			cursor_size_vertical: 40\n\
 			cursor_shape: \"block\"\n\
 			background_fit: \"zoom\"\n\
+			wallpaper_default: false\n\
 			wallpaper_opacity: 0.4\n\
 			background_opacity: 0.9\n\
 			opacity: 0.8\n\
@@ -9504,6 +9644,10 @@ mod tests {
 		assert!(
 			out.contains("\tdefault_fit: \"zoom\""),
 			"background_* alias carried:\n{out}"
+		);
+		assert!(
+			out.contains("\tfallback_builtin: false"),
+			"the builtin switch carried under its new name:\n{out}"
 		);
 		assert!(
 			out.contains("\topacity: 0.4") && !out.contains("\topacity: 0.9"),
@@ -9550,6 +9694,24 @@ mod tests {
 		assert_eq!(out, std::fs::read_to_string(&path).unwrap());
 		let _ = std::fs::remove_file(&path);
 		let _ = std::fs::remove_file(dir.join("config.shcl.bak"));
+	}
+
+	// The glow settings were renamed to scrim, and the glow border to the text
+	// outline. A flat file from before that keeps every value.
+	// Test ID: Er2UFeQ
+	#[test]
+	fn the_old_glow_names_convert_to_scrim_and_outline() {
+		let out = converted_config_text(
+			"text_glow: false\ntext_glow_radius: 7\ntext_glow_softness: 0.3\ncursor_glow: true\ntext_glow_border: 2.5\ntext_glow_ramp: \"s\"\n",
+		)
+		.expect("a flat file converts");
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")));
+		assert!(!s.text_scrim, "{out}");
+		assert_eq!(s.text_scrim_radius, 7.0, "{out}");
+		assert_eq!(s.text_scrim_softness, 0.3, "{out}");
+		assert!(s.cursor_scrim, "{out}");
+		assert_eq!(s.text_outline, 2.5, "{out}");
+		assert_eq!(s.text_scrim_ramp, "sigmoid", "{out}");
 	}
 
 	// The shipped template itself must never read as legacy.
@@ -10692,6 +10854,91 @@ mod tests {
 		assert_eq!(s.wallpaper_folder, Some(PathBuf::from("/elsewhere")));
 		assert!(!s.wallpaper_folder_auto);
 		assert_eq!(s.wallpaper_folder_raw, "/elsewhere");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// With no image named and nothing rotating, a wallpaper in one of the usual
+	// places is found, the current spelling first. A relative name is taken from
+	// the config's own folder.
+	// Test ID: Er2UFeU
+	#[test]
+	fn a_wallpaper_in_the_usual_place_is_found() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = std::env::temp_dir().join(format!("silkterm_wpfile_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(dir.join("backgrounds")).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+
+		assert_eq!(resolve_wallpaper(None), None, "nothing there yet");
+		let older = dir.join("backgrounds").join("background.png");
+		std::fs::write(&older, b"").unwrap();
+		assert_eq!(resolve_wallpaper(None), Some(older.clone()));
+		std::fs::write(&path, "wallpaper:\n\trotate:\n\t\tenabled: false\n").unwrap();
+		assert_eq!(load().wallpaper, Some(older), "found at launch");
+
+		std::fs::create_dir_all(dir.join("wallpaper")).unwrap();
+		let current = dir.join("wallpaper").join("wallpaper.jpg");
+		std::fs::write(&current, b"").unwrap();
+		assert_eq!(resolve_wallpaper(None), Some(current));
+
+		assert_eq!(
+			resolve_wallpaper(Some("x.png".to_string())),
+			Some(dir.join("x.png"))
+		);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// --reset-config moves the file aside and never overwrites an earlier
+	// backup; with no file left there is nothing to do.
+	// Test ID: Er2UFeV
+	#[test]
+	fn a_reset_keeps_every_earlier_config() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = std::env::temp_dir().join(format!("silkterm_reset_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let read = |name: &str| std::fs::read_to_string(dir.join(name)).unwrap();
+
+		std::fs::write(&path, "a").unwrap();
+		assert_eq!(reset_config(), Some(dir.join("config.shcl.bak")));
+		assert!(!path.exists(), "the config was moved, not copied");
+		assert_eq!(read("config.shcl.bak"), "a");
+
+		std::fs::write(&path, "b").unwrap();
+		assert_eq!(reset_config(), Some(dir.join("config.shcl.bak2")));
+		assert_eq!(read("config.shcl.bak"), "a", "the first backup kept");
+		assert_eq!(read("config.shcl.bak2"), "b");
+
+		assert_eq!(reset_config(), None);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Hiding a lone tab is off by default and is not a dialog row, so only the
+	// View menu's save reaches the file.
+	// Test ID: Er2UFeW
+	#[test]
+	fn hide_single_tab_is_off_and_survives_a_save() {
+		assert!(!Settings::default().hide_single_tab);
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = std::env::temp_dir().join(format!("silkterm_hidetab_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, default_config()).unwrap();
+		set_config_override(path.clone());
+
+		let orig = load();
+		assert!(!orig.hide_single_tab);
+		let mut new = orig.clone();
+		new.hide_single_tab = true;
+		assert!(persist(&orig, &new));
+		assert!(load().hide_single_tab);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
