@@ -2585,6 +2585,8 @@ fn write_shells(
 	orig: &[crate::shells::ShellEntry],
 	now: &[crate::shells::ShellEntry],
 ) {
+	let disk = read_shells(doc);
+	let want = shells_to_save(&disk, orig, now);
 	// File ORDER is the list's order - it decides the menu and, at the top, the
 	// default shell - and a reorder changes no entry, so the per-entry path below
 	// would write nothing at all and lose it. A moved entry therefore rewrites
@@ -2592,26 +2594,75 @@ fn write_shells(
 	let order = |list: &[crate::shells::ShellEntry]| -> Vec<String> {
 		list.iter().map(|e| e.slug.clone()).collect()
 	};
-	if order(orig) != order(now) {
-		for old in orig {
+	if order(&disk) != order(&want) {
+		for old in &disk {
 			doc.remove(&format!("shells.{}", old.slug));
 		}
-		for entry in now {
+		for entry in &want {
 			write_shell(doc, entry);
 		}
 		return;
 	}
-	for old in orig {
-		if !now.iter().any(|e| e.slug == old.slug) {
-			doc.remove(&format!("shells.{}", old.slug));
-		}
-	}
-	for entry in now {
-		if orig.iter().any(|e| e == entry) {
+	for entry in &want {
+		if disk.iter().any(|e| e == entry) {
 			continue;
 		}
 		write_shell(doc, entry);
 	}
+}
+
+// The list a save leaves in the file. `orig` is what this window loaded and
+// `now` its list since, but another window may have saved in between, and the
+// window has no file watcher. Diffing `now` against a stale `orig` put another
+// window's new find above the whole list, and so made it the default shell:
+// only the entries `orig` named were taken out before the rewrite.
+//
+// So the file is the third side. Another window's new entry stays, at the end,
+// and an entry it removed stays gone. An entry this window did not change keeps
+// the file's copy. The order is this window's only when it moved something;
+// otherwise it is the file's, with this window's new entries after it.
+fn shells_to_save(
+	disk: &[crate::shells::ShellEntry],
+	orig: &[crate::shells::ShellEntry],
+	now: &[crate::shells::ShellEntry],
+) -> Vec<crate::shells::ShellEntry> {
+	use crate::shells::ShellEntry;
+	let find = |list: &'_ [ShellEntry], slug: &str| -> Option<ShellEntry> {
+		list.iter().find(|e| e.slug == slug).cloned()
+	};
+	let resolve = |entry: &ShellEntry| match (find(orig, &entry.slug), find(disk, &entry.slug)) {
+		(Some(_), None) => None,
+		(Some(loaded), Some(stored)) if loaded == *entry => Some(stored),
+		_ => Some(entry.clone()),
+	};
+	let is_new = |entry: &ShellEntry| find(orig, &entry.slug).is_none();
+	let kept = |list: &[ShellEntry], other: &[ShellEntry]| -> Vec<String> {
+		list.iter()
+			.filter(|e| other.iter().any(|o| o.slug == e.slug))
+			.map(|e| e.slug.clone())
+			.collect()
+	};
+	let added = now.iter().filter(|e| is_new(e)).count();
+	let moved =
+		kept(now, orig) != kept(orig, now) || now[now.len() - added..].iter().any(|e| !is_new(e));
+	let mut out: Vec<ShellEntry> = Vec::new();
+	if moved {
+		out.extend(now.iter().filter_map(resolve));
+	} else {
+		for stored in disk {
+			match (find(orig, &stored.slug), find(now, &stored.slug)) {
+				(Some(_), None) => {}
+				(_, Some(entry)) => out.extend(resolve(&entry)),
+				(None, None) => out.push(stored.clone()),
+			}
+		}
+	}
+	for entry in now.iter().filter(|e| is_new(e)).chain(disk) {
+		if !out.iter().any(|e| e.slug == entry.slug) && find(orig, &entry.slug).is_none() {
+			out.push(entry.clone());
+		}
+	}
+	out
 }
 
 // One entry's fields, set where they already are. Dropping the subtree first
@@ -6101,6 +6152,132 @@ mod tests {
 		assert_eq!(
 			back.iter().map(|e| e.command.as_str()).collect::<Vec<_>>(),
 			vec!["/bin/zsh", "/bin/bash", "/usr/bin/fish"]
+		);
+	}
+
+	// A first launch writes the scan's list into a brand-new file, and the file's
+	// order is the menu's and names the default shell.
+	#[test]
+	fn a_fresh_file_keeps_the_order_the_scan_found() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = std::env::temp_dir().join(format!("silkterm_freshshells_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, default_config()).unwrap();
+		set_config_override(path.clone());
+
+		let orig = load();
+		assert!(orig.shells.is_empty(), "a fresh file has no list yet");
+		let found = crate::shells::detect_every_known();
+		let mut new = orig.clone();
+		new.shells = crate::shells::merge(&orig.shells, &found);
+		assert!(persist(&orig, &new));
+		let titles = |list: &[crate::shells::ShellEntry]| -> Vec<String> {
+			list.iter().map(|e| e.title.clone()).collect()
+		};
+		assert_eq!(
+			titles(&load().shells),
+			found.iter().map(|f| f.title.clone()).collect::<Vec<_>>()
+		);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Two windows, and the second one loaded before the first one's scan saved a
+	// new find. Its own scan finds the same program and saves. It used to take out
+	// only the entries it had loaded and rewrite them, so the find it never
+	// loaded stayed above them all and a REPL became the default shell.
+	#[test]
+	fn a_stale_window_cannot_put_another_windows_find_on_top() {
+		let loaded = vec![
+			shell_entry("bash", "/bin/bash"),
+			shell_entry("nushell", "/bin/nu"),
+			shell_entry("zsh", "/bin/zsh"),
+		];
+		let mut on_disk = loaded.clone();
+		on_disk.push(shell_entry("node_js_2", "/nvm/bin/node"));
+		let mut doc = parse_kept(&saved_text(&doc_with_shells(&on_disk)));
+
+		write_shells(&mut doc, &loaded, &on_disk);
+
+		assert_eq!(
+			doc.children("shells"),
+			vec!["bash", "nushell", "zsh", "node_js_2"]
+		);
+	}
+
+	// The same window with an older list, doing something else to it. Every save
+	// keeps what the other window did, unless this window changed that entry.
+	#[test]
+	fn a_stale_window_keeps_what_another_window_saved() {
+		let loaded = vec![
+			shell_entry("bash", "/bin/bash"),
+			shell_entry("nushell", "/bin/nu"),
+			shell_entry("python_3", "/bin/python3"),
+			shell_entry("zsh", "/bin/zsh"),
+		];
+		let slugs = |doc: &shcl::Document| doc.children("shells");
+
+		// another window switched Zsh off and added Fish; this one switches
+		// Python off
+		let mut theirs = loaded.clone();
+		theirs[3].active = false;
+		theirs.push(shell_entry("fish", "/bin/fish"));
+		let mut doc = doc_with_shells(&theirs);
+		let mut mine = loaded.clone();
+		mine[2].active = false;
+		write_shells(&mut doc, &loaded, &mine);
+		assert_eq!(
+			slugs(&doc),
+			vec!["bash", "nushell", "python_3", "zsh", "fish"]
+		);
+		let back = read_shells(&doc);
+		assert!(!back[2].active, "this window's change went in");
+		assert!(!back[3].active, "the other window's change stayed");
+
+		// another window removed Nushell; this one stamps the date on everything
+		let mut theirs = loaded.clone();
+		theirs.remove(1);
+		let mut doc = doc_with_shells(&theirs);
+		let mut mine = loaded.clone();
+		for entry in &mut mine {
+			entry.last_seen = "2026-09-27".into();
+		}
+		write_shells(&mut doc, &loaded, &mine);
+		assert_eq!(
+			slugs(&doc),
+			vec!["bash", "python_3", "zsh"],
+			"it stays removed"
+		);
+
+		// another window moved Zsh to the top; this one only switches Python off
+		let theirs = vec![
+			loaded[3].clone(),
+			loaded[0].clone(),
+			loaded[1].clone(),
+			loaded[2].clone(),
+		];
+		let mut doc = doc_with_shells(&theirs);
+		let mut mine = loaded.clone();
+		mine[2].active = false;
+		write_shells(&mut doc, &loaded, &mine);
+		assert_eq!(slugs(&doc), vec!["zsh", "bash", "nushell", "python_3"]);
+
+		// but a move made in this window is written, with the other window's
+		// new entry after it
+		let mut theirs = loaded.clone();
+		theirs.push(shell_entry("fish", "/bin/fish"));
+		let mut doc = doc_with_shells(&theirs);
+		let mine = vec![
+			loaded[1].clone(),
+			loaded[0].clone(),
+			loaded[2].clone(),
+			loaded[3].clone(),
+		];
+		write_shells(&mut doc, &loaded, &mine);
+		assert_eq!(
+			slugs(&doc),
+			vec!["nushell", "bash", "python_3", "zsh", "fish"]
 		);
 	}
 

@@ -817,10 +817,20 @@ fn launch(command: &str, program: &str) -> String {
 // Everything installed that looks like a shell, in the order it should be
 // offered in (see `Group`).
 pub fn detect() -> Vec<Found> {
+	detect_with(login_shell(), &which, platform_extras)
+}
+
+// The scan with its three lookups passed in, so a test can install every shell
+// the table knows and read the order a fresh list really arrives in.
+fn detect_with(
+	login: Option<String>,
+	which: &dyn Fn(&str) -> Option<PathBuf>,
+	extras: fn() -> Vec<Found>,
+) -> Vec<Found> {
 	let mut out: Vec<Found> = Vec::new();
 	let mut seen: Vec<Ident> = Vec::new();
 	let add = |hit: Found, out: &mut Vec<Found>, seen: &mut Vec<Ident>| {
-		let Some(id) = Ident::of(&hit.command, &which) else {
+		let Some(id) = Ident::of(&hit.command, which) else {
 			return;
 		};
 		if id.exe.is_none() || seen.iter().any(|s| s.same(&id)) {
@@ -837,7 +847,7 @@ pub fn detect() -> Vec<Found> {
 	// say so. It is also the one, and the only one, that gets the twin that skips
 	// its startup files. Windows has no user shell, so ComSpec takes its ordinary
 	// place in the order instead of the top of it.
-	if let Some(login) = login_shell() {
+	if let Some(login) = login {
 		let base = base_name(&login);
 		let title = pretty(&base);
 		let login_cmd = launch(&login, &base);
@@ -873,13 +883,22 @@ pub fn detect() -> Vec<Found> {
 			);
 		}
 	}
-	for hit in platform_extras() {
+	for hit in extras() {
 		add(hit, &mut out, &mut seen);
 	}
 	// One sort, at the end: the order is a property of the list, not of the
 	// sequence the looking happened to run in.
 	out.sort_by_key(Found::order);
 	out
+}
+
+// A scan on a box where every shell the table knows is installed, bash is the
+// login shell, and nothing else turns up. Each program resolves to a path that
+// does not exist, so nothing on the test box can merge two of them.
+#[cfg(test)]
+pub(crate) fn detect_every_known() -> Vec<Found> {
+	let installed = |prog: &str| Some(Path::new("/silk-test/bin").join(base_name(prog)));
+	detect_with(Some("/bin/bash".to_string()), &installed, Vec::new)
 }
 
 // Where the login shell and its startup-file-free twin belong. Both arms compile
@@ -1368,6 +1387,46 @@ mod tests {
 		assert_eq!(
 			titles,
 			["Zsh", "Zsh (no rc)", "Nushell", "Python 3", "Bash"]
+		);
+	}
+
+	// The order design.md gives a fresh unix list: the login shell with its twin
+	// under it, the modern shells, the language REPLs, then the rest of the POSIX
+	// family in the table's own order. Every table entry is installed, so a group
+	// or a title edited out of line with the design fails here.
+	#[cfg(unix)]
+	#[test]
+	fn a_fresh_unix_list_arrives_in_the_designed_order() {
+		let titles: Vec<String> = detect_every_known().into_iter().map(|f| f.title).collect();
+		assert_eq!(
+			titles,
+			[
+				"Bash",
+				"Bash (no rc)",
+				"Elvish",
+				"Ion",
+				"Murex",
+				"Nushell",
+				"OSH",
+				"PowerShell 7",
+				"Xonsh",
+				"YSH",
+				"IPython",
+				"Node.js",
+				"Python 3",
+				"Zsh",
+				"Fish",
+				"Dash",
+				"Ash",
+				"Korn shell",
+				"MirBSD Korn shell",
+				"Yash",
+				"Tcsh",
+				"C shell",
+				"POSIX shell",
+				"Es",
+				"rc",
+			]
 		);
 	}
 
