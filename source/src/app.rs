@@ -8722,6 +8722,7 @@ mod tests {
 	// The strength scale went from 10% to 20% per doubling in August and design.md
 	// kept the old numbers for weeks, with nothing to catch it. Both places that
 	// quote the number are held against the code now.
+	// Test ID: EqSDfqy
 	#[test]
 	fn the_docs_quote_the_scrim_strength_scale_the_code_uses() {
 		let pct = SCRIM_PCT_PER_DOUBLING;
@@ -8749,6 +8750,7 @@ mod tests {
 	// A save nobody asked for can be refused at every resize, so it is said once
 	// a session for each file. An OK in Settings that could not save is said
 	// every time, or the button would seem to do nothing.
+	// Test ID: EqGnMOu
 	#[test]
 	fn a_refused_save_is_said_once_unless_it_was_asked_for() {
 		let mut told = Vec::new();
@@ -8765,6 +8767,7 @@ mod tests {
 	// the tab can go with it. Close pane then found no such pane in the current tab
 	// and fell through to closing the tab, or the window, with another tab's shells
 	// still running.
+	// Test ID: Eq4SnxI
 	#[test]
 	fn close_pane_on_a_pane_that_is_gone_closes_nothing() {
 		assert_eq!(close_scope(false, 1, 1), CloseScope::Nothing);
@@ -8778,6 +8781,7 @@ mod tests {
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
 	// than the device's largest texture. The GL path's offscreen is made at the
 	// window's size, and wgpu treats the refusal as fatal, so the launch died.
+	// Test ID: Eq4SnxJ
 	#[test]
 	fn a_window_is_never_bigger_than_the_device_allows() {
 		let (w, h) = window_px(1000, 1000, 8.0, 17.0, 4.0, 30.0);
@@ -8789,6 +8793,7 @@ mod tests {
 	// A requested row count is the shell's rows, so the tab strip counts against
 	// the window's height while it shows. Left out of the sum, a window asked for
 	// 24 rows gave its shell 22.
+	// Test ID: Eq4SnxK
 	#[test]
 	fn the_tab_strip_counts_against_a_requested_row_count() {
 		let shown = window_px(80, 24, 8.0, 17.0, 4.0, 20.0 + 24.0);
@@ -8801,6 +8806,7 @@ mod tests {
 	// screen, and a hidden window waits the shorter of the two times. Everything
 	// that vetoes it is a None, since a deadline that then had to be checked
 	// again elsewhere is how a veto gets forgotten.
+	// Test ID: Eq8b2Gu
 	#[test]
 	fn the_idle_release_waits_on_the_window_and_only_an_unwatched_one() {
 		let since = Instant::now();
@@ -8853,6 +8859,7 @@ mod tests {
 	// A program printing in a minimized window held its device for good, since
 	// every output started the idle clock over. Output nobody can see leaves the
 	// clock alone, but a released window is still owed its device for the reveal.
+	// Test ID: EqBNCpU
 	#[test]
 	fn output_into_a_hidden_window_does_not_hold_its_device() {
 		let long_ago = Instant::now()
@@ -8880,6 +8887,7 @@ mod tests {
 		assert!(seen.wake_owed);
 	}
 
+	// Test ID: EqFWtPs
 	#[test]
 	fn the_title_note_follows_the_device_out_and_back() {
 		let now = Instant::now();
@@ -8911,6 +8919,7 @@ mod tests {
 	// A return to this console is healed at once and once more when the X
 	// server has settled, since a purge after the first rebuild spoiled it
 	// (20260917: text gone and a gray background after a switch to VT 1).
+	// Test ID: EqBP7iS
 	#[test]
 	fn a_return_to_this_console_is_healed_again_once_settled() {
 		let back = Instant::now();
@@ -8931,6 +8940,7 @@ mod tests {
 	// --fullscreen asks for fullscreen before the first frame, and the window
 	// manager's resize arrives after it, so a one-off fullscreen launch stored the
 	// whole screen as the size to open at next time.
+	// Test ID: Eq4SnxL
 	#[test]
 	fn a_fullscreen_or_maximized_size_is_not_remembered() {
 		assert!(remember_resize(true, false, false));
@@ -8942,6 +8952,7 @@ mod tests {
 
 	// Only a focused window's own eased frame is evidence; every other pass
 	// pauses the watch, so an idle gap is never read as a period.
+	// Test ID: EpWnbLc
 	#[test]
 	fn only_a_focused_eased_unpinned_frame_is_counted() {
 		use super::RatingStep;
@@ -8966,6 +8977,7 @@ mod tests {
 
 	// A bench rung and the bench's answer are both measured, so a step the
 	// display watch took goes, and the stored profile is the user's own values.
+	// Test ID: EpWow4e
 	#[test]
 	fn a_measured_profile_replaces_a_session_step() {
 		use crate::profile::Profile;
@@ -8985,6 +8997,7 @@ mod tests {
 
 	// The watch's step is session state. Stored in the profile or written out,
 	// one stall became every later launch's profile and took the wallpaper.
+	// Test ID: EpX5Wgq
 	#[test]
 	fn a_watch_step_never_reaches_the_stored_profile_or_the_file() {
 		use crate::profile::Profile;
@@ -9056,6 +9069,7 @@ mod tests {
 
 	// Which launches owe a rating. Pulled out of the launch path when every write
 	// in it changed, so the decision itself provably did not.
+	// Test ID: EpXN9p2
 	#[test]
 	fn rating_due_matches_the_launch_rules() {
 		let hardware = "0123456789abcdef";
@@ -9124,6 +9138,7 @@ mod tests {
 	// A rating that did not reach the file was a test at every launch. Each file
 	// here is one that used to lose it or read it back as nothing: a clean one, one
 	// with a line the parse cannot place, and one with the key twice.
+	// Test ID: EpXN9p3
 	#[test]
 	fn a_rating_survives_to_the_next_launch_whatever_else_the_file_holds() {
 		use crate::profile::Profile;
@@ -9212,6 +9227,7 @@ mod tests {
 
 	// A failed save used to leave the banner saying the test was running and then
 	// run it again next launch. It says why now, for the seconds it stays up.
+	// Test ID: EpXN9p4
 	#[test]
 	fn the_banner_says_why_a_rating_was_not_kept() {
 		const AGAIN: &str = "The test runs again at the next launch.";
@@ -9250,6 +9266,7 @@ mod tests {
 	// Switching the wallpaper off and on again drops the rotation pick, and a
 	// request that does not re-read the folder then answers with nothing at all:
 	// the folder suppresses the built-in, and there is no pick to fall back on.
+	// Test ID: Ep1Y6Tg
 	#[test]
 	fn a_rotation_folder_with_nothing_showing_is_read_again() {
 		let pick = std::path::PathBuf::from("/w/a.jpg");
@@ -9267,6 +9284,7 @@ mod tests {
 	// cursor keys were not, so one notch sent arrow keys to the job the pane said
 	// it was protecting. Everything user-driven goes through `write_input` now,
 	// and the only direct write left is the reply the terminal owes the program.
+	// Test ID: EpHQ61Q
 	#[test]
 	fn a_read_only_pane_takes_nothing_the_user_sent() {
 		let body = include_str!("app.rs")
@@ -9291,6 +9309,7 @@ mod tests {
 
 	// A tick that leaves the timer where it was fires again on the next pass, and
 	// each of those starts another decode thread.
+	// Test ID: EpHNMfQ
 	#[test]
 	fn a_rotation_tick_moves_the_timer_off_now() {
 		let now = Instant::now();
@@ -9303,6 +9322,7 @@ mod tests {
 
 	// Clearing the box is how a renamed tab goes back to naming itself, so a
 	// blank title must not be stored as one.
+	// Test ID: EoTYmjQ
 	#[test]
 	fn a_cleared_tab_title_is_no_title_at_all() {
 		assert_eq!(typed_title(String::new(), "bash"), None);
@@ -9317,6 +9337,7 @@ mod tests {
 	// A tab title is renamed by byte offset over text that need not be ASCII, so
 	// every move and every erase has to fall on a character boundary or the
 	// string operations panic.
+	// Test ID: EoSiOoS
 	#[test]
 	fn renaming_a_tab_stays_on_character_boundaries() {
 		let mut edit = TabEdit {
@@ -9356,6 +9377,7 @@ mod tests {
 	// A narrow window used to draw "Copy on:" straight over "Panes" and "Help" -
 	// both there, neither readable. The cluster sheds parts instead, and the
 	// checkboxes are the last thing to go because they carry the state.
+	// Test ID: Eo6mi5I
 	#[test]
 	fn the_copy_cluster_sheds_parts_before_it_reaches_the_menu_titles() {
 		let metrics = |right: f32| CopyMetrics {
@@ -9381,6 +9403,7 @@ mod tests {
 
 	// A word that is not drawn cannot be aimed at, so the box has to answer for
 	// itself - otherwise the narrow arrangement has a dead checkbox.
+	// Test ID: Eo6mi5J
 	#[test]
 	fn a_checkbox_with_no_word_is_still_clickable() {
 		let metrics = CopyMetrics {
@@ -9411,6 +9434,7 @@ mod tests {
 	// scales at its own use site, and a piece that misses out is exactly the
 	// defect this pass fixed (chrome thinning out as the display's DPI rises).
 	// So: the same geometry at 2x must come out at twice the size, everywhere.
+	// Test ID: EnLuU52
 	#[test]
 	fn the_chrome_doubles_when_the_display_does() {
 		// the tab's close button, measured against a bar that has itself doubled
@@ -9442,6 +9466,7 @@ mod tests {
 	// the same number by construction - shorten a path to a width the tab does not
 	// then give it and the last component is clipped anyway, which is the whole
 	// thing the shortening exists to avoid.
+	// Test ID: EnbYSzw
 	#[test]
 	fn a_title_is_fitted_to_the_width_it_is_actually_given() {
 		for scale in [1.0, 1.5, 2.0] {
@@ -9467,6 +9492,7 @@ mod tests {
 	// at spawn, so an unresolved one means nothing was switched on and the engine
 	// chose for itself - and a guess from the list is exactly what had a pane
 	// running PowerShell labelled Command Prompt.
+	// Test ID: EnbYSzx
 	#[test]
 	fn a_tab_names_only_the_shell_it_can_actually_see() {
 		assert_eq!(tab_command_line(None), "");
@@ -9506,6 +9532,7 @@ mod tests {
 	// A letter picks the first row carrying it, so a menu that spends one twice
 	// does not read as ambiguous - it quietly makes the later row unreachable.
 	// Every menu is checked for this where it is built.
+	// Test ID: EnMAGUK
 	#[test]
 	fn one_menu_never_spends_an_accelerator_twice() {
 		let rows = vec![
@@ -9525,6 +9552,7 @@ mod tests {
 	// what ACTIVATING it does is different. Treating it as a separator instead
 	// (which is what the old two-arm matches did) leaves it unhoverable and
 	// unreachable, i.e. an item nothing can ever pick.
+	// Test ID: EnM97jE
 	#[test]
 	fn a_submenu_row_hit_tests_and_steps_like_an_item() {
 		let menu = test_menu(
@@ -9555,6 +9583,7 @@ mod tests {
 	// the whole of what keeps the pointer rule simple, since "inside the submenu"
 	// and "on a parent row" can then never both be true. A submenu that overlaps
 	// would close itself the moment the pointer entered it.
+	// Test ID: EnM97jF
 	#[test]
 	fn a_submenu_stands_clear_of_the_rows_it_came_from() {
 		let parent = test_menu(0.0, 200.0, vec![test_item("One"), test_item("Two")]);
@@ -9573,6 +9602,7 @@ mod tests {
 	// A click inside an open submenu is a click on the menu, so the chrome that
 	// stands aside for a popup (the menu bar, the tab bar) has to stand aside for
 	// it too - otherwise a submenu overlapping either band loses its clicks to it.
+	// Test ID: EnM97jG
 	#[test]
 	fn a_click_in_the_submenu_still_counts_as_a_click_on_the_menu() {
 		let mut parent = test_menu(0.0, 200.0, vec![msub(Some('w'), "With Shell", vec![])]);
@@ -9590,6 +9620,7 @@ mod tests {
 	// numbers. Whatever the display does to them, `item_at` and `row_top` have to
 	// keep agreeing - a menu whose rows are drawn one place and clicked another
 	// is the failure this guards.
+	// Test ID: EnLuU53
 	#[test]
 	fn a_dropdown_scales_whole_and_its_rows_still_hit_test() {
 		let menu_at = |scale: f32| {
@@ -9652,6 +9683,7 @@ mod tests {
 	// and winit replays every held key as a synthetic press on the way back in -
 	// before it re-reads the modifiers. Taking that replay as typing is what put
 	// a bare arrow into the shell, so only a real press may count.
+	// Test ID: EmpzjSS
 	#[test]
 	fn a_replayed_key_is_not_typing() {
 		assert!(key_is_typed(ElementState::Pressed, false));
@@ -9662,6 +9694,7 @@ mod tests {
 
 	// The copy chord skips the unfocused-key gate, so it must never match what
 	// that gate is for: a key passed through a WM grab with the modifiers zeroed.
+	// Test ID: EpyCuGe
 	#[test]
 	fn only_a_held_ctrl_shift_c_is_the_copy_chord() {
 		use winit::keyboard::{Key, ModifiersState, NamedKey};
@@ -9684,6 +9717,7 @@ mod tests {
 	// worse than none: it would wander off the sampling grid instead of sitting
 	// on it. Each frame's deadline therefore has to come from the LAST DEADLINE,
 	// never from "now" - which is the whole of what this pins.
+	// Test ID: EmptHsG
 	#[test]
 	fn a_pinned_frame_rate_does_not_drift() {
 		let ivl = Duration::from_millis(20);
@@ -9712,6 +9746,7 @@ mod tests {
 	// while that thing is on, so a reader can take the whole column one way. A
 	// "Hide ..." caption checked when the thing is GONE reads backwards next to
 	// its neighbours, which is what this stops coming back.
+	// Test ID: EolQiSW
 	#[test]
 	fn every_view_toggle_is_checked_while_its_subject_is_on() {
 		let all_on = ViewState {
@@ -9744,6 +9779,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EolQiSX
 	#[test]
 	fn the_view_menu_spends_no_accelerator_twice() {
 		let off = ViewState {
@@ -9760,6 +9796,7 @@ mod tests {
 		assert_eq!(accel_clash(&view_menu_items(off)), None);
 	}
 
+	// Test ID: EqpdApU
 	#[test]
 	fn next_wallpaper_shows_only_with_somewhere_to_go() {
 		let state = |next_wallpaper| ViewState {
@@ -9799,6 +9836,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EkrYObg
 	#[test]
 	fn accel_prefers_exact_case_then_falls_back() {
 		// 'S' must pick "Selection", not the 's' in "Paste"
@@ -9811,6 +9849,7 @@ mod tests {
 	// Ctrl+Shift+N used to start the program with nothing but a working
 	// directory, so a window opened with --config got the default file, and a
 	// pane sitting in home looked like a desktop launch and took the setting.
+	// Test ID: Eq4Yrbc
 	#[test]
 	fn a_new_window_keeps_the_settings_file_and_the_panes_directory() {
 		let exe = std::path::Path::new("/opt/silkterm/silkterm");
@@ -9852,6 +9891,7 @@ mod tests {
 
 	// Reload config dropped the font and colors given on the command line, while
 	// a value the command line did not name has to come from the file.
+	// Test ID: Eq4Yrbd
 	#[test]
 	fn a_reload_keeps_the_launch_options_over_the_file() {
 		let launch = crate::cli::Style {

@@ -493,6 +493,7 @@ mod tests {
 	// Nothing sat between the file and a linear f32 buffer at sixteen bytes a
 	// pixel, so an ordinary large photo wanted gigabytes and an image past the
 	// GPU's texture limit aborted the upload.
+	// Test ID: EpHe9lo
 	#[test]
 	fn a_large_wallpaper_is_cut_down_before_any_of_the_work() {
 		use super::{MAX_EDGE, fit_within};
@@ -517,6 +518,7 @@ mod tests {
 		assert_eq!(fit_within(0, 0, MAX_EDGE), None);
 	}
 
+	// Test ID: EjwZbJA
 	#[test]
 	fn wallpaper_order_wraps() {
 		assert_eq!(next_wallpaper_index(3, 0), 1);
@@ -525,6 +527,7 @@ mod tests {
 		assert_eq!(next_wallpaper_index(0, 0), 0); // empty: safe
 	}
 
+	// Test ID: Eld70rY
 	#[test]
 	fn shuffle_never_repeats_a_recent_image() {
 		// whatever the entropy, the pick avoids the held-back window and stays in range
@@ -545,6 +548,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Eld70rZ
 	#[test]
 	fn shuffle_survives_tiny_folders() {
 		// two images alternate; one (or none) has nowhere else to go
@@ -556,6 +560,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Eld70ra
 	#[test]
 	fn shuffle_still_reaches_every_image() {
 		// holding back recent picks must not strand any image permanently
@@ -570,6 +575,7 @@ mod tests {
 		assert_eq!(seen.len(), 6, "some image was never picked");
 	}
 
+	// Test ID: EjwZbJB
 	#[test]
 	fn folder_scan_filters_and_sorts() {
 		let dir = std::env::temp_dir().join(format!("silkterm_wp_scan_{}", std::process::id()));
@@ -593,6 +599,7 @@ mod tests {
 	// The path is no longer stat'd before the worker sees it (that check used to
 	// run on the startup thread), so an unreadable one must end on the built-in
 	// rather than on nothing.
+	// Test ID: ElvpdEu
 	#[test]
 	fn an_unreadable_image_still_lands_on_the_builtin() {
 		let mut s = flat_settings();
@@ -609,6 +616,7 @@ mod tests {
 	// The blur asserts on a sigma that is not a normal float, and a subnormal one
 	// passed both the config's range and the tag reader, so the worker panicked
 	// and took the terminal with it.
+	// Test ID: Eq8KqtE
 	#[test]
 	fn a_subnormal_blur_is_no_blur() {
 		let mut s = flat_settings();
@@ -676,6 +684,7 @@ mod tests {
 	// a float copy at full width before the cut, gigabytes from a few hundred KB.
 	// Measured in a child copy of this test binary so no other test's memory
 	// counts.
+	// Test ID: Eq8KqtF
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn a_huge_image_costs_its_decode_and_no_more() {
@@ -709,6 +718,7 @@ mod tests {
 		assert!(grew < 200 << 10, "peak grew {} MiB", grew >> 10);
 	}
 
+	// Test ID: Eq8KqtG
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn huge_image_child() {
@@ -738,6 +748,7 @@ mod tests {
 	// a gigabyte or so each for a 4K image, and a rotation faster than the
 	// preparation kept several going at once. The worker asks between stages
 	// now, and every stage boundary is a place it gives up.
+	// Test ID: Eq9J5HU
 	#[test]
 	fn a_superseded_request_stops_before_its_next_stage() {
 		use std::cell::Cell;
@@ -789,6 +800,7 @@ mod tests {
 	// retired the one before it, so the picture never changed, and the retired
 	// workers piled up. One preparation at a time now, and the picture changes
 	// no later than one preparation after a tick.
+	// Test ID: Eq9J5HV
 	#[test]
 	fn rotation_keeps_going_when_preparing_outlasts_the_interval() {
 		const IVL: u32 = 2;
@@ -849,6 +861,7 @@ mod tests {
 	// An empty rotation folder reports no rotation, and the built-in fills in -
 	// the folder's emptiness used to be tested during config resolve, so the
 	// suppression has to key on what the scan found, not on the folder existing.
+	// Test ID: ElvpdEv
 	#[test]
 	fn an_empty_rotation_folder_falls_back_to_the_builtin() {
 		let mut s = flat_settings();
@@ -865,6 +878,7 @@ mod tests {
 	// The image's own tags win over the configured default, and are read from the
 	// file the pixels actually came from (which for rotation is the picked image,
 	// not whatever `wallpaper` happened to name).
+	// Test ID: ElvpdEw
 	#[test]
 	fn the_builtin_keeps_the_configured_fit() {
 		let s = Settings {
@@ -880,6 +894,7 @@ mod tests {
 
 	// A bare flag means no picture, whether or not a rotation folder is there.
 	// Without the folder this used to show the built-in.
+	// Test ID: Eq4Yrbi
 	#[test]
 	fn a_cleared_wallpaper_shows_nothing_with_or_without_a_folder() {
 		let dir = std::env::temp_dir().join(format!("silkterm_wp_cleared_{}", std::process::id()));

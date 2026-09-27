@@ -812,6 +812,7 @@ mod tests {
 		parse(s.split_whitespace().map(String::from)).unwrap()
 	}
 
+	// Test ID: Ei9SyM4
 	#[test]
 	fn window_opts() {
 		let c = p("--columns 100 --rows 40 --fullscreen --hide-menu=no");
@@ -822,6 +823,7 @@ mod tests {
 		assert!(!c.hierarchical);
 	}
 
+	// Test ID: EoSKhlo
 	#[test]
 	fn keep_open_is_read_at_every_level() {
 		let c = p("--keep-open --new-tab --new-pane --keep-open=no");
@@ -831,6 +833,7 @@ mod tests {
 		assert_eq!(c.tabs[1].panes[0].style.keep_open, None);
 	}
 
+	// Test ID: EmrsJ5M
 	#[test]
 	fn cli_only_flags_are_taken_anywhere() {
 		// They print and exit, so where they sit can't matter - and answering
@@ -845,6 +848,7 @@ mod tests {
 		assert!(p("--new-pane --donate").donate);
 	}
 
+	// Test ID: EmrsJ5N
 	#[test]
 	fn the_three_version_spellings_are_one_flag() {
 		assert!(p("--version").version);
@@ -853,6 +857,7 @@ mod tests {
 		assert!(!p("--columns 80").version);
 	}
 
+	// Test ID: EmrsJ5O
 	#[test]
 	fn padding_puts_one_blank_line_either_side() {
 		// A body's own trailing newlines must not stack up into extra blanks -
@@ -862,6 +867,7 @@ mod tests {
 		assert_eq!(padded("a\nb\n\n\n"), "\na\nb\n\n");
 	}
 
+	// Test ID: EmrsJ5P
 	#[test]
 	fn about_survives_having_no_adapter() {
 		// A box with no usable GPU still has a version and a build worth
@@ -875,6 +881,7 @@ mod tests {
 		assert!(!text.contains("Acceleration:"));
 	}
 
+	// Test ID: Eo4auD9
 	#[test]
 	fn version_names_the_build_as_well_as_the_release() {
 		// A release version can't tell two builds apart, which is the whole reason
@@ -900,6 +907,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eo4auDA
 	#[test]
 	fn the_build_number_is_lowercase_crockford() {
 		// Baked in by build.rs, so this is the one place the shipped value itself
@@ -913,6 +921,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EmrsJ5Q
 	#[test]
 	fn donate_names_the_address() {
 		let text = donate();
@@ -921,6 +930,7 @@ mod tests {
 		assert!(text.contains(config::DONATE_URL));
 	}
 
+	// Test ID: EmrsJ5R
 	#[test]
 	fn usage_lists_every_cli_only_flag() {
 		// The flags exist to be found; one added without its line is a flag
@@ -940,6 +950,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Ei9SyM5
 	#[test]
 	fn window_opt_after_tab_errors() {
 		assert!(
@@ -952,6 +963,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Ei9SyM6
 	#[test]
 	fn tabs_and_panes() {
 		let c = p("--new-tab --new-pane --right --new-pane --down --splits=main");
@@ -964,16 +976,19 @@ mod tests {
 		assert_eq!(t.panes[2].splits.as_deref(), Some("main"));
 	}
 
+	// Test ID: Ei9SyM7
 	#[test]
 	fn first_pane_rejects_split() {
 		assert!(parse("--pane=main --right".split_whitespace().map(String::from)).is_err());
 	}
 
+	// Test ID: Ei9SyM8
 	#[test]
 	fn select_unknown_tab_errors() {
 		assert!(parse("--tab=nope".split_whitespace().map(String::from)).is_err());
 	}
 
+	// Test ID: Ei9SyM9
 	#[test]
 	fn shell_splitting() {
 		let c = parse(
@@ -986,6 +1001,7 @@ mod tests {
 		assert_eq!(sh, &["git", "log", "--oneline"]);
 	}
 
+	// Test ID: Ei9SyMA
 	#[test]
 	fn shell_quotes() {
 		assert_eq!(
@@ -995,6 +1011,7 @@ mod tests {
 		assert_eq!(shell_split("'a b' c").unwrap(), ["a b", "c"]);
 	}
 
+	// Test ID: El59QIS
 	#[test]
 	fn shell_keeps_unquoted_backslashes() {
 		// A Windows path written plainly must arrive intact, quoted or not.
@@ -1012,12 +1029,14 @@ mod tests {
 		);
 	}
 
+	// Test ID: El59QIT
 	#[test]
 	fn shell_still_escapes_whitespace_and_quotes() {
 		assert_eq!(shell_split(r"/opt/my\ app/sh").unwrap(), ["/opt/my app/sh"]);
 		assert_eq!(shell_split(r"it\'s fine").unwrap(), ["it's", "fine"]);
 	}
 
+	// Test ID: Ei9SyMB
 	#[test]
 	fn style_cascade_scope() {
 		let c = p("--shell=fish --new-tab --shell=zsh --new-pane --shell=htop");
@@ -1039,6 +1058,7 @@ mod tests {
 	// spellings and both value forms. It is kept exactly as written: `~` and
 	// `%VAR%` mean nothing until spawn time, and expanding at parse would bake
 	// this process's environment into a value the config file can also carry.
+	// Test ID: EnWOVqi
 	#[test]
 	fn a_directory_cascades_the_way_a_shell_does() {
 		let c = p("--directory=/w --new-tab --dir /t --new-pane --directory=~/p");
@@ -1051,6 +1071,7 @@ mod tests {
 		assert!(parse(["--directory".to_string()]).is_err());
 	}
 
+	// Test ID: EkgzanA
 	#[test]
 	fn wallpaper_never_eats_the_next_option() {
 		// bare flag followed by another option = explicitly none; the option survives
@@ -1067,6 +1088,7 @@ mod tests {
 		assert_eq!(c.win.style.wallpaper_img, Some(None));
 	}
 
+	// Test ID: EjpedZg
 	#[test]
 	fn control_flags() {
 		let c = p("--wallpaper /x.png");
@@ -1082,6 +1104,7 @@ mod tests {
 		assert_eq!(c.wallpaper, None);
 	}
 
+	// Test ID: EjNOyIS
 	#[test]
 	fn only_config_args_detects_layoutless_launches() {
 		let v = |s: &str| -> Vec<String> { s.split_whitespace().map(String::from).collect() };
@@ -1092,6 +1115,7 @@ mod tests {
 		assert!(!only_config_args(v("--new-tab")));
 	}
 
+	// Test ID: Ei9SyMC
 	#[test]
 	fn size_and_colors() {
 		let c = p("--new-pane --size=30% --background-color=#102030");
@@ -1099,6 +1123,7 @@ mod tests {
 		assert_eq!(c.tabs[0].panes[1].style.bg_color, Some([0x10, 0x20, 0x30]));
 	}
 
+	// Test ID: EiYTyQS
 	#[test]
 	fn window_style_folds_into_settings() {
 		let c = p(
@@ -1117,6 +1142,7 @@ mod tests {
 		assert_eq!(s.wallpaper_opacity, 0.5);
 	}
 
+	// Test ID: EiYTyQT
 	#[test]
 	fn window_style_noop_leaves_defaults() {
 		// no style flags -> settings untouched
@@ -1130,6 +1156,7 @@ mod tests {
 	// nan parsed fine and went into the live settings. The session's first save
 	// then compared it against the value it stood for, found the two unequal - a
 	// NaN is unequal to itself - and wrote NaN over the user's own value.
+	// Test ID: Eq4SnxM
 	#[test]
 	fn a_non_finite_number_is_refused() {
 		let bad = |s: &str| parse(s.split_whitespace().map(String::from)).is_err();
@@ -1143,6 +1170,7 @@ mod tests {
 
 	// Every number stands for a setting, so it is held to that setting's range:
 	// the command line may not ask for a value the config file could not hold.
+	// Test ID: Eq4SnxN
 	#[test]
 	fn a_number_is_held_to_its_settings_range() {
 		assert_eq!(p("--font-size 4000").win.style.font_size, Some(400.0));

@@ -210,6 +210,7 @@ mod tests {
 	// anything, and expands percent variables before any escaping is processed.
 	// Nothing escapes a URL for that, so nothing tries: every platform hands the
 	// URL to its own opener as one plain argument.
+	// Test ID: EpHYLCy
 	#[test]
 	fn a_url_reaches_the_opener_exactly_as_it_was_printed() {
 		let nasty = "https://example.com/?a=%USERPROFILE%&b=x^y|z<>()\"'`$ q";
@@ -231,6 +232,7 @@ mod tests {
 		find_at(&text, hit).map(|(_, _, url)| url)
 	}
 
+	// Test ID: Em1S9yr
 	#[test]
 	fn a_plain_url_is_found_anywhere_inside_it() {
 		let line = "see https://example.com/a?b=1&c=2 for more";
@@ -250,6 +252,7 @@ mod tests {
 		assert_eq!(find_at(&text, end), None, "the space after is not one");
 	}
 
+	// Test ID: Em1S9ys
 	#[test]
 	fn sentence_punctuation_and_brackets_come_off_the_end() {
 		assert_eq!(
@@ -273,6 +276,7 @@ mod tests {
 
 	// The allowlist is the security boundary, not a convenience: a scheme that
 	// isn't listed must never become clickable.
+	// Test ID: Em1S9yt
 	#[test]
 	fn only_allowlisted_schemes_are_links() {
 		assert_eq!(at("javascript:alert(1)", "javascript"), None);
@@ -284,6 +288,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Em1S9yu
 	#[test]
 	fn ordinary_text_with_a_colon_is_not_a_link() {
 		assert_eq!(at("aspect ratio 3:4 here", "3:4"), None);
@@ -294,6 +299,7 @@ mod tests {
 		assert_eq!(at("https://", "https"), None, "no body");
 	}
 
+	// Test ID: Em1S9yv
 	#[test]
 	fn the_scheme_is_case_insensitive_and_several_links_coexist() {
 		assert_eq!(
@@ -310,6 +316,7 @@ mod tests {
 	// directed test as well as the fuzz below. These are the ones that turn a
 	// printed line into code: two of them run script in a browser, one runs it in
 	// the Windows shell, and the rest reach a handler no terminal should offer.
+	// Test ID: EpQN0oK
 	#[test]
 	fn a_hostile_scheme_never_becomes_a_link() {
 		#[rustfmt::skip]
@@ -401,6 +408,7 @@ mod tests {
 			}
 		}
 
+		// Test ID: EpQN0oL
 		#[test]
 		fn only_an_allowlisted_url_is_ever_offered_to_the_opener() {
 			let corpus = fuzz::corpus("links");

@@ -1184,6 +1184,7 @@ mod tests {
 	// OSC 52, and whether the engine passes a store on is its config's call. A
 	// default that moved would quietly break copying again, or start answering
 	// reads.
+	// Test ID: EpyJWG0
 	#[test]
 	fn a_program_can_set_the_clipboard_but_never_read_it() {
 		use alacritty_terminal::event::{Event, EventListener};
@@ -1225,6 +1226,7 @@ mod tests {
 	// A program could set a title of any size and push it thousands of times onto
 	// the title stack, and each copy was kept. A megabyte title grew the whole
 	// program by about 4 GiB.
+	// Test ID: EqBcj6m
 	#[test]
 	fn a_program_title_is_held_to_a_size() {
 		use alacritty_terminal::event::{Event, EventListener};
@@ -1274,6 +1276,7 @@ mod tests {
 	// A pane narrowed below two cells asked the engine for one column, where a
 	// wide character panicked and wide text already on screen reflowed until
 	// memory ran out.
+	// Test ID: EqBQjc0
 	#[test]
 	fn a_pane_too_narrow_for_a_wide_character_still_takes_one() {
 		use alacritty_terminal::event::VoidListener;
@@ -1295,6 +1298,7 @@ mod tests {
 
 	// Closing a pane whose shell ignores the hang-up signal froze the whole
 	// window until that shell ended, since the close waited on it.
+	// Test ID: EqBSso5
 	#[test]
 	fn closing_a_pane_does_not_wait_on_a_shell_that_stays() {
 		use std::time::{Duration, Instant};
@@ -1318,6 +1322,7 @@ mod tests {
 	// at a whole core until it exited. The engine read EIO, went round again, and
 	// found the PTY still readable. The fix is in the engine fork, so an engine
 	// update is what would bring this back.
+	// Test ID: EqBacFs
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn a_hung_up_terminal_does_not_spin_the_reader() {
@@ -1350,6 +1355,7 @@ mod tests {
 		assert!(ended < 1000, "the pane ended {ended} ms after its program");
 	}
 
+	// Test ID: EqBacFt
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn hung_up_child() {
@@ -1424,6 +1430,7 @@ mod tests {
 	// A program that asks what color the background is (neovim, delta, termbg on
 	// every start) used to get nothing back and wait out its timeout. The three
 	// named slots and the whole palette answer now; anything else does not.
+	// Test ID: EpHUIAS
 	#[test]
 	fn a_color_query_gets_an_answer() {
 		use alacritty_terminal::event::{Event, WindowSize};
@@ -1477,6 +1484,7 @@ mod tests {
 
 	// tmux renames its client, so /proc/pid/comm reads "tmux: client" and a plain
 	// name comparison never matched it.
+	// Test ID: EoqHGQz
 	#[cfg(unix)]
 	#[test]
 	fn a_renamed_process_still_reports_its_program() {
@@ -1486,6 +1494,7 @@ mod tests {
 		assert_eq!(program_name(""), "");
 	}
 
+	// Test ID: Eolpl0a
 	#[test]
 	fn wsl_is_handed_the_directory_ahead_of_its_own_command() {
 		let dir = std::path::Path::new("/home/jim");
@@ -1504,6 +1513,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eolpl0b
 	#[test]
 	fn nothing_else_gets_a_cd_argument() {
 		let dir = std::path::Path::new("/home/jim");
@@ -1514,6 +1524,7 @@ mod tests {
 		assert!(wsl_cd(&argv("wsl.exe --cd ~ -d DebianWSL2"), dir).is_none());
 	}
 
+	// Test ID: EpQN0oR
 	#[test]
 	fn a_pane_only_ever_starts_in_an_absolute_directory() {
 		let keep = |s: &str| usable_cwd(Some(std::path::PathBuf::from(s))).is_some();
@@ -1538,6 +1549,7 @@ mod tests {
 
 	// The --keep-open line reads this out to the user, so it has to say the same
 	// thing on every platform.
+	// Test ID: EoSKhlp
 	#[cfg(unix)]
 	#[test]
 	fn an_exit_status_reads_the_same_on_every_platform() {
@@ -1550,6 +1562,7 @@ mod tests {
 
 	// Folding the notices may never LOSE one: the window clears the gate before
 	// it looks at the grid, so a read cycle that arrives mid-handling posts again.
+	// Test ID: EnLddKq
 	#[test]
 	fn one_notice_stands_until_the_window_takes_it() {
 		let gate = WakeGate::default();
@@ -1560,6 +1573,7 @@ mod tests {
 		assert!(gate.post());
 	}
 
+	// Test ID: EqH4isw
 	#[cfg(windows)]
 	#[test]
 	fn a_pane_hands_its_program_and_arguments_down_whole() {
@@ -1575,6 +1589,7 @@ mod tests {
 	// without finding it empty leaves the pipe's waker unarmed, so the engine's
 	// reader thread has to say when it fills again. The fix is in the engine
 	// fork, and this is what fails if an engine update leaves it behind.
+	// Test ID: EqH4isx
 	#[cfg(windows)]
 	#[test]
 	fn a_pane_under_a_flood_keeps_saying_there_is_more() {
@@ -1632,6 +1647,7 @@ mod tests {
 	// in NOW. A process that never moves must read back where it was started
 	// (that half is deterministic), and one that calls SetCurrentDirectory - as
 	// cmd.exe's `cd` does - must read back the new place, not the old one.
+	// Test ID: EnWyJ9U
 	#[cfg(windows)]
 	#[test]
 	fn a_windows_shell_reports_where_it_is_now_not_where_it_started() {
@@ -1708,6 +1724,7 @@ mod tests {
 	// A recycled pid is the failure this guard exists for: the row claims the
 	// shell as its parent but started before the shell did, so it belongs to
 	// whoever held that pid before.
+	// Test ID: EnL1S0f
 	#[test]
 	fn a_child_that_predates_the_shell_is_not_its_command() {
 		assert!(is_command_child(Some(200), 100));
@@ -1728,6 +1745,7 @@ mod tests {
 	// pwsh 7 prepends its own module directories to PSModulePath in its process,
 	// so a Windows PowerShell 5.1 pane opened below one finds pwsh's PSReadLine
 	// ahead of its own, cannot load it, and starts with no line editing.
+	// Test ID: EncA4gS
 	#[test]
 	fn a_shell_private_variable_is_put_back_to_the_session_value() {
 		let session = vars(&[(
@@ -1750,6 +1768,7 @@ mod tests {
 	// pwsh's -ExecutionPolicy sets this and every descendant inherits it. The
 	// session never sets it, so neither should a pane - and that means DROPPING
 	// it, not handing the shell an empty one to read.
+	// Test ID: EncA4gT
 	#[test]
 	fn a_variable_the_session_never_set_is_dropped() {
 		let session = vars(&[("PATH", r"C:\bin")]);
@@ -1763,6 +1782,7 @@ mod tests {
 	// Launched from the desktop rather than from a shell, the inherited
 	// environment already IS the session one. That is the ordinary case and it
 	// must write nothing at all.
+	// Test ID: EncA4gU
 	#[test]
 	fn an_environment_that_already_matches_needs_no_fixups() {
 		let session = vars(&[("PSModulePath", "one;two")]);
@@ -1772,6 +1792,7 @@ mod tests {
 
 	// Everything the user exported themselves is the reason a pane inherits at
 	// all, so a variable off the list is left alone however far it has drifted.
+	// Test ID: EncA4gV
 	#[test]
 	fn only_the_named_variables_are_touched() {
 		let session = vars(&[("VIRTUAL_ENV", ""), ("PSModulePath", "one")]);
@@ -1782,6 +1803,7 @@ mod tests {
 	// Windows environment names are case-insensitive and a block keeps whichever
 	// spelling set it first, so the two sides can differ by case alone - which is
 	// not a difference and must not read as one.
+	// Test ID: EncA4gW
 	#[test]
 	fn a_name_that_differs_only_in_case_is_the_same_variable() {
 		let session = vars(&[("PSModulePath", "one")]);
@@ -1792,6 +1814,7 @@ mod tests {
 	// The block is NUL-separated NAME=VALUE closed by a second NUL, and it also
 	// carries the hidden per-drive entries Windows keeps, whose NAME begins with
 	// '=' - so the separator can never be the first character.
+	// Test ID: EncA4gX
 	#[test]
 	fn an_environment_block_splits_names_from_values() {
 		let mut block: Vec<u16> = Vec::new();
@@ -1814,6 +1837,7 @@ mod tests {
 	// spelled with its references intact. A shell given that raw would search a
 	// directory that does not exist - and an unknown name has to survive rather
 	// than collapse to nothing, which would silently shorten a search path.
+	// Test ID: EncA4gY
 	#[test]
 	fn a_stored_reference_expands_and_an_unknown_one_survives() {
 		let vars = vars(&[("ProgramFiles", r"C:\Program Files")]);
@@ -1829,6 +1853,7 @@ mod tests {
 	// it answers with the empty set and every listed variable is DROPPED. That is
 	// only honest because nothing on the list is a variable a session sets - and it
 	// is the same path Windows takes for a variable its session block lacks.
+	// Test ID: EncBmYy
 	#[test]
 	fn an_empty_session_drops_every_private_variable() {
 		let inherited = vars(&[
@@ -1952,6 +1977,7 @@ mod tests {
 			);
 		}
 
+		// Test ID: EpQN0oS
 		#[test]
 		fn a_program_cannot_make_the_terminal_type() {
 			let corpus = fuzz::corpus("vt");

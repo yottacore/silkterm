@@ -179,6 +179,7 @@ mod tests {
 		(to_oklab(a).0 - to_oklab(b).0).abs()
 	}
 
+	// Test ID: EoTQguW
 	#[test]
 	fn oklab_round_trips() {
 		for c in [[0, 0, 0], [255, 255, 255], [124, 168, 229], [200, 30, 90]] {
@@ -190,6 +191,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EoTQguX
 	#[test]
 	fn dark_text_on_a_dark_background_is_lifted() {
 		let bg = [0, 0, 0];
@@ -204,6 +206,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EoTQguY
 	#[test]
 	fn pale_text_on_a_light_background_is_darkened() {
 		let bg = [0xf6, 0xf5, 0xf0];
@@ -213,6 +216,7 @@ mod tests {
 		assert!(gap(out, bg) >= 0.29);
 	}
 
+	// Test ID: EoTQguZ
 	#[test]
 	fn a_readable_pair_is_left_exactly_alone() {
 		let bg = [0, 0, 0];
@@ -223,6 +227,7 @@ mod tests {
 
 	// The HIDDEN attribute sets fg to bg, and a program can do the same by hand.
 	// Either way it is on purpose.
+	// Test ID: EoTQgua
 	#[test]
 	fn text_hidden_in_the_background_color_stays_hidden() {
 		assert_eq!(
@@ -231,6 +236,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EoTQgub
 	#[test]
 	fn zero_is_off() {
 		let fg = [0, 0, 0x80];
@@ -238,6 +244,7 @@ mod tests {
 	}
 
 	// Same lightness, different hue: nothing to compare, so it still has to move.
+	// Test ID: EoTQguc
 	#[test]
 	fn equal_lightness_moves_away_from_the_background() {
 		let bg = [0x30, 0x30, 0x30];
@@ -249,6 +256,7 @@ mod tests {
 	}
 
 	// Hue survives the move - a lifted red must not come back some other color.
+	// Test ID: EoTQgud
 	#[test]
 	fn the_hue_survives_a_lift() {
 		let fg = [0x40, 0x00, 0x00];
@@ -258,6 +266,7 @@ mod tests {
 
 	// A pale color on a light-but-not-white background: lighter runs out of room
 	// well before the gap is met, so it has to go the other way instead.
+	// Test ID: EoTQgue
 	#[test]
 	fn a_direction_with_no_room_flips_to_the_other_one() {
 		let bg = [0xb7, 0xb1, 0xa5];
@@ -271,6 +280,7 @@ mod tests {
 		assert!(gap(out, bg) >= 0.44);
 	}
 
+	// Test ID: EoTQguf
 	#[test]
 	fn the_memo_answers_the_same_as_the_plain_call() {
 		let mut memo = Readable::default();

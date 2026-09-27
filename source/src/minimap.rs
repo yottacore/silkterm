@@ -1253,6 +1253,7 @@ mod tests {
 	// gap drawn between lines beats against the pixel grid, and at these
 	// pitches the beat is slow enough to read as broad bands running down the
 	// column that are not in the text at all.
+	// Test ID: EqRBEHA
 	#[test]
 	fn a_page_of_one_line_composes_evenly() {
 		let settings = config::Settings::default();
@@ -1303,6 +1304,7 @@ mod tests {
 	// The same across the column. Cells do not line up with pixels either, and
 	// a filter no wider than one pixel leaves the cell grid beating against
 	// them - a comb down the column that is not in the text.
+	// Test ID: EqRBEHB
 	#[test]
 	fn a_repeating_line_composes_without_a_comb() {
 		let cfg = config::Settings::default();
@@ -1344,6 +1346,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EopeF4y
 	#[test]
 	fn a_full_screen_program_takes_the_column_unless_it_is_named() {
 		let mut s = cfg(true, 100.0);
@@ -1365,6 +1368,7 @@ mod tests {
 		assert!(wanted(&s, true, Some("less")));
 	}
 
+	// Test ID: EoXOeuW
 	#[test]
 	fn off_costs_the_pane_nothing() {
 		let full = Rect {
@@ -1378,6 +1382,7 @@ mod tests {
 		assert_eq!(column_w(&cfg(false, 100.0), full.w, 1.0, true), 0.0);
 	}
 
+	// Test ID: EpyCuGf
 	#[test]
 	fn the_column_takes_its_width_and_no_more() {
 		let s = cfg(true, 100.0);
@@ -1391,6 +1396,7 @@ mod tests {
 		assert_eq!(text_rect(full, &s, 1.0, true).w, 700.0);
 	}
 
+	// Test ID: EoXOeuX
 	#[test]
 	fn a_narrow_pane_gives_up_the_column() {
 		// half a pane is the most the column may take, and below the narrowest
@@ -1399,6 +1405,7 @@ mod tests {
 		assert_eq!(column_w(&cfg(true, 100.0), 120.0, 1.0, true), 60.0);
 	}
 
+	// Test ID: EoXOeuY
 	#[test]
 	fn a_short_buffer_does_not_stretch_to_fill() {
 		// 50 lines in a 600px column: capped, so well short of the 600
@@ -1409,6 +1416,7 @@ mod tests {
 		assert!(line_px(600.0, 10_000, 1.0) < 0.1);
 	}
 
+	// Test ID: EoXOeuZ
 	#[test]
 	fn the_handle_rides_the_scroll_position() {
 		let (top_y, _) = handle_span(600.0, 1000, 1000, 40, 960.0, 1.0);
@@ -1422,6 +1430,7 @@ mod tests {
 	// used to read the marker's drawn top back through the inverse of where it
 	// was drawn; the height floor makes that reading approximate, so the drag
 	// works from the grab instead.
+	// Test ID: EoXOeua
 	#[test]
 	fn a_drag_round_trips_through_the_mapping() {
 		let track = 600.0;
@@ -1451,6 +1460,7 @@ mod tests {
 	// the column landing off center (F148). Where the height floor makes the
 	// marker taller than the rows it stands for, it grows from their middle,
 	// so the slack is half that excess and no more.
+	// Test ID: EqR4Ye0
 	#[test]
 	fn the_marker_sits_over_the_lines_it_stands_for() {
 		let track = 900.0;
@@ -1486,6 +1496,7 @@ mod tests {
 	// drag event feeds the same pointer back, so it has to come out unmoved.
 	// Where it does not, a press and one pixel of movement scrolls the view on
 	// its own.
+	// Test ID: EqMZXTc
 	#[test]
 	fn a_marker_reads_back_the_position_it_was_drawn_at() {
 		let track = 900.0;
@@ -1549,12 +1560,14 @@ mod tests {
 		.unwrap()
 	}
 
+	// Test ID: EoXOeub
 	#[test]
 	fn the_handle_stays_grabbable_on_a_deep_buffer() {
 		let (_, h) = handle_span(600.0, 100_000, 100_000, 40, 0.0, 1.0);
 		assert!(h >= MIN_HANDLE);
 	}
 
+	// Test ID: EoXOeuc
 	#[test]
 	fn a_line_composes_where_the_mapping_puts_it() {
 		// 100 lines in a 200px column, line 40 the only red one
@@ -1576,6 +1589,7 @@ mod tests {
 		assert_eq!(map.pixel(6, red)[3], 0);
 	}
 
+	// Test ID: EoXOeud
 	#[test]
 	fn a_short_buffer_leaves_the_bottom_of_the_column_empty() {
 		let width = 4;
@@ -1590,6 +1604,7 @@ mod tests {
 		assert_eq!(map.pixel(0, used + 1)[3], 0);
 	}
 
+	// Test ID: EoXOeue
 	#[test]
 	fn one_inked_line_among_many_still_shows() {
 		// 5,000 lines into 500px: 10 lines to a pixel row, and the single red one
@@ -1607,6 +1622,7 @@ mod tests {
 
 	// What the map is for is reading density from a distance, so a stretch of
 	// mostly blank lines has to look different from a solid page.
+	// Test ID: Eolyf2O
 	#[test]
 	fn a_sparse_stretch_reads_dimmer_than_a_full_one() {
 		let width = 4;
@@ -1631,6 +1647,7 @@ mod tests {
 	// the build that folds them in holds the term lock the PTY reader waits on.
 	// So a build that does not compose rasterizes nothing, and a compose does no
 	// more than the history and the screen, however much output went by.
+	// Test ID: EqLtc6K
 	#[test]
 	fn a_flood_rasterizes_only_what_a_compose_shows() {
 		let (cols, lines, scrollback) = (80, 24, 1000);
@@ -1689,6 +1706,7 @@ mod tests {
 	// A compose holds the term lock, and how long it takes grows with the
 	// scrollback. So the wait after one grows with it, keeping the map to a
 	// small share of the time at any depth.
+	// Test ID: EqLtc6L
 	#[test]
 	fn a_slow_compose_waits_its_share_out() {
 		assert_eq!(gap(Duration::ZERO), Duration::from_millis(COMPOSE_MS));
@@ -1734,6 +1752,7 @@ mod tests {
 	// The column's width can change between composes, and the image is still
 	// the one composed at the old width. A caller that took the new width made
 	// a texture the pixels could not fill, and wgpu killed the window.
+	// Test ID: EqLzJNY
 	#[test]
 	fn the_map_reports_the_size_its_pixels_have() {
 		let (cols, lines) = (20, 4);
@@ -1832,6 +1851,7 @@ mod tests {
 		out
 	}
 
+	// Test ID: EqLzJNZ
 	#[test]
 	fn a_rasterized_line_matches_a_plain_per_cell_pass() {
 		let cfg = config::Settings::default();
@@ -1874,6 +1894,7 @@ mod tests {
 	// A character is not a flat block. A period inks a fraction of its cell and
 	// a hash most of it, and that difference is what stops a run of text
 	// reading as one bar.
+	// Test ID: EqMTH4y
 	#[test]
 	fn a_glyphs_weight_follows_how_much_it_inks() {
 		let cfg = config::Settings::default();
@@ -1926,6 +1947,7 @@ mod tests {
 	// At the capped height a line's ink is a band narrower than a pixel, so it
 	// falls across two pixel rows at part strength rather than filling one.
 	// That is what a page of text looks like from across the room.
+	// Test ID: EqMTH4z
 	#[test]
 	fn a_line_at_the_cap_is_softer_than_a_solid_row() {
 		let width = 4;
@@ -1951,6 +1973,7 @@ mod tests {
 	// Under a flood the eased view sits behind the newest output. The map stops
 	// where the view has reached, so the column shows nothing the text has not.
 	// With the ease at rest it draws the whole buffer again.
+	// Test ID: EqN59w0
 	#[test]
 	fn the_map_stops_where_the_eased_text_has_reached() {
 		let settings = config::Settings::default();
@@ -2042,6 +2065,7 @@ mod tests {
 	// and is out again (SR1): the map used to stop at the last screen row with
 	// ink, so the blank rows under a short prompt took no track. They are part
 	// of the buffer, and the marker reaches over them.
+	// Test ID: EqQ3t6m
 	#[test]
 	fn blank_rows_under_a_prompt_are_part_of_the_map() {
 		let settings = config::Settings::default();
@@ -2115,6 +2139,7 @@ mod tests {
 
 	// The ease drains whether or not more output arrives, so a map that came
 	// out short has to ask for another compose or it stays short.
+	// Test ID: EqN59w1
 	#[test]
 	fn a_trimmed_compose_owes_another() {
 		let settings = config::Settings::default();
@@ -2151,6 +2176,7 @@ mod tests {
 	// can draw anything new. Owing one anyway had `wake()` asking app.rs for a
 	// frame and a full recompose about eleven times a second for as long as the
 	// pane sat there, with no output and nobody touching it.
+	// Test ID: EqQ9f4K
 	#[test]
 	fn a_parked_view_stops_owing_composes() {
 		let _g = config::test_store_lock();
@@ -2222,6 +2248,7 @@ mod tests {
 		assert!(draining.wake().is_some(), "a draining lag asks for a frame");
 	}
 
+	// Test ID: EqLzJNa
 	#[test]
 	fn a_pixel_takes_the_nearest_byte() {
 		assert_eq!(to_u8(0.4), 0);
@@ -2232,6 +2259,7 @@ mod tests {
 
 	// Rasterizing late must not change what is drawn: every compose matches the
 	// one a fresh cache makes from the same grid, whatever went by in between.
+	// Test ID: EqLtc6M
 	#[test]
 	fn a_late_raster_composes_the_image_a_fresh_one_would() {
 		let cfg = config::Settings::default();
@@ -2314,6 +2342,7 @@ mod tests {
 
 	// Below a pixel a line has no room for a gap, so it is taken whole and a
 	// full page is as bright as it ever was.
+	// Test ID: Eolyf2P
 	#[test]
 	fn a_line_under_a_pixel_keeps_its_whole_height() {
 		assert_eq!(Minimap::band(0.4), (0.0, 0.4));

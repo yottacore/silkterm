@@ -260,6 +260,7 @@ mod tests {
 	// Dark mode never takes the other blend, whatever the picture. The visibility
 	// ramp does reach it - that is the point of the ramp - so the exact identity
 	// only holds with the ramp off, which is what the second half checks.
+	// Test ID: EqTTXtg
 	#[test]
 	fn dark_mode_still_draws_the_blend_it_always_has() {
 		for name in crate::theme::names() {
@@ -289,6 +290,7 @@ mod tests {
 	// The whole reason the mix is a pure power curve rather than sRGB's own. Over
 	// a black background the two are the same arithmetic, so a dark theme could
 	// take either path and draw the same pixels.
+	// Test ID: EqTOWF6
 	#[test]
 	fn over_black_the_mix_is_the_blend_it_replaces() {
 		for v in SLIDERS {
@@ -313,6 +315,7 @@ mod tests {
 		config::from_linear(mix.field(HI, bg)) - config::from_linear(mix.field(LO, bg))
 	}
 
+	// Test ID: EqTOWF7
 	#[test]
 	fn light_mode_shows_the_contrast_dark_mode_shows() {
 		for name in crate::theme::names() {
@@ -337,6 +340,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EqTOWF8
 	#[test]
 	fn the_shipped_default_asks_for_the_scale_black_would_have_given() {
 		let s = themed("SilkTerm", "light");
@@ -351,6 +355,7 @@ mod tests {
 
 	// A dark theme whose background is not black already shows less picture, so
 	// its light mode shows less too. Self-consistent rather than uniform.
+	// Test ID: EqTOWF9
 	#[test]
 	fn a_theme_with_a_lifted_dark_background_asks_for_less() {
 		let silk = wallpaper_mix(&themed("SilkTerm", "light"), 0.10, None).amount;
@@ -359,6 +364,7 @@ mod tests {
 		assert!(pastel < silk - 0.05, "silk {silk}, pastel {pastel}");
 	}
 
+	// Test ID: EqTOWFA
 	#[test]
 	fn the_scale_runs_end_to_end_and_only_upward() {
 		for name in crate::theme::names() {
@@ -374,6 +380,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EqT4HIf
 	#[test]
 	fn the_halo_is_quietened_wherever_a_picture_is_up() {
 		let s = themed("SilkTerm", "light");
@@ -383,6 +390,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EqT4HIg
 	#[test]
 	fn the_halo_covers_the_same_ground_in_both_modes() {
 		let name = "SilkTerm";
@@ -411,6 +419,7 @@ mod tests {
 	const BRIGHT: (f32, f32) = (0.45, 0.80);
 	const ORDINARY: (f32, f32) = (REF_MEAN, REF_HI);
 
+	// Test ID: EqTTXth
 	#[test]
 	fn an_ordinary_picture_is_drawn_at_what_the_slider_says() {
 		for name in crate::theme::names() {
@@ -428,6 +437,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EqTTXti
 	#[test]
 	fn a_glaring_picture_is_held_back_and_a_faint_one_lifted() {
 		let s = themed("SilkTerm", "dark");
@@ -443,6 +453,7 @@ mod tests {
 
 	// The same rule read from the other side, which is what the backlog asked
 	// for: over a light background it is the DARK picture that stands out.
+	// Test ID: EqTTXtj
 	#[test]
 	fn light_mode_holds_back_the_picture_that_stands_out_there_instead() {
 		let s = themed("SilkTerm", "light");
@@ -472,6 +483,7 @@ mod tests {
 	// Glare comes from a picture's bright end, not from its average. A night sky
 	// with a sun in it has the same overall level as a flat dark picture and is
 	// nothing like it to look at, so the ramp has to tell them apart.
+	// Test ID: EqTTXtk
 	#[test]
 	fn a_dark_picture_with_a_bright_area_is_not_a_dark_picture() {
 		let s = themed("SilkTerm", "dark");
@@ -484,6 +496,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EqTTXtl
 	#[test]
 	fn a_full_slider_always_draws_the_picture_as_it_is() {
 		for name in crate::theme::names() {
@@ -503,6 +516,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EqTTXtm
 	#[test]
 	fn the_strength_setting_turns_the_ramp_off() {
 		let mut s = themed("SilkTerm", "dark");
@@ -518,6 +532,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EqTTXtn
 	#[test]
 	fn the_ramp_never_takes_the_slider_backwards() {
 		for mode in ["dark", "light"] {
@@ -536,6 +551,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EqT4HIh
 	#[test]
 	fn no_picture_leaves_the_halo_alone() {
 		assert_eq!(halo_gain(&themed("SilkTerm", "light"), 0.0), 1.0);

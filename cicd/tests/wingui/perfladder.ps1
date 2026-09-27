@@ -1,6 +1,7 @@
 ##	The performance ladder rating itself on real hardware. It has only ever run on
 ##	a software adapter, where it answers Standard, so what a discrete or integrated
 ##	GPU actually rates has never been seen.
+##	Test ID: EpJ5h1E
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the banner cannot be grabbed" }
 

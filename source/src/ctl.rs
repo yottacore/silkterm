@@ -190,6 +190,7 @@ pub fn send(_cmd: &str) -> Result<(), String> {
 mod tests {
 	use super::*;
 
+	// Test ID: EjpedZh
 	#[test]
 	fn parse_commands() {
 		assert!(matches!(parse("reload"), Ok(UserEvent::ReloadSettings)));
@@ -209,6 +210,7 @@ mod tests {
 
 	// Each way out a window can take, driven in a child copy of this test binary
 	// (`socket_exit_child` below), which binds a socket and then leaves.
+	// Test ID: Eq4Yrbg
 	#[cfg(unix)]
 	#[test]
 	fn the_socket_file_goes_away_however_the_process_ends() {
@@ -238,6 +240,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// Test ID: Eq4Yrbh
 	#[cfg(unix)]
 	#[test]
 	fn socket_exit_child() {

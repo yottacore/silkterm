@@ -1,5 +1,6 @@
 ##	Proves the rig itself: a window comes up on the real adapter, it draws, it takes
 ##	the foreground, and what is typed reaches the shell inside it.
+##	Test ID: EpJ4XDc
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 

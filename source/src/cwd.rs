@@ -458,6 +458,7 @@ mod tests {
 
 	// A zsh started from dash reports, exits, and leaves dash, which says
 	// nothing. The next tab started in zsh's last directory.
+	// Test ID: Eq4qaCW
 	#[cfg(unix)]
 	#[test]
 	fn a_report_is_dropped_once_the_program_that_sent_it_exits() {
@@ -489,6 +490,7 @@ mod tests {
 
 	// The spelling the unix shells emit: a URL, so the path is percent-encoded
 	// and the machine is named. Both terminators are in use.
+	// Test ID: EnXWnI0
 	#[test]
 	fn an_osc7_url_names_the_directory_it_encodes() {
 		assert_eq!(
@@ -514,6 +516,7 @@ mod tests {
 	// A directory on another machine is not one we can open, and the case that
 	// makes this matter is the one where the two agree by accident: an ssh
 	// session whose remote path exists here too would open the wrong pane.
+	// Test ID: EnXWnI1
 	#[test]
 	fn a_directory_on_another_machine_is_not_ours() {
 		assert_eq!(directory("7;file://elsewhere/srv/log", "box"), None);
@@ -522,6 +525,7 @@ mod tests {
 
 	// The ConEmu spelling, which is what Windows Terminal documents for
 	// PowerShell - so a profile already set up for that terminal works here.
+	// Test ID: EnXWnI2
 	#[test]
 	fn the_conemu_spelling_is_read_too() {
 		assert_eq!(directory("9;9;/srv/log", "box"), Some(native("/srv/log")));
@@ -535,6 +539,7 @@ mod tests {
 
 	// A read returns whatever the pipe held, so a report arrives in as many
 	// pieces as it likes - including one split mid-escape and mid-terminator.
+	// Test ID: EnXWnI3
 	#[test]
 	fn a_report_split_across_reads_still_arrives() {
 		let whole = b"ok\x1b]7;file:///srv/log\x07more";
@@ -558,6 +563,7 @@ mod tests {
 	// Every other OSC goes past constantly - titles on every prompt, clipboard
 	// writes carrying whole selections - and none of it may be collected, or a
 	// paste-sized payload would be buffered for nothing.
+	// Test ID: EnXWnI4
 	#[test]
 	fn nothing_but_the_two_sequences_is_collected() {
 		let reported = Reported::default();
@@ -581,6 +587,7 @@ mod tests {
 
 	// The Windows spellings: a drive letter arrives behind the URL separator
 	// that a file:// path always has, and the separators turn around.
+	// Test ID: EnXWnI5
 	#[cfg(windows)]
 	#[test]
 	fn a_windows_drive_letter_survives_the_url_it_arrived_in() {
@@ -597,6 +604,7 @@ mod tests {
 	// A reported directory names the tab and reaches the window title, so it has
 	// to be text. Percent-decoding is how a control character gets in: the shell
 	// need not have printed one for the payload to decode into one.
+	// Test ID: EpQN0oF
 	#[test]
 	fn a_reported_directory_carrying_a_control_character_is_refused() {
 		assert_eq!(directory("9;9;/srv/lo\u{0}g", "box"), None);
@@ -621,6 +629,7 @@ mod tests {
 			"..", "\u{0}", "srv", "\u{4e2d}",
 		];
 
+		// Test ID: EpQN0oG
 		#[test]
 		fn any_reported_directory_parses_into_a_usable_path() {
 			let corpus = fuzz::corpus("cwd");

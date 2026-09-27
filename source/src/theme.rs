@@ -352,6 +352,7 @@ pub fn resolve(name: &str, mode: &str, system_dark: bool) -> Palette {
 mod tests {
 	use super::*;
 
+	// Test ID: EiMPv8L
 	#[test]
 	fn resolve_picks_theme_and_mode() {
 		// unknown name falls back to the first theme (SilkTerm)
@@ -367,6 +368,7 @@ mod tests {
 		assert_eq!(resolve(" matrix ", "DARK", true).fg, find("Matrix").dark.fg);
 	}
 
+	// Test ID: EiuvVez
 	#[test]
 	fn chrome_defaults_shared_across_themes() {
 		// every built-in theme uses the same neutral menu colors (both modes)
@@ -385,6 +387,7 @@ mod tests {
 	// The pair only works if the two read as different signals. A theme that let
 	// them converge would draw the focused control and everything merely
 	// highlighted in the same color, which is the whole point of splitting them.
+	// Test ID: Em3Pif6
 	#[test]
 	fn the_two_attention_colours_stay_apart() {
 		for (name, t) in THEMES {
@@ -401,6 +404,7 @@ mod tests {
 	// own foreground needed lifting, the floor would be repainting the thing it is
 	// measured against. ANSI black is the other end of the same check: it is
 	// invisible on a dark ground by definition, which is the case the floor is for.
+	// Test ID: EoTQgug
 	#[test]
 	fn a_theme_fg_clears_the_floor_and_ansi_black_does_not() {
 		let floor = crate::config::Settings::default().text_min_contrast;
@@ -424,6 +428,7 @@ mod tests {
 	// the menu's own text. The gap is still wide at the shipped colors, but a
 	// theme that overrode the menu pair could land somewhere the lift makes
 	// unreadable, and nothing repaints chrome at run time.
+	// Test ID: EqQPotH
 	#[test]
 	fn tip_text_clears_the_floor_on_its_own_box() {
 		let floor = crate::config::Settings::default().text_min_contrast;
@@ -444,6 +449,7 @@ mod tests {
 	// keeps its own color. So the plate is a second background the text has to
 	// clear the floor on, and a cursor at the fg's own brightness fails it. The
 	// plate is blended over the bg in linear light, as the sRGB surface does.
+	// Test ID: Eq9PYAL
 	#[test]
 	fn text_on_the_cursor_plate_clears_the_floor() {
 		let floor = crate::config::Settings::default().text_min_contrast;

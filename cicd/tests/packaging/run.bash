@@ -8,6 +8,7 @@
 ##		release could go out with no installers in it.
 ##		build_packages() is lifted out of cicd.bash and run against the real
 ##		template and makensis, once with each shape of target directory.
+##	- Test ID: EqAwQq9
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

@@ -3,6 +3,7 @@
 ##	- Purpose:
 ##		The publish script commits and pushes, so nothing the caller's environment
 ##		holds may be executed inside it. It used to eval one of its own variables.
+##	- Test ID: EpHV4IK
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

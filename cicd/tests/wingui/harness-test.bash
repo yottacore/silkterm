@@ -7,6 +7,7 @@
 ##		It ran whatever binary the box last built, so a result could be for an
 ##		older commit. And its cleanup stopped every process named silkterm, on
 ##		boxes other people use.
+##	- Test ID: EqH4isr
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

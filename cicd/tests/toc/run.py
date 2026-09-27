@@ -9,6 +9,7 @@
 ##		  --fix       write the rebuilt block instead of reporting
 ##		  --root DIR  repository root (default: three levels above this script)
 ##	Exit: 0 all TOCs current, 1 one or more differ.
+##	Test ID: EqRbSy0
 
 ##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:

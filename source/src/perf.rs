@@ -338,6 +338,7 @@ mod tests {
 
 	// One sample is the whole distribution, and 95% of one still has to fall on
 	// it rather than one past the end.
+	// Test ID: EoTIJ8i
 	#[test]
 	fn percentiles_never_step_past_the_last_sample() {
 		assert_eq!(percentiles(&[7]), (7, 7));

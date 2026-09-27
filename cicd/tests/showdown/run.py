@@ -6,6 +6,7 @@
 ##		used to rewrite their row anyway. This drives both table writers with the
 ##		terminal and the measuring faked out, against a scratch README. It also
 ##		checks the rigs find the build where CARGO_TARGET_DIR puts it.
+##	- Test ID: EqBnA5g
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

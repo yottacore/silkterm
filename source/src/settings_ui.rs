@@ -6559,6 +6559,7 @@ mod tests {
 	// in DIP, so the same window comes out the same apparent size on a monitor at
 	// another scale - and the values and unapplied edits have to still be there,
 	// which is the whole reason the dialog is not rebuilt for one.
+	// Test ID: EqMD0kq
 	#[test]
 	fn a_scale_change_moves_the_boundary_and_leaves_the_rest() {
 		let mut d = mk_dialog_at(900.0, 1.0);
@@ -6603,6 +6604,7 @@ mod tests {
 	// so the window manager sends no resize and nothing else tells the dialog it
 	// is now claiming twice the pixels the window has. Handing it the size the
 	// window really measures is what puts the two back in step.
+	// Test ID: EqQh9oP
 	#[test]
 	fn a_window_that_keeps_its_pixels_through_a_scale_change_still_fits_them() {
 		let mut d = mk_dialog_at(900.0, 1.0);
@@ -6640,6 +6642,7 @@ mod tests {
 	// to be the SAME pad. Mixing a physical measurement with a raw DIP constant
 	// halves the box's share of it at 2x (flush right) and takes two thirds of it
 	// at 3x (the title runs past the box).
+	// Test ID: EncVe5o
 	#[test]
 	fn a_tab_title_keeps_its_clear_space_at_every_scale() {
 		let pad = super::lay().tab_pad;
@@ -6660,6 +6663,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EipgKd6
 	#[test]
 	fn tabs_partition_all_specs() {
 		let d = mk_dialog(2000.0);
@@ -6670,6 +6674,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Eit1amm
 	#[test]
 	fn revert_restores_default_and_records_key() {
 		let mut d = mk_dialog(2000.0);
@@ -6691,6 +6696,7 @@ mod tests {
 		assert!(d.edited.use_system_font && d.edited.use_system_font_size);
 	}
 
+	// Test ID: EipgKd7
 	#[test]
 	fn height_cap_enables_scroll() {
 		// generous cap: natural size, nothing to scroll
@@ -6718,6 +6724,7 @@ mod tests {
 	// Too narrow, and the rows keep their natural width and slide sideways under
 	// the window instead of being cut down to fit it. The bar that does it lives
 	// in the clear space above the footer, so showing it costs the rows nothing.
+	// Test ID: EpOQNMS
 	#[test]
 	fn a_narrow_window_scrolls_sideways_rather_than_truncating() {
 		let mut d = mk_dialog(2000.0);
@@ -6764,6 +6771,7 @@ mod tests {
 	// Widening hands the extra room to the control in the middle of the row. The
 	// value field and the revert arrow keep their distance from the right edge,
 	// so both stay in one column whatever the window is doing.
+	// Test ID: EpOQNMT
 	#[test]
 	fn widening_stretches_the_control_and_not_its_value_field() {
 		let mut d = mk_dialog(2000.0);
@@ -6789,6 +6797,7 @@ mod tests {
 
 	// A row declared `beside` shares the line above it: same y, and the two split
 	// the control column without touching. The pair costs one line, not two.
+	// Test ID: EpOQNMU
 	#[test]
 	fn a_paired_row_shares_the_line_above_it() {
 		let d = mk_dialog(4000.0);
@@ -6825,6 +6834,7 @@ mod tests {
 	// A pair shares one revert arrow, so a profile showing the FIRST half must not
 	// silence the arrow for the second - which is not governed and can still be
 	// off its default with no other way back.
+	// Test ID: EqRTxpI
 	#[test]
 	fn a_governed_half_does_not_silence_its_partner_s_revert() {
 		let mut d = mk_dialog(4000.0);
@@ -6864,6 +6874,7 @@ mod tests {
 	// in view, and never with the rows' sideways scroll - a tab panned off the
 	// window edge could not be clicked, which is how you leave a tab that will
 	// not fit.
+	// Test ID: EpOZLYG
 	#[test]
 	fn the_tab_strip_keeps_the_current_tab_in_the_window() {
 		let mut d = mk_dialog(4000.0);
@@ -6885,6 +6896,7 @@ mod tests {
 	}
 
 	// A pair is worth having only if it is shorter than the two rows it replaces.
+	// Test ID: EpOQNMV
 	#[test]
 	fn pairing_rows_makes_the_tab_shorter() {
 		let d = mk_dialog(4000.0);
@@ -6906,6 +6918,7 @@ mod tests {
 
 	// The strip is chrome: shorter than a footer button, dropped clear of the
 	// panel edge, and closed off by a rule the rows start below.
+	// Test ID: Em3Pif3
 	#[test]
 	fn the_tabs_stand_on_the_line_that_closes_their_strip() {
 		let d = mk_dialog(2000.0);
@@ -6923,6 +6936,7 @@ mod tests {
 	// The whole point of a sub-group: the label steps right, the control does
 	// not. A control that moved with its label would break the one column every
 	// row shares, which is what makes a settings list scannable.
+	// Test ID: Em3akaG
 	#[test]
 	fn a_sub_group_indents_labels_and_nothing_else() {
 		let mut d = mk_dialog(4000.0);
@@ -6966,6 +6980,7 @@ mod tests {
 
 	// A sub-group's leader is set off from whatever sat above it, the way a
 	// heading is - but its own members are not, or the run would not read as one.
+	// Test ID: Em3akaH
 	#[test]
 	fn a_sub_group_leader_gets_the_gap_and_its_members_do_not() {
 		let d = mk_dialog(4000.0);
@@ -7046,6 +7061,7 @@ mod tests {
 	// applies for the session and is gone at relaunch, with nothing anywhere to
 	// say so. Both scrollbar colors did exactly that from the day the bar
 	// shipped, so the check is generic - every row, saved and read back.
+	// Test ID: Em3akaI
 	#[test]
 	fn every_row_survives_a_save_and_a_relaunch() {
 		let _guard = config::test_config_lock();
@@ -7107,6 +7123,7 @@ mod tests {
 	// A revert queues the row's line to go back to the template's default at
 	// Apply. A change made to the same row after that has to win, where it used to
 	// be written and then commented straight back out, and so gone at relaunch.
+	// Test ID: Epz4rDk
 	#[test]
 	fn a_row_changed_after_its_revert_keeps_the_change() {
 		let _guard = config::test_config_lock();
@@ -7181,6 +7198,7 @@ mod tests {
 	// label does not. A dialog of rendering settings carries one on most of its
 	// rows because a name cannot say what a falloff curve does to the picture; a
 	// tip that only reworded its label would be the thing to delete.
+	// Test ID: EpHedwm
 	#[test]
 	fn no_flyover_merely_restates_its_label() {
 		let d = mk_dialog(4000.0);
@@ -7223,6 +7241,7 @@ mod tests {
 	// The shells grid is one spec row carrying two editable fields per entry, and
 	// the right-click handler walked spec rows - so those two were the only fields
 	// in the dialog with no menu, while the Menu key worked on them.
+	// Test ID: EpHbI5g
 	#[test]
 	fn the_shells_grid_fields_have_a_right_click_menu() {
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -7274,6 +7293,7 @@ mod tests {
 	// to sit inside each arm of the press handler, and the color, text and radio
 	// arms never got it - so a grayed field still changed its setting, and the
 	// font Family field switched off "use the system font" as a side effect.
+	// Test ID: EpHT2u8
 	#[test]
 	fn a_grayed_control_takes_no_click() {
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -7322,6 +7342,7 @@ mod tests {
 	// While a profile is chosen, every row it governs shows the profile's value
 	// and the user's own value waits underneath. Custom is the one profile that
 	// governs nothing.
+	// Test ID: EqRTxpJ
 	#[test]
 	fn a_profile_shows_its_values_in_its_rows() {
 		use super::{GOVERNED, PROFILE_TIP};
@@ -7406,6 +7427,7 @@ mod tests {
 	// values on screen become the user's own, the profile drops to Custom and
 	// the machine stops choosing - and every other governed row keeps what it
 	// was showing, so only the row that was touched moves.
+	// Test ID: EqRTxpK
 	#[test]
 	fn changing_a_governed_row_takes_the_profile_to_custom() {
 		use super::GOVERNED;
@@ -7450,6 +7472,7 @@ mod tests {
 	// A change to a setting it governs is the one thing that has to move it: the
 	// override would otherwise go on covering the new value, and so would the
 	// stored profile underneath it.
+	// Test ID: EqRTxpL
 	#[test]
 	fn changing_a_governed_row_under_remote_drops_the_override() {
 		let mut d = mk_dialog(900.0);
@@ -7467,6 +7490,7 @@ mod tests {
 	// would be overwritten at the next launch with nothing to show for it.
 	// Remote is the exception: it lasts this session only and says nothing about
 	// what the machine should settle on.
+	// Test ID: EqMD0kr
 	#[test]
 	fn naming_a_profile_switches_off_the_automatic_choice_except_remote() {
 		let mut d = mk_dialog(900.0);
@@ -7490,6 +7514,7 @@ mod tests {
 	// A 0..1 fraction reads as a whole percent and is stored as the decimal. The
 	// two directions have to be exact inverses: a revert that came a hair off
 	// its own default would leave the arrow lit with nothing to undo.
+	// Test ID: Em3akaJ
 	#[test]
 	fn a_fraction_reads_as_a_whole_percent_and_stores_as_a_decimal() {
 		let mut d = mk_dialog(4000.0);
@@ -7526,6 +7551,7 @@ mod tests {
 
 	// A heading that only repeats its tab's title is gone from the layout
 	// entirely - not merely hidden, or it would leave a gap where it used to be.
+	// Test ID: Em3Pif4
 	#[test]
 	fn a_heading_that_repeats_its_tab_takes_no_room() {
 		let mut d = mk_dialog(2000.0);
@@ -7603,6 +7629,7 @@ mod tests {
 		(d, i)
 	}
 
+	// Test ID: EnQUIKp
 	#[test]
 	fn the_shells_grid_has_a_tab_to_itself() {
 		let ui = super::ui_spec::ui();
@@ -7641,6 +7668,7 @@ mod tests {
 
 	// Asked for on the Cursor tab, and asked for LAST - so both halves are
 	// pinned, or a row appended later quietly takes its place.
+	// Test ID: EnQUIKq
 	#[test]
 	fn copy_on_select_is_the_last_thing_on_the_cursor_tab() {
 		let d = mk_dialog(4000.0);
@@ -7662,6 +7690,7 @@ mod tests {
 	// exactly one of them - the encoding both the focus ring and the hit tests
 	// read, so a mistake here would put the ring on one control and the click on
 	// another.
+	// Test ID: EnQUIKr
 	#[test]
 	fn a_part_index_names_one_control_on_one_line() {
 		let (d, i) = mk_shell_dialog(3);
@@ -7686,6 +7715,7 @@ mod tests {
 	// Reordering left the keyboard when the arrows did, so the grip must not be a
 	// stop - a ring sitting on a control that Space cannot work is worse than no
 	// ring at all. Nothing in the grid is grayed any more either.
+	// Test ID: EnRWor4
 	#[test]
 	fn the_grip_is_a_gesture_and_not_a_keyboard_stop() {
 		let (d, i) = mk_shell_dialog(3);
@@ -7709,6 +7739,7 @@ mod tests {
 	// The grip's whole job. Dragging is live - the list reorders under the
 	// pointer rather than on release - so each step of the gesture is asserted,
 	// not just where it ended up.
+	// Test ID: EnRWor5
 	#[test]
 	fn a_grip_drag_reorders_the_list() {
 		let (mut d, i) = mk_shell_dialog(3);
@@ -7745,6 +7776,7 @@ mod tests {
 	// Dragged the other way, and off the top: the first line is as far as it
 	// goes. The arithmetic is in f32 and ends on a usize, so this is the test
 	// that says the saturating cast is being RELIED on rather than tolerated.
+	// Test ID: EnRWor6
 	#[test]
 	fn a_line_dragged_off_the_top_lands_on_the_first() {
 		let (mut d, i) = mk_shell_dialog(3);
@@ -7762,6 +7794,7 @@ mod tests {
 	// The command is REQUIRED: emptying the field cannot be what stores an entry
 	// that names nothing to run. The stored value stands and the box shows it
 	// again, which is the whole rule at the field.
+	// Test ID: EnQUIKs
 	#[test]
 	fn a_blank_command_cannot_replace_a_stored_one() {
 		let (mut d, _) = mk_shell_dialog(2);
@@ -7782,6 +7815,7 @@ mod tests {
 	// A name edit applies to the entry it was opened for, not on the row index -
 	// the two are different numbers here, which is the whole point of the
 	// pseudo-row scheme.
+	// Test ID: EnQUIKt
 	#[test]
 	fn a_field_edit_lands_on_its_own_entry() {
 		let (mut d, _) = mk_shell_dialog(3);
@@ -7795,6 +7829,7 @@ mod tests {
 
 	// Add creates an entry with no command and puts the caret straight in it - the
 	// one field that has to be filled before the entry means anything.
+	// Test ID: EnQUIKu
 	#[test]
 	fn adding_a_shell_opens_the_field_it_needs() {
 		let (mut d, i) = mk_shell_dialog(1);
@@ -7816,6 +7851,7 @@ mod tests {
 
 	// Removing is the one grid action doing the opposite cannot undo, so it asks
 	// first - and asking must not remove anything by itself.
+	// Test ID: EnQUIKv
 	#[test]
 	fn removing_a_shell_asks_before_it_happens() {
 		let (mut d, _) = mk_shell_dialog(3);
@@ -7839,6 +7875,7 @@ mod tests {
 	// so the one thing that can go wrong is them meeting in the middle. The
 	// order asserted here is the order asked for: remove sits between the
 	// command and the date, where it is hard to press by accident.
+	// Test ID: EnQUIKw
 	#[test]
 	fn the_grid_columns_stay_inside_the_panel_in_order() {
 		let (d, i) = mk_shell_dialog(2);
@@ -7878,6 +7915,7 @@ mod tests {
 	// the old arrows. Three things: the grip is three bars and not a button, the
 	// remove mark is drawn in the danger colour and not the text colour, and no
 	// arrow survives anywhere in the grid.
+	// Test ID: EnRaGh6
 	#[test]
 	fn the_grip_reads_as_bars_and_the_remove_mark_reads_as_red() {
 		let (mut d, i) = mk_shell_dialog(2);
@@ -7947,6 +7985,7 @@ mod tests {
 	// The draw path has no other cover, and it is where a new control kind fails
 	// silently: a grid that renders nothing at all still passes every geometry
 	// test above. So this walks what would actually be handed to the renderer.
+	// Test ID: EnQWzbk
 	#[test]
 	fn the_grid_draws_a_line_for_every_shell() {
 		let (d, i) = mk_shell_dialog(3);
@@ -7995,6 +8034,7 @@ mod tests {
 
 	// An entry being edited shows the BUFFER, not the stored value - the field
 	// would otherwise look inert while it is typed into.
+	// Test ID: EnQWzbl
 	#[test]
 	fn a_grid_field_being_edited_shows_what_is_typed() {
 		let (mut d, _) = mk_shell_dialog(2);
@@ -8011,6 +8051,7 @@ mod tests {
 	// A scan that arrives while the dialog is open moves BOTH copies, so it does not
 	// read as an edit the user made - and it folds into what they have already
 	// done rather than replacing it.
+	// Test ID: EnQUIKx
 	#[test]
 	fn a_scan_that_lands_mid_edit_is_not_mistaken_for_an_edit() {
 		let (mut d, _) = mk_shell_dialog(1);
@@ -8025,6 +8066,7 @@ mod tests {
 		assert_eq!(d.orig.shells.len(), d.edited.shells.len());
 	}
 
+	// Test ID: Elzhjoe
 	#[test]
 	fn a_restored_view_never_outruns_the_new_dialog() {
 		// scrolled to the bottom of the last tab, as if the user had just closed it
@@ -8061,6 +8103,7 @@ mod tests {
 		assert_eq!(d.scroll, 0.0);
 	}
 
+	// Test ID: EitmBBQ
 	#[test]
 	fn keyboard_focus_walks_controls_then_buttons() {
 		use super::Focus;
@@ -8101,6 +8144,7 @@ mod tests {
 		assert_eq!(d.focus, Some(Focus::Button(2)));
 	}
 
+	// Test ID: Ejak3Qu
 	#[test]
 	fn dual_cursor_row_two_stops_toggle_and_revert() {
 		use super::{Focus, Kind};
@@ -8146,6 +8190,7 @@ mod tests {
 	// monospace family - always on Windows, and on a desktop with none set. That
 	// is a property of the environment, not of the platform, so the test asks the
 	// same question the code does.
+	// Test ID: ElEvh0T
 	#[test]
 	fn system_font_toggle_inert_without_an_os_family() {
 		use super::Key;
@@ -8202,6 +8247,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Em2dFyi
 	#[test]
 	fn a_large_ui_font_scales_radio_layout_and_widens_panel() {
 		use super::Kind;
@@ -8241,6 +8287,7 @@ mod tests {
 
 	// The layout is DIP, so a doubled scale factor may only multiply it: same
 	// dialog, twice the pixels, and a pointer still hits the same control.
+	// Test ID: Em2dFyj
 	#[test]
 	fn the_scale_factor_only_multiplies_the_layout() {
 		let mut base = mk_dialog(4000.0);
@@ -8271,6 +8318,7 @@ mod tests {
 		assert_ne!(d.edited.transparent_background, before);
 	}
 
+	// Test ID: EjYm8dk
 	#[test]
 	fn dropdown_open_navigate_commit() {
 		use super::{Action, Focus, Key, Kind};
@@ -8308,6 +8356,7 @@ mod tests {
 		assert_eq!(d.edited.text_scrim_function, "dt");
 	}
 
+	// Test ID: EjYm8dl
 	#[test]
 	fn dropdown_mouse_open_and_pick() {
 		use super::Key;
@@ -8332,6 +8381,7 @@ mod tests {
 		assert_eq!(d.edited.text_scrim_ramp, "log");
 	}
 
+	// Test ID: ElpQBin
 	#[test]
 	fn the_scrolling_feel_sliders_read_where_their_defaults_claim() {
 		// Every one of these is documented in the config template as coming out at a
@@ -8365,6 +8415,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: ElpQBio
 	#[test]
 	fn the_scrolling_feel_sliders_round_trip_and_run_the_right_way() {
 		// A slider that reads back as something else is the "setting does
@@ -8411,6 +8462,7 @@ mod tests {
 		assert!(hard_down < d.edited.scroll_ramp_down_ms);
 	}
 
+	// Test ID: EiuyGZk
 	#[test]
 	fn buttons_fire_on_release_over_button() {
 		use super::Action;
@@ -8431,6 +8483,7 @@ mod tests {
 		assert_eq!(d.pressed, None);
 	}
 
+	// Test ID: EitmBBR
 	#[test]
 	fn space_or_enter_activates_focused_button() {
 		use super::{Action, Focus};
@@ -8441,6 +8494,7 @@ mod tests {
 		assert_eq!(d.key_enter(), Action::Ok);
 	}
 
+	// Test ID: EitjFLE
 	#[test]
 	fn keyboard_skips_headers_and_disabled() {
 		let mut d = mk_dialog(2000.0);
@@ -8454,6 +8508,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EitjFLF
 	#[test]
 	fn space_toggles_focused_boolean() {
 		let mut d = mk_dialog(2000.0);
@@ -8464,6 +8519,7 @@ mod tests {
 		assert_eq!(d.edited.transparent_background, !before);
 	}
 
+	// Test ID: EitjFLG
 	#[test]
 	fn arrows_adjust_slider_and_radio() {
 		use super::Key;
@@ -8489,6 +8545,7 @@ mod tests {
 		assert_eq!(d.get_radio(Key::BgFit), 0);
 	}
 
+	// Test ID: EkZgQnY
 	#[test]
 	fn slider_step_matches_spec() {
 		use super::slider_step;
@@ -8501,6 +8558,7 @@ mod tests {
 		assert_eq!(slider_step(20.0, 400.0, true, true), 38.0); // 380/10 -> 38
 	}
 
+	// Test ID: EkZgQnZ
 	#[test]
 	fn up_down_step_focused_slider() {
 		use super::Key;
@@ -8523,6 +8581,7 @@ mod tests {
 		assert_eq!(d.get_f32(Key::SingleScreenTau), 59.0);
 	}
 
+	// Test ID: EkZgQna
 	#[test]
 	fn up_down_step_slider_during_edit() {
 		use super::Key;
@@ -8543,6 +8602,7 @@ mod tests {
 		assert_eq!(d.selected_text().as_deref(), Some("31")); // stays fully selected
 	}
 
+	// Test ID: EkZgQnb
 	#[test]
 	fn fresh_click_selects_all_but_drag_keeps_range() {
 		use super::Key;
@@ -8584,6 +8644,7 @@ mod tests {
 
 	// All four tab chords, in both directions, and the plain keys they must not
 	// steal: Tab alone walks controls, and PageUp/PageDown alone do nothing here.
+	// Test ID: Em3Pif5
 	#[test]
 	fn ctrl_tab_and_ctrl_page_walk_the_tabs_both_ways() {
 		let mut d = mk_dialog(2000.0);
@@ -8614,6 +8675,7 @@ mod tests {
 		assert_eq!(d.tab, 1, "plain Tab walks controls, not tabs");
 	}
 
+	// Test ID: Eiustaa
 	#[test]
 	fn slider_numeric_field_edits_and_clamps() {
 		use super::{Focus, Key};
@@ -8645,6 +8707,7 @@ mod tests {
 		assert!(d.edit.is_none());
 	}
 
+	// Test ID: Eiustab
 	#[test]
 	fn slider_field_typing_starts_fresh_and_rejects_letters() {
 		use super::{Focus, Key};
@@ -8680,6 +8743,7 @@ mod tests {
 		assert_eq!(d.edited.opacity, 0.5);
 	}
 
+	// Test ID: EitjFLH
 	#[test]
 	fn caret_from_click_picks_nearest() {
 		let mut m = |s: &str| s.chars().count() as f32; // 1 unit per ascii char
@@ -8689,6 +8753,7 @@ mod tests {
 		assert_eq!(super::caret_from_click("hello", 100.0, &mut m), 5);
 	}
 
+	// Test ID: EkI1Txg
 	#[test]
 	fn word_motion_and_word_at() {
 		let s = "foo bar_baz/qux.png";
@@ -8705,6 +8770,7 @@ mod tests {
 	// "File or folder" says where the picture comes from. With Rotate folder on
 	// that is the folder, shipped as the usual place; with it off, the image. A
 	// named image wins at run time, so it shows whichever way the switch is set.
+	// Test ID: Er1vmpQ
 	#[test]
 	fn the_wallpaper_box_follows_the_rotate_switch() {
 		use super::Key;
@@ -8793,6 +8859,7 @@ mod tests {
 		(d, i, n)
 	}
 
+	// Test ID: EkI1Txh
 	#[test]
 	fn open_selects_all_and_typing_replaces() {
 		let (mut d, _) = mk_text_edit("old.png");
@@ -8813,6 +8880,7 @@ mod tests {
 		assert_eq!(d.edit.as_ref().unwrap().buf, "n");
 	}
 
+	// Test ID: EkI1Txi
 	#[test]
 	fn ctrl_word_nav_and_word_delete() {
 		let (mut d, _) = mk_text_edit("foo bar.png");
@@ -8831,6 +8899,7 @@ mod tests {
 		assert_eq!(d.selected_text().as_deref(), Some("png"));
 	}
 
+	// Test ID: EkI1Txj
 	#[test]
 	fn select_all_cut_paste_roundtrip() {
 		let (mut d, _) = mk_text_edit("keep me");
@@ -8848,6 +8917,7 @@ mod tests {
 		assert_eq!(d.edit.as_ref().unwrap().buf, "x");
 	}
 
+	// Test ID: EkI1Txk
 	#[test]
 	fn paste_respects_field_validation() {
 		use super::{Focus, Key, Kind};
@@ -8883,6 +8953,7 @@ mod tests {
 		assert_eq!(d.edit.as_ref().unwrap().buf, "1.25");
 	}
 
+	// Test ID: EkI1Txl
 	#[test]
 	fn mouse_click_drag_and_multiclick_select() {
 		let (mut d, i) = mk_text_edit("foo bar.png");
@@ -8920,6 +8991,7 @@ mod tests {
 		assert_eq!(d.selected_text().as_deref(), Some("foo"));
 	}
 
+	// Test ID: EiMPv8K
 	#[test]
 	fn scroll_speed_inverts_tau() {
 		// endpoints: slowest tau = slowest speed, fastest tau = fastest speed
@@ -8941,6 +9013,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EkIvixE
 	#[test]
 	fn long_value_scrolls_to_keep_caret_visible() {
 		use super::lay;
@@ -8971,6 +9044,7 @@ mod tests {
 		assert_eq!(d.edit.as_ref().unwrap().view_to, 0.0);
 	}
 
+	// Test ID: EkIvixF
 	#[test]
 	fn short_value_never_scrolls() {
 		let (mut d, _) = mk_text_edit("short.png");
@@ -8980,6 +9054,7 @@ mod tests {
 		assert_eq!(d.edit.as_ref().unwrap().view_to, 0.0);
 	}
 
+	// Test ID: EkIvixG
 	#[test]
 	fn click_and_drag_map_through_the_view() {
 		use super::lay;
@@ -9017,6 +9092,7 @@ mod tests {
 		assert!(d.selected_text().is_some());
 	}
 
+	// Test ID: EkIvixH
 	#[test]
 	fn context_menu_open_fire_and_gating() {
 		use super::{Action, EditCmd, lay};
@@ -9061,6 +9137,7 @@ mod tests {
 		assert!(d.emenu.is_none());
 	}
 
+	// Test ID: EkIvixI
 	#[test]
 	fn blink_holds_solid_on_activity() {
 		let (mut d, _) = mk_text_edit("abc");
@@ -9096,6 +9173,7 @@ mod tests {
 	// Nothing anywhere records "this theme has unsaved changes" - a color that
 	// disagrees with the theme IS the record, and it lives in the config file, so
 	// the answer is the same after a restart.
+	// Test ID: Em3lZEu
 	#[test]
 	fn an_edited_colour_is_what_makes_the_theme_dirty() {
 		let mut d = on_theme("Matrix");
@@ -9115,6 +9193,7 @@ mod tests {
 
 	// Saving folds the edits into the theme itself, so the per-color overrides
 	// have nothing left to say and are queued to be commented back out.
+	// Test ID: Em3lZEv
 	#[test]
 	fn saving_folds_the_edits_into_the_theme() {
 		let mut d = on_theme("Matrix");
@@ -9145,6 +9224,7 @@ mod tests {
 	// Saving grays Save out, so the control the keyboard was on drops out of the
 	// Tab ring. Focus has to carry on to the next button rather than snapping
 	// back to the first control on the tab.
+	// Test ID: Em430PA
 	#[test]
 	fn focus_carries_on_when_the_control_under_it_greys_out() {
 		let mut d = on_theme("Matrix");
@@ -9164,6 +9244,7 @@ mod tests {
 
 	// A theme may take a built-in's name and stand in for it; deleting it puts the
 	// built-in back rather than leaving the name pointing at nothing.
+	// Test ID: Em3lZEw
 	#[test]
 	fn a_saved_theme_shadows_a_builtin_and_delete_uncovers_it() {
 		let mut d = on_theme("Matrix");
@@ -9186,6 +9267,7 @@ mod tests {
 	// The colors on screen are no longer the theme the box names, so the box stops
 	// naming it. The popup still highlights the theme the edits started from, and
 	// picking it back adopts its colors and the box says its name again.
+	// Test ID: EqSprxY
 	#[test]
 	fn an_edited_theme_reads_as_unsaved_in_the_box() {
 		let mut d = on_theme("Matrix");
@@ -9222,6 +9304,7 @@ mod tests {
 
 	// Picking a theme takes on its colors. Keeping the old theme's tweaks would
 	// make the picker look broken on every color that had been edited.
+	// Test ID: Em3lZEx
 	#[test]
 	fn picking_a_theme_adopts_its_colours() {
 		let mut d = on_theme("SilkTerm");
@@ -9246,6 +9329,7 @@ mod tests {
 	// Picking a theme must not leave the old palette behind as colors.* overrides.
 	// Those would be written as active lines and then outrank every later theme
 	// change, which also freezes one variant when the mode follows the desktop.
+	// Test ID: Em430PB
 	#[test]
 	fn adopting_a_theme_clears_the_colour_overrides() {
 		let mut d = on_theme("SilkTerm");
@@ -9271,6 +9355,7 @@ mod tests {
 	// The box is modal by gate, and the gate is a list every input path has to be
 	// on. These four were missed once: the accelerators applied and closed the
 	// dialog through the box, and typing edited the row sitting behind it.
+	// Test ID: Em430PC
 	#[test]
 	fn the_prompt_swallows_every_input_path() {
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -9326,6 +9411,7 @@ mod tests {
 		(d, i)
 	}
 
+	// Test ID: EqSaSRl
 	#[test]
 	fn a_chip_opens_the_picker_and_cancel_puts_the_color_back() {
 		let (mut d, _) = mk_picker();
@@ -9352,6 +9438,7 @@ mod tests {
 
 	// A drag across the square keeps adjusting, and the strip beside it moves
 	// the hue without disturbing what the square set.
+	// Test ID: EqSaSRm
 	#[test]
 	fn a_drag_across_the_square_carries_the_color_with_it() {
 		let (mut d, _) = mk_picker();
@@ -9394,6 +9481,7 @@ mod tests {
 
 	// Every way in must reach the box rather than the panel under it. The panel
 	// is still there, still has a focused row, and would take the keystroke.
+	// Test ID: EqSaSRn
 	#[test]
 	fn the_picker_swallows_every_input_path() {
 		let (mut d, i) = mk_picker();
@@ -9431,6 +9519,7 @@ mod tests {
 	// The box's six value boxes borrow row indices no row can have, at the far
 	// end from the ones the shells grid borrows. Either range reading the other's
 	// would edit a shell that is not there.
+	// Test ID: EqSaSRo
 	#[test]
 	fn a_value_box_is_never_mistaken_for_a_shells_field() {
 		for f in super::pick::Field::ALL {
@@ -9455,6 +9544,7 @@ mod tests {
 
 	// Tab walks the box, a value box opens with its number selected on the way
 	// past, and what is typed into it reaches the row behind.
+	// Test ID: EqSaSRp
 	#[test]
 	fn walking_the_box_opens_each_value_box_selected() {
 		let (mut d, _) = mk_picker();
@@ -9490,6 +9580,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EqSaSRq
 	#[test]
 	fn a_typed_value_box_reaches_the_row_behind_the_box() {
 		let (mut d, _) = mk_picker();
@@ -9521,6 +9612,7 @@ mod tests {
 
 	// Arrows adjust whatever the keyboard is on, so nothing in the box is
 	// reachable only by pointer.
+	// Test ID: EqSaSRr
 	#[test]
 	fn the_arrows_work_the_square_the_strip_and_the_boxes() {
 		let (mut d, _) = mk_picker();
@@ -9564,6 +9656,7 @@ mod tests {
 
 	// The keyboard reaches the chip, and walking onto it neither opens a field
 	// nor opens the picker by itself.
+	// Test ID: EqSaSRs
 	#[test]
 	fn the_chip_is_a_focus_stop_of_its_own() {
 		let mut d = mk_dialog(4000.0);
@@ -9590,6 +9683,7 @@ mod tests {
 
 	// The box draws. It used to be possible to leave a sentinel row index where
 	// the row list gets read with it.
+	// Test ID: EqSaSRt
 	#[test]
 	fn the_box_draws_without_reading_a_row_that_is_not_there() {
 		let (mut d, _) = mk_picker();
@@ -9625,6 +9719,7 @@ mod tests {
 	// The prompt is not a row. Clicking its field used to put the prompt's own
 	// sentinel index into the focus ring, and the next frame read the row list
 	// with it.
+	// Test ID: EpHNgxU
 	#[test]
 	fn clicking_the_prompt_field_leaves_the_focus_ring_on_a_real_row() {
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -9645,6 +9740,7 @@ mod tests {
 
 	// Renaming moves the name and the selection together; the slug behind it does
 	// not move, so the config subtree stays where it is.
+	// Test ID: Eq4Gng8
 	#[test]
 	fn a_theme_can_be_renamed_to_its_own_name_or_a_different_case() {
 		let mut d = on_theme("Matrix");
@@ -9669,6 +9765,7 @@ mod tests {
 	// size and no monospace family, so there it was every user; here the report
 	// has to be said out loud, or a desktop that does name a font never reaches
 	// the case.
+	// Test ID: Eq4Gng9
 	#[test]
 	fn a_live_half_of_a_pair_row_takes_a_click_while_the_other_half_is_grayed() {
 		use super::Key;
@@ -9712,6 +9809,7 @@ mod tests {
 		assert_eq!(d.get_toggle(Key::SystemFont), face, "a grayed half acted");
 	}
 
+	// Test ID: Em3lZEy
 	#[test]
 	fn a_rename_moves_the_name_and_the_selection() {
 		let mut d = on_theme("Matrix");
@@ -9736,6 +9834,7 @@ mod tests {
 
 	// The prompt box takes the keyboard while it is up, and Esc leaves the theme
 	// exactly as it was.
+	// Test ID: Em3lZEz
 	#[test]
 	fn the_prompt_box_owns_the_keyboard_until_it_closes() {
 		let mut d = on_theme("Matrix");
@@ -9770,6 +9869,7 @@ mod tests {
 
 	// A name OK cannot take keeps the box open and says why, instead of closing
 	// and quietly doing nothing.
+	// Test ID: Em3lZF0
 	#[test]
 	fn a_name_it_cannot_take_keeps_the_box_open() {
 		let mut d = on_theme("Matrix");
@@ -9790,6 +9890,7 @@ mod tests {
 	// Settings opens on the file, so a change another window saved after this
 	// one loaded is what the dialog shows, and a save from here writes only what
 	// was edited.
+	// Test ID: EqdzLhw
 	#[test]
 	fn settings_opens_on_the_file_as_it_is_now() {
 		let _guard = config::test_config_lock();
@@ -9818,6 +9919,7 @@ mod tests {
 	}
 
 	// A saved theme has to come back after a restart, or saving it meant nothing.
+	// Test ID: Em3lZF1
 	#[test]
 	fn a_saved_theme_survives_a_relaunch() {
 		let _guard = config::test_config_lock();
@@ -9880,6 +9982,7 @@ mod tests {
 
 	// The outline is drawn by the scrim pass but is not the halo: it takes input
 	// with the scrim off, and the cursor may join it either way.
+	// Test ID: Ep17Tr0
 	#[test]
 	fn the_outline_stands_without_the_scrim() {
 		let mut d = mk_dialog(4000.0);
@@ -9916,6 +10019,7 @@ mod tests {
 
 	// Remote is a profile the file never holds: picking it raises the session
 	// override over the stored profile, and any other pick lowers it again.
+	// Test ID: Ep17Tr1
 	#[test]
 	fn picking_remote_never_reaches_the_stored_profile() {
 		let mut d = mk_dialog(4000.0);
@@ -9952,6 +10056,7 @@ mod tests {
 	// A step the display watch took shows in the dropdown and reads as a change,
 	// so the arrow offers the way back. A hand pick lifts it, and picking the
 	// profile the file already holds writes only the automatic switch.
+	// Test ID: EpWow4j
 	#[test]
 	fn a_session_step_shows_and_a_hand_pick_lifts_it() {
 		let _guard = config::test_config_lock();
@@ -10013,6 +10118,7 @@ mod tests {
 
 	// The handle overhangs the track at either end, so a ring drawn around the
 	// track alone crossed it there.
+	// Test ID: Ep17Tr2
 	#[test]
 	fn the_slider_focus_ring_clears_the_handle_at_both_ends() {
 		let d = mk_dialog(4000.0);
@@ -10049,6 +10155,7 @@ mod tests {
 		d.mouse_up(x, y);
 	}
 
+	// Test ID: EqAiJBo
 	#[test]
 	fn a_click_into_a_field_selects_all_on_release() {
 		use super::lay;
@@ -10076,6 +10183,7 @@ mod tests {
 
 	// Walking onto a text field opens it with the value selected, so typing
 	// replaces it. A slider is deliberately not in that set.
+	// Test ID: EqAiJBp
 	#[test]
 	fn keyboard_focus_opens_a_text_field_with_the_value_selected() {
 		use super::{Focus, Key};
@@ -10164,6 +10272,7 @@ mod tests {
 	}
 
 	// Esc from inside a field is the dialog's Cancel, not "shut the field".
+	// Test ID: EqAiJBq
 	#[test]
 	fn escape_from_inside_a_field_cancels_the_dialog() {
 		use super::Action;
@@ -10173,6 +10282,7 @@ mod tests {
 	}
 
 	// Enter in a field is OK, not "close the field and wait for another Enter".
+	// Test ID: EqAiJBr
 	#[test]
 	fn enter_in_a_field_is_the_dialogs_ok() {
 		use super::{Action, Key};
@@ -10204,6 +10314,7 @@ mod tests {
 	// out and still read the USER's own values rather than the derived pair. The
 	// live copy wears the derived one, and a dialog that took it as the baseline
 	// would write it to the file and store it in the next saved theme.
+	// Test ID: EqRxesm
 	#[test]
 	fn the_wallpaper_switch_grays_its_two_rows_and_leaves_their_values_the_users() {
 		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
@@ -10258,6 +10369,7 @@ mod tests {
 
 	// Switching it off in the dialog ungrays them in the same pass, since the
 	// gates read the edited copy rather than the live one.
+	// Test ID: EqRxesn
 	#[test]
 	fn switching_it_off_ungrays_the_two_rows_at_once() {
 		let mut d = mk_dialog(4000.0);

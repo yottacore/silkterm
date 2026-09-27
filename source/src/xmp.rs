@@ -216,6 +216,7 @@ mod tests {
 		<wallpaper:Opacity>15%</wallpaper:Opacity>\
 		<wallpaper:Blur>5</wallpaper:Blur></rdf:Description>";
 
+	// Test ID: EllRmPA
 	#[test]
 	fn reads_both_spellings_of_a_property() {
 		assert_eq!(property(DOC, "Fit").as_deref(), Some("stretch"));
@@ -258,6 +259,7 @@ mod tests {
 		out
 	}
 
+	// Test ID: EllRmPB
 	#[test]
 	fn walks_a_png_and_a_jpeg_to_the_packet() {
 		let dir = std::env::temp_dir().join(format!("silkterm_xmp_{}", std::process::id()));
@@ -284,6 +286,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// Test ID: EllRmPC
 	#[test]
 	fn anchor_accepts_the_written_form_and_rejects_junk() {
 		assert_eq!(parse_anchor("50%, 50%"), Some([0.5, 0.5]));
@@ -297,6 +300,7 @@ mod tests {
 
 	// A missing or unreadable tag must leave the caller on its own default
 	// rather than forcing one - that is what keeps the global setting meaningful.
+	// Test ID: EllRmPD
 	#[test]
 	fn unknown_values_yield_nothing_to_apply() {
 		assert_eq!(parse_fit("ZOOM"), Some(Fit::Zoom));
@@ -308,6 +312,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EoSDflY
 	#[test]
 	fn look_tags_read_in_the_settings_own_units() {
 		assert_eq!(parse_percent("10%"), Some(0.1));
@@ -413,6 +418,7 @@ mod tests {
 			tags
 		}
 
+		// Test ID: EpQN0oT
 		#[test]
 		fn a_corrupt_image_cannot_take_the_wallpaper_worker_down() {
 			let path =

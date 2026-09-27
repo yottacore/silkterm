@@ -1217,6 +1217,7 @@ mod tests {
 	// On a Windows box with no Python, the scan offered Python 3 anyway, because
 	// App Installer's alias for it passes as a file. A tab started from it only
 	// says to go and install Python.
+	// Test ID: EqH4isu
 	#[test]
 	fn a_store_install_prompt_is_not_a_shell() {
 		let installer = r"C:\Program Files\WindowsApps\Microsoft.DesktopAppInstaller_1.26.430.0_x64__8wekyb3d8bbwe";
@@ -1271,6 +1272,7 @@ mod tests {
 	}
 
 	// The same through the real alias, where the box has one.
+	// Test ID: EqH4isv
 	#[cfg(windows)]
 	#[test]
 	fn the_store_python_prompt_on_this_box_is_not_found() {
@@ -1295,6 +1297,7 @@ mod tests {
 	// The tab strip asks this once per tab per frame, and each answer used to walk
 	// the stored list resolving every entry through the filesystem. A numeric gate
 	// rather than a stopwatch: repeats cost no searches at all.
+	// Test ID: EpHTffM
 	#[test]
 	fn a_tab_label_does_not_search_the_path_every_frame() {
 		use std::sync::atomic::Ordering;
@@ -1331,6 +1334,7 @@ mod tests {
 		assert_eq!(friendly("/bin/bash", &renamed), "My bash");
 	}
 
+	// Test ID: EncVe5p
 	#[test]
 	fn the_offered_order_groups_first_and_sorts_inside_a_group() {
 		let titles = ordered(vec![
@@ -1375,6 +1379,7 @@ mod tests {
 	// The top of the list is the default shell (config::default_shell_argv), so on
 	// unix nothing may sort above the user's own - and its startup-file-free twin
 	// has to stay directly under it rather than sorting off among the others.
+	// Test ID: EncVe5q
 	#[test]
 	fn the_login_shell_leads_and_its_twin_stays_under_it() {
 		let titles = ordered(vec![
@@ -1394,6 +1399,7 @@ mod tests {
 	// under it, the modern shells, the language REPLs, then the rest of the POSIX
 	// family in the table's own order. Every table entry is installed, so a group
 	// or a title edited out of line with the design fails here.
+	// Test ID: Er1q5YB
 	#[cfg(unix)]
 	#[test]
 	fn a_fresh_unix_list_arrives_in_the_designed_order() {
@@ -1433,6 +1439,7 @@ mod tests {
 	// A curated group keeps its table order even when that disagrees with the
 	// alphabet - the three POSIX-environment bashes are one shell built three
 	// ways, and MSYS2's full one is the one to reach for first.
+	// Test ID: EncVe5r
 	#[test]
 	fn a_curated_group_keeps_its_table_order() {
 		let titles = ordered(vec![
@@ -1448,6 +1455,7 @@ mod tests {
 
 	// The table is where each shell's place is declared, so the places the order
 	// names outright are worth holding to it.
+	// Test ID: EncVe5s
 	#[test]
 	fn the_table_puts_each_named_shell_where_the_order_says() {
 		if cfg!(unix) {
@@ -1502,6 +1510,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EnM97jH
 	#[test]
 	fn a_shell_that_is_gone_is_switched_off_and_kept() {
 		let stored = vec![entry("bash", "bash", true), entry("fish", "fish", true)];
@@ -1513,6 +1522,7 @@ mod tests {
 
 	// The lopsided half: a scan adds, and it switches off. It must never switch
 	// one back on - it cannot tell a returning program from a deliberate "no".
+	// Test ID: EnM97jI
 	#[test]
 	fn a_scan_never_switches_a_shell_back_on() {
 		let stored = vec![entry("fish", "fish", false)];
@@ -1522,6 +1532,7 @@ mod tests {
 		assert!(!out[0].active);
 	}
 
+	// Test ID: EnM97jJ
 	#[test]
 	fn a_shell_already_stored_is_not_added_twice() {
 		let stored = vec![entry("bash", "/bin/bash", true)];
@@ -1535,6 +1546,7 @@ mod tests {
 	// left out of what makes it that shell. The stored command is not rewritten
 	// either - a scan never touches one - so an existing entry keeps its banner
 	// until the user says otherwise.
+	// Test ID: EnbGwtE
 	#[test]
 	fn a_cosmetic_flag_does_not_make_it_a_different_shell() {
 		let stored = vec![entry("pwsh", "/opt/ps/pwsh", true)];
@@ -1572,6 +1584,7 @@ mod tests {
 	// Something offered as an alternative to another entry arrives switched OFF:
 	// a list that grows a row is fine, one that grows a row the user has to
 	// notice and turn back off is not.
+	// Test ID: EnbGwtF
 	#[test]
 	fn a_dormant_find_arrives_switched_off() {
 		let found = vec![Found::dormant("Relaxed", "/opt/ps/pwsh -x".into(), "")];
@@ -1585,6 +1598,7 @@ mod tests {
 
 	// The arguments are part of what makes a shell one entry or two: the twin
 	// that skips the startup files is the same program and a different shell.
+	// Test ID: EnM97jK
 	#[test]
 	fn the_same_program_with_different_flags_is_a_different_shell() {
 		let stored = vec![entry("bash", "bash", true)];
@@ -1598,6 +1612,7 @@ mod tests {
 	// /usr/bin on most Linux distributions, /etc/shells lists both spellings, and
 	// the list came out with two of everything. Following the links is what fixes
 	// it, so the test needs real ones on disk.
+	// Test ID: EoLegPo
 	#[cfg(unix)]
 	#[test]
 	fn one_shell_reached_by_two_paths_is_one_entry() {
@@ -1625,6 +1640,7 @@ mod tests {
 	// ...but a link is not always the shell it points at. /bin/sh is dash or bash
 	// on nearly every box, and it is a different shell from either: a shell reads
 	// the name it was started under and behaves differently under it.
+	// Test ID: EoLegPp
 	#[cfg(unix)]
 	#[test]
 	fn a_link_is_not_the_shell_it_points_at() {
@@ -1648,6 +1664,7 @@ mod tests {
 	// The half that reaches a config someone already has. A scan only adds, so a
 	// list that grew duplicates before the rule above existed would keep them
 	// forever unless the merge can take one out.
+	// Test ID: EoLegPq
 	#[test]
 	fn a_duplicate_already_in_the_list_is_taken_out() {
 		let stored = vec![
@@ -1663,6 +1680,7 @@ mod tests {
 	// A row only goes when the row it duplicates is installed too. Otherwise an
 	// entry whose program is gone - which matches anything sharing its name -
 	// would take out the working shell below it.
+	// Test ID: EoLegPr
 	#[test]
 	fn a_missing_shell_never_deletes_the_one_below_it() {
 		let stored = vec![
@@ -1681,6 +1699,7 @@ mod tests {
 
 	// Three environments ship a program called bash and they are not the same
 	// shell. Matching on the resolved path is what keeps them apart.
+	// Test ID: EnM97jL
 	#[test]
 	fn two_installed_shells_that_share_a_name_stay_apart() {
 		let resolve = |prog: &str| {
@@ -1696,6 +1715,7 @@ mod tests {
 	// A shell that was uninstalled and put back must re-arm the entry it belongs
 	// to rather than sitting beside it as a second copy - which is what a strict
 	// path match would do, since the disabled entry resolves nowhere.
+	// Test ID: EnM97jM
 	#[test]
 	fn a_reinstalled_shell_rejoins_its_own_disabled_entry() {
 		let stored = vec![entry("fish", "/usr/local/bin/fish", false)];
@@ -1708,6 +1728,7 @@ mod tests {
 	// Initial population IS the scan's order, and detect() leads with the login
 	// shell - which is what puts the user's own shell at the top, where the top
 	// means "the default". Nothing may quietly sort or group the findings.
+	// Test ID: EnQUIKy
 	#[test]
 	fn an_empty_list_takes_the_scan_in_the_order_it_found_them() {
 		let found = vec![
@@ -1721,6 +1742,7 @@ mod tests {
 		assert!(out[0].active, "and the one at the top is usable");
 	}
 
+	// Test ID: EnQUIKz
 	#[test]
 	fn an_adopted_command_is_titled_after_its_program() {
 		let entry = adopted("/usr/bin/fish --login", &[]);
@@ -1730,6 +1752,7 @@ mod tests {
 		assert!(entry.last_seen.is_empty(), "no scan has vouched for it");
 	}
 
+	// Test ID: EnM97jN
 	#[test]
 	fn a_new_shell_lands_at_the_end_with_its_own_key() {
 		let stored = vec![entry("bash", "bash", true)];
@@ -1741,6 +1764,7 @@ mod tests {
 		assert!(out[1].active);
 	}
 
+	// Test ID: EnM97jO
 	#[test]
 	fn a_key_that_is_taken_gets_a_number() {
 		let stored = vec![entry("git_bash", "/a/bash", true)];
@@ -1750,6 +1774,7 @@ mod tests {
 		assert_eq!(out[1].slug, "git_bash_2");
 	}
 
+	// Test ID: EnM97jP
 	#[test]
 	fn a_command_that_does_not_split_is_ignored_rather_than_stored() {
 		let out = merged(&[], &[Found::new("Empty", String::new(), "")], &|_| {
@@ -1762,6 +1787,7 @@ mod tests {
 	// is a base name - lowercased on Windows, `.exe` stripped. A mixed-case key
 	// therefore can never be found, and the shell it names silently loses its
 	// friendly title. PyCmd shipped spelled "PyCmd" and did exactly that.
+	// Test ID: EnRWor7
 	#[test]
 	fn a_known_shell_can_be_found_under_its_own_name() {
 		for (exe, title, _, _) in KNOWN {
@@ -1776,6 +1802,7 @@ mod tests {
 	// The identity `adopt_default_shell` needs: a bare name and the full path to
 	// the same file are one shell, and the question has to answer the same way
 	// round either way, because the resolves-nowhere fallback is one-sided.
+	// Test ID: EnRWor8
 	#[test]
 	fn a_bare_name_and_its_full_path_are_one_shell() {
 		let real = |prog: &str| match prog {
@@ -1794,6 +1821,7 @@ mod tests {
 
 	// The twin exists for the shell the user actually logs in with, so the flag
 	// has to be the right one per shell rather than bash's spelling for all.
+	// Test ID: EnM97jQ
 	#[test]
 	fn each_shell_skips_its_startup_files_its_own_way() {
 		assert_eq!(no_startup_file("bash").map(|f| f.0), Some("--norc"));
@@ -1809,6 +1837,7 @@ mod tests {
 
 	// The stamp is what makes the "Active" column trustworthy: a shell switched
 	// off carries the date it was last there, so the switch is explicable.
+	// Test ID: EnQUIL0
 	#[test]
 	fn a_scan_dates_what_it_found_and_leaves_what_it_did_not() {
 		let mut gone = entry("fish", "fish", true);
@@ -1823,6 +1852,7 @@ mod tests {
 		assert!(!out[1].active);
 	}
 
+	// Test ID: EnQUIL1
 	#[test]
 	fn a_newly_found_shell_is_dated_the_day_it_turned_up() {
 		let found = vec![Found::new("Fish", "fish".into(), "")];
@@ -1832,6 +1862,7 @@ mod tests {
 
 	// The epoch, a leap day, and a century that is not a leap year - the three
 	// places the era arithmetic can go wrong.
+	// Test ID: EnQUIL2
 	#[test]
 	fn a_day_count_reads_as_the_date_it_is() {
 		assert_eq!(civil_from_days(0), (1970, 1, 1));
@@ -1851,6 +1882,7 @@ mod tests {
 		assert_eq!(civil_from_days(20_684), (2026, 8, 19));
 	}
 
+	// Test ID: EnM97jR
 	#[test]
 	fn a_path_with_a_space_is_quoted_and_survives_the_split() {
 		let quoted = quoted(Path::new(r"C:\Program Files\Git\bin\bash.exe"));

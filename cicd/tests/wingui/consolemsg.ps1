@@ -1,5 +1,6 @@
 ##	A release build owns no console, so what a control command has to say goes
 ##	to the console it was typed at, or nowhere. It went nowhere for a while.
+##	Test ID: EqH4isq
 
 $said = Join-Path $OutDir "consolemsg.txt"
 $c = Start-Process cmd.exe -ArgumentList '/k', "`"$Exe`" --reload-settings" -PassThru
