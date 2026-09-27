@@ -2210,6 +2210,11 @@ impl SettingsDialog {
 	fn centered_in_row(&self, i: usize, h: f32) -> f32 {
 		self.row_y(i) + (self.line_row_h() - h) / 2.0
 	}
+	// A heading's faint rule, near the bottom of its tall row, leaving a clear
+	// gap below the heading text above it.
+	fn header_rule_y(&self, i: usize) -> f32 {
+		self.row_y(i) + self.row_h(&Kind::Header("")) - 8.0
+	}
 	fn track(&self, i: usize) -> Rect {
 		let x = self.control_x(i);
 		Rect {
@@ -5555,9 +5560,7 @@ impl SettingsDialog {
 				}
 				Kind::ShellList => self.shell_rects(i, &mut out, &q, &border, &mut measure),
 				Kind::Header(_) => {
-					// faint rule near the bottom of the (tall) heading row, leaving a
-					// clear gap below the heading text above it
-					let y = self.row_y(i) + self.row_h(&Kind::Header("")) - 8.0;
+					let y = self.header_rule_y(i);
 					let x = self.content_x() + lay().pad;
 					out.push(q(
 						x,
@@ -5771,7 +5774,7 @@ impl SettingsDialog {
 			if self.specs[i].tab != self.tab || Self::header_is_tab_title(&self.specs[i]) {
 				continue;
 			}
-			let ty = row_text_y(self.row_y(i), lay().row_height);
+			let ty = row_text_y(self.row_y(i), self.line_row_h());
 			if let Kind::Header(section) = self.specs[i].kind {
 				// heading near the top of the row; the rule sits lower (gap between)
 				let hy = self.row_y(i) + 5.0;
@@ -9993,6 +9996,10 @@ mod tests {
 			d.disabled(Key::ScrimRadius),
 			"the halo's own rows still gray"
 		);
+		assert!(d.disabled(Key::ScrimSoftness), "softness is the halo's too");
+		d.edited.text_scrim = true;
+		assert!(!d.disabled(Key::ScrimSoftness));
+		d.edited.text_scrim = false;
 		let i = d
 			.specs
 			.iter()
@@ -10379,5 +10386,643 @@ mod tests {
 		d.set_toggle(Key::ColFromWallpaper, false);
 		assert!(!d.disabled(Key::ColFg));
 		assert!(!d.disabled(Key::ColCursor));
+	}
+
+	// A dialog at a given UI line height, the other chrome measured to match.
+	fn mk_dialog_line(line_h: f32) -> SettingsDialog {
+		let k = line_h / 19.0;
+		let mut d = SettingsDialog::new(
+			0.0,
+			0.0,
+			line_h,
+			170.0 * k,
+			80.0 * k,
+			90.0 * k,
+			vec![90.0 * k; tab_titles().len()],
+			f32::MAX,
+			4000.0,
+			1.0,
+		);
+		d.orig.performance_profile = "custom".to_string();
+		d.edited.performance_profile = "custom".to_string();
+		d
+	}
+
+	// The colors of the quads that are exactly one of the four edges `border`
+	// draws round `r`, `t` thick.
+	fn edge_colors(quads: &[crate::gfx::RectInstance], r: super::Rect, t: f32) -> Vec<[f32; 4]> {
+		let edges = [
+			[r.x - t, r.y - t, r.w + 2.0 * t, t],
+			[r.x - t, r.y + r.h, r.w + 2.0 * t, t],
+			[r.x - t, r.y, t, r.h],
+			[r.x + r.w, r.y, t, r.h],
+		];
+		quads
+			.iter()
+			.filter(|q| {
+				edges.iter().any(|e| {
+					(q.pos[0] - e[0]).abs() < 0.01
+						&& (q.pos[1] - e[1]).abs() < 0.01
+						&& (q.size[0] - e[2]).abs() < 0.01
+						&& (q.size[1] - e[3]).abs() < 0.01
+				})
+			})
+			.map(|q| q.color)
+			.collect()
+	}
+
+	// A second Apply has to diff against what the first one applied, not against
+	// the dialog as it opened, or putting a value back reads as no change.
+	// Test ID: Er2X6Ej
+	#[test]
+	fn a_second_apply_diffs_against_the_first() {
+		let mut d = mk_dialog(4000.0);
+		d.orig.wallpaper_default_fit = config::Fit::Stretch;
+		d.edited.wallpaper_default_fit = config::Fit::Stretch;
+		d.set_radio(Key::BgFit, 1);
+		assert_eq!(d.edited().wallpaper_default_fit, config::Fit::Zoom);
+		d.commit_baseline();
+		d.set_radio(Key::BgFit, 0);
+		assert_ne!(
+			d.orig().wallpaper_default_fit,
+			d.edited().wallpaper_default_fit,
+			"going back to Stretch reads as no change, so nothing is written"
+		);
+		// and the app does move the baseline on every Apply
+		let app = include_str!("app.rs");
+		let at = app
+			.find("fn apply_dialog_settings")
+			.expect("apply_dialog_settings");
+		let body = &app[at..at + app[at..].find("\n\t}\n").expect("its end")];
+		assert!(
+			body.contains(".commit_baseline()"),
+			"Apply no longer resets the baseline"
+		);
+	}
+
+	// Labels center on the row they are in, measured from the real line height,
+	// so they line up with their controls at any interface font.
+	// Test ID: Er2X6Ek
+	#[test]
+	fn a_label_centers_on_its_row_at_any_line_height() {
+		for line_h in [19.0, 38.0] {
+			let mut d = mk_dialog_line(line_h);
+			let mut checked = 0;
+			for tab in 0..tab_titles().len() {
+				d.tab = tab;
+				let texts = d.texts_dip(d.line_h, |s| s.chars().count() as f32 * 7.0);
+				for (i, spec) in SettingsDialog::visible(d.specs, tab) {
+					if spec.beside || spec.label.is_empty() || matches!(spec.kind, Kind::Header(_))
+					{
+						continue;
+					}
+					let want = d.centered_in_row(i, 0.0);
+					let x = d.label_x(i);
+					assert!(
+						texts.iter().any(|t| t.text == spec.label
+							&& (t.x - x).abs() < 0.01
+							&& (t.y + line_h / 2.0 - want).abs() < 0.5),
+						"{} is off its row's center at line height {line_h}",
+						spec.label
+					);
+					checked += 1;
+				}
+			}
+			assert!(checked > 20, "only {checked} labels found");
+		}
+	}
+
+	// The performance-related sections share one tab, Performance first, and the
+	// old Performance tab is gone.
+	// Test ID: Er2X6El
+	#[test]
+	fn the_silk_tab_holds_performance_readability_and_scrolling() {
+		let specs = &super::ui().specs;
+		let at = |key: Key| specs.iter().position(|s| s.key == key).unwrap();
+		let silk = specs[at(Key::PerfProfile)].tab;
+		assert_eq!(tab_titles()[silk], "Silk");
+		let heading_over = |i: usize| {
+			specs[..i]
+				.iter()
+				.rev()
+				.find_map(|s| match s.kind {
+					Kind::Header(label) => Some(label),
+					_ => None,
+				})
+				.unwrap()
+		};
+		let mut last = 0;
+		for (key, heading) in [
+			(Key::PerfAuto, "Performance"),
+			(Key::Outline, "Text readability"),
+			(Key::SmoothScroll, "Scrolling"),
+		] {
+			let i = at(key);
+			assert_eq!(specs[i].tab, silk, "{} left the Silk tab", key.name());
+			assert_eq!(heading_over(i), heading, "{} changed section", key.name());
+			assert!(i > last, "{} is out of order", key.name());
+			last = i;
+		}
+		assert!(!tab_titles().contains(&"Performance"));
+	}
+
+	// A heading's text sits at the top of its row and the rule near the bottom,
+	// and the two stay apart whatever the interface font.
+	// Test ID: Er2X6Em
+	#[test]
+	fn a_heading_never_runs_into_its_rule() {
+		for line_h in [14.0, 19.0, 26.0, 38.0, 60.0] {
+			let mut d = mk_dialog_line(line_h);
+			let mut checked = 0;
+			for tab in 0..tab_titles().len() {
+				d.tab = tab;
+				let texts = d.texts_dip(d.line_h, |s| s.chars().count() as f32 * 7.0);
+				for (i, spec) in SettingsDialog::visible(d.specs, tab) {
+					let Kind::Header(label) = spec.kind else {
+						continue;
+					};
+					let text = texts
+						.iter()
+						.find(|t| t.bold && t.text == label)
+						.expect("the heading's text");
+					let rule = d.header_rule_y(i);
+					assert!(
+						text.y + line_h < rule,
+						"{label} runs into its rule at line height {line_h}"
+					);
+					assert!(
+						rule + 1.0 <= d.row_y(i) + d.row_h(&spec.kind) + 0.01,
+						"{label}'s rule falls out of its row"
+					);
+					checked += 1;
+				}
+			}
+			assert!(checked > 5, "only {checked} headings found");
+		}
+	}
+
+	// The footer buttons explain themselves, each with its own line.
+	// Test ID: Er2X6En
+	#[test]
+	fn every_footer_button_has_its_own_tip() {
+		let d = mk_dialog(4000.0);
+		let help = &super::ui().help;
+		for (action, r, label) in d.buttons() {
+			let want = match action {
+				super::Action::Cancel => help.cancel,
+				super::Action::Apply => help.apply,
+				_ => help.ok,
+			};
+			assert!(!want.is_empty(), "{label} has no tip declared");
+			let (tip, anchor) = d
+				.hover_tip_dip(r.x + r.w / 2.0, r.y + r.h / 2.0)
+				.unwrap_or_else(|| panic!("{label} shows no tip"));
+			assert_eq!(tip, want, "{label} shows the wrong tip");
+			assert!(
+				(anchor.x - r.x).abs() < 0.01,
+				"{label}'s tip hangs elsewhere"
+			);
+		}
+		let (c, a, o) = (help.cancel, help.apply, help.ok);
+		assert!(c != a && a != o && c != o, "two buttons share a tip");
+	}
+
+	// A sub-group needs no heading above it: an unindented control followed by
+	// indented rows leads one, and gets the sub-group gap after a plain row.
+	// Test ID: Er2X6Eo
+	#[test]
+	fn a_sub_group_stands_without_a_heading() {
+		let row = |key: Key, indent: u8| super::Spec {
+			label: "",
+			key,
+			kind: Kind::Toggle,
+			tab: 0,
+			help: "",
+			indent,
+			beside: false,
+		};
+		let specs = [
+			row(Key::PerfCheckHardware, 0),
+			row(Key::Transparency, 0),
+			row(Key::Opacity, 1),
+			row(Key::BackdropBlur, 1),
+		];
+		assert!(!SettingsDialog::leads_subgroup(&specs, 0, 0));
+		assert!(SettingsDialog::leads_subgroup(&specs, 1, 0));
+		assert_eq!(SettingsDialog::gap_above(&specs, 0, 0, None), 0.0);
+		assert_eq!(
+			SettingsDialog::gap_above(&specs, 1, 0, Some(&specs[0])),
+			lay().subgroup_gap
+		);
+		assert!(lay().subgroup_gap > 0.0);
+		assert_eq!(
+			SettingsDialog::gap_above(&specs, 2, 0, Some(&specs[1])),
+			0.0
+		);
+		assert_eq!(
+			SettingsDialog::gap_above(&specs, 3, 0, Some(&specs[2])),
+			0.0
+		);
+	}
+
+	// Which tab a row is on and which sub-group it belongs to is the design. The
+	// completeness test only asks that each row exists, so this pins the rest,
+	// by key so a relabel does not move it.
+	// Test ID: Er2X6Ep
+	#[test]
+	fn each_tab_holds_its_designed_sub_groups() {
+		let specs = &super::ui().specs;
+		let at = |key: Key| {
+			specs
+				.iter()
+				.position(|s| s.key == key)
+				.unwrap_or_else(|| panic!("no {} row", key.name()))
+		};
+		// the rows under a leader, down to the first one back at its depth; half
+		// a line's indent means nothing, so those are stepped over
+		let members = |lead: usize| -> Vec<Key> {
+			let top = &specs[lead];
+			specs[lead + 1..]
+				.iter()
+				.filter(|s| !s.beside)
+				.take_while(|s| s.tab == top.tab && s.indent > top.indent)
+				.map(|s| {
+					assert_eq!(s.indent, top.indent + 1, "{} is nested too deep", s.label);
+					s.key
+				})
+				.collect()
+		};
+		let groups: &[(&str, Key, &[Key])] = &[
+			(
+				"Silk",
+				Key::TextScrim,
+				&[
+					Key::ScrimStrength,
+					Key::ScrimRadius,
+					Key::ScrimSoftness,
+					Key::ScrimFunction,
+					Key::MinContrast,
+				],
+			),
+			(
+				"Silk",
+				Key::SmoothScroll,
+				&[
+					Key::ScrollEaseIn,
+					Key::ScrollRampUp,
+					Key::SingleScreenTau,
+					Key::ScrollRampDown,
+					Key::ScrollEaseOut,
+				],
+			),
+			(
+				"Background",
+				Key::Transparency,
+				&[Key::Opacity, Key::BackdropBlur],
+			),
+			(
+				"Background",
+				Key::BgEnabled,
+				&[
+					Key::BgImage,
+					Key::BgFit,
+					Key::BgHonorXmp,
+					Key::BgRotate,
+					Key::BgOpacity,
+					Key::BgBlur,
+					Key::BgHonorXmpLook,
+				],
+			),
+			(
+				"Background",
+				Key::BgContrastMask,
+				&[
+					Key::BgContrastSize,
+					Key::BgContrastStrength,
+					Key::BgContrastAuto,
+				],
+			),
+			("Cursor", Key::CursorAnimation, &[Key::CursorResume]),
+			(
+				"Movement",
+				Key::Scrollbar,
+				&[Key::ScrollbarThickness, Key::ScrollbarAutoHide],
+			),
+			("Movement", Key::Minimap, &[Key::MinimapWidth]),
+			(
+				"Themes",
+				Key::ColBg,
+				&[Key::ColFromWallpaper, Key::ColFg, Key::ColCursor],
+			),
+			(
+				"Themes",
+				Key::ColDialogBg,
+				&[
+					Key::ColDialogFg,
+					Key::ColMenuBg,
+					Key::ColMenuFg,
+					Key::ColGutter,
+					Key::ColHighlight,
+					Key::ColFocus,
+				],
+			),
+			("Window", Key::RememberSize, &[Key::Columns, Key::Rows]),
+		];
+		for &(tab, lead, want) in groups {
+			let i = at(lead);
+			assert_eq!(
+				tab_titles()[specs[i].tab],
+				tab,
+				"{} left its tab",
+				lead.name()
+			);
+			let got = members(i);
+			let names = |keys: &[Key]| keys.iter().map(|k| k.name()).collect::<Vec<_>>();
+			assert_eq!(
+				names(&got),
+				names(want),
+				"{}'s sub-group changed",
+				lead.name()
+			);
+		}
+		// the whole Cursor tab, in order; the scrim and outline pair has no key
+		// of its own, so it answers by its first part
+		let cursor = specs[at(Key::CursorBlink)].tab;
+		assert_eq!(tab_titles()[cursor], "Cursor");
+		let rows: Vec<&str> = specs
+			.iter()
+			.filter(|s| s.tab == cursor && !matches!(s.kind, Kind::Header(_)))
+			.map(|s| match s.kind {
+				Kind::Dual { keys, .. } => keys[0].name(),
+				_ => s.key.name(),
+			})
+			.collect();
+		assert_eq!(
+			rows,
+			[
+				"CursorBlink",
+				"CursorHeight",
+				"CursorWidth",
+				"CursorAnimation",
+				"CursorResume",
+				"CursorScrim",
+				"CopyOnSelect",
+			]
+		);
+		// the margin stands on its own after the size group
+		let margin = &specs[at(Key::Margin)];
+		assert_eq!(tab_titles()[margin.tab], "Window");
+		assert_eq!(margin.indent, 0);
+	}
+
+	// Rename opens on the theme's own name, all of it selected, so typing
+	// replaces it.
+	// Test ID: Er2X6Eq
+	#[test]
+	fn rename_opens_on_the_name_selected() {
+		let mut d = on_theme("Matrix");
+		d.save_theme_as("Mine");
+		d.theme_action(super::ThemeBtn::Rename);
+		let edit = d.edit.as_ref().expect("the name field");
+		assert_eq!(edit.buf, "Mine");
+		assert_eq!(edit.sel, Some(0), "the name is not selected");
+		assert_eq!(edit.cur, edit.buf.len(), "the caret is not at the end");
+		d.char_input('X');
+		d.prompt_accept();
+		assert!(d.prompt.is_none());
+		assert_eq!(d.edited.theme, "X");
+		assert_eq!(d.edited.user_themes.len(), 1);
+		assert_eq!(d.edited.user_themes[0].name, "X");
+	}
+
+	// Every slider says what it counts in, and one that counts pixels steps in
+	// whole ones rather than showing 10.00 beside whole percentages.
+	// Test ID: Er2X6Er
+	#[test]
+	fn every_slider_names_its_unit_and_pixels_step_whole() {
+		// counts and sizes whose label already says what they are
+		let unitless = [
+			Key::FontSize,
+			Key::LineHeight,
+			Key::WheelLines,
+			Key::Columns,
+			Key::Rows,
+			Key::IdleHiddenMin,
+			Key::IdleMin,
+		];
+		let specs = &super::ui().specs;
+		for s in specs {
+			let Kind::Slider { int, .. } = s.kind else {
+				continue;
+			};
+			if s.label.ends_with(" px") {
+				assert!(int, "{} steps in fractions of a pixel", s.label);
+			}
+			assert!(
+				[" %", " px", " ms", " s"]
+					.iter()
+					.any(|unit| s.label.ends_with(unit))
+					|| unitless.contains(&s.key),
+				"{} names no unit",
+				s.label
+			);
+		}
+		let label = |key: Key| specs.iter().find(|s| s.key == key).unwrap().label;
+		for (key, unit) in [
+			(Key::BgBlur, " px"),
+			(Key::ScrollbarThickness, " px"),
+			(Key::ScrimRadius, " px"),
+			(Key::Outline, " px"),
+			(Key::CursorBlink, " ms"),
+			(Key::CursorResume, " s"),
+		] {
+			assert!(
+				label(key).ends_with(unit),
+				"{} should end in{unit}",
+				label(key)
+			);
+		}
+	}
+
+	// A field is its own height, taller than a checkbox so the text has room
+	// above and below it; the color chip matches the field beside it; and a box
+	// centers in the row it is in, not in the row floor.
+	// Test ID: Er2X6Es
+	#[test]
+	fn a_field_has_room_for_its_text_and_centers_in_its_row() {
+		for line_h in [18.0, 38.0] {
+			let mut d = mk_dialog_line(line_h);
+			assert!(d.field_h() >= d.line_h + 2.0 * lay().field_pad_v);
+			assert!(d.field_h() > lay().swatch);
+			let c = d.specs.iter().position(|s| s.key == Key::ColBg).unwrap();
+			d.tab = d.specs[c].tab;
+			assert!((d.swatch(c).h - d.hexbox(c).h).abs() < 0.01);
+			let mut checked = 0;
+			for tab in 0..tab_titles().len() {
+				d.tab = tab;
+				for (i, spec) in SettingsDialog::visible(d.specs, tab) {
+					let r = match spec.kind {
+						Kind::Slider { .. } => d.valbox(i),
+						Kind::Color => d.hexbox(i),
+						Kind::Text => d.textbox(i),
+						_ => continue,
+					};
+					let mid = d.row_y(i) + d.row_screen_h(i) / 2.0;
+					assert!(
+						(r.y + r.h / 2.0 - mid).abs() < 0.5,
+						"{} rides off its row's center at line height {line_h}",
+						spec.label
+					);
+					checked += 1;
+				}
+			}
+			assert!(checked > 20, "only {checked} fields found");
+		}
+	}
+
+	// The Active box on a shell's line is a checkbox like any other: square, and
+	// centered on its line with the fields beside it.
+	// Test ID: Er2X6Et
+	#[test]
+	fn a_shells_active_box_is_square_and_centered_on_its_line() {
+		let (d, i) = mk_shell_dialog(2);
+		for k in 0..2 {
+			let active = d.shell_active_box(i, k);
+			let name = d.shell_name_box(i, k);
+			assert!((active.w - lay().swatch).abs() < 0.01);
+			assert!((active.h - lay().swatch).abs() < 0.01);
+			assert!(
+				(active.y + active.h / 2.0 - (name.y + name.h / 2.0)).abs() < 0.5,
+				"line {k}'s box is off the line's center"
+			);
+		}
+	}
+
+	// A focused field draws one outline: the ring on the field's own edge, and
+	// the field's border standing down.
+	// Test ID: Er2X6Eu
+	#[test]
+	fn a_focused_field_draws_one_outline() {
+		let mut d = mk_dialog(4000.0);
+		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
+		d.tab = d.specs[i].tab;
+		d.focus = Some(super::Focus::Row(i, 0));
+		let (_, rows) = d.rects_dip(d.line_h, |s: &str| s.chars().count() as f32 * 7.0);
+		let ring = super::config::srgb_f32(super::dlg().focus_out);
+		let edges = edge_colors(&rows, d.textbox(i), 1.0);
+		assert_eq!(edges.len(), 4, "{} quads on the field's edge", edges.len());
+		assert!(edges.iter().all(|&c| c == ring), "the edge is not the ring");
+	}
+
+	// Only OK, the button Enter fires, is outlined in the highlight; the others
+	// take the quiet gray.
+	// Test ID: Er2X6Ev
+	#[test]
+	fn only_the_default_button_is_outlined_in_the_highlight() {
+		let mut d = mk_dialog(4000.0);
+		d.focus = None;
+		let (fixed, _) = d.rects_dip(d.line_h, |s: &str| s.chars().count() as f32 * 7.0);
+		let hl = super::config::srgb_f32(super::dlg().btn_hl);
+		let gray = super::config::srgb_f32(super::dlg().panel_border);
+		assert_ne!(hl, gray);
+		for (action, r, label) in d.buttons() {
+			let want = if action == super::Action::Ok {
+				hl
+			} else {
+				gray
+			};
+			let edges = edge_colors(&fixed, r, 1.0);
+			assert_eq!(edges.len(), 4, "{label} has no outline");
+			assert!(edges.iter().all(|&c| c == want), "{label}'s outline");
+		}
+	}
+
+	// Test ID: Er2X6Ew
+	#[test]
+	fn a_footer_caption_is_centered_in_its_button() {
+		let d = mk_dialog(4000.0);
+		let measure = |s: &str| s.chars().count() as f32 * 7.0;
+		let texts = d.texts_dip(d.line_h, measure);
+		for (_, r, label) in d.buttons() {
+			let t = texts
+				.iter()
+				.find(|t| t.text == label && r.contains(t.x, t.y + d.line_h / 2.0))
+				.unwrap_or_else(|| panic!("{label} has no caption"));
+			assert!(
+				(t.x + measure(label) / 2.0 - (r.x + r.w / 2.0)).abs() < 0.5,
+				"{label} is off center"
+			);
+		}
+	}
+
+	// A second section on a tab is set off from the one above it.
+	// Test ID: Er2X6Ex
+	#[test]
+	fn a_heading_after_a_section_gets_clear_space_above_it() {
+		assert!(lay().header_gap > 0.0);
+		let mut d = mk_dialog(4000.0);
+		let mut checked = 0;
+		for tab in 0..tab_titles().len() {
+			d.tab = tab;
+			let mut prev: Option<usize> = None;
+			for (i, spec) in SettingsDialog::visible(d.specs, tab) {
+				if let (Kind::Header(label), Some(p)) = (&spec.kind, prev) {
+					let gap = d.row_y(i) - (d.row_y(p) + d.row_screen_h(p));
+					assert!(
+						(gap - lay().header_gap).abs() < 0.01,
+						"{label} is {gap} below the section above it"
+					);
+					checked += 1;
+				}
+				prev = Some(i);
+			}
+		}
+		assert!(checked > 3, "only {checked} headings follow a section");
+	}
+
+	// Alt+C, Alt+A and Alt+O fire the footer buttons, and holding Alt underlines
+	// the letter that does it.
+	// Test ID: Er2X6Ey
+	#[test]
+	fn alt_fires_the_footer_buttons_and_underlines_them() {
+		use super::Action;
+		let mut d = mk_dialog(4000.0);
+		assert_eq!(d.alt_key('c'), Action::Cancel);
+		assert_eq!(d.alt_key('A'), Action::Apply);
+		assert_eq!(d.alt_key('o'), Action::Ok);
+		assert_eq!(d.alt_key('x'), Action::None);
+		let text = super::config::srgb_f32(super::dlg().text);
+		let underlines = |d: &SettingsDialog| {
+			let (fixed, _) = d.rects_dip(d.line_h, |s: &str| s.chars().count() as f32 * 7.0);
+			d.buttons()
+				.iter()
+				.filter(|(_, r, _)| {
+					fixed.iter().any(|q| {
+						q.color == text
+							&& (q.size[1] - 1.5).abs() < 0.01
+							&& r.contains(q.pos[0], q.pos[1])
+					})
+				})
+				.count()
+		};
+		d.set_mods(true, false, false);
+		assert_eq!(
+			underlines(&d),
+			3,
+			"Alt held, and not every button underlined"
+		);
+		d.set_mods(false, false, false);
+		assert_eq!(underlines(&d), 0, "underlined with Alt up");
+	}
+
+	// Space typed into an open field is a space, and the dialog takes no action.
+	// Test ID: Er2X6Ez
+	#[test]
+	fn space_types_into_an_open_field() {
+		let (mut d, _) = mk_text_edit("DejaVu");
+		d.cursor_end();
+		assert_eq!(d.key_space(), super::Action::None);
+		d.char_input('S');
+		assert_eq!(d.edit.as_ref().unwrap().buf, "DejaVu S");
 	}
 }
