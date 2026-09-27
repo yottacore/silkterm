@@ -148,7 +148,10 @@ fn requested_color(index: usize) -> Option<alacritty_terminal::vte::ansi::Rgb> {
 }
 
 fn engine_config() -> Config {
-	let s = crate::config::settings();
+	engine_config_for(&crate::config::settings())
+}
+
+fn engine_config_for(s: &crate::config::Settings) -> Config {
 	Config {
 		scrolling_history: s.scrollback,
 		semantic_escape_chars: s.word_separators.clone(),
@@ -1221,6 +1224,20 @@ mod tests {
 			*seen.0.lock().expect("seen lock"),
 			["Clipboard hello", "Selection hello"]
 		);
+	}
+
+	// The configured word separators are what the engine splits words on.
+	// Test ID: Er2UFeT
+	#[test]
+	fn the_engine_splits_words_on_the_configured_separators() {
+		let s = crate::config::Settings {
+			word_separators: " ,;".to_string(),
+			scrollback: 1234,
+			..Default::default()
+		};
+		let config = super::engine_config_for(&s);
+		assert_eq!(config.semantic_escape_chars, " ,;");
+		assert_eq!(config.scrolling_history, 1234);
 	}
 
 	// A program could set a title of any size and push it thousands of times onto

@@ -148,6 +148,18 @@ echo more >>"${work}/blank/proj/file.txt"
 rc=0; out="$(cd "${work}/blank/proj" && GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="$(fPublishMessage "" "" "")" bash "${publish}" --quiet 2>&1)" || rc=$?
 fCheck "and that is the message committed" test "$(fLastMsg blank)" = "Silk CI/CD 20260101-000000"
 
+## The commit message is the one question. A second "Proceed? [y/N]" after it
+## was removed; its answer would be read as the next thing on stdin.
+prompt="$(sed -n '/^if ((! assume_yes)); then$/,/^fi$/p' "${root}/cicd.bash")"
+fAsk(){  ## fAsk <stdin>: the prompt block, then whatever it left unread
+	# shellcheck disable=SC2034  ## read by the lifted block
+	(assume_yes=0; publish_msg=""; GIT_PUBLISH=(x); fEcho_ResetBlankCounter(){ :; }
+		eval "${prompt}"; echo "msg=${publish_msg}"; read -r rest || true; echo "rest=${rest:-}") <<<"${1}"
+}
+fCheck "the prompt block is found in cicd.bash" test -n "${prompt}"
+fCheck "a typed message is the only line read" test "$(fAsk $'typed\nn')" = $'msg=typed\nrest=n'
+fCheck "a blank line takes the automatic message" test "$(fAsk $'\nn')" = $'msg=Silk CI/CD 20260101-000000\nrest=n'
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
@@ -156,3 +168,4 @@ echo "all passed"
 ##		- 20260917 JC: A failed pull, a message as given, and the blank prompt answer.
 ##		- 20260917 JC: The excludes go through the publisher's own reader to a stub rar.
 ##		- 20260922 JC: The release packages stay in the backup.
+##		- 20260926 JC: The commit message prompt asks nothing after it.

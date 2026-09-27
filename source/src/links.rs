@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
 // Hyperlinks in terminal output: find URLs in a row of grid text, and hand one
 // to the desktop's handler.
 //

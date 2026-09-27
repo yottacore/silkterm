@@ -166,7 +166,8 @@ fDie(){ { fEcho_Force "FAILED: $*"; echo; } >&2; exit 1; }
 ## True when a process here is running the file at $1. Reads /proc, since fuser is
 ## not on every distro. A Windows build in the synced dir is never run from there.
 fInUse(){ local want exe; want="$(readlink -f "$1" 2>/dev/null)" || return 1; [[ -n "$want" ]] || return 1
-	for exe in /proc/[0-9]*/exe; do if [[ "$(readlink "$exe" 2>/dev/null)" == "$want" ]]; then return 0; fi; done; return 1; }
+	for exe in /proc/[0-9]*/exe; do if [[ "$(readlink "$exe" 2>/dev/null)" == "$want" ]]; then return 0; fi; done; return 1
+}
 ## Tag for a build copy: '<toolchain: gnu|msvc><built on: l|m|b|w><target: l|m|b|w><arch: i|a>'.
 ## Built-on is this host; the target and arch come from the os-arch label the build
 ## was made under, so a cross-build is tagged for where it will RUN. Prints nothing
@@ -213,10 +214,15 @@ dogfood_dest(){
 ## say which one it is up front. WSL is told from its kernel string; the Windows
 ## pipeline sets CICD_LINUX_HALF when it hands the Linux stages over.
 host_line(){
-	local kernel="" distro="${WSL_DISTRO_NAME:-}" os=""
+	local kernel="" os=""
 	[[ -r /proc/version ]] && kernel="$(</proc/version)"
 	[[ -r /etc/os-release ]] && os="$(. /etc/os-release 2>/dev/null; printf '%s' "${PRETTY_NAME:-${NAME:-}}")"
-	case "$(uname -s)" in
+	host_describe "$(uname -s)" "$(uname -m)" "${kernel}" "${os}"
+}
+## host_describe <uname -s> <uname -m> <kernel version string> <distribution>
+host_describe(){
+	local -r sys="$1" arch="$2" kernel="$3" os="$4" distro="${WSL_DISTRO_NAME:-}"
+	case "${sys}" in
 		MINGW*|MSYS*|CYGWIN*)
 			printf 'Windows (MSYS bash) - cicd-win.ps1 is the pipeline for this box' ;;
 		Linux)
@@ -228,9 +234,9 @@ host_line(){
 					printf '%s%s on Windows, run on its own' "$gen" "${distro:+ ($distro)}"
 				fi
 			else
-				printf 'Linux%s, %s' "${os:+ ($os)}" "$(uname -m)"
+				printf 'Linux%s, %s' "${os:+ ($os)}" "${arch}"
 			fi ;;
-		*) printf '%s, %s' "$(uname -s)" "$(uname -m)" ;;
+		*) printf '%s, %s' "${sys}" "${arch}" ;;
 	esac
 }
 ## Run a build command, retrying it a few times before calling it a failure. Every
@@ -512,13 +518,16 @@ built_from_state="$(fSourceState)"
 ## tree takes its commit's time, so a rebuild of a release commit gets the same
 ## number. A dirty tree is a different binary, so it keeps the clock. After stage 0,
 ## since a fast-forward moves the commit. A value cicd-win hands down is kept.
-if [[ -z "${SILK_BUILD_MINUTES:-}" ]]; then
+fPinBuildMinutes(){
+	[[ -z "${SILK_BUILD_MINUTES:-}" ]] || return 0
+	local buildSecs
 	buildSecs="$(date +%s)"
 	if [[ -z "$(git status --porcelain --untracked-files=no 2>/dev/null || echo dirty)" ]]; then
 		buildSecs="$(git log -1 --format=%ct 2>/dev/null || date +%s)"
 	fi
 	export SILK_BUILD_MINUTES=$(( (buildSecs - 946684800) / 60 ))
-fi
+}
+fPinBuildMinutes
 
 ## Stage 1: format.
 fSection "1/8  Format"
@@ -664,6 +673,49 @@ if [[ -x "${root}/cicd/tests/gates/run.bash" ]]; then
 	"${root}/cicd/tests/gates/run.bash" >/dev/null || fDie "startup gate test failed"
 	fEcho "OK: startup gates"
 fi
+## This script's own steps: the build retry, the dogfood tag, the options, the
+## running-copy check, the build number and the host line.
+if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
+	fEcho_Clean "pipeline steps ..."
+	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed"
+	fEcho "OK: pipeline steps"
+fi
+## Stage 0, which has to stop a diverged tree before anything is built.
+if [[ -x "${root}/cicd/tests/sync/run.bash" ]]; then
+	fEcho_Clean "remote sync ..."
+	"${root}/cicd/tests/sync/run.bash" >/dev/null || fDie "remote sync test failed"
+	fEcho "OK: remote sync"
+fi
+## The rotation that prunes run logs and flamegraphs.
+if [[ -x "${root}/cicd/tests/rotate/run.bash" ]]; then
+	fEcho_Clean "log rotation ..."
+	"${root}/cicd/tests/rotate/run.bash" >/dev/null || fDie "log rotation test failed"
+	fEcho "OK: log rotation"
+fi
+## One tool pin list for both pipelines, and the docs quoting it.
+if [[ -x "${root}/cicd/tests/pins/run.bash" ]]; then
+	fEcho_Clean "tool pins ..."
+	"${root}/cicd/tests/pins/run.bash" >/dev/null || fDie "tool pin test failed"
+	fEcho "OK: tool pins"
+fi
+## The PowerShell lint this stage gates on has to fail on a finding.
+if [[ -x "${root}/cicd/tests/pslint/run.bash" ]]; then
+	fEcho_Clean "PowerShell lint ..."
+	"${root}/cicd/tests/pslint/run.bash" >/dev/null || fDie "PowerShell lint test failed"
+	fEcho "OK: PowerShell lint"
+fi
+## The Windows runner, which steps over a box that is off.
+if [[ -x "${root}/cicd/tests/win-remote/run.bash" ]]; then
+	fEcho_Clean "windows runner ..."
+	"${root}/cicd/tests/win-remote/run.bash" >/dev/null || fDie "windows runner test failed"
+	fEcho "OK: windows runner"
+fi
+## The parts of the Windows pipeline that run anywhere.
+if [[ -x "${root}/cicd/tests/cicd-win/run.bash" ]]; then
+	fEcho_Clean "windows pipeline pieces ..."
+	"${root}/cicd/tests/cicd-win/run.bash" >/dev/null || fDie "windows pipeline test failed"
+	fEcho "OK: windows pipeline pieces"
+fi
 ## Every table of contents, which no markdown linter regenerates. design.md had
 ## been missing eight of its headings.
 if [[ -x "${root}/cicd/tests/toc/run.py" ]]; then
@@ -677,6 +729,13 @@ if [[ -x "${root}/cicd/tests/tables/run.py" ]]; then
 	fEcho_Clean "markdown tables ..."
 	"${root}/cicd/tests/tables/run.py" >/dev/null || fDie "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
 	fEcho "OK: markdown tables"
+fi
+## Blank lines between top-level bullets and around headings, which no markdown
+## linter here checks. The README and style guide had drifted.
+if [[ -x "${root}/cicd/tests/docs/run.py" ]]; then
+	fEcho_Clean "markdown spacing ..."
+	docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fDie "a markdown file is missing a blank line - see above"; }
+	fEcho "OK: markdown spacing"
 fi
 ## Every test carries an ID, and no two share one.
 if [[ -x "${root}/cicd/utility/test-id.py" ]]; then

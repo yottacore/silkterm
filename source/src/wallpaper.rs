@@ -892,6 +892,131 @@ mod tests {
 		assert_eq!(anchor, [0.5, 0.5]);
 	}
 
+	// Test ID: Er2UJeL
+	#[test]
+	fn the_master_switch_turns_the_wallpaper_off() {
+		let request = |enabled| Request {
+			seq: 1,
+			newest: Arc::new(AtomicU64::new(1)),
+			settings: Arc::new(Settings {
+				wallpaper_enabled: enabled,
+				..flat_settings()
+			}),
+			scan: false,
+			current: None,
+			cleared: false,
+		};
+		assert!(run(&request(false)).image.is_none());
+		// the control: switched on, the same request shows the built-in
+		assert!(run(&request(true)).image.is_some());
+	}
+
+	// Rotation off leaves the folder in the settings, so switching it back on
+	// picks up where it was.
+	// Test ID: Er2UJeM
+	#[test]
+	fn rotation_off_stops_rotating_and_keeps_the_folder() {
+		let dir = std::env::temp_dir().join(format!("silkterm_wp_rot_off_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		image::GrayImage::new(2, 2).save(dir.join("a.png")).unwrap();
+		let on = Settings {
+			wallpaper_folder: Some(dir.clone()),
+			wallpaper_rotate_enabled: true,
+			..flat_settings()
+		};
+		assert_eq!(on.rotation_folder(), Some(&dir));
+		let off = Settings {
+			wallpaper_rotate_enabled: false,
+			..on.clone()
+		};
+		assert!(off.rotation_folder().is_none());
+		assert!(super::rotate(&off, None).is_none());
+		assert_eq!(off.wallpaper_folder, Some(dir.clone()));
+		// and the master switch takes rotation with it
+		let master_off = Settings {
+			wallpaper_enabled: false,
+			..on
+		};
+		assert!(master_off.rotation_folder().is_none());
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	fn tagged_file(name: &str, tags: &str) -> std::path::PathBuf {
+		let packet = format!(
+			"<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=''>{tags}\
+			</rdf:Description></rdf:RDF></x:xmpmeta>"
+		);
+		let path =
+			std::env::temp_dir().join(format!("silkterm_wp_{name}_{}.png", std::process::id()));
+		std::fs::write(&path, tagged_png(&packet)).unwrap();
+		path
+	}
+
+	// Test ID: Er2UJeN
+	#[test]
+	fn an_images_layout_tags_win_until_honor_tags_is_off() {
+		let path = tagged_file(
+			"layout",
+			"<wallpaper:Fit>zoom</wallpaper:Fit><wallpaper:Anchor>25%, 80%</wallpaper:Anchor>",
+		);
+		let mut s = Settings {
+			wallpaper_default_fit: Fit::Stretch,
+			wallpaper_honor_xmp: true,
+			..flat_settings()
+		};
+		let honored = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		assert_eq!(honored.fit, Fit::Zoom);
+		assert_eq!(honored.anchor, [0.25, 0.8]);
+		s.wallpaper_honor_xmp = false;
+		let ignored = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		assert_eq!(ignored.fit, Fit::Stretch);
+		assert_eq!(ignored.anchor, [0.5, 0.5]);
+		let _ = std::fs::remove_file(&path);
+	}
+
+	// Test ID: Er2UJeO
+	#[test]
+	fn an_images_look_tags_win_until_honor_look_tags_is_off() {
+		let path = tagged_file("look", "<wallpaper:Opacity>40%</wallpaper:Opacity>");
+		let mut s = Settings {
+			wallpaper_opacity: 0.1,
+			wallpaper_honor_xmp_look: true,
+			..flat_settings()
+		};
+		let honored = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		assert!((honored.opacity - 0.4).abs() < 1e-6, "{}", honored.opacity);
+		s.wallpaper_honor_xmp_look = false;
+		let ignored = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		assert!((ignored.opacity - 0.1).abs() < 1e-6, "{}", ignored.opacity);
+		let _ = std::fs::remove_file(&path);
+	}
+
+	// A blur done on the sRGB bytes darkens an edge: black beside white met at
+	// about 128 there, where half the light is sRGB 188.
+	// Test ID: Er2UJeP
+	#[test]
+	fn the_blur_mixes_in_linear_light() {
+		let path =
+			std::env::temp_dir().join(format!("silkterm_wp_edge_{}.png", std::process::id()));
+		let mut edge = image::RgbaImage::new(16, 1);
+		for (x, _, px) in edge.enumerate_pixels_mut() {
+			let v = if x < 8 { 0 } else { 255 };
+			*px = image::Rgba([v, v, v, 255]);
+		}
+		edge.save(&path).unwrap();
+		let s = Settings {
+			wallpaper_blur: 2.0,
+			..flat_settings()
+		};
+		let out = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		let _ = std::fs::remove_file(&path);
+		// the two pixels either side of the edge straddle half the light
+		let pair = f32::from(out.rgba.get_pixel(7, 0)[0]) + f32::from(out.rgba.get_pixel(8, 0)[0]);
+		let mid = pair / 2.0;
+		assert!((mid - 188.0).abs() < 12.0, "edge at {mid}");
+	}
+
 	// A bare flag means no picture, whether or not a rotation folder is there.
 	// Without the folder this used to show the built-in.
 	// Test ID: Eq4Yrbi

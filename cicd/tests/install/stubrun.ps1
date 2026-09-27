@@ -5,6 +5,8 @@
 ##		does: its text as a script block. The two web cmdlets are replaced by
 ##		functions of the same name, which the block finds first. They serve the
 ##		folder in STUB_DIR, and the API answers with STUB_API_CODE.
+##		STUB_ONE_OBJECT=1 hands the release list over as one object, the way
+##		Windows PowerShell 5.1 does, and STUB_NO_YES=1 leaves out -Yes.
 ##	- Syntax: stubrun.ps1 -Installer <path to install.ps1> [installer options]
 ##	- History: At bottom of file.
 
@@ -33,7 +35,9 @@ function Invoke-RestMethod {
 		$err.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($body)
 		throw $err
 	}
-	return ($body | ConvertFrom-Json)
+	$list = $body | ConvertFrom-Json
+	if ($env:STUB_ONE_OBJECT) { return , $list }
+	return $list
 }
 
 function Invoke-WebRequest {
@@ -44,9 +48,10 @@ function Invoke-WebRequest {
 ##	A stub that breaks has to show as a failed run, not a line of noise.
 $ErrorActionPreference = 'Stop'
 
-$options = @{ Yes = $true }
+$options = if ($env:STUB_NO_YES) { @{} } else { @{ Yes = $true } }
 if ($Rest) { for ($i = 0; $i -lt $Rest.Count; $i += 2) { $options[$Rest[$i].TrimStart('-')] = $Rest[$i + 1] } }
 & ([scriptblock]::Create([System.IO.File]::ReadAllText($Installer))) @options
 
 ##	History:
 ##		- 20260925 JC: Created.
+##		- 20260926 JC: STUB_ONE_OBJECT and STUB_NO_YES.

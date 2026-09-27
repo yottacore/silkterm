@@ -22,8 +22,9 @@ use crate::bgimage::{ImageRenderer, WpProbe};
 use crate::clipboard::Clipboard;
 use crate::config;
 use crate::gfx::{Gfx, Rebirth, RectInstance, RectRenderer, VramProbe};
-use crate::input;
+use crate::input::{self, ClickSelect, CopyFrom, Hotkey, WheelRoute, is_copy_chord};
 use crate::pane::{BarHit, CopyKind, Dir, Pane, PaneManager, Rect};
+use crate::shells::ShellEntry;
 use crate::term::{PaneId, UserEvent};
 use crate::text::TextCtx;
 
@@ -772,9 +773,13 @@ fn mta(ch: char, on: bool, label: &str, action: MenuAction) -> Entry {
 // titles and the order; only the active entries are offered, and the action
 // carries the index into the WHOLE list so a disabled entry between two active
 // ones cannot shift what a click runs.
-fn shell_submenu(accel: Option<char>, label: &str, action: fn(usize) -> MenuAction) -> Vec<Entry> {
-	let items: Vec<Entry> = config::settings()
-		.shells
+fn shell_submenu(
+	shells: &[ShellEntry],
+	accel: Option<char>,
+	label: &str,
+	action: fn(usize) -> MenuAction,
+) -> Vec<Entry> {
+	let items: Vec<Entry> = shells
 		.iter()
 		.enumerate()
 		.filter(|(_, shell)| shell.active)
@@ -863,17 +868,142 @@ fn next_wallpaper_row() -> Entry {
 }
 
 // The three shell rows: a new tab, and a split either way.
-fn new_tab_shells(accel: Option<char>) -> Vec<Entry> {
-	shell_submenu(accel, "New tab with shell", MenuAction::NewTabShell)
+fn new_tab_shells(shells: &[ShellEntry], accel: Option<char>) -> Vec<Entry> {
+	shell_submenu(shells, accel, "New tab with shell", MenuAction::NewTabShell)
 }
-fn split_shells() -> Vec<Entry> {
-	let mut rows = shell_submenu(None, "Split vertical with shell", |i| {
+fn split_shells(shells: &[ShellEntry]) -> Vec<Entry> {
+	let mut rows = shell_submenu(shells, None, "Split vertical with shell", |i| {
 		MenuAction::SplitShell(Dir::Vertical, i)
 	});
-	rows.extend(shell_submenu(None, "Split horizontal with shell", |i| {
-		MenuAction::SplitShell(Dir::Horizontal, i)
-	}));
+	rows.extend(shell_submenu(
+		shells,
+		None,
+		"Split horizontal with shell",
+		|i| MenuAction::SplitShell(Dir::Horizontal, i),
+	));
 	rows
+}
+
+// The menu-bar dropdowns other than View, and the right-click menu, each apart
+// from the window it opens in, so the labels and accelerators can be held to
+// the style guide by test the way View's are.
+//
+// No tab or pane action goes on File; each has a menu of its own.
+fn file_menu_items() -> Vec<Entry> {
+	vec![
+		mia('R', "Reload config", MenuAction::ReloadConfig),
+		mia('S', "Settings\u{2026} (Ctrl+,)", MenuAction::Settings),
+		Entry::Sep,
+		mia('Q', "Quit", MenuAction::Quit),
+	]
+}
+
+fn edit_menu_items(copy_select: bool, copy_output: bool) -> Vec<Entry> {
+	vec![
+		mia('C', "Copy (Ctrl+Shift+C)", MenuAction::Copy),
+		mia('P', "Paste (Ctrl+Shift+V)", MenuAction::Paste),
+		mia('S', "Paste Selection", MenuAction::PasteSelection),
+		Entry::Sep,
+		mt(copy_select, "Copy on select", MenuAction::ToggleCopySelect),
+		mt(copy_output, "Copy on output", MenuAction::ToggleCopyOutput),
+	]
+}
+
+fn tabs_menu_items(shells: &[ShellEntry]) -> Vec<Entry> {
+	let mut items = vec![mia('N', "New tab (Ctrl+Shift+T)", MenuAction::NewTab)];
+	items.extend(new_tab_shells(shells, Some('S')));
+	items.extend([
+		Entry::Sep,
+		mia('C', "Close tab (Ctrl+Shift+W)", MenuAction::CloseTab),
+	]);
+	items
+}
+
+fn panes_menu_items(shells: &[ShellEntry]) -> Vec<Entry> {
+	let mut items = vec![
+		mia('V', "Split vertical", MenuAction::SplitVertical),
+		mia('H', "Split horizontal", MenuAction::SplitHorizontal),
+	];
+	items.extend(split_shells(shells));
+	items.extend([Entry::Sep, mia('C', "Close pane", MenuAction::Close)]);
+	items
+}
+
+fn help_menu_items() -> Vec<Entry> {
+	vec![mia('A', "About\u{2026}", MenuAction::About)]
+}
+
+// What the right-click menu needs to know about the pane and window it opens
+// over. The checkmark fields read as ViewState's do.
+#[derive(Clone, Copy)]
+struct CtxState {
+	// a link under the click; its two rows are left out otherwise
+	link: bool,
+	read_only: bool,
+	copy_select: bool,
+	copy_output: bool,
+	menu_bar: bool,
+	next_wallpaper: bool,
+}
+
+fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
+	let mut entries = Vec::new();
+	// A link under the click gets its two items at the top, and only then -
+	// they'd be dead weight on every other right-click.
+	if on.link {
+		entries.extend([
+			mia('O', "Open link", MenuAction::OpenLink),
+			mia('L', "Copy link", MenuAction::CopyLink),
+			Entry::Sep,
+		]);
+	}
+	// no accelerator on the shell rows: this menu already spends every letter
+	// their labels offer - 'S' on "Paste Selection", 'H' on "Split
+	// horizontal", 'N' on "New tab" - and a duplicate would make the older
+	// item unreachable, since the first match wins
+	entries.extend([
+		mia('C', "Copy (Ctrl+Shift+C)", MenuAction::Copy),
+		mia('P', "Paste (Ctrl+Shift+V)", MenuAction::Paste),
+		mia('S', "Paste Selection", MenuAction::PasteSelection),
+		Entry::Sep,
+		mt(
+			on.copy_select,
+			"Copy on select",
+			MenuAction::ToggleCopySelect,
+		),
+		mt(
+			on.copy_output,
+			"Copy on output",
+			MenuAction::ToggleCopyOutput,
+		),
+		mta('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
+		Entry::Sep,
+		mia('N', "New tab (Ctrl+Shift+T)", MenuAction::NewTab),
+	]);
+	entries.extend(new_tab_shells(shells, None));
+	entries.extend([
+		Entry::Sep,
+		mia('V', "Split vertical", MenuAction::SplitVertical),
+		mia('H', "Split horizontal", MenuAction::SplitHorizontal),
+	]);
+	entries.extend(split_shells(shells));
+	entries.extend([
+		Entry::Sep,
+		mi("Close pane", MenuAction::Close),
+		// The one window-chrome row worth repeating here: with the bar hidden
+		// this menu is the only way back to it. The rest live on View.
+		Entry::Sep,
+		mta('M', on.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
+	]);
+	if on.next_wallpaper {
+		entries.push(next_wallpaper_row());
+	}
+	entries.extend([
+		Entry::Sep,
+		mi("Reload config", MenuAction::ReloadConfig),
+		mi("Settings\u{2026} (Ctrl+,)", MenuAction::Settings),
+	]);
+	entries
 }
 
 // The background shell scan came back (shells.rs). It reports what it FOUND;
@@ -1124,6 +1254,30 @@ struct CopyMetrics {
 	lead_gap: f32, // "Copy on:" to the first checkbox
 }
 
+// Where menu-bar buffer `i` is drawn: (left, clip left, clip right, top). The
+// titles come first, then the right-aligned copy-mode labels, and at a narrow
+// width some of those are not there at all.
+//
+// Everything on this bar sits on ONE baseline. The copy labels used to center
+// their full ink box, which reads better on its own but left them half a
+// descent above the titles beside them.
+fn menubar_text_slot(
+	text: &TextCtx,
+	menu_h: f32,
+	bar_layout: &[(f32, f32)],
+	copyboxes: Option<&CopyBoxes>,
+	i: usize,
+) -> Option<(f32, f32, f32, f32)> {
+	let bar_top = text.ui_text_top(0.0, menu_h);
+	if let Some(&(x, w)) = bar_layout.get(i) {
+		return Some((x + text.dip(MENU_BAR_PAD), x, x + w, bar_top));
+	}
+	let j = i - bar_layout.len();
+	let cb = copyboxes.filter(|cb| cb.shown[j])?;
+	let (x, w) = (cb.label_x[j], cb.label_w[j]);
+	Some((x, x, x + w, bar_top))
+}
+
 // The widest arrangement that still clears `titles_right`, or None when even the
 // bare boxes cannot. Ordered widest first: whole thing, then without the lead-in,
 // then boxes alone.
@@ -1188,27 +1342,34 @@ impl Tabs {
 		self.list.iter_mut().find_map(|pm| pm.panes.get_mut(&id))
 	}
 	fn next(&mut self) {
-		let n = self.list.len();
-		self.active = (self.active + 1) % n;
+		self.active = tab_step(self.active, self.list.len(), true);
 	}
 	fn prev(&mut self) {
-		let n = self.list.len();
-		self.active = (self.active + n - 1) % n;
+		self.active = tab_step(self.active, self.list.len(), false);
 	}
-	// swap the active tab with its neighbor and follow it
 	fn move_active(&mut self, fwd: bool) {
-		let n = self.list.len();
-		if n < 2 {
-			return;
-		}
-		let j = if fwd {
-			(self.active + 1) % n
-		} else {
-			(self.active + n - 1) % n
-		};
-		self.list.swap(self.active, j);
-		self.active = j;
+		self.active = move_tab(&mut self.list, self.active, fwd);
 	}
+}
+
+// The tab beside `i` of `n`, wrapping at both ends.
+fn tab_step(i: usize, n: usize, forward: bool) -> usize {
+	if forward {
+		(i + 1) % n
+	} else {
+		(i + n - 1) % n
+	}
+}
+
+// Swap the tab at `i` with its neighbour and answer where it went, so the
+// active tab follows. Past either end it trades places with the far one.
+fn move_tab<T>(list: &mut [T], i: usize, forward: bool) -> usize {
+	if list.len() < 2 {
+		return i;
+	}
+	let j = tab_step(i, list.len(), forward);
+	list.swap(i, j);
+	j
 }
 
 // Menu/tab bars auto-size to the menu (proportional) font: height = the text line
@@ -1287,14 +1448,6 @@ const MENU_ACCEL_DROP: f32 = 3.0; // accelerator underline's rise off the item's
 // modifiers on the way out - so a grab that still passes the key through hands
 // us an arrow with nothing held, which would encode as a bare arrow.
 const IGNORE_KEYS_WHILE_UNFOCUSED: bool = true;
-
-// Ctrl+Shift+C, read off the held modifiers. A grab's pass-through arrives with
-// them zeroed, so it never matches.
-fn is_copy_chord(mods: ModifiersState, key: &Key) -> bool {
-	mods.control_key()
-		&& mods.shift_key()
-		&& matches!(key, Key::Character(typed) if typed.eq_ignore_ascii_case("c"))
-}
 
 // Winit replays every key already held down whenever focus changes, flagged
 // `is_synthetic`, so an app can track what is physically pressed. That is
@@ -1449,6 +1602,13 @@ fn rotation_live(locked: bool, count: usize, folder: bool) -> bool {
 
 fn rotation_next(now: Instant, live: bool, interval_s: f32) -> Option<Instant> {
 	(live && interval_s > 0.0).then(|| now + Duration::from_secs_f32(interval_s))
+}
+
+// A wait that starts over once the wallpaper is on screen (the shell scan, the
+// benchmark). It moves out to `due` but never past its backstop, and a wait that
+// already ran stays gone: a late wallpaper must not start a second one.
+fn push_back(at: Option<Instant>, cap: Option<Instant>, due: Instant) -> Option<Instant> {
+	at.map(|_| cap.map_or(due, |cap| due.min(cap)))
 }
 
 // With the profile on automatic, hardware the config has not seen gets a fresh
@@ -1873,23 +2033,43 @@ fn spawn_vt_watch(proxy: EventLoopProxy<UserEvent>) -> bool {
 		return false;
 	};
 	std::thread::spawn(move || {
-		let mut last = home_vt.clone();
+		let mut watch = VtWatch::new(home_vt);
 		loop {
 			std::thread::sleep(Duration::from_millis(500));
 			let Some(cur) = read(&path) else {
 				continue;
 			};
-			if cur != last {
-				vramdbg(&format!("vt switch: {last} -> {cur}"));
-				let returned = cur == home_vt && last != home_vt;
-				last = cur;
-				if returned && proxy.send_event(UserEvent::VtSwitched).is_err() {
-					return; // event loop gone - exit with the app
-				}
+			if cur != watch.last {
+				vramdbg(&format!("vt switch: {} -> {cur}", watch.last));
+			}
+			if watch.step(cur) && proxy.send_event(UserEvent::VtSwitched).is_err() {
+				return; // event loop gone - exit with the app
 			}
 		}
 	});
 	true
+}
+
+// The console this display lives on, and the one seen last.
+#[cfg(any(target_os = "linux", test))]
+struct VtWatch {
+	home: String,
+	last: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl VtWatch {
+	fn new(home: String) -> Self {
+		let last = home.clone();
+		Self { home, last }
+	}
+
+	// Take the console now active; true only when that is a return home.
+	fn step(&mut self, cur: String) -> bool {
+		let returned = cur == self.home && self.last != self.home;
+		self.last = cur;
+		returned
+	}
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2043,6 +2223,30 @@ enum Caret {
 }
 
 const MENU_BAR: [&str; 6] = ["File", "Edit", "View", "Tabs", "Panes", "Help"];
+
+// The top-level menu Alt plus `ch` opens: the one whose title starts with it.
+fn bar_menu_for(ch: char) -> Option<usize> {
+	let ch = ch.to_ascii_uppercase();
+	MENU_BAR.iter().position(|title| title.starts_with(ch))
+}
+
+// Which bar titles get their accelerator underlined, and on which letter: all
+// of them while Alt is held, none while a dropdown is open, since the dropdown
+// underlines its own rows then.
+fn bar_title_underlines(
+	alt_held: bool,
+	open: Option<usize>,
+	titles: &[&str],
+) -> Vec<(usize, char)> {
+	if !alt_held || open.is_some() {
+		return Vec::new();
+	}
+	titles
+		.iter()
+		.enumerate()
+		.filter_map(|(i, title)| title.chars().next().map(|c| (i, c)))
+		.collect()
+}
 const COPYBOX_LABELS: [&str; 3] = ["Copy on:", "select", "output"]; // menu-bar auto-copy checkboxes
 
 // Everything that lives on the GPU device, held together so an idle window can
@@ -2226,6 +2430,36 @@ struct State {
 	idle: IdleClock,
 	conserve: Conserve,
 	vt_heal: VtHeal,
+}
+
+// What a render entry point does, given whether the window was hidden at the
+// last check and is now (see `State::freeze_sync`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Frame {
+	Skip,    // nothing on screen: a frame now would bank the backlog into the ease
+	CatchUp, // just shown again: one hard-cut frame
+	Draw,
+}
+
+fn freeze_frame(was_hidden: bool, hidden: bool) -> Frame {
+	if hidden {
+		Frame::Skip
+	} else if was_hidden {
+		Frame::CatchUp
+	} else {
+		Frame::Draw
+	}
+}
+
+// (window frame, menu bar) saved and shown after a bare-window toggle, `bare`
+// being the new state. Coming back puts back only what is still off, so one
+// switched on in the meantime stays on.
+fn bare_chrome(bare: bool, saved: (bool, bool), now: (bool, bool)) -> ((bool, bool), (bool, bool)) {
+	if bare {
+		(now, (false, false))
+	} else {
+		(saved, (now.0 | saved.0, now.1 | saved.1))
+	}
 }
 
 impl State {
@@ -2526,21 +2760,16 @@ impl State {
 	}
 
 	// Mouse reporting: forward a button press/release to the pane under the cursor
-	// when the app has mouse tracking on. Shift is the local-action override (so the
-	// user can still select/paste/menu). Returns true when the event was reported
-	// (and should not be handled locally). Records the held button for drag + release.
+	// when the app has mouse tracking on (see `input::press_is_reported` for what
+	// stays local). Returns true when the event was reported (and should not be
+	// handled locally). Records the held button for drag + release.
 	fn report_mouse_button(&mut self, button: MouseButton, state: ElementState) -> bool {
-		let Some(btn) = mouse_btn_of(button) else {
+		let Some(btn) = input::mouse_btn_of(button) else {
 			return false;
 		};
-		// Right-click is reserved for SilkTerm's own context menu and never
-		// forwarded to a mouse-tracking app (else e.g. muffer pastes on it).
-		if btn == input::MouseBtn::Right {
-			return false;
-		}
 		let (x, y) = self.mouse;
 		if state == ElementState::Pressed {
-			if self.mods.shift_key() {
+			if !input::press_is_reported(btn, self.menu.is_some(), self.mods.shift_key()) {
 				return false;
 			}
 			let cur = self.tabs.cur();
@@ -2632,14 +2861,19 @@ impl State {
 	// eligibility can break is itself an event, so the disarm always comes before
 	// a refocus could re-poll.
 	fn poll_output_copy(&mut self) {
-		let keep = self.focused.then(|| self.tabs.cur().focused);
+		let cur_focused = self.tabs.cur().focused;
 		for pm in &mut self.tabs.list {
 			for (id, pane) in &mut pm.panes {
-				if keep != Some(*id) || !pane.copy_output {
+				// ids are unique across tabs, so this is the active tab's pane too
+				let in_use = *id == cur_focused;
+				if !(input::copy_allowed(CopyFrom::Output, self.focused, in_use)
+					&& pane.copy_output)
+				{
 					pane.disarm_capture();
 				}
 			}
 		}
+		let keep = self.focused.then_some(cur_focused);
 		let Some(focused_id) = keep else {
 			return;
 		};
@@ -3179,55 +3413,16 @@ impl State {
 		let read_only = p.is_some_and(|p| p.read_only);
 		let copy_select = p.is_some_and(|p| p.copy_select);
 		let copy_output = p.is_some_and(|p| p.copy_output);
-		// A link under the click gets its two items at the top, and only then -
-		// they'd be dead weight on every other right-click.
 		self.menu_link = self.link_at_pointer().map(|(_, link)| link.url);
-		let mut entries = Vec::new();
-		if self.menu_link.is_some() {
-			entries.extend([
-				mia('O', "Open link", MenuAction::OpenLink),
-				mia('L', "Copy link", MenuAction::CopyLink),
-				Entry::Sep,
-			]);
-		}
-		// no accelerator on the shell rows: this menu already spends every letter
-		// their labels offer - 'S' on "Paste Selection", 'H' on "Split
-		// horizontal", 'N' on "New tab" - and a duplicate would make the older
-		// item unreachable, since the first match wins
-		entries.extend([
-			mia('C', "Copy (Ctrl+Shift+C)", MenuAction::Copy),
-			mia('P', "Paste (Ctrl+Shift+V)", MenuAction::Paste),
-			mia('S', "Paste Selection", MenuAction::PasteSelection),
-			Entry::Sep,
-			mt(copy_select, "Copy on select", MenuAction::ToggleCopySelect),
-			mt(copy_output, "Copy on output", MenuAction::ToggleCopyOutput),
-			mta('R', read_only, "Read-only", MenuAction::ToggleReadOnly),
-			Entry::Sep,
-			mia('N', "New tab (Ctrl+Shift+T)", MenuAction::NewTab),
-		]);
-		entries.extend(new_tab_shells(None));
-		entries.extend([
-			Entry::Sep,
-			mia('V', "Split vertical", MenuAction::SplitVertical),
-			mia('H', "Split horizontal", MenuAction::SplitHorizontal),
-		]);
-		entries.extend(split_shells());
-		entries.extend([
-			Entry::Sep,
-			mi("Close pane", MenuAction::Close),
-			// The one window-chrome row worth repeating here: with the bar hidden
-			// this menu is the only way back to it. The rest live on View.
-			Entry::Sep,
-			mta('M', self.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
-		]);
-		if self.can_rotate() {
-			entries.push(next_wallpaper_row());
-		}
-		entries.extend([
-			Entry::Sep,
-			mi("Reload config", MenuAction::ReloadConfig),
-			mi("Settings\u{2026} (Ctrl+,)", MenuAction::Settings),
-		]);
+		let on = CtxState {
+			link: self.menu_link.is_some(),
+			read_only,
+			copy_select,
+			copy_output,
+			menu_bar: self.menu_bar,
+			next_wallpaper: self.can_rotate(),
+		};
+		let entries = context_menu_items(on, &config::settings().shells);
 		self.bar_open = None;
 		self.popup(target, entries, mx, my);
 	}
@@ -3466,20 +3661,8 @@ impl State {
 		let copy_select = p.is_some_and(|p| p.copy_select);
 		let copy_output = p.is_some_and(|p| p.copy_output);
 		match idx {
-			0 => vec![
-				mia('R', "Reload config", MenuAction::ReloadConfig),
-				mia('S', "Settings\u{2026} (Ctrl+,)", MenuAction::Settings),
-				Entry::Sep,
-				mia('Q', "Quit", MenuAction::Quit),
-			],
-			1 => vec![
-				mia('C', "Copy (Ctrl+Shift+C)", MenuAction::Copy),
-				mia('P', "Paste (Ctrl+Shift+V)", MenuAction::Paste),
-				mia('S', "Paste Selection", MenuAction::PasteSelection),
-				Entry::Sep,
-				mt(copy_select, "Copy on select", MenuAction::ToggleCopySelect),
-				mt(copy_output, "Copy on output", MenuAction::ToggleCopyOutput),
-			],
+			0 => file_menu_items(),
+			1 => edit_menu_items(copy_select, copy_output),
 			2 => view_menu_items(ViewState {
 				read_only,
 				fullscreen: self.window.fullscreen().is_some(),
@@ -3491,25 +3674,9 @@ impl State {
 				remote: config::settings().remote_override,
 				next_wallpaper: self.can_rotate(),
 			}),
-			3 => {
-				let mut items = vec![mia('N', "New tab (Ctrl+Shift+T)", MenuAction::NewTab)];
-				items.extend(new_tab_shells(Some('S')));
-				items.extend([
-					Entry::Sep,
-					mia('C', "Close tab (Ctrl+Shift+W)", MenuAction::CloseTab),
-				]);
-				items
-			}
-			4 => {
-				let mut items = vec![
-					mia('V', "Split vertical", MenuAction::SplitVertical),
-					mia('H', "Split horizontal", MenuAction::SplitHorizontal),
-				];
-				items.extend(split_shells());
-				items.extend([Entry::Sep, mia('C', "Close pane", MenuAction::Close)]);
-				items
-			}
-			_ => vec![mia('A', "About\u{2026}", MenuAction::About)],
+			3 => tabs_menu_items(&config::settings().shells),
+			4 => panes_menu_items(&config::settings().shells),
+			_ => help_menu_items(),
 		}
 	}
 
@@ -3979,11 +4146,12 @@ impl State {
 	// frame banks the whole backlog into the ease before anything cuts it.
 	fn freeze_sync(&mut self) -> bool {
 		let hidden = self.hidden();
-		if self.was_hidden && !hidden {
+		let frame = freeze_frame(self.was_hidden, hidden);
+		if frame == Frame::CatchUp {
 			self.freeze_catchup();
 		}
 		self.was_hidden = hidden;
-		hidden
+		frame == Frame::Skip
 	}
 
 	// A frozen surface coming back on screen: hidden tabs never build, and a
@@ -4110,19 +4278,12 @@ impl State {
 		idledbg(&format!("device rebuilt in {:?}", start.elapsed()));
 	}
 
-	// Every piece of chrome off at once, and back the way it was. Only what is
-	// still off is put back, so a bar switched on in the meantime stays on.
+	// Every piece of chrome off at once, and back the way it was.
 	fn toggle_bare(&mut self) {
 		self.bare = !self.bare;
-		if self.bare {
-			self.bare_saved = (self.decorated, self.menu_bar);
-			self.decorated = false;
-			self.menu_bar = false;
-		} else {
-			let (decorated, menu_bar) = self.bare_saved;
-			self.decorated |= decorated;
-			self.menu_bar |= menu_bar;
-		}
+		let (saved, now) = bare_chrome(self.bare, self.bare_saved, (self.decorated, self.menu_bar));
+		self.bare_saved = saved;
+		(self.decorated, self.menu_bar) = now;
 		self.window.set_decorations(self.decorated);
 		self.bar_open = None;
 		self.relayout_all();
@@ -4881,25 +5042,28 @@ impl State {
 				if let Some(&(x, w)) = layout.get(idx) {
 					instances.push(rect_inst(x, 0.0, w, menu_h, config::menu_hover()));
 				}
-			} else if self.mods.alt_key() {
-				// Alt held (no dropdown open): underline each title's accelerator
-				// letter, like the open-dropdown items do (press the letter to open).
+			}
+			// Alt held (no dropdown open): underline each title's accelerator
+			// letter, like the open-dropdown items do (press the letter to open).
+			let marks = bar_title_underlines(self.mods.alt_key(), self.bar_open, &MENU_BAR);
+			if !marks.is_empty() {
 				let attrs = crate::text::ui_attrs();
 				let rule = self.text.dip(CHROME_HAIRLINE);
 				let underline_y = self.text.ui_baseline(0.0, menu_h) + rule;
 				let title_pad = self.text.dip(MENU_BAR_PAD);
-				for (i, &(x, _)) in layout.iter().enumerate() {
-					if let Some(c) = MENU_BAR[i].chars().next() {
-						let mut buf = [0u8; 4];
-						let letter_w = self.text.measure_ui_text(c.encode_utf8(&mut buf), &attrs);
-						instances.push(rect_inst(
-							x + title_pad,
-							underline_y,
-							letter_w,
-							rule,
-							config::menu_fg(),
-						));
-					}
+				for (i, c) in marks {
+					let Some(&(x, _)) = layout.get(i) else {
+						continue;
+					};
+					let mut buf = [0u8; 4];
+					let letter_w = self.text.measure_ui_text(c.encode_utf8(&mut buf), &attrs);
+					instances.push(rect_inst(
+						x + title_pad,
+						underline_y,
+						letter_w,
+						rule,
+						config::menu_fg(),
+					));
 				}
 			}
 			// always-visible copy-mode checkboxes (right side): outlines always,
@@ -5449,23 +5613,11 @@ impl State {
 				areas.extend(p.emoji_area(margin));
 			}
 			if self.menu_bar {
-				// Everything on this bar sits on ONE baseline. The copy labels used
-				// to center their full ink box, which reads better on its own but
-				// left them half a descent above the titles beside them.
-				let bar_top = self.text.ui_text_top(0.0, menu_h);
 				for (i, buf) in chrome.menubar.iter().enumerate() {
-					// the trailing buffers are the right-aligned copy-mode labels,
-					// and at a narrow width some of them are not there at all
-					let (left, left_bound, right_bound, top) = if i < bar_layout.len() {
-						let (x, w) = bar_layout[i];
-						(x + self.text.dip(MENU_BAR_PAD), x, x + w, bar_top)
-					} else {
-						let j = i - bar_layout.len();
-						let Some(cb) = copyboxes.as_ref().filter(|cb| cb.shown[j]) else {
-							continue;
-						};
-						let (x, w) = (cb.label_x[j], cb.label_w[j]);
-						(x, x, x + w, bar_top)
+					let Some((left, left_bound, right_bound, top)) =
+						menubar_text_slot(&self.text, menu_h, &bar_layout, copyboxes.as_ref(), i)
+					else {
+						continue;
 					};
 					// trailing buffers are the copy-mode labels - dim them off-focus
 					let color = if i < bar_layout.len() {
@@ -6131,14 +6283,12 @@ impl State {
 		// second one.
 		if self.revealed && self.wp_answered && !self.wp_shown {
 			self.wp_shown = true;
-			if self.shell_scan_at.is_some() {
-				let due = Instant::now() + SHELL_SCAN_DELAY;
-				self.shell_scan_at = Some(self.shell_scan_cap.map_or(due, |cap| due.min(cap)));
-			}
-			if self.bench_at.is_some() {
-				let due = Instant::now() + BENCH_DELAY;
-				self.bench_at = Some(self.bench_cap.map_or(due, |cap| due.min(cap)));
-			}
+			self.shell_scan_at = push_back(
+				self.shell_scan_at,
+				self.shell_scan_cap,
+				Instant::now() + SHELL_SCAN_DELAY,
+			);
+			self.bench_at = push_back(self.bench_at, self.bench_cap, Instant::now() + BENCH_DELAY);
 		}
 		if env_flag("SILK_DUMP") {
 			gpu.gfx.dump_offscreen("/tmp/silk_offscreen.png");
@@ -6151,16 +6301,6 @@ impl State {
 			self.text.trim_atlas();
 		}
 		animating
-	}
-}
-
-// winit button -> the reportable subset (None for Back/Forward/etc.)
-fn mouse_btn_of(button: MouseButton) -> Option<input::MouseBtn> {
-	match button {
-		MouseButton::Left => Some(input::MouseBtn::Left),
-		MouseButton::Middle => Some(input::MouseBtn::Middle),
-		MouseButton::Right => Some(input::MouseBtn::Right),
-		_ => None,
 	}
 }
 
@@ -6401,6 +6541,24 @@ pub fn load_icon() -> Option<winit::window::Icon> {
 	winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
 
+// A pane's shell, most specific first: its own --shell, the pane it splits, its
+// tab's, the window's, then the default. The first pane of a tab has no split
+// source, and a window with no tabs given has only the last two.
+fn pane_shell(
+	explicit: Option<&Vec<String>>,
+	split_source: Option<&Vec<String>>,
+	tab: Option<&Vec<String>>,
+	window: Option<&Vec<String>>,
+	default: impl FnOnce() -> Option<Vec<String>>,
+) -> Option<Vec<String>> {
+	explicit
+		.or(split_source)
+		.or(tab)
+		.or(window)
+		.cloned()
+		.or_else(default)
+}
+
 // Build the initial tabs/panes from the parsed command line. Without
 // hierarchical flags, one tab with one pane (running any window-level --shell).
 fn build_layout(
@@ -6432,12 +6590,13 @@ fn build_layout(
 		}
 	};
 	if !cli.hierarchical {
-		let shell = cli
-			.win
-			.style
-			.shell
-			.clone()
-			.or_else(config::default_shell_argv);
+		let shell = pane_shell(
+			None,
+			None,
+			None,
+			cli.win.style.shell.as_ref(),
+			config::default_shell_argv,
+		);
 		let mut pm = spawn(text, shell, win_dir);
 		let id = pm.focused;
 		hold(&mut pm, id, cli.win.style.keep_open.unwrap_or(false));
@@ -6446,13 +6605,13 @@ fn build_layout(
 	let mut out = Vec::new();
 	for tab in &cli.tabs {
 		// main pane's shell cascades pane -> tab -> window
-		let main_shell = tab.panes[0]
-			.style
-			.shell
-			.clone()
-			.or_else(|| tab.style.shell.clone())
-			.or_else(|| cli.win.style.shell.clone())
-			.or_else(config::default_shell_argv);
+		let main_shell = pane_shell(
+			tab.panes[0].style.shell.as_ref(),
+			None,
+			tab.style.shell.as_ref(),
+			cli.win.style.shell.as_ref(),
+			config::default_shell_argv,
+		);
 		// directories cascade the same way the shells do
 		let tab_dir = tab
 			.style
@@ -6503,14 +6662,13 @@ fn build_layout(
 				crate::cli::Dir4::Left => (Dir::Vertical, true),
 			};
 			// new pane's shell: explicit -> the pane it splits -> tab -> window
-			let shell = pane_spec
-				.style
-				.shell
-				.clone()
-				.or_else(|| shells.get(&target).cloned().flatten())
-				.or_else(|| tab.style.shell.clone())
-				.or_else(|| cli.win.style.shell.clone())
-				.or_else(config::default_shell_argv);
+			let shell = pane_shell(
+				pane_spec.style.shell.as_ref(),
+				shells.get(&target).and_then(Option::as_ref),
+				tab.style.shell.as_ref(),
+				cli.win.style.shell.as_ref(),
+				config::default_shell_argv,
+			);
 			// and its directory: explicit -> the pane it splits -> tab -> window
 			let pane_dir = pane_spec
 				.style
@@ -6608,7 +6766,9 @@ fn new_window_command(
 // Default split direction when none is given: split along the longer axis so the
 // new pane goes where there's more room.
 fn default_dir(pm: &PaneManager, target: PaneId) -> crate::cli::Dir4 {
-	let rect = pm.panes.get(&target).map(|p| p.rect);
+	default_dir_for(pm.panes.get(&target).map(|p| p.rect))
+}
+fn default_dir_for(rect: Option<Rect>) -> crate::cli::Dir4 {
 	match rect {
 		Some(rect) if rect.h > rect.w => crate::cli::Dir4::Down,
 		_ => crate::cli::Dir4::Right,
@@ -7058,9 +7218,8 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 			}
 			UserEvent::ClipboardStore(id, kind, text) => {
-				// Only the pane in use may set it, so a background pane printing a
-				// hostile file cannot swap what the next paste holds.
-				if id == state.tabs.cur().focused {
+				let in_use = id == state.tabs.cur().focused;
+				if input::copy_allowed(CopyFrom::Program, state.focused, in_use) {
 					match kind {
 						ClipboardType::Clipboard => state.clipboard.set_clipboard(text),
 						// set_primary falls back to the real clipboard where there is
@@ -7364,17 +7523,16 @@ impl ApplicationHandler<UserEvent> for App {
 					state.dirty = true;
 					return;
 				}
-				// click on the tab bar selects a tab. Skip when a dropdown is open: it
-				// opens flush under the menu bar, so its top item overlaps the tab-bar
-				// band - without this guard the tab bar steals the click and (e.g.)
-				// "Tabs|New tab" selects a tab instead of firing, once >1 tab exists.
+				// click on the tab bar selects a tab
 				let tab_bar_y = state.menubar_h();
 				if button == MouseButton::Left
-					&& state.menu.is_none()
-					&& state.tab_bar_visible()
-					&& y >= tab_bar_y
-					&& y < tab_bar_y + state.tab_bar_h()
-				{
+					&& input::tab_bar_takes_press(
+						state.menu.is_some(),
+						state.tab_bar_visible(),
+						y,
+						tab_bar_y,
+						state.tab_bar_h(),
+					) {
 					if let Some(i) = state.tab_at(x) {
 						// press in the close-button column only ARMS the close (the
 						// button lights up); the close itself fires on release over
@@ -7458,8 +7616,7 @@ impl ApplicationHandler<UserEvent> for App {
 				// mouse-tracking app owns the pointer: report the press, skip local
 				// selection/paste/menu (Shift bypasses to the local action). An open
 				// menu must get the click (operate/dismiss it), not the app underneath.
-				if state.menu.is_none() && state.report_mouse_button(button, ElementState::Pressed)
-				{
+				if state.report_mouse_button(button, ElementState::Pressed) {
 					state.dirty = true;
 					return;
 				}
@@ -7500,36 +7657,31 @@ impl ApplicationHandler<UserEvent> for App {
 							state.link_arm = Some((id, link.url));
 						} else {
 							state.focus_at(x, y);
-							// 1 click = plain run (Ctrl = rectangle), 2 = word/pair,
-							// 3 = whole line (wrapped lines included)
 							let now = Instant::now();
-							let (cell_w, cell_h) = (state.text.cell_w, state.text.cell_h);
-							let near =
-								state.last_click.is_some_and(|(last_time, last_x, last_y)| {
-									now.duration_since(last_time) < Duration::from_millis(400)
-										&& (x - last_x).abs() <= cell_w
-										&& (y - last_y).abs() <= cell_h
-								});
-							// count consecutive same-spot clicks; a 4th wraps back to 1
-							state.click_count = if near { (state.click_count % 3) + 1 } else { 1 };
+							state.click_count = input::click_count(
+								state.last_click,
+								state.click_count,
+								now,
+								(x, y),
+								(state.text.cell_w, state.text.cell_h),
+							);
 							state.last_click = Some((now, x, y));
-							let double = state.click_count == 2;
-							let triple = state.click_count == 3;
-							let pairs = if double {
+							let kind =
+								input::click_select(state.click_count, state.mods.control_key());
+							let pairs = if kind == ClickSelect::Word {
 								config::selection_pairs()
 							} else {
 								Vec::new()
 							};
-							let ctrl = state.mods.control_key();
 							let started = state.tabs.cur().pane_at(x, y).and_then(|id| {
 								let p = state.tabs.cur().panes.get(&id)?;
 								let (point, side) = p.point_at(x, y, &state.text)?;
-								if triple {
+								if kind == ClickSelect::Line {
 									// whole logical line, spanning wrapped continuation rows
 									let (start, end) = p.line_span(point);
 									p.begin_selection(start, Side::Left, SelectionType::Simple);
 									p.update_selection(end, Side::Right);
-								} else if double {
+								} else if kind == ClickSelect::Word {
 									// a shape we can name (URL, path) wins; else the
 									// contents of a matched pair; else a bracket to
 									// its partner; else the word
@@ -7551,7 +7703,7 @@ impl ApplicationHandler<UserEvent> for App {
 										}
 									}
 								} else {
-									let sel_type = if ctrl {
+									let sel_type = if kind == ClickSelect::Block {
 										SelectionType::Block
 									} else {
 										SelectionType::Simple
@@ -7597,7 +7749,7 @@ impl ApplicationHandler<UserEvent> for App {
 				state: ElementState::Released,
 				button,
 				..
-			} if state.mouse_btn.is_some() && state.mouse_btn == mouse_btn_of(button) => {
+			} if input::release_is_reported(state.mouse_btn, button) => {
 				if state.report_mouse_button(button, ElementState::Released) {
 					state.dirty = true;
 				}
@@ -7632,18 +7784,17 @@ impl ApplicationHandler<UserEvent> for App {
 					}
 					state.dirty = true;
 				}
-				// armed tab close: fire only if the release is still on the same box
 				if let Some(i) = state.tab_close_arm.take() {
 					let (x, y) = state.mouse;
 					let tab_bar_y = state.menubar_h();
-					if i < state.tabs.len() && y >= tab_bar_y && y < tab_bar_y + state.tab_bar_h() {
-						let bar_h = state.tab_bar_h();
-						let on_close = state
-							.tab_close_box_at(i, tab_bar_y, bar_h)
-							.is_some_and(|cb| x >= cb.x);
-						if on_close && state.tab_at(x) == Some(i) {
-							state.close_tab_at(i);
-						}
+					let bar_h = state.tab_bar_h();
+					let in_bar = y >= tab_bar_y && y < tab_bar_y + bar_h;
+					let close_x = (in_bar && i < state.tabs.len())
+						.then(|| state.tab_close_box_at(i, tab_bar_y, bar_h))
+						.flatten()
+						.map(|cb| cb.x);
+					if input::close_on_release(i, x, in_bar, close_x, state.tab_at(x)) {
+						state.close_tab_at(i);
 					}
 					state.dirty = true;
 				}
@@ -7673,17 +7824,15 @@ impl ApplicationHandler<UserEvent> for App {
 					match text {
 						Some(sel_text) => {
 							// copy-on-select: a finished selection also goes to the
-							// desktop clipboard when the pane opted in. The drag
-							// itself is the proof this window is the one in use, so
-							// the window-focus flag has no say here - it can lag
-							// the WM, and a copy that silently misses is worse than
-							// one from a window that was just clicked in.
-							if state
-								.tabs
-								.cur()
-								.panes
-								.get(&id)
-								.is_some_and(|p| p.copy_select)
+							// desktop clipboard when the pane opted in
+							let in_use = id == state.tabs.cur().focused;
+							if input::copy_allowed(CopyFrom::Select, state.focused, in_use)
+								&& state
+									.tabs
+									.cur()
+									.panes
+									.get(&id)
+									.is_some_and(|p| p.copy_select)
 							{
 								state.clipboard.set_clipboard(sel_text.clone());
 							}
@@ -7715,40 +7864,38 @@ impl ApplicationHandler<UserEvent> for App {
 					.unwrap_or(state.tabs.cur().focused);
 				let cell_h = state.text.cell_h;
 				// A mouse-tracking app (muffer, tmux, vim with mouse on, ...) wants
-				// the wheel as button 64/65 reports, not our scrollback. Shift is the
-				// local-scroll override. Report one notch per line, then stop here.
-				if !state.mods.shift_key() {
-					let (up, notches) = match delta {
-						MouseScrollDelta::LineDelta(_, y) => {
-							(y > 0.0, (y.abs().round() as u32).max(1))
-						}
-						MouseScrollDelta::PixelDelta(pos) => (
-							(pos.y as f32) > 0.0,
-							((pos.y.abs() as f32 / cell_h).round() as u32).max(1),
-						),
-					};
-					if let Some(p) = state.tabs.cur().panes.get(&id) {
-						// No cell under the pointer means it is over the minimap
-						// column, not the text - fall through and scroll the buffer.
-						if let Some((col, row)) = input::wants_mouse(p.mode)
-							.then(|| p.screen_cell_at(x, y, &state.text))
-							.flatten()
-						{
-							let btn = if up {
-								input::MouseBtn::WheelUp
-							} else {
-								input::MouseBtn::WheelDown
-							};
-							for _ in 0..notches.min(8) {
-								if let Some(seq) = input::mouse_report(
-									p.mode, btn, true, false, col, row, state.mods,
-								) {
-									p.write_input(seq);
-								}
+				// the wheel as button 64/65 reports, not our scrollback. Report one
+				// notch per line, then stop here.
+				let shift = state.mods.shift_key();
+				let (up, notches) = match delta {
+					MouseScrollDelta::LineDelta(_, y) => (y > 0.0, (y.abs().round() as u32).max(1)),
+					MouseScrollDelta::PixelDelta(pos) => (
+						(pos.y as f32) > 0.0,
+						((pos.y.abs() as f32 / cell_h).round() as u32).max(1),
+					),
+				};
+				if let Some(p) = state.tabs.cur().panes.get(&id) {
+					// No cell under the pointer means it is over the minimap
+					// column, not the text - fall through and scroll the buffer.
+					if let Some((col, row)) = (input::wheel_route(p.mode, shift)
+						== WheelRoute::Report)
+						.then(|| p.screen_cell_at(x, y, &state.text))
+						.flatten()
+					{
+						let btn = if up {
+							input::MouseBtn::WheelUp
+						} else {
+							input::MouseBtn::WheelDown
+						};
+						for _ in 0..notches.min(8) {
+							if let Some(seq) =
+								input::mouse_report(p.mode, btn, true, false, col, row, state.mods)
+							{
+								p.write_input(seq);
 							}
-							state.dirty = true;
-							return;
 						}
+						state.dirty = true;
+						return;
 					}
 				}
 				// smooth scrollback uses WHEEL_LINES; full-screen apps get their
@@ -7765,14 +7912,7 @@ impl ApplicationHandler<UserEvent> for App {
 				};
 				if let Some(p) = state.tabs.cur_mut().panes.get_mut(&id) {
 					let mode = p.mode;
-					// Alternate-scroll (DECSET 1007) is default-on, so gate the cursor-key
-					// path on actually being in the alt screen. On the primary screen the
-					// wheel must scroll our scrollback; sending cursor keys there recalls
-					// shell history instead (the reported bug).
-					let alt_scroll = mode.contains(TermMode::ALT_SCREEN)
-						&& mode.contains(TermMode::ALTERNATE_SCROLL)
-						&& !mode.intersects(TermMode::MOUSE_MODE);
-					if alt_scroll {
+					if input::wheel_route(mode, shift) == WheelRoute::CursorKeys {
 						// full-screen apps (less, nano, ...) have no scrollback of
 						// their own; the wheel drives their cursor-key scrolling
 						let n = alt_lines.abs().round() as i32;
@@ -7957,112 +8097,87 @@ impl ApplicationHandler<UserEvent> for App {
 					state.dirty = true;
 					return;
 				}
-				// Ctrl+, opens settings
-				if state.mods.control_key()
-					&& !state.mods.shift_key()
-					&& matches!(&key.logical_key, Key::Character(typed) if typed == ",")
-				{
-					state.open_settings();
-					return;
-				}
-				if matches!(&key.logical_key, Key::Named(NamedKey::F11)) {
-					state.toggle_fullscreen();
-					return;
-				}
-				// Menu/Apps key opens the context menu on the focused pane
-				if matches!(&key.logical_key, Key::Named(NamedKey::ContextMenu)) {
-					let id = state.tabs.cur().focused;
-					if let Some(p) = state.tabs.cur().panes.get(&id) {
-						let (rect_x, rect_y) = (p.rect.x, p.rect.y);
-						state.open_menu(id, rect_x + 12.0, rect_y + 12.0);
+				match input::hotkey_for(&key.logical_key, state.mods, state.menu_bar) {
+					Some(Hotkey::Settings) => {
+						state.open_settings();
+						return;
+					}
+					Some(Hotkey::Fullscreen) => {
+						state.toggle_fullscreen();
+						return;
+					}
+					// the Menu/Apps key opens the context menu on the focused pane
+					Some(Hotkey::ContextMenu) => {
+						let id = state.tabs.cur().focused;
+						if let Some(p) = state.tabs.cur().panes.get(&id) {
+							let (rect_x, rect_y) = (p.rect.x, p.rect.y);
+							state.open_menu(id, rect_x + 12.0, rect_y + 12.0);
+							state.dirty = true;
+						}
+						return;
+					}
+					// a letter no title starts with goes on to the shell
+					Some(Hotkey::MenuTitle(ch)) => {
+						if let Some(i) = bar_menu_for(ch) {
+							state.open_bar_menu(i);
+							state.dirty = true;
+							return;
+						}
+					}
+					Some(Hotkey::NewTab) => {
+						state.new_tab(&self.proxy);
+						return;
+					}
+					// the current tab, or the window if it is the last one
+					Some(Hotkey::CloseTab) => {
+						state.close_tab();
+						return;
+					}
+					Some(Hotkey::NewWindow) => {
+						state.new_window();
+						return;
+					}
+					Some(Hotkey::Zoom(dir)) => {
+						state.font_zoom(dir);
+						return;
+					}
+					Some(Hotkey::ZoomReset) => {
+						state.font_zoom_reset();
+						return;
+					}
+					Some(hotkey @ (Hotkey::PrevTab | Hotkey::NextTab)) => {
+						if hotkey == Hotkey::PrevTab {
+							state.tabs.prev();
+						} else {
+							state.tabs.next();
+						}
+						state.freeze_catchup();
+						state.update_title();
 						state.dirty = true;
+						return;
 					}
-					return;
-				}
-				// Menu accelerators: Alt+F/E/V/T/P/H open the matching top-level
-				// menu. NOTE: this shadows the shell's Meta+<those letters>
-				// (e.g. Meta-f word-forward) - the standard menu-bar tradeoff.
-				if state.menu_bar && state.mods.alt_key() && !state.mods.control_key() {
-					if let Key::Character(typed) = &key.logical_key {
-						if let Some(ch) = typed.chars().next().map(|c| c.to_ascii_uppercase()) {
-							if let Some(i) = MENU_BAR.iter().position(|title| title.starts_with(ch))
-							{
-								state.open_bar_menu(i);
-								state.dirty = true;
-								return;
+					Some(Hotkey::MoveTab { forward }) => {
+						state.tabs.move_active(forward); // same tab follows - nothing was frozen
+						state.update_title();
+						state.dirty = true;
+						return;
+					}
+					Some(Hotkey::Copy) => {
+						state.copy_selection();
+						state.dirty = true;
+						return;
+					}
+					Some(Hotkey::Paste) => {
+						let focused = state.tabs.cur().focused;
+						if let Some(text) = state.clipboard.get_clipboard() {
+							if let Some(p) = state.tabs.cur_mut().panes.get_mut(&focused) {
+								p.paste(&text);
 							}
 						}
+						state.dirty = true;
+						return;
 					}
-				}
-				// tab hotkeys (Ctrl based).
-				if state.mods.control_key() {
-					let shift = state.mods.shift_key();
-					match &key.logical_key {
-						// Ctrl+Shift+T: new tab (Shift so plain Ctrl+T reaches the shell)
-						Key::Character(typed) if shift && typed.eq_ignore_ascii_case("t") => {
-							state.new_tab(&self.proxy);
-							return;
-						}
-						// Ctrl+Shift+W / Ctrl+F4: close the current tab, or the window
-						// if it is the last one. Shift on W so plain Ctrl+W reaches the
-						// shell (word-erase).
-						Key::Character(typed) if shift && typed.eq_ignore_ascii_case("w") => {
-							state.close_tab();
-							return;
-						}
-						Key::Named(NamedKey::F4) => {
-							state.close_tab();
-							return;
-						}
-						// Ctrl+Shift+N: new window, starting in the focused pane's
-						// current directory
-						Key::Character(typed) if shift && typed.eq_ignore_ascii_case("n") => {
-							state.new_window();
-							return;
-						}
-						// Ctrl+- / Ctrl+= / Ctrl++: session font zoom ("+" is
-						// Shift+"=" on most layouts, so both spellings count)
-						Key::Character(typed) if typed == "-" => {
-							state.font_zoom(-1);
-							return;
-						}
-						Key::Character(typed) if typed == "=" || typed == "+" => {
-							state.font_zoom(1);
-							return;
-						}
-						// Ctrl+0: reset the session font zoom to the configured size
-						Key::Character(typed) if typed == "0" => {
-							state.font_zoom_reset();
-							return;
-						}
-						Key::Named(NamedKey::PageUp) => {
-							if shift {
-								state.tabs.move_active(false); // same tab follows - nothing was frozen
-							} else {
-								state.tabs.prev();
-								state.freeze_catchup();
-							}
-							state.update_title();
-							state.dirty = true;
-							return;
-						}
-						Key::Named(NamedKey::PageDown) => {
-							if shift {
-								state.tabs.move_active(true);
-							} else {
-								state.tabs.next();
-								state.freeze_catchup();
-							}
-							state.update_title();
-							state.dirty = true;
-							return;
-						}
-						_ => {}
-					}
-				}
-				if state.handle_hotkey(&key) {
-					state.dirty = true;
-					return;
+					None => {}
 				}
 				let focused = state.tabs.cur().focused;
 				let app_cursor = state
@@ -8664,7 +8779,11 @@ impl ApplicationHandler<UserEvent> for App {
 }
 
 impl State {
+	// Ctrl+Shift+C, focused window or not
 	fn copy_selection(&mut self) {
+		if !input::copy_allowed(CopyFrom::Chord, self.focused, true) {
+			return;
+		}
 		let focused = self.tabs.cur().focused;
 		if let Some(text) = self
 			.tabs
@@ -8674,32 +8793,6 @@ impl State {
 			.and_then(super::pane::Pane::selection_text)
 		{
 			self.clipboard.set_clipboard(text);
-		}
-	}
-
-	// Ctrl+Shift chords for pane management. Returns true if consumed.
-	// Only clipboard hotkeys live here now: pane management (split/close/cycle)
-	// is menu-only by design - see the keyboard handler and design.md.
-	fn handle_hotkey(&mut self, key: &winit::event::KeyEvent) -> bool {
-		if !(self.mods.control_key() && self.mods.shift_key()) {
-			return false;
-		}
-		let focused = self.tabs.cur().focused;
-		match &key.logical_key {
-			// Ctrl+Shift+C / Ctrl+Shift+V: clipboard copy / paste
-			k if is_copy_chord(self.mods, k) => {
-				self.copy_selection();
-				true
-			}
-			Key::Character(typed) if typed.eq_ignore_ascii_case("v") => {
-				if let Some(text) = self.clipboard.get_clipboard() {
-					if let Some(p) = self.tabs.cur_mut().panes.get_mut(&focused) {
-						p.paste(&text);
-					}
-				}
-				true
-			}
-			_ => false,
 		}
 	}
 }
@@ -8714,6 +8807,12 @@ mod tests {
 		new_window_command, notice_due, pace_frame, rating_step, release_deadline, remember_resize,
 		rotation_live, rotation_next, settings_after_reload, tab_close_box, tab_command_line,
 		tab_title_w, typed_title, view_menu_items, window_px,
+	};
+	use super::{
+		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
+		bar_title_underlines, context_menu_items, default_dir_for, edit_menu_items, entry_accel,
+		entry_label, file_menu_items, help_menu_items, menubar_text_slot, pane_shell,
+		panes_menu_items, push_back, split_shells, tabs_menu_items,
 	};
 	use crate::config;
 	use std::time::{Duration, Instant};
@@ -9777,6 +9876,35 @@ mod tests {
 				);
 			}
 		}
+		// and each of these has a row at all, checked exactly while it is on
+		let all_off = ViewState {
+			read_only: false,
+			fullscreen: false,
+			window_frame: false,
+			menu_bar: false,
+			tab_strip: false,
+			minimap: false,
+			bare: false,
+			remote: false,
+			next_wallpaper: false,
+		};
+		let rows: [(&str, fn(&MenuAction) -> bool); 4] = [
+			("Menu bar", |a| matches!(a, MenuAction::ToggleMenuBar)),
+			("Window frame", |a| matches!(a, MenuAction::ToggleFrame)),
+			("Fullscreen", |a| matches!(a, MenuAction::ToggleFullscreen)),
+			("Read-only", |a| matches!(a, MenuAction::ToggleReadOnly)),
+		];
+		for (state, on) in [(all_on, true), (all_off, false)] {
+			let items = view_menu_items(state);
+			for (name, want) in rows {
+				assert_eq!(
+					check_of(&items, want),
+					Some(Some(on)),
+					"View's {name} row, everything {}",
+					if on { "on" } else { "off" }
+				);
+			}
+		}
 	}
 
 	// Test ID: EolQiSX
@@ -9833,6 +9961,512 @@ mod tests {
 		assert!(
 			!rotation_live(false, 5, false),
 			"no folder, nothing to rotate"
+		);
+	}
+
+	// Some(check) for the first top-level item doing what `want` picks.
+	fn check_of(items: &[Entry], want: fn(&MenuAction) -> bool) -> Option<Option<bool>> {
+		items.iter().find_map(|entry| match entry {
+			Entry::Item { action, check, .. } if want(action) => Some(*check),
+			_ => None,
+		})
+	}
+
+	fn position_of(items: &[Entry], want: fn(&MenuAction) -> bool) -> Option<usize> {
+		items
+			.iter()
+			.position(|entry| matches!(entry, Entry::Item { action, .. } if want(action)))
+	}
+
+	// Every action a menu can reach, submenus included.
+	fn actions_in(items: &[Entry]) -> Vec<MenuAction> {
+		let mut out = Vec::new();
+		for entry in items {
+			match entry {
+				Entry::Item { action, .. } => out.push(*action),
+				Entry::Sub { items, .. } => out.extend(actions_in(items)),
+				Entry::Sep => {}
+			}
+		}
+		out
+	}
+
+	fn shell(title: &str, active: bool) -> ShellEntry {
+		ShellEntry {
+			slug: title.to_lowercase(),
+			title: title.into(),
+			command: title.to_lowercase(),
+			active,
+			comment: String::new(),
+			last_seen: String::new(),
+		}
+	}
+
+	// A disabled entry sits between the two active ones, so an index that
+	// counted only the offered rows would show.
+	fn three_shells() -> Vec<ShellEntry> {
+		vec![
+			shell("PowerShell 7", true),
+			shell("fish", false),
+			shell("Nushell", true),
+		]
+	}
+
+	// Every menu with as many rows as it can have: each toggle on, a link under
+	// the pointer, a wallpaper to move on to, and shells to offer.
+	fn every_menu(shells: &[ShellEntry]) -> Vec<(&'static str, Vec<Entry>)> {
+		let view = ViewState {
+			read_only: true,
+			fullscreen: true,
+			window_frame: true,
+			menu_bar: true,
+			tab_strip: true,
+			minimap: true,
+			bare: true,
+			remote: true,
+			next_wallpaper: true,
+		};
+		let ctx = CtxState {
+			link: true,
+			read_only: true,
+			copy_select: true,
+			copy_output: true,
+			menu_bar: true,
+			next_wallpaper: true,
+		};
+		vec![
+			("File", file_menu_items()),
+			("Edit", edit_menu_items(true, true)),
+			("View", view_menu_items(view)),
+			("Tabs", tabs_menu_items(shells)),
+			("Panes", panes_menu_items(shells)),
+			("Help", help_menu_items()),
+			("right-click", context_menu_items(ctx, shells)),
+		]
+	}
+
+	// The shortcut in "Label (Ctrl+Shift+C)", if the row shows one.
+	fn shortcut_of(label: &str) -> Option<&str> {
+		let open = label.rfind(" (")?;
+		label[open + 2..].strip_suffix(')')
+	}
+
+	// Build time only checks a menu's letters in a debug build, and only when
+	// that menu is opened. This holds every one of them to it.
+	// Test ID: Er2UvPk
+	#[test]
+	fn no_menu_spends_an_accelerator_twice() {
+		for shells in [three_shells(), Vec::new()] {
+			for (name, items) in every_menu(&shells) {
+				assert_eq!(accel_clash(&items), None, "{name}");
+			}
+		}
+	}
+
+	// Keys are spelled as words, so "Ctrl+=" or "Ctrl++" cannot come back.
+	// Ctrl+, keeps its comma: the style guide spells it that way too.
+	// Test ID: Er2UvPl
+	#[test]
+	fn every_shortcut_in_a_menu_is_spelled_one_way() {
+		for (name, items) in every_menu(&three_shells()) {
+			for label in items.iter().filter_map(entry_label) {
+				let Some(keys) = shortcut_of(label) else {
+					continue;
+				};
+				assert!(!keys.contains(' '), "{name}: {label}");
+				for key in keys.split('+') {
+					assert!(
+						key == "," || (!key.is_empty() && key.chars().all(char::is_alphanumeric)),
+						"{name}: {label} spells a key as {key:?}"
+					);
+				}
+			}
+		}
+		let view = &every_menu(&[])[2].1;
+		let label_of = |want| {
+			position_of(view, want)
+				.and_then(|i| entry_label(&view[i]))
+				.unwrap_or_default()
+		};
+		assert_eq!(
+			shortcut_of(label_of(|a| matches!(a, MenuAction::FontBigger))),
+			Some("Ctrl+Plus")
+		);
+		assert_eq!(
+			shortcut_of(label_of(|a| matches!(a, MenuAction::FontSmaller))),
+			Some("Ctrl+Minus")
+		);
+	}
+
+	// A row that opens a prompt or a dialog ends in the one ellipsis character,
+	// never three dots.
+	// Test ID: Er2UvPm
+	#[test]
+	fn a_row_that_asks_for_more_ends_in_a_real_ellipsis() {
+		use crate::ui_spec::{Key, Kind};
+		let spec = crate::ui_spec::ui()
+			.specs
+			.iter()
+			.find(|spec| spec.key == Key::ThemeActions)
+			.expect("the theme buttons row");
+		let Kind::Buttons(labels) = spec.kind else {
+			panic!("the theme actions are buttons");
+		};
+		for want in ["Save as\u{2026}", "Rename\u{2026}"] {
+			assert!(labels.contains(&want), "{want} in {labels:?}");
+		}
+		for (name, items) in every_menu(&three_shells()) {
+			for label in items.iter().filter_map(entry_label) {
+				assert!(!label.contains("..."), "{name}: {label}");
+			}
+		}
+	}
+
+	// Sentence case: past the first letter, a capital is either the row's
+	// accelerator ("Paste Selection") or part of the shortcut. Shell titles in a
+	// flyout are names and keep theirs.
+	// Test ID: Er2UvPn
+	#[test]
+	fn every_menu_row_is_in_sentence_case() {
+		for (name, items) in every_menu(&three_shells()) {
+			for entry in &items {
+				let Some(label) = entry_label(entry) else {
+					continue;
+				};
+				let accel = entry_accel(entry).map(|(_, pos)| pos);
+				let words = label.rfind(" (").map_or(label, |open| &label[..open]);
+				for (at, ch) in words.char_indices().skip(1) {
+					assert!(
+						!ch.is_uppercase() || accel == Some(at),
+						"{name}: {label} capitalizes {ch}"
+					);
+				}
+			}
+		}
+	}
+
+	// Test ID: Er2UvPo
+	#[test]
+	fn the_right_click_menu_rules_off_the_tab_rows_from_the_pane_rows() {
+		let ctx = CtxState {
+			link: false,
+			read_only: false,
+			copy_select: false,
+			copy_output: false,
+			menu_bar: true,
+			next_wallpaper: false,
+		};
+		for shells in [three_shells(), Vec::new()] {
+			let items = context_menu_items(ctx, &shells);
+			let last_tab = items
+				.iter()
+				.rposition(|entry| {
+					actions_in(std::slice::from_ref(entry))
+						.iter()
+						.any(|a| matches!(a, MenuAction::NewTab | MenuAction::NewTabShell(_)))
+				})
+				.expect("a tab row");
+			let first_pane = position_of(&items, |a| matches!(a, MenuAction::SplitVertical))
+				.expect("a pane row");
+			assert!(last_tab < first_pane);
+			assert!(
+				items[last_tab..first_pane]
+					.iter()
+					.any(|entry| matches!(entry, Entry::Sep)),
+				"no rule between the tab rows and the pane rows"
+			);
+		}
+	}
+
+	// Test ID: Er2UvPp
+	#[test]
+	fn the_bar_reads_file_to_help_and_file_holds_no_tab_or_pane_action() {
+		assert_eq!(MENU_BAR, ["File", "Edit", "View", "Tabs", "Panes", "Help"]);
+		for action in actions_in(&file_menu_items()) {
+			assert!(!matches!(
+				action,
+				MenuAction::NewTab
+					| MenuAction::NewTabShell(_)
+					| MenuAction::CloseTab
+					| MenuAction::SplitVertical
+					| MenuAction::SplitHorizontal
+					| MenuAction::SplitShell(..)
+					| MenuAction::Close
+			));
+		}
+	}
+
+	// Test ID: Er2UvPq
+	#[test]
+	fn the_right_click_menu_carries_the_pane_actions_and_their_checkmarks() {
+		for on in [false, true] {
+			let items = context_menu_items(
+				CtxState {
+					link: false,
+					read_only: on,
+					copy_select: false,
+					copy_output: false,
+					menu_bar: on,
+					next_wallpaper: false,
+				},
+				&[],
+			);
+			let plain: [(&str, fn(&MenuAction) -> bool); 8] = [
+				("Copy", |a| matches!(a, MenuAction::Copy)),
+				("Paste", |a| matches!(a, MenuAction::Paste)),
+				("Paste selection", |a| {
+					matches!(a, MenuAction::PasteSelection)
+				}),
+				("New tab", |a| matches!(a, MenuAction::NewTab)),
+				("Split vertical", |a| matches!(a, MenuAction::SplitVertical)),
+				("Split horizontal", |a| {
+					matches!(a, MenuAction::SplitHorizontal)
+				}),
+				("Reload config", |a| matches!(a, MenuAction::ReloadConfig)),
+				("Settings", |a| matches!(a, MenuAction::Settings)),
+			];
+			for (name, want) in plain {
+				assert_eq!(check_of(&items, want), Some(None), "{name}");
+			}
+			assert_eq!(
+				check_of(&items, |a| matches!(a, MenuAction::ToggleReadOnly)),
+				Some(Some(on))
+			);
+			assert_eq!(
+				check_of(&items, |a| matches!(a, MenuAction::ToggleMenuBar)),
+				Some(Some(on))
+			);
+			assert_eq!(accel_clash(&items), None);
+		}
+	}
+
+	// Test ID: Er2UvPr
+	#[test]
+	fn a_new_tab_shell_row_lists_the_active_shells_or_is_not_there() {
+		let ctx = CtxState {
+			link: false,
+			read_only: false,
+			copy_select: false,
+			copy_output: false,
+			menu_bar: true,
+			next_wallpaper: false,
+		};
+		let shells = three_shells();
+		for (name, items) in [
+			("Tabs", tabs_menu_items(&shells)),
+			("right-click", context_menu_items(ctx, &shells)),
+		] {
+			let below = position_of(&items, |a| matches!(a, MenuAction::NewTab)).unwrap() + 1;
+			let Entry::Sub { label, items, .. } = &items[below] else {
+				panic!("{name}: no shell row under New tab");
+			};
+			assert_eq!(label, "New tab with shell");
+			let offered: Vec<_> = items.iter().filter_map(entry_label).collect();
+			assert_eq!(offered, ["PowerShell 7", "Nushell"], "{name}");
+			let picks = actions_in(items);
+			assert!(matches!(
+				picks[..],
+				[MenuAction::NewTabShell(0), MenuAction::NewTabShell(2)]
+			));
+		}
+		for shells in [Vec::new(), vec![shell("fish", false)]] {
+			for items in [tabs_menu_items(&shells), context_menu_items(ctx, &shells)] {
+				assert!(!items.iter().any(|entry| matches!(entry, Entry::Sub { .. })));
+			}
+		}
+	}
+
+	// Test ID: Er2UvPs
+	#[test]
+	fn both_split_shell_rows_offer_the_same_shells_by_their_place_in_the_list() {
+		let shells = three_shells();
+		let rows = split_shells(&shells);
+		assert_eq!(rows.len(), 2);
+		for (row, (label, dir)) in rows.iter().zip([
+			("Split vertical with shell", Dir::Vertical),
+			("Split horizontal with shell", Dir::Horizontal),
+		]) {
+			let Entry::Sub {
+				label: shown,
+				items,
+				..
+			} = row
+			else {
+				panic!("{label} is not a submenu");
+			};
+			assert_eq!(shown, label);
+			let offered: Vec<_> = items.iter().filter_map(entry_label).collect();
+			assert_eq!(offered, ["PowerShell 7", "Nushell"], "{label}");
+			let picks = actions_in(items);
+			assert!(
+				matches!(
+					picks[..],
+					[MenuAction::SplitShell(a, 0), MenuAction::SplitShell(b, 2)] if a == dir && b == dir
+				),
+				"{label}"
+			);
+		}
+		// both rows sit under the two plain splits on the Panes menu
+		let panes = panes_menu_items(&shells);
+		assert!(matches!(
+			panes[2..4],
+			[Entry::Sub { .. }, Entry::Sub { .. }]
+		));
+		assert!(split_shells(&[shell("fish", false)]).is_empty());
+		assert!(split_shells(&[]).is_empty());
+	}
+
+	// Test ID: Er2UvPt
+	#[test]
+	fn alt_and_a_title_letter_opens_that_menu() {
+		for (i, ch) in "fevtph".chars().enumerate() {
+			assert_eq!(bar_menu_for(ch), Some(i), "{ch}");
+			assert_eq!(bar_menu_for(ch.to_ascii_uppercase()), Some(i), "{ch}");
+		}
+		assert_eq!(bar_menu_for('x'), None);
+		let mut firsts: Vec<char> = MENU_BAR.iter().filter_map(|t| t.chars().next()).collect();
+		firsts.sort_unstable();
+		firsts.dedup();
+		assert_eq!(firsts.len(), MENU_BAR.len(), "two titles share a letter");
+	}
+
+	// Test ID: Er2UvPu
+	#[test]
+	fn the_bar_titles_are_underlined_only_while_alt_is_held_and_nothing_is_open() {
+		assert!(bar_title_underlines(false, None, &MENU_BAR).is_empty());
+		assert!(bar_title_underlines(true, Some(2), &MENU_BAR).is_empty());
+		assert!(bar_title_underlines(false, Some(2), &MENU_BAR).is_empty());
+		let marks = bar_title_underlines(true, None, &MENU_BAR);
+		assert_eq!(marks.len(), MENU_BAR.len());
+		for (i, ch) in marks {
+			assert!(MENU_BAR[i].starts_with(ch));
+			// the letter drawn is the letter that opens it
+			assert_eq!(bar_menu_for(ch), Some(i));
+		}
+	}
+
+	// Test ID: Er2UvPv
+	#[test]
+	fn a_split_with_no_direction_goes_along_the_longer_side() {
+		use crate::cli::Dir4;
+		let rect = |w, h| {
+			Some(Rect {
+				x: 0.0,
+				y: 0.0,
+				w,
+				h,
+			})
+		};
+		assert_eq!(default_dir_for(rect(400.0, 900.0)), Dir4::Down);
+		assert_eq!(default_dir_for(rect(900.0, 400.0)), Dir4::Right);
+		assert_eq!(default_dir_for(rect(500.0, 500.0)), Dir4::Right);
+		assert_eq!(default_dir_for(None), Dir4::Right);
+	}
+
+	// Test ID: Er2UvPw
+	#[test]
+	fn the_wallpaper_pushes_a_wait_back_but_never_starts_one_again() {
+		let now = Instant::now();
+		let armed = Some(now);
+		let due = now + Duration::from_secs(3);
+		let cap = now + Duration::from_secs(20);
+		assert_eq!(push_back(armed, Some(cap), due), Some(due));
+		assert_eq!(push_back(armed, None, due), Some(due));
+		let late = now + Duration::from_secs(30);
+		assert_eq!(
+			push_back(armed, Some(cap), late),
+			Some(cap),
+			"past the backstop"
+		);
+		assert_eq!(
+			push_back(None, Some(cap), due),
+			None,
+			"the scan already ran"
+		);
+	}
+
+	// Test ID: Er2UvPx
+	#[test]
+	fn a_pane_takes_the_most_specific_shell_it_was_given() {
+		let argv = |s: &str| vec![s.to_string()];
+		let (pane, source, tab, window) =
+			(argv("pane"), argv("source"), argv("tab"), argv("window"));
+		let default = || Some(argv("default"));
+		let pick = |p, s, t, w| pane_shell(p, s, t, w, default).unwrap()[0].clone();
+		assert_eq!(
+			pick(Some(&pane), Some(&source), Some(&tab), Some(&window)),
+			"pane"
+		);
+		assert_eq!(
+			pick(None, Some(&source), Some(&tab), Some(&window)),
+			"source"
+		);
+		assert_eq!(pick(None, None, Some(&tab), Some(&window)), "tab");
+		assert_eq!(pick(None, None, None, Some(&window)), "window");
+		assert_eq!(pick(None, None, None, None), "default");
+	}
+
+	// The default shell is the first entry switched on, not the first entry.
+	// Test ID: Er2VLed
+	#[test]
+	fn the_default_shell_is_the_first_active_entry() {
+		let _store = config::test_store_lock();
+		let saved = config::settings();
+		let with = |shells: Vec<ShellEntry>| {
+			config::update(config::Settings {
+				shells,
+				..(*saved).clone()
+			});
+			config::default_shell_argv()
+		};
+		let mut listed = vec![
+			shell("fish", false),
+			shell("Bash", true),
+			shell("zsh", true),
+		];
+		listed[1].command = "bash -l".into();
+		assert_eq!(
+			with(listed),
+			Some(vec!["bash".to_string(), "-l".to_string()])
+		);
+		assert_eq!(with(vec![shell("fish", false)]), None);
+		config::update((*saved).clone());
+	}
+
+	// The titles and the copy labels beside them are one row of text, so they
+	// sit on one baseline. The labels once centered their whole ink box instead
+	// and rode half a descent higher.
+	// Test ID: Er2VLee
+	#[test]
+	fn the_bar_titles_and_the_copy_labels_share_a_baseline() {
+		let text = TextCtx::new_cpu(1.0);
+		let menu_h = text.ui_line_h + text.dip(MENU_BAR_VPAD);
+		let layout = [(0.0, 40.0), (40.0, 40.0)];
+		let cb = copybox_place(
+			&CopyMetrics {
+				right: 900.0,
+				label_w: [56.0, 34.0, 40.0],
+				box_sz: 10.0,
+				box_y: 4.0,
+				box_gap: 6.0,
+				pair_gap: 14.0,
+				lead_gap: 10.0,
+			},
+			[true; 3],
+		);
+		let top = |i| menubar_text_slot(&text, menu_h, &layout, Some(&cb), i).map(|slot| slot.3);
+		let title = top(0).expect("a title");
+		for label in 0..3 {
+			assert_eq!(top(layout.len() + label), Some(title), "copy label {label}");
+		}
+		// a label with no room is not drawn at all
+		let narrow = CopyBoxes {
+			shown: [false, true, true],
+			..cb
+		};
+		assert_eq!(
+			menubar_text_slot(&text, menu_h, &layout, Some(&narrow), layout.len()),
+			None
 		);
 	}
 
@@ -9925,6 +10559,81 @@ mod tests {
 		assert!(
 			reloaded.wallpaper_enabled,
 			"a named wallpaper stays switched on"
+		);
+	}
+
+	// Test ID: Er2UiYT
+	#[test]
+	fn changing_tab_wraps_at_both_ends() {
+		use super::tab_step;
+		assert_eq!(tab_step(0, 3, true), 1);
+		assert_eq!(tab_step(2, 3, true), 0);
+		assert_eq!(tab_step(0, 3, false), 2);
+		assert_eq!(tab_step(1, 3, false), 0);
+		assert_eq!(tab_step(0, 1, true), 0);
+		assert_eq!(tab_step(0, 1, false), 0);
+	}
+
+	// Test ID: Er2UiYU
+	#[test]
+	fn a_moved_tab_trades_places_with_its_neighbour_and_stays_active() {
+		use super::move_tab;
+		let mut tabs = ['a', 'b', 'c'];
+		assert_eq!(move_tab(&mut tabs, 1, true), 2);
+		assert_eq!(tabs, ['a', 'c', 'b']);
+		assert_eq!(move_tab(&mut tabs, 2, true), 0, "past the end");
+		assert_eq!(tabs, ['b', 'c', 'a']);
+		assert_eq!(move_tab(&mut tabs, 0, false), 2, "past the start");
+		assert_eq!(tabs, ['a', 'c', 'b']);
+		let mut one = ['a'];
+		assert_eq!(move_tab(&mut one, 0, true), 0);
+	}
+
+	// Test ID: Er2UiYV
+	#[test]
+	fn only_a_return_to_this_console_is_signalled() {
+		let mut watch = super::VtWatch::new("tty7".into());
+		let seen: Vec<bool> = ["tty7", "tty1", "tty7", "tty7", "tty2", "tty3", "tty7"]
+			.into_iter()
+			.map(|vt| watch.step(vt.into()))
+			.collect();
+		assert_eq!(seen, [false, false, true, false, false, false, true]);
+	}
+
+	// A frame drawn while hidden banks the backlog into the ease, and the reveal
+	// then plays it back as if it had just arrived.
+	// Test ID: Er2UiYW
+	#[test]
+	fn a_hidden_window_draws_nothing_and_its_return_is_one_cut() {
+		use super::{Frame, freeze_frame};
+		assert_eq!(freeze_frame(false, true), Frame::Skip);
+		assert_eq!(freeze_frame(true, true), Frame::Skip);
+		assert_eq!(freeze_frame(true, false), Frame::CatchUp);
+		assert_eq!(freeze_frame(false, false), Frame::Draw);
+	}
+
+	// Test ID: Er2UiYX
+	#[test]
+	fn leaving_a_bare_window_puts_back_only_what_was_on() {
+		use super::bare_chrome;
+		// going bare saves what was on and hides both
+		assert_eq!(
+			bare_chrome(true, (false, false), (true, true)),
+			((true, true), (false, false))
+		);
+		assert_eq!(
+			bare_chrome(false, (true, true), (false, false)).1,
+			(true, true)
+		);
+		// the frame was already off, so it stays off
+		assert_eq!(
+			bare_chrome(false, (false, true), (false, false)).1,
+			(false, true)
+		);
+		// a menu bar switched on while bare stays on
+		assert_eq!(
+			bare_chrome(false, (true, false), (false, true)).1,
+			(true, true)
 		);
 	}
 }

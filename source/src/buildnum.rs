@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
 // The build number: whole minutes since 2000 began, written in Crockford base 32.
 // Five characters until 2063, it sorts in the order the builds were made, and it
 // decodes back to the minute one was built - which is what a copy's file date
@@ -191,5 +194,44 @@ mod tests {
 			}
 		}
 		assert!(seen > 0, "found no includes at all, so the scan is broken");
+	}
+
+	// Every source file names the license the crate is published under, as the
+	// manifest does.
+	// Test ID: Er2UFeX
+	#[test]
+	fn every_source_file_carries_the_license_header() {
+		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+		let manifest = std::fs::read_to_string(crate_dir.join("Cargo.toml")).unwrap();
+		assert!(
+			manifest
+				.lines()
+				.any(|line| line.trim() == "license = \"GPL-2.0-or-later\""),
+			"Cargo.toml names another license"
+		);
+		let mut seen = 0;
+		for entry in std::fs::read_dir(crate_dir.join("src")).unwrap().flatten() {
+			let path = entry.path();
+			if path.extension().is_none_or(|ext| ext != "rs") {
+				continue;
+			}
+			let text = std::fs::read_to_string(&path).unwrap();
+			let mut lines = text.lines();
+			assert_eq!(
+				lines.next(),
+				Some("// SPDX-License-Identifier: GPL-2.0-or-later"),
+				"{}",
+				path.display()
+			);
+			assert!(
+				lines
+					.next()
+					.is_some_and(|line| line.starts_with("// Copyright © ")),
+				"{} has no copyright line under the license",
+				path.display()
+			);
+			seen += 1;
+		}
+		assert!(seen > 0, "found no source files, so the scan is broken");
 	}
 }

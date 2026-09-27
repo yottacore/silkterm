@@ -192,6 +192,13 @@ fCases() {
 	h="${work}/${kind}-order-dev"
 	STUB_DIR="${caseDir}" INSTALL_ARGS="--release dev" fInstall "${h}" || true
 	fCheck "${kind}: dev puts 1.0.0 above 1.0.0-alpha.2" fInstalled "${h}" 9.9.9
+	## Windows PowerShell 5.1 hands the API's list over as one object. Read as a
+	## list of one, every tag came at once and nothing could be picked.
+	if [ "${kind}" = "ps1" ]; then
+		h="${work}/${kind}-order-one-object"
+		STUB_DIR="${caseDir}" fInstall "${h}" STUB_ONE_OBJECT=1 || true
+		fCheck "${kind}: a release list handed over as one object still picks the highest" fInstalled "${h}" 9.9.9
+	fi
 
 	## Only pre-releases: stable says so and takes the newest, beta10 over beta3.
 	caseDir="${work}/${kind}-rel-pre"
@@ -254,6 +261,39 @@ if command -v pwsh >/dev/null 2>&1; then
 	fCases ps1
 else
 	echo "  skip install.ps1 cases (no pwsh)"
+fi
+
+## An option with no value says which one, rather than exiting in silence.
+for opt in --release --target; do
+	h="${work}/bash-bare${opt}"
+	rc=0; INSTALL_ARGS="${opt}" fInstall "${h}" || rc=$?
+	fCheck "bash: ${opt} with no value fails" test "${rc}" -ne 0
+	fCheck "bash: and names the option" fSaid "${h}" "${opt} needs a value"
+done
+
+## install.ps1 without -Yes, where it cannot ask. It used to say "Aborted" and
+## succeed. Read-Host throws under -NonInteractive, and with a terminal on stdin
+## nothing else gives it away, so that case runs under a pty.
+if command -v pwsh >/dev/null 2>&1; then
+	fAsked(){
+		fSaid "${1}" "Error: there is no terminal here to ask for confirmation" &&
+			fSaid "${1}" "Re-run with -Yes" && [ ! -e "${1}/.local/bin/silkterm" ]
+	}
+	h="${work}/ps1-no-yes-devnull"
+	rc=0; INSTALLER=ps1 fInstall "${h}" STUB_NO_YES=1 </dev/null || rc=$?
+	fCheck "ps1: no -Yes and no input fails, asks for -Yes and installs nothing" test "${rc}" -ne 0 -a -n "$(fAsked "${h}" && echo y)"
+	if command -v script >/dev/null 2>&1; then
+		h="${work}/ps1-no-yes-pty"
+		mkdir -p "${h}/.tmp"
+		env -i PATH="${stubDir}:/usr/bin:/bin:${pwshDir}" HOME="${h}" TMPDIR="${h}/.tmp" STUB_DIR="${relDir}" \
+			STUB_LOG="${h}/.tmp/calls.log" STUB_NO_YES=1 \
+			script -qec "pwsh -NoProfile -NonInteractive -File '${meDir}/stubrun.ps1' -Installer '${root}/install.ps1'" /dev/null \
+			</dev/null >"${h}/out.log" 2>&1 || true
+		fCheck "ps1: no -Yes under -NonInteractive on a terminal asks for -Yes and installs nothing" fAsked "${h}"
+		fCheck "ps1: and does not claim to have aborted" fNotSaid "${h}" "Aborted"
+	else
+		echo "  skip install.ps1 on a terminal (no script)"
+	fi
 fi
 
 ## install.ps1 writes the same entry, and its Exec goes through the same rule.
@@ -346,3 +386,5 @@ echo "all passed"
 ##		- 20260917 JC: The rig's display: taken, stale and shared.
 ##		- 20260925 JC: Which release is picked, API failures, and a re-run that
 ##		               puts back a missing launcher.
+##		- 20260926 JC: A release list as one object, an option with no value, and
+##		               install.ps1 without -Yes where it cannot ask.

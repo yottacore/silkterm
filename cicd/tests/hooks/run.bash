@@ -151,6 +151,38 @@ fCheck "the uncommitted change is still there afterwards" \
 fCheck "the gate worktree is cleaned up" \
 	bash -c 'test "$(git -C "$1" worktree list | wc -l)" -eq 1' _ "${clone}"
 
+## The release guard itself: main only takes a higher version, with the README
+## badge naming it. The stub gate passes throughout, so a refusal here is the
+## guard's. $1 is the version, $2 the badge.
+fRelease(){
+	printf 'version = "%s"\n' "${1}" > "${clone}/source/Cargo.toml"
+	printf '[![Release](Release-%s-blue)]\n' "${2}" > "${clone}/README.md"
+	printf 'good\n' > "${clone}/verdict"
+	printf '%s\n' "${1}" >> "${clone}/releases"
+	git -C "${clone}" add -A
+	git -C "${clone}" commit -q --no-verify -m "release ${1}"
+}
+fPushSays(){  ## fPushSays <text>: the push is refused, and says <text>
+	local out
+	if out="$(git -C "${clone}" push -q origin main 2>&1)"; then return 1; fi
+	grep -qF -- "${1}" <<<"${out}"
+}
+fRelease 9.0.2 9.0.1
+fCheck "a release whose badge still names the last version is refused" fPushSays "README Release badge does not match version 9.0.2"
+git -C "${clone}" reset -q --hard origin/main
+fRelease 9.0.0 9.0.0
+fCheck "a version below the one on main is refused" fPushSays "version 9.0.0 must be greater than 9.0.1"
+git -C "${clone}" reset -q --hard origin/main
+fRelease 9.0.1 9.0.1
+fCheck "and so is the same version again" fPushSays "version 9.0.1 must be greater than 9.0.1"
+git -C "${clone}" reset -q --hard origin/main
+fRelease 10.0.0-beta2 10.0.0--beta2
+fCheck "a pre-release above it is taken, its badge escaped" git -C "${clone}" push -q origin main
+fRelease 10.0.0 10.0.0
+fCheck "and the release it leads to is taken after it" git -C "${clone}" push -q origin main
+fRelease 10.0.0-rc1 10.0.0--rc1
+fCheck "but not a pre-release of the version already out" fPushSays "version 10.0.0-rc1 must be greater than 10.0.0"
+
 if ((failures)); then
 	echo "  ${failures} failure(s)"
 	exit 1
@@ -162,3 +194,4 @@ echo "  hooks: ok"
 ##		          pre-commit formatter staged a partly staged file whole, and the
 ##		          pre-push gate read the working tree rather than the commit.
 ##		20260918  A file with mod lines, which the formatter could not commit.
+##		20260926  The release guard: badge, lower or equal version, pre-releases.
