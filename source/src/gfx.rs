@@ -1240,6 +1240,24 @@ pub const fn acceleration(device_type: wgpu::DeviceType) -> &'static str {
 	}
 }
 
+// An adapter for a test to describe itself with, since wgpu gives it no default.
+#[cfg(test)]
+pub fn test_adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterInfo {
+	wgpu::AdapterInfo {
+		name: name.to_string(),
+		vendor: 0,
+		device: 0,
+		device_type,
+		device_pci_bus_id: String::new(),
+		driver: String::new(),
+		driver_info: String::new(),
+		backend: wgpu::Backend::Vulkan,
+		subgroup_min_size: 4,
+		subgroup_max_size: 128,
+		transient_saves_memory: false,
+	}
+}
+
 // Adapter details for `--about`, with no window and no device. Only the adapter
 // is asked for: request_device is the expensive half (measured ~161ms against
 // ~6ms), and nothing here draws. PRIMARY matches what the About dialog runs on,
@@ -1853,5 +1871,20 @@ mod tests {
 		assert_eq!(SENTINEL_ROW % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
 		// the second witness reads back at this buffer offset
 		assert_eq!(SENTINEL_BYTES as u64 % wgpu::COPY_BUFFER_ALIGNMENT, 0);
+	}
+
+	// Test ID: Er2UJeQ
+	#[test]
+	fn every_gpu_is_hardware_and_only_the_cpu_is_software() {
+		use wgpu::DeviceType;
+		assert_eq!(acceleration(DeviceType::Cpu), "Software (CPU)");
+		for (kind, said) in [
+			(DeviceType::DiscreteGpu, "Hardware (discrete GPU)"),
+			(DeviceType::IntegratedGpu, "Hardware (integrated GPU)"),
+			(DeviceType::VirtualGpu, "Hardware (virtual GPU)"),
+		] {
+			assert_eq!(acceleration(kind), said);
+		}
+		assert!(!acceleration(DeviceType::Other).starts_with("Hardware"));
 	}
 }

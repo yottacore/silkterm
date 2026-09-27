@@ -881,6 +881,26 @@ mod tests {
 		assert!(!text.contains("Acceleration:"));
 	}
 
+	// With an adapter the Info block names it, indented under the heading, and
+	// says whether it is a GPU or a software renderer.
+	// Test ID: Er2UJeR
+	#[test]
+	fn about_names_the_renderer_and_whether_it_is_accelerated() {
+		let info = crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu);
+		let text = about(Some(&info));
+		let lines: Vec<&str> = text.lines().collect();
+		let at = lines
+			.iter()
+			.position(|l| *l == "Info")
+			.expect("an Info heading");
+		let under = &lines[at + 1..];
+		assert!(under.contains(&"  Renderer:  X"), "{text}");
+		assert!(under.contains(&"  Backend:  Vulkan"), "{text}");
+		assert!(under.contains(&"  Acceleration:  Software (CPU)"), "{text}");
+		let gpu = crate::gfx::test_adapter("Y", wgpu::DeviceType::DiscreteGpu);
+		assert!(about(Some(&gpu)).contains("  Acceleration:  Hardware (discrete GPU)"));
+	}
+
 	// Test ID: Eo4auD9
 	#[test]
 	fn version_names_the_build_as_well_as_the_release() {
@@ -1192,5 +1212,123 @@ mod tests {
 			p("--new-pane --size=0").tabs[0].panes[1].size,
 			Some(Size::Cells(1))
 		);
+	}
+
+	fn bad(s: &str) -> bool {
+		parse(s.split_whitespace().map(String::from)).is_err()
+	}
+
+	// Test ID: Er2UJeS
+	#[test]
+	fn config_names_the_file_in_either_form_and_only_for_the_window() {
+		assert_eq!(
+			p("--config /tmp/a.shcl").config,
+			Some(PathBuf::from("/tmp/a.shcl"))
+		);
+		assert_eq!(
+			p("--config=/tmp/a.shcl").config,
+			Some(PathBuf::from("/tmp/a.shcl"))
+		);
+		assert_eq!(p("--columns 80").config, None);
+		assert!(bad("--new-tab --config x"));
+		assert!(bad("--config"));
+	}
+
+	// Test ID: Er2UJeT
+	#[test]
+	fn pixel_width_and_height_take_a_whole_number_before_any_tab() {
+		let c = p("--pixel-width 800 --pixel-height=600");
+		assert_eq!(c.win.pixel_width, Some(800));
+		assert_eq!(c.win.pixel_height, Some(600));
+		assert_eq!(p("--columns 80").win.pixel_width, None);
+		assert!(bad("--pixel-width abc"));
+		assert!(bad("--pixel-height -5"));
+		assert!(bad("--new-tab --pixel-width 800"));
+		assert!(bad("--new-pane --pixel-height=600"));
+	}
+
+	// Test ID: Er2UJeU
+	#[test]
+	fn hide_windowframe_is_a_window_bool() {
+		assert_eq!(p("--hide-windowframe").win.hide_frame, Some(true));
+		assert_eq!(p("--hide-windowframe=no").win.hide_frame, Some(false));
+		assert_eq!(p("--hide-windowframe yes").win.hide_frame, Some(true));
+		assert_eq!(p("--columns 80").win.hide_frame, None);
+		assert!(bad("--hide-windowframe=maybe"));
+		assert!(bad("--new-tab --hide-windowframe"));
+	}
+
+	// Test ID: Er2UJeV
+	#[test]
+	fn tab_selects_by_handle_or_first_and_later_options_land_there() {
+		let c = p("--new-tab=a --new-tab --tab=a --title A --tab main --title M");
+		assert_eq!(c.tabs.len(), 3);
+		assert_eq!(c.tabs[1].title.as_deref(), Some("A"));
+		assert_eq!(c.tabs[0].title.as_deref(), Some("M"));
+		assert_eq!(c.tabs[2].title, None);
+		// a pane added after selecting goes to that tab
+		let c = p("--new-tab=a --new-tab --tab a --new-pane");
+		assert_eq!(c.tabs[1].panes.len(), 2);
+		assert_eq!(c.tabs[2].panes.len(), 1);
+		// "0" is the first tab too, and selecting is a hierarchical launch
+		assert!(p("--tab=0").hierarchical);
+		assert!(bad("--tab"));
+		assert!(bad("--new-tab=a --tab=b"));
+	}
+
+	// Test ID: Er2UJeW
+	#[test]
+	fn pane_selects_by_handle_and_a_split_can_name_it() {
+		let c = p("--new-pane=a --new-pane --pane=a --new-pane --splits=a");
+		let panes = &c.tabs[0].panes;
+		assert_eq!(panes.len(), 4);
+		assert_eq!(panes[1].id.as_deref(), Some("a"));
+		assert_eq!(panes[3].splits.as_deref(), Some("a"));
+		// selecting a pane makes it the one later options attach to
+		let c = p("--new-pane=a --new-pane --pane=a --shell=fish");
+		assert!(c.tabs[0].panes[1].style.shell.is_some());
+		assert!(c.tabs[0].panes[2].style.shell.is_none());
+		assert!(bad("--new-pane=a --pane=nope"));
+		assert!(bad("--pane"));
+		// a handle belongs to its own tab
+		assert!(bad("--new-pane=a --new-tab --pane=a"));
+	}
+
+	// A title goes to whatever scope it follows. After a pane marker it is kept
+	// on the pane and reaches neither the tab nor the window.
+	// Test ID: Er2UJeX
+	#[test]
+	fn a_title_names_the_window_or_the_tab_it_follows() {
+		let c = p("--title W --new-tab --title T --new-pane --title P");
+		assert_eq!(c.win.title.as_deref(), Some("W"));
+		assert_eq!(c.tabs[1].title.as_deref(), Some("T"));
+		assert_eq!(c.tabs[0].title, None);
+		assert_eq!(c.tabs[1].panes[1].title.as_deref(), Some("P"));
+		let c = p("--new-tab --new-pane --title P");
+		assert_eq!(c.tabs[1].title, None);
+		assert_eq!(c.win.title, None);
+	}
+
+	// Test ID: Er2UJeY
+	#[test]
+	fn stretch_is_taken_in_both_spellings_and_reaches_the_settings() {
+		for flag in ["--background-image-stretch", "--wallpaper-stretch"] {
+			let c = p(flag);
+			assert_eq!(
+				c.win.style.wallpaper_default_fit,
+				Some(Fit::Stretch),
+				"{flag}"
+			);
+			assert_eq!(
+				p(&format!("{flag}=no")).win.style.wallpaper_default_fit,
+				None
+			);
+			let mut s = config::Settings {
+				wallpaper_default_fit: Fit::Zoom,
+				..config::Settings::default()
+			};
+			fold_window_style(&mut s, &c.win.style);
+			assert_eq!(s.wallpaper_default_fit, Fit::Stretch, "{flag}");
+		}
 	}
 }

@@ -760,7 +760,11 @@ const KNOWN: &[(&str, &str, &str, Group)] = &[
 ];
 
 #[cfg(not(unix))]
-const KNOWN: &[(&str, &str, &str, Group)] = &[
+const KNOWN: &[(&str, &str, &str, Group)] = KNOWN_WINDOWS;
+
+// Named apart so the installer's shortcut list can be held to it from any box.
+#[cfg(any(not(unix), test))]
+const KNOWN_WINDOWS: &[(&str, &str, &str, Group)] = &[
 	("pwsh", "PowerShell 7", "", Group::Pwsh7),
 	(
 		"nu",
@@ -951,48 +955,53 @@ fn platform_extras() -> Vec<Found> {
 		.collect()
 }
 
+// Windows PowerShell 5.1 and cmd.exe are always at a fixed place under the
+// system root, whether or not the user has them on PATH. Takes the root, so a
+// test can hand it a folder of its own.
+#[cfg(any(windows, test))]
+fn windows_fixed_shells(root: &Path) -> Vec<Found> {
+	let mut out = Vec::new();
+	for (rel, title, comment, group) in [
+		(
+			r"System32\WindowsPowerShell\v1.0\powershell.exe",
+			"Windows PowerShell 5",
+			"the 5.1 shell that ships with Windows",
+			Group::WinPs5,
+		),
+		(r"System32\cmd.exe", "Windows Cmd", "", Group::Legacy),
+	] {
+		let path = root.join(rel);
+		if path.is_file() {
+			out.push(Found::new(title, launch(&quoted(&path), rel), comment).in_group(group, 0));
+		}
+	}
+	// Windows PowerShell 5.1 ships at a policy that refuses to run script
+	// files, so it loads no profile - which is why it cannot report where it
+	// is (see integration.rs). This entry relaxes that for its own session
+	// only, nothing written anywhere. It arrives switched OFF because it is
+	// a security setting: an alternative to reach for, not a default.
+	let ps51 = root.join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+	if ps51.is_file() {
+		out.push(
+			Found::dormant(
+				"Windows PowerShell 5 (relaxed)",
+				format!(
+					"{} -ExecutionPolicy RemoteSigned",
+					launch(&quoted(&ps51), "powershell")
+				),
+				"runs profile scripts; per-session, nothing is written",
+			)
+			.in_group(Group::WinPs5Relaxed, 0),
+		);
+	}
+	out
+}
+
 #[cfg(windows)]
 fn platform_extras() -> Vec<Found> {
 	let mut out = Vec::new();
-	// Windows PowerShell 5.1 and cmd.exe are always at a fixed place under the
-	// system root, whether or not the user has them on PATH.
 	if let Ok(root) = std::env::var("SystemRoot") {
-		let root = Path::new(&root);
-		for (rel, title, comment, group) in [
-			(
-				r"System32\WindowsPowerShell\v1.0\powershell.exe",
-				"Windows PowerShell 5",
-				"the 5.1 shell that ships with Windows",
-				Group::WinPs5,
-			),
-			(r"System32\cmd.exe", "Windows Cmd", "", Group::Legacy),
-		] {
-			let path = root.join(rel);
-			if path.is_file() {
-				out.push(
-					Found::new(title, launch(&quoted(&path), rel), comment).in_group(group, 0),
-				);
-			}
-		}
-		// Windows PowerShell 5.1 ships at a policy that refuses to run script
-		// files, so it loads no profile - which is why it cannot report where it
-		// is (see integration.rs). This entry relaxes that for its own session
-		// only, nothing written anywhere. It arrives switched OFF because it is
-		// a security setting: an alternative to reach for, not a default.
-		let ps51 = root.join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-		if ps51.is_file() {
-			out.push(
-				Found::dormant(
-					"Windows PowerShell 5 (relaxed)",
-					format!(
-						"{} -ExecutionPolicy RemoteSigned",
-						launch(&quoted(&ps51), "powershell")
-					),
-					"runs profile scripts; per-session, nothing is written",
-				)
-				.in_group(Group::WinPs5Relaxed, 0),
-			);
-		}
+		out.extend(windows_fixed_shells(Path::new(&root)));
 	}
 	// The POSIX environments each ship their own bash. They share a name and
 	// nothing else, so each is offered under the environment it belongs to - and
@@ -1403,7 +1412,14 @@ mod tests {
 	#[cfg(unix)]
 	#[test]
 	fn a_fresh_unix_list_arrives_in_the_designed_order() {
-		let titles: Vec<String> = detect_every_known().into_iter().map(|f| f.title).collect();
+		let found = detect_every_known();
+		// PowerShell opens on a prompt rather than its banner
+		let pwsh = found.iter().find(|f| f.title == "PowerShell 7").unwrap();
+		assert!(pwsh.command.ends_with(" -NoLogo"), "{}", pwsh.command);
+		// the twin that skips the startup files is there to be switched on
+		assert!(found[0].active);
+		assert!(!found[1].active);
+		let titles: Vec<String> = found.into_iter().map(|f| f.title).collect();
 		assert_eq!(
 			titles,
 			[
@@ -1434,6 +1450,89 @@ mod tests {
 				"rc",
 			]
 		);
+	}
+
+	// The 5.1 that ships with Windows is found under the system root, and the
+	// entry that relaxes its execution policy arrives switched off.
+	// Test ID: Er2UJed
+	#[test]
+	fn the_relaxed_windows_powershell_is_offered_switched_off() {
+		let root = std::env::temp_dir().join(format!("silkterm_sysroot_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&root);
+		std::fs::create_dir_all(&root).unwrap();
+		assert!(windows_fixed_shells(&root).is_empty());
+		// nested folders on Windows, one file with backslashes in its name elsewhere
+		let ps = root.join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+		std::fs::create_dir_all(ps.parent().unwrap()).unwrap();
+		std::fs::write(&ps, b"").unwrap();
+		let found = windows_fixed_shells(&root);
+		let _ = std::fs::remove_dir_all(&root);
+		let plain = found
+			.iter()
+			.find(|f| f.title == "Windows PowerShell 5")
+			.unwrap();
+		assert!(plain.active);
+		assert_eq!(plain.group, Group::WinPs5);
+		let relaxed = found
+			.iter()
+			.find(|f| f.title == "Windows PowerShell 5 (relaxed)")
+			.expect("a relaxed entry");
+		assert!(!relaxed.active);
+		assert_eq!(relaxed.group, Group::WinPs5Relaxed);
+		assert!(
+			relaxed
+				.command
+				.ends_with(" -NoLogo -ExecutionPolicy RemoteSigned"),
+			"{}",
+			relaxed.command
+		);
+		assert!(
+			found.iter().all(|f| f.title != "Windows Cmd"),
+			"no cmd.exe here"
+		);
+	}
+
+	// The installer writes one start-menu shortcut per shell it finds, by the
+	// names and flags a scan would offer. Nothing else holds the two lists
+	// together.
+	// Test ID: Er2UJee
+	#[test]
+	fn the_installer_offers_the_shells_a_windows_scan_would() {
+		// read at run time: an include would make the installer a build input
+		let nsi = std::fs::read_to_string(
+			std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+				.join("../cicd/packaging/windows/installer.nsi.in"),
+		)
+		.unwrap();
+		// each line is: !insertmacro ShellLink "exe" "title" "args"
+		let mut ours: Vec<(String, String, String)> = nsi
+			.lines()
+			.filter_map(|l| l.trim().strip_prefix("!insertmacro ShellLink "))
+			.map(|rest| {
+				let quoted: Vec<&str> = rest.split('"').skip(1).step_by(2).collect();
+				(quoted[0].into(), quoted[1].into(), quoted[2].into())
+			})
+			.collect();
+		let mut table: Vec<(String, String, String)> = KNOWN_WINDOWS
+			.iter()
+			.map(|(exe, title, _, _)| {
+				(format!("{exe}.exe"), (*title).to_string(), launch(exe, exe))
+			})
+			.collect();
+		ours.sort();
+		table.sort();
+		assert_eq!(ours, table);
+		// the working directory is set before the plain shortcut and left alone
+		// until the last shell's
+		let set = nsi
+			.find(r#"StrCpy $OUTDIR "%USERPROFILE%""#)
+			.expect("the start folder");
+		let plain = nsi
+			.find(r#"CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk""#)
+			.unwrap();
+		let last = nsi.rfind("!insertmacro ShellLink ").unwrap();
+		assert!(set < plain && plain < last);
+		assert!(!nsi[set..last].contains("SetOutPath"));
 	}
 
 	// A curated group keeps its table order even when that disagrees with the

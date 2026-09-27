@@ -706,11 +706,7 @@ impl DialogWin {
 		let Content::About { source, .. } = &self.content else {
 			return;
 		};
-		let (lines, links, size) = match source {
-			AboutSource::About(info) => layout_about(&mut self.text, info),
-			#[cfg(not(target_os = "windows"))]
-			AboutSource::Notice(paras) => layout_notice(&mut self.text, paras),
-		};
+		let (lines, links, size) = layout_source(&mut self.text, source);
 		if let Content::About {
 			lines: old_lines,
 			links: old_links,
@@ -1620,6 +1616,17 @@ fn layout_about(
 	(lines, links, (box_w, box_h))
 }
 
+fn layout_source(
+	text: &mut TextCtx,
+	source: &AboutSource,
+) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
+	match source {
+		AboutSource::About(info) => layout_about(text, info),
+		#[cfg(not(target_os = "windows"))]
+		AboutSource::Notice(paras) => layout_notice(text, paras),
+	}
+}
+
 // A notice's window title and its paragraphs. The path is a paragraph of its
 // own, since it is the one part that cannot be wrapped at a space.
 pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
@@ -1914,9 +1921,12 @@ mod tests {
 	use std::time::Instant;
 
 	use super::{
-		DLG_DECOR_HEADROOM, DLG_MAX_H, DLG_SNAP, Rect, caps_from, refusal_notice, size_within_caps,
-		snap_to, tip_gate, usable_screen,
+		ABOUT_PAD, AboutSource, DLG_DECOR_HEADROOM, DLG_MAX_H, DLG_SNAP, Rect, caps_from,
+		layout_about, layout_source, refusal_notice, size_within_caps, snap_to, tip_gate,
+		usable_screen,
 	};
+	use crate::config;
+	use crate::text::{TextCtx, ui_attrs};
 
 	// What a refused save says: which file, which lines, and what that costs.
 	// Test ID: EqGnMOw
@@ -2063,5 +2073,102 @@ mod tests {
 		);
 		// a screen that measured as nothing is not a reason to shrink to nothing
 		assert_eq!(size_within_caps((800, 600), (0.0, 0.0)), (800, 600));
+	}
+
+	fn adapter() -> wgpu::AdapterInfo {
+		crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu)
+	}
+
+	// The Support button opens the donation page and shows its address as a
+	// flyover, and the box is wide enough that the flyover is not cut off.
+	// Test ID: Er2UJeZ
+	#[test]
+	fn the_about_box_has_a_support_button_with_room_for_its_address() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let (lines, links, (box_w, _)) = layout_about(&mut text, &adapter());
+		let buttons: Vec<_> = links.iter().filter(|l| l.button).collect();
+		assert_eq!(buttons.len(), 1);
+		assert_eq!(buttons[0].url.as_deref(), Some(config::DONATE_URL));
+		assert_eq!(buttons[0].tooltip.as_deref(), Some(config::DONATE_URL));
+		assert!(lines.iter().any(|l| l.text == "Support SilkTerm!"));
+		let pad = text.dip(ABOUT_PAD);
+		let tip = text.measure_ui_text(config::DONATE_URL, &ui_attrs());
+		assert!(box_w >= tip + pad * 2.0, "{box_w} clips a {tip} flyover");
+	}
+
+	// Test ID: Er2UJea
+	#[test]
+	fn the_about_box_names_the_version_copyright_license_and_build() {
+		let (lines, _, _) = layout_about(&mut TextCtx::new_cpu(1.0), &adapter());
+		let said: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
+		let version = format!("Version {}", env!("CARGO_PKG_VERSION"));
+		let build = format!("Build:  {}  {}", config::BUILD_ID, config::build_target());
+		assert!(said.contains(&version.as_str()), "{said:?}");
+		assert!(
+			said.iter().any(|l| l.starts_with("Copyright © ")),
+			"{said:?}"
+		);
+		assert!(said.contains(&"License: GPL-2.0-or-later"), "{said:?}");
+		assert!(said.contains(&build.as_str()), "{said:?}");
+		assert!(said.contains(&"Acceleration:  Software (CPU)"), "{said:?}");
+	}
+
+	// Test ID: Er2UJeb
+	#[test]
+	fn the_about_box_leads_with_a_bold_title_and_links_the_repository() {
+		let (lines, links, _) = layout_about(&mut TextCtx::new_cpu(1.0), &adapter());
+		assert_eq!(lines[0].text, format!("About {}", config::APP_NAME));
+		assert!(lines[0].bold);
+		assert!((lines[0].scale - 1.5).abs() < f32::EPSILON);
+		let repo = env!("CARGO_PKG_REPOSITORY");
+		let line = lines
+			.iter()
+			.find(|l| l.text == repo)
+			.expect("a repository line");
+		let link = links
+			.iter()
+			.find(|l| l.url.as_deref() == Some(repo))
+			.expect("a repository link");
+		assert!(!link.button);
+		let r = &link.rect;
+		assert!(r.w > 0.0 && r.h > 0.0);
+		assert!(
+			r.x <= line.x && line.x < r.x + r.w,
+			"link {r:?}, line x {}",
+			line.x
+		);
+		assert!(
+			r.y <= line.y && line.y < r.y + r.h,
+			"link {r:?}, line y {}",
+			line.y
+		);
+	}
+
+	// Both boxes are laid out again from their source when the display scale
+	// changes, and what comes back has to be measured at the new scale.
+	// Test ID: Er2UJec
+	#[test]
+	fn about_and_the_notice_lay_out_again_at_twice_the_size() {
+		let sources = [
+			AboutSource::About(Box::new(adapter())),
+			#[cfg(not(target_os = "windows"))]
+			AboutSource::Notice(
+				refusal_notice(&config::Refusal {
+					path: "/home/me/.config/silkterm/config.shcl".into(),
+					lines: vec![12],
+					lost: 1,
+				})
+				.1,
+			),
+		];
+		let (mut one, mut two) = (TextCtx::new_cpu(1.0), TextCtx::new_cpu(2.0));
+		for source in &sources {
+			let (_, _, (w1, h1)) = layout_source(&mut one, source);
+			let (_, _, (w2, h2)) = layout_source(&mut two, source);
+			for (at1, at2) in [(w1, w2), (h1, h2)] {
+				let ratio = at2 / at1;
+				assert!((1.85..2.15).contains(&ratio), "{at1} -> {at2}");
+			}
+		}
 	}
 }
