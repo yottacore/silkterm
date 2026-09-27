@@ -46,13 +46,14 @@ Where AI is allowed near this project, where it isn't, and who is accountable ei
 	- [Contributing](#contributing)
 - [Where this could change](#where-this-could-change)
 - [About the author](#about-the-author)
+	- [That's great and all but what about AI](#thats-great-and-all-but-what-about-ai)
 	- [The use of AI in writing this document](#the-use-of-ai-in-writing-this-document)
 
 <!-- /TOC -->
 
 ## A note about reusing this document (please do)
 
-If you just want a clean AI guidelines document with no commentary, history, or author background, delete the following sections. They were written to be cleanly removable:
+If you just want a clean AI guidelines document with no commentary, history, or unnecessary author background, delete the following sections. They were written to be cleanly removable:
 
 - Introduction
 
@@ -100,7 +101,7 @@ Storage got more expensive over the same stretch: a drive they bought for EUR 70
 
 Nobody sends that bill to the companies running the crawlers. A large host absorbs it. A small one, an NGO, or a self-hoster might not be able to, and that narrows who can afford to host anything at all.
 
-Then there's the PRs: "People submitting (often well-meaning) low-effort, LLM-generated contributions that require substantial amounts of time to review." That cost isn't shared either. It falls on whoever maintains the project, usually for free, and it scales with how cheap the tooling makes the submission. A model writes a plausible thousand-line pull request faster than anyone can read one.
+Then there are the PRs: "People submitting (often well-meaning) low-effort, LLM-generated contributions that require substantial amounts of time to review." That cost isn't shared either. It falls on whoever maintains the project, usually for free, and it scales with how cheap the tooling makes the submission. A model writes a plausible thousand-line pull request faster than anyone can read one.
 
 That asymmetry is most of the reason the rules further down put the burden where they do.
 
@@ -164,7 +165,7 @@ On capability, the number usually quoted is [METR's](https://metr.org/blog/2025-
 
 At a seven-month doubling interval, 3 years is about 35x compounded. At a four-month interval, 3 years is over 500x. And the interval itself keeps getting shorter. If that holds, 1,000x in 3 years is well within reach. (This is a trend, not a "prediction".)
 
-So the position is narrower than "AI is worth it". It is that the useful capability is on track to run on a desktop with no cloud data center behind it (e.g. in a solar-powered home office), sooner than later.
+So the position is narrower than "AI is worth it". It is that the useful capability is on track to run on a desktop with no cloud data center behind it (e.g. in a solar-powered home office), sooner rather than later.
 
 ### Economic
 
@@ -270,7 +271,7 @@ Examples:
 
 - Benchmarking and measurements for competitive comparison charts.
 
-- Asset generation. A tougher call, since creatives need work too and are being replaced by AI at heartbreaking levels. But on a FLOSS project with no pay and nobody stepping up to volunteer, what are you going to do? Even a maintainer who is "artistic enough" - and experienced enough with the tools - to make image, audio, and video assets by hand may rather spend that time on product design, problem-solving, and coding. And for assets, it's usually easy to know exactly what's wanted and describe it precisely.
+- Asset generation. A tougher call, since creatives need work too and are being replaced by AI at heartbreaking levels. But on a FLOSS project with no pay and nobody stepping up to volunteer, what are you going to do? Even a maintainer who is "artistic enough" - and experienced enough with the tools - to make image, audio, and video assets by hand may prefer spend that time on product design, problem-solving, and coding. And for assets, it's usually easy to know exactly what's wanted and describe it precisely.
 
 - Boring "required" website setup and generation. Not for the site that *is* the product, where designers and engineers and stakeholders come together to make something good. I mean the bare-minimum commodity web presence even basic FLOSS products need, that nobody wants to slog through unpaid.
 
@@ -430,41 +431,57 @@ The second list is closer than it looks. That is most of why this document exist
 
 ## About the author
 
-This author has been programming since childhood. Hobby, then professional, then a decades-long side quest into management and executive leadership (almost always with programmers in the chain of my accountability) - all the while still being an enthusiastic hobby programmer.
+I'll share my backstory here, because I think it's probably very similar to anyone reading this who is considering implementing something like this as a policy for their own organization, or personal use. (I would delete this and other "narrative" sections before modifying and deploying, as irrelevant to the actual policies.)
 
-I started with BASIC, then Pascal, then C. (Pretty standard progression then.) Then the OO indoctrination began - first with Visual Basic, some Java, then proper early C#. (And of course JavaScript.) I've struggled since then to shake the reflexive OO urge.
+I've been programming since my early teens. Hobby, then professional, then a decades-long side-quest into all the levels of leadership (almost always with programmers in my chain of accountability and with a bit of biased "favored status"). All the while still being an enthusiastic hobby programmer. I've had a pretty standard tech career arc that covered low-level systems programming, Object-Oriented business programming, formal UI/UX design, (traditional) database design, many of the old and newer network and web paradigms, full-stack web dev, mobile development, business analysis/consulting, technical design writing, product ownership, adopted the whole agile thing, and devops with CI/CD. And just like anyone on this path, it involved a fair amount of anxiety over the sheer depth and breadth of new technologies I felt I "should" at least understand well if not also use, the FOMO, and the self-doubt over why I wasn't able to understand it all at once. Then at some point there was a slow-motion revelation - a resignation and acceptance that it's all too much - and the realization that "leaders" aren't supposed to know "everything". *Gestures broadly*. (In that respect, "giving up" meant moving forward and helping others.)
 
-Go was my first "real" modern non-OO language, and I still have to stop myself from forcing OO onto it. Ditto with Rust.
+("Letting go" also ironically helped make learning new things easier, by being able to focus on one thing at a time with no pressure of my own making.)
 
-Along the way, I became ~~the world's leading authority~~ some guy who got good at Bash. (Mostly by horribly misusing it for 20 years and wondering why it performed so poorly.)
+As a kid I started with BASIC, then Pascal in college, then C. (Pretty standard progression at the time.)
 
-When AI started becoming a "thing" in programming, I was against it. Which was convenient, because it sucked.
+Then the OO indoctrination began - first with Visual Basic, some Java, then proper early C#. (And of course mandatory JavaScript, node, etc.)
 
-That view has softened with the emergence of the late-2026 frontier models. (Again, convenient, now that it's pretty capable.) For a few years I've been running large AI-led experiments under an alt GitHub account, mostly toy projects to see where the models fall apart, and where they help. I've kept at it because I've watched them improve so quickly.
+Thank the gods, I squeaked by without having to really learn C++. (I do have some very old "Learn C++" books that may be lurking somewhere - that sat on my "to-read" pile gathering dust for years.)
+
+Either way, I've struggled mightily to shake the reflexive urge to force OO onto non-OO languages. (Whether procedural, functional, prototypal - anything.)
+
+Go was my first "real" modern, compiled, non-OO language. (And as you may know, boy is it non-OO.) I still struggle to avoiding stapling vaguely OO-like patterns onto it.
+
+Also somehow along the way, I became ~~the world's leading authority~~ some guy who got good at Bash. (Mostly by horribly misusing it for 20 years, using it for things it was never meant for, wondering why it performed so poorly, and cringing at my own earlier work from even a few years ago.)
+
+### That's great and all but what about AI
+
+When AI first started getting OK at programming assistance, I was against it - which was convenient, because it sucked. But I still started testing it in 2021, possibly out of a little FOMO.
+
+Ever since then I've been running AI coding experiments under an alt GitHub account, mostly toy projects to see where the models fall apart, and where they help. I've kept at it because I've watched them improve at an exponential rate along the way. I took the typical AI progression route: First chat, then chat+canvas, then convenience code completion plugins in the IDE, then CLI.
+
+My "no AI" stance on my main account has begun softening with the emergence of the late-2026 frontier models. (Again, convenient, now that it's pretty capable.)
 
 One outcome is that this nearly decade-old main account no longer has a blanket "no-AI" policy. It now allows AI only under strict, human-driven constraints. (As documented here.)
 
 Personally, I use AI to help me:
 
-- Overcome my bad OO habits, by explicitly asking it to suggest non-OO alternative approaches.
+- Overcome my bad OO habits, by explicitly asking the agent to identify alien OO patterns, and suggest idiomatic refactorings.
 
 - Break my bad habit (again from OO days) of trying to make anything and everything generic, reusable, and inheritable - and just get the thing done.
 
-- Deal with Rust's confusingly myriad ways of doing everything, by suggesting the one idiomatic style I've chosen and documented.
+- Deal with Rust's confusingly myriad ways of doing everything, by suggesting the one idiomatic style I chose to stick to, after searching the documented advice of experts.
 
-	- AI also helps me with the parts of Rust's syntax I'm having trouble hard-wiring. Which probably helps perpetuate that problem - but "master Rust syntax" is just not on my bucket list. Go, maybe.
+	- AI also helps me with the parts of Rust syntax I'm still having trouble hard-wiring into the brain. Which helps perpetuate that problem - but "become a master of Rust syntax" is just not on my life bucket list. Golang...maybe.
 
 - Port code to multiple languages with bit-for-bit fidelity on input and output against a given reference implementation. (E.g., SHCL.)
 
-- Make the subtle refactors required for a codebase to be 100% cross-platform capable.
+- Make the subtle refactors that are sometimes required for a codebase to be 100% cross-platform, with native idioms where necessary.
 
-- Build OS-specific packaging.
+- Build OS-specific packaging and installers.
 
-- Handle most of the devops pipeline, given explicit instructions and references from previous work.
+- Handle most of the devops pipeline, given explicit instructions and references from previous work - including checksum-accurate reproducible builds where possible.
+
+- Free me from the opressive shackles of TDD. (Which I never formally adopted due to its many drawbacks, but still tend to reflexively reach for anyway, in some form or another, out of a vague sense of "obligation". [Obligation to who?])
 
 - Do dull, tedious work like generating benchmark and demo video/GIF harnesses.
 
-- Do adversarial code reviews. Agents are *so* good at this, in fact, they're *too* good - and struggle to ever find a bug-free candidate. (I wrote an AI assistant to help with that.)
+- Do adversarial code reviews. This is where AI truly shines. In fact, they're *too* good - and it's a problem converging on a bug-free candidate.
 
 ### The use of AI in writing this document
 
@@ -482,13 +499,13 @@ AI was used on this document for:
 
 What AI was *not* used for:
 
-- **Content generation**. Every questionable and/or redundant argument made here, every odd injection of unsolicited opinion and narration into what should be a straightforward "guidelines" document, is from a human. This human.
+- **Content generation**. Every questionable and/or redundant argument made here, every odd injection of unsolicited opinion and narration into what should be a straightforward "guidelines" document - is from a human. This human.
 
 - ~~**Grammar-checking**. I prefer the organic feel of my own tedious phrasing, run-on sentences, and abruptly ending such run-on sentences where I've run out of examples but want it to *seem* like there's more, with ", etc.". If it's not tedious for me to read my own writing, it just doesn't *feel* right~~.
 
-	- This second edition was grammar-checked with AI.
+	- Since the second edition, this has been grammar-checked with AI.
 
-- **Tone and appropriateness policing**. Again: probably would have been a good idea.
+- **Tone and appropriateness policing**. Again: not doing but probably should.
 
 ---
 

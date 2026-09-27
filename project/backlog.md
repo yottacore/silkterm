@@ -12,65 +12,136 @@
 
 <!-- TOC -->
 
-- [Conventions](#conventions)
-- [Backlog](#backlog)
-	- [Bugs](#bugs)
-	- [Features and enhancements](#features-and-enhancements)
-	- [Future and/or deferred](#future-andor-deferred)
-	- [Canceled](#canceled)
-	- [Done](#done)
-		- [Done - Bugs](#done---bugs)
-		- [Done - Features and enhancements](#done---features-and-enhancements)
+- [Introduction](#introduction)
+- [New format](#new-format)
+- [Bugs](#bugs)
+- [Features and enhancements](#features-and-enhancements)
+- [Done](#done)
+	- [Done - Bugs](#done---bugs)
+	- [Done - Features and enhancements](#done---features-and-enhancements)
+- [Deferred](#deferred)
+- [Canceled](#canceled)
 
 <!-- /TOC -->
 
-## Conventions
+## Introduction
 
-In each section, items are listed approximately from newest to oldest. Inside Done and Canceled, loose items come first and code-review rounds after, each run newest first.
+Going forward, new issues in the new template at the bottom of this file, will go in the '## New format' section only. No more status emojis, but will be sorted (top-down) by status, then severity|priority. Issues in the old format (with status emojis) won't be refactored, but will continue to be worked until moved to closed, canceled, or deferred sections, and emojis updated. (Eventually this will all be moved to nano-git-db anyway. This new template is an intermediate effort to make issues going forward more structured and importable.)
 
-Statii:
+## New format
 
-- 🔘 Not started
+- A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
+	- ID: 2026092618142600
+	- Type: Bug
+	- Status: Testing
+	- Severity: High
+	- Opened: 20260926-181426
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Have a shell installed that the list does not have yet.
+		- Start two SilkTerm windows a few seconds apart, and let both scans run.
+	- Incorrect behavior: The new shell goes to the top of the list, so the next launch opens on it. Here it was a second Node.js entry, or maybe Python.
+	- Expected behavior: A new shell goes at the end, and the default shell stays the same.
+	- Reproduced: Yes, on b23 in a unit test of the save. Not seen on screen, since the live list was fixed by hand before this was looked at.
+	- Actual cause:
+		- A save compared the list against what the window loaded, not against the file. There is no file watcher, so a window that loaded before another one saved took out only the entries it knew about. The new entry was left above all of them.
+		- The live file fits this. Its second Node.js entry came from a launch with nvm on PATH.
+		- Not shcl. A fresh scan and a reorder both save in the right order through the line-keeping save.
+	- Actual fix: The save merges three ways against the file. Another window's new entries stay at the end, its removals stay gone, and its edits stay unless this window changed the same entry.
+	- Branch: cfgorder
+	- Commit: c6d68c1
+	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
 
-- 🛠️ Started, and/or partially complete
+- The wallpaper folder setting is blank, and Settings never shows the folder
+	- ID: 2026092618142601
+	- Type: Enhancement
+	- Status: Testing
+	- Priority: Avg
+	- Opened: 20260926-181426
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- The default names the usual place for the platform.
+		- "File or folder" in Settings shows it.
+	- Decisions:
+		- 20260926: JC picked a real default over a gray hint, one box that follows Rotate folder over a separate row, and `$XDG_CONFIG_HOME` over `~/.config` on Linux.
+		- The default is looked up, not expanded. So it keeps the older folder names, a Windows pack left beside the config, and `--config`.
+		- The box shows a named image whenever there is one, since it wins at run time. Otherwise it shows the folder with Rotate folder on and the image with it off.
+		- What the box edits is fixed when it opens. Emptying it on the way to typing an image used to send the rest of the typing to the folder.
+		- The built-in wallpaper on new windows that day was a different thing. `~/.config/silkterm/wallpaper` links into the synced tree that moved to `private/` that afternoon.
+	- Branch: cfgorder
+	- Commit: d24bb6e
+	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 
-- 🔬 Testing not started or finished
+- Shells started from an MSIX package inherit its AppData and registry redirection
+	- ID: 2026092617015082
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20260926-170150
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run SilkTerm from an MSIX package.
+		- In one of its shells, write a new file under `%APPDATA%` and a new HKCU value.
+	- Incorrect behavior: Both go to the package's private folder. Other programs can't see them, and uninstalling SilkTerm deletes them. So `pip install --user`, npm, winget and the like only half install.
+	- Expected behavior: Shells, and everything run in them, act the same as with the NSIS install.
+	- Reproduced: No, since there is no package yet. The Claude desktop app has the same bug open, as anthropics/claude-code issue 93152.
+	- Possible cause: Child processes of a packaged app run inside the package, with its file and registry redirection.
+	- Decisions:
+		- 20260926: Start the shells outside the package. The other options were turning redirection off in the manifest, which needs the `unvirtualizedResources` restricted capability that Microsoft may not grant, and `RuntimeBehavior="win32App"`, which may not be allowed in a full MSIX package.
+		- Where the breakaway goes needs care. Microsoft's docs say the `PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY` setting controls the children of the process being created, not that process itself. So it goes on SilkTerm's own launch, from a small launcher stub or a one-time relaunch of itself. The shells SilkTerm starts then run outside.
+		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
+		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
+	- Estimated effort: Avg
 
-- ✋ Defer
+- A launch from the Start menu as an MSIX package opens the first shell in System32
+	- ID: 2026092617015083
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20260926-170150
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run SilkTerm from an MSIX package.
+		- Start it from the Start menu.
+	- Incorrect behavior: The first shell opens in `C:\Windows\System32`.
+	- Expected behavior: It opens in `shell.startup_directory`, which is the home folder by default. That holds on the first launch and on every one after it.
+	- Reproduced: No, since there is no package yet. A packaged app's Start menu entry can't set a working directory, so every launch from it starts in System32, or SysWOW64 for a 32-bit build.
+	- Possible cause: `inherited_dir_is_a_choice` in `config.rs` treats a launch that isn't from a shell as deliberate, unless it starts in home, a root, or the exe's folder. System32 isn't on that list.
+	- Decisions:
+		- 20260926: Send a launch that starts in System32 to `%USERPROFILE%`. The system folder joins home, a root and the exe's folder as places a launcher leaves us. The launch then falls to `shell.startup_directory`, which is `~` unless changed.
+		- This covers every launch, not just the first, because every Start menu launch starts there. Anything else already goes where it should. Started from a shell, it uses that shell's folder. Explorer's "Open in Terminal" uses that folder. A new tab, pane or window uses the pane it came from. `--directory` beats all of them.
+		- Explorer's "Open in Terminal" on System32 itself gets home instead. That's rare and accepted. A shell sitting in System32, like an elevated cmd, still counts as a choice.
+		- Nothing here needs a package, so it can be done and tested now.
+	- Estimated effort: Low
+	- Test case: Unit tests for `dir_is_a_choice` with the system folder as the working directory.
 
-- ✅ Complete
+- A pipeline run dies at the Windows GUI stage when a box is held by another session
+	- ID: 2026092618254900
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20260926-182549
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Hold vm925w's host lock from another session.
+		- Run `cicd/cicd.bash -y --no-publish`.
+	- Incorrect behavior: The harness queues for the lock, prints "still queued", and the run stops with "a windows gui scenario failed". No dogfood build is made.
+	- Expected behavior: A locked or unreachable box is reported and stepped over, as the stage's own comment says. Only a scenario that ran and failed stops the run.
+	- Reproduced: Yes, on b23 on 20260926 at 18:25, with vm925w held by a nemo-anywhere session.
+	- Possible cause: The lock's "still queued" exit reaches `cicd.bash` as the harness's failure.
+	- Estimated effort: Low
 
-- 🚫 Canceled
-
-To make using these icons easier if desired, add them to a clipboard or key macro manager. (This format is "temporary" anyway [albeit for a while now], until we switch over to nano-git-db for the minor stuff, and GitHub Issues for the bigger stuff.)
-
-Sub-bullets under an item lead with what they are, so an item can be read by skimming the prefixes.
-
-- `Reproduced:` what was actually seen
-
-- `Cause:` why
-
-- `Decided:` a call that had to be made before code
-
-- `Fixed:` what changed
-
-- `Pinned by:` what now fails if it comes back
-
-- `Left alone:` what was looked at and deliberately not touched
-
-- `Measured:` a number
-
-- `Note:` anything else.
-
-A fix said to be in all four bindings has to name the function for each. "In all four" on its own can't be checked by anyone reading later.
-
-Each item should include the date it was opened and closed. If the open date is unknown, it says "n/a". A deferred item keeps only its opened date.
-
-Issues opened by automated code reviews should be grouped under a main bullet with YYYYmmDD, and each one should get programmer review for validity and accuracy.
-
-## Backlog
-
-### Bugs
+## Bugs
 
 - 🔘 Pipeline and installer review 20260924
 	- 🔘 The one-liners run the installers on main, which still lack the 09-17 fixes and the 5.1 fix below.
@@ -95,7 +166,7 @@ Issues opened by automated code reviews should be grouped under a main bullet wi
 	- Reproduced: `SILK_FUZZ_SEED=107671` on `a_wallpaper_repair_changes_nothing_else`, on dev before the shcl bump as well.
 	- Opened: 20260925-183900
 
-### Features and enhancements
+## Features and enhancements
 
 - ✋ Save settings by editing only the lines that changed, so a file with a line that cannot be read still takes the window size, menu switches and new shells.
 	- The performance rating already saves this way. The shell list and Settings Apply would still refuse.
@@ -254,151 +325,9 @@ Issues opened by automated code reviews should be grouped under a main bullet wi
 	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already holds the text on it legible in both modes, so this is a question of how loud it looks rather than whether it works.
 	- Opened: 20260920-190859
 
-### Future and/or deferred
+## Done
 
-- ✋ t2nsn - old stray versions of executables and launchers: Find and move old GFS versions, and trash any out-of-place stray executables and scripts. Update '.desktop' files to run the correct bash script, launcher chain minimized or hidden, and use the icon from the 'latest version' symlink.
-	- Note: the launcher copies outside the repo are older than the ones in `utility/`, and nothing copies them over.
-	- Note: 20260924, t2nsn itself not looked at yet. A survey of the main workstation, taken by mistake for this item, found its desktop entry and keyboard shortcut running a stale mirror copy of the launcher, plus a few strays. That list is in the private notes.
-	- ✋ Deferred: 20260924, nothing is being built or tested on t2nsn for now.
-	- Opened: 20260924-113215
-
-- ✋ With two tmux panes stacked and both printing, only one pane slides at a time, and the other jumps whole lines. Each time the other pane scrolls, the slide in progress jumps the rest of the way.
-	- Side-by-side panes are not affected.
-	- Split from the smooth scrolling seams item. It shows on builds from before the scroll ledger too.
-	- The fix: a ledger per region in the engine fork, and one slide per region. That is design work across the fork, the pane and the renderer, so it is deferred until it can be given a run of its own.
-	- Since 20260917 the ledger carries on across a region that shares rows with the one in flight (the nano fix), so only regions sharing none still start it over. Stacked panes are that case: they still need a ledger entry and a slide per region, as section 5 says.
-	- Opened: 20260911-113647
-
-- ✋ Detach a tab into a new window, and dock a tab into an existing window, both with the mouse.
-	- Needs multi-window, which does not exist yet. The rest of the tab interface is done.
-	- Opened: 20260703-091342
-
-- ✋ Flip the scrim color under text that had to be lifted for contrast.
-	- Better than moving the text color, but it is a shader answer rather than the per-cell one already built. See the contrast item under Done.
-	- Opened: 20260830-201602
-
-- ✋ Terminal throughput benchmark: the Windows speed rows.
-	- Deferred, and the machine was never the problem. Measured twice on deliberately different hardware: a laptop, then Windows in a VM on the reference host with a discrete card passed through, which is the setup the table's own notes promised would fix it. Neither pass produced anything publishable. Figures and reasoning are in `utility/include/ancillary-notes.fods`, under three `VM` sheets beside the original ones.
-	- There is no correction factor to find. The terminals that run on both platforms disagree about the host-to-guest ratio by more than a factor of two, so one multiplier cannot serve the table. That is measured now, not inferred from everything clustering the way it did on the laptop.
-	- Windows Terminal comes out faster than every published Linux row, because it hosts the console itself rather than reading a relayed one. Sorting it in would rank it first overall on figures taken from another platform and another transport.
-	- The fast terminals are not limited by themselves, and this is measured rather than inferred. A consumer that reads the stream and discards it produces the same figure as a real terminal, on every width class. Every Windows terminal near that number is simply at the console host's ceiling, which is also why ours reads the same with all the eye candy on as with it all off.
-	- The barrier is answered by the console host rather than by the terminal, so a Windows row would not mean what the column heading says even if the rest were solved.
-	- Alacritty cannot be run at all. It deadlocks partway through, which is its own bug.
-	- Retry only if the console host stops being the limit. The deadlock fix reaching upstream would let Alacritty be measured, but it would hit the same ceiling as everything else.
-	- Opened: 20260802-094409
-
-- ✋ The publish stage stays unrun under WSL2. It commits and pushes the working tree, and writes a backup archive to a synced path that does not exist there.
-	- Opened: 20260824-123142
-
-- ✋ Severe windows multiscreen bug:
-	- Description: Dragging from a high-dpi screen to a low-dpi screen causes the window size to freak out. It seems to jump in size from larger to normal to even larger (possibly at each Windows rerender point), getting bigger each time, until it spans several screens worth of real-estate and slows to a crawl.
-	- Steps to reproduce: Easy to reproduce. Essentially the description.
-	- Workaround: Stop dragging the window. Maximize it on the target screen. Finish work, close, relaunch (or just accept a maximized state for that terminal session).
-	- ✋ Can't replicate on different monitors that also have different DPI. Don't have access to original setup. Only observed once, and was in a hurry to shutdown, so it could have been a fluke. Leaving open on backlog just in case.
-	- Opened: 20260816-103257
-
-- ✋ Feature: Minority Report mode: Borderless, transparent, changes perspective depending on screen location.
-	- Top feature once the backlog is mostly worked through. Nothing remotely like this exists.
-	- It would be highly impractical for actual long terminal sessions. But I'm pretty sure Alacritty's underlying plumbing doesn't prevent this. (Or, can be patched to do it.)
-	- Opened: 20260703-071620
-
-- ✋ Build packages when cicd.bash `--quick` isn't specified:
-	- ✋ Deferred (no cross toolchain): macOS `.dmg` (needs an Apple SDK / osxcross - license-gated) and BSD packages (needs a FreeBSD sysroot). AppImage/Flatpak also future.
-	- Opened: 20260724-080316
-
-- ✋ Config file: For each feature listed below, allow user to list programs (comma-delimited), that, when running, temporarily disable:
-	- Smooth scrolling. (Comma-delimited.)
-	- Smooth cursor movement and blink. (Comma-delimited.)
-	- Text scrim and outline
-		- Note: Should not affect existing still-visible text renedered before the program's output, or new output following the output from the affected program that is still visible. (Comma-delimited.)
-	- ✋ Deferred: the scrim disable is meant to apply only to that program's own output within a pane, not per-pane / per-tab / per-window - so surrounding text (the prompt above, the resumed prompt below, unrelated scrollback) keeps its scrim. That is the hard part: the scrim is a single window-global pass with no per-region concept. Honoring "just this command's output" for a normal-screen command like `ls` needs:
-		- Tracking each command's output boundaries in the byte stream (start when the fg pgid becomes the command, end when it returns to the shell - the copy-on-output machinery),
-		- Mapping those logical lines onto current grid rows and re-mapping them every frame as things scroll and scrollback evicts, and
-		- Excluding exactly those cells from the coverage source. Fullscreen apps (vim/nano/less/htop) are the easy sub-case (the whole pane is their output), but the requested normal-screen case is not.
-		- Do not implement this as per-pane scrim on/off.
-		- Smooth-scroll and smooth-cursor disable are individually tractable (per-pane, gated on the foreground program) if ever wanted on their own; only the scrim sub-item is the blocker. Kept as one deferred item.
-	- Opened: 20260708-115155
-
-- ✋ Feature: (Git) Implement branch protection rules on main:
-	- ✋ Require a pull request before merging (blocks direct pushes), and
-	- ✋ Require review from Code Owners.
-	- ✋ In more distant future: Do not allow bypassing / include administrators
-		- Without this, I (as OG admin) can still merge around it, which is good early on.
-	- Opened: 20260706-202218
-
-- ✋ Bug: Modal Bug - About only (almost certainly a Compiz issue): with the About/Settings dialog open, selecting another window then re-selecting the dialog leaves the terminal buried behind whatever got in front, instead of both coming to the top together. Settings now works; About still does this on some Compiz desktops.
-	- Almost certainly a Compiz WM issue, not a SilkTerm bug. About and Settings use the exact same dialog code path, so a difference between them is the WM's handling.
-	- Note: the general case is fixed - the hints are set before the window maps, and since Compiz won't raise a transient's parent, the terminal is restacked under the dialog on focus and re-asserted briefly to outlast Compiz's animated settle. The About-only failure has not been reproduced.
-	- 🔘 Is probably fixed. Test on non-compiz WM.
-	- Opened: 20260707-022408
-
-### Canceled
-
-- 🚫 Dogfood: the launcher when the network build host is down.
-	- Moot. The launcher reads only the synced app dir now, so there is no network source to be unreachable and no bounded wait to exercise. What the build host being down costs is a stale app dir, which is the same as any other day it did not run.
-	- Opened: 20260823-131929
-	- Closed: 20260908-001500
-
-- 🚫 Terminal throughput benchmark: MobaXterm and PuTTY rows.
-	- MobaXterm needs more than it is worth. Its local shell is Cygwin on a real pty and stty reports the grid, but no Windows program gets a tty through it. isatty is false both ways and the grid call fails, and its python3 is the Windows one on PATH, so there is nothing to fall back to. Both halves need a real terminal on stdin and stdout, so it would take a Cygwin python installed into the plugin environment first.
-	- PuTTY cannot be measured this way at all. It has no local shell, only network sessions. kitty and Ghostty have no Windows build, and the package named kitty is KiTTY, an unrelated PuTTY fork.
-	- Opened: 20260802-094409
-	- Closed: 20260818-054058
-
-- 🚫 Windows fonts look too small even at 100% scale, compared to regular modern windows apps, and to legacy apps. Including terminal text, menus, and Settings. (May need Windows host to test.)
-	- Opened: 20260722-194629
-	- Closed: 20260817-120024
-
-- 🚫 README screenshot refresh in cicd is off (`SHOTS_ENABLE=0` in `cicd/config.bash`; `--shots` re-enables per run). So the README grid images won't auto-update after visual changes
-	- Moot point.
-	- Opened: 20260711-145122
-	- Closed: 20260713-142351
-
-- 🚫 CTRL+right arrow should move to the beginning of the next word, not the end of the current. (CTRL+left arrow works as expected.)
-	- And delimit on spaces (only?).
-	- Resolution: after research, not a terminal-side fix. Ctrl+Right already sends the standard `\x1b[1;5C`; whether the cursor stops on the end of the word or the start of the next is decided by the running line editor (bash/readline `forward-word` = word end; zsh = next word start), so the asymmetry with Ctrl+Left is inherent to readline, identical across terminals. Changing the emitted sequence would break the standard every app expects. Achievable per-user via a readline binding, or later via the deferred key-remap system.
-	- Opened: 20260708-191010
-	- Closed: 20260709-115247
-
-- 🚫 CI/CD scripts:
-	- 🚫 Build alternate targets in parallel, to speed process up.
-		- Too fiddly. Possibly revisit in future. This lives in `cicd.bash`, which is pseudo-generic and could be made more so. Maybe it can shell out to a hyper-specific build script, or be updated to handle rust, go, and c++. Or more likely, it's just project-specifig, in spite of being originally [re]architected to call a settings script.
-	- Opened: 20260628-194609
-	- Closed: 20260630-110459
-
-- 🚫 Settings dialog (part 2):
-	- 🚫 Adopt a cross-platform GUI / windowing widget toolkit (e.g. egui) for Settings, About, the main menu, and the context menu instead of hand-rolling them.
-		- No. Results of the spike (branch `spike/egui-dialog`): egui 0.35 rides our exact wgpu 29 + winit 0.30 (no downgrade, shares our graphics stack) and integrated easily.
-		- Drawbacks to egui: it adds ~32% to the release binary for what is secondary chrome, against the minimal-binary-size priority. Hand-rolling also keeps one unified color/theme + native-OS-font system across the terminal and the chrome. egui would need a separate egui-`Visuals` theme kept in sync, plus its own bundled fonts).
-		- Decision: Chrome stays hand-rolled.
-	- Opened: 20260628-083740
-	- Closed: 20260703-091342
-
-- 🚫 Allow toggling from default "Insert" mode, to "Overwrite".
-	- 🚫 Change cursor in default "Insert" mode, to a thinner bar than the block cursor (but thicker than, say, "|").
-	- 🚫 Overwrite mode will be the regular block cursor.
-		- Overwrite mode canceled.
-	- Backed out (20260630): overwrite mode + the Insert-key toggle removed (a terminal can't force the shell's line editor to overwrite). Kept the cursor work - configurable shape, blink, smooth slide. Insert key now just passes through to the shell.
-	- Resolution: This can't be done without wonky hacks.
-	- Opened: n/a
-	- Closed: 20260629-230245
-
-- 🚫 Terse `--layout` DSL as optional sugar over the window/tab/pane CLI model (not a replacement). One compact string for quick splits; lowers to the exact same internal layout the hierarchical flags produce, so it inherits per-pane targeting "for free."
-	- Operators (mnemonic = the divider they draw): `|` side-by-side (vertical divider), `-` stacked (horizontal divider); `(...)` to nest (a group is uniform - mix directions by nesting); `;` separates tabs; `.` = one default pane.
-	- Leaf = `.` (default shell) | command-alias name (from a `[commands]` config table, keeps the string quote-free) | `{raw command}` (opaque span so an inner `|` pipe isn't parsed as a split; `\}` escapes a brace). Optional fixed-order suffixes: `@dir` (cwd), `:weight` (size), `!` (keep-open).
-	- Example: `silkterm --layout '(.|.)-. ; nvim|{git log} ; btop'` -> tab1: two-on-top/one-below; tab2: nvim beside a git-log pane; tab3: btop. Same string is accepted in `layout = "..."` in the config.
-	- Trade-off vs the flags: far terser for hand-typed/quick layouts, but less self-documenting; the flags stay the canonical form (and what "Save layout" emits). DSL is purely a convenience front-end.
-	- Opened: 20260628-083740
-	- Closed: 20260713-142351
-
-- 🚫 In `nano`, scrolling isn't smooth, it jumps line-by-line like traditional terminals. Is that just an artifact of the way `nano` specifically works?
-	- Observation: `nano` (like `vim`, `less`, etc.) runs in the alternate screen and repaints the visible region in place; it keeps fixed chrome (title bar, shortcut bar) and rewrites the text rows itself. There is no terminal-level scroll (`display_offset` stays 0, no scrollback growth) for the renderer to ease, so the content snaps. The wheel now at least drives nano's own (line-by-line) scrolling via alternate-scroll. Making full-screen apps scroll smoothly would require the terminal to detect a vertical content shift within the app's scroll region frame-to-frame and animate it - a heuristic, app-fragile feature (nano's fixed bars break a naive whole-grid diff). Left as a future enhancement rather than a fragile hack.
-	- Opened: 20260628-083740
-	- Closed: 20260713-142351
-
-### Done
-
-#### Done - Bugs
+### Done - Bugs
 
 - ✅ A short settings file can get one section's commented defaults filed under another.
 	- Seen on a hand-written file: the Performance defaults were written under Transparency, and the next launch added them again where they belong.
@@ -2279,7 +2208,7 @@ Issues opened by automated code reviews should be grouped under a main bullet wi
 	- Opened: 20260723-135701
 	- Closed: 20260723-190021
 
-#### Done - Features and enhancements
+### Done - Features and enhancements
 
 - ✅ Integrate and test the latest shcl 3.0.0-beta.1 build from the local shcl repo.
 	- Done: now on shcl's dev at f2a8ad2. Every test passed on the bump alone.
@@ -5194,3 +5123,217 @@ Issues opened by automated code reviews should be grouped under a main bullet wi
 		- Terminal Bro: Just...no.
 	- Opened: n/a
 	- Closed: 20260628-083740
+
+## Deferred
+
+- ✋ t2nsn - old stray versions of executables and launchers: Find and move old GFS versions, and trash any out-of-place stray executables and scripts. Update '.desktop' files to run the correct bash script, launcher chain minimized or hidden, and use the icon from the 'latest version' symlink.
+	- Note: the launcher copies outside the repo are older than the ones in `utility/`, and nothing copies them over.
+	- Note: 20260924, t2nsn itself not looked at yet. A survey of the main workstation, taken by mistake for this item, found its desktop entry and keyboard shortcut running a stale mirror copy of the launcher, plus a few strays. That list is in the private notes.
+	- ✋ Deferred: 20260924, nothing is being built or tested on t2nsn for now.
+	- Opened: 20260924-113215
+
+- ✋ With two tmux panes stacked and both printing, only one pane slides at a time, and the other jumps whole lines. Each time the other pane scrolls, the slide in progress jumps the rest of the way.
+	- Side-by-side panes are not affected.
+	- Split from the smooth scrolling seams item. It shows on builds from before the scroll ledger too.
+	- The fix: a ledger per region in the engine fork, and one slide per region. That is design work across the fork, the pane and the renderer, so it is deferred until it can be given a run of its own.
+	- Since 20260917 the ledger carries on across a region that shares rows with the one in flight (the nano fix), so only regions sharing none still start it over. Stacked panes are that case: they still need a ledger entry and a slide per region, as section 5 says.
+	- Opened: 20260911-113647
+
+- ✋ Detach a tab into a new window, and dock a tab into an existing window, both with the mouse.
+	- Needs multi-window, which does not exist yet. The rest of the tab interface is done.
+	- Opened: 20260703-091342
+
+- ✋ Flip the scrim color under text that had to be lifted for contrast.
+	- Better than moving the text color, but it is a shader answer rather than the per-cell one already built. See the contrast item under Done.
+	- Opened: 20260830-201602
+
+- ✋ Terminal throughput benchmark: the Windows speed rows.
+	- Deferred, and the machine was never the problem. Measured twice on deliberately different hardware: a laptop, then Windows in a VM on the reference host with a discrete card passed through, which is the setup the table's own notes promised would fix it. Neither pass produced anything publishable. Figures and reasoning are in `utility/include/ancillary-notes.fods`, under three `VM` sheets beside the original ones.
+	- There is no correction factor to find. The terminals that run on both platforms disagree about the host-to-guest ratio by more than a factor of two, so one multiplier cannot serve the table. That is measured now, not inferred from everything clustering the way it did on the laptop.
+	- Windows Terminal comes out faster than every published Linux row, because it hosts the console itself rather than reading a relayed one. Sorting it in would rank it first overall on figures taken from another platform and another transport.
+	- The fast terminals are not limited by themselves, and this is measured rather than inferred. A consumer that reads the stream and discards it produces the same figure as a real terminal, on every width class. Every Windows terminal near that number is simply at the console host's ceiling, which is also why ours reads the same with all the eye candy on as with it all off.
+	- The barrier is answered by the console host rather than by the terminal, so a Windows row would not mean what the column heading says even if the rest were solved.
+	- Alacritty cannot be run at all. It deadlocks partway through, which is its own bug.
+	- Retry only if the console host stops being the limit. The deadlock fix reaching upstream would let Alacritty be measured, but it would hit the same ceiling as everything else.
+	- Opened: 20260802-094409
+
+- ✋ The publish stage stays unrun under WSL2. It commits and pushes the working tree, and writes a backup archive to a synced path that does not exist there.
+	- Opened: 20260824-123142
+
+- ✋ Severe windows multiscreen bug:
+	- Description: Dragging from a high-dpi screen to a low-dpi screen causes the window size to freak out. It seems to jump in size from larger to normal to even larger (possibly at each Windows rerender point), getting bigger each time, until it spans several screens worth of real-estate and slows to a crawl.
+	- Steps to reproduce: Easy to reproduce. Essentially the description.
+	- Workaround: Stop dragging the window. Maximize it on the target screen. Finish work, close, relaunch (or just accept a maximized state for that terminal session).
+	- ✋ Can't replicate on different monitors that also have different DPI. Don't have access to original setup. Only observed once, and was in a hurry to shutdown, so it could have been a fluke. Leaving open on backlog just in case.
+	- Opened: 20260816-103257
+
+- ✋ Feature: Minority Report mode: Borderless, transparent, changes perspective depending on screen location.
+	- Top feature once the backlog is mostly worked through. Nothing remotely like this exists.
+	- It would be highly impractical for actual long terminal sessions. But I'm pretty sure Alacritty's underlying plumbing doesn't prevent this. (Or, can be patched to do it.)
+	- Opened: 20260703-071620
+
+- ✋ Build packages when cicd.bash `--quick` isn't specified:
+	- ✋ Deferred (no cross toolchain): macOS `.dmg` (needs an Apple SDK / osxcross - license-gated) and BSD packages (needs a FreeBSD sysroot). AppImage/Flatpak also future.
+	- Opened: 20260724-080316
+
+- ✋ Config file: For each feature listed below, allow user to list programs (comma-delimited), that, when running, temporarily disable:
+	- Smooth scrolling. (Comma-delimited.)
+	- Smooth cursor movement and blink. (Comma-delimited.)
+	- Text scrim and outline
+		- Note: Should not affect existing still-visible text renedered before the program's output, or new output following the output from the affected program that is still visible. (Comma-delimited.)
+	- ✋ Deferred: the scrim disable is meant to apply only to that program's own output within a pane, not per-pane / per-tab / per-window - so surrounding text (the prompt above, the resumed prompt below, unrelated scrollback) keeps its scrim. That is the hard part: the scrim is a single window-global pass with no per-region concept. Honoring "just this command's output" for a normal-screen command like `ls` needs:
+		- Tracking each command's output boundaries in the byte stream (start when the fg pgid becomes the command, end when it returns to the shell - the copy-on-output machinery),
+		- Mapping those logical lines onto current grid rows and re-mapping them every frame as things scroll and scrollback evicts, and
+		- Excluding exactly those cells from the coverage source. Fullscreen apps (vim/nano/less/htop) are the easy sub-case (the whole pane is their output), but the requested normal-screen case is not.
+		- Do not implement this as per-pane scrim on/off.
+		- Smooth-scroll and smooth-cursor disable are individually tractable (per-pane, gated on the foreground program) if ever wanted on their own; only the scrim sub-item is the blocker. Kept as one deferred item.
+	- Opened: 20260708-115155
+
+- ✋ Feature: (Git) Implement branch protection rules on main:
+	- ✋ Require a pull request before merging (blocks direct pushes), and
+	- ✋ Require review from Code Owners.
+	- ✋ In more distant future: Do not allow bypassing / include administrators
+		- Without this, I (as OG admin) can still merge around it, which is good early on.
+	- Opened: 20260706-202218
+
+- ✋ Bug: Modal Bug - About only (almost certainly a Compiz issue): with the About/Settings dialog open, selecting another window then re-selecting the dialog leaves the terminal buried behind whatever got in front, instead of both coming to the top together. Settings now works; About still does this on some Compiz desktops.
+	- Almost certainly a Compiz WM issue, not a SilkTerm bug. About and Settings use the exact same dialog code path, so a difference between them is the WM's handling.
+	- Note: the general case is fixed - the hints are set before the window maps, and since Compiz won't raise a transient's parent, the terminal is restacked under the dialog on focus and re-asserted briefly to outlast Compiz's animated settle. The About-only failure has not been reproduced.
+	- 🔘 Is probably fixed. Test on non-compiz WM.
+	- Opened: 20260707-022408
+
+## Canceled
+
+- 🚫 Dogfood: the launcher when the network build host is down.
+	- Moot. The launcher reads only the synced app dir now, so there is no network source to be unreachable and no bounded wait to exercise. What the build host being down costs is a stale app dir, which is the same as any other day it did not run.
+	- Opened: 20260823-131929
+	- Closed: 20260908-001500
+
+- 🚫 Terminal throughput benchmark: MobaXterm and PuTTY rows.
+	- MobaXterm needs more than it is worth. Its local shell is Cygwin on a real pty and stty reports the grid, but no Windows program gets a tty through it. isatty is false both ways and the grid call fails, and its python3 is the Windows one on PATH, so there is nothing to fall back to. Both halves need a real terminal on stdin and stdout, so it would take a Cygwin python installed into the plugin environment first.
+	- PuTTY cannot be measured this way at all. It has no local shell, only network sessions. kitty and Ghostty have no Windows build, and the package named kitty is KiTTY, an unrelated PuTTY fork.
+	- Opened: 20260802-094409
+	- Closed: 20260818-054058
+
+- 🚫 Windows fonts look too small even at 100% scale, compared to regular modern windows apps, and to legacy apps. Including terminal text, menus, and Settings. (May need Windows host to test.)
+	- Opened: 20260722-194629
+	- Closed: 20260817-120024
+
+- 🚫 README screenshot refresh in cicd is off (`SHOTS_ENABLE=0` in `cicd/config.bash`; `--shots` re-enables per run). So the README grid images won't auto-update after visual changes
+	- Moot point.
+	- Opened: 20260711-145122
+	- Closed: 20260713-142351
+
+- 🚫 CTRL+right arrow should move to the beginning of the next word, not the end of the current. (CTRL+left arrow works as expected.)
+	- And delimit on spaces (only?).
+	- Resolution: after research, not a terminal-side fix. Ctrl+Right already sends the standard `\x1b[1;5C`; whether the cursor stops on the end of the word or the start of the next is decided by the running line editor (bash/readline `forward-word` = word end; zsh = next word start), so the asymmetry with Ctrl+Left is inherent to readline, identical across terminals. Changing the emitted sequence would break the standard every app expects. Achievable per-user via a readline binding, or later via the deferred key-remap system.
+	- Opened: 20260708-191010
+	- Closed: 20260709-115247
+
+- 🚫 CI/CD scripts:
+	- 🚫 Build alternate targets in parallel, to speed process up.
+		- Too fiddly. Possibly revisit in future. This lives in `cicd.bash`, which is pseudo-generic and could be made more so. Maybe it can shell out to a hyper-specific build script, or be updated to handle rust, go, and c++. Or more likely, it's just project-specifig, in spite of being originally [re]architected to call a settings script.
+	- Opened: 20260628-194609
+	- Closed: 20260630-110459
+
+- 🚫 Settings dialog (part 2):
+	- 🚫 Adopt a cross-platform GUI / windowing widget toolkit (e.g. egui) for Settings, About, the main menu, and the context menu instead of hand-rolling them.
+		- No. Results of the spike (branch `spike/egui-dialog`): egui 0.35 rides our exact wgpu 29 + winit 0.30 (no downgrade, shares our graphics stack) and integrated easily.
+		- Drawbacks to egui: it adds ~32% to the release binary for what is secondary chrome, against the minimal-binary-size priority. Hand-rolling also keeps one unified color/theme + native-OS-font system across the terminal and the chrome. egui would need a separate egui-`Visuals` theme kept in sync, plus its own bundled fonts).
+		- Decision: Chrome stays hand-rolled.
+	- Opened: 20260628-083740
+	- Closed: 20260703-091342
+
+- 🚫 Allow toggling from default "Insert" mode, to "Overwrite".
+	- 🚫 Change cursor in default "Insert" mode, to a thinner bar than the block cursor (but thicker than, say, "|").
+	- 🚫 Overwrite mode will be the regular block cursor.
+		- Overwrite mode canceled.
+	- Backed out (20260630): overwrite mode + the Insert-key toggle removed (a terminal can't force the shell's line editor to overwrite). Kept the cursor work - configurable shape, blink, smooth slide. Insert key now just passes through to the shell.
+	- Resolution: This can't be done without wonky hacks.
+	- Opened: n/a
+	- Closed: 20260629-230245
+
+- 🚫 Terse `--layout` DSL as optional sugar over the window/tab/pane CLI model (not a replacement). One compact string for quick splits; lowers to the exact same internal layout the hierarchical flags produce, so it inherits per-pane targeting "for free."
+	- Operators (mnemonic = the divider they draw): `|` side-by-side (vertical divider), `-` stacked (horizontal divider); `(...)` to nest (a group is uniform - mix directions by nesting); `;` separates tabs; `.` = one default pane.
+	- Leaf = `.` (default shell) | command-alias name (from a `[commands]` config table, keeps the string quote-free) | `{raw command}` (opaque span so an inner `|` pipe isn't parsed as a split; `\}` escapes a brace). Optional fixed-order suffixes: `@dir` (cwd), `:weight` (size), `!` (keep-open).
+	- Example: `silkterm --layout '(.|.)-. ; nvim|{git log} ; btop'` -> tab1: two-on-top/one-below; tab2: nvim beside a git-log pane; tab3: btop. Same string is accepted in `layout = "..."` in the config.
+	- Trade-off vs the flags: far terser for hand-typed/quick layouts, but less self-documenting; the flags stay the canonical form (and what "Save layout" emits). DSL is purely a convenience front-end.
+	- Opened: 20260628-083740
+	- Closed: 20260713-142351
+
+- 🚫 In `nano`, scrolling isn't smooth, it jumps line-by-line like traditional terminals. Is that just an artifact of the way `nano` specifically works?
+	- Observation: `nano` (like `vim`, `less`, etc.) runs in the alternate screen and repaints the visible region in place; it keeps fixed chrome (title bar, shortcut bar) and rewrites the text rows itself. There is no terminal-level scroll (`display_offset` stays 0, no scrollback growth) for the renderer to ease, so the content snaps. The wheel now at least drives nano's own (line-by-line) scrolling via alternate-scroll. Making full-screen apps scroll smoothly would require the terminal to detect a vertical content shift within the app's scroll region frame-to-frame and animate it - a heuristic, app-fragile feature (nano's fixed bars break a naive whole-grid diff). Left as a future enhancement rather than a fragile hack.
+	- Opened: 20260628-083740
+	- Closed: 20260713-142351
+
+## Reference
+
+<!-- New issue template
+
+Legacy statuses:
+
+- 🔘 Not started
+
+- 🛠️ Started, and/or partially complete
+
+- 🔬 Testing not started or finished
+
+- ✋ Defer
+
+- ✅ Complete
+
+- 🚫 Canceled
+
+New issue format:
+
+- Only use rows that you actually need or expect will be filled in. Always fill in the title, ID, Type, Status, Opened and Created by.
+
+- The ID is the local time to the hundredth of a second. Opened is when it was written down, which may differ. (Use a keyboard macro and possibly something like project 'zuid' to generate.)
+
+- Status values, in sort order: Started, Testing, Waiting on signoff, Stalled, Queued, Deferred, Done, Moot, Canceled. Testing means the fix is in and checks are running or still to run. Waiting on signoff means testing passed. Moot means something else changed and made it irrelevant. Canceled means it still applies but was decided against.
+
+- Rows marked [Bug] are for bugs only, and rows marked [Feature] for features and enhancements. Children are not nested. They sit at the top level and point back with Parent ID.
+
+Template:
+
+- Title
+	- ID: YYYYmmDDHHMMSSNN
+	- Type: [Bug|Feature|Enhancement|Task]
+	- Status: [Queued|Started|Stalled|Testing|Waiting on signoff|Moot|Canceled|Deferred|Done]
+	- Priority|Severity [Bug]: [Critical|High|Avg|Low]
+	- Opened: YYYYmmDD-HHMMSS
+	- Opened by:
+	- Assigned to:
+	- Parent ID: YYYYmmDDHHMMSSNN
+	- Prereq IDs:
+		- YYYYmmDDHHMMSSNN
+	- Related IDs:
+		- YYYYmmDDHHMMSSNN
+	- Target OS:
+	- Test environment:
+	- Version and build:
+	- Requirements  [Feature]:
+		- Hierarchical bulleted list.
+	- Steps to reproduce [Bug]:
+		- ...
+	- Incorrect behavior [Bug]:
+	- Expected behavior [Bug]:
+	- Reproduced [Bug]: [No, or when, where and how]
+	- Possible cause [Bug]:
+	- Actual cause [Bug]:
+		- ...
+	- Estimated effort: [High|Avg|Low]
+	- Actual effort: [High|Avg|Low]
+	- Progress log:
+		- YYYYmmDD-HHMMSS: Notable effort.
+	- Decisions:
+		- ...
+	- Actual fix [Bug]:
+	- Branch:
+	- Commit:
+	- Test case: [Reason not applicable, or CI test case #]
+	- Acceptance signoff:
+	- Superseded by ID: YYYYmmDDHHMMSSNN
+	- Closed: YYYYmmDD-HHMMSS
+
+-->
