@@ -178,6 +178,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: 20260925, saves now use shcl's new line-keeping save, so lines nobody changed are written back as they were. A file with a dropped tab-indented line still gets the whole-file save from shcl, which deletes that line, so the refusal stays.
 	- Opened: 20260918
 
+- 🔘 Say when a color typed into the settings file is read as empty because it was not quoted.
+	- `background: #112233` reads as nothing, since `#` starts a comment, and the theme's color is used with no message.
+	- Opened: 20260914-124200
+
+- 🔘 Let the showdown tools measure again every row the README table carries.
+	- The size figures for GNOME Terminal, WezTerm, Tabby and Hyper, and Tabby's speed figure, have no rig entry that can take them again.
+	- Opened: 20260914-124200
+
+- 🔘 Check the README's install and build version claims in the pipeline.
+	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
+	- Opened: 20260914-124200
+
+- 🔘 Minimap: one slow redraw can leave the map standing still for a long time afterwards.
+	- The wait after a redraw is twenty times what that redraw took, and redrawing the whole map - after a screen swap, a resize, or a resync - costs far more than an ordinary one. Measured at a 30,000-line scrollback in a debug build: a 445 ms whole redraw, then a 22 ms one that waited 8.95 s. At the 1,000,000-line maximum it would be around 30 s.
+	- The wait could follow what an ordinary redraw costs, or be capped.
+	- Opened: 20260919-140536
+
+- 🔘 Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
+	- At 100,000 lines one redraw holds the terminal for about 150 ms, and at the 1,000,000-line maximum it would be over a second. The time between redraws already grows with it, so the average cost stays small; the pause itself does not.
+	- Opened: 20260919-134338
+
+- 🔘 Two more settings of the same class as the light mode calibration, neither fixed.
+	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.
+	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already holds the text on it legible in both modes, so this is a question of how loud it looks rather than whether it works.
+	- Opened: 20260920-190859
+
 - **Stop here to work on releasing RC1**.
 
 - 🔘 Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds.
@@ -254,9 +280,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Low: Trash quality, only looks OK at small blur radii.
 	- Opened: 20260724-080316
 
-- 🔘 Add silkterm to a Windows package manager (e.g. winget or choco).
-	- Opened: 20260816-103257
-
 - 🔘 Ability to change hotkeys, and/or assign new ones dynamically. Including a "capture" dialog.
 	- Opened: 20260703-100322
 
@@ -299,32 +322,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Emits the create/select form: `--new-tab` / `--new-pane` (with explicit `--splits`, direction, and non-default `--size`) for structure, plus `--tab=<id>` / `--pane=<id>` for per-entity overrides. Always writes explicit directions and sizes (never the "more space" default) so a saved layout reproduces regardless of window size.
 	- Alternately, lean on shcl hierarchical format for nested configurations.
 	- Opened: 20260628-083740
-
-- 🔘 Say when a color typed into the settings file is read as empty because it was not quoted.
-	- `background: #112233` reads as nothing, since `#` starts a comment, and the theme's color is used with no message.
-	- Opened: 20260914-124200
-
-- 🔘 Let the showdown tools measure again every row the README table carries.
-	- The size figures for GNOME Terminal, WezTerm, Tabby and Hyper, and Tabby's speed figure, have no rig entry that can take them again.
-	- Opened: 20260914-124200
-
-- 🔘 Check the README's install and build version claims in the pipeline.
-	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
-	- Opened: 20260914-124200
-
-- 🔘 Minimap: one slow redraw can leave the map standing still for a long time afterwards.
-	- The wait after a redraw is twenty times what that redraw took, and redrawing the whole map - after a screen swap, a resize, or a resync - costs far more than an ordinary one. Measured at a 30,000-line scrollback in a debug build: a 445 ms whole redraw, then a 22 ms one that waited 8.95 s. At the 1,000,000-line maximum it would be around 30 s.
-	- The wait could follow what an ordinary redraw costs, or be capped.
-	- Opened: 20260919-140536
-
-- 🔘 Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
-	- At 100,000 lines one redraw holds the terminal for about 150 ms, and at the 1,000,000-line maximum it would be over a second. The time between redraws already grows with it, so the average cost stays small; the pause itself does not.
-	- Opened: 20260919-134338
-
-- 🔘 Two more settings of the same class as the light mode calibration, neither fixed.
-	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.
-	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already holds the text on it legible in both modes, so this is a question of how loud it looks rather than whether it works.
-	- Opened: 20260920-190859
 
 ## Done
 
