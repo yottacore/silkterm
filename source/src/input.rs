@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+use std::time::{Duration, Instant};
+
 use alacritty_terminal::term::TermMode;
-use winit::event::KeyEvent;
+use winit::event::{KeyEvent, MouseButton};
 use winit::keyboard::{Key, ModifiersState, NamedKey, SmolStr};
 
 // A mouse event to report to the PTY. Wheel notches ride buttons 64/65; `None`
@@ -37,6 +39,205 @@ impl MouseBtn {
 // True when the app has any mouse tracking turned on (DECSET 1000/1002/1003).
 pub fn wants_mouse(mode: TermMode) -> bool {
 	mode.intersects(TermMode::MOUSE_REPORT_CLICK | TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION)
+}
+
+// winit button -> the reportable subset (None for Back/Forward/etc.)
+pub fn mouse_btn_of(button: MouseButton) -> Option<MouseBtn> {
+	match button {
+		MouseButton::Left => Some(MouseBtn::Left),
+		MouseButton::Middle => Some(MouseBtn::Middle),
+		MouseButton::Right => Some(MouseBtn::Right),
+		_ => None,
+	}
+}
+
+// Whether a press goes to a mouse-tracking app instead of being handled here.
+// Right-click is reserved for our own context menu (muffer pastes on it), an
+// open menu takes the click to operate or dismiss it, and Shift is the
+// local-action override.
+pub fn press_is_reported(btn: MouseBtn, menu_open: bool, shift: bool) -> bool {
+	btn != MouseBtn::Right && !menu_open && !shift
+}
+
+// A release is reported only for the button whose press was. Any other one
+// would clear the held state, and the app would see a release it never saw
+// pressed.
+pub fn release_is_reported(held: Option<MouseBtn>, button: MouseButton) -> bool {
+	held.is_some() && held == mouse_btn_of(button)
+}
+
+// A left press in the tab-bar band goes to the tab bar - unless a dropdown is
+// open. One opens flush under the menu bar, so its top item overlaps the band,
+// and "Tabs|New tab" would select a tab instead of firing.
+pub fn tab_bar_takes_press(menu_open: bool, bar_shown: bool, y: f32, top: f32, h: f32) -> bool {
+	!menu_open && bar_shown && y >= top && y < top + h
+}
+
+// A tab close armed by a press fires only if the release is still over that
+// tab's close box. `close_x` is the left edge of the armed tab's box, None when
+// the tab is gone. Dragging off before releasing cancels, like any button.
+pub fn close_on_release(
+	armed: usize,
+	x: f32,
+	in_bar: bool,
+	close_x: Option<f32>,
+	tab_at: Option<usize>,
+) -> bool {
+	in_bar && close_x.is_some_and(|left| x >= left) && tab_at == Some(armed)
+}
+
+// How soon, and how near, a click has to follow the last one to count with it.
+pub const MULTI_CLICK: Duration = Duration::from_millis(400);
+
+// A press's place in a run of clicks on one spot: 1, 2 or 3, and a fourth
+// starts over. One too late, or more than a cell away, starts a new run.
+pub fn click_count(
+	last: Option<(Instant, f32, f32)>,
+	count: u32,
+	now: Instant,
+	at: (f32, f32),
+	cell: (f32, f32),
+) -> u32 {
+	let near = last.is_some_and(|(when, x, y)| {
+		now.duration_since(when) < MULTI_CLICK
+			&& (at.0 - x).abs() <= cell.0
+			&& (at.1 - y).abs() <= cell.1
+	});
+	if near { (count % 3) + 1 } else { 1 }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClickSelect {
+	Run,   // plain selection from the press
+	Block, // a rectangle, Ctrl held
+	Word,  // a shape, a pair's contents, a bracket to its partner, else the word
+	Line,  // the whole logical line, wrapped rows included
+}
+
+pub fn click_select(count: u32, ctrl: bool) -> ClickSelect {
+	match count {
+		2 => ClickSelect::Word,
+		3 => ClickSelect::Line,
+		_ if ctrl => ClickSelect::Block,
+		_ => ClickSelect::Run,
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WheelRoute {
+	Report,     // button 64/65 reports to a mouse-tracking app
+	CursorKeys, // arrow keys, for a full-screen app with no scrollback of its own
+	Scrollback, // our own smooth scrollback
+}
+
+// Where a wheel turn goes. Alternate scroll (DECSET 1007) is on by default, so
+// cursor keys also need the alt screen: on the primary screen they would walk
+// shell history instead of scrolling. Shift keeps the wheel local.
+pub fn wheel_route(mode: TermMode, shift: bool) -> WheelRoute {
+	if !shift && wants_mouse(mode) {
+		WheelRoute::Report
+	} else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) && !wants_mouse(mode)
+	{
+		WheelRoute::CursorKeys
+	} else {
+		WheelRoute::Scrollback
+	}
+}
+
+// Ctrl+Shift+C, read off the held modifiers. A grab's pass-through arrives with
+// them zeroed, so it never matches.
+pub fn is_copy_chord(mods: ModifiersState, key: &Key) -> bool {
+	mods.control_key()
+		&& mods.shift_key()
+		&& matches!(key, Key::Character(typed) if typed.eq_ignore_ascii_case("c"))
+}
+
+// A key the terminal keeps rather than typing at the shell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hotkey {
+	Settings,
+	Fullscreen,
+	ContextMenu,
+	MenuTitle(char), // Alt+letter, the first letter of a menu-bar title
+	NewTab,
+	CloseTab,
+	NewWindow,
+	Zoom(i32),
+	ZoomReset,
+	PrevTab,
+	NextTab,
+	MoveTab { forward: bool },
+	Copy,
+	Paste,
+}
+
+// Which hotkey a press is, if any. Chords that shells bind keep their plain
+// Ctrl form free (Ctrl+T, Ctrl+W, Ctrl+V), and pane split, close and focus
+// cycling are menu-only by design.
+pub fn hotkey_for(key: &Key, mods: ModifiersState, menu_bar: bool) -> Option<Hotkey> {
+	let ctrl = mods.control_key();
+	let shift = mods.shift_key();
+	match key {
+		Key::Character(typed) if ctrl && !shift && typed == "," => return Some(Hotkey::Settings),
+		Key::Named(NamedKey::F11) => return Some(Hotkey::Fullscreen),
+		Key::Named(NamedKey::ContextMenu) => return Some(Hotkey::ContextMenu),
+		_ => {}
+	}
+	// This shadows the shell's Meta+<those letters> (Meta-f word-forward), the
+	// usual menu-bar tradeoff.
+	if menu_bar && mods.alt_key() && !ctrl {
+		if let Key::Character(typed) = key {
+			if let Some(ch) = typed.chars().next() {
+				return Some(Hotkey::MenuTitle(ch.to_ascii_uppercase()));
+			}
+		}
+	}
+	if !ctrl {
+		return None;
+	}
+	let hotkey = match key {
+		Key::Character(typed) if shift && typed.eq_ignore_ascii_case("t") => Hotkey::NewTab,
+		Key::Character(typed) if shift && typed.eq_ignore_ascii_case("w") => Hotkey::CloseTab,
+		Key::Named(NamedKey::F4) => Hotkey::CloseTab,
+		// new window, starting in the focused pane's current directory
+		Key::Character(typed) if shift && typed.eq_ignore_ascii_case("n") => Hotkey::NewWindow,
+		// "+" is Shift+"=" on most layouts, so both spellings count
+		Key::Character(typed) if typed == "-" => Hotkey::Zoom(-1),
+		Key::Character(typed) if typed == "=" || typed == "+" => Hotkey::Zoom(1),
+		Key::Character(typed) if typed == "0" => Hotkey::ZoomReset,
+		Key::Named(NamedKey::PageUp) if shift => Hotkey::MoveTab { forward: false },
+		Key::Named(NamedKey::PageDown) if shift => Hotkey::MoveTab { forward: true },
+		Key::Named(NamedKey::PageUp) => Hotkey::PrevTab,
+		Key::Named(NamedKey::PageDown) => Hotkey::NextTab,
+		k if is_copy_chord(mods, k) => Hotkey::Copy,
+		Key::Character(typed) if shift && typed.eq_ignore_ascii_case("v") => Hotkey::Paste,
+		_ => return None,
+	};
+	Some(hotkey)
+}
+
+// Where a write to the desktop clipboard comes from.
+#[derive(Clone, Copy)]
+pub enum CopyFrom {
+	Chord,   // Ctrl+Shift+C
+	Select,  // a finished drag-select, with copy on select on
+	Program, // a program in a pane, through OSC 52
+	Output,  // a finished command's output, with copy on output on
+}
+
+// Whether a copy goes through. The window-focus flag can lag the window
+// manager, so the two a person drives never wait on it: a chord typed at this
+// window, or a drag in it, is proof enough it is the one in use. The two that
+// fire on their own take only the pane in use - a background pane printing a
+// hostile file cannot swap what the next paste holds - and output copies only
+// while its window has focus, so a command that finished while the user was
+// elsewhere never copies late.
+pub fn copy_allowed(from: CopyFrom, window_focused: bool, pane_in_use: bool) -> bool {
+	match from {
+		CopyFrom::Chord | CopyFrom::Select => true,
+		CopyFrom::Program => pane_in_use,
+		CopyFrom::Output => window_focused && pane_in_use,
+	}
 }
 
 // Encode a mouse event as a report for the PTY, honouring the app's tracking
@@ -472,5 +673,251 @@ mod tests {
 			encode_key(&a, Some("a"), ModifiersState::ALT, false).unwrap(),
 			b"\x1ba".to_vec()
 		);
+	}
+
+	const CTRL: ModifiersState = ModifiersState::CONTROL;
+	const CTRL_SHIFT: ModifiersState = ModifiersState::CONTROL.union(ModifiersState::SHIFT);
+
+	fn chord(typed: &str, mods: ModifiersState) -> Option<Hotkey> {
+		hotkey_for(&Key::Character(typed.into()), mods, true)
+	}
+
+	fn named(key: NamedKey, mods: ModifiersState) -> Option<Hotkey> {
+		hotkey_for(&Key::Named(key), mods, true)
+	}
+
+	// Test ID: Er2UiYC
+	#[test]
+	fn a_new_tab_takes_shift_so_plain_ctrl_t_reaches_the_shell() {
+		assert_eq!(chord("T", CTRL_SHIFT), Some(Hotkey::NewTab));
+		assert_eq!(chord("t", CTRL_SHIFT), Some(Hotkey::NewTab));
+		assert_eq!(chord("t", CTRL), None);
+	}
+
+	// Test ID: Er2UiYD
+	#[test]
+	fn ctrl_page_keys_change_tab() {
+		assert_eq!(named(NamedKey::PageUp, CTRL), Some(Hotkey::PrevTab));
+		assert_eq!(named(NamedKey::PageDown, CTRL), Some(Hotkey::NextTab));
+		assert_eq!(named(NamedKey::PageUp, NONE), None);
+	}
+
+	// Test ID: Er2UiYE
+	#[test]
+	fn ctrl_shift_page_keys_move_the_tab() {
+		assert_eq!(
+			named(NamedKey::PageUp, CTRL_SHIFT),
+			Some(Hotkey::MoveTab { forward: false })
+		);
+		assert_eq!(
+			named(NamedKey::PageDown, CTRL_SHIFT),
+			Some(Hotkey::MoveTab { forward: true })
+		);
+	}
+
+	// Test ID: Er2UiYF
+	#[test]
+	fn both_close_tab_chords_close_but_plain_ctrl_w_reaches_the_shell() {
+		assert_eq!(chord("W", CTRL_SHIFT), Some(Hotkey::CloseTab));
+		assert_eq!(named(NamedKey::F4, CTRL), Some(Hotkey::CloseTab));
+		assert_eq!(chord("w", CTRL), None, "word erase");
+		assert_eq!(named(NamedKey::F4, NONE), None);
+	}
+
+	// Test ID: Er2UiYG
+	#[test]
+	fn the_menu_key_settings_and_fullscreen_are_hotkeys() {
+		assert_eq!(
+			named(NamedKey::ContextMenu, NONE),
+			Some(Hotkey::ContextMenu)
+		);
+		assert_eq!(chord(",", CTRL), Some(Hotkey::Settings));
+		assert_eq!(named(NamedKey::F11, NONE), Some(Hotkey::Fullscreen));
+		assert_eq!(chord("V", CTRL_SHIFT), Some(Hotkey::Paste));
+		assert_eq!(chord("C", CTRL_SHIFT), Some(Hotkey::Copy));
+		assert_eq!(chord("v", CTRL), None);
+	}
+
+	// Pane split, close and focus cycling are menu-only, so every other chord
+	// goes to the shell.
+	// Test ID: Er2UiYH
+	#[test]
+	fn no_chord_splits_closes_or_cycles_panes() {
+		for c in 'a'..='z' {
+			let hotkey = chord(&c.to_string(), CTRL_SHIFT);
+			match c {
+				't' | 'w' | 'n' | 'c' | 'v' => assert!(hotkey.is_some(), "{c}"),
+				_ => assert_eq!(hotkey, None, "Ctrl+Shift+{c}"),
+			}
+		}
+		for key in [
+			NamedKey::Tab,
+			NamedKey::ArrowLeft,
+			NamedKey::ArrowRight,
+			NamedKey::ArrowUp,
+			NamedKey::ArrowDown,
+		] {
+			assert_eq!(named(key, CTRL), None, "{key:?}");
+			assert_eq!(named(key, CTRL_SHIFT), None, "{key:?}");
+		}
+	}
+
+	// Test ID: Er2UiYI
+	#[test]
+	fn a_release_is_reported_only_for_the_button_held() {
+		let left = Some(MouseBtn::Left);
+		assert!(release_is_reported(left, MouseButton::Left));
+		assert!(!release_is_reported(left, MouseButton::Middle));
+		assert!(!release_is_reported(left, MouseButton::Right));
+		assert!(!release_is_reported(None, MouseButton::Left));
+		assert!(!release_is_reported(None, MouseButton::Back));
+	}
+
+	// A dropdown opens flush under the menu bar, over the tab-bar band.
+	// Test ID: Er2UiYJ
+	#[test]
+	fn an_open_dropdown_keeps_a_press_in_the_tab_bar_band() {
+		let (top, h) = (24.0, 30.0);
+		assert!(tab_bar_takes_press(false, true, 30.0, top, h));
+		assert!(!tab_bar_takes_press(true, true, 30.0, top, h));
+		assert!(!tab_bar_takes_press(false, false, 30.0, top, h));
+		assert!(!tab_bar_takes_press(false, true, top + h, top, h));
+		assert!(!tab_bar_takes_press(false, true, top - 1.0, top, h));
+	}
+
+	// Test ID: Er2UiYK
+	#[test]
+	fn right_click_and_a_click_on_an_open_menu_stay_local() {
+		assert!(press_is_reported(MouseBtn::Left, false, false));
+		assert!(press_is_reported(MouseBtn::Middle, false, false));
+		assert!(!press_is_reported(MouseBtn::Right, false, false));
+		assert!(!press_is_reported(MouseBtn::Left, true, false));
+		assert!(!press_is_reported(MouseBtn::Middle, true, false));
+		assert!(!press_is_reported(MouseBtn::Left, false, true), "Shift");
+	}
+
+	// Alternate scroll is on by default, so the primary screen with it set is
+	// the ordinary case, and it has to scroll the buffer.
+	// Test ID: Er2UiYL
+	#[test]
+	fn the_wheel_scrolls_back_on_the_primary_screen() {
+		let alt_scroll = TermMode::ALTERNATE_SCROLL;
+		let alt_screen = TermMode::ALT_SCREEN | alt_scroll;
+		assert_eq!(wheel_route(alt_scroll, false), WheelRoute::Scrollback);
+		assert_eq!(
+			wheel_route(TermMode::empty(), false),
+			WheelRoute::Scrollback
+		);
+		assert_eq!(wheel_route(alt_screen, false), WheelRoute::CursorKeys);
+		assert_eq!(
+			wheel_route(TermMode::ALT_SCREEN, false),
+			WheelRoute::Scrollback,
+			"no alternate scroll"
+		);
+		for tracking in [
+			TermMode::MOUSE_REPORT_CLICK,
+			TermMode::MOUSE_DRAG,
+			TermMode::MOUSE_MOTION,
+		] {
+			assert_eq!(
+				wheel_route(alt_screen | tracking, false),
+				WheelRoute::Report
+			);
+			assert_eq!(wheel_route(tracking, false), WheelRoute::Report);
+		}
+	}
+
+	// Test ID: Er2UiYM
+	#[test]
+	fn shift_keeps_the_wheel_local_over_a_tracking_app() {
+		let tracking = TermMode::MOUSE_REPORT_CLICK;
+		assert_eq!(wheel_route(tracking, true), WheelRoute::Scrollback);
+		assert_eq!(
+			wheel_route(
+				tracking | TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL,
+				true
+			),
+			WheelRoute::Scrollback
+		);
+		// with no tracking app, Shift changes nothing
+		let alt_screen = TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL;
+		assert_eq!(wheel_route(alt_screen, true), WheelRoute::CursorKeys);
+	}
+
+	// Test ID: Er2UiYN
+	#[test]
+	fn an_armed_tab_close_fires_only_on_its_own_box() {
+		let close_x = Some(100.0);
+		assert!(close_on_release(2, 110.0, true, close_x, Some(2)));
+		// dragged off the box, but still on the tab
+		assert!(!close_on_release(2, 90.0, true, close_x, Some(2)));
+		// over the next tab's box
+		assert!(!close_on_release(2, 130.0, true, close_x, Some(3)));
+		// below the bar
+		assert!(!close_on_release(2, 110.0, false, close_x, Some(2)));
+		// the tab is gone
+		assert!(!close_on_release(2, 110.0, true, None, None));
+	}
+
+	// Test ID: Er2UiYO
+	#[test]
+	fn clicks_count_to_three_on_one_spot_then_start_over() {
+		let cell = (8.0, 16.0);
+		let t0 = Instant::now();
+		let soon = t0 + Duration::from_millis(150);
+		let at = (40.0, 40.0);
+		assert_eq!(click_count(None, 0, t0, at, cell), 1);
+		let last = Some((t0, at.0, at.1));
+		assert_eq!(click_count(last, 1, soon, at, cell), 2);
+		assert_eq!(click_count(last, 2, soon, at, cell), 3);
+		assert_eq!(click_count(last, 3, soon, at, cell), 1, "a fourth wraps");
+		// too late, or more than a cell away, starts a new run
+		assert_eq!(click_count(last, 1, t0 + MULTI_CLICK, at, cell), 1);
+		assert_eq!(click_count(last, 1, soon, (at.0 + 9.0, at.1), cell), 1);
+		assert_eq!(click_count(last, 1, soon, (at.0, at.1 - 17.0), cell), 1);
+		assert_eq!(
+			click_count(last, 1, soon, (at.0 + 8.0, at.1 + 16.0), cell),
+			2
+		);
+	}
+
+	// Test ID: Er2UiYP
+	#[test]
+	fn ctrl_selects_a_block_but_only_on_a_single_click() {
+		assert_eq!(click_select(1, false), ClickSelect::Run);
+		assert_eq!(click_select(1, true), ClickSelect::Block);
+		assert_eq!(click_select(2, false), ClickSelect::Word);
+		assert_eq!(click_select(2, true), ClickSelect::Word);
+		assert_eq!(click_select(3, false), ClickSelect::Line);
+		assert_eq!(click_select(3, true), ClickSelect::Line);
+	}
+
+	// Both regressed by waiting on the window-focus flag, which can lag the
+	// window manager.
+	// Test ID: Er2UiYQ
+	#[test]
+	fn a_copy_the_user_drives_does_not_wait_on_window_focus() {
+		for from in [CopyFrom::Chord, CopyFrom::Select] {
+			assert!(copy_allowed(from, false, true));
+			assert!(copy_allowed(from, true, true));
+		}
+	}
+
+	// Test ID: Er2UiYR
+	#[test]
+	fn a_program_sets_the_clipboard_only_from_the_pane_in_use() {
+		assert!(copy_allowed(CopyFrom::Program, true, true));
+		assert!(copy_allowed(CopyFrom::Program, false, true));
+		assert!(!copy_allowed(CopyFrom::Program, true, false));
+	}
+
+	// A capture that is not allowed is disarmed, so output that finished while
+	// the user was elsewhere never copies on the way back.
+	// Test ID: Er2UiYS
+	#[test]
+	fn output_copies_only_from_the_pane_in_use_of_a_focused_window() {
+		assert!(copy_allowed(CopyFrom::Output, true, true));
+		assert!(!copy_allowed(CopyFrom::Output, false, true));
+		assert!(!copy_allowed(CopyFrom::Output, true, false));
 	}
 }
