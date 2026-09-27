@@ -563,6 +563,7 @@ mod tests {
 	// The one check no parser strictness can make: a setting the code knows but
 	// the document never mentions is a perfectly valid document, and a setting
 	// silently missing from the dialog is exactly the failure worth catching.
+	// Test ID: Em2iOem
 	#[test]
 	fn the_declarations_are_complete_and_well_formed() {
 		let ui = match parse(SOURCE) {
@@ -610,6 +611,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Em2iOen
 	#[test]
 	fn every_tab_has_rows_and_every_row_a_tab() {
 		let ui = ui();
@@ -626,6 +628,7 @@ mod tests {
 
 	// Sanity clamps rather than validation: every layout number is a floor that
 	// content can outgrow, so the only real mistake is a negative or absurd one.
+	// Test ID: Em2iOeo
 	#[test]
 	fn the_layout_numbers_are_sane() {
 		let lay = &ui().layout;
@@ -648,6 +651,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Em2iOep
 	#[test]
 	fn a_bad_document_is_reported_rather_than_half_read() {
 		let bad = "tabs: \"Only\"\nrows:\n\tNotASetting:\n\t\tlabel: x\n\t\tkind: toggle\n";

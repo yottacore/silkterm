@@ -1919,6 +1919,7 @@ mod tests {
 	};
 
 	// What a refused save says: which file, which lines, and what that costs.
+	// Test ID: EqGnMOw
 	#[test]
 	fn a_refused_save_names_the_file_and_the_lines() {
 		let said = |lines: &[usize], lost: usize| {
@@ -1959,6 +1960,7 @@ mod tests {
 	// strip or a menu does. Drawing it needs a GPU, so what is pinned here is the
 	// decision render asks for: whether there is a tip to draw, and when to come
 	// back for one.
+	// Test ID: Eq4Llx2
 	#[test]
 	fn a_dialog_tip_waits_for_the_pointer_to_rest() {
 		let mut dwell = crate::tip::Dwell::default();
@@ -1990,6 +1992,7 @@ mod tests {
 	// The defect this was written for: a 1080p screen at 150% with a taskbar
 	// leaves 1008 usable, and the dialog was being sized against the full 1080 -
 	// so its footer buttons sat behind the taskbar with no way to reach OK.
+	// Test ID: EpOQNMO
 	#[test]
 	fn the_height_cap_comes_off_the_usable_screen_not_the_monitor() {
 		let scale = 1.5;
@@ -2008,6 +2011,7 @@ mod tests {
 
 	// Before the window is mapped there is no frame to measure, so the allowance
 	// stands in for one - and it is a DIP figure, so it grows with the scale.
+	// Test ID: EpOQNMP
 	#[test]
 	fn an_unmapped_window_falls_back_to_the_dip_allowance() {
 		for scale in [1.0, 1.5, 2.0] {
@@ -2019,6 +2023,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EpOQNMQ
 	#[test]
 	fn a_screen_that_answers_nothing_still_yields_a_usable_cap() {
 		let (w, h) = caps_from(usable_screen(None, None), (0.0, 0.0), 1.0);
@@ -2027,6 +2032,7 @@ mod tests {
 		assert_eq!(usable_screen(None, Some((800.0, 600.0))), (800.0, 600.0));
 	}
 
+	// Test ID: EpOQNMR
 	#[test]
 	fn a_resize_settles_on_the_natural_size_and_lets_go_past_the_snap() {
 		let want = 648.0;
@@ -2041,6 +2047,7 @@ mod tests {
 	// A scale change leaves the window at the pixels it already had, and the
 	// screen holds fewer DIP at the higher scale. Nothing else pulls the window
 	// back onto it.
+	// Test ID: EqQh9oO
 	#[test]
 	fn a_window_is_held_to_what_the_screen_can_hold_at_the_new_scale() {
 		// inside the caps: left exactly as it is, no resize asked for

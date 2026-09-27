@@ -678,6 +678,12 @@ if [[ -x "${root}/cicd/tests/tables/run.py" ]]; then
 	"${root}/cicd/tests/tables/run.py" >/dev/null || fDie "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
 	fEcho "OK: markdown tables"
 fi
+## Every test carries an ID, and no two share one.
+if [[ -x "${root}/cicd/utility/test-id.py" ]]; then
+	fEcho_Clean "test IDs ..."
+	testIds="$("${root}/cicd/utility/test-id.py" --check 2>&1)" || { echo "${testIds}"; fDie "a test has no ID or shares one - make IDs with cicd/utility/test-id.py"; }
+	fEcho "OK: test IDs"
+fi
 ## The Windows scenario harness, which once tested whatever the box last built
 ## and stopped every SilkTerm on a shared box.
 if [[ -x "${root}/cicd/tests/wingui/harness-test.bash" ]]; then

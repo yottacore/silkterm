@@ -228,6 +228,7 @@ mod tests {
 	}
 	// A Windows release build owns no console, so a control command that failed
 	// said nothing at all.
+	// Test ID: EqH4ist
 	#[test]
 	fn a_control_command_joins_the_console_it_was_typed_at() {
 		for args in [

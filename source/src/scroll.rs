@@ -525,6 +525,7 @@ mod tests {
 		config::settings().output_ease_lines.max(0.0)
 	}
 
+	// Test ID: EpaxTdw
 	#[test]
 	fn chasing_output_is_the_output_ease_only() {
 		let _g = pin();
@@ -545,6 +546,7 @@ mod tests {
 	// F150. A gesture aimed at the bottom eases in exactly the way output does,
 	// so `following()` and `visual` both read as a lag while one is in flight.
 	// Nothing printed, so nothing is unshown, whatever the view is doing.
+	// Test ID: EqQ3t6n
 	#[test]
 	fn a_gesture_to_the_bottom_is_not_unshown_output() {
 		let _g = pin();
@@ -585,6 +587,7 @@ mod tests {
 	// is the same shape. Neither shows the user anything, so neither may cancel
 	// a flood's trim - the fix for F150 read `chasing_output()`, which goes false
 	// for the rest of the flood at the first one.
+	// Test ID: EqQ3t6o
 	#[test]
 	fn a_flood_stays_trimmed_through_a_keystroke() {
 		let _g = pin();
@@ -624,6 +627,7 @@ mod tests {
 	// The count is what the map trims by, so it has to be the ease's own backlog
 	// under a plain flood, and it has to drain to nothing once output stops. The
 	// second half walks a mixed script and holds the invariants over all of it.
+	// Test ID: EqQ3t6p
 	#[test]
 	fn unshown_output_drains_as_the_view_reaches_it() {
 		let _g = pin();
@@ -715,6 +719,7 @@ mod tests {
 
 	// Smooth scrolling off: the grid already sits at the bottom, so there is no
 	// lag to ease and nothing for the map to hold back.
+	// Test ID: EqQ3t6q
 	#[test]
 	fn smooth_off_leaves_nothing_unshown() {
 		let _g = pin();
@@ -734,6 +739,7 @@ mod tests {
 		config::update(config::Settings::default());
 	}
 
+	// Test ID: Eion5oO
 	#[test]
 	fn starts_following() {
 		let _g = pin();
@@ -743,6 +749,7 @@ mod tests {
 		assert_eq!(s.desired_offset(), 0);
 	}
 
+	// Test ID: Eion5oP
 	#[test]
 	fn wheel_clamps_to_history() {
 		let _g = pin();
@@ -764,6 +771,7 @@ mod tests {
 		assert!(s.frac().abs() < 1e-3);
 	}
 
+	// Test ID: EkzU0Jc
 	#[test]
 	fn fractional_wheel_rests_on_a_whole_line() {
 		let _g = pin();
@@ -795,6 +803,7 @@ mod tests {
 	// A gesture that stops just past a line used to be rounded BACK onto it, so
 	// the view went all the way forward and then hopped a line the other way -
 	// under a line of travel, but a visible reversal against the gesture.
+	// Test ID: Eo6nUjQ
 	#[test]
 	fn a_wheel_settles_on_the_line_it_was_heading_for() {
 		let _g = pin();
@@ -822,6 +831,7 @@ mod tests {
 		assert_eq!(to, from - 3, "and the same going the other way");
 	}
 
+	// Test ID: EloyL8K
 	#[test]
 	fn nudge_accumulates_without_a_line_cap() {
 		let _g = pin();
@@ -840,6 +850,7 @@ mod tests {
 		assert!(lag <= 501.0 + 1e-3);
 	}
 
+	// Test ID: Eion5oQ
 	#[test]
 	fn nudge_ignored_when_scrolled_back() {
 		let _g = pin();
@@ -852,6 +863,7 @@ mod tests {
 		assert_eq!(before, after); // no-snap rule: output must not move a reader
 	}
 
+	// Test ID: Eion5oR
 	#[test]
 	fn output_backlog_settles_to_bottom() {
 		let _g = pin();
@@ -870,6 +882,7 @@ mod tests {
 		assert!(s.frac().abs() < 1e-3);
 	}
 
+	// Test ID: Elqv6O1
 	#[test]
 	fn a_burst_leaves_rest_slowly_with_the_ramp_still_ahead() {
 		let _g = pin();
@@ -894,6 +907,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eion5oS
 	#[test]
 	fn burst_ramps_faster_than_trickle() {
 		let _g = pin();
@@ -918,6 +932,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EorTe2N
 	#[test]
 	fn app_scroll_grows_within_the_cover_and_eases_to_rest() {
 		let _g = pin();
@@ -942,6 +957,7 @@ mod tests {
 		assert!(!s.animating());
 	}
 
+	// Test ID: EorTe2O
 	#[test]
 	fn app_slide_keeps_up_with_a_fast_app() {
 		let _g = pin();
@@ -972,6 +988,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EorTe2P
 	#[test]
 	fn app_slide_and_output_chase_run_the_same_curve() {
 		let _g = pin();
@@ -1011,6 +1028,7 @@ mod tests {
 		assert_eq!(view.visual_lines(), 0.0);
 	}
 
+	// Test ID: EjICKOZ
 	#[test]
 	fn output_ease_descends_monotonically() {
 		let _g = pin();
@@ -1038,6 +1056,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: ElpQBij
 	#[test]
 	fn a_single_screen_burst_eases_gentler_than_an_overflowed_one() {
 		let _g = pin();
@@ -1067,6 +1086,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EloSH6G
 	#[test]
 	fn a_burst_ends_at_rest_and_the_next_starts_in_view() {
 		let _g = pin();
@@ -1101,6 +1121,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EjICKOa
 	#[test]
 	fn app_slide_eases_monotonically_without_overshoot() {
 		let _g = pin();
@@ -1123,6 +1144,7 @@ mod tests {
 		assert_eq!(s.app_offset(), 0.0);
 	}
 
+	// Test ID: EjFiQFd
 	#[test]
 	fn cancel_app_scroll_hard_cuts_the_slide() {
 		let _g = pin();
@@ -1135,6 +1157,7 @@ mod tests {
 		assert!(!s.animating());
 	}
 
+	// Test ID: ElcxMmv
 	#[test]
 	fn snap_lands_at_rest_instantly() {
 		let _g = pin();
@@ -1155,6 +1178,7 @@ mod tests {
 		assert_eq!(s.desired_offset(), 20);
 	}
 
+	// Test ID: EloyL8L
 	#[test]
 	fn smooth_off_lands_every_scroll_instantly() {
 		let _g = pin();
@@ -1183,6 +1207,7 @@ mod tests {
 		config::update(config::Settings::default());
 	}
 
+	// Test ID: EloyL8M
 	#[test]
 	fn a_user_jump_to_bottom_is_not_chase_limited() {
 		let _g = pin();
@@ -1207,6 +1232,7 @@ mod tests {
 		assert!(left < 30.0, "jump home crawled: {left} lines left after 2s");
 	}
 
+	// Test ID: EloiOa0
 	#[test]
 	fn a_fresh_motion_builds_speed_instead_of_spiking() {
 		let _g = pin();
@@ -1233,6 +1259,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EloiOa1
 	#[test]
 	fn the_tail_sweeps_in_instead_of_crawling() {
 		let _g = pin();
@@ -1272,6 +1299,7 @@ mod tests {
 		config::update(cfg);
 	}
 
+	// Test ID: ElpQBik
 	#[test]
 	fn ease_in_sets_how_gently_motion_leaves_rest() {
 		let _g = pin();
@@ -1297,6 +1325,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Elqv6O2
 	#[test]
 	fn ease_in_also_paces_a_bursts_first_moments() {
 		let _g = pin();
@@ -1326,6 +1355,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: ElpQBil
 	#[test]
 	fn ramp_up_sets_how_fast_catch_up_accelerates() {
 		let _g = pin();
@@ -1351,6 +1381,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Elqv6O3
 	#[test]
 	fn ramp_down_sets_how_gradually_speed_winds_down() {
 		let _g = pin();
@@ -1387,6 +1418,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Elqv6O4
 	#[test]
 	fn a_stopped_burst_decelerates_instead_of_stopping_dead() {
 		let _g = pin();
@@ -1430,6 +1462,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: ElpQBim
 	#[test]
 	fn ease_out_sets_how_gently_the_tail_lands() {
 		let _g = pin();
@@ -1465,6 +1498,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eion5oT
 	#[test]
 	fn set_max_clamps_positions() {
 		let _g = pin();
@@ -1487,6 +1521,7 @@ mod tests {
 	// scrollback, so there is nothing to ease through. The view must be at rest
 	// on the spot - left past the grid, its fraction wrapped through a whole cell
 	// once per line of leftover backlog (the nano wobble).
+	// Test ID: Eo9w0Z6
 	#[test]
 	fn an_alt_screen_entry_lands_a_running_ease_at_rest() {
 		let _g = pin();
@@ -1508,6 +1543,7 @@ mod tests {
 	// navigation ease, so any advance the fixed 230ms cascade was slower than
 	// got the cascade instead - a crawl to a near-stop, then a visible restart
 	// when the stop band took over. Both halves are asserted here.
+	// Test ID: EowmlLM
 	#[test]
 	fn a_short_advance_is_one_motion_and_the_settings_reach_it() {
 		let _g = pin();
@@ -1560,6 +1596,7 @@ mod tests {
 
 	// Same rule at the other end: a shallow history caps the ease floor, so the
 	// view never renders a line the grid cannot show.
+	// Test ID: Eo9w0Z7
 	#[test]
 	fn the_ease_floor_is_capped_by_the_history() {
 		let _g = pin();

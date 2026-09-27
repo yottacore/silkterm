@@ -442,6 +442,7 @@ mod tests {
 		to_oklab(c).0
 	}
 
+	// Test ID: EqRxesS
 	#[test]
 	fn a_flat_gray_reports_its_own_luma_at_both_ends() {
 		let sum = summarize(&plain([128, 128, 128], 64, 64), 1.0);
@@ -456,6 +457,7 @@ mod tests {
 	// bright strip that most of the picture disagrees with - a sky over a dark
 	// landscape is the ordinary case. A middle reading would call this image dark
 	// and put the text where the strip swallows it.
+	// Test ID: EqRxesT
 	#[test]
 	fn the_bright_end_finds_a_strip_most_of_the_picture_disagrees_with() {
 		// four fifths near-black, one fifth white
@@ -473,6 +475,7 @@ mod tests {
 
 	// A mean color cannot answer this: red and cyan in equal measure average to
 	// gray, and the mean hue is then whichever way the rounding fell.
+	// Test ID: EqRxesU
 	#[test]
 	fn the_dominant_hue_survives_a_second_colour_that_would_cancel_a_mean() {
 		let red: [u8; 3] = [0xd0, 0x30, 0x30];
@@ -493,6 +496,7 @@ mod tests {
 	// And the weight is chroma, not a count of cells. A wide near-gray field with
 	// the faintest tint covers more of the picture than a vivid patch does, and
 	// the vivid patch is what anybody looking at it would call its color.
+	// Test ID: EqRxesV
 	#[test]
 	fn the_hue_weight_is_chroma_rather_than_how_many_cells_carry_it() {
 		let faint: [u8; 3] = [0x76, 0x78, 0x84]; // barely blue
@@ -515,6 +519,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EqRxesW
 	#[test]
 	fn a_dark_theme_keeps_light_text_and_a_light_theme_keeps_dark_text() {
 		let sum = summarize(&plain([90, 110, 160], 32, 32), 0.35);
@@ -531,6 +536,7 @@ mod tests {
 	// further away, and it is measured against the bright end. The theme here has
 	// a mid-gray foreground on purpose - a shipped one sits high enough that the
 	// "never dimmer than the theme" floor would swallow the range being measured.
+	// Test ID: EqRxesX
 	#[test]
 	fn a_brighter_image_pushes_the_text_further_away() {
 		let s = settings(SILK_BG, [0x70, 0x70, 0x70], SILK_CURSOR);
@@ -550,6 +556,7 @@ mod tests {
 	// A dark image must not make the text dimmer than the theme's own. Without
 	// the floor at the theme's foreground, a near-black wallpaper would answer
 	// mid-gray text and read as the wallpaper spoiling the theme.
+	// Test ID: EqRxesY
 	#[test]
 	fn a_dark_image_never_dims_the_text_below_the_themes_own() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
@@ -563,6 +570,7 @@ mod tests {
 
 	// The hue half. A blue picture has to answer warm text, whatever the theme's
 	// own foreground was.
+	// Test ID: EqRxesZ
 	#[test]
 	fn a_blue_image_gives_warm_text_and_a_warm_image_gives_cool_text() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
@@ -574,6 +582,7 @@ mod tests {
 
 	// Six of the shipped pack have no hue worth complementing. Inventing one from
 	// that little chroma would swing the text about between two gray images.
+	// Test ID: EqRxesa
 	#[test]
 	fn a_grey_image_keeps_the_themes_own_hue() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
@@ -586,6 +595,7 @@ mod tests {
 
 	// The tint cap. Matrix's foreground is chroma 0.25, and carrying that to a
 	// complementary hue is what made a green theme answer pure yellow.
+	// Test ID: EqRxesb
 	#[test]
 	fn a_vivid_theme_foreground_comes_back_as_a_tint() {
 		let s = settings([0x00, 0x08, 0x02], [0x33, 0xff, 0x66], [0x0a, 0x7a, 0x2a]);
@@ -607,6 +617,7 @@ mod tests {
 	// Same colours, same picture, same slider - only the mode moves. A dark
 	// picture turned well up, because below that the field stays bright enough
 	// that the theme's own foreground wins either way.
+	// Test ID: EqT4HIe
 	#[test]
 	fn light_mode_places_the_text_against_the_alpha_it_will_really_be_drawn_at() {
 		let light_bg = [0xf6u8, 0xf5, 0xf0];
@@ -643,6 +654,7 @@ mod tests {
 
 	// The cursor rule every built-in theme is already held to: the plate is a
 	// second background, so the text on it must clear the floor too.
+	// Test ID: EqRxesc
 	#[test]
 	fn text_on_the_derived_cursor_plate_clears_the_floor() {
 		let floor = Settings::default().text_min_contrast;
@@ -675,6 +687,7 @@ mod tests {
 	// `cursor_for` takes the field behind the plate as a neutral, because the
 	// summary is a luma statistic. A strongly tinted field of the same luma has to
 	// give nearly the same plate, or the simplification is buying the wrong thing.
+	// Test ID: EqRxesd
 	#[test]
 	fn the_neutral_field_model_stays_inside_a_tolerance() {
 		let alpha = crate::pane::CURSOR_ALPHA;
@@ -701,6 +714,7 @@ mod tests {
 
 	// The shipped config turns this on, and the wallpaper is on too, so a fresh
 	// install re-colors its text without anyone visiting the Themes tab.
+	// Test ID: EqSm2Rk
 	#[test]
 	fn the_shipped_defaults_take_the_text_color_from_the_wallpaper() {
 		let mut s = Settings::default();
@@ -713,6 +727,7 @@ mod tests {
 		assert!(s.wallpaper_colors.is_some());
 	}
 
+	// Test ID: EqRxese
 	#[test]
 	fn apply_is_off_unless_the_switch_and_the_wallpaper_are_both_on() {
 		let sum = summarize(&plain([90, 110, 160], 32, 32), 0.35);
@@ -740,6 +755,7 @@ mod tests {
 	}
 
 	// The shadow is what keeps the file and the dialog seeing the user's colors.
+	// Test ID: EqRxesf
 	#[test]
 	fn apply_then_unapply_is_the_identity_however_many_times_it_runs() {
 		let mut s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
@@ -758,6 +774,7 @@ mod tests {
 
 	// A summary is six numbers so that a theme change can re-derive with no
 	// decode. That only works if the background is read live.
+	// Test ID: EqRxesg
 	#[test]
 	fn the_same_image_answers_differently_under_a_different_background() {
 		let sum = summarize(&plain([120, 120, 130], 32, 32), 0.3);
@@ -773,6 +790,7 @@ mod tests {
 
 	// With the floor off there is no gap to work with, so the lightness half has
 	// nothing to say and the theme's own brightness stands.
+	// Test ID: EqRxesh
 	#[test]
 	fn a_floor_of_zero_leaves_the_lightness_alone() {
 		let mut s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
@@ -787,6 +805,7 @@ mod tests {
 
 	// An image too bright for any foreground is the case the scrim covers. What
 	// must not happen is a panic or a color outside the cube.
+	// Test ID: EqRxesi
 	#[test]
 	fn an_image_brighter_than_the_floor_allows_goes_to_the_limit() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
@@ -794,6 +813,7 @@ mod tests {
 		assert!(lightness(out.fg) > 0.95, "{:?}", out.fg);
 	}
 
+	// Test ID: EqRxesj
 	#[test]
 	fn an_empty_image_is_answered_rather_than_panicking() {
 		let sum = summarize(&image::RgbaImage::new(0, 0), 0.5);
@@ -804,6 +824,7 @@ mod tests {
 
 	// A transparent image lets the background through, so the field is the
 	// background and the text should sit where the theme put it.
+	// Test ID: EqRxesk
 	#[test]
 	fn a_fully_transparent_image_leaves_the_field_as_the_background() {
 		let clear = image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 255, 255, 0]));

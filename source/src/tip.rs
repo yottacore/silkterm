@@ -235,6 +235,7 @@ mod tests {
 
 	// A tip has to fit whatever it hangs off, whatever the font does to the text
 	// - one clamped to a window edge simply runs off it.
+	// Test ID: EoThLQe
 	#[test]
 	fn a_tip_wraps_on_words_and_never_splits_one() {
 		let lines = wrap(
@@ -262,6 +263,7 @@ mod tests {
 
 	// A tip that cannot fit below what it describes flips above it, rather than
 	// clamping into the bottom edge and covering it.
+	// Test ID: EoThLQf
 	#[test]
 	fn a_tip_with_no_room_below_goes_above() {
 		let anchor = rect(100.0, 40.0, 60.0, 20.0);
@@ -273,6 +275,7 @@ mod tests {
 		assert_eq!(up, 212.0);
 	}
 
+	// Test ID: EoThLQg
 	#[test]
 	fn a_tip_stays_inside_both_side_edges() {
 		let win = (400.0, 300.0);
@@ -285,6 +288,7 @@ mod tests {
 	// Every measurement the box brings itself is a DIP converted once, so the same
 	// tip on a 2x display is the 1x one doubled. A number left in raw pixels shows
 	// up here as a box that grew by less than its text did.
+	// Test ID: Eq4Llx3
 	#[test]
 	fn a_tip_at_twice_the_scale_is_the_1x_tip_doubled() {
 		let one = lay_out(
@@ -331,6 +335,7 @@ mod tests {
 
 	// A menu tip stands clear of the menu, and swaps to the other side rather
 	// than covering the rows it is describing.
+	// Test ID: EoThLQh
 	#[test]
 	fn a_menu_tip_never_lies_over_its_own_menu() {
 		let row = rect(20.0, 60.0, 180.0, 24.0);
@@ -345,6 +350,7 @@ mod tests {
 
 	// A tip left up too long goes away, and moving about on the same target
 	// does not bring it back - only leaving and coming back does.
+	// Test ID: EqdzLhx
 	#[test]
 	fn a_tip_goes_down_after_its_limit_until_the_pointer_comes_back() {
 		let limit = Duration::from_secs(30);
@@ -377,6 +383,7 @@ mod tests {
 	// The clock runs on while the pointer stays put, and restarts when it moves
 	// to something else - otherwise dragging across a strip would flash a tip
 	// over every tab on the way.
+	// Test ID: EoThLQi
 	#[test]
 	fn moving_to_something_else_restarts_the_clock() {
 		let mut dwell: Dwell<usize> = Dwell::default();

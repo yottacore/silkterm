@@ -7,6 +7,7 @@
 ##		the desktop, pointing into a prefix that was later rebuilt. This runs the
 ##		wine launcher from a scratch copy of the repo, with wine and everything it
 ##		would kill stubbed, and checks every wine call has the menu builder off.
+##	- Test ID: Eqqc5Me
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

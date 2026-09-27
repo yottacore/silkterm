@@ -546,6 +546,7 @@ mod tests {
 
 	// sh may well be dash, and a shell named by a full path is the ordinary case
 	// on Windows - so both have to answer the way a bare `bash` does.
+	// Test ID: EoTbwMS
 	#[test]
 	fn only_bash_is_offered_the_bash_prompt() {
 		assert!(is_bash("bash"));
@@ -559,6 +560,7 @@ mod tests {
 	// Windows answers in the console's code page, so a path is only believed as
 	// the hex the query asks for. An empty profile gives an empty first line, and
 	// the policy that then comes first is not hex.
+	// Test ID: Eq4upT6
 	#[test]
 	fn a_profile_path_is_read_from_its_hex_and_nothing_else() {
 		let jose =
@@ -585,6 +587,7 @@ mod tests {
 
 	// The same through each real PowerShell installed. On Windows this is the
 	// case that failed, in both 5.1 and 7; elsewhere it checks the query parses.
+	// Test ID: Eq4upT7
 	#[test]
 	fn a_powershell_names_a_profile_outside_ascii() {
 		let query = super::PROFILE_QUERY.replace(
@@ -608,6 +611,7 @@ mod tests {
 
 	// It replaces a PS1 set in .bashrc, and Debian's own files set one, so it is
 	// on only for somebody who asked for it.
+	// Test ID: Eq4uQkq
 	#[test]
 	fn the_bash_prompt_is_off_until_asked_for() {
 		assert!(!crate::config::Settings::default().bash_prompt);
@@ -615,6 +619,7 @@ mod tests {
 
 	// The value is handed to bash as a command string, so a Windows path has to
 	// arrive as something bash reads rather than as a run of escapes.
+	// Test ID: EoTbwMT
 	#[test]
 	fn a_prompt_command_survives_a_windows_path() {
 		let win = prompt_command(std::path::Path::new("C:\\Users\\me\\x9ps1-git"));
@@ -628,6 +633,7 @@ mod tests {
 
 	// The compiled-in copy is what gets written out and then run by bash, so a
 	// truncated or mangled vendoring should not reach anybody's prompt.
+	// Test ID: EoTbwMU
 	#[test]
 	fn the_bash_prompt_script_is_a_whole_script() {
 		assert!(BASH_PROMPT.starts_with("#!/bin/bash"));
@@ -638,6 +644,7 @@ mod tests {
 	// Anyone who publishes a repository picks its branch names, and bash expands
 	// the prompt text at every prompt. A branch named `$(cmd)` ran cmd in any
 	// bash pane opened in a clone.
+	// Test ID: EpxrTRY
 	#[cfg(unix)]
 	#[test]
 	fn a_branch_name_is_shown_and_never_run_by_the_prompt() {
@@ -711,6 +718,7 @@ mod tests {
 
 	// The git part used to need a remote named origin, and read its marks from
 	// git's English status text, so it never showed a count.
+	// Test ID: EqBmHyq
 	#[cfg(unix)]
 	#[test]
 	fn the_prompt_shows_any_repository_and_how_far_it_is_from_upstream() {
@@ -799,6 +807,7 @@ mod tests {
 	// A profile is a script run at every shell start, and it often holds tokens.
 	// The write used to replace a linked profile with a copy at the umask's mode,
 	// and wrote through a link left at its temp or backup name.
+	// Test ID: Eq4qaCX
 	#[cfg(unix)]
 	#[test]
 	fn a_profile_write_keeps_its_link_and_mode_and_follows_no_planted_link() {
@@ -868,6 +877,7 @@ mod tests {
 
 	// Builds before the record existed, beta3 included, put the block in without
 	// noting it. Deleting such a block put it straight back at the next launch.
+	// Test ID: Eq4qaCY
 	#[test]
 	fn a_block_already_there_is_noted_so_deleting_it_sticks() {
 		let dir = std::env::temp_dir().join(format!("silkterm_intnote_{}", std::process::id()));
@@ -894,6 +904,7 @@ mod tests {
 
 	// The block's own comment used to invite a host color added inside the
 	// markers, which the next refresh deleted with no copy kept.
+	// Test ID: Eq4qaCZ
 	#[test]
 	fn a_host_color_is_set_where_a_refresh_leaves_it() {
 		assert!(!SNIPPET.contains("Add your own"));
@@ -917,6 +928,7 @@ mod tests {
 	// hook holds a delegate that `&` cannot call, so an earlier handler broke every
 	// directory change, and a second load wrapped its own wrapper. Both arms are
 	// run: the 5.1 one by forcing the test that picks it.
+	// Test ID: Eq4qaCa
 	#[test]
 	fn the_block_keeps_an_earlier_hook_and_survives_loading_twice() {
 		let Some(pwsh) = a_pwsh() else {
@@ -974,6 +986,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The PowerShell prompt is a port of the bash one and should read the same.
 	// It named only an origin remote and showed no count, a day after bash got both.
+	// Test ID: EqFy7VA
 	#[test]
 	fn the_powershell_prompt_shows_any_repository_and_how_far_it_is_from_upstream() {
 		use std::path::Path;
@@ -1098,6 +1111,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// A profile that already reports is not ours to edit, whoever set it up -
 	// and this is also what makes a second launch a no-op rather than a second
 	// copy of the block.
+	// Test ID: EnalvtQ
 	#[test]
 	fn a_profile_that_already_reports_is_left_alone() {
 		assert!(already_reports(&with_block("", "\n")), "our own block");
@@ -1117,6 +1131,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// What is there is followed, never rewritten - so a prompt the profile sets
 	// up further down is the one this block wraps.
+	// Test ID: EnalvtR
 	#[test]
 	fn the_block_lands_at_the_end_and_keeps_what_was_there() {
 		let before = "Import-Module Cows\r\nSet-Alias ll Get-ChildItem\r\n";
@@ -1134,6 +1149,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// PowerShell 5.1 writes UTF-16 by default, so a profile that does not decode
 	// as UTF-8 is an ordinary one. It used to read back as an empty string, which
 	// skipped the backup and replaced the file with the block alone.
+	// Test ID: EpHO1lo
 	#[test]
 	fn a_profile_that_is_not_utf8_is_left_alone() {
 		let dir = std::env::temp_dir().join(format!("silkterm_int16_{}", std::process::id()));
@@ -1166,6 +1182,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// Deleting the block is documented as how to switch this off, in four places
 	// including the block's own first line. It was not: with the block gone there
 	// was no marker to match and the next launch put it straight back.
+	// Test ID: EpHWuEq
 	#[test]
 	fn a_deleted_block_stays_deleted() {
 		let dir = std::env::temp_dir().join(format!("silkterm_intoff_{}", std::process::id()));
@@ -1203,6 +1220,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The whole of what a launch does to a file that is not ours: keep a copy,
 	// follow what is there, and never do it twice.
+	// Test ID: EnalvtS
 	#[test]
 	fn a_profile_is_backed_up_once_and_added_to_once() {
 		let dir = std::env::temp_dir().join("silkterm-integration-test");
@@ -1255,6 +1273,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// A block in a profile the shell will not run is worse than no block: it is
 	// an execution-policy error on every launch, which is what a first cut of
 	// this did to Windows PowerShell 5.1 on the box it was written on.
+	// Test ID: EnalvtT
 	#[test]
 	fn a_shell_that_will_not_run_scripts_keeps_its_profile() {
 		for allowed in ["RemoteSigned", "Unrestricted", "Bypass", " bypass "] {
@@ -1267,6 +1286,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// Only PowerShell needs this: every other shell moves its own process, so
 	// the OS can be asked. A full path answers the same as a bare name.
+	// Test ID: EnalvtU
 	#[test]
 	fn only_the_powershells_are_offered_a_profile() {
 		assert!(is_powershell("pwsh"));
@@ -1295,6 +1315,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The block gains things over time, so an install that only ever appended
 	// would leave anyone who already has it on whatever version they first got.
+	// Test ID: EnbYSzy
 	#[test]
 	fn an_existing_block_is_brought_up_to_date_in_place() {
 		let stale = format!(
@@ -1315,6 +1336,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 		assert_eq!(refreshed_block(&updated, LF), None);
 	}
 
+	// Test ID: EnbYSzz
 	#[test]
 	fn a_profile_with_no_block_of_ours_is_not_rewritten() {
 		assert_eq!(refreshed_block("# just my own profile\n", LF), None);
@@ -1327,6 +1349,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// A profile with no byte-order mark is read as ANSI by Windows PowerShell
 	// 5.1, so a single accented character or box-drawing glyph in here arrives
 	// mangled on the one version that cannot be told otherwise.
+	// Test ID: EoTnK8W
 	#[test]
 	fn the_block_is_plain_ascii() {
 		let stray: String = SNIPPET.chars().filter(|c| !c.is_ascii()).collect();
@@ -1335,6 +1358,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The prompt is part of the block rather than a script beside it, and both
 	// halves of the version split have to reach it.
+	// Test ID: EoTnK8X
 	#[test]
 	fn the_block_carries_the_prompt() {
 		assert!(SNIPPET.contains("function global:__SilkTermPrompt"));
@@ -1345,6 +1369,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 
 	// The block people are told to paste in by hand has to be the block that
 	// gets installed, or one of the two quietly stops being true.
+	// Test ID: EnalvtV
 	#[test]
 	fn the_documented_snippet_is_the_one_that_is_installed() {
 		let doc = include_str!("../../shell-integration.md").replace("\r\n", "\n");

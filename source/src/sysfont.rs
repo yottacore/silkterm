@@ -261,6 +261,7 @@ mod platform {
 
 		// gsettings answers on an Xfce box too, with GNOME's defaults for keys
 		// nobody set, so the desktop decides which store is asked first.
+		// Test ID: Eq9PYAK
 		#[test]
 		fn the_desktop_decides_which_font_store_answers_first() {
 			let gnome = || Some("'Cantarell 11'".to_string());

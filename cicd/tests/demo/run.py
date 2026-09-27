@@ -6,6 +6,7 @@
 ##		recording. This drives the session the recorder's way, with a stand-in for
 ##		the window manager, and checks where the recorder finds its run folder and
 ##		its binary. Nothing here needs a display.
+##	- Test ID: EqBe4cC
 ##	- History: At bottom of file.
 
 ##	Copyright (c) 2026 Bubbles

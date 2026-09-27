@@ -55,6 +55,7 @@ mod tests {
 		crockford32(minutes_since_2000(unix_secs))
 	}
 
+	// Test ID: Eo4auD2
 	#[test]
 	fn the_alphabet_is_crockfords_with_the_ambiguous_letters_left_out() {
 		let alphabet = std::str::from_utf8(CROCKFORD_LOWER).unwrap();
@@ -65,6 +66,7 @@ mod tests {
 		assert_eq!(alphabet.len(), 32);
 	}
 
+	// Test ID: Eo4auD3
 	#[test]
 	fn small_values_encode_digit_by_digit() {
 		assert_eq!(crockford32(0), "0");
@@ -79,6 +81,7 @@ mod tests {
 		assert_eq!(crockford32(1024), "100");
 	}
 
+	// Test ID: Eo4auD4
 	#[test]
 	fn a_build_number_decodes_back_to_the_minute_it_was_built() {
 		// Round-trip every digit position through a hand-rolled decode, so an
@@ -94,6 +97,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Eo4auD5
 	#[test]
 	fn the_epoch_is_the_start_of_2000_and_the_count_is_whole_minutes() {
 		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX), 0);
@@ -105,6 +109,7 @@ mod tests {
 		assert_eq!(minutes_since_2000(EPOCH_2000_UNIX + 365 * 86_400), 525_600);
 	}
 
+	// Test ID: Eo4auD6
 	#[test]
 	fn a_clock_behind_the_epoch_gives_zero_rather_than_wrapping() {
 		assert_eq!(minutes_since_2000(0), 0);
@@ -112,6 +117,7 @@ mod tests {
 		assert_eq!(build_number_at(0), "0");
 	}
 
+	// Test ID: Eo4auD7
 	#[test]
 	fn a_later_build_always_sorts_after_an_earlier_one() {
 		// Same length means plain string order works; the length only grows, so
@@ -123,6 +129,7 @@ mod tests {
 		assert!(build_number_at(EPOCH_2000_UNIX) < build_number_at(EPOCH_2000_UNIX + 60));
 	}
 
+	// Test ID: Eo4auD8
 	#[test]
 	fn the_number_stays_five_characters_for_the_life_of_this_program() {
 		// 32^5 minutes past 2000 is partway through 2063; anything sooner is five
@@ -135,6 +142,7 @@ mod tests {
 
 	// Every file the code pulls in with include_bytes! or include_str! sits under
 	// one of the inputs, and so do the lock file and both manifests.
+	// Test ID: Eq4Yrbe
 	#[test]
 	fn the_build_inputs_cover_every_included_file_and_the_lock() {
 		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

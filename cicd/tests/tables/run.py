@@ -10,6 +10,7 @@
 ##		  --fix       rewrite a table that differs instead of reporting it
 ##		  --root DIR  repository root (default: three levels above this script)
 ##	Exit: 0 all tables canonical, 1 one or more differ.
+##	Test ID: EqqceDw
 
 ##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:

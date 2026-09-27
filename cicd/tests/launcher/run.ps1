@@ -7,6 +7,7 @@
 ##		- Also: that every argument reaches the terminal exactly as given, and
 ##		  that a build already held is recognised without reading it again.
 ##		- Nothing here touches the real home directory or the real pool.
+##	Test ID: EpHRcSG
 ##	History: At bottom of script.
 
 ##	Copyright (c) 2026 Bubbles

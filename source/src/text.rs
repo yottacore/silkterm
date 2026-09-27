@@ -1099,6 +1099,7 @@ mod tests {
 
 	// Only dark-on-light gets the correction. Applying it the other way would
 	// thin text that linear blending has already made heavy enough.
+	// Test ID: EqWXhBB
 	#[test]
 	fn only_text_darker_than_its_background_is_corrected() {
 		let (black, white) = ([0, 0, 0], [255, 255, 255]);
@@ -1128,6 +1129,7 @@ mod tests {
 	// The pair the curve is built from spans the real pair's own brightness, and
 	// the shader divides by the gap between the two - so a dark-on-light pair has
 	// to come back the darker one first.
+	// Test ID: EqWXhBC
 	#[test]
 	fn the_pair_reaches_the_shader_as_grays_of_its_own_brightness() {
 		let (fg, bg, _) = text_blend([0, 0, 0], [255, 255, 255], 1.0);
@@ -1145,6 +1147,7 @@ mod tests {
 	// single advance (Monaspace Argon does it for 53 of them, emoji included).
 	// Whole cells is what the row buffer lays out in, so the rounding has to
 	// report that honestly rather than call anything close enough.
+	// Test ID: Elm5uB6
 	#[test]
 	fn a_single_advance_never_reads_as_two_cells() {
 		let unit = 1240.0; // Monaspace Argon's own ASCII advance, in font units
@@ -1164,6 +1167,7 @@ mod tests {
 	// decides where the OS family sits in it - it must never drop the configured
 	// stack, which is what made Linux and Windows resolve the same config
 	// differently, and the built-in stack always backs both up.
+	// Test ID: ElEvh0U
 	#[test]
 	fn mono_candidates_keep_one_order_on_every_platform() {
 		let configured = Some("Alpha, Beta");
@@ -1199,6 +1203,7 @@ mod tests {
 	// A pinned mono family falls back to a color emoji face that rasterizes to
 	// nothing, which drew every emoji as an empty cell. The generic-monospace
 	// retry must find a face that actually paints.
+	// Test ID: ElBP6CG
 	#[test]
 	fn emoji_falls_back_to_a_face_that_rasterizes() {
 		let mut fs = FontSystem::new();
@@ -1220,6 +1225,7 @@ mod tests {
 	// A chrome line placed by ui_visible_center_top must sit with its visible
 	// (ascender-top..baseline) box centered in the bar, for any bar height and
 	// metrics - so a font/size change stays balanced without hand-tuned padding.
+	// Test ID: EiyvOXw
 	#[test]
 	fn chrome_text_visible_box_centers_in_bar() {
 		let vmetrics = (13.6f32, 3.4f32); // ascent, descent px
@@ -1238,6 +1244,7 @@ mod tests {
 
 	// A tab title placed by ui_ink_center_top sits with ascender-top to
 	// descender-bottom centered, so descenders don't crowd the button's edge.
+	// Test ID: EoT6qwS
 	#[test]
 	fn chrome_ink_box_centers_in_bar() {
 		let vmetrics = (14.6f32, 4.7f32);
@@ -1254,6 +1261,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Eip4OOO
 	#[test]
 	fn ui_font_resolves_to_concrete_family() {
 		let fs = FontSystem::new();
@@ -1262,6 +1270,7 @@ mod tests {
 		assert!(fam.is_some(), "no concrete UI family resolved for chrome");
 	}
 
+	// Test ID: EipMwEi
 	#[test]
 	fn ui_attrs_shape_in_pinned_family() {
 		let mut fs = FontSystem::new();
@@ -1296,6 +1305,7 @@ mod tests {
 	// proportional bold fallback (advances set_monospace_width can't snap), which
 	// skews space-based alignment. mono_bold_weight() requests the family's
 	// boldest available face instead, so bold never leaves the family.
+	// Test ID: EkhEfku
 	#[test]
 	fn mono_bold_stays_in_pinned_family() {
 		let mut fs = FontSystem::new();

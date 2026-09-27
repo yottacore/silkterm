@@ -972,6 +972,7 @@ mod tests {
 	// exist for.
 	// The outline's eight taps are three texture samples each, on every pixel of
 	// every frame, and the result was multiplied by zero when the outline was off.
+	// Test ID: EpHbxSC
 	#[test]
 	fn the_outline_taps_only_run_when_there_is_an_outline() {
 		let comp = WGSL
@@ -997,6 +998,7 @@ mod tests {
 	// by the extent it was given, so every pixel came out at full halo - a flat
 	// plate of background color over every pane. The slider cannot reach it; the
 	// config file can.
+	// Test ID: EpHXu9Y
 	#[test]
 	fn a_halo_wider_than_the_taps_is_held_to_them() {
 		// the shader owns the tap window; this is the other half of that number
@@ -1016,6 +1018,7 @@ mod tests {
 	// to be well under a straight line rather than near it. It still has to
 	// reach zero at the edge: the distance paths saturate there, so whatever it
 	// returns at 1 is the alpha of every pixel in the pane.
+	// Test ID: EqN5SfI
 	#[test]
 	fn the_exponential_falloff_drops_away_hard() {
 		assert!(
@@ -1036,6 +1039,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EpHXO9g
 	#[test]
 	fn nothing_drawing_costs_no_memory() {
 		let uhd = (3840, 2160);

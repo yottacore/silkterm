@@ -996,6 +996,7 @@ mod tests {
 
 	// A prompt's check mark went to the emoji face and came out purple, ignoring
 	// the color it was set in. These are the ones that must stay text.
+	// Test ID: EolvnsW
 	#[test]
 	fn a_dingbat_is_not_an_emoji() {
 		for ch in [
@@ -1028,6 +1029,7 @@ mod tests {
 	// frame. Anything warmed for that frame has to survive: glyphon panics if the
 	// rasterize callback answers None where it previously answered Some, which is
 	// exactly what a wholesale clear caused.
+	// Test ID: ElKWljk
 	#[test]
 	fn overflow_keeps_every_raster_the_current_frame_warmed() {
 		let mut cg = ColorGlyphs::new();
@@ -1041,6 +1043,7 @@ mod tests {
 
 	// The sweep can drop a key glyphon is still holding, and glyphon aborts on a
 	// glyph that stops answering. So a miss answers with pixels nobody can see.
+	// Test ID: EpHSLii
 	#[test]
 	fn a_missing_raster_answers_with_transparent_pixels() {
 		let cg = ColorGlyphs::new();
@@ -1059,6 +1062,7 @@ mod tests {
 
 	// The cache must still shed genuinely dead entries, or a long session at a
 	// changing font size would grow without limit.
+	// Test ID: ElKWljl
 	#[test]
 	fn overflow_drops_rasters_no_recent_frame_touched() {
 		let mut cg = ColorGlyphs::new();
@@ -1070,6 +1074,7 @@ mod tests {
 
 	// An emoji that stays on screen is warmed every frame but inserted only once;
 	// the hit path has to re-stamp it or it ages out from under the atlas.
+	// Test ID: ElKWljm
 	#[test]
 	fn a_cache_hit_repins_the_raster() {
 		let mut cg = ColorGlyphs::new();
@@ -1086,6 +1091,7 @@ mod tests {
 	// The whole point of the module: a COLRv1-only emoji font must produce actual
 	// color pixels, where swash hands back an empty image. Skipped where the box
 	// has no color font at all.
+	// Test ID: ElDEZZo
 	#[test]
 	fn colr_v1_emoji_rasterizes_in_colour() {
 		let mut db = fontdb::Database::new();
@@ -1128,6 +1134,7 @@ mod tests {
 
 	// Porter-Duff SrcIn keeps only the part of the source covered by the backdrop,
 	// and Noto Color Emoji leans on it 300+ times per font.
+	// Test ID: ElDEZZp
 	#[test]
 	fn src_in_masks_the_source_to_the_backdrop() {
 		let mut dst = vec![0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.2];
@@ -1141,6 +1148,7 @@ mod tests {
 	}
 
 	// Extend modes drive what happens past the ends of a color line.
+	// Test ID: ElDEZZq
 	#[test]
 	fn gradient_extend_modes_wrap_clamp_and_mirror() {
 		let ramp: Vec<[f32; 4]> = (0..RAMP_LEN)
@@ -1157,6 +1165,7 @@ mod tests {
 
 	// A radial gradient's point must sit on a circle with a non-negative radius,
 	// picking the LARGEST such t; points with no such circle stay transparent.
+	// Test ID: ElDEZZr
 	#[test]
 	fn conical_picks_the_largest_valid_circle() {
 		// Concentric, r 0 -> 1: the halfway point sits at t = 0.5.

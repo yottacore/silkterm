@@ -275,6 +275,7 @@ mod tests {
 		encode_key(&Key::Named(named), None, mods, app_cursor)
 	}
 
+	// Test ID: EiokAEK
 	#[test]
 	fn arrows_follow_decckm() {
 		assert_eq!(enc(NamedKey::ArrowUp, NONE, false).unwrap(), b"\x1b[A");
@@ -282,6 +283,7 @@ mod tests {
 		assert_eq!(enc(NamedKey::End, NONE, false).unwrap(), b"\x1b[F");
 	}
 
+	// Test ID: EiokAEL
 	#[test]
 	fn modified_arrows_use_csi_mod_form() {
 		// Ctrl+Right = word skip in readline/most TUIs
@@ -306,6 +308,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EiokAEM
 	#[test]
 	fn function_keys() {
 		assert_eq!(enc(NamedKey::F1, NONE, false).unwrap(), b"\x1bOP");
@@ -323,6 +326,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EiokAEN
 	#[test]
 	fn editing_keys() {
 		let ctrl = ModifiersState::CONTROL;
@@ -337,6 +341,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eizuc4W
 	#[test]
 	fn mouse_sgr_and_x10() {
 		let sgr = TermMode::MOUSE_REPORT_CLICK | TermMode::SGR_MOUSE;
@@ -384,6 +389,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eizuc4X
 	#[test]
 	fn mouse_report_needs_tracking() {
 		// no tracking mode set -> nothing to report
@@ -397,6 +403,7 @@ mod tests {
 	// winit calls the spacebar a named key, so Ctrl+Space never reached the
 	// control-code path and sent a plain space. Emacs and readline set-mark, and
 	// tmux begin-selection, all want NUL.
+	// Test ID: EpHUQUa
 	#[test]
 	fn ctrl_space_is_nul() {
 		let ctrl = ModifiersState::CONTROL;
@@ -411,6 +418,7 @@ mod tests {
 
 	// A character handed to the window instead of typed at it arrives as a key
 	// the layout cannot name. It used to reach nothing at all.
+	// Test ID: EpPhAdV
 	#[test]
 	fn an_unnamed_key_is_read_as_its_text() {
 		let injected = Key::Unidentified(NativeKey::Windows(0xe7));
@@ -430,6 +438,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EpPhAdW
 	#[test]
 	fn a_key_that_carries_no_text_stays_unnamed() {
 		let injected = Key::Unidentified(NativeKey::Windows(0xe7));
@@ -440,6 +449,7 @@ mod tests {
 	// Only an unnamed key is filled in from its text. A named key already says
 	// what it is, and its text is a representation of that rather than typing -
 	// Enter carries "\r", and reading it as a character would lose the key.
+	// Test ID: EpPhAdX
 	#[test]
 	fn a_key_the_layout_named_is_left_alone() {
 		assert_eq!(typed_key(&Key::Named(NamedKey::Enter), Some("\r")), None);
@@ -448,6 +458,7 @@ mod tests {
 		assert_eq!(typed_key(&Key::Dead(Some('\u{301}')), Some("a")), None);
 	}
 
+	// Test ID: EiokAEO
 	#[test]
 	fn ctrl_chars_and_alt_prefix() {
 		let ctrl = ModifiersState::CONTROL;

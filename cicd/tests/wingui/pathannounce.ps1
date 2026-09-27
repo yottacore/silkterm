@@ -7,6 +7,7 @@
 ##	on b29w it is, so PATH could not show the difference there. The marker is
 ##	written straight to the registry the way the PATH is, so it shows whether
 ##	the shell rebuilt its copy after the install.
+##	Test ID: EqH4iss
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the Run box cannot be typed into" }
 

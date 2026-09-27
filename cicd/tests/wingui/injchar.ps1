@@ -1,6 +1,7 @@
 ##	A character can reach a window handed over whole instead of typed, and that is
 ##	how the touch keyboard sends what its layout has no key for. Text expanders and
 ##	some accessibility tools do the same. It used to reach nothing at all here.
+##	Test ID: EpPhAdU
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed" }
 

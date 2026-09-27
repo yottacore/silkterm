@@ -5940,6 +5940,7 @@ mod tests {
 	// reads runs from the mark main sets rather than from whatever first asked.
 	// A second mark must not restart it, or a later caller would reset the
 	// session's own clock.
+	// Test ID: EqRZeqO
 	#[test]
 	fn a_session_uptime_runs_from_the_launch_mark() {
 		mark_launch();
@@ -5960,6 +5961,7 @@ mod tests {
 	// turning into a different surface. The lightness floor and ceiling are the
 	// strip's own inactive-to-active step either side, so "slightly lighter"
 	// means what the strip already means by it.
+	// Test ID: EqQPotE
 	#[test]
 	fn a_tip_sits_off_every_tab_color() {
 		let l = |c: [u8; 3]| crate::palette::to_oklab(c).0;
@@ -5992,6 +5994,7 @@ mod tests {
 
 	// The three tip colors are the point of the item, so none of them may come
 	// back as the menu color it is derived from.
+	// Test ID: EqQPotF
 	#[test]
 	fn a_tip_is_not_painted_in_the_menu_colors() {
 		let (bg, fg) = (crate::theme::MENU_BG_DEF, crate::theme::MENU_FG_DEF);
@@ -6005,6 +6008,7 @@ mod tests {
 	// these are shades rather than two more colors on the Themes tab. shade()
 	// picks its direction from luminance, so a light menu color has to send the
 	// tip the other way rather than off the top end.
+	// Test ID: EqQPotG
 	#[test]
 	fn a_tip_follows_a_custom_menu_color_either_way() {
 		let l = |c: [u8; 3]| crate::palette::to_oklab(c).0;
@@ -6027,6 +6031,7 @@ mod tests {
 	// so. Without it the whole thing can be cut with nothing to notice. It only
 	// bites when the suite is run holding those rights, which on unix needs no
 	// privilege at all: `unshare -Ur cargo test`.
+	// Test ID: EpPPU7c
 	#[test]
 	fn the_title_reports_the_rights_this_process_holds() {
 		assert_eq!(rights().say, privilege_word());
@@ -6037,6 +6042,7 @@ mod tests {
 	// caused it unfixable from the terminal it killed. Both halves cut a string
 	// at a fixed byte offset: a hex color, and the `env:` in front of a variable
 	// name.
+	// Test ID: EpHOAM4
 	#[test]
 	fn a_config_value_cannot_abort_the_launch_on_a_byte_slice() {
 		// six bytes, three characters
@@ -6054,6 +6060,7 @@ mod tests {
 	// The case that keeps coming up is a file manager's "Open in terminal": no
 	// tty, but a directory that was very much chosen. Only the three directories
 	// a launcher leaves us in by default may fall through to the setting.
+	// Test ID: Eo6i2no
 	#[test]
 	fn an_inherited_directory_is_a_choice_unless_a_launcher_picked_it() {
 		let home = PathBuf::from("/home/u");
@@ -6075,6 +6082,7 @@ mod tests {
 	// it pins the macOS answer from a box that has no macOS, and the Windows one
 	// from Linux. Reading cfg! at each use site instead would leave two thirds of
 	// this unrunnable wherever it happens to be run.
+	// Test ID: EnPU6SG
 	#[test]
 	fn each_platform_keeps_its_config_where_that_platform_keeps_settings() {
 		let home = PathBuf::from("/home/u");
@@ -6099,6 +6107,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EnPU6SH
 	#[test]
 	fn an_explicit_xdg_config_home_wins_on_every_platform() {
 		// Setting it is a deliberate act, so it outranks the platform default
@@ -6115,6 +6124,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EnPU6SI
 	#[test]
 	fn a_missing_native_base_falls_back_rather_than_leaving_no_config() {
 		// A stripped environment (a service, a bare shell) can carry no APPDATA.
@@ -6133,6 +6143,7 @@ mod tests {
 	// size on any display, so it doubles when the scale factor does. The floor is
 	// the other half - a hairline the author asked to be visible must never round
 	// down to nothing, which is what a 1 DIP rule does on a display below 1x.
+	// Test ID: EnLuU54
 	#[test]
 	fn a_chrome_measurement_scales_and_a_hairline_survives() {
 		assert_eq!(dip(10.0, 1.0), 10.0);
@@ -6173,6 +6184,7 @@ mod tests {
 	// of each day. It used to drop the entry's subtree and put it back at the end
 	// of the block, which loses its comments and moves it - and the first entry in
 	// the file is the default shell.
+	// Test ID: EpHPcsy
 	#[test]
 	fn a_daily_stamp_leaves_a_shell_where_it_is() {
 		let text = "shells:\n\n\t## the one I use\n\tbash:\n\t\ttitle: \"bash\"\n\t\tcommand: \"/bin/bash\"\n\t\tactive: true\n\n\tzsh:\n\t\ttitle: \"zsh\"\n\t\tcommand: \"/bin/zsh\"\n\t\tactive: true\n";
@@ -6200,6 +6212,7 @@ mod tests {
 	// File order IS the list's order - it decides what the menu offers first and
 	// therefore which shell is the default - and a reorder changes no entry, so
 	// the per-entry write path would have written nothing at all and lost it.
+	// Test ID: EnQUIKm
 	#[test]
 	fn a_reorder_is_written_even_though_no_entry_changed() {
 		let list = vec![
@@ -6222,6 +6235,7 @@ mod tests {
 
 	// A first launch writes the scan's list into a brand-new file, and the file's
 	// order is the menu's and names the default shell.
+	// Test ID: Er1q5Y8
 	#[test]
 	fn a_fresh_file_keeps_the_order_the_scan_found() {
 		let _guard = super::test_config_lock();
@@ -6252,6 +6266,7 @@ mod tests {
 	// new find. Its own scan finds the same program and saves. It used to take out
 	// only the entries it had loaded and rewrite them, so the find it never
 	// loaded stayed above them all and a REPL became the default shell.
+	// Test ID: Er1q5Y9
 	#[test]
 	fn a_stale_window_cannot_put_another_windows_find_on_top() {
 		let loaded = vec![
@@ -6273,6 +6288,7 @@ mod tests {
 
 	// The same window with an older list, doing something else to it. Every save
 	// keeps what the other window did, unless this window changed that entry.
+	// Test ID: Er1q5YA
 	#[test]
 	fn a_stale_window_keeps_what_another_window_saved() {
 		let loaded = vec![
@@ -6346,6 +6362,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EnQUIKn
 	#[test]
 	fn the_date_a_shell_was_last_seen_round_trips() {
 		let mut entry = shell_entry("bash", "/bin/bash");
@@ -6361,6 +6378,7 @@ mod tests {
 
 	// The list names the default now (its top active entry), so an old
 	// `shell.default` has to become the top of the list rather than be dropped.
+	// Test ID: EnQUIKo
 	#[test]
 	fn an_old_default_shell_becomes_the_top_of_the_list() {
 		let list = vec![
@@ -6383,6 +6401,7 @@ mod tests {
 
 	// The migration drops `shell.default` only once its adoption into the list is
 	// saved. A line shcl cannot read refuses that save, so the choice has to wait.
+	// Test ID: EpyvpeC
 	#[test]
 	fn an_old_default_shell_waits_for_a_save_that_can_happen() {
 		let dir =
@@ -6430,6 +6449,7 @@ mod tests {
 
 	// ':' must NOT be a word separator, else a double-click on C:\... drops the
 	// drive prefix (the alacritty default splits on ':'). Regression guard.
+	// Test ID: EkVfEUC
 	#[test]
 	fn default_word_separators_keep_drive_colon() {
 		let d = Settings::default();
@@ -6450,6 +6470,7 @@ mod tests {
 	// A profile's values ride on top of the live settings, and a write that
 	// starts from a live copy (the minimap toggle, the remembered size) must
 	// not carry them into the file - or Custom would have nothing to put back.
+	// Test ID: EorkTk0
 	#[test]
 	fn the_file_keeps_the_users_values_under_a_profile() {
 		let _guard = super::test_config_lock();
@@ -6488,6 +6509,7 @@ mod tests {
 	// A text color the wallpaper picked is session state, the same as a display
 	// step. Written down, every rotation would rewrite the file, and the colors
 	// would outlive the picture they came from.
+	// Test ID: EqRxesl
 	#[test]
 	fn a_text_colour_taken_from_the_wallpaper_never_reaches_the_file() {
 		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
@@ -6548,6 +6570,7 @@ mod tests {
 	// A step the display watch took lasts the session. Written down, one stall
 	// became every later launch's profile, with no way back while automatic was
 	// on - that took a desktop to Standard terminal and its wallpaper with it.
+	// Test ID: EpWow4f
 	#[test]
 	fn a_session_step_down_never_reaches_the_file() {
 		let _guard = super::test_config_lock();
@@ -6597,6 +6620,7 @@ mod tests {
 
 	// "Reload config" re-reads the file, which never holds the session's own
 	// state, so a reload must not lift a remote profile or a watch step.
+	// Test ID: EpWow4g
 	#[test]
 	fn a_reload_keeps_what_the_file_never_held() {
 		let live = Settings {
@@ -6616,6 +6640,7 @@ mod tests {
 	// An Apply from a dialog opened earlier keeps a remote switch or a watch step
 	// taken since, and the dialog's own pick, revert or automatic switch still
 	// lifts them.
+	// Test ID: EpX7AvY
 	#[test]
 	fn an_apply_keeps_the_session_state_the_dialog_did_not_touch() {
 		use crate::profile::Profile;
@@ -6680,6 +6705,7 @@ mod tests {
 	// said ok and showed nothing. Naming one turns the switch on, the way
 	// `--wallpaper-file` does at launch, and a profile that turns the wallpaper
 	// off still wins for both.
+	// Test ID: Eq4Yrbf
 	#[test]
 	fn naming_a_wallpaper_turns_it_on_unless_the_profile_says_off() {
 		let off = Settings {
@@ -6703,6 +6729,7 @@ mod tests {
 
 	// A wallpaper given on the command line lasts the session: a reload keeps it
 	// over the file, and an Apply keeps it unless the dialog picked another.
+	// Test ID: Epytxce
 	#[test]
 	fn a_command_line_wallpaper_outlasts_a_reload_and_an_apply() {
 		let with = |raw: &str| Settings {
@@ -6756,6 +6783,7 @@ mod tests {
 
 	// Every launch-time rewrite used to truncate the file before writing it, so a
 	// crash or a full disk during one left nothing where the config was.
+	// Test ID: EpHaZLU
 	#[test]
 	fn a_launch_time_rewrite_never_truncates_the_config() {
 		let dir = std::env::temp_dir().join(format!("silkterm_cfgatomic_{}", std::process::id()));
@@ -6790,6 +6818,7 @@ mod tests {
 
 	// On Windows nothing said a file with a line it cannot read could no longer
 	// be saved. Only the window can say so, so a refused write leaves word of it.
+	// Test ID: EqGnMOv
 	#[test]
 	fn a_refused_save_leaves_word_for_the_window() {
 		let _guard = super::test_config_lock();
@@ -6821,6 +6850,7 @@ mod tests {
 	// A failed save used to present to the dialog as a clean one, so it closed as
 	// if it had written. shcl refusing a lossy round trip is the case that makes
 	// this permanent.
+	// Test ID: EpHOR0K
 	#[test]
 	fn a_save_that_failed_is_not_reported_as_a_save() {
 		let dir = std::env::temp_dir().join(format!("silkterm_cfgfail_{}", std::process::id()));
@@ -6862,6 +6892,7 @@ mod tests {
 	// shcl deletes its temp copy after a replace that took the old file fails, so
 	// the settings are written at the empty name instead of lost, keeping the
 	// file's mode and leaving nothing beside it.
+	// Test ID: Epa8S0e
 	#[test]
 	fn a_write_that_took_the_file_writes_it_again() {
 		let took: RestorePublish = |file, _| {
@@ -6898,6 +6929,7 @@ mod tests {
 
 	// The real file is found before the write, since a link to a file the replace
 	// took no longer resolves. The link stays and the real file keeps its mode.
+	// Test ID: Epa8S0f
 	#[cfg(unix)]
 	#[test]
 	fn a_restore_keeps_a_linked_private_settings_file() {
@@ -6938,6 +6970,7 @@ mod tests {
 
 	// The ordinary failure (read-only, held open) leaves the old file in place, so
 	// nothing is written over it and nothing waits.
+	// Test ID: Epa8S0g
 	#[test]
 	fn a_failed_write_that_left_the_file_changes_nothing() {
 		let refuse: RestorePublish = |_, _| Err("refused".to_string());
@@ -6966,6 +6999,7 @@ mod tests {
 
 	// Something can take the empty name before the restore does. A link left
 	// there is never written through, even one whose target does not exist.
+	// Test ID: Epa8S0h
 	#[cfg(unix)]
 	#[test]
 	fn a_restore_never_writes_through_a_name_taken_meanwhile() {
@@ -6995,6 +7029,7 @@ mod tests {
 
 	// A restore that cannot write stops within its bound and says the file is gone,
 	// rather than retrying forever or reporting the replace's error alone.
+	// Test ID: Epa8S0i
 	#[cfg(unix)]
 	#[test]
 	fn a_restore_that_cannot_write_gives_up_and_says_so() {
@@ -7101,6 +7136,7 @@ mod tests {
 
 	// Error 5 alone cannot tell a pending delete from a file this process may not
 	// open, so every look-alike is checked beside the real one.
+	// Test ID: EpaOYRs
 	#[cfg(windows)]
 	#[test]
 	fn only_a_delete_in_progress_reads_as_pending() {
@@ -7172,6 +7208,7 @@ mod tests {
 
 	// A replace that fails can leave the old name waiting on a scanner's handle.
 	// The restore waits that out within its bound and writes the text there.
+	// Test ID: EpaOYRt
 	#[cfg(windows)]
 	#[test]
 	fn a_restore_waits_for_a_name_still_being_deleted() {
@@ -7207,6 +7244,7 @@ mod tests {
 
 	// A name still pending when the tries run out gets the give-up error, and
 	// nothing is written at it or beside it.
+	// Test ID: EpaOYRu
 	#[cfg(windows)]
 	#[test]
 	fn a_restore_gives_up_on_a_delete_that_stays_pending() {
@@ -7245,6 +7283,7 @@ mod tests {
 
 	// shcl's own save has no seam and no restore, so every settings write goes
 	// through write_config_atomic instead.
+	// Test ID: Epa8S0j
 	#[test]
 	fn every_settings_write_goes_through_the_restore() {
 		let body = include_str!("config.rs")
@@ -7265,6 +7304,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eq4SnxO
 	#[test]
 	fn persist_writes_nothing_for_a_nan_on_both_sides() {
 		let _guard = super::test_config_lock();
@@ -7299,6 +7339,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// Test ID: EjkEYAK
 	#[test]
 	fn persist_survives_bare_decimal_float() {
 		// Memoize settings() BEFORE installing the override: a test on another
@@ -7353,6 +7394,7 @@ mod tests {
 	// The /proc-based busy check: a child process holding the file open is seen as
 	// busy; once it exits the file reads as free again. Linux only (the check is a
 	// no-op elsewhere).
+	// Test ID: EjwSEES
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn config_open_elsewhere_sees_a_holder() {
@@ -7384,6 +7426,7 @@ mod tests {
 	}
 
 	// Where a rating's lines go, and that nothing else in the file moves.
+	// Test ID: EpXN9p5
 	#[test]
 	fn rating_lines_replace_insert_and_collapse() {
 		const ID: &str = "0123456789abcdef";
@@ -7503,6 +7546,7 @@ mod tests {
 	// The template is a save fixed point (G69), and a rating written into it must
 	// not be the thing that makes the next save rewrite it. An all-digit id is the
 	// spelling most likely to come out differently.
+	// Test ID: EpXN9p6
 	#[test]
 	fn a_rating_leaves_a_canonical_file_canonical() {
 		for id in ["0123456789abcdef", "1234567890123456"] {
@@ -7520,6 +7564,7 @@ mod tests {
 
 	// A line placed in a block that already drops one can change which line the
 	// parse drops. The count does not grow, and another setting loads differently.
+	// Test ID: EpXeZQW
 	#[test]
 	fn a_rating_changes_no_other_setting() {
 		let text = "performance:\n\t\t# rated_hardware: \"\"  ## Default\n\t\t\tautomatic: false\n\t\tcheck_hardware: false\n";
@@ -7657,6 +7702,7 @@ mod tests {
 	// Each of these kept a rating through the dialog's save, and the line writer
 	// answered that it had a line that could not be read, so the test ran at
 	// every launch.
+	// Test ID: EpXiS3s
 	#[test]
 	fn a_rating_reaches_a_clean_file_wherever_its_lines_sit() {
 		const ID: &str = "0123456789abcdef";
@@ -7685,6 +7731,7 @@ mod tests {
 
 	// On those files the lines go in one by one: every line already there stays,
 	// byte for byte and in order, apart from the cleared value that gets one.
+	// Test ID: EpXiS3t
 	#[test]
 	fn a_rating_in_a_clean_file_moves_no_other_line() {
 		let lines = RatingLines {
@@ -7709,6 +7756,7 @@ mod tests {
 	// that line takes the rating. Beside a line the parse drops there is no save's
 	// text to fall back on, so a second line for the key leaves the rating unread
 	// and the test runs at every launch.
+	// Test ID: EpYWC5Y
 	#[test]
 	fn a_value_cleared_by_hand_takes_the_rating_on_its_own_line() {
 		let lines = RatingLines {
@@ -7747,6 +7795,7 @@ mod tests {
 	// written key before and is not read at all after, so no setting reads
 	// differently, and only the lost-line count stops a file the next Settings
 	// save refuses whole.
+	// Test ID: EpYhM4m
 	#[test]
 	fn a_rating_loses_no_line_the_file_did_not_already_lose() {
 		const ID: &str = "0123456789abcdef";
@@ -7799,6 +7848,7 @@ mod tests {
 
 	// The dialog's save was how a rating was written before, so the files it kept
 	// one in are the floor: the rating writer keeps one in each of them too.
+	// Test ID: EpXiS3u
 	#[test]
 	fn a_rating_is_kept_wherever_the_dialogs_save_kept_it() {
 		const ID: &str = "0123456789abcdef";
@@ -7847,6 +7897,7 @@ mod tests {
 
 	// "A line that cannot be read" is said only of a file that has one. A clean
 	// file the writer still cannot place gets a reason that is true of it.
+	// Test ID: EpXiS3v
 	#[test]
 	fn a_clean_file_is_never_called_unreadable() {
 		let id_only = RatingLines {
@@ -7901,6 +7952,7 @@ mod tests {
 	// the quotes off one that reads as a number, bool or date. The rating check
 	// leaves the quoted flag out because of this. The quote character itself is
 	// read by the launch's migration, and the check compares migrated text for that.
+	// Test ID: EpXyGI4
 	#[test]
 	fn a_save_that_requotes_a_value_changes_no_read() {
 		const PATH: &str = "blk.k";
@@ -7980,6 +8032,7 @@ mod tests {
 	// reads the difference. Each file is
 	// written again just before the rating, since a load adds the block and the
 	// line writer would then never reach the save's text.
+	// Test ID: EpXyGI5
 	#[test]
 	fn a_rating_is_kept_where_a_save_only_requotes() {
 		const ID: &str = "0123456789abcdef";
@@ -8054,6 +8107,7 @@ mod tests {
 	// heading deeper than its block becomes the parent of the setting under it.
 	// The save's text moves both without changing a value. Each file is written
 	// again before the rating, as a launch that found it busy leaves it.
+	// Test ID: EpYDF0i
 	#[test]
 	fn a_rating_changes_nothing_the_next_launch_migrates() {
 		let stack = format!(
@@ -8093,6 +8147,7 @@ mod tests {
 	// converted first, and the conversion copies a font list with its quotes, which
 	// the refresh after it reads. A save spells them the other way, so the rating
 	// check has to look through the conversion as well.
+	// Test ID: EqHPuMK
 	#[test]
 	fn a_rating_changes_nothing_the_next_launch_converts() {
 		let flat = format!("font_family: '{}'\n", SUPERSEDED_FONT_STACKS[0]);
@@ -8127,6 +8182,7 @@ mod tests {
 	// commented-out settings of the group added just before it, so `font:` went
 	// in under `contrast_mask:` and the later groups split each other. Their
 	// settings read as missing at the next launch and were added again.
+	// Test ID: EquUFK4
 	#[test]
 	fn backfill_puts_each_group_in_its_own_section() {
 		let text = "wallpaper:\n\timage: x\nwindow:\n\tmargin: 6\nperformance:\n\tautomatic: false\n\tprofile: custom\n";
@@ -8169,6 +8225,7 @@ mod tests {
 	// A setting typed two tabs in under its block loads, until the launch adds the
 	// template's own active lines above it. It then read as part of one of those
 	// and was ignored from the next launch on, with nothing said.
+	// Test ID: EpZCS12
 	#[test]
 	fn backfill_keeps_a_setting_that_is_indented_too_deep() {
 		let files = [
@@ -8213,6 +8270,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EpZCS13
 	#[test]
 	fn a_rating_is_refused_where_a_launch_step_reads_the_layout() {
 		fn reads_quotes(text: &str) -> Option<String> {
@@ -8319,6 +8377,7 @@ mod tests {
 	// save, so the test ran at every launch. The rating goes in beside it now; the
 	// dialog's refusal to rewrite such a file stays. The line sits in a theme,
 	// where the reload's backfill adds nothing that could give it a level.
+	// Test ID: EpXN9p7
 	#[test]
 	fn a_rating_is_kept_beside_an_unreadable_line() {
 		const ID: &str = "0123456789abcdef";
@@ -8365,6 +8424,7 @@ mod tests {
 
 	// Every launch-time write defers to a holder, and so does a rating, which then
 	// has to say so rather than report a write.
+	// Test ID: EpXN9p8
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn a_held_settings_file_keeps_no_rating() {
@@ -8411,6 +8471,7 @@ mod tests {
 	// A rename publishes a new file, so a rating written that way replaced a linked
 	// settings file with a plain copy and reset a private one's mode. The dialog's
 	// save never did either.
+	// Test ID: EpXatHM
 	#[cfg(unix)]
 	#[test]
 	fn a_rating_keeps_a_linked_private_settings_file() {
@@ -8450,6 +8511,7 @@ mod tests {
 
 	// Adding missing settings at launch had the same faults the rating write had,
 	// and so did the template write and the renames beside it.
+	// Test ID: EpyTXE0
 	#[cfg(unix)]
 	#[test]
 	fn a_launch_rewrite_keeps_a_linked_private_settings_file() {
@@ -8479,6 +8541,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// Test ID: EpyTXE1
 	#[cfg(unix)]
 	#[test]
 	fn a_launch_rewrite_writes_through_no_link_left_at_a_temp_name() {
@@ -8518,6 +8581,7 @@ mod tests {
 
 	// The temp file's name is predictable, so something already sitting there must
 	// never be written through: a link to another file would get the settings text.
+	// Test ID: EpXatHN
 	#[cfg(unix)]
 	#[test]
 	fn a_rating_writes_through_no_link_left_at_a_temp_name() {
@@ -8564,6 +8628,7 @@ mod tests {
 	// One unusable line must cost only its own setting, never the whole file. This
 	// used to need a hand-rolled retry loop (blank the offending line, reparse);
 	// the parser is forgiving now, so the guarantee has to be re-proven here.
+	// Test ID: ElcTgW8
 	#[test]
 	fn a_bad_line_drops_only_its_own_setting() {
 		let p = std::path::Path::new("test.shcl");
@@ -8582,6 +8647,7 @@ mod tests {
 
 	// Clearing the Family box wrote nothing at all, so the old line survived and
 	// the font came back next launch.
+	// Test ID: EpHR81A
 	#[test]
 	fn clearing_the_font_family_takes_the_old_line_out() {
 		let set = Settings {
@@ -8599,6 +8665,7 @@ mod tests {
 	// Reverting used to remove the node, and shcl takes a node's leading comments
 	// with it - so a scrim setting destroyed seven lines of documentation, and a
 	// note written above a value went the same way.
+	// Test ID: EpHPcsz
 	#[test]
 	fn reverting_a_setting_keeps_the_comments_above_it() {
 		let text = "text:\n\n\t## A blurred patch of background color behind each letter, so text stays\n\t## readable over a wallpaper.\n\tscrim:\n\t\t## mine: I like it stronger\n\t\tstrength: 40\n";
@@ -8629,6 +8696,7 @@ mod tests {
 	// launch on a texture limit while a large scrollback grew until the process
 	// was killed. `1e400` is here because shcl reads it as infinity and reports
 	// it good, and infinity survives a clamp.
+	// Test ID: EpHOzrc
 	#[test]
 	fn every_numeric_setting_has_a_floor_and_a_ceiling() {
 		let p = std::path::Path::new("test.shcl");
@@ -8703,6 +8771,7 @@ mod tests {
 
 	// All three of these were silent, and the file looks perfectly fine while the
 	// setting does nothing. The first one also stops every future save.
+	// Test ID: EpHb2Tw
 	#[test]
 	fn a_config_says_what_is_wrong_with_it() {
 		// a key set twice
@@ -8737,6 +8806,7 @@ mod tests {
 
 	// Saved themes are written and read under `themes.`, so a file holding one has
 	// nothing in it to complain about. A real typo beside it still gets a line.
+	// Test ID: Epz2LOS
 	#[test]
 	fn a_saved_theme_is_not_taken_for_a_typo() {
 		let pal = crate::theme::resolve_in(&[], "SilkTerm", "dark", true);
@@ -8767,6 +8837,7 @@ mod tests {
 
 	// A color that is not the theme's own is an override, wherever it came from,
 	// and the system switching between dark and light must not take it away.
+	// Test ID: Epz2LOT
 	#[test]
 	fn a_color_override_survives_the_system_switching_modes() {
 		let _store = test_store_lock();
@@ -8796,6 +8867,7 @@ mod tests {
 	// A key written twice cannot resolve to one value, so the default takes
 	// effect. That is the right outcome, but it has to be SAID - the setting is
 	// there in the file, plainly set, and doing nothing.
+	// Test ID: Em2JGe0
 	#[test]
 	fn a_setting_written_twice_falls_back_and_is_reported() {
 		let p = std::path::Path::new("test.shcl");
@@ -8816,6 +8888,7 @@ mod tests {
 		assert_eq!(line_list(&[0]), "", "an uncitable node adds nothing");
 	}
 
+	// Test ID: ElcTgW9
 	#[test]
 	fn default_config_is_valid_shcl() {
 		let doc = shcl::Document::parse(default_config());
@@ -8835,6 +8908,7 @@ mod tests {
 	// a commented default with no active sibling - the shape that shcl used to
 	// re-pad to the block header's depth - so this is now the guard on the writer
 	// itself, and a bump that reintroduced the reflow would fail here.
+	// Test ID: ElcTgWA
 	#[test]
 	fn default_config_survives_a_save_unchanged() {
 		let doc = shcl::Document::parse(default_config());
@@ -8849,6 +8923,7 @@ mod tests {
 	// its default, so removing the '# ' must change nothing. Seven lines named
 	// an example instead, and uncommenting any of them quietly changed what
 	// loaded. This reads the template, so a line added later is checked too.
+	// Test ID: Eq4CjrE
 	#[test]
 	fn every_commented_default_line_loads_as_the_default() {
 		// resolve() hunts for a wallpaper folder under the config and data dirs,
@@ -8905,6 +8980,7 @@ mod tests {
 
 	// The template is where the footer actually reaches a new file; the const is
 	// what puts it back on an old one. Nothing else keeps the two in step.
+	// Test ID: Ep6mucC
 	#[test]
 	fn the_template_ends_with_the_banner() {
 		assert!(default_config().ends_with(SHCL_BANNER));
@@ -8914,6 +8990,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Ep6mucD
 	#[test]
 	fn the_banner_is_retrofitted_and_kept_last() {
 		let plain = "font:\n\tsize: 13.0\n";
@@ -8952,6 +9029,7 @@ mod tests {
 	}
 
 	// Someone who rewrote the footer gets to keep their wording.
+	// Test ID: Ep6mucE
 	#[test]
 	fn an_edited_banner_is_left_alone() {
 		let mine = "font:\n\tsize: 13.0\n\n## This config file format is SHCL. Go read the spec.\n";
@@ -8960,6 +9038,7 @@ mod tests {
 
 	// These are the lines shcl 2.0.0 wrote for a UNC path, a drive path and a
 	// tab. Read as they stand, 3.0 doubles the backslashes in the first.
+	// Test ID: EqpHg6S
 	#[test]
 	fn a_file_shcl2_wrote_reads_the_same() {
 		let body =
@@ -9002,6 +9081,7 @@ mod tests {
 
 	// shcl 2.0.0 wrote `# enabled: true` above `# rotate:` and indented under
 	// `opacity`, so the lines read wrong once uncommented. The save is shcl's.
+	// Test ID: EqpHg6T
 	#[test]
 	fn a_save_keeps_a_commented_block_in_order() {
 		let text = "wallpaper:\n\topacity: 0.2\n\t# rotate:\n\t\t# enabled: true\n\tblur: 3\n";
@@ -9011,6 +9091,7 @@ mod tests {
 	}
 
 	// Quotes, a space indent and a dotted line nobody changed stay as typed.
+	// Test ID: EqwBj7o
 	#[test]
 	fn a_save_writes_only_the_lines_it_changed() {
 		let dir = std::env::temp_dir().join(format!("silkterm_keeplines_{}", std::process::id()));
@@ -9034,6 +9115,7 @@ mod tests {
 
 	// #136 convention: explanatory comments use '## '; commented-out (disabled)
 	// settings use a single '# '.
+	// Test ID: Eibw0CG
 	#[test]
 	fn default_config_comment_style() {
 		// The file header is verbatim prose in single-'#' form and is exempt.
@@ -9059,6 +9141,7 @@ mod tests {
 	}
 
 	// #142: the default values.
+	// Test ID: EibwbOi
 	#[test]
 	fn changed_defaults() {
 		let d = Settings::default();
@@ -9089,6 +9172,7 @@ mod tests {
 	// defaults (sdf / exponential). The falloff's two renamed curves keep parsing
 	// under their old spellings, so a config written before the rename still reads
 	// as the same curve rather than silently falling back to the default.
+	// Test ID: EjYS5vM
 	#[test]
 	fn scrim_function_and_ramp_resolve() {
 		let p = std::path::Path::new("test.shcl");
@@ -9113,6 +9197,7 @@ mod tests {
 	// The face/size split's inference for configs predating use_system_font_size:
 	// absent = follow the face toggle, except an explicit font_size (which the old
 	// single toggle silently ignored) reads as intent and turns the size follow off.
+	// Test ID: EkoQjqK
 	#[test]
 	fn system_font_size_split_inference() {
 		let p = std::path::Path::new("test.shcl");
@@ -9134,6 +9219,7 @@ mod tests {
 	// a directory at all. Both platforms' spellings everywhere: a config file gets
 	// carried between machines, and a `$HOME` left standing as a literal folder
 	// name on Windows would be a very quiet way to fail.
+	// Test ID: EnRWor2
 	#[test]
 	fn a_home_token_expands_however_it_is_spelled() {
 		let home = super::home_string();
@@ -9164,6 +9250,7 @@ mod tests {
 	// The shipped default is the home variable spelled the way somebody on this
 	// platform would type it, and the template's commented line has to say the
 	// same thing or the first save rewrites the file we just wrote (G69, G72).
+	// Test ID: Eq3hq92
 	#[test]
 	fn the_shipped_startup_directory_is_this_platforms_home_variable() {
 		let home = super::home_string();
@@ -9186,6 +9273,7 @@ mod tests {
 	// The other pairs that mean one thing under two spellings. Only the one the
 	// running platform sets is checked against a value; the point is that the
 	// other spelling answers too rather than expanding to nothing.
+	// Test ID: EoSvoUy
 	#[test]
 	fn the_other_platforms_spelling_of_a_name_still_answers() {
 		for (ours, theirs) in [("USER", "USERNAME"), ("TMPDIR", "TEMP")] {
@@ -9206,6 +9294,7 @@ mod tests {
 	// reads those words and they mean something to it: a cmd prompt string, a
 	// bash `-c` script, a percent that is just a percent. Splitting happens
 	// first, which keeps a variable holding a path with a space in it whole.
+	// Test ID: Eq3cPFw
 	#[test]
 	fn a_config_command_expands_the_program_and_nothing_after_it() {
 		let home = super::home_string();
@@ -9249,6 +9338,7 @@ mod tests {
 	// A directory named on the command line is checked before anything spawns, so
 	// a path that is not there reads as one line naming the flag rather than as a
 	// shell that failed to start - and it expands the same tokens the setting does.
+	// Test ID: EnWOVqj
 	#[test]
 	fn a_named_directory_is_expanded_and_checked() {
 		let home = super::home_string();
@@ -9268,6 +9358,7 @@ mod tests {
 	// the same file, so a STRING compare promoted a second copy of the user's
 	// default shell to the top of their own list - where the top is what "default
 	// shell" now means, so the duplicate became the default.
+	// Test ID: EnRWor3
 	#[test]
 	fn a_default_shell_already_in_the_list_moves_instead_of_doubling() {
 		let entry = |slug: &str, command: &str| crate::shells::ShellEntry {
@@ -9301,6 +9392,7 @@ mod tests {
 		assert_eq!(out[0].command, "fish");
 	}
 
+	// Test ID: EkrTZxY
 	#[test]
 	fn copy_on_select_key_parses_and_defaults_off() {
 		let p = std::path::Path::new("test.shcl");
@@ -9308,6 +9400,7 @@ mod tests {
 		assert!(resolve(read_raw("shell.copy_on_select: true\n", p)).copy_on_select);
 	}
 
+	// Test ID: Em1S9yq
 	#[test]
 	fn hyperlink_keys_parse_in_their_block() {
 		let p = std::path::Path::new("test.shcl");
@@ -9327,6 +9420,7 @@ mod tests {
 
 	// An over-range output_ease_lines must clamp: scroll's backlog clamp uses it
 	// as a lower bound and panics (aborts, in release) when it exceeds the cap.
+	// Test ID: EjNOyIT
 	#[test]
 	fn output_ease_lines_clamps_to_backlog_cap() {
 		let raw = read_raw(
@@ -9344,6 +9438,7 @@ mod tests {
 	}
 
 	// One syntax-broken line must not sink the valid settings around it.
+	// Test ID: Eij9gBE
 	#[test]
 	fn parse_lenient_drops_only_the_bad_line() {
 		let text = "transparency.opacity: 0.7\ncursor_blink: enable\nwindow.margin: 12.0\n";
@@ -9352,6 +9447,7 @@ mod tests {
 		assert_eq!(raw.margin, Some(12.0)); // after the bad line
 	}
 
+	// Test ID: EiuvVey
 	#[test]
 	fn chrome_colors_default_and_override() {
 		// theme provides the chrome; the default matches the shared menu colors
@@ -9374,6 +9470,7 @@ mod tests {
 	// themes.* user data survives, and the original file is kept as a .bak.
 	// When both an old alias and its newer flat spelling are present, the newer
 	// one wins.
+	// Test ID: ElmIYG0
 	#[test]
 	fn legacy_config_converts_with_values_carried() {
 		let dir = std::env::temp_dir().join(format!("silkterm_convert_{}", std::process::id()));
@@ -9456,6 +9553,7 @@ mod tests {
 	}
 
 	// The shipped template itself must never read as legacy.
+	// Test ID: ElmIYG1
 	#[test]
 	fn a_new_format_config_never_converts() {
 		let dir = std::env::temp_dir().join(format!("silkterm_noconvert_{}", std::process::id()));
@@ -9473,6 +9571,7 @@ mod tests {
 
 	// A current file with one flat key at the margin still converts, and its shell
 	// list is the user's own: every entry carries, in order, with all its fields.
+	// Test ID: EpyvpeD
 	#[test]
 	fn a_converted_file_keeps_its_shell_list() {
 		let list = vec![
@@ -9519,6 +9618,7 @@ mod tests {
 	// A flat `wallpaper:` held the image. It reaches `wallpaper.image`, never the
 	// block heading, whatever order the carried values are placed in, and a save
 	// from Settings then loads every carried value the same.
+	// Test ID: EpZcBUO
 	#[test]
 	fn a_flat_wallpaper_converts_to_the_image_and_survives_a_save() {
 		let _guard = super::test_config_lock();
@@ -9586,6 +9686,7 @@ mod tests {
 
 	// Every block name, not only `wallpaper`: an old flat line named like a block
 	// is either carried to a setting or dropped, and the block keeps its heading.
+	// Test ID: EpZcBUP
 	#[test]
 	fn a_flat_key_named_like_a_block_never_lands_on_its_heading() {
 		let dir = std::env::temp_dir().join(format!("silkterm_flathead_{}", std::process::id()));
@@ -9621,6 +9722,7 @@ mod tests {
 	// gets it back under `image:`, in place. No backup is taken, so a folder that
 	// already holds every backup name is repaired too, and the next launch neither
 	// converts the file nor changes it again.
+	// Test ID: EpZefUm
 	#[test]
 	fn an_image_left_on_the_wallpaper_heading_moves_to_image() {
 		let _guard = super::test_config_lock();
@@ -9711,6 +9813,7 @@ mod tests {
 
 	// The repair rewrites a settings file at launch, so every shape that is not
 	// the one an earlier conversion wrote is left alone.
+	// Test ID: EpZefUn
 	#[test]
 	fn only_a_heading_holding_a_value_is_repaired() {
 		let damaged = misplaced_image(default_config());
@@ -9780,6 +9883,7 @@ mod tests {
 
 	// A launch that finds the settings file open in another program leaves it as it
 	// is, and the next launch that does not repairs it.
+	// Test ID: EpZtWPY
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn a_busy_launch_defers_the_wallpaper_repair() {
@@ -9839,6 +9943,7 @@ mod tests {
 
 	// The repair rewrites the settings file at launch, so a linked file stays
 	// linked to the same file, and a private one stays private.
+	// Test ID: EpZts0G
 	#[cfg(unix)]
 	#[test]
 	fn a_repair_keeps_a_linked_private_settings_file() {
@@ -9885,6 +9990,7 @@ mod tests {
 	// The conversion rewrites the settings file where it is: a link stays a link
 	// to the same file, a private file stays private, its backup is as private,
 	// and a link sitting at a backup name is never written through.
+	// Test ID: EpZfVmi
 	#[cfg(unix)]
 	#[test]
 	fn a_conversion_keeps_a_linked_private_settings_file() {
@@ -9941,6 +10047,7 @@ mod tests {
 
 	// A conversion that cannot write leaves the file as it was and keeps no
 	// backup of it, or a file that stays unwritable gains one at every launch.
+	// Test ID: EpZfVmj
 	#[cfg(unix)]
 	#[test]
 	fn a_conversion_that_cannot_write_keeps_no_backup() {
@@ -9979,6 +10086,7 @@ mod tests {
 	// A failed write is not proof the file is as it was. ReplaceFile can fail after
 	// the file it replaces is gone, and then the backup is the only copy left. So a
 	// failed conversion drops its backup only when the file reads back whole.
+	// Test ID: EpZszNA
 	#[test]
 	fn a_failed_conversion_keeps_the_backup_unless_the_file_is_whole() {
 		type Write = fn(&std::path::Path, &str) -> Result<(), String>;
@@ -10024,6 +10132,7 @@ mod tests {
 
 	// A hand-edited config is where a home-relative path gets typed, so `~` has
 	// to expand. `~user` has nothing to resolve against and stays literal.
+	// Test ID: Ellevxg
 	#[test]
 	fn tilde_expands_to_home_but_only_for_this_user() {
 		let home = super::home_string();
@@ -10044,6 +10153,7 @@ mod tests {
 	// the active/commented state, and the indentation that says which block it
 	// belongs to. Renames may not cross blocks - the machinery rewrites lines, it
 	// does not move them - so this one stays inside `scroll:`.
+	// Test ID: ElpQBii
 	#[test]
 	fn a_renamed_setting_keeps_its_value_and_its_block() {
 		let out = migrate_config_text("scroll:\n\tinview_tau_ms: 45.0\n").expect("should migrate");
@@ -10067,6 +10177,7 @@ mod tests {
 
 	// Renames nest: this one sits two blocks deep, so the machinery has to match
 	// on the whole path rather than the leaf.
+	// Test ID: EoqHGQy
 	#[test]
 	fn a_renamed_setting_two_blocks_deep_is_found() {
 		assert_eq!(
@@ -10089,6 +10200,7 @@ mod tests {
 	// Once both spellings are in the file the old line must be left exactly
 	// where it is: it is no longer stale, it is the new setting's own line, and
 	// dropping or re-renaming it would delete a user's color on every launch.
+	// Test ID: Em3Pif2
 	#[test]
 	fn a_renamed_key_frees_its_old_name_for_a_new_setting() {
 		// first launch: the one color there is becomes the calm one
@@ -10124,6 +10236,7 @@ mod tests {
 	// successor, and ease_in changed units (fraction -> milliseconds), so its
 	// old value must not be carried into the new key. Active and stale
 	// commented lines both go; the settings around them stay put.
+	// Test ID: Elqv6O0
 	#[test]
 	fn retired_scroll_knobs_are_removed_not_carried() {
 		let out = migrate_config_text(
@@ -10138,6 +10251,7 @@ mod tests {
 	}
 
 	// A config with nothing to migrate is left untouched (no needless rewrite).
+	// Test ID: Eimg8fI
 	#[test]
 	fn migrate_config_noop_when_current() {
 		assert!(
@@ -10151,6 +10265,7 @@ mod tests {
 	// stack was the default kept that stack forever. Migration refreshes exactly
 	// the shipped defaults and nothing the user chose themselves - now keyed on
 	// the nested font.family path.
+	// Test ID: ElEvh0S
 	#[test]
 	fn migrate_refreshes_a_superseded_default_font_stack() {
 		let stale = SUPERSEDED_FONT_STACKS[0];
@@ -10193,6 +10308,7 @@ mod tests {
 	// An active line's path is the one shcl reads, whatever comments sit above it.
 	// A save moves a comment to the depth of the setting below it, so a path taken
 	// from the comment changed at the first save.
+	// Test ID: EpZCRku
 	#[test]
 	fn an_active_line_takes_no_path_from_a_comment() {
 		let setting = |text: &str, at: usize| {
@@ -10249,6 +10365,7 @@ mod tests {
 
 	// Whether a rename's new name is already present is judged where a save puts
 	// a commented line, or the first save turns the rename on or off.
+	// Test ID: EpZCS14
 	#[test]
 	fn a_commented_new_name_counts_where_a_save_puts_it() {
 		let saved = |t: &str| shcl::Document::parse(t).to_canonical();
@@ -10288,6 +10405,7 @@ mod tests {
 
 	// A Settings save may tidy quotes and indentation, and the launch after it
 	// must load every value as the launch before it did.
+	// Test ID: EpZCS15
 	#[test]
 	fn a_settings_save_moves_no_value_at_the_next_launch() {
 		type Reader = fn(&Settings) -> String;
@@ -10427,6 +10545,7 @@ mod tests {
 	// template's current one; an active line, or one the user annotated, is theirs.
 	// Every entry refreshes, including a second one for a path whose default has
 	// been retuned twice - the lookup must not stop at the first match.
+	// Test ID: Elzq5VQ
 	#[test]
 	fn migrate_refreshes_a_superseded_commented_default() {
 		// the path's blocks, one indent level each, with the leaf last
@@ -10460,6 +10579,7 @@ mod tests {
 	// The shipped folder names the usual place in this platform's spelling, and
 	// the template's commented line has to say the same, or the first save
 	// rewrites the file just written (G69, G72).
+	// Test ID: Er1vmpM
 	#[test]
 	fn the_shipped_wallpaper_folder_is_this_platforms_usual_place() {
 		let want = if cfg!(windows) {
@@ -10492,6 +10612,7 @@ mod tests {
 	// Where the usual place is: the data dir, which on Windows is Local, since a
 	// pack is bulk and has no business roaming. `--config` and XDG_CONFIG_HOME
 	// keep everything in one tree.
+	// Test ID: Er1vmpN
 	#[test]
 	fn each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data() {
 		let config = PathBuf::from("/c/silkterm");
@@ -10522,6 +10643,7 @@ mod tests {
 	// found with the value at its default, commented, uncommented or emptied, and
 	// under the older spellings. A named image outranks it, and a named folder
 	// outranks the image.
+	// Test ID: Er1vmpO
 	#[test]
 	fn the_default_wallpaper_folder_is_found_in_the_usual_place() {
 		let _guard = super::test_config_lock();
@@ -10575,6 +10697,7 @@ mod tests {
 
 	// An existing config's commented line names the old empty default, and is
 	// refreshed to the place it meant.
+	// Test ID: Er1vmpP
 	#[test]
 	fn an_existing_config_learns_where_the_wallpaper_folder_is() {
 		let out = migrate_config_text("wallpaper:\n\trotate:\n\t\t# folder: \"\"  ## Default\n")
@@ -10587,6 +10710,7 @@ mod tests {
 
 	// The table above is kept by hand, so nothing can catch an entry that was
 	// simply never added. This names the one default that changed most recently.
+	// Test ID: EqSm2Rl
 	#[test]
 	fn an_existing_config_learns_that_wallpaper_text_colors_ship_on() {
 		let out = migrate_config_text("colors:\n\t# from_wallpaper: false  ## Default\n")
@@ -10600,6 +10724,7 @@ mod tests {
 	// The coverage exponent is gone and its number means nothing as an amount,
 	// so the line goes rather than carrying a value over. An active one has to
 	// go too: left in place it would read as a setting nothing answers for.
+	// Test ID: EqWXhBA
 	#[test]
 	fn an_existing_config_loses_the_coverage_exponent() {
 		for line in [
@@ -10615,6 +10740,7 @@ mod tests {
 
 	// The walker is what gives every line its full nested path - the whole
 	// line-oriented machinery keys on it.
+	// Test ID: ElmIYG2
 	#[test]
 	fn walker_resolves_nested_paths() {
 		let text = "top: 1\nwallpaper:\n\t# enabled: true\n\trotate:\n\t\t# folder: \"x\"\n\t\tinterval_s: 2.0\n\t# opacity: 0.5\ncolors.focus: \"#123456\"\n";
@@ -10644,6 +10770,7 @@ mod tests {
 	// The whole-file diff is the strong form of that - a save may only ever add
 	// the lines it was asked to add - and the spot checks below say WHICH shapes
 	// are being relied on, so a failure names the one that moved.
+	// Test ID: ElmIYG3
 	#[test]
 	fn a_save_keeps_nested_comment_layout() {
 		let mut doc = shcl::Document::parse(default_config());
@@ -10690,6 +10817,7 @@ mod tests {
 	// A line whose indentation matches no level is dropped by the parse, and a
 	// save would then delete it. The write refuses instead: a hand-written line
 	// is worth more than the one setting the save was carrying.
+	// Test ID: EoGez3w
 	#[test]
 	fn a_save_that_would_drop_a_line_is_refused() {
 		let dir = std::env::temp_dir().join(format!("silk-lostgate-{}", std::process::id()));
@@ -10716,6 +10844,7 @@ mod tests {
 	// A stray indented with spaces used to be dropped too, and every save of
 	// the file refused. shcl 3.0 keeps it as written, so the save goes through
 	// and the line is still there, still reported, and still sets nothing.
+	// Test ID: EqtUcp6
 	#[test]
 	fn a_save_keeps_a_space_indented_stray() {
 		let dir = std::env::temp_dir().join(format!("silk-keptstray-{}", std::process::id()));
@@ -10749,6 +10878,7 @@ mod tests {
 	// its siblings INSIDE their block, at the right depth, NOT be appended with
 	// a second copy of the group's comment block - that paragraph is already in
 	// the file, attached to the siblings.
+	// Test ID: EllvVHE
 	#[test]
 	fn a_straggler_lands_beside_its_siblings_not_with_a_second_paragraph() {
 		let path = std::env::temp_dir().join("silkterm_backfill_straggler_test.shcl");
@@ -10807,6 +10937,7 @@ mod tests {
 	// The real on-disk load pipeline (convert -> migrate -> backfill) on a
 	// pre-nesting config: values end at their nested paths, the original file
 	// is kept as .bak, missing keys arrive, and the chain is stable.
+	// Test ID: ElmIYG4
 	#[test]
 	fn pipeline_convert_migrate_backfill_on_disk() {
 		let dir = std::env::temp_dir().join(format!("silkterm_pipeline_{}", std::process::id()));
@@ -10865,6 +10996,7 @@ mod tests {
 
 	// The scan must not offer the loader a file it can't decode: `image` is built
 	// with only png + jpeg, so a wider list picks a wallpaper that then fails.
+	// Test ID: EllHdNA
 	#[test]
 	fn image_scan_only_accepts_what_the_decoder_has() {
 		use std::path::Path;
@@ -11089,6 +11221,7 @@ mod tests {
 			}
 		}
 
+		// Test ID: EpZCS16
 		#[test]
 		fn a_settings_save_moves_no_value_at_the_next_launch() {
 			let corpus = fuzz::corpus("config");
@@ -11109,6 +11242,7 @@ mod tests {
 
 		// A generator that stops making the shapes that moved a value passes
 		// forever, so each is looked for by name.
+		// Test ID: EpZCS17
 		#[test]
 		fn the_save_generator_reaches_every_shape() {
 			let indent = |line: &str| line.len() - line.trim_start().len();
@@ -11251,6 +11385,7 @@ mod tests {
 
 		// A generator that quietly stops generating passes forever. This is what
 		// says the template is still being read.
+		// Test ID: EpQN0oC
 		#[test]
 		fn the_generator_still_finds_the_settings_it_draws_from() {
 			assert!(
@@ -11277,6 +11412,7 @@ mod tests {
 			);
 		}
 
+		// Test ID: EpQN0oD
 		#[test]
 		fn no_config_file_can_take_the_program_down() {
 			let corpus = fuzz::corpus("config");
@@ -11292,6 +11428,7 @@ mod tests {
 		// Free-form bytes, with no config shape imposed at all. The generator
 		// above never emits a lone `:` at depth four or a value that is only a
 		// byte-order mark, and the parser has to hold up under those too.
+		// Test ID: EpQN0oE
 		#[test]
 		fn arbitrary_bytes_parse_without_panicking() {
 			let corpus = fuzz::corpus("config-bytes");
@@ -11314,6 +11451,7 @@ mod tests {
 		// A flat file of old names, the newest spelling winning, converts with each
 		// value readable at its new path, every block heading still a heading, and
 		// no second conversion.
+		// Test ID: EpZcBUQ
 		#[test]
 		fn a_flat_file_carries_every_value_to_its_path() {
 			use super::super::{CONFIG_REMOVED, LEGACY_KEYS, converted_config_text};
@@ -11409,6 +11547,7 @@ mod tests {
 		// loaded before it loads the same after, or nothing is written. Settings
 		// are re-indented at random here, since a line indented deeper than its
 		// block needs is what an added line can take over.
+		// Test ID: EpZCS18
 		#[test]
 		fn backfill_changes_nothing_that_loaded() {
 			use super::super::backfilled_text;
@@ -11448,6 +11587,7 @@ mod tests {
 
 		// Whatever backfill adds is where the next launch looks for it, so a
 		// second pass finds nothing missing.
+		// Test ID: EquUFK5
 		#[test]
 		fn backfill_settles_in_one_pass() {
 			use super::super::backfilled_text;
@@ -11468,6 +11608,7 @@ mod tests {
 		// The launch-time repair of a wallpaper heading, over the shapes around it:
 		// it settles in one pass, touches only the heading and the line it adds, and
 		// every other setting loads as before.
+		// Test ID: EpZefUo
 		#[test]
 		fn a_wallpaper_repair_changes_nothing_else() {
 			use super::super::{valued_wallpaper_line, wallpaper_heading_repaired};
@@ -11853,6 +11994,7 @@ mod tests {
 			assert_eq!(now, then, "another setting loads differently\n{shown}");
 		}
 
+		// Test ID: EpXeZQX
 		#[test]
 		fn a_rating_changes_nothing_else_in_any_file() {
 			let corpus = fuzz::corpus("config");

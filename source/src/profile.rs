@@ -714,6 +714,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: Ep17Tqy
 	#[test]
 	fn a_missing_card_is_picked_for_rather_than_timed() {
 		let card = adapter("NVIDIA GeForce RTX 3060 Ti", wgpu::DeviceType::DiscreteGpu);
@@ -744,6 +745,7 @@ mod tests {
 		)));
 	}
 
+	// Test ID: EowvGeu
 	#[cfg(not(windows))]
 	#[test]
 	fn a_display_naming_another_host_is_a_remote_screen() {
@@ -789,6 +791,7 @@ mod tests {
 		panic!("the run never answered");
 	}
 
+	// Test ID: EowvGev
 	#[test]
 	fn the_run_stops_at_the_first_rung_that_holds_the_rate() {
 		let budget = budget_ms(60.0);
@@ -827,6 +830,7 @@ mod tests {
 	// drawn. The run used to read that as a hopeless machine and save Standard,
 	// which has no wallpaper, for every launch after. A stall that Standard does
 	// not cure says nothing about the machine, so the run gives no answer.
+	// Test ID: EqHVWh6
 	#[test]
 	fn a_display_that_is_not_drawing_gives_no_rating() {
 		let budget = budget_ms(60.0);
@@ -867,6 +871,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EorkTk1
 	#[test]
 	fn a_profile_masks_the_stored_values_and_custom_puts_them_back() {
 		let mut s = tuned();
@@ -887,6 +892,7 @@ mod tests {
 		assert!(s.profile_shadow.is_none());
 	}
 
+	// Test ID: EorkTk2
 	#[test]
 	fn applying_twice_does_not_stack() {
 		let mut s = tuned();
@@ -900,6 +906,7 @@ mod tests {
 		assert!(!s.wallpaper_enabled, "the user's value, not High's");
 	}
 
+	// Test ID: EorkTk3
 	#[test]
 	fn each_profile_costs_less_than_the_one_above() {
 		let mut s = Settings::default();
@@ -940,6 +947,7 @@ mod tests {
 
 	// The override is a profile that is never in the file: it sits over whatever
 	// the stored one says and lifts off without touching it.
+	// Test ID: Ep17Tqz
 	#[test]
 	fn the_remote_override_sits_over_the_stored_profile() {
 		let mut s = tuned();
@@ -960,6 +968,7 @@ mod tests {
 
 	// The display watch's step is session state over the stored rung: it never
 	// makes a profile heavier, and a hand-set or Custom profile is left alone.
+	// Test ID: EpWow4h
 	#[test]
 	fn a_session_step_sits_over_the_stored_profile() {
 		let at = |stored: &str, step: Profile| {
@@ -1001,6 +1010,7 @@ mod tests {
 	// A rating written before the version was part of the id reads as another
 	// machine's, once, so a profile an older build's step-down wrote is measured
 	// again rather than kept.
+	// Test ID: EpWpSam
 	#[test]
 	fn a_rating_from_before_the_version_is_stale() {
 		let card = adapter("NVIDIA GeForce RTX 3060 Ti", wgpu::DeviceType::DiscreteGpu);
@@ -1022,6 +1032,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EpWow4i
 	#[test]
 	fn watched_lower_stops_at_low() {
 		assert_eq!(Profile::Max.watched_lower(), Some(Profile::High));
@@ -1036,6 +1047,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EorkTk4
 	#[test]
 	fn the_ladder_ends_at_standard_and_custom_is_off_it() {
 		assert_eq!(Profile::Max.lower(), Some(Profile::High));
@@ -1053,6 +1065,7 @@ mod tests {
 		}
 	}
 
+	// Test ID: EorkTk5
 	#[test]
 	fn a_window_of_stretched_frames_is_a_miss_and_a_pause_breaks_the_chain() {
 		let budget = budget_ms(60.0);
@@ -1085,6 +1098,7 @@ mod tests {
 	// A monitor asleep under the NVIDIA driver paces a GL client at 1 fps. That
 	// is forty times a 60 Hz budget, and it stepped a desktop down to Standard
 	// overnight.
+	// Test ID: EpWnbLd
 	#[test]
 	fn a_capped_display_is_not_a_slow_one() {
 		let budget = budget_ms(60.0);
@@ -1100,6 +1114,7 @@ mod tests {
 
 	// The budget was read once at launch. A window opened on 144 Hz and dragged
 	// to 60 Hz timed every frame against 10.4 ms and stepped the profile down.
+	// Test ID: EqFz3m4
 	#[test]
 	fn the_budget_follows_the_monitor_the_window_is_on() {
 		let mut t = Instant::now();
@@ -1123,6 +1138,7 @@ mod tests {
 
 	// Moved the other way, periods paced at 60 Hz would read as misses against a
 	// 144 Hz budget, so a new budget starts the window over.
+	// Test ID: EqFz3m5
 	#[test]
 	fn frames_paced_by_another_monitor_are_not_counted_against_this_one() {
 		let slow = budget_ms(60.0);
@@ -1137,6 +1153,7 @@ mod tests {
 		assert_eq!(r.verdict(fast), Some(false));
 	}
 
+	// Test ID: EpWnbLe
 	#[test]
 	fn a_stall_throws_away_the_window_around_it() {
 		let budget = budget_ms(60.0);
@@ -1151,6 +1168,7 @@ mod tests {
 		assert_eq!(r.verdict(budget), Some(true), "a slow display still is");
 	}
 
+	// Test ID: EpWnbLf
 	#[test]
 	fn a_window_does_not_span_a_long_pause() {
 		let budget = budget_ms(60.0);

@@ -5,6 +5,7 @@
 ##		taken while a run was still writing them recorded the part written so far,
 ##		and every later look said SEEN. This runs cicd.bash's own logging block
 ##		and checks the gates only ever see a finished file.
+##	- Test ID: EqBfc5Y
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

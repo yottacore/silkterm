@@ -8,6 +8,7 @@
 ##		change to the line it writes is a change to what is checked.
 ##	- Syntax: desktop-entry.ps1 [-Installer <path to install.ps1>]
 ##	- Exit: 0 when every check passed, 1 otherwise.
+##	- Test ID: EqAwQq8
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

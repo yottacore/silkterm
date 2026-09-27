@@ -9,6 +9,7 @@
 ##	- Syntax: windows.ps1 [-Shell pwsh|powershell] [-Installer <path to install.ps1>]
 ##		powershell runs the installer under Windows PowerShell 5.1.
 ##	- Exit: 0 when every check passed, 1 otherwise.
+##	- Test ID: Eqq4nMu
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

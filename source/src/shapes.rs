@@ -289,6 +289,7 @@ mod tests {
 		span_at(&text, hit).map(|(s, e)| text[s..e].iter().collect())
 	}
 
+	// Test ID: Eo6l7kW
 	#[test]
 	fn a_drive_path_keeps_its_drive_letter() {
 		assert_eq!(
@@ -303,6 +304,7 @@ mod tests {
 
 	// The case word selection cannot do at all: the space ends the word, so a
 	// double-click used to give back "Files\app.exe".
+	// Test ID: Eo6l7kX
 	#[test]
 	fn a_folder_name_may_have_spaces_in_it() {
 		assert_eq!(
@@ -316,6 +318,7 @@ mod tests {
 	}
 
 	// Prose after a path is prose, not more path - there is no separator in it.
+	// Test ID: Eo6l7kY
 	#[test]
 	fn a_space_with_no_separator_after_it_ends_the_path() {
 		assert_eq!(
@@ -328,6 +331,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eo6l7kZ
 	#[test]
 	fn a_line_number_after_the_extension_is_not_part_of_the_name() {
 		assert_eq!(
@@ -340,6 +344,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eo6l7ka
 	#[test]
 	fn a_url_wins_over_everything_else() {
 		assert_eq!(
@@ -356,6 +361,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: Eo6l7kb
 	#[test]
 	fn a_unc_path_and_a_home_path_are_shapes_too() {
 		assert_eq!(
@@ -365,6 +371,7 @@ mod tests {
 		assert_eq!(at("~/bin/tool.sh", "bin").as_deref(), Some("~/bin/tool.sh"));
 	}
 
+	// Test ID: Eo6l7kc
 	#[test]
 	fn ordinary_text_is_left_to_the_word_rules() {
 		assert_eq!(at("this and/or that", "and"), None);
@@ -373,6 +380,7 @@ mod tests {
 		assert_eq!(at("xC:\\notapath here", "notapath"), None);
 	}
 
+	// Test ID: Eo6l7kd
 	#[test]
 	fn a_quoted_or_bracketed_path_sheds_the_wrapper() {
 		assert_eq!(
@@ -387,6 +395,7 @@ mod tests {
 
 	// A git prompt puts the remote in brackets beside its status marks, and the
 	// pair rule would otherwise hand back the marks with it.
+	// Test ID: EofxyNU
 	#[test]
 	fn a_git_remote_is_a_shape() {
 		assert_eq!(
@@ -413,6 +422,7 @@ mod tests {
 		);
 	}
 
+	// Test ID: EofxyNV
 	#[test]
 	fn a_colon_after_a_word_is_not_a_remote() {
 		assert_eq!(at("see notes.txt:12/34 there", "notes"), None);
@@ -421,6 +431,7 @@ mod tests {
 		assert_eq!(at("host.com:noslash here", "noslash"), None);
 	}
 
+	// Test ID: Eo6l7ke
 	#[test]
 	fn a_click_past_the_end_of_the_row_finds_nothing() {
 		let text: Vec<char> = "/etc/hosts".chars().collect();
@@ -442,6 +453,7 @@ mod tests {
 			" ", "(", ")", "\u{4e2d}", "\u{1f600}",
 		];
 
+		// Test ID: EpQN0oO
 		#[test]
 		fn a_shape_span_never_runs_past_the_row_it_was_found_in() {
 			let corpus = fuzz::corpus("shapes");

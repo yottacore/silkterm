@@ -8,6 +8,7 @@
 ##		that already exists is refused.
 ##	- Syntax: tempdir.ps1 [-Installer <path to install.ps1>]
 ##	- Exit: 0 when every check passed, 1 otherwise.
+##	- Test ID: EqBoTW4
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

@@ -8,6 +8,7 @@
 ##		Windows pipeline runs it as well as the Linux one. Needs ssh-keygen.
 ##	- Syntax: verify-sign.ps1 [-Installer <path to install.ps1>]
 ##	- Exit: 0 when every check passed or ssh-keygen is missing, 1 otherwise.
+##	- Test ID: Eq9wAnY
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

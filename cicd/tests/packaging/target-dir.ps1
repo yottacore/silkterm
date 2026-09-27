@@ -7,6 +7,7 @@
 ##		fTargetDir is lifted out of the file rather than retyped.
 ##	- Syntax: target-dir.ps1 [-Pipeline <path to cicd-win.ps1>]
 ##	- Exit: 0 when every check passed, 1 otherwise.
+##	- Test ID: EqAwQqA
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

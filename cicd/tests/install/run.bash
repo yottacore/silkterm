@@ -7,6 +7,7 @@
 ##		launcher that still works from a path holding a space.
 ##		The last two run install.bash for real, against a stand-in release served
 ##		by a curl on PATH, in a scratch home and temp folder.
+##	- Test ID: EpHW9fk
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

@@ -9,6 +9,7 @@
 ##		script. The pipeline, the packaging and the installers kept it too.
 ##		This clones the repository, renames the clone, and checks that nothing a
 ##		build reads by name went missing and that the old name is gone.
+##	- Test ID: EqAwQqB
 ##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]

@@ -1778,6 +1778,7 @@ mod tests {
 
 	// Numbers from the NVIDIA box where a stray GLX error used to kill the
 	// window at its next focus change: GLX 152 with errors from 158, NV-GLX 156.
+	// Test ID: EqFRbdI
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn gl_errors_are_claimed_and_others_are_not() {
@@ -1805,6 +1806,7 @@ mod tests {
 	// was taken unconditionally to join the worker and only put back on the
 	// Building arm, so the second dialog open dropped the context and every open
 	// after that paid for a cold one.
+	// Test ID: Ep1mr9M
 	#[test]
 	fn a_settled_context_survives_being_settled_again() {
 		let mut w = Warm::Building(std::thread::spawn(|| Some(7)));
@@ -1816,6 +1818,7 @@ mod tests {
 
 	// A worker that came back empty stays Failed rather than falling back to
 	// Idle, which would let `start` spawn another probe on the next pass.
+	// Test ID: Ep1mr9N
 	#[test]
 	fn a_failed_warm_up_stays_failed() {
 		let mut w = Warm::Building(std::thread::spawn(|| Option::<u32>::None));
@@ -1827,6 +1830,7 @@ mod tests {
 
 	// The sentinel only detects loss if its pattern can't be mistaken for
 	// trashed VRAM: right size, deterministic, and not a trivial fill.
+	// Test ID: Ekm1rM0
 	#[test]
 	fn sentinel_pattern_is_deterministic_and_varied() {
 		let a = sentinel_pattern();
@@ -1842,6 +1846,7 @@ mod tests {
 		assert_ne!(a, vec![0u8; SENTINEL_BYTES]);
 	}
 
+	// Test ID: Ekm1rM1
 	#[test]
 	fn sentinel_row_is_copy_aligned() {
 		// stride == unpadded row, so the readback compares without de-padding

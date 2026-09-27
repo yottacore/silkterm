@@ -2,6 +2,7 @@
 ##	on Windows the only word of it went to a console a release build does not
 ##	have. Now a standard message box says so, a few seconds after launch, when
 ##	the shell scan's save is refused.
+##	Test ID: EqH8w4O
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the box cannot be grabbed" }
 
