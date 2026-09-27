@@ -3,6 +3,7 @@
 <!-- markdownlint-disable MD033 -- No inline html -->
 <!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
 <!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
+
 # Development prerequisites
 
 What to install before you can develop and build SilkTerm, per OS. Once these are in place, [build.md](build.md) has the actual build commands (native + cross), and the CI/CD pipelines (`cicd/cicd.bash` on Linux, `cicd/cicd-win.ps1` on Windows) drive the full lint/test/build/package flow.
