@@ -6559,6 +6559,15 @@ fn pane_shell(
 		.or_else(default)
 }
 
+// A new pane's direction: its own, else the one the pane it splits was given,
+// which carries down the chain. None leaves it to `default_dir`.
+fn pane_split_dir(
+	explicit: Option<crate::cli::Dir4>,
+	split_source: Option<crate::cli::Dir4>,
+) -> Option<crate::cli::Dir4> {
+	explicit.or(split_source)
+}
+
 // Build the initial tabs/panes from the parsed command line. Without
 // hierarchical flags, one tab with one pane (running any window-level --shell).
 fn build_layout(
@@ -6646,6 +6655,9 @@ fn build_layout(
 		dirs.insert(main_id, main_dir);
 		let mut keeps: HashMap<PaneId, bool> = HashMap::new();
 		keeps.insert(main_id, main_keep);
+		// only a direction somebody gave, or inherited from one; the tab's first
+		// pane has none
+		let mut split_dirs: HashMap<PaneId, crate::cli::Dir4> = HashMap::new();
 		let mut prev = main_id;
 
 		for pane_spec in &tab.panes[1..] {
@@ -6654,7 +6666,8 @@ fn build_layout(
 				.as_deref()
 				.and_then(|handle| handles.get(handle).copied())
 				.unwrap_or(prev);
-			let dir4 = pane_spec.dir.unwrap_or_else(|| default_dir(&pm, target));
+			let given_dir = pane_split_dir(pane_spec.dir, split_dirs.get(&target).copied());
+			let dir4 = given_dir.unwrap_or_else(|| default_dir(&pm, target));
 			let (dir, before) = match dir4 {
 				crate::cli::Dir4::Down => (Dir::Horizontal, false),
 				crate::cli::Dir4::Up => (Dir::Horizontal, true),
@@ -6685,10 +6698,11 @@ fn build_layout(
 				.or(tab.style.keep_open)
 				.or(cli.win.style.keep_open)
 				.unwrap_or(false);
-			let ratio = match pane_spec.size {
-				None => 0.5,
-				Some(Size::Percent(pct)) => pct / 100.0,
-				Some(Size::Cells(n)) => {
+			// no size evens out a run of same-direction splits, as a split from
+			// the keyboard does
+			let ratio = pane_spec.size.map(|size| match size {
+				Size::Percent(pct) => pct / 100.0,
+				Size::Cells(n) => {
 					let rect = pm.panes.get(&target).map_or(area, |p| p.rect);
 					let denom = match dir {
 						Dir::Vertical => (rect.w / text.cell_w).max(1.0),
@@ -6696,7 +6710,7 @@ fn build_layout(
 					};
 					n as f32 / denom
 				}
-			};
+			});
 			if let Some(new_id) = pm.split_at(
 				text,
 				proxy,
@@ -6707,7 +6721,6 @@ fn build_layout(
 				shell.clone(),
 				pane_dir.clone().or_else(|| start.clone()),
 				area,
-				false,
 			) {
 				if let Some(handle) = &pane_spec.id {
 					handles.insert(handle.clone(), new_id);
@@ -6715,6 +6728,9 @@ fn build_layout(
 				shells.insert(new_id, shell);
 				dirs.insert(new_id, pane_dir);
 				keeps.insert(new_id, keep);
+				if let Some(given) = given_dir {
+					split_dirs.insert(new_id, given);
+				}
 				hold(&mut pm, new_id, keep);
 				prev = new_id;
 			}
@@ -8812,7 +8828,7 @@ mod tests {
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
 		bar_title_underlines, context_menu_items, default_dir_for, edit_menu_items, entry_accel,
 		entry_label, file_menu_items, help_menu_items, menubar_text_slot, pane_shell,
-		panes_menu_items, push_back, split_shells, tabs_menu_items,
+		pane_split_dir, panes_menu_items, push_back, split_shells, tabs_menu_items,
 	};
 	use crate::config;
 	use std::time::{Duration, Instant};
@@ -10361,6 +10377,19 @@ mod tests {
 		assert_eq!(default_dir_for(rect(900.0, 400.0)), Dir4::Right);
 		assert_eq!(default_dir_for(rect(500.0, 500.0)), Dir4::Right);
 		assert_eq!(default_dir_for(None), Dir4::Right);
+	}
+
+	// --new-pane=a --down --new-pane --splits=a stacks the second pane below too.
+	// Test ID: ErCAz8d
+	#[test]
+	fn a_pane_splits_the_way_the_pane_it_splits_was_split() {
+		use crate::cli::Dir4;
+		assert_eq!(pane_split_dir(None, Some(Dir4::Down)), Some(Dir4::Down));
+		assert_eq!(
+			pane_split_dir(Some(Dir4::Left), Some(Dir4::Down)),
+			Some(Dir4::Left)
+		);
+		assert_eq!(pane_split_dir(None, None), None, "left to the longer side");
 	}
 
 	// Test ID: Er2UvPw
