@@ -31,10 +31,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## New format
 
+- Windows Terminal handoff
+	- ID: 2026092810510800
+	- Type: Feature
+	- Status: Queued
+	- Priority|Severity: Avg
+	- Opened: 20260928-105138
+	- Opened by: JC
+	- Assigned to: JC
+	- Target OS: Windows
+	- Test environment:
+	- Version and build:
+	- Requirements:
+		- In order to register as the "default terminal" in Windows, several unusual things are required.
+		- I closed the webpage that describes exactly what, before copying the URL, so do research again.
+		- Open questions:
+			- Generally, I'd like the ability for the user to be able to register the one installed version of SilkTerm as the default terminal.
+			- But for me specifically, I'd like to be able to register 'n8runterm' as the default. (Is that a completely separate thing?)
+	- Estimated effort: Avg
+	- Actual effort:
+	- Progress log:
+		- …
+	- Decisions:
+		- …
+	- Branch:
+	- Commit:
+	- Test case:
+	- Acceptance signoff:
+	- Superseded by ID:
+	- Closed:
+
 - cicd shows one line per test, with its status and test ID
 	- ID: 2026092711142900
 	- Type: Enhancement
-	- Status: Testing
+	- Status: Closed
 	- Priority: Avg
 	- Opened: 20260927-111429
 	- Opened by: JC
@@ -50,6 +80,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A test whose ID cannot be found shows dashes, with a warning line after the run.
 	- Branch: testlines
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
+	- Closed: 20260928-111812
 
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
@@ -74,11 +105,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: cfgorder
 	- Commit: c6d68c1
 	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
+	- Closed:
 
 - The wallpaper folder setting is blank, and Settings never shows the folder
 	- ID: 2026092618142601
 	- Type: Enhancement
-	- Status: Testing
+	- Status: Closed
 	- Priority: Avg
 	- Opened: 20260926-181426
 	- Opened by: JC
@@ -96,6 +128,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: cfgorder
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
+	- Closed: 20260928-112023
 
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082
@@ -119,6 +152,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
 		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
 	- Estimated effort: Avg
+	- Closed:
 
 - A launch from the Start menu as an MSIX package opens the first shell in System32
 	- ID: 2026092617015083
@@ -143,6 +177,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Nothing here needs a package, so it can be done and tested now.
 	- Estimated effort: Low
 	- Test case: Unit tests for `dir_is_a_choice` with the system folder as the working directory.
+	- Closed:
 
 - A pipeline run dies at the Windows GUI stage when a box is held by another session
 	- ID: 2026092618254900
@@ -161,6 +196,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: Yes, on b23 on 20260926 at 18:25, with vm925w held by a nemo-anywhere session.
 	- Possible cause: The lock's "still queued" exit reaches `cicd.bash` as the harness's failure.
 	- Estimated effort: Low
+	- Closed:
 
 - A command-line split does not reuse the direction of the pane it splits, and a run of splits the same way is not evened out
 	- ID: 2026092621021531
@@ -177,6 +213,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Both are in the done command-line item. Direction carries along the split chain, and a run of same-direction splits with no size is spread out evenly.
 	- Reproduced: No. Read from the code, where `build_layout` falls back to `default_dir` and always splits at 0.5 with no evening out.
 	- Test case: None yet. `a_split_with_no_direction_goes_along_the_longer_side` pins the fallback as it is.
+	- Closed:
 
 - A settings range test skips two of the keys it lists
 	- ID: 2026092621021532
@@ -189,6 +226,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: All
 	- Incorrect behavior: `every_numeric_setting_has_a_floor_and_a_ceiling` lists `window.idle_release_hidden_min` and `window.idle_release_min`, but reads `remembered_rows` for both. Their own ceilings are never checked, and the grid limit it checks is not theirs.
 	- Expected behavior: Each key reads its own field and checks its own limit.
+	- Closed:
 
 - CODEOWNERS has no line for the About dialog
 	- ID: 2026092621021533
@@ -202,6 +240,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The done support item lists the About dialog as locked in CODEOWNERS, but the file names only itself, DONATE.md and FUNDING.yml.
 	- Expected behavior: A line for the code that draws the About dialog and its support button.
 	- Test case: None, it is a git host setting.
+	- Closed:
 
 - Three fixes are pinned only by tests in the patched crates, which the pipeline never runs
 	- ID: 2026092621021534
@@ -215,6 +254,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- The x11-clipboard stale clear, the Windows pane handle leak and the engine's scroll ledger are held only by tests in the fork repos.
 		- Either run those tests from cicd, or say in each item that the fork's own runs are the check.
+	- Closed:
 
 - The launcher test would use the real dogfood pool if run on Windows
 	- ID: 2026092621021535
@@ -227,6 +267,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: Windows
 	- Incorrect behavior: `cicd/tests/launcher/run.ps1` points HOME and USERPROFILE at a sandbox, but on Windows the launcher keeps its pool under LOCALAPPDATA, which it leaves alone.
 	- Expected behavior: The sandbox covers LOCALAPPDATA too. cicd runs the test only on Linux today, so nothing has touched the real pool.
+	- Closed:
 
 ## Bugs
 
@@ -254,6 +295,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260925-183900
 
 ## Features and enhancements
+
+- 🔘 Windows: let SilkTerm be picked as the default terminal, so a console program started from anywhere, such as double-clicking a `.bat`, opens in SilkTerm instead of conhost or Windows Terminal.
+	- There is no setting or script that can do this from the outside. Windows stores the choice in `HKCU\Console\%%Startup` as two COM class IDs, `DelegationConsole` and `DelegationTerminal`, not as program paths. The console host creates that class and calls `ITerminalHandoff::EstablishPtyHandoff`, passing over the pipes of a program that's already running.
+	- Checked 2026-09-28: the source has nothing for this, and neither does build `slktrmdf_20260927-175446_gnulwi`. Pointing the registry at SilkTerm today would break every console launch.
+	- 🔘 Add a COM local server to SilkTerm that implements the handoff interface. It's defined in microsoft/terminal at `src/host/proxy/ITerminalHandoff.idl`. Newer builds call `ITerminalHandoff3`, scheck which version the current console host uses before starting.
+	- 🔘 Give the pty backend a second way in. Today it always creates its own ConPTY. A handed-off session arrives with its pipes, signal pipe and process handles already made, and the tab has to runthose.
+	- 🔘 Register the class under `HKCU\Software\Classes\CLSID\{guid}\LocalServer32`, pointing at `%LOCALAPPDATA%\Programs\silkterm.exe` with a flag like `--handoff`. That's the symlink the launcher kpointed at the newest dogfood build, so the default follows each new build.
+			- A handed-off window skips the launcher, so it won't be elevated.
+	- 🔘 Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminalthat the built-in conhost doesn't. Not verified. The ConPTY redistributable already being tried here ships its own console host, which may or may not be usable for this.
+	- 🔘 Add a way to switch it on and off, either in Settings or as a command-line option. Turning it off means setting both values back to all zeros, which is "Let Windows decide".
+	- The Settings app's dropdown only lists packaged apps that declare the handoff extension. An unpackaged SilkTerm could still write the registry values itself, but it would never show up in that l
 
 - ✋ Save settings by editing only the lines that changed, so a file with a line that cannot be read still takes the window size, menu switches and new shells.
 	- The performance rating already saves this way. The shell list and Settings Apply would still refuse.
@@ -354,7 +406,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		This is the last time you'll see this message, but you can get back to the download prompt again at any time through Help|About.
 		~~~
 
-	- Add a "Wallpaper ..." button to Help > About that opens the same offer again. Window title "SilkTerm background wallpaper download", same two buttons, and the same body text minus the welcome and the last line.
+	- Add a "Wallpaper …" button to Help > About that opens the same offer again. Window title "SilkTerm background wallpaper download", same two buttons, and the same body text minus the welcome and the last line.
 	- Note: the dialog copy was specified 20260826.
 	- Opened: 20260817-120024
 
@@ -1057,7 +1109,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A Windows console names a new window after the program it starts, so a shell that sets no title of its own arrives carrying its own image path. Confirmed for cmd and for pwsh on both test machines.
 	- A console that names the program and then the command it is running keeps the command. The name has to be a full path for that, so vim's "build.bat - VIM" is left alone.
 	- Seen on Linux against a live pane fed each shape: the reported title, a running command, and an ordinary title that has to survive untouched.
-	- Unrun: Windows, where the titles actually come from. An elevated pane is also unchecked - an elevated console labels its own window "Administrator: ...", and whether that reaches the terminal is unknown, so nothing was built for it.
+	- Unrun: Windows, where the titles actually come from. An elevated pane is also unchecked - an elevated console labels its own window "Administrator: …", and whether that reaches the terminal is unknown, so nothing was built for it.
 	- Pinned by: `a_console_title_that_only_names_a_program_is_dropped`, `a_console_that_names_the_command_it_is_running_keeps_the_command`, `an_editor_naming_the_file_it_has_open_keeps_the_file` and `a_tab_passes_over_a_title_that_only_names_a_program`.
 	- Opened: 20260908-125000
 	- Closed: 20260909-104500
@@ -1368,7 +1420,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Code review 20260908. Twenty-five defects, full-codebase pass. Each is fixed and each left a test behind that fails without the fix.
 	- ✅ 1. Wallpaper rotation spawned a decode thread on every pass through the event loop and never recovered. The timer moves off the current moment when a tick fires, rather than waiting for an answer that could never be current.
 		- Pinned by: `a_rotation_tick_moves_the_timer_off_now`.
-	- ✅ 2. Settings, Themes, "Save as...", then a click in the name box, aborted the program. The prompt box is not a row, and it can no longer put itself into the row list's keyboard focus.
+	- ✅ 2. Settings, Themes, "Save as…", then a click in the name box, aborted the program. The prompt box is not a row, and it can no longer put itself into the row list's keyboard focus.
 		- Pinned by: `clicking_the_prompt_field_leaves_the_focus_ring_on_a_real_row`.
 	- ✅ 3. A PowerShell profile that is not valid UTF-8 was replaced whole with no backup. Such a profile is left alone now, the backup covers the update path as well, and both writes rename into place instead of truncating.
 		- Pinned by: `a_profile_that_is_not_utf8_is_left_alone`.
@@ -1504,7 +1556,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Seen doing "Open terminal here" on Windows. Nothing hands wsl.exe a directory today - a distribution is stored as `wsl.exe -d <name>`, and the pane starts wherever the spawned process inherited from.
 	- Two cases that need separating before anything is changed, because only the second is clearly broken:
 		- The first pane of a launch inherits the folder the launcher was sitting in, which wsl.exe is supposed to translate on its own. If that is the failing case, the question is what it does instead.
-		- A new tab or split from a WSL pane inherits what the shell last reported, which is a posix path. That cannot be a Windows working directory at all. Fits the garbled `/tmp/...` prompt seen once after splitting a WSL pane.
+		- A new tab or split from a WSL pane inherits what the shell last reported, which is a posix path. That cannot be a Windows working directory at all. Fits the garbled `/tmp/…` prompt seen once after splitting a WSL pane.
 	- Fixed: the directory is handed to wsl.exe with `--cd`, inserted ahead of its own arguments since options have to come first. It takes a Windows path or a posix one, so whichever spelling the source pane reported goes straight through. An entry that already carries a `--cd` of its own is left alone.
 	- Fixed: a directory a shell reported is only used as a Windows working directory when it is spelled as one. The first case turned out not to be broken, since wsl.exe translates a directory it inherits on its own. The second was, and worse than expected: /tmp, /mnt and /opt all resolve against the current drive, so a posix path from a WSL pane passed the existing "does it exist" check and was taken as a directory on C:, which is the garbled prompt in the report.
 	- An explicitly chosen startup directory is made absolute before it is checked, so a drive-less spelling still resolves rather than being dropped by the new rule.
@@ -2182,7 +2234,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260708-163910
 
 - ✅ Bug in double-click to select (then Ctrl+shift+C).
-	- Steps to reproduce: The specific command was `zpool status`. Trying to double-click on a member by label (e.g. "zfs-..."), or "ONLINE", results in something else being selected. It appears to actually select something to the right. But if you can guess correctly on your aim, then hit the copy hotkey, it does correctly copy the text. (Just not the text that's highlighted.)
+	- Steps to reproduce: The specific command was `zpool status`. Trying to double-click on a member by label (e.g. "zfs-…"), or "ONLINE", results in something else being selected. It appears to actually select something to the right. But if you can guess correctly on your aim, then hit the copy hotkey, it does correctly copy the text. (Just not the text that's highlighted.)
 	- Cause: `zpool status` indents its config section with a literal tab. The raw tab was passed through to the shaper, which expands it to a full 8-column stop. That shifted the row's visible text several columns right of the grid the selection uses. The highlight and copy stayed correct but no longer lined up with the on-screen text, so clicking a visible word selected a cell several columns away. Only tab-indented output was affected.
 	- Fixed: render any control character in a cell as a plain one-cell space, so the tab cell advances one column and the row stays grid-aligned.
 	- Pinned by: `render_char_maps_controls_to_space`.
@@ -2468,7 +2520,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done (20260806): `install.bash` now targets bash 3.2 (the macOS system bash), and `install.ps1` runs on Windows PowerShell 5.1 as well as 7+, on any platform PowerShell supports.
 	- Why the extra care on failures: an installer is the first thing a new user runs, so a raw stack trace is the worst possible first impression. Permission denied, an unreachable github, a rate-limited API, a missing platform build and "the app is still running" each get their own message saying what to do next.
 	- Verified on a Windows host: the Start Menu shortcut, an elevated system install, and the PATH edit. That edit writes through the registry rather than the environment API, because the API rewrites an expandable PATH as a plain one and silently kills every `%VAR%` already in it.
-	- Done (20260807): fixed for the `irm ... | iex` form the README advertises. That runs the script inside the caller's own shell, so three things behaved differently there - a failure closed their window, the script-block form could not resolve its own variables, and strict mode was left switched on in their session afterwards. The retired `-Arch` option also rejected its own default under that form, which is how it surfaced.
+	- Done (20260807): fixed for the `irm … | iex` form the README advertises. That runs the script inside the caller's own shell, so three things behaved differently there - a failure closed their window, the script-block form could not resolve its own variables, and strict mode was left switched on in their session afterwards. The retired `-Arch` option also rejected its own default under that form, which is how it surfaced.
 	- Done (20260807): both scripts and the README section published to `main`, so the advertised one-liners work ahead of the next release.
 
 	- A Bash >=3.2 script, and/or cross-platform PowerShell v7 script, that users can run as a one-liner from their shell - to download the latest stable or dev release, verify checksum, and install the executable. Idempotent; states its plan and asks before touching anything. Uses nice output, blank line at the start and end of script, and one blank line between major sections of output. Add something the contents below to README.md, under an "Installation" header, "Direct" subheader. (The primary install should be an installer.) Include the commands, and the install locations.
@@ -2934,7 +2986,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Show in window title, if GPU and CPU savings are in effect, then show when restoring, then restored.
 	- In effect: "[regular title] (resource conservation mode)"
-	- Restoring: "[regular title] (restoring resources ...)"
+	- Restoring: "[regular title] (restoring resources …)"
 	- Restored: "[regular title] (resources restored)"
 		- Show for 5 seconds after restoration
 	- Pinned by: `the_title_note_follows_the_device_out_and_back` and `a_note_follows_the_whole_title_even_a_custom_one`.
@@ -3269,7 +3321,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Contradictions were settled in the guide rather than left as two habits. It keeps a short list of places the built interface still differs, so the gap is visible instead of forgotten.
 		- No test: style guide text.
 	- ✅ Apply the updates across the project (mostly menus and settings dialog).
-		- "Save as..." and "Rename" on the Themes tab now end in a real ellipsis, the way Settings and About already did.
+		- "Save as…" and "Rename" on the Themes tab now end in a real ellipsis, the way Settings and About already did.
 		- The three font-size items on the View menu read "Ctrl+Plus", "Ctrl+Minus" and "Ctrl+0", so every shortcut in every menu is spelled one way. Both were looked at on screen.
 		- Two differences are deliberate and stay listed rather than fixed: the capital S in "Paste Selection", which is what its accelerator has to take, and "Copy on select" sitting on the Cursor tab, which was asked for and is pinned by a test.
 		- Pinned by: `every_shortcut_in_a_menu_is_spelled_one_way` and `a_row_that_asks_for_more_ends_in_a_real_ellipsis`.
@@ -3444,7 +3496,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- "Blink rate" slider
 			- "Shape"
 			- "Animation"
-			- "Animation pauses on ..."
+			- "Animation pauses on …"
 				- [ ] Loss of window focus
 				- [ ] Loss of pane activity
 				- [ ] Input inactivity
@@ -3463,11 +3515,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- ✅ "Theme" (drop-down of selectable themes).
 					- Pinned by: `picking_a_theme_adopts_its_colours` and `an_edited_theme_reads_as_unsaved_in_the_box`.
 				- ✅ Buttons aligned underneath theme dropdown box, arranged in one horizontal row:
-					- [Save]  [Save as ...]  [Rename]  [Delete]
+					- [Save]  [Save as …]  [Rename]  [Delete]
 					- Behavior:
 						- ✅ [Save] is only enabled, if the user has unsaved changes to current theme. Even across sessions.
 							- Pinned by: `an_edited_colour_is_what_makes_the_theme_dirty` and `focus_carries_on_when_the_control_under_it_greys_out`.
-						- ✅ [Save as ...] pops up a small dialog with the text "Enter a new theme name", and below that, an empty textbox. buttons at bottom-right "Cancel|OK" (OK default)
+						- ✅ [Save as …] pops up a small dialog with the text "Enter a new theme name", and below that, an empty textbox. buttons at bottom-right "Cancel|OK" (OK default)
 							- Pinned by: `the_prompt_box_owns_the_keyboard_until_it_closes`.
 						- ✅ [Rename] pops up a small dialog to edit existing name (all text selected by default), with buttons "Cancel|OK" (OK default).
 							- Pinned by: `rename_opens_on_the_name_selected`.
@@ -3504,7 +3556,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- UI:
 				- A grid, one line per stored shell, every field edited in place: "Name", "Command", "Last seen", "Active"
 					- Reconciled with what was asked for later, which supersedes the original spelling of this item: the columns are the four above, "Last seen" is new (a date, read-only, written by the scan), the edit popup is gone in favor of editing in the row, and "Comment" is no longer a column - the scan still writes it and it shows as the row's flyover tip.
-					- "Active" is a checkbox. When it is on, the shell's name appears under "Tabs/New tab with shell ... ->".
+					- "Active" is a checkbox. When it is on, the shell's name appears under "Tabs/New tab with shell … ->".
 					- The command is required: emptying the field leaves the stored one standing, and an entry that never got one is dropped rather than saved.
 				- ✅ A grip at the left of each line reorders it by dragging. This supersedes the four move icons this item first asked for ("Move to top", "Move up", "Move down", "Move to bottom"), which are gone; reordering is mouse-only now.
 					- Pinned by: `a_grip_drag_reorders_the_list`, `the_grip_is_a_gesture_and_not_a_keyboard_stop` and `a_line_dragged_off_the_top_lands_on_the_first`.
@@ -3659,7 +3711,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ General format (unless we already inherited one):
 		- Done: both `--option value` and `--option=value` are taken, and a bool takes true/t/yes/y/1 or false/f/no/n/0. Short forms exist only for `-h` and `-v` so far.
 		- `--option[=| ]value` | `-o value`
-		- `--unary-flag` | `--unary-flag[=| ]\(true|t|yes|y|Y|1|false|f|no|n|N|0\)` | `-u` | ...etc.
+		- `--unary-flag` | `--unary-flag[=| ]\(true|t|yes|y|Y|1|false|f|no|n|N|0\)` | `-u` | …etc.
 		- In other words, even unary flags can be treated as options, and important options have single unique "short" versions.
 		- Pinned by: `window_opts`, `a_directory_cascades_the_way_a_shell_does` and `wallpaper_never_eats_the_next_option`.
 	- ✅ `--config[=| ]"alternate config file location"`
@@ -3888,7 +3940,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260828
 
 - ✅ Menu enhancements: shells in the Tabs and Panes menus, sentence case, and a separator.
-	- ✅ "Tabs/New tab with shell ... ->" (below "New tab"), opens sub-menu, with list of shells by Title, as configured by default and/or edited by user in Settings dialog, "Shells" tab.
+	- ✅ "Tabs/New tab with shell … ->" (below "New tab"), opens sub-menu, with list of shells by Title, as configured by default and/or edited by user in Settings dialog, "Shells" tab.
 		- Done: the row sits under "New Tab" in the Tabs menu and in the right-click menu, and opens a flyout listing every active shell by title. It draws from the stored list, which the background scan above fills in - so it did not have to wait for the Settings "Shells" tab after all; that tab is now only the editor for a list that already exists.
 		- The row is absent entirely while there is no shell to put under it, rather than opening an empty flyout.
 		- A new tab started this way still inherits the current directory - picking a shell says nothing about where to start.
@@ -4315,7 +4367,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- Scenario 1: <1 screen of text, from the top:
 					- "Instant" output.
 				- Scenario 2: >1 screen of text, from the top:
-					- First screen's worth of output appears "instantly". But once it needs to start scrolling up, then...
+					- First screen's worth of output appears "instantly". But once it needs to start scrolling up, then…
 					- Ease-in has full control of speed. Then hands off to the ramp-up function. Then to unbounded speed. At some arbitrary point depenting on output, the ramp-down function takes over, and finally ease-out.
 				- Scenario 3: <1 screen of text, from the bottom (with a screen full of text above):
 					- Ease-in begins with full control of speed from the start.
@@ -5490,7 +5542,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Solution:
 		- One command (`cicd/cicd.bash`) runs the whole release end to end: format the code, debug build, run the tests, take a profiler snapshot, build all the release targets (native + cross), install the native build into a local bin dir ("dogfood"), then back up and publish to git. It prints the plan and the paths it will use first, and stops at the first problem.
 		- Reusable in other projects: copy the `cicd/` directory and edit just `cicd/config.bash`. The engine itself stays generic.
-		- Can run fully unattended with `-y` (give the publish commit message up front with `-m "..."`), so it formats, builds, tests, releases, and publishes without stopping to ask. Any stage can be skipped (`--no-fmt`, `--no-cross`, `--no-profile`, `--no-dogfood`, `--no-publish`).
+		- Can run fully unattended with `-y` (give the publish commit message up front with `-m "…"`), so it formats, builds, tests, releases, and publishes without stopping to ask. Any stage can be skipped (`--no-fmt`, `--no-cross`, `--no-profile`, `--no-dogfood`, `--no-publish`).
 		- The profiler stage is informational, not a pass/fail gate: it runs the real app under heavy load for a few seconds and saves a flamegraph - a single SVG you open in a browser to see where the time goes. It only aborts the run if the app itself misbehaves, not for environmental reasons like no display.
 		- Old profiler snapshots and git backups are both trimmed to about 30 files by one shared routine, keeping a time-spread history: the most recent handful, plus the newest of each recent hour/day/week/month/year, plus the very first.
 		- The fuller details (profiler tooling, the dedicated build profile, the rotation rules and tuning knobs) are documented in the `cicd/` scripts themselves.
@@ -5719,7 +5771,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260629-214404
 
 - ✅ Menu content change: No tab or pane setting under the "File" menu. "Panes" can be it's own top-level menu item, between "Tabs" and "Help".
-	- Done. Menu bar is now File / Edit / View / Tabs / Panes / Help. File = Reload Config, Settings..., Quit (no tab/pane items). Tabs = New/Next/Previous/Close Tab. Panes (new, between Tabs and Help) = Split Vertical, Split Horizontal, Close Pane (moved out of View). View = Fullscreen, Hide window frame, Menu bar.
+	- Done. Menu bar is now File / Edit / View / Tabs / Panes / Help. File = Reload Config, Settings…, Quit (no tab/pane items). Tabs = New/Next/Previous/Close Tab. Panes (new, between Tabs and Help) = Split Vertical, Split Horizontal, Close Pane (moved out of View). View = Fullscreen, Hide window frame, Menu bar.
 	- Pinned by: `the_bar_reads_file_to_help_and_file_holds_no_tab_or_pane_action`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -5752,7 +5804,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done. `window.set_fullscreen(Borderless)` + F11. Compiz on this box doesn't honor the request (environment, like the F11 grab); it works on a compliant WM.
 		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
 	- ✅ Settings
-		- Done: "Settings..." on the right-click menu opens the dialog, as does Ctrl+Comma. "Reload Config" beside it applies edits made to the file by hand.
+		- Done: "Settings…" on the right-click menu opens the dialog, as does Ctrl+Comma. "Reload Config" beside it applies edits made to the file by hand.
 		- Pinned by: `the_right_click_menu_carries_the_pane_actions_and_their_checkmarks`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -5799,7 +5851,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Double-clicking selects a word up to user-tweakable delimiters (sane defaults; full paths stay whole).
 	- Done: a double-click, meaning two clicks in the same cell within the usual interval, selects a word. A `word_separators` setting names the delimiters, and the default keeps the characters that hold a path together.
-	- Refined: dropped ':' from the default delimiters, so a Windows drive path (`C:\...`) selects whole (was splitting off the drive); URLs and namespaced idents come along too. Override by adding ':' back to `word_separators`.
+	- Refined: dropped ':' from the default delimiters, so a Windows drive path (`C:\…`) selects whole (was splitting off the drive); URLs and namespaced idents come along too. Override by adding ':' back to `word_separators`.
 	- Pinned by: `default_word_separators_keep_drive_colon`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -5828,7 +5880,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260629-214404
 
 - ✅ Local config file with tunables, somewhere under ~/.config
-	- Done: `$XDG_CONFIG_HOME/silkterm/config.toml` (-> `~/.config/...`), auto-created with commented defaults on first run. Tunables: font, size, line height, margin, scrollback, scroll feel, colors (`#rrggbb`). Malformed/unknown entries fall back to defaults.
+	- Done: `$XDG_CONFIG_HOME/silkterm/config.toml` (-> `~/.config/…`), auto-created with commented defaults on first run. Tunables: font, size, line height, margin, scrollback, scroll feel, colors (`#rrggbb`). Malformed/unknown entries fall back to defaults.
 	- Pinned by: `each_platform_keeps_its_config_where_that_platform_keeps_settings`, `an_explicit_xdg_config_home_wins_on_every_platform`, `a_bad_line_drops_only_its_own_setting` and `default_config_is_valid_shcl`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -5927,7 +5979,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Glidra: Sounds like something on a drug store shelf, or an enemy of Godzilla.
 		- Velumux: Meh. Doesn't seem memorable.
 		- Scrollo: Kind of cool. Sounds like Bender's evil cousin.
-		- Terminal Bro: Just...no.
+		- Terminal Bro: Just…no.
 	- No test: a naming decision.
 	- Opened: n/a
 	- Closed: 20260628-083740
@@ -6062,9 +6114,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260629-230245
 
 - 🚫 Terse `--layout` DSL as optional sugar over the window/tab/pane CLI model (not a replacement). One compact string for quick splits; lowers to the exact same internal layout the hierarchical flags produce, so it inherits per-pane targeting "for free."
-	- Operators (mnemonic = the divider they draw): `|` side-by-side (vertical divider), `-` stacked (horizontal divider); `(...)` to nest (a group is uniform - mix directions by nesting); `;` separates tabs; `.` = one default pane.
+	- Operators (mnemonic = the divider they draw): `|` side-by-side (vertical divider), `-` stacked (horizontal divider); `(…)` to nest (a group is uniform - mix directions by nesting); `;` separates tabs; `.` = one default pane.
 	- Leaf = `.` (default shell) | command-alias name (from a `[commands]` config table, keeps the string quote-free) | `{raw command}` (opaque span so an inner `|` pipe isn't parsed as a split; `\}` escapes a brace). Optional fixed-order suffixes: `@dir` (cwd), `:weight` (size), `!` (keep-open).
-	- Example: `silkterm --layout '(.|.)-. ; nvim|{git log} ; btop'` -> tab1: two-on-top/one-below; tab2: nvim beside a git-log pane; tab3: btop. Same string is accepted in `layout = "..."` in the config.
+	- Example: `silkterm --layout '(.|.)-. ; nvim|{git log} ; btop'` -> tab1: two-on-top/one-below; tab2: nvim beside a git-log pane; tab3: btop. Same string is accepted in `layout = "…"` in the config.
 	- Trade-off vs the flags: far terser for hand-typed/quick layouts, but less self-documenting; the flags stay the canonical form (and what "Save layout" emits). DSL is purely a convenience front-end.
 	- Opened: 20260628-083740
 	- Closed: 20260713-142351
@@ -6098,7 +6150,12 @@ New issue format:
 
 - The ID is the local time to the hundredth of a second. Opened is when it was written down, which may differ. (Use a keyboard macro and possibly something like project 'zuid' to generate.)
 
-- Status values, in sort order: Started, Testing, Waiting on signoff, Stalled, Queued, Deferred, Done, Moot, Canceled. Testing means the fix is in and checks are running or still to run. Waiting on signoff means testing passed. Moot means something else changed and made it irrelevant. Canceled means it still applies but was decided against.
+- Status values meaning: Testing means the fix is in and checks are running or still to run. Waiting on signoff means automated testing passed. Moot means something else changed that made it irrelevant. Canceled means it still applies but was decided against.
+
+- As issues are worked, and statuses change, place them in correct sorting order within the list:
+	- First by status: Waiting on signoff, Testing, Stalled, Started, Queued, Done, Deferred, Canceled, Moot
+	- Then by type: Bugs, [not bugs together]
+	- Then by severity|priority: Critical, High, Avg, Low
 
 - Rows marked [Bug] are for bugs only, and rows marked [Feature] for features and enhancements. Children are not nested. They sit at the top level and point back with Parent ID.
 
@@ -6109,39 +6166,39 @@ Template:
 	- Type: [Bug|Feature|Enhancement|Task]
 	- Status: [Queued|Started|Stalled|Testing|Waiting on signoff|Moot|Canceled|Deferred|Done]
 	- Priority|Severity [Bug]: [Critical|High|Avg|Low]
-	- Opened: YYYYmmDD-HHMMSS
+	- Opened:
 	- Opened by:
 	- Assigned to:
-	- Parent ID: YYYYmmDDHHMMSSNN
+	- Parent ID:
 	- Prereq IDs:
-		- YYYYmmDDHHMMSSNN
+		- …
 	- Related IDs:
-		- YYYYmmDDHHMMSSNN
+		- …
 	- Target OS:
 	- Test environment:
 	- Version and build:
 	- Requirements  [Feature]:
-		- Hierarchical bulleted list.
+		- …
 	- Steps to reproduce [Bug]:
-		- ...
+		- …
 	- Incorrect behavior [Bug]:
 	- Expected behavior [Bug]:
 	- Reproduced [Bug]: [No, or when, where and how]
 	- Possible cause [Bug]:
 	- Actual cause [Bug]:
-		- ...
+		- …
 	- Estimated effort: [High|Avg|Low]
 	- Actual effort: [High|Avg|Low]
 	- Progress log:
-		- YYYYmmDD-HHMMSS: Notable effort.
+		- …
 	- Decisions:
-		- ...
+		- …
 	- Actual fix [Bug]:
 	- Branch:
 	- Commit:
 	- Test case: [Reason not applicable, or CI test case #]
 	- Acceptance signoff:
-	- Superseded by ID: YYYYmmDDHHMMSSNN
-	- Closed: YYYYmmDD-HHMMSS
+	- Superseded by ID:
+	- Closed:
 
 -->
