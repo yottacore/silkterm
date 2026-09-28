@@ -338,7 +338,7 @@ How it is built:
 
 - Under a flood every pixel of the map moves on every line, so a recompose is throttled rather than run per frame. A compose the throttle defers schedules a timed wake, not an animation flag - marking the window animating would bring it straight back, find the throttle still closed, and spin at the frame rate.
 
-- The throttle is at least 90 ms, and at least twenty times what the last compose took. A column that changes size composes at once instead of waiting the throttle out, so the image is never left at a size the column no longer has. A compose rasterizes up to the whole scrollback, which can be a million lines, so a fixed interval could not bound its share of the lock at every depth. At the default depth under a flood, the map on costs about 6% of throughput.
+- The throttle is at least 90 ms, and at least twenty times what the last ordinary compose took. A whole redraw after a screen swap, a resize or a resync costs far more, and waiting twenty times that left the map still for seconds, so it does not count. A column that changes size composes at once instead of waiting the throttle out, so the image is never left at a size the column no longer has. A compose rasterizes up to the whole scrollback, which can be a million lines, so a fixed interval could not bound its share of the lock at every depth. At the default depth under a flood, the map on costs about 6% of throughput.
 
 - Memory is about 5 MB per pane at the default scrollback and a 120 px column, freed while the map is off.
 
