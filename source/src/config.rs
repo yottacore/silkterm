@@ -2223,6 +2223,24 @@ fn config_complaints(text: &str) -> Vec<String> {
 		));
 	}
 
+	// `background: #112233` sets nothing, since `#` starts a comment, and the
+	// theme's color is used instead. The walk takes such a line for a heading.
+	let source: Vec<&str> = text.lines().collect();
+	for w in walk_settings(text) {
+		if let WalkLine::Setting {
+			index,
+			path,
+			active: true,
+			header: true,
+		} = w && let Some(color) = unquoted_color(source[index])
+		{
+			out.push(format!(
+				"`{path}` is empty{} - `#` starts a comment, so write the color in quotes: \"{color}\"",
+				line_list(&[index + 1])
+			));
+		}
+	}
+
 	// A key written twice resolves to neither spelling, so the setting is there
 	// in the file, plainly set, and doing nothing.
 	let mut seen: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
@@ -2291,6 +2309,19 @@ fn config_complaints(text: &str) -> Vec<String> {
 struct Reader<'a> {
 	doc: shcl::Document,
 	path: &'a std::path::Path,
+}
+
+// The color in `key: #rrggbb` with nothing but a comment after it, which is
+// what an unquoted color reads as. Three, six or eight hex digits.
+fn unquoted_color(line: &str) -> Option<&str> {
+	let (_, value) = line.split_once(':')?;
+	let value = value.trim_start();
+	let digits = value.strip_prefix('#')?;
+	let len = digits
+		.find(|c: char| !c.is_ascii_hexdigit())
+		.unwrap_or(digits.len());
+	let ends = digits[len..].chars().next().is_none_or(char::is_whitespace);
+	(matches!(len, 3 | 6 | 8) && ends).then(|| &value[..=len])
 }
 
 // " line 4" / " lines 2, 4" for a diagnostic, empty when there is nothing to
@@ -8923,6 +8954,28 @@ mod tests {
 
 	// All three of these were silent, and the file looks perfectly fine while the
 	// setting does nothing. The first one also stops every future save.
+	// An unquoted color was read as empty and the theme's color used, with no word
+	// of it anywhere.
+	// Test ID: ErCYi4K
+	#[test]
+	fn an_unquoted_color_is_named() {
+		let said = config_complaints("colors:\n\tbackground: #112233\n\tcursor: #abc  # mine\n");
+		assert_eq!(said.len(), 2, "{said:?}");
+		assert!(said[0].contains("colors.background"), "{said:?}");
+		assert!(said[0].contains("line 2"), "{said:?}");
+		assert!(said[0].contains("\"#112233\""), "{said:?}");
+		assert!(said[1].contains("\"#abc\""), "{said:?}");
+		assert!(config_complaints("colors:\n\tbackground: \"#112233\"\n").is_empty());
+		// a heading with a comment after it is still a heading
+		assert!(
+			config_complaints("colors:  # the palette\n\tbackground: \"#112233\"\n").is_empty()
+		);
+		assert_eq!(unquoted_color("x: #aabbccdd"), Some("#aabbccdd"));
+		assert_eq!(unquoted_color("x: #abcd"), None);
+		assert_eq!(unquoted_color("x: #1234567g"), None);
+		assert_eq!(unquoted_color("x:"), None);
+	}
+
 	// Test ID: EpHb2Tw
 	#[test]
 	fn a_config_says_what_is_wrong_with_it() {
