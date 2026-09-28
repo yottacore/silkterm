@@ -283,6 +283,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Estimated effort: Avg
 	- Closed:
 
+- Demo: the cursor goes to 50% width when the cursor size and animation change
+	- ID: 2026092812581720
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20260928-125817
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- When changing the cursor size and animation, change to 50% width.
+	- Closed:
+
 - Three fixes are pinned only by tests in the patched crates, which the pipeline never runs
 	- ID: 2026092621021534
 	- Type: Task
@@ -308,19 +321,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - 🔬 Check the display-scale fixes on two monitors at different scales.
 	- Covers the Settings dialog, maximized as well, and the About and notice boxes. The fixes are under Done.
 	- Opened: 20260919-153000
-
-- 🔘 A line the parse drops can make the whole settings file convert as the old flat layout.
-	- The line is tab-indented, steps back to a depth nothing uses, and is named like an old flat setting such as `margin`. SilkTerm's own reader takes it as a top-level setting, so the file is moved aside to `.bak` and written fresh.
-	- Opened: 20260925-073415
-
-- 🔘 Adding missing settings at launch can give a dropped line a place, so it starts being read.
-	- Example: `window:` with `margin` two tabs in and a stray line one tab in. The added window settings go in at one tab, and the stray line becomes a window setting.
-	- Opened: 20260925-073415
-
-- 🔘 The wallpaper heading repair test fails on a junk file where `wallpaper.rotate` is written three times.
-	- It reads as written more than once before and after the repair, so it loads the same. Only the count goes from 3 to 2, since the repair folds two `wallpaper:` blocks. The test compares the count too.
-	- Reproduced: `SILK_FUZZ_SEED=107671` on `a_wallpaper_repair_changes_nothing_else`, on dev before the shcl bump as well.
-	- Opened: 20260925-183900
 
 ## Features and enhancements
 
@@ -492,6 +492,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 ## Done
 
 ### Done - Bugs
+
+- ✅ A line the parse drops can make the whole settings file convert as the old flat layout.
+	- The line is tab-indented, steps back to a depth nothing uses, and is named like an old flat setting such as `margin`. SilkTerm's own reader takes it as a top-level setting, so the file is moved aside to `.bak` and written fresh.
+	- Cause: the check for an old flat file read the lines on its own, and put such a line at the top level. shcl reads nothing from it.
+	- Fixed: a line shcl cannot read neither marks a file as old nor carries a value into a converted one.
+	- Test: `a_line_that_sets_nothing_never_converts_the_file`. It fails on the old code.
+	- Opened: 20260925-073415
+	- Closed: 20260928-125842
+
+- ✅ Adding missing settings at launch can give a dropped line a place, so it starts being read.
+	- Example: `window:` with `margin` two tabs in and a stray line one tab in. The added window settings go in at one tab, and the stray line becomes a window setting.
+	- Fixed: an added line is kept only where every line shcl could not read before still cannot be read. Missing groups are tried again until a round adds nothing, since a group refused where it first went can fit once the ones after it are in.
+	- Test: `backfill_leaves_a_dropped_line_dropped`, which fails on the old code. `backfill_changes_nothing_that_loaded` now also fails when a dropped line starts being read. `backfill_settles_in_one_pass` found the case that needed the second round.
+	- Opened: 20260925-073415
+	- Closed: 20260928-125842
+
+- ✅ The wallpaper heading repair test fails on a junk file where `wallpaper.rotate` is written three times.
+	- It reads as written more than once before and after the repair, so it loads the same. Only the count goes from 3 to 2, since the repair folds two `wallpaper:` blocks. The test compares the count too.
+	- Reproduced: `SILK_FUZZ_SEED=107671` on `a_wallpaper_repair_changes_nothing_else`, on dev before the shcl bump as well.
+	- Cause: the test, not the repair. A key written more than once loads as a duplicate however many times it is there.
+	- Fixed: the test compares such a key by how it loads, not by the count.
+	- Test: `a_key_written_three_times_survives_the_wallpaper_repair` runs that seed on every test run. It fails on the old comparison.
+	- Opened: 20260925-183900
+	- Closed: 20260928-125842
 
 - ✅ A short settings file can get one section's commented defaults filed under another.
 	- Seen on a hand-written file: the Performance defaults were written under Transparency, and the next launch added them again where they belong.

@@ -3842,13 +3842,18 @@ fn convert_legacy_config_with(
 fn converted_config_text(text: &str) -> Option<String> {
 	let lines: Vec<&str> = text.lines().collect();
 	let walked = walk_settings(text);
+	// A line shcl cannot read sets nothing, whatever it is called. The walk puts
+	// a line that steps back to a depth nothing uses at the top level, where an
+	// old flat name such as `margin` looked like a whole old file.
+	let unread = unreadable_lines(&shcl::Document::parse(text));
+	let read = |index: usize| !unread.contains(&(index + 1));
 	// Only an ACTIVE flat key marks a file as legacy: any real old config has
 	// several (the template shipped with them), while a comment that merely
 	// spells an old name - e.g. one a relayouted save left at column 0 - must
 	// never nuke a current-format file.
 	let legacy = walked.iter().any(|w| {
-		matches!(w, WalkLine::Setting { path: p, header: false, active: true, .. }
-			if !p.contains('.') && LEGACY_KEYS.iter().any(|(old, _)| old == p))
+		matches!(w, WalkLine::Setting { index, path: p, header: false, active: true }
+			if read(*index) && !p.contains('.') && LEGACY_KEYS.iter().any(|(old, _)| old == p))
 	});
 	if !legacy {
 		return None;
@@ -3885,7 +3890,7 @@ fn converted_config_text(text: &str) -> Option<String> {
 		else {
 			continue;
 		};
-		if !active || *header {
+		if !active || *header || !read(*index) {
 			continue;
 		}
 		let Some(value) = line_setting_value(lines[*index]) else {
@@ -4499,75 +4504,88 @@ fn backfilled_text(text: &str) -> Result<Option<String>, String> {
 				.any(|k| k.strip_prefix(p).is_some_and(|r| r.starts_with('.')))
 	};
 
+	// A group refused because of where it would go can fit once the groups after
+	// it are in, so the groups are tried again until a round adds nothing. That
+	// is what the next launch would do, and it would write the file again.
 	let mut changed = false;
-	for group in &groups {
-		// fresh view after any earlier insertion
-		let at = paths_at(&lines);
-		let present = group.iter().filter(|(p, _)| has(&at, p)).count();
-		if present == group.len() {
-			continue;
-		}
-		if present == 0 {
-			// wholly-new group: comments and all, in template position
-			let saved = (lines.clone(), origin.clone());
-			let block: Vec<String> = group.iter().flat_map(|(_, b)| b.iter().cloned()).collect();
-			match anchor_for(&group[0].0, &order, &at, &lines, true) {
-				Anchor::Before(index) => {
-					// separate from the next group's comment block below, and from
-					// whatever ends above
-					add_line(&mut lines, &mut origin, index, String::new());
-					let mut index = index;
-					if index > 0 && !lines[index - 1].trim().is_empty() {
-						add_line(&mut lines, &mut origin, index, String::new());
-						index += 1;
-					}
-					for (offset, line) in block.into_iter().enumerate() {
-						add_line(&mut lines, &mut origin, index + offset, line);
-					}
-				}
-				Anchor::After(index) => {
-					let mut added = vec![String::new()];
-					added.extend(block);
-					for (offset, line) in added.into_iter().enumerate() {
-						add_line(&mut lines, &mut origin, index + 1 + offset, line);
-					}
-				}
-				Anchor::Append => {
-					let end = lines.len();
-					add_line(&mut lines, &mut origin, end, String::new());
-					for line in block {
-						let end = lines.len();
-						add_line(&mut lines, &mut origin, end, line);
-					}
-				}
-			}
-			let paths: Vec<&String> = group.iter().map(|(p, _)| p).collect();
-			let mut now = (lines, origin);
-			changed |= settle(text, &mut now, saved, &paths);
-			(lines, origin) = now;
-			continue;
-		}
-		// part-present group: the comments are already in the file next to the
-		// siblings, so re-appending them would duplicate the paragraph - put
-		// each straggler back beside its siblings, line only, template order
-		for (p, block) in group {
+	loop {
+		let mut round = false;
+		for group in &groups {
+			// fresh view after any earlier insertion
 			let at = paths_at(&lines);
-			if has(&at, p) {
+			let present = group.iter().filter(|(p, _)| has(&at, p)).count();
+			if present == group.len() {
 				continue;
 			}
-			let Some(line) = block.last() else { continue };
-			let saved = (lines.clone(), origin.clone());
-			match anchor_for(p, &order, &at, &lines, false) {
-				Anchor::Before(index) => add_line(&mut lines, &mut origin, index, line.clone()),
-				Anchor::After(index) => add_line(&mut lines, &mut origin, index + 1, line.clone()),
-				Anchor::Append => {
-					let end = lines.len();
-					add_line(&mut lines, &mut origin, end, line.clone());
+			if present == 0 {
+				// wholly-new group: comments and all, in template position
+				let saved = (lines.clone(), origin.clone());
+				let block: Vec<String> =
+					group.iter().flat_map(|(_, b)| b.iter().cloned()).collect();
+				match anchor_for(&group[0].0, &order, &at, &lines, true) {
+					Anchor::Before(index) => {
+						// separate from the next group's comment block below, and from
+						// whatever ends above
+						add_line(&mut lines, &mut origin, index, String::new());
+						let mut index = index;
+						if index > 0 && !lines[index - 1].trim().is_empty() {
+							add_line(&mut lines, &mut origin, index, String::new());
+							index += 1;
+						}
+						for (offset, line) in block.into_iter().enumerate() {
+							add_line(&mut lines, &mut origin, index + offset, line);
+						}
+					}
+					Anchor::After(index) => {
+						let mut added = vec![String::new()];
+						added.extend(block);
+						for (offset, line) in added.into_iter().enumerate() {
+							add_line(&mut lines, &mut origin, index + 1 + offset, line);
+						}
+					}
+					Anchor::Append => {
+						let end = lines.len();
+						add_line(&mut lines, &mut origin, end, String::new());
+						for line in block {
+							let end = lines.len();
+							add_line(&mut lines, &mut origin, end, line);
+						}
+					}
 				}
+				let paths: Vec<&String> = group.iter().map(|(p, _)| p).collect();
+				let mut now = (lines, origin);
+				round |= settle(text, &mut now, saved, &paths);
+				(lines, origin) = now;
+				continue;
 			}
-			let mut now = (lines, origin);
-			changed |= settle(text, &mut now, saved, &[p]);
-			(lines, origin) = now;
+			// part-present group: the comments are already in the file next to the
+			// siblings, so re-appending them would duplicate the paragraph - put
+			// each straggler back beside its siblings, line only, template order
+			for (p, block) in group {
+				let at = paths_at(&lines);
+				if has(&at, p) {
+					continue;
+				}
+				let Some(line) = block.last() else { continue };
+				let saved = (lines.clone(), origin.clone());
+				match anchor_for(p, &order, &at, &lines, false) {
+					Anchor::Before(index) => add_line(&mut lines, &mut origin, index, line.clone()),
+					Anchor::After(index) => {
+						add_line(&mut lines, &mut origin, index + 1, line.clone())
+					}
+					Anchor::Append => {
+						let end = lines.len();
+						add_line(&mut lines, &mut origin, end, line.clone());
+					}
+				}
+				let mut now = (lines, origin);
+				round |= settle(text, &mut now, saved, &[p]);
+				(lines, origin) = now;
+			}
+		}
+		changed |= round;
+		if !round {
+			break;
 		}
 	}
 	if !changed {
@@ -4669,6 +4687,15 @@ fn unbury(text: &str, lines: &mut [String], origin: &[Option<usize>]) -> Result<
 		.into_iter()
 		.filter(|path| before.get_string(path).is_ok())
 		.collect();
+	// The lines shcl cannot read stay exactly those. A line added at a depth a
+	// dropped one steps back to gives it a block, and it starts being read.
+	let unread: Vec<Option<usize>> = unreadable_lines(&before).into_iter().map(Some).collect();
+	let unread_now = |doc: &shcl::Document| -> Vec<Option<usize>> {
+		unreadable_lines(doc)
+			.into_iter()
+			.map(|line| origin.get(line - 1).copied().flatten().map(|from| from + 1))
+			.collect()
+	};
 	// each pass moves one line, and a line is never moved twice
 	for _ in 0..=settings.len() {
 		let mut joined = lines.join("\n");
@@ -4677,7 +4704,10 @@ fn unbury(text: &str, lines: &mut [String], origin: &[Option<usize>]) -> Result<
 		let changed = loaded
 			.iter()
 			.find(|path| reads(&before, path) != reads(&after, path));
-		if changed.is_none() && after.lost_count() <= before.lost_count() {
+		if changed.is_none()
+			&& after.lost_count() == before.lost_count()
+			&& unread_now(&after) == unread
+		{
 			return Ok(());
 		}
 		let now_at = |index: usize| origin.iter().position(|from| *from == Some(index));
@@ -8324,6 +8354,29 @@ mod tests {
 	// A setting typed two tabs in under its block loads, until the launch adds the
 	// template's own active lines above it. It then read as part of one of those
 	// and was ignored from the next launch on, with nothing said.
+	// `stray` steps back to a depth nothing under `window:` uses, so shcl drops
+	// it. The window settings backfill would add at one tab give that depth a
+	// block, and the stray started being read as a window setting.
+	// Test ID: ErCHjkM
+	#[test]
+	fn backfill_leaves_a_dropped_line_dropped() {
+		let text = "window:\n\t\tmargin: 4\n\trows: 40\n";
+		let before = shcl::Document::parse(text);
+		assert_eq!(before.lost_count(), 1);
+		assert!(before.get_string("window.rows").is_err());
+		let out = backfilled_text(text)
+			.expect("nothing that loaded changes")
+			.expect("other groups are still missing");
+		let after = shcl::Document::parse(&out);
+		assert_eq!(after.lost_count(), 1, "{out}");
+		assert!(after.get_string("window.rows").is_err(), "{out}");
+		assert_eq!(
+			after.get_string("window.margin"),
+			before.get_string("window.margin")
+		);
+		assert!(out.contains("\nfont:\n"), "another block is still added");
+	}
+
 	// Test ID: EpZCS12
 	#[test]
 	fn backfill_keeps_a_setting_that_is_indented_too_deep() {
@@ -9773,6 +9826,21 @@ mod tests {
 		assert!(s.cursor_scrim, "{out}");
 		assert_eq!(s.text_outline, 2.5, "{out}");
 		assert_eq!(s.text_scrim_ramp, "sigmoid", "{out}");
+	}
+
+	// shcl drops a line that steps back to a depth nothing uses, so it sets
+	// nothing. Called `margin`, it used to send the whole file to `.bak` as an
+	// old flat one.
+	// Test ID: ErCHjg8
+	#[test]
+	fn a_line_that_sets_nothing_never_converts_the_file() {
+		let text = "\t\twindow:\n\t\t\tcolumns: 100\n\tmargin: 4\n";
+		let doc = shcl::Document::parse(text);
+		assert_eq!(doc.lost_count(), 1);
+		assert!(doc.get_string("margin").is_err());
+		assert_eq!(converted_config_text(text), None);
+		// an old name that does read still converts
+		assert!(converted_config_text("margin: 4\nwindow:\n\tcolumns: 100\n").is_some());
 	}
 
 	// The shipped template itself must never read as legacy.
@@ -11877,9 +11945,10 @@ mod tests {
 				};
 				let before = shcl::Document::parse(&text);
 				let after = shcl::Document::parse(&out);
-				assert!(
-					after.lost_count() <= before.lost_count(),
-					"a line was lost\nbefore:\n{text}\nafter:\n{out}"
+				assert_eq!(
+					after.lost_count(),
+					before.lost_count(),
+					"a line was lost, or a lost one found a place\nbefore:\n{text}\nafter:\n{out}"
 				);
 				for path in before.paths() {
 					if before.get_string(&path).is_ok() {
