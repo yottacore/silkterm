@@ -127,6 +127,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the keyboard split goes through the same placing code. The divider drag is the only other place that marks a run as sized by hand.
 	- Closed:
 
+- The Windows save notice scenario never answers, so a full pipeline run stops at the GUI stage
+	- ID: 2026092813222318
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20260928-132223
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run `cicd/cicd.bash -y --no-publish` with vm925w up.
+	- Incorrect behavior: `savenotice` ends with "the session never answered", and the run stops with no dogfood build.
+	- Expected behavior: The scenario sees the notice for a refused save and passes.
+	- Reproduced: Yes, on b23 against vm925w on 20260928. Earlier runs since the shcl 3.0 bump found no box up, so the scenario had not run.
+	- Actual cause: Its settings file had a line indented with spaces. shcl 3.0 keeps such a line as written, so the save went through and no notice came.
+	- Actual fix: The line now steps back to a depth nothing uses, which shcl still drops.
+	- Branch: savenotice
+	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
+	- Closed:
+
 - A settings range test skips two of the keys it lists
 	- ID: 2026092621021532
 	- Type: Bug
