@@ -377,11 +377,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
 	- Opened: 20260914-124200
 
-- 🔘 Minimap: one slow redraw can leave the map standing still for a long time afterwards.
-	- The wait after a redraw is twenty times what that redraw took, and redrawing the whole map - after a screen swap, a resize, or a resync - costs far more than an ordinary one. Measured at a 30,000-line scrollback in a debug build: a 445 ms whole redraw, then a 22 ms one that waited 8.95 s. At the 1,000,000-line maximum it would be around 30 s.
-	- The wait could follow what an ordinary redraw costs, or be capped.
-	- Opened: 20260919-140536
-
 - 🔘 Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
 	- At 100,000 lines one redraw holds the terminal for about 150 ms, and at the 1,000,000-line maximum it would be over a second. The time between redraws already grows with it, so the average cost stays small; the pause itself does not.
 	- Opened: 20260919-134338
@@ -2633,6 +2628,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260723-190021
 
 ### Done - Features and enhancements
+
+- ✅ Minimap: one slow redraw can leave the map standing still for a long time afterwards.
+	- The wait after a redraw is twenty times what that redraw took, and redrawing the whole map - after a screen swap, a resize, or a resync - costs far more than an ordinary one. Measured at a 30,000-line scrollback in a debug build: a 445 ms whole redraw, then a 22 ms one that waited 8.95 s. At the 1,000,000-line maximum it would be around 30 s.
+	- The wait could follow what an ordinary redraw costs, or be capped.
+	- Done: the wait follows what an ordinary redraw costs. A whole redraw no longer sets it.
+	- Test: `a_whole_redraw_does_not_set_the_wait`. It fails with the whole redraw setting the wait again. Not measured at depth on screen.
+	- Opened: 20260919-140536
+	- Closed: 20260928-140027
 
 - ✅ Say when a color typed into the settings file is read as empty because it was not quoted.
 	- `background: #112233` reads as nothing, since `#` starts a comment, and the theme's color is used with no message.

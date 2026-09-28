@@ -450,10 +450,17 @@ impl Minimap {
 		// width until it does, and at a deep scrollback the wait is seconds
 		if due || self.img_h != img_h || self.img_w != width {
 			self.last_compose = Some(now);
+			// A whole redraw, after a screen swap, a resize or a resync, costs
+			// far more than the ordinary ones after it. Twenty times its cost
+			// left the map standing still for seconds, so the wait follows the
+			// ordinary cost.
+			let whole = self.fresh >= self.hist;
 			let began = Instant::now();
 			self.catch_up(grid, colors, cfg, lag);
 			self.compose(img_h, scale);
-			self.spent = began.elapsed();
+			if !whole {
+				self.spent = began.elapsed();
+			}
 			// Short of the bottom AND the lag is still falling, so another
 			// compose is owed even if no more output arrives: the ease drains
 			// on its own and the map has to follow it down. `pending` drives
@@ -1747,6 +1754,48 @@ mod tests {
 		assert_eq!(map.wake(), Some(t0 + Duration::from_secs(1)));
 		build(&mut map, &mut term, 1000);
 		assert_ne!(map.rev, first, "the wait is over and the map is behind");
+	}
+
+	// A 445 ms whole redraw at 30,000 lines held the next 22 ms one back for
+	// nearly nine seconds.
+	// Test ID: ErCaBEG
+	#[test]
+	fn a_whole_redraw_does_not_set_the_wait() {
+		let (cols, lines) = (40, 5);
+		let (mut term, mut parser) = live_term(cols, lines, 100);
+		let cfg = config::Settings::default();
+		let t0 = Instant::now();
+		let mut map = Minimap::default();
+		let mut build = |map: &mut Minimap, term: &mut Term<VoidListener>, at: u64, cut: bool| {
+			parser.advance(term, b"\rsome output\r\n");
+			let now = t0 + Duration::from_millis(at);
+			map.update(
+				term.grid(),
+				term.colors(),
+				&cfg,
+				8,
+				50,
+				1.0,
+				lines,
+				cols,
+				1,
+				0,
+				true,
+				cut,
+				now,
+			);
+		};
+		build(&mut map, &mut term, 0, false);
+		let slow = Duration::from_millis(50);
+		map.spent = slow;
+		let before = map.rev;
+		build(&mut map, &mut term, 1000, true);
+		assert_ne!(map.rev, before, "the whole redraw composed");
+		assert_eq!(map.spent, slow, "a whole redraw set the wait");
+		let before = map.rev;
+		build(&mut map, &mut term, 2000, false);
+		assert_ne!(map.rev, before, "the ordinary one composed");
+		assert!(map.spent < slow, "an ordinary compose sets the wait");
 	}
 
 	// The column's width can change between composes, and the image is still
