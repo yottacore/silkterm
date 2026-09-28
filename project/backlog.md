@@ -87,6 +87,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `cicd/tests/win-remote/run.bash`, against a stand-in lock. Seen to fail on the old runner.
 	- Closed:
 
+- The launcher test would use the real dogfood pool if run on Windows
+	- ID: 2026092621021535
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Incorrect behavior: `cicd/tests/launcher/run.ps1` points HOME and USERPROFILE at a sandbox, but on Windows the launcher keeps its pool under LOCALAPPDATA, which it leaves alone.
+	- Expected behavior: The sandbox covers LOCALAPPDATA too. cicd runs the test only on Linux today, so nothing has touched the real pool.
+	- Actual fix: LOCALAPPDATA and APPDATA move into the sandbox with home, and the test looks for the pool where each platform keeps it. APPDATA is where the launcher files its Start menu entry.
+	- Branch: winlock
+	- Test case: "every folder the launcher writes to is in the sandbox", in `cicd/tests/launcher/run.ps1`. Seen to fail with LOCALAPPDATA left out. Run on Linux only.
+	- Closed:
+
 - Windows Terminal handoff
 	- ID: 2026092810510800
 	- Type: Feature
@@ -266,19 +282,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- The x11-clipboard stale clear, the Windows pane handle leak and the engine's scroll ledger are held only by tests in the fork repos.
 		- Either run those tests from cicd, or say in each item that the fork's own runs are the check.
-	- Closed:
-
-- The launcher test would use the real dogfood pool if run on Windows
-	- ID: 2026092621021535
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Incorrect behavior: `cicd/tests/launcher/run.ps1` points HOME and USERPROFILE at a sandbox, but on Windows the launcher keeps its pool under LOCALAPPDATA, which it leaves alone.
-	- Expected behavior: The sandbox covers LOCALAPPDATA too. cicd runs the test only on Linux today, so nothing has touched the real pool.
 	- Closed:
 
 ## Bugs
