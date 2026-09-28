@@ -15,8 +15,10 @@ function fText($h) { $sb = New-Object System.Text.StringBuilder 2048; [void][Sil
 function fClass($h) { $sb = New-Object System.Text.StringBuilder 256; [void][SilkBox.Win]::GetClassNameW($h, $sb, 256); $sb.ToString() }
 
 $cfg = Join-Path $OutDir "savenotice-config.shcl"
-##	Tabs above, spaces on the last line: the reader cannot place it.
-fFreshConfig $cfg @("window:", "`topacity: 1.0", "    margin: 4")
+##	The last line steps back to a depth nothing uses, so the reader cannot place
+##	it. A line indented with spaces is kept as written since shcl 3.0, and saves
+##	go through beside it.
+fFreshConfig $cfg @("window:", "`t`topacity: 1.0", "`tmargin: 4")
 
 $p = fStartSilk $Exe @("--config=$cfg", "--columns", "100", "--rows", "30") @{}
 $h = fWaitWindow $p 40
@@ -32,12 +34,12 @@ if (fCheck "a message box came up for the refused save" ($box -ne [IntPtr]::Zero
 	$body = fText ([SilkBox.Win]::GetDlgItem($box, 0xFFFF))
 	fNote "box says: $title / $($body -replace '\s+', ' ')"
 	$onDisk = @(Get-Content $cfg)
-	$at = 1 + [array]::FindIndex([string[]]$onDisk, [Predicate[string]] { param($l) $l -eq '    margin: 4' })
+	$at = 1 + [array]::FindIndex([string[]]$onDisk, [Predicate[string]] { param($l) $l -eq "`tmargin: 4" })
 	fNote "the file has $($onDisk.Count) lines, the bad one at $at"
 	[void](fCheck "it is titled as the notice" ($title -eq 'Settings not saved'))
 	##	The launch has filled in the missing settings by then, so the bad line has moved down.
 	[void](fCheck "it names the file and the line as the file has it" ($body.Contains($cfg) -and $body -like "*Line $at cannot be read*"))
 	[void](fShot $box "notice")
-	[void](fCheck "the settings file was left as it was" ((Get-Content $cfg -Raw) -like "*    margin: 4*"))
+	[void](fCheck "the settings file was left as it was" (@(Get-Content $cfg) -contains "`tmargin: 4"))
 }
 fStop $p
