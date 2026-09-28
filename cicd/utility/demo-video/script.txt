@@ -64,7 +64,7 @@ ls ~/
 
 @ •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 @ Scene: the build
-@ banner: "Watch it speed up, then wind down."
+@ banner: "Watch it adapt to any output speed"
 @ This scene exists to show the scroll SPEED CURVE, so the output is paced in
 @ five movements rather than at a constant rate. Output that arrives at one rate
 @ only ever shows one point on the curve.
@@ -145,13 +145,12 @@ cd projects/pulsar
 
 @ •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 @ Scene: the wallpaper
-@ banner: "The built-in wallpaper, live"
+@ banner: "Advanced wallpaper support, with a default in the executable"
 
-silkterm --wallpaper ~/.config/silkterm/wallpapers/default.jpg
-	@ The app's own baked-in default image, so this lands on exactly the
-	@ out-of-the-box look - live, no restart. Blurred, 10% opacity, zoom fit.
-
-@ hold 4 seconds
+@ Nothing typed. The image compiled into the app is switched on through the
+@ control socket, so this is exactly the out-of-the-box look - live, no
+@ restart. Blurred, 10% opacity, zoom fit.
+@ hold 4.4 seconds after the switch - the reload takes about a second to show
 @ banner: "Text stays legible over any of it" - hold 2.8 seconds
 @ do NOT clear
 
