@@ -4,7 +4,7 @@ SilkTerm is a Rust project using `wgpu` (GPU), `winit` (windowing), `glyphon` (t
 
 ## Toolchain
 
-Requires a Rust toolchain, edition 2024. Builds and tests use rustc 1.96, the version `rust-toolchain.toml` pins. `rust-version` in `Cargo.toml` says 1.89, the oldest cosmic-text 0.18 takes, but nothing is built with anything older than 1.96. `rustup` is the simplest way to manage targets:
+Requires a Rust toolchain, edition 2024. It needs rustc 1.96, the version `rust-toolchain.toml` pins. The code does not build on 1.94. `rustup` is the simplest way to manage targets:
 
 ~~~sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

@@ -4869,7 +4869,7 @@ mod tests {
 		let settle = std::time::Duration::from_millis(300);
 		let now = std::time::Instant::now();
 		let long_ago = now
-			.checked_sub(std::time::Duration::from_secs(60))
+			.checked_sub(std::time::Duration::from_mins(1))
 			.expect("a minute ago");
 		// nothing printed for a minute, and a poll just found the shell still busy
 		let next = next_capture_poll(long_ago, settle, now + super::CAPTURE_RETRY);

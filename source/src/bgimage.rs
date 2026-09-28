@@ -409,6 +409,17 @@ fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
     return vec4<f32>(corner * 2.0 - 1.0, 0.0, 1.0);
 }
 
+// The one sRGB encode runs on premultiplied values, so a see-through fill is
+// written as the color that encodes to la times its own encoding (gfx::see_through).
+fn enc(c: vec3<f32>) -> vec3<f32> {
+    let cl = max(c, vec3<f32>(0.0));
+    return select(1.055 * pow(cl, vec3<f32>(1.0 / 2.4)) - 0.055, cl * 12.92, cl <= vec3<f32>(0.0031308));
+}
+fn dec(c: vec3<f32>) -> vec3<f32> {
+    let cl = max(c, vec3<f32>(0.0));
+    return select(pow((cl + 0.055) / 1.055, vec3<f32>(2.4)), cl / 12.92, cl <= vec3<f32>(0.04045));
+}
+
 @fragment
 fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     let p = frag.xy; // framebuffer pixels (y-down)
@@ -439,6 +450,9 @@ fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     let hi = pow(max(filled, vec3<f32>(0.0)), e);
     let mixed = pow(mix(lo, hi, vec3<f32>(u.amount)), vec3<f32>(2.4));
     let la = u.bg.a;
+    if (la < 1.0) {
+        return vec4<f32>(dec(enc(mixed) * la), la);
+    }
     return vec4<f32>(mixed * la, la); // premultiplied
 }
 ";

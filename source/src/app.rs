@@ -40,7 +40,7 @@ const RAISE_REASSERT_IVL: Duration = Duration::from_millis(50);
 // Reopening Settings this soon after closing it resumes the tab and scroll it
 // was left on - long enough to cover "closed it, went to look at the result,
 // came back", short enough that a later visit still starts from the top.
-const SETTINGS_RESUME: Duration = Duration::from_secs(60);
+const SETTINGS_RESUME: Duration = Duration::from_mins(1);
 
 pub struct App {
 	proxy: EventLoopProxy<UserEvent>,
@@ -4910,7 +4910,7 @@ impl State {
 			under.push(RectInstance {
 				pos: [pane.full.x, pane.full.y],
 				size: [pane.full.w, pane.full.h],
-				color: pane_bg,
+				color: crate::gfx::see_through(pane_bg),
 				..Default::default()
 			});
 			pane_fulls.push(pane.full);
@@ -8946,16 +8946,16 @@ mod tests {
 		);
 		assert_eq!(
 			release_deadline(&cfg, &idle(false, false)),
-			Some(since + Duration::from_secs(240 * 60))
+			Some(since + Duration::from_hours(4))
 		);
 		assert_eq!(
 			release_deadline(&cfg, &idle(false, true)),
-			Some(since + Duration::from_secs(30 * 60))
+			Some(since + Duration::from_mins(30))
 		);
 		// minimized with focus still nominally on it: out of sight is what counts
 		assert_eq!(
 			release_deadline(&cfg, &idle(true, true)),
-			Some(since + Duration::from_secs(30 * 60))
+			Some(since + Duration::from_mins(30))
 		);
 		let mut owed = idle(false, true);
 		owed.bench_busy = true;
