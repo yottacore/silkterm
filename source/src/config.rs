@@ -744,8 +744,9 @@ pub fn startup_dir() -> Option<std::path::PathBuf> {
 // launched us was sitting somewhere on purpose, and so is a file manager's
 // "Open in terminal", which hands us the folder being looked at without giving
 // us a terminal. What is left - a desktop icon, a Start-menu entry, a shortcut -
-// starts in the home directory, at a filesystem root, or beside the executable,
-// and none of those say anything about where the user wants to be.
+// starts in the home directory, at a filesystem root, beside the executable, or
+// in the Windows system folder, and none of those say anything about where the
+// user wants to be.
 fn inherited_dir_is_a_choice() -> bool {
 	if DIR_HANDED_DOWN.load(Ordering::Relaxed) || launched_from_shell() {
 		return true;
@@ -757,7 +758,21 @@ fn inherited_dir_is_a_choice() -> bool {
 		std::env::current_dir().ok().as_deref(),
 		home_dir().as_deref(),
 		exe_dir.as_deref(),
+		&system_dirs(),
 	)
+}
+
+// A packaged app's Start-menu entry can't name a working directory, so every
+// launch from one starts in System32, or SysWOW64 for a 32-bit build.
+fn system_dirs() -> Vec<std::path::PathBuf> {
+	if !cfg!(windows) {
+		return Vec::new();
+	}
+	let Some(root) = std::env::var_os("SystemRoot").or_else(|| std::env::var_os("windir")) else {
+		return Vec::new();
+	};
+	let root = std::path::PathBuf::from(root);
+	vec![root.join("System32"), root.join("SysWOW64")]
 }
 
 // The decision on its own, so both platforms' answers are testable from either
@@ -767,6 +782,7 @@ fn dir_is_a_choice(
 	cwd: Option<&std::path::Path>,
 	home: Option<&std::path::Path>,
 	exe_dir: Option<&std::path::Path>,
+	system: &[std::path::PathBuf],
 ) -> bool {
 	let Some(cwd) = cwd else {
 		return false;
@@ -779,6 +795,7 @@ fn dir_is_a_choice(
 	![home, exe_dir]
 		.into_iter()
 		.flatten()
+		.chain(system.iter().map(std::path::PathBuf::as_path))
 		.any(|dir| real(dir) == cwd)
 }
 
@@ -6067,15 +6084,59 @@ mod tests {
 	fn an_inherited_directory_is_a_choice_unless_a_launcher_picked_it() {
 		let home = PathBuf::from("/home/u");
 		let exe_dir = PathBuf::from("/opt/silkterm");
-		let choice =
-			|cwd: &str| dir_is_a_choice(Some(&PathBuf::from(cwd)), Some(&home), Some(&exe_dir));
+		let choice = |cwd: &str| {
+			dir_is_a_choice(Some(&PathBuf::from(cwd)), Some(&home), Some(&exe_dir), &[])
+		};
 		assert!(choice("/home/u/src/thing"), "a file manager's folder");
 		assert!(!choice("/home/u"), "where a desktop icon starts");
 		assert!(!choice("/opt/silkterm"), "double-clicked the executable");
 		assert!(!choice("/"), "a launcher with no directory of its own");
 		assert!(
-			!dir_is_a_choice(None, Some(&home), Some(&exe_dir)),
+			!dir_is_a_choice(None, Some(&home), Some(&exe_dir), &[]),
 			"no directory at all is not a statement either"
+		);
+	}
+
+	// An MSIX package's Start-menu entry has no working directory, so Windows
+	// starts it in System32. That is where the launcher left us, not a folder
+	// anybody picked, so the first shell goes to the setting instead.
+	// Test ID: ErC7NYR
+	#[test]
+	fn a_start_in_the_windows_system_folder_is_not_a_choice() {
+		let home = PathBuf::from("C:/Users/u");
+		let exe_dir = PathBuf::from("C:/Program Files/SilkTerm");
+		let system = [
+			PathBuf::from("C:/Windows/System32"),
+			PathBuf::from("C:/Windows/SysWOW64"),
+		];
+		let choice = |cwd: &str| {
+			dir_is_a_choice(
+				Some(&PathBuf::from(cwd)),
+				Some(&home),
+				Some(&exe_dir),
+				&system,
+			)
+		};
+		assert!(
+			!choice("C:/Windows/System32"),
+			"a packaged Start-menu launch"
+		);
+		assert!(
+			!choice("C:/Windows/SysWOW64"),
+			"the same for a 32-bit build"
+		);
+		assert!(
+			choice("C:/Windows"),
+			"the folder above is somewhere a person went"
+		);
+		assert!(choice("C:/Windows/System32/drivers"), "and so is one below");
+		assert!(
+			choice("C:/Users/u/src"),
+			"an ordinary folder is still a choice"
+		);
+		assert!(
+			system_dirs().is_empty() || cfg!(windows),
+			"the system folder only counts on Windows"
 		);
 	}
 
