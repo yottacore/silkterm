@@ -61,6 +61,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_start_in_the_windows_system_folder_is_not_a_choice`. Seen to fail with the system folders left out.
 	- Closed:
 
+- A pipeline run dies at the Windows GUI stage when a box is held by another session
+	- ID: 2026092618254900
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20260926-182549
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Hold vm925w's host lock from another session.
+		- Run `cicd/cicd.bash -y --no-publish`.
+	- Incorrect behavior: The harness queues for the lock, prints "still queued", and the run stops with "a windows gui scenario failed". No dogfood build is made.
+	- Expected behavior: A locked or unreachable box is reported and stepped over, as the stage's own comment says. Only a scenario that ran and failed stops the run.
+	- Reproduced: Yes, on b23 on 20260926 at 18:25, with vm925w held by a nemo-anywhere session.
+	- Possible cause: The lock's "still queued" exit reaches `cicd.bash` as the harness's failure.
+	- Actual cause:
+		- `--optional` covered a box that was off, not one another session held. The lock's wait ran out and its exit was taken for the harness's.
+		- Both boxes were asked for at once, so the free one was lost with the held one.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Actual fix: With `--optional`, each box is held and run on in turn. One whose wait runs out before the command starts is reported and skipped. The command's own exit is still passed on.
+	- Branch: winlock
+	- Test case: `cicd/tests/win-remote/run.bash`, against a stand-in lock. Seen to fail on the old runner.
+	- Closed:
+
 - Windows Terminal handoff
 	- ID: 2026092810510800
 	- Type: Feature
@@ -182,25 +208,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
 		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
 	- Estimated effort: Avg
-	- Closed:
-
-- A pipeline run dies at the Windows GUI stage when a box is held by another session
-	- ID: 2026092618254900
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20260926-182549
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Steps to reproduce:
-		- Hold vm925w's host lock from another session.
-		- Run `cicd/cicd.bash -y --no-publish`.
-	- Incorrect behavior: The harness queues for the lock, prints "still queued", and the run stops with "a windows gui scenario failed". No dogfood build is made.
-	- Expected behavior: A locked or unreachable box is reported and stepped over, as the stage's own comment says. Only a scenario that ran and failed stops the run.
-	- Reproduced: Yes, on b23 on 20260926 at 18:25, with vm925w held by a nemo-anywhere session.
-	- Possible cause: The lock's "still queued" exit reaches `cicd.bash` as the harness's failure.
-	- Estimated effort: Low
 	- Closed:
 
 - A command-line split does not reuse the direction of the pane it splits, and a run of splits the same way is not evened out
