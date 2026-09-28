@@ -11,8 +11,8 @@
 ##	  bash <(curl -fsSL https://raw.githubusercontent.com/yottacore/silkterm/main/install.bash) [options]
 ##	- Options: --release stable|dev, --target user|system, --yes, --version, --help.
 ##	  The OS, the CPU architecture and the asset name are all detected.
-##	- Needs: bash >= 3.2 (the macOS system bash), curl or wget, and one of
-##	  sha256sum / shasum / openssl.
+##	- Needs: bash >= 3.2 (the macOS system bash; tested on 5 only), curl or
+##	  wget, and one of sha256sum / shasum / openssl.
 ##	- History:
 ##	  - 20260723 JC: Created.
 ##	  - 20260806 JC: Made project-agnostic; dropped --arch for autodetection;

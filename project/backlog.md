@@ -219,7 +219,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Estimated effort: Avg
 	- Actual effort:
 	- Progress log:
-		- …
+		- 20260928: Research so far, moved here from a second copy of this item:
+			- Windows: let SilkTerm be picked as the default terminal, so a console program started from anywhere, such as double-clicking a `.bat`, opens in SilkTerm instead of conhost or Windows Terminal.
+			- There is no setting or script that can do this from the outside. Windows stores the choice in `HKCU\Console\%%Startup` as two COM class IDs, `DelegationConsole` and `DelegationTerminal`, not as program paths. The console host creates that class and calls `ITerminalHandoff::EstablishPtyHandoff`, passing over the pipes of a program that's already running.
+			- Checked 2026-09-28: the source has nothing for this, and neither does build `slktrmdf_20260927-175446_gnulwi`. Pointing the registry at SilkTerm today would break every console launch.
+			- Add a COM local server to SilkTerm that implements the handoff interface. It's defined in microsoft/terminal at `src/host/proxy/ITerminalHandoff.idl`. Newer builds call `ITerminalHandoff3`, check which version the current console host uses before starting.
+			- Give the pty backend a second way in. Today it always creates its own ConPTY. A handed-off session arrives with its pipes, signal pipe and process handles already made, and the tab has to run those.
+			- Register the class under `HKCU\Software\Classes\CLSID\{guid}\LocalServer32`, pointing at `%LOCALAPPDATA%\Programs\silkterm.exe` with a flag like `--handoff`. That's the symlink the launcher keeps pointed at the newest dogfood build, so the default follows each new build.
+				- A handed-off window skips the launcher, so it won't be elevated.
+			- Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminal that the built-in conhost doesn't. Not verified. The ConPTY redistributable already being tried here ships its own console host, which may or may not be usable for this.
+			- Add a way to switch it on and off, either in Settings or as a command-line option. Turning it off means setting both values back to all zeros, which is "Let Windows decide".
+			- The Settings app's dropdown only lists packaged apps that declare the handoff extension. An unpackaged SilkTerm could still write the registry values itself, but it would never show up in that list.
 	- Decisions:
 		- …
 	- Branch:
@@ -333,6 +343,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: All
 	- Requirements:
 		- When changing the cursor size and animation, change to 50% width.
+	- Decisions:
+		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
 ## Bugs
@@ -349,17 +361,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Features and enhancements
 
-- 🔘 Windows: let SilkTerm be picked as the default terminal, so a console program started from anywhere, such as double-clicking a `.bat`, opens in SilkTerm instead of conhost or Windows Terminal.
-	- There is no setting or script that can do this from the outside. Windows stores the choice in `HKCU\Console\%%Startup` as two COM class IDs, `DelegationConsole` and `DelegationTerminal`, not as program paths. The console host creates that class and calls `ITerminalHandoff::EstablishPtyHandoff`, passing over the pipes of a program that's already running.
-	- Checked 2026-09-28: the source has nothing for this, and neither does build `slktrmdf_20260927-175446_gnulwi`. Pointing the registry at SilkTerm today would break every console launch.
-	- 🔘 Add a COM local server to SilkTerm that implements the handoff interface. It's defined in microsoft/terminal at `src/host/proxy/ITerminalHandoff.idl`. Newer builds call `ITerminalHandoff3`, scheck which version the current console host uses before starting.
-	- 🔘 Give the pty backend a second way in. Today it always creates its own ConPTY. A handed-off session arrives with its pipes, signal pipe and process handles already made, and the tab has to runthose.
-	- 🔘 Register the class under `HKCU\Software\Classes\CLSID\{guid}\LocalServer32`, pointing at `%LOCALAPPDATA%\Programs\silkterm.exe` with a flag like `--handoff`. That's the symlink the launcher kpointed at the newest dogfood build, so the default follows each new build.
-			- A handed-off window skips the launcher, so it won't be elevated.
-	- 🔘 Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminalthat the built-in conhost doesn't. Not verified. The ConPTY redistributable already being tried here ships its own console host, which may or may not be usable for this.
-	- 🔘 Add a way to switch it on and off, either in Settings or as a command-line option. Turning it off means setting both values back to all zeros, which is "Let Windows decide".
-	- The Settings app's dropdown only lists packaged apps that declare the handoff extension. An unpackaged SilkTerm could still write the registry values itself, but it would never show up in that l
-
 - ✋ Save settings by editing only the lines that changed, so a file with a line that cannot be read still takes the window size, menu switches and new shells.
 	- The performance rating already saves this way. The shell list and Settings Apply would still refuse.
 	- ✋ Waiting for shcl 3.0, which should change how such a file is read and written. Look again once it is out.
@@ -375,6 +376,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - 🔘 Check the README's install and build version claims in the pipeline.
 	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
+	- Decided: 20260928, no old bash is built for this. `install.bash` is written for 3.2, and the README now says it is tested on 5 only.
+	- Note: 20260928, the Windows pipeline already runs the installer under PowerShell 5.1 (`cicd/tests/install/windows.ps1`). The Rust 1.89 badge is still unchecked.
 	- Opened: 20260914-124200
 
 - 🔘 Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
