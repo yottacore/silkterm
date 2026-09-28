@@ -25,6 +25,22 @@ use winit::window::{Window, WindowAttributes};
 // high-precision format (Rgba16Float; an sRGB view would decode in the blit's
 // sample and cancel the encode, an 8-bit linear one bands dark gradients).
 // New render features must not add their own encode.
+//
+// That one encode runs on premultiplied values, which is exact at alpha 1 and
+// wrong anywhere else: sRGB(a * c) is brighter than a * sRGB(c), and the
+// compositor blends what it gets as if it were the second. A light background
+// at 80% came out as 91% of itself, so it covered most of what the desktop
+// behind it should have shown, while black stayed black. The only translucent
+// thing drawn is the pane fill, so rather than move the encode, the fill is
+// given the color whose encoded, premultiplied value is right.
+pub fn see_through(color: [f32; 4]) -> [f32; 4] {
+	let a = color[3];
+	if a >= 1.0 || a <= 0.0 {
+		return color;
+	}
+	let k = |c: f32| crate::config::to_linear_f32(a * crate::config::from_linear(c)) / a;
+	[k(color[0]), k(color[1]), k(color[2]), a]
+}
 
 // How a frame reaches the screen. `Native` is the normal wgpu surface (Vulkan/
 // Metal/DX/Wayland - supports premultiplied alpha where the platform does).
@@ -1793,6 +1809,36 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// What the compositor shows through a pane fill, as an encoded value: the
+	// fill's premultiplied pixel after the one encode, plus the desktop at 1 - a.
+	fn shown(fill: [f32; 4], desktop: f32) -> f32 {
+		crate::config::from_linear(fill[0] * fill[3]) + (1.0 - fill[3]) * desktop
+	}
+
+	// A light fill has to let as much of the desktop through as a dark one at the
+	// same opacity. Before, white at 80% showed under half of what black did.
+	// Test ID: ErDEQFR
+	#[test]
+	fn a_light_fill_is_as_see_through_as_a_dark_one() {
+		for a in [0.3f32, 0.5, 0.8, 0.95] {
+			for c in [0.0f32, 0.01, 0.2, 0.8, 1.0] {
+				let fill = see_through([c, c, c, a]);
+				let want = a * crate::config::from_linear(c);
+				let got = shown(fill, 0.0);
+				assert!((got - want).abs() < 1e-4, "c {c} a {a}: {got} vs {want}");
+			}
+			let dark = shown(see_through([0.0, 0.0, 0.0, a]), 1.0);
+			let light = shown(see_through([1.0, 1.0, 1.0, a]), 0.0);
+			let (dark_range, light_range) = (dark - 0.0, 1.0 - light);
+			assert!(
+				(dark_range - light_range).abs() < 1e-4,
+				"a {a}: dark shows {dark_range}, light {light_range}"
+			);
+		}
+		let opaque = [0.3, 0.6, 0.9, 1.0];
+		assert_eq!(see_through(opaque), opaque);
+	}
 
 	// Numbers from the NVIDIA box where a stray GLX error used to kill the
 	// window at its next focus change: GLX 152 with errors from 158, NV-GLX 156.

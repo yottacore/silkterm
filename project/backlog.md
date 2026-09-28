@@ -381,6 +381,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - 🔘 Two more settings of the same class as the light mode calibration, neither fixed.
 	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.
 	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already holds the text on it legible in both modes, so this is a question of how loud it looks rather than whether it works.
+	- Fixed: 20260928, window transparency. The cause was not the eye. The fill was encoded to sRGB after it was premultiplied, so a light fill at 80% came out as 91% of itself and covered most of the desktop. Black was not affected. A light fill now lets through exactly as much as a dark one.
+	- Test: `a_light_fill_is_as_see_through_as_a_dark_one`, which fails on the old code.
+	- Note: 20260928, the cursor plate is placed by the contrast floor, not by its alpha. Every shipped theme's plate already sits right at the floor from the text, in both modes. Light text is at Oklab 0.32 to 0.37 and the background at 0.94 to 0.97, so the plate can only get 0.12 to 0.20 away from the background. Dark mode gets 0.20 to 0.42. A stronger alpha would push the plate into the text, so the theme cursor colors would have to get lighter to compensate, and the plate would end up where it is now. Only darker light-mode text makes more room. Waiting on a call.
 	- Opened: 20260920-190859
 
 - **Stop here to work on releasing RC1**.
@@ -2630,7 +2633,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
 	- Decided: 20260928, no old bash is built for this. `install.bash` is written for 3.2, and the README now says it is tested on 5 only.
 	- Note: 20260928, the Windows pipeline already runs the installer under PowerShell 5.1 (`cicd/tests/install/windows.ps1`).
-	- Decided: 20260928, the Rust badge says 1.96, the pinned toolchain everything is built and tested on. `rust-version` stays 1.89, the floor cosmic-text sets.
+	- Decided: 20260928, the Rust badge says 1.96, the pinned toolchain everything is built and tested on. `rust-version` says 1.96 too, since the code does not build on 1.94.
 	- Test: PowerShell 5.1 by `cicd/tests/install/windows.ps1`. No test for bash or Rust, which now claim only the versions the pipeline runs.
 	- Opened: 20260914-124200
 
