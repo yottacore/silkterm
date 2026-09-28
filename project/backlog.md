@@ -127,6 +127,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the keyboard split goes through the same placing code. The divider drag is the only other place that marks a run as sized by hand.
 	- Closed:
 
+- A settings range test skips two of the keys it lists
+	- ID: 2026092621021532
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Incorrect behavior: `every_numeric_setting_has_a_floor_and_a_ceiling` lists `window.idle_release_hidden_min` and `window.idle_release_min`, but reads `remembered_rows` for both. Their own ceilings are never checked, and the grid limit it checks is not theirs.
+	- Expected behavior: Each key reads its own field and checks its own limit.
+	- Actual fix: Each key reads its own field and is held to its own limit. A key the list names but the reader does not is now a failure.
+	- Branch: smallfix
+	- Test case: `every_numeric_setting_has_a_floor_and_a_ceiling`. Seen to fail with the idle release clamp taken off.
+	- Swept: the float half of the same test reads a field of its own for every key.
+	- Closed:
+
+- CODEOWNERS has no line for the About dialog
+	- ID: 2026092621021533
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Incorrect behavior: The done support item lists the About dialog as locked in CODEOWNERS, but the file names only itself, DONATE.md and FUNDING.yml.
+	- Expected behavior: A line for the code that draws the About dialog and its support button.
+	- Actual fix: `source/src/dialog.rs` is listed. The addresses the button opens are in `config.rs`, which stays open since it holds every setting.
+	- Branch: smallfix
+	- Test case: None, it is a git host setting. The git host reports no errors in the file.
+	- Closed:
+
 - Windows Terminal handoff
 	- ID: 2026092810510800
 	- Type: Feature
@@ -248,33 +281,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
 		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
 	- Estimated effort: Avg
-	- Closed:
-
-- A settings range test skips two of the keys it lists
-	- ID: 2026092621021532
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Incorrect behavior: `every_numeric_setting_has_a_floor_and_a_ceiling` lists `window.idle_release_hidden_min` and `window.idle_release_min`, but reads `remembered_rows` for both. Their own ceilings are never checked, and the grid limit it checks is not theirs.
-	- Expected behavior: Each key reads its own field and checks its own limit.
-	- Closed:
-
-- CODEOWNERS has no line for the About dialog
-	- ID: 2026092621021533
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Incorrect behavior: The done support item lists the About dialog as locked in CODEOWNERS, but the file names only itself, DONATE.md and FUNDING.yml.
-	- Expected behavior: A line for the code that draws the About dialog and its support button.
-	- Test case: None, it is a git host setting.
 	- Closed:
 
 - Three fixes are pinned only by tests in the patched crates, which the pipeline never runs

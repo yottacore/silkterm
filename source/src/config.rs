@@ -8840,27 +8840,27 @@ mod tests {
 			}
 		}
 
-		// the two integer pairs, same shape
+		// the integers, each against its own limit
 		let huge = "99999999";
-		for key in [
-			"window.columns",
-			"window.rows",
-			"window.remembered_columns",
-			"window.remembered_rows",
-			"window.idle_release_hidden_min",
-			"window.idle_release_min",
+		for (key, (lo, hi)) in [
+			("window.columns", limits::GRID),
+			("window.rows", limits::GRID),
+			("window.remembered_columns", limits::GRID),
+			("window.remembered_rows", limits::GRID),
+			("window.idle_release_hidden_min", limits::IDLE_MIN),
+			("window.idle_release_min", limits::IDLE_MIN),
 		] {
 			let s = read(key, huge);
 			let got = match key {
 				"window.columns" => s.columns,
 				"window.rows" => s.rows,
 				"window.remembered_columns" => s.remembered_columns,
-				_ => s.remembered_rows,
+				"window.remembered_rows" => s.remembered_rows,
+				"window.idle_release_hidden_min" => s.idle_release_hidden_min,
+				"window.idle_release_min" => s.idle_release_min,
+				other => panic!("{other} is not in the reader"),
 			};
-			assert!(
-				(limits::GRID.0..=limits::GRID.1).contains(&got),
-				"{key} resolved to {got}"
-			);
+			assert!((lo..=hi).contains(&got), "{key} resolved to {got}");
 		}
 		assert!(
 			read("scroll.scrollback", huge).scrollback <= limits::SCROLLBACK.1,

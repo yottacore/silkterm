@@ -5,3 +5,7 @@
 /.github/CODEOWNERS  @jim-collier
 /DONATE.md  @jim-collier
 /.github/FUNDING.yml  @jim-collier
+
+# Help > About, with its support button. The addresses it opens are constants in
+# source/src/config.rs, which is left open since it holds every setting.
+/source/src/dialog.rs  @jim-collier
