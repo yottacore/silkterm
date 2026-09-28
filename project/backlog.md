@@ -369,10 +369,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: 20260925, saves now use shcl's new line-keeping save, so lines nobody changed are written back as they were. A file with a dropped tab-indented line still gets the whole-file save from shcl, which deletes that line, so the refusal stays.
 	- Opened: 20260918
 
-- 🔘 Say when a color typed into the settings file is read as empty because it was not quoted.
-	- `background: #112233` reads as nothing, since `#` starts a comment, and the theme's color is used with no message.
-	- Opened: 20260914-124200
-
 - 🔘 Let the showdown tools measure again every row the README table carries.
 	- The size figures for GNOME Terminal, WezTerm, Tabby and Hyper, and Tabby's speed figure, have no rig entry that can take them again.
 	- Opened: 20260914-124200
@@ -2637,6 +2633,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260723-190021
 
 ### Done - Features and enhancements
+
+- ✅ Say when a color typed into the settings file is read as empty because it was not quoted.
+	- `background: #112233` reads as nothing, since `#` starts a comment, and the theme's color is used with no message.
+	- Done: the launch names the setting and its line, and shows the color in quotes. Like the other complaints about the file, it goes to the console.
+	- Test: `an_unquoted_color_is_named`. It fails with the message taken out.
+	- Opened: 20260914-124200
+	- Closed: 20260928-135555
 
 - ✅ Integrate and test the latest shcl 3.0.0-beta.1 build from the local shcl repo.
 	- Done: now on shcl's dev at f2a8ad2. Every test passed on the bump alone.
