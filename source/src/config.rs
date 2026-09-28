@@ -4571,7 +4571,7 @@ fn backfilled_text(text: &str) -> Result<Option<String>, String> {
 				match anchor_for(p, &order, &at, &lines, false) {
 					Anchor::Before(index) => add_line(&mut lines, &mut origin, index, line.clone()),
 					Anchor::After(index) => {
-						add_line(&mut lines, &mut origin, index + 1, line.clone())
+						add_line(&mut lines, &mut origin, index + 1, line.clone());
 					}
 					Anchor::Append => {
 						let end = lines.len();
@@ -11996,7 +11996,7 @@ mod tests {
 		// Test ID: ErCFlaa
 		#[test]
 		fn a_key_written_three_times_survives_the_wallpaper_repair() {
-			wallpaper_repair_case(107671);
+			wallpaper_repair_case(107_671);
 		}
 
 		fn wallpaper_repair_case(seed: u64) {
