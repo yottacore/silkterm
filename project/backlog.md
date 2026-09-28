@@ -160,6 +160,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
 	- Closed:
 
+- Three fixes are pinned only by tests in the patched crates, which the pipeline never runs
+	- ID: 2026092621021534
+	- Type: Task
+	- Status: Waiting on signoff
+	- Priority: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- The x11-clipboard stale clear, the Windows pane handle leak and the engine's scroll ledger are held only by tests in the fork repos.
+		- Either run those tests from cicd, or say in each item that the fork's own runs are the check.
+	- Decisions:
+		- 20260928: Each item says so. The handle leak test needs Windows and the clipboard one an X server, so running them here would cover only the ledger.
+	- Progress log:
+		- 20260928: The clipboard and handle leak items already said so. The nano item, which the ledger test pins, now does too.
+	- Test case: None, the items are notes.
+	- Closed:
+
 - Windows Terminal handoff
 	- ID: 2026092810510800
 	- Type: Feature
@@ -294,20 +313,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: All
 	- Requirements:
 		- When changing the cursor size and animation, change to 50% width.
-	- Closed:
-
-- Three fixes are pinned only by tests in the patched crates, which the pipeline never runs
-	- ID: 2026092621021534
-	- Type: Task
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- The x11-clipboard stale clear, the Windows pane handle leak and the engine's scroll ledger are held only by tests in the fork repos.
-		- Either run those tests from cicd, or say in each item that the fork's own runs are the check.
 	- Closed:
 
 ## Bugs
@@ -969,6 +974,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Why it did not show in testing: a slow renderer takes five or more steps per frame, so two regions never met between frames. A real GPU sees one step per frame.
 	- Fixed: a scroll of a region sharing rows with the one in flight carries on. The ledger narrows to the rows both scrolls moved and keeps the rows that cross that edge, whether the grid dropped them or they only stopped moving. While a slide is in flight the pane takes the record with the region and direction left open instead of clearing it each frame, and the strip keeps its rows across such a step. A region sharing no rows still starts over, so stacked tmux panes stay their own item.
 	- Pinned by: `a_slide_survives_nanos_odd_region_step` in the pane and `scroll_ledger_carries_on_across_an_overlapping_region` in the engine fork, both watched failing under the old rule.
+	- Note: the engine fork's test runs in the fork, not in this pipeline.
 	- Confirmed fixed by eye on the reporting desktop, 20260917.
 	- Opened: 20260911-124508
 	- Closed: 20260917-143700
