@@ -31,6 +31,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## New format
 
+- A launch from the Start menu as an MSIX package opens the first shell in System32
+	- ID: 2026092617015083
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20260926-170150
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run SilkTerm from an MSIX package.
+		- Start it from the Start menu.
+	- Incorrect behavior: The first shell opens in `C:\Windows\System32`.
+	- Expected behavior: It opens in `shell.startup_directory`, which is the home folder by default. That holds on the first launch and on every one after it.
+	- Reproduced: No, since there is no package yet. A packaged app's Start menu entry can't set a working directory, so every launch from it starts in System32, or SysWOW64 for a 32-bit build.
+	- Possible cause: `inherited_dir_is_a_choice` in `config.rs` treats a launch that isn't from a shell as deliberate, unless it starts in home, a root, or the exe's folder. System32 isn't on that list.
+	- Decisions:
+		- 20260926: Send a launch that starts in System32 to `%USERPROFILE%`. The system folder joins home, a root and the exe's folder as places a launcher leaves us. The launch then falls to `shell.startup_directory`, which is `~` unless changed.
+		- This covers every launch, not just the first, because every Start menu launch starts there. Anything else already goes where it should. Started from a shell, it uses that shell's folder. Explorer's "Open in Terminal" uses that folder. A new tab, pane or window uses the pane it came from. `--directory` beats all of them.
+		- Explorer's "Open in Terminal" on System32 itself gets home instead. That's rare and accepted. A shell sitting in System32, like an elevated cmd, still counts as a choice.
+		- Nothing here needs a package, so it can be done and tested now.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Progress log:
+		- 20260928: Checked by unit test on b23 only. There is still no package to launch on Windows.
+	- Actual fix: System32 and SysWOW64 under `%SystemRoot%` join the places a launcher leaves us, on Windows only.
+	- Branch: sysdir
+	- Test case: `a_start_in_the_windows_system_folder_is_not_a_choice`. Seen to fail with the system folders left out.
+	- Closed:
+
 - Windows Terminal handoff
 	- ID: 2026092810510800
 	- Type: Feature
@@ -152,31 +182,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
 		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
 	- Estimated effort: Avg
-	- Closed:
-
-- A launch from the Start menu as an MSIX package opens the first shell in System32
-	- ID: 2026092617015083
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20260926-170150
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Steps to reproduce:
-		- Run SilkTerm from an MSIX package.
-		- Start it from the Start menu.
-	- Incorrect behavior: The first shell opens in `C:\Windows\System32`.
-	- Expected behavior: It opens in `shell.startup_directory`, which is the home folder by default. That holds on the first launch and on every one after it.
-	- Reproduced: No, since there is no package yet. A packaged app's Start menu entry can't set a working directory, so every launch from it starts in System32, or SysWOW64 for a 32-bit build.
-	- Possible cause: `inherited_dir_is_a_choice` in `config.rs` treats a launch that isn't from a shell as deliberate, unless it starts in home, a root, or the exe's folder. System32 isn't on that list.
-	- Decisions:
-		- 20260926: Send a launch that starts in System32 to `%USERPROFILE%`. The system folder joins home, a root and the exe's folder as places a launcher leaves us. The launch then falls to `shell.startup_directory`, which is `~` unless changed.
-		- This covers every launch, not just the first, because every Start menu launch starts there. Anything else already goes where it should. Started from a shell, it uses that shell's folder. Explorer's "Open in Terminal" uses that folder. A new tab, pane or window uses the pane it came from. `--directory` beats all of them.
-		- Explorer's "Open in Terminal" on System32 itself gets home instead. That's rare and accepted. A shell sitting in System32, like an elevated cmd, still counts as a choice.
-		- Nothing here needs a package, so it can be done and tested now.
-	- Estimated effort: Low
-	- Test case: Unit tests for `dir_is_a_choice` with the system folder as the working directory.
 	- Closed:
 
 - A pipeline run dies at the Windows GUI stage when a box is held by another session
