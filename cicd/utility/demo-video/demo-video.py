@@ -30,7 +30,7 @@
 ##		Settings changes shown mid-run (the cursor ones) go through the app's
 ##		control socket, so they arrive live with nothing typed on camera.
 ##		Both profiles start opaque on a plain black background (no image); the
-##		closing scenes bring the built-in wallpaper in via the app's --wallpaper.
+##		closing scenes turn the built-in wallpaper on through the control socket.
 ##		Screens are cleared between scenes except where the next command is meant
 ##		to push the previous output up - a cleared screen means the typing that
 ##		follows changes few pixels, which is most of what keeps the gif small.
@@ -729,12 +729,9 @@ def write_config(home, profile):
 	# is no "no wallpaper" state to start from (an unset image IS what shows the
 	# built-in one). Image opacity stays at the 0.10 default.
 	#
-	# rotate.enabled OFF matters just as much and is far less obvious: rotation
-	# adopts a wallpaper folder sitting beside the config on its own, and the
-	# wallpapers/ dir holding the image seg_wallpaper reveals is exactly that. On
-	# the defaults it picked the image at launch, so the demo opened ON the
-	# wallpaper and the reveal changed nothing. Naming the file outright still
-	# works with rotation off, which is all seg_wallpaper does.
+	# rotate.enabled stays OFF too: rotation adopts a wallpaper folder on its
+	# own, and a folder suppresses the built-in image, so the reveal could show
+	# something else or nothing at all.
 	#
 	# What is pinned here and what is deliberately absent:
 	#  - grid, font and margin stay pinned even where they equal a default, so a
@@ -745,11 +742,7 @@ def write_config(home, profile):
 	#  - cursor.size.width IS pinned, and to the shipped block on purpose: it is
 	#    the before half of seg_cursor, which narrows it to a bar on camera.
 	cfgdir = home / ".config" / "silkterm"
-	wpdir = cfgdir / "wallpapers"
-	wpdir.mkdir(parents=True, exist_ok=True)
-	# the app's own baked-in wallpaper, so the closing scene shows exactly the
-	# out-of-the-box look (and can never drift from it)
-	shutil.copy2(REPO / "source/assets/default-background.jpg", wpdir / "default.jpg")
+	cfgdir.mkdir(parents=True, exist_ok=True)
 	(cfgdir / "config.shcl").write_text('''font.use_system_family: true
 performance.automatic: false
 performance.profile: custom
@@ -1031,8 +1024,11 @@ def set_cfg(rec, keys):
 		path = ".".join([n for _, n in stack] + [name])
 		if path in keys:
 			val = keys[path]
-			lines[i] = f"{raw[:indent]}{name}: " + (
-				f'"{val}"' if isinstance(val, str) else f"{val}")
+			if isinstance(val, bool):
+				val = "true" if val else "false"
+			elif isinstance(val, str):
+				val = f'"{val}"'
+			lines[i] = f"{raw[:indent]}{name}: {val}"
 			seen.add(path)
 	missing = sorted(set(keys) - seen)
 	if missing:
@@ -1062,7 +1058,7 @@ def seg_ls(r, t, m):
 	# no wipe: the build output is meant to push this listing up
 
 def seg_build(r, t, m):
-	with Banner(r, "Watch it speed up, then wind down."):
+	with Banner(r, "Watch it adapt to any output speed"):
 		t.cmd("cd projects/pulsar", settle=0.6, typos=0.0)
 		# the script runs ~6.5s now (five paced movements, see write_tree) and the
 		# settle has to outlast it, or the scene cuts away mid wind-down - which is
@@ -1135,12 +1131,14 @@ def seg_cursor(r, t, m):
 		time.sleep(3.2)
 
 def seg_wallpaper(r, t, m):
-	# the image is the app's own baked-in default, copied into the fake config
-	# dir - so this gives exactly the out-of-the-box look, live, no restart
-	with Banner(r, "The built-in wallpaper, live"):
-		t.cmd("silkterm --wallpaper ~/.config/silkterm/wallpapers/default.jpg",
-			settle=3.4)
-		time.sleep(0.6)
+	# the image compiled into the binary, switched on like any other setting, so
+	# this is exactly the out-of-the-box look with nothing typed. The reload
+	# takes about a second to reach the screen, hence the longer hold.
+	with Banner(r, "Advanced wallpaper support, with a default in the executable"):
+		r.xdo("windowactivate", r.win)
+		time.sleep(0.4)
+		set_cfg(r, {"wallpaper.fallback_builtin": True})
+		time.sleep(4.4)
 	with Banner(r, "Text stays legible over any of it"):
 		time.sleep(2.8)
 	# no wipe from here on: the closing scenes build up the frame that the demo
@@ -1571,6 +1569,9 @@ if __name__ == "__main__":
 
 
 ##	Script history:
+##		- 20260928: the wallpaper arrives through the control socket with
+##		  nothing typed, under a new caption. The build caption says it adapts
+##		  to any output speed.
 ##		- 20260924: closing the panes happens in a cut, which the encode drops
 ##		  along with its sound. The cursor turns to a bar and a phase fade in one
 ##		  step. The wheel caption names the minimap.

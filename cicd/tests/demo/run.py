@@ -169,10 +169,16 @@ try:
 except RuntimeError:
 	missed = True
 check("a setting with no line stops the run", missed)
+cfg.write_text("wallpaper:\n\tfallback_builtin: false\n")
+demo.set_cfg(rec, {"wallpaper.fallback_builtin": True})
+check("a switch is written the way shcl reads one",
+	cfg.read_text().split("\n")[1] == "\tfallback_builtin: true", repr(cfg.read_text()))
 demo.ctl = real_ctl
 demo.write_config(rec.home, demo.PROFILES["gif"])
 check("the recording's config turns wallpaper rotation off",
 	"wallpaper.rotate.enabled: false" in cfg.read_text().splitlines())
+check("and starts with no wallpaper, so the reveal changes something",
+	"wallpaper.fallback_builtin: false" in cfg.read_text().splitlines())
 done(rec)
 
 ## The window manager's session: its settings stay in the work folder, and
