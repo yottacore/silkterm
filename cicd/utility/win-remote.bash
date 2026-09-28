@@ -50,6 +50,8 @@
 ##		caps the wait in seconds.
 ##		hold runs a local command with the boxes held, for a caller that makes several
 ##		calls in a row and cannot have another session get in between them.
+##		With --optional, each box is held and run on in turn, and one that another
+##		session holds past the wait is skipped. WINRIG_LOCK_WAIT defaults to 100 there.
 ##	Exit: 0 ok, 1 job or connection failure, 2 usage / no config, 3 the lock's wait ran out.
 ##	History: At bottom of script.
 
@@ -206,14 +208,39 @@ fHoldBoxes() {
 	((${#names[@]})) || return 0
 	"$lock" check "${names[@]}" >/dev/null 2>&1 || rc=$?
 	case "$rc" in
-		0) return 0 ;;
+		0) if [[ -n "${WINRIG_STARTED:-}" ]]; then : > "${WINRIG_STARTED}"; fi; return 0 ;;
 		1) ;;
 		*) fWarn "host lock unusable here (exit ${rc}), going ahead without it"; return 0 ;;
 	esac
 	##	Already re-run under wrap for these boxes and still not held. Stop rather than loop.
 	[[ "${WINRIG_LOCKED:-}" != "${names[*]}" ]] || fFail "the host lock does not show ${names[*]} as held, even under wrap" 2
+	((optional)) && fHoldEachOrSkip "$lock" "${names[@]}"
 	export WINRIG_LOCKED="${names[*]}"
 	exec "$lock" wrap "${names[@]}" --why "silkterm win-remote ${cmd}" ${WINRIG_LOCK_WAIT:+--wait "${WINRIG_LOCK_WAIT}"} -- "$0" "${origArgs[@]}"
+}
+
+##	For --optional, a box another session holds is stepped over like one that is
+##	off. Asking for every box at once would wait on the busy one and skip the free
+##	one too, so each is taken and run on in turn, and the lock's wait is capped.
+##	Only a wait that ran out before the command started is a skip; the command's
+##	own exit is passed on.
+fHoldEachOrSkip() {
+	local lock="$1"; shift
+	local name started rc worst=0
+	started="$(mktemp)"
+	for name in "$@"; do
+		rm -f "${started}"
+		rc=0
+		WINRIG_ONLY="${name}" WINRIG_LOCKED="${name}" WINRIG_STARTED="${started}" \
+			"$lock" wrap "${name}" --why "silkterm win-remote ${cmd}" --wait "${WINRIG_LOCK_WAIT:-100}" -- "$0" "${origArgs[@]}" || rc=$?
+		if ((rc == 3)) && [[ ! -e "${started}" ]]; then
+			fWarn "${name}: held by another session, skipped"
+		elif ((rc > worst)); then
+			worst=${rc}
+		fi
+	done
+	rm -f "${started}"
+	exit "${worst}"
 }
 
 runScript=""
@@ -229,7 +256,8 @@ fNoRef() { [[ -z "${refGiven}" ]] || fFail "--ref belongs to sync - sync with it
 ##	that takes no arguments says so rather than dropping them.
 fNoArgs() { local what="$1"; shift; (($# == 0)) || fFail "${what} takes no arguments, and options go before the command (got: $*)" 2 ;}
 
-only=""; optional=0; syncRef="dev"; refGiven=""
+##	WINRIG_ONLY narrows every call made under a one-box hold, as --host would.
+only="${WINRIG_ONLY:-}"; optional=0; syncRef="dev"; refGiven=""
 while (($#)); do case "$1" in
 	--host)    only="${2:-}"; shift 2 ;;
 	--as)      sshUser="${2:-}"; shift 2 ;;
@@ -334,3 +362,4 @@ esac
 ##		- 20260910: an option written after the command is refused, not dropped.
 ##		- 20260910: waits for the host lock, and hold.
 ##		- 20260918: push, for a binary built here.
+##		- 20260928: --optional steps over a box another session holds.

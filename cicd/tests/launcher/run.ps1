@@ -51,21 +51,34 @@ function fSandbox {
 	return $root
 }
 
-function fRun { param([string]$Home_)
+## On Windows the launcher keeps its pool under LOCALAPPDATA and its Start menu
+## entry under APPDATA, so both move into the sandbox along with home.
+function fUseHome { param([string]$Home_)
 	$env:HOME = $Home_
 	$env:USERPROFILE = $Home_
+	$env:LOCALAPPDATA = Join-Path $Home_ "AppData/Local"
+	$env:APPDATA = Join-Path $Home_ "AppData/Roaming"
+}
+
+## Where the launcher puts the pool, the symlink and its log.
+function fBin { param([string]$Home_)
+	if ($IsWindows) { return (Join-Path $Home_ "AppData/Local/Programs") }
+	return (Join-Path $Home_ ".local/bin")
+}
+
+function fRun { param([string]$Home_)
+	fUseHome $Home_
 	& $Pwsh -NoProfile -File $Launcher --install-only 2>&1 | Out-Null
 }
 
 ## Same, but hands back what the launcher said, and takes extra arguments.
 function fRunSaying { param([string]$Home_, [string[]]$Extra = @())
-	$env:HOME = $Home_
-	$env:USERPROFILE = $Home_
+	fUseHome $Home_
 	return (& $Pwsh -NoProfile -File $Launcher @Extra 2>&1 | Out-String)
 }
 
-function fPool { param([string]$Home_) return (Join-Path $Home_ ".local/bin/silkterm_versions") }
-function fRunLog { param([string]$Home_) return [string](Get-Content -LiteralPath (Join-Path $Home_ ".local/bin/runterm.log") -Raw -ErrorAction SilentlyContinue) }
+function fPool { param([string]$Home_) return (Join-Path (fBin $Home_) "silkterm_versions") }
+function fRunLog { param([string]$Home_) return [string](Get-Content -LiteralPath (Join-Path (fBin $Home_) "runterm.log") -Raw -ErrorAction SilentlyContinue) }
 function fStamp { param([datetime]$When) return $When.ToString("yyyyMMdd-HHmmss") }
 
 ## Plant a held copy. Without -Text it is $Bytes of nothing, sparse, so a big one
@@ -92,7 +105,7 @@ function fHeld { param([string]$Home_)
 function fHeldStamps { param([string]$Home_) return @(fHeld $Home_ | ForEach-Object { ($_.Name -split '_')[1] }) }
 
 function fLinkTarget { param([string]$Home_)
-	$link = Get-Item -LiteralPath (Join-Path $Home_ ".local/bin/silkterm") -Force -ErrorAction SilentlyContinue
+	$link = Get-Item -LiteralPath (Join-Path (fBin $Home_) "silkterm") -Force -ErrorAction SilentlyContinue
 	if ($link) { return $link.LinkTarget }
 	return $null
 }
@@ -127,6 +140,9 @@ function fRecordingBuild { param([string]$Path)
 }
 
 $realHome    = $env:HOME
+$realProfile = $env:USERPROFILE
+$realLocal   = $env:LOCALAPPDATA
+$realRoaming = $env:APPDATA
 $realPath    = $env:PATH
 ## Nothing here may open a window on the desktop, whatever the launcher falls back to.
 $realDisplay = $env:DISPLAY
@@ -135,11 +151,14 @@ Remove-Item Env:DISPLAY, Env:WAYLAND_DISPLAY -ErrorAction SilentlyContinue
 try {
 	Write-Host "a release build already installed at the symlink path"
 	$root = fSandbox
-	$bin = Join-Path $root ".local/bin"
+	$bin = fBin $root
 	New-Item -ItemType Directory -Path $bin -Force | Out-Null
 	$installed = Join-Path $bin "silkterm"
 	Set-Content -LiteralPath $installed -Value "a release build somebody installed" -NoNewline
 	fRun $root
+	## A Windows run would otherwise rotate the real pool.
+	$inside = { param([string]$Path) $Path -and $Path.StartsWith($root) }
+	fCheck "every folder the launcher writes to is in the sandbox" ((& $inside $env:HOME) -and (& $inside $env:USERPROFILE) -and (& $inside $env:LOCALAPPDATA) -and (& $inside $env:APPDATA))
 	fCheck "the installed build is still there" (Test-Path -LiteralPath $installed)
 	fCheck "and is still itself" ((Get-Content -LiteralPath $installed -Raw) -eq "a release build somebody installed")
 	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
@@ -147,7 +166,7 @@ try {
 	Write-Host "nothing installed at the symlink path"
 	$root = fSandbox
 	fRun $root
-	$link = Join-Path $root ".local/bin/silkterm"
+	$link = Join-Path (fBin $root) "silkterm"
 	fCheck "the launcher put its own silkterm there" (Test-Path -LiteralPath $link)
 	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -336,6 +355,9 @@ try {
 	}
 } finally {
 	$env:HOME = $realHome
+	$env:USERPROFILE = $realProfile
+	$env:LOCALAPPDATA = $realLocal
+	$env:APPDATA = $realRoaming
 	$env:PATH = $realPath
 	if ($null -ne $realDisplay) { $env:DISPLAY = $realDisplay }
 	if ($null -ne $realWayland) { $env:WAYLAND_DISPLAY = $realWayland }
@@ -345,6 +367,7 @@ if ($script:Failures -gt 0) { Write-Host "$($script:Failures) failed"; exit 1 }
 Write-Host "all passed"
 
 ##	History:
+##		- 2026-09-28: LOCALAPPDATA and APPDATA are sandboxed too.
 ##		- 2026-09-26: Pool cases: copy and decline, rotation, the byte cap, the
 ##		  swept leftover, the Dropbox spelling, the title and the fallback.
 ##		- 2026-09-08: Created.

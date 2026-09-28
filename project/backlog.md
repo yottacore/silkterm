@@ -27,7 +27,7 @@
 
 ## Introduction
 
-Going forward, new issues in the new template at the bottom of this file, will go in the '## New format' section only. No more status emojis, but will be sorted (top-down) by status, then severity|priority. Issues in the old format (with status emojis) won't be refactored, but will continue to be worked until moved to closed, canceled, or deferred sections, and emojis updated. (Eventually this will all be moved to nano-git-db anyway. This new template is an intermediate effort to make issues going forward more structured and importable.)
+Going forward, new issues in the new template at the bottom of this file, will go in the '## New format' section only. No more status emojis. Refer to '## Reference' for sort order. Issues in the old format (with status emojis) won't be refactored, but will continue to be worked until moved to closed, canceled, or deferred sections, and emojis updated. (Eventually this will all be moved to nano-git-db anyway. This new template is an intermediate effort to make issues going forward more structured and importable.)
 
 ## New format
 
@@ -59,6 +59,48 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix: System32 and SysWOW64 under `%SystemRoot%` join the places a launcher leaves us, on Windows only.
 	- Branch: sysdir
 	- Test case: `a_start_in_the_windows_system_folder_is_not_a_choice`. Seen to fail with the system folders left out.
+	- Closed:
+
+- A pipeline run dies at the Windows GUI stage when a box is held by another session
+	- ID: 2026092618254900
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20260926-182549
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Hold vm925w's host lock from another session.
+		- Run `cicd/cicd.bash -y --no-publish`.
+	- Incorrect behavior: The harness queues for the lock, prints "still queued", and the run stops with "a windows gui scenario failed". No dogfood build is made.
+	- Expected behavior: A locked or unreachable box is reported and stepped over, as the stage's own comment says. Only a scenario that ran and failed stops the run.
+	- Reproduced: Yes, on b23 on 20260926 at 18:25, with vm925w held by a nemo-anywhere session.
+	- Possible cause: The lock's "still queued" exit reaches `cicd.bash` as the harness's failure.
+	- Actual cause:
+		- `--optional` covered a box that was off, not one another session held. The lock's wait ran out and its exit was taken for the harness's.
+		- Both boxes were asked for at once, so the free one was lost with the held one.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Actual fix: With `--optional`, each box is held and run on in turn. One whose wait runs out before the command starts is reported and skipped. The command's own exit is still passed on.
+	- Branch: winlock
+	- Test case: `cicd/tests/win-remote/run.bash`, against a stand-in lock. Seen to fail on the old runner.
+	- Closed:
+
+- The launcher test would use the real dogfood pool if run on Windows
+	- ID: 2026092621021535
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Incorrect behavior: `cicd/tests/launcher/run.ps1` points HOME and USERPROFILE at a sandbox, but on Windows the launcher keeps its pool under LOCALAPPDATA, which it leaves alone.
+	- Expected behavior: The sandbox covers LOCALAPPDATA too. cicd runs the test only on Linux today, so nothing has touched the real pool.
+	- Actual fix: LOCALAPPDATA and APPDATA move into the sandbox with home, and the test looks for the pool where each platform keeps it. APPDATA is where the launcher files its Start menu entry.
+	- Branch: winlock
+	- Test case: "every folder the launcher writes to is in the sandbox", in `cicd/tests/launcher/run.ps1`. Seen to fail with LOCALAPPDATA left out. Run on Linux only.
 	- Closed:
 
 - Windows Terminal handoff
@@ -184,25 +226,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Estimated effort: Avg
 	- Closed:
 
-- A pipeline run dies at the Windows GUI stage when a box is held by another session
-	- ID: 2026092618254900
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20260926-182549
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Steps to reproduce:
-		- Hold vm925w's host lock from another session.
-		- Run `cicd/cicd.bash -y --no-publish`.
-	- Incorrect behavior: The harness queues for the lock, prints "still queued", and the run stops with "a windows gui scenario failed". No dogfood build is made.
-	- Expected behavior: A locked or unreachable box is reported and stepped over, as the stage's own comment says. Only a scenario that ran and failed stops the run.
-	- Reproduced: Yes, on b23 on 20260926 at 18:25, with vm925w held by a nemo-anywhere session.
-	- Possible cause: The lock's "still queued" exit reaches `cicd.bash` as the harness's failure.
-	- Estimated effort: Low
-	- Closed:
-
 - A command-line split does not reuse the direction of the pane it splits, and a run of splits the same way is not evened out
 	- ID: 2026092621021531
 	- Type: Bug
@@ -259,19 +282,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- The x11-clipboard stale clear, the Windows pane handle leak and the engine's scroll ledger are held only by tests in the fork repos.
 		- Either run those tests from cicd, or say in each item that the fork's own runs are the check.
-	- Closed:
-
-- The launcher test would use the real dogfood pool if run on Windows
-	- ID: 2026092621021535
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Incorrect behavior: `cicd/tests/launcher/run.ps1` points HOME and USERPROFILE at a sandbox, but on Windows the launcher keeps its pool under LOCALAPPDATA, which it leaves alone.
-	- Expected behavior: The sandbox covers LOCALAPPDATA too. cicd runs the test only on Linux today, so nothing has touched the real pool.
 	- Closed:
 
 ## Bugs

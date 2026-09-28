@@ -91,8 +91,55 @@ fCheck "without touching the other box" fNotCalled "192.0.2.20"
 fRemote "192.0.2.10 192.0.2.20" hosts
 fCheck "hosts lists each box as up or down" test "${rc}" -eq 0 -a -n "$(grep -E '^boxa +up +192\.0\.2\.11$' <<<"${out}")" -a -n "$(grep -E '^boxb +down +192\.0\.2\.20$' <<<"${out}")"
 
+## A host lock that another session holds boxa through. wrap waits on a busy box
+## and gives up with the lock's own exit 3; a free one runs the command with it held.
+cat >"${stubs}/lock" <<'STUB'
+#!/usr/bin/env bash
+cmd="${1}"; shift
+case "${cmd}" in
+	hosts) echo "boxa boxb" ;;
+	check) for h in "$@"; do [[ " ${STUB_HELD:-} " == *" ${h} "* ]] || exit 1; done ;;
+	wrap)
+		names=(); while [[ "${1}" != -- ]]; do case "${1}" in --why|--wait) shift 2 ;; *) names+=("${1}"); shift ;; esac; done; shift
+		for h in "${names[@]}"; do
+			if [[ " ${STUB_BUSY:-} " == *" ${h} "* ]]; then echo "still queued: ${h} is held" >&2; exit 3; fi
+		done
+		echo "wrap ${names[*]}" >>"${STUB_LOG}"
+		STUB_HELD="${names[*]}" exec "$@" ;;
+esac
+STUB
+chmod +x "${stubs}/lock"
+lockConf="${work}/winrig-lock.conf"
+{ printf '@lock %s\n' "${stubs}/lock"; cat "${conf}"; } >"${lockConf}"
+fLocked(){  ## fLocked <busy boxes> <exit of the held command> <args...>
+	local -r busy="${1}" code="${2}"; shift 2
+	: >"${work}/calls"
+	rc=0; out="$(PATH="${stubs}:${PATH}" WINRIG_CONF="${lockConf}" WINRIG_USER=tester STUB_LOG="${work}/calls" \
+		STUB_BUSY="${busy}" HELD_EXIT="${code}" WIN_REMOTE="${winRemote}" "${winRemote}" "$@" 2>&1)" || rc=$?
+}
+cat >"${work}/held" <<'STUB'
+#!/usr/bin/env bash
+echo "held with ${STUB_HELD:-nothing}, sees $("${WIN_REMOTE}" hosts | tr -s ' \n' ' ')"
+exit "${HELD_EXIT}"
+STUB
+chmod +x "${work}/held"
+
+fLocked "boxa" 0 --optional hold "${work}/held"
+fCheck "a box another session holds is stepped over" fSaid "boxa: held by another session, skipped"
+fCheck "and the free one still runs, held on its own" fSaid "held with boxb, sees boxb up 192.0.2.20"
+fCheck "and the run passes" test "${rc}" -eq 0
+fLocked "" 0 --optional hold "${work}/held"
+fCheck "with both free, each box gets a turn" test "$(grep -c '^held with' <<<"${out}")" -eq 2
+fLocked "" 1 --optional hold "${work}/held"
+fCheck "a command that ran and failed still fails the run" test "${rc}" -eq 1
+fLocked "" 3 --optional hold "${work}/held"
+fCheck "even when its own exit looks like the lock's" test "${rc}" -eq 3
+fLocked "boxa" 0 hold "${work}/held"
+fCheck "without --optional a busy box still stops the run" test "${rc}" -eq 3
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20260926 JC: Created.
+##		- 20260928 JC: a box another session holds.
