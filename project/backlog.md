@@ -120,6 +120,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix:
 		- A pane with no direction takes the one given to the pane it splits, and passes it on. The longer side is only the last resort.
 		- A split with no size evens out its run, as a split from the keyboard does. A split with a size keeps it, and the run it is in is no longer evened out, as after dragging a divider.
+	- Progress log:
+		- 20260928: Checked on b23 on a private display with a debug build. The example gave three panes of 15 rows each, and three splits to the right gave four panes of 29 columns each.
 	- Branch: splitdir
 	- Test case: `a_pane_splits_the_way_the_pane_it_splits_was_split`, `a_run_of_command_line_splits_with_no_size_comes_out_even`, `a_command_line_split_with_a_size_keeps_it`. Each seen to fail with its half of the fix taken out. `a_split_with_no_direction_goes_along_the_longer_side` still pins the fallback.
 	- Swept: the keyboard split goes through the same placing code. The divider drag is the only other place that marks a run as sized by hand.
