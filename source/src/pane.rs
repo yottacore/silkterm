@@ -3440,8 +3440,8 @@ impl PaneManager {
 	) {
 		let cwd = self.panes.get(&id).and_then(|p| p.term.cwd());
 		// interactive splits even-distribute the same-direction run (unless a divider
-		// in it was hand-dragged); the CLI drives its own sizing, so it passes false
-		self.split_at(ctx, proxy, id, dir, false, 0.5, command, cwd, area, true);
+		// in it was hand-dragged)
+		self.split_at(ctx, proxy, id, dir, false, None, command, cwd, area);
 	}
 
 	// What the tab has to say about itself: the command its focused pane was
@@ -3471,10 +3471,9 @@ impl PaneManager {
 	}
 
 	// General split used by the CLI: split `id` along `dir`, the new pane on the
-	// `before` side (a) or after (b), taking `new_ratio` of the split; runs
-	// `command`. Returns the new pane id (None if `id` wasn't a leaf). `equalize`
-	// re-distributes the same-direction run to equal fractions after inserting
-	// (interactive default); the CLI passes false and sizes explicitly.
+	// `before` side (a) or after (b); runs `command`. Returns the new pane id (None
+	// if `id` wasn't a leaf). `new_ratio` is the new pane's share, kept as given;
+	// None evens out the same-direction run it joined, see `place_split`.
 	pub fn split_at(
 		&mut self,
 		ctx: &mut TextCtx,
@@ -3482,11 +3481,10 @@ impl PaneManager {
 		id: PaneId,
 		dir: Dir,
 		before: bool,
-		new_ratio: f32,
+		new_ratio: Option<f32>,
 		command: Option<Vec<String>>,
 		cwd: Option<std::path::PathBuf>,
 		area: Rect,
-		equalize: bool,
 	) -> Option<PaneId> {
 		// leaves mirror `panes`, so this is also "is id a leaf" - checked up
 		// front so a doomed insert can't spawn (then kill) a shell
@@ -3512,26 +3510,11 @@ impl PaneManager {
 		};
 		pane.copy_select = inherit_select;
 		pane.copy_output = inherit_output;
-		// child-a's ratio: if the new pane is 'a' (before) it takes new_ratio,
-		// else 'a' is the old pane and keeps the remainder.
-		let ratio_a = if before { new_ratio } else { 1.0 - new_ratio };
-		if !insert_split_at(
-			&mut self.root,
-			id,
-			dir,
-			new_id,
-			before,
-			ratio_a.clamp(0.05, 0.95),
-		) {
+		if !place_split(&mut self.root, id, dir, new_id, before, new_ratio) {
 			return None;
 		}
 		self.panes.insert(new_id, pane);
 		self.focused = new_id;
-		// even-distribute the same-direction run the new pane joined, unless a
-		// divider in it was hand-dragged (then successive splits stay 50/50)
-		if equalize {
-			equalize_dir_run(&mut self.root, new_id, dir);
-		}
 		self.relayout(ctx, area);
 		Some(new_id)
 	}
@@ -4116,6 +4099,35 @@ fn insert_split_at(
 				|| insert_split_at(b, id, dir, new_id, before, ratio_a)
 		}
 	}
+}
+
+// Put leaf `new_id` beside leaf `id`. A given share is kept: the split counts as
+// sized by hand, so no later split in its run evens it out. With none the new
+// pane takes half, then the same-direction run it joined is evened out, unless a
+// divider in it was sized by hand (then successive splits stay 50/50).
+fn place_split(
+	root: &mut Node,
+	id: PaneId,
+	dir: Dir,
+	new_id: PaneId,
+	before: bool,
+	new_ratio: Option<f32>,
+) -> bool {
+	let share = new_ratio.unwrap_or(0.5);
+	// child-a's ratio: if the new pane is 'a' (before) it takes the share, else
+	// 'a' is the old pane and keeps the remainder
+	let ratio_a = if before { share } else { 1.0 - share };
+	if !insert_split_at(root, id, dir, new_id, before, ratio_a.clamp(0.05, 0.95)) {
+		return false;
+	}
+	if new_ratio.is_none() {
+		equalize_dir_run(root, new_id, dir);
+	} else if let Some(path) = path_to(root, new_id) {
+		if let Node::Split { manual, .. } = node_at_mut(root, &path[..path.len() - 1]) {
+			*manual = true;
+		}
+	}
+	true
 }
 
 // Path (false = a-child, true = b-child) from `node` down to leaf `id`, if present.
@@ -4811,11 +4823,11 @@ mod tests {
 		fingerprint_frame, fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged,
 		handle_pos, has_ink, layout, ledger_makes_room, ledger_step, link_at, lock_for_frame,
 		logical_line_bounds, minimap, mono_attrs, move_is_input, next_capture_poll, output_advance,
-		output_band, pair_inside, paste_payload, prompt_strip, pulse_env, pushed_since,
-		render_char, repainted_edge, resume_delay, same_char_pair, scroll_shift_signed,
-		set_buffer_rows, set_ratio, shift_makes_room, shown_cursor_shape, slide_bands,
-		slide_is_visible, snapshot_rows, static_bands, strip_cell, strip_rows, swap_leaves,
-		text_buffer_h, translate_span, vanished_range, weld_region_clip,
+		output_band, pair_inside, paste_payload, place_split, prompt_strip, pulse_env,
+		pushed_since, render_char, repainted_edge, resume_delay, same_char_pair,
+		scroll_shift_signed, set_buffer_rows, set_ratio, shift_makes_room, shown_cursor_shape,
+		slide_bands, slide_is_visible, snapshot_rows, static_bands, strip_cell, strip_rows,
+		swap_leaves, text_buffer_h, translate_span, vanished_range, weld_region_clip,
 	};
 	use crate::config;
 	use alacritty_terminal::event::{Event, EventListener};
@@ -5810,6 +5822,59 @@ mod tests {
 		for (_, w) in &ws {
 			assert!((w - 300.0).abs() <= 3.0, "not equal quarters: {ws:?}");
 		}
+	}
+
+	// The command line evens out a run of splits with no size, the same as the
+	// keyboard does, and keeps a size it was given.
+	// Test ID: ErCAz1p
+	#[test]
+	fn a_run_of_command_line_splits_with_no_size_comes_out_even() {
+		let mut root = leaf(1);
+		assert!(place_split(&mut root, 1, Dir::Vertical, 2, false, None));
+		assert!(place_split(&mut root, 2, Dir::Vertical, 3, false, None));
+		assert!(place_split(&mut root, 3, Dir::Vertical, 4, false, None));
+		for (id, w) in widths(&root, 1200.0) {
+			assert!(
+				(w - 300.0).abs() <= 3.0,
+				"pane {id} is {w} wide, not a quarter"
+			);
+		}
+	}
+
+	// Test ID: ErCAz5H
+	#[test]
+	fn a_command_line_split_with_a_size_keeps_it() {
+		let mut root = leaf(1);
+		assert!(place_split(
+			&mut root,
+			1,
+			Dir::Vertical,
+			2,
+			false,
+			Some(0.3)
+		));
+		assert!(place_split(&mut root, 2, Dir::Vertical, 3, false, None));
+		let ws = widths(&root, 1000.0);
+		assert!(
+			(ws[0].1 - 700.0).abs() <= 3.0,
+			"the sized split was evened out: {ws:?}"
+		);
+		assert!(
+			(ws[1].1 - ws[2].1).abs() <= 3.0,
+			"the next one halves what it split: {ws:?}"
+		);
+		// a pane put before the one it splits takes its share on that side
+		let mut before = leaf(1);
+		assert!(place_split(
+			&mut before,
+			1,
+			Dir::Vertical,
+			2,
+			true,
+			Some(0.25)
+		));
+		let ws = widths(&before, 1000.0);
+		assert!((ws[1].1 - 250.0).abs() <= 3.0, "{ws:?}");
 	}
 
 	// Test ID: EivUOFe

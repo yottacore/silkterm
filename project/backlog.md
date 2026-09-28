@@ -103,6 +103,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: "every folder the launcher writes to is in the sandbox", in `cicd/tests/launcher/run.ps1`. Seen to fail with LOCALAPPDATA left out. Run on Linux only.
 	- Closed:
 
+- A command-line split does not reuse the direction of the pane it splits, and a run of splits the same way is not evened out
+	- ID: 2026092621021531
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- `silkterm --new-pane=a --down --new-pane --splits=a`
+	- Incorrect behavior: The second pane goes right or down by the target's shape, not down like the pane it splits. Three panes split the same way with no size come out at a half, a quarter and a quarter.
+	- Expected behavior: Both are in the done command-line item. Direction carries along the split chain, and a run of same-direction splits with no size is spread out evenly.
+	- Reproduced: No. Read from the code, where `build_layout` falls back to `default_dir` and always splits at 0.5 with no evening out.
+	- Actual fix:
+		- A pane with no direction takes the one given to the pane it splits, and passes it on. The longer side is only the last resort.
+		- A split with no size evens out its run, as a split from the keyboard does. A split with a size keeps it, and the run it is in is no longer evened out, as after dragging a divider.
+	- Branch: splitdir
+	- Test case: `a_pane_splits_the_way_the_pane_it_splits_was_split`, `a_run_of_command_line_splits_with_no_size_comes_out_even`, `a_command_line_split_with_a_size_keeps_it`. Each seen to fail with its half of the fix taken out. `a_split_with_no_direction_goes_along_the_longer_side` still pins the fallback.
+	- Swept: the keyboard split goes through the same placing code. The divider drag is the only other place that marks a run as sized by hand.
+	- Closed:
+
 - Windows Terminal handoff
 	- ID: 2026092810510800
 	- Type: Feature
@@ -224,23 +246,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
 		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
 	- Estimated effort: Avg
-	- Closed:
-
-- A command-line split does not reuse the direction of the pane it splits, and a run of splits the same way is not evened out
-	- ID: 2026092621021531
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Steps to reproduce:
-		- `silkterm --new-pane=a --down --new-pane --splits=a`
-	- Incorrect behavior: The second pane goes right or down by the target's shape, not down like the pane it splits. Three panes split the same way with no size come out at a half, a quarter and a quarter.
-	- Expected behavior: Both are in the done command-line item. Direction carries along the split chain, and a run of same-direction splits with no size is spread out evenly.
-	- Reproduced: No. Read from the code, where `build_layout` falls back to `default_dir` and always splits at 0.5 with no evening out.
-	- Test case: None yet. `a_split_with_no_direction_goes_along_the_longer_side` pins the fallback as it is.
 	- Closed:
 
 - A settings range test skips two of the keys it lists
