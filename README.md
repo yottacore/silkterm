@@ -8,7 +8,7 @@
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4)](https://github.com/sponsors/jim-collier)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-%E2%98%95-ff5e5b)](https://ko-fi.com/jimcollier)
 [![Release](https://img.shields.io/badge/Release-1.0.0--beta3-blue)](https://github.com/yottacore/silkterm/releases)
-![Rust: 1.89+](https://img.shields.io/badge/Rust-1.89%2B-orange)
+![Rust: 1.96](https://img.shields.io/badge/Rust-1.96-orange)
 [![License: GPL v2+](https://img.shields.io/badge/License-GPLv2%2B-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 
 <!--

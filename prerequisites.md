@@ -8,7 +8,7 @@
 
 What to install before you can develop and build SilkTerm, per OS. Once these are in place, [build.md](build.md) has the actual build commands (native + cross), and the CI/CD pipelines (`cicd/cicd.bash` on Linux, `cicd/cicd-win.ps1` on Windows) drive the full lint/test/build/package flow.
 
-SilkTerm is a Rust project (edition 2024, rustc >= 1.89). The toolchain channel is pinned in `rust-toolchain.toml` (1.96.0 + rustfmt/clippy + the cross targets); `rustup`-routed cargo picks it up automatically on first build.
+SilkTerm is a Rust project, edition 2024, built and tested on rustc 1.96. The toolchain channel is pinned in `rust-toolchain.toml` (1.96.0 + rustfmt/clippy + the cross targets); `rustup`-routed cargo picks it up automatically on first build.
 
 ## Windows (native)
 

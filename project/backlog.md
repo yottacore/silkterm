@@ -374,12 +374,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The size figures for GNOME Terminal, WezTerm, Tabby and Hyper, and Tabby's speed figure, have no rig entry that can take them again.
 	- Opened: 20260914-124200
 
-- 🔘 Check the README's install and build version claims in the pipeline.
-	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
-	- Decided: 20260928, no old bash is built for this. `install.bash` is written for 3.2, and the README now says it is tested on 5 only.
-	- Note: 20260928, the Windows pipeline already runs the installer under PowerShell 5.1 (`cicd/tests/install/windows.ps1`). The Rust 1.89 badge is still unchecked.
-	- Opened: 20260914-124200
-
 - 🔘 Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
 	- At 100,000 lines one redraw holds the terminal for about 150 ms, and at the 1,000,000-line maximum it would be over a second. The time between redraws already grows with it, so the average cost stays small; the pause itself does not.
 	- Opened: 20260919-134338
@@ -2631,6 +2625,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260723-190021
 
 ### Done - Features and enhancements
+
+- ✅ Check the README's install and build version claims in the pipeline.
+	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
+	- Decided: 20260928, no old bash is built for this. `install.bash` is written for 3.2, and the README now says it is tested on 5 only.
+	- Note: 20260928, the Windows pipeline already runs the installer under PowerShell 5.1 (`cicd/tests/install/windows.ps1`).
+	- Decided: 20260928, the Rust badge says 1.96, the pinned toolchain everything is built and tested on. `rust-version` stays 1.89, the floor cosmic-text sets.
+	- Test: PowerShell 5.1 by `cicd/tests/install/windows.ps1`. No test for bash or Rust, which now claim only the versions the pipeline runs.
+	- Opened: 20260914-124200
 
 - ✅ Minimap: one slow redraw can leave the map standing still for a long time afterwards.
 	- The wait after a redraw is twenty times what that redraw took, and redrawing the whole map - after a screen swap, a resize, or a resync - costs far more than an ordinary one. Measured at a 30,000-line scrollback in a debug build: a 445 ms whole redraw, then a 22 ms one that waited 8.95 s. At the 1,000,000-line maximum it would be around 30 s.
