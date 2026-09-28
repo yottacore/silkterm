@@ -11919,6 +11919,18 @@ mod tests {
 		// Test ID: EpZefUo
 		#[test]
 		fn a_wallpaper_repair_changes_nothing_else() {
+			fuzz::soak("config-repair", wallpaper_repair_case);
+		}
+
+		// Seed 107671 writes `wallpaper.rotate` three times over two blocks, and the
+		// repair folds that to two. A plain test run's soak stops short of it.
+		// Test ID: ErCFlaa
+		#[test]
+		fn a_key_written_three_times_survives_the_wallpaper_repair() {
+			wallpaper_repair_case(107671);
+		}
+
+		fn wallpaper_repair_case(seed: u64) {
 			use super::super::{valued_wallpaper_line, wallpaper_heading_repaired};
 			const IMAGES: [&str; 5] = [
 				"/p/a.png",
@@ -11927,133 +11939,137 @@ mod tests {
 				"''",
 				"'/p/#1.png'",
 			];
-			fuzz::soak("config-repair", |seed| {
-				let mut rng = fuzz::Rng::new(seed);
-				let mut text = default_config().to_string();
-				// valued `wallpaper:` lines above a block the template has
-				let mut valued = 0;
-				if !rng.chance(5) {
-					let image = rng.pick(&IMAGES);
-					text = text.replacen("\nwallpaper:\n", &format!("\nwallpaper: {image}\n"), 1);
-					valued += 1;
-				}
-				// shapes the repair must work through
-				if rng.chance(3) {
-					text.push_str("wallpaper.image: /p/b.png\n");
-				}
-				if rng.chance(3) {
-					text.push_str("font_size: 13\n");
-				}
-				if rng.chance(3) {
-					text.push_str("notes: ```\nwallpaper: /p/c.png\n\trotate:\n```\n");
-				}
-				if rng.chance(4) {
-					text = shcl::Document::parse(&text).to_canonical();
-				}
-				// shapes that rule it out
-				let mut ruled_out = false;
-				if rng.chance(6) {
-					let flat = if rng.chance(2) {
-						"wallpaper: /p/d.png\n\twallpaper_opacity: 0.4\n"
-					} else {
-						"wallpaper: /p/d.png\nopacity: 0.4\n"
-					};
-					text.insert_str(0, flat);
-					ruled_out = true;
-				}
-				if rng.chance(6) {
-					text.push_str("wallpaper: /p/e.png\n\topacity: 0.4\n");
-					valued += 1;
-				}
-				// any shape at all, so no expectation either way
-				let mut unknown = false;
-				if rng.chance(4) {
-					text.push_str(&String::from_utf8_lossy(&config(&mut rng)));
-					unknown = true;
-				}
-				if seed % 4 == 3 {
-					text = text.replace('\n', "\r\n");
-				}
-				let Some(out) = wallpaper_heading_repaired(&text) else {
-					assert!(
-						valued != 1 || ruled_out || unknown,
-						"a damaged heading was not repaired\nfile:\n{text}"
-					);
-					return;
-				};
-				assert!(
-					unknown || (valued == 1 && !ruled_out),
-					"repaired a file with {valued} valued headings:\n{text}"
-				);
-				assert_eq!(
-					wallpaper_heading_repaired(&out),
-					None,
-					"not settled\nfile:\n{text}\nrepaired:\n{out}"
-				);
-
-				// line endings may change (a repair writes LF), line contents may not
-				let old: Vec<&str> = text.lines().map(|l| l.trim_end_matches('\r')).collect();
-				let new: Vec<&str> = out.lines().map(|l| l.trim_end_matches('\r')).collect();
-				let at = old
-					.iter()
-					.zip(&new)
-					.position(|(a, b)| a != b)
-					.expect("the heading line changes");
-				assert!(
-					valued_wallpaper_line(old[at]) && new[at] == "wallpaper:",
-					"line {at} changed\nfile:\n{text}\nrepaired:\n{out}"
-				);
-				let added = new.len().checked_sub(old.len()).expect("no line removed");
-				assert!(added <= 1, "{added} lines added\nfile:\n{text}");
-				if added == 1 {
-					assert!(
-						new[at + 1].trim_start().starts_with("image: "),
-						"added {:?}",
-						new[at + 1]
-					);
-				}
-				assert_eq!(
-					old[at + 1..],
-					new[at + 1 + added..],
-					"another line changed\nfile:\n{text}\nrepaired:\n{out}"
-				);
-
-				let before = shcl::Document::parse(&text);
-				let after = shcl::Document::parse(&out);
-				let mut paths = before.paths();
-				paths.extend(after.paths());
-				// A heading in two `wallpaper:` blocks reads as written twice until the
-				// repair empties the first block and shcl folds the two. An empty value
-				// loads as the default either way, so only a value is compared.
-				let folded = |p: &str| {
-					matches!(after.get_string(p), Err(shcl::Status::Empty))
-						&& matches!(
-							before.get_string(p),
-							Err(shcl::Status::Empty | shcl::Status::Multiple)
-						)
-				};
-				for path in paths
-					.iter()
-					.filter(|p| *p != "wallpaper" && *p != "wallpaper.image" && !folded(p))
-				{
-					assert_eq!(
-						format!("{:?} {}", before.get_string(path), before.count(path)),
-						format!("{:?} {}", after.get_string(path), after.count(path)),
-						"{path} loads differently\nfile:\n{text}\nrepaired:\n{out}"
-					);
-				}
-				// the file may hold a second `wallpaper` block, so read the line alone
-				let image = if before.count("wallpaper.image") > 0 {
-					before.get_string("wallpaper.image")
+			let mut rng = fuzz::Rng::new(seed);
+			let mut text = default_config().to_string();
+			// valued `wallpaper:` lines above a block the template has
+			let mut valued = 0;
+			if !rng.chance(5) {
+				let image = rng.pick(&IMAGES);
+				text = text.replacen("\nwallpaper:\n", &format!("\nwallpaper: {image}\n"), 1);
+				valued += 1;
+			}
+			// shapes the repair must work through
+			if rng.chance(3) {
+				text.push_str("wallpaper.image: /p/b.png\n");
+			}
+			if rng.chance(3) {
+				text.push_str("font_size: 13\n");
+			}
+			if rng.chance(3) {
+				text.push_str("notes: ```\nwallpaper: /p/c.png\n\trotate:\n```\n");
+			}
+			if rng.chance(4) {
+				text = shcl::Document::parse(&text).to_canonical();
+			}
+			// shapes that rule it out
+			let mut ruled_out = false;
+			if rng.chance(6) {
+				let flat = if rng.chance(2) {
+					"wallpaper: /p/d.png\n\twallpaper_opacity: 0.4\n"
 				} else {
-					shcl::Document::parse(old[at]).get_string("wallpaper")
+					"wallpaper: /p/d.png\nopacity: 0.4\n"
 				};
-				assert_eq!(
-					after.get_string("wallpaper.image"),
-					image,
-					"the image\nfile:\n{text}\nrepaired:\n{out}"
+				text.insert_str(0, flat);
+				ruled_out = true;
+			}
+			if rng.chance(6) {
+				text.push_str("wallpaper: /p/e.png\n\topacity: 0.4\n");
+				valued += 1;
+			}
+			// any shape at all, so no expectation either way
+			let mut unknown = false;
+			if rng.chance(4) {
+				text.push_str(&String::from_utf8_lossy(&config(&mut rng)));
+				unknown = true;
+			}
+			if seed % 4 == 3 {
+				text = text.replace('\n', "\r\n");
+			}
+			let Some(out) = wallpaper_heading_repaired(&text) else {
+				assert!(
+					valued != 1 || ruled_out || unknown,
+					"a damaged heading was not repaired\nfile:\n{text}"
 				);
-			});
+				return;
+			};
+			assert!(
+				unknown || (valued == 1 && !ruled_out),
+				"repaired a file with {valued} valued headings:\n{text}"
+			);
+			assert_eq!(
+				wallpaper_heading_repaired(&out),
+				None,
+				"not settled\nfile:\n{text}\nrepaired:\n{out}"
+			);
+
+			// line endings may change (a repair writes LF), line contents may not
+			let old: Vec<&str> = text.lines().map(|l| l.trim_end_matches('\r')).collect();
+			let new: Vec<&str> = out.lines().map(|l| l.trim_end_matches('\r')).collect();
+			let at = old
+				.iter()
+				.zip(&new)
+				.position(|(a, b)| a != b)
+				.expect("the heading line changes");
+			assert!(
+				valued_wallpaper_line(old[at]) && new[at] == "wallpaper:",
+				"line {at} changed\nfile:\n{text}\nrepaired:\n{out}"
+			);
+			let added = new.len().checked_sub(old.len()).expect("no line removed");
+			assert!(added <= 1, "{added} lines added\nfile:\n{text}");
+			if added == 1 {
+				assert!(
+					new[at + 1].trim_start().starts_with("image: "),
+					"added {:?}",
+					new[at + 1]
+				);
+			}
+			assert_eq!(
+				old[at + 1..],
+				new[at + 1 + added..],
+				"another line changed\nfile:\n{text}\nrepaired:\n{out}"
+			);
+
+			let before = shcl::Document::parse(&text);
+			let after = shcl::Document::parse(&out);
+			let mut paths = before.paths();
+			paths.extend(after.paths());
+			// A heading in two `wallpaper:` blocks reads as written twice until the
+			// repair empties the first block and shcl folds the two. An empty value
+			// loads as the default either way, so only a value is compared.
+			let folded = |p: &str| {
+				matches!(after.get_string(p), Err(shcl::Status::Empty))
+					&& matches!(
+						before.get_string(p),
+						Err(shcl::Status::Empty | shcl::Status::Multiple)
+					)
+			};
+			// A key written more than once loads as a duplicate however many times it
+			// is there, and the same fold can take one of those away.
+			let loads = |doc: &shcl::Document, p: &str| match doc.get_string(p) {
+				Err(shcl::Status::Multiple) => format!("{:?}", doc.get_string(p)),
+				got => format!("{got:?} {}", doc.count(p)),
+			};
+			for path in paths
+				.iter()
+				.filter(|p| *p != "wallpaper" && *p != "wallpaper.image" && !folded(p))
+			{
+				assert_eq!(
+					loads(&before, path),
+					loads(&after, path),
+					"{path} loads differently\nfile:\n{text}\nrepaired:\n{out}"
+				);
+			}
+			// the file may hold a second `wallpaper` block, so read the line alone
+			let image = if before.count("wallpaper.image") > 0 {
+				before.get_string("wallpaper.image")
+			} else {
+				shcl::Document::parse(old[at]).get_string("wallpaper")
+			};
+			assert_eq!(
+				after.get_string("wallpaper.image"),
+				image,
+				"the image\nfile:\n{text}\nrepaired:\n{out}"
+			);
 		}
 
 		// Children for a performance block the way hand edits leave them: mixed
