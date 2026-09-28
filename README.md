@@ -312,7 +312,7 @@ The primary install is a native package from the [releases page](https://github.
 
 Prefer a plain binary? These one-liners work out your operating system and CPU on their own, download the release built for it, check its sha256, and install it. Once a release is signed, the checksums file has to carry a good signature from the release key or nothing is installed. Each prints what it is about to do and asks before touching anything, and does nothing at all when you are already up to date. The defaults suit most people - add `--help` for the handful of things you can change.
 
-Bash 3.2 or newer (Linux, macOS, WSL):
+Bash, written for 3.2 or newer and tested on 5 (Linux, macOS, WSL):
 
 ~~~bash
 bash <(curl -fsSL https://raw.githubusercontent.com/yottacore/silkterm/main/install.bash)
