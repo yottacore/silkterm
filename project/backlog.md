@@ -6246,8 +6246,8 @@ New issue format:
 
 - As issues are worked, and statuses change, place them in correct sorting order within the list:
 	- First by status: Waiting on signoff, Testing, Stalled, Started, Queued, Done, Deferred, Canceled, Moot
-	- Then by type: Bugs, [not bugs together]
 	- Then by severity|priority: Critical, High, Avg, Low
+	- Then by type: Bugs, [not bugs together]
 
 - Rows marked [Bug] are for bugs only, and rows marked [Feature] for features and enhancements. Children are not nested. They sit at the top level and point back with Parent ID.
 
