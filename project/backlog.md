@@ -225,30 +225,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- Closed:
 
-- Shells started from an MSIX package inherit its AppData and registry redirection
-	- ID: 2026092617015082
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20260926-170150
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Steps to reproduce:
-		- Run SilkTerm from an MSIX package.
-		- In one of its shells, write a new file under `%APPDATA%` and a new HKCU value.
-	- Incorrect behavior: Both go to the package's private folder. Other programs can't see them, and uninstalling SilkTerm deletes them. So `pip install --user`, npm, winget and the like only half install.
-	- Expected behavior: Shells, and everything run in them, act the same as with the NSIS install.
-	- Reproduced: No, since there is no package yet. The Claude desktop app has the same bug open, as anthropics/claude-code issue 93152.
-	- Possible cause: Child processes of a packaged app run inside the package, with its file and registry redirection.
-	- Decisions:
-		- 20260926: Start the shells outside the package. The other options were turning redirection off in the manifest, which needs the `unvirtualizedResources` restricted capability that Microsoft may not grant, and `RuntimeBehavior="win32App"`, which may not be allowed in a full MSIX package.
-		- Where the breakaway goes needs care. Microsoft's docs say the `PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY` setting controls the children of the process being created, not that process itself. So it goes on SilkTerm's own launch, from a small launcher stub or a one-time relaunch of itself. The shells SilkTerm starts then run outside.
-		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
-		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
-	- Estimated effort: Avg
-	- Closed:
-
 - Windows Terminal handoff
 	- ID: 2026092810510800
 	- Type: Feature
@@ -347,6 +323,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- Shells started from an MSIX package inherit its AppData and registry redirection
+	- ID: 2026092617015082
+	- Type: Bug
+	- Status: Deferred
+	- Severity: High
+	- Opened: 20260926-170150
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run SilkTerm from an MSIX package.
+		- In one of its shells, write a new file under `%APPDATA%` and a new HKCU value.
+	- Incorrect behavior: Both go to the package's private folder. Other programs can't see them, and uninstalling SilkTerm deletes them. So `pip install --user`, npm, winget and the like only half install.
+	- Expected behavior: Shells, and everything run in them, act the same as with the NSIS install.
+	- Reproduced: No, since there is no package yet. The Claude desktop app has the same bug open, as anthropics/claude-code issue 93152.
+	- Possible cause: Child processes of a packaged app run inside the package, with its file and registry redirection.
+	- Decisions:
+		- 20260926: Start the shells outside the package. The other options were turning redirection off in the manifest, which needs the `unvirtualizedResources` restricted capability that Microsoft may not grant, and `RuntimeBehavior="win32App"`, which may not be allowed in a full MSIX package.
+		- Where the breakaway goes needs care. Microsoft's docs say the `PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY` setting controls the children of the process being created, not that process itself. So it goes on SilkTerm's own launch, from a small launcher stub or a one-time relaunch of itself. The shells SilkTerm starts then run outside.
+		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
+		- 20260928: Deferred past RC1, to go with the store release work. Nothing here can be tested without a package.
+		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
+	- Estimated effort: Avg
+	- Closed:
 
 ## Old format
 
