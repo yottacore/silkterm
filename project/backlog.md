@@ -1,4 +1,4 @@
-<!-- markdownlint-disable MD007 -- Indent count -->
+<!-- markdownlint-disable MD007 -- Unordered list indentation -->
 <!-- markdownlint-disable MD010 -- No hard tabs -->
 <!-- markdownlint-disable MD033 -- No inline html -->
 <!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
@@ -13,15 +13,16 @@
 <!-- TOC -->
 
 - [Introduction](#introduction)
-- [New format](#new-format)
-- [Bugs](#bugs)
-- [Features and enhancements](#features-and-enhancements)
-- [Done](#done)
-	- [Done - Bugs](#done---bugs)
-	- [Done - Features and enhancements](#done---features-and-enhancements)
-- [Deferred](#deferred)
-- [Canceled](#canceled)
-- [Reference](#reference)
+- [Issues](#issues)
+- [Old format](#old-format)
+	- [Bugs](#bugs)
+	- [Features and enhancements](#features-and-enhancements)
+	- [Done](#done)
+		- [Done - Bugs](#done---bugs)
+		- [Done - Features and enhancements](#done---features-and-enhancements)
+	- [Deferred](#deferred)
+	- [Canceled](#canceled)
+- [Template](#template)
 
 <!-- /TOC -->
 
@@ -29,7 +30,7 @@
 
 Going forward, new issues in the new template at the bottom of this file, will go in the '## New format' section only. No more status emojis. Refer to '## Reference' for sort order. Issues in the old format (with status emojis) won't be refactored, but will continue to be worked until moved to closed, canceled, or deferred sections, and emojis updated. (Eventually this will all be moved to nano-git-db anyway. This new template is an intermediate effort to make issues going forward more structured and importable.)
 
-## New format
+## Issues
 
 - A launch from the Start menu as an MSIX package opens the first shell in System32
 	- ID: 2026092617015083
@@ -87,6 +88,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `cicd/tests/win-remote/run.bash`, against a stand-in lock. Seen to fail on the old runner.
 	- Closed:
 
+- The Windows save notice scenario never answers, so a full pipeline run stops at the GUI stage
+	- ID: 2026092813222318
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20260928-132223
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run `cicd/cicd.bash -y --no-publish` with vm925w up.
+	- Incorrect behavior: `savenotice` ends with "the session never answered", and the run stops with no dogfood build.
+	- Expected behavior: The scenario sees the notice for a refused save and passes.
+	- Reproduced: Yes, on b23 against vm925w on 20260928. Earlier runs since the shcl 3.0 bump found no box up, so the scenario had not run.
+	- Actual cause: Its settings file had a line indented with spaces. shcl 3.0 keeps such a line as written, so the save went through and no notice came.
+	- Actual fix: The line now steps back to a depth nothing uses, which shcl still drops.
+	- Branch: savenotice
+	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
+	- Closed:
+
 - The launcher test would use the real dogfood pool if run on Windows
 	- ID: 2026092621021535
 	- Type: Bug
@@ -125,26 +146,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: splitdir
 	- Test case: `a_pane_splits_the_way_the_pane_it_splits_was_split`, `a_run_of_command_line_splits_with_no_size_comes_out_even`, `a_command_line_split_with_a_size_keeps_it`. Each seen to fail with its half of the fix taken out. `a_split_with_no_direction_goes_along_the_longer_side` still pins the fallback.
 	- Swept: the keyboard split goes through the same placing code. The divider drag is the only other place that marks a run as sized by hand.
-	- Closed:
-
-- The Windows save notice scenario never answers, so a full pipeline run stops at the GUI stage
-	- ID: 2026092813222318
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20260928-132223
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Steps to reproduce:
-		- Run `cicd/cicd.bash -y --no-publish` with vm925w up.
-	- Incorrect behavior: `savenotice` ends with "the session never answered", and the run stops with no dogfood build.
-	- Expected behavior: The scenario sees the notice for a refused save and passes.
-	- Reproduced: Yes, on b23 against vm925w on 20260928. Earlier runs since the shcl 3.0 bump found no box up, so the scenario had not run.
-	- Actual cause: Its settings file had a line indented with spaces. shcl 3.0 keeps such a line as written, so the save went through and no notice came.
-	- Actual fix: The line now steps back to a depth nothing uses, which shcl still drops.
-	- Branch: savenotice
-	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Closed:
 
 - A settings range test skips two of the keys it lists
@@ -199,6 +200,55 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None, the items are notes.
 	- Closed:
 
+- A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
+	- ID: 2026092618142600
+	- Type: Bug
+	- Status: Testing
+	- Severity: High
+	- Opened: 20260926-181426
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Have a shell installed that the list does not have yet.
+		- Start two SilkTerm windows a few seconds apart, and let both scans run.
+	- Incorrect behavior: The new shell goes to the top of the list, so the next launch opens on it. Here it was a second Node.js entry, or maybe Python.
+	- Expected behavior: A new shell goes at the end, and the default shell stays the same.
+	- Reproduced: Yes, on b23 in a unit test of the save. Not seen on screen, since the live list was fixed by hand before this was looked at.
+	- Actual cause:
+		- A save compared the list against what the window loaded, not against the file. There is no file watcher, so a window that loaded before another one saved took out only the entries it knew about. The new entry was left above all of them.
+		- The live file fits this. Its second Node.js entry came from a launch with nvm on PATH.
+		- Not shcl. A fresh scan and a reorder both save in the right order through the line-keeping save.
+	- Actual fix: The save merges three ways against the file. Another window's new entries stay at the end, its removals stay gone, and its edits stay unless this window changed the same entry.
+	- Branch: cfgorder
+	- Commit: c6d68c1
+	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
+	- Closed:
+
+- Shells started from an MSIX package inherit its AppData and registry redirection
+	- ID: 2026092617015082
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20260926-170150
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run SilkTerm from an MSIX package.
+		- In one of its shells, write a new file under `%APPDATA%` and a new HKCU value.
+	- Incorrect behavior: Both go to the package's private folder. Other programs can't see them, and uninstalling SilkTerm deletes them. So `pip install --user`, npm, winget and the like only half install.
+	- Expected behavior: Shells, and everything run in them, act the same as with the NSIS install.
+	- Reproduced: No, since there is no package yet. The Claude desktop app has the same bug open, as anthropics/claude-code issue 93152.
+	- Possible cause: Child processes of a packaged app run inside the package, with its file and registry redirection.
+	- Decisions:
+		- 20260926: Start the shells outside the package. The other options were turning redirection off in the manifest, which needs the `unvirtualizedResources` restricted capability that Microsoft may not grant, and `RuntimeBehavior="win32App"`, which may not be allowed in a full MSIX package.
+		- Where the breakaway goes needs care. Microsoft's docs say the `PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY` setting controls the children of the process being created, not that process itself. So it goes on SilkTerm's own launch, from a small launcher stub or a one-time relaunch of itself. The shells SilkTerm starts then run outside.
+		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
+		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
+	- Estimated effort: Avg
+	- Closed:
+
 - Windows Terminal handoff
 	- ID: 2026092810510800
 	- Type: Feature
@@ -239,6 +289,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Superseded by ID:
 	- Closed:
 
+- Demo: the cursor goes to 50% width when the cursor size and animation change
+	- ID: 2026092812581720
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20260928-125817
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- When changing the cursor size and animation, change to 50% width.
+	- Decisions:
+		- 20260928: Held for the release, with the other demo recorder change.
+	- Closed:
+
 - cicd shows one line per test, with its status and test ID
 	- ID: 2026092711142900
 	- Type: Enhancement
@@ -259,31 +324,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: testlines
 	- Test case: No test. Output only. The gate and a quick run showed all 942 Rust tests with an ID, and a made-up name showed the dashes and the warning.
 	- Closed: 20260928-111812
-
-- A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
-	- ID: 2026092618142600
-	- Type: Bug
-	- Status: Testing
-	- Severity: High
-	- Opened: 20260926-181426
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Steps to reproduce:
-		- Have a shell installed that the list does not have yet.
-		- Start two SilkTerm windows a few seconds apart, and let both scans run.
-	- Incorrect behavior: The new shell goes to the top of the list, so the next launch opens on it. Here it was a second Node.js entry, or maybe Python.
-	- Expected behavior: A new shell goes at the end, and the default shell stays the same.
-	- Reproduced: Yes, on b23 in a unit test of the save. Not seen on screen, since the live list was fixed by hand before this was looked at.
-	- Actual cause:
-		- A save compared the list against what the window loaded, not against the file. There is no file watcher, so a window that loaded before another one saved took out only the entries it knew about. The new entry was left above all of them.
-		- The live file fits this. Its second Node.js entry came from a launch with nvm on PATH.
-		- Not shcl. A fresh scan and a reorder both save in the right order through the line-keeping save.
-	- Actual fix: The save merges three ways against the file. Another window's new entries stay at the end, its removals stay gone, and its edits stay unless this window changed the same entry.
-	- Branch: cfgorder
-	- Commit: c6d68c1
-	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
-	- Closed:
 
 - The wallpaper folder setting is blank, and Settings never shows the folder
 	- ID: 2026092618142601
@@ -308,46 +348,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
 
-- Shells started from an MSIX package inherit its AppData and registry redirection
-	- ID: 2026092617015082
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20260926-170150
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Steps to reproduce:
-		- Run SilkTerm from an MSIX package.
-		- In one of its shells, write a new file under `%APPDATA%` and a new HKCU value.
-	- Incorrect behavior: Both go to the package's private folder. Other programs can't see them, and uninstalling SilkTerm deletes them. So `pip install --user`, npm, winget and the like only half install.
-	- Expected behavior: Shells, and everything run in them, act the same as with the NSIS install.
-	- Reproduced: No, since there is no package yet. The Claude desktop app has the same bug open, as anthropics/claude-code issue 93152.
-	- Possible cause: Child processes of a packaged app run inside the package, with its file and registry redirection.
-	- Decisions:
-		- 20260926: Start the shells outside the package. The other options were turning redirection off in the manifest, which needs the `unvirtualizedResources` restricted capability that Microsoft may not grant, and `RuntimeBehavior="win32App"`, which may not be allowed in a full MSIX package.
-		- Where the breakaway goes needs care. Microsoft's docs say the `PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY` setting controls the children of the process being created, not that process itself. So it goes on SilkTerm's own launch, from a small launcher stub or a one-time relaunch of itself. The shells SilkTerm starts then run outside.
-		- The docs call breakaway the default, but the Claude report shows it isn't in practice. A box test decides which Windows versions honor it.
-		- Open question. SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
-	- Estimated effort: Avg
-	- Closed:
+## Old format
 
-- Demo: the cursor goes to 50% width when the cursor size and animation change
-	- ID: 2026092812581720
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20260928-125817
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- When changing the cursor size and animation, change to 50% width.
-	- Decisions:
-		- 20260928: Held for the release, with the other demo recorder change.
-	- Closed:
-
-## Bugs
+### Bugs
 
 - 🔘 Pipeline and installer review 20260924
 	- 🔘 The one-liners run the installers on main, which still lack the 09-17 fixes and the 5.1 fix below.
@@ -359,16 +362,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Covers the Settings dialog, maximized as well, and the About and notice boxes. The fixes are under Done.
 	- Opened: 20260919-153000
 
-## Features and enhancements
-
-- ✋ Save settings by editing only the lines that changed, so a file with a line that cannot be read still takes the window size, menu switches and new shells.
-	- The performance rating already saves this way. The shell list and Settings Apply would still refuse.
-	- ✋ Waiting for shcl 3.0, which should change how such a file is read and written. Look again once it is out.
-	- Note: 20260924, shcl 3.0 still counts a line it cannot place as lost and has no save that edits single lines. So this is no longer waiting on shcl.
-	- Decided: 20260924, stays held for now.
-	- Note: 20260925, shcl now keeps a stray line indented with spaces as written, so a save goes through beside one. A tab-indented line that steps back to a depth nothing uses is still dropped, and a save still refuses over it.
-	- Note: 20260925, saves now use shcl's new line-keeping save, so lines nobody changed are written back as they were. A file with a dropped tab-indented line still gets the whole-file save from shcl, which deletes that line, so the refusal stays.
-	- Opened: 20260918
+### Features and enhancements
 
 - 🔘 Let the showdown tools measure again every row the README table carries.
 	- The size figures for GNOME Terminal, WezTerm, Tabby and Hyper, and Tabby's speed figure, have no rig entry that can take them again.
@@ -505,9 +499,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Alternately, lean on shcl hierarchical format for nested configurations.
 	- Opened: 20260628-083740
 
-## Done
+### Done
 
-### Done - Bugs
+#### Done - Bugs
 
 - ✅ A line the parse drops can make the whole settings file convert as the old flat layout.
 	- The line is tab-indented, steps back to a depth nothing uses, and is named like an old flat setting such as `margin`. SilkTerm's own reader takes it as a top-level setting, so the file is moved aside to `.bak` and written fresh.
@@ -2627,7 +2621,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260723-135701
 	- Closed: 20260723-190021
 
-### Done - Features and enhancements
+#### Done - Features and enhancements
 
 - ✅ Check the README's install and build version claims in the pipeline.
 	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.
@@ -6076,7 +6070,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: n/a
 	- Closed: 20260628-083740
 
-## Deferred
+### Deferred
+
+- ✋ Save settings by editing only the lines that changed, so a file with a line that cannot be read still takes the window size, menu switches and new shells.
+	- The performance rating already saves this way. The shell list and Settings Apply would still refuse.
+	- ✋ Waiting for shcl 3.0, which should change how such a file is read and written. Look again once it is out.
+	- Note: 20260924, shcl 3.0 still counts a line it cannot place as lost and has no save that edits single lines. So this is no longer waiting on shcl.
+	- Decided: 20260924, stays held for now.
+	- Note: 20260925, shcl now keeps a stray line indented with spaces as written, so a save goes through beside one. A tab-indented line that steps back to a depth nothing uses is still dropped, and a save still refuses over it.
+	- Note: 20260925, saves now use shcl's new line-keeping save, so lines nobody changed are written back as they were. A file with a dropped tab-indented line still gets the whole-file save from shcl, which deletes that line, so the refusal stays.
+	- Opened: 20260918
 
 - ✋ t2nsn - old stray versions of executables and launchers: Find and move old GFS versions, and trash any out-of-place stray executables and scripts. Update '.desktop' files to run the correct bash script, launcher chain minimized or hidden, and use the icon from the 'latest version' symlink.
 	- Note: the launcher copies outside the repo are older than the ones in `utility/`, and nothing copies them over.
@@ -6154,7 +6157,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- 🔘 Is probably fixed. Test on non-compiz WM.
 	- Opened: 20260707-022408
 
-## Canceled
+### Canceled
 
 - 🚫 Dogfood: the launcher when the network build host is down.
 	- Moot. The launcher reads only the synced app dir now, so there is no network source to be unreachable and no bounded wait to exercise. What the build host being down costs is a stale app dir, which is the same as any other day it did not run.
@@ -6218,11 +6221,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260628-083740
 	- Closed: 20260713-142351
 
-## Reference
+## Template
 
-<!-- New issue template
-
-Legacy statuses:
+### Old format
 
 - 🔘 Not started
 
@@ -6236,41 +6237,43 @@ Legacy statuses:
 
 - 🚫 Canceled
 
-New issue format:
+### New format
 
-- Only use rows that you actually need or expect will be filled in. Always fill in the title, ID, Type, Status, Opened and Created by.
+- Notes:
 
-- The ID is the local time to the hundredth of a second. Opened is when it was written down, which may differ. (Use a keyboard macro and possibly something like project 'zuid' to generate.)
+	- Only use rows that you actually need or expect will be filled in. Always fill in the title, ID, Type, Status, Opened and Created by.
 
-- Status values meaning: Testing means the fix is in and checks are running or still to run. Waiting on signoff means automated testing passed. Moot means something else changed that made it irrelevant. Canceled means it still applies but was decided against.
+	- The ID is the local time to the hundredth of a second. Opened is when it was written down, which may differ. (Use a keyboard macro and possibly something like project 'zuid' to generate.)
 
-- As issues are worked, and statuses change, place them in correct sorting order within the list:
-	- First by status: Waiting on signoff, Testing, Stalled, Started, Queued, Done, Deferred, Canceled, Moot
-	- Then by severity|priority: Critical, High, Avg, Low
-	- Then by type: Bugs, [not bugs together]
+	- Status values meaning: Testing means the fix is in and checks are running or still to run. Waiting on signoff means automated testing passed. Moot means something else changed that made it irrelevant. Canceled means it still applies but was decided against. Waiting for testing means the fix is in and waits on a long CI run or an outside test host. Can't reproduce means a real attempt to reproduce it failed.
 
-- Rows marked [Bug] are for bugs only, and rows marked [Feature] for features and enhancements. Children are not nested. They sit at the top level and point back with Parent ID.
+	- As issues are worked, and statuses change, place them in correct sorting order within the list:
+		- First by status: Waiting for answers, Waiting on signoff, Testing, Waiting for testing, Can't reproduce, Stalled, Started, Queued, Done, Deferred, Canceled, Moot
+		- Then by severity|priority: Critical, High, Avg, Low
+		- Then by type: Bugs, [not bugs together]
+
+	- Rows marked [Bug] are for bugs only, and rows marked [Feature] for features and enhancements. Children are not nested. They sit at the top level and point back with Parent ID.
 
 Template:
 
 - Title
 	- ID: YYYYmmDDHHMMSSNN
 	- Type: [Bug|Feature|Enhancement|Task]
-	- Status: [Queued|Started|Stalled|Testing|Waiting on signoff|Moot|Canceled|Deferred|Done]
+	- Status: [Queued|Waiting for answers|Waiting on signoff|Waiting for testing|Started|Testing|Stalled|Can't reproduce|Moot|Canceled|Deferred|Done]
+	- Needs local test suite run?:
+	- Needs external testing:
 	- Priority|Severity [Bug]: [Critical|High|Avg|Low]
 	- Opened:
 	- Opened by:
 	- Assigned to:
 	- Parent ID:
 	- Prereq IDs:
-		- …
 	- Related IDs:
-		- …
 	- Target OS:
 	- Test environment:
 	- Version and build:
 	- Requirements  [Feature]:
-		- …
+		- Hierarchical bulleted list.
 	- Steps to reproduce [Bug]:
 		- …
 	- Incorrect behavior [Bug]:
@@ -6292,5 +6295,3 @@ Template:
 	- Acceptance signoff:
 	- Superseded by ID:
 	- Closed:
-
--->
