@@ -104,19 +104,42 @@ xterm is the useful control precisely because it draws on the CPU and should cla
 
 The published figures are left as they were rather than refreshed to a later pass. They sit inside the drift the table already warns about, and rewriting one row's numbers while the others keep their originals would make the column less consistent, not more. Expect a few MiB either way: libraries load on demand, and GTK terminals are the worst for it - gnome-terminal moved 28.5 to 53.6 between two runs of one pass, because the first measured the thin client wrapper rather than `gnome-terminal-server`.
 
+The rig's entries for GNOME Terminal, WezTerm, Tabby and Hyper were checked against their published rows on 20260928, over three runs. Nothing was published from them.
+
+| Row            | File+deps published | This rig | Mem published | This rig
+| :------------- | ------------------: | -------: | ------------: | :------------------
+| GNOME Terminal |                84.0 |     84.0 |          53.6 | 52.2, 52.3, 52.2
+| WezTerm        |               129.9 |    128.9 |          84.8 | 83.1, 82.6, 82.9
+| Tabby          |               454.2 |    454.7 |         473.4 | 365.6, 476.3, 473.6
+| Hyper          |               300.9 |    299.5 |         309.4 | 267.3, 267.7, 265.6
+
+- A bundle's File+deps agrees only since the classifier stopped counting the bundle's own libraries twice, once in its unpacked size and again as deps. That had put WezTerm 3 MiB over its row and Tabby 7.
+
+- An Electron terminal's Mem moves a long way between runs. Tabby read 366 once and 474 to 476 twice on the same day. Hyper held at 266 to 268, against 309 published. Take several runs before publishing either.
+
 ## Per-terminal notes
 
 Most terminals need nothing but their key. The awkward ones, and why:
 
 - **gnome-terminal** never resizes with the compositor output, so it is the one terminal told its geometry directly (`--geometry`). Its first measured run silently came out at 180x45 and had to be redone - always confirm the fitted grid in the output.
+	- The size rig gives it a session bus of its own, as the speed rig does. On the account's bus the window would go to a server already running for the desktop. Its server is started by that bus and is nobody's child, so the rig finds it by the throwaway account's home in its environment and measures it from there down. The `gnome-terminal` command that only asks for the window is left out, as is the bus.
 
 - **xterm** is X11-only. Xwayland fails on this rig (`/tmp/.X11-unix` ownership), so its speed figure was taken on X11, and its cross-rig agreement (28.8 vs 29.2, 1.3%) is what justifies publishing it beside Wayland rows. The size rig runs on Xvfb anyway, so it needs nothing special there.
+	- Xwayland worked on this rig on 20260928, but xterm read 18.4 MB/s of ASCII through it against the 28.3 published, in one single-rep run on a busy machine. The speed rig has no xterm entry for that reason, and the row keeps its X11 figure.
 
 - **WezTerm** 20240203 silently falls back to X11 under sway 1.10 despite `enable_wayland`. It is parser-bound and agreed within 1.7% across rigs, so its figure holds anywhere.
+	- Sway tells only its own children where its Xwayland is, so the speed rig asks sway for that display and hands it over.
+	- The size rig starts `wezterm-gui` directly, with `initial_cols` and `initial_rows`, and bills the whole extracted AppImage as the Electron bundles are.
 
 - **Hyper** rewrites `~/.hyper.js` on every launch, so it has to be written fresh per run. It never answers the barrier, so it cannot be timed at all.
+	- With `XDG_CONFIG_HOME` set, as it is on the throwaway account, the file is `$XDG_CONFIG_HOME/hyper/.hyper.js`. Its `shell` and `shellArgs` start the rig's own shell.
+	- It has a size entry only.
 
 - **Tabby** ignores `SHELL` and offers no profile hook that takes. Dismiss its Welcome tab once by clicking "Close and never show again", then hook the run through the login shell's `.bashrc`.
+	- Both rigs do that on the throwaway account: `enableWelcomeTab: false` in its `config.yaml` stands in for the click, and `.bashrc` and `.bash_profile` start the rig's shell. That assumes the account's login shell is bash.
+	- Tabby 1.0.235 is built on Electron 38, which picks Wayland by itself under the speed rig. The rig still passes `--ozone-platform=wayland`.
+
+- **Tabby and Hyper** take no grid on the command line. The size rig starts them on a shell that reports its grid, and resizes the window until that reads 100x30.
 
 - **Electron terminals** driven by hand must not be run under a fake `HOME`: the results store lives under `~/.local/share/silkterm-bench`, and redirecting `HOME` sends the results there too. The rig's own launches hand the real home back to the measuring tool, so this is only about the ones it cannot start. Give `AppRun` an `APPDIR` or run the inner binary directly. They exit with SIGTRAP or SIGILL after measurement under Xvfb, which is harmless - the pids have already been sampled.
 
@@ -128,6 +151,16 @@ Binaries are resolved from `PATH` first, then `cicd/artifacts/sizebench/terms/`.
 apt-get download alacritty                                   # no sudo needed
 dpkg -x alacritty_*.deb cicd/artifacts/sizebench/terms/..    # gives terms/usr/bin/alacritty
 ~~~
+
+The WezTerm, Tabby and Hyper AppImages are kept there too, but they are run extracted and from `PATH`. Extracted under the repo, the two Electron bundles carry their own `.md` files, which the markdown checks then read. For example:
+
+~~~sh
+cicd/artifacts/sizebench/tabby-1.0.235-linux-x64.AppImage --appimage-extract    # makes ./squashfs-root
+mv squashfs-root ~/.local/opt/tabby
+ln -s ~/.local/opt/tabby/tabby ~/.local/bin/tabby
+~~~
+
+WezTerm links as `usr/bin/wezterm` and Hyper as `hyper`. The size rig finds the extracted folder again through the link, since it bills the whole of it.
 
 ## Why the README has no Windows speed rows
 

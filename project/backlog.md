@@ -280,6 +280,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
+- The showdown rigs cannot take XTerm's speed figure again
+	- ID: 2026092820352466
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20260928-203524
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Related IDs: split from the done old-format item "Let the showdown tools measure again every row the README table carries".
+	- Requirements:
+		- The published XTerm speed figure was taken on X11. The speed rig runs under sway, and through its Xwayland xterm read 18.4 MB/s against 28.3 published, in one noisy run.
+		- Either give the rig an X11 path for xterm, or show the Xwayland figure is real and say so.
+	- Closed:
+
 - cicd shows one line per test, with its status and test ID
 	- ID: 2026092711142900
 	- Type: Enhancement
@@ -364,10 +379,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260919-153000
 
 ### Features and enhancements
-
-- 🔘 Let the showdown tools measure again every row the README table carries.
-	- The size figures for GNOME Terminal, WezTerm, Tabby and Hyper, and Tabby's speed figure, have no rig entry that can take them again.
-	- Opened: 20260914-124200
 
 - 🔘 Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
 	- At 100,000 lines one redraw holds the terminal for about 150 ms, and at the 1,000,000-line maximum it would be over a second. The time between redraws already grows with it, so the average cost stays small; the pause itself does not.
@@ -2623,6 +2634,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260723-190021
 
 #### Done - Features and enhancements
+
+- ✅ Let the showdown tools measure again every row the README table carries.
+	- The size figures for GNOME Terminal, WezTerm, Tabby and Hyper, and Tabby's speed figure, have no rig entry that can take them again.
+	- Done: GNOME Terminal, WezTerm and Tabby have entries on both rigs, and Hyper on the size rig. A bundle is no longer billed twice for its own libraries.
+	- Verified: 20260928, each entry measured without writing the README. File+deps came within about a MiB of every published row, and Mem within 2 MiB, except Hyper (266 to 268 against 309) and one of three Tabby runs (366 against 473). Details in `utility/include/showdown-readme.md`.
+	- Note: XTerm's speed row still has no entry. It came from X11, and through Xwayland xterm reads well below it.
+	- Test case: ErE7yrA.
+	- Opened: 20260914-124200
+	- Closed: 20260928-203406
 
 - ✅ Check the README's install and build version claims in the pipeline.
 	- The Rust 1.89 badge, bash 3.2 for `install.bash` and PowerShell 5.1 for `install.ps1` hold today, and nothing builds or runs with those versions.

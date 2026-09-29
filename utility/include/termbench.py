@@ -78,6 +78,7 @@
 ##	History:
 ##		20260728 Initial.
 ##		20260730 Moved under utility/include/, behind update-showdown.py.
+##		20260928 WezTerm's and GNOME Terminal's versions come from their launchers.
 
 import argparse
 import array
@@ -520,6 +521,8 @@ SYSTEM_PREFIXES = ("/usr/", "/bin/", "/sbin/", "/opt/", "/snap/",
 
 VERSION_RE = re.compile(r"(\d+\.\d+(?:\.\d+)?(?:[-+.\w]*)?)")
 VERSION_PAREN_RE = re.compile(r"\((\d+)\)")
+# WezTerm's release names: date, time and commit, of which the table shows the date.
+VERSION_DATE_RE = re.compile(r"\b(20\d{6})-\d{6}-[0-9a-f]{6,}\b")
 STAMP_RE = re.compile(r"(\d{8}-\d{6})")
 
 
@@ -607,6 +610,9 @@ def _probe_version(exe, base):
 		got = VERSION_PAREN_RE.search(raw)
 		if got:
 			return (_clean_name(raw.split("(")[0]) or base), got.group(1)
+		got = VERSION_DATE_RE.search(raw)
+		if got:
+			return (_clean_name(raw.split(got.group(0))[0]) or base), got.group(1)
 	return base, ""
 
 
@@ -645,6 +651,16 @@ def identify(console):
 			base = base[:-4]
 		# "xfce4-terminal 1.2.0 (Xfce 4.20)" -> name from the leading words.
 		name, version = _probe_version(exe, base)
+		# wezterm-gui answers --version with a placeholder and gnome-terminal-server not
+		# at all. The command that starts each one knows.
+		for suffix in ("-gui", "-server"):
+			if version or not base.endswith(suffix):
+				continue
+			launcher = base[:-len(suffix)]
+			beside = os.path.join(os.path.dirname(exe), launcher)
+			found = beside if os.path.isfile(beside) else shutil.which(launcher)
+			if found:
+				name, version = _probe_version(found, launcher)
 
 	if not name:
 		# XTVERSION: not everything answers, but when it does it is definitive.

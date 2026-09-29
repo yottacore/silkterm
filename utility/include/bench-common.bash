@@ -45,6 +45,110 @@ fTargetDir(){
 	if [[ "${dir}" == /* ]]; then printf '%s' "${dir}"; else printf '%s' "${repo}/${dir}"; fi
 }
 
+##	A terminal binary: PATH first, then the kept downloads, so a re-measure needs no
+##	re-download.
+fFindTerm(){
+	local -r repo="$1" name="$2"
+	local -r terms="${repo}/cicd/artifacts/sizebench/terms"
+	local candidate=""
+	if candidate="$(command -v "${name}" 2>/dev/null)"; then printf '%s' "${candidate}"; return 0; fi
+	for candidate in "${terms}/bin/${name}" "${terms}/usr/bin/${name}"; do
+		if [[ -f "${candidate}" && -x "${candidate}" ]]; then printf '%s' "${candidate}"; return 0; fi
+	done
+	return 1
+}
+
+##	Every process started on a throwaway account (fPrivateAccount): the launched tree, plus
+##	whatever carries the account's HOME. A service the private bus starts is not the bus's
+##	child, since dbus-daemon forks twice, so the tree alone misses GNOME Terminal's server.
+##	HOME alone misses Electron, which writes its process title over its environment.
+fOwnedPids(){
+	local -r home="$1" launched="${2:-0}"
+	local pid="" environ=""
+	if ((launched > 0)); then fCollectTree "${launched}"; fi
+	for pid in $(pgrep -u "$(id -u)" 2>/dev/null || true); do
+		environ="$(tr '\0' '\n' 2>/dev/null < "/proc/${pid}/environ" || true)"
+		if [[ $'\n'"${environ}"$'\n' == *$'\n'"HOME=${home}"$'\n'* ]]; then printf '%s\n' "${pid}"; fi
+	done
+	return 0
+}
+
+##	The topmost of those running the given executable: the terminal itself, measured from
+##	there down, so neither the bus nor a client that only asked for a window is billed.
+##	Usage: fOwnedRoot <executable> <throwaway home> <launched pid>
+fOwnedRoot(){
+	local -r exe="$1" home="$2" launched="$3"
+	local want="" pid="" parent=""
+	local -A mine=()
+	want="$(readlink -f "${exe}")"
+	for pid in $(fOwnedPids "${home}" "${launched}"); do
+		if [[ "$(readlink -f "/proc/${pid}/exe" 2>/dev/null || true)" == "${want}" ]]; then mine[${pid}]=1; fi
+	done
+	for pid in $(printf '%s\n' "${!mine[@]}" | sort -n); do
+		parent="$(ps -o ppid= -p "${pid}" 2>/dev/null || true)"
+		parent="${parent//[[:space:]]/}"
+		if [[ -z "${mine[${parent:-0}]:-}" ]]; then printf '%s' "${pid}"; return 0; fi
+	done
+	return 1
+}
+
+##	The grid a terminal reports from inside, as "rows cols", once it has settled. A report
+##	can predate the resize it is meant to answer (80x24 from a window not yet tiled), so
+##	a size is taken only once two reports in a row agree.
+fReadGrid(){
+	local -r reportFile="$1"
+	local seen="" again=""
+	local -i waited=0 tries=0
+	while ((waited < 60)); do [[ -f "${reportFile}" ]] && break; sleep 0.25; waited+=1; done
+	[[ -f "${reportFile}" ]] || fDie "the terminal never reported its grid"
+	for ((tries = 0; tries < 12; tries++)); do
+		seen="$(cat "${reportFile}" 2>/dev/null || true)"
+		sleep 0.5
+		again="$(cat "${reportFile}" 2>/dev/null || true)"
+		[[ -n "${seen}" && "${seen}" == "${again}" ]] && break
+	done
+	printf '%s' "${again}"
+}
+
+##	Fit a terminal to a grid by resizing whatever holds it, reading back the grid the
+##	terminal reports from inside. That works for any terminal without knowing its cell
+##	metrics or its geometry flags.
+##	Usage: fFitGrid <cols> <rows> <report file> <resize function> <start width> <start height>
+fFitGrid(){
+	local -i wantC=$1 wantR=$2
+	local reportFile="$3" resizeFn="$4"
+	local -i w=$5 h=$6 pass=0 gotC=0 gotR=0
+	## A proportional step can hop over the answer and come back (43 rows, 41, 43 ...)
+	## when a cell is near 20 pixels, which a new account's default font made routine.
+	## When two passes in a row land close on either side, the next try is the middle
+	## of them. Far apart, the proportional step is the better guess.
+	## Only the pass before counts: the first report can predate the window's tiling.
+	local -i prevW=0 prevH=0 prevC=0 prevR=0 nextW=0 nextH=0
+	local report=""
+
+	for ((pass = 1; pass <= 12; pass++)); do
+		"${resizeFn}" ${w} ${h}
+		rm -f "${reportFile}"
+		report="$(fReadGrid "${reportFile}")" || exit 1
+		read -r gotR gotC <<< "${report}" || true
+		((gotC)) || fDie "unreadable grid report"
+		fEcho_Clean "      fit pass ${pass}: ${gotC}x${gotR} at ${w}x${h}"
+		if ((gotC == wantC && gotR == wantR)); then fEcho "grid ${gotC}x${gotR}"; return 0; fi
+		nextW=${w}; nextH=${h}
+		if ((gotC != wantC)); then
+			if ((prevC && prevC - wantC <= 3 && wantC - prevC <= 3 && (prevC - wantC) * (gotC - wantC) < 0)); then nextW=$(( (prevW + w) / 2 ))
+			else nextW=$(( w * wantC / gotC )); fi
+		fi
+		if ((gotR != wantR)); then
+			if ((prevR && prevR - wantR <= 3 && wantR - prevR <= 3 && (prevR - wantR) * (gotR - wantR) < 0)); then nextH=$(( (prevH + h) / 2 ))
+			else nextH=$(( h * wantR / gotR )); fi
+		fi
+		prevW=${w}; prevH=${h}; prevC=${gotC}; prevR=${gotR}
+		w=${nextW}; h=${nextH}
+	done
+	fDie "could not fit ${wantC}x${wantR} (stopped at ${gotC}x${gotR})"
+}
+
 ##	A launched pid plus everything under it. Diffing the system-wide process list instead
 ##	would sweep in whatever else the desktop started meanwhile, and a name match would find
 ##	copies that were already running.
@@ -146,4 +250,5 @@ fRequireCandyProfile(){
 ##	History:
 ##		- 20260730: Factored out of the two rigs when they moved under utility/include/.
 ##		- 20260918: fPrivateAccount, fSilkProfile, fRequireCandyProfile.
+##		- 20260928: fFindTerm, fOwnedPids, fOwnedRoot, fReadGrid and fFitGrid, from the speed rig.
 ##
