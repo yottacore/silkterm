@@ -45,6 +45,7 @@
 ##		20260730 Written, to drive both shootout rigs from one place.
 ##		20260730 Ported from shell so it runs on Windows too, and absorbed the
 ##		         measure-this-terminal path, which had no wrapper before.
+##		20260928 Both rigs for GNOME Terminal, WezTerm and Tabby; size for Hyper.
 
 import argparse
 import os
@@ -67,8 +68,11 @@ TERMS = [
 	("xfce4",      "XFCE4 Terminal",  "both"),
 	("terminator", "Terminator",      "both"),
 	("xterm",      "XTerm",           "size"),
-	("gnome",      "GNOME Terminal",  "speed"),
-	("wezterm",    "WezTerm",         "speed"),
+	("gnome",      "GNOME Terminal",  "both"),
+	("wezterm",    "WezTerm",         "both"),
+	("tabby",      "Tabby",           "both"),
+	#	Never answers the speed rig's barrier, so it has no speed figure to take.
+	("hyper",      "Hyper",           "size"),
 ]
 
 LETTERBOX = "-" * 78

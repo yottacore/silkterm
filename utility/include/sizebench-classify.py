@@ -64,8 +64,12 @@ def closure(roots, needed, resolve):
 	return seen
 
 
-def measure(pids, exe_paths, be, verbose=False):
-	"""File+deps and Mem for one process tree, given a platform collector."""
+def measure(pids, exe_paths, be, verbose=False, payload=None):
+	"""File+deps and Mem for one process tree, given a platform collector.
+
+	With payload, the bundle's own libraries are already in its size, so only the ones
+	it borrows from the system count as deps.
+	"""
 	# Every library any process in the tree has mapped.
 	mapped = set()
 	for pid in pids:
@@ -123,7 +127,9 @@ def measure(pids, exe_paths, be, verbose=False):
 		return total
 
 	exe_bytes = disk(exe_paths)
-	deps_bytes = disk(app_libs - set(exe_paths))
+	inside = os.path.join(os.path.realpath(payload), "") if payload else None
+	deps_bytes = disk(p for p in app_libs - set(exe_paths)
+	                  if not (inside and os.path.realpath(p).startswith(inside)))
 
 	# Resident: private pages are per process, shared mappings are counted once across the
 	# tree (per file, the largest any one process holds). Summing the whole resident set
@@ -1183,7 +1189,7 @@ def main():
 				exes.append(got)
 		exes = list(dict.fromkeys(exes))[:1]
 
-	res = measure(pids, exes, be, verbose=args.verbose)
+	res = measure(pids, exes, be, verbose=args.verbose, payload=args.payload)
 
 	# A self-contained bundle has no meaningful "executable" - what you install is the
 	# whole extracted payload, plus the system libraries it still borrows.

@@ -80,20 +80,9 @@ list_terms(){
 	fEcho_Clean "  kitty       needs terms/bin/kitty       (see showdown-readme.md)"
 	fEcho_Clean "  wezterm     needs the AppImage extracted (see showdown-readme.md)"
 	fEcho_Clean "  xfce4 gnome terminator                  (distro packages)"
-	fEcho_Clean "  xterm       X11 only - runs via Xwayland, see showdown-readme.md"
-	fEcho_Clean "  hyper tabby awkward, see showdown-readme.md"
-}
-
-##	Resolve a terminal binary: PATH first, then the kept artifact dir, so a re-run does
-##	not need to re-download anything.
-find_bin(){
-	local name="$1" ; local candidate=""
-	if candidate="$(command -v "${name}" 2>/dev/null)"; then echo "${candidate}"; return 0; fi
-	for candidate in "${_repo}/cicd/artifacts/sizebench/terms/bin/${name}" \
-	                 "${_repo}/cicd/artifacts/sizebench/terms/usr/bin/${name}"; do
-		[[ -x "${candidate}" ]] && { echo "${candidate}"; return 0; }
-	done
-	return 1
+	fEcho_Clean "  xterm       X11 only, and its row came from X11 (see showdown-readme.md)"
+	fEcho_Clean "  tabby       needs the AppImage extracted (see showdown-readme.md)"
+	fEcho_Clean "  (no hyper: it never answers the barrier, so it cannot be timed)"
 }
 
 ##	Alacritty reads the user's own config unless pointed elsewhere, and defaults TERM to
@@ -116,6 +105,17 @@ write_plain_config(){
 ##	turn the effects down under the row that claims them.
 write_candy_config(){
 	cp "${_here}/termbench-candy.shcl" "${_work}/candy.shcl"
+}
+
+##	Tabby ignores SHELL and has no profile hook that takes, so the scene goes in through
+##	the login shell it starts, which is bash here. With its Welcome tab on, the window
+##	opens on that tab and no shell starts at all.
+write_tabby_account(){
+	local -r home="$1"
+	local rc=""
+	mkdir -p "${home}/.config/tabby"
+	printf 'enableWelcomeTab: false\n' > "${home}/.config/tabby/config.yaml"
+	for rc in .bashrc .bash_profile; do printf 'exec %s\n' "${sceneCmd}" > "${home}/${rc}"; done
 }
 
 ##	Start a terminal on the throwaway account, with its output in term.log.
@@ -184,52 +184,21 @@ start_rig(){
 
 ##	The compositor tiles its only client to the whole output, so the grid is steered by
 ##	the output mode instead of by each terminal's own geometry flags - which is what
-##	makes one fitter work for every terminal. The scene reports its own stty size while
-##	it waits, so nothing here needs to know a terminal's cell metrics.
-fit_grid(){
-	local -i wantC=$1 wantR=$2
-	local reportFile="$3"
-	local -i w=2438 h=1680 pass=0 gotC=0 gotR=0
-	## A proportional step can hop over the answer and come back (43 rows, 41, 43 ...)
-	## when a cell is near 20 pixels, which a new account's default font made routine.
-	## When two passes in a row land close on either side, the next try is the middle
-	## of them. Far apart, the proportional step is the better guess.
-	## Only the pass before counts: the first report can predate the window's tiling.
-	local -i prevW=0 prevH=0 prevC=0 prevR=0 nextW=0 nextH=0
+##	makes one fitter work for every terminal.
+resize_output(){ swaymsg output HEADLESS-1 mode "${1}x${2}" >/dev/null 2>&1 || true; }
 
-	for ((pass = 1; pass <= 12; pass++)); do
-		swaymsg output HEADLESS-1 mode ${w}x${h} >/dev/null 2>&1 || true
-		rm -f "${reportFile}"
-		local -i waited=0
-		while ((waited < 60)); do [[ -f "${reportFile}" ]] && break; sleep 0.25; waited+=1; done
-		[[ -f "${reportFile}" ]] || fDie "the terminal never reported its grid - see ${_work}"
-		## A report can predate the resize it is meant to answer (80x24 from a window
-		## not yet tiled), so take a size only once two reports in a row agree.
-		local seen="" again=""
-		local -i tries=0
-		for ((tries = 0; tries < 12; tries++)); do
-			seen="$(cat "${reportFile}" 2>/dev/null || true)"
-			sleep 0.5
-			again="$(cat "${reportFile}" 2>/dev/null || true)"
-			[[ -n "${seen}" && "${seen}" == "${again}" ]] && break
-		done
-		read -r gotR gotC <<< "${again}" || true
-		((gotC)) || fDie "unreadable grid report"
-		fEcho_Clean "      fit pass ${pass}: ${gotC}x${gotR} at output ${w}x${h}"
-		if ((gotC == wantC && gotR == wantR)); then fEcho "grid ${gotC}x${gotR}"; return 0; fi
-		nextW=${w}; nextH=${h}
-		if ((gotC != wantC)); then
-			if ((prevC && prevC - wantC <= 3 && wantC - prevC <= 3 && (prevC - wantC) * (gotC - wantC) < 0)); then nextW=$(( (prevW + w) / 2 ))
-			else nextW=$(( w * wantC / gotC )); fi
-		fi
-		if ((gotR != wantR)); then
-			if ((prevR && prevR - wantR <= 3 && wantR - prevR <= 3 && (prevR - wantR) * (gotR - wantR) < 0)); then nextH=$(( (prevH + h) / 2 ))
-			else nextH=$(( h * wantR / gotR )); fi
-		fi
-		prevW=${w}; prevH=${h}; prevC=${gotC}; prevR=${gotR}
-		w=${nextW}; h=${nextH}
+##	The X display of the compositor's own Xwayland, for WezTerm, which falls back to X11.
+##	Only the compositor's children are told it, so it is asked for. Not for xterm: its
+##	speed row came from X11, and one run through Xwayland read 18 MB/s against its 28.
+xwayland_display(){
+	local -r file="${_work}/xdisplay"
+	local -i waited=0
+	swaymsg exec "printf '%s' \"\$DISPLAY\" > '${file}'" >/dev/null 2>&1 || true
+	while ((waited < 40)); do
+		if [[ -s "${file}" ]]; then cat "${file}"; return 0; fi
+		sleep 0.25; waited+=1
 	done
-	fDie "could not fit ${wantC}x${wantR} (stopped at ${gotC}x${gotR})"
+	return 1
 }
 
 
@@ -288,6 +257,19 @@ declare -r sceneCmd="/bin/dash ${_here}/termbench-scene.sh"
 
 fPrivateAccount "${_work}/home"
 
+## Looked up here rather than inside the launch line, where a failed lookup only ends
+## the substitution and the rig goes on to launch nothing.
+declare termBin=""
+case "${termKey}" in
+	alacritty|kitty|wezterm|tabby)
+		termBin="$(fFindTerm "${_repo}" "${termKey}")" || fDie "${termKey} not found - see showdown-readme.md" ;;
+esac
+declare xDisplay=""
+case "${termKey}" in
+	wezterm)
+		xDisplay="$(xwayland_display)" || fDie "the compositor has no Xwayland display" ;;
+esac
+
 case "${termKey}" in
 	silkterm)
 		write_candy_config
@@ -297,13 +279,15 @@ case "${termKey}" in
 		launch "${silkBin}" --config "${_work}/plain.shcl" --shell "${sceneCmd}" ;;
 	alacritty)
 		write_alacritty_config
-		launch "$(find_bin alacritty || fDie "alacritty not found - see showdown-readme.md")" \
-			--config-file "${_work}/alacritty.toml" -e ${sceneCmd} ;;
+		launch "${termBin}" --config-file "${_work}/alacritty.toml" -e ${sceneCmd} ;;
 	kitty)
-		launch "$(find_bin kitty || fDie "kitty not found - see showdown-readme.md")" ${sceneCmd} ;;
+		launch "${termBin}" ${sceneCmd} ;;
 	wezterm)
-		launch "$(find_bin wezterm || fDie "wezterm not found - see showdown-readme.md")" \
-			--config enable_wayland=true start --always-new-process -- ${sceneCmd} ;;
+		## 20240203 falls back to X11 under sway 1.10 whatever enable_wayland says.
+		launch env DISPLAY="${xDisplay}" "${termBin}" --config enable_wayland=true start --always-new-process -- ${sceneCmd} ;;
+	tabby)
+		write_tabby_account "${_work}/home"
+		launch "${termBin}" --ozone-platform=wayland ;;
 	xfce4)
 		launch xfce4-terminal --disable-server -x ${sceneCmd} ;;
 	gnome)
@@ -319,7 +303,7 @@ case "${termKey}" in
 esac
 fEcho "launched pid ${_termPid}"
 
-fit_grid ${wantC} ${wantR} "${sizeFile}"
+fFitGrid ${wantC} ${wantR} "${sizeFile}" resize_output 2438 1680
 touch "${goFile}"
 
 fEcho "measuring (${reps} runs per scene)"
@@ -356,3 +340,4 @@ exit 0
 ##	History:
 ##		- 20260730 JC: Created, from the scratch rig used for the first shootout table.
 ##		- 20260918 JC: Every terminal runs on a throwaway account and session bus; the +candy row pins its profile.
+##		- 20260928 JC: Tabby entry. WezTerm gets the compositor's Xwayland display.

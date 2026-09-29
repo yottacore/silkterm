@@ -678,6 +678,12 @@ if [[ -x "${root}/cicd/tests/showdown/run.py" ]]; then
 	"${root}/cicd/tests/showdown/run.py" >/dev/null || fDie "showdown table test failed ($(fTestId cicd/tests/showdown/run.py))"
 	fEcho "OK: showdown table writers ($(fTestId cicd/tests/showdown/run.py))"
 fi
+## Every measured row of that table has a rig entry that can take it again.
+if [[ -x "${root}/cicd/tests/showdown/rigs.py" ]]; then
+	fEcho_Clean "showdown rig entries ..."
+	"${root}/cicd/tests/showdown/rigs.py" >/dev/null || fDie "showdown rig entry test failed ($(fTestId cicd/tests/showdown/rigs.py))"
+	fEcho "OK: showdown rig entries ($(fTestId cicd/tests/showdown/rigs.py))"
+fi
 ## The startup gates, which once marked a run as seen while it was being written.
 if [[ -x "${root}/cicd/tests/gates/run.bash" ]]; then
 	fEcho_Clean "startup gates ..."
