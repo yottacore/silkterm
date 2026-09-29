@@ -6,6 +6,7 @@
 //! design.md.
 
 use std::collections::{HashMap, VecDeque};
+use std::ops::Range;
 use std::time::{Duration, Instant};
 
 use alacritty_terminal::grid::{Dimensions, Grid};
@@ -53,13 +54,19 @@ const PREVIEW_A: f32 = 0.72;
 // every frame and every pixel of the map moves with it, so this is what keeps
 // a feature that is only a hint from costing what the text costs.
 const COMPOSE_MS: u64 = 90;
-// A compose holds the term lock the PTY reader waits on, and with a deep
-// scrollback under a flood it rasterizes the whole of it. So the next one waits
-// this many times as long as the last one took, which keeps the map to about a
-// twentieth of the time however deep the buffer is.
+// A compose holds the term lock the PTY reader waits on while it rasterizes,
+// and over a deep scrollback the pixel work runs to a million lines, on a
+// thread of its own. So the next one waits this many times as long as the
+// last one took, both parts, which keeps the map to about a twentieth of a
+// core however deep the buffer is.
 const COMPOSE_SHARE: u32 = 20;
 // A cache that has fallen behind the grid is rebuilt whole, at most this often.
 const RESYNC_MS: u64 = 400;
+// Cells one compose may rasterize from history, about 4 ms here. A deep
+// scrollback under a flood, or rebuilt whole, is more than a compose can read
+// without stopping the terminal: 100,000 lines took 150 ms. Past this, one
+// line stands in for its neighbors until later composes have the time.
+const RASTER_CELLS: usize = 300_000;
 
 // Weights under this are dropped from a cell's span list. The tails of a tent
 // cost as much to walk as its middle and change nothing.
@@ -297,9 +304,31 @@ pub fn drag_to(
 // A pane's rasterized buffer plus the image composed from it. History lines
 // never change, so each one rasterizes once, at the first compose after it
 // scrolls off; the live screen rows are redone at each compose.
+//
+// Rasterizing reads the grid, so it runs here under the term lock, and the
+// budget bounds it. The rows and the pixel work live in `store`, and a whole
+// compose over a deep scrollback takes the store to a thread of its own,
+// since at a million lines it is most of a second. While the store is away
+// the builds only count, and what they owe it goes along with the next one.
 #[derive(Default)]
 pub struct Minimap {
-	rows: VecDeque<Row>,
+	store: Store,
+	job: Option<Job>,
+	// when to look for that thread's answer again
+	poll_at: Option<Instant>,
+	took: Duration, // how long the last compose on its own thread ran
+	// One per history row the store has: a stand-in copied from a neighbor,
+	// not rasterized from its own line yet. `rough_n` counts them.
+	rough: VecDeque<bool>,
+	rough_n: usize,
+	// No stand-ins from here up, so the search for them starts here.
+	clean_from: usize,
+	// Edits owed to the store: drop every row, or this many off the top.
+	owed_clear: bool,
+	owed_front: usize,
+	// History moved or was rebuilt since the last compose, so the next one
+	// redoes the whole image rather than the rows it rasterized.
+	moved: bool,
 	spare: Vec<Row>,
 	hist: usize, // history lines the cache accounts for
 	// Buffer lines the map actually draws: the whole buffer less the lines the
@@ -323,6 +352,10 @@ pub struct Minimap {
 	img: Vec<u8>,
 	img_w: usize,
 	img_h: usize,
+	// the lines and scale it was composed over, so a compose that moved
+	// nothing knows it may redo only part of it
+	img_total: usize,
+	img_scale: f32,
 	pub rev: u64, // bumped on every compose, so the renderer can skip re-uploads
 	// rows changed since the last compose, and the compose was throttled out -
 	// the pane reports this as animation so the frame after picks it up
@@ -339,6 +372,73 @@ pub struct Minimap {
 	spans_for: (usize, usize),
 	#[cfg(test)]
 	rastered: usize,
+	#[cfg(test)]
+	budget: Option<usize>,
+	#[cfg(test)]
+	here_px: Option<usize>,
+}
+
+// The rows, and what composing them needs, in one piece that can go to
+// another thread and come back.
+#[derive(Default)]
+struct Store {
+	rows: VecDeque<Row>,
+	screen: usize, // the screen rows at the end of `rows`
+	spare: Vec<Row>,
+	acc: Acc,
+	img: Vec<u8>, // always the newest image; `Minimap::img` is a copy
+}
+
+// A compose that has the store on its own thread.
+struct Job {
+	thread: std::thread::JoinHandle<(Store, Duration)>,
+	plan: Plan,
+	here: Duration, // what building the plan cost this thread
+	whole: bool,
+}
+
+// One compose: the edits the builds since the last one owe the store, the
+// rows rasterized for it, and the image to make.
+#[derive(Default)]
+struct Plan {
+	clear: bool,
+	front: usize,
+	// a drawn line and how many lines it stands for, itself included, oldest
+	// first
+	groups: Vec<(Row, usize)>,
+	refined: Vec<(usize, Row)>,
+	screen: Vec<Row>,
+	// redo the whole image, or only the rows `refined` and `screen` touch
+	full: bool,
+	width: usize,
+	img_h: usize,
+	total: usize,
+	scale: f32,
+}
+
+impl Plan {
+	// Rows times pixels a compose on this thread may take, about 4 ms here.
+	// Over it, the store goes to a thread of its own.
+	const HERE_PX: usize = 2_000_000;
+
+	fn heavy(&self, limit: usize) -> bool {
+		self.full && self.total * self.width > limit
+	}
+
+	// The plan without its rows, which is all that is needed to show the
+	// image it made.
+	fn numbers(&self) -> Plan {
+		Plan {
+			clear: self.clear,
+			front: self.front,
+			full: self.full,
+			width: self.width,
+			img_h: self.img_h,
+			total: self.total,
+			scale: self.scale,
+			..Default::default()
+		}
+	}
 }
 
 // Per-dest-row accumulators, kept so a compose allocates nothing.
@@ -347,7 +447,22 @@ struct Acc {
 	rgb: Vec<f32>,
 	weight: Vec<f32>,
 	alpha: Vec<f32>,
+	// Lines that fall wholly inside the pixel row, added up as integers per
+	// color plane: red, green and blue times alpha, then alpha. `peak` is the
+	// strongest alpha. Flushed into the three above.
+	sum: Vec<u32>,
+	peak: Vec<u32>,
 }
+
+// Whole lines added up before a flush, so `Acc::sum` cannot overflow.
+const WHOLE_MAX: usize = 65_000;
+
+// How often to look again for a compose that has run past what the last one
+// took.
+const POLL_MS: u64 = 8;
+
+// Replaced rows this close together are redone as one run.
+const RUN_GAP: usize = 64;
 
 impl Minimap {
 	pub fn image(&self) -> (&[u8], usize, usize) {
@@ -367,7 +482,8 @@ impl Minimap {
 		}
 	}
 
-	// Free everything. Called when the column goes away.
+	// Free everything. Called when the column goes away. A compose still on
+	// its thread finishes there and is dropped.
 	pub fn clear(&mut self) {
 		*self = Self::default();
 	}
@@ -398,6 +514,7 @@ impl Minimap {
 		if width == 0 || img_h == 0 || lines == 0 || cols == 0 {
 			return;
 		}
+		let collected = self.collect(now);
 		let hist = grid.history_size();
 		let mut rebuild = cut
 			|| self.width != width
@@ -421,10 +538,12 @@ impl Minimap {
 		self.width = width;
 		self.cols = cols;
 		self.lines = lines;
-		// the screen rows from the last compose
-		self.recycle_from(self.hist - self.fresh);
+		self.moved |= rebuild || advanced > 0;
 		if rebuild {
-			self.recycle_from(0);
+			self.owed_clear = true;
+			self.owed_front = 0;
+			self.rough.clear();
+			self.rough_n = 0;
 			self.hist = hist;
 			self.fresh = hist;
 		} else {
@@ -432,8 +551,12 @@ impl Minimap {
 			self.fresh += advanced;
 			// the oldest lines leave first, and those are the rasterized ones
 			while self.hist > hist {
-				if let Some(row) = self.rows.pop_front() {
-					self.spare.push(row);
+				if self.hist > self.fresh {
+					self.owed_front += 1;
+					self.clean_from = self.clean_from.saturating_sub(1);
+					if self.rough.pop_front() == Some(true) {
+						self.rough_n -= 1;
+					}
 				} else {
 					self.fresh -= 1;
 				}
@@ -443,6 +566,10 @@ impl Minimap {
 		self.tail = tail;
 		self.stale_since = None;
 
+		if self.job.is_some() {
+			self.pending = true;
+			return;
+		}
 		let due = self
 			.last_compose
 			.is_none_or(|t| now.duration_since(t) >= gap(self.spent));
@@ -456,23 +583,36 @@ impl Minimap {
 			// ordinary cost.
 			let whole = self.fresh >= self.hist;
 			let began = Instant::now();
-			self.catch_up(grid, colors, cfg, lag);
-			self.compose(img_h, scale);
+			let mut plan = self.plan(grid, colors, cfg, lag, img_h, scale);
+			#[cfg(test)]
+			let limit = self.here_px.unwrap_or(Plan::HERE_PX);
+			#[cfg(not(test))]
+			let limit = Plan::HERE_PX;
+			if plan.heavy(limit) {
+				self.send(plan, began.elapsed(), whole, now);
+				self.pending = true;
+				return;
+			}
+			self.store.run(&mut plan);
+			self.publish(&plan);
 			if !whole {
 				self.spent = began.elapsed();
 			}
-			// Short of the bottom AND the lag is still falling, so another
-			// compose is owed even if no more output arrives: the ease drains
-			// on its own and the map has to follow it down. `pending` drives
-			// the build gate and the timed wake, so this is the whole
-			// mechanism - and it is why the drain half matters. A view parked
-			// in the scrollback freezes the lag, and owing a compose there
-			// asked for a frame and a full recompose several times a second
-			// for as long as the pane sat there (F155).
-			self.pending = draining && self.shown < self.hist + self.lines;
-		} else {
+		} else if !collected {
 			self.pending = true;
+			return;
 		}
+		// Short of the bottom AND the lag is still falling, so another
+		// compose is owed even if no more output arrives: the ease drains
+		// on its own and the map has to follow it down. `pending` drives
+		// the build gate and the timed wake, so this is the whole
+		// mechanism - and it is why the drain half matters. A view parked
+		// in the scrollback freezes the lag, and owing a compose there
+		// asked for a frame and a full recompose several times a second
+		// for as long as the pane sat there (F155). Stand-ins left to
+		// replace owe one too, and that runs out.
+		self.pending =
+			(draining && self.shown < self.hist + self.lines) || self.rough_n > 0 || self.moved;
 	}
 
 	// A compose is owed. The build gate reads this so the next pass pays it,
@@ -483,40 +623,176 @@ impl Minimap {
 
 	// When that compose comes due. A timed wake rather than an animation flag:
 	// marking the window animating would bring it straight back, find the
-	// throttle still closed, and spin at the frame rate.
+	// throttle still closed, and spin at the frame rate. The same goes for a
+	// compose on its own thread, which is looked for when it should be done.
 	pub fn wake(&self) -> Option<Instant> {
+		if self.job.is_some() {
+			return self.poll_at;
+		}
 		let at = self.last_compose?;
 		self.pending.then(|| at + gap(self.spent))
 	}
 
-	// Drop cached rows from `keep` onward, holding on to the allocations.
-	fn recycle_from(&mut self, keep: usize) {
-		while self.rows.len() > keep {
-			if let Some(row) = self.rows.pop_back() {
-				self.spare.push(row);
+	// Hand the store to a thread for the whole compose. If no thread can be
+	// had, the cache starts over.
+	fn send(&mut self, mut plan: Plan, here: Duration, whole: bool, now: Instant) {
+		let mut store = std::mem::take(&mut self.store);
+		let numbers = plan.numbers();
+		let spawned = std::thread::Builder::new()
+			.name("minimap".into())
+			.spawn(move || {
+				let began = Instant::now();
+				store.run(&mut plan);
+				(store, began.elapsed())
+			});
+		match spawned {
+			Ok(thread) => {
+				self.poll_at = Some(now + self.took.max(Duration::from_millis(POLL_MS)));
+				self.job = Some(Job {
+					thread,
+					plan: numbers,
+					here,
+					whole,
+				});
 			}
+			// the closure owned the store, and a failed spawn drops it
+			Err(_) => self.lost(),
 		}
 	}
 
+	// Take the store back from a compose that has finished on its thread.
+	// Answers whether one did.
+	fn collect(&mut self, now: Instant) -> bool {
+		let Some(job) = self.job.take_if(|job| job.thread.is_finished()) else {
+			if self.job.is_some() {
+				self.poll_at = Some(now + Duration::from_millis(POLL_MS));
+			}
+			return false;
+		};
+		let Ok((store, took)) = job.thread.join() else {
+			self.lost();
+			return false;
+		};
+		self.store = store;
+		self.took = took;
+		self.poll_at = None;
+		self.publish(&job.plan);
+		if !job.whole {
+			self.spent = job.here + took;
+		}
+		true
+	}
+
+	// The store did not come back, so the next build rebuilds the cache.
+	fn lost(&mut self) {
+		self.store = Store::default();
+		self.job = None;
+		self.poll_at = None;
+		self.width = 0;
+		self.pending = true;
+	}
+
+	// Show what the store just composed.
+	fn publish(&mut self, plan: &Plan) {
+		self.img.clone_from(&self.store.img);
+		self.img_w = plan.width;
+		self.img_h = plan.img_h;
+		self.img_total = plan.total;
+		self.img_scale = plan.scale;
+		self.shown = plan.total;
+		self.rev = self.rev.wrapping_add(1);
+		// the store gets back more rows than it hands out, and the raster here
+		// wants some for the next compose
+		let want = (self.budget() + self.lines).saturating_sub(self.spare.len());
+		let from = self.store.spare.len().saturating_sub(want);
+		self.spare.extend(self.store.spare.drain(from..));
+	}
+
+	// History lines one compose may rasterize.
+	fn budget(&self) -> usize {
+		#[cfg(test)]
+		if let Some(lines) = self.budget {
+			return lines;
+		}
+		(RASTER_CELLS / self.cols.max(1)).max(1)
+	}
+
 	// Rasterize the history lines the builds only counted, then the screen.
-	// Bounded by the history's size however much output went by since the
-	// last compose. Also settles how far down the buffer the map draws.
-	fn catch_up(&mut self, grid: &Grid<Cell>, colors: &Colors, cfg: &config::Settings, lag: usize) {
+	// Bounded by the budget however deep the history is and however much
+	// output went by: past it, every `step`th line is drawn and stands in for
+	// the rows around it. What is left of the budget replaces stand-ins,
+	// newest first, since the oldest are the first to leave. Also settles how
+	// far down the buffer the map draws.
+	fn plan(
+		&mut self,
+		grid: &Grid<Cell>,
+		colors: &Colors,
+		cfg: &config::Settings,
+		lag: usize,
+		img_h: usize,
+		scale: f32,
+	) -> Plan {
 		self.fit_spans();
 		let mut readable = palette::Readable::default();
-		for k in (1..=self.fresh).rev() {
-			let row = self.take_row();
-			self.raster(grid, Line(-(k as i32)), colors, cfg, &mut readable, row);
+		let mut plan = Plan {
+			clear: std::mem::take(&mut self.owed_clear),
+			front: std::mem::take(&mut self.owed_front),
+			..Default::default()
+		};
+		let mut left = self.budget();
+		let fresh = std::mem::take(&mut self.fresh);
+		let step = fresh.div_ceil(left).max(1);
+		let mut k = fresh;
+		while k > 0 {
+			// lines k (the oldest) down to k - group + 1, drawn from the newest
+			let group = step.min(k);
+			let mut row = self.take_row();
+			let line = Line(-((k - group + 1) as i32));
+			self.fill(grid, line, colors, cfg, &mut readable, &mut row);
+			if group > 1 {
+				self.rough.extend(std::iter::repeat_n(true, group - 1));
+				self.rough_n += group - 1;
+				self.clean_from = usize::MAX;
+			}
+			self.rough.push_back(false);
+			plan.groups.push((row, group));
+			left = left.saturating_sub(1);
+			k -= group;
 		}
-		self.fresh = 0;
+		let mut i = self.clean_from.min(self.hist);
+		while self.rough_n > 0 && left > 0 && i > 0 {
+			i -= 1;
+			if !self.rough[i] {
+				continue;
+			}
+			let mut row = self.take_row();
+			let line = Line(i as i32 - self.hist as i32);
+			self.fill(grid, line, colors, cfg, &mut readable, &mut row);
+			plan.refined.push((i, row));
+			self.rough[i] = false;
+			self.rough_n -= 1;
+			left -= 1;
+		}
+		self.clean_from = i;
 		for line in 0..self.lines as i32 {
-			let row = self.take_row();
-			self.raster(grid, Line(line), colors, cfg, &mut readable, row);
+			let mut row = self.take_row();
+			self.fill(grid, Line(line), colors, cfg, &mut readable, &mut row);
+			plan.screen.push(row);
 		}
 		// The rows are all rasterized either way, since the ease drains and the
 		// map has to reach them without re-reading the grid. One line is kept
 		// whatever the lag, so the column never disappears mid-flood.
-		self.shown = (self.hist + self.lines).saturating_sub(lag).max(1);
+		plan.total = (self.hist + self.lines).saturating_sub(lag).max(1);
+		plan.width = self.width;
+		plan.img_h = img_h;
+		plan.scale = scale;
+		plan.full = self.moved
+			|| self.img_w != plan.width
+			|| self.img_h != img_h
+			|| self.img_total != plan.total
+			|| self.img_scale != scale;
+		self.moved = false;
+		plan
 	}
 
 	// The same for every line, so worked out once per width and column count
@@ -563,14 +839,14 @@ impl Minimap {
 	// One grid line to one strip of preview pixels. Blank cells are skipped
 	// before any color is resolved, which is most of a terminal buffer.
 	// Answers whether the line laid down any ink at all.
-	fn raster(
+	fn fill(
 		&mut self,
 		grid: &Grid<Cell>,
 		line: Line,
 		colors: &Colors,
 		cfg: &config::Settings,
 		readable: &mut palette::Readable,
-		mut out: Row,
+		out: &mut Row,
 	) -> bool {
 		let width = self.width;
 		#[cfg(test)]
@@ -628,7 +904,6 @@ impl Minimap {
 			out[px * 4 + 2] = to_u8(acc.rgb[px * 3 + 2] / w);
 			out[px * 4 + 3] = to_u8(w.min(1.0) * 255.0);
 		}
-		self.rows.push_back(out);
 		any
 	}
 
@@ -639,20 +914,72 @@ impl Minimap {
 		let t = ((lh - BAND_FLOOR) / (BAND_FULL - BAND_FLOOR)).clamp(0.0, 1.0);
 		(lh * BAND_TOP * t, lh * (1.0 - t * (1.0 - BAND)))
 	}
+}
 
-	// Squash the cached rows into the column image. Colour is the average of the
-	// lines that actually have ink, so a lone red line is not washed out by its
-	// blank neighbours; how bright the pixel gets is how much ink fell in it.
-	fn compose(&mut self, img_h: usize, scale: f32) {
-		let width = self.width;
-		let total = self.shown.min(self.rows.len());
-		self.img_w = width;
-		self.img_h = img_h;
-		self.img.clear();
-		self.img.resize(width * img_h * 4, 0);
-		self.pending = false;
-		self.rev = self.rev.wrapping_add(1);
-		if total == 0 || width == 0 {
+impl Store {
+	// Make the edits the plan carries, then compose.
+	fn run(&mut self, plan: &mut Plan) {
+		for _ in 0..self.screen {
+			if let Some(row) = self.rows.pop_back() {
+				self.spare.push(row);
+			}
+		}
+		if plan.clear {
+			self.spare.extend(self.rows.drain(..));
+		}
+		for _ in 0..plan.front {
+			if let Some(row) = self.rows.pop_front() {
+				self.spare.push(row);
+			}
+		}
+		for (row, stands_for) in plan.groups.drain(..) {
+			for _ in 1..stands_for {
+				let mut copy = self.spare.pop().unwrap_or_default();
+				copy.clone_from(&row);
+				self.rows.push_back(copy);
+			}
+			self.rows.push_back(row);
+		}
+		// the rows replaced, newest first, as runs, so two far apart do not
+		// redo everything between them
+		let mut runs: Vec<Range<usize>> = Vec::new();
+		for (i, mut row) in plan.refined.drain(..) {
+			if let Some(old) = self.rows.get_mut(i) {
+				std::mem::swap(old, &mut row);
+			}
+			self.spare.push(row);
+			match runs.last_mut() {
+				Some(run) if run.start <= i + RUN_GAP => run.start = i.min(run.start),
+				_ => runs.push(i..i + 1),
+			}
+		}
+		self.screen = plan.screen.len();
+		self.rows.extend(plan.screen.drain(..));
+
+		let (width, img_h, scale) = (plan.width, plan.img_h, plan.scale);
+		if plan.full || self.img.len() != width * img_h * 4 {
+			self.img.clear();
+			self.img.resize(width * img_h * 4, 0);
+			self.compose(0..plan.total, plan, scale);
+			return;
+		}
+		for run in runs {
+			self.compose(run, plan, scale);
+		}
+		let hist = self.rows.len() - self.screen;
+		self.compose(hist..self.rows.len(), plan, scale);
+	}
+
+	// Squash the cached rows into the column image: the pixel rows that rows
+	// `lines` fall in. Each pixel row is worked out on its own, so redoing a
+	// few matches what a whole compose draws there. Colour is the average of
+	// the lines that actually have ink, so a lone red line is not washed out
+	// by its blank neighbours; how bright the pixel gets is how much ink fell
+	// in it.
+	fn compose(&mut self, lines: Range<usize>, plan: &Plan, scale: f32) {
+		let (width, img_h) = (plan.width, plan.img_h);
+		let total = plan.total.min(self.rows.len());
+		if total == 0 || width == 0 || lines.start >= lines.end.min(total) {
 			return;
 		}
 		let lh = line_px(img_h as f32, total, scale);
@@ -662,7 +989,7 @@ impl Minimap {
 		let used = (lh * total as f32).ceil().min(img_h as f32) as usize;
 		// The band takes ink out of the line; putting it back concentrated keeps
 		// a solid page as bright as it was, with the gap between lines showing.
-		let (band_top, band_h) = Self::band(lh);
+		let (band_top, band_h) = Minimap::band(lh);
 		let gain = if band_h > 0.0 { lh / band_h } else { 0.0 };
 		// A line is spread over a tent a pixel each side rather than clipped to
 		// the pixel row it falls in. A box leaves the line grid beating against
@@ -674,7 +1001,10 @@ impl Minimap {
 		// much on the deep buffer where a compose is already the expensive one.
 		let soft = lh >= BAND_FLOOR;
 		let reach = if soft { 1.0 } else { 0.0 };
-		for py in 0..used {
+		let py0 = (lines.start as f32 * lh - reach - 1.0).floor().max(0.0) as usize;
+		let py1 = ((lines.end.min(total) as f32 * lh + reach + 1.0).ceil() as usize).min(used);
+		for py in py0..py1 {
+			self.img[py * width * 4..(py + 1) * width * 4].fill(0);
 			let acc = &mut self.acc;
 			acc.reset(width);
 			let y0 = py as f32;
@@ -683,8 +1013,23 @@ impl Minimap {
 				.min(total.saturating_sub(1));
 			let last =
 				(((y1 + reach - band_top) / lh).ceil().max(0.0) as usize).clamp(first + 1, total);
+			let mut whole = 0;
 			for i in first..last {
 				let top = i as f32 * lh + band_top;
+				let row = &self.rows[i];
+				// Most lines of a deep buffer fall wholly inside their pixel row
+				// and all take the same share, so those add up as integers and
+				// the share is applied once. That is most of the cost of a
+				// compose at depth.
+				if !soft && top >= y0 && top + band_h <= y1 {
+					acc.add_whole(row);
+					whole += 1;
+					if whole == WHOLE_MAX {
+						acc.flush(band_h * gain);
+						whole = 0;
+					}
+					continue;
+				}
 				let cover = if soft {
 					tent_over(top, top + band_h, y0 + 0.5) * gain
 				} else {
@@ -693,7 +1038,6 @@ impl Minimap {
 				if cover <= 0.0 {
 					continue;
 				}
-				let row = &self.rows[i];
 				for px in 0..width {
 					let a = row[px * 4 + 3] as f32 / 255.0;
 					if a <= 0.0 {
@@ -709,6 +1053,7 @@ impl Minimap {
 					}
 				}
 			}
+			acc.flush(band_h * gain);
 			let base = py * width * 4;
 			for px in 0..width {
 				let w = acc.weight[px];
@@ -733,6 +1078,47 @@ impl Acc {
 		self.weight.resize(width, 0.0);
 		self.alpha.clear();
 		self.alpha.resize(width, 0.0);
+		self.sum.clear();
+		self.sum.resize(width * 4, 0);
+		self.peak.clear();
+		self.peak.resize(width, 0);
+	}
+
+	// Planar, so the loop runs over several pixels at once.
+	fn add_whole(&mut self, row: &[u8]) {
+		let n = self.peak.len();
+		let (red, rest) = self.sum.split_at_mut(n);
+		let (green, rest) = rest.split_at_mut(n);
+		let (blue, alpha) = rest.split_at_mut(n);
+		let (alpha, peak, row) = (&mut alpha[..n], &mut self.peak[..n], &row[..n * 4]);
+		for i in 0..n {
+			let px =
+				u32::from_le_bytes([row[i * 4], row[i * 4 + 1], row[i * 4 + 2], row[i * 4 + 3]]);
+			let a = px >> 24;
+			red[i] += (px & 0xff) * a;
+			green[i] += ((px >> 8) & 0xff) * a;
+			blue[i] += ((px >> 16) & 0xff) * a;
+			alpha[i] += a;
+			peak[i] = peak[i].max(a);
+		}
+	}
+
+	// Fold the whole lines in, each taking `cover` of the pixel row.
+	fn flush(&mut self, cover: f32) {
+		let k = cover / 255.0;
+		let n = self.peak.len();
+		for px in 0..n {
+			let a = self.sum[3 * n + px];
+			if a > 0 {
+				self.rgb[px * 3] += self.sum[px] as f32 * k;
+				self.rgb[px * 3 + 1] += self.sum[n + px] as f32 * k;
+				self.rgb[px * 3 + 2] += self.sum[2 * n + px] as f32 * k;
+				self.weight[px] += a as f32 * k;
+				self.alpha[px] = self.alpha[px].max(self.peak[px] as f32 / 255.0);
+			}
+		}
+		self.sum.fill(0);
+		self.peak.fill(0);
 	}
 }
 
@@ -1164,10 +1550,41 @@ impl Minimap {
 	fn seed(&mut self, width: usize, rows: Vec<Row>) {
 		self.width = width;
 		self.shown = rows.len();
-		self.rows = rows.into();
+		self.hist = rows.len();
+		self.rough = vec![false; rows.len()].into();
+		self.store.rows = rows.into();
+		self.store.screen = 0;
+	}
+
+	// A whole compose of the seeded rows, here and now.
+	fn compose(&mut self, img_h: usize, scale: f32) {
+		let plan = Plan {
+			full: true,
+			width: self.width,
+			img_h,
+			total: self.shown.min(self.store.rows.len()),
+			scale,
+			..Default::default()
+		};
+		let len = self.width * img_h * 4;
+		self.store.img.clear();
+		self.store.img.resize(len, 0);
+		self.store.compose(0..plan.total, &plan, scale);
+		self.publish(&plan);
+	}
+
+	// A compose that went to its own thread, waited for.
+	fn wait(&mut self) {
+		while let Some(job) = &self.job {
+			if job.thread.is_finished() {
+				self.collect(Instant::now());
+			} else {
+				std::thread::sleep(Duration::from_millis(1));
+			}
+		}
 	}
 	fn pixel(&self, x: usize, y: usize) -> [u8; 4] {
-		let i = (y * self.width + x) * 4;
+		let i = (y * self.img_w + x) * 4;
 		[
 			self.img[i],
 			self.img[i + 1],
@@ -1325,16 +1742,15 @@ mod tests {
 			..Default::default()
 		};
 		map.fit_spans();
-		let row = map.take_row();
-		map.raster(
+		let mut strip = map.take_row();
+		map.fill(
 			term.grid(),
 			Line(0),
 			term.colors(),
 			&cfg,
 			&mut palette::Readable::default(),
-			row,
+			&mut strip,
 		);
-		let strip = map.rows.pop_back().unwrap();
 		// a five-pixel average holds no cell-scale detail, so what is left in
 		// it is the slow beat
 		let smooth: Vec<f32> = (4..width - 4)
@@ -1798,6 +2214,142 @@ mod tests {
 		assert!(map.spent < slow, "an ordinary compose sets the wait");
 	}
 
+	// At 100,000 lines one compose held the terminal for 150 ms, reading every
+	// line of a rebuilt or flooded scrollback and composing all of it. Here a
+	// compose reads no more than its budget, and a whole image goes to a
+	// thread of its own while the builds carry on.
+	// Test ID: ErEKIJ0
+	#[test]
+	fn a_deep_redraw_reads_only_its_budget_here() {
+		let (cols, lines, scrollback) = (40, 10, 3000);
+		let (mut term, mut parser) = live_term(cols, lines, scrollback);
+		let mut rng = Rng::new(3);
+		let flood =
+			|term: &mut Term<VoidListener>, parser: &mut Processor, rng: &mut Rng, n: usize| {
+				let mut text = String::new();
+				for _ in 0..n {
+					text += &styled_line(rng, cols);
+					text += "\r\n";
+				}
+				parser.advance(term, text.as_bytes());
+			};
+		flood(&mut term, &mut parser, &mut rng, scrollback + 500);
+		let cfg = config::Settings::default();
+		let budget = 100;
+		let mut map = Minimap {
+			budget: Some(budget),
+			here_px: Some(0),
+			..Default::default()
+		};
+		// a minute a step, so the throttle is never what decides a compose
+		let start = Instant::now();
+		let update =
+			|map: &mut Minimap, term: &Term<VoidListener>, pushed: usize, at: u64, cut: bool| {
+				let rastered = map.rastered;
+				map.update(
+					term.grid(),
+					term.colors(),
+					&cfg,
+					16,
+					300,
+					1.0,
+					lines,
+					cols,
+					pushed,
+					0,
+					false,
+					cut,
+					start + Duration::from_secs(at * 60),
+				);
+				let read = map.rastered - rastered;
+				assert!(read <= budget + lines, "{read} lines read at {at} s");
+			};
+
+		// the scrollback rebuilt whole, as after a screen swap or a resize
+		update(&mut map, &term, 0, 0, true);
+		assert!(map.job.is_some(), "the whole image was composed here");
+		assert!(map.pending(), "and nothing owed while it is away");
+		assert!(map.wake().is_some(), "or a time to look for it");
+		let rev = map.rev;
+		map.wait();
+		assert_ne!(map.rev, rev, "the image never came back");
+		let (px, w, h) = map.image();
+		assert_eq!(px.len(), w * h * 4);
+		assert!(map.rough_n > scrollback / 2, "{} stand-ins", map.rough_n);
+
+		// then a flood that turns the scrollback over between composes
+		for at in 1..20 {
+			flood(&mut term, &mut parser, &mut rng, scrollback / 2);
+			update(&mut map, &term, scrollback / 2, at, false);
+			map.wait();
+		}
+		assert!(map.pixel(0, 290)[3] > 0, "the map shows the flood");
+	}
+
+	// A stand-in is only there until a compose has the time, and once the
+	// output stops every line is drawn from itself: the image ends up the one
+	// a cache with no budget makes. The composes that replace them redo only
+	// the pixel rows they touch, so this also holds that to a whole compose,
+	// under both filters.
+	// Test ID: ErEKIcQ
+	#[test]
+	fn stand_ins_give_way_to_the_lines_they_stand_for() {
+		let cfg = config::Settings::default();
+		let (cols, lines, img_h) = (40, 10, 300);
+		// about 0.1 px a line, and about 0.7
+		for scrollback in [3000, 400] {
+			let (mut term, mut parser) = live_term(cols, lines, scrollback);
+			let mut rng = Rng::new(scrollback as u64);
+			let mut text = String::new();
+			for _ in 0..scrollback * 2 {
+				text += &styled_line(&mut rng, cols);
+				text += "\r\n";
+			}
+			parser.advance(&mut term, text.as_bytes());
+			// a minute a step, well past the throttle
+			let start = Instant::now();
+			let update = |map: &mut Minimap, at: u64, cut: bool| {
+				map.update(
+					term.grid(),
+					term.colors(),
+					&cfg,
+					16,
+					img_h,
+					1.0,
+					lines,
+					cols,
+					0,
+					0,
+					false,
+					cut,
+					start + Duration::from_secs(at * 60),
+				);
+				map.wait();
+			};
+			let mut map = Minimap {
+				budget: Some(50),
+				here_px: Some(0),
+				..Default::default()
+			};
+			update(&mut map, 0, true);
+			assert!(map.rough_n > 0, "{scrollback}: nothing stood in");
+			let mut at = 0;
+			while map.pending() {
+				at += 1;
+				assert!(at < 1000, "{scrollback}: still {} stand-ins", map.rough_n);
+				update(&mut map, at, false);
+			}
+			assert_eq!(map.rough_n, 0, "{scrollback}");
+			let mut whole = Minimap::default();
+			update(&mut whole, at, true);
+			assert_eq!(whole.rough_n, 0);
+			assert!(
+				map.img == whole.img,
+				"{scrollback}: not the image every line makes"
+			);
+		}
+	}
+
 	// The column's width can change between composes, and the image is still
 	// the one composed at the old width. A caller that took the new width made
 	// a texture the pixels could not fill, and wgpu killed the window.
@@ -1921,16 +2473,15 @@ mod tests {
 			map.fit_spans();
 			let mut readable = palette::Readable::default();
 			for line in 0..lines as i32 {
-				let row = map.take_row();
-				map.raster(
+				let mut got = map.take_row();
+				map.fill(
 					term.grid(),
 					Line(line),
 					term.colors(),
 					&cfg,
 					&mut readable,
-					row,
+					&mut got,
 				);
-				let got = map.rows.pop_back().unwrap();
 				let want = reference_row(term.grid(), Line(line), term.colors(), &cfg, width, cols);
 				assert!(
 					got == want,
@@ -1957,16 +2508,16 @@ mod tests {
 				..Default::default()
 			};
 			map.fit_spans();
-			let row = map.take_row();
-			map.raster(
+			let mut row = map.take_row();
+			map.fill(
 				term.grid(),
 				Line(0),
 				term.colors(),
 				&cfg,
 				&mut palette::Readable::default(),
-				row,
+				&mut row,
 			);
-			map.rows.pop_back().unwrap()
+			row
 		};
 		let run = |c: char| strip(&c.to_string().repeat(cols - 1))[3];
 		let (dots, letters, hashes) = (run('.'), run('e'), run('#'));
