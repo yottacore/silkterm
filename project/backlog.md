@@ -380,9 +380,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ### Features and enhancements
 
-- 🔘 Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
+- ✅ Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
 	- At 100,000 lines one redraw holds the terminal for about 150 ms, and at the 1,000,000-line maximum it would be over a second. The time between redraws already grows with it, so the average cost stays small; the pause itself does not.
+	- Done: a redraw reads at most about 4 ms worth of lines. Past that, one line stands in for its neighbors, and later redraws draw the rest, newest first. Once output stops the map ends up the same as before. Redrawing the whole map over a deep scrollback runs beside the terminal rather than holding it up.
+	- Done: a redraw that owes another now asks for it on time. It waited for something unrelated to happen, which with nothing else going on was every two seconds.
+	- Test: `a_deep_redraw_reads_only_its_budget_here` and `stand_ins_give_way_to_the_lines_they_stand_for`, each red with its part of the fix taken out. The wake has no test, since it lives in the event loop.
+	- Verified: during a 32 MiB flood at 100,000 lines, the longest the terminal stood still went from 154-164 ms to 20-24 ms, against 10-15 ms with the map off. At 1,000,000 lines one redraw holds it under 10 ms, from about 2 s. Throughput with the map on is no lower than with it off, at 10,000 and at 100,000 lines. Settled, the map matches the old one but for 1% of its pixels, one level apart. With output stopped the map redraws every 90 ms again, where it had waited two seconds. Linux only.
+	- Note: replacing every stand-in takes a few seconds at 100,000 lines and about a minute at 1,000,000. The map stays usable meanwhile. At the default depth a flood now draws stand-ins too, and they are gone within about a second of the output stopping.
 	- Opened: 20260919-134338
+	- Closed: 20260928-214340
 
 - 🔘 Two more settings of the same class as the light mode calibration, neither fixed.
 	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.

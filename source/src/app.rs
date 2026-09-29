@@ -8711,6 +8711,16 @@ impl ApplicationHandler<UserEvent> for App {
 			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
 			(other_flow, _) => other_flow,
 		};
+		// A compose in the frame just drawn can owe another, and its wake only
+		// exists now. The pass above ran before the frame, so without this the
+		// loop waits for something unrelated to happen. One already due is left
+		// out, as it is above: a window that is not drawing would spin on it.
+		let now = Instant::now();
+		for pane in state.tabs.cur().panes.values() {
+			if let Some(wake) = pane.map_wake().filter(|&wake| wake > now) {
+				cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
+			}
+		}
 		// wake a parked cursor at its scheduled resume time, even when idle
 		let flow = match (flow, cursor_wake) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
