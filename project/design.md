@@ -77,6 +77,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 
 - [Smooth scrolling](design_docs/20260930-144720_smooth-scrolling.md)
 
+- [Smooth cursor](design_docs/20260930-145124_smooth-cursor.md)
+
 ## Architecture
 
 ### Language / Stack Decision

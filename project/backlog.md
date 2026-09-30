@@ -4663,6 +4663,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Regression risk to watch: pausing must always wait for the cursor's largest point in the cycle, and resuming must always start from that same point.
 			- This took several attempts to get right.
 			- The machine is PauseState in pane.rs.
+			- The rule is written down in the [smooth cursor design doc](design_docs/20260930-145124_smooth-cursor.md).
 	- Tier 6 - freeze what can't be seen.
 		- ✅ 6.1 Freeze rendering (never PTY reading) of minimized windows and hidden tabs. Catch up instantly on switch.
 			- Minimized: no frames at all. With busy output: ~83% of a core visible, ~0% minimized, full rate again on restore.
@@ -5308,6 +5309,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: retrospectively, this was a hard one. The cursor kept snapping to the largest point in the animation cycle on any keypress, which is the opposite of smooth and was distracting. Resuming after a pause caught the cycle at an arbitrary point, sometimes the smallest, so the size warped from largest to smallest. On sporadic input the two together produced a jarring double bounce.
 		- But now it works as designed.
 	- Pinned by: `pause_state_glides_holds_then_resumes_from_full` and `pause_state_hold_needs_both_idle_and_hold_timeouts`.
+	- Note: 20260930, superseded in part. "continuous" was removed on 20260731 and pause is the only mode (Epic 1n6fydv, 5.1). The pause rule is in the [smooth cursor design doc](design_docs/20260930-145124_smooth-cursor.md).
 	- Opened: 20260703-211333
 	- Closed: 20260707-041911
 
@@ -5547,6 +5549,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No test: the default changed later, and `changed_defaults` pins the current one.
 	- ✅ Default cursor_animation = "pulse_vertical"
 		- Pinned by: `changed_defaults`.
+	- Note: 20260930, superseded. The default is a full block now, from "New defaults: block cursor".
 	- Opened: n/a
 	- Closed: 20260701-123735
 
@@ -5595,6 +5598,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Foreground text color: 88ffee
 			- Cursor: ff88aa
 		- No test: the colors were replaced. The theme tests hold contrast floors now.
+	- Note: 20260930, `pulse_vertical` is the default animation, not `phase`. The keys are nested now (`cursor.size.width`, `cursor.size.height`, `cursor.animation`, `cursor.blink_rate_ms`). The design is in the [smooth cursor design doc](design_docs/20260930-145124_smooth-cursor.md).
 	- Opened: n/a
 	- Closed: 20260701-113927
 
