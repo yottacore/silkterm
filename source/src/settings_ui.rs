@@ -9047,6 +9047,8 @@ mod tests {
 	fn the_wallpaper_box_follows_the_rotate_switch() {
 		use super::Key;
 		let token = crate::config::WALLPAPER_DIR_TOKEN;
+		// "/pics" is rooted but not absolute on Windows, which puts it on a drive
+		let pics = if cfg!(windows) { "C:/pics" } else { "/pics" };
 		let mut d = mk_dialog(4000.0);
 		d.edited.wallpaper_raw = String::new();
 		d.edited.wallpaper = None;
@@ -9055,11 +9057,11 @@ mod tests {
 		assert_eq!(d.get_text(Key::BgImage), token, "pre-filled");
 		assert!(d.is_default(Key::BgImage));
 
-		d.set_text(Key::BgImage, "/pics");
-		assert_eq!(d.edited.wallpaper_folder_raw, "/pics");
+		d.set_text(Key::BgImage, pics);
+		assert_eq!(d.edited.wallpaper_folder_raw, pics);
 		assert_eq!(
 			d.edited.wallpaper_folder,
-			Some(std::path::PathBuf::from("/pics"))
+			Some(std::path::PathBuf::from(pics))
 		);
 		assert!(!d.edited.wallpaper_folder_auto);
 		assert!(d.edited.wallpaper_raw.is_empty(), "the image is untouched");
@@ -9085,7 +9087,7 @@ mod tests {
 			"a named image shows either way"
 		);
 
-		d.edited.wallpaper_folder_raw = "/pics".to_string();
+		d.edited.wallpaper_folder_raw = pics.to_string();
 		d.revert(Key::BgImage);
 		assert!(d.edited.wallpaper_raw.is_empty());
 		assert_eq!(d.edited.wallpaper_folder_raw, token);
@@ -10718,7 +10720,8 @@ mod tests {
 			"going back to Stretch reads as no change, so nothing is written"
 		);
 		// and the app does move the baseline on every Apply
-		let app = include_str!("app.rs");
+		// a Windows checkout has CRLF line ends
+		let app = include_str!("app.rs").replace("\r\n", "\n");
 		let at = app
 			.find("fn apply_dialog_settings")
 			.expect("apply_dialog_settings");

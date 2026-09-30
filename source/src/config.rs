@@ -11031,11 +11031,19 @@ mod tests {
 
 		write("wallpaper:\n\timage: /x.png\n");
 		assert_eq!(load().wallpaper_folder, None, "a named image outranks it");
-		write("wallpaper:\n\timage: /x.png\n\trotate:\n\t\tfolder: /elsewhere\n");
+		// "/elsewhere" is rooted but not absolute on Windows, which puts it on a drive
+		let elsewhere = if cfg!(windows) {
+			"C:/elsewhere"
+		} else {
+			"/elsewhere"
+		};
+		write(&format!(
+			"wallpaper:\n\timage: /x.png\n\trotate:\n\t\tfolder: {elsewhere}\n"
+		));
 		let s = load();
-		assert_eq!(s.wallpaper_folder, Some(PathBuf::from("/elsewhere")));
+		assert_eq!(s.wallpaper_folder, Some(PathBuf::from(elsewhere)));
 		assert!(!s.wallpaper_folder_auto);
-		assert_eq!(s.wallpaper_folder_raw, "/elsewhere");
+		assert_eq!(s.wallpaper_folder_raw, elsewhere);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
