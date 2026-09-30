@@ -2343,6 +2343,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: once the scrollback buffer is full, the output-ease infers how far the view advanced by matching row fingerprints against the last frame. That matcher demanded a pixel-clean translate of the whole retained region, so a single off cell - a redrawn prompt or spinner, a rewrapped line, or a multi-frame gap when a fast burst held the terminal lock - made it give up and report the full backlog cap instead of the true small advance. The cap snapped the view up about a screenful and eased it back; on fast, speed-varying output it misfired every few frames, so the view bounced far down and scrolled back up over and over.
 	- Fixed: the matcher now tolerates a few off cells and picks the shift that best explains the frame, so a small advance reads as small. In-place redraws and static/blank fields still report no scroll, and a genuine full turnover still ramps to catch up.
 	- Pinned by: `a_status_bar_is_held_still_at_a_full_scrollback_too` and `a_clear_eases_the_same_at_a_full_scrollback`.
+	- Note: 20260930, superseded. The matcher became best-coverage scoring in the `flatpak update` item, and later the engine's own count replaced it at a full scrollback.
 	- Opened: n/a
 	- Closed: 20260713-085150
 
@@ -2725,6 +2726,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Native keybindings for `less` don't work.
 	- Fixed: `less` enables application-cursor-keys mode (DECCKM); arrow / Home / End are now encoded as `ESC O x` instead of `ESC [ x` when that mode is active. The mouse wheel also now drives full-screen apps: when the alternate screen / alternate-scroll mode is active it sends cursor-key presses instead of moving the (nonexistent) scrollback.
 	- Pinned by: `arrows_follow_decckm`.
+	- Note: 20260930, the wheel rule here was narrowed later. Cursor keys go only on the alt screen with alternate-scroll on and no mouse mode.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -4567,88 +4569,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ New speed defaults (20260803): the five now default to 50 / 75 / 75 / 75 / 40 in watch order - a much harder ramp-up, roughly double the single-screen top speed, a quicker wind-down, and a gentler stop. Ease-in is unchanged in feel.
 		- An existing config carries these five as its own values, so it keeps the old ones until those lines are edited or the config is reset. Only a new config picks the new defaults up.
 		- Pinned by: `the_scrolling_feel_sliders_read_where_their_defaults_claim`.
-	- The design (what should - in hindsight - have been its own design doc):
-		- General description:
-			- Think of each setting as a specific segment of a graph on an X and Y axis.
-			- The X-axis is time, the Y-axis is scroll speed.
-				- The X-axis may be infinite (or at least unbounded) - say, running `cat /dev/random` then going on vacation.
-				- The Y-axis may be infinite (or at least not strictly bounded) - with the same example as above, spitting out lines as fast as the CPU can run the kernel code.
-			- The beginning and end of the curve necessarily sit at Y=0. Scrolling starts from stillness, and ends at stillness.
-			- The some segment of "curve" may be perfectly flat on the Y axis, and quite finite (i.e. capped at Y=[max single-screen speed]).
-				- Possibly the whole curve, if output fits into a single screen.
-			- We don't care about defining or modeling the overall "curve" - only the named segments within it.
-			- **Each output-scroll-related setting define a completely separate "function" (conceptually if not literally), that have extremely limited and precisely-defined influence over the next**.
-				- With only one few exceptions, the one and only influence each setting has on the next, is that the *end* X/Y point of the previous function, determines exactly where the START point of the next is located. Those exceptions are documented in the "Parameters" section below.
-			- At some point, the middle of the overall "curve" could turn from flat, to quickly ramp up to some nondeterministic, unbounded, virtual Y speed (i.e. when scrolling that was within a single screen, reaches the top of the terminal and must start speeding up to keep up with unlimited output). In that case:
-				- The ease-in function takes over again, starting at that X and Y point. Except in this case, Y won't be 0.
-		- Parameters (all just defined segments of the/a "curve") - each one hands of complete control of scroll speed variability to the next, in this exact order:
-			- "Ease-in":
-				- This first "function" starts at Y=0 the first time, and describes how fast the speed initially jumps.
-			- "Ramp-up"
-				- Starts at exactly whatever X/Y "Ease-in" ended at. Can't be <=0, must be a positive slope.
-				- Typically - but not necessarily - steeper than "ease-in". (But either way, it can't be <=0, so scroll speed will increase.)
-				- This is a rare exception where the exact X/Y end point is not within its control. As mentioned earlier, the Y is defined by the next function in the chain, [max speed], which coupd be either [max single-screen speed], or [unbounded].
-						- The X/Y starting point is defined by the previous function, and the Y ending point is defined by the *next* function. So it does not have full control over either 1) it's duration, *or* 2) the length of its own line.
-			- [Max speed]: A flat horizontal line in principle (and exactly horizontal when == [max single-screen scroll speed]).
-				- [Max single-screen scroll speed] adjustment is in effect for as long as the top of the new output hasn't hit the top of the terminal yet.
-				- [Unbounded]: as fast as the output needs to render, to keep up with output.
-			- **Note**: The first two functions may or may not be invoked exactly and only one more time - *if* [max speed] was == [max single-screen scroll speed], *and* output now needs to accelerate to any speed faster than [max single-screen scroll speed]:
-				- Second invocation of "Ease-in":
-					- The second time starts not at Y=0 like the first time, but at Y=[Max single-screen scroll speed]. And again, still describes how fast the speed initially jumps from what it was before.
-				- Second invocation of "Ramp-up":
-					- Exact same formula, definition, constraints, and unique attribute as first invocation: Starts at exactly whatever X/Y the previous "Ease-in" ended at, and ends at the unbounded Y.
-						- How does it know wher "unbounded Y" is? Maybe it guesses a sane value, maybe it can see the rate of incoming data, or maybe it just punts and acellerates exponentially until it's reached.
-			- "Ramp-down":
-				- Once output ceases yet hasn't all rendered (because SilkTerm will hold a reserve buffer of at least 1 screen when running at top speed), the speed function hands off to "Ramp-down".
-				- This starts at the precisely known X and Y handoff point on our time/speed curve.
-				- It's almost the inverse of "Ramp-up", *except*:
-					- Not only does it know it's starting X, it also knows it's exact starting Y.
-					- It can't end arbitrily on its own terms, but its end point *is* deterministic. It has to trace "Ease-out" *backwards* (can be pre-computed and stored in memory whenever "Ease-out" setting changes), to know exactly what Y value to end at and hand-off to "Ease-out".
-					- This adjustment, although not an exact mirror in calculation, "feels" just like the inverse of "Ramp-up".
-			- "Ease-out":
-				- Almost the inverse of 'Ease-in', at least visually - except that:
-					- It's individually adjustable.
-					- It must calculate backwards its starting X point, based on the inrushing known end of buffered content.
-					- It's end point is *always* Y=0, and it's X value can be calculated in real-time ahead of time. From there it can work backwards and tell (or be queried by) "Ramp-down", it's own *exact starting* X and Y ahead of time, so that "Ramp-down" will know it's own ending X/Y.
-					- This adjustment, although not an exact mirror in calculation, "feels" just like the inverse of "Ease-in".
-		- Different potential "curve" models - to choose from. (Or maybe a tunable with three options governing all parameters curve shapes):
-			- Option 1: Smooth curves for all parameters (with their individual "scale" sliders):
-				- One curve type for all adjustments: e.g. Sigmoid, half-normal, exponential, and/or logarithmic curves depending on where in the graph a function sits and how it connects to the previous and next.
-				- The shape definitions per function don't change with adjustment, they just grow or shrink (in proportional size) depending on the scale of each individual setting.
-					- In other words, the curve grows along both the x-axis and the y-axis. Getting sharper (smaller) or gentler (larger).
-				- Computationally expensive?
-			- Option 2: Each scroll speed parameter is defined by a straight line. This may not be as jarring as it sounds, as these kind of linear + angular graphs work fine in audio and video production, which are all about perception.
-				- The linear slope of each line is variable based on the height (Y) and time (X).
-				- The end of each adjustable line must touch the beginning of the next - but the transition may be an abrupt angle.
-				- Option 2a: Adjustment is time, length and height auto-adjust.
-				- Option 2b: Adjustment is height, length and time auto-adjust.
-				- Option 2c: Adjustement is length, height and time auto adjust.
-		- Common behavior:
-			- Typical scroll flow can take these routes - which don't/shouldn't need individual code paths, just for illustration:
-				- Scenario 1: <1 screen of text, from the top:
-					- "Instant" output.
-				- Scenario 2: >1 screen of text, from the top:
-					- First screen's worth of output appears "instantly". But once it needs to start scrolling up, then…
-					- Ease-in has full control of speed. Then hands off to the ramp-up function. Then to unbounded speed. At some arbitrary point depenting on output, the ramp-down function takes over, and finally ease-out.
-				- Scenario 3: <1 screen of text, from the bottom (with a screen full of text above):
-					- Ease-in begins with full control of speed from the start.
-					- Then hands off to the ramp-up function.
-					- Then to [maximum single-screen] speed.
-					- At some arbitrary point when output ends, the ramp-down function takes over
-					- Finally the ease-out function.
-				- Scenario 4: >1 screen of text, from the bottom (with a screen full of text above):
-					- Ease-in begins with full control of speed from the start.
-					- Then hands off to the ramp-up function.
-					- Then to unbounded speed.
-					- At some arbitrary point when output ends, the ramp-down function takes over.
-					- Finally the ease-out function.
-				- Other scenarious (e.g. output starts in the middle of the screen) can be inferred from those 4 scenarios.
+	- The design moved to the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md), under "The curve, as specified".
 	- Opened: n/a
 	- Closed: 20260804-084202
 
 - ✅ A single boolean option to disable/enable smooth scrolling, without changing other settings (but disabling their controls).
 	- New "Smooth scrolling" switch at the top of the Scrolling tab (config: `scroll.smooth`, default on). Off = wheel, output and full-screen-app scrolling all jump instantly, and the two speed sliders gray out. Wheel lines, scrollbar and the rest stay active since they apply either way.
 	- Pinned by: `smooth_off_lands_every_scroll_instantly` and `smooth_off_leaves_nothing_unshown`.
+	- Note: 20260930, there are five speed sliders now, not two. All five gray out.
 	- Opened: n/a
 	- Closed: 20260802-123859
 
@@ -4667,6 +4595,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: output easing now picks a speed profile per burst. While a burst's own first line is still on screen (a short listing), catch-up tops out at the new "In-view output speed" - faster than the initial speed, but building more slowly and never reaching the full chase. Once a burst has scrolled a screenful, the full ramp takes over exactly as before. A burst ends when the view settles at the bottom, so sporadic output keeps the plain initial ease.
 	- The one setting is `scroll.inview_tau_ms` (default 60 ms), with an "In-view output speed" slider next to "Initial scroll speed" in Settings on the same 1..100 scale.
 	- A burst that starts high on a fresh screen (right after a clear) counts as in-view up to a screenful longer than strictly needed - the switch assumes the burst began at the bottom row. The error direction is gentle, never bouncy.
+	- Note: 20260930, "In-view output speed" is now the output chase's Single-screen speed (`scroll.single_screen_tau_ms`), and "Initial scroll speed" is gone. See the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md).
 	- Opened: 20260629-110720
 	- Closed: 20260802-103137
 
@@ -4980,6 +4909,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note: a proper fix needs to know a partial scroll region is active so it can suppress easing only then, but alacritty_terminal doesn't expose the scroll region. Options for later: patch the crate to expose it, tee and parse DECSTBM ourselves, or accept it like other full-screen apps.
 	- Update: This actually seems to have fixed itself with some other work. Keep on backlog just in case.
 	- Pinned by: `a_status_bar_below_the_scroll_region_is_held_still` and `a_status_bar_is_held_still_at_a_full_scrollback_too`.
+	- Note: 20260930, the engine fork records scroll regions now, in the scroll ledger. That is what keeps the status bar still.
 	- Opened: 20260628-083740
 	- Closed: 20260724-080316
 
@@ -5775,6 +5705,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Set default "Initial scroll speed" to 25.
 		- Done: the default is now speed 25 on the 1..100 scale, in both the code default and the config template.
 		- Pinned by: `retired_scroll_knobs_are_removed_not_carried`, since the setting was retired.
+	- Note: 20260930, superseded. "Initial scroll speed" was retired on 20260804. The output chase's Ease-in and Ramp-up do its job now. See the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6061,6 +5992,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
 	- 🚫 Hide scrollbar (toggle with checkmark)
 		- Canceled. No scrollbar exists for smooth-scroll.
+		- Note: 20260930, a scrollbar exists now. Its switch is in Settings, not this menu.
 	- ✅ Fullscreen (toggle with checkmark)
 		- Done. `window.set_fullscreen(Borderless)` + F11. Compiz on this box doesn't honor the request (environment, like the F11 grab); it works on a compliant WM.
 		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
@@ -6393,6 +6325,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - 🚫 In `nano`, scrolling isn't smooth, it jumps line-by-line like traditional terminals. Is that just an artifact of the way `nano` specifically works?
 	- Observation: `nano` (like `vim`, `less`, etc.) runs in the alternate screen and repaints the visible region in place; it keeps fixed chrome (title bar, shortcut bar) and rewrites the text rows itself. There is no terminal-level scroll (`display_offset` stays 0, no scrollback growth) for the renderer to ease, so the content snaps. The wheel now at least drives nano's own (line-by-line) scrolling via alternate-scroll. Making full-screen apps scroll smoothly would require the terminal to detect a vertical content shift within the app's scroll region frame-to-frame and animate it - a heuristic, app-fragile feature (nano's fixed bars break a naive whole-grid diff). Left as a future enhancement rather than a fragile hack.
+	- Note: 20260930, superseded. Full-screen programs slide now, through the engine's scroll ledger, with row fingerprints as the fallback. See the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md).
 	- Opened: 20260628-083740
 	- Closed: 20260713-142351
 
