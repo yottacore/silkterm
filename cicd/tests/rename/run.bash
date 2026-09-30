@@ -17,16 +17,20 @@
 
 set -euo pipefail
 meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
 root="$(cd "${meDir}/../../.." && pwd)"
 
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
-##	Under target/, so the clone lands on the same filesystem and git can hardlink
-##	its objects - a clone into /tmp copies the lot and takes a minute.
-clone="${root}/target/rename-test-$$-${RANDOM}"
-trap 'rm -rf "${clone}"' EXIT
-git -C "${root}" clone --quiet --local . "${clone}"
+##	--shared reads the repository's objects in place rather than copying them,
+##	so the clone is quick from any filesystem. --local hardlinks them, which
+##	fails when the temp dir is on another filesystem. rename.bash only moves
+##	and rewrites tracked files and writes no objects, so the source is untouched.
+clone="$(mktemp -d)/clone"
+trap 'rm -rf "${clone%/clone}"' EXIT
+git -C "${root}" clone --quiet --shared . "${clone}"
 
 ( cd "${clone}" && utility/rename.bash Weavterm >/dev/null )
 
@@ -80,3 +84,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20260917 JC: Created.
+##		- 20260930 JC: The clone goes in the test run folder, with --shared.
