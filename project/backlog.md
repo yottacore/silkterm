@@ -169,6 +169,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260930: The base is the system temp dir, which follows `TMPDIR` on Linux and macOS. A box whose `/tmp` is unreliable points `TMPDIR` somewhere else for test runs, and nothing box-specific goes in the repo.
 	- Closed:
 
+- The Windows GUI harness keeps its files outside %TEMP% on the test box
+	- ID: 2026093015422119
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20260930-154221
+	- Opened by: CC
+	- Parent ID: 2026093013113320
+	- Target OS: Windows
+	- Requirements:
+		- What the harness writes on the remote test box goes under `%TEMP%`, in one dated folder per run, as the parent asks. That is its staging folder under `C:\ProgramData\silkrig`, and a scenario's own scratch, such as the path announce folder.
+	- Note: It stages under ProgramData because one account copies the files in and the console user runs the scenario. Each account's `%TEMP%` is private to it, so this needs its own look on a Windows box.
+	- Closed:
+
 - A launch from the Start menu as an MSIX package opens the first shell in System32
 	- ID: 2026092617015083
 	- Type: Bug
