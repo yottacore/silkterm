@@ -34,9 +34,10 @@ fEnd(){ local dir; for dir in "${locked[@]}"; do chmod 755 "${dir}"; rm -rf "${d
 trap fEnd EXIT
 
 stampRe='^test_silkterm_[0-9]{8}-[0-9]{8}$'
-##	fLocked <base>: an empty r/ under base, then base read-only. Each base is
-##	made with a short name straight under the run folder, since the sockets
-##	some tests bind under it have to fit in 107 bytes.
+##	fLocked <base>: an empty r/ under base, then base read-only. Each base has
+##	a name over 100 characters, so a Unix socket bound by its full path under
+##	the run folder goes past the 107-byte limit and fails, whatever TMPDIR is.
+longName="$(printf 'l%.0s' {1..100})"
 fLocked(){ mkdir "${1}/r"; chmod 555 "${1}"; locked+=("${1}"); }
 fOnlyRun(){ [[ "$(ls -A "${1}")" == "r" ]]; }
 fInside(){ [[ -n "${1}" && "${2}" == "${1}"/* ]]; }  ## fInside <folder> <path>
@@ -53,7 +54,7 @@ fOneStamped(){
 ##	A: the Rust suite, with the temp dir read-only. Built first with the normal
 ##	environment, so rustc and the linker never write there.
 if ! ( cd "${root}" && cargo test --no-run ) >"${work}/build.log" 2>&1; then fShowTail "${work}/build.log"; echo "the test build failed"; exit 1; fi
-baseA="$(mktemp -d "${TMPDIR}/XXX")"; fLocked "${baseA}"
+baseA="$(mktemp -d "${TMPDIR}/${longName}XXX")"; fLocked "${baseA}"
 rc=0; ( cd "${root}" && SILKTERM_TEST_DIR="${baseA}/r" TMPDIR="${baseA}" cargo test ) >"${work}/a.log" 2>&1 || rc=$?
 fCheck "the Rust suite passes with the temp dir read-only" test "${rc}" -eq 0
 ((rc == 0)) || grep -E 'FAILED|panicked' "${work}/a.log" | head -n 20 | sed 's/^/      /'
@@ -67,7 +68,7 @@ fCheck "and makes exactly one 0700 folder in the temp dir, named for the time" f
 
 ##	C: script tests, the same way. The rest need a display, the remote box, or
 ##	minutes of installer runs, and are guarded by E instead.
-baseC="$(mktemp -d "${TMPDIR}/XXX")"; fLocked "${baseC}"
+baseC="$(mktemp -d "${TMPDIR}/${longName}XXX")"; fLocked "${baseC}"
 fScript(){  ## fScript <label> <command ...>
 	local -r label="${1}"; shift
 	local -r log="${work}/c-${label//\//-}.log"

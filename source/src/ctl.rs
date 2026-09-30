@@ -221,11 +221,15 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		for how in ["exit", "sigterm", "sighup", "abort"] {
-			let path = dir.join(format!("{how}.sock"));
+			// Bound by name from inside the folder, since a full path under the
+			// run folder can pass the 107-byte limit on a Unix socket path.
+			let name = format!("{how}.sock");
+			let path = dir.join(&name);
 			let status = std::process::Command::new(&exe)
 				.args(["--exact", "ctl::tests::socket_exit_child", "--nocapture"])
+				.current_dir(&dir)
 				.env("SILK_CTL_EXIT", how)
-				.env("SILK_CTL_PATH", &path)
+				.env("SILK_CTL_PATH", &name)
 				.stdout(std::process::Stdio::null())
 				.stderr(std::process::Stdio::null())
 				.status()

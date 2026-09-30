@@ -240,19 +240,20 @@ sentinel = account / ".config/silkterm/config.shcl"
 sentinel.parent.mkdir(parents=True)
 sentinel.write_text("performance:\n\tautomatic: true\n\tprofile: low\n")
 record = scratch / "record"
-## Beside scratch rather than in it: the sockets bound here have to fit in 107
-## bytes, and the temp dir may already be a long path.
-runtime = Path(tempfile.mkdtemp(prefix="rt-"))
+runtime = scratch / "run"
+runtime.mkdir(mode=0o700)
 work = scratch / "work"
 work.mkdir()
 fakes = scratch / "fakes"
 fakes.mkdir()
 (fakes / "sway").write_text(f"""#!/usr/bin/env python3
 import os, socket, time
-run = {str(runtime)!r}
+## Bound by name from inside the folder, since a full path under the temp dir
+## can pass the 107-byte limit on a Unix socket path.
+os.chdir({str(runtime)!r})
 for name in (f"sway-ipc.{{os.getuid()}}.{{os.getpid()}}.sock", f"wayland-{{os.getpid()}}"):
 	sock = socket.socket(socket.AF_UNIX)
-	sock.bind(os.path.join(run, name))
+	sock.bind(name)
 	sock.listen(1)
 	globals()[name] = sock
 time.sleep(120)
@@ -365,7 +366,6 @@ check("note 9 says the size rig is an X server drawing in software at its grid",
 	and "Xvfb" in size_rig_text and 'grid="100x30"' in size_rig_text)
 
 shutil.rmtree(scratch, ignore_errors=True)
-shutil.rmtree(runtime, ignore_errors=True)
 if failures:
 	print(f"{failures} failed")
 	sys.exit(1)
@@ -375,5 +375,5 @@ print("all passed")
 ##		- 20260917 JC: Created.
 ##		- 20260918 JC: Both rigs start SilkTerm on settings of their own.
 ##		- 20260926 JC: Payloads, scene weights and cell rates.
-##		- 20260930 JC: The size rig keeps its folder under the temp dir it was given. A
-##		  shorter runtime folder.
+##		- 20260930 JC: The size rig keeps its folder under the temp dir it was given. The fake
+##		  compositor binds its sockets by name.
