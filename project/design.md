@@ -21,8 +21,7 @@
 	- [Smooth scrolling](#smooth-scrolling)
 	- [Minimap](#minimap)
 	- [Text readability scrim](#text-readability-scrim)
-	- [Minimum contrast (2026-08-30)](#minimum-contrast-2026-08-30)
-	- [Dark text on a light background (2026-09-21)](#dark-text-on-a-light-background-2026-09-21)
+	- [Themes and text color](#themes-and-text-color)
 	- [Wallpaper](#wallpaper)
 	- [Performance profiles (2026-09-03)](#performance-profiles-2026-09-03)
 	- [Font fallback stack](#font-fallback-stack)
@@ -30,9 +29,7 @@
 	- [What a double-click grabs (2026-08-26)](#what-a-double-click-grabs-2026-08-26)
 	- [Selecting past the edge of the screen (2026-09-20)](#selecting-past-the-edge-of-the-screen-2026-09-20)
 	- [Measurements and display scaling](#measurements-and-display-scaling)
-	- [Attention colors and dialog chrome](#attention-colors-and-dialog-chrome)
 	- [The Settings dialog](#the-settings-dialog)
-	- [Saved themes](#saved-themes)
 	- [The shell list and how it is filled](#the-shell-list-and-how-it-is-filled)
 	- [What a pane's shell inherits](#what-a-panes-shell-inherits)
 	- [A prompt is offered to bash, never installed (2026-08-30)](#a-prompt-is-offered-to-bash-never-installed-2026-08-30)
@@ -84,6 +81,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md)
 
 - [Minimap](design_docs/20260930-150325_minimap.md)
+
+- [Themes and text color](design_docs/20260930-150458_themes.md)
 
 ## Architecture
 
@@ -172,39 +171,9 @@ A soft halo in the background color behind every glyph, plus an optional crisp o
 
 Full design: [Text scrim](design_docs/20260930-145304_scrim.md).
 
-### Minimum contrast (2026-08-30)
+### Themes and text color
 
-Programs pick text colors for a terminal they cannot see. One that assumes a light background writes near-black text, and on a dark one it disappears. So a floor is enforced on how close text may come to the color behind it, and anything under it is moved away: lighter on a dark background, darker on a light one.
-
-The comparison is against the cell's own background color, not against what a pixel behind the glyph actually shows. Per-pixel would mean the wallpaper, the blur, the scrim and the cell color all at once, in the shader, and it would give one word two colors across a gradient. The cell color is also the right answer in practice: a cell carrying its own background paints it solid, and one on the default background gets a scrim halo of exactly that color, with the wallpaper already pulled most of the way toward it.
-
-Lightness is measured in Oklab rather than as a WCAG ratio. That ratio's constant term swamps the dark end, so two near-blacks score respectably while being invisible, which is the whole case this is for. The move changes Oklab L alone and leaves a and b, so hue and saturation survive and colors stay told apart: a lifted navy is still navy. It goes to whichever side the text is already on, unless that side has no room left before white or black, in which case it goes the other way. Pale text on a merely light background is the case that needs the flip.
-
-The default floor is 45%, which puts previously invisible text at roughly 2.8:1 against a black background. Lower settings measure out as doing nothing visible at all. Two things are deliberately exempt. Text set to exactly its background color is left hidden, since that is how the hidden attribute works and how a program conceals a password. And ANSI black on a dark background is not exempt, even though it is invisible by definition - a program using it as a foreground has made the mistake this setting is for.
-
-Every built-in theme's own foreground clears the floor on its own, which is checked at build time. A theme whose body text needed lifting would mean the floor was repainting the thing it is measured against.
-
-The block cursor is a second background. It is drawn as a plate at 55% under the glyph, and the glyph keeps its own color, so the text on it has to clear the same floor against the plate as blended over the theme's background. That is checked for every built-in theme and mode the same way. A cursor at the text's own brightness fails it outright, which is what the monochrome themes shipped with. In a light theme the rule also sets how dark the text has to be: the plate sits between the text and the background, and a paler foreground leaves no room for one that both shows as a block and carries the text.
-
-Over a light background the plate is drawn at 80% instead. A linear-light blend barely moves a light ground, so at 55% even a black cursor could not take the plate much more than 0.2 Oklab L off the paper. The stronger alpha goes only as far as the text on the plate still clears the floor, so a saved theme or an overridden cursor picked for the old plate keeps about the plate it had. The shipped light themes' text was darkened to make the room, and their plates now sit 0.25 to 0.28 off the background, against 0.20 to 0.42 in dark mode. Colors taken from the wallpaper follow the same rule, since the derived text is never paler than the theme's.
-
-### Dark text on a light background (2026-09-21)
-
-The color pipeline works in linear light, and glyph coverage is blended there too. A pixel the rasterizer says is half covered comes out at about three quarters brightness either way round. On a dark background that is a strong edge. On a light one it is barely a quarter of the ink the eye expects, so the thin parts of every stroke fade and a light theme reads a weight lighter than the same font in a dark one. Bold survives because most of its pixels are fully covered.
-
-What the text should look like is settled first. Almost every other program blends text in sRGB, and that is the weight a font is drawn and hinted for, so the target is the pixel an sRGB blend of the pair would have produced.
-
-The fix reaches it without blending there. glyphon's fragment shader is given the text color, its background and an amount, all in the params uniform, and it bends coverage so the finished pixel comes out on that target: blend the pair in sRGB at the reported coverage, decode, and read off how far between the two the answer sits. That fraction is the alpha. The output is still linear and the surface is still encoded exactly once, which is what the color pipeline contract is about - the rejected alternative was a second encode of the output inside the text pass, not arithmetic that reads the sRGB curve.
-
-`text.dark_on_light` says how much of the correction to apply, defaulting to 1.0, and it is applied only where the text is darker than the background behind it. Light on dark is already heavy enough and correcting that side would thin it. The comparison is Oklab lightness, the same measure minimum contrast uses.
-
-The setting runs to 2.0 rather than stopping at the blend. Everything up to 1.0 is a correction and 1.0 is the whole of it; above that is taste, and it is there because how heavy text ought to look is partly the display and the font. It fills the counters of small letters if pushed, which the config comment says.
-
-The first version of this was a coverage exponent, and the exponent was the wrong curve rather than the wrong number. Matching an sRGB blend needs roughly 0.53 at a quarter coverage, 0.35 at a half and 0.18 at three quarters, so no single value fits: one that filled the stems smudged the faint edge pixels, and one that left the edges alone left the stems pale. Measured on the shipped light theme, the exponent it shipped with was about 20 sRGB levels light on a three-quarter covered pixel. The correction here has no such number in it - at full amount every pixel carries the ink the rasterizer reported.
-
-One alpha has to serve all three channels, so the pair reaches the shader as sRGB grays of its own brightness. A glyph in some other color - an ANSI red, say - takes the same curve, which measures up to about 20 levels off on its partly covered pixels, always toward more ink. Correcting per glyph would mean encoding each glyph color in the shader for a difference smaller than the one being fixed.
-
-The pair is decided once per render pass, not per glyph, because one pass draws the whole window and a uniform is what the shader can read. The main window's pass carries the terminal's own pair, so in a light theme the menu and tab labels - which stay on dark chrome in both modes - are corrected along with everything else, in the wrong direction. That is accepted: it is a small strip, and giving the chrome its own pass would cost a second renderer and a second atlas to fix a few hundred pixels. The Settings dialog is a separate context and decides on its own panel colors.
+Four built-in themes, each a dark and a light palette, plus saved themes stored whole. A minimum contrast floor in Oklab moves text that is too close to its cell's background, the block cursor's plate has to carry the text on it, and dark text on a light background is corrected to the weight an sRGB blend would give. Full design: [Themes and text color](design_docs/20260930-150458_themes.md).
 
 ### Wallpaper
 
@@ -315,37 +284,9 @@ The built-in stack is last for a reason. The generic monospace query below it is
 
 Every measurement in the interface is written once in DIP, a ninety-sixth of an inch, and turned into real pixels only when it is drawn. A pop-out dialog converts once, at its window's edge. The main window's chrome converts at each measurement, since it shares its space with the terminal grid. `SILK_SCALE` overrides the scale factor for testing. The full rules are in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
-### Attention colors and dialog chrome
-
-- A theme carries two attention colors rather than one, because they answer different questions. **Highlights** marks several things at once: the live pane's ring, slider handles, revert arrows, the default button. It therefore stays calm enough to appear many times on a screen. **Focus** marks the single control the keyboard is on, so it is the more vivid of the pair and sits well away from its partner in hue. Every theme keeps its two well apart, because a theme that let them converge would draw "look at this" and "you are here" in the same color.
-
-- The dialog's own accents follow the theme. They used to be a fixed blue while the theme's attention color was something else entirely, so the panel could not agree with the terminal it belonged to. The pressed-button fill is that color mixed back toward the panel, which is what makes a pressed button read as pressed rather than as the focused one.
-
-The dialog's focus outline, tab strip and flyover help are in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
-
 ### The Settings dialog
 
 A pop-out window with eight tabs, declared in the compiled-in `settings_ui.shcl`, drawn by SilkTerm and driven fully from the keyboard. Groups, sub-groups, the color picker, Apply and OK, and display scaling are all in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
-
-### Saved themes
-
-- A theme the user saves is stored **whole**: both variants, the ten palette colors and the sixteen ANSI colors, rather than as a base theme plus the differences.
-
-	- Saving, renaming and deleting all become one operation on one config subtree.
-
-	- A stale color cannot survive under a name that no longer sets it.
-
-	- A saved theme is self-contained enough to hand to someone else.
-
-- What identifies a saved theme in the file is a slug that never changes, with the display name stored beside it. A rename therefore rewrites one line instead of moving a subtree, and the `theme` setting keeps holding a name a person would recognize.
-
-- **Nothing records "this theme has unsaved changes".** A per-color override that disagrees with the theme is that record, and it already lives in the config file. So the Save button is right after a restart, with no flag to keep in step. Saving folds the overrides into the theme and drops them, which is also what makes the button go quiet again.
-
-- While an override is in place the Theme dropdown says `[unsaved]` rather than naming a palette the colors have moved away from. It is display only, derived from the same test the Save button uses, so nothing extra is stored. The list underneath is unchanged and still highlights the theme the edits started from, which is both how to see what they started from and how to discard them: pick it again and its colors come back.
-
-- A saved theme may take a built-in's name and stand in for it. That gives "customize a built-in" an obvious home, and deleting the saved copy puts the built-in back rather than leaving the name pointing at nothing. Built-ins themselves cannot be renamed or deleted.
-
-- Picking a theme takes on its colors wholesale rather than keeping the previous theme's tweaks on top. A picker that visibly changed nothing on every color that had been edited would read as broken, and those tweaks belonged to the theme being left behind.
 
 ### The shell list and how it is filled
 

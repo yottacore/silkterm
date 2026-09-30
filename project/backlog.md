@@ -2466,6 +2466,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: this was the actual nano complaint (the "shadow jump" language was describing it). Reverse video (dark on light) renders visually thinner than the same-weight light-on-dark text, an inherent effect that other terminals also show. The glow only boosts light-on-dark text, so inverse text got no readability help.
 	- Fixed: a new `embolden_inverse` config bool (default true) renders reverse-video runs bold so they read as strongly as normal text. The difference is modest with the default font; if it reads as too subtle, the next step is faux-bold (stroke dilation).
 	- Pinned by: `inverse_video_is_drawn_bold_unless_turned_off`.
+	- Note: 20260930, the nano "shadow jump" was also a real motion bug, fixed separately in "The Notorious "Bouncing Shadow in Wobbly Nano" bug".
 	- Opened: 20260703-211333
 	- Closed: 20260706-112748
 
@@ -4447,6 +4448,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ A theme can be added or edited in the config file, and the dropdown picks it up. A saved theme is written whole under its own name, so it stands on its own and can be handed to someone else.
 		- Pinned by: `a_saved_theme_survives_a_relaunch` and `saving_folds_the_edits_into_the_theme`.
 	- Note: a fourth theme and a per-theme menu color are still open under Features and enhancements.
+	- Note: 20260930, out of date. There are four built-ins now, with Pastel, and the light variants' text was darkened to leave room for the cursor plate. See the [themes design doc](design_docs/20260930-150458_themes.md).
 	- Opened: 20260628-083740
 	- Closed: 20260805-012227
 
@@ -4513,6 +4515,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- On disk: a fresh file writes the new lines, a file still holding an old one is brought forward, and a value written or annotated there is left as it stands.
 	- The light variant of the theme is untouched; its foreground is a near-black and the request was about the default dark scheme.
 	- Pinned by: `every_commented_default_line_loads_as_the_default` and `migrate_refreshes_a_superseded_commented_default`.
+	- Note: 20260930, "neither can clash" was wrong. A channel swap gives the two the same brightness, so text under the cursor could not be read. The cursor is a deep violet now, from "Bug: Text sitting under the cursor is hard to read".
 	- Opened: n/a
 	- Closed: 20260804-112336
 
