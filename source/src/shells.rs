@@ -525,7 +525,7 @@ fn base_name(prog: &str) -> String {
 // rather than to a stopwatch.
 pub static PATH_SEARCHES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-fn which(prog: &str) -> Option<PathBuf> {
+pub fn which(prog: &str) -> Option<PathBuf> {
 	PATH_SEARCHES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 	which_in(prog, &std::env::var_os("PATH")?, &runnable)
 }

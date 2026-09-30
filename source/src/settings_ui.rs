@@ -23,6 +23,7 @@
 //! set of numbers to reason about. At scale 1 nothing changes.
 
 use crate::config::{self, Settings};
+use crate::fileassoc::Assoc;
 use crate::gfx::RectInstance;
 use crate::pane::Rect;
 use crate::pick::{self, Picker};
@@ -494,6 +495,20 @@ impl ThemeBtn {
 	}
 }
 
+// The Windows file-type rows, which act on the registry rather than a setting.
+fn assoc_of(key: Key) -> Option<Assoc> {
+	match key {
+		Key::OpenBatch => Some(Assoc::Batch),
+		Key::OpenPowerShell => Some(Assoc::PowerShell),
+		Key::OpenVbScript => Some(Assoc::VbScript),
+		Key::OpenFolder => Some(Assoc::Folder),
+		_ => None,
+	}
+}
+fn assoc_slot(assoc: Assoc) -> usize {
+	Assoc::ALL.iter().position(|&a| a == assoc).unwrap_or(0)
+}
+
 // A small box over the panel: name a new theme, rename one, or confirm a delete
 // - of a theme, or of a shell. It is drawn in the overlay pass and takes every
 // click and key while it is up, so the panel behind it can be left exactly as it
@@ -513,6 +528,7 @@ enum PromptFocus {
 enum PromptJob {
 	Theme(ThemeBtn),
 	DropShell(usize), // index into `edited.shells`
+	Notice,           // says something and asks nothing; OK alone
 }
 
 #[derive(Debug)]
@@ -531,6 +547,16 @@ impl Prompt {
 			self.job,
 			PromptJob::Theme(ThemeBtn::SaveAs | ThemeBtn::Rename)
 		)
+	}
+	// A notice has nothing to cancel, so it has no Cancel.
+	fn parts(&self) -> &'static [PromptFocus] {
+		if self.has_field() {
+			&[PromptFocus::Field, PromptFocus::Cancel, PromptFocus::Ok]
+		} else if self.job == PromptJob::Notice {
+			&[PromptFocus::Ok]
+		} else {
+			&[PromptFocus::Cancel, PromptFocus::Ok]
+		}
 	}
 }
 
@@ -700,6 +726,12 @@ pub struct SettingsDialog {
 	// desktop reports: that answer is the only thing that grays the system-font
 	// row, and a box whose desktop does name a font could not reach the case.
 	os_font: crate::sysfont::Monospace,
+	// Where the Windows file-type rows write, and whether each of
+	// `fileassoc::Assoc::ALL` is registered. A map stands in for the registry in
+	// tests. The answer is read when the dialog opens and after each change, not
+	// per frame, since it drives a revert arrow.
+	assoc: Box<dyn crate::fileassoc::Store + Send>,
+	assoc_on: [bool; 4],
 	focus: Option<Focus>, // keyboard-focused control/button (None = mouse-only)
 	alt: bool,            // Alt held: underline button accelerators (Cancel/Apply/OK)
 	shift: bool,          // Shift held (Shift+Tab walks focus backwards)
@@ -902,7 +934,7 @@ impl SettingsDialog {
 		};
 		let specs: &'static [Spec] = &ui().specs;
 		let settings = users_own((*config::settings()).clone());
-		Self {
+		let mut dialog = Self {
 			orig: settings.clone(),
 			edited: settings,
 			defaults: Settings::default(),
@@ -932,6 +964,8 @@ impl SettingsDialog {
 			emenu: None,
 			mouse: (0.0, 0.0),
 			os_font: crate::sysfont::monospace().clone(),
+			assoc: crate::fileassoc::system(),
+			assoc_on: [false; 4],
 			focus: None,
 			alt: false,
 			shift: false,
@@ -941,7 +975,9 @@ impl SettingsDialog {
 			btn_w,
 			row_btn_w,
 			scale,
-		}
+		};
+		dialog.assoc_refresh();
+		dialog
 	}
 
 	// The size the content wants, in DIP, from the chrome already converted at
@@ -1870,7 +1906,7 @@ impl SettingsDialog {
 			Kind::Color if part == 0 => self.pick_open(i),
 			Kind::Text | Kind::Color | Kind::Slider { .. } => self.open_edit(i, true),
 			Kind::Dropdown(_) => self.dd_open(i),
-			Kind::Buttons(_) => self.theme_action(ThemeBtn::of(part)),
+			Kind::Buttons(_) => self.row_button(i, part),
 			Kind::ShellList => self.shell_activate(i, part),
 			_ => {}
 		}
@@ -2392,7 +2428,9 @@ impl SettingsDialog {
 	// else asks the setting behind it.
 	fn part_disabled(&self, i: usize, p: u16) -> bool {
 		match self.specs[i].kind {
-			Kind::Buttons(_) => !self.theme_btn_enabled(ThemeBtn::of(p)),
+			Kind::Buttons(_) => {
+				assoc_of(self.specs[i].key).is_none() && !self.theme_btn_enabled(ThemeBtn::of(p))
+			}
 			// Nothing in the grid is ever grayed: every stop is a value the user
 			// can always edit, and reordering left the keyboard with the arrows.
 			Kind::ShellList => false,
@@ -2443,6 +2481,11 @@ impl SettingsDialog {
 			if self.specs[i].tab != self.tab || matches!(self.specs[i].kind, Kind::Header(_)) {
 				continue;
 			}
+			let arrow = self.revert_box(i);
+			if self.has_revert(i) && !self.specs[i].revert_help.is_empty() && arrow.contains(mx, my)
+			{
+				return Some((self.specs[i].revert_help, arrow));
+			}
 			let grayed = self.disabled(self.specs[i].key);
 			let tip = match self.disabled_tip(self.specs[i].key).filter(|_| grayed) {
 				Some(why) => why,
@@ -2454,7 +2497,18 @@ impl SettingsDialog {
 			// the exception - its "row" is the whole grid, and a tip that popped
 			// up over every line of it would be in the way of the work; it hangs
 			// off the column titles instead, which is where the question is.
-			let ctl = self.checkbox(i);
+			// a row of buttons answers over its buttons, not a checkbox's width
+			let ctl = match self.specs[i].kind {
+				Kind::Buttons(captions) => {
+					let first = self.row_btn_rect(i, 0);
+					let last = self.row_btn_rect(i, captions.len().saturating_sub(1) as u16);
+					Rect {
+						w: last.x + last.w - first.x,
+						..first
+					}
+				}
+				_ => self.checkbox(i),
+			};
 			let hit = if matches!(self.specs[i].kind, Kind::ShellList) {
 				Rect {
 					x: self.content_x() + lay().pad,
@@ -2572,13 +2626,15 @@ impl SettingsDialog {
 	// A row of push-buttons has no value, and the shells grid is a list rather
 	// than a setting - neither has a default to go back to. A row drawn beside
 	// another has none of its own either: the one revert arrow at the end of the
-	// line stands for both halves.
+	// line stands for both halves. The file-type rows are the exception: their
+	// arrow puts back what Register replaced.
 	fn has_revert(&self, i: usize) -> bool {
 		!self.specs[i].beside
-			&& !matches!(
-				self.specs[i].kind,
-				Kind::Header(_) | Kind::Buttons(_) | Kind::ShellList
-			)
+			&& match self.specs[i].kind {
+				Kind::Header(_) | Kind::ShellList => false,
+				Kind::Buttons(_) => assoc_of(self.specs[i].key).is_some(),
+				_ => true,
+			}
 	}
 	// Every setting one revert arrow answers for: the row's own, both halves of a
 	// Dual, and whatever is drawn beside it.
@@ -2596,6 +2652,10 @@ impl SettingsDialog {
 	// Revert a whole row to defaults - every key the row's own arrow covers, less
 	// the ones a profile is showing for.
 	fn row_revert(&mut self, i: usize) {
+		if let Some(assoc) = assoc_of(self.specs[i].key) {
+			self.assoc_set(assoc, false);
+			return;
+		}
 		for k in self.row_keys(i) {
 			if !self.profile_shows(k) && !self.is_default(k) {
 				self.revert(k);
@@ -2619,6 +2679,65 @@ impl SettingsDialog {
 			(Action::Apply, mk(x_apply), "Apply"),
 			(Action::Ok, mk(x_ok), "OK"),
 		]
+	}
+
+	// ---- file types -----------------------------------------------------------
+
+	// A push-button on a row: the theme row's, or a file type's Register.
+	fn row_button(&mut self, i: usize, part: u16) {
+		match assoc_of(self.specs[i].key) {
+			Some(assoc) => self.assoc_set(assoc, true),
+			None => self.theme_action(ThemeBtn::of(part)),
+		}
+	}
+
+	fn assoc_refresh(&mut self) {
+		for assoc in Assoc::ALL {
+			self.assoc_on[assoc_slot(assoc)] = crate::fileassoc::registered(assoc, &*self.assoc);
+		}
+	}
+
+	// Register or put back, at once: the registry is the state, so there is
+	// nothing for Apply to write and nothing for Cancel to undo.
+	fn assoc_set(&mut self, assoc: Assoc, on: bool) {
+		let done = if on {
+			std::env::current_exe()
+				.map_err(|e| e.to_string())
+				.and_then(|exe| {
+					let exe = crate::fileassoc::exe_to_register(&exe, &|p| p.exists());
+					crate::fileassoc::register(assoc, &exe, &mut *self.assoc)
+				})
+		} else {
+			crate::fileassoc::unregister(assoc, &mut *self.assoc)
+		};
+		crate::fileassoc::changed();
+		self.assoc_refresh();
+		let say = match done {
+			Err(why) => Some(("Windows did not take the change".to_string(), why)),
+			Ok(()) if on => {
+				let picked = crate::fileassoc::overridden(assoc, &*self.assoc);
+				(!picked.is_empty()).then(|| {
+					(
+						format!(
+							"Windows still opens {} files with the app picked for them",
+							picked.join(" and ")
+						),
+						"To change that, choose Open with on one, then SilkTerm, then Always"
+							.to_string(),
+					)
+				})
+			}
+			Ok(()) => None,
+		};
+		if let Some((title, detail)) = say {
+			self.commit_edit();
+			self.prompt = Some(Prompt {
+				job: PromptJob::Notice,
+				title,
+				focus: PromptFocus::Ok,
+				warn: Some(detail),
+			});
+		}
 	}
 
 	// ---- themes ---------------------------------------------------------------
@@ -2868,6 +2987,7 @@ impl SettingsDialog {
 			}
 			(PromptJob::Theme(_), None) => self.delete_theme(),
 			(PromptJob::DropShell(at), _) => self.shell_remove(at),
+			(PromptJob::Notice, _) => {}
 		}
 		self.prompt_close();
 	}
@@ -2942,11 +3062,7 @@ impl SettingsDialog {
 		let Some(prompt) = self.prompt.as_mut() else {
 			return;
 		};
-		let stops: &[PromptFocus] = if prompt.has_field() {
-			&[PromptFocus::Field, PromptFocus::Cancel, PromptFocus::Ok]
-		} else {
-			&[PromptFocus::Cancel, PromptFocus::Ok]
-		};
+		let stops = prompt.parts();
 		let cur = stops.iter().position(|&s| s == prompt.focus).unwrap_or(0);
 		let step = if forward { 1 } else { stops.len() - 1 };
 		prompt.focus = stops[(cur + step) % stops.len()];
@@ -2957,7 +3073,8 @@ impl SettingsDialog {
 		if self.emenu.is_some() {
 			return;
 		}
-		for part in [PromptFocus::Cancel, PromptFocus::Ok] {
+		let parts = self.prompt.as_ref().map_or(&[][..], Prompt::parts);
+		for &part in parts.iter().filter(|&&p| p != PromptFocus::Field) {
 			if !self.prompt_btn_rect(part).contains(x, y) {
 				continue;
 			}
@@ -3810,6 +3927,10 @@ impl SettingsDialog {
 			| Key::ColScrollbarTrough => self.get_col(key) == self.default_col(key),
 			// buttons and headings hold nothing to revert
 			Key::None | Key::ThemeActions => true,
+			// nothing to put back until Register has saved something
+			Key::OpenBatch | Key::OpenPowerShell | Key::OpenVbScript | Key::OpenFolder => {
+				assoc_of(key).is_none_or(|assoc| !self.assoc_on[assoc_slot(assoc)])
+			}
 			// the sliders
 			_ => self.get_f32(key) == self.default_f32(key),
 		}
@@ -4816,7 +4937,7 @@ impl SettingsDialog {
 					self.shell_activate(i, p);
 				}
 			} else if self.row_btn_rect(i, p).contains(x, y) {
-				self.theme_action(ThemeBtn::of(p));
+				self.row_button(i, p);
 			}
 		}
 		Action::None
@@ -5197,7 +5318,7 @@ impl SettingsDialog {
 			// and every stop in the shells grid is one of those or a field
 			match self.specs[i].kind {
 				Kind::Buttons(_) => {
-					self.theme_action(ThemeBtn::of(p));
+					self.row_button(i, p);
 					Action::None
 				}
 				Kind::ShellList => {
@@ -6145,11 +6266,15 @@ impl SettingsDialog {
 		let box_r = self.prompt_rect();
 		rects.push(q(box_r.x, box_r.y, box_r.w, box_r.h, dlg().panel_bg));
 		border(&mut rects, box_r, 1.0, dlg().panel_border);
-		texts.push(mk(
-			prompt.title.clone(),
-			box_r.x + lay().pad,
-			box_r.y + lay().pad + (self.line_h + lay().row_pad - self.line_h) / 2.0,
-		));
+		// a long message is cut at the box's edge rather than drawn past it
+		texts.push(TextItem {
+			clip: Some(box_r),
+			..mk(
+				prompt.title.clone(),
+				box_r.x + lay().pad,
+				box_r.y + lay().pad + (self.line_h + lay().row_pad - self.line_h) / 2.0,
+			)
+		});
 		if let Some(field) = self.prompt_field_rect() {
 			rects.push(q(field.x, field.y, field.w, field.h, dlg().field_bg));
 			if prompt.focus == PromptFocus::Field {
@@ -6172,10 +6297,14 @@ impl SettingsDialog {
 			let y = self.prompt_btn_rect(PromptFocus::Ok).y - (self.line_h + lay().row_pad);
 			texts.push(TextItem {
 				color: dlg().btn_hl,
+				clip: Some(box_r),
 				..mk(warn.clone(), box_r.x + lay().pad, y)
 			});
 		}
 		for (part, caption) in [(PromptFocus::Cancel, "Cancel"), (PromptFocus::Ok, "OK")] {
+			if !prompt.parts().contains(&part) {
+				continue;
+			}
 			let r = self.prompt_btn_rect(part);
 			rects.push(q(r.x, r.y, r.w, r.h, dlg().btn_bg));
 			let ring = prompt.focus == part;
@@ -7616,6 +7745,144 @@ mod tests {
 		}
 	}
 
+	// A dialog on the Shell tab, writing to `store`, with row `key` in view.
+	fn mk_assoc_dialog(
+		key: Key,
+		store: Box<dyn crate::fileassoc::Store + Send>,
+	) -> (SettingsDialog, usize) {
+		let mut d = mk_dialog(4000.0);
+		d.assoc = store;
+		d.assoc_refresh();
+		let i = d
+			.specs
+			.iter()
+			.position(|s| s.key == key)
+			.expect("a file-type row");
+		d.tab = d.specs[i].tab;
+		(d, i)
+	}
+
+	fn click_on(d: &mut SettingsDialog, r: crate::pane::Rect) {
+		let mut measure = |s: &str| s.len() as f32;
+		click(d, r.x + 2.0, r.y + 2.0, &mut measure);
+	}
+
+	// Register acts at once and lights the arrow; the arrow puts back what was
+	// there and goes dim again.
+	// Test ID: ErNGry1
+	#[test]
+	fn a_file_type_registers_at_once_and_its_arrow_puts_it_back() {
+		let store = Box::new(crate::fileassoc::Memory::default());
+		let (mut d, i) = mk_assoc_dialog(Key::OpenBatch, store);
+		assert!(
+			d.has_revert(i) && d.row_is_default(i),
+			"nothing to put back yet"
+		);
+		assert!(!d.part_disabled(i, 0));
+		let command = r"HKCU\Software\Classes\batfile\shell\open\command";
+		let r = d.row_btn_rect(i, 0);
+		click_on(&mut d, r);
+		assert!(
+			d.assoc
+				.get(command, "")
+				.is_some_and(|v| v.text.contains("--open"))
+		);
+		assert!(!d.row_is_default(i), "the arrow lights");
+		assert!(d.prompt.is_none(), "nothing to say");
+		let r = d.revert_box(i);
+		click_on(&mut d, r);
+		assert!(d.assoc.get(command, "").is_none());
+		assert!(d.row_is_default(i));
+	}
+
+	// The button and the arrow each say what they do.
+	// Test ID: ErNGry2
+	#[test]
+	fn a_file_types_button_and_arrow_have_their_own_tips() {
+		let store = Box::new(crate::fileassoc::Memory::default());
+		for key in [
+			Key::OpenBatch,
+			Key::OpenPowerShell,
+			Key::OpenVbScript,
+			Key::OpenFolder,
+		] {
+			let (d, i) = mk_assoc_dialog(key, store.clone());
+			let tip = |r: crate::pane::Rect| d.hover_tip(r.x + 2.0, r.y + 2.0).map(|(tip, _)| tip);
+			assert!(!d.specs[i].help.is_empty() && !d.specs[i].revert_help.is_empty());
+			assert_eq!(tip(d.row_btn_rect(i, 0)), Some(d.specs[i].help), "{key:?}");
+			assert_eq!(
+				tip(d.revert_box(i)),
+				Some(d.specs[i].revert_help),
+				"{key:?}"
+			);
+		}
+	}
+
+	// A type the user picked an app for under Open with keeps that app, and
+	// the dialog says so rather than looking as if it worked.
+	// Test ID: ErNGry3
+	#[test]
+	fn a_type_windows_keeps_elsewhere_is_reported() {
+		use crate::fileassoc::Store;
+		let mut store = crate::fileassoc::Memory::default();
+		let choice =
+			r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ps1\UserChoice";
+		let picked = crate::fileassoc::Value {
+			kind: crate::fileassoc::REG_SZ,
+			text: "AppXsomething".into(),
+		};
+		store.set(choice, "ProgId", &picked).unwrap();
+		let (mut d, i) = mk_assoc_dialog(Key::OpenPowerShell, Box::new(store));
+		let r = d.row_btn_rect(i, 0);
+		click_on(&mut d, r);
+		let prompt = d.prompt.as_ref().expect("a notice");
+		assert_eq!(prompt.job, super::PromptJob::Notice);
+		assert!(prompt.title.contains(".ps1"), "{}", prompt.title);
+		assert_eq!(prompt.parts(), [super::PromptFocus::Ok]);
+		assert!(!d.row_is_default(i), "it is registered all the same");
+		d.key_enter();
+		assert!(d.prompt.is_none());
+	}
+
+	// Test ID: ErNGry4
+	#[test]
+	fn a_registry_that_refuses_says_why() {
+		struct Refuses;
+		impl crate::fileassoc::Store for Refuses {
+			fn get(&self, _: &str, _: &str) -> Option<crate::fileassoc::Value> {
+				None
+			}
+			fn set(
+				&mut self,
+				key: &str,
+				_: &str,
+				_: &crate::fileassoc::Value,
+			) -> Result<(), String> {
+				Err(format!("cannot write {key}: Access is denied."))
+			}
+			fn delete(&mut self, _: &str, _: &str) -> Result<(), String> {
+				Ok(())
+			}
+			fn exists(&self, _: &str) -> bool {
+				false
+			}
+			fn prune(&mut self, _: &str) -> Result<(), String> {
+				Ok(())
+			}
+		}
+		let (mut d, i) = mk_assoc_dialog(Key::OpenFolder, Box::new(Refuses));
+		let r = d.row_btn_rect(i, 0);
+		click_on(&mut d, r);
+		let prompt = d.prompt.as_ref().expect("a notice");
+		assert!(
+			prompt
+				.warn
+				.as_deref()
+				.is_some_and(|w| w.contains("Access is denied"))
+		);
+		assert!(d.row_is_default(i), "nothing was registered");
+	}
+
 	// A dialog sitting on the Shell tab with `n` shells in it.
 	fn mk_shell_dialog(n: usize) -> (SettingsDialog, usize) {
 		let mut d = mk_dialog(4000.0);
@@ -7643,14 +7910,16 @@ mod tests {
 			.expect("a shells grid");
 		assert_eq!(tab_titles()[grid.tab], "Shell");
 		// The tab is the grid, its headings, the startup directory the grid's own
-		// default shell starts in, and the two switches for what SilkTerm sets
-		// up in a shell it starts - nothing else belongs beside them.
+		// default shell starts in, the two switches for what SilkTerm sets up in a
+		// shell it starts, and on Windows the script types it opens - nothing else
+		// belongs beside them.
 		for spec in ui.specs.iter().filter(|s| s.tab == grid.tab) {
 			assert!(
 				matches!(spec.kind, super::Kind::ShellList | super::Kind::Header(_))
 					|| spec.key == Key::StartupDirectory
 					|| spec.key == Key::ShellIntegration
-					|| spec.key == Key::BashPrompt,
+					|| spec.key == Key::BashPrompt
+					|| super::assoc_of(spec.key).is_some(),
 				"{} does not belong on the Shell tab",
 				spec.label
 			);
@@ -10600,6 +10869,8 @@ mod tests {
 			help: "",
 			indent,
 			beside: false,
+			revert_help: "",
+			windows: false,
 		};
 		let specs = [
 			row(Key::PerfCheckHardware, 0),

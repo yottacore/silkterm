@@ -115,6 +115,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 - Two rows may share a line where neither earns one of its own and the two belong together. The upper one keeps the label column, and its label has to name both halves. The lower one is declared `beside`, takes the right half of the control column, and carries its own label only if its control does not say what it is. One revert control at the end of the line answers for both.
 
 - Row kinds are: heading, toggle, slider, color, text, radio, dropdown, pair, buttons, and shells. The last two are one-offs. A `buttons` row holds no value and acts on the row above it; `shells` is the Shell tab's grid, one declared row that draws a line per stored shell. A new kind needs a reason no existing kind covers.
+	- A row or a whole group that only applies to one platform is declared with `windows: true` and left out of every other build. Rows are not grayed for that, since a control that can never work there is noise.
 
 - A slider carries a number field beside it, and the field is the way to enter an exact value.
 
@@ -123,6 +124,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 - A fraction stored as 0..1 is shown as a whole percent. The file keeps the decimal.
 
 - Every row that holds a value has a revert control at the right edge, which puts the shipped default back. A heading, a `buttons` row and the shells grid hold no single value, so none of them carries one.
+	- The Windows file-type rows are the exception. Each is a `buttons` row whose Register writes the registry at once, and its revert control puts back what Register replaced. The arrow is lit while the registry names SilkTerm, and its flyover says what it puts back.
 
 - Every row must actually write what it edits. A row whose setting is never persisted is worse than no row, because the change appears to take and then vanishes at the next launch.
 

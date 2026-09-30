@@ -159,6 +159,10 @@ icons:
 ##            heading already took that name, or because the row edits no
 ##            single setting of its own (`key: none`)
 ## help:      flyover text, for a control whose label does not explain it
+## revert_help: flyover for the revert arrow, where it does more than put the
+##            shipped default back
+## windows:   true for a row that exists only on Windows. On a heading it takes
+##            the whole group, and every row in it has to say so as well.
 
 rows:
 
@@ -903,6 +907,48 @@ rows:
 		kind: toggle
 		setting: shell.bash_prompt
 		help: "Give each new bash pane the x9ps1-git prompt, which shows the branch and status of the git project you are in. It replaces a prompt set in .bashrc, and nothing is written into any file."
+
+	## What Explorer opens a file type with, per user. Register writes it and
+	## saves what was there; the revert arrow puts that back. Both act at once,
+	## so Cancel does not undo them. Neither is a setting in the config file:
+	## the registry is the state, and the arrow is lit while it says SilkTerm.
+	OpenWith:
+		kind: heading
+		label: "Open with SilkTerm"
+		tab: Shell
+		windows: true
+
+	OpenBatch:
+		label: "Batch files"
+		kind: buttons
+		options: "Register"
+		windows: true
+		help: "Run .bat and .cmd files in SilkTerm when they are opened from Explorer. The pane stays open when the script ends, showing how it exited. Register again after moving SilkTerm."
+		revert_help: "Put back whatever opened .bat and .cmd files before SilkTerm was registered."
+
+	OpenPowerShell:
+		label: "PowerShell scripts"
+		kind: buttons
+		options: "Register"
+		windows: true
+		help: "Run .ps1 files in SilkTerm when they are opened from Explorer, with PowerShell 7 if it is installed and Windows PowerShell if not. A script runs unless the machine allows only signed ones, the same as Windows' own Run with PowerShell."
+		revert_help: "Put back whatever opened .ps1 files before SilkTerm was registered."
+
+	OpenVbScript:
+		label: "VBScript files"
+		kind: buttons
+		options: "Register"
+		windows: true
+		help: "Run .vbs files in SilkTerm when they are opened from Explorer, through the console script host, so their messages print in the pane instead of popping up."
+		revert_help: "Put back whatever opened .vbs files before SilkTerm was registered."
+
+	OpenFolder:
+		label: "Folder menu"
+		kind: buttons
+		options: "Register"
+		windows: true
+		help: "Add Open in SilkTerm to the right-click menu of folders and drives, and of the empty space in a folder. On Windows 11 it is under Show more options."
+		revert_help: "Take Open in SilkTerm off the folder menu."
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Graying

@@ -71,6 +71,7 @@ SilkTerm™ is a hardware-accelerated terminal for Linux and Windows that scroll
 	- [Set up development environment](#set-up-development-environment)
 	- [Configuration](#configuration)
 	- [Shell integration](#shell-integration)
+	- [Opening scripts and folders on Windows](#opening-scripts-and-folders-on-windows)
 - [Contributing](#contributing)
 - [Support SilkTerm](#support-silkterm)
 	- [Direct support](#direct-support)
@@ -402,6 +403,28 @@ SilkTerm handles that one for you. A few seconds after launch it adds a small di
 Same story for a shell running behind `ssh` or in a container - that one is yours to set up, since the shell you are typing at is not the process SilkTerm started.
 
 [shell-integration.md](shell-integration.md) covers all of it, including the snippets for bash, zsh and fish.
+
+### Opening scripts and folders on Windows
+
+The Shell tab of Settings has an "Open with SilkTerm" group, one row per kind of file:
+
+- Batch files: `.bat` and `.cmd`.
+
+- PowerShell scripts: `.ps1`, with PowerShell 7 if it is installed and Windows PowerShell if not.
+
+- VBScript files: `.vbs`, through the console script host, so their messages print in the pane.
+
+- Folder menu: an "Open in SilkTerm" entry for folders and drives. On Windows 11 it is under "Show more options".
+
+Register makes a double-click run that kind of file in SilkTerm. The pane stays open after the script ends, so its output and exit status can be read. It is for your account only and needs no administrator rights. The arrow at the end of the row puts back whatever was there before. Register again after moving SilkTerm.
+
+What it does not cover:
+
+- A console program started any other way, such as `cmd` from the Run box or a double-clicked `.exe`, still opens where it did. SilkTerm is not a replacement for Windows' default terminal setting.
+
+- A file type you picked an app for under "Open with" keeps that app, because Windows keeps that choice out of reach of other programs. Settings says so, and choosing SilkTerm there yourself is what changes it.
+
+- A script run as administrator still opens in the Windows console.
 
 ## Contributing
 
