@@ -1673,7 +1673,7 @@ mod tests {
 
 		use super::peb_cwd;
 		let real = |dir: &std::path::Path| std::fs::canonicalize(dir).expect("canonicalize");
-		let started_in = crate::testdir::run_dir();
+		let started_in = crate::testdir::run_dir().to_path_buf();
 		let moved_to = std::path::PathBuf::from(r"C:\Windows");
 
 		// Each shell is held open on its own stdin pipe, and runs NOTHING. That is
