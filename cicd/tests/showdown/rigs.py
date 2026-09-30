@@ -7,7 +7,9 @@
 ##		the GNOME Terminal, WezTerm, Tabby and Hyper entries rely on: finding the
 ##		terminal among the processes of the rig's throwaway account, billing a
 ##		bundle once for its own libraries, and taking a version from the command
-##		that starts a terminal when the terminal itself will not give one.
+##		that starts a terminal when the terminal itself will not give one. XTerm's
+##		speed row came from X11, so the speed rig has to run it on an X server of
+##		its own, and README note 9 has to say so.
 ##	- Test ID: ErE7yrA
 ##	- History: At bottom of file.
 
@@ -48,10 +50,6 @@ scratch = Path(tempfile.mkdtemp(prefix="silk-showrig-"))
 
 ## Rows measured on Windows are taken from inside the terminal there, not by a rig.
 WINDOWS_ROWS = {"conhost.exe", "Windows Terminal"}
-## XTerm's speed row came from X11. The speed rig could only reach it through Xwayland,
-## which reads well below that row, so it has no entry until there is an X11 speed rig.
-NO_SPEED_RIG = {"XTerm"}
-
 us = load("update_showdown", UTILITY / "update-showdown.py")
 sr = load("showdown_readme", INCLUDE / "showdown-readme.py")
 mdtable = load("mdtable", INCLUDE / "mdtable.py")
@@ -73,7 +71,7 @@ rigs_for = {sr.norm(row): rigs for _, row, rigs in us.TERMS}
 for cells in table[2:]:
 	name = sr.norm(cells[name_col])
 	shown = re.sub(r"<sup>.*?</sup>", "", cells[name_col]).strip()
-	if measured(cells[speed_col]) and shown not in NO_SPEED_RIG:
+	if measured(cells[speed_col]):
 		check(f"{shown}'s speed figure can be taken again",
 			rigs_for.get(name) in ("both", "speed"), str(rigs_for.get(name)))
 	if any(measured(cells[i]) for i in size_cols) and shown not in WINDOWS_ROWS:
@@ -90,6 +88,14 @@ for key, row, rigs in us.TERMS:
 		check(f"the speed rig has a recipe for {key}", key in speed_arms)
 	if rigs in ("both", "size"):
 		check(f"the size rig has a recipe for {key}", key in size_keys)
+
+## Through the compositor's Xwayland, xterm reads about a third below its X11 row.
+x11_terms = re.search(r'^declare -r x11Terms="([^"]*)"$', speed_rig, re.M)
+check("the speed rig runs xterm on an X server of its own",
+	x11_terms is not None and "xterm" in x11_terms.group(1).split() and "Xvfb" in speed_rig)
+note9 = next((ln for ln in readme.splitlines() if ln.startswith("<sub><sup>9</sup>")), "")
+check("README note 9 says XTerm's row comes from a private X server",
+	"XTerm draws only on X11, so its row comes from a private X server" in note9)
 
 ## Finding the terminal on the throwaway account. The stand-in terminal is a copy of
 ## bash, so it can start another copy of itself.
@@ -222,3 +228,4 @@ print("all passed")
 
 ##	History:
 ##		- 20260928 JC: Created.
+##		- 20260929 JC: XTerm's speed row, on an X server of its own.

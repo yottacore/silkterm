@@ -19,6 +19,8 @@ utility/update-showdown.py --all --no-readme             # measure everything, w
 | speed | `termbench-run.bash` | 160x42 | headless sway on the real GPU | the width classes and the score
 | size  | `sizebench-run.bash` | 100x30 | private Xvfb                  | File+deps and Mem
 
+The speed rig makes one exception. xterm draws only on X11, so it runs on a private Xvfb (`--display`, default `:98`) rather than through the compositor's Xwayland. The notes on xterm below say why.
+
 Naming no terminal takes the third path, which needs no rig at all: measure whatever terminal you are sitting in, from inside it. That is the only way to measure a terminal that exists solely on Windows or macOS, and the only mode that works off Linux. Both halves are available that way, but only one at a time, since the two want different window sizes.
 
 **The two grids differ deliberately and must not be unified.** Speed wants a realistic working grid. Memory scales with the surface - the same SilkTerm binary reads 38 MiB heavier at its default geometry than at 100x30 - so the size rows are taken small and identical.
@@ -125,7 +127,11 @@ Most terminals need nothing but their key. The awkward ones, and why:
 	- The size rig gives it a session bus of its own, as the speed rig does. On the account's bus the window would go to a server already running for the desktop. Its server is started by that bus and is nobody's child, so the rig finds it by the throwaway account's home in its environment and measures it from there down. The `gnome-terminal` command that only asks for the window is left out, as is the bus.
 
 - **xterm** is X11-only. Xwayland fails on this rig (`/tmp/.X11-unix` ownership), so its speed figure was taken on X11, and its cross-rig agreement (28.8 vs 29.2, 1.3%) is what justifies publishing it beside Wayland rows. The size rig runs on Xvfb anyway, so it needs nothing special there.
-	- Xwayland worked on this rig on 20260928, but xterm read 18.4 MB/s of ASCII through it against the 28.3 published, in one single-rep run on a busy machine. The speed rig has no xterm entry for that reason, and the row keeps its X11 figure.
+	- Xwayland worked on this rig on 20260928, but xterm read 18.4 MB/s of ASCII through it against the 28.3 published, in one single-rep run on a busy machine.
+	- Measured again on 20260929, six pairs of runs at 6 reps, the two ways taken in turn: 16.1 to 18.6 MB/s of ASCII through Xwayland against 25.1 to 28.7 on a private Xvfb, and a score of 14.5 to 16.4 against 21.5 to 23.9. The low ends of both came with the load average at 10 to 16 on 32 cores. The last four pairs, at 3 to 9, read 18.2 to 18.6 and 27.2 to 28.7. So the gap is real, and it is about a third.
+	- It is not the X server doing more. Xwayland used 1.1 to 1.6 s of CPU a run and Xvfb 0.2 to 0.4 s. xterm's own CPU went from 62 s to 90 s for the same payloads, nearly all of it user time. The grid and the window size matched both ways, and giving xterm focus on Xvfb changed nothing.
+	- The control: xfce4-terminal's ASCII does not move through Xwayland (92 to 94 MB/s, against 92 to 100 on Xvfb and 84 to 94 on the compositor itself), so the rig's Xwayland is not simply slow. Its 4-byte scene does drop there, from 67 to 15, and that time is the X server's.
+	- So the speed rig runs xterm on a private Xvfb, since its row came from X11 too. At a quiet moment it read 28.32, 49.22 and a score of 23.9, against 28.3, 48.5 and 23.9 published. The row keeps its figure.
 
 - **WezTerm** 20240203 silently falls back to X11 under sway 1.10 despite `enable_wayland`. It is parser-bound and agreed within 1.7% across rigs, so its figure holds anywhere.
 	- Sway tells only its own children where its Xwayland is, so the speed rig asks sway for that display and hands it over.

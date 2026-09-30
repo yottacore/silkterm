@@ -10,7 +10,8 @@
 ##	- Purpose:
 ##		Repeatable rig for the README terminal shootout. Brings up a private headless
 ##		Wayland compositor on the real GPU, launches one terminal as its only client,
-##		fits every terminal to the same grid, and runs termbench.py inside it.
+##		fits every terminal to the same grid, and runs termbench.py inside it. A terminal
+##		that draws only on X11 gets a private X server instead (x11Terms).
 ##
 ##		The rig matters more than it looks. Measured 20260730: software GL halves
 ##		SilkTerm (45 vs 88 MB/s on ascii) and VirtualGL still costs ~14%, while
@@ -24,6 +25,7 @@
 ##		   --grid CxR      grid every terminal is fitted to (default 160x42)
 ##		   --label TEXT    row name for the README table (default: autodetected)
 ##		   --scene NAME    one width class only (ascii|latin|cjk|emoji|mixed)
+##		   --display :N    private X server for an X11-only terminal (default :98)
 ##		   --no-save       measure without recording or touching README.md
 ##		   --keep          leave the compositor up afterwards
 ##		   --list          list the known terminal keys and exit
@@ -47,7 +49,7 @@ declare -r _work="$(mktemp -d -t termbench-XXXXXX)"
 
 source "${_here}/bench-common.bash"                                ## fEcho, fKillPids
 
-declare -i _swayPid=0 _termPid=0
+declare -i _swayPid=0 _termPid=0 _xvfbPid=0
 declare -i _keepRig=0
 
 cleanup(){
@@ -59,6 +61,7 @@ cleanup(){
 		fKillPids "${tree[@]}"
 	fi
 	if ((_swayPid)) && ((!_keepRig)); then kill ${_swayPid} 2>/dev/null || true; fi
+	if ((_xvfbPid)) && ((!_keepRig)); then kill ${_xvfbPid} 2>/dev/null || true; fi
 	if ((!_keepRig)); then rm -rf "${_work}" 2>/dev/null || true; fi
 	exit ${rc}
 }
@@ -80,7 +83,7 @@ list_terms(){
 	fEcho_Clean "  kitty       needs terms/bin/kitty       (see showdown-readme.md)"
 	fEcho_Clean "  wezterm     needs the AppImage extracted (see showdown-readme.md)"
 	fEcho_Clean "  xfce4 gnome terminator                  (distro packages)"
-	fEcho_Clean "  xterm       X11 only, and its row came from X11 (see showdown-readme.md)"
+	fEcho_Clean "  xterm       X11 only, so it runs on a private X server (see showdown-readme.md)"
 	fEcho_Clean "  tabby       needs the AppImage extracted (see showdown-readme.md)"
 	fEcho_Clean "  (no hyper: it never answers the barrier, so it cannot be timed)"
 }
@@ -187,9 +190,40 @@ start_rig(){
 ##	makes one fitter work for every terminal.
 resize_output(){ swaymsg output HEADLESS-1 mode "${1}x${2}" >/dev/null 2>&1 || true; }
 
+##	Terminals that draw only on X11 and are measured on an X server of their own rather
+##	than through the compositor's Xwayland. xterm reads about a third slower through
+##	Xwayland (18 MB/s of ASCII against 28 on an X server, 20260929), and its row came
+##	from X11. It draws on the CPU, so a software X server costs it nothing.
+declare -r x11Terms=" xterm "
+
+##	A private X server on a number nobody else is using. One already there is refused
+##	rather than reused, since it could be somebody else's.
+start_x11(){
+	command -v Xvfb >/dev/null 2>&1 || fDie "Xvfb is not installed (package xvfb)"
+	if DISPLAY="${xDisplayNum}" xdpyinfo >/dev/null 2>&1 || [[ -e "/tmp/.X${xDisplayNum#:}-lock" ]]; then
+		fDie "${xDisplayNum} is already in use; pick another with --display"
+	fi
+	Xvfb "${xDisplayNum}" -screen 0 2560x1600x24 -nolisten tcp > "${_work}/xvfb.log" 2>&1 &
+	_xvfbPid=$!
+	local -i waited=0
+	while ((waited < 50)); do
+		if DISPLAY="${xDisplayNum}" xdpyinfo >/dev/null 2>&1; then break; fi
+		kill -0 ${_xvfbPid} 2>/dev/null || fDie "Xvfb exited during startup - see ${_work}/xvfb.log"
+		sleep 0.2; waited+=1
+	done
+	## The lock names the server that took the number, which has to be ours.
+	[[ "$(tr -d ' \n' < "/tmp/.X${xDisplayNum#:}-lock" 2>/dev/null || true)" == "${_xvfbPid}" ]] \
+		|| fDie "${xDisplayNum} did not come up as ours"
+	export DISPLAY="${xDisplayNum}" GDK_BACKEND=x11
+	unset WAYLAND_DISPLAY
+	fEcho "rig: Xvfb pid ${_xvfbPid}, ${DISPLAY}"
+}
+
+##	The terminal is started at the grid, and fFitGrid only confirms it.
+resize_none(){ :; }
+
 ##	The X display of the compositor's own Xwayland, for WezTerm, which falls back to X11.
-##	Only the compositor's children are told it, so it is asked for. Not for xterm: its
-##	speed row came from X11, and one run through Xwayland read 18 MB/s against its 28.
+##	Only the compositor's children are told it, so it is asked for.
 xwayland_display(){
 	local -r file="${_work}/xdisplay"
 	local -i waited=0
@@ -206,7 +240,7 @@ xwayland_display(){
 ##	Arguments
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-declare termKey="" label="" scene="" grid="160x42"
+declare termKey="" label="" scene="" grid="160x42" xDisplayNum=":98"
 declare -i reps=6 noSave=0
 
 while (($#)); do
@@ -216,6 +250,7 @@ while (($#)); do
 		--grid)    grid="${2:-}";    shift 2 ;;
 		--label)   label="${2:-}";   shift 2 ;;
 		--scene)   scene="${2:-}";   shift 2 ;;
+		--display) xDisplayNum="${2:-}"; shift 2 ;;
 		--no-save) noSave=1;         shift ;;
 		--keep)    _keepRig=1;       shift ;;
 		--list)    list_terms; exit 0 ;;
@@ -247,7 +282,13 @@ case "${termKey}" in
 	silkterm|silkplain) [[ -x "${silkBin}" ]] || fDie "no build at ${silkBin}" ;;
 esac
 
-start_rig
+declare resizeFn=resize_output
+if [[ "${x11Terms}" == *" ${termKey} "* ]]; then
+	start_x11
+	resizeFn=resize_none
+else
+	start_rig
+fi
 
 ## The scene script waits on the go file, reporting its grid meanwhile, so the fitter
 ## can settle the size before a single byte is measured.
@@ -297,13 +338,13 @@ case "${termKey}" in
 	terminator)
 		launch terminator -e "${sceneCmd}" ;;
 	xterm)
-		launch xterm -e ${sceneCmd} ;;
+		launch xterm -geometry ${wantC}x${wantR} -e ${sceneCmd} ;;
 	*)
 		fDie "unknown terminal key: ${termKey} (--list)" ;;
 esac
 fEcho "launched pid ${_termPid}"
 
-fFitGrid ${wantC} ${wantR} "${sizeFile}" resize_output 2438 1680
+fFitGrid ${wantC} ${wantR} "${sizeFile}" ${resizeFn} 2438 1680
 touch "${goFile}"
 
 fEcho "measuring (${reps} runs per scene)"
@@ -333,7 +374,10 @@ if /usr/bin/grep -q "sync NONE" "${outFile}" 2>/dev/null; then
 	fEcho "WARNING: this terminal never answered the barrier - the figures are not comparable"
 fi
 
-if ((_keepRig)); then fEcho "rig left up: SWAYSOCK=${SWAYSOCK} WAYLAND_DISPLAY=${WAYLAND_DISPLAY} (work: ${_work})"; fi
+if ((_keepRig)); then
+	if ((_xvfbPid)); then fEcho "rig left up: DISPLAY=${DISPLAY} (work: ${_work})"
+	else fEcho "rig left up: SWAYSOCK=${SWAYSOCK} WAYLAND_DISPLAY=${WAYLAND_DISPLAY} (work: ${_work})"; fi
+fi
 exit 0
 
 
@@ -341,3 +385,4 @@ exit 0
 ##		- 20260730 JC: Created, from the scratch rig used for the first shootout table.
 ##		- 20260918 JC: Every terminal runs on a throwaway account and session bus; the +candy row pins its profile.
 ##		- 20260928 JC: Tabby entry. WezTerm gets the compositor's Xwayland display.
+##		- 20260929 JC: xterm runs on a private X server, as its row was taken.

@@ -46,6 +46,7 @@
 ##		20260730 Ported from shell so it runs on Windows too, and absorbed the
 ##		         measure-this-terminal path, which had no wrapper before.
 ##		20260928 Both rigs for GNOME Terminal, WezTerm and Tabby; size for Hyper.
+##		20260929 Both rigs for XTerm; its speed runs on a private X server.
 
 import argparse
 import os
@@ -67,7 +68,7 @@ TERMS = [
 	("kitty",      "kitty",           "both"),
 	("xfce4",      "XFCE4 Terminal",  "both"),
 	("terminator", "Terminator",      "both"),
-	("xterm",      "XTerm",           "size"),
+	("xterm",      "XTerm",           "both"),
 	("gnome",      "GNOME Terminal",  "both"),
 	("wezterm",    "WezTerm",         "both"),
 	("tabby",      "Tabby",           "both"),
