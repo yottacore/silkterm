@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
 	- ID: 2026092821452948
 	- Type: Bug
-	- Status: Waiting on signoff
+	- Status: Done
 	- Severity: Low
 	- Opened: 20260928-214529
 	- Opened by: CC
@@ -61,7 +61,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The showdown rigs cannot take XTerm's speed figure again
 	- ID: 2026092820352466
 	- Type: Task
-	- Status: Waiting on signoff
+	- Status: Done
 	- Priority: Low
 	- Opened: 20260928-203524
 	- Opened by: CC
@@ -84,7 +84,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Windows: open scripts and folders in SilkTerm
 	- ID: 2026093009280571
 	- Type: Feature
-	- Status: Waiting on signoff
+	- Status: Done
 	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
 	- Priority|Severity: Avg
 	- Opened: 20260930-092805
@@ -112,7 +112,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff:
-
 
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
