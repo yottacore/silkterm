@@ -822,6 +822,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Still suspect: the gate that drops keys while the window reads as unfocused (from the bare-arrow fix, never run on this desktop), and CopyQ taking the clipboard back right after a copy.
 	- ✋ 20260905-184500: With the change in, copy-on-select and the hotkey have both worked so far. Leaving open until it has held for a while, since it was intermittent.
 	- Pinned by: `a_copy_the_user_drives_does_not_wait_on_window_focus`.
+	- Note: 20260930, the "still suspect" gate was the cause, found in "The copy-to-clipboard bug is back". Ctrl+Shift+C no longer waits on the focus flag.
 	- Opened: 20260905-175000
 	- UAT accepted.
 	- Closed: 20260921
@@ -1907,6 +1908,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A space is crossed only when a path separator turns up within the next forty characters, which is what separates "Program Files\app.exe" from a path followed by a sentence.
 	- Note: the missing drive letter came in on the same report and is still open under Bugs.
 	- Pinned by: `a_folder_name_may_have_spaces_in_it`, `a_space_with_no_separator_after_it_ends_the_path`, `a_line_number_after_the_extension_is_not_part_of_the_name` and `a_url_wins_over_everything_else`.
+	- Note: 20260930, the drive letter item is closed now, as not reproduced on Linux.
 	- Opened: 20260826-123553
 	- Closed: 20260826-183724
 
@@ -5187,6 +5189,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- ✅ Not persisted across sessions.
 			- Done: no config key exists; the mode always starts off.
 			- No test: partly replaced by the `copy_on_select` setting.
+	- Note: 20260930, "Only one or the other" was reversed too. The two are independent now, from "Option to copy all output".
 	- Opened: n/a
 	- Closed: 20260713-013515
 
@@ -5835,6 +5838,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ The list of selection inclusion pairs should be read from the config file.
 		- Done: a `selection_pairs` setting, defaulting to the usual quote and bracket pairs. It is backfilled into an existing config, commented out, and is not in the Settings dialog.
 		- Pinned by: `selection_pairs_parse_in_order_and_come_from_the_file`.
+	- Note: 20260930, a double-click asks for a shape first now, such as a path or URL, then the pair, then the word. The keys are `selection.word_separators` and `selection.pairs`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 

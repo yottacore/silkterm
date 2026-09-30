@@ -26,8 +26,7 @@
 	- [Performance profiles (2026-09-03)](#performance-profiles-2026-09-03)
 	- [Fonts, Unicode and emoji](#fonts-unicode-and-emoji)
 	- [Hyperlinks](#hyperlinks)
-	- [What a double-click grabs (2026-08-26)](#what-a-double-click-grabs-2026-08-26)
-	- [Selecting past the edge of the screen (2026-09-20)](#selecting-past-the-edge-of-the-screen-2026-09-20)
+	- [Double-click and selection](#double-click-and-selection)
 	- [Measurements and display scaling](#measurements-and-display-scaling)
 	- [The Settings dialog](#the-settings-dialog)
 	- [The shell list and how it is filled](#the-shell-list-and-how-it-is-filled)
@@ -89,6 +88,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Unicode, fonts and emoji](design_docs/20260930-150813_unicode-and-emoji.md)
 
 - [Split panes](design_docs/20260930-150948_split-panes.md)
+
+- [Double-click and selection](design_docs/20260930-151047_double-click-selection.md)
 
 ## Architecture
 
@@ -244,27 +245,9 @@ One monospace family is pinned for every weight, found from one search order on 
 
 - Links open through the desktop's own handler by default, with a configurable program to override it. Deciding what a URL means is the desktop's job, not a terminal's.
 
-### What a double-click grabs (2026-08-26)
+### Double-click and selection
 
-- A double-click asks three questions in order, and the first one that answers wins: is this a shape we can name, is it inside a matched pair, is it a word. Word selection was the only rule for a long time and it cannot handle a path with a space in it, because a space is what ends a word.
-
-- The shapes are URLs and file URIs, drive paths (`C:\...`), UNC paths, absolute posix paths, and `~/` paths. Each has to start at an anchor a reader would recognize, with only whitespace, a quote or an opening bracket in front of it. Among the options considered, that was preferred over "anything that is not obviously a word", which reads `and/or` as a path.
-
-- Git remotes and scp targets are shapes as well, in the `[user@]host:path` form. This one was added because a git prompt writes the remote inside brackets beside its status marks, and the matched-pair rule then handed back the marks along with it. Narrowing the pair rule was considered and rejected, since selecting a quoted phrase whole is wanted and was asked for separately. A host needs a dot and an alphabetic ending, and the path needs a separator and a letter in its first segment, which is what keeps `build:release/x` and `notes.txt:12/34` out.
-
-- A remote is the one shape a file extension does not end. A prompt writes the branch after the repository as `repo.git:dev`, and that whole field is what a reader sees as one thing, so stopping at `.git` would leave the branch as a dead patch that selects the brackets instead.
-
-- Where a path ends is two heuristics, both picked for what they refuse. A space is crossed only when a path separator turns up soon after, so a folder name with spaces stays whole while a path followed by a sentence does not swallow it. And the run stops at a file extension, which is what leaves a `:120:5` line number behind.
-
-- A trailing full stop, comma or bracket comes off the same way it does for a link. The two share the trimming idea but not the code, since a path may hold characters a URL may not.
-
-### Selecting past the edge of the screen (2026-09-20)
-
-- A drag held past the top or bottom of its pane scrolls the view that way and keeps selecting, so a selection can run further than what fits on screen. A pointer outside the pane is pulled to the nearest edge cell rather than ignored, which also means a drag that strays into a neighboring pane still belongs to the one it started in.
-
-- The speed is the larger of two answers: how far past the edge the pointer is, and how long it has been held there. Distance alone is the obvious rule and it is the one that feels right, but a maximized window has its top edge against the top of the screen, so there is nowhere left to push the pointer - that window could only ever creep. The hold reaches the same top speed in two seconds.
-
-- It creeps rather than standing still right at the edge, since picking up one more line is the common case and a drag that starts fast overshoots it. The top speed is capped: a pointer flung off the screen should not cross the whole buffer before the button comes up.
+A double-click takes a shape it can name first, such as a path, URL or git remote, then the inside of a matched pair, then a word. A drag held past the pane's edge scrolls and keeps selecting. Copy has four routes, each with its own rule. Full design: [Double-click and selection](design_docs/20260930-151047_double-click-selection.md).
 
 ### Measurements and display scaling
 
