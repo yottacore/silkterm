@@ -69,6 +69,7 @@ keys![
 	ColHighlight, ColFocus, ColGutter,
 	ColMenuBg, ColMenuFg, ColDialogBg, ColDialogFg,
 	Theme, ThemeMode, ThemeActions,
+	OpenBatch, OpenPowerShell, OpenVbScript, OpenFolder,
 ];
 
 pub enum Kind {
@@ -117,6 +118,12 @@ pub struct Spec {
 	// its label has to name both halves. This row's own label, if it has one,
 	// follows its control the way a checkbox's does.
 	pub beside: bool,
+	// Flyover for the revert arrow, where it does something other than put the
+	// shipped default back.
+	pub revert_help: &'static str,
+	// Only in the Windows build. Test builds keep it everywhere, so its layout
+	// and behavior are tested on every platform.
+	pub windows: bool,
 }
 
 // One setting a control has to wait on, resolved from the file's gate lines.
@@ -237,11 +244,18 @@ const SOURCE: &str = include_str!("settings_ui.shcl");
 pub fn ui() -> &'static Ui {
 	static CELL: OnceLock<Ui> = OnceLock::new();
 	CELL.get_or_init(|| match parse(SOURCE) {
-		Ok(ui) => ui,
+		Ok(mut ui) => {
+			keep_platform(&mut ui.specs, cfg!(any(windows, test)));
+			ui
+		}
 		// Unreachable in a tested build: the document is compiled in, so it
 		// cannot vary at runtime and the test below reads the same bytes.
 		Err(problems) => panic!("settings_ui.shcl: {}", problems.join("; ")),
 	})
+}
+
+fn keep_platform(specs: &mut Vec<Spec>, windows: bool) {
+	specs.retain(|spec| windows || !spec.windows);
 }
 
 // A parsed string lives as long as the process; there is exactly one document
@@ -366,6 +380,9 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 	let mut specs: Vec<Spec> = Vec::new();
 	let mut settings: Vec<(Key, &'static [&'static str])> = Vec::new();
 	let mut tab = 0usize;
+	// a Windows-only heading takes its rows with it, or they would show under
+	// the group above on every other platform
+	let mut group_windows = false;
 	for name in doc.children("rows") {
 		let at = |field: &str| format!("rows.{name}.{field}");
 		let label = doc.get_string(&at("label")).unwrap_or_default();
@@ -498,6 +515,14 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 				));
 			}
 		}
+		let windows = doc.get_bool(&at("windows")).unwrap_or(false);
+		if matches!(kind, Kind::Header(_)) {
+			group_windows = windows;
+		} else if group_windows && !windows {
+			problems.push(format!(
+				"rows.{name}: a Windows-only group's rows are Windows-only"
+			));
+		}
 		specs.push(Spec {
 			label: keep(label),
 			key,
@@ -506,6 +531,8 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			help: doc.get_string(&at("help")).map_or("", keep),
 			indent: doc.get_int(&at("indent")).unwrap_or(0).clamp(0, 4) as u8,
 			beside,
+			revert_help: doc.get_string(&at("revert_help")).map_or("", keep),
+			windows,
 		});
 	}
 
@@ -558,7 +585,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-	use super::{Key, Kind, SOURCE, parse, ui};
+	use super::{Key, Kind, SOURCE, keep_platform, parse, ui};
 
 	// The one check no parser strictness can make: a setting the code knows but
 	// the document never mentions is a perfectly valid document, and a setting
@@ -660,6 +687,49 @@ mod tests {
 		};
 		assert!(
 			problems.iter().any(|p| p.contains("notasetting")),
+			"{problems:?}"
+		);
+	}
+
+	// Everywhere but Windows the file-type group is gone, heading and all, and
+	// nothing else goes with it.
+	// Test ID: ErNFx0g
+	#[test]
+	fn the_windows_rows_leave_every_other_build() {
+		let Ok(mut ui) = parse(SOURCE) else {
+			panic!("settings_ui.shcl does not parse")
+		};
+		let all = ui.specs.len();
+		let windows = ui.specs.iter().filter(|s| s.windows).count();
+		assert!(windows >= 5, "the heading and four rows");
+		assert!(
+			ui.specs
+				.iter()
+				.any(|s| s.windows && matches!(s.kind, Kind::Header(_)))
+		);
+		keep_platform(&mut ui.specs, false);
+		assert_eq!(ui.specs.len(), all - windows);
+		for key in [
+			Key::OpenBatch,
+			Key::OpenPowerShell,
+			Key::OpenVbScript,
+			Key::OpenFolder,
+		] {
+			assert!(ui.specs.iter().all(|s| s.key != key), "{}", key.name());
+		}
+	}
+
+	// Test ID: ErNFx0h
+	#[test]
+	fn a_windows_group_cannot_hold_a_row_for_everyone() {
+		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\t\twindows: true\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: 0, 1\n\t\tsetting: margin\n";
+		let Err(problems) = parse(bad) else {
+			panic!("a shared row under a Windows-only heading must be reported")
+		};
+		assert!(
+			problems
+				.iter()
+				.any(|p| p.contains("margin") && p.contains("Windows")),
 			"{problems:?}"
 		);
 	}

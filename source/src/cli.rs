@@ -542,6 +542,24 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			// time by config::spawn_dir, the same way the config setting is.
 			"directory" | "dir" => style.directory = Some(a.value(name, inline)?),
 			"keep-open" => style.keep_open = Some(a.bool_value(name, inline)?),
+			// A file opened from Explorer. Everything after it is the file's own
+			// arguments, so it comes last, and it starts in the file's folder.
+			"open" => {
+				let file = a.value(name, inline)?;
+				let args: Vec<String> = a.items.drain(a.i..).collect();
+				style.shell = Some(crate::fileassoc::open_argv(
+					&file,
+					&args,
+					cfg!(windows),
+					&|| crate::shells::which("pwsh").is_some(),
+				));
+				if style.directory.is_none() {
+					style.directory = std::path::Path::new(&file)
+						.parent()
+						.filter(|dir| !dir.as_os_str().is_empty())
+						.map(|dir| dir.display().to_string());
+				}
+			}
 			"font-name" => style.font_name = Some(a.value(name, inline)?),
 			"font-size" => {
 				style.font_size = Some(parse_f32_in(
@@ -794,6 +812,7 @@ Per-scope (window/tab/pane; cascades, most-specific wins):
   --shell \"...\"               command to run (argv; e.g. fish, 'bash --norc')
   --directory \"...\"           where that shell starts (alias --dir; ~ and $VARs ok)
   --keep-open[=BOOL]          keep the pane after the command exits, showing its status
+  --open FILE [ARGS...]       run FILE, from its folder; the rest of the line is its arguments
   --font-name \"...\"           font family
   --font-size N               font size
   --background-color #rrggbb
@@ -1072,6 +1091,32 @@ mod tests {
 			c.tabs[1].panes[1].style.shell.as_deref(),
 			Some(&["htop".to_string()][..])
 		);
+	}
+
+	// What a double-click in Explorer runs: the file's own arguments ride along
+	// even when they look like options, and it starts beside the file unless
+	// told otherwise.
+	// Test ID: ErNFfTP
+	#[test]
+	fn open_takes_the_rest_of_the_line() {
+		let argv = |s: &[&str]| s.iter().map(ToString::to_string).collect::<Vec<_>>();
+		let c = parse(argv(&[
+			"--keep-open",
+			"--open",
+			"/s/go.bat",
+			"--new-tab",
+			"x y",
+		]))
+		.unwrap();
+		let shell = c.win.style.shell.unwrap();
+		assert_eq!(shell.last().map(String::as_str), Some("x y"));
+		assert!(shell.iter().any(|a| a == "--new-tab"));
+		assert!(c.tabs.is_empty(), "an argument is not a tab");
+		assert_eq!(c.win.style.keep_open, Some(true));
+		assert_eq!(c.win.style.directory.as_deref(), Some("/s"));
+		let c = parse(argv(&["--dir=/w", "--open", "/s/go.bat"])).unwrap();
+		assert_eq!(c.win.style.directory.as_deref(), Some("/w"));
+		assert!(parse(argv(&["--open"])).is_err());
 	}
 
 	// A directory rides the same cascade as the shell it starts, in both
