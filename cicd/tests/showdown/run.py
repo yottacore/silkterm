@@ -240,8 +240,9 @@ sentinel = account / ".config/silkterm/config.shcl"
 sentinel.parent.mkdir(parents=True)
 sentinel.write_text("performance:\n\tautomatic: true\n\tprofile: low\n")
 record = scratch / "record"
-runtime = scratch / "run"
-runtime.mkdir(mode=0o700)
+## Beside scratch rather than in it: the sockets bound here have to fit in 107
+## bytes, and the temp dir may already be a long path.
+runtime = Path(tempfile.mkdtemp(prefix="rt-"))
 work = scratch / "work"
 work.mkdir()
 fakes = scratch / "fakes"
@@ -364,6 +365,7 @@ check("note 9 says the size rig is an X server drawing in software at its grid",
 	and "Xvfb" in size_rig_text and 'grid="100x30"' in size_rig_text)
 
 shutil.rmtree(scratch, ignore_errors=True)
+shutil.rmtree(runtime, ignore_errors=True)
 if failures:
 	print(f"{failures} failed")
 	sys.exit(1)
@@ -373,4 +375,5 @@ print("all passed")
 ##		- 20260917 JC: Created.
 ##		- 20260918 JC: Both rigs start SilkTerm on settings of their own.
 ##		- 20260926 JC: Payloads, scene weights and cell rates.
-##		- 20260930 JC: The size rig keeps its folder under the temp dir it was given.
+##		- 20260930 JC: The size rig keeps its folder under the temp dir it was given. A
+##		  shorter runtime folder.
