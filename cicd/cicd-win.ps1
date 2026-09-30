@@ -123,6 +123,10 @@ $Root    = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $AppName = "SilkTerm"
 $ExeName = "silkterm"
 
+## One folder for every file the tests write, shared by both cargo test runs and
+## the installer tests. TEMP and TMP stay put, so builds keep the system temp dir.
+. (Join-Path $Root "cicd\tests\_testdir.ps1"); fTestDir_Make
+
 ## The single version source (first `version = "..."` line).
 $VersionManifest = Join-Path $Root "source\Cargo.toml"
 

@@ -318,6 +318,13 @@ write_sums(){
 }
 trap 'rc=$?; printf "\n[ CICD ABORTED (exit %s) at line %s: %s ]\n\n" "$rc" "$LINENO" "$BASH_COMMAND" >&2; exit $rc' ERR
 
+## One folder for every file the tests write, made before the gate or any test
+## stage so they all share it. TMPDIR stays put, so builds and packaging keep the
+## system temp dir.
+# shellcheck source=cicd/tests/_testdir.bash
+source "${root}/cicd/tests/_testdir.bash"
+fTestDir_Make || fDie "could not make the test run folder"
+
 ## Gate mode: the local merge gate (what a bare-bones hosted CI would run).
 ## fmt --check + clippy -D warnings + tests, fail-fast, nothing mutated, no
 ## artifacts/log-tee/publish. Wired as the pre-push hook for main, so nothing
@@ -646,6 +653,13 @@ if ((! quick)) && [[ -x "${root}/cicd/tests/rename/run.bash" ]]; then
 	fEcho_Clean "project rename ..."
 	"${root}/cicd/tests/rename/run.bash" >/dev/null || fDie "project rename test failed ($(fTestId cicd/tests/rename/run.bash))"
 	fEcho "OK: project rename ($(fTestId cicd/tests/rename/run.bash))"
+fi
+## Every file a test writes goes under the run folder. Skipped under --quick: it
+## runs the Rust tests again.
+if ((! quick)) && [[ -x "${root}/cicd/tests/testdir/run.bash" ]]; then
+	fEcho_Clean "test run folder ..."
+	"${root}/cicd/tests/testdir/run.bash" >/dev/null || fDie "test run folder test failed ($(fTestId cicd/tests/testdir/run.bash))"
+	fEcho "OK: test run folder ($(fTestId cicd/tests/testdir/run.bash))"
 fi
 ## The git hooks act on a commit or a push, where a mistake is awkward to undo.
 if [[ -x "${root}/cicd/tests/hooks/run.bash" ]]; then
