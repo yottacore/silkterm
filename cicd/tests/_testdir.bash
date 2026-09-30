@@ -16,7 +16,8 @@
 fTestDir_Make(){
 	##	Sets and exports SILKTERM_TEST_DIR. Returns 1, with the reason on stderr, when it cannot.
 	if [[ -n "${SILKTERM_TEST_DIR:-}" ]]; then
-		if ! mkdir -p -- "${SILKTERM_TEST_DIR}"; then echo "test run folder: cannot make '${SILKTERM_TEST_DIR}'" >&2; return 1; fi
+		## Tested first, since some tests start others with a PATH that has no mkdir.
+		if [[ ! -d "${SILKTERM_TEST_DIR}" ]] && ! mkdir -p -- "${SILKTERM_TEST_DIR}"; then echo "test run folder: cannot make '${SILKTERM_TEST_DIR}'" >&2; return 1; fi
 		export SILKTERM_TEST_DIR
 		return 0
 	fi
