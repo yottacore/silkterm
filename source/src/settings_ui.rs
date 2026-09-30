@@ -9047,7 +9047,7 @@ mod tests {
 	fn the_wallpaper_box_follows_the_rotate_switch() {
 		use super::Key;
 		let token = crate::config::WALLPAPER_DIR_TOKEN;
-		// "/pics" is rooted but not absolute on Windows, so it lands on a drive there
+		// "/pics" is rooted but not absolute on Windows, which puts it on a drive
 		let pics = if cfg!(windows) { "C:/pics" } else { "/pics" };
 		let mut d = mk_dialog(4000.0);
 		d.edited.wallpaper_raw = String::new();

@@ -11031,7 +11031,7 @@ mod tests {
 
 		write("wallpaper:\n\timage: /x.png\n");
 		assert_eq!(load().wallpaper_folder, None, "a named image outranks it");
-		// "/elsewhere" is rooted but not absolute on Windows, so it lands on a drive
+		// "/elsewhere" is rooted but not absolute on Windows, which puts it on a drive
 		let elsewhere = if cfg!(windows) {
 			"C:/elsewhere"
 		} else {

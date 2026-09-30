@@ -152,42 +152,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Four unit tests fail on Windows
-	- ID: 2026093010080316
-	- Type: Bug
-	- Status: Done
-	- Priority|Severity: Avg
-	- Opened: 20260930-100803
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w, `cargo test`
-	- Steps to reproduce: Run `cargo test` on Windows.
-	- Incorrect behavior:
-		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
-		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
-		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
-	- Expected behavior: They pass, as on Linux.
-	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
-	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
-	- Actual cause: All four are faults in the tests. None is timing.
-		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
-		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
-	- Progress log:
-		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
-	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
-	- Branch: wintests
-	- Commit: 731d528
-	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
-	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
-	- Swept:
-		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
-		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
-		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
-		- The Windows run this item came from named only these four. That full suite was not run again.
-	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
-	- Closed: 20260930-125357
-
 - A launch from the Start menu as an MSIX package opens the first shell in System32
 	- ID: 2026092617015083
 	- Type: Bug
@@ -266,6 +230,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
+
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
+	- Status: Done
+	- Priority|Severity: Avg
+	- Opened: 20260930-100803
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
+	- Actual cause: All four are faults in the tests. None is timing.
+		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
+		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Progress log:
+		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
+	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
+	- Branch: wintests
+	- Commit: 731d528
+	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
+	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
+	- Swept:
+		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
+		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
+		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
+		- The Windows run this item came from named only these four. That full suite was not run again.
+	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
+	- Closed: 20260930-125357
 
 - cicd shows one line per test, with its status and test ID
 	- ID: 2026092711142900
