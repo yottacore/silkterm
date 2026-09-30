@@ -148,11 +148,16 @@ const SILK_DARK: Palette = Palette {
 	],
 };
 
+// A light theme's text is as dark as it is to make room for the cursor. The
+// plate has to sit the contrast floor away from the text, so the paler the text
+// the closer the plate crowds the background. At this depth, and at the light
+// plate's stronger alpha, it stands about as far off the paper as a dark
+// theme's plate stands off its background.
 #[rustfmt::skip]
 const SILK_LIGHT: Palette = Palette {
 	bg: [0xf6, 0xf5, 0xf0],
-	fg: [0x30, 0x32, 0x38],
-	cursor: [0x33, 0x55, 0x99],
+	fg: [0x1d, 0x1f, 0x25],
+	cursor: [0x50, 0x75, 0xbc],
 	highlight: [0x33, 0x66, 0xbb],
 	focus: [0xb8, 0x6e, 0x00],
 	menu_bg: MENU_BG_DEF, menu_fg: MENU_FG_DEF,
@@ -168,9 +173,7 @@ const SILK_LIGHT: Palette = Palette {
 
 // Matrix: monochrome green. Dark = bright green on near-black; light = dark green
 // on a light gray. Being monochrome, the cursor is the same hue as the text at
-// the brightness the text stays readable on (see SILK_DARK). In the light mode
-// that only works with a fg this dark: a paler one leaves no room between it
-// and the bg for a plate that both shows and carries the text.
+// the brightness the text stays readable on (see SILK_DARK and SILK_LIGHT).
 #[rustfmt::skip]
 const MATRIX_DARK: Palette = Palette {
 	bg: [0x00, 0x08, 0x02],
@@ -192,8 +195,8 @@ const MATRIX_DARK: Palette = Palette {
 #[rustfmt::skip]
 const MATRIX_LIGHT: Palette = Palette {
 	bg: [0xe9, 0xee, 0xe9],
-	fg: [0x07, 0x3d, 0x14],
-	cursor: [0x42, 0x92, 0x48],
+	fg: [0x00, 0x24, 0x02],
+	cursor: [0x38, 0x89, 0x3f],
 	highlight: [0x0a, 0x77, 0x2a],
 	focus: [0x0a, 0x8f, 0x9a],
 	menu_bg: MENU_BG_DEF, menu_fg: MENU_FG_DEF,
@@ -230,8 +233,8 @@ const AMBER_DARK: Palette = Palette {
 #[rustfmt::skip]
 const AMBER_LIGHT: Palette = Palette {
 	bg: [0xf2, 0xee, 0xe6],
-	fg: [0x54, 0x2c, 0x00],
-	cursor: [0xbf, 0x7a, 0x40],
+	fg: [0x38, 0x13, 0x00],
+	cursor: [0xad, 0x6a, 0x2e],
 	highlight: [0x9a, 0x52, 0x00],
 	focus: [0xc8, 0x10, 0x2e],
 	menu_bg: MENU_BG_DEF, menu_fg: MENU_FG_DEF,
@@ -272,8 +275,8 @@ const PASTEL_DARK: Palette = Palette {
 #[rustfmt::skip]
 const PASTEL_LIGHT: Palette = Palette {
 	bg: [0xf2, 0xf0, 0xe9],
-	fg: [0x3c, 0x3f, 0x4a],
-	cursor: [0x9a, 0xa0, 0xc8],
+	fg: [0x20, 0x22, 0x2c],
+	cursor: [0x78, 0x7e, 0xa4],
 	highlight: [0xa8, 0x60, 0x7a],
 	focus: [0x0f, 0x8f, 0x8a],
 	menu_bg: MENU_BG_DEF, menu_fg: MENU_FG_DEF,
@@ -445,34 +448,47 @@ mod tests {
 		}
 	}
 
-	// The block cursor is a plate at CURSOR_ALPHA under the glyph, and the glyph
-	// keeps its own color. So the plate is a second background the text has to
-	// clear the floor on, and a cursor at the fg's own brightness fails it. The
-	// plate is blended over the bg in linear light, as the sRGB surface does.
+	// The plate a theme's cursor draws over its background, at the alpha the
+	// renderer picks for that palette.
+	fn cursor_plate(pal: &Palette, floor: f32) -> [u8; 3] {
+		let alpha = crate::pane::cursor_alpha(pal.fg, pal.bg, pal.cursor, floor);
+		crate::pane::cursor_plate(pal.cursor, pal.bg, alpha)
+	}
+
+	// The block cursor is a plate under the glyph, and the glyph keeps its own
+	// color. So the plate is a second background the text has to clear the floor
+	// on, and a cursor at the fg's own brightness fails it.
 	// Test ID: Eq9PYAL
 	#[test]
 	fn text_on_the_cursor_plate_clears_the_floor() {
 		let floor = crate::config::Settings::default().text_min_contrast;
-		let alpha = crate::pane::CURSOR_ALPHA;
-		let blend = |cursor: [u8; 3], bg: [u8; 3]| {
-			let mix = |k: usize| {
-				let (c, b) = (
-					crate::config::to_linear(cursor[k]),
-					crate::config::to_linear(bg[k]),
-				);
-				crate::config::from_linear_u8(c * alpha + b * (1.0 - alpha))
-			};
-			[mix(0), mix(1), mix(2)]
-		};
 		for (name, t) in THEMES {
 			for (mode, pal) in [("dark", t.dark), ("light", t.light)] {
-				let plate = blend(pal.cursor, pal.bg);
+				let plate = cursor_plate(&pal, floor);
 				assert_eq!(
 					crate::palette::readable(pal.fg, plate, floor),
 					pal.fg,
 					"{name} {mode}: text on the cursor would be repainted"
 				);
 			}
+		}
+	}
+
+	// A light theme's plate used to sit 0.12 to 0.20 Oklab L off its background,
+	// against 0.20 to 0.42 in dark mode, because pale text left it no room. The
+	// light text is darker now and the plate stronger, and this holds the room.
+	// Test ID: ErJIAXF
+	#[test]
+	fn a_light_cursor_plate_stands_off_the_background_like_a_dark_one() {
+		let floor = crate::config::Settings::default().text_min_contrast;
+		let lightness = |c: [u8; 3]| crate::palette::to_oklab(c).0;
+		for (name, t) in THEMES {
+			let pal = t.light;
+			let gap = lightness(pal.bg) - lightness(cursor_plate(&pal, floor));
+			assert!(
+				gap >= 0.24,
+				"{name} light: the cursor plate is only {gap:.3} off the background"
+			);
 		}
 	}
 

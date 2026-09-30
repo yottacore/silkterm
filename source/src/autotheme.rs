@@ -274,13 +274,13 @@ fn field_luma(sum: &Summary, image_luma: f32, bg: [u8; 3], mix: crate::visibilit
 // floor before. Plate lightness rises with the cursor's, so sixteen rounds of
 // bisection place it inside a byte, and this runs once a picture rather than per
 // frame. Where the field is already brighter than the target the search bottoms
-// out at black, which is the best answer available.
+// out at black, which is the best answer available. `alpha` is the plate's, which
+// is stronger over a light theme (`pane::cursor_alpha`).
 //
 // The field is taken as a neutral at its summarized luma. The summary is a luma
 // statistic by design, and `the_neutral_field_model_stays_inside_a_tolerance`
 // bounds what the simplification costs on a strongly tinted picture.
-fn cursor_for(plate_target: f32, behind_luma: f32, hue: f32, chroma: f32) -> [u8; 3] {
-	let alpha = crate::pane::CURSOR_ALPHA;
+fn cursor_for(plate_target: f32, behind_luma: f32, alpha: f32, hue: f32, chroma: f32) -> [u8; 3] {
 	let plate_of = |cursor_l: f32| {
 		let c = at_lightness(cursor_l, hue, chroma);
 		let mix = |k: usize| config::to_linear(c[k]) * alpha + behind_luma * (1.0 - alpha);
@@ -349,7 +349,7 @@ pub fn derive(sum: &Summary, s: &Settings) -> Derived {
 	};
 	let out_fg = at_lightness(target, hue, chroma);
 
-	// The cursor is a plate at CURSOR_ALPHA with the glyph's own color on top, so
+	// The cursor is a plate with the glyph's own color on top, so
 	// it is a second background the text has to clear the same floor on. Put the
 	// plate exactly the floor away from the text - the furthest it can sit from
 	// the field while still carrying a glyph - and find the cursor that draws it.
@@ -363,6 +363,11 @@ pub fn derive(sum: &Summary, s: &Settings) -> Derived {
 	let out_cursor = cursor_for(
 		plate,
 		field_luma(sum, sum.luma_hi, bg, mix),
+		if light_text {
+			crate::pane::CURSOR_ALPHA
+		} else {
+			crate::pane::CURSOR_ALPHA_LIGHT
+		},
 		(hue + CURSOR_ROTATE).rem_euclid(360.0),
 		hue_chroma(cursor).1.min(MAX_CHROMA),
 	);
@@ -646,8 +651,7 @@ mod tests {
 
 	// The plate the block cursor draws, over a field taken as a neutral at
 	// `behind` - the same model `cursor_for` searches against.
-	fn plate_over(cursor: [u8; 3], behind: f32) -> f32 {
-		let alpha = crate::pane::CURSOR_ALPHA;
+	fn plate_over(cursor: [u8; 3], behind: f32, alpha: f32) -> f32 {
 		let mix = |k: usize| config::to_linear(cursor[k]) * alpha + behind * (1.0 - alpha);
 		to_oklab_linear([mix(0), mix(1), mix(2)]).0
 	}
@@ -669,8 +673,16 @@ mod tests {
 				for op in [0.1f32, 0.35, 1.0] {
 					let sum = summarize(&plain(rgb, 32, 32), op);
 					let out = derive(&sum, &s);
-					let plate =
-						plate_over(out.cursor, field_luma(&sum, sum.luma_hi, bg, mix(&s, &sum)));
+					let alpha = if bg[0] > 0x80 {
+						crate::pane::CURSOR_ALPHA_LIGHT
+					} else {
+						crate::pane::CURSOR_ALPHA
+					};
+					let plate = plate_over(
+						out.cursor,
+						field_luma(&sum, sum.luma_hi, bg, mix(&s, &sum)),
+						alpha,
+					);
 					let gap = (lightness(out.fg) - plate).abs();
 					// Short only where the field is already past the target and the
 					// search bottoms out, which is the case the scrim covers.
@@ -701,8 +713,8 @@ mod tests {
 				let field: Vec<f32> = (0..3)
 					.map(|k| config::to_linear(tinted[k]) * scale)
 					.collect();
-				let cursor = cursor_for(gray_lightness(behind) + 0.2, behind, 0.0, 0.04);
-				let neutral = plate_over(cursor, behind);
+				let cursor = cursor_for(gray_lightness(behind) + 0.2, behind, alpha, 0.0, 0.04);
+				let neutral = plate_over(cursor, behind, alpha);
 				let mix =
 					|k: usize| config::to_linear(cursor[k]) * alpha + field[k] * (1.0 - alpha);
 				let real = to_oklab_linear([mix(0), mix(1), mix(2)]).0;
