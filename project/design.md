@@ -79,6 +79,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 
 - [Smooth cursor](design_docs/20260930-145124_smooth-cursor.md)
 
+- [Text scrim](design_docs/20260930-145304_scrim.md)
+
 ## Architecture
 
 ### Language / Stack Decision
@@ -254,23 +256,9 @@ How it is built:
 
 ### Text readability scrim
 
-A bg-colored backing behind glyphs so text stays legible over a busy background image or a near-transparent terminal. The scene's text is rendered to a coverage texture, turned into a halo, and composited under the crisp text, colored per-pixel so each glyph's backing takes its own cell's bg color. The outline is drawn in the same composite from the crisp coverage, so it works with the halo off, and the halo's blur is skipped then. The cursor is a separate coverage texture so it can join the halo and the outline as independent toggles.
+A soft halo in the background color behind every glyph, plus an optional crisp outline, so text stays readable over a busy wallpaper or a see-through window. The halo's shape and its fade are separate settings, and Strength thickens it into a plate.
 
-The halo shape is selectable ("Scrim function"), because a plain Gaussian blur is a poor legibility backing. It is a round kernel, so as the radius grows the backing rounds off and the corners of a solid block recede. A square of text then reads as sitting on a separate round blob rather than an even plate. Four functions are offered:
-
-- **Dilate**. The backing grows the same distance from every edge as a square (Chebyshev distance), so corners stay full. The most solid/boxy look.
-
-- **SDF** (default). The backing grows by true round (Euclidean) distance with full corners: round like the old blur, but the corners no longer pull in. This is the described ideal.
-
-- **DT** (distance transform). The same Euclidean distance rendered as a solid plate with a crisp feathered lip, rather than a soft glow. A highlighter-style backing.
-
-- **Gaussian [ugly]**. The legacy separable blur, kept as a baseline to compare against.
-
-The distance functions share one engine: a separable, exactly-Euclidean distance transform bounded to the halo radius. It takes a per-column 1D distance, then a row combine. That is cheap - two passes, no jump-flood - and reads either metric off the same field. Independently, a "Scrim falloff" curve shapes how the backing fades with distance: Sigmoid, Half-normal, Linear, Logarithmic, or Exponential. It applies both as the blur kernel weight and as the distance-path transfer. Falloff and function are orthogonal: the function decides the halo's shape, the falloff its fade. The falloff is named for the curve it draws rather than for a blur, since the same word otherwise names both a shape and a fade. A bell curve's outer half is a half-normal, and a smoothstep is a sigmoid. Every curve is normalized to reach zero at the halo's outer edge, so a halo ends where its radius says it does.
-
-A third knob, "Strength", decides how bold the finished halo is: each 20% doubles its opacity, up to five doublings at 100%. Because the doubled value is clamped, the halo's core saturates first and the solid part grows outward along the falloff. So the backing thickens into a plate rather than merely brightening, and it still stops at the radius. At 0 the halo is exactly as the function and falloff built it. Light mode takes some of that back, for the reason below.
-
-The shipped values are a radius of 8 px and a strength of 20%. Both were raised when the exponential falloff was made twice as steep, since a curve that drops away sooner has to start further out and heavier to finish in about the same place. The cheaper profiles keep the same share of the radius they always had, so they still look like the same halo built with fewer taps.
+Full design: [Text scrim](design_docs/20260930-145304_scrim.md).
 
 ### Minimum contrast (2026-08-30)
 
@@ -322,7 +310,7 @@ The second is the picture. At one setting a bright photo glares where a dark one
 
 It reaches dark mode too, which is the point of it: at a 10% slider the pack's brightest picture went from a mean of 58.8 to 48.3 and its darkest from 0.8 to 2.6. In light mode the rule reads from the other side, because there it is the dark picture that stands out: the same two went from 26 and 93 sRGB levels of displacement to 63 and 52. Setting it to 0 restores the old behavior exactly, which the rig confirms pixel for pixel.
 
-The scrim's halo is the one thing here still calibrated by measurement rather than derived. It has the same asymmetry pointing the other way - in light mode it is a pale plate on a darkened field, which is the same move in the direction the eye notices most - but that composite blends against the destination through the pipeline's blend state and cannot read it, so there is nothing to solve against. Its alpha is scaled down until it covers the same ground dark mode's does, which works out at about a doubling and a half whatever the visibility is set to, and it stops at a quarter of what was asked for so the plate cannot stop doing its job. That moved 43% of the pixels around a screenful of text by an average of 10 sRGB levels, and the text still read clearly.
+The scrim's halo is calibrated for light mode separately, by measurement. See the [Text scrim](design_docs/20260930-145304_scrim.md) design doc.
 
 Everything here measures with a transfer curve taken on Rec.709 luma. Luma because a linear-light alpha blend is affine in it, so one number stands in for a whole composite. A curve because linear light is not what the eye reads; the sRGB transfer tracks CIE L* closely enough for the scrim, and the pure power is what makes the mix exact. Oklab lightness was measured and rejected: it has no linear toe, so it reads a near-black background as far more separable than it is.
 

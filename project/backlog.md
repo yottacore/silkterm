@@ -5242,15 +5242,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: a "Scrim function" choice with four options, and "Scrim falloff" expanded to five curves - S-curve, Gaussian, linear, logarithmic and exponential. Both are config settings and both are radio rows in Settings.
 		- Three of the four functions share one cheap two-pass distance calculation, bounded to the halo radius, so corners stay full instead of receding. The default is the one that gives a round halo with full corners; the Gaussian is kept as a baseline and labeled as the ugly one.
 		- The function decides the shape and the falloff decides the fade, so the two are independent.
-	- Standard Gaussian Blur function is a poor fit for the text scrim, as a legibility aid. Here's why:
-	- **What's wrong**: To illustrate conceptually: If you apply a background scrim to a solid square using gaussian blur, as the blur radius increases, the total blur shape looks more and more "round". This means that - effectively - the blur behind the square, doesn't look even at the corners. It looks "too strong" along the middle of the sides of the square, and "pulled-in" at the corners. The corners look naked. Basically it looks like a square sitting on top of a separate round fuzzy thing - rather than something evenly integrated with the square. (Which describes the cursor in block mode perfectly, and also why the scrim behind some clusters of letters looks "clumpy".)
-	- **What would be better**: Ideally, the blur would also be square-ish - extending evenly from every angle, from every point along the edge of the square. (With corners rounding off with increasing blur radius, but never actually pulling in below the corners.) In other words, if you measured the density fall-off of the blur starting from the corner and moving outwart diagonally, it should fall-off at about the same rate, as if you measured it from the middle of an edge and moved out perpendicularly.
-	- **Note**: "Gaussian" isn't just a blur function, it also describes blur falloff. (The Gaussian function makes the bell-shaped normal distribution, the falloff is half of one side.) So while the Gaussian *blur* function is probably the wrong blur to use, the *falloff* model is fine. Whether the two concepts can be separated in practice, is an open question for now, but seems doable (but also there's no reason for it to be a hard requirement - and isn't).
-	- **Solutions ideas**:
-		- **Distance field blur**. Aka signed distance field blur. This may be the closest match. Compute the signed distance from every pixel to the boundary of the shape, then apply a falloff function (Gaussian, linear, S, etc.) to that distance. Every point one pixel outside the shape has the same opacity regardless of whether it's beside an edge or outside a corner. The corners stay "full" instead of receding.
-		- **Morphological dilation followed by feathering**. This might be the easiest and most practical to implement. Common in graphics applications. First expand the shape (using a square or other structuring element). In this case, each character individually on their center (and they'd grow into each other). Then feather the expanded edge - again with a falloff function. This also avoids the rounded-cloud appearance.
-		- **Distance transform + transfer function**. Common in vector rendering and font rendering. Rather than convolving with a kernel, opacity is a function of distance from the boundary. I'm not really clear on how that works.
-		- **All of them**: Rather than trying to decide which is best in a vaccuum, add an item to the config file (and a dropdown selection box in Settings) for "Scrim function", to choose among those three - plus the original "Gaussian [ugly]" (at the bottom). And as long as we're doing that, we might as well add a dropdown selection box for "Scrim falloff", including "S-curve, Gaussian, Linear, Logarithmic, Exponential".
+	- Why a Gaussian blur is a poor fit, and the solution ideas this was built from, moved to the [scrim design doc](design_docs/20260930-145304_scrim.md), under "Why not a Gaussian blur".
+	- Note: 20260930, the two settings are dropdowns now, not radio rows.
 	- Pinned by: `scrim_function_and_ramp_resolve` and `the_exponential_falloff_drops_away_hard`.
 	- Opened: 20260708-163910
 	- Closed: 20260709-115247
@@ -5271,6 +5264,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Options to include the cursor in the text scrim, and outline. Default scrim to off, outline to on.
 	- Done: the cursor's coverage is kept apart from the text's, so its halo and its border are independent of each other. Two settings, with rows in the dialog reading "Cursor in scrim" and "Cursor in outline". The scrim is off by default and the outline on.
 	- Pinned by: `changed_defaults` and `the_outline_stands_without_the_scrim`.
+	- Note: 20260930, the two rows are one "Visibility" row on the Cursor tab now, with a Scrim and an Outline box.
 	- Opened: 20260708-191010
 	- Closed: 20260708-193014
 
@@ -5351,6 +5345,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Glow falloff: Change default to S-curve.
 		- Done: the default falloff is now the S-curve.
 		- No test: the default changed later, and `changed_defaults` pins the current one.
+	- Note: 20260930, the outline default is 1 now, and the falloff default is Exponential.
 	- Opened: 20260702-170007
 	- Closed: 20260702-174347
 
@@ -5507,6 +5502,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Cursor's own glow (merged with the text glow). (20260701, branch glow2)
 		- Done: the cursor draws into the glow source before the blur, so its halo is the text glow at no extra per-frame cost. The crisp cursor still draws on top. A cursor_glow config toggle, default on.
 		- No test: GPU compositing.
+	- Note: 20260930, `cursor_glow` is `cursor.scrim` now, and off by default.
 	- Opened: 20260701-122853
 	- Closed: 20260701-195019
 
@@ -5523,6 +5519,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Provide options for different blur fadeoff ramps. E.g. default gaussian, linear, or "S"-shaped.
 		- Done: the blur falloff is selectable - text_glow_ramp of gaussian (default), linear, or s. A Glow falloff radio in Settings.
 		- Pinned by: `scrim_function_and_ramp_resolve`.
+	- Note: 20260930, the `text_glow_*` names are `text.scrim.*` and `text.outline` now. The outline default is 1, and the falloff is a dropdown of five curves, default Exponential.
 	- Opened: 20260630-184012
 	- Closed: 20260703-092145
 
@@ -5789,6 +5786,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Visual bug: When background glow is applied to characters that have a per-character(s)-box different background, and the foreground color is similar to the global background for that character(s), then the character is a blurry mess. (E.g. the global background is dark, but some characters are rendered one-off with dark text and light background, then it's not readable.)
 		- ✅ The solution is, if a character has a different background color than global, use that one-off background color as the glow color for that character. - Done: the glow is now colored by a per-pixel "bgcolor" texture (cleared to the global bg, with the per-cell bg rects drawn over it) instead of a single global tint; the composite multiplies the blurred glyph coverage by that local color. So a glyph on a colored cell gets a halo matching its own cell bg (harmless), while global-bg cells keep their readability halo.
 			- No test: a GPU texture effect, checked by eye.
+	- Note: 20260930, superseded in part. It is the text scrim now, on by default, with the rows and defaults in the [scrim design doc](design_docs/20260930-145304_scrim.md).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
