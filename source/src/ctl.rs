@@ -216,7 +216,8 @@ mod tests {
 	fn the_socket_file_goes_away_however_the_process_ends() {
 		use std::os::unix::process::ExitStatusExt;
 		let exe = std::env::current_exe().unwrap();
-		let dir = std::env::temp_dir().join(format!("silkterm_ctl_exit_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_ctl_exit_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		for how in ["exit", "sigterm", "sighup", "abort"] {

@@ -1259,7 +1259,7 @@ mod tests {
 		assert!(!alias_is_install_prompt(&[]));
 
 		// a file the check refuses is passed over for the next one on PATH
-		let root = std::env::temp_dir().join(format!("silkterm_which_{}", std::process::id()));
+		let root = crate::testdir::run_dir().join(format!("silkterm_which_{}", std::process::id()));
 		let (first, second) = (root.join("a"), root.join("b"));
 		for dir in [&first, &second] {
 			std::fs::create_dir_all(dir).unwrap();
@@ -1457,7 +1457,8 @@ mod tests {
 	// Test ID: Er2UJed
 	#[test]
 	fn the_relaxed_windows_powershell_is_offered_switched_off() {
-		let root = std::env::temp_dir().join(format!("silkterm_sysroot_{}", std::process::id()));
+		let root =
+			crate::testdir::run_dir().join(format!("silkterm_sysroot_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&root);
 		std::fs::create_dir_all(&root).unwrap();
 		assert!(windows_fixed_shells(&root).is_empty());
@@ -1716,7 +1717,7 @@ mod tests {
 	#[test]
 	fn one_shell_reached_by_two_paths_is_one_entry() {
 		use std::os::unix::fs::symlink;
-		let dir = std::env::temp_dir().join(format!("silkterm_links_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_links_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(dir.join("usr/bin")).unwrap();
 		std::fs::write(dir.join("usr/bin/fish"), "").unwrap();
@@ -1744,7 +1745,7 @@ mod tests {
 	#[test]
 	fn a_link_is_not_the_shell_it_points_at() {
 		use std::os::unix::fs::symlink;
-		let dir = std::env::temp_dir().join(format!("silkterm_sh_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_sh_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		std::fs::write(dir.join("dash"), "").unwrap();

@@ -7198,7 +7198,7 @@ mod tests {
 	fn every_row_survives_a_save_and_a_relaunch() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings(); // memoize before the override goes in
-		let dir = std::env::temp_dir().join(format!("silkterm_rows_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_rows_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let _ = std::fs::write(&path, "");
@@ -7260,7 +7260,7 @@ mod tests {
 	fn a_row_changed_after_its_revert_keeps_the_change() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings(); // memoize before the override goes in
-		let dir = std::env::temp_dir().join(format!("silkterm_revert_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_revert_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let _ = std::fs::write(&path, "");
@@ -10169,7 +10169,7 @@ mod tests {
 	fn settings_opens_on_the_file_as_it_is_now() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_reopen_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_reopen_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let _ = std::fs::write(&path, "");
@@ -10198,7 +10198,7 @@ mod tests {
 	fn a_saved_theme_survives_a_relaunch() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_theme_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_theme_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let _ = std::fs::write(&path, "");
@@ -10339,7 +10339,7 @@ mod tests {
 	fn a_session_step_shows_and_a_hand_pick_lifts_it() {
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_uistep_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_uistep_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");

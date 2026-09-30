@@ -649,7 +649,7 @@ mod tests {
 	#[test]
 	fn a_branch_name_is_shown_and_never_run_by_the_prompt() {
 		use std::process::Command;
-		let dir = std::env::temp_dir().join(format!("silkterm_x9ps1_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_x9ps1_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		let repo = dir.join("repo");
 		std::fs::create_dir_all(&repo).expect("temp dir");
@@ -724,7 +724,8 @@ mod tests {
 	fn the_prompt_shows_any_repository_and_how_far_it_is_from_upstream() {
 		use std::path::Path;
 		use std::process::Command;
-		let dir = std::env::temp_dir().join(format!("silkterm_x9ps1git_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_x9ps1git_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let script = dir.join(super::BASH_PROMPT_FILE);
@@ -812,7 +813,8 @@ mod tests {
 	#[test]
 	fn a_profile_write_keeps_its_link_and_mode_and_follows_no_planted_link() {
 		use std::os::unix::fs::{PermissionsExt, symlink};
-		let dir = std::env::temp_dir().join(format!("silkterm_intlink_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_intlink_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		let record = dir.join("shell-integration.installed");
 		let name = "Microsoft.PowerShell_profile.ps1";
@@ -880,7 +882,8 @@ mod tests {
 	// Test ID: Eq4qaCY
 	#[test]
 	fn a_block_already_there_is_noted_so_deleting_it_sticks() {
-		let dir = std::env::temp_dir().join(format!("silkterm_intnote_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_intnote_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let own = "Set-Alias ll Get-ChildItem\n";
@@ -935,14 +938,14 @@ mod tests {
 			eprintln!("no pwsh here, skipped");
 			return;
 		};
-		let dir = std::env::temp_dir().join(format!("silkterm_intps_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_intps_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		// output is piped here, which the block reads as not a terminal
 		let block = SNIPPET.replace("-not [Console]::IsOutputRedirected", "$true");
 		let hook = "if ($null -ne $ExecutionContext.SessionState.InvokeCommand.PSObject.Properties['LocationChangedAction'])";
 		assert!(block.contains(hook));
-		let target = std::env::temp_dir();
+		let target = crate::testdir::run_dir();
 		let target = target.to_string_lossy();
 		for (arm, text) in [
 			("hook", block.clone()),
@@ -995,7 +998,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 			eprintln!("no pwsh here, skipped");
 			return;
 		};
-		let dir = std::env::temp_dir().join(format!("silkterm_psgit_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_psgit_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let block = dir.join("block.ps1");
@@ -1152,7 +1155,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// Test ID: EpHO1lo
 	#[test]
 	fn a_profile_that_is_not_utf8_is_left_alone() {
-		let dir = std::env::temp_dir().join(format!("silkterm_int16_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_int16_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let record = dir.join("shell-integration.installed");
@@ -1185,7 +1188,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// Test ID: EpHWuEq
 	#[test]
 	fn a_deleted_block_stays_deleted() {
-		let dir = std::env::temp_dir().join(format!("silkterm_intoff_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_intoff_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let profile = dir.join("Microsoft.PowerShell_profile.ps1");
@@ -1223,7 +1226,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// Test ID: EnalvtS
 	#[test]
 	fn a_profile_is_backed_up_once_and_added_to_once() {
-		let dir = std::env::temp_dir().join("silkterm-integration-test");
+		let dir = crate::testdir::run_dir().join("silkterm-integration-test");
 		let _ = std::fs::remove_dir_all(&dir);
 		// its own record, never the live one: install_into would write into the
 		// user's data directory
