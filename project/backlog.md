@@ -32,139 +32,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- A launch from the Start menu as an MSIX package opens the first shell in System32
-	- ID: 2026092617015083
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20260926-170150
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Steps to reproduce:
-		- Run SilkTerm from an MSIX package.
-		- Start it from the Start menu.
-	- Incorrect behavior: The first shell opens in `C:\Windows\System32`.
-	- Expected behavior: It opens in `shell.startup_directory`, which is the home folder by default. That holds on the first launch and on every one after it.
-	- Reproduced: No, since there is no package yet. A packaged app's Start menu entry can't set a working directory, so every launch from it starts in System32, or SysWOW64 for a 32-bit build.
-	- Possible cause: `inherited_dir_is_a_choice` in `config.rs` treats a launch that isn't from a shell as deliberate, unless it starts in home, a root, or the exe's folder. System32 isn't on that list.
-	- Decisions:
-		- 20260926: Send a launch that starts in System32 to `%USERPROFILE%`. The system folder joins home, a root and the exe's folder as places a launcher leaves us. The launch then falls to `shell.startup_directory`, which is `~` unless changed.
-		- This covers every launch, not just the first, because every Start menu launch starts there. Anything else already goes where it should. Started from a shell, it uses that shell's folder. Explorer's "Open in Terminal" uses that folder. A new tab, pane or window uses the pane it came from. `--directory` beats all of them.
-		- Explorer's "Open in Terminal" on System32 itself gets home instead. That's rare and accepted. A shell sitting in System32, like an elevated cmd, still counts as a choice.
-		- Nothing here needs a package, so it can be done and tested now.
-	- Estimated effort: Low
-	- Actual effort: Low
-	- Progress log:
-		- 20260928: Checked by unit test on b23 only. There is still no package to launch on Windows.
-	- Actual fix: System32 and SysWOW64 under `%SystemRoot%` join the places a launcher leaves us, on Windows only.
-	- Branch: sysdir
-	- Test case: `a_start_in_the_windows_system_folder_is_not_a_choice`. Seen to fail with the system folders left out.
-	- Closed:
-
-- A pipeline run dies at the Windows GUI stage when a box is held by another session
-	- ID: 2026092618254900
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20260926-182549
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Steps to reproduce:
-		- Hold vm925w's host lock from another session.
-		- Run `cicd/cicd.bash -y --no-publish`.
-	- Incorrect behavior: The harness queues for the lock, prints "still queued", and the run stops with "a windows gui scenario failed". No dogfood build is made.
-	- Expected behavior: A locked or unreachable box is reported and stepped over, as the stage's own comment says. Only a scenario that ran and failed stops the run.
-	- Reproduced: Yes, on b23 on 20260926 at 18:25, with vm925w held by a nemo-anywhere session.
-	- Possible cause: The lock's "still queued" exit reaches `cicd.bash` as the harness's failure.
-	- Actual cause:
-		- `--optional` covered a box that was off, not one another session held. The lock's wait ran out and its exit was taken for the harness's.
-		- Both boxes were asked for at once, so the free one was lost with the held one.
-	- Estimated effort: Low
-	- Actual effort: Low
-	- Actual fix: With `--optional`, each box is held and run on in turn. One whose wait runs out before the command starts is reported and skipped. The command's own exit is still passed on.
-	- Branch: winlock
-	- Test case: `cicd/tests/win-remote/run.bash`, against a stand-in lock. Seen to fail on the old runner.
-	- Closed:
-
-- The Windows save notice scenario never answers, so a full pipeline run stops at the GUI stage
-	- ID: 2026092813222318
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20260928-132223
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Steps to reproduce:
-		- Run `cicd/cicd.bash -y --no-publish` with vm925w up.
-	- Incorrect behavior: `savenotice` ends with "the session never answered", and the run stops with no dogfood build.
-	- Expected behavior: The scenario sees the notice for a refused save and passes.
-	- Reproduced: Yes, on b23 against vm925w on 20260928. Earlier runs since the shcl 3.0 bump found no box up, so the scenario had not run.
-	- Actual cause: Its settings file had a line indented with spaces. shcl 3.0 keeps such a line as written, so the save went through and no notice came.
-	- Actual fix: The line now steps back to a depth nothing uses, which shcl still drops.
-	- Branch: savenotice
-	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
-	- Closed:
-
-- The launcher test would use the real dogfood pool if run on Windows
-	- ID: 2026092621021535
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Incorrect behavior: `cicd/tests/launcher/run.ps1` points HOME and USERPROFILE at a sandbox, but on Windows the launcher keeps its pool under LOCALAPPDATA, which it leaves alone.
-	- Expected behavior: The sandbox covers LOCALAPPDATA too. cicd runs the test only on Linux today, so nothing has touched the real pool.
-	- Actual fix: LOCALAPPDATA and APPDATA move into the sandbox with home, and the test looks for the pool where each platform keeps it. APPDATA is where the launcher files its Start menu entry.
-	- Branch: winlock
-	- Test case: "every folder the launcher writes to is in the sandbox", in `cicd/tests/launcher/run.ps1`. Seen to fail with LOCALAPPDATA left out. Run on Linux only.
-	- Closed:
-
-- A command-line split does not reuse the direction of the pane it splits, and a run of splits the same way is not evened out
-	- ID: 2026092621021531
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Steps to reproduce:
-		- `silkterm --new-pane=a --down --new-pane --splits=a`
-	- Incorrect behavior: The second pane goes right or down by the target's shape, not down like the pane it splits. Three panes split the same way with no size come out at a half, a quarter and a quarter.
-	- Expected behavior: Both are in the done command-line item. Direction carries along the split chain, and a run of same-direction splits with no size is spread out evenly.
-	- Reproduced: No. Read from the code, where `build_layout` falls back to `default_dir` and always splits at 0.5 with no evening out.
-	- Actual fix:
-		- A pane with no direction takes the one given to the pane it splits, and passes it on. The longer side is only the last resort.
-		- A split with no size evens out its run, as a split from the keyboard does. A split with a size keeps it, and the run it is in is no longer evened out, as after dragging a divider.
-	- Progress log:
-		- 20260928: Checked on b23 on a private display with a debug build. The example gave three panes of 15 rows each, and three splits to the right gave four panes of 29 columns each.
-	- Branch: splitdir
-	- Test case: `a_pane_splits_the_way_the_pane_it_splits_was_split`, `a_run_of_command_line_splits_with_no_size_comes_out_even`, `a_command_line_split_with_a_size_keeps_it`. Each seen to fail with its half of the fix taken out. `a_split_with_no_direction_goes_along_the_longer_side` still pins the fallback.
-	- Swept: the keyboard split goes through the same placing code. The divider drag is the only other place that marks a run as sized by hand.
-	- Closed:
-
-- A settings range test skips two of the keys it lists
-	- ID: 2026092621021532
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Incorrect behavior: `every_numeric_setting_has_a_floor_and_a_ceiling` lists `window.idle_release_hidden_min` and `window.idle_release_min`, but reads `remembered_rows` for both. Their own ceilings are never checked, and the grid limit it checks is not theirs.
-	- Expected behavior: Each key reads its own field and checks its own limit.
-	- Actual fix: Each key reads its own field and is held to its own limit. A key the list names but the reader does not is now a failure.
-	- Branch: smallfix
-	- Test case: `every_numeric_setting_has_a_floor_and_a_ceiling`. Seen to fail with the idle release clamp taken off.
-	- Swept: the float half of the same test reads a field of its own for every key.
-	- Closed:
-
 - A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
 	- ID: 2026092821452948
 	- Type: Bug
@@ -292,10 +159,89 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
+- A launch from the Start menu as an MSIX package opens the first shell in System32
+	- ID: 2026092617015083
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20260926-170150
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run SilkTerm from an MSIX package.
+		- Start it from the Start menu.
+	- Incorrect behavior: The first shell opens in `C:\Windows\System32`.
+	- Expected behavior: It opens in `shell.startup_directory`, which is the home folder by default. That holds on the first launch and on every one after it.
+	- Reproduced: No, since there is no package yet. A packaged app's Start menu entry can't set a working directory, so every launch from it starts in System32, or SysWOW64 for a 32-bit build.
+	- Possible cause: `inherited_dir_is_a_choice` in `config.rs` treats a launch that isn't from a shell as deliberate, unless it starts in home, a root, or the exe's folder. System32 isn't on that list.
+	- Decisions:
+		- 20260926: Send a launch that starts in System32 to `%USERPROFILE%`. The system folder joins home, a root and the exe's folder as places a launcher leaves us. The launch then falls to `shell.startup_directory`, which is `~` unless changed.
+		- This covers every launch, not just the first, because every Start menu launch starts there. Anything else already goes where it should. Started from a shell, it uses that shell's folder. Explorer's "Open in Terminal" uses that folder. A new tab, pane or window uses the pane it came from. `--directory` beats all of them.
+		- Explorer's "Open in Terminal" on System32 itself gets home instead. That's rare and accepted. A shell sitting in System32, like an elevated cmd, still counts as a choice.
+		- Nothing here needs a package, so it can be done and tested now.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Progress log:
+		- 20260928: Checked by unit test on b23 only. There is still no package to launch on Windows.
+	- Actual fix: System32 and SysWOW64 under `%SystemRoot%` join the places a launcher leaves us, on Windows only.
+	- Branch: sysdir
+	- Test case: `a_start_in_the_windows_system_folder_is_not_a_choice`. Seen to fail with the system folders left out.
+	- Acceptance signoff: Self-closed: the fix is what the decision spelled out, and its test passes.
+	- Closed: 20260930-073126
+
+- A pipeline run dies at the Windows GUI stage when a box is held by another session
+	- ID: 2026092618254900
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20260926-182549
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Hold vm925w's host lock from another session.
+		- Run `cicd/cicd.bash -y --no-publish`.
+	- Incorrect behavior: The harness queues for the lock, prints "still queued", and the run stops with "a windows gui scenario failed". No dogfood build is made.
+	- Expected behavior: A locked or unreachable box is reported and stepped over, as the stage's own comment says. Only a scenario that ran and failed stops the run.
+	- Reproduced: Yes, on b23 on 20260926 at 18:25, with vm925w held by a nemo-anywhere session.
+	- Possible cause: The lock's "still queued" exit reaches `cicd.bash` as the harness's failure.
+	- Actual cause:
+		- `--optional` covered a box that was off, not one another session held. The lock's wait ran out and its exit was taken for the harness's.
+		- Both boxes were asked for at once, so the free one was lost with the held one.
+	- Estimated effort: Low
+	- Actual effort: Low
+	- Actual fix: With `--optional`, each box is held and run on in turn. One whose wait runs out before the command starts is reported and skipped. The command's own exit is still passed on.
+	- Branch: winlock
+	- Test case: `cicd/tests/win-remote/run.bash`, against a stand-in lock. Seen to fail on the old runner.
+	- Acceptance signoff: Self-closed: pipeline only, and its test failed before the fix.
+	- Closed: 20260930-073126
+
+- The Windows save notice scenario never answers, so a full pipeline run stops at the GUI stage
+	- ID: 2026092813222318
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20260928-132223
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run `cicd/cicd.bash -y --no-publish` with vm925w up.
+	- Incorrect behavior: `savenotice` ends with "the session never answered", and the run stops with no dogfood build.
+	- Expected behavior: The scenario sees the notice for a refused save and passes.
+	- Reproduced: Yes, on b23 against vm925w on 20260928. Earlier runs since the shcl 3.0 bump found no box up, so the scenario had not run.
+	- Actual cause: Its settings file had a line indented with spaces. shcl 3.0 keeps such a line as written, so the save went through and no notice came.
+	- Actual fix: The line now steps back to a depth nothing uses, which shcl still drops.
+	- Branch: savenotice
+	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
+	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
+	- Closed: 20260930-073126
+
 - cicd shows one line per test, with its status and test ID
 	- ID: 2026092711142900
 	- Type: Enhancement
-	- Status: Closed
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20260927-111429
 	- Opened by: JC
@@ -316,7 +262,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The wallpaper folder setting is blank, and Settings never shows the folder
 	- ID: 2026092618142601
 	- Type: Enhancement
-	- Status: Closed
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20260926-181426
 	- Opened by: JC
@@ -335,6 +281,66 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- The launcher test would use the real dogfood pool if run on Windows
+	- ID: 2026092621021535
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Incorrect behavior: `cicd/tests/launcher/run.ps1` points HOME and USERPROFILE at a sandbox, but on Windows the launcher keeps its pool under LOCALAPPDATA, which it leaves alone.
+	- Expected behavior: The sandbox covers LOCALAPPDATA too. cicd runs the test only on Linux today, so nothing has touched the real pool.
+	- Actual fix: LOCALAPPDATA and APPDATA move into the sandbox with home, and the test looks for the pool where each platform keeps it. APPDATA is where the launcher files its Start menu entry.
+	- Branch: winlock
+	- Test case: "every folder the launcher writes to is in the sandbox", in `cicd/tests/launcher/run.ps1`. Seen to fail with LOCALAPPDATA left out. Run on Linux only.
+	- Acceptance signoff: Self-closed: test sandbox only, and its test failed before the fix.
+	- Closed: 20260930-073126
+
+- A command-line split does not reuse the direction of the pane it splits, and a run of splits the same way is not evened out
+	- ID: 2026092621021531
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- `silkterm --new-pane=a --down --new-pane --splits=a`
+	- Incorrect behavior: The second pane goes right or down by the target's shape, not down like the pane it splits. Three panes split the same way with no size come out at a half, a quarter and a quarter.
+	- Expected behavior: Both are in the done command-line item. Direction carries along the split chain, and a run of same-direction splits with no size is spread out evenly.
+	- Reproduced: No. Read from the code, where `build_layout` falls back to `default_dir` and always splits at 0.5 with no evening out.
+	- Actual fix:
+		- A pane with no direction takes the one given to the pane it splits, and passes it on. The longer side is only the last resort.
+		- A split with no size evens out its run, as a split from the keyboard does. A split with a size keeps it, and the run it is in is no longer evened out, as after dragging a divider.
+	- Progress log:
+		- 20260928: Checked on b23 on a private display with a debug build. The example gave three panes of 15 rows each, and three splits to the right gave four panes of 29 columns each.
+	- Branch: splitdir
+	- Test case: `a_pane_splits_the_way_the_pane_it_splits_was_split`, `a_run_of_command_line_splits_with_no_size_comes_out_even`, `a_command_line_split_with_a_size_keeps_it`. Each seen to fail with its half of the fix taken out. `a_split_with_no_direction_goes_along_the_longer_side` still pins the fallback.
+	- Swept: the keyboard split goes through the same placing code. The divider drag is the only other place that marks a run as sized by hand.
+	- Acceptance signoff: Self-closed: the done command-line item set the intent, and its tests failed before the fix.
+	- Closed: 20260930-073126
+
+- A settings range test skips two of the keys it lists
+	- ID: 2026092621021532
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Incorrect behavior: `every_numeric_setting_has_a_floor_and_a_ceiling` lists `window.idle_release_hidden_min` and `window.idle_release_min`, but reads `remembered_rows` for both. Their own ceilings are never checked, and the grid limit it checks is not theirs.
+	- Expected behavior: Each key reads its own field and checks its own limit.
+	- Actual fix: Each key reads its own field and is held to its own limit. A key the list names but the reader does not is now a failure.
+	- Branch: smallfix
+	- Test case: `every_numeric_setting_has_a_floor_and_a_ceiling`. Seen to fail with the idle release clamp taken off.
+	- Swept: the float half of the same test reads a field of its own for every key.
+	- Acceptance signoff: Self-closed: mechanical test fix.
+	- Closed: 20260930-073126
 
 - CODEOWNERS has no line for the About dialog
 	- ID: 2026092621021533
