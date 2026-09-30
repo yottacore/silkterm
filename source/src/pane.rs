@@ -54,6 +54,12 @@ const CURSOR_MOVE_TAU_MS: f32 = 55.0; // horizontal slide responsiveness (lower 
 const CURSOR_CATCHUP: f32 = 0.45; // tau divisor per cell of lag
 const CURSOR_MAX_LAG: f32 = 8.0; // hard cap on how far behind the slide may sit (cells)
 pub(crate) const CURSOR_ALPHA: f32 = 0.55; // solid block-cursor alpha; theme.rs tests cursor colors against it
+// The same plate over a light background. A linear-light blend moves a light
+// ground very little, so at 55% the darkest plate any cursor could draw sat
+// barely 0.2 Oklab L under the shipped light backgrounds. At 80% it can reach
+// the floor from the text with the cursor itself still mid-toned, so its hue
+// shows. `cursor_alpha` decides which one a palette gets.
+pub(crate) const CURSOR_ALPHA_LIGHT: f32 = 0.8;
 // Escape hatch: true restores the old always-running animation (the removed
 // cursor_animation_input = "continuous"), bypassing the pause/park machinery.
 const CURSOR_ANIM_CONTINUOUS: bool = false;
@@ -452,16 +458,62 @@ fn pulse_env(phase: f32) -> f32 {
 	}
 }
 
+// The block cursor's plate alpha for this text, background and cursor. Dark
+// text on a light ground takes the stronger light alpha, but only as far as the
+// text on the plate still clears the contrast floor. The shipped light cursors
+// are chosen to reach it; a saved theme or an overridden cursor picked against
+// the old 55% stops where its text would start to sink into the plate, so it
+// keeps about the plate it always had. Everything else keeps `CURSOR_ALPHA`.
+pub(crate) fn cursor_alpha(fg: [u8; 3], bg: [u8; 3], cursor: [u8; 3], floor: f32) -> f32 {
+	let fg_l = palette::to_oklab(fg).0;
+	if fg_l >= palette::to_oklab(bg).0 {
+		return CURSOR_ALPHA;
+	}
+	let clears = |alpha: f32| palette::to_oklab(cursor_plate(cursor, bg, alpha)).0 - fg_l >= floor;
+	if clears(CURSOR_ALPHA_LIGHT) {
+		return CURSOR_ALPHA_LIGHT;
+	}
+	if !clears(CURSOR_ALPHA) {
+		return CURSOR_ALPHA;
+	}
+	let (mut lo, mut hi) = (CURSOR_ALPHA, CURSOR_ALPHA_LIGHT);
+	for _ in 0..12 {
+		let mid = 0.5 * (lo + hi);
+		if clears(mid) {
+			lo = mid;
+		} else {
+			hi = mid;
+		}
+	}
+	lo
+}
+
+// The plate a cursor draws at `alpha` over `bg`, blended in linear light as the
+// sRGB surface does.
+pub(crate) fn cursor_plate(cursor: [u8; 3], bg: [u8; 3], alpha: f32) -> [u8; 3] {
+	let mix = |k: usize| {
+		config::from_linear_u8(
+			config::to_linear(cursor[k]) * alpha + config::to_linear(bg[k]) * (1.0 - alpha),
+		)
+	};
+	[mix(0), mix(1), mix(2)]
+}
+
 // What the animation makes of the cursor at `phase` of its cycle: the (width,
 // height) fractions, the alpha, and whether each axis pulses. "phase" fades
-// the alpha on a cosine; the pulses scale an axis by `pulse_env`; "none" and
-// anything unknown leave the cursor as it is.
-fn cursor_envelope(anim: &str, phase: f32, geom: (f32, f32)) -> (f32, f32, f32, bool, bool) {
+// `full`, the plate's own alpha, on a cosine; the pulses scale an axis by
+// `pulse_env`; "none" and anything unknown leave the cursor as it is.
+fn cursor_envelope(
+	anim: &str,
+	phase: f32,
+	geom: (f32, f32),
+	full: f32,
+) -> (f32, f32, f32, bool, bool) {
 	let (mut w_frac, mut h_frac) = geom;
-	let mut alpha = CURSOR_ALPHA;
+	let mut alpha = full;
 	let (pulsing_w, pulsing_h) = match anim {
 		"phase" => {
-			alpha = CURSOR_ALPHA * (0.5 + 0.5 * (phase * std::f32::consts::TAU).cos());
+			alpha = full * (0.5 + 0.5 * (phase * std::f32::consts::TAU).cos());
 			(false, false)
 		}
 		"pulse_vertical" => {
@@ -2825,8 +2877,14 @@ impl Pane {
 			self.blink_t += dt;
 		}
 		let phase = (self.blink_t / period).fract();
+		let full = cursor_alpha(
+			settings.fg,
+			settings.bg,
+			cursor_rgb,
+			settings.text_min_contrast,
+		);
 		let (w_frac, h_frac, alpha, pulsing_w, pulsing_h) =
-			cursor_envelope(anim, phase, cursor_geom);
+			cursor_envelope(anim, phase, cursor_geom, full);
 		// keep frames flowing while the cursor slides or the cycle runs. A parked
 		// cursor is static at full size, so it needs NO frames - that is the whole
 		// idle-CPU win; the timed resume is driven by cursor_wake instead
@@ -4813,21 +4871,22 @@ fn band_row_line(screen_row: i32, display_offset: i32, split_row: i32, ob: usize
 #[cfg(test)]
 mod tests {
 	use super::{
-		APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA, CURSOR_MAX_LAG,
-		DepthSampler, Dir, GColor, LinkHit, Node, OffStrip, PROMPT_SKEL_MIN, PauseState, Rect,
-		SLIDE_TOP_BAND_APPS, StripCell, Style, Weight, adopt_band, alloc_pane_id, band_row_line,
-		bar_applies_to, bar_pos_to_lines, bar_thumb_span, bar_track, bell_brighten, bracket_reach,
-		capture_grid_text, capture_start, child_areas, cursor_cycle, cursor_envelope,
-		cursor_geometry, cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair,
-		divider_at, drop_hold_over, ease_output, edge_scroll_rate, equalize_dir_run,
-		fingerprint_frame, fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged,
-		handle_pos, has_ink, layout, ledger_makes_room, ledger_step, link_at, lock_for_frame,
-		logical_line_bounds, minimap, mono_attrs, move_is_input, next_capture_poll, output_advance,
-		output_band, pair_inside, paste_payload, place_split, prompt_strip, pulse_env,
-		pushed_since, render_char, repainted_edge, resume_delay, same_char_pair,
-		scroll_shift_signed, set_buffer_rows, set_ratio, shift_makes_room, shown_cursor_shape,
-		slide_bands, slide_is_visible, snapshot_rows, static_bands, strip_cell, strip_rows,
-		swap_leaves, text_buffer_h, translate_span, vanished_range, weld_region_clip,
+		APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA,
+		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, DepthSampler, Dir, GColor, LinkHit, Node, OffStrip,
+		PROMPT_SKEL_MIN, PauseState, Rect, SLIDE_TOP_BAND_APPS, StripCell, Style, Weight,
+		adopt_band, alloc_pane_id, band_row_line, bar_applies_to, bar_pos_to_lines, bar_thumb_span,
+		bar_track, bell_brighten, bracket_reach, capture_grid_text, capture_start, child_areas,
+		cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate,
+		cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair, divider_at,
+		drop_hold_over, ease_output, edge_scroll_rate, equalize_dir_run, fingerprint_frame,
+		fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged, handle_pos, has_ink,
+		layout, ledger_makes_room, ledger_step, link_at, lock_for_frame, logical_line_bounds,
+		minimap, mono_attrs, move_is_input, next_capture_poll, output_advance, output_band,
+		pair_inside, paste_payload, place_split, prompt_strip, pulse_env, pushed_since,
+		render_char, repainted_edge, resume_delay, same_char_pair, scroll_shift_signed,
+		set_buffer_rows, set_ratio, shift_makes_room, shown_cursor_shape, slide_bands,
+		slide_is_visible, snapshot_rows, static_bands, strip_cell, strip_rows, swap_leaves,
+		text_buffer_h, translate_span, vanished_range, weld_region_clip,
 	};
 	use crate::config;
 	use alacritty_terminal::event::{Event, EventListener};
@@ -7687,17 +7746,17 @@ mod tests {
 
 		let geom = (0.8, 0.6);
 		let env = pulse_env(0.2);
-		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_vertical", 0.2, geom);
+		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_vertical", 0.2, geom, CURSOR_ALPHA);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8, 0.6 * env, CURSOR_ALPHA, false, true)
 		);
-		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_horizontal", 0.2, geom);
+		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_horizontal", 0.2, geom, CURSOR_ALPHA);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8 * env, 0.6, CURSOR_ALPHA, true, false)
 		);
-		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_both", 0.2, geom);
+		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_both", 0.2, geom, CURSOR_ALPHA);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8 * env, 0.6 * env, CURSOR_ALPHA, true, true)
@@ -7840,12 +7899,35 @@ mod tests {
 		assert_eq!(unique.len(), ids.len());
 	}
 
+	// The light plate's stronger alpha must never sink the text into the plate.
+	// A cursor picked for the old 55% plate, which is what a saved light theme
+	// carries, gets only as much of it as the floor allows, and dark text on a
+	// light ground is the only case that gets any.
+	// Test ID: ErJLuvI
+	#[test]
+	fn a_light_plate_stops_where_its_text_would_sink() {
+		let floor = 0.45;
+		let lightness = |c: [u8; 3]| crate::palette::to_oklab(c).0;
+		let (bg, fg, cursor) = ([0xf6, 0xf5, 0xf0], [0x30, 0x32, 0x38], [0x33, 0x55, 0x99]);
+		let alpha = cursor_alpha(fg, bg, cursor, floor);
+		assert!(
+			alpha > CURSOR_ALPHA && alpha < CURSOR_ALPHA_LIGHT,
+			"alpha {alpha}"
+		);
+		let gap = lightness(cursor_plate(cursor, bg, alpha)) - lightness(fg);
+		assert!(gap >= floor, "the text sits {gap} from the plate");
+		assert_eq!(
+			cursor_alpha([0x88, 0xee, 0xcc], [0, 0, 0], [0x8a, 0x3f, 0xa4], floor),
+			CURSOR_ALPHA
+		);
+	}
+
 	// The phase blink fades on a cosine: full at the start of the cycle, gone at
 	// its middle, and partway between them. An on/off blink has no partway.
 	// Test ID: Er2VGXA
 	#[test]
 	fn the_phase_blink_fades_instead_of_switching() {
-		let alpha = |phase: f32| cursor_envelope("phase", phase, (1.0, 1.0)).2;
+		let alpha = |phase: f32| cursor_envelope("phase", phase, (1.0, 1.0), CURSOR_ALPHA).2;
 		assert_eq!(alpha(0.0), CURSOR_ALPHA);
 		assert!(alpha(0.5).abs() < 1e-6, "gone at mid-cycle: {}", alpha(0.5));
 		for phase in [0.25, 0.75] {
@@ -7866,13 +7948,13 @@ mod tests {
 		let geom = (0.4, 0.6);
 		for phase in [0.0, 0.2, 0.5, 0.95] {
 			assert_eq!(
-				cursor_envelope("none", phase, geom),
+				cursor_envelope("none", phase, geom, CURSOR_ALPHA),
 				(0.4, 0.6, CURSOR_ALPHA, false, false)
 			);
-			let (w, h, _, pw, ph) = cursor_envelope("phase", phase, geom);
+			let (w, h, _, pw, ph) = cursor_envelope("phase", phase, geom, CURSOR_ALPHA);
 			assert_eq!((w, h, pw, ph), (0.4, 0.6, false, false));
 		}
-		assert!(cursor_envelope("phase", 0.5, geom).2 < CURSOR_ALPHA);
+		assert!(cursor_envelope("phase", 0.5, geom, CURSOR_ALPHA).2 < CURSOR_ALPHA);
 	}
 
 	// Leaving the alt screen hands the normal screen's scrollback back in one
