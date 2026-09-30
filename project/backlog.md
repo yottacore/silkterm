@@ -23,6 +23,8 @@
 	- [Deferred](#deferred)
 	- [Canceled](#canceled)
 - [Template](#template)
+	- [Old format statuses](#old-format-statuses)
+	- [New format](#new-format)
 
 <!-- /TOC -->
 
@@ -150,6 +152,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When changing the cursor size and animation, change to 50% width.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
+	- Closed:
+
+- Test files go under one dated folder in the system temp dir
+	- ID: 2026093013113320
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20260930-131133
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- All test files go somewhere under `%TEMP%` on Windows, or `/tmp/` elsewhere.
+		- Each run gets a subfolder named something like `test_silkterm_YYYYmmDD-HHMMSSNN`.
+	- Note: Most Rust tests already use the system temp dir, but each picks its own name at the top level of it. The script tests use `mktemp`, and a few write under `target/`.
 	- Closed:
 
 - A launch from the Start menu as an MSIX package opens the first shell in System32
@@ -6380,7 +6396,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Template
 
-### Old format
+### Old format statuses
 
 - 🔘 Not started
 
