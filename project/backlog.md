@@ -2087,6 +2087,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: color glyphs are now painted directly - the paint graph is walked and rendered through a small 2D back end (transforms, clip and layer stacks, solid/linear/radial/sweep fills, Porter-Duff and blend compositing), then handed to the renderer's color atlas as a per-cell image fitted to the cell box. Chars with no color glyph are untouched and still take the monochrome fallback path.
 	- `color_emoji` (default true) turns it off, which restores the monochrome outlines.
 	- Pinned by: `colr_v1_emoji_rasterizes_in_colour`.
+	- Note: 20260930, the key is `text.color_emoji` now.
 	- Opened: n/a
 	- Closed: 20260727-014507
 
@@ -6112,6 +6113,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Use system monospace font by default
 	- Done: the default font is the monospace family the OS is set to, when that family is installed, and generic monospace otherwise. `font_family` in the config overrides it by name.
 	- Pinned by: `mono_candidates_keep_one_order_on_every_platform`.
+	- Note: 20260930, superseded. The font comes from one search order now, with a built-in list, from "The font fallback stack is only partly implemented".
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 

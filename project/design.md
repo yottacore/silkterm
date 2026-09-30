@@ -24,7 +24,7 @@
 	- [Themes and text color](#themes-and-text-color)
 	- [Wallpaper](#wallpaper)
 	- [Performance profiles (2026-09-03)](#performance-profiles-2026-09-03)
-	- [Font fallback stack](#font-fallback-stack)
+	- [Fonts, Unicode and emoji](#fonts-unicode-and-emoji)
 	- [Hyperlinks](#hyperlinks)
 	- [What a double-click grabs (2026-08-26)](#what-a-double-click-grabs-2026-08-26)
 	- [Selecting past the edge of the screen (2026-09-20)](#selecting-past-the-edge-of-the-screen-2026-09-20)
@@ -85,6 +85,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Themes and text color](design_docs/20260930-150458_themes.md)
 
 - [Speed](design_docs/20260930-150643_speed.md)
+
+- [Unicode, fonts and emoji](design_docs/20260930-150813_unicode-and-emoji.md)
 
 ## Architecture
 
@@ -224,29 +226,9 @@ One setting decides how much the look may cost, so a slow machine is a choice on
 
 - Blur quality is not part of a profile yet. The backlog item for it stands on its own, and a profile could drive it later.
 
-### Font fallback stack
+### Fonts, Unicode and emoji
 
-One monospace family is pinned for every weight, because the shaper picks the best face per query and would otherwise let a bold run end up in a different family than the regular run beside it.
-
-Which family that is comes from a single search order, the same on every platform:
-
-- the OS monospace family, when "use system font" is on
-
-- then the configured `font_family`, a comma-separated stack
-
-- then the OS monospace family, when "use system font" is off
-
-- then a built-in stack, which is also what a fresh config is written with
-
-- then, only if none of the above is installed, whatever the generic monospace name resolves to
-
-The setting only reorders that list; it never truncates it. An earlier version dropped `font_family` entirely while following the OS font. The same build and the same config then resolved differently depending on the platform, and a configured stack could be silently ignored. Every list is now always walked. A family that is not installed simply falls through to the next one, and the configured stack still has effect as a fallback.
-
-Platforms differ only in what they report, not in the rules applied to it. Windows has a system font size but no monospace family, so following the family there is a no-op and resolution starts at `font_family` without a special case. A toggle with nothing behind it reads as inert, so the Settings checkbox grays out and says why. The same holds for a desktop with no font setting configured at all, which is why the check asks what was detected rather than which platform is running.
-
-On Linux the desktop's own settings store is asked first and the other one fills in: xfconf on Xfce, gsettings elsewhere. gsettings answers on any box with GNOME's schemas installed, an Xfce box included, and a key nobody set comes back as the schema default, so asking it first on Xfce gave Cantarell 11 and Monospace 11 whatever the desktop was set to.
-
-The built-in stack is last for a reason. The generic monospace query below it is effectively a lottery over installed fonts, and its winner may ship no bold face. That ejects bold runs into an arbitrary, often proportional, fallback whose advances can't be snapped to the cell grid. Every entry in the built-in stack carries a real bold face. When that stack changes, the outgoing value is recorded, so an existing config still carrying it verbatim is refreshed on the next launch. A stack the user edited is theirs and is left alone.
+One monospace family is pinned for every weight, found from one search order on every platform. Anything that family lacks falls back glyph by glyph and is fitted to its cells, and color emoji are painted in-house. Full design: [Unicode, fonts and emoji](design_docs/20260930-150813_unicode-and-emoji.md).
 
 ### Hyperlinks
 
