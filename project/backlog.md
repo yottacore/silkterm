@@ -3472,6 +3472,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Add a new indented checkmark below that, "Check again next program run", that gets cleared after checking next program run.
 	- Done. Both check rows are grayed while the profile is not chosen automatically, since neither does anything then. The one-shot check clears itself as the launch starts the rating, not when the rating answers, so a window closed mid-run has still spent it. The new row is shorter than asked, because the full wording was the widest label on any tab and widened the whole dialog; the flyover says the rest.
 	- Pinned by: `each_profile_costs_less_than_the_one_above` and `rating_due_matches_the_launch_rules`.
+	- Note: 20260930, Low draws a 1 px outline now, from "Retune the scrim defaults for the steeper exponential falloff", and the check row is "Re-test next run".
 	- Opened: 20260905-094509
 	- Closed: 20260905-094509
 
@@ -3503,6 +3504,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Seen on Linux under software rendering: a fresh config came up Low, stepped down to Standard terminal during one burst of output, and a pick of Max silk in the dialog put the wallpaper on screen while the file kept the wallpaper switched off underneath.
 	- Not yet seen: Windows, a real GPU, and a display that is not 60 Hz.
 	- Pinned by: `a_profile_masks_the_stored_values_and_custom_puts_them_back`, `a_window_of_stretched_frames_is_a_miss_and_a_pause_breaks_the_chain`, `watched_lower_stops_at_low` and `a_missing_card_is_picked_for_rather_than_timed`.
+	- Note: 20260930, superseded in parts. Low keeps the wallpaper, governed rows and the dropdown stay live, the first pick is timed rather than starting at Max silk, and a step is never written. See the [performance profiles design doc](design_docs/20260930-151204_performance-profiles.md).
 	- Opened: n/a
 	- Closed: 20260903-213000
 

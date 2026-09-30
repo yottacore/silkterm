@@ -23,7 +23,7 @@
 	- [Text readability scrim](#text-readability-scrim)
 	- [Themes and text color](#themes-and-text-color)
 	- [Wallpaper](#wallpaper)
-	- [Performance profiles (2026-09-03)](#performance-profiles-2026-09-03)
+	- [Performance profiles](#performance-profiles)
 	- [Fonts, Unicode and emoji](#fonts-unicode-and-emoji)
 	- [Hyperlinks](#hyperlinks)
 	- [Double-click and selection](#double-click-and-selection)
@@ -90,6 +90,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Split panes](design_docs/20260930-150948_split-panes.md)
 
 - [Double-click and selection](design_docs/20260930-151047_double-click-selection.md)
+
+- [Performance profiles](design_docs/20260930-151204_performance-profiles.md)
 
 ## Architecture
 
@@ -186,48 +188,9 @@ Four built-in themes, each a dark and a light palette, plus saved themes stored 
 
 A faint, blurred picture behind the text, from a named image, a rotating folder or the built-in one, prepared on a worker so it never delays the window. Visibility means the same amount of the picture's contrast in dark and light mode, and the text colors can come from the picture. The see-through window is covered there too. Full design: [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md).
 
-### Performance profiles (2026-09-03)
+### Performance profiles
 
-One setting decides how much the look may cost, so a slow machine is a choice on one tab rather than a dozen switches on four.
-
-- Five profiles, in the order they cost: Custom, Max silk, High, Low, Standard terminal. Max silk is every effect at its shipped setting. High shortens the ease-in, ease-out and single-screen stretches of a scroll and gives the text halo a cheaper shape with a shorter reach. Low also drops the halo and the cursor animation, and leans on the outline instead; it keeps the wallpaper, which is decoded once and costs nothing per frame, and smooth scrolling. Standard terminal is a plain terminal: no smooth scrolling, no wallpaper, no halo, no outline, no animation. No profile draws an outline over a pixel wide; Low once used two, which read as a heavy stroke rather than as the thin edge the outline is for.
-
-- A sixth, Remote (temporary), is Standard terminal under another name and is never written to the file. It is put on for a remote screen at launch and taken off again at the next launch unless that one is remote too. It can also be switched by hand, from the Profile dropdown or from "Temporary remote display mode" on the View menu, and either way it lasts the session. The stored profile waits underneath it.
-
-- A profile sits on top of the stored settings rather than in them. The file and the dialog keep the user's own values. When settings go live the profile overwrites the fields it governs and keeps the originals beside them, and every write path puts them back before anything reaches the file. Choosing Custom is a profile that governs nothing, so it restores everything.
-
-- In the dialog the governed rows show the profile's values rather than the user's own, and their flyover says so. This is display only, so Apply writes the user's values underneath.
-
-- It leads the Silk tab, first in the dialog, with text readability and the scrolling feel under it. Those are the two sections it governs most of, so the switch and its effects are on one screen. Wallpaper and cursor rows stay on their own tabs and are grayed there. That still makes eight tabs, one past the guide's ceiling.
-
-- Automatic is the default, and the first pick is measured rather than guessed. Naming the adapter was not enough: an integrated chip is not a slow one, so it started at Max silk and stayed there.
-	- A run the display stalls gives no rating (2026-09-18). A monitor asleep paces every frame at about one a second, whatever is drawn. The run read that as a hopeless machine and saved Standard terminal, which has no wallpaper, for every launch after. Simply not saving on a stall would test a truly slow machine at every launch. So when a rung runs more than four times over its budget, Standard is timed once: a slow machine draws that well enough and gets Standard, and if Standard stalls as well, the display is what is pacing the frames. Then nothing is saved, the session goes back to the profile it had, the banner says the display was not drawing at its usual rate, and the next launch tests again. The display power state is not read, for the reason given under the watch below.
-
-- A governed row still takes input, and changing one takes the profile to Custom (2026-09-20). The rows used to be grayed, which meant every tweak started with a trip to the Silk tab to find a dropdown, and the flyover could only say where that tab was. Changing a setting is a clear enough statement that the profile is no longer wanted, so it is read as one: the values on screen become the user's own, the profile becomes Custom and "Choose automatically" goes off. The values on screen are what is kept, not the older ones the profile had been hiding, because the edit was made against what could be seen. Picking Custom from the dropdown is still the other way in, and that one does bring the older values back - the difference is that a pick says "my settings" and an edit says "this, but with that changed". While a profile is showing, a governed row offers no revert arrow, since what it shows is not a value the user set. Remote (temporary) is no exception here: it governs, so an edit under it drops the session override and the stored profile with it, or the new value would be covered up by one or the other.
-
-- The Profile dropdown stays live while automatic is on, and naming one switches automatic off (2026-09-19). It used to be grayed, so taking the machine's choice back meant finding the switch first and then the dropdown, in that order, with the dropdown showing the answer being argued with the whole time. Naming a profile is the clearest statement there is that the choice is no longer the machine's, so it is read as one. Without that, a pick made with automatic still on would be overwritten at the next launch with nothing on screen to say why. Remote (temporary) is the exception: it lasts this session only and says nothing about what the machine should settle on, so it leaves the switch as it was.
-
-- What the machine is gets hashed - the processor and its usable core count, the graphics adapter, and installed memory to the nearest GiB - and that hash is what the profile is written down against. The parts that need no adapter are read on a worker at launch, since nothing before the first frame wants them. A different hash is a different machine and gets rated again; the same hash leaves the profile where it was left. "Check for hardware change" under Performance switches the check off for a machine already rated, and "Re-test next run" under it asks for one more rating regardless, then clears itself once that launch has started one.
-	- The rating is written into the settings file line by line, so a file with a line that cannot be read still keeps it, and the rest of the file is left as it was. A file that reads clean but has nowhere a line can go, such as one with no Performance section, gets what a save from the Settings dialog would write. Either way the write is refused if any other setting would load differently at the next launch. That is judged on the text the next launch would leave, after every rewrite it makes before it reads the file: the wallpaper heading repair, the conversion of a file from before the nested layout, the move of `shell.default` into the shell list, and the renames and refreshes (2026-09-18). Two of those once looked at how a line was written as well as at its value, the quotes around an old default font list and the indent of a commented-out heading above a renamed setting, and a save changes both. Judging only the renames missed the conversion, which copies a font list with its quotes for the refresh after it to read. Adding missing settings is left out, since it only adds lines the program owns and runs whether or not a rating was written.
-	- Those steps read no quotes or indents now (the saving contract under Configuration format), so nothing known can make the check refuse. It stays for the next step that does, and a test hands it one.
-	- A rating is also refused where the next launch would not keep it. That launch writes a file from before the nested layout afresh and carries no rating over, so the rating goes in one launch later.
-	- When the rating cannot be kept (the file is open in another program, or cannot be written), the banner says so before it comes down, and the test runs again at the next launch.
-	- A build from before 2026-09-10 and a later one, launched in turn on one settings file, test at every switch, since the rating version is part of the hash.
-	- Rejected: a separate rating record in the data directory. It is a second copy of state the settings file already holds, and a hand-cleared `rated_hardware` would stop forcing a new rating, which the template comment promises.
-	- Rejected: retrying a write the busy check deferred. It costs a scan of every process's open files on a timer, for a case the banner now explains.
-
-- A remote screen is not rated and nothing is written for it. Every frame is encoded and shipped over a network, so the graphics card says nothing about what the person sees, and a benchmark on it would only flatter the machine; the session runs under the Remote profile instead and the console's rating stays as it was. An adapter with no card behind it goes to Low, untimed, decided before anything renders.
-
-- Anything else is timed. The window comes up whole, the wallpaper appears, and then a banner takes the window while three rungs are measured in turn: Max silk, High, Low, each put live and given up to about a second of full-rate frames. The first whose median frame period fits the display's refresh budget is the answer. The window keeps drawing underneath the banner, dimmed, because what is being timed is worth seeing; it takes no input, because a keystroke would change the measurement. Standard terminal is never timed - it is what is left when Low misses. A rung several times past the budget ends the run outright, since no profile below it changes the per-pixel work by that much, and that is also the case that would otherwise take longest to measure.
-
-- The display is still watched afterwards. When the median frame over a window of eased frames runs half again past the refresh period, the profile steps down one rung until SilkTerm restarts. The refresh period is the monitor's the window is on now, read again a few times a second, so a window dragged to another monitor is judged by that one. Frames paced under the old one are dropped rather than counted. Nothing is written, and the next launch starts from the rated profile again. The watch stops at Low. Low keeps the wallpaper, which costs nothing per frame, and Standard terminal turns off the eased frames being measured, so a step there could never be checked again. Only a window with focus is counted. A frame several times past the budget is not counted at all, because a monitor asleep under the NVIDIA driver paces a GL client at 1 fps, and an idle gap is not a frame either. Eases more than 30 seconds apart start a new window, so a verdict comes from one sitting. It never steps back up within a session, because a lighter profile renders less, so a fast run under it says nothing about the heavier one. A hand pick or a measured rating lifts the step, and a hand pick with automatic off stays put.
-	- This reverses the earlier rule that the step was written down. A written step made one window's misreading every later window's setting, with no way back while automatic was on. It took a 60 Hz desktop with a discrete card down to Standard terminal overnight, and the wallpaper with it.
-	- Ratings written before this change are redone once, since a written step cannot be told apart from a measured answer. The rating version is part of the hardware hash. A machine with "Check for hardware change" off keeps what it has until "Re-test next run" is used.
-	- Rejected: write the step and ask for a rating at the next launch. That is a banner after every hiccup.
-	- Rejected: write it but stop at Low. One stall would still change every later window.
-	- Rejected: read the X11 display power state. It is platform-specific, and it misses every other kind of stall, such as a suspend in mid-ease or a card taken by another program.
-
-- Blur quality is not part of a profile yet. The backlog item for it stands on its own, and a profile could drive it later.
+One setting decides how much the look may cost: Max silk, High, Low, Standard terminal or Custom, plus Remote (temporary) for a remote screen. A profile sits over the user's settings and never changes them. The first pick is timed and written against a hardware fingerprint, and a session steps down on missed frames without writing it. Full design: [Performance profiles](design_docs/20260930-151204_performance-profiles.md).
 
 ### Fonts, Unicode and emoji
 
