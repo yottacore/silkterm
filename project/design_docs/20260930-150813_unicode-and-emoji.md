@@ -130,7 +130,7 @@ The two glyph caches, text and color, are cleared together, and a missing raster
 
 ### Engine limits
 
-- The engine keeps up to nine combining marks per cell. That change is carried on the engine fork until upstream releases it. See the Alacritty design doc.
+- The engine keeps up to nine combining marks per cell. That change is carried on the engine fork until upstream releases it. See the [terminal engine](20260930-151451_alacritty-fork.md) design doc.
 
 - A pane is at least two columns, the engine's documented minimum, so a wide character always has room.
 
@@ -142,7 +142,7 @@ The two glyph caches, text and color, are cleared together, and a missing raster
 
 - Settings for fallback fonts. There is nothing a person would tune.
 
-- Batching fallback glyphs into one draw. Not worth 1.6% of a frame. See the Speed design doc.
+- Batching fallback glyphs into one draw. Not worth 1.6% of a frame. See the [Speed](20260930-150643_speed.md) design doc.
 
 - "Use system font" as inert on Windows. Only the family half is inert. The size half works.
 

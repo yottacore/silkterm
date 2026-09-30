@@ -127,7 +127,7 @@ Copy kept breaking, and the reason is that there are four ways to copy, each wit
 
 - **A program's clipboard request** (OSC 52) is honored only from the pane in use. Other panes and tabs are ignored. On Linux it also sets the primary selection.
 
-On X11, owning the selection has one more trap. When another program takes the selection, a stale clear can arrive for a copy that has already been replaced, and the stock clipboard crate then dropped the newer text. SilkTerm carries a patched `x11-clipboard` that keeps the value. See the Alacritty design doc for how patched crates are carried.
+On X11, owning the selection has one more trap. When another program takes the selection, a stale clear can arrive for a copy that has already been replaced, and the stock clipboard crate then dropped the newer text. SilkTerm carries a patched `x11-clipboard` that keeps the value. See the [terminal engine](20260930-151451_alacritty-fork.md) design doc for how patched crates are carried.
 
 ### Copy on output
 

@@ -211,7 +211,7 @@ This reverses an earlier rule, that the step was written down. A written step ma
 
 ## Roadmap
 
-- Blur quality is not part of a profile yet. A profile could drive it once the setting exists. See the Text scrim design doc.
+- Blur quality is not part of a profile yet. A profile could drive it once the setting exists. See the [Text scrim](20260930-145304_scrim.md) design doc.
 
 - The profile has not been watched on a display that is not 60 Hz, or on two real monitors at different rates.
 

@@ -375,7 +375,7 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 
 - Rounding a wheel gesture to the nearest line. It hops back at the end of a gesture.
 
-- Forking the Alacritty application. See the Alacritty design doc.
+- Forking the Alacritty application. See the [terminal engine](20260930-151451_alacritty-fork.md) design doc.
 
 ### Superseded
 
