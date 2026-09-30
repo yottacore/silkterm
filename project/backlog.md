@@ -3856,6 +3856,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- ✅ All of the behavior above is built and running - see the auto-detect item under "Features and enhancements".
 				- Pinned by: `a_shell_that_is_gone_is_switched_off_and_kept`, `a_shell_already_stored_is_not_added_twice`, `a_scan_never_switches_a_shell_back_on`, `the_login_shell_leads_and_its_twin_stays_under_it` and `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- Note: a color picker, the wallpaper randomize sub-group, and a few other rows are still open under Features and enhancements.
+	- Note: 20260930, the tab layouts here are out of date. The Silk tab gathered Performance, Text readability and Scrolling, and the color picker is done. The dialog as it stands is in the [Settings dialog design doc](design_docs/20260930-145721_settings-dialog.md).
 	- Opened: 20260719-085918
 	- Closed: 20260830-164632
 
@@ -4459,6 +4460,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Pinned by: `only_the_default_button_is_outlined_in_the_highlight`.
 	- Note: an existing config's `colors.focus` carries over to `colors.highlight` on the next launch, and the freed name now holds the new focus color.
 	- UAT.
+	- Note: 20260930, "Highlights" was renamed "Highlight".
 	- Opened: 20260719-085918
 	- Closed: 20260804-235533
 
@@ -5110,6 +5112,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Wayland transparency (2026-07-18): the native-alpha path works - a translucent terminal background over the compositor with text, chrome and cursor staying opaque, same as X11.
 	- Note (2026-07-18), on dialog stacking under Wayland: a pop-out dialog opens as its own window, renders fully, floats above the terminal, and stays modal. The compositor floats it because it says it is a fixed size; the X11 hints correctly do nothing there.
 		- Keyboard input to a dialog under Wayland is unconfirmed and needs a real Wayland desktop to check. Nothing was found wrong in the dialog code, and X11 is unaffected.
+	- Note: 20260930, the dialog keyboard question was an artifact of the test setup, not a bug.
 	- Opened: n/a
 	- Closed: 20260718-120039
 
@@ -5128,6 +5131,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- ✅ Can cycle through with Ctrl+PgUp|PgDn.
 			- Done: Ctrl+PageDown = next tab, Ctrl+PageUp = previous, alongside the existing Ctrl+Tab.
 			- Pinned by: `ctrl_tab_and_ctrl_page_walk_the_tabs_both_ways`.
+	- Note: 20260930, there are eight tabs now: Silk, Background, Text, Cursor, Movement, Themes, Window and Shell.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5492,6 +5496,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note: alt+down for dropdowns is N/A today - the dialog has no dropdowns yet; wire it up with the theme dropdown in Themes part 3.
 		- Pinned by: `keyboard_focus_walks_controls_then_buttons`, `keyboard_skips_headers_and_disabled`, `space_toggles_focused_boolean` and `ctrl_tab_and_ctrl_page_walk_the_tabs_both_ways`.
 	- Note: It might be best to defer some of these, until after (and if) native window controls are implimented.
+	- Note: 20260930, out of date in three places. On Windows the dialog is an owned popup, not a child. Shell has its own tab. Alt+Down is done, on the dropdowns.
 	- Opened: n/a
 	- Closed: 20260703-092145
 
@@ -5896,6 +5901,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No test: a real OS window, which needs a display.
 	- 🚫 Use the system window background and text color, if feasible in a cross-platform way.
 		- Canceled. No portable API; same as the menus/About.
+	- Note: 20260930, the Font size slider no longer turns the system font off. It is grayed while the system font is on.
 	- Opened: n/a
 	- Closed: 20260719-085918
 
@@ -5942,6 +5948,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Group Settings items into logical sections.
 	- Done: section headers, bold with a faint rule under them - Appearance, Font, Window, Scrolling, Colors. Row positions are summed per row now, since a header is taller than a setting.
 	- Pinned by: `every_tab_has_rows_and_every_row_a_tab` and `keyboard_skips_headers_and_disabled`.
+	- Note: 20260930, superseded by tabs, with groups and sub-groups on each.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5949,6 +5956,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: a "Font family" text field, empty meaning the system default. The pinned family is re-resolved whenever the text context is rebuilt, so the field and the "Use system font" checkbox take effect on Apply rather than on the next launch.
 		- Fixed on the way: the spacebar arrives as a named key rather than a character, so a font name or path with spaces in it now types correctly into a dialog field.
 	- Pinned by: `space_types_into_an_open_field`.
+	- Note: 20260930, superseded. An empty family no longer means the system default. "Use system font" does that, and the family is a fallback list.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6059,6 +6067,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Foundation: the live settings can be swapped as a whole at run time, which is what lets a dialog apply without a restart.
 		- Not yet exposed (the field table is trivially extensible): font_family, scrollback, alt/output scroll lines, background_fit, columns/rows, word_separators.
 	- Pinned by: `buttons_fire_on_release_over_button`, `space_or_enter_activates_focused_button`, `escape_from_inside_a_field_cancels_the_dialog`, `enter_in_a_field_is_the_dialogs_ok` and `a_save_writes_only_the_lines_it_changed`.
+	- Note: 20260930, superseded. Settings is a pop-out window now, not a modal over the terminal, and font family, columns and rows are exposed.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 

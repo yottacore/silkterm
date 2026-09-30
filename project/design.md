@@ -32,8 +32,7 @@
 	- [Selecting past the edge of the screen (2026-09-20)](#selecting-past-the-edge-of-the-screen-2026-09-20)
 	- [Measurements and display scaling](#measurements-and-display-scaling)
 	- [Attention colors and dialog chrome](#attention-colors-and-dialog-chrome)
-	- [Groups and sub-groups in the Settings dialog](#groups-and-sub-groups-in-the-settings-dialog)
-	- [The color picker (2026-09-20)](#the-color-picker-2026-09-20)
+	- [The Settings dialog](#the-settings-dialog)
 	- [Saved themes](#saved-themes)
 	- [The shell list and how it is filled](#the-shell-list-and-how-it-is-filled)
 	- [What a pane's shell inherits](#what-a-panes-shell-inherits)
@@ -80,6 +79,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Smooth cursor](design_docs/20260930-145124_smooth-cursor.md)
 
 - [Text scrim](design_docs/20260930-145304_scrim.md)
+
+- [Settings dialog](design_docs/20260930-145721_settings-dialog.md)
 
 ## Architecture
 
@@ -445,23 +446,7 @@ The built-in stack is last for a reason. The generic monospace query below it is
 
 ### Measurements and display scaling
 
-- Every measurement in the interface is written once, in device-independent pixels, and turned into real ones only when it is drawn. A DIP is a ninety-sixth of an inch, so a border, a gap or a checkbox is the same physical size on any screen. Nothing is written in raw pixels any more - the terminal grid itself is the only thing sized in them, and that follows the font.
-
-- Where the conversion happens differs by surface, and the difference is deliberate.
-
-	- A pop-out dialog is solved end to end in DIP and converts once, where its layout meets its window. It owns its whole coordinate space, so one boundary is enough and a stray conversion inside would scale something twice.
-
-	- The main window's chrome converts at each measurement instead. Menu bar, tab bar, menus, focus ring and pane gap all share a coordinate space with the terminal grid, which is in real pixels by nature, so there is no boundary to put a conversion on.
-
-- A dialog already open follows a scale change in place, rather than being rebuilt (2026-09-19). Dragging it to a monitor at another scale, or changing the desktop's scaling under it, moves only the boundary: the text context rasterizes at the new size and the chrome is measured again, and the layout below is already in DIP, so it is the same size on screen with the clicks where they look. A rebuild would have been a few lines, since reopening was the one thing that worked before, but what a reopen carries is the tab and the scroll - so every unapplied edit would have gone the moment the window crossed a monitor edge, which is worse than the wrong size. The size kept for the rest of the session is in DIP for the same reason, so a reopen on another monitor is the same apparent size and not the same count of pixels. About and the notice follow one too (2026-09-20), by a different route: neither can be resized and neither holds a layout to adjust, so each keeps what it was built from and is laid out again from scratch at the new scale.
-
-- Neither half of the boundary moves on its own, so a scale change sets both (2026-09-20). The window toolkit keeps the logical size, which for an ordinary window means the new physical size arrives straight after - but a maximized or tiled window keeps its physical size and sends nothing at all, and the dialog would then draw at the new scale inside the size it had before. So the dialog is told what the window really measures rather than waiting to be told, and the window is asked for that size held to what the screen can still hold, since a screen holds fewer DIP at a higher scale.
-
-- **A measurement TAKEN in real pixels must convert the constant beside it, not the other way about.** Text is measured against the font, which is real pixels by nature; the clear space that goes around it is written in DIP. Adding the two as they stand and dividing the sum at the dialog's boundary shrinks the constant by the scale factor - so at 2x a tab's title had half the clear space its own box allowed for and sat flush against the right edge, and above that it ran past it. Every such site converts the constant where it is used, exactly as the main window's chrome does. There is one rule for it, so the four places that size the dialog's columns cannot drift apart.
-
-- Conversion rounds to whole pixels. A rule or a hairline that fell between two of them would come out soft, and the one-pixel gap between panes is the extreme case: on a screen scaled below 1x, rounding alone would take it to nothing, so a measurement asked to be visible never rounds away.
-
-- A raw-pixel measurement is invisible at 1x and only thins out as the scale factor rises, which makes this the kind of mistake nobody sees on the machine they wrote it on. So the scale factor can be overridden from the environment (`SILK_SCALE`), and a high-DPI layout can be looked at on an ordinary display. Off X11 there is no other way to ask for one.
+Every measurement in the interface is written once in DIP, a ninety-sixth of an inch, and turned into real pixels only when it is drawn. A pop-out dialog converts once, at its window's edge. The main window's chrome converts at each measurement, since it shares its space with the terminal grid. `SILK_SCALE` overrides the scale factor for testing. The full rules are in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
 ### Attention colors and dialog chrome
 
@@ -469,39 +454,11 @@ The built-in stack is last for a reason. The generic monospace query below it is
 
 - The dialog's own accents follow the theme. They used to be a fixed blue while the theme's attention color was something else entirely, so the panel could not agree with the terminal it belonged to. The pressed-button fill is that color mixed back toward the panel, which is what makes a pressed button read as pressed rather than as the focused one.
 
-- A focused field shows one outline, not two. The ring sits exactly on the box's own outline and the box stands its border down. Where the focused thing is not a box at all, such as a checkbox or a slider handle, the ring sits a little outside it instead.
+The dialog's focus outline, tab strip and flyover help are in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
-- Tabs sit on a recessed **Gutter** strip and stand on the rule that closes it off, the way tabbed interfaces generally read. The current tab is a lighter gray rather than an accent: "you are here" is not the same job as "look at this". Above the rows there is no heading repeating the tab's own name, since the strip has said it already.
+### The Settings dialog
 
-- Controls whose label does not explain them carry a line of flyover help. One that is grayed out explains why instead, that being the more urgent question at the time. The text wraps to the panel rather than being clamped to its edge, so neither a longer sentence nor a larger interface font can push it out of view.
-
-### Groups and sub-groups in the Settings dialog
-
-- Settings are organized two ways. A **group** is a titled section with a rule under it and clear space above. A **sub-group** has no title of its own. It is a control followed by the controls that depend on it, whose labels step right so the run reads as belonging to the leader. A master switch and the things it governs is the shape this exists for.
-
-- Only labels move. Every control keeps the one column it shares with every other row, because a settings list is scanned down that column and a control that wandered with its label would break it. A sub-group is therefore free of any bookkeeping. It is read off the indentation rather than declared a second time, so the leader and its members cannot disagree about who belongs to what.
-
-- A fraction stored as a decimal is shown as a whole percent. Nobody thinks in 0.35, and the file is a different audience from the dialog. The decimal is what the renderer wants and what a hand-edited config should keep. The two directions are exact inverses, so reverting one gives back its own default rather than a hair off it.
-
-- The tabs follow what a person is looking at rather than what the code calls it: Silk, Background, Text, Cursor, Movement, Themes, Window, Shell. Settings that describe one subject sit together even when they are implemented in different places. The cursor's shape, its animation and whether it joins the text halo are all "cursor" to the person changing them.
-
-### The color picker (2026-09-20)
-
-- A color chip opens a picker: a saturation and brightness square, a hue strip beside it, six value boxes, and Cancel and OK. The hex field on the row stays where it is. Typing a known hex is faster than hunting for it, and a picker is for the case where the value is not known yet.
-
-- The box holds the color as hue, saturation and brightness rather than as the three bytes. Dragging to the bottom of the square leaves black, which says nothing about hue, and dragging to the left edge leaves a gray, which says nothing about saturation either. Reading the model back off the bytes each frame would send both markers home the moment the color reached an edge. The bytes are derived from the model, and the trip back the other way is exact for every color, so nothing drifts on the way in.
-
-- Changes go straight to the row behind the box, and Cancel puts back what the row held when it opened. That makes the chip, and the window under the dialog, the preview: there is no second copy of the value to get out of step, and the one thing to undo is one assignment.
-
-- The square and the strip are drawn by the renderer's own quad shader, as two modes of it. A gradient built from flat quads would be thousands of them for one square, and a picker is not worth a texture upload per hue.
-
-- The square mixes toward the hue in sRGB, not in linear light. Every other color in the program is handed to the GPU linear, and mixing toward white there gives a square nobody would recognize as a color picker: the pale half swamps everything else. So the square's quad carries its hue in sRGB and the shader encodes the result itself. That is the one exception, and it is written down where the quad is declared.
-
-- Six value boxes: red, green and blue as whole percents, then brightness, saturation and a hex value. No hue box. The strip is the hue control, and the other five can already name any color between them. Percents rather than 0 to 255 because every other fraction in the dialog shows as a whole percent, and a settings dialog should not switch units halfway down.
-
-- The chip is a focus stop of its own, so a Color row has two: the chip, then the hex field. Walking onto the chip opens nothing, and Space or Enter opens the picker. Without that the picker would be the one thing in the dialog a keyboard could not reach.
-
-- Inside the box the arrows adjust whatever holds focus: the square by a hundredth of its range, the strip by a hundredth of a turn, a value box by a hundredth of its own range. That is the same step every number box in the dialog already takes.
+A pop-out window with eight tabs, declared in the compiled-in `settings_ui.shcl`, drawn by SilkTerm and driven fully from the keyboard. Groups, sub-groups, the color picker, Apply and OK, and display scaling are all in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
 ### Saved themes
 
