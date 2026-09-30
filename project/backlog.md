@@ -6320,6 +6320,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260818-054058
 
 - 🚫 Windows fonts look too small even at 100% scale, compared to regular modern windows apps, and to legacy apps. Including terminal text, menus, and Settings. (May need Windows host to test.)
+	- Note: 20260930, no reason was written down when this was canceled, and none is remembered. Since then the terminal size follows the Windows font size, and the dialogs and chrome follow the display scale. If it still shows, file it again with a screenshot beside another app.
 	- Opened: 20260722-194629
 	- Closed: 20260817-120024
 
@@ -6362,6 +6363,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Leaf = `.` (default shell) | command-alias name (from a `[commands]` config table, keeps the string quote-free) | `{raw command}` (opaque span so an inner `|` pipe isn't parsed as a split; `\}` escapes a brace). Optional fixed-order suffixes: `@dir` (cwd), `:weight` (size), `!` (keep-open).
 	- Example: `silkterm --layout '(.|.)-. ; nvim|{git log} ; btop'` -> tab1: two-on-top/one-below; tab2: nvim beside a git-log pane; tab3: btop. Same string is accepted in `layout = "…"` in the config.
 	- Trade-off vs the flags: far terser for hand-typed/quick layouts, but less self-documenting; the flags stay the canonical form (and what "Save layout" emits). DSL is purely a convenience front-end.
+	- Note: 20260930, no reason was written down when this was canceled, and none is remembered. The create and select flags already reach every layout this would, and they are what "Save layout" would write.
 	- Opened: 20260628-083740
 	- Closed: 20260713-142351
 
