@@ -13,6 +13,8 @@
 
 set -euo pipefail
 meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
 root="$(cd "${meDir}/../../.." && pwd)"
 pins="${root}/cicd/tool-pins.txt"
 
