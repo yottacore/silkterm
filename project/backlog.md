@@ -168,7 +168,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - CODEOWNERS has no line for the About dialog
 	- ID: 2026092621021533
 	- Type: Bug
-	- Status: Waiting on signoff
+	- Status: Done
 	- Severity: Low
 	- Opened: 20260926-210215
 	- Opened by: CC
@@ -179,12 +179,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix: `source/src/dialog.rs` is listed. The addresses the button opens are in `config.rs`, which stays open since it holds every setting.
 	- Branch: smallfix
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
-	- Closed:
+	- Closed: 20260929-170546
 
 - Three fixes are pinned only by tests in the patched crates, which the pipeline never runs
 	- ID: 2026092621021534
 	- Type: Task
-	- Status: Waiting on signoff
+	- Status: Done
 	- Priority: Low
 	- Opened: 20260926-210215
 	- Opened by: CC
@@ -198,7 +198,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20260928: The clipboard and handle leak items already said so. The nano item, which the ledger test pins, now does too.
 	- Test case: None, the items are notes.
-	- Closed:
+	- Closed: 20260929-170507
 
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
