@@ -166,6 +166,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- All test files go somewhere under `%TEMP%` on Windows, or `/tmp/` elsewhere.
 		- Each run gets a subfolder named something like `test_silkterm_YYYYmmDD-HHMMSSNN`.
 	- Note: Most Rust tests already use the system temp dir, but each picks its own name at the top level of it. The script tests use `mktemp`, and a few write under `target/`.
+	- Decisions:
+		- 20260930: The base is the system temp dir, which follows `TMPDIR` on Linux and macOS. A box whose `/tmp` is unreliable points `TMPDIR` somewhere else for test runs, and nothing box-specific goes in the repo.
 	- Closed:
 
 - A launch from the Start menu as an MSIX package opens the first shell in System32
