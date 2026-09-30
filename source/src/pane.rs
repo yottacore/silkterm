@@ -1365,7 +1365,7 @@ impl Pane {
 		// end of the current read cycle and makes the reader's next cycle wait behind
 		// us. That caps the stale-frame run - without it a heavy `cat` freezes the
 		// pane for seconds - at the cost of blocking for one cycle (measured under
-		// 5ms). See design.md.
+		// 5ms). See the speed design doc.
 		let Some(mut guard) = lock_for_frame(&self.term.term, &mut self.lock_misses) else {
 			return;
 		};

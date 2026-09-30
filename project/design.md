@@ -36,7 +36,7 @@
 	- [Opening files from Explorer on Windows (2026-09-30)](#opening-files-from-explorer-on-windows-2026-09-30)
 	- [One tip system, four places that draw it (2026-08-30)](#one-tip-system-four-places-that-draw-it-2026-08-30)
 	- [Render Loop Sketch](#render-loop-sketch)
-	- [Output notices under a flood](#output-notices-under-a-flood)
+	- [Speed](#speed)
 	- [The About box says how long the session has been up (2026-09-20)](#the-about-box-says-how-long-the-session-has-been-up-2026-09-20)
 	- [A character handed to the window is typing (2026-09-09)](#a-character-handed-to-the-window-is-typing-2026-09-09)
 	- [What untrusted input may not do (2026-09-09)](#what-untrusted-input-may-not-do-2026-09-09)
@@ -83,6 +83,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Minimap](design_docs/20260930-150325_minimap.md)
 
 - [Themes and text color](design_docs/20260930-150458_themes.md)
+
+- [Speed](design_docs/20260930-150643_speed.md)
 
 ## Architecture
 
@@ -153,7 +155,7 @@ Frame loop: a PTY read or a user event marks the app dirty or starts an animatio
 
 Critical constraint: crate's `display_offset` is integer lines. No fractional scroll in crate. Smooth scroll lives entirely in the renderer.
 
-Sharing the terminal with the reader thread: the reader holds the terminal across a whole read cycle, so the renderer cannot simply take it every frame without stalling. It also cannot merely try and give up. The reader reclaims it immediately, and an impatient try can lose forever, which showed up as a pane frozen for seconds during heavy output. The rule is to try first, and after a couple of frames of getting nowhere, wait properly. Waiting is bounded, because it reserves the terminal ahead of the reader's next cycle. Trying is not bounded at all.
+Sharing the terminal with the reader thread: try first, and after a couple of frames of getting nowhere, wait properly, since the wait is bounded and the try is not. See the [Speed](design_docs/20260930-150643_speed.md) design doc.
 
 ### Smooth scrolling
 
@@ -398,13 +400,9 @@ A pop-out window with eight tabs, declared in the compiled-in `settings_ui.shcl`
 
 - Need: glyph atlas (rasterize font once, cache cells), cell metrics (width/height in px), vsync via wgpu surface.
 
-### Output notices under a flood
+### Speed
 
-- A pane's PTY reader finishes a read cycle roughly every 900 bytes when output is pouring in, and each cycle used to become its own window event. On 32 MiB of output that is about 20,000 events, and it was decided that the window should take delivery of at most one at a time: the notice carries nothing, so the window reads the grid as it stands whenever it gets round to one, and a queue of twenty identical notices only ever produced twenty identical reads.
-
-- Measured on the Windows box, the folding costs nothing and saves a great deal: throughput is unchanged (11.8 against 11.7 MB/s over four alternating pairs) while the process burns a third less CPU and the window thread less than half - the 2.5 seconds that used to go into the operating system's message queue was more than parsing and drawing put together.
-
-- The notice is re-armed before the window acts on it, so a read cycle that arrives mid-handling posts a fresh one rather than being dropped. That ordering is the whole safety argument, and it is what a unit test pins.
+Output reaches the window as one notice at a time, drawing never blocks reading, and a frame whose text did not change does no text work. Throughput is measured by a benchmark anyone can run, and published in the README. Full design: [Speed](design_docs/20260930-150643_speed.md).
 
 ### The About box says how long the session has been up (2026-09-20)
 

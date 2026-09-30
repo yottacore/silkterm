@@ -1946,6 +1946,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- What is left to gain is therefore about a second per 32 MiB, and none of it is in the drawing: parsing is half a second of that, and the rest is the engine's Windows pipe plumbing, which delivers about 17 MB/s where a plain blocking read of the same pipe gets 22. Two obvious levers were tried and neither moved it - folding the engine's internal notifications, and waiting for the pipe to accumulate before reading it. Reading and parsing on one thread beats the shipped two-thread arrangement by half a second, which is the direction worth exploring if this is ever picked up again, and it would mean a real fork.
 	- Also settled: the console host's delivery ceiling is fixed. Pipe buffers from the default to 16 MB, read sizes from 64 KB to 1 MB, and Microsoft's redistributable host beside the executable all sit within noise.
 	- No test: a measurement. Nothing changed.
+	- Note: 20260930, the first four sub-bullets were the first answer. The reopen below corrects them: the gap is about 2x, not 10x, and a single-thread read and parse is still a direction if this is picked up again.
 	- Opened: 20260818-054058
 	- Closed: 20260818-062827
 
@@ -1963,6 +1964,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Carried locally in the meantime: the workspace pins the released engine plus that one change, so our builds are fixed now rather than waiting. Cargo records the exact commit, so a build is still reproducible.
 	- Follow-up when a release carries it: drop the pin from the workspace file (it says so in place) and delete the branch it points at.
 	- No test: the fix is in the engine fork's Windows PTY code, and its tests run only there.
+	- Note: 20260930, out of date on two points. The engine is carried on the fork branch `scroll-ledger-0.26.0` with several patches, not a one-change pin, and the fix is pinned by a fork test and a SilkTerm Windows flood test.
 	- Opened: 20260814-140609
 	- Closed: 20260816-103257
 
@@ -5746,6 +5748,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Optimize compiled binaries to balance executable size and speed (slight nod to size), without the risk of triggering antivirus.
 	- Done: `[profile.release]`: `lto = "fat"` (whole-program inlining - smaller and usually faster than thin), `panic = "abort"` (drops unwinding tables - sizable shrink, fine for a GUI app), kept `codegen-units = 1` + `strip = true`, and opt-level stays 3 so renderer/PTY hot paths aren't slowed (the size improvement comes from the free wins, not from `opt-level=s/z`). Deliberately no UPX/packer - packers routinely trip AV heuristics. - Result: the Linux binary is ~13% smaller, with no runtime-speed tradeoff.
 	- No test: release profile settings, no behavior to drive.
+	- Note: 20260930, superseded in part. The release opt-level is "s" now, from "Performance pass: smaller binary, less per-frame work".
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
