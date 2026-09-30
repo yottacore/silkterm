@@ -165,40 +165,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the float half of the same test reads a field of its own for every key.
 	- Closed:
 
-- CODEOWNERS has no line for the About dialog
-	- ID: 2026092621021533
+- A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
+	- ID: 2026092821452948
 	- Type: Bug
-	- Status: Done
+	- Status: Waiting on signoff
 	- Severity: Low
-	- Opened: 20260926-210215
+	- Opened: 20260928-214529
 	- Opened by: CC
 	- Assigned to: CC
 	- Target OS: All
-	- Incorrect behavior: The done support item lists the About dialog as locked in CODEOWNERS, but the file names only itself, DONATE.md and FUNDING.yml.
-	- Expected behavior: A line for the code that draws the About dialog and its support button.
-	- Actual fix: `source/src/dialog.rs` is listed. The addresses the button opens are in `config.rs`, which stays open since it holds every setting.
-	- Branch: smallfix
-	- Test case: None, it is a git host setting. The git host reports no errors in the file.
-	- Closed: 20260929-170546
-
-- Three fixes are pinned only by tests in the patched crates, which the pipeline never runs
-	- ID: 2026092621021534
-	- Type: Task
-	- Status: Done
-	- Priority: Low
-	- Opened: 20260926-210215
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- The x11-clipboard stale clear, the Windows pane handle leak and the engine's scroll ledger are held only by tests in the fork repos.
-		- Either run those tests from cicd, or say in each item that the fork's own runs are the check.
-	- Decisions:
-		- 20260928: Each item says so. The handle leak test needs Windows and the clipboard one an X server, so running them here would cover only the ledger.
+	- Incorrect behavior: `about_to_wait` collects each pane's cursor wake before the frame is drawn. A wake the frame itself sets is not seen until something else wakes the loop.
+	- Expected behavior: A wake set while drawing is honored on time.
+	- Reproduced: No. Read from the code while fixing the minimap's version of the same gap, which waited up to two seconds when idle.
+	- Related IDs: the done old-format item "Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time".
+	- Actual cause:
+		- A cursor that parks sets its resume time in the frame. The loop read that time before drawing, so a cursor that parked in the frame had no wake at all, and one whose resume moved earlier kept the old time.
+		- Four window wakes had the same order. The idle release and the rating banner were missed when the frame revealed the window or a rating ended. The rating's start waited for its cap when the wallpaper showed in the frame. A frame asked for after drawing, when a rating ended or stepped the profile down, waited for the next event.
 	- Progress log:
-		- 20260928: The clipboard and handle leak items already said so. The nano item, which the ledger test pins, now does too.
-	- Test case: None, the items are notes.
-	- Closed: 20260929-170507
+		- 20260929: Not seen on screen. Checked by unit test and clippy on b23 only.
+	- Actual fix: Every pane wake, the cursor's and the minimap's, is read after the frame from one list (`PaneWakes`). The idle release, the rating's start and banner, and the reveal deadline are read after it too. A frame asked for after drawing is drawn on the next pass.
+	- Branch: curwake
+	- Test case: `a_wake_set_while_drawing_is_kept` (ErJF0fr). Seen to fail with only the minimap's wake read after the frame. The window wakes have no test, since they live in the event loop.
+	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the minimap. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame does not set them.
+	- Closed:
 
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
@@ -280,30 +269,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
-	- ID: 2026092821452948
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20260928-214529
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Incorrect behavior: `about_to_wait` collects each pane's cursor wake before the frame is drawn. A wake the frame itself sets is not seen until something else wakes the loop.
-	- Expected behavior: A wake set while drawing is honored on time.
-	- Reproduced: No. Read from the code while fixing the minimap's version of the same gap, which waited up to two seconds when idle.
-	- Related IDs: the done old-format item "Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time".
-	- Actual cause:
-		- A cursor that parks sets its resume time in the frame. The loop read that time before drawing, so a cursor that parked in the frame had no wake at all, and one whose resume moved earlier kept the old time.
-		- Four window wakes had the same order. The idle release and the rating banner were missed when the frame revealed the window or a rating ended. The rating's start waited for its cap when the wallpaper showed in the frame. A frame asked for after drawing, when a rating ended or stepped the profile down, waited for the next event.
-	- Progress log:
-		- 20260929: Not seen on screen. Checked by unit test and clippy on b23 only.
-	- Actual fix: Every pane wake, the cursor's and the minimap's, is read after the frame from one list (`PaneWakes`). The idle release, the rating's start and banner, and the reveal deadline are read after it too. A frame asked for after drawing is drawn on the next pass.
-	- Branch: curwake
-	- Test case: `a_wake_set_while_drawing_is_kept` (ErJF0fr). Seen to fail with only the minimap's wake read after the frame. The window wakes have no test, since they live in the event loop.
-	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the minimap. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame does not set them.
-	- Closed:
-
 - The showdown rigs cannot take XTerm's speed figure again
 	- ID: 2026092820352466
 	- Type: Task
@@ -362,6 +327,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- CODEOWNERS has no line for the About dialog
+	- ID: 2026092621021533
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Incorrect behavior: The done support item lists the About dialog as locked in CODEOWNERS, but the file names only itself, DONATE.md and FUNDING.yml.
+	- Expected behavior: A line for the code that draws the About dialog and its support button.
+	- Actual fix: `source/src/dialog.rs` is listed. The addresses the button opens are in `config.rs`, which stays open since it holds every setting.
+	- Branch: smallfix
+	- Test case: None, it is a git host setting. The git host reports no errors in the file.
+	- Closed: 20260929-170546
+
+- Three fixes are pinned only by tests in the patched crates, which the pipeline never runs
+	- ID: 2026092621021534
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20260926-210215
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- The x11-clipboard stale clear, the Windows pane handle leak and the engine's scroll ledger are held only by tests in the fork repos.
+		- Either run those tests from cicd, or say in each item that the fork's own runs are the check.
+	- Decisions:
+		- 20260928: Each item says so. The handle leak test needs Windows and the clipboard one an X server, so running them here would cover only the ledger.
+	- Progress log:
+		- 20260928: The clipboard and handle leak items already said so. The nano item, which the ledger test pins, now does too.
+	- Test case: None, the items are notes.
+	- Closed: 20260929-170507
 
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082
