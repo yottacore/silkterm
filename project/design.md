@@ -95,29 +95,15 @@ Each of these has its own design doc, which is the source of truth for that feat
 
 - [Releasing resources](design_docs/20260930-151334_releasing-resources.md)
 
+- [The terminal engine and patched crates](design_docs/20260930-151451_alacritty-fork.md)
+
 ## Architecture
 
 ### Language / Stack Decision
 
-Rust + `alacritty_terminal` crate (not a fork of Alacritty repo).
+Rust plus the `alacritty_terminal` crate, not a fork of the Alacritty application. The crate brings the PTY, the parser and the grid, and SilkTerm builds only the renderer. Three crates are carried on small patched branches, one per published release. Why, what is used and how the patches are carried: [The terminal engine and patched crates](design_docs/20260930-151451_alacritty-fork.md).
 
-Rationale:
-
-- `alacritty_terminal` crate (v0.15.0 at design time; v0.26 as built) provides PTY + full VT/ANSI parser + grid state as a standalone library. Inherit the two hardest, correctness-critical pieces.
-
-- Do not `git fork alacritty` - its renderer is built to snap to cells and maintainers reject smooth scroll by design. Forking = fighting architecture + merge debt. Crate = clean dependency, build only the renderer.
-
-- Two crates are nonetheless patched, through `[patch.crates-io]` in the workspace manifest, and both follow one rule: a branch under `jim-collier` named for the release it sits on, holding that published release plus our change and a test for it. Naming the release is what lets an older lock keep resolving, and starting from the published source rather than the upstream branch keeps the delta to what has actually been read. `alacritty_terminal` carries the scroll ledger and four smaller fixes; `x11-clipboard` keeps the copied text when a stale `SelectionClear` arrives, which was the defect behind copies that silently stopped working (2026-09-20).
-
-- Renderer: `wgpu` (or `glium` as fallback). Glyph atlas + cell draw.
-
-Rejected alternatives:
-
-- Go (`aminal`, custom): Difficult due to dearth of existing plumbing options; parser is the hard part.
-
-- Zig + libvterm + raylib: viable but less ecosystem glue than Rust path.
-
-- Python: Excluded (not compiled).
+- Renderer: `wgpu`. Glyph atlas plus cell draw.
 
 ### Logical code organization
 
@@ -152,19 +138,7 @@ Frame loop: a PTY read or a user event marks the app dirty or starts an animatio
 
 ### API (alacritty_terminal)
 
-(As designed against 0.15.0; the build tracks the current release - 0.26 as of 2026-07. Signatures below are the stable core that carried over.)
-
-- `Term::scroll_display(Scroll)` - moves viewport by whole lines. `Scroll` enum: `Delta(i32)`, `PageUp`, `PageDown`, `Top`, `Bottom`.
-
-- `grid.display_offset()` - integer line offset from bottom = current viewport position.
-
-- Grid cell iteration (`iter_visible` / indexing) = render source.
-
-- `config::Scrolling` = history limit + line multiplier only. not animation. Ignore for smooth scroll.
-
-Critical constraint: crate's `display_offset` is integer lines. No fractional scroll in crate. Smooth scroll lives entirely in the renderer.
-
-Sharing the terminal with the reader thread: try first, and after a couple of frames of getting nowhere, wait properly, since the wait is bounded and the try is not. See the [Speed](design_docs/20260930-150643_speed.md) design doc.
+The engine knows only whole lines (`display_offset`), so smooth scrolling lives entirely in the renderer. The calls SilkTerm relies on, and how the terminal is shared with the reader thread, are in the [terminal engine](design_docs/20260930-151451_alacritty-fork.md) and [Speed](design_docs/20260930-150643_speed.md) design docs.
 
 ### Smooth scrolling
 

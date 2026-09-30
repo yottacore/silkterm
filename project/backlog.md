@@ -1967,7 +1967,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Carried locally in the meantime: the workspace pins the released engine plus that one change, so our builds are fixed now rather than waiting. Cargo records the exact commit, so a build is still reproducible.
 	- Follow-up when a release carries it: drop the pin from the workspace file (it says so in place) and delete the branch it points at.
 	- No test: the fix is in the engine fork's Windows PTY code, and its tests run only there.
-	- Note: 20260930, out of date on two points. The engine is carried on the fork branch `scroll-ledger-0.26.0` with several patches, not a one-change pin, and the fix is pinned by a fork test and a SilkTerm Windows flood test.
+	- Note: 20260930, out of date on two points. The engine is carried on the fork branch `scroll-ledger-0.26.0` with several patches, not a one-change pin, and the fix is pinned by a fork test and a SilkTerm Windows flood test. alacritty/alacritty#9026 was closed unmerged, so the change stays on the fork.
 	- Opened: 20260814-140609
 	- Closed: 20260816-103257
 
