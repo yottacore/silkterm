@@ -966,6 +966,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: the debug log no longer records every probe that finds nothing wrong. Those lines filled its size cap in a day in July, so it has recorded nothing since.
 	- Pinned by: `a_return_to_this_console_is_healed_again_once_settled`, watched failing with the second pass pushed out. A faked switch and return released and rebuilt the device twice, and the window drew normally after.
 	- To confirm: a real switch to a text console and back on the reference box. `~/silk_vramdbg.txt` is full, so move it aside first; with `~/silk_vramdbg.on` in place a return then logs both heals.
+	- Note: 20260930, the memory fault guess above is out of date. RAM was tested and is fine, and the crashes that day are put down to a kernel fault.
 	- Opened: 20260917-164802
 	- UAT 20260919-143007: This appears to be fixed. Upon return, the wallpaper blanks and comes back, and the window title says "resources restored".
 	- Closed: 20260919-152000
@@ -3301,6 +3302,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Found on the way and fixed: glibc kept each wallpaper decode's buffers resident in the worker's arena, about 50 MB per window from the first decode alone. The mmap threshold is pinned now, which cut launch memory by about 60 MB with a wallpaper. And every Vulkan instance destroyed on NVIDIA left two file descriptors open, so the warm dialog context keeps its instance across a release.
 	- Rows on the Window tab: "Free resources when idle", "Minutes when hidden" (30), "Minutes otherwise" (240). Config keys `window.idle_release`, `window.idle_release_hidden_min`, `window.idle_release_min`.
 	- Pinned by: `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` and `output_into_a_hidden_window_does_not_hold_its_device`.
+	- Note: 20260930, the planning bullets above were answered by the Done bullets: nothing is disabled under transparency, and the label is "Free resources when idle". The design is in the [releasing resources design doc](design_docs/20260930-151334_releasing-resources.md).
 	- Opened: 20260905-181131
 	- Closed: 20260917-070723
 

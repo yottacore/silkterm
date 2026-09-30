@@ -42,7 +42,7 @@
 	- [The fuzzer (2026-09-09)](#the-fuzzer-2026-09-09)
 	- [Environment](#environment)
 	- [Startup and slow external resources](#startup-and-slow-external-resources)
-	- [Letting the GPU go on a long idle (2026-09-17)](#letting-the-gpu-go-on-a-long-idle-2026-09-17)
+	- [Releasing resources](#releasing-resources)
 	- [Configuration format](#configuration-format)
 	- [Variables in a setting (2026-08-30)](#variables-in-a-setting-2026-08-30)
 	- [Command-line options](#command-line-options)
@@ -92,6 +92,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Double-click and selection](design_docs/20260930-151047_double-click-selection.md)
 
 - [Performance profiles](design_docs/20260930-151204_performance-profiles.md)
+
+- [Releasing resources](design_docs/20260930-151334_releasing-resources.md)
 
 ## Architecture
 
@@ -412,31 +414,9 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 - The same shape is intended for shell discovery when that arrives: draw first, scan for installed shells afterwards, fold in what was found.
 
-### Letting the GPU go on a long idle (2026-09-17)
+### Releasing resources
 
-- Off by default. Switched on, a window that has sat unused lets its GPU device go, with everything uploaded to it, and takes it back the moment it is used again. The shells run on and the grid keeps up; only drawing stops. The case is many windows open for days, each holding a device, a swapchain, two glyph atlases, the scrim's textures and a wallpaper the whole time.
-
-- Unused means no input, no focus change and no output from any pane while the window can be seen. Output into a hidden window does not count, or a program printing in a minimized window would hold the device for good. Two waits, both in minutes on the Window tab: a shorter one for a window that is minimized, or covered where the desktop reports it, and a longer one for a window that is only unfocused, since that one may be on a second screen being read. A window with focus and on screen never lets go.
-
-- It comes back on any sign of life: a key, a click, the pointer entering, focus, a hidden window being shown, a shell printing, or the desktop asking for a repaint. Output into a hidden window does not bring it back; that waits for the reveal, the way the frozen-window rule already works.
-
-- Held off while a dialog is open, since on X11 the dialog's context cannot outlive the terminal's, and while a hardware rating is owed or running.
-
-- What is kept is what a rebuild starts from: the wgpu instance, and on X11 the GL framebuffer config the window was made with. The instance rather than a fresh one, because a GL instance's teardown terminates an EGL display the glutin context may share, and because on the other backends the adapter enumeration it holds is the slow part of a cold start. The dialogs' warm context keeps its instance and adapter the same way and lets only its device go: on NVIDIA, every Vulkan instance destroyed left two descriptors open.
-
-- The fonts and metrics stay, since layout and input still need them. Gone with the device: the rasterized glyphs, the shaped chrome and the wallpaper, which is decoded again on the way back, as after a VT switch.
-
-- Measured on the Linux box under software GL, on a private display: about 3 ms to let go, about 25 ms to take back, and no CPU at all while released. Under the NVIDIA driver, on Wayland and on Windows the numbers are not taken yet.
-
-- Memory found on the way: glibc lets its mmap threshold rise with each large buffer freed, after which a wallpaper's decode is carved out of the worker thread's arena and stays resident there once freed, and `malloc_trim` never shrinks an arena that is not the main one. Every window kept the first decode's 50 MB for life, and each rebuild kept 40 MB more. The threshold is pinned at 4 MB now, so an image buffer comes from the OS and goes back to it. Launch memory dropped by about 60 MB with a wallpaper.
-
-- The same release and rebuild heals a window after a return to its console from a text one, twice: at once, and again three seconds later, after the X server has set the mode. The older fix rebuilt only the glyphs and the wallpaper, and each thing added to the device since then was one more that a switch could leave spoiled.
-
-- The window title says so (2026-09-18). "(resource conservation mode)" while released, "(restoring resources ...)" until the wallpaper is back, since the device itself returns too fast to see, then "(resources restored)" for five seconds. Any rebuild shows it, a return from a text console included, and it goes on a `--title` too, since it is news about the window rather than part of its name.
-
-- Rejected: dropping the uploads and keeping the device. The device and its context are the fixed cost the feature exists to remove, and the uploads are the smaller half.
-
-- Rejected: disabling the feature under transparency. The X11 GL path survives the teardown, since the ARGB visual belongs to the window and a new context on the kept config binds to it.
+A window nobody is looking at draws no frames, and a minimized window or hidden tab freezes its rendering but never its reading. Optionally, an unused window gives its GPU device back and takes it again on any sign of life. After a return from a text console, the whole device is rebuilt. Full design: [Releasing resources](design_docs/20260930-151334_releasing-resources.md).
 
 ### Configuration format
 
