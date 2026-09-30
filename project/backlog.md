@@ -79,6 +79,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: 20260929, the rig's own xterm run read 28.32, 49.22 and 23.9 against 28.3, 48.5 and 23.9 published, and wrote nothing. Details in `utility/include/showdown-readme.md`.
 	- Closed:
 
+- Windows: open scripts and folders in SilkTerm
+	- ID: 2026093009280571
+	- Type: Feature
+	- Status: Waiting on signoff
+	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
+	- Priority|Severity: Avg
+	- Opened: 20260930-092805
+	- Opened by: JC
+	- Assigned to: JC
+	- Related IDs: 2026092810510800
+	- Target OS: Windows
+	- Test environment: vm925w, Windows 11 25H2
+	- Requirements:
+		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
+			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
+			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
+			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
+		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
+			- Windows only. Other platforms don't show them.
+		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
+		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
+		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
+		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
+		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
+		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
+	- Branch: winassoc
+	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
+	- Acceptance signoff:
+
+
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
 	- Type: Bug
@@ -119,26 +152,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Windows: open scripts and folders in SilkTerm
-	- ID: 2026093009280571
-	- Type: Feature
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
 	- Status: Queued
 	- Priority|Severity: Avg
-	- Opened: 20260930-092805
+	- Opened: 20260930-100803
 	- Opened by: JC
-	- Assigned to: JC
-	- Related IDs: 2026092810510800
 	- Target OS: Windows
-	- Requirements:
-		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
-			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
-			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
-			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
-			- Note: A `.ps1` opens in Notepad on a double-click, and Windows does that on purpose. It stays that way, and its "Run with PowerShell" entry runs in SilkTerm.
-		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
-			- Windows only. Other platforms don't show them.
-		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
-	- Estimated effort: Avg
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
 
 - A launch from the Start menu as an MSIX package opens the first shell in System32
 	- ID: 2026092617015083

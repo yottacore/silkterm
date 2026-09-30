@@ -39,6 +39,7 @@
 	- [The shell list and how it is filled](#the-shell-list-and-how-it-is-filled)
 	- [What a pane's shell inherits](#what-a-panes-shell-inherits)
 	- [A prompt is offered to bash, never installed (2026-08-30)](#a-prompt-is-offered-to-bash-never-installed-2026-08-30)
+	- [Opening files from Explorer on Windows (2026-09-30)](#opening-files-from-explorer-on-windows-2026-09-30)
 	- [One tip system, four places that draw it (2026-08-30)](#one-tip-system-four-places-that-draw-it-2026-08-30)
 	- [Render Loop Sketch](#render-loop-sketch)
 	- [Output notices under a flood](#output-notices-under-a-flood)
@@ -706,6 +707,22 @@ The built-in stack is last for a reason. The generic monospace query below it is
 - x9ps1-git is a separate MIT project of the same author. The in-repo copy is a vendored copy of its `bin/x9ps1-git`, and will go stale on its own if nobody looks - the version it carries is in its own header.
 
 - PowerShell gets the same prompt, ported rather than shared, and delivered the other way. See below for why the two halves cannot use one mechanism.
+
+### Opening files from Explorer on Windows (2026-09-30)
+
+- SilkTerm opens `.bat`, `.cmd`, `.ps1` and `.vbs` files, and folders, through per-user file associations. It is not Windows' default terminal.
+
+- Being the default terminal is ruled out for good. Windows starts the console program first and then hands its live session to the terminal through COM, and only Windows Terminal's console host can do the handing. So it needs Windows Terminal installed, a COM server inside SilkTerm, and a second way into the pty backend. Associations cover what a person actually double-clicks, for a small part of the work.
+
+- Registering overrides only the `open` verb of each type's program ID, its label and its command, in `HKCU\Software\Classes`. Windows reads HKCU over HKLM a value at a time, so the type keeps its icon, its other verbs and its description. It also adds a `SilkTerm.<ext>` entry under Open with, which is the only way in when the user picked an app for the type there.
+
+- What each value held before is saved under `HKCU\Software\SilkTerm\Associations`, with the value we wrote. Putting back restores only a value still holding ours, so a change somebody made since is left alone. Registering again puts back and saves over, so the path follows the build.
+
+- The command is `silkterm --keep-open --open "%1" %*`. `--open` picks the host from the file type and takes the rest of the line as the file's arguments. A batch file is started as itself, since CreateProcess hands it to `cmd.exe` quoted the way cmd wants. A `.ps1` uses the same execution-policy step as Windows' own "Run with PowerShell".
+
+- A dogfood build registers the launcher's link beside its versions folder rather than the versioned copy, which gets renamed.
+
+- The Settings rows act at once and hold no config value, since the registry is the state. They exist only in the Windows build.
 
 ### One tip system, four places that draw it (2026-08-30)
 
