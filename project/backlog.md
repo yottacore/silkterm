@@ -189,6 +189,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the minimap. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame does not set them.
 	- Closed:
 
+- The showdown rigs cannot take XTerm's speed figure again
+	- ID: 2026092820352466
+	- Type: Task
+	- Status: Waiting on signoff
+	- Priority: Low
+	- Opened: 20260928-203524
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Related IDs: split from the done old-format item "Let the showdown tools measure again every row the README table carries".
+	- Requirements:
+		- The published XTerm speed figure was taken on X11. The speed rig runs under sway, and through its Xwayland xterm read 18.4 MB/s against 28.3 published, in one noisy run.
+		- Either give the rig an X11 path for xterm, or show the Xwayland figure is real and say so.
+	- Progress log:
+		- 20260929: The Xwayland figure is real. Six pairs of runs, the two ways in turn: 16.1 to 18.6 MB/s of ASCII through Xwayland against 25.1 to 28.7 on a private X server. The extra time is in xterm itself, not the X server.
+		- 20260929: Control: xfce4-terminal's ASCII holds through the same Xwayland, and its row reproduced on the compositor at a quiet moment (94.0 against 94.2).
+	- Decisions:
+		- 20260929: Both. The speed rig runs xterm on a private X server, as its row was taken on X11, and README note 9 says so, with the Xwayland figure beside it. The published row keeps its numbers.
+	- Branch: xtermspeed
+	- Test case: ErE7yrA (`cicd/tests/showdown/rigs.py`). Seen to fail on the old rig.
+	- Verified: 20260929, the rig's own xterm run read 28.32, 49.22 and 23.9 against 28.3, 48.5 and 23.9 published, and wrote nothing. Details in `utility/include/showdown-readme.md`.
+	- Closed:
+
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
 	- Type: Bug
@@ -267,29 +290,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When changing the cursor size and animation, change to 50% width.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
-	- Closed:
-
-- The showdown rigs cannot take XTerm's speed figure again
-	- ID: 2026092820352466
-	- Type: Task
-	- Status: Waiting on signoff
-	- Priority: Low
-	- Opened: 20260928-203524
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Related IDs: split from the done old-format item "Let the showdown tools measure again every row the README table carries".
-	- Requirements:
-		- The published XTerm speed figure was taken on X11. The speed rig runs under sway, and through its Xwayland xterm read 18.4 MB/s against 28.3 published, in one noisy run.
-		- Either give the rig an X11 path for xterm, or show the Xwayland figure is real and say so.
-	- Progress log:
-		- 20260929: The Xwayland figure is real. Six pairs of runs, the two ways in turn: 16.1 to 18.6 MB/s of ASCII through Xwayland against 25.1 to 28.7 on a private X server. The extra time is in xterm itself, not the X server.
-		- 20260929: Control: xfce4-terminal's ASCII holds through the same Xwayland, and its row reproduced on the compositor at a quiet moment (94.0 against 94.2).
-	- Decisions:
-		- 20260929: Both. The speed rig runs xterm on a private X server, as its row was taken on X11, and README note 9 says so, with the Xwayland figure beside it. The published row keeps its numbers.
-	- Branch: xtermspeed
-	- Test case: ErE7yrA (`cicd/tests/showdown/rigs.py`). Seen to fail on the old rig.
-	- Verified: 20260929, the rig's own xterm run read 28.32, 49.22 and 23.9 against 28.3, 48.5 and 23.9 published, and wrote nothing. Details in `utility/include/showdown-readme.md`.
 	- Closed:
 
 - cicd shows one line per test, with its status and test ID
