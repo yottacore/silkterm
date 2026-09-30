@@ -3,7 +3,8 @@
 ##	- Purpose:
 ##		Run pieces of cicd-win.ps1 here, lifted out of the file rather than
 ##		retyped: the run log rotation, the path map it hands the release builds,
-##		and the check for a local path left in a built file.
+##		the check for a local path left in a built file, and the installer tests,
+##		which must leave the pipeline's temp folder as they found it.
 ##	- Syntax: _lift.ps1 -Work <scratch dir> [-Pipeline <path to cicd-win.ps1>]
 ##		Prints one ok or FAIL line per check, and the path map's file and the
 ##		values it should hold as JSON on the last line, for a TOML reader to check.
@@ -22,7 +23,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fInstallerTests') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
@@ -69,6 +70,39 @@ fCheck 'the checkout is found, in another case' (fHas 'c:\SRC\silkterm\source\ma
 fCheck 'a mapped path is not' (-not (fHas '/cargo/registry/src/x.rs and /silkterm/source/main.rs'))
 fCheck 'nor is a longer name that starts the same' (-not (fHas 'C:\Users\somebodyelse\x.rs'))
 
+##	The installer tests, with stand-ins that each take the run folder the way
+##	the real ones do and note the temp folder they saw. One takes the Windows
+##	branch, so TEMP and TMP move too. Afterward the pipeline's own temp folder,
+##	which the release builds use, must be what it was, TMP still unset.
+. (Join-Path $PSScriptRoot '../_testdir.ps1')
+function fEcho { }
+function fDie { param([string]$Msg); throw $Msg }
+$Root = Join-Path $Work 'root'
+$seen = Join-Path $Work 'seen.txt'
+$helper = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../_testdir.ps1')).Path
+$stub = { param([string]$Extra)
+	"param([string]`$Shell)`n. '$helper'`n$Extra`nfTestDir_Use`nAdd-Content -LiteralPath '$seen' -Value ([System.IO.Path]::GetTempPath() + '|' + `$env:TEMP + '|' + `$env:TMP)`nexit 0"
+}
+foreach ($rel in 'cicd/tests/release/verify-sign.ps1', 'cicd/tests/install/tempdir.ps1', 'cicd/tests/install/windows.ps1') {
+	$path = Join-Path $Root $rel
+	New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
+	$extra = if ($rel -like '*tempdir*') { 'function fTestDir_OnWindows { $true }' } else { '' }
+	Set-Content -LiteralPath $path -Value (& $stub $extra)
+}
+$sys = Join-Path $Work 'sys'
+New-Item -ItemType Directory -Path $sys -Force | Out-Null
+$env:SILKTERM_TEST_DIR = Join-Path $Work 'run'
+$env:TEMP = $sys; $env:TMPDIR = $sys; Remove-Item env:TMP -ErrorAction SilentlyContinue
+fInstallerTests
+fCheck 'the installer tests leave TMPDIR as it was' ($env:TMPDIR -eq $sys)
+fCheck 'and TEMP' ($env:TEMP -eq $sys)
+fCheck 'and TMP still unset' (-not (Test-Path env:TMP))
+fCheck 'so the temp folder is the system one again' ([System.IO.Path]::GetTempPath().TrimEnd('/', '\') -eq $sys)
+$lines = @(Get-Content -LiteralPath $seen)
+$inRun = @($lines | Where-Object { $_.Split('|')[0].StartsWith($env:SILKTERM_TEST_DIR) })
+fCheck 'while each installer test had the run folder as its temp folder' ($lines.Count -eq 4 -and $inRun.Count -eq 4)
+fCheck 'with TEMP and TMP there too in the one that takes the Windows branch' ($lines.Count -eq 4 -and $lines[1].EndsWith("|$($env:SILKTERM_TEST_DIR)|$($env:SILKTERM_TEST_DIR)"))
+
 ##	The path map, from folders whose names hold a backslash and a quote. The
 ##	TOML reader on the other end decides whether they were escaped right.
 $Root = "$Work/sil\k`"term"
@@ -86,3 +120,4 @@ exit 0
 
 ##	History:
 ##		- 20260926 JC: Created.
+##		- 20260930 JC: The installer tests leave the temp folder alone.

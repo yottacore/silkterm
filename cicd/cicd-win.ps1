@@ -221,6 +221,26 @@ function fExec {
 	if ($LASTEXITCODE -ne 0) { fDie "$What failed (exit $LASTEXITCODE): $File $($CmdArgs -join ' ')" }
 }
 
+## The installer tests. They run in this process and point TEMP and TMP at the
+## test run folder, so both go back afterward for the builds that follow.
+function fInstallerTests {
+	fTestDir_Keep {
+		## install.ps1's signature check, with the OpenSSH that ships on Windows.
+		fExec "installer signing" (Join-Path $Root "cicd\tests\release\verify-sign.ps1")
+		fEcho "OK: installer signing"
+		## ...and its temp folder step, where the shared temp folder is the one it guards against.
+		fExec "installer temp folder" (Join-Path $Root "cicd\tests\install\tempdir.ps1")
+		fEcho "OK: installer temp folder"
+		## ...and a real install, upgrade and repair, under both PowerShells. Called
+		## directly, since fExec's array would reach -Shell as a plain value.
+		foreach ($shell in @("pwsh", "powershell")) {
+			& (Join-Path $Root "cicd\tests\install\windows.ps1") -Shell $shell
+			if ($LASTEXITCODE -ne 0) { fDie "installer on Windows ($shell) failed" }
+		}
+		fEcho "OK: installer on Windows"
+	}
+}
+
 ## First `version = "x"` from the manifest.
 function fVersion {
 	$line = Select-String -LiteralPath $VersionManifest -Pattern '^\s*version\s*=\s*"([^"]+)"' |
@@ -853,19 +873,7 @@ function fMain {
 	fSection "3  Tests"
 	fExec "tests" "cargo" @("test")
 	fEcho "OK: tests passed"
-	## install.ps1's signature check, with the OpenSSH that ships on Windows.
-	fExec "installer signing" (Join-Path $Root "cicd\tests\release\verify-sign.ps1")
-	fEcho "OK: installer signing"
-	## ...and its temp folder step, where the shared temp folder is the one it guards against.
-	fExec "installer temp folder" (Join-Path $Root "cicd\tests\install\tempdir.ps1")
-	fEcho "OK: installer temp folder"
-	## ...and a real install, upgrade and repair, under both PowerShells. Called
-	## directly, since fExec's array would reach -Shell as a plain value.
-	foreach ($shell in @("pwsh", "powershell")) {
-		& (Join-Path $Root "cicd\tests\install\windows.ps1") -Shell $shell
-		if ($LASTEXITCODE -ne 0) { fDie "installer on Windows ($shell) failed" }
-	}
-	fEcho "OK: installer on Windows"
+	fInstallerTests
 	fLintAdvisory
 
 	## Stage 4: release builds (x86_64 msvc + gnu always; ARM64 when ready).

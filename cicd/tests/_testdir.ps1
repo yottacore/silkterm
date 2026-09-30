@@ -1,7 +1,7 @@
 ##	- Purpose:
 ##		The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, for the
-##		PowerShell tests and cicd-win.ps1. Dot-sourced; it defines fTestDir_Make
-##		and fTestDir_Use and runs nothing. Same contract as _testdir.bash:
+##		PowerShell tests and cicd-win.ps1. Dot-sourced; it defines fTestDir_Make,
+##		fTestDir_Use and fTestDir_Keep and runs nothing. Same contract as _testdir.bash:
 ##		SILKTERM_TEST_DIR set and not empty is the folder, made if missing;
 ##		otherwise a fresh one is made, 0700 off Windows, and exported, so every
 ##		test the caller starts shares it.
@@ -50,6 +50,21 @@ function fTestDir_Use {
 		$env:TMP = $env:SILKTERM_TEST_DIR
 	} else {
 		$env:TMPDIR = $env:SILKTERM_TEST_DIR
+	}
+}
+
+function fTestDir_Keep {
+	##	Runs $Run, then puts back the temp folder that fTestDir_Use points
+	##	elsewhere. For a caller that runs tests in its own process and has more
+	##	to do after them, since the environment is the whole process's.
+	param([Parameter(Mandatory)][scriptblock]$Run)
+	$saved = @{ TEMP = $env:TEMP; TMP = $env:TMP; TMPDIR = $env:TMPDIR }
+	try { & $Run }
+	finally {
+		foreach ($name in $saved.Keys) {
+			if ($null -eq $saved[$name]) { Remove-Item "env:$name" -ErrorAction SilentlyContinue }
+			else { Set-Item "env:$name" $saved[$name] }
+		}
 	}
 }
 
