@@ -183,7 +183,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: Most Rust tests already use the system temp dir, but each picks its own name at the top level of it. The script tests use `mktemp`, and a few write under `target/`.
 	- Decisions:
 		- 20260930: The base is the system temp dir, which follows `TMPDIR` on Linux and macOS. A box whose `/tmp` is unreliable points `TMPDIR` somewhere else for test runs, and nothing box-specific goes in the repo.
-	- Test case: ErOj67l (`cicd/tests/testdir/run.bash`), and the `testdir::tests` Rust tests `a_run_folder_is_made_fresh_under_the_temp_base` (ErOj5oB), `a_run_folder_already_there_is_never_adopted` (ErOj5oC), `a_run_folder_gives_up_when_every_name_is_taken` (ErOj5oD), `a_run_folder_the_runner_gives_is_used` (ErOj5oE) and `a_run_folder_is_stamped_in_local_time` (ErOj5oF). Each seen to fail on the old behavior.
+	- Test case: ErOj67l (`cicd/tests/testdir/run.bash`), and the `testdir::tests` Rust tests `a_run_folder_is_made_fresh_under_the_temp_base` (ErOj5oB), `a_run_folder_already_there_is_never_adopted` (ErOj5oC), `a_run_folder_gives_up_when_every_name_is_taken` (ErOj5oD), `a_run_folder_the_runner_gives_is_used` (ErOj5oE) and `a_run_folder_is_stamped_in_local_time` (ErOj5oF). Each seen to fail on the old behavior. Er2UgYE (`cicd/tests/cicd-win/run.bash`) pins that the Windows pipeline's installer tests leave its temp folder alone.
 	- Branch: testtmp
 	- Closed:
 
