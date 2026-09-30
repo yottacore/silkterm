@@ -20,6 +20,7 @@
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
 $Launcher = Join-Path (Split-Path $PSScriptRoot -Parent | Split-Path -Parent | Split-Path -Parent) "utility/n8runterm.ps1"
 if (-not (Test-Path -LiteralPath $Launcher)) { throw "no launcher at $Launcher" }
