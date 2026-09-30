@@ -3199,6 +3199,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: a short map owed a redraw for as long as it was short, and a view parked in the scrollback freezes the lag, so it asked for a frame and a whole redraw about eleven times a second with no output at all. It owes one only while the count is draining now.
 	- Note: this widens the open bug about the marker moving at a different rate from the map under it, from at most a screen of blank rows to the whole output lag, measured at 218 against 225 lines under a 600 lines/s flood, and the gap now stays while the view is parked.
 	- To confirm: how it looks under a real flood. It is pinned by number, not by eye.
+	- Note: 20260930, the marker-rate bug named above was fixed the same day, in "Minimap: the marker sits above the part of the map the screen is showing".
 	- Opened: 20260919-190000
 	- Closed: 20260920-081500
 
@@ -3226,6 +3227,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: reworking the marker to end on the last drawn line broke the round trip between where it is drawn and the position a drag reads back from it, so a press plus one pixel of movement scrolled the view by itself. The marker's height and travel now come off one helper and the two directions divide by the same travel. The same fault was reachable before this work at a deep scrollback, where the marker's minimum height ate into its travel; that is fixed with it.
 	- Pinned by: `a_marker_reads_back_the_position_it_was_drawn_at`, over 21 positions across six buffer shapes, watched failing on both.
 	- Note: the marker now moves at a slightly different rate from the map under it, which is filed as its own bug.
+	- Note: 20260930, both "its own open item" and "filed as its own bug" were closed later: "Minimap: stop the map where the eased text has reached" and "Minimap: the marker sits above the part of the map the screen is showing".
 	- Opened: 20260918-110145
 	- Closed: 20260919-165500
 
@@ -3321,6 +3323,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: the minimap's own bar is gone, and the regular scrollbar sits at the far right edge, over the edge of the map. The width setting is now the whole column's.
 	- On a short scrollback the map's marker and the scrollbar thumb sit at different heights, because the map does not stretch to fill its column.
 	- Pinned by: `the_scrollbar_sits_at_the_far_edge_past_the_minimap`.
+	- Note: 20260930, the marker and the thumb take one span now, at the map's pitch, so they no longer sit at different heights.
 	- Opened: n/a
 	- Closed: 20260915-122637
 
@@ -3539,6 +3542,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- And a pixel row is now as bright as the ink that actually fell in it, so a mostly blank stretch reads dimmer than a solid page. A single inked line among many is held above a floor so it stays findable, and color still comes only from the lines that have ink, so a lone red line keeps its color.
 	- Measured on a scene of 4,000 lines: the column used to be lit edge to edge with no gaps anywhere, and is a fifth dimmer now. At a couple of hundred lines each line reads as its own bar.
 	- Pinned by: `a_sparse_stretch_reads_dimmer_than_a_full_one`, `one_inked_line_among_many_still_shows` and `a_line_under_a_pixel_keeps_its_whole_height`.
+	- Note: 20260930, lines are 1.5 px now, with each character weighted by how much it inks, from "Minimap:" (closed 20260919-165500).
 	- Opened: 20260902-000000
 	- Closed: 20260903-045000
 
@@ -3575,6 +3579,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Lines draw as colored strokes, not glyphs. A blend of many lines keeps the strongest ink rather than the average, so one red line among fifty still reads.
 		- Settings are a toggle and a width on the Movement tab, plus a View-menu item. Off by default, and off means no column, no cache and no per-frame work.
 	- Pinned by: `off_costs_the_pane_nothing`, `the_column_takes_its_width_and_no_more`, `the_handle_rides_the_scroll_position` and `one_inked_line_among_many_still_shows`.
+	- Note: 20260930, out of date in three places. It is on by default, there is one scrollbar at the far right, and a pixel row is as bright as the ink that fell in it rather than the strongest line. See the [minimap design doc](design_docs/20260930-150325_minimap.md).
 	- Opened: 20260802-094409
 	- Closed: 20260831-075726
 

@@ -83,6 +83,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 
 - [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md)
 
+- [Minimap](design_docs/20260930-150325_minimap.md)
+
 ## Architecture
 
 ### Language / Stack Decision
@@ -162,99 +164,7 @@ Full design: [Smooth scrolling](design_docs/20260930-144720_smooth-scrolling.md)
 
 ### Minimap
 
-An optional sidebar showing the whole scroll buffer in miniature, in the spirit of the Sublime Text / VS Code minimap. On by default since 2026-09-17, once the column learned to step aside for full-screen programs.
-
-Where it sits:
-
-- Per pane, not per window. Scrollback belongs to a pane, so in a split each pane carries its own map.
-
-- The map owns a real column inside the pane's rect - it never overlays the text. Turning it on costs terminal columns, and the PTY resizes like any other layout change. A pane too narrow to spare the room gets no column at all; the column may never take more than half a pane.
-
-- Left to right: terminal text, then the preview. The regular scrollbar sits at the pane's far right edge, over the edge of the preview, the same overlay it is without a map. An earlier design kept a second, always-visible bar beside the preview. The two showed the same thing, so that one was removed.
-
-- The configured width is the whole column's.
-
-The mapping, which is the decision everything else rests on:
-
-- The whole buffer - history plus screen - always maps linearly onto the column, top-anchored, oldest first. The editors slide their minimap once the document outgrows it; this one never does.
-
-- The map stops where the eased text has reached, not at the live bottom of the buffer. Under a flood the view sits behind the newest output by however far the output ease is holding it, and drawing past that puts lines in the column that are not on screen. What is held back is the output the view has not come down to yet: new lines add to it as they arrive, and the view gives it back as it reaches them. So a scroll or a jump to the bottom never shortens the column by itself, and typing during a flood does not turn the trim off. The extent is settled when the picture is composed, so the marker is never measured against a picture nobody drew, and a map that came out short asks for another compose and follows the ease down. One line is always kept, so the column never disappears.
-
-- An earlier pass read the same sentence the other way and stopped the map at the last screen row with output, so the blank rows under a short prompt took no track. That is out again. The blank rows are part of the buffer.
-
-- Two narrower rules were tried before that one and each broke the other's case (2026-09-20). Trimming whenever the view is following the bottom reads a jump to the bottom as output, since the view eases in the same way, and shortens the map by the whole distance the gesture has left to travel. Trimming only while the output chase owns the motion misses the rest of a flood after a single keystroke, because a keystroke aims the view at the bottom and that flag does not clear while output keeps arriving. Both are one-line readings of the scroll position from outside the scroll model, which carries the chase's undrained backlog and a gesture's remaining travel in one number. Counting the unreached lines inside the model is what settles both, since only it can tell the two apart.
-
-- With a short buffer, lines draw at a capped height (1.5 px at 1x) and the preview just does not reach the bottom of the column yet. That cap is scaled but not rounded to whole pixels, on purpose: a line has to be able to sit at a fraction of one, or its ink falls inside a single pixel row and a page goes back to reading as a slab.
-
-- With a deep buffer, lines go sub-pixel and blend down, so the map compresses instead of scrolling. At the default 10,000-line scrollback a line is a fraction of a pixel; colored regions still read as bands, which is most of the point.
-
-- The marker is measured at the map's own pitch, over the lines the picture draws rather than over the whole buffer. Anything else puts it above or below the text it stands for whenever the two differ, which is every moment the trim above is holding the map short.
-
-- The marker carries a floor on its height so a deep buffer still leaves something to grab. The thumb takes the same span, never its own. Where the floor makes the marker taller than the rows it stands for, it grows both ways from their middle, so it still reads as pointing at them.
-
-What a line looks like:
-
-- Strokes, not glyphs. Per cell: a run of the cell's fg color where there is ink, over the cell's bg where it differs from the default. Hues survive, so errors, prompts and diffs stay findable from across the room.
-
-- How much of its cell a character inks varies with the character, from a quarter for a period or a comma up to the full amount for a hash, a block or an em-wide letter. A flat share is what made a run of text read as one bar. The weights are eyeballed from a monospace face rather than measured, since the map is a hint and the face in use is not known where the raster runs. A cell that carries its own background still paints solid whatever is in it; only how far its color pulls toward the foreground moves.
-
-- Across a line, coverage adds up, so a short or indented line reads as one. Down the column, color is averaged over only the lines that have ink, so a lone red line among blanks keeps its color rather than fading into them.
-
-- A cell is spread over a tent a pixel each side, and so is a line, rather than each being clipped to the pixel it happens to fall in. Neither grid lines up with the pixels, and at the ratios a column runs at - about 100 cells into 90 px, about one line per pixel - clipping leaves the two grids beating against each other. That draws a comb across the column and broad bands down it, neither of which is in the text. The wider filter costs about a sixth more per compose and it is what makes a page of repeated output read as the text it came from.
-
-- Under about 0.6 px per line the line filter goes back to clipping. A pixel there already averages more than a whole line, the gap below is switched off and the column is even anyway, while the wider filter would cost three times as much - and that is the deep buffer where a compose is already the expensive one.
-
-- How bright a pixel row gets is how much ink actually fell in it, so a mostly blank stretch reads dimmer than a solid page. That is what makes density legible from a distance. One inked line among many would otherwise almost vanish, so a pixel never falls below a set share of the strongest line in it.
-
-- A line does not fill its own height. The gap above and below is what stops a page of text reading as one block. At the capped height the ink is a band narrower than a pixel, so it falls across two pixel rows at part strength rather than filling one, which is what a page of text looks like from a distance. Below about half a pixel there is no room for a gap and the line is taken whole, with the two ramped between so the map does not change brightness as a growing buffer crosses that point.
-
-- The column steps aside while a full-screen program runs, and the text gets its width back. Such a program draws on its own screen, which has no scroll buffer behind it, so the map would show a rectangle at the top of an otherwise empty column.
-
-- Which programs are the exception is a setting rather than a rule, because there is no way to tell from the outside whether a full-screen program is one the map could usefully follow. By default it names a pager and the two multiplexers.
-
-Interaction:
-
-- The marker drags like a thumb and rides the scroll target, so it tracks the pointer exactly. A drag works out from where it grabbed rather than from where the marker was last drawn: the height floor means the drawn top is a rounded reading of the position, and reading it back would move the view on a press that never moved.
-
-- A click elsewhere in the column centers the view there, eased the same way a scrollbar drag settles. The bottom of the map stands for the lines the trim is holding back as well as the last one it drew, so a click there means the newest output.
-
-- The wheel over the column scrolls the buffer, same as over the text - including under an app that is tracking the mouse, since there is no cell under the pointer to report.
-
-Alt screen:
-
-- The column stays, so the PTY is not resized every time an app flips screens. The preview shows the screen itself, with no marker and no thumb - there is nothing to scroll.
-
-Cost when off:
-
-- Truly off: no column, no cache, no per-frame work. The whole feature hangs off one config check, and the cache is freed the moment the column goes away.
-
-Settings and chrome:
-
-- A "Minimap" toggle and a width slider on the Movement tab, under the scrollbar cluster, plus a View-menu item. The marker reuses the scrollbar's thumb color, which is why the scrollbar color rows sit with the palette rather than under the scrollbar switch.
-
-How it is built:
-
-- `minimap.rs` owns the line cache, the raster, the mapping and the hit tests. `pane.rs` carves the rect and routes events. Drawing is one textured quad per pane plus overlay quads for the marker and thumb.
-
-- Each line rasterizes once into a fixed-width pixel row, at the first compose after it enters history, since history lines never change; the live screen rows re-raster at each compose. A build between composes only counts the new lines. It runs while holding the lock the PTY reader waits on, and under a flood most lines leave history before any compose would show them, so rasterizing them as they arrived cost about half the terminal's speed. A screen swap, a resize and a width change drop the cache. Sitting scrolled back with a full scrollback is the one case where nothing reports how many lines were pushed, so a changed newest-history line is taken as the sign the cache has fallen behind, and it rebuilds whole at a bounded rate.
-
-- A compose reads at most about 4 ms worth of lines from the grid. A deep scrollback that was just rebuilt, or turned over by a flood, holds far more than that: reading 100,000 lines took 150 ms, and the terminal stood still for all of it. Past the limit, one line in every so many is drawn and stands in for the lines around it. Later composes spend what is left of the limit replacing the stand-ins, newest first, since the oldest are the first to leave. Once output stops, the map ends up the one every line makes. Until then a pixel row can show a neighbor's picture of a line, which under a flood nobody can tell.
-
-- A compose that only replaced stand-ins redoes just the pixel rows they fall in, and the screen's. Each pixel row is worked out on its own, so that matches a whole compose.
-
-- Redrawing the whole image is pixel work on the cached rows, and it needs no lock. Over a deep scrollback it is still most of a second at a million lines, so the rows go to a thread of their own for it, and the finished image is swapped in when they come back. The builds carry on counting meanwhile. A small one is cheaper to do in place.
-
-- The composed image uploads as a texture the size of the column, so texture size limits and the GL context's VRAM-loss re-upload both stay non-issues.
-
-- Under a flood every pixel of the map moves on every line, so a recompose is throttled rather than run per frame. A compose the throttle defers schedules a timed wake, not an animation flag - marking the window animating would bring it straight back, find the throttle still closed, and spin at the frame rate. A compose can owe the next one, and that wake is only known once its frame is drawn, so the event loop looks for it again after drawing.
-
-- The throttle is at least 90 ms, and at least twenty times what the last ordinary compose took, the part on its own thread included. A whole redraw after a screen swap, a resize or a resync costs far more, and waiting twenty times that left the map still for seconds, so it does not count. A column that changes size composes at once instead of waiting the throttle out, so the image is never left at a size the column no longer has. A whole compose still grows with the scrollback, which can be a million lines, so a fixed interval could not bound its share at every depth. At the default depth under a flood, the map on costs about 6% of throughput.
-
-- Memory is about 5 MB per pane at the default scrollback and a 120 px column, freed while the map is off.
-
-- The marker and the scrollbar thumb say the same thing, so dragging either one pins both to the pointer. Off a drag they both ride the eased position and move with the content. Letting only the dragged one ride the pointer left the other trailing the ease the whole way down, which read as the second one lagging.
-
-- A handle let go stays where it was dropped until the text arrives, rather than being handed straight back to the eased position. The text is still on its way at that moment, so handing it back sent the handle backward the way it came and then crawling forward again - a bounce, on the one gesture where the user has said exactly where they want to be. The hold ends when the two agree, or at once if anything else moves the target, since from there the handle belongs to the content again.
+A column beside each pane showing the whole scroll buffer in miniature. The buffer always maps linearly onto the column and never slides, and the map stops where the eased text has reached. Lines are colored strokes weighted by how much each character inks. Full design: [Minimap](design_docs/20260930-150325_minimap.md).
 
 ### Text readability scrim
 
