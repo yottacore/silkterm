@@ -32,6 +32,65 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Windows Terminal handoff
+	- ID: 2026092810510800
+	- Type: Feature
+	- Status: Waiting for answers
+	- Priority|Severity: Avg
+	- Opened: 20260928-105138
+	- Opened by: JC
+	- Assigned to: JC
+	- Target OS: Windows
+	- Test environment:
+	- Version and build:
+	- Requirements:
+		- In order to register as the "default terminal" in Windows, several unusual things are required.
+		- I closed the webpage that describes exactly what, before copying the URL, so do research again.
+		- Open questions:
+			- Generally, I'd like the ability for the user to be able to register the one installed version of SilkTerm as the default terminal.
+			- But for me specifically, I'd like to be able to register 'n8runterm' as the default. (Is that a completely separate thing?)
+	- Estimated effort: Avg
+	- Actual effort:
+	- Progress log:
+		- 20260928: Research so far, moved here from a second copy of this item:
+			- Windows: let SilkTerm be picked as the default terminal, so a console program started from anywhere, such as double-clicking a `.bat`, opens in SilkTerm instead of conhost or Windows Terminal.
+			- There is no setting or script that can do this from the outside. Windows stores the choice in `HKCU\Console\%%Startup` as two COM class IDs, `DelegationConsole` and `DelegationTerminal`, not as program paths. The console host creates that class and calls `ITerminalHandoff::EstablishPtyHandoff`, passing over the pipes of a program that's already running.
+				- 20260930: It's two hops, not one. The built-in conhost only knows `IConsoleHandoff`, and passes the session to the `DelegationConsole` class. That one, Windows Terminal's OpenConsole, then calls `ITerminalHandoff3` on the `DelegationTerminal` class. Checked in the microsoft/terminal source, and in the conhost and OpenConsole binaries on vm925w.
+			- Checked 2026-09-28: the source has nothing for this, and neither does build `slktrmdf_20260927-175446_gnulwi`. Pointing the registry at SilkTerm today would break every console launch.
+				- 20260930: A failed handoff falls back to conhost, so it isn't a hard break. But COM waits up to 60 seconds for the class to appear, and each launch would also open a plain SilkTerm window, so in practice it's close to the same. Read from the source, not tried.
+			- Add a COM local server to SilkTerm that implements the handoff interface. It's defined in microsoft/terminal at `src/host/proxy/ITerminalHandoff.idl`. Newer builds call `ITerminalHandoff3`, check which version the current console host uses before starting.
+				- 20260930: Confirmed. OpenConsole calls only `ITerminalHandoff3` since Windows Terminal 1.22, and conhost never calls any of them. The OpenConsole in Windows Terminal 1.24 on vm925w carries only that interface's ID.
+			- Give the pty backend a second way in. Today it always creates its own ConPTY. A handed-off session arrives with its pipes, signal pipe and process handles already made, and the tab has to run those.
+				- 20260930: With version 3, the terminal makes the two data pipes and gives the console host its ends. The signal pipe, a session reference, and the console host and client process handles arrive ready-made. Resize is a six-byte packet on the signal pipe, and closing the session is closing those handles, so it needs no `conpty.dll`.
+			- Register the class under `HKCU\Software\Classes\CLSID\{guid}\LocalServer32`, pointing at `%LOCALAPPDATA%\Programs\silkterm.exe` with a flag like `--handoff`. That's the symlink the launcher keeps pointed at the newest dogfood build, so the default follows each new build.
+				- A handed-off window skips the launcher, so it won't be elevated.
+					- 20260930: An elevated console program doesn't hand off at all, and stays in conhost. Windows Terminal has the same limit, by design (microsoft/terminal#10276).
+				- 20260930: COM adds ` -Embedding` to the command line on its own, so no flag of ours is needed. The program it starts has 60 seconds to register the class.
+			- Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminal that the built-in conhost doesn't. Not verified. The ConPTY redistributable already being tried here ships its own console host, which may or may not be usable for this.
+				- 20260930: Verified. It has to be Windows Terminal's OpenConsole, with that ID. Conhost's own ID turns handoff off, and conhost can't reach a terminal by itself. So Windows Terminal has to be installed. It also carries the parts that pass the call between processes. The redistributable's OpenConsole has the same ID built in, so it can't stand in as a second console host.
+			- Add a way to switch it on and off, either in Settings or as a command-line option. Turning it off means setting both values back to all zeros, which is "Let Windows decide".
+				- 20260930: Right, and a missing value means the same. The account on vm925w has Windows Terminal set by name, though, so off may be better as putting back whatever was there. See the questions below.
+			- The Settings app's dropdown only lists packaged apps that declare the handoff extension. An unpackaged SilkTerm could still write the registry values itself, but it would never show up in that list.
+				- 20260930: It takes two app extensions in the same package, `com.microsoft.windows.console.host` and `com.microsoft.windows.terminal.host`, so a packaged SilkTerm has to name a console host too. For a pair it doesn't know, Windows Terminal's own Settings page shows "Let Windows decide".
+		- 20260930: Research redone against the microsoft/terminal source and docs, and checked read-only on vm925w (Windows 11 25H2, Windows Terminal 1.24). Corrections are the dated sub-bullets above. The plan is in details.md, under "Windows Terminal handoff plan (20260930)".
+		- 20260930: No other terminal has released this yet. WezTerm has two open requests (wezterm#7534, wezterm#7328). A few small projects have code, two of them in Rust, and all take the same route: Windows Terminal's OpenConsole as the console host, their own class as the terminal.
+		- 20260930: `n8runterm` isn't a separate thing. The registration names a program, and COM starts it by itself. The launcher could be named there, but then PowerShell, and by default a UAC prompt, would sit in front of every console launch. The launcher already keeps `%LOCALAPPDATA%\Programs\silkterm.exe` pointed at the newest build, so registering that path gets the same result without it.
+		- 20260930: Questions:
+			- Is it OK to rely on Windows Terminal being installed? It's what passes the session on. Doing without it means building our own console host and bundling it, which is much bigger.
+			- Should a handed-off program open in a new SilkTerm window each time, like conhost, or as a tab in a window that's already open, like Windows Terminal? The plan starts with a new window.
+			- When the handed-off program exits, should its tab close right away, as panes and conhost both do now, or stay open with the exit status, as `--keep-open` does?
+			- Should the switch be a command-line option only at first, or a Settings row too?
+			- When it's switched off, put back whatever was set before, or always "Let Windows decide"?
+			- May the work register it for the test account on vm925w while testing? It would write that account's console and class keys, and put them back after each run.
+	- Decisions:
+		- …
+	- Branch: wthandoff
+	- Commit:
+	- Test case:
+	- Acceptance signoff:
+	- Superseded by ID:
+	- Closed:
+
 - A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
 	- ID: 2026092821452948
 	- Type: Bug
@@ -102,65 +161,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: cfgorder
 	- Commit: c6d68c1
 	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
-	- Closed:
-
-- Windows Terminal handoff
-	- ID: 2026092810510800
-	- Type: Feature
-	- Status: Waiting for answers
-	- Priority|Severity: Avg
-	- Opened: 20260928-105138
-	- Opened by: JC
-	- Assigned to: JC
-	- Target OS: Windows
-	- Test environment:
-	- Version and build:
-	- Requirements:
-		- In order to register as the "default terminal" in Windows, several unusual things are required.
-		- I closed the webpage that describes exactly what, before copying the URL, so do research again.
-		- Open questions:
-			- Generally, I'd like the ability for the user to be able to register the one installed version of SilkTerm as the default terminal.
-			- But for me specifically, I'd like to be able to register 'n8runterm' as the default. (Is that a completely separate thing?)
-	- Estimated effort: Avg
-	- Actual effort:
-	- Progress log:
-		- 20260928: Research so far, moved here from a second copy of this item:
-			- Windows: let SilkTerm be picked as the default terminal, so a console program started from anywhere, such as double-clicking a `.bat`, opens in SilkTerm instead of conhost or Windows Terminal.
-			- There is no setting or script that can do this from the outside. Windows stores the choice in `HKCU\Console\%%Startup` as two COM class IDs, `DelegationConsole` and `DelegationTerminal`, not as program paths. The console host creates that class and calls `ITerminalHandoff::EstablishPtyHandoff`, passing over the pipes of a program that's already running.
-				- 20260930: It's two hops, not one. The built-in conhost only knows `IConsoleHandoff`, and passes the session to the `DelegationConsole` class. That one, Windows Terminal's OpenConsole, then calls `ITerminalHandoff3` on the `DelegationTerminal` class. Checked in the microsoft/terminal source, and in the conhost and OpenConsole binaries on vm925w.
-			- Checked 2026-09-28: the source has nothing for this, and neither does build `slktrmdf_20260927-175446_gnulwi`. Pointing the registry at SilkTerm today would break every console launch.
-				- 20260930: A failed handoff falls back to conhost, so it isn't a hard break. But COM waits up to 60 seconds for the class to appear, and each launch would also open a plain SilkTerm window, so in practice it's close to the same. Read from the source, not tried.
-			- Add a COM local server to SilkTerm that implements the handoff interface. It's defined in microsoft/terminal at `src/host/proxy/ITerminalHandoff.idl`. Newer builds call `ITerminalHandoff3`, check which version the current console host uses before starting.
-				- 20260930: Confirmed. OpenConsole calls only `ITerminalHandoff3` since Windows Terminal 1.22, and conhost never calls any of them. The OpenConsole in Windows Terminal 1.24 on vm925w carries only that interface's ID.
-			- Give the pty backend a second way in. Today it always creates its own ConPTY. A handed-off session arrives with its pipes, signal pipe and process handles already made, and the tab has to run those.
-				- 20260930: With version 3, the terminal makes the two data pipes and gives the console host its ends. The signal pipe, a session reference, and the console host and client process handles arrive ready-made. Resize is a six-byte packet on the signal pipe, and closing the session is closing those handles, so it needs no `conpty.dll`.
-			- Register the class under `HKCU\Software\Classes\CLSID\{guid}\LocalServer32`, pointing at `%LOCALAPPDATA%\Programs\silkterm.exe` with a flag like `--handoff`. That's the symlink the launcher keeps pointed at the newest dogfood build, so the default follows each new build.
-				- A handed-off window skips the launcher, so it won't be elevated.
-					- 20260930: An elevated console program doesn't hand off at all, and stays in conhost. Windows Terminal has the same limit, by design (microsoft/terminal#10276).
-				- 20260930: COM adds ` -Embedding` to the command line on its own, so no flag of ours is needed. The program it starts has 60 seconds to register the class.
-			- Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminal that the built-in conhost doesn't. Not verified. The ConPTY redistributable already being tried here ships its own console host, which may or may not be usable for this.
-				- 20260930: Verified. It has to be Windows Terminal's OpenConsole, with that ID. Conhost's own ID turns handoff off, and conhost can't reach a terminal by itself. So Windows Terminal has to be installed. It also carries the parts that pass the call between processes. The redistributable's OpenConsole has the same ID built in, so it can't stand in as a second console host.
-			- Add a way to switch it on and off, either in Settings or as a command-line option. Turning it off means setting both values back to all zeros, which is "Let Windows decide".
-				- 20260930: Right, and a missing value means the same. The account on vm925w has Windows Terminal set by name, though, so off may be better as putting back whatever was there. See the questions below.
-			- The Settings app's dropdown only lists packaged apps that declare the handoff extension. An unpackaged SilkTerm could still write the registry values itself, but it would never show up in that list.
-				- 20260930: It takes two app extensions in the same package, `com.microsoft.windows.console.host` and `com.microsoft.windows.terminal.host`, so a packaged SilkTerm has to name a console host too. For a pair it doesn't know, Windows Terminal's own Settings page shows "Let Windows decide".
-		- 20260930: Research redone against the microsoft/terminal source and docs, and checked read-only on vm925w (Windows 11 25H2, Windows Terminal 1.24). Corrections are the dated sub-bullets above. The plan is in details.md, under "Windows Terminal handoff plan (20260930)".
-		- 20260930: No other terminal has released this yet. WezTerm has two open requests (wezterm#7534, wezterm#7328). A few small projects have code, two of them in Rust, and all take the same route: Windows Terminal's OpenConsole as the console host, their own class as the terminal.
-		- 20260930: `n8runterm` isn't a separate thing. The registration names a program, and COM starts it by itself. The launcher could be named there, but then PowerShell, and by default a UAC prompt, would sit in front of every console launch. The launcher already keeps `%LOCALAPPDATA%\Programs\silkterm.exe` pointed at the newest build, so registering that path gets the same result without it.
-		- 20260930: Questions:
-			- Is it OK to rely on Windows Terminal being installed? It's what passes the session on. Doing without it means building our own console host and bundling it, which is much bigger.
-			- Should a handed-off program open in a new SilkTerm window each time, like conhost, or as a tab in a window that's already open, like Windows Terminal? The plan starts with a new window.
-			- When the handed-off program exits, should its tab close right away, as panes and conhost both do now, or stay open with the exit status, as `--keep-open` does?
-			- Should the switch be a command-line option only at first, or a Settings row too?
-			- When it's switched off, put back whatever was set before, or always "Let Windows decide"?
-			- May the work register it for the test account on vm925w while testing? It would write that account's console and class keys, and put them back after each run.
-	- Decisions:
-		- …
-	- Branch: wthandoff
-	- Commit:
-	- Test case:
-	- Acceptance signoff:
-	- Superseded by ID:
 	- Closed:
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
