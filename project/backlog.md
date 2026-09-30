@@ -283,7 +283,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
 	- ID: 2026092821452948
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Severity: Low
 	- Opened: 20260928-214529
 	- Opened by: CC
@@ -293,6 +293,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: A wake set while drawing is honored on time.
 	- Reproduced: No. Read from the code while fixing the minimap's version of the same gap, which waited up to two seconds when idle.
 	- Related IDs: the done old-format item "Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time".
+	- Actual cause:
+		- A cursor that parks sets its resume time in the frame. The loop read that time before drawing, so a cursor that parked in the frame had no wake at all, and one whose resume moved earlier kept the old time.
+		- Four window wakes had the same order. The idle release and the rating banner were missed when the frame revealed the window or a rating ended. The rating's start waited for its cap when the wallpaper showed in the frame. A frame asked for after drawing, when a rating ended or stepped the profile down, waited for the next event.
+	- Progress log:
+		- 20260929: Not seen on screen. Checked by unit test and clippy on b23 only.
+	- Actual fix: Every pane wake, the cursor's and the minimap's, is read after the frame from one list (`PaneWakes`). The idle release, the rating's start and banner, and the reveal deadline are read after it too. A frame asked for after drawing is drawn on the next pass.
+	- Branch: curwake
+	- Test case: `a_wake_set_while_drawing_is_kept` (ErJF0fr). Seen to fail with only the minimap's wake read after the frame. The window wakes have no test, since they live in the event loop.
+	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the minimap. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame does not set them.
 	- Closed:
 
 - The showdown rigs cannot take XTerm's speed figure again

@@ -124,7 +124,7 @@ App  (winit ApplicationHandler)
 
 So a window is a list of tabs, a tab is a split tree of panes, a pane wraps one terminal; pop-out dialogs are independent sibling windows.
 
-Frame loop: a PTY read or a user event marks the app dirty or starts an animation. `about_to_wait` renders when something is dirty or animating, and otherwise waits. A render advances the scroll easing, snaps the grid to the nearest whole line, and redraws each pane from current model state. Frames are driven from `about_to_wait` rather than redraw requests, because `request_redraw` is unreliable under X11/Compiz here.
+Frame loop: a PTY read or a user event marks the app dirty or starts an animation. `about_to_wait` renders when something is dirty or animating, and otherwise waits. A render advances the scroll easing, snaps the grid to the nearest whole line, and redraws each pane from current model state. Frames are driven from `about_to_wait` rather than redraw requests, because `request_redraw` is unreliable under X11/Compiz here. Timed wakes, such as a parked cursor's resume or a minimap compose that owes another, are read after the frame, since drawing is what sets them.
 
 ### API (alacritty_terminal)
 

@@ -1781,6 +1781,38 @@ fn pace_frame(next: &mut Option<Instant>, ivl: Duration) -> ControlFlow {
 	ControlFlow::WaitUntil(at)
 }
 
+// The times a pane asks the loop to come back at, apart from animating. A
+// new one goes here too, or `pane_wake` never sees it.
+trait PaneWakes {
+	fn cursor_wake_at(&self) -> Option<Instant>;
+	fn map_wake_at(&self) -> Option<Instant>;
+}
+
+impl PaneWakes for Pane {
+	fn cursor_wake_at(&self) -> Option<Instant> {
+		self.cursor_wake
+	}
+
+	fn map_wake_at(&self) -> Option<Instant> {
+		self.map_wake()
+	}
+}
+
+// The earliest pane wake still ahead of `now`, read after the frame, since
+// drawing is what sets them. One already due is left out: the pass before the
+// frame acts on those, and a window that is not drawing would spin on one.
+fn pane_wake<'a, P: PaneWakes + 'a>(
+	panes: impl IntoIterator<Item = &'a P>,
+	now: Instant,
+) -> Option<Instant> {
+	panes
+		.into_iter()
+		.flat_map(|pane| [pane.cursor_wake_at(), pane.map_wake_at()])
+		.flatten()
+		.filter(|&wake| wake > now)
+		.min()
+}
+
 // When the window last saw a person or a shell: input, focus either way, or
 // output while it could be seen. The idle release counts from `since` (see
 // `release_deadline`). `wake_owed` says something wants the window back since
@@ -4195,6 +4227,20 @@ impl State {
 		if self.idle.output(self.gpu.is_none(), self.was_hidden) {
 			idledbg("wake: output");
 		}
+	}
+
+	// The rating waits for the wallpaper, since that is part of what it times,
+	// but no longer than its cap.
+	fn bench_blocked(&self) -> bool {
+		!self.wp_shown && self.bench_cap.is_some_and(|cap| Instant::now() < cap)
+	}
+
+	// The banner comes down once the run is over and it has been up long
+	// enough to read.
+	fn bench_banner_wake(&self) -> Option<Instant> {
+		self.bench_banner
+			.filter(|_| self.bench.is_none() && self.bench_at.is_none())
+			.map(|up| up + BENCH_BANNER_MIN)
 	}
 
 	fn release_deadline(&self, cfg: &config::Settings, hidden: bool) -> Option<Instant> {
@@ -8540,14 +8586,11 @@ impl ApplicationHandler<UserEvent> for App {
 		if !state.revealed {
 			state.dirty = true;
 		}
-		let reveal_wake = (!state.revealed).then_some(state.reveal_deadline);
 		// The startup benchmark: due, so start it on the heaviest rung. It waits
 		// for the wallpaper whatever the delay says, since the wallpaper is part
 		// of what is being timed. A pinned frame rate would time itself rather
 		// than the machine, so it cancels the run outright (the first pick stands).
-		let bench_blocked =
-			!state.wp_shown && state.bench_cap.is_some_and(|cap| Instant::now() < cap);
-		if state.bench_at.is_some_and(|at| Instant::now() >= at) && !bench_blocked {
+		if state.bench_at.is_some_and(|at| Instant::now() >= at) && !state.bench_blocked() {
 			state.bench_at = None;
 			state.bench_cap = None;
 			if max_fps().is_none() {
@@ -8568,13 +8611,10 @@ impl ApplicationHandler<UserEvent> for App {
 		if state.bench.is_some() {
 			state.dirty = true;
 		}
-		// The banner comes down once the run is over and it has been up long
-		// enough to read.
-		let bench_banner_wake = state
-			.bench_banner
-			.filter(|_| state.bench.is_none() && state.bench_at.is_none())
-			.map(|up| up + BENCH_BANNER_MIN);
-		if bench_banner_wake.is_some_and(|wake| Instant::now() >= wake) {
+		if state
+			.bench_banner_wake()
+			.is_some_and(|wake| Instant::now() >= wake)
+		{
 			state.bench_banner = None;
 			state.bench_kept = None;
 			state.bench_stalled = false;
@@ -8587,25 +8627,21 @@ impl ApplicationHandler<UserEvent> for App {
 		// on screen, and not before: output into a hidden one waits for the
 		// reveal. One left alone for long enough lets it go, unless a dialog is
 		// up (on X11 the dialog's context cannot outlive the terminal's).
-		let idle_wake = if state.gpu.is_none() {
+		let dialog_up = self.dialog.is_some() || self.notice.is_some();
+		if state.gpu.is_none() {
 			if state.idle.wake_owed && !hidden {
 				state.rebuild_gpu();
 			}
-			None
-		} else if self.dialog.is_none() && self.notice.is_none() {
-			let due = state.release_deadline(&config::settings(), hidden);
-			if due.is_some_and(|due| Instant::now() >= due) {
-				state.release_gpu();
-				// the dialogs' warm context is a second device; it comes back
-				// with the first (see the warm-up at the top of this pass)
-				self.gpu_warm.release();
-				None
-			} else {
-				due
-			}
-		} else {
-			None
-		};
+		} else if !dialog_up
+			&& state
+				.release_deadline(&config::settings(), hidden)
+				.is_some_and(|due| Instant::now() >= due)
+		{
+			state.release_gpu();
+			// the dialogs' warm context is a second device; it comes back
+			// with the first (see the warm-up at the top of this pass)
+			self.gpu_warm.release();
+		}
 		// A pass that draws nothing pauses the watch too, or the next ease's first
 		// period would be the whole idle gap before it.
 		let flow = if hidden || state.gpu.is_none() {
@@ -8711,16 +8747,21 @@ impl ApplicationHandler<UserEvent> for App {
 			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
 			(other_flow, _) => other_flow,
 		};
-		// A compose in the frame just drawn can owe another, and its wake only
-		// exists now. The pass above ran before the frame, so without this the
-		// loop waits for something unrelated to happen. One already due is left
-		// out, as it is above: a window that is not drawing would spin on it.
-		let now = Instant::now();
-		for pane in state.tabs.cur().panes.values() {
-			if let Some(wake) = pane.map_wake().filter(|&wake| wake > now) {
-				cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
-			}
+		// Read after the frame, since the frame and the rating step after it can
+		// set a wake or owe another frame: a cursor that parks, a minimap compose
+		// that owes another, the window revealed, a rating ended. Read before,
+		// each waited for some unrelated event.
+		if let Some(wake) = pane_wake(state.tabs.cur().panes.values(), Instant::now()) {
+			cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
 		}
+		let flow = match (
+			flow,
+			(state.dirty && !hidden && state.gpu.is_some()).then(Instant::now),
+		) {
+			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
+			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
+			(other_flow, _) => other_flow,
+		};
 		// wake a parked cursor at its scheduled resume time, even when idle
 		let flow = match (flow, cursor_wake) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
@@ -8728,6 +8769,9 @@ impl ApplicationHandler<UserEvent> for App {
 			(other_flow, _) => other_flow,
 		};
 		// wake to let the device go once the window has sat idle long enough
+		let idle_wake = (state.gpu.is_some() && !dialog_up)
+			.then(|| state.release_deadline(&config::settings(), hidden))
+			.flatten();
 		let flow = match (flow, idle_wake) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
 			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
@@ -8769,17 +8813,17 @@ impl ApplicationHandler<UserEvent> for App {
 		// wake when the benchmark comes due, and again when its banner may come
 		// down - an idle window generates nothing of its own to bring it back
 		let bench_wake = match (state.bench_at, state.bench_cap) {
-			(Some(_), Some(cap)) if bench_blocked => Some(cap),
+			(Some(_), Some(cap)) if state.bench_blocked() => Some(cap),
 			(at, _) => at,
 		};
-		let flow = match (flow, bench_wake.or(bench_banner_wake)) {
+		let flow = match (flow, bench_wake.or(state.bench_banner_wake())) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
 			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
 			(other_flow, _) => other_flow,
 		};
 		// wake at the reveal deadline so a hidden startup window is shown even if no
 		// post-resize frame arrives
-		let flow = match (flow, reveal_wake) {
+		let flow = match (flow, (!state.revealed).then_some(state.reveal_deadline)) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
 			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
 			(other_flow, _) => other_flow,
@@ -8827,12 +8871,12 @@ impl State {
 mod tests {
 	use super::{
 		Caret, CloseScope, Conserve, ContextMenu, CopyMetrics, Entry, Idle, IdleClock, MenuAction,
-		RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, TAB_CLOSE_M, TabEdit, VT_SETTLE, ViewState, VtHeal,
-		accel_at, accel_clash, close_scope, copybox_fit, copybox_place, fit_px, focus_ring,
-		is_copy_chord, key_is_typed, menu_metrics, mia, msub, mta, needs_folder_read,
-		new_window_command, notice_due, pace_frame, rating_step, release_deadline, remember_resize,
-		rotation_live, rotation_next, settings_after_reload, tab_close_box, tab_command_line,
-		tab_title_w, typed_title, view_menu_items, window_px,
+		PaneWakes, RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, TAB_CLOSE_M, TabEdit, VT_SETTLE,
+		ViewState, VtHeal, accel_at, accel_clash, close_scope, copybox_fit, copybox_place, fit_px,
+		focus_ring, is_copy_chord, key_is_typed, menu_metrics, mia, msub, mta, needs_folder_read,
+		new_window_command, notice_due, pace_frame, pane_wake, rating_step, release_deadline,
+		remember_resize, rotation_live, rotation_next, settings_after_reload, tab_close_box,
+		tab_command_line, tab_title_w, typed_title, view_menu_items, window_px,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -9865,6 +9909,66 @@ mod tests {
 			late.unwrap() > Instant::now(),
 			"a stale deadline must be dropped"
 		);
+	}
+
+	struct Wakes {
+		cursor: Option<Instant>,
+		map: Option<Instant>,
+	}
+
+	impl PaneWakes for Wakes {
+		fn cursor_wake_at(&self) -> Option<Instant> {
+			self.cursor
+		}
+
+		fn map_wake_at(&self) -> Option<Instant> {
+			self.map
+		}
+	}
+
+	// A cursor that parks in a frame sets its resume time in that frame. The
+	// loop read the cursor's wake only before drawing, so the resume waited for
+	// some other event. Every kind of pane wake is read after the frame now.
+	// Test ID: ErJF0fr
+	#[test]
+	fn a_wake_set_while_drawing_is_kept() {
+		let now = Instant::now();
+		let soon = now + Duration::from_millis(300);
+		let later = now + Duration::from_secs(2);
+		let parked = [Wakes {
+			cursor: Some(soon),
+			map: None,
+		}];
+		assert_eq!(
+			pane_wake(&parked, now),
+			Some(soon),
+			"a parked cursor's wake"
+		);
+		let mixed = [
+			Wakes {
+				cursor: Some(later),
+				map: None,
+			},
+			Wakes {
+				cursor: None,
+				map: Some(soon),
+			},
+			Wakes {
+				cursor: Some(soon + Duration::from_millis(1)),
+				map: Some(later),
+			},
+		];
+		assert_eq!(
+			pane_wake(&mixed, now),
+			Some(soon),
+			"the earliest, any pane or kind"
+		);
+		// due ones belong to the pass before the frame, or an idle window spins
+		let due = [Wakes {
+			cursor: Some(now),
+			map: now.checked_sub(Duration::from_millis(1)),
+		}];
+		assert_eq!(pane_wake(&due, now), None);
 	}
 
 	// The style guide asks every View toggle to name the thing and be checked
