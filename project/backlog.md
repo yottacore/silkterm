@@ -138,6 +138,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- Closed:
 
+- The merge gate fails on clippy at a doc comment in the minimap source
+	- ID: 2026093016391134
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20260930-163911
+	- Opened by: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Run the gate, or the clippy line with `-D warnings`, on dev.
+	- Incorrect behavior: clippy stops on `doc_markdown` at `source/src/minimap.rs` line 6, where `project/design_docs` is not in backticks. The gate fails, so nothing passes it.
+	- Expected behavior: clippy is clean on dev.
+	- Reproduced: Yes, 20260930 on the Linux box, on branch testtmp, whose copy of the file and lint config match dev.
+	- Origin: b349520, "minimap design doc". Confirmed.
+	- Closed:
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
