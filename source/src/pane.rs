@@ -7858,7 +7858,10 @@ mod tests {
 	// Test ID: Er2VGX8
 	#[test]
 	fn arming_a_copy_waits_for_the_term_instead_of_giving_up() {
-		let body = include_str!("pane.rs")
+		// a Windows checkout has CRLF line ends, and a body left uncut runs on into
+		// code that does try the lock
+		let file = include_str!("pane.rs").replace("\r\n", "\n");
+		let body = file
 			.split("pub fn arm_capture(&mut self) {")
 			.nth(1)
 			.and_then(|rest| rest.split("\n\t}\n").next())
