@@ -534,6 +534,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: 20260928, the answer is to darken the shipped light-mode text, so the plate has room to be louder.
 	- Fixed: 20260929, the cursor plate. The shipped light themes have darker text, and over a light background the plate is drawn at 80% instead of 55%, as far as the text on it still clears the floor. Darker text alone was not enough, since at 55% even a black cursor could not take the plate much past 0.2 from a light background. Their plates now sit 0.25 to 0.28 from the background, where they were 0.12 to 0.20. Dark mode is unchanged. A saved theme keeps about the plate it had.
 	- Test: `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
+	- Note: 20260930, both halves are fixed now, the window transparency on 20260928 and the cursor plate on 20260929. The title is out of date. What is left is the look on screen.
 	- Opened: 20260920-190859
 
 - **Stop here to work on releasing RC1**.
@@ -821,6 +822,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Still suspect: the gate that drops keys while the window reads as unfocused (from the bare-arrow fix, never run on this desktop), and CopyQ taking the clipboard back right after a copy.
 	- ✋ 20260905-184500: With the change in, copy-on-select and the hotkey have both worked so far. Leaving open until it has held for a while, since it was intermittent.
 	- Pinned by: `a_copy_the_user_drives_does_not_wait_on_window_focus`.
+	- Note: 20260930, the "still suspect" gate was the cause, found in "The copy-to-clipboard bug is back". Ctrl+Shift+C no longer waits on the focus flag.
 	- Opened: 20260905-175000
 	- UAT accepted.
 	- Closed: 20260921
@@ -964,6 +966,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: the debug log no longer records every probe that finds nothing wrong. Those lines filled its size cap in a day in July, so it has recorded nothing since.
 	- Pinned by: `a_return_to_this_console_is_healed_again_once_settled`, watched failing with the second pass pushed out. A faked switch and return released and rebuilt the device twice, and the window drew normally after.
 	- To confirm: a real switch to a text console and back on the reference box. `~/silk_vramdbg.txt` is full, so move it aside first; with `~/silk_vramdbg.on` in place a return then logs both heals.
+	- Note: 20260930, the memory fault guess above is out of date. RAM was tested and is fine, and the crashes that day are put down to a kernel fault.
 	- Opened: 20260917-164802
 	- UAT 20260919-143007: This appears to be fixed. Upon return, the wallpaper blanks and comes back, and the window title says "resources restored".
 	- Closed: 20260919-152000
@@ -1906,6 +1909,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A space is crossed only when a path separator turns up within the next forty characters, which is what separates "Program Files\app.exe" from a path followed by a sentence.
 	- Note: the missing drive letter came in on the same report and is still open under Bugs.
 	- Pinned by: `a_folder_name_may_have_spaces_in_it`, `a_space_with_no_separator_after_it_ends_the_path`, `a_line_number_after_the_extension_is_not_part_of_the_name` and `a_url_wins_over_everything_else`.
+	- Note: 20260930, the drive letter item is closed now, as not reproduced on Linux.
 	- Opened: 20260826-123553
 	- Closed: 20260826-183724
 
@@ -1945,6 +1949,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- What is left to gain is therefore about a second per 32 MiB, and none of it is in the drawing: parsing is half a second of that, and the rest is the engine's Windows pipe plumbing, which delivers about 17 MB/s where a plain blocking read of the same pipe gets 22. Two obvious levers were tried and neither moved it - folding the engine's internal notifications, and waiting for the pipe to accumulate before reading it. Reading and parsing on one thread beats the shipped two-thread arrangement by half a second, which is the direction worth exploring if this is ever picked up again, and it would mean a real fork.
 	- Also settled: the console host's delivery ceiling is fixed. Pipe buffers from the default to 16 MB, read sizes from 64 KB to 1 MB, and Microsoft's redistributable host beside the executable all sit within noise.
 	- No test: a measurement. Nothing changed.
+	- Note: 20260930, the first four sub-bullets were the first answer. The reopen below corrects them: the gap is about 2x, not 10x, and a single-thread read and parse is still a direction if this is picked up again.
 	- Opened: 20260818-054058
 	- Closed: 20260818-062827
 
@@ -1962,6 +1967,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Carried locally in the meantime: the workspace pins the released engine plus that one change, so our builds are fixed now rather than waiting. Cargo records the exact commit, so a build is still reproducible.
 	- Follow-up when a release carries it: drop the pin from the workspace file (it says so in place) and delete the branch it points at.
 	- No test: the fix is in the engine fork's Windows PTY code, and its tests run only there.
+	- Note: 20260930, out of date on two points. The engine is carried on the fork branch `scroll-ledger-0.26.0` with several patches, not a one-change pin, and the fix is pinned by a fork test and a SilkTerm Windows flood test. alacritty/alacritty#9026 was closed unmerged, so the change stays on the fork.
 	- Opened: 20260814-140609
 	- Closed: 20260816-103257
 
@@ -2084,6 +2090,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: color glyphs are now painted directly - the paint graph is walked and rendered through a small 2D back end (transforms, clip and layer stacks, solid/linear/radial/sweep fills, Porter-Duff and blend compositing), then handed to the renderer's color atlas as a per-cell image fitted to the cell box. Chars with no color glyph are untouched and still take the monochrome fallback path.
 	- `color_emoji` (default true) turns it off, which restores the monochrome outlines.
 	- Pinned by: `colr_v1_emoji_rasterizes_in_colour`.
+	- Note: 20260930, the key is `text.color_emoji` now.
 	- Opened: n/a
 	- Closed: 20260727-014507
 
@@ -2343,6 +2350,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: once the scrollback buffer is full, the output-ease infers how far the view advanced by matching row fingerprints against the last frame. That matcher demanded a pixel-clean translate of the whole retained region, so a single off cell - a redrawn prompt or spinner, a rewrapped line, or a multi-frame gap when a fast burst held the terminal lock - made it give up and report the full backlog cap instead of the true small advance. The cap snapped the view up about a screenful and eased it back; on fast, speed-varying output it misfired every few frames, so the view bounced far down and scrolled back up over and over.
 	- Fixed: the matcher now tolerates a few off cells and picks the shift that best explains the frame, so a small advance reads as small. In-place redraws and static/blank fields still report no scroll, and a genuine full turnover still ramps to catch up.
 	- Pinned by: `a_status_bar_is_held_still_at_a_full_scrollback_too` and `a_clear_eases_the_same_at_a_full_scrollback`.
+	- Note: 20260930, superseded. The matcher became best-coverage scoring in the `flatpak update` item, and later the engine's own count replaced it at a full scrollback.
 	- Opened: n/a
 	- Closed: 20260713-085150
 
@@ -2464,6 +2472,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: this was the actual nano complaint (the "shadow jump" language was describing it). Reverse video (dark on light) renders visually thinner than the same-weight light-on-dark text, an inherent effect that other terminals also show. The glow only boosts light-on-dark text, so inverse text got no readability help.
 	- Fixed: a new `embolden_inverse` config bool (default true) renders reverse-video runs bold so they read as strongly as normal text. The difference is modest with the default font; if it reads as too subtle, the next step is faux-bold (stroke dilation).
 	- Pinned by: `inverse_video_is_drawn_bold_unless_turned_off`.
+	- Note: 20260930, the nano "shadow jump" was also a real motion bug, fixed separately in "The Notorious "Bouncing Shadow in Wobbly Nano" bug".
 	- Opened: 20260703-211333
 	- Closed: 20260706-112748
 
@@ -2725,6 +2734,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Native keybindings for `less` don't work.
 	- Fixed: `less` enables application-cursor-keys mode (DECCKM); arrow / Home / End are now encoded as `ESC O x` instead of `ESC [ x` when that mode is active. The mouse wheel also now drives full-screen apps: when the alternate screen / alternate-scroll mode is active it sends cursor-key presses instead of moving the (nonexistent) scrollback.
 	- Pinned by: `arrows_follow_decckm`.
+	- Note: 20260930, the wheel rule here was narrowed later. Cursor keys go only on the alt screen with alternate-scroll on and no mouse mode.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -3075,6 +3085,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Measured:` one foreground clears the 45% floor on the whole shipped pack at 10% visibility, on about two thirds at 35%, and on a fifth at 100%. Past that no color exists and the scrim covers it. design.md says so rather than the feature pretending otherwise.
 	- `Pinned by:` twenty tests in `autotheme.rs` plus three for the wiring, eight of them mutation-checked - the dialog baseline, the two gates, the gamut clip, the persist path, the hue weight, the bright-end percentile, the theme floor and the chroma cutoff.
 	- `Measured:` seen against the shipped pack, and in the app with the switch on and off. The row's label costs the dialog 10 px of width; the first wording cost 69 and was cut.
+	- Note: 20260930, it is on by default now, not off. See the [wallpaper design doc](design_docs/20260930-150052_wallpaper.md).
 	- Opened: 20260804-134813
 	- Closed: 20260920-143625
 
@@ -3195,6 +3206,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: a short map owed a redraw for as long as it was short, and a view parked in the scrollback freezes the lag, so it asked for a frame and a whole redraw about eleven times a second with no output at all. It owes one only while the count is draining now.
 	- Note: this widens the open bug about the marker moving at a different rate from the map under it, from at most a screen of blank rows to the whole output lag, measured at 218 against 225 lines under a 600 lines/s flood, and the gap now stays while the view is parked.
 	- To confirm: how it looks under a real flood. It is pinned by number, not by eye.
+	- Note: 20260930, the marker-rate bug named above was fixed the same day, in "Minimap: the marker sits above the part of the map the screen is showing".
 	- Opened: 20260919-190000
 	- Closed: 20260920-081500
 
@@ -3222,6 +3234,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: reworking the marker to end on the last drawn line broke the round trip between where it is drawn and the position a drag reads back from it, so a press plus one pixel of movement scrolled the view by itself. The marker's height and travel now come off one helper and the two directions divide by the same travel. The same fault was reachable before this work at a deep scrollback, where the marker's minimum height ate into its travel; that is fixed with it.
 	- Pinned by: `a_marker_reads_back_the_position_it_was_drawn_at`, over 21 positions across six buffer shapes, watched failing on both.
 	- Note: the marker now moves at a slightly different rate from the map under it, which is filed as its own bug.
+	- Note: 20260930, both "its own open item" and "filed as its own bug" were closed later: "Minimap: stop the map where the eased text has reached" and "Minimap: the marker sits above the part of the map the screen is showing".
 	- Opened: 20260918-110145
 	- Closed: 20260919-165500
 
@@ -3289,6 +3302,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Found on the way and fixed: glibc kept each wallpaper decode's buffers resident in the worker's arena, about 50 MB per window from the first decode alone. The mmap threshold is pinned now, which cut launch memory by about 60 MB with a wallpaper. And every Vulkan instance destroyed on NVIDIA left two file descriptors open, so the warm dialog context keeps its instance across a release.
 	- Rows on the Window tab: "Free resources when idle", "Minutes when hidden" (30), "Minutes otherwise" (240). Config keys `window.idle_release`, `window.idle_release_hidden_min`, `window.idle_release_min`.
 	- Pinned by: `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` and `output_into_a_hidden_window_does_not_hold_its_device`.
+	- Note: 20260930, the planning bullets above were answered by the Done bullets: nothing is disabled under transparency, and the label is "Free resources when idle". The design is in the [releasing resources design doc](design_docs/20260930-151334_releasing-resources.md).
 	- Opened: 20260905-181131
 	- Closed: 20260917-070723
 
@@ -3317,6 +3331,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: the minimap's own bar is gone, and the regular scrollbar sits at the far right edge, over the edge of the map. The width setting is now the whole column's.
 	- On a short scrollback the map's marker and the scrollbar thumb sit at different heights, because the map does not stretch to fill its column.
 	- Pinned by: `the_scrollbar_sits_at_the_far_edge_past_the_minimap`.
+	- Note: 20260930, the marker and the thumb take one span now, at the map's pitch, so they no longer sit at different heights.
 	- Opened: n/a
 	- Closed: 20260915-122637
 
@@ -3459,6 +3474,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Add a new indented checkmark below that, "Check again next program run", that gets cleared after checking next program run.
 	- Done. Both check rows are grayed while the profile is not chosen automatically, since neither does anything then. The one-shot check clears itself as the launch starts the rating, not when the rating answers, so a window closed mid-run has still spent it. The new row is shorter than asked, because the full wording was the widest label on any tab and widened the whole dialog; the flyover says the rest.
 	- Pinned by: `each_profile_costs_less_than_the_one_above` and `rating_due_matches_the_launch_rules`.
+	- Note: 20260930, Low draws a 1 px outline now, from "Retune the scrim defaults for the steeper exponential falloff", and the check row is "Re-test next run".
 	- Opened: 20260905-094509
 	- Closed: 20260905-094509
 
@@ -3490,6 +3506,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Seen on Linux under software rendering: a fresh config came up Low, stepped down to Standard terminal during one burst of output, and a pick of Max silk in the dialog put the wallpaper on screen while the file kept the wallpaper switched off underneath.
 	- Not yet seen: Windows, a real GPU, and a display that is not 60 Hz.
 	- Pinned by: `a_profile_masks_the_stored_values_and_custom_puts_them_back`, `a_window_of_stretched_frames_is_a_miss_and_a_pause_breaks_the_chain`, `watched_lower_stops_at_low` and `a_missing_card_is_picked_for_rather_than_timed`.
+	- Note: 20260930, superseded in parts. Low keeps the wallpaper, governed rows and the dropdown stay live, the first pick is timed rather than starting at Max silk, and a step is never written. See the [performance profiles design doc](design_docs/20260930-151204_performance-profiles.md).
 	- Opened: n/a
 	- Closed: 20260903-213000
 
@@ -3535,6 +3552,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- And a pixel row is now as bright as the ink that actually fell in it, so a mostly blank stretch reads dimmer than a solid page. A single inked line among many is held above a floor so it stays findable, and color still comes only from the lines that have ink, so a lone red line keeps its color.
 	- Measured on a scene of 4,000 lines: the column used to be lit edge to edge with no gaps anywhere, and is a fifth dimmer now. At a couple of hundred lines each line reads as its own bar.
 	- Pinned by: `a_sparse_stretch_reads_dimmer_than_a_full_one`, `one_inked_line_among_many_still_shows` and `a_line_under_a_pixel_keeps_its_whole_height`.
+	- Note: 20260930, lines are 1.5 px now, with each character weighted by how much it inks, from "Minimap:" (closed 20260919-165500).
 	- Opened: 20260902-000000
 	- Closed: 20260903-045000
 
@@ -3571,6 +3589,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Lines draw as colored strokes, not glyphs. A blend of many lines keeps the strongest ink rather than the average, so one red line among fifty still reads.
 		- Settings are a toggle and a width on the Movement tab, plus a View-menu item. Off by default, and off means no column, no cache and no per-frame work.
 	- Pinned by: `off_costs_the_pane_nothing`, `the_column_takes_its_width_and_no_more`, `the_handle_rides_the_scroll_position` and `one_inked_line_among_many_still_shows`.
+	- Note: 20260930, out of date in three places. It is on by default, there is one scrollbar at the far right, and a pixel row is as bright as the ink that fell in it rather than the strongest line. See the [minimap design doc](design_docs/20260930-150325_minimap.md).
 	- Opened: 20260802-094409
 	- Closed: 20260831-075726
 
@@ -3854,6 +3873,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- ✅ All of the behavior above is built and running - see the auto-detect item under "Features and enhancements".
 				- Pinned by: `a_shell_that_is_gone_is_switched_off_and_kept`, `a_shell_already_stored_is_not_added_twice`, `a_scan_never_switches_a_shell_back_on`, `the_login_shell_leads_and_its_twin_stays_under_it` and `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- Note: a color picker, the wallpaper randomize sub-group, and a few other rows are still open under Features and enhancements.
+	- Note: 20260930, the tab layouts here are out of date. The Silk tab gathered Performance, Text readability and Scrolling, and the color picker is done. The dialog as it stands is in the [Settings dialog design doc](design_docs/20260930-145721_settings-dialog.md).
 	- Opened: 20260719-085918
 	- Closed: 20260830-164632
 
@@ -4437,6 +4457,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ A theme can be added or edited in the config file, and the dropdown picks it up. A saved theme is written whole under its own name, so it stands on its own and can be handed to someone else.
 		- Pinned by: `a_saved_theme_survives_a_relaunch` and `saving_folds_the_edits_into_the_theme`.
 	- Note: a fourth theme and a per-theme menu color are still open under Features and enhancements.
+	- Note: 20260930, out of date. There are four built-ins now, with Pastel, and the light variants' text was darkened to leave room for the cursor plate. See the [themes design doc](design_docs/20260930-150458_themes.md).
 	- Opened: 20260628-083740
 	- Closed: 20260805-012227
 
@@ -4457,6 +4478,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Pinned by: `only_the_default_button_is_outlined_in_the_highlight`.
 	- Note: an existing config's `colors.focus` carries over to `colors.highlight` on the next launch, and the freed name now holds the new focus color.
 	- UAT.
+	- Note: 20260930, "Highlights" was renamed "Highlight".
 	- Opened: 20260719-085918
 	- Closed: 20260804-235533
 
@@ -4502,6 +4524,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- On disk: a fresh file writes the new lines, a file still holding an old one is brought forward, and a value written or annotated there is left as it stands.
 	- The light variant of the theme is untouched; its foreground is a near-black and the request was about the default dark scheme.
 	- Pinned by: `every_commented_default_line_loads_as_the_default` and `migrate_refreshes_a_superseded_commented_default`.
+	- Note: 20260930, "neither can clash" was wrong. A channel swap gives the two the same brightness, so text under the cursor could not be read. The cursor is a deep violet now, from "Bug: Text sitting under the cursor is hard to read".
 	- Opened: n/a
 	- Closed: 20260804-112336
 
@@ -4567,88 +4590,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ New speed defaults (20260803): the five now default to 50 / 75 / 75 / 75 / 40 in watch order - a much harder ramp-up, roughly double the single-screen top speed, a quicker wind-down, and a gentler stop. Ease-in is unchanged in feel.
 		- An existing config carries these five as its own values, so it keeps the old ones until those lines are edited or the config is reset. Only a new config picks the new defaults up.
 		- Pinned by: `the_scrolling_feel_sliders_read_where_their_defaults_claim`.
-	- The design (what should - in hindsight - have been its own design doc):
-		- General description:
-			- Think of each setting as a specific segment of a graph on an X and Y axis.
-			- The X-axis is time, the Y-axis is scroll speed.
-				- The X-axis may be infinite (or at least unbounded) - say, running `cat /dev/random` then going on vacation.
-				- The Y-axis may be infinite (or at least not strictly bounded) - with the same example as above, spitting out lines as fast as the CPU can run the kernel code.
-			- The beginning and end of the curve necessarily sit at Y=0. Scrolling starts from stillness, and ends at stillness.
-			- The some segment of "curve" may be perfectly flat on the Y axis, and quite finite (i.e. capped at Y=[max single-screen speed]).
-				- Possibly the whole curve, if output fits into a single screen.
-			- We don't care about defining or modeling the overall "curve" - only the named segments within it.
-			- **Each output-scroll-related setting define a completely separate "function" (conceptually if not literally), that have extremely limited and precisely-defined influence over the next**.
-				- With only one few exceptions, the one and only influence each setting has on the next, is that the *end* X/Y point of the previous function, determines exactly where the START point of the next is located. Those exceptions are documented in the "Parameters" section below.
-			- At some point, the middle of the overall "curve" could turn from flat, to quickly ramp up to some nondeterministic, unbounded, virtual Y speed (i.e. when scrolling that was within a single screen, reaches the top of the terminal and must start speeding up to keep up with unlimited output). In that case:
-				- The ease-in function takes over again, starting at that X and Y point. Except in this case, Y won't be 0.
-		- Parameters (all just defined segments of the/a "curve") - each one hands of complete control of scroll speed variability to the next, in this exact order:
-			- "Ease-in":
-				- This first "function" starts at Y=0 the first time, and describes how fast the speed initially jumps.
-			- "Ramp-up"
-				- Starts at exactly whatever X/Y "Ease-in" ended at. Can't be <=0, must be a positive slope.
-				- Typically - but not necessarily - steeper than "ease-in". (But either way, it can't be <=0, so scroll speed will increase.)
-				- This is a rare exception where the exact X/Y end point is not within its control. As mentioned earlier, the Y is defined by the next function in the chain, [max speed], which coupd be either [max single-screen speed], or [unbounded].
-						- The X/Y starting point is defined by the previous function, and the Y ending point is defined by the *next* function. So it does not have full control over either 1) it's duration, *or* 2) the length of its own line.
-			- [Max speed]: A flat horizontal line in principle (and exactly horizontal when == [max single-screen scroll speed]).
-				- [Max single-screen scroll speed] adjustment is in effect for as long as the top of the new output hasn't hit the top of the terminal yet.
-				- [Unbounded]: as fast as the output needs to render, to keep up with output.
-			- **Note**: The first two functions may or may not be invoked exactly and only one more time - *if* [max speed] was == [max single-screen scroll speed], *and* output now needs to accelerate to any speed faster than [max single-screen scroll speed]:
-				- Second invocation of "Ease-in":
-					- The second time starts not at Y=0 like the first time, but at Y=[Max single-screen scroll speed]. And again, still describes how fast the speed initially jumps from what it was before.
-				- Second invocation of "Ramp-up":
-					- Exact same formula, definition, constraints, and unique attribute as first invocation: Starts at exactly whatever X/Y the previous "Ease-in" ended at, and ends at the unbounded Y.
-						- How does it know wher "unbounded Y" is? Maybe it guesses a sane value, maybe it can see the rate of incoming data, or maybe it just punts and acellerates exponentially until it's reached.
-			- "Ramp-down":
-				- Once output ceases yet hasn't all rendered (because SilkTerm will hold a reserve buffer of at least 1 screen when running at top speed), the speed function hands off to "Ramp-down".
-				- This starts at the precisely known X and Y handoff point on our time/speed curve.
-				- It's almost the inverse of "Ramp-up", *except*:
-					- Not only does it know it's starting X, it also knows it's exact starting Y.
-					- It can't end arbitrily on its own terms, but its end point *is* deterministic. It has to trace "Ease-out" *backwards* (can be pre-computed and stored in memory whenever "Ease-out" setting changes), to know exactly what Y value to end at and hand-off to "Ease-out".
-					- This adjustment, although not an exact mirror in calculation, "feels" just like the inverse of "Ramp-up".
-			- "Ease-out":
-				- Almost the inverse of 'Ease-in', at least visually - except that:
-					- It's individually adjustable.
-					- It must calculate backwards its starting X point, based on the inrushing known end of buffered content.
-					- It's end point is *always* Y=0, and it's X value can be calculated in real-time ahead of time. From there it can work backwards and tell (or be queried by) "Ramp-down", it's own *exact starting* X and Y ahead of time, so that "Ramp-down" will know it's own ending X/Y.
-					- This adjustment, although not an exact mirror in calculation, "feels" just like the inverse of "Ease-in".
-		- Different potential "curve" models - to choose from. (Or maybe a tunable with three options governing all parameters curve shapes):
-			- Option 1: Smooth curves for all parameters (with their individual "scale" sliders):
-				- One curve type for all adjustments: e.g. Sigmoid, half-normal, exponential, and/or logarithmic curves depending on where in the graph a function sits and how it connects to the previous and next.
-				- The shape definitions per function don't change with adjustment, they just grow or shrink (in proportional size) depending on the scale of each individual setting.
-					- In other words, the curve grows along both the x-axis and the y-axis. Getting sharper (smaller) or gentler (larger).
-				- Computationally expensive?
-			- Option 2: Each scroll speed parameter is defined by a straight line. This may not be as jarring as it sounds, as these kind of linear + angular graphs work fine in audio and video production, which are all about perception.
-				- The linear slope of each line is variable based on the height (Y) and time (X).
-				- The end of each adjustable line must touch the beginning of the next - but the transition may be an abrupt angle.
-				- Option 2a: Adjustment is time, length and height auto-adjust.
-				- Option 2b: Adjustment is height, length and time auto-adjust.
-				- Option 2c: Adjustement is length, height and time auto adjust.
-		- Common behavior:
-			- Typical scroll flow can take these routes - which don't/shouldn't need individual code paths, just for illustration:
-				- Scenario 1: <1 screen of text, from the top:
-					- "Instant" output.
-				- Scenario 2: >1 screen of text, from the top:
-					- First screen's worth of output appears "instantly". But once it needs to start scrolling up, then…
-					- Ease-in has full control of speed. Then hands off to the ramp-up function. Then to unbounded speed. At some arbitrary point depenting on output, the ramp-down function takes over, and finally ease-out.
-				- Scenario 3: <1 screen of text, from the bottom (with a screen full of text above):
-					- Ease-in begins with full control of speed from the start.
-					- Then hands off to the ramp-up function.
-					- Then to [maximum single-screen] speed.
-					- At some arbitrary point when output ends, the ramp-down function takes over
-					- Finally the ease-out function.
-				- Scenario 4: >1 screen of text, from the bottom (with a screen full of text above):
-					- Ease-in begins with full control of speed from the start.
-					- Then hands off to the ramp-up function.
-					- Then to unbounded speed.
-					- At some arbitrary point when output ends, the ramp-down function takes over.
-					- Finally the ease-out function.
-				- Other scenarious (e.g. output starts in the middle of the screen) can be inferred from those 4 scenarios.
+	- The design moved to the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md), under "The curve, as specified".
 	- Opened: n/a
 	- Closed: 20260804-084202
 
 - ✅ A single boolean option to disable/enable smooth scrolling, without changing other settings (but disabling their controls).
 	- New "Smooth scrolling" switch at the top of the Scrolling tab (config: `scroll.smooth`, default on). Off = wheel, output and full-screen-app scrolling all jump instantly, and the two speed sliders gray out. Wheel lines, scrollbar and the rest stay active since they apply either way.
 	- Pinned by: `smooth_off_lands_every_scroll_instantly` and `smooth_off_leaves_nothing_unshown`.
+	- Note: 20260930, there are five speed sliders now, not two. All five gray out.
 	- Opened: n/a
 	- Closed: 20260802-123859
 
@@ -4667,6 +4616,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: output easing now picks a speed profile per burst. While a burst's own first line is still on screen (a short listing), catch-up tops out at the new "In-view output speed" - faster than the initial speed, but building more slowly and never reaching the full chase. Once a burst has scrolled a screenful, the full ramp takes over exactly as before. A burst ends when the view settles at the bottom, so sporadic output keeps the plain initial ease.
 	- The one setting is `scroll.inview_tau_ms` (default 60 ms), with an "In-view output speed" slider next to "Initial scroll speed" in Settings on the same 1..100 scale.
 	- A burst that starts high on a fresh screen (right after a clear) counts as in-view up to a screenful longer than strictly needed - the switch assumes the burst began at the bottom row. The error direction is gentle, never bouncy.
+	- Note: 20260930, "In-view output speed" is now the output chase's Single-screen speed (`scroll.single_screen_tau_ms`), and "Initial scroll speed" is gone. See the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md).
 	- Opened: 20260629-110720
 	- Closed: 20260802-103137
 
@@ -4734,6 +4684,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Regression risk to watch: pausing must always wait for the cursor's largest point in the cycle, and resuming must always start from that same point.
 			- This took several attempts to get right.
 			- The machine is PauseState in pane.rs.
+			- The rule is written down in the [smooth cursor design doc](design_docs/20260930-145124_smooth-cursor.md).
 	- Tier 6 - freeze what can't be seen.
 		- ✅ 6.1 Freeze rendering (never PTY reading) of minimized windows and hidden tabs. Catch up instantly on switch.
 			- Minimized: no frames at all. With busy output: ~83% of a core visible, ~0% minimized, full rate again on restore.
@@ -4870,6 +4821,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pinned by: `tilde_expands_to_home_but_only_for_this_user`.
 	- ✅ A wallpaper named on the command line still shows even when the config has the feature switched off - naming one is a choice for that run.
 		- Pinned by: `naming_a_wallpaper_turns_it_on_unless_the_profile_says_off` and `a_command_line_wallpaper_outlasts_a_reload_and_an_apply`.
+	- Note: 20260930, the keys here are the flat spellings. They are nested now (`wallpaper.enabled`, `wallpaper.fallback_builtin`, `wallpaper.default_fit`).
 	- Opened: n/a
 	- Closed: 20260801-230305
 
@@ -4950,6 +4902,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: moves the config aside so it can't load, and a fresh one is written from the template on the way up. The old file is kept as `config.shcl.bak` (`.bak2`, `.bak3` and so on when repeated), never deleted. Combines with `--config`, which picks which file gets reset.
 		- Pinned by: `a_reset_keeps_every_earlier_config`.
 	- Changing a default leaves an existing config describing the old behavior, so a commented line still carrying a superseded default is now brought up to date - `# cursor_size_width: 25` becomes `# cursor_size_width: 100`. A value you uncommented and set yourself is never touched, nor is one you left a note beside.
+	- Note: 20260930, the folder is `wallpaper/` now, and the keys are nested (`wallpaper.rotate.random`).
 	- Opened: 20260629-110720
 	- Closed: 20260731-115810
 
@@ -4980,6 +4933,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note: a proper fix needs to know a partial scroll region is active so it can suppress easing only then, but alacritty_terminal doesn't expose the scroll region. Options for later: patch the crate to expose it, tee and parse DECSTBM ourselves, or accept it like other full-screen apps.
 	- Update: This actually seems to have fixed itself with some other work. Keep on backlog just in case.
 	- Pinned by: `a_status_bar_below_the_scroll_region_is_held_still` and `a_status_bar_is_held_still_at_a_full_scrollback_too`.
+	- Note: 20260930, the engine fork records scroll regions now, in the scroll ledger. That is what keeps the status bar still.
 	- Opened: 20260628-083740
 	- Closed: 20260724-080316
 
@@ -5119,6 +5073,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Skip startup rotation, if a wallpaper was specified on the command line.
 		- Done: a wallpaper given on the command line (--background-image, including an explicit clear) is kept on screen at launch instead of being overwritten by the rotation's startup pick. The folder is still scanned and the timer still armed, so scheduled rotation proceeds once the interval elapses (order mode's first tick falls on the folder's natural first image).
 		- Pinned by: `a_rotation_folder_with_nothing_showing_is_read_again` and `next_wallpaper_shows_only_with_somewhere_to_go`.
+	- Note: 20260930, superseded in part. A command-line wallpaper stops rotation for the session now, and the shuffle avoids a recent history, not just the image up.
 	- Opened: 20260703-100322
 	- Closed: 20260720-070458
 
@@ -5127,6 +5082,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: background53.jpg (~100KB, negligible vs the ~13MB binary) is embedded via include_bytes and decoded as the wallpaper when no image and no rotation folder are configured. It runs through the same blur/contrast/opacity pipeline as a file wallpaper. New config key `background_default` (default true) opts out for a plain background-colored terminal.
 	- Note: this changes the look for anyone running with no wallpaper - fresh installs (and existing configs with no background_image/folder) now show the built-in one until they set `background_default = false`. Config-only for now (not in the Settings dialog, which is due for its big reorg); it backfills into existing configs as a commented default.
 	- Pinned by: `an_unreadable_image_still_lands_on_the_builtin` and `a_cleared_wallpaper_shows_nothing_with_or_without_a_folder`.
+	- Note: 20260930, the image was replaced later ("Wallpaper: change the default image baked into the executable"), and the key is `wallpaper.fallback_builtin`, which is in Settings.
 	- Opened: 20260719-085918
 	- Closed: 20260720-071134
 
@@ -5179,6 +5135,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Wayland transparency (2026-07-18): the native-alpha path works - a translucent terminal background over the compositor with text, chrome and cursor staying opaque, same as X11.
 	- Note (2026-07-18), on dialog stacking under Wayland: a pop-out dialog opens as its own window, renders fully, floats above the terminal, and stays modal. The compositor floats it because it says it is a fixed size; the X11 hints correctly do nothing there.
 		- Keyboard input to a dialog under Wayland is unconfirmed and needs a real Wayland desktop to check. Nothing was found wrong in the dialog code, and X11 is unaffected.
+	- Note: 20260930, the dialog keyboard question was an artifact of the test setup, not a bug.
 	- Opened: n/a
 	- Closed: 20260718-120039
 
@@ -5197,6 +5154,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- ✅ Can cycle through with Ctrl+PgUp|PgDn.
 			- Done: Ctrl+PageDown = next tab, Ctrl+PageUp = previous, alongside the existing Ctrl+Tab.
 			- Pinned by: `ctrl_tab_and_ctrl_page_walk_the_tabs_both_ways`.
+	- Note: 20260930, there are eight tabs now: Silk, Background, Text, Cursor, Movement, Themes, Window and Shell.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5235,6 +5193,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- ✅ Not persisted across sessions.
 			- Done: no config key exists; the mode always starts off.
 			- No test: partly replaced by the `copy_on_select` setting.
+	- Note: 20260930, "Only one or the other" was reversed too. The two are independent now, from "Option to copy all output".
 	- Opened: n/a
 	- Closed: 20260713-013515
 
@@ -5311,15 +5270,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: a "Scrim function" choice with four options, and "Scrim falloff" expanded to five curves - S-curve, Gaussian, linear, logarithmic and exponential. Both are config settings and both are radio rows in Settings.
 		- Three of the four functions share one cheap two-pass distance calculation, bounded to the halo radius, so corners stay full instead of receding. The default is the one that gives a round halo with full corners; the Gaussian is kept as a baseline and labeled as the ugly one.
 		- The function decides the shape and the falloff decides the fade, so the two are independent.
-	- Standard Gaussian Blur function is a poor fit for the text scrim, as a legibility aid. Here's why:
-	- **What's wrong**: To illustrate conceptually: If you apply a background scrim to a solid square using gaussian blur, as the blur radius increases, the total blur shape looks more and more "round". This means that - effectively - the blur behind the square, doesn't look even at the corners. It looks "too strong" along the middle of the sides of the square, and "pulled-in" at the corners. The corners look naked. Basically it looks like a square sitting on top of a separate round fuzzy thing - rather than something evenly integrated with the square. (Which describes the cursor in block mode perfectly, and also why the scrim behind some clusters of letters looks "clumpy".)
-	- **What would be better**: Ideally, the blur would also be square-ish - extending evenly from every angle, from every point along the edge of the square. (With corners rounding off with increasing blur radius, but never actually pulling in below the corners.) In other words, if you measured the density fall-off of the blur starting from the corner and moving outwart diagonally, it should fall-off at about the same rate, as if you measured it from the middle of an edge and moved out perpendicularly.
-	- **Note**: "Gaussian" isn't just a blur function, it also describes blur falloff. (The Gaussian function makes the bell-shaped normal distribution, the falloff is half of one side.) So while the Gaussian *blur* function is probably the wrong blur to use, the *falloff* model is fine. Whether the two concepts can be separated in practice, is an open question for now, but seems doable (but also there's no reason for it to be a hard requirement - and isn't).
-	- **Solutions ideas**:
-		- **Distance field blur**. Aka signed distance field blur. This may be the closest match. Compute the signed distance from every pixel to the boundary of the shape, then apply a falloff function (Gaussian, linear, S, etc.) to that distance. Every point one pixel outside the shape has the same opacity regardless of whether it's beside an edge or outside a corner. The corners stay "full" instead of receding.
-		- **Morphological dilation followed by feathering**. This might be the easiest and most practical to implement. Common in graphics applications. First expand the shape (using a square or other structuring element). In this case, each character individually on their center (and they'd grow into each other). Then feather the expanded edge - again with a falloff function. This also avoids the rounded-cloud appearance.
-		- **Distance transform + transfer function**. Common in vector rendering and font rendering. Rather than convolving with a kernel, opacity is a function of distance from the boundary. I'm not really clear on how that works.
-		- **All of them**: Rather than trying to decide which is best in a vaccuum, add an item to the config file (and a dropdown selection box in Settings) for "Scrim function", to choose among those three - plus the original "Gaussian [ugly]" (at the bottom). And as long as we're doing that, we might as well add a dropdown selection box for "Scrim falloff", including "S-curve, Gaussian, Linear, Logarithmic, Exponential".
+	- Why a Gaussian blur is a poor fit, and the solution ideas this was built from, moved to the [scrim design doc](design_docs/20260930-145304_scrim.md), under "Why not a Gaussian blur".
+	- Note: 20260930, the two settings are dropdowns now, not radio rows.
 	- Pinned by: `scrim_function_and_ramp_resolve` and `the_exponential_falloff_drops_away_hard`.
 	- Opened: 20260708-163910
 	- Closed: 20260709-115247
@@ -5340,6 +5292,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Options to include the cursor in the text scrim, and outline. Default scrim to off, outline to on.
 	- Done: the cursor's coverage is kept apart from the text's, so its halo and its border are independent of each other. Two settings, with rows in the dialog reading "Cursor in scrim" and "Cursor in outline". The scrim is off by default and the outline on.
 	- Pinned by: `changed_defaults` and `the_outline_stands_without_the_scrim`.
+	- Note: 20260930, the two rows are one "Visibility" row on the Cursor tab now, with a Scrim and an Outline box.
 	- Opened: 20260708-191010
 	- Closed: 20260708-193014
 
@@ -5378,6 +5331,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: retrospectively, this was a hard one. The cursor kept snapping to the largest point in the animation cycle on any keypress, which is the opposite of smooth and was distracting. Resuming after a pause caught the cycle at an arbitrary point, sometimes the smallest, so the size warped from largest to smallest. On sporadic input the two together produced a jarring double bounce.
 		- But now it works as designed.
 	- Pinned by: `pause_state_glides_holds_then_resumes_from_full` and `pause_state_hold_needs_both_idle_and_hold_timeouts`.
+	- Note: 20260930, superseded in part. "continuous" was removed on 20260731 and pause is the only mode (Epic 1n6fydv, 5.1). The pause rule is in the [smooth cursor design doc](design_docs/20260930-145124_smooth-cursor.md).
 	- Opened: 20260703-211333
 	- Closed: 20260707-041911
 
@@ -5419,6 +5373,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Glow falloff: Change default to S-curve.
 		- Done: the default falloff is now the S-curve.
 		- No test: the default changed later, and `changed_defaults` pins the current one.
+	- Note: 20260930, the outline default is 1 now, and the falloff default is Exponential.
 	- Opened: 20260702-170007
 	- Closed: 20260702-174347
 
@@ -5565,6 +5520,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note: alt+down for dropdowns is N/A today - the dialog has no dropdowns yet; wire it up with the theme dropdown in Themes part 3.
 		- Pinned by: `keyboard_focus_walks_controls_then_buttons`, `keyboard_skips_headers_and_disabled`, `space_toggles_focused_boolean` and `ctrl_tab_and_ctrl_page_walk_the_tabs_both_ways`.
 	- Note: It might be best to defer some of these, until after (and if) native window controls are implimented.
+	- Note: 20260930, out of date in three places. On Windows the dialog is an owned popup, not a child. Shell has its own tab. Alt+Down is done, on the dropdowns.
 	- Opened: n/a
 	- Closed: 20260703-092145
 
@@ -5575,6 +5531,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Cursor's own glow (merged with the text glow). (20260701, branch glow2)
 		- Done: the cursor draws into the glow source before the blur, so its halo is the text glow at no extra per-frame cost. The crisp cursor still draws on top. A cursor_glow config toggle, default on.
 		- No test: GPU compositing.
+	- Note: 20260930, `cursor_glow` is `cursor.scrim` now, and off by default.
 	- Opened: 20260701-122853
 	- Closed: 20260701-195019
 
@@ -5591,6 +5548,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Provide options for different blur fadeoff ramps. E.g. default gaussian, linear, or "S"-shaped.
 		- Done: the blur falloff is selectable - text_glow_ramp of gaussian (default), linear, or s. A Glow falloff radio in Settings.
 		- Pinned by: `scrim_function_and_ramp_resolve`.
+	- Note: 20260930, the `text_glow_*` names are `text.scrim.*` and `text.outline` now. The outline default is 1, and the falloff is a dropdown of five curves, default Exponential.
 	- Opened: 20260630-184012
 	- Closed: 20260703-092145
 
@@ -5617,6 +5575,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No test: the default changed later, and `changed_defaults` pins the current one.
 	- ✅ Default cursor_animation = "pulse_vertical"
 		- Pinned by: `changed_defaults`.
+	- Note: 20260930, superseded. The default is a full block now, from "New defaults: block cursor".
 	- Opened: n/a
 	- Closed: 20260701-123735
 
@@ -5665,6 +5624,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Foreground text color: 88ffee
 			- Cursor: ff88aa
 		- No test: the colors were replaced. The theme tests hold contrast floors now.
+	- Note: 20260930, `pulse_vertical` is the default animation, not `phase`. The keys are nested now (`cursor.size.width`, `cursor.size.height`, `cursor.animation`, `cursor.blink_rate_ms`). The design is in the [smooth cursor design doc](design_docs/20260930-145124_smooth-cursor.md).
 	- Opened: n/a
 	- Closed: 20260701-113927
 
@@ -5775,6 +5735,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Set default "Initial scroll speed" to 25.
 		- Done: the default is now speed 25 on the 1..100 scale, in both the code default and the config template.
 		- Pinned by: `retired_scroll_knobs_are_removed_not_carried`, since the setting was retired.
+	- Note: 20260930, superseded. "Initial scroll speed" was retired on 20260804. The output chase's Ease-in and Ramp-up do its job now. See the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5795,6 +5756,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Optimize compiled binaries to balance executable size and speed (slight nod to size), without the risk of triggering antivirus.
 	- Done: `[profile.release]`: `lto = "fat"` (whole-program inlining - smaller and usually faster than thin), `panic = "abort"` (drops unwinding tables - sizable shrink, fine for a GUI app), kept `codegen-units = 1` + `strip = true`, and opt-level stays 3 so renderer/PTY hot paths aren't slowed (the size improvement comes from the free wins, not from `opt-level=s/z`). Deliberately no UPX/packer - packers routinely trip AV heuristics. - Result: the Linux binary is ~13% smaller, with no runtime-speed tradeoff.
 	- No test: release profile settings, no behavior to drive.
+	- Note: 20260930, superseded in part. The release opt-level is "s" now, from "Performance pass: smaller binary, less per-frame work".
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5828,6 +5790,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				2. The blit adds TPDF dither (~1 LSB, per-pixel hash) before the 8-bit write, breaking residual banding scene-wide.
 				3. The blur now runs in linear light (decode sRGB -> blur in f32 -> re-encode) so edges are gamma-correct.
 			- Pinned by: `the_blur_mixes_in_linear_light`.
+	- Note: 20260930, the folder is `wallpaper/` now, and the blur default is 10.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5854,6 +5817,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Visual bug: When background glow is applied to characters that have a per-character(s)-box different background, and the foreground color is similar to the global background for that character(s), then the character is a blurry mess. (E.g. the global background is dark, but some characters are rendered one-off with dark text and light background, then it's not readable.)
 		- ✅ The solution is, if a character has a different background color than global, use that one-off background color as the glow color for that character. - Done: the glow is now colored by a per-pixel "bgcolor" texture (cleared to the global bg, with the per-cell bg rects drawn over it) instead of a single global tint; the composite multiplies the blurred glyph coverage by that local color. So a glyph on a colored cell gets a halo matching its own cell bg (harmless), while global-bg cells keep their readability halo.
 			- No test: a GPU texture effect, checked by eye.
+	- Note: 20260930, superseded in part. It is the text scrim now, on by default, with the rows and defaults in the [scrim design doc](design_docs/20260930-145304_scrim.md).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5878,6 +5842,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ The list of selection inclusion pairs should be read from the config file.
 		- Done: a `selection_pairs` setting, defaulting to the usual quote and bracket pairs. It is backfilled into an existing config, commented out, and is not in the Settings dialog.
 		- Pinned by: `selection_pairs_parse_in_order_and_come_from_the_file`.
+	- Note: 20260930, a double-click asks for a shape first now, such as a path or URL, then the pair, then the word. The keys are `selection.word_separators` and `selection.pairs`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5904,6 +5869,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- How: the graphics library cannot get per-pixel alpha on X11 by itself - its modern path forces an opaque surface, and its GL path will not bind the visual that carries an alpha channel. So on X11 the window and a transparent GL context are created directly, the library runs on top of that, the scene renders to an offscreen texture, and that is copied into the GL framebuffer. Off X11, on Wayland for instance, the ordinary surface already carries alpha. Nothing was downgraded and the renderer was not rewritten.
 	- Note: the hard part was that on NVIDIA/Linux glyphon renders no text on a GL context below 4.2, because drawing into a texture view silently no-ops there (that is how glyphon builds its atlas). Fix: request a GL 4.6 context, falling back as low as 3.3.
 	- No test: per-pixel alpha needs a GPU and a compositor.
+	- Note: 20260930, Windows has its own path now, DX12 composition, which takes effect at the next launch.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5963,6 +5929,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No test: a real OS window, which needs a display.
 	- 🚫 Use the system window background and text color, if feasible in a cross-platform way.
 		- Canceled. No portable API; same as the menus/About.
+	- Note: 20260930, the Font size slider no longer turns the system font off. It is grayed while the system font is on.
 	- Opened: n/a
 	- Closed: 20260719-085918
 
@@ -6009,6 +5976,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Group Settings items into logical sections.
 	- Done: section headers, bold with a faint rule under them - Appearance, Font, Window, Scrolling, Colors. Row positions are summed per row now, since a header is taller than a setting.
 	- Pinned by: `every_tab_has_rows_and_every_row_a_tab` and `keyboard_skips_headers_and_disabled`.
+	- Note: 20260930, superseded by tabs, with groups and sub-groups on each.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6016,6 +5984,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: a "Font family" text field, empty meaning the system default. The pinned family is re-resolved whenever the text context is rebuilt, so the field and the "Use system font" checkbox take effect on Apply rather than on the next launch.
 		- Fixed on the way: the spacebar arrives as a named key rather than a character, so a font name or path with spaces in it now types correctly into a dialog field.
 	- Pinned by: `space_types_into_an_open_field`.
+	- Note: 20260930, superseded. An empty family no longer means the system default. "Use system font" does that, and the family is a fallback list.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6061,6 +6030,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
 	- 🚫 Hide scrollbar (toggle with checkmark)
 		- Canceled. No scrollbar exists for smooth-scroll.
+		- Note: 20260930, a scrollbar exists now. Its switch is in Settings, not this menu.
 	- ✅ Fullscreen (toggle with checkmark)
 		- Done. `window.set_fullscreen(Borderless)` + F11. Compiz on this box doesn't honor the request (environment, like the F11 grab); it works on a compliant WM.
 		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
@@ -6101,6 +6071,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Add adjustable background image opacity to config file, and make default about 33%. This is independent of "see-through" opacity. The "opacity" should be relative to the background color. 0% = all background color, 100% = all image.
 	- Done. `background_opacity` already provided this (0 = all bg color, 1 = all image); changed the default to 0.33. Independent of `opacity` (see-through).
 	- Pinned by: `a_full_slider_always_draws_the_picture_as_it_is` and `changed_defaults`.
+	- Note: 20260930, superseded. This is the Visibility slider now, 10% by default, drawn by the rule in the [wallpaper design doc](design_docs/20260930-150052_wallpaper.md).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6125,6 +6096,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Foundation: the live settings can be swapped as a whole at run time, which is what lets a dialog apply without a restart.
 		- Not yet exposed (the field table is trivially extensible): font_family, scrollback, alt/output scroll lines, background_fit, columns/rows, word_separators.
 	- Pinned by: `buttons_fire_on_release_over_button`, `space_or_enter_activates_focused_button`, `escape_from_inside_a_field_cancels_the_dialog`, `enter_in_a_field_is_the_dialogs_ok` and `a_save_writes_only_the_lines_it_changed`.
+	- Note: 20260930, superseded. Settings is a pop-out window now, not a modal over the terminal, and font family, columns and rows are exposed.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6149,6 +6121,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Use system monospace font by default
 	- Done: the default font is the monospace family the OS is set to, when that family is installed, and generic monospace otherwise. `font_family` in the config overrides it by name.
 	- Pinned by: `mono_candidates_keep_one_order_on_every_platform`.
+	- Note: 20260930, superseded. The font comes from one search order now, with a built-in list, from "The font fallback stack is only partly implemented".
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6213,6 +6186,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Render options: Stretch-to-fit, Zoom-to-fit.
 		- Done. `background_fit` = "stretch" | "zoom"; default zoom/cover.
 		- Pinned by: `a_flat_wallpaper_converts_to_the_image_and_survives_a_save`.
+	- Note: 20260930, the `background_*` keys are nested `wallpaper.*` keys now, and the default fit is Stretch.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6393,6 +6367,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - 🚫 In `nano`, scrolling isn't smooth, it jumps line-by-line like traditional terminals. Is that just an artifact of the way `nano` specifically works?
 	- Observation: `nano` (like `vim`, `less`, etc.) runs in the alternate screen and repaints the visible region in place; it keeps fixed chrome (title bar, shortcut bar) and rewrites the text rows itself. There is no terminal-level scroll (`display_offset` stays 0, no scrollback growth) for the renderer to ease, so the content snaps. The wheel now at least drives nano's own (line-by-line) scrolling via alternate-scroll. Making full-screen apps scroll smoothly would require the terminal to detect a vertical content shift within the app's scroll region frame-to-frame and animate it - a heuristic, app-fragile feature (nano's fixed bars break a naive whole-grid diff). Left as a future enhancement rather than a fragile hack.
+	- Note: 20260930, superseded. Full-screen programs slide now, through the engine's scroll ledger, with row fingerprints as the fallback. See the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md).
 	- Opened: 20260628-083740
 	- Closed: 20260713-142351
 

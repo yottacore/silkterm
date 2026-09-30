@@ -13,43 +13,36 @@
 <!-- TOC -->
 
 - [Goal](#goal)
+- [Feature designs](#feature-designs)
 - [Architecture](#architecture)
 	- [Language / Stack Decision](#language--stack-decision)
 	- [Logical code organization](#logical-code-organization)
 	- [API (alacritty_terminal)](#api-alacritty_terminal)
-	- [Smooth-Scroll](#smooth-scroll)
-	- [Output easing (new text)](#output-easing-new-text)
-	- [Smooth-scroll inside full-screen apps](#smooth-scroll-inside-full-screen-apps)
+	- [Smooth scrolling](#smooth-scrolling)
 	- [Minimap](#minimap)
 	- [Text readability scrim](#text-readability-scrim)
-	- [Minimum contrast (2026-08-30)](#minimum-contrast-2026-08-30)
-	- [Dark text on a light background (2026-09-21)](#dark-text-on-a-light-background-2026-09-21)
-	- [How much of the wallpaper is on screen (2026-09-20)](#how-much-of-the-wallpaper-is-on-screen-2026-09-20)
-	- [Text colors from the wallpaper (2026-09-20)](#text-colors-from-the-wallpaper-2026-09-20)
-	- [Performance profiles (2026-09-03)](#performance-profiles-2026-09-03)
-	- [Font fallback stack](#font-fallback-stack)
+	- [Themes and text color](#themes-and-text-color)
+	- [Wallpaper](#wallpaper)
+	- [Performance profiles](#performance-profiles)
+	- [Fonts, Unicode and emoji](#fonts-unicode-and-emoji)
 	- [Hyperlinks](#hyperlinks)
-	- [What a double-click grabs (2026-08-26)](#what-a-double-click-grabs-2026-08-26)
-	- [Selecting past the edge of the screen (2026-09-20)](#selecting-past-the-edge-of-the-screen-2026-09-20)
+	- [Double-click and selection](#double-click-and-selection)
 	- [Measurements and display scaling](#measurements-and-display-scaling)
-	- [Attention colors and dialog chrome](#attention-colors-and-dialog-chrome)
-	- [Groups and sub-groups in the Settings dialog](#groups-and-sub-groups-in-the-settings-dialog)
-	- [The color picker (2026-09-20)](#the-color-picker-2026-09-20)
-	- [Saved themes](#saved-themes)
+	- [The Settings dialog](#the-settings-dialog)
 	- [The shell list and how it is filled](#the-shell-list-and-how-it-is-filled)
 	- [What a pane's shell inherits](#what-a-panes-shell-inherits)
 	- [A prompt is offered to bash, never installed (2026-08-30)](#a-prompt-is-offered-to-bash-never-installed-2026-08-30)
 	- [Opening files from Explorer on Windows (2026-09-30)](#opening-files-from-explorer-on-windows-2026-09-30)
 	- [One tip system, four places that draw it (2026-08-30)](#one-tip-system-four-places-that-draw-it-2026-08-30)
 	- [Render Loop Sketch](#render-loop-sketch)
-	- [Output notices under a flood](#output-notices-under-a-flood)
+	- [Speed](#speed)
 	- [The About box says how long the session has been up (2026-09-20)](#the-about-box-says-how-long-the-session-has-been-up-2026-09-20)
 	- [A character handed to the window is typing (2026-09-09)](#a-character-handed-to-the-window-is-typing-2026-09-09)
 	- [What untrusted input may not do (2026-09-09)](#what-untrusted-input-may-not-do-2026-09-09)
 	- [The fuzzer (2026-09-09)](#the-fuzzer-2026-09-09)
 	- [Environment](#environment)
 	- [Startup and slow external resources](#startup-and-slow-external-resources)
-	- [Letting the GPU go on a long idle (2026-09-17)](#letting-the-gpu-go-on-a-long-idle-2026-09-17)
+	- [Releasing resources](#releasing-resources)
 	- [Configuration format](#configuration-format)
 	- [Variables in a setting (2026-08-30)](#variables-in-a-setting-2026-08-30)
 	- [Command-line options](#command-line-options)
@@ -72,29 +65,45 @@ GUI terminal emulator for Debian/X11/Compiz with pixel-by-pixel smooth scrolling
 
 No existing Linux terminal does animated smooth-scroll on output. (Verified: WezTerm, kitty, foot, Alacritty, GNOME Terminal, Konsole all snap to cell rows.)
 
+## Feature designs
+
+Each of these has its own design doc, which is the source of truth for that feature.
+
+- [Smooth scrolling](design_docs/20260930-144720_smooth-scrolling.md)
+
+- [Smooth cursor](design_docs/20260930-145124_smooth-cursor.md)
+
+- [Text scrim](design_docs/20260930-145304_scrim.md)
+
+- [Settings dialog](design_docs/20260930-145721_settings-dialog.md)
+
+- [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md)
+
+- [Minimap](design_docs/20260930-150325_minimap.md)
+
+- [Themes and text color](design_docs/20260930-150458_themes.md)
+
+- [Speed](design_docs/20260930-150643_speed.md)
+
+- [Unicode, fonts and emoji](design_docs/20260930-150813_unicode-and-emoji.md)
+
+- [Split panes](design_docs/20260930-150948_split-panes.md)
+
+- [Double-click and selection](design_docs/20260930-151047_double-click-selection.md)
+
+- [Performance profiles](design_docs/20260930-151204_performance-profiles.md)
+
+- [Releasing resources](design_docs/20260930-151334_releasing-resources.md)
+
+- [The terminal engine and patched crates](design_docs/20260930-151451_alacritty-fork.md)
+
 ## Architecture
 
 ### Language / Stack Decision
 
-Rust + `alacritty_terminal` crate (not a fork of Alacritty repo).
+Rust plus the `alacritty_terminal` crate, not a fork of the Alacritty application. The crate brings the PTY, the parser and the grid, and SilkTerm builds only the renderer. Three crates are carried on small patched branches, one per published release. Why, what is used and how the patches are carried: [The terminal engine and patched crates](design_docs/20260930-151451_alacritty-fork.md).
 
-Rationale:
-
-- `alacritty_terminal` crate (v0.15.0 at design time; v0.26 as built) provides PTY + full VT/ANSI parser + grid state as a standalone library. Inherit the two hardest, correctness-critical pieces.
-
-- Do not `git fork alacritty` - its renderer is built to snap to cells and maintainers reject smooth scroll by design. Forking = fighting architecture + merge debt. Crate = clean dependency, build only the renderer.
-
-- Two crates are nonetheless patched, through `[patch.crates-io]` in the workspace manifest, and both follow one rule: a branch under `jim-collier` named for the release it sits on, holding that published release plus our change and a test for it. Naming the release is what lets an older lock keep resolving, and starting from the published source rather than the upstream branch keeps the delta to what has actually been read. `alacritty_terminal` carries the scroll ledger and four smaller fixes; `x11-clipboard` keeps the copied text when a stale `SelectionClear` arrives, which was the defect behind copies that silently stopped working (2026-09-20).
-
-- Renderer: `wgpu` (or `glium` as fallback). Glyph atlas + cell draw.
-
-Rejected alternatives:
-
-- Go (`aminal`, custom): Difficult due to dearth of existing plumbing options; parser is the hard part.
-
-- Zig + libvterm + raylib: viable but less ecosystem glue than Rust path.
-
-- Python: Excluded (not compiled).
+- Renderer: `wgpu`. Glyph atlas plus cell draw.
 
 ### Logical code organization
 
@@ -129,398 +138,39 @@ Frame loop: a PTY read or a user event marks the app dirty or starts an animatio
 
 ### API (alacritty_terminal)
 
-(As designed against 0.15.0; the build tracks the current release - 0.26 as of 2026-07. Signatures below are the stable core that carried over.)
+The engine knows only whole lines (`display_offset`), so smooth scrolling lives entirely in the renderer. The calls SilkTerm relies on, and how the terminal is shared with the reader thread, are in the [terminal engine](design_docs/20260930-151451_alacritty-fork.md) and [Speed](design_docs/20260930-150643_speed.md) design docs.
 
-- `Term::scroll_display(Scroll)` - moves viewport by whole lines. `Scroll` enum: `Delta(i32)`, `PageUp`, `PageDown`, `Top`, `Bottom`.
+### Smooth scrolling
 
-- `grid.display_offset()` - integer line offset from bottom = current viewport position.
+The engine keeps whole lines, and the renderer draws a fractional offset over them. The wheel, the scrollbar, new output and full-screen programs all ease by moving that offset. New output runs through the output chase, a speed curve made of five named segments, one per setting. Full-screen programs are read from a scroll ledger in the engine fork, with row fingerprints as the fallback.
 
-- Grid cell iteration (`iter_visible` / indexing) = render source.
-
-- `config::Scrolling` = history limit + line multiplier only. not animation. Ignore for smooth scroll.
-
-Critical constraint: crate's `display_offset` is integer lines. No fractional scroll in crate. Smooth scroll lives entirely in the renderer.
-
-Sharing the terminal with the reader thread: the reader holds the terminal across a whole read cycle, so the renderer cannot simply take it every frame without stalling. It also cannot merely try and give up. The reader reclaims it immediately, and an impatient try can lose forever, which showed up as a pane frozen for seconds during heavy output. The rule is to try first, and after a couple of frames of getting nowhere, wait properly. Waiting is bounded, because it reserves the terminal ahead of the reader's next cycle. Trying is not bounded at all.
-
-### Smooth-Scroll
-
-Crate owns integer "where grid is." Renderer owns fractional overlay.
-
-1. Hold separate `visual_offset: f32` in render layer (separate from crate's integer `display_offset`).
-
-1. On wheel input: set target, lerp `visual_offset` toward target each frame (~100ms ease).
-
-1. When `visual_offset` crosses a full line boundary: call `scroll_display(Delta(+/-1))` to advance grid integer offset, subtract `1.0` from `visual_offset` to keep fractional remainder.
-
-1. Render: draw grid translated vertically by `visual_offset * cell_height` pixels.
-
-1. Draw one extra row at top + bottom so partial rows fill viewport edges during fractional offset.
-
-A gesture rests on a whole line, and on the line it was heading FOR. A pixel-delta wheel leaves a fractional target, and parking there renders every row shifted by a sub-cell fraction. Rounding to the nearest line is the obvious way to settle that and it is wrong at the end of a gesture: a scroll that stops nine tenths past a boundary goes all the way forward and then hops back, which reads as a glitch even though the travel is under a line. So the detent goes forward, in the direction the wheel was already turning. A scrollbar drag or a track click carries no direction and still rounds to nearest, which is what direct manipulation wants.
-
-The ease curve is deliberately asymmetric. A single exponential lerp starts at peak speed on its first frame and crawls its last pixels in over a second. Both read wrong. Motion instead builds from rest through a two-stage cascade: the visual position chases a leading stage, which chases the target. The stop is sharpened by a minimum closing speed over the final fraction of a line. Ease-out above that band is unchanged. Neither stage can overshoot, so the curve cannot bounce.
-
-### Output easing (new text)
-
-Same mechanism: when new output pushes content up, animate `visual_offset` from +1 line back to 0 over the easing window instead of snapping. Treat output-scroll as an animated target like wheel-scroll.
-
-The view never sits past the grid. The whole part of the offset is what the grid is scrolled by and the fraction is drawn, so an offset beyond the scrollback would pin the whole part while the fraction kept wrapping, one whole-cell hop per line. That was the nano wobble: a burst still easing when the alt screen (no scrollback) took over. The offset is clamped to the scrollback instead, which stops the ease the instant a screen swaps and caps how far a fresh terminal's first output eases.
-
-Lines a program redraws in place at the bottom hold still while output eases. A progress line, apt's status bar, or a live input block under a transcript did not move in the grid, but the ease shifted the whole pane, so they dropped a row with every new line and slid back up. That showed as a sharp horizontal seam at the top edge of those lines.
-
-- The held rows are the ones below the rows a step actually moved, and one of them must be text that reads the same as before. Without that, the last chunk of plain output and a prompt coming back after a command would hold still too.
-
-- Rows below a program's own scroll region are held on the engine's record alone, whatever they say.
-
-- The band only grows while one ease runs. Steady output keeps a single ease going, so a band measured once could miss a block caught half drawn, and a band that shrank would drop a held row back into the moving text.
-
-- A single progress line whose text changes on the same tick a new line arrives still drops for that step. Matching rows loosely enough to catch it also held half-written output lines. A click on a held row while the ease runs maps to the moving view for that moment.
-
-A surface that could not be seen does not ease at all. A minimized or occluded window, and a tab that is not the shown one, build no frames while they are out of view, so whatever arrived meanwhile is a gap rather than motion. Easing that gap in would say the wrong thing twice: it animates content that is already old, and it reads as output arriving right now. Coming back on screen is one instant cut instead, and the flash that produces is the point - it marks the update as catching up rather than happening.
-
-Catch-up speed is modeled as one curve on a time/speed graph, and each setting is a named segment of it. The curve starts and ends at zero. Each segment hands exactly one thing to the next: the point where it ended. In order:
-
-- Ease-in lifts the speed from rest over its duration. It is the only segment that can leave zero.
-
-- Ramp-up doubles the speed every one of its periods, toward whichever top applies.
-
-- The top is either the single-screen speed or unbounded. Single-screen applies while the burst's own first line is still on screen, so a short listing never races. Once a screenful has scrolled past, the ramp reaches whatever keeps up.
-
-- When the cap lifts mid-burst, Ease-in runs once more from the speed it found itself at, and then Ramp-up resumes.
-
-The segments are straight lines and exponentials adjusted by time, rather than one smooth sigmoid-family curve per segment. That is the shape language audio and video production use, it is cheap to compute, and each knob stays a plain duration.
-
-Winding down is the same curve traced backwards. Ramp-down is a braking curve computed from where Ease-out comes to rest: at any moment the speed may not exceed what could still be wound down, halving per the Ramp-down period, within the lines left to render. Applied continuously, that one rule is both the reserve and the deceleration. At speed, the view deliberately trails the live output by a braking distance. The moment output ceases, the speed rides the curve down and hands off to Ease-out exactly at the stopping band. An earlier design only relaxed the speed during a lull, which in practice never fired. The ramp-down knob read as inert, and stops from speed were cliffs.
-
-While a burst is in flight the chase drives the view outright. It used to be a speed CAP on the plain navigation ease, which only bit while the ease was the faster of the two - so a short advance got the navigation ease instead, decaying on a fixed constant none of the five settings reach, and then visibly picked back up when the sharpened stop took over. A prompt returning after a command is one or two lines, so it stalled every time. The chase already ends exactly where the stopping band begins, which means it needs nothing handed to it and nothing left over.
-
-The backlog is deliberately not capped in lines. An earlier design capped it at 16 and drove speed from backlog depth. Any real burst filled the cap in about a tenth of a second, after which the view rode the raw output rate and the speed settings had no perceivable effect. The ramps bound the lag in time instead: about one ramp-down period at a steady rate. That is what makes the slow start physically possible. User navigation is exempt from the chase. Wheel and scrollbar keep a plain fixed ease, and a jump back to the bottom sweeps home at full ease speed.
-
-The five settings that shape all of this are presented in the order they are watched, rather than grouped by mechanism:
-
-- Ease-in: how gently the view leaves rest.
-
-- Ramp-up: how hard it accelerates.
-
-- Single-screen speed: the ceiling while the burst still fits on screen.
-
-- Ramp-down: how gradually it winds down.
-
-- Ease-out: how gently it comes to rest.
-
-A sixth, the initial scroll speed, was removed. It fed four separate mechanisms at once, which made every slider appear to influence every other, and the curve's own Ease-in now owns leaving rest.
-
-Two of the five are matched pairs, and each pair runs one direction: higher Ease-in and Ease-out are gentler, higher Ramp-up and Ramp-down are harder. That constraint decides how a value is stored rather than the other way round. Both ends of the ease are stored as how long they take, not how fast they move, purely so each slider runs with its partner instead of against it. Storing the mechanism directly would have made one half of each pair read backwards.
-
-A single "Smooth scrolling" master switch (`scroll.smooth`) turns all scroll animation off at once - wheel ease, output ease, and the full-screen-app slide - without touching the individual settings; their dialog controls gray out while it is off. Every effect group in Settings follows the same master-switch pattern (transparency, wallpaper, contrast mask, text scrim, scrollbar).
-
-### Smooth-scroll inside full-screen apps
-
-Scrollback and output easing (above) both have an easy signal: the wheel turns, or the buffer grows, and we ease a fractional offset. Full-screen ("alt-screen") apps - less, vim, nano, tmux - are the hard case, and no other terminal animates them. They own the screen. Most scroll a region of it with the terminal's own scroll commands (a linefeed at the bottom of a DECSTBM region, `CSI n S`), and the terminal throws the outgoing rows away because the alt screen keeps no scrollback. Some repaint whole lines in place instead, and then the grid just changes under us. Two mechanisms cover the two kinds, and the exact one is asked first.
-
-- **The engine keeps a ledger (2026-09-03).** Our alacritty fork records every region scroll as it happens: which rows moved, by how many lines, and the rows the scroll pushed out. Each frame the pane reads it and clears it. That is the whole answer for anything that scrolls the terminal. The count is exact and uncapped, so a burst that replaces the screen between two frames is still one known number; the region says which rows hold still; and the outgoing rows are real content rather than a guess. This is what lets tmux ease at all, since it runs on the alt screen where the old approach had nothing to measure. The engine also counts every line it sends off the top of the screen into the scrollback, and that count carries plain output once the scrollback is full and its depth stops growing; it is summed on its own, so a region scroll in the same read does not lose it. It covers a whole-screen scroll, a scroll of a region that starts at the top row (apt's progress bar pins the last row under one), and a screen clear, which also sends the screen into the scrollback (2026-09-18). Before that it covered whole-screen scrolls only, so with the scrollback full the lines above a pinned status line cut instead of easing, and so did a clear. A recorded scroll that moved only blank rows is not eased at all. Nothing visible moved, and a line editor such as ble.sh scrolls the blank rows under the cursor to make room for its prompt; easing that drags the prompt down from behind the rows above. Nor is a scroll down that only pushes off rows that were blank to the bottom of the screen (2026-09-19). That is content making room for itself, such as an input box growing as a paste arrives, and easing it drops the new lines out from behind the rows above, last line first. It pops in instead, the same on the ledger and on the fingerprint path. The kept rows alone cannot say it, since less blanks its prompt row in the same write as its scroll back, so the last frame has to agree. `SLIDE_DOWN_INTO_ROOM` in `pane.rs` brings the slide back. One direction at a time: a scroll the other way starts the ledger over, and so does a scroll of a region sharing no row with the one in flight. A scroll of an overlapping region carries on (2026-09-17). The ledger narrows to the rows both scrolls moved and keeps the rows that cross that edge, whether the grid dropped them or they only stopped moving, and the pane takes the record each frame with the region and direction left open while a slide is in flight, clearing it only at rest. nano is why: its edit window is rows 2 to 45, and whenever the line leaving it is blank ncurses scrolls rows 2 to 46 instead, taking the blank status row along. Starting over on that threw the slide away every other step of an up run.
-
-- **Fingerprints where the engine recorded nothing.** An app that repaints its lines with cursor addressing, or ConPTY on Windows re-emitting a scroll as a repaint, leaves no ledger entry. For those, every frame fingerprints each visible row (a hash of its characters) and `scroll_shift_signed` looks for the vertical shift, up to 24 lines either way, that lines up the most rows, requiring enough of them to have really moved. An in-place status-line redraw lines up positionally but did not move, so it cannot false-trigger a slide. The bands it holds still are measured the same way, as the unchanged rows at each end.
-
-- **Ease it into place with the output chase.** The grid is already at the post-scroll position, so to animate we push the content back by the shift and ease that offset to zero. The offset runs the same curve and the same five sliders as plain output. An app scrolling its region by N lines looks exactly like N lines printed at a prompt, and a unit test holds the two channels to one trajectory.
-
-- **Fill the gap with the scrolled-off rows.** The gap the slide reveals cannot be redrawn from the model. The rows the ledger kept, or on the fingerprint path the rows snapshotted styled a frame earlier, go into a retained strip. The strip draws welded to the sliding content's edge and rides the same eased offset, so the gap is always exactly filled with real outgoing content, complete with its own cell backgrounds and readability scrim. The offset can never open more gap than the strip holds. About three screens are kept, so a long burst eases through its tail. An earlier design retained the whole previous shaped frame instead; its fill could trail the ease and it repositioned at every re-capture, which read as a pulsing shadow under a title bar.
-
-- **One row is pinned by reading, not by the region.** A pager like less scrolls the whole screen and rewrites its prompt on the bottom row afterwards. That row reads the same after the scroll as before, so it is held still even though the region says it moved. The same text ends up in the same place either way, so nothing is lost. A blank row never qualifies: tmux scrolls first and draws the freed row a moment later, and a frame built in between would otherwise pin that row and make its new line pop in while the rest slides.
-
-- The edge the strip fills from holds a row the recorded scroll does not account for. muffer repaints its "1 new message" pill over the last row of its transcript after each scroll. That row slid with the text while its old copy rode in the strip, so the pill showed twice. Such rows are counted from the edge, up to a quarter of the region, and only when the row past them moved as recorded, so a frame repainted wholesale holds nothing. The strip then takes its rows from the frame before. The held edge may grow during a slide, since a frame can be built between the scroll and the repaint.
-
-A sliding frame therefore composites as four parts:
-
-- The scrolled-off strip, filling the revealed gap.
-
-- The current middle region, sliding over it, clipped between the two bands.
-
-- The title and status bands, redrawn unshifted.
-
-- The readability scrim, following the whole thing, strip included.
-
-What makes this hard:
-
-- The stock engine has no scroll event and does not expose the app's scroll region. The ledger is our own addition to the fork. Without it, "a scroll happened, by N lines, with these fixed bands" is inferred, and the inference must reject false positives: an in-place redraw must not bounce, the apt-status-bar hazard.
-
-- The off-screen content is unrecoverable from the grid. The ledger takes each row on its way out and leaves a spare in its place, which the grid resets as it would have reset the row, so keeping rows costs a full-screen program next to nothing (2026-09-18). It used to copy each row, which took about a third off the parse speed on the alt screen. Only a row that stops moving while staying on screen is still copied, which happens when an overlapping region carries on. The fingerprint path still has to capture it styled a frame ahead.
-
-- tmux draws lazily. On a burst it scrolls the outer terminal by the grid's whole advance and only then redraws, so the rows that leave are whatever it had drawn before, sometimes blank. Every terminal's scrollback gets the same stale rows. The strip is faithful to what tmux sent, not to what its pane holds.
-
-- tmux can only scroll a pane that spans the full width. Side-by-side panes are repainted, so they fall to the fingerprint path and mostly hard-cut.
-
-- The fixed bands mean three regions have to tile with no gap and no overlap.
-
-- All of it is sub-line and per-frame, riding the same fractional renderer and scrim pass, under a redraw loop that cannot trust X11/Compiz redraw requests.
-
-It is switchable (`smooth_scroll_apps`, on by default).
+Full design: [Smooth scrolling](design_docs/20260930-144720_smooth-scrolling.md).
 
 ### Minimap
 
-An optional sidebar showing the whole scroll buffer in miniature, in the spirit of the Sublime Text / VS Code minimap. On by default since 2026-09-17, once the column learned to step aside for full-screen programs.
-
-Where it sits:
-
-- Per pane, not per window. Scrollback belongs to a pane, so in a split each pane carries its own map.
-
-- The map owns a real column inside the pane's rect - it never overlays the text. Turning it on costs terminal columns, and the PTY resizes like any other layout change. A pane too narrow to spare the room gets no column at all; the column may never take more than half a pane.
-
-- Left to right: terminal text, then the preview. The regular scrollbar sits at the pane's far right edge, over the edge of the preview, the same overlay it is without a map. An earlier design kept a second, always-visible bar beside the preview. The two showed the same thing, so that one was removed.
-
-- The configured width is the whole column's.
-
-The mapping, which is the decision everything else rests on:
-
-- The whole buffer - history plus screen - always maps linearly onto the column, top-anchored, oldest first. The editors slide their minimap once the document outgrows it; this one never does.
-
-- The map stops where the eased text has reached, not at the live bottom of the buffer. Under a flood the view sits behind the newest output by however far the output ease is holding it, and drawing past that puts lines in the column that are not on screen. What is held back is the output the view has not come down to yet: new lines add to it as they arrive, and the view gives it back as it reaches them. So a scroll or a jump to the bottom never shortens the column by itself, and typing during a flood does not turn the trim off. The extent is settled when the picture is composed, so the marker is never measured against a picture nobody drew, and a map that came out short asks for another compose and follows the ease down. One line is always kept, so the column never disappears.
-
-- An earlier pass read the same sentence the other way and stopped the map at the last screen row with output, so the blank rows under a short prompt took no track. That is out again. The blank rows are part of the buffer.
-
-- Two narrower rules were tried before that one and each broke the other's case (2026-09-20). Trimming whenever the view is following the bottom reads a jump to the bottom as output, since the view eases in the same way, and shortens the map by the whole distance the gesture has left to travel. Trimming only while the output chase owns the motion misses the rest of a flood after a single keystroke, because a keystroke aims the view at the bottom and that flag does not clear while output keeps arriving. Both are one-line readings of the scroll position from outside the scroll model, which carries the chase's undrained backlog and a gesture's remaining travel in one number. Counting the unreached lines inside the model is what settles both, since only it can tell the two apart.
-
-- With a short buffer, lines draw at a capped height (1.5 px at 1x) and the preview just does not reach the bottom of the column yet. That cap is scaled but not rounded to whole pixels, on purpose: a line has to be able to sit at a fraction of one, or its ink falls inside a single pixel row and a page goes back to reading as a slab.
-
-- With a deep buffer, lines go sub-pixel and blend down, so the map compresses instead of scrolling. At the default 10,000-line scrollback a line is a fraction of a pixel; colored regions still read as bands, which is most of the point.
-
-- The marker is measured at the map's own pitch, over the lines the picture draws rather than over the whole buffer. Anything else puts it above or below the text it stands for whenever the two differ, which is every moment the trim above is holding the map short.
-
-- The marker carries a floor on its height so a deep buffer still leaves something to grab. The thumb takes the same span, never its own. Where the floor makes the marker taller than the rows it stands for, it grows both ways from their middle, so it still reads as pointing at them.
-
-What a line looks like:
-
-- Strokes, not glyphs. Per cell: a run of the cell's fg color where there is ink, over the cell's bg where it differs from the default. Hues survive, so errors, prompts and diffs stay findable from across the room.
-
-- How much of its cell a character inks varies with the character, from a quarter for a period or a comma up to the full amount for a hash, a block or an em-wide letter. A flat share is what made a run of text read as one bar. The weights are eyeballed from a monospace face rather than measured, since the map is a hint and the face in use is not known where the raster runs. A cell that carries its own background still paints solid whatever is in it; only how far its color pulls toward the foreground moves.
-
-- Across a line, coverage adds up, so a short or indented line reads as one. Down the column, color is averaged over only the lines that have ink, so a lone red line among blanks keeps its color rather than fading into them.
-
-- A cell is spread over a tent a pixel each side, and so is a line, rather than each being clipped to the pixel it happens to fall in. Neither grid lines up with the pixels, and at the ratios a column runs at - about 100 cells into 90 px, about one line per pixel - clipping leaves the two grids beating against each other. That draws a comb across the column and broad bands down it, neither of which is in the text. The wider filter costs about a sixth more per compose and it is what makes a page of repeated output read as the text it came from.
-
-- Under about 0.6 px per line the line filter goes back to clipping. A pixel there already averages more than a whole line, the gap below is switched off and the column is even anyway, while the wider filter would cost three times as much - and that is the deep buffer where a compose is already the expensive one.
-
-- How bright a pixel row gets is how much ink actually fell in it, so a mostly blank stretch reads dimmer than a solid page. That is what makes density legible from a distance. One inked line among many would otherwise almost vanish, so a pixel never falls below a set share of the strongest line in it.
-
-- A line does not fill its own height. The gap above and below is what stops a page of text reading as one block. At the capped height the ink is a band narrower than a pixel, so it falls across two pixel rows at part strength rather than filling one, which is what a page of text looks like from a distance. Below about half a pixel there is no room for a gap and the line is taken whole, with the two ramped between so the map does not change brightness as a growing buffer crosses that point.
-
-- The column steps aside while a full-screen program runs, and the text gets its width back. Such a program draws on its own screen, which has no scroll buffer behind it, so the map would show a rectangle at the top of an otherwise empty column.
-
-- Which programs are the exception is a setting rather than a rule, because there is no way to tell from the outside whether a full-screen program is one the map could usefully follow. By default it names a pager and the two multiplexers.
-
-Interaction:
-
-- The marker drags like a thumb and rides the scroll target, so it tracks the pointer exactly. A drag works out from where it grabbed rather than from where the marker was last drawn: the height floor means the drawn top is a rounded reading of the position, and reading it back would move the view on a press that never moved.
-
-- A click elsewhere in the column centers the view there, eased the same way a scrollbar drag settles. The bottom of the map stands for the lines the trim is holding back as well as the last one it drew, so a click there means the newest output.
-
-- The wheel over the column scrolls the buffer, same as over the text - including under an app that is tracking the mouse, since there is no cell under the pointer to report.
-
-Alt screen:
-
-- The column stays, so the PTY is not resized every time an app flips screens. The preview shows the screen itself, with no marker and no thumb - there is nothing to scroll.
-
-Cost when off:
-
-- Truly off: no column, no cache, no per-frame work. The whole feature hangs off one config check, and the cache is freed the moment the column goes away.
-
-Settings and chrome:
-
-- A "Minimap" toggle and a width slider on the Movement tab, under the scrollbar cluster, plus a View-menu item. The marker reuses the scrollbar's thumb color, which is why the scrollbar color rows sit with the palette rather than under the scrollbar switch.
-
-How it is built:
-
-- `minimap.rs` owns the line cache, the raster, the mapping and the hit tests. `pane.rs` carves the rect and routes events. Drawing is one textured quad per pane plus overlay quads for the marker and thumb.
-
-- Each line rasterizes once into a fixed-width pixel row, at the first compose after it enters history, since history lines never change; the live screen rows re-raster at each compose. A build between composes only counts the new lines. It runs while holding the lock the PTY reader waits on, and under a flood most lines leave history before any compose would show them, so rasterizing them as they arrived cost about half the terminal's speed. A screen swap, a resize and a width change drop the cache. Sitting scrolled back with a full scrollback is the one case where nothing reports how many lines were pushed, so a changed newest-history line is taken as the sign the cache has fallen behind, and it rebuilds whole at a bounded rate.
-
-- A compose reads at most about 4 ms worth of lines from the grid. A deep scrollback that was just rebuilt, or turned over by a flood, holds far more than that: reading 100,000 lines took 150 ms, and the terminal stood still for all of it. Past the limit, one line in every so many is drawn and stands in for the lines around it. Later composes spend what is left of the limit replacing the stand-ins, newest first, since the oldest are the first to leave. Once output stops, the map ends up the one every line makes. Until then a pixel row can show a neighbor's picture of a line, which under a flood nobody can tell.
-
-- A compose that only replaced stand-ins redoes just the pixel rows they fall in, and the screen's. Each pixel row is worked out on its own, so that matches a whole compose.
-
-- Redrawing the whole image is pixel work on the cached rows, and it needs no lock. Over a deep scrollback it is still most of a second at a million lines, so the rows go to a thread of their own for it, and the finished image is swapped in when they come back. The builds carry on counting meanwhile. A small one is cheaper to do in place.
-
-- The composed image uploads as a texture the size of the column, so texture size limits and the GL context's VRAM-loss re-upload both stay non-issues.
-
-- Under a flood every pixel of the map moves on every line, so a recompose is throttled rather than run per frame. A compose the throttle defers schedules a timed wake, not an animation flag - marking the window animating would bring it straight back, find the throttle still closed, and spin at the frame rate. A compose can owe the next one, and that wake is only known once its frame is drawn, so the event loop looks for it again after drawing.
-
-- The throttle is at least 90 ms, and at least twenty times what the last ordinary compose took, the part on its own thread included. A whole redraw after a screen swap, a resize or a resync costs far more, and waiting twenty times that left the map still for seconds, so it does not count. A column that changes size composes at once instead of waiting the throttle out, so the image is never left at a size the column no longer has. A whole compose still grows with the scrollback, which can be a million lines, so a fixed interval could not bound its share at every depth. At the default depth under a flood, the map on costs about 6% of throughput.
-
-- Memory is about 5 MB per pane at the default scrollback and a 120 px column, freed while the map is off.
-
-- The marker and the scrollbar thumb say the same thing, so dragging either one pins both to the pointer. Off a drag they both ride the eased position and move with the content. Letting only the dragged one ride the pointer left the other trailing the ease the whole way down, which read as the second one lagging.
-
-- A handle let go stays where it was dropped until the text arrives, rather than being handed straight back to the eased position. The text is still on its way at that moment, so handing it back sent the handle backward the way it came and then crawling forward again - a bounce, on the one gesture where the user has said exactly where they want to be. The hold ends when the two agree, or at once if anything else moves the target, since from there the handle belongs to the content again.
+A column beside each pane showing the whole scroll buffer in miniature. The buffer always maps linearly onto the column and never slides, and the map stops where the eased text has reached. Lines are colored strokes weighted by how much each character inks. Full design: [Minimap](design_docs/20260930-150325_minimap.md).
 
 ### Text readability scrim
 
-A bg-colored backing behind glyphs so text stays legible over a busy background image or a near-transparent terminal. The scene's text is rendered to a coverage texture, turned into a halo, and composited under the crisp text, colored per-pixel so each glyph's backing takes its own cell's bg color. The outline is drawn in the same composite from the crisp coverage, so it works with the halo off, and the halo's blur is skipped then. The cursor is a separate coverage texture so it can join the halo and the outline as independent toggles.
+A soft halo in the background color behind every glyph, plus an optional crisp outline, so text stays readable over a busy wallpaper or a see-through window. The halo's shape and its fade are separate settings, and Strength thickens it into a plate.
 
-The halo shape is selectable ("Scrim function"), because a plain Gaussian blur is a poor legibility backing. It is a round kernel, so as the radius grows the backing rounds off and the corners of a solid block recede. A square of text then reads as sitting on a separate round blob rather than an even plate. Four functions are offered:
+Full design: [Text scrim](design_docs/20260930-145304_scrim.md).
 
-- **Dilate**. The backing grows the same distance from every edge as a square (Chebyshev distance), so corners stay full. The most solid/boxy look.
+### Themes and text color
 
-- **SDF** (default). The backing grows by true round (Euclidean) distance with full corners: round like the old blur, but the corners no longer pull in. This is the described ideal.
+Four built-in themes, each a dark and a light palette, plus saved themes stored whole. A minimum contrast floor in Oklab moves text that is too close to its cell's background, the block cursor's plate has to carry the text on it, and dark text on a light background is corrected to the weight an sRGB blend would give. Full design: [Themes and text color](design_docs/20260930-150458_themes.md).
 
-- **DT** (distance transform). The same Euclidean distance rendered as a solid plate with a crisp feathered lip, rather than a soft glow. A highlighter-style backing.
+### Wallpaper
 
-- **Gaussian [ugly]**. The legacy separable blur, kept as a baseline to compare against.
+A faint, blurred picture behind the text, from a named image, a rotating folder or the built-in one, prepared on a worker so it never delays the window. Visibility means the same amount of the picture's contrast in dark and light mode, and the text colors can come from the picture. The see-through window is covered there too. Full design: [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md).
 
-The distance functions share one engine: a separable, exactly-Euclidean distance transform bounded to the halo radius. It takes a per-column 1D distance, then a row combine. That is cheap - two passes, no jump-flood - and reads either metric off the same field. Independently, a "Scrim falloff" curve shapes how the backing fades with distance: Sigmoid, Half-normal, Linear, Logarithmic, or Exponential. It applies both as the blur kernel weight and as the distance-path transfer. Falloff and function are orthogonal: the function decides the halo's shape, the falloff its fade. The falloff is named for the curve it draws rather than for a blur, since the same word otherwise names both a shape and a fade. A bell curve's outer half is a half-normal, and a smoothstep is a sigmoid. Every curve is normalized to reach zero at the halo's outer edge, so a halo ends where its radius says it does.
+### Performance profiles
 
-A third knob, "Strength", decides how bold the finished halo is: each 20% doubles its opacity, up to five doublings at 100%. Because the doubled value is clamped, the halo's core saturates first and the solid part grows outward along the falloff. So the backing thickens into a plate rather than merely brightening, and it still stops at the radius. At 0 the halo is exactly as the function and falloff built it. Light mode takes some of that back, for the reason below.
+One setting decides how much the look may cost: Max silk, High, Low, Standard terminal or Custom, plus Remote (temporary) for a remote screen. A profile sits over the user's settings and never changes them. The first pick is timed and written against a hardware fingerprint, and a session steps down on missed frames without writing it. Full design: [Performance profiles](design_docs/20260930-151204_performance-profiles.md).
 
-The shipped values are a radius of 8 px and a strength of 20%. Both were raised when the exponential falloff was made twice as steep, since a curve that drops away sooner has to start further out and heavier to finish in about the same place. The cheaper profiles keep the same share of the radius they always had, so they still look like the same halo built with fewer taps.
+### Fonts, Unicode and emoji
 
-### Minimum contrast (2026-08-30)
-
-Programs pick text colors for a terminal they cannot see. One that assumes a light background writes near-black text, and on a dark one it disappears. So a floor is enforced on how close text may come to the color behind it, and anything under it is moved away: lighter on a dark background, darker on a light one.
-
-The comparison is against the cell's own background color, not against what a pixel behind the glyph actually shows. Per-pixel would mean the wallpaper, the blur, the scrim and the cell color all at once, in the shader, and it would give one word two colors across a gradient. The cell color is also the right answer in practice: a cell carrying its own background paints it solid, and one on the default background gets a scrim halo of exactly that color, with the wallpaper already pulled most of the way toward it.
-
-Lightness is measured in Oklab rather than as a WCAG ratio. That ratio's constant term swamps the dark end, so two near-blacks score respectably while being invisible, which is the whole case this is for. The move changes Oklab L alone and leaves a and b, so hue and saturation survive and colors stay told apart: a lifted navy is still navy. It goes to whichever side the text is already on, unless that side has no room left before white or black, in which case it goes the other way. Pale text on a merely light background is the case that needs the flip.
-
-The default floor is 45%, which puts previously invisible text at roughly 2.8:1 against a black background. Lower settings measure out as doing nothing visible at all. Two things are deliberately exempt. Text set to exactly its background color is left hidden, since that is how the hidden attribute works and how a program conceals a password. And ANSI black on a dark background is not exempt, even though it is invisible by definition - a program using it as a foreground has made the mistake this setting is for.
-
-Every built-in theme's own foreground clears the floor on its own, which is checked at build time. A theme whose body text needed lifting would mean the floor was repainting the thing it is measured against.
-
-The block cursor is a second background. It is drawn as a plate at 55% under the glyph, and the glyph keeps its own color, so the text on it has to clear the same floor against the plate as blended over the theme's background. That is checked for every built-in theme and mode the same way. A cursor at the text's own brightness fails it outright, which is what the monochrome themes shipped with. In a light theme the rule also sets how dark the text has to be: the plate sits between the text and the background, and a paler foreground leaves no room for one that both shows as a block and carries the text.
-
-Over a light background the plate is drawn at 80% instead. A linear-light blend barely moves a light ground, so at 55% even a black cursor could not take the plate much more than 0.2 Oklab L off the paper. The stronger alpha goes only as far as the text on the plate still clears the floor, so a saved theme or an overridden cursor picked for the old plate keeps about the plate it had. The shipped light themes' text was darkened to make the room, and their plates now sit 0.25 to 0.28 off the background, against 0.20 to 0.42 in dark mode. Colors taken from the wallpaper follow the same rule, since the derived text is never paler than the theme's.
-
-### Dark text on a light background (2026-09-21)
-
-The color pipeline works in linear light, and glyph coverage is blended there too. A pixel the rasterizer says is half covered comes out at about three quarters brightness either way round. On a dark background that is a strong edge. On a light one it is barely a quarter of the ink the eye expects, so the thin parts of every stroke fade and a light theme reads a weight lighter than the same font in a dark one. Bold survives because most of its pixels are fully covered.
-
-What the text should look like is settled first. Almost every other program blends text in sRGB, and that is the weight a font is drawn and hinted for, so the target is the pixel an sRGB blend of the pair would have produced.
-
-The fix reaches it without blending there. glyphon's fragment shader is given the text color, its background and an amount, all in the params uniform, and it bends coverage so the finished pixel comes out on that target: blend the pair in sRGB at the reported coverage, decode, and read off how far between the two the answer sits. That fraction is the alpha. The output is still linear and the surface is still encoded exactly once, which is what the color pipeline contract is about - the rejected alternative was a second encode of the output inside the text pass, not arithmetic that reads the sRGB curve.
-
-`text.dark_on_light` says how much of the correction to apply, defaulting to 1.0, and it is applied only where the text is darker than the background behind it. Light on dark is already heavy enough and correcting that side would thin it. The comparison is Oklab lightness, the same measure minimum contrast uses.
-
-The setting runs to 2.0 rather than stopping at the blend. Everything up to 1.0 is a correction and 1.0 is the whole of it; above that is taste, and it is there because how heavy text ought to look is partly the display and the font. It fills the counters of small letters if pushed, which the config comment says.
-
-The first version of this was a coverage exponent, and the exponent was the wrong curve rather than the wrong number. Matching an sRGB blend needs roughly 0.53 at a quarter coverage, 0.35 at a half and 0.18 at three quarters, so no single value fits: one that filled the stems smudged the faint edge pixels, and one that left the edges alone left the stems pale. Measured on the shipped light theme, the exponent it shipped with was about 20 sRGB levels light on a three-quarter covered pixel. The correction here has no such number in it - at full amount every pixel carries the ink the rasterizer reported.
-
-One alpha has to serve all three channels, so the pair reaches the shader as sRGB grays of its own brightness. A glyph in some other color - an ANSI red, say - takes the same curve, which measures up to about 20 levels off on its partly covered pixels, always toward more ink. Correcting per glyph would mean encoding each glyph color in the shader for a difference smaller than the one being fixed.
-
-The pair is decided once per render pass, not per glyph, because one pass draws the whole window and a uniform is what the shader can read. The main window's pass carries the terminal's own pair, so in a light theme the menu and tab labels - which stay on dark chrome in both modes - are corrected along with everything else, in the wrong direction. That is accepted: it is a small strip, and giving the chrome its own pass would cost a second renderer and a second atlas to fix a few hundred pixels. The Settings dialog is a separate context and decides on its own panel colors.
-
-### How much of the wallpaper is on screen (2026-09-20)
-
-The visibility slider is an authored amount - a person moved it - and what the renderer wants is a linear-light alpha. Those are not the same thing, in two separate ways, and both used to show.
-
-The first is the mode. sRGB's curve is steep near black and flat near white, so the same alpha covers a lot of visible ground over a dark background and almost none over a light one. Measured at the shipped 10%, a picture's own contrast came out at 6.4 sRGB levels of spread in dark mode and 0.6 in light: the same setting, and the picture was simply gone.
-
-What the slider means is settled first: **this much of the picture's own contrast reaches the screen**. Over a black background a linear blend delivers exactly that, because black leaves the blend a pure scale of the encoded picture and a scale cannot touch contrast. That is why dark mode has never needed any of this, and the closed form `alpha^(1/2.4)` says how much it delivers. A dark theme whose background is not black delivers less, and the same expression says how much less.
-
-Light mode cannot deliver it with a blend at all, so it does not use one. It mixes the background and the picture in a power curve at the amount dark mode's blend would have delivered. The curve is a pure power rather than sRGB's own, because sRGB's `- 0.055` term does not cancel: over black the power curve makes the mix exactly the linear blend it replaces, so the two modes are one rule with dark mode as its black-background case, and sRGB's would have lifted dark mode's black by eight levels. Measured after the change, light mode's spread was 6.4 against dark mode's 6.4, and at half visibility 12.5 against 12.5.
-
-A mix needs the background color, which a hardware blend cannot supply, so the wallpaper pass writes the pane fill itself and is clipped to the pane. The divider slits between panes keep their own color rather than taking a faint tint from the picture, which is the one thing that changes there.
-
-The second is the picture. At one setting a bright photo glares where a dark one is barely there, because the slider says how much of the picture to mix in rather than how far to move the background. `wallpaper.even_visibility` holds every picture to the same displacement: one further from the background than the shipped pack's median is drawn at less than the number says, and one closer at more. How bright a picture reads is its overall level and its bright end together, half each, because glare comes from the bright end - a night sky with a sun in it is not a dark picture to look at. The correction fades out as the slider rises and is gone at 100%, since that is where the picture has to be drawn as it is.
-
-It reaches dark mode too, which is the point of it: at a 10% slider the pack's brightest picture went from a mean of 58.8 to 48.3 and its darkest from 0.8 to 2.6. In light mode the rule reads from the other side, because there it is the dark picture that stands out: the same two went from 26 and 93 sRGB levels of displacement to 63 and 52. Setting it to 0 restores the old behavior exactly, which the rig confirms pixel for pixel.
-
-The scrim's halo is the one thing here still calibrated by measurement rather than derived. It has the same asymmetry pointing the other way - in light mode it is a pale plate on a darkened field, which is the same move in the direction the eye notices most - but that composite blends against the destination through the pipeline's blend state and cannot read it, so there is nothing to solve against. Its alpha is scaled down until it covers the same ground dark mode's does, which works out at about a doubling and a half whatever the visibility is set to, and it stops at a quarter of what was asked for so the plate cannot stop doing its job. That moved 43% of the pixels around a screenful of text by an average of 10 sRGB levels, and the text still read clearly.
-
-Everything here measures with a transfer curve taken on Rec.709 luma. Luma because a linear-light alpha blend is affine in it, so one number stands in for a whole composite. A curve because linear light is not what the eye reads; the sRGB transfer tracks CIE L* closely enough for the scrim, and the pure power is what makes the mix exact. Oklab lightness was measured and rejected: it has no linear toe, so it reads a near-black background as far more separable than it is.
-
-The pipeline contract holds throughout. The wallpaper pass still emits linear, and only the mix inside it happens in a curve. Nothing downstream - the scrim, the text, the cursor, and whatever the GPU effects epic adds - sees anything but linear light.
-
-### Text colors from the wallpaper (2026-09-20)
-
-A switch on the Themes tab that takes the text and cursor colors from the picture behind them instead of from the theme. On by default, since the wallpaper is on by default too and the derived text is never dimmer than the theme's own - so it can only help, and with no picture up it does nothing at all. While it is on, the Foreground and Cursor rows gray out, and nothing derived this way is written to the file - a rotation would otherwise rewrite the config every few minutes, and the colors would outlive the picture they came from.
-
-Two halves, decided separately. Harmony and legibility are unrelated problems, and one number cannot answer both: a complement at the same lightness as its ground is the least readable pairing there is, which is where the shimmer at the edge of vivid opposites comes from.
-
-- **Lightness** comes from how bright the background actually gets. This is the half that does the work, and the obvious approach is the wrong one: averaging the image says nothing useful, because a photo's brightness varies from cell to cell and text readable over a dark sky vanishes into a cloud. The text is placed the contrast floor away from the field's bright end - the 95th percentile of what the cells behind it are, once the picture has been composited over the theme's background at its visibility setting.
-
-- **Hue** comes from the picture's own dominant hue, turned to its complement and held to a gentle tint. A mean color cannot supply it either, and for a different reason: opposite hues cancel, so a picture full of color averages to gray and the hue of that gray is noise. Of the 104 shipped wallpapers, 17 average to something that faint, and one of them reads 174 degrees away from the hue that is all over it. The hue is taken from a chroma-weighted histogram instead, the way a picture's color is normally found.
-
-- **The cursor** takes a further third of the circle, which is where every built-in theme's cursor already sits against its foreground. Its plate is a second background the text has to clear the floor on, so the plate is placed exactly the floor away from the text - the furthest it can get from the picture while still carrying a glyph - and the cursor that draws it is found from there.
-
-Three limits, said here rather than left to be discovered.
-
-- **It cannot guarantee the floor, and does not pretend to.** Measured over the shipped pack, one foreground clears a 45% gap on every image at the shipped 10% visibility, on about two thirds at 35%, and on a fifth at 100%. Past that no color exists: the picture's own bright end is already inside the floor of white. The derived color takes the best position available and the text scrim covers the rest, which is the job the scrim already had. Nothing else is switched on behind the user's back to make up the difference.
-
-- **A dark picture never dims the text.** The theme says how bright its text should be and the picture may only ask for more. Without that floor a near-black wallpaper answers mid-gray text, which reads as the wallpaper spoiling the theme rather than serving it.
-
-- **The theme still decides which side the text sits on.** A light theme keeps dark text however dark the picture is. Flipping polarity from a photograph would stop it being the theme that was chosen.
-
-The chroma is capped low for every theme, which is the one place a theme's own identity is deliberately overridden. Carrying a monochrome theme's saturation to a complementary hue turns Matrix's green into flat yellow - the cast is decoration and the lightness is the legibility, so the cast is what gives way. A picture with almost no color in it keeps the theme's own hue instead, since there is nothing there to complement.
-
-The grayed rows show the user's own colors, not the derived pair. A row a performance profile governs shows the profile's value, because there is no other way to see it; a color is different, since it is on screen behind the dialog. So the rows say what comes back when the switch goes off, and the live copy's derived pair never reaches the dialog, the file, or a saved theme.
-
-The work splits across two threads. The wallpaper worker already holds the finished pixels, so it reduces the picture to six numbers there. The colors themselves are worked out from those numbers wherever the live settings are, which is what lets a theme change re-color the text with no second decode. Luma is what gets summarized rather than lightness, because luma survives being composited over a background color later and lightness does not.
-
-### Performance profiles (2026-09-03)
-
-One setting decides how much the look may cost, so a slow machine is a choice on one tab rather than a dozen switches on four.
-
-- Five profiles, in the order they cost: Custom, Max silk, High, Low, Standard terminal. Max silk is every effect at its shipped setting. High shortens the ease-in, ease-out and single-screen stretches of a scroll and gives the text halo a cheaper shape with a shorter reach. Low also drops the halo and the cursor animation, and leans on the outline instead; it keeps the wallpaper, which is decoded once and costs nothing per frame, and smooth scrolling. Standard terminal is a plain terminal: no smooth scrolling, no wallpaper, no halo, no outline, no animation. No profile draws an outline over a pixel wide; Low once used two, which read as a heavy stroke rather than as the thin edge the outline is for.
-
-- A sixth, Remote (temporary), is Standard terminal under another name and is never written to the file. It is put on for a remote screen at launch and taken off again at the next launch unless that one is remote too. It can also be switched by hand, from the Profile dropdown or from "Temporary remote display mode" on the View menu, and either way it lasts the session. The stored profile waits underneath it.
-
-- A profile sits on top of the stored settings rather than in them. The file and the dialog keep the user's own values. When settings go live the profile overwrites the fields it governs and keeps the originals beside them, and every write path puts them back before anything reaches the file. Choosing Custom is a profile that governs nothing, so it restores everything.
-
-- In the dialog the governed rows show the profile's values rather than the user's own, and their flyover says so. This is display only, so Apply writes the user's values underneath.
-
-- It leads the Silk tab, first in the dialog, with text readability and the scrolling feel under it. Those are the two sections it governs most of, so the switch and its effects are on one screen. Wallpaper and cursor rows stay on their own tabs and are grayed there. That still makes eight tabs, one past the guide's ceiling.
-
-- Automatic is the default, and the first pick is measured rather than guessed. Naming the adapter was not enough: an integrated chip is not a slow one, so it started at Max silk and stayed there.
-	- A run the display stalls gives no rating (2026-09-18). A monitor asleep paces every frame at about one a second, whatever is drawn. The run read that as a hopeless machine and saved Standard terminal, which has no wallpaper, for every launch after. Simply not saving on a stall would test a truly slow machine at every launch. So when a rung runs more than four times over its budget, Standard is timed once: a slow machine draws that well enough and gets Standard, and if Standard stalls as well, the display is what is pacing the frames. Then nothing is saved, the session goes back to the profile it had, the banner says the display was not drawing at its usual rate, and the next launch tests again. The display power state is not read, for the reason given under the watch below.
-
-- A governed row still takes input, and changing one takes the profile to Custom (2026-09-20). The rows used to be grayed, which meant every tweak started with a trip to the Silk tab to find a dropdown, and the flyover could only say where that tab was. Changing a setting is a clear enough statement that the profile is no longer wanted, so it is read as one: the values on screen become the user's own, the profile becomes Custom and "Choose automatically" goes off. The values on screen are what is kept, not the older ones the profile had been hiding, because the edit was made against what could be seen. Picking Custom from the dropdown is still the other way in, and that one does bring the older values back - the difference is that a pick says "my settings" and an edit says "this, but with that changed". While a profile is showing, a governed row offers no revert arrow, since what it shows is not a value the user set. Remote (temporary) is no exception here: it governs, so an edit under it drops the session override and the stored profile with it, or the new value would be covered up by one or the other.
-
-- The Profile dropdown stays live while automatic is on, and naming one switches automatic off (2026-09-19). It used to be grayed, so taking the machine's choice back meant finding the switch first and then the dropdown, in that order, with the dropdown showing the answer being argued with the whole time. Naming a profile is the clearest statement there is that the choice is no longer the machine's, so it is read as one. Without that, a pick made with automatic still on would be overwritten at the next launch with nothing on screen to say why. Remote (temporary) is the exception: it lasts this session only and says nothing about what the machine should settle on, so it leaves the switch as it was.
-
-- What the machine is gets hashed - the processor and its usable core count, the graphics adapter, and installed memory to the nearest GiB - and that hash is what the profile is written down against. The parts that need no adapter are read on a worker at launch, since nothing before the first frame wants them. A different hash is a different machine and gets rated again; the same hash leaves the profile where it was left. "Check for hardware change" under Performance switches the check off for a machine already rated, and "Re-test next run" under it asks for one more rating regardless, then clears itself once that launch has started one.
-	- The rating is written into the settings file line by line, so a file with a line that cannot be read still keeps it, and the rest of the file is left as it was. A file that reads clean but has nowhere a line can go, such as one with no Performance section, gets what a save from the Settings dialog would write. Either way the write is refused if any other setting would load differently at the next launch. That is judged on the text the next launch would leave, after every rewrite it makes before it reads the file: the wallpaper heading repair, the conversion of a file from before the nested layout, the move of `shell.default` into the shell list, and the renames and refreshes (2026-09-18). Two of those once looked at how a line was written as well as at its value, the quotes around an old default font list and the indent of a commented-out heading above a renamed setting, and a save changes both. Judging only the renames missed the conversion, which copies a font list with its quotes for the refresh after it to read. Adding missing settings is left out, since it only adds lines the program owns and runs whether or not a rating was written.
-	- Those steps read no quotes or indents now (the saving contract under Configuration format), so nothing known can make the check refuse. It stays for the next step that does, and a test hands it one.
-	- A rating is also refused where the next launch would not keep it. That launch writes a file from before the nested layout afresh and carries no rating over, so the rating goes in one launch later.
-	- When the rating cannot be kept (the file is open in another program, or cannot be written), the banner says so before it comes down, and the test runs again at the next launch.
-	- A build from before 2026-09-10 and a later one, launched in turn on one settings file, test at every switch, since the rating version is part of the hash.
-	- Rejected: a separate rating record in the data directory. It is a second copy of state the settings file already holds, and a hand-cleared `rated_hardware` would stop forcing a new rating, which the template comment promises.
-	- Rejected: retrying a write the busy check deferred. It costs a scan of every process's open files on a timer, for a case the banner now explains.
-
-- A remote screen is not rated and nothing is written for it. Every frame is encoded and shipped over a network, so the graphics card says nothing about what the person sees, and a benchmark on it would only flatter the machine; the session runs under the Remote profile instead and the console's rating stays as it was. An adapter with no card behind it goes to Low, untimed, decided before anything renders.
-
-- Anything else is timed. The window comes up whole, the wallpaper appears, and then a banner takes the window while three rungs are measured in turn: Max silk, High, Low, each put live and given up to about a second of full-rate frames. The first whose median frame period fits the display's refresh budget is the answer. The window keeps drawing underneath the banner, dimmed, because what is being timed is worth seeing; it takes no input, because a keystroke would change the measurement. Standard terminal is never timed - it is what is left when Low misses. A rung several times past the budget ends the run outright, since no profile below it changes the per-pixel work by that much, and that is also the case that would otherwise take longest to measure.
-
-- The display is still watched afterwards. When the median frame over a window of eased frames runs half again past the refresh period, the profile steps down one rung until SilkTerm restarts. The refresh period is the monitor's the window is on now, read again a few times a second, so a window dragged to another monitor is judged by that one. Frames paced under the old one are dropped rather than counted. Nothing is written, and the next launch starts from the rated profile again. The watch stops at Low. Low keeps the wallpaper, which costs nothing per frame, and Standard terminal turns off the eased frames being measured, so a step there could never be checked again. Only a window with focus is counted. A frame several times past the budget is not counted at all, because a monitor asleep under the NVIDIA driver paces a GL client at 1 fps, and an idle gap is not a frame either. Eases more than 30 seconds apart start a new window, so a verdict comes from one sitting. It never steps back up within a session, because a lighter profile renders less, so a fast run under it says nothing about the heavier one. A hand pick or a measured rating lifts the step, and a hand pick with automatic off stays put.
-	- This reverses the earlier rule that the step was written down. A written step made one window's misreading every later window's setting, with no way back while automatic was on. It took a 60 Hz desktop with a discrete card down to Standard terminal overnight, and the wallpaper with it.
-	- Ratings written before this change are redone once, since a written step cannot be told apart from a measured answer. The rating version is part of the hardware hash. A machine with "Check for hardware change" off keeps what it has until "Re-test next run" is used.
-	- Rejected: write the step and ask for a rating at the next launch. That is a banner after every hiccup.
-	- Rejected: write it but stop at Low. One stall would still change every later window.
-	- Rejected: read the X11 display power state. It is platform-specific, and it misses every other kind of stall, such as a suspend in mid-ease or a card taken by another program.
-
-- Blur quality is not part of a profile yet. The backlog item for it stands on its own, and a profile could drive it later.
-
-### Font fallback stack
-
-One monospace family is pinned for every weight, because the shaper picks the best face per query and would otherwise let a bold run end up in a different family than the regular run beside it.
-
-Which family that is comes from a single search order, the same on every platform:
-
-- the OS monospace family, when "use system font" is on
-
-- then the configured `font_family`, a comma-separated stack
-
-- then the OS monospace family, when "use system font" is off
-
-- then a built-in stack, which is also what a fresh config is written with
-
-- then, only if none of the above is installed, whatever the generic monospace name resolves to
-
-The setting only reorders that list; it never truncates it. An earlier version dropped `font_family` entirely while following the OS font. The same build and the same config then resolved differently depending on the platform, and a configured stack could be silently ignored. Every list is now always walked. A family that is not installed simply falls through to the next one, and the configured stack still has effect as a fallback.
-
-Platforms differ only in what they report, not in the rules applied to it. Windows has a system font size but no monospace family, so following the family there is a no-op and resolution starts at `font_family` without a special case. A toggle with nothing behind it reads as inert, so the Settings checkbox grays out and says why. The same holds for a desktop with no font setting configured at all, which is why the check asks what was detected rather than which platform is running.
-
-On Linux the desktop's own settings store is asked first and the other one fills in: xfconf on Xfce, gsettings elsewhere. gsettings answers on any box with GNOME's schemas installed, an Xfce box included, and a key nobody set comes back as the schema default, so asking it first on Xfce gave Cantarell 11 and Monospace 11 whatever the desktop was set to.
-
-The built-in stack is last for a reason. The generic monospace query below it is effectively a lottery over installed fonts, and its winner may ship no bold face. That ejects bold runs into an arbitrary, often proportional, fallback whose advances can't be snapped to the cell grid. Every entry in the built-in stack carries a real bold face. When that stack changes, the outgoing value is recorded, so an existing config still carrying it verbatim is refreshed on the next launch. A stack the user edited is theirs and is left alone.
+One monospace family is pinned for every weight, found from one search order on every platform. Anything that family lacks falls back glyph by glyph and is fitted to its cells, and color emoji are painted in-house. Full design: [Unicode, fonts and emoji](design_docs/20260930-150813_unicode-and-emoji.md).
 
 ### Hyperlinks
 
@@ -534,107 +184,17 @@ The built-in stack is last for a reason. The generic monospace query below it is
 
 - Links open through the desktop's own handler by default, with a configurable program to override it. Deciding what a URL means is the desktop's job, not a terminal's.
 
-### What a double-click grabs (2026-08-26)
+### Double-click and selection
 
-- A double-click asks three questions in order, and the first one that answers wins: is this a shape we can name, is it inside a matched pair, is it a word. Word selection was the only rule for a long time and it cannot handle a path with a space in it, because a space is what ends a word.
-
-- The shapes are URLs and file URIs, drive paths (`C:\...`), UNC paths, absolute posix paths, and `~/` paths. Each has to start at an anchor a reader would recognize, with only whitespace, a quote or an opening bracket in front of it. Among the options considered, that was preferred over "anything that is not obviously a word", which reads `and/or` as a path.
-
-- Git remotes and scp targets are shapes as well, in the `[user@]host:path` form. This one was added because a git prompt writes the remote inside brackets beside its status marks, and the matched-pair rule then handed back the marks along with it. Narrowing the pair rule was considered and rejected, since selecting a quoted phrase whole is wanted and was asked for separately. A host needs a dot and an alphabetic ending, and the path needs a separator and a letter in its first segment, which is what keeps `build:release/x` and `notes.txt:12/34` out.
-
-- A remote is the one shape a file extension does not end. A prompt writes the branch after the repository as `repo.git:dev`, and that whole field is what a reader sees as one thing, so stopping at `.git` would leave the branch as a dead patch that selects the brackets instead.
-
-- Where a path ends is two heuristics, both picked for what they refuse. A space is crossed only when a path separator turns up soon after, so a folder name with spaces stays whole while a path followed by a sentence does not swallow it. And the run stops at a file extension, which is what leaves a `:120:5` line number behind.
-
-- A trailing full stop, comma or bracket comes off the same way it does for a link. The two share the trimming idea but not the code, since a path may hold characters a URL may not.
-
-### Selecting past the edge of the screen (2026-09-20)
-
-- A drag held past the top or bottom of its pane scrolls the view that way and keeps selecting, so a selection can run further than what fits on screen. A pointer outside the pane is pulled to the nearest edge cell rather than ignored, which also means a drag that strays into a neighboring pane still belongs to the one it started in.
-
-- The speed is the larger of two answers: how far past the edge the pointer is, and how long it has been held there. Distance alone is the obvious rule and it is the one that feels right, but a maximized window has its top edge against the top of the screen, so there is nowhere left to push the pointer - that window could only ever creep. The hold reaches the same top speed in two seconds.
-
-- It creeps rather than standing still right at the edge, since picking up one more line is the common case and a drag that starts fast overshoots it. The top speed is capped: a pointer flung off the screen should not cross the whole buffer before the button comes up.
+A double-click takes a shape it can name first, such as a path, URL or git remote, then the inside of a matched pair, then a word. A drag held past the pane's edge scrolls and keeps selecting. Copy has four routes, each with its own rule. Full design: [Double-click and selection](design_docs/20260930-151047_double-click-selection.md).
 
 ### Measurements and display scaling
 
-- Every measurement in the interface is written once, in device-independent pixels, and turned into real ones only when it is drawn. A DIP is a ninety-sixth of an inch, so a border, a gap or a checkbox is the same physical size on any screen. Nothing is written in raw pixels any more - the terminal grid itself is the only thing sized in them, and that follows the font.
+Every measurement in the interface is written once in DIP, a ninety-sixth of an inch, and turned into real pixels only when it is drawn. A pop-out dialog converts once, at its window's edge. The main window's chrome converts at each measurement, since it shares its space with the terminal grid. `SILK_SCALE` overrides the scale factor for testing. The full rules are in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
-- Where the conversion happens differs by surface, and the difference is deliberate.
+### The Settings dialog
 
-	- A pop-out dialog is solved end to end in DIP and converts once, where its layout meets its window. It owns its whole coordinate space, so one boundary is enough and a stray conversion inside would scale something twice.
-
-	- The main window's chrome converts at each measurement instead. Menu bar, tab bar, menus, focus ring and pane gap all share a coordinate space with the terminal grid, which is in real pixels by nature, so there is no boundary to put a conversion on.
-
-- A dialog already open follows a scale change in place, rather than being rebuilt (2026-09-19). Dragging it to a monitor at another scale, or changing the desktop's scaling under it, moves only the boundary: the text context rasterizes at the new size and the chrome is measured again, and the layout below is already in DIP, so it is the same size on screen with the clicks where they look. A rebuild would have been a few lines, since reopening was the one thing that worked before, but what a reopen carries is the tab and the scroll - so every unapplied edit would have gone the moment the window crossed a monitor edge, which is worse than the wrong size. The size kept for the rest of the session is in DIP for the same reason, so a reopen on another monitor is the same apparent size and not the same count of pixels. About and the notice follow one too (2026-09-20), by a different route: neither can be resized and neither holds a layout to adjust, so each keeps what it was built from and is laid out again from scratch at the new scale.
-
-- Neither half of the boundary moves on its own, so a scale change sets both (2026-09-20). The window toolkit keeps the logical size, which for an ordinary window means the new physical size arrives straight after - but a maximized or tiled window keeps its physical size and sends nothing at all, and the dialog would then draw at the new scale inside the size it had before. So the dialog is told what the window really measures rather than waiting to be told, and the window is asked for that size held to what the screen can still hold, since a screen holds fewer DIP at a higher scale.
-
-- **A measurement TAKEN in real pixels must convert the constant beside it, not the other way about.** Text is measured against the font, which is real pixels by nature; the clear space that goes around it is written in DIP. Adding the two as they stand and dividing the sum at the dialog's boundary shrinks the constant by the scale factor - so at 2x a tab's title had half the clear space its own box allowed for and sat flush against the right edge, and above that it ran past it. Every such site converts the constant where it is used, exactly as the main window's chrome does. There is one rule for it, so the four places that size the dialog's columns cannot drift apart.
-
-- Conversion rounds to whole pixels. A rule or a hairline that fell between two of them would come out soft, and the one-pixel gap between panes is the extreme case: on a screen scaled below 1x, rounding alone would take it to nothing, so a measurement asked to be visible never rounds away.
-
-- A raw-pixel measurement is invisible at 1x and only thins out as the scale factor rises, which makes this the kind of mistake nobody sees on the machine they wrote it on. So the scale factor can be overridden from the environment (`SILK_SCALE`), and a high-DPI layout can be looked at on an ordinary display. Off X11 there is no other way to ask for one.
-
-### Attention colors and dialog chrome
-
-- A theme carries two attention colors rather than one, because they answer different questions. **Highlights** marks several things at once: the live pane's ring, slider handles, revert arrows, the default button. It therefore stays calm enough to appear many times on a screen. **Focus** marks the single control the keyboard is on, so it is the more vivid of the pair and sits well away from its partner in hue. Every theme keeps its two well apart, because a theme that let them converge would draw "look at this" and "you are here" in the same color.
-
-- The dialog's own accents follow the theme. They used to be a fixed blue while the theme's attention color was something else entirely, so the panel could not agree with the terminal it belonged to. The pressed-button fill is that color mixed back toward the panel, which is what makes a pressed button read as pressed rather than as the focused one.
-
-- A focused field shows one outline, not two. The ring sits exactly on the box's own outline and the box stands its border down. Where the focused thing is not a box at all, such as a checkbox or a slider handle, the ring sits a little outside it instead.
-
-- Tabs sit on a recessed **Gutter** strip and stand on the rule that closes it off, the way tabbed interfaces generally read. The current tab is a lighter gray rather than an accent: "you are here" is not the same job as "look at this". Above the rows there is no heading repeating the tab's own name, since the strip has said it already.
-
-- Controls whose label does not explain them carry a line of flyover help. One that is grayed out explains why instead, that being the more urgent question at the time. The text wraps to the panel rather than being clamped to its edge, so neither a longer sentence nor a larger interface font can push it out of view.
-
-### Groups and sub-groups in the Settings dialog
-
-- Settings are organized two ways. A **group** is a titled section with a rule under it and clear space above. A **sub-group** has no title of its own. It is a control followed by the controls that depend on it, whose labels step right so the run reads as belonging to the leader. A master switch and the things it governs is the shape this exists for.
-
-- Only labels move. Every control keeps the one column it shares with every other row, because a settings list is scanned down that column and a control that wandered with its label would break it. A sub-group is therefore free of any bookkeeping. It is read off the indentation rather than declared a second time, so the leader and its members cannot disagree about who belongs to what.
-
-- A fraction stored as a decimal is shown as a whole percent. Nobody thinks in 0.35, and the file is a different audience from the dialog. The decimal is what the renderer wants and what a hand-edited config should keep. The two directions are exact inverses, so reverting one gives back its own default rather than a hair off it.
-
-- The tabs follow what a person is looking at rather than what the code calls it: Silk, Background, Text, Cursor, Movement, Themes, Window, Shell. Settings that describe one subject sit together even when they are implemented in different places. The cursor's shape, its animation and whether it joins the text halo are all "cursor" to the person changing them.
-
-### The color picker (2026-09-20)
-
-- A color chip opens a picker: a saturation and brightness square, a hue strip beside it, six value boxes, and Cancel and OK. The hex field on the row stays where it is. Typing a known hex is faster than hunting for it, and a picker is for the case where the value is not known yet.
-
-- The box holds the color as hue, saturation and brightness rather than as the three bytes. Dragging to the bottom of the square leaves black, which says nothing about hue, and dragging to the left edge leaves a gray, which says nothing about saturation either. Reading the model back off the bytes each frame would send both markers home the moment the color reached an edge. The bytes are derived from the model, and the trip back the other way is exact for every color, so nothing drifts on the way in.
-
-- Changes go straight to the row behind the box, and Cancel puts back what the row held when it opened. That makes the chip, and the window under the dialog, the preview: there is no second copy of the value to get out of step, and the one thing to undo is one assignment.
-
-- The square and the strip are drawn by the renderer's own quad shader, as two modes of it. A gradient built from flat quads would be thousands of them for one square, and a picker is not worth a texture upload per hue.
-
-- The square mixes toward the hue in sRGB, not in linear light. Every other color in the program is handed to the GPU linear, and mixing toward white there gives a square nobody would recognize as a color picker: the pale half swamps everything else. So the square's quad carries its hue in sRGB and the shader encodes the result itself. That is the one exception, and it is written down where the quad is declared.
-
-- Six value boxes: red, green and blue as whole percents, then brightness, saturation and a hex value. No hue box. The strip is the hue control, and the other five can already name any color between them. Percents rather than 0 to 255 because every other fraction in the dialog shows as a whole percent, and a settings dialog should not switch units halfway down.
-
-- The chip is a focus stop of its own, so a Color row has two: the chip, then the hex field. Walking onto the chip opens nothing, and Space or Enter opens the picker. Without that the picker would be the one thing in the dialog a keyboard could not reach.
-
-- Inside the box the arrows adjust whatever holds focus: the square by a hundredth of its range, the strip by a hundredth of a turn, a value box by a hundredth of its own range. That is the same step every number box in the dialog already takes.
-
-### Saved themes
-
-- A theme the user saves is stored **whole**: both variants, the ten palette colors and the sixteen ANSI colors, rather than as a base theme plus the differences.
-
-	- Saving, renaming and deleting all become one operation on one config subtree.
-
-	- A stale color cannot survive under a name that no longer sets it.
-
-	- A saved theme is self-contained enough to hand to someone else.
-
-- What identifies a saved theme in the file is a slug that never changes, with the display name stored beside it. A rename therefore rewrites one line instead of moving a subtree, and the `theme` setting keeps holding a name a person would recognize.
-
-- **Nothing records "this theme has unsaved changes".** A per-color override that disagrees with the theme is that record, and it already lives in the config file. So the Save button is right after a restart, with no flag to keep in step. Saving folds the overrides into the theme and drops them, which is also what makes the button go quiet again.
-
-- While an override is in place the Theme dropdown says `[unsaved]` rather than naming a palette the colors have moved away from. It is display only, derived from the same test the Save button uses, so nothing extra is stored. The list underneath is unchanged and still highlights the theme the edits started from, which is both how to see what they started from and how to discard them: pick it again and its colors come back.
-
-- A saved theme may take a built-in's name and stand in for it. That gives "customize a built-in" an obvious home, and deleting the saved copy puts the built-in back rather than leaving the name pointing at nothing. Built-ins themselves cannot be renamed or deleted.
-
-- Picking a theme takes on its colors wholesale rather than keeping the previous theme's tweaks on top. A picker that visibly changed nothing on every color that had been edited would read as broken, and those tweaks belonged to the theme being left behind.
+A pop-out window with eight tabs, declared in the compiled-in `settings_ui.shcl`, drawn by SilkTerm and driven fully from the keyboard. Groups, sub-groups, the color picker, Apply and OK, and display scaling are all in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
 ### The shell list and how it is filled
 
@@ -746,13 +306,9 @@ The built-in stack is last for a reason. The generic monospace query below it is
 
 - Need: glyph atlas (rasterize font once, cache cells), cell metrics (width/height in px), vsync via wgpu surface.
 
-### Output notices under a flood
+### Speed
 
-- A pane's PTY reader finishes a read cycle roughly every 900 bytes when output is pouring in, and each cycle used to become its own window event. On 32 MiB of output that is about 20,000 events, and it was decided that the window should take delivery of at most one at a time: the notice carries nothing, so the window reads the grid as it stands whenever it gets round to one, and a queue of twenty identical notices only ever produced twenty identical reads.
-
-- Measured on the Windows box, the folding costs nothing and saves a great deal: throughput is unchanged (11.8 against 11.7 MB/s over four alternating pairs) while the process burns a third less CPU and the window thread less than half - the 2.5 seconds that used to go into the operating system's message queue was more than parsing and drawing put together.
-
-- The notice is re-armed before the window acts on it, so a read cycle that arrives mid-handling posts a fresh one rather than being dropped. That ordering is the whole safety argument, and it is what a unit test pins.
+Output reaches the window as one notice at a time, drawing never blocks reading, and a frame whose text did not change does no text work. Throughput is measured by a benchmark anyone can run, and published in the README. Full design: [Speed](design_docs/20260930-150643_speed.md).
 
 ### The About box says how long the session has been up (2026-09-20)
 
@@ -818,8 +374,7 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 - Target: Debian. The primary dev/reference environment is X11 (Compiz), but one Linux binary runs native on both X11 and Wayland. winit selects the backend at runtime, and X11/Wayland/GL are all loaded on demand. Windows and macOS are targets too, all with x86_64 and ARM64 variants.
 
-	- The X11 path also uses a glutin GL context for per-pixel background transparency, because wgpu can't drive an ARGB surface on X11. Wayland uses the plain wgpu surface, which already does premultiplied alpha. Everything else - chrome, text, scrollback slide, background image + blur + scrim - is the shared native path on both.
-	- On Windows, transparency means presenting through the desktop compositor: a DX12 swapchain on a DirectComposition visual, with no redirection surface under the window. A swapchain made straight from the window only composites opaque, and the backend picked by default varies per machine, so DX12 is pinned whenever the setting is on. Both are fixed at window creation, so the setting takes effect on the next launch there.
+	- Per-pixel transparency takes a different path on each platform: a hand-made glutin GL context on X11, the plain surface on Wayland, and DX12 composition on Windows. See the [Wallpaper](design_docs/20260930-150052_wallpaper.md) design doc.
 
 	- Wayland coverage: smooth scrolling is identical on both engines. The scroll regression harness runs its scenes a second time under a headless `cage` kiosk (`run.bash --wayland`). Per-pixel transparency and dialog stacking on Wayland are not yet exercised (follow-ups).
 
@@ -827,42 +382,15 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 ### Startup and slow external resources
 
-- Nothing on the path from launch to the first frame may read an external resource that isn't needed to draw that frame. A wallpaper folder can be a network share, a synced collection or anything else that answers slowly or times out, and a terminal that waits for it is a terminal that hasn't opened yet.
-
-- The wallpaper is the whole of that category today: scanning the rotation folder, reading the shuffle history, decoding the image, blurring and contrast-flattening it, and reading its layout tags. All of it runs on a worker thread. The window opens and the shell starts immediately, and the wallpaper appears when it is ready. That visible gap is an accepted trade, since the alternative is a window that may never open at all.
-
-- Each request gets its own thread rather than sharing a long-lived worker. A request stuck on a dead mount can never be canceled, so a shared worker would leave every later request stuck behind it. A stale result is discarded on arrival, and a thread stuck on a read costs almost nothing. One doing real work does not, so a superseded worker asks between its stages whether it is still the newest and gives up when it is not, before the float copy and the blur where most of the memory and time go.
-	- A rotation tick that finds a request still working sends nothing. Sending would only retire the one in flight, and once an image took longer to prepare than the interval, every rotation was retired before it arrived: the picture never changed and the retired workers ran on, several gigabytes at once. The tick is remembered and served by the arriving result, or by a rotation sent then when the result was not one. So an interval shorter than a preparation rotates at the pace of the preparation, with one worker at a time, and the setting reads as "at least this many seconds".
+- Nothing on the path from launch to the first frame may read an external resource that isn't needed to draw that frame. The wallpaper is the whole of that category today, and all of it runs on a worker thread. See the [Wallpaper](design_docs/20260930-150052_wallpaper.md) design doc.
 
 - The config file itself is a deliberate exception. Window size, font metrics and theme all come from it, and the window is held hidden until it can open at its final size. Reading it later would only trade a small local read for a visible resize flash.
 
 - The same shape is intended for shell discovery when that arrives: draw first, scan for installed shells afterwards, fold in what was found.
 
-### Letting the GPU go on a long idle (2026-09-17)
+### Releasing resources
 
-- Off by default. Switched on, a window that has sat unused lets its GPU device go, with everything uploaded to it, and takes it back the moment it is used again. The shells run on and the grid keeps up; only drawing stops. The case is many windows open for days, each holding a device, a swapchain, two glyph atlases, the scrim's textures and a wallpaper the whole time.
-
-- Unused means no input, no focus change and no output from any pane while the window can be seen. Output into a hidden window does not count, or a program printing in a minimized window would hold the device for good. Two waits, both in minutes on the Window tab: a shorter one for a window that is minimized, or covered where the desktop reports it, and a longer one for a window that is only unfocused, since that one may be on a second screen being read. A window with focus and on screen never lets go.
-
-- It comes back on any sign of life: a key, a click, the pointer entering, focus, a hidden window being shown, a shell printing, or the desktop asking for a repaint. Output into a hidden window does not bring it back; that waits for the reveal, the way the frozen-window rule already works.
-
-- Held off while a dialog is open, since on X11 the dialog's context cannot outlive the terminal's, and while a hardware rating is owed or running.
-
-- What is kept is what a rebuild starts from: the wgpu instance, and on X11 the GL framebuffer config the window was made with. The instance rather than a fresh one, because a GL instance's teardown terminates an EGL display the glutin context may share, and because on the other backends the adapter enumeration it holds is the slow part of a cold start. The dialogs' warm context keeps its instance and adapter the same way and lets only its device go: on NVIDIA, every Vulkan instance destroyed left two descriptors open.
-
-- The fonts and metrics stay, since layout and input still need them. Gone with the device: the rasterized glyphs, the shaped chrome and the wallpaper, which is decoded again on the way back, as after a VT switch.
-
-- Measured on the Linux box under software GL, on a private display: about 3 ms to let go, about 25 ms to take back, and no CPU at all while released. Under the NVIDIA driver, on Wayland and on Windows the numbers are not taken yet.
-
-- Memory found on the way: glibc lets its mmap threshold rise with each large buffer freed, after which a wallpaper's decode is carved out of the worker thread's arena and stays resident there once freed, and `malloc_trim` never shrinks an arena that is not the main one. Every window kept the first decode's 50 MB for life, and each rebuild kept 40 MB more. The threshold is pinned at 4 MB now, so an image buffer comes from the OS and goes back to it. Launch memory dropped by about 60 MB with a wallpaper.
-
-- The same release and rebuild heals a window after a return to its console from a text one, twice: at once, and again three seconds later, after the X server has set the mode. The older fix rebuilt only the glyphs and the wallpaper, and each thing added to the device since then was one more that a switch could leave spoiled.
-
-- The window title says so (2026-09-18). "(resource conservation mode)" while released, "(restoring resources ...)" until the wallpaper is back, since the device itself returns too fast to see, then "(resources restored)" for five seconds. Any rebuild shows it, a return from a text console included, and it goes on a `--title` too, since it is news about the window rather than part of its name.
-
-- Rejected: dropping the uploads and keeping the device. The device and its context are the fixed cost the feature exists to remove, and the uploads are the smaller half.
-
-- Rejected: disabling the feature under transparency. The X11 GL path survives the teardown, since the ARGB visual belongs to the window and a new context on the kept config binds to it.
+A window nobody is looking at draws no frames, and a minimized window or hidden tab freezes its rendering but never its reading. Optionally, an unused window gives its GPU device back and takes it again on any sign of life. After a return from a text console, the whole device is rebuilt. Full design: [Releasing resources](design_docs/20260930-151334_releasing-resources.md).
 
 ### Configuration format
 
@@ -950,16 +478,7 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 - Starting over is a rename rather than a delete. `--reset-config` moves the file aside and lets the next launch write a fresh one, so the previous settings stay recoverable.
 
-- Some defaults are better inferred from the config directory than stated in the file. A folder of wallpapers sitting in the expected place is taken as wanting them rotated, without a setting to turn it on and without writing anything back. The inference yields to anything explicit: a wallpaper named in the config, or one given on the command line for a single run.
-	- The folder setting's default names that place, the way somebody on the platform would type it: `%LOCALAPPDATA%\silkterm\wallpaper`, `$HOME/Library/Application Support/silkterm/wallpaper`, or `$XDG_CONFIG_HOME/silkterm/wallpaper`. It used to be blank, and a blank box says nothing about what goes in it. The default is looked up as "the usual place" rather than expanded. So it still finds the older `wallpapers` and `backgrounds` spellings and a pack left beside the config on Windows, and it follows `--config` and `XDG_CONFIG_HOME` whether or not that variable is set. An empty value means the same.
-	- Settings has one "File or folder" box for both. A named image wins at run time, so the box shows one whenever it is set. Otherwise it follows Rotate folder: the folder with it on, the image with it off. Which of the two a field edits is fixed when the field opens, so emptying it on the way to typing something else does not switch it.
-
-- With the wallpaper switched on, something is always shown. The shipped image stands in whenever nothing else supplies one: no image named, an empty rotation folder, a file that will not open. A folder that does hold images owns the picture instead, so the stand-in only appears once the folder has been read and found wanting. Which means any request that could leave the window bare has to read the folder first, rather than assume the last pick is still in hand.
-	- The one exception is asking for none. `--wallpaper-file` or `--wallpaper` with no value shows no picture for the session, with or without a rotation folder. Before, it showed the stand-in or nothing depending on a folder the command never named.
-
-- A wallpaper named on the command line, at launch or while running, turns the wallpaper on for the session even when the file has it off. Naming one is a deliberate choice. A performance profile that turns the wallpaper off still wins, for both flags alike, since the profile goes on after them. Reload config keeps it, along with the font and colors the command line gave at launch.
-
-- A wallpaper image can carry its own layout and look in its XMP metadata, under a `wallpaper` namespace named for what the tags describe rather than for this program, so any tool can write them. `Fit` and `Anchor` are absolute, since how an image should be cropped is a property of the image. `Opacity` and `Blur` are absolute too, in the same units as the two settings, and replace them for that image. The shipped pack carries the program defaults on every image, so the two sliders only reach untagged images until the switch is turned off; that trade was accepted so an image's look means the same thing everywhere. Each pair has its own switch in Settings, on by default, and a missing or unreadable tag always falls back to the setting rather than failing the image.
+- Some defaults are better inferred from the config directory than stated in the file. A folder of wallpapers in the expected place is taken as wanting them rotated, and nothing is written back. That, the folder's default, what shows when nothing is named, command-line wallpapers and the XMP layout and look tags are in the [Wallpaper](design_docs/20260930-150052_wallpaper.md) design doc.
 
 ## Delivery (CI/CD, branches, releases)
 

@@ -1379,7 +1379,7 @@ const MENU_BAR_VPAD: f32 = 6.0;
 const TAB_BAR_VPAD: f32 = 6.0; // text is metric-centered in the bar; descenders clear via that
 const BELL_TAU_S: f32 = 0.18; // visual-bell flash fade time-constant (~0.8s to settle)
 // Text scrim "Strength" is a percent; this much of it is one doubling of the
-// finished halo's alpha. design.md and the dialog's comment both quote the
+// finished halo's alpha. The scrim design doc and the dialog's comment both quote the
 // number, and a test holds them to it.
 const SCRIM_PCT_PER_DOUBLING: f32 = 20.0;
 // Freeze knob (one line rolls it back): a minimized window builds no frames -
@@ -8905,9 +8905,18 @@ mod tests {
 		};
 		let said =
 			format!("each {pct:.0}% doubles its opacity, up to {doublings} doublings at 100%");
+		// the doc's name starts with the time it was written, so find it by its tail
+		let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../project/design_docs");
+		let doc = std::fs::read_dir(&docs)
+			.unwrap_or_else(|e| panic!("{}: {e}", docs.display()))
+			.filter_map(Result::ok)
+			.map(|e| e.path())
+			.find(|p| p.to_string_lossy().ends_with("_scrim.md"))
+			.expect("no scrim design doc");
 		assert!(
-			read("../project/design.md").contains(&said),
-			"design.md does not say: {said}"
+			std::fs::read_to_string(&doc).unwrap().contains(&said),
+			"{} does not say: {said}",
+			doc.display()
 		);
 		let commented = format!("each {pct:.0}% is one doubling");
 		assert!(
