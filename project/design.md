@@ -23,8 +23,7 @@
 	- [Text readability scrim](#text-readability-scrim)
 	- [Minimum contrast (2026-08-30)](#minimum-contrast-2026-08-30)
 	- [Dark text on a light background (2026-09-21)](#dark-text-on-a-light-background-2026-09-21)
-	- [How much of the wallpaper is on screen (2026-09-20)](#how-much-of-the-wallpaper-is-on-screen-2026-09-20)
-	- [Text colors from the wallpaper (2026-09-20)](#text-colors-from-the-wallpaper-2026-09-20)
+	- [Wallpaper](#wallpaper)
 	- [Performance profiles (2026-09-03)](#performance-profiles-2026-09-03)
 	- [Font fallback stack](#font-fallback-stack)
 	- [Hyperlinks](#hyperlinks)
@@ -81,6 +80,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Text scrim](design_docs/20260930-145304_scrim.md)
 
 - [Settings dialog](design_docs/20260930-145721_settings-dialog.md)
+
+- [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md)
 
 ## Architecture
 
@@ -295,53 +296,9 @@ One alpha has to serve all three channels, so the pair reaches the shader as sRG
 
 The pair is decided once per render pass, not per glyph, because one pass draws the whole window and a uniform is what the shader can read. The main window's pass carries the terminal's own pair, so in a light theme the menu and tab labels - which stay on dark chrome in both modes - are corrected along with everything else, in the wrong direction. That is accepted: it is a small strip, and giving the chrome its own pass would cost a second renderer and a second atlas to fix a few hundred pixels. The Settings dialog is a separate context and decides on its own panel colors.
 
-### How much of the wallpaper is on screen (2026-09-20)
+### Wallpaper
 
-The visibility slider is an authored amount - a person moved it - and what the renderer wants is a linear-light alpha. Those are not the same thing, in two separate ways, and both used to show.
-
-The first is the mode. sRGB's curve is steep near black and flat near white, so the same alpha covers a lot of visible ground over a dark background and almost none over a light one. Measured at the shipped 10%, a picture's own contrast came out at 6.4 sRGB levels of spread in dark mode and 0.6 in light: the same setting, and the picture was simply gone.
-
-What the slider means is settled first: **this much of the picture's own contrast reaches the screen**. Over a black background a linear blend delivers exactly that, because black leaves the blend a pure scale of the encoded picture and a scale cannot touch contrast. That is why dark mode has never needed any of this, and the closed form `alpha^(1/2.4)` says how much it delivers. A dark theme whose background is not black delivers less, and the same expression says how much less.
-
-Light mode cannot deliver it with a blend at all, so it does not use one. It mixes the background and the picture in a power curve at the amount dark mode's blend would have delivered. The curve is a pure power rather than sRGB's own, because sRGB's `- 0.055` term does not cancel: over black the power curve makes the mix exactly the linear blend it replaces, so the two modes are one rule with dark mode as its black-background case, and sRGB's would have lifted dark mode's black by eight levels. Measured after the change, light mode's spread was 6.4 against dark mode's 6.4, and at half visibility 12.5 against 12.5.
-
-A mix needs the background color, which a hardware blend cannot supply, so the wallpaper pass writes the pane fill itself and is clipped to the pane. The divider slits between panes keep their own color rather than taking a faint tint from the picture, which is the one thing that changes there.
-
-The second is the picture. At one setting a bright photo glares where a dark one is barely there, because the slider says how much of the picture to mix in rather than how far to move the background. `wallpaper.even_visibility` holds every picture to the same displacement: one further from the background than the shipped pack's median is drawn at less than the number says, and one closer at more. How bright a picture reads is its overall level and its bright end together, half each, because glare comes from the bright end - a night sky with a sun in it is not a dark picture to look at. The correction fades out as the slider rises and is gone at 100%, since that is where the picture has to be drawn as it is.
-
-It reaches dark mode too, which is the point of it: at a 10% slider the pack's brightest picture went from a mean of 58.8 to 48.3 and its darkest from 0.8 to 2.6. In light mode the rule reads from the other side, because there it is the dark picture that stands out: the same two went from 26 and 93 sRGB levels of displacement to 63 and 52. Setting it to 0 restores the old behavior exactly, which the rig confirms pixel for pixel.
-
-The scrim's halo is calibrated for light mode separately, by measurement. See the [Text scrim](design_docs/20260930-145304_scrim.md) design doc.
-
-Everything here measures with a transfer curve taken on Rec.709 luma. Luma because a linear-light alpha blend is affine in it, so one number stands in for a whole composite. A curve because linear light is not what the eye reads; the sRGB transfer tracks CIE L* closely enough for the scrim, and the pure power is what makes the mix exact. Oklab lightness was measured and rejected: it has no linear toe, so it reads a near-black background as far more separable than it is.
-
-The pipeline contract holds throughout. The wallpaper pass still emits linear, and only the mix inside it happens in a curve. Nothing downstream - the scrim, the text, the cursor, and whatever the GPU effects epic adds - sees anything but linear light.
-
-### Text colors from the wallpaper (2026-09-20)
-
-A switch on the Themes tab that takes the text and cursor colors from the picture behind them instead of from the theme. On by default, since the wallpaper is on by default too and the derived text is never dimmer than the theme's own - so it can only help, and with no picture up it does nothing at all. While it is on, the Foreground and Cursor rows gray out, and nothing derived this way is written to the file - a rotation would otherwise rewrite the config every few minutes, and the colors would outlive the picture they came from.
-
-Two halves, decided separately. Harmony and legibility are unrelated problems, and one number cannot answer both: a complement at the same lightness as its ground is the least readable pairing there is, which is where the shimmer at the edge of vivid opposites comes from.
-
-- **Lightness** comes from how bright the background actually gets. This is the half that does the work, and the obvious approach is the wrong one: averaging the image says nothing useful, because a photo's brightness varies from cell to cell and text readable over a dark sky vanishes into a cloud. The text is placed the contrast floor away from the field's bright end - the 95th percentile of what the cells behind it are, once the picture has been composited over the theme's background at its visibility setting.
-
-- **Hue** comes from the picture's own dominant hue, turned to its complement and held to a gentle tint. A mean color cannot supply it either, and for a different reason: opposite hues cancel, so a picture full of color averages to gray and the hue of that gray is noise. Of the 104 shipped wallpapers, 17 average to something that faint, and one of them reads 174 degrees away from the hue that is all over it. The hue is taken from a chroma-weighted histogram instead, the way a picture's color is normally found.
-
-- **The cursor** takes a further third of the circle, which is where every built-in theme's cursor already sits against its foreground. Its plate is a second background the text has to clear the floor on, so the plate is placed exactly the floor away from the text - the furthest it can get from the picture while still carrying a glyph - and the cursor that draws it is found from there.
-
-Three limits, said here rather than left to be discovered.
-
-- **It cannot guarantee the floor, and does not pretend to.** Measured over the shipped pack, one foreground clears a 45% gap on every image at the shipped 10% visibility, on about two thirds at 35%, and on a fifth at 100%. Past that no color exists: the picture's own bright end is already inside the floor of white. The derived color takes the best position available and the text scrim covers the rest, which is the job the scrim already had. Nothing else is switched on behind the user's back to make up the difference.
-
-- **A dark picture never dims the text.** The theme says how bright its text should be and the picture may only ask for more. Without that floor a near-black wallpaper answers mid-gray text, which reads as the wallpaper spoiling the theme rather than serving it.
-
-- **The theme still decides which side the text sits on.** A light theme keeps dark text however dark the picture is. Flipping polarity from a photograph would stop it being the theme that was chosen.
-
-The chroma is capped low for every theme, which is the one place a theme's own identity is deliberately overridden. Carrying a monochrome theme's saturation to a complementary hue turns Matrix's green into flat yellow - the cast is decoration and the lightness is the legibility, so the cast is what gives way. A picture with almost no color in it keeps the theme's own hue instead, since there is nothing there to complement.
-
-The grayed rows show the user's own colors, not the derived pair. A row a performance profile governs shows the profile's value, because there is no other way to see it; a color is different, since it is on screen behind the dialog. So the rows say what comes back when the switch goes off, and the live copy's derived pair never reaches the dialog, the file, or a saved theme.
-
-The work splits across two threads. The wallpaper worker already holds the finished pixels, so it reduces the picture to six numbers there. The colors themselves are worked out from those numbers wherever the live settings are, which is what lets a theme change re-color the text with no second decode. Luma is what gets summarized rather than lightness, because luma survives being composited over a background color later and lightness does not.
+A faint, blurred picture behind the text, from a named image, a rotating folder or the built-in one, prepared on a worker so it never delays the window. Visibility means the same amount of the picture's contrast in dark and light mode, and the text colors can come from the picture. The see-through window is covered there too. Full design: [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md).
 
 ### Performance profiles (2026-09-03)
 
@@ -662,8 +619,7 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 - Target: Debian. The primary dev/reference environment is X11 (Compiz), but one Linux binary runs native on both X11 and Wayland. winit selects the backend at runtime, and X11/Wayland/GL are all loaded on demand. Windows and macOS are targets too, all with x86_64 and ARM64 variants.
 
-	- The X11 path also uses a glutin GL context for per-pixel background transparency, because wgpu can't drive an ARGB surface on X11. Wayland uses the plain wgpu surface, which already does premultiplied alpha. Everything else - chrome, text, scrollback slide, background image + blur + scrim - is the shared native path on both.
-	- On Windows, transparency means presenting through the desktop compositor: a DX12 swapchain on a DirectComposition visual, with no redirection surface under the window. A swapchain made straight from the window only composites opaque, and the backend picked by default varies per machine, so DX12 is pinned whenever the setting is on. Both are fixed at window creation, so the setting takes effect on the next launch there.
+	- Per-pixel transparency takes a different path on each platform: a hand-made glutin GL context on X11, the plain surface on Wayland, and DX12 composition on Windows. See the [Wallpaper](design_docs/20260930-150052_wallpaper.md) design doc.
 
 	- Wayland coverage: smooth scrolling is identical on both engines. The scroll regression harness runs its scenes a second time under a headless `cage` kiosk (`run.bash --wayland`). Per-pixel transparency and dialog stacking on Wayland are not yet exercised (follow-ups).
 
@@ -671,12 +627,7 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 ### Startup and slow external resources
 
-- Nothing on the path from launch to the first frame may read an external resource that isn't needed to draw that frame. A wallpaper folder can be a network share, a synced collection or anything else that answers slowly or times out, and a terminal that waits for it is a terminal that hasn't opened yet.
-
-- The wallpaper is the whole of that category today: scanning the rotation folder, reading the shuffle history, decoding the image, blurring and contrast-flattening it, and reading its layout tags. All of it runs on a worker thread. The window opens and the shell starts immediately, and the wallpaper appears when it is ready. That visible gap is an accepted trade, since the alternative is a window that may never open at all.
-
-- Each request gets its own thread rather than sharing a long-lived worker. A request stuck on a dead mount can never be canceled, so a shared worker would leave every later request stuck behind it. A stale result is discarded on arrival, and a thread stuck on a read costs almost nothing. One doing real work does not, so a superseded worker asks between its stages whether it is still the newest and gives up when it is not, before the float copy and the blur where most of the memory and time go.
-	- A rotation tick that finds a request still working sends nothing. Sending would only retire the one in flight, and once an image took longer to prepare than the interval, every rotation was retired before it arrived: the picture never changed and the retired workers ran on, several gigabytes at once. The tick is remembered and served by the arriving result, or by a rotation sent then when the result was not one. So an interval shorter than a preparation rotates at the pace of the preparation, with one worker at a time, and the setting reads as "at least this many seconds".
+- Nothing on the path from launch to the first frame may read an external resource that isn't needed to draw that frame. The wallpaper is the whole of that category today, and all of it runs on a worker thread. See the [Wallpaper](design_docs/20260930-150052_wallpaper.md) design doc.
 
 - The config file itself is a deliberate exception. Window size, font metrics and theme all come from it, and the window is held hidden until it can open at its final size. Reading it later would only trade a small local read for a visible resize flash.
 
@@ -794,16 +745,7 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 - Starting over is a rename rather than a delete. `--reset-config` moves the file aside and lets the next launch write a fresh one, so the previous settings stay recoverable.
 
-- Some defaults are better inferred from the config directory than stated in the file. A folder of wallpapers sitting in the expected place is taken as wanting them rotated, without a setting to turn it on and without writing anything back. The inference yields to anything explicit: a wallpaper named in the config, or one given on the command line for a single run.
-	- The folder setting's default names that place, the way somebody on the platform would type it: `%LOCALAPPDATA%\silkterm\wallpaper`, `$HOME/Library/Application Support/silkterm/wallpaper`, or `$XDG_CONFIG_HOME/silkterm/wallpaper`. It used to be blank, and a blank box says nothing about what goes in it. The default is looked up as "the usual place" rather than expanded. So it still finds the older `wallpapers` and `backgrounds` spellings and a pack left beside the config on Windows, and it follows `--config` and `XDG_CONFIG_HOME` whether or not that variable is set. An empty value means the same.
-	- Settings has one "File or folder" box for both. A named image wins at run time, so the box shows one whenever it is set. Otherwise it follows Rotate folder: the folder with it on, the image with it off. Which of the two a field edits is fixed when the field opens, so emptying it on the way to typing something else does not switch it.
-
-- With the wallpaper switched on, something is always shown. The shipped image stands in whenever nothing else supplies one: no image named, an empty rotation folder, a file that will not open. A folder that does hold images owns the picture instead, so the stand-in only appears once the folder has been read and found wanting. Which means any request that could leave the window bare has to read the folder first, rather than assume the last pick is still in hand.
-	- The one exception is asking for none. `--wallpaper-file` or `--wallpaper` with no value shows no picture for the session, with or without a rotation folder. Before, it showed the stand-in or nothing depending on a folder the command never named.
-
-- A wallpaper named on the command line, at launch or while running, turns the wallpaper on for the session even when the file has it off. Naming one is a deliberate choice. A performance profile that turns the wallpaper off still wins, for both flags alike, since the profile goes on after them. Reload config keeps it, along with the font and colors the command line gave at launch.
-
-- A wallpaper image can carry its own layout and look in its XMP metadata, under a `wallpaper` namespace named for what the tags describe rather than for this program, so any tool can write them. `Fit` and `Anchor` are absolute, since how an image should be cropped is a property of the image. `Opacity` and `Blur` are absolute too, in the same units as the two settings, and replace them for that image. The shipped pack carries the program defaults on every image, so the two sliders only reach untagged images until the switch is turned off; that trade was accepted so an image's look means the same thing everywhere. Each pair has its own switch in Settings, on by default, and a missing or unreadable tag always falls back to the setting rather than failing the image.
+- Some defaults are better inferred from the config directory than stated in the file. A folder of wallpapers in the expected place is taken as wanting them rotated, and nothing is written back. That, the folder's default, what shows when nothing is named, command-line wallpapers and the XMP layout and look tags are in the [Wallpaper](design_docs/20260930-150052_wallpaper.md) design doc.
 
 ## Delivery (CI/CD, branches, releases)
 

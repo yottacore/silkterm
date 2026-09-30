@@ -534,6 +534,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: 20260928, the answer is to darken the shipped light-mode text, so the plate has room to be louder.
 	- Fixed: 20260929, the cursor plate. The shipped light themes have darker text, and over a light background the plate is drawn at 80% instead of 55%, as far as the text on it still clears the floor. Darker text alone was not enough, since at 55% even a black cursor could not take the plate much past 0.2 from a light background. Their plates now sit 0.25 to 0.28 from the background, where they were 0.12 to 0.20. Dark mode is unchanged. A saved theme keeps about the plate it had.
 	- Test: `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
+	- Note: 20260930, both halves are fixed now, the window transparency on 20260928 and the cursor plate on 20260929. The title is out of date. What is left is the look on screen.
 	- Opened: 20260920-190859
 
 - **Stop here to work on releasing RC1**.
@@ -3077,6 +3078,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Measured:` one foreground clears the 45% floor on the whole shipped pack at 10% visibility, on about two thirds at 35%, and on a fifth at 100%. Past that no color exists and the scrim covers it. design.md says so rather than the feature pretending otherwise.
 	- `Pinned by:` twenty tests in `autotheme.rs` plus three for the wiring, eight of them mutation-checked - the dialog baseline, the two gates, the gamut clip, the persist path, the hue weight, the bright-end percentile, the theme floor and the chroma cutoff.
 	- `Measured:` seen against the shipped pack, and in the app with the switch on and off. The row's label costs the dialog 10 px of width; the first wording cost 69 and was cut.
+	- Note: 20260930, it is on by default now, not off. See the [wallpaper design doc](design_docs/20260930-150052_wallpaper.md).
 	- Opened: 20260804-134813
 	- Closed: 20260920-143625
 
@@ -4802,6 +4804,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pinned by: `tilde_expands_to_home_but_only_for_this_user`.
 	- ✅ A wallpaper named on the command line still shows even when the config has the feature switched off - naming one is a choice for that run.
 		- Pinned by: `naming_a_wallpaper_turns_it_on_unless_the_profile_says_off` and `a_command_line_wallpaper_outlasts_a_reload_and_an_apply`.
+	- Note: 20260930, the keys here are the flat spellings. They are nested now (`wallpaper.enabled`, `wallpaper.fallback_builtin`, `wallpaper.default_fit`).
 	- Opened: n/a
 	- Closed: 20260801-230305
 
@@ -4882,6 +4885,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: moves the config aside so it can't load, and a fresh one is written from the template on the way up. The old file is kept as `config.shcl.bak` (`.bak2`, `.bak3` and so on when repeated), never deleted. Combines with `--config`, which picks which file gets reset.
 		- Pinned by: `a_reset_keeps_every_earlier_config`.
 	- Changing a default leaves an existing config describing the old behavior, so a commented line still carrying a superseded default is now brought up to date - `# cursor_size_width: 25` becomes `# cursor_size_width: 100`. A value you uncommented and set yourself is never touched, nor is one you left a note beside.
+	- Note: 20260930, the folder is `wallpaper/` now, and the keys are nested (`wallpaper.rotate.random`).
 	- Opened: 20260629-110720
 	- Closed: 20260731-115810
 
@@ -5052,6 +5056,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Skip startup rotation, if a wallpaper was specified on the command line.
 		- Done: a wallpaper given on the command line (--background-image, including an explicit clear) is kept on screen at launch instead of being overwritten by the rotation's startup pick. The folder is still scanned and the timer still armed, so scheduled rotation proceeds once the interval elapses (order mode's first tick falls on the folder's natural first image).
 		- Pinned by: `a_rotation_folder_with_nothing_showing_is_read_again` and `next_wallpaper_shows_only_with_somewhere_to_go`.
+	- Note: 20260930, superseded in part. A command-line wallpaper stops rotation for the session now, and the shuffle avoids a recent history, not just the image up.
 	- Opened: 20260703-100322
 	- Closed: 20260720-070458
 
@@ -5060,6 +5065,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: background53.jpg (~100KB, negligible vs the ~13MB binary) is embedded via include_bytes and decoded as the wallpaper when no image and no rotation folder are configured. It runs through the same blur/contrast/opacity pipeline as a file wallpaper. New config key `background_default` (default true) opts out for a plain background-colored terminal.
 	- Note: this changes the look for anyone running with no wallpaper - fresh installs (and existing configs with no background_image/folder) now show the built-in one until they set `background_default = false`. Config-only for now (not in the Settings dialog, which is due for its big reorg); it backfills into existing configs as a commented default.
 	- Pinned by: `an_unreadable_image_still_lands_on_the_builtin` and `a_cleared_wallpaper_shows_nothing_with_or_without_a_folder`.
+	- Note: 20260930, the image was replaced later ("Wallpaper: change the default image baked into the executable"), and the key is `wallpaper.fallback_builtin`, which is in Settings.
 	- Opened: 20260719-085918
 	- Closed: 20260720-071134
 
@@ -5765,6 +5771,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				2. The blit adds TPDF dither (~1 LSB, per-pixel hash) before the 8-bit write, breaking residual banding scene-wide.
 				3. The blur now runs in linear light (decode sRGB -> blur in f32 -> re-encode) so edges are gamma-correct.
 			- Pinned by: `the_blur_mixes_in_linear_light`.
+	- Note: 20260930, the folder is `wallpaper/` now, and the blur default is 10.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -5842,6 +5849,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- How: the graphics library cannot get per-pixel alpha on X11 by itself - its modern path forces an opaque surface, and its GL path will not bind the visual that carries an alpha channel. So on X11 the window and a transparent GL context are created directly, the library runs on top of that, the scene renders to an offscreen texture, and that is copied into the GL framebuffer. Off X11, on Wayland for instance, the ordinary surface already carries alpha. Nothing was downgraded and the renderer was not rewritten.
 	- Note: the hard part was that on NVIDIA/Linux glyphon renders no text on a GL context below 4.2, because drawing into a texture view silently no-ops there (that is how glyphon builds its atlas). Fix: request a GL 4.6 context, falling back as low as 3.3.
 	- No test: per-pixel alpha needs a GPU and a compositor.
+	- Note: 20260930, Windows has its own path now, DX12 composition, which takes effect at the next launch.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6043,6 +6051,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Add adjustable background image opacity to config file, and make default about 33%. This is independent of "see-through" opacity. The "opacity" should be relative to the background color. 0% = all background color, 100% = all image.
 	- Done. `background_opacity` already provided this (0 = all bg color, 1 = all image); changed the default to 0.33. Independent of `opacity` (see-through).
 	- Pinned by: `a_full_slider_always_draws_the_picture_as_it_is` and `changed_defaults`.
+	- Note: 20260930, superseded. This is the Visibility slider now, 10% by default, drawn by the rule in the [wallpaper design doc](design_docs/20260930-150052_wallpaper.md).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -6156,6 +6165,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Render options: Stretch-to-fit, Zoom-to-fit.
 		- Done. `background_fit` = "stretch" | "zoom"; default zoom/cover.
 		- Pinned by: `a_flat_wallpaper_converts_to_the_image_and_survives_a_save`.
+	- Note: 20260930, the `background_*` keys are nested `wallpaper.*` keys now, and the default fit is Stretch.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
