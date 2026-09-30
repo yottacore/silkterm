@@ -52,7 +52,7 @@ fCleanup() {
 	if [[ -n "${_work}" ]]; then mapfile -t launched < <(fOwnedPids "${_work}/home" "${_rootPid}"); fi
 	fKillPids "${_termPids[@]:-0}" "${launched[@]:-0}"
 	((_xvfbPid > 0)) && kill "${_xvfbPid}" 2>/dev/null || true
-	if [[ -n "${_work}" && -z "${optKeep:-}" && "${_work}" == /tmp/* ]]; then
+	if [[ -n "${_work}" && -z "${optKeep:-}" && "${_work}" == "${TMPDIR:-/tmp}"/sizebench.* ]]; then
 		rm -rf "${_work}" || true
 	fi
 	return 0
@@ -270,7 +270,7 @@ fMain() {
 	local bin=""
 	bin="$(fTermBinary "${key}")" || exit 1
 
-	_work="$(mktemp -d /tmp/sizebench.XXXXXX)"
+	_work="$(mktemp -d "${TMPDIR:-/tmp}/sizebench.XXXXXX")"
 
 	fSection "Rig"
 	fEcho "terminal ${key} -> ${bin}"
@@ -348,4 +348,5 @@ fi
 ##  - 20260730: Written, after the previous pass's scripts were lost with their scratch dir.
 ##  - 20260918: The +candy row pins its profile, and the rig prints the one in force.
 ##  - 20260928: GNOME Terminal, WezTerm, Tabby and Hyper, on a throwaway account.
+##  - 20260930: Scratch goes under TMPDIR when it is set.
 ##
