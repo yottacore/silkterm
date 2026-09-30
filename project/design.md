@@ -88,6 +88,8 @@ Each of these has its own design doc, which is the source of truth for that feat
 
 - [Unicode, fonts and emoji](design_docs/20260930-150813_unicode-and-emoji.md)
 
+- [Split panes](design_docs/20260930-150948_split-panes.md)
+
 ## Architecture
 
 ### Language / Stack Decision
