@@ -22,12 +22,14 @@
 # Configuration
 
 ## Where the launcher might be, best first: beside this script (the repo copy),
-## then the local mirror of the synced tree, then the synced tree itself.
+## then the local mirror of the synced tree, then the synced tree itself. On a Mac
+## ~/synced is a Finder alias, which a shell cannot follow, so Dropbox is named too.
 declare -r selfDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 declare -ar launcherCandidates=(
 	"${selfDir}/n8runterm.ps1"
 	"/opt/0-0/common/exec/synced_local-copies/util/0_crossplatform/n8runterm.ps1"
 	"${HOME}/synced/0-0/common/exec/util/0_crossplatform/n8runterm.ps1"
+	"${HOME}/Dropbox/0-0/common/exec/util/0_crossplatform/n8runterm.ps1"
 )
 
 ## Only for the no-pwsh case; the launcher has its own, longer list.
@@ -79,7 +81,7 @@ fFallbackTerminal(){
  set -e  #..................: Exit on errors.
  set -E  #..................: Propagate ERR trap into functions and subshells.
  set   -o pipefail  #.......: Fail a pipe if any stage fails.
- shopt -s inherit_errexit  #: Propagate 'set -e' into command substitutions. (Bash >=4.4.)
+ shopt -s inherit_errexit 2>/dev/null || true  #: Propagate 'set -e' into command substitutions. Bash >=4.4; a Mac's own bash is 3.2.
 
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] || { echo -e "\nError in $(basename "${BASH_SOURCE[0]}"): Not meant to be 'sourced'.\n" >&2; return 1; }
 
@@ -87,5 +89,6 @@ fMain  "${@}"
 
 
 ##	History:
+##		- 2026-10-01: Looks under ~/Dropbox too, and runs under bash 3.2, for a Mac.
 ##		- 2026-09-07: Created, replacing n8runterm.bash - the launcher is one
 ##		              cross-platform .ps1 now and this only has to find it.

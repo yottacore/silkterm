@@ -34,6 +34,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- macOS builds and Microsoft Store packaging in the private repo
+	- ID: 2026100113403226
+	- Type: Feature
+	- Status: Waiting on signoff
+	- Needs external testing: A look at the Mac app and the dogfood entry on the b26 desktop, and a sideload install of the Store package.
+	- Priority: Avg
+	- Opened: 20261001-134032
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: the old-format item "Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds".
+	- Target OS: macOS, Windows
+	- Requirements:
+		- Build SilkTerm on macOS (b26) when it is up and the silkterm-private repo is there.
+		- All macOS build, test and packaging steps run on b26 and live in silkterm-private.
+		- Regular Windows executables still build here. Store packaging and signing run only on a Windows box, preferably vm925w, from silkterm-private.
+		- The pipeline starts the Mac and Store parts only when the repo and the boxes are available.
+		- b26 is reserved through the same host lock as the Windows boxes.
+		- The README says SilkTerm is on macOS and coming to the Microsoft Store, without calling those versions free. The Windows .exe on the releases page is free.
+		- b26 gets a dogfood launcher like the Linux and Windows ones.
+	- Progress log:
+		- 20261001: The pipeline runs the private repo's runner after the packages stage when it is checked out beside this one. It skips a box that is off or held by another session, and stops only when a job ran and failed. `--no-private` turns it off.
+		- 20261001: On b26: the unit tests (971 pass), Intel and Apple silicon release builds, a universal app, and a zip and dmg of it. Signed ad hoc for now. The Mac build is dogfooded through the synced app folder like the others.
+		- 20261001: On vm925w: an msix per arch, a bundle, and the msixupload Partner Center takes, from the Windows binaries built here. Unsigned until a certificate is on the box. The package name and publisher are placeholders until the name is reserved in Partner Center.
+		- 20261001: The launcher makes a "SilkTerm (dogfood)" app in ~/Applications on a Mac, and its wrapper runs under the Mac's own bash 3.2. Both were run on b26 with --version only. The live launcher copies were brought up to the repo's.
+		- 20261001: README updated for macOS and the Store.
+	- Branch: privhook
+	- Test case: Not applicable for the pipeline glue. The launcher harness and the engine, docs, tables and TOC tests pass.
+	- Closed:
+
 - Option: remember maximized state
 	- ID: 2026093018413683
 	- Type: Feature
@@ -615,8 +644,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - **Stop here to work on releasing RC1**.
 
-- 🔘 Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds.
+- 🔬 Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds.
 	- Opened: 20260924-113215
+	- 20261001: The repo is in use for the Mac build and Store packaging. Tracked as issue 2026100113403226. WinUI 3 is not started.
 
 - 🔘 After October and/or when updated silkterm has run on all hosts: Remove code that migrates and/or updates old config files.
 	- Opened: 20260924-113215
