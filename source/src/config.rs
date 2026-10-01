@@ -1145,9 +1145,16 @@ fn parse_kept(text: &str) -> shcl::Document {
 }
 
 // What a save writes. shcl falls back to the canonical form where it cannot keep
-// the lines, and always for a file that lost one, so the refusal still stands.
+// the lines.
 fn saved_text(doc: &shcl::Document) -> String {
 	doc.to_text_keep_lines().0
+}
+
+// shcl's save_file_keep_lines gate. A line the parse dropped is written back as
+// it was while the lines are kept, so only a save that falls back to the
+// canonical form would delete it, and only that one is refused.
+fn save_refused(doc: &shcl::Document) -> bool {
+	doc.lost_count() > 0 && !doc.to_text_keep_lines().1
 }
 
 // One classified line of a config text, with its full nested path resolved from
@@ -1491,7 +1498,11 @@ fn unreadable_lines(doc: &shcl::Document) -> Vec<usize> {
 // can put the file back when a replace took it.
 #[must_use]
 fn write_doc(path: &std::path::Path, doc: &shcl::Document) -> bool {
-	let lost = doc.lost_count();
+	let lost = if save_refused(doc) {
+		doc.lost_count()
+	} else {
+		0
+	};
 	if lost > 0 {
 		if let Ok(mut refused) = REFUSED.lock() {
 			*refused = Some(Refusal {
@@ -2218,19 +2229,14 @@ fn config_complaints(text: &str) -> Vec<String> {
 	let doc = shcl::Document::parse(text);
 	let mut out = Vec::new();
 
-	let lost = doc.lost_count();
 	let lines = unreadable_lines(&doc);
-	if lost > 0 {
-		out.push(format!(
-			"{lost} line(s) could not be read{} - settings cannot be saved until that is fixed",
-			line_list(&lines)
-		));
-	} else if !lines.is_empty() {
-		// shcl keeps a space-indented stray as written, so a save goes through,
-		// but it still sets nothing.
+	if !lines.is_empty() || doc.lost_count() > 0 {
+		// shcl writes such a line back as it was, so a save goes through, but it
+		// still sets nothing. A save it cannot keep the lines for is refused, and
+		// the window says so then.
 		out.push(format!(
 			"{} line(s) could not be read{} - they are kept but set nothing",
-			lines.len(),
+			lines.len().max(doc.lost_count()),
 			line_list(&lines)
 		));
 	}
@@ -3568,8 +3574,13 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("wallpaper.rotate.folder", "\"wallpaper/\"  ## Default"),
 	// then empty, which meant the same place without naming it
 	("wallpaper.rotate.folder", "\"\"  ## Default"),
-	// then this platform's place in double quotes
-	("wallpaper.rotate.folder", WALLPAPER_DIR_DOUBLE_QUOTED),
+	// then with single backslashes, which shcl 3.0 reads as escapes, so the line
+	// set nothing once uncommented
+	#[cfg(windows)]
+	(
+		"wallpaper.rotate.folder",
+		"\"%LOCALAPPDATA%\\silkterm\\wallpaper\"  ## Default",
+	),
 	(
 		"selection.word_separators",
 		"\",|\\\"' ()[]{}<>\"  ## Default",
@@ -4271,7 +4282,7 @@ fn rewritten_by<'a>(text: &'a str, steps: &[LaunchStep]) -> std::borrow::Cow<'a,
 // save writes a commented line at the depth of the setting below it, so a
 // commented new name can move into the old name's block, and a rename that a
 // save turns on or off moved a value at the next launch. A file that lost a
-// line cannot be saved, so it has no saved form to agree with.
+// line has no canonical form that keeps it, so it has none to agree with.
 fn saved_paths(text: &str) -> Option<std::collections::HashSet<String>> {
 	let doc = shcl::Document::parse(text);
 	if doc.lost_count() > 0 {
@@ -4323,14 +4334,12 @@ fn adopted_shell_doc(doc: &shcl::Document) -> Option<shcl::Document> {
 	Some(doc)
 }
 
-// The adoption as text, for `next_launch_text`. A file with a line that cannot be
-// read is left alone, as the save is refused there.
+// The adoption as text, for `next_launch_text`. Where the save is refused the
+// file is left alone.
 fn adopted_shell_text(text: &str) -> Option<String> {
-	let doc = parse_kept(text);
-	if doc.lost_count() > 0 {
-		return None;
-	}
-	adopted_shell_doc(&doc).map(|doc| saved_text(&doc))
+	adopted_shell_doc(&parse_kept(text))
+		.filter(|doc| !save_refused(doc))
+		.map(|doc| saved_text(&doc))
 }
 
 // The list with `wanted` at the front. An entry already running that shell moves;
@@ -4945,8 +4954,7 @@ fn with_rating_lines_through(
 	{
 		return Ok(out);
 	}
-	if before.lost_count() == 0
-		&& let Some(out) = saved_rating(&before, &wanted)
+	if let Some(out) = saved_rating(&before, &wanted)
 		&& reads_as_asked(&before, loaded, &out, &wanted, steps)
 	{
 		return Ok(out);
@@ -4981,7 +4989,7 @@ fn saved_rating(before: &shcl::Document, wanted: &[(&str, Option<RatingValue>)])
 			return None;
 		}
 	}
-	Some(saved_text(&doc))
+	(!save_refused(&doc)).then(|| saved_text(&doc))
 }
 
 // The parse a launch makes of this text, or None where the launch's rewrites
@@ -5678,7 +5686,7 @@ fn adopt_legacy_config() {
 static DEFAULT_CONFIG_TEXT: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
 	DEFAULT_CONFIG_TEMPLATE
 		.replace("{HOME}", HOME_TOKEN)
-		.replace("{WPDIR}", WALLPAPER_DIR_TOKEN)
+		.replace("{WPDIR}", &wallpaper_dir_escaped())
 });
 
 fn default_config() -> &'static str {
@@ -5695,9 +5703,8 @@ pub const HOME_TOKEN: &str = "$HOME";
 
 // The wallpaper folder's shipped default: the usual place on this platform, in
 // the same spelling. It is looked up rather than expanded (`rotation_folder_for`),
-// so it is right even where XDG_CONFIG_HOME is unset. The template quotes it
-// in single quotes, where a backslash is just a backslash. shcl 3.0 reads one
-// in double quotes as an escape, and `\s` is not one, so the line set nothing.
+// so it is right even where XDG_CONFIG_HOME is unset. The template writes it in
+// double quotes, so a backslash goes in doubled (`wallpaper_dir_escaped`).
 #[cfg(windows)]
 pub const WALLPAPER_DIR_TOKEN: &str = r"%LOCALAPPDATA%\silkterm\wallpaper";
 #[cfg(target_os = "macos")]
@@ -5705,13 +5712,9 @@ pub const WALLPAPER_DIR_TOKEN: &str = "$HOME/Library/Application Support/silkter
 #[cfg(not(any(windows, target_os = "macos")))]
 pub const WALLPAPER_DIR_TOKEN: &str = "$XDG_CONFIG_HOME/silkterm/wallpaper";
 
-#[cfg(windows)]
-const WALLPAPER_DIR_DOUBLE_QUOTED: &str = "\"%LOCALAPPDATA%\\silkterm\\wallpaper\"  ## Default";
-#[cfg(target_os = "macos")]
-const WALLPAPER_DIR_DOUBLE_QUOTED: &str =
-	"\"$HOME/Library/Application Support/silkterm/wallpaper\"  ## Default";
-#[cfg(not(any(windows, target_os = "macos")))]
-const WALLPAPER_DIR_DOUBLE_QUOTED: &str = "\"$XDG_CONFIG_HOME/silkterm/wallpaper\"  ## Default";
+fn wallpaper_dir_escaped() -> String {
+	WALLPAPER_DIR_TOKEN.replace('\\', r"\\")
+}
 
 const DEFAULT_CONFIG_TEMPLATE: &str = r##"# SilkTerm configuration file.
 #
@@ -5759,7 +5762,7 @@ wallpaper:
 		# enabled: true  ## Default
 		## The default is the usual place on this system. A wallpapers or
 		## backgrounds folder there is found too.
-		# folder: '{WPDIR}'  ## Default
+		# folder: "{WPDIR}"  ## Default
 		# interval_s: 0.0  ## Default
 		# random: true  ## Default
 
@@ -6557,7 +6560,9 @@ mod tests {
 	}
 
 	// The migration drops `shell.default` only once its adoption into the list is
-	// saved. A line shcl cannot read refuses that save, so the choice has to wait.
+	// saved. A line shcl cannot read is written back as it was, so the save goes
+	// through beside one. Where the save cannot keep the lines it would delete the
+	// line instead, so it is refused and the choice has to wait.
 	// Test ID: EpyvpeC
 	#[test]
 	fn an_old_default_shell_waits_for_a_save_that_can_happen() {
@@ -6585,6 +6590,15 @@ mod tests {
 		let default_of = |text: &str| shcl::Document::parse(text).get_string("shell.default").ok();
 
 		std::fs::write(&path, format!("{clean}mm:\n\t\tnn: 1\n\too: 2\n")).unwrap();
+		adopt_default_shell(&path);
+		migrate_config(&path);
+		let beside = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(default_of(&beside), None, "{beside}");
+		assert_eq!(order(&beside), ["zsh", "bash"]);
+		assert!(beside.contains("mm:\n\t\tnn: 1\n\too: 2\n"), "{beside}");
+
+		// a second shell block sends the save back to the canonical form
+		std::fs::write(&path, format!("{clean}shell:\n\t\tnn: 1\n\too: 2\n")).unwrap();
 		adopt_default_shell(&path);
 		migrate_config(&path);
 		let refused = std::fs::read_to_string(&path).unwrap();
@@ -8598,9 +8612,9 @@ mod tests {
 	}
 
 	// A line the parse cannot place made every save refuse, and the rating is a
-	// save, so the test ran at every launch. The rating goes in beside it now; the
-	// dialog's refusal to rewrite such a file stays. The line sits in a theme,
-	// where the reload's backfill adds nothing that could give it a level.
+	// save, so the test ran at every launch. The rating goes in beside it now, and
+	// so does the dialog's save, with the line kept as it was. The line sits in a
+	// theme, where the reload's backfill adds nothing that could give it a level.
 	// Test ID: EpXN9p7
 	#[test]
 	fn a_rating_is_kept_beside_an_unreadable_line() {
@@ -8636,14 +8650,15 @@ mod tests {
 		assert_eq!(reloaded.rated_hardware, ID);
 		assert_eq!(reloaded.performance_profile, "high");
 
-		let before = std::fs::read_to_string(&path).unwrap();
 		let mut next = reloaded.clone();
 		next.rated_hardware = "fedcba9876543210".to_string();
+		assert!(persist(&reloaded, &next), "the dialog's save goes through");
+		let after = std::fs::read_to_string(&path).unwrap();
 		assert!(
-			!persist(&reloaded, &next),
-			"the dialog's save still refuses a file that lost a line"
+			after.starts_with("themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n"),
+			"the unreadable line is as it was\n{after}"
 		);
-		assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+		assert_eq!(reload_from_disk().rated_hardware, "fedcba9876543210");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -9038,10 +9053,11 @@ mod tests {
 		assert_eq!(typo.len(), 1, "{typo:?}");
 		assert!(typo[0].contains("font.famly"), "{typo:?}");
 
-		// a line the parser had to drop, which also disables saving
+		// a line the parser had to drop, which a save writes back as it was
 		let lost = config_complaints("font:\n\t\tsize: 13.0\n\tfamily: \"One\"\n");
 		assert!(
-			lost.iter().any(|m| m.contains("cannot be saved")),
+			lost.iter()
+				.any(|m| m.contains("line 3") && m.contains("set nothing")),
 			"{lost:?}"
 		);
 
@@ -11006,14 +11022,14 @@ mod tests {
 			Settings::default().wallpaper_folder_raw,
 			WALLPAPER_DIR_TOKEN
 		);
-		let line = format!("folder: '{WALLPAPER_DIR_TOKEN}'  ## Default");
+		let line = format!("folder: \"{}\"  ## Default", wallpaper_dir_escaped());
 		assert!(
 			default_config().contains(&line),
 			"template says something else"
 		);
 		// the Windows spelling keeps its backslashes through a read, whatever
 		// box reads it
-		let doc = shcl::Document::parse("folder: '%LOCALAPPDATA%\\silkterm\\wallpaper'\n");
+		let doc = shcl::Document::parse("folder: \"%LOCALAPPDATA%\\\\silkterm\\\\wallpaper\"\n");
 		assert_eq!(
 			doc.get_string("folder").unwrap(),
 			r"%LOCALAPPDATA%\silkterm\wallpaper"
@@ -11065,7 +11081,10 @@ mod tests {
 		let path = dir.join("config.shcl");
 		set_config_override(path.clone());
 		let write = |text: &str| std::fs::write(&path, text).unwrap();
-		let folder = |text: &str| format!("wallpaper:\n\trotate:\n\t\tfolder: '{text}'\n");
+		let folder = |text: &str| {
+			let text = text.replace('\\', r"\\");
+			format!("wallpaper:\n\trotate:\n\t\tfolder: \"{text}\"\n")
+		};
 
 		write(default_config());
 		assert_eq!(
@@ -11208,7 +11227,10 @@ mod tests {
 		let out = migrate_config_text("wallpaper:\n\trotate:\n\t\t# folder: \"\"  ## Default\n")
 			.expect("the outgoing default should be refreshed");
 		assert!(
-			out.contains(&format!("# folder: '{WALLPAPER_DIR_TOKEN}'  ## Default")),
+			out.contains(&format!(
+				"# folder: \"{}\"  ## Default",
+				wallpaper_dir_escaped()
+			)),
 			"{out:?}"
 		);
 	}
@@ -12133,7 +12155,7 @@ mod tests {
 			use super::super::{valued_wallpaper_line, wallpaper_heading_repaired};
 			const IMAGES: [&str; 5] = [
 				"/p/a.png",
-				"'C:\\Users\\x\\a b.png'",
+				"\"C:\\\\Users\\\\x\\\\a b.png\"",
 				"/p/a.png  # mine",
 				"''",
 				"'/p/#1.png'",
