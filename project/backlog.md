@@ -138,6 +138,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- Closed:
 
+- Test files go under one dated folder in the system temp dir
+	- ID: 2026093013113320
+	- Type: Task
+	- Status: Waiting for testing
+	- Needs external testing: The Windows side: `cargo test`, the installer tests inside a real `cicd-win.ps1` run, and a look that a Windows pipeline run leaves `%TEMP%` pointed where it was.
+	- Priority: Avg
+	- Opened: 20260930-131133
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- All test files go somewhere under `%TEMP%` on Windows, or `/tmp/` elsewhere.
+		- Each run gets a subfolder named something like `test_silkterm_YYYYmmDD-HHMMSSNN`.
+	- Note: Most Rust tests already use the system temp dir, but each picks its own name at the top level of it. The script tests use `mktemp`, and a few write under `target/`.
+	- Decisions:
+		- 20260930: The base is the system temp dir, which follows `TMPDIR` on Linux and macOS. A box whose `/tmp` is unreliable points `TMPDIR` somewhere else for test runs, and nothing box-specific goes in the repo.
+	- Test case: ErOj67l (`cicd/tests/testdir/run.bash`), and the `testdir::tests` Rust tests `a_run_folder_is_made_fresh_under_the_temp_base` (ErOj5oB), `a_run_folder_already_there_is_never_adopted` (ErOj5oC), `a_run_folder_gives_up_when_every_name_is_taken` (ErOj5oD), `a_run_folder_the_runner_gives_is_used` (ErOj5oE) and `a_run_folder_is_stamped_in_local_time` (ErOj5oF). Each seen to fail on the old behavior. Er2UgYE (`cicd/tests/cicd-win/run.bash`) pins that the Windows pipeline's installer tests leave its temp folder alone.
+	- Progress log:
+		- 20260930: Done on Linux. Each run makes one `test_silkterm_<stamp>` folder under the temp dir, shared by the Rust tests and the script tests a pipeline run starts. The remote Windows box's staging is split off as 2026093015422119.
+	- Branch: testtmp
+	- Closed:
+
 - The merge gate fails on clippy at a doc comment in the minimap source
 	- ID: 2026093016391134
 	- Type: Bug
@@ -167,24 +188,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When changing the cursor size and animation, change to 50% width.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
-	- Closed:
-
-- Test files go under one dated folder in the system temp dir
-	- ID: 2026093013113320
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20260930-131133
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- All test files go somewhere under `%TEMP%` on Windows, or `/tmp/` elsewhere.
-		- Each run gets a subfolder named something like `test_silkterm_YYYYmmDD-HHMMSSNN`.
-	- Note: Most Rust tests already use the system temp dir, but each picks its own name at the top level of it. The script tests use `mktemp`, and a few write under `target/`.
-	- Decisions:
-		- 20260930: The base is the system temp dir, which follows `TMPDIR` on Linux and macOS. A box whose `/tmp` is unreliable points `TMPDIR` somewhere else for test runs, and nothing box-specific goes in the repo.
-	- Test case: ErOj67l (`cicd/tests/testdir/run.bash`), and the `testdir::tests` Rust tests `a_run_folder_is_made_fresh_under_the_temp_base` (ErOj5oB), `a_run_folder_already_there_is_never_adopted` (ErOj5oC), `a_run_folder_gives_up_when_every_name_is_taken` (ErOj5oD), `a_run_folder_the_runner_gives_is_used` (ErOj5oE) and `a_run_folder_is_stamped_in_local_time` (ErOj5oF). Each seen to fail on the old behavior. Er2UgYE (`cicd/tests/cicd-win/run.bash`) pins that the Windows pipeline's installer tests leave its temp folder alone.
-	- Branch: testtmp
 	- Closed:
 
 - The Windows GUI harness keeps its files outside %TEMP% on the test box
