@@ -852,7 +852,7 @@ impl DialogWin {
 		if let Some(ms) = tip_wake {
 			self.anim_wake = Some(self.anim_wake.map_or(ms, |have| have.min(ms)));
 		}
-		let Some(frame) = self.gfx.begin_frame() else {
+		let Ok(frame) = self.gfx.begin_frame() else {
 			return;
 		};
 		let view = self.gfx.frame_view(&frame);

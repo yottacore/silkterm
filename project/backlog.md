@@ -34,6 +34,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- macOS: the first launch hangs with no window, using more and more memory
+	- ID: 2026100114274893
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Needs external testing: A look at the dogfood app from the Dock on b26.
+	- Severity: Critical
+	- Opened: 20261001-142748
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100113403226
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Steps to reproduce:
+		- Start SilkTerm on a Mac, here from Spotlight.
+	- Incorrect behavior: No window. The Dock shows it running and "Application not responding", and memory climbs until the graphics driver hangs.
+	- Expected behavior: The window opens.
+	- Reproduced: 20261001 on b26, from Spotlight and from a terminal.
+	- Actual cause:
+		- The window is created hidden and shown after its first frame. On macOS the graphics layer gives a hidden window no frame at all, so the first frame never came and the window was never shown.
+		- Each try had already written its text and other GPU buffers. Returning without a submit left all of them held, about 30 MB a second, and the frame was tried again at once.
+	- Actual fix:
+		- A frame with nothing to draw into still submits, which frees what it wrote.
+		- A hidden window that is refused a frame because it is not visible is shown at once. The startup deadline now applies to a refused frame too.
+		- Checked on b26: memory stays flat at about 230 MB and the window opens.
+	- Branch: machang
+	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
+	- Closed:
+
 - macOS builds and Microsoft Store packaging in the private repo
 	- ID: 2026100113403226
 	- Type: Feature
@@ -59,6 +87,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261001: On vm925w: an msix per arch, a bundle, and the msixupload Partner Center takes, from the Windows binaries built here. Unsigned until a certificate is on the box. The package name and publisher are placeholders until the name is reserved in Partner Center.
 		- 20261001: The launcher makes a "SilkTerm (dogfood)" app in ~/Applications on a Mac, and its wrapper runs under the Mac's own bash 3.2. Both were run on b26 with --version only. The live launcher copies were brought up to the repo's.
 		- 20261001: README updated for macOS and the Store.
+		- 20261001: The dogfood app now runs SilkTerm in its own process, so the Dock shows one icon that can be kept there. Before, it handed off to a second program with no bundle. Seen on b26 opened the way Spotlight does it.
 	- Branch: privhook
 	- Test case: Not applicable for the pipeline glue. The launcher harness and the engine, docs, tables and TOC tests pass.
 	- Closed:
