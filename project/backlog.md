@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
 	- Type: Bug
-	- Status: Waiting on signoff
+	- Status: Done
 	- Needs external testing: A look at the dogfood app from the Dock on b26.
 	- Severity: Critical
 	- Opened: 20261001-142748
@@ -60,12 +60,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Checked on b26: memory stays flat at about 230 MB and the window opens.
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
-	- Closed:
+	- Closed: 20261001-155746
 
 - macOS builds and Microsoft Store packaging in the private repo
 	- ID: 2026100113403226
 	- Type: Feature
-	- Status: Waiting on signoff
+	- Status: Done
 	- Needs external testing: A look at the Mac app and the dogfood entry on the b26 desktop, and a sideload install of the Store package.
 	- Priority: Avg
 	- Opened: 20261001-134032
@@ -90,12 +90,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261001: The dogfood app now runs SilkTerm in its own process, so the Dock shows one icon that can be kept there. Before, it handed off to a second program with no bundle. Seen on b26 opened the way Spotlight does it.
 	- Branch: privhook
 	- Test case: Not applicable for the pipeline glue. The launcher harness and the engine, docs, tables and TOC tests pass.
-	- Closed:
+	- Closed: 20261001-155641
 
 - Size the Settings dialog to the tallest tab with no dynamic content
 	- ID: 2026093018413684
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20260930-184136
 	- Opened by: JC
@@ -107,12 +107,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260930: Done. The Shell tab is left out of the height, and scrolls when its list is taller.
 	- Branch: maxdlg
 	- Test case: `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (ErPQry8). Seen to fail on the old sizing.
-	- Closed:
+	- Closed: 20261001-155733
 
 - Integrate and test shcl 3.0.0-beta.1 from shcl's dev branch, at b10c2009
 	- ID: 2026100115322364
 	- Type: Task
-	- Status: Waiting on signoff
+	- Status: Done
 	- Needs external testing: A dogfood look at a Settings save on a file with a stray line, on Linux and Windows.
 	- Priority: Avg
 	- Opened: 20261001-143000
@@ -133,6 +133,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Windows paths in the template use double quotes with doubled backslashes, the canonical spelling.
 	- Branch: shcl3e
 	- Test case: `a_rating_is_kept_beside_an_unreadable_line` and `an_old_default_shell_waits_for_a_save_that_can_happen`, both watched red with the old gate put back. `savenotice` passes on vm925w. All unit tests pass here, and on vm925w all but the known `a_run_folder_already_there_is_never_adopted`.
+	- Closed: 20261001-155719
 
 - Option: remember maximized state
 	- ID: 2026093018413683
@@ -824,7 +825,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note: 20260924, main also lacks the later installer fixes under Done: version order, API errors, the running-copy upgrade and the re-run repair.
 		- Opened: 20260924-115032
 
-- 🔬 Check the display-scale fixes on two monitors at different scales.
+- ✅ Check the display-scale fixes on two monitors at different scales.
 	- Covers the Settings dialog, maximized as well, and the About and notice boxes. The fixes are under Done.
 	- Opened: 20260919-153000
 
@@ -844,7 +845,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - **Stop here to work on releasing RC1**.
 
-- 🔬 Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds.
+- ✅ Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds.
 	- Opened: 20260924-113215
 	- 20261001: The repo is in use for the Mac build and Store packaging. Tracked as issue 2026100113403226. WinUI 3 is not started.
 
