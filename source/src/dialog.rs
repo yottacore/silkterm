@@ -1842,9 +1842,78 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	))
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+// macOS: the screen's visible frame, which leaves out the menu bar and the
+// Dock. Without it the cap was the whole display, and a dialog that tall was
+// pushed down from under the menu bar until its buttons left the screen.
+#[cfg(target_os = "macos")]
+pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
+	use objc2::MainThreadMarker;
+	use objc2_app_kit::{NSScreen, NSView};
+
+	let RawWindowHandle::AppKit(h) = handle else {
+		return None;
+	};
+	let mtm = MainThreadMarker::new()?;
+	// SAFETY: an AppKit handle names the window's live NSView, and the marker
+	// above proves this is the main thread, the only one AppKit answers on.
+	let view: &NSView = unsafe { h.ns_view.cast::<NSView>().as_ref() };
+	let screen = view.window()?.screen()?;
+	// Cocoa's origin is the bottom-left of the first screen, the one with the
+	// menu bar - the same display winit measures from.
+	let primary = NSScreen::screens(mtm).firstObject()?;
+	let area = screen.visibleFrame();
+	Some(flip_cocoa_rect(
+		(area.origin.x, area.origin.y),
+		(area.size.width, area.size.height),
+		primary.frame().size.height,
+		screen.backingScaleFactor(),
+	))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 pub fn work_area_of(_handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	None
+}
+
+// Cocoa measures the screen in points from the bottom-left of the primary
+// display, y up. winit measures in physical pixels from its top-left, y down.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn flip_cocoa_rect(
+	origin: (f64, f64),
+	size: (f64, f64),
+	primary_h: f64,
+	scale: f64,
+) -> (i32, i32, i32, i32) {
+	let top = primary_h - (origin.1 + size.1);
+	(
+		(origin.0 * scale).round() as i32,
+		(top * scale).round() as i32,
+		(size.0 * scale).round() as i32,
+		(size.1 * scale).round() as i32,
+	)
+}
+
+// Where a dialog goes: centered over the terminal, then pulled back onto the
+// work area, or a tall dialog centered on a tall terminal puts its own buttons
+// under the taskbar or the Dock. With no work area to go by it only keeps off
+// the negative side of the origin.
+#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
+pub fn dialog_origin(
+	parent_pos: (i32, i32),
+	parent_size: (u32, u32),
+	dialog: (u32, u32),
+	work: Option<(i32, i32, i32, i32)>,
+) -> (i32, i32) {
+	let (dlg_w, dlg_h) = (dialog.0 as i32, dialog.1 as i32);
+	let x = parent_pos.0 + (parent_size.0 as i32 - dlg_w) / 2;
+	let y = parent_pos.1 + (parent_size.1 as i32 - dlg_h) / 2;
+	match work {
+		Some((ax, ay, aw, ah)) => (
+			x.clamp(ax, (ax + aw - dlg_w).max(ax)),
+			y.clamp(ay, (ay + ah - dlg_h).max(ay)),
+		),
+		None => (x.max(0), y.max(0)),
+	}
 }
 
 pub fn work_area(window: &Window) -> Option<(i32, i32, i32, i32)> {
@@ -1922,8 +1991,8 @@ mod tests {
 
 	use super::{
 		ABOUT_PAD, AboutSource, DLG_DECOR_HEADROOM, DLG_MAX_H, DLG_SNAP, Rect, caps_from,
-		layout_about, layout_source, refusal_notice, size_within_caps, snap_to, tip_gate,
-		usable_screen,
+		dialog_origin, flip_cocoa_rect, layout_about, layout_source, refusal_notice,
+		size_within_caps, snap_to, tip_gate, usable_screen,
 	};
 	use crate::config;
 	use crate::text::{TextCtx, ui_attrs};
@@ -2040,6 +2109,53 @@ mod tests {
 		assert!(w > 0.0 && h > 0.0 && h <= DLG_MAX_H);
 		// no work area published: the monitor is all there is to go on
 		assert_eq!(usable_screen(None, Some((800.0, 600.0))), (800.0, 600.0));
+	}
+
+	// The b26 case: a Retina screen that looks like 1440x900, a 25 point menu
+	// bar and a Dock. Sized against the whole display, the dialog plus its title
+	// bar was taller than what lies below the menu bar, so macOS pushed it down
+	// until the buttons were off the bottom. Off the visible frame it fits, and
+	// placed over a terminal near the top it still clears the menu bar.
+	// Test ID: ErUj5Ic
+	#[test]
+	fn a_mac_dialog_fits_between_the_menu_bar_and_the_dock() {
+		let scale = 2.0;
+		let (menu_bar, dock) = (25.0, 70.0);
+		let work = flip_cocoa_rect((0.0, dock), (1440.0, 900.0 - menu_bar - dock), 900.0, scale);
+		assert_eq!(
+			work,
+			(0, 50, 2880, 1610),
+			"below the menu bar, above the Dock"
+		);
+		let (ax, ay, aw, ah) = work;
+		let title_bar = 28.0 * 2.0;
+		let screen = usable_screen(Some((aw as f32, ah as f32)), Some((2880.0, 1800.0)));
+		let (_, cap) = caps_from(screen, (0.0, title_bar), scale as f32);
+		let outer = (cap + title_bar) as u32;
+		assert!(outer <= ah as u32, "{outer} tall does not fit {ah}");
+		let (x, y) = dialog_origin((200, 60), (1600, 1300), (1300, outer), Some(work));
+		assert!(y >= ay && y + outer as i32 <= ay + ah, "y {y} runs off");
+		assert!(x >= ax && x + 1300 <= ax + aw);
+	}
+
+	// A second monitor above or left of the primary has negative coordinates,
+	// and a dialog on it stays there rather than jumping to the primary.
+	// Test ID: ErUj5MS
+	#[test]
+	fn a_dialog_stays_on_a_monitor_left_of_the_primary() {
+		let work = flip_cocoa_rect((-1920.0, 0.0), (1920.0, 1055.0), 1080.0, 1.0);
+		assert_eq!(work, (-1920, 25, 1920, 1055));
+		let (x, y) = dialog_origin((-1800, 100), (1600, 900), (800, 1000), Some(work));
+		assert_eq!((x, y), (-1400, 50));
+		// nothing known about the screen: only the negative side is refused
+		assert_eq!(
+			dialog_origin((-1800, -50), (1600, 900), (800, 1000), None),
+			(0, 0)
+		);
+		assert_eq!(
+			dialog_origin((100, 100), (1000, 800), (600, 400), None),
+			(300, 300)
+		);
 	}
 
 	// Test ID: EpOQNMR

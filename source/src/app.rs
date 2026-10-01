@@ -298,42 +298,44 @@ impl App {
 	}
 
 	// Windows: an owned popup gets no automatic placement (it appears at the
-	// screen origin), so center a fresh dialog over the terminal window - then
-	// pull it back onto the part of the screen a window can reach, or a tall
-	// dialog centered on a tall terminal puts its own buttons under the taskbar.
-	// Linux WMs place transients themselves.
-	#[cfg(target_os = "windows")]
+	// screen origin). macOS centers a new window on the screen at its first
+	// size, and growing it after keeps the bottom edge, so a tall one is pushed
+	// down from under the menu bar and off the bottom. Both center the dialog
+	// over the terminal and keep it on the work area. Linux WMs place
+	// transients themselves.
+	#[cfg(any(target_os = "windows", target_os = "macos"))]
 	fn center_dialog(&self) {
 		let (Some(state), Some(dialog)) = (self.state.as_ref(), self.dialog.as_ref()) else {
 			return;
 		};
-		if let Ok(pos) = state.window.outer_position() {
-			let win = state.window.outer_size();
-			let dlg = dialog.window.outer_size();
-			let mut x = pos.x + (win.width as i32 - dlg.width as i32) / 2;
-			let mut y = pos.y + (win.height as i32 - dlg.height as i32) / 2;
-			// the terminal's monitor, not the dialog's: the dialog has not been
-			// placed yet, so its own answer is for wherever the origin is
-			let screen = {
-				use winit::raw_window_handle::HasWindowHandle;
-				state
-					.window
-					.window_handle()
-					.ok()
-					.map(|h| h.as_raw())
-					.and_then(crate::dialog::work_area_of)
-			};
-			if let Some((ax, ay, aw, ah)) = screen {
-				x = x.clamp(ax, (ax + aw - dlg.width as i32).max(ax));
-				y = y.clamp(ay, (ay + ah - dlg.height as i32).max(ay));
-			}
-			dialog
+		let Ok(pos) = state.window.outer_position() else {
+			return;
+		};
+		let win = state.window.outer_size();
+		let dlg = dialog.window.outer_size();
+		// the terminal's monitor, not the dialog's: the dialog has not been
+		// placed yet, so its own answer is for wherever the origin is
+		let work = {
+			use winit::raw_window_handle::HasWindowHandle;
+			state
 				.window
-				.set_outer_position(winit::dpi::PhysicalPosition::new(x.max(0), y.max(0)));
-		}
+				.window_handle()
+				.ok()
+				.map(|h| h.as_raw())
+				.and_then(crate::dialog::work_area_of)
+		};
+		let (x, y) = crate::dialog::dialog_origin(
+			(pos.x, pos.y),
+			(win.width, win.height),
+			(dlg.width, dlg.height),
+			work,
+		);
+		dialog
+			.window
+			.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
 	}
-	// self kept for call-site parity with the Windows version above
-	#[cfg(not(target_os = "windows"))]
+	// self kept for call-site parity with the version above
+	#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 	#[allow(clippy::unused_self)]
 	fn center_dialog(&self) {}
 

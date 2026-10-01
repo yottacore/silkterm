@@ -20,6 +20,33 @@ pub fn monospace() -> &'static Monospace {
 	M.get_or_init(platform::monospace)
 }
 
+/// How a platform's font points relate to logical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PointUnit {
+	/// A Mac lays out in points, so a Mac point already is the logical pixel,
+	/// and the backing scale factor takes it the rest of the way.
+	MacLogical,
+	/// 1/72 inch, against the 96-DPI reference logical pixels are measured on.
+	Typographic,
+}
+
+pub fn px_from_pt_for(pt: f32, unit: PointUnit) -> f32 {
+	match unit {
+		PointUnit::MacLogical => pt,
+		PointUnit::Typographic => pt * 96.0 / 72.0,
+	}
+}
+
+/// A size the OS reported in points, in logical pixels on this platform.
+pub fn px_from_pt(pt: f32) -> f32 {
+	let unit = if cfg!(target_os = "macos") {
+		PointUnit::MacLogical
+	} else {
+		PointUnit::Typographic
+	};
+	px_from_pt_for(pt, unit)
+}
+
 #[derive(Default, Clone)]
 pub struct UiFont {
 	pub family: Option<String>, // desktop interface font family, e.g. "GentiumAlt"
@@ -305,12 +332,13 @@ mod platform {
 #[cfg(target_os = "macos")]
 mod platform {
 	use super::Monospace;
+	use objc2_app_kit::NSFont;
 	use std::process::Command;
 
 	pub fn monospace() -> Monospace {
 		Monospace {
 			family: family(),
-			size_pt: size(),
+			size_pt: fixed_pitch_size(),
 		}
 	}
 
@@ -323,10 +351,18 @@ mod platform {
 		Some(String::from_utf8(out.stdout).ok()?.trim().to_string())
 	}
 
-	fn size() -> Option<f32> {
-		defaults_global("NSFixedPitchFontSize")?.parse().ok()
+	// AppKit answers with its default when nobody has set NSFixedPitchFontSize,
+	// which the defaults key alone does not.
+	fn fixed_pitch_size() -> Option<f32> {
+		objc2::rc::autoreleasepool(|_| {
+			let font = NSFont::userFixedPitchFontOfSize(0.0)?;
+			let size = font.pointSize() as f32;
+			(size > 0.0).then_some(size)
+		})
 	}
 
+	// Only a family somebody picked. AppKit would always name one (Menlo), and
+	// following that would drop the font_family stack for everyone.
 	fn family() -> Option<String> {
 		// Stored as a PostScript name, e.g. "Menlo-Regular"; take the family part.
 		let postscript_name = defaults_global("NSFixedPitchFont")?;
@@ -339,12 +375,13 @@ mod platform {
 	}
 
 	// macOS has no user-set UI font, and the actual one (San Francisco) hides
-	// behind a private name fontdb can't query. Report the conventional AppKit
-	// system size and let the family fall back (curated list has Helvetica Neue).
+	// behind a private name fontdb can't query. Report AppKit's system size and
+	// let the family fall back (curated list has Helvetica Neue).
 	pub fn interface() -> super::UiFont {
+		let size = NSFont::systemFontSize() as f32;
 		super::UiFont {
 			family: None,
-			size_pt: Some(13.0),
+			size_pt: Some(if size > 0.0 { size } else { 13.0 }),
 			bold: false,
 			italic: false,
 		}
@@ -454,5 +491,22 @@ mod platform {
 	}
 	pub fn interface() -> UiFont {
 		UiFont::default()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{PointUnit, px_from_pt_for};
+
+	// macOS reports 13 pt for the interface and about 11 pt for fixed pitch, and
+	// both are already logical pixels there. Taking them as 1/72 inch made every
+	// font on a Mac a third too big.
+	// Test ID: ErUj5E3
+	#[test]
+	fn a_mac_point_is_already_a_logical_pixel() {
+		assert_eq!(px_from_pt_for(13.0, PointUnit::MacLogical), 13.0);
+		assert_eq!(px_from_pt_for(11.0, PointUnit::MacLogical), 11.0);
+		assert_eq!(px_from_pt_for(9.0, PointUnit::Typographic), 12.0);
+		assert_eq!(px_from_pt_for(12.0, PointUnit::Typographic), 16.0);
 	}
 }

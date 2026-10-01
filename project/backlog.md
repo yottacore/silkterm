@@ -34,208 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- macOS: the first launch hangs with no window, using more and more memory
-	- ID: 2026100114274893
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: A look at the dogfood app from the Dock on b26.
-	- Severity: Critical
-	- Opened: 20261001-142748
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100113403226
-	- Target OS: macOS
-	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
-	- Steps to reproduce:
-		- Start SilkTerm on a Mac, here from Spotlight.
-	- Incorrect behavior: No window. The Dock shows it running and "Application not responding", and memory climbs until the graphics driver hangs.
-	- Expected behavior: The window opens.
-	- Reproduced: 20261001 on b26, from Spotlight and from a terminal.
-	- Actual cause:
-		- The window is created hidden and shown after its first frame. On macOS the graphics layer gives a hidden window no frame at all, so the first frame never came and the window was never shown.
-		- Each try had already written its text and other GPU buffers. Returning without a submit left all of them held, about 30 MB a second, and the frame was tried again at once.
-	- Actual fix:
-		- A frame with nothing to draw into still submits, which frees what it wrote.
-		- A hidden window that is refused a frame because it is not visible is shown at once. The startup deadline now applies to a refused frame too.
-		- Checked on b26: memory stays flat at about 230 MB and the window opens.
-	- Branch: machang
-	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
-	- Closed: 20261001-155746
-
-- macOS builds and Microsoft Store packaging in the private repo
-	- ID: 2026100113403226
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A look at the Mac app and the dogfood entry on the b26 desktop, and a sideload install of the Store package.
-	- Priority: Avg
-	- Opened: 20261001-134032
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: the old-format item "Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds".
-	- Target OS: macOS, Windows
-	- Requirements:
-		- Build SilkTerm on macOS (b26) when it is up and the silkterm-private repo is there.
-		- All macOS build, test and packaging steps run on b26 and live in silkterm-private.
-		- Regular Windows executables still build here. Store packaging and signing run only on a Windows box, preferably vm925w, from silkterm-private.
-		- The pipeline starts the Mac and Store parts only when the repo and the boxes are available.
-		- b26 is reserved through the same host lock as the Windows boxes.
-		- The README says SilkTerm is on macOS and coming to the Microsoft Store, without calling those versions free. The Windows .exe on the releases page is free.
-		- b26 gets a dogfood launcher like the Linux and Windows ones.
-	- Progress log:
-		- 20261001: The pipeline runs the private repo's runner after the packages stage when it is checked out beside this one. It skips a box that is off or held by another session, and stops only when a job ran and failed. `--no-private` turns it off.
-		- 20261001: On b26: the unit tests (971 pass), Intel and Apple silicon release builds, a universal app, and a zip and dmg of it. Signed ad hoc for now. The Mac build is dogfooded through the synced app folder like the others.
-		- 20261001: On vm925w: an msix per arch, a bundle, and the msixupload Partner Center takes, from the Windows binaries built here. Unsigned until a certificate is on the box. The package name and publisher are placeholders until the name is reserved in Partner Center.
-		- 20261001: The launcher makes a "SilkTerm (dogfood)" app in ~/Applications on a Mac, and its wrapper runs under the Mac's own bash 3.2. Both were run on b26 with --version only. The live launcher copies were brought up to the repo's.
-		- 20261001: README updated for macOS and the Store.
-		- 20261001: The dogfood app now runs SilkTerm in its own process, so the Dock shows one icon that can be kept there. Before, it handed off to a second program with no bundle. Seen on b26 opened the way Spotlight does it.
-	- Branch: privhook
-	- Test case: Not applicable for the pipeline glue. The launcher harness and the engine, docs, tables and TOC tests pass.
-	- Closed: 20261001-155641
-
-- Size the Settings dialog to the tallest tab with no dynamic content
-	- ID: 2026093018413684
-	- Type: Enhancement
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20260930-184136
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- The dialog's height comes from the tallest tab whose rows don't vary, so not the Shell tab.
-	- Progress log:
-		- 20260930: Done. The Shell tab is left out of the height, and scrolls when its list is taller.
-	- Branch: maxdlg
-	- Test case: `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (ErPQry8). Seen to fail on the old sizing.
-	- Closed: 20261001-155733
-
-- Integrate and test shcl 3.0.0-beta.1 from shcl's dev branch, at b10c2009
-	- ID: 2026100115322364
-	- Type: Task
-	- Status: Done
-	- Needs external testing: A dogfood look at a Settings save on a file with a stray line, on Linux and Windows.
-	- Priority: Avg
-	- Opened: 20261001-143000
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100115322365, 2026100115322366, 2026100115322367
-	- Target OS: All
-	- Test environment: b23, and vm925w for the unit tests and the `savenotice` scenario
-	- Progress log:
-		- Was on f2a8ad2. b10c2009 is 240 commits on, and its crate still says 2.0.0.
-		- Fixed by this build: a tab-indented line that steps back to a depth nothing uses is written back as it was by the line-keeping save. f2a8ad2 fell back to the whole-file form there and dropped the line. shcl's own save now refuses only where it has to fall back.
-		- SilkTerm side: every save, the rating, the shell adoption and the default shell move use shcl's new rule, so a stray line no longer blocks them. The launch message says such a line is kept but sets nothing.
-		- New in this build: inside double quotes, an escape shcl does not know is an error, and the line sets nothing. `"%LOCALAPPDATA%\silkterm\wallpaper"` was the Windows template's folder line. It is now written with doubled backslashes, and an existing commented line in the old spelling is refreshed at launch.
-		- Still the same: a save that falls back to the whole-file form still refuses beside a stray line. A block written twice and edited is one way to get there, so `savenotice` now uses a stray plus two `shells:` blocks.
-		- Still the same: a file a dogfood build stamped with Format 3 during the beta is never migrated, so a Windows path it holds in double quotes with single backslashes now sets nothing. No release wrote one.
-		- Before and after on the real program: the beta3 build refuses the save beside a stray line and the new build saves it, keeping the line.
-	- Decisions:
-		- Windows paths in the template use double quotes with doubled backslashes, the canonical spelling.
-	- Branch: shcl3e
-	- Test case: `a_rating_is_kept_beside_an_unreadable_line` and `an_old_default_shell_waits_for_a_save_that_can_happen`, both watched red with the old gate put back. `savenotice` passes on vm925w. All unit tests pass here, and on vm925w all but the known `a_run_folder_already_there_is_never_adopted`.
-	- Closed: 20261001-155719
-
-- Option: remember maximized state
-	- ID: 2026093018413683
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A look on Windows and under Wayland. Only X11 was run.
-	- Priority: Avg
-	- Opened: 20260930-184136
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- A window closed maximized opens maximized next launch, behind a setting.
-	- Progress log:
-		- 20260930: Built. "Remember maximized" on the Window tab, on by default. The state is kept in `window.remembered_maximized`, beside the remembered size, which stays the size the window goes back to when un-maximized.
-		- 20260930: A size or fullscreen given on the command line wins over it.
-		- 20260930: Checked on b23 under xfwm4: maximize, close, relaunch opens maximized; un-maximize goes back to the remembered size and saves the state off; a resize by hand still saves the size.
-		- 20261001: Off by default now. A config still carrying the old commented default line gets the new one.
-	- Branch: maxdlg, maxoff
-	- Test case: `a_window_left_maximized_opens_maximized` (ErPSaVM), and `the_template_carries_the_remembered_size_as_live_lines` now covers the new line. Both seen to fail.
-	- Acceptance signoff: JC, 20261001, with the default changed to off.
-	- Closed: 20261001
-
-- A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
-	- ID: 2026092821452948
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20260928-214529
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: All
-	- Incorrect behavior: `about_to_wait` collects each pane's cursor wake before the frame is drawn. A wake the frame itself sets is not seen until something else wakes the loop.
-	- Expected behavior: A wake set while drawing is honored on time.
-	- Reproduced: No. Read from the code while fixing the minimap's version of the same gap, which waited up to two seconds when idle.
-	- Related IDs: the done old-format item "Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time".
-	- Actual cause:
-		- A cursor that parks sets its resume time in the frame. The loop read that time before drawing, so a cursor that parked in the frame had no wake at all, and one whose resume moved earlier kept the old time.
-		- Four window wakes had the same order. The idle release and the rating banner were missed when the frame revealed the window or a rating ended. The rating's start waited for its cap when the wallpaper showed in the frame. A frame asked for after drawing, when a rating ended or stepped the profile down, waited for the next event.
-	- Progress log:
-		- 20260929: Not seen on screen. Checked by unit test and clippy on b23 only.
-	- Actual fix: Every pane wake, the cursor's and the minimap's, is read after the frame from one list (`PaneWakes`). The idle release, the rating's start and banner, and the reveal deadline are read after it too. A frame asked for after drawing is drawn on the next pass.
-	- Branch: curwake
-	- Test case: `a_wake_set_while_drawing_is_kept` (ErJF0fr). Seen to fail with only the minimap's wake read after the frame. The window wakes have no test, since they live in the event loop.
-	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the minimap. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame does not set them.
-	- Closed:
-
-- The showdown rigs cannot take XTerm's speed figure again
-	- ID: 2026092820352466
-	- Type: Task
-	- Status: Done
-	- Priority: Low
-	- Opened: 20260928-203524
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Linux
-	- Related IDs: split from the done old-format item "Let the showdown tools measure again every row the README table carries".
-	- Requirements:
-		- The published XTerm speed figure was taken on X11. The speed rig runs under sway, and through its Xwayland xterm read 18.4 MB/s against 28.3 published, in one noisy run.
-		- Either give the rig an X11 path for xterm, or show the Xwayland figure is real and say so.
-	- Progress log:
-		- 20260929: The Xwayland figure is real. Six pairs of runs, the two ways in turn: 16.1 to 18.6 MB/s of ASCII through Xwayland against 25.1 to 28.7 on a private X server. The extra time is in xterm itself, not the X server.
-		- 20260929: Control: xfce4-terminal's ASCII holds through the same Xwayland, and its row reproduced on the compositor at a quiet moment (94.0 against 94.2).
-	- Decisions:
-		- 20260929: Both. The speed rig runs xterm on a private X server, as its row was taken on X11, and README note 9 says so, with the Xwayland figure beside it. The published row keeps its numbers.
-	- Branch: xtermspeed
-	- Test case: ErE7yrA (`cicd/tests/showdown/rigs.py`). Seen to fail on the old rig.
-	- Verified: 20260929, the rig's own xterm run read 28.32, 49.22 and 23.9 against 28.3, 48.5 and 23.9 published, and wrote nothing. Details in `utility/include/showdown-readme.md`.
-	- Closed:
-
-- Windows: open scripts and folders in SilkTerm
-	- ID: 2026093009280571
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
-	- Priority|Severity: Avg
-	- Opened: 20260930-092805
-	- Opened by: JC
-	- Assigned to: JC
-	- Related IDs: 2026092810510800
-	- Target OS: Windows
-	- Test environment: vm925w, Windows 11 25H2
-	- Requirements:
-		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
-			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
-			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
-			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
-		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
-			- Windows only. Other platforms don't show them.
-		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
-		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
-	- Estimated effort: Avg
-	- Progress log:
-		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
-		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
-		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
-		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
-		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
-	- Branch: winassoc
-	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
-	- Acceptance signoff: 20260930-183819
-
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
 	- Type: Bug
@@ -261,30 +59,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- Closed:
 
-- The merge gate fails on clippy at a doc comment in the minimap source
-	- ID: 2026093016391134
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20260930-163911
-	- Opened by: CC
-	- Target OS: All
-	- Steps to reproduce:
-		- Run the gate, or the clippy line with `-D warnings`, on dev.
-	- Incorrect behavior: clippy stops on `doc_markdown` at `source/src/minimap.rs` line 6, where `project/design_docs` is not in backticks. The gate fails, so nothing passes it.
-	- Expected behavior: clippy is clean on dev.
-	- Reproduced: Yes, 20260930 on the Linux box, on branch testtmp, whose copy of the file and lint config match dev.
-	- Origin: b349520, "minimap design doc". Confirmed.
-	- Actual fix: The path is in backticks.
-	- Branch: clipfix
-	- Commit: ae4ca9f
-	- Verified: clippy with `-D warnings` is clean on the whole workspace, native and for the Windows target.
-	- Closed:
-
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: On b26, open Settings with the terminal at the top, the middle and the bottom of the screen. The whole dialog stays below the menu bar and above the Dock, buttons in view, centered over the terminal where it fits. Again with the Dock on the side and hidden. About opens over the terminal too.
 	- Severity: High
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -295,12 +74,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Open Settings.
 	- Incorrect behavior: The dialog is nearly the height of the screen, and it is placed so the buttons sit below the bottom edge.
 	- Expected behavior: The dialog is a sensible size and fits on the screen, buttons included.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
+	- Actual cause:
+		- macOS had no work-area read, so the height cap was the whole display less a title bar, and nothing placed the dialog.
+		- macOS centers a new window at its first, smaller size, and a window that grows keeps its bottom edge. A dialog that tall was then pushed down from under the menu bar, and its buttons went off the bottom.
+		- Text a third too big made the natural height taller still (2026100114435561).
+	- Actual fix:
+		- The cap comes off the screen's visible frame, which leaves out the menu bar and the Dock.
+		- The dialog is centered over the terminal and moved onto that area, the same as on Windows. The placement is shared, so on Windows a dialog over a terminal on a monitor left of or above the primary now stays there instead of moving to the primary.
+	- Swept: Both callers of the work area, the size caps and the placement. About takes the same placement.
+	- Test case: `a_mac_dialog_fits_between_the_menu_bar_and_the_dock` (ErUj5Ic) and `a_dialog_stays_on_a_monitor_left_of_the_primary` (ErUj5MS). The first fails with the old cap, the second with the old clamp.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macsize
+	- Commit: 747356f
 	- Closed:
 
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: On b26, terminal text at the size `defaults read -g NSFixedPitchFontSize` gives, or about 11 pt when that is unset, and the menus, tabs and Settings at the size of other apps' interface text. A config with the system size switched off keeps its own size.
 	- Severity: Avg
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -310,6 +103,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
 	- Incorrect behavior: Both the interface fonts and the terminal font are too big. Neither seems to follow the system font size.
 	- Expected behavior: Both start from the size macOS uses.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
+	- Actual cause:
+		- Sizes macOS reports in points were converted at 96 per inch, as on Windows and Linux. A Mac point already is a logical pixel, so everything came out a third too big. The interface's 13 pt became 17.3.
+		- The terminal size was read only from the `NSFixedPitchFontSize` default. Where nobody set it, there was no size to follow and the 17 pixel fallback was used.
+	- Actual fix:
+		- A Mac point is taken as a logical pixel.
+		- The fixed-width size comes from AppKit, which answers with its default when nobody has set one. The interface size is AppKit's system size, still 13 pt.
+		- The family still comes only from a font somebody picked, so the font list is not dropped for Menlo.
+	- Swept: Both point conversions, the terminal size and the interface size.
+	- Test case: `a_mac_point_is_already_a_logical_pixel` (ErUj5E3). It fails with the old conversion.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macsize
+	- Commit: 747356f
 	- Closed:
 
 - macOS: window transparency does not work
@@ -434,29 +240,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Command+, opens Settings, on macOS only.
 	- Closed:
 
-- shcl: a bad escape on a line that opens a block drops the whole block
-	- ID: 2026100115322365
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261001-153223
-	- Opened by: CC
-	- Related IDs: 2026100115322364
-	- Steps to reproduce:
-		- `wallpaper: "C:\Users\x.png"`, then `\trotate:` and `\t\tenabled: false` under it.
-	- Incorrect behavior: the first line is E023 and every line under it is E018, so four lines are lost and `wallpaper.rotate.enabled` reads NotFound. f2a8ad2 read them all.
-	- Expected behavior: the bad value sets nothing, and the block under it still loads.
-	- Possible cause: the E018 rule for lines under a skipped line also covers a line skipped only for its value.
-	- Progress log:
-		- A silent wrong answer, for shcl to look at. SilkTerm's wallpaper heading repair happens to bring the block back for this one key.
-		- Rough edge, same build: lines a keep-lines save adds take their indent from the first child of the nearest block. One block indented two tabs a level makes every new block in the file do the same.
-		- Rough edge, same build: the Format line still says 3, so a file stamped during the beta is taken as current, and `migrate` leaves its single-backslash paths alone.
-	- Fix: Use '\\' inside double quotes, for Windows paths. (Or anything that requires an actual backslash.)
-	- Note: 20261001, the template has written Windows paths that way since `shcl3e`. The two rough edges stay with shcl.
-	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`.
-	- Acceptance signoff: Self-closed: the fix line names what the template already does.
-	- Closed: 20261001-191500
-
 - The launch names an unreadable line two lines short of where the file has it
 	- ID: 2026100115322366
 	- Type: Bug
@@ -483,6 +266,54 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- `saved_paths` walks `to_canonical()`. A keep-lines save leaves a commented line where it is, so the answer can differ from what the save writes.
 		- `a_commented_new_name_counts_where_a_save_puts_it` pins the current behavior. Left as it was on `shcl3e`.
+
+- macOS: the first launch hangs with no window, using more and more memory
+	- ID: 2026100114274893
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: A look at the dogfood app from the Dock on b26.
+	- Severity: Critical
+	- Opened: 20261001-142748
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100113403226
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Steps to reproduce:
+		- Start SilkTerm on a Mac, here from Spotlight.
+	- Incorrect behavior: No window. The Dock shows it running and "Application not responding", and memory climbs until the graphics driver hangs.
+	- Expected behavior: The window opens.
+	- Reproduced: 20261001 on b26, from Spotlight and from a terminal.
+	- Actual cause:
+		- The window is created hidden and shown after its first frame. On macOS the graphics layer gives a hidden window no frame at all, so the first frame never came and the window was never shown.
+		- Each try had already written its text and other GPU buffers. Returning without a submit left all of them held, about 30 MB a second, and the frame was tried again at once.
+	- Actual fix:
+		- A frame with nothing to draw into still submits, which frees what it wrote.
+		- A hidden window that is refused a frame because it is not visible is shown at once. The startup deadline now applies to a refused frame too.
+		- Checked on b26: memory stays flat at about 230 MB and the window opens.
+	- Branch: machang
+	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
+	- Closed: 20261001-155746
+
+- The merge gate fails on clippy at a doc comment in the minimap source
+	- ID: 2026093016391134
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20260930-163911
+	- Opened by: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Run the gate, or the clippy line with `-D warnings`, on dev.
+	- Incorrect behavior: clippy stops on `doc_markdown` at `source/src/minimap.rs` line 6, where `project/design_docs` is not in backticks. The gate fails, so nothing passes it.
+	- Expected behavior: clippy is clean on dev.
+	- Reproduced: Yes, 20260930 on the Linux box, on branch testtmp, whose copy of the file and lint config match dev.
+	- Origin: b349520, "minimap design doc". Confirmed.
+	- Actual fix: The path is in backticks.
+	- Branch: clipfix
+	- Commit: ae4ca9f
+	- Verified: clippy with `-D warnings` is clean on the whole workspace, native and for the Windows target.
+	- Closed:
 
 - A launch from the Start menu as an MSIX package opens the first shell in System32
 	- ID: 2026092617015083
@@ -599,6 +430,156 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
 
+- macOS builds and Microsoft Store packaging in the private repo
+	- ID: 2026100113403226
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A look at the Mac app and the dogfood entry on the b26 desktop, and a sideload install of the Store package.
+	- Priority: Avg
+	- Opened: 20261001-134032
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: the old-format item "Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds".
+	- Target OS: macOS, Windows
+	- Requirements:
+		- Build SilkTerm on macOS (b26) when it is up and the silkterm-private repo is there.
+		- All macOS build, test and packaging steps run on b26 and live in silkterm-private.
+		- Regular Windows executables still build here. Store packaging and signing run only on a Windows box, preferably vm925w, from silkterm-private.
+		- The pipeline starts the Mac and Store parts only when the repo and the boxes are available.
+		- b26 is reserved through the same host lock as the Windows boxes.
+		- The README says SilkTerm is on macOS and coming to the Microsoft Store, without calling those versions free. The Windows .exe on the releases page is free.
+		- b26 gets a dogfood launcher like the Linux and Windows ones.
+	- Progress log:
+		- 20261001: The pipeline runs the private repo's runner after the packages stage when it is checked out beside this one. It skips a box that is off or held by another session, and stops only when a job ran and failed. `--no-private` turns it off.
+		- 20261001: On b26: the unit tests (971 pass), Intel and Apple silicon release builds, a universal app, and a zip and dmg of it. Signed ad hoc for now. The Mac build is dogfooded through the synced app folder like the others.
+		- 20261001: On vm925w: an msix per arch, a bundle, and the msixupload Partner Center takes, from the Windows binaries built here. Unsigned until a certificate is on the box. The package name and publisher are placeholders until the name is reserved in Partner Center.
+		- 20261001: The launcher makes a "SilkTerm (dogfood)" app in ~/Applications on a Mac, and its wrapper runs under the Mac's own bash 3.2. Both were run on b26 with --version only. The live launcher copies were brought up to the repo's.
+		- 20261001: README updated for macOS and the Store.
+		- 20261001: The dogfood app now runs SilkTerm in its own process, so the Dock shows one icon that can be kept there. Before, it handed off to a second program with no bundle. Seen on b26 opened the way Spotlight does it.
+	- Branch: privhook
+	- Test case: Not applicable for the pipeline glue. The launcher harness and the engine, docs, tables and TOC tests pass.
+	- Closed: 20261001-155641
+
+- Size the Settings dialog to the tallest tab with no dynamic content
+	- ID: 2026093018413684
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20260930-184136
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- The dialog's height comes from the tallest tab whose rows don't vary, so not the Shell tab.
+	- Progress log:
+		- 20260930: Done. The Shell tab is left out of the height, and scrolls when its list is taller.
+	- Branch: maxdlg
+	- Test case: `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (ErPQry8). Seen to fail on the old sizing.
+	- Closed: 20261001-155733
+
+- Integrate and test shcl 3.0.0-beta.1 from shcl's dev branch, at b10c2009
+	- ID: 2026100115322364
+	- Type: Task
+	- Status: Done
+	- Needs external testing: A dogfood look at a Settings save on a file with a stray line, on Linux and Windows.
+	- Priority: Avg
+	- Opened: 20261001-143000
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100115322365, 2026100115322366, 2026100115322367
+	- Target OS: All
+	- Test environment: b23, and vm925w for the unit tests and the `savenotice` scenario
+	- Progress log:
+		- Was on f2a8ad2. b10c2009 is 240 commits on, and its crate still says 2.0.0.
+		- Fixed by this build: a tab-indented line that steps back to a depth nothing uses is written back as it was by the line-keeping save. f2a8ad2 fell back to the whole-file form there and dropped the line. shcl's own save now refuses only where it has to fall back.
+		- SilkTerm side: every save, the rating, the shell adoption and the default shell move use shcl's new rule, so a stray line no longer blocks them. The launch message says such a line is kept but sets nothing.
+		- New in this build: inside double quotes, an escape shcl does not know is an error, and the line sets nothing. `"%LOCALAPPDATA%\silkterm\wallpaper"` was the Windows template's folder line. It is now written with doubled backslashes, and an existing commented line in the old spelling is refreshed at launch.
+		- Still the same: a save that falls back to the whole-file form still refuses beside a stray line. A block written twice and edited is one way to get there, so `savenotice` now uses a stray plus two `shells:` blocks.
+		- Still the same: a file a dogfood build stamped with Format 3 during the beta is never migrated, so a Windows path it holds in double quotes with single backslashes now sets nothing. No release wrote one.
+		- Before and after on the real program: the beta3 build refuses the save beside a stray line and the new build saves it, keeping the line.
+	- Decisions:
+		- Windows paths in the template use double quotes with doubled backslashes, the canonical spelling.
+	- Branch: shcl3e
+	- Test case: `a_rating_is_kept_beside_an_unreadable_line` and `an_old_default_shell_waits_for_a_save_that_can_happen`, both watched red with the old gate put back. `savenotice` passes on vm925w. All unit tests pass here, and on vm925w all but the known `a_run_folder_already_there_is_never_adopted`.
+	- Closed: 20261001-155719
+
+- Option: remember maximized state
+	- ID: 2026093018413683
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A look on Windows and under Wayland. Only X11 was run.
+	- Priority: Avg
+	- Opened: 20260930-184136
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- A window closed maximized opens maximized next launch, behind a setting.
+	- Progress log:
+		- 20260930: Built. "Remember maximized" on the Window tab, on by default. The state is kept in `window.remembered_maximized`, beside the remembered size, which stays the size the window goes back to when un-maximized.
+		- 20260930: A size or fullscreen given on the command line wins over it.
+		- 20260930: Checked on b23 under xfwm4: maximize, close, relaunch opens maximized; un-maximize goes back to the remembered size and saves the state off; a resize by hand still saves the size.
+		- 20261001: Off by default now. A config still carrying the old commented default line gets the new one.
+	- Branch: maxdlg, maxoff
+	- Test case: `a_window_left_maximized_opens_maximized` (ErPSaVM), and `the_template_carries_the_remembered_size_as_live_lines` now covers the new line. Both seen to fail.
+	- Acceptance signoff: JC, 20261001, with the default changed to off.
+	- Closed: 20261001
+
+- Windows: open scripts and folders in SilkTerm
+	- ID: 2026093009280571
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
+	- Priority|Severity: Avg
+	- Opened: 20260930-092805
+	- Opened by: JC
+	- Assigned to: JC
+	- Related IDs: 2026092810510800
+	- Target OS: Windows
+	- Test environment: vm925w, Windows 11 25H2
+	- Requirements:
+		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
+			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
+			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
+			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
+		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
+			- Windows only. Other platforms don't show them.
+		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
+		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
+		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
+		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
+		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
+		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
+	- Branch: winassoc
+	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
+	- Acceptance signoff: 20260930-183819
+
+- shcl: a bad escape on a line that opens a block drops the whole block
+	- ID: 2026100115322365
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261001-153223
+	- Opened by: CC
+	- Related IDs: 2026100115322364
+	- Steps to reproduce:
+		- `wallpaper: "C:\Users\x.png"`, then `\trotate:` and `\t\tenabled: false` under it.
+	- Incorrect behavior: the first line is E023 and every line under it is E018, so four lines are lost and `wallpaper.rotate.enabled` reads NotFound. f2a8ad2 read them all.
+	- Expected behavior: the bad value sets nothing, and the block under it still loads.
+	- Possible cause: the E018 rule for lines under a skipped line also covers a line skipped only for its value.
+	- Progress log:
+		- A silent wrong answer, for shcl to look at. SilkTerm's wallpaper heading repair happens to bring the block back for this one key.
+		- Rough edge, same build: lines a keep-lines save adds take their indent from the first child of the nearest block. One block indented two tabs a level makes every new block in the file do the same.
+		- Rough edge, same build: the Format line still says 3, so a file stamped during the beta is taken as current, and `migrate` leaves its single-backslash paths alone.
+	- Fix: Use '\\' inside double quotes, for Windows paths. (Or anything that requires an actual backslash.)
+	- Note: 20261001, the template has written Windows paths that way since `shcl3e`. The two rough edges stay with shcl.
+	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`.
+	- Acceptance signoff: Self-closed: the fix line names what the template already does.
+	- Closed: 20261001-191500
+
 - cicd shows one line per test, with its status and test ID
 	- ID: 2026092711142900
 	- Type: Enhancement
@@ -642,6 +623,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
+	- ID: 2026092821452948
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20260928-214529
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Incorrect behavior: `about_to_wait` collects each pane's cursor wake before the frame is drawn. A wake the frame itself sets is not seen until something else wakes the loop.
+	- Expected behavior: A wake set while drawing is honored on time.
+	- Reproduced: No. Read from the code while fixing the minimap's version of the same gap, which waited up to two seconds when idle.
+	- Related IDs: the done old-format item "Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time".
+	- Actual cause:
+		- A cursor that parks sets its resume time in the frame. The loop read that time before drawing, so a cursor that parked in the frame had no wake at all, and one whose resume moved earlier kept the old time.
+		- Four window wakes had the same order. The idle release and the rating banner were missed when the frame revealed the window or a rating ended. The rating's start waited for its cap when the wallpaper showed in the frame. A frame asked for after drawing, when a rating ended or stepped the profile down, waited for the next event.
+	- Progress log:
+		- 20260929: Not seen on screen. Checked by unit test and clippy on b23 only.
+	- Actual fix: Every pane wake, the cursor's and the minimap's, is read after the frame from one list (`PaneWakes`). The idle release, the rating's start and banner, and the reveal deadline are read after it too. A frame asked for after drawing is drawn on the next pass.
+	- Branch: curwake
+	- Test case: `a_wake_set_while_drawing_is_kept` (ErJF0fr). Seen to fail with only the minimap's wake read after the frame. The window wakes have no test, since they live in the event loop.
+	- Swept: every wake `about_to_wait` waits on. Per pane, the cursor and the minimap. Per window, the capture, dialog, dialog raise, idle release, restored title, second heal, wallpaper rotation, shell scan, tab tip, rating start and banner, reveal and VRAM probe wakes. The ones not listed in the fix were already read after the frame, or the frame does not set them.
+	- Closed:
 
 - The launcher test would use the real dogfood pool if run on Windows
 	- ID: 2026092621021535
@@ -718,6 +723,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: smallfix
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
 	- Closed: 20260929-170546
+
+- The showdown rigs cannot take XTerm's speed figure again
+	- ID: 2026092820352466
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20260928-203524
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Related IDs: split from the done old-format item "Let the showdown tools measure again every row the README table carries".
+	- Requirements:
+		- The published XTerm speed figure was taken on X11. The speed rig runs under sway, and through its Xwayland xterm read 18.4 MB/s against 28.3 published, in one noisy run.
+		- Either give the rig an X11 path for xterm, or show the Xwayland figure is real and say so.
+	- Progress log:
+		- 20260929: The Xwayland figure is real. Six pairs of runs, the two ways in turn: 16.1 to 18.6 MB/s of ASCII through Xwayland against 25.1 to 28.7 on a private X server. The extra time is in xterm itself, not the X server.
+		- 20260929: Control: xfce4-terminal's ASCII holds through the same Xwayland, and its row reproduced on the compositor at a quiet moment (94.0 against 94.2).
+	- Decisions:
+		- 20260929: Both. The speed rig runs xterm on a private X server, as its row was taken on X11, and README note 9 says so, with the Xwayland figure beside it. The published row keeps its numbers.
+	- Branch: xtermspeed
+	- Test case: ErE7yrA (`cicd/tests/showdown/rigs.py`). Seen to fail on the old rig.
+	- Verified: 20260929, the rig's own xterm run read 28.32, 49.22 and 23.9 against 28.3, 48.5 and 23.9 published, and wrote nothing. Details in `utility/include/showdown-readme.md`.
+	- Closed:
 
 - Three fixes are pinned only by tests in the patched crates, which the pipeline never runs
 	- ID: 2026092621021534

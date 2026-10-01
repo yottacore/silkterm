@@ -3152,7 +3152,7 @@ pub fn parse_hex(s: &str) -> Option<[u8; 3]> {
 pub fn default_font_size() -> f32 {
 	crate::sysfont::monospace()
 		.size_pt
-		.map(|pt| pt * 96.0 / 72.0) // points -> logical px at the 96-DPI reference
+		.map(crate::sysfont::px_from_pt)
 		.filter(|px| *px >= 4.0)
 		.unwrap_or(FALLBACK_FONT_SIZE)
 }

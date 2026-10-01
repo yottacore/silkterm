@@ -550,12 +550,12 @@ impl TextCtx {
 		let cell_h = line_height.max(1.0);
 		let debold_safe = bold_matches_cell(&mut font_system, metrics, cell_w);
 
-		// Chrome follows the desktop UI font size (pt -> px at the 96-DPI
-		// reference, like the mono path); terminal size is the fallback so the
-		// old chrome look is kept where no desktop setting is readable.
+		// Chrome follows the desktop UI font size, converted like the mono path;
+		// terminal size is the fallback so the old chrome look is kept where no
+		// desktop setting is readable.
 		let ui_px = crate::sysfont::interface()
 			.size_pt
-			.map(|pt| pt * 96.0 / 72.0)
+			.map(crate::sysfont::px_from_pt)
 			.filter(|px| *px >= 4.0)
 			.unwrap_or_else(config::effective_font_size);
 		let ui_px = (ui_px * scale).round().max(8.0);
