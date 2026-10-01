@@ -1034,15 +1034,7 @@ fn surface_config(
 		.find(wgpu::TextureFormat::is_srgb)
 		.unwrap_or(caps.formats[0]);
 
-	// Prefer a premultiplied-alpha mode so a translucent background shows the
-	// desktop through. If only Opaque is available (no compositor), stay
-	// opaque - transparency is silently ignored.
-	let alpha_mode = caps
-		.alpha_modes
-		.iter()
-		.copied()
-		.find(|m| *m == wgpu::CompositeAlphaMode::PreMultiplied)
-		.unwrap_or(caps.alpha_modes[0]);
+	let (alpha_mode, transparent) = pick_alpha_mode(&caps.alpha_modes, adapter.get_info().backend);
 
 	let config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1059,11 +1051,31 @@ fn surface_config(
 		// path and other platforms already pace evenly, so leave them.
 		desired_maximum_frame_latency: if cfg!(windows) { 1 } else { 2 },
 	};
-	Some((
-		config,
-		format,
-		alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied,
-	))
+	Some((config, format, transparent))
+}
+
+// The compositing mode to ask for, and whether it lets a translucent background
+// show the desktop. Premultiplied wherever it is offered. If only Opaque is
+// available (no compositor), stay opaque and transparency is silently ignored.
+//
+// Metal never offers PreMultiplied, only Opaque and PostMultiplied, and the
+// first one offered is Opaque, so a Mac window stayed opaque. PostMultiplied
+// there only means the CAMetalLayer is not marked opaque. Core Animation still
+// reads the layer as premultiplied, which is what the shaders write, so it is
+// the same thing under another name. Elsewhere PostMultiplied would multiply
+// a second time, so it is taken on Metal only.
+fn pick_alpha_mode(
+	offered: &[wgpu::CompositeAlphaMode],
+	backend: wgpu::Backend,
+) -> (wgpu::CompositeAlphaMode, bool) {
+	use wgpu::CompositeAlphaMode as Mode;
+	if offered.contains(&Mode::PreMultiplied) {
+		return (Mode::PreMultiplied, true);
+	}
+	if backend == wgpu::Backend::Metal && offered.contains(&Mode::PostMultiplied) {
+		return (Mode::PostMultiplied, true);
+	}
+	(offered.first().copied().unwrap_or(Mode::Opaque), false)
 }
 
 // A wgpu instance/adapter/device kept for the life of the process and shared by
@@ -1873,6 +1885,35 @@ mod tests {
 		}
 		let opaque = [0.3, 0.6, 0.9, 1.0];
 		assert_eq!(see_through(opaque), opaque);
+	}
+
+	// What each platform's surface offers, and what the window must ask for.
+	// Metal lists Opaque first and never PreMultiplied, which left a Mac window
+	// opaque. The other rows are what Linux and Windows already picked.
+	// Test ID: ErUlBTl
+	#[test]
+	fn each_platform_picks_a_see_through_alpha_mode_where_it_has_one() {
+		use wgpu::Backend;
+		use wgpu::CompositeAlphaMode::{Inherit, Opaque, PostMultiplied, PreMultiplied};
+		#[rustfmt::skip]
+		let cases = [
+			(Backend::Metal,  vec![Opaque, PostMultiplied],                         (PostMultiplied, true)),
+			(Backend::Metal,  vec![Opaque],                                         (Opaque, false)),
+			(Backend::Dx12,   vec![PreMultiplied],                                  (PreMultiplied, true)),
+			(Backend::Dx12,   vec![Opaque],                                         (Opaque, false)),
+			(Backend::Vulkan, vec![Opaque],                                         (Opaque, false)),
+			(Backend::Vulkan, vec![Inherit],                                        (Inherit, false)),
+			(Backend::Vulkan, vec![Opaque, PreMultiplied, PostMultiplied, Inherit], (PreMultiplied, true)),
+			(Backend::Vulkan, vec![Opaque, PostMultiplied],                         (Opaque, false)),
+			(Backend::Gl,     vec![PreMultiplied, Opaque],                          (PreMultiplied, true)),
+		];
+		for (backend, offered, want) in cases {
+			assert_eq!(
+				pick_alpha_mode(&offered, backend),
+				want,
+				"{backend:?} offering {offered:?}"
+			);
+		}
 	}
 
 	// Numbers from the NVIDIA box where a stray GLX error used to kill the
