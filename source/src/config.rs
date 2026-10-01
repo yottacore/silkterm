@@ -396,6 +396,7 @@ pub struct Settings {
 	pub columns: usize,                    // initial window grid size (used when !remember_size)
 	pub rows: usize,
 	pub remember_size: bool, // launch at the last window size instead of columns/rows
+	pub remember_maximized: bool, // launch maximized if the last window closed that way
 	pub hide_single_tab: bool, // hide the tab bar while only one tab is open
 	pub tab_shows_title: bool, // let a program's own title name the tab (tabtitle::Parts)
 	pub tab_shows_shell: bool, // parts a tab's own text is made of
@@ -410,14 +411,15 @@ pub struct Settings {
 	pub tab_tip_max_s: f32,    // longest a tab's tip stays up; 0 = until the pointer leaves
 	pub remembered_columns: usize, // last actual window size (not shown in the dialog)
 	pub remembered_rows: usize,
-	pub word_separators: String, // delimiters for double-click word selection
-	pub selection_pairs: String, // matched pairs a double-click selects inside of
-	pub command_line: String,    // default CLI layout/options when launched with no args
-	pub startup_directory: String, // where a shell starts when nothing else said (see startup_dir)
-	pub copy_on_select: bool,    // panes start with copy-on-select enabled
-	pub shell_integration: bool, // put the directory-reporting block in PowerShell profiles
-	pub bash_prompt: bool,       // give bash panes the x9ps1-git prompt (see integration.rs)
-	pub hyperlinks: bool,        // underline URLs in output on hover; Ctrl+click opens them
+	pub remembered_maximized: bool, // was the window last left maximized
+	pub word_separators: String,    // delimiters for double-click word selection
+	pub selection_pairs: String,    // matched pairs a double-click selects inside of
+	pub command_line: String,       // default CLI layout/options when launched with no args
+	pub startup_directory: String,  // where a shell starts when nothing else said (see startup_dir)
+	pub copy_on_select: bool,       // panes start with copy-on-select enabled
+	pub shell_integration: bool,    // put the directory-reporting block in PowerShell profiles
+	pub bash_prompt: bool,          // give bash panes the x9ps1-git prompt (see integration.rs)
+	pub hyperlinks: bool,           // underline URLs in output on hover; Ctrl+click opens them
 	pub hyperlink_open_command: String, // opener for a clicked link (empty = the desktop's own)
 	pub bg: [u8; 3],
 	pub fg: [u8; 3],
@@ -566,6 +568,7 @@ impl Default for Settings {
 			columns: 160,
 			rows: 48,
 			remember_size: true,
+			remember_maximized: true,
 			hide_single_tab: false,
 			tab_shows_shell: true,
 			tab_shows_program: true,
@@ -580,6 +583,7 @@ impl Default for Settings {
 			tab_tip_max_s: 30.0,
 			remembered_columns: 160,
 			remembered_rows: 48,
+			remembered_maximized: false,
 			// alacritty's default delimiters minus ':', so a Windows drive path
 			// (C:\...) stays whole on a double-click - and namespaced idents
 			// (std::vec) and URLs (http://) with it. /.-_~ are already word chars.
@@ -1843,6 +1847,9 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	if s.remember_size != orig.remember_size {
 		doc.put_bool("window.remember_size", s.remember_size);
 	}
+	if s.remember_maximized != orig.remember_maximized {
+		doc.put_bool("window.remember_maximized", s.remember_maximized);
+	}
 	if s.hide_single_tab != orig.hide_single_tab {
 		doc.put_bool("window.hide_single_tab", s.hide_single_tab);
 	}
@@ -1884,6 +1891,9 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	}
 	if s.remembered_rows != orig.remembered_rows {
 		doc.put_int("window.remembered_rows", s.remembered_rows as i64);
+	}
+	if s.remembered_maximized != orig.remembered_maximized {
+		doc.put_bool("window.remembered_maximized", s.remembered_maximized);
 	}
 	if s.word_separators != orig.word_separators {
 		doc.put_string("selection.word_separators", &s.word_separators);
@@ -2097,6 +2107,7 @@ struct RawConfig {
 	columns: Option<usize>,
 	rows: Option<usize>,
 	remember_size: Option<bool>,
+	remember_maximized: Option<bool>,
 	hide_single_tab: Option<bool>,
 	tab_shows_shell: Option<bool>,
 	tab_shows_program: Option<bool>,
@@ -2111,6 +2122,7 @@ struct RawConfig {
 	tab_tip_max_s: Option<f32>,
 	remembered_columns: Option<usize>,
 	remembered_rows: Option<usize>,
+	remembered_maximized: Option<bool>,
 	word_separators: Option<String>,
 	selection_pairs: Option<String>,
 	command_line: Option<String>,
@@ -2475,6 +2487,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> RawConfig {
 		columns: r.u("window.columns"),
 		rows: r.u("window.rows"),
 		remember_size: r.b("window.remember_size"),
+		remember_maximized: r.b("window.remember_maximized"),
 		hide_single_tab: r.b("window.hide_single_tab"),
 		tab_shows_shell: r.b("window.tab_shows_shell"),
 		tab_shows_program: r.b("window.tab_shows_program"),
@@ -2489,6 +2502,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> RawConfig {
 		tab_tip_max_s: r.f("window.tab_tip_max_s"),
 		remembered_columns: r.u("window.remembered_columns"),
 		remembered_rows: r.u("window.remembered_rows"),
+		remembered_maximized: r.b("window.remembered_maximized"),
 		word_separators: r.s("selection.word_separators"),
 		selection_pairs: r.s("selection.pairs"),
 		command_line: r.s("shell.command_line"),
@@ -3033,6 +3047,7 @@ fn resolve(raw: RawConfig) -> Settings {
 		columns: numi(raw.columns, d.columns, limits::GRID),
 		rows: numi(raw.rows, d.rows, limits::GRID),
 		remember_size: raw.remember_size.unwrap_or(d.remember_size),
+		remember_maximized: raw.remember_maximized.unwrap_or(d.remember_maximized),
 		hide_single_tab: raw.hide_single_tab.unwrap_or(d.hide_single_tab),
 		tab_shows_shell: raw.tab_shows_shell.unwrap_or(d.tab_shows_shell),
 		tab_shows_program: raw.tab_shows_program.unwrap_or(d.tab_shows_program),
@@ -3057,6 +3072,7 @@ fn resolve(raw: RawConfig) -> Settings {
 		tab_tip_max_s: raw.tab_tip_max_s.unwrap_or(d.tab_tip_max_s).max(0.0),
 		remembered_columns: numi(raw.remembered_columns, d.remembered_columns, limits::GRID),
 		remembered_rows: numi(raw.remembered_rows, d.remembered_rows, limits::GRID),
+		remembered_maximized: raw.remembered_maximized.unwrap_or(d.remembered_maximized),
 		word_separators: raw.word_separators.unwrap_or(d.word_separators),
 		selection_pairs: raw.selection_pairs.unwrap_or(d.selection_pairs),
 		command_line: raw.command_line.unwrap_or(d.command_line),
@@ -5931,6 +5947,9 @@ window:
 	# remember_size: true  ## Default
 	remembered_columns: 160
 	remembered_rows: 48
+
+	# remember_maximized: true  ## Default
+	remembered_maximized: false
 
 	# hide_single_tab: false  ## Default
 
@@ -9144,7 +9163,11 @@ mod tests {
 	// Test ID: Er2UFeN
 	#[test]
 	fn the_template_carries_the_remembered_size_as_live_lines() {
-		for want in ["window.remembered_columns", "window.remembered_rows"] {
+		for want in [
+			"window.remembered_columns",
+			"window.remembered_rows",
+			"window.remembered_maximized",
+		] {
 			let active = walk_settings(default_config())
 				.into_iter()
 				.find_map(|w| match w {
@@ -9159,8 +9182,16 @@ mod tests {
 		));
 		let d = Settings::default();
 		assert_eq!(
-			(s.remembered_columns, s.remembered_rows),
-			(d.remembered_columns, d.remembered_rows)
+			(
+				s.remembered_columns,
+				s.remembered_rows,
+				s.remembered_maximized
+			),
+			(
+				d.remembered_columns,
+				d.remembered_rows,
+				d.remembered_maximized
+			)
 		);
 	}
 

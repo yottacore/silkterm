@@ -871,6 +871,12 @@ impl SettingsDialog {
 
 	// Natural height of one tab's rows (gaps included). Static so `new` can size
 	// the window before Self exists; row_y must walk rows the same way.
+	// The tabs whose height never changes after the dialog opens.
+	fn fixed_tabs(specs: &[Spec]) -> impl Iterator<Item = usize> + '_ {
+		(0..tab_titles().len()).filter(|&t| {
+			!Self::visible(specs, t).any(|(_, spec)| matches!(spec.kind, Kind::ShellList))
+		})
+	}
 	fn tab_content_h(specs: &[Spec], tab: usize, line_h: f32, shells: usize) -> f32 {
 		let mut h = 0.0;
 		let mut prev: Option<&Spec> = None;
@@ -992,9 +998,10 @@ impl SettingsDialog {
 	) -> (f32, f32) {
 		let specs: &'static [Spec] = &ui().specs;
 		let btn_h = lay().button_height.max(line_h + lay().row_pad);
-		let shells = config::settings().shells.len();
-		let tallest = (0..tab_titles().len())
-			.map(|t| Self::tab_content_h(specs, t, line_h, shells))
+		// A tab whose height moves with the data, the shell list's, scrolls
+		// instead. Otherwise a long list of shells makes every tab tall.
+		let tallest = Self::fixed_tabs(specs)
+			.map(|t| Self::tab_content_h(specs, t, line_h, 0))
 			.fold(0.0f32, f32::max);
 		let natural_h = Self::gutter_h_for(line_h)
 			+ 1.0 + lay().tabs_gap
@@ -3555,6 +3562,7 @@ impl SettingsDialog {
 			Key::CursorScrim => s.cursor_scrim,
 			Key::CursorOutline => s.cursor_outline,
 			Key::RememberSize => s.remember_size,
+			Key::RememberMaximized => s.remember_maximized,
 			Key::TabShowsTitle => s.tab_shows_title,
 			Key::TabShowsShell => s.tab_shows_shell,
 			Key::TabShowsProgram => s.tab_shows_program,
@@ -3599,6 +3607,7 @@ impl SettingsDialog {
 			Key::CursorScrim => self.edited.cursor_scrim = on,
 			Key::CursorOutline => self.edited.cursor_outline = on,
 			Key::RememberSize => self.edited.remember_size = on,
+			Key::RememberMaximized => self.edited.remember_maximized = on,
 			Key::TabShowsTitle => self.edited.tab_shows_title = on,
 			Key::TabShowsShell => self.edited.tab_shows_shell = on,
 			Key::TabShowsProgram => self.edited.tab_shows_program = on,
@@ -3864,6 +3873,7 @@ impl SettingsDialog {
 			Key::SystemFont => edited.use_system_font == defaults.use_system_font,
 			Key::SystemFontSize => edited.use_system_font_size == defaults.use_system_font_size,
 			Key::RememberSize => edited.remember_size == defaults.remember_size,
+			Key::RememberMaximized => edited.remember_maximized == defaults.remember_maximized,
 			Key::TabShowsTitle => edited.tab_shows_title == defaults.tab_shows_title,
 			Key::TabShowsShell => edited.tab_shows_shell == defaults.tab_shows_shell,
 			Key::TabShowsProgram => edited.tab_shows_program == defaults.tab_shows_program,
@@ -3994,6 +4004,7 @@ impl SettingsDialog {
 			| Key::SystemFont
 			| Key::SystemFontSize
 			| Key::RememberSize
+			| Key::RememberMaximized
 			| Key::TabShowsShell
 			| Key::TabShowsProgram
 			| Key::TabShowsDirectory
@@ -4047,6 +4058,7 @@ impl SettingsDialog {
 					Key::TabShowsProgram => self.defaults.tab_shows_program,
 					Key::TabShowsDirectory => self.defaults.tab_shows_directory,
 					Key::TitleShowsTab => self.defaults.title_shows_tab,
+					Key::RememberMaximized => self.defaults.remember_maximized,
 					_ => self.defaults.remember_size,
 				};
 				self.set_toggle(key, default_val);
@@ -6853,6 +6865,30 @@ mod tests {
 		assert_eq!(d.scroll, d.max_scroll());
 	}
 
+	// The Shell tab grows a line per shell, so it scrolls instead of making
+	// every other tab as tall as its list.
+	// Test ID: ErPQry8
+	#[test]
+	fn the_dialog_is_as_tall_as_its_tallest_fixed_tab() {
+		let mut d = mk_dialog(4000.0);
+		let fixed: Vec<usize> = SettingsDialog::fixed_tabs(d.specs).collect();
+		let shell_tab = (0..tab_titles().len())
+			.find(|t| !fixed.contains(t))
+			.expect("the Shell tab is not a fixed one");
+		d.edited.shells = (0..60)
+			.map(|i| shell_entry(&format!("Shell {i}"), "sh"))
+			.collect();
+		let mut tallest = 0.0f32;
+		for &t in &fixed {
+			d.tab = t;
+			assert_eq!(d.max_scroll(), 0.0, "tab {t} fits");
+			tallest = tallest.max(d.content_h());
+		}
+		assert!((d.viewport().h - tallest).abs() < 0.01, "no room left over");
+		d.tab = shell_tab;
+		assert!(d.max_scroll() > 0.0, "a long shell list scrolls");
+	}
+
 	// Too narrow, and the rows keep their natural width and slide sideways under
 	// the window instead of being cut down to fit it. The bar that does it lives
 	// in the clear space above the footer, so showing it costs the rows nothing.
@@ -7759,6 +7795,11 @@ mod tests {
 			.position(|s| s.key == key)
 			.expect("a file-type row");
 		d.tab = d.specs[i].tab;
+		// the Shell tab is not what sizes the dialog, so its last rows may need
+		// scrolling to
+		d.focus = Some(super::Focus::Row(i, 0));
+		d.scroll_focus_into_view();
+		d.focus = None;
 		(d, i)
 	}
 
@@ -8344,8 +8385,9 @@ mod tests {
 		// scrolled to the bottom of the last tab, as if the user had just closed it
 		let mut d = mk_dialog(400.0);
 		// the tallest tab, not merely the last: which tab overflows a short
-		// window is a property of the content, and a new tab can change it
-		d.tab = (0..tab_titles().len())
+		// window is a property of the content, and a new tab can change it. The
+		// Shell tab is left out, since its height is the shell count's.
+		d.tab = SettingsDialog::fixed_tabs(d.specs)
 			.max_by(|a, b| {
 				let h = |t: usize| {
 					SettingsDialog::tab_content_h(d.specs, t, d.line_h, d.edited.shells.len())

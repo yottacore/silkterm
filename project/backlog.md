@@ -34,6 +34,43 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Option: remember maximized state
+	- ID: 2026093018413683
+	- Type: Feature
+	- Status: Waiting on signoff
+	- Needs external testing: A look on Windows and under Wayland. Only X11 was run.
+	- Priority: Avg
+	- Opened: 20260930-184136
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- A window closed maximized opens maximized next launch, behind a setting.
+	- Progress log:
+		- 20260930: Built. "Remember maximized" on the Window tab, on by default. The state is kept in `window.remembered_maximized`, beside the remembered size, which stays the size the window goes back to when un-maximized.
+		- 20260930: A size or fullscreen given on the command line wins over it.
+		- 20260930: Checked on b23 under xfwm4: maximize, close, relaunch opens maximized; un-maximize goes back to the remembered size and saves the state off; a resize by hand still saves the size.
+	- Branch: maxdlg
+	- Test case: `a_window_left_maximized_opens_maximized` (ErPSaVM), and `the_template_carries_the_remembered_size_as_live_lines` now covers the new line. Both seen to fail.
+	- Closed:
+
+- Size the Settings dialog to the tallest tab with no dynamic content
+	- ID: 2026093018413684
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20260930-184136
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- The dialog's height comes from the tallest tab whose rows don't vary, so not the Shell tab.
+	- Progress log:
+		- 20260930: Done. The Shell tab is left out of the height, and scrolls when its list is taller.
+	- Branch: maxdlg
+	- Test case: `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (ErPQry8). Seen to fail on the old sizing.
+	- Closed:
+
 - A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
 	- ID: 2026092821452948
 	- Type: Bug
