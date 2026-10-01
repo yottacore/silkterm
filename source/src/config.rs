@@ -3568,6 +3568,8 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("wallpaper.rotate.folder", "\"wallpaper/\"  ## Default"),
 	// then empty, which meant the same place without naming it
 	("wallpaper.rotate.folder", "\"\"  ## Default"),
+	// then this platform's place in double quotes
+	("wallpaper.rotate.folder", WALLPAPER_DIR_DOUBLE_QUOTED),
 	(
 		"selection.word_separators",
 		"\",|\\\"' ()[]{}<>\"  ## Default",
@@ -5693,14 +5695,23 @@ pub const HOME_TOKEN: &str = "$HOME";
 
 // The wallpaper folder's shipped default: the usual place on this platform, in
 // the same spelling. It is looked up rather than expanded (`rotation_folder_for`),
-// so it is right even where XDG_CONFIG_HOME is unset. The backslashes stay as
-// written inside double quotes, since shcl keeps a pair it has no escape for.
+// so it is right even where XDG_CONFIG_HOME is unset. The template quotes it
+// in single quotes, where a backslash is just a backslash. shcl 3.0 reads one
+// in double quotes as an escape, and `\s` is not one, so the line set nothing.
 #[cfg(windows)]
 pub const WALLPAPER_DIR_TOKEN: &str = r"%LOCALAPPDATA%\silkterm\wallpaper";
 #[cfg(target_os = "macos")]
 pub const WALLPAPER_DIR_TOKEN: &str = "$HOME/Library/Application Support/silkterm/wallpaper";
 #[cfg(not(any(windows, target_os = "macos")))]
 pub const WALLPAPER_DIR_TOKEN: &str = "$XDG_CONFIG_HOME/silkterm/wallpaper";
+
+#[cfg(windows)]
+const WALLPAPER_DIR_DOUBLE_QUOTED: &str = "\"%LOCALAPPDATA%\\silkterm\\wallpaper\"  ## Default";
+#[cfg(target_os = "macos")]
+const WALLPAPER_DIR_DOUBLE_QUOTED: &str =
+	"\"$HOME/Library/Application Support/silkterm/wallpaper\"  ## Default";
+#[cfg(not(any(windows, target_os = "macos")))]
+const WALLPAPER_DIR_DOUBLE_QUOTED: &str = "\"$XDG_CONFIG_HOME/silkterm/wallpaper\"  ## Default";
 
 const DEFAULT_CONFIG_TEMPLATE: &str = r##"# SilkTerm configuration file.
 #
@@ -5748,7 +5759,7 @@ wallpaper:
 		# enabled: true  ## Default
 		## The default is the usual place on this system. A wallpapers or
 		## backgrounds folder there is found too.
-		# folder: "{WPDIR}"  ## Default
+		# folder: '{WPDIR}'  ## Default
 		# interval_s: 0.0  ## Default
 		# random: true  ## Default
 
@@ -10995,14 +11006,14 @@ mod tests {
 			Settings::default().wallpaper_folder_raw,
 			WALLPAPER_DIR_TOKEN
 		);
-		let line = format!("folder: \"{WALLPAPER_DIR_TOKEN}\"  ## Default");
+		let line = format!("folder: '{WALLPAPER_DIR_TOKEN}'  ## Default");
 		assert!(
 			default_config().contains(&line),
 			"template says something else"
 		);
 		// the Windows spelling keeps its backslashes through a read, whatever
 		// box reads it
-		let doc = shcl::Document::parse("folder: \"%LOCALAPPDATA%\\silkterm\\wallpaper\"\n");
+		let doc = shcl::Document::parse("folder: '%LOCALAPPDATA%\\silkterm\\wallpaper'\n");
 		assert_eq!(
 			doc.get_string("folder").unwrap(),
 			r"%LOCALAPPDATA%\silkterm\wallpaper"
@@ -11054,7 +11065,7 @@ mod tests {
 		let path = dir.join("config.shcl");
 		set_config_override(path.clone());
 		let write = |text: &str| std::fs::write(&path, text).unwrap();
-		let folder = |text: &str| format!("wallpaper:\n\trotate:\n\t\tfolder: \"{text}\"\n");
+		let folder = |text: &str| format!("wallpaper:\n\trotate:\n\t\tfolder: '{text}'\n");
 
 		write(default_config());
 		assert_eq!(
@@ -11197,7 +11208,7 @@ mod tests {
 		let out = migrate_config_text("wallpaper:\n\trotate:\n\t\t# folder: \"\"  ## Default\n")
 			.expect("the outgoing default should be refreshed");
 		assert!(
-			out.contains(&format!("# folder: \"{WALLPAPER_DIR_TOKEN}\"  ## Default")),
+			out.contains(&format!("# folder: '{WALLPAPER_DIR_TOKEN}'  ## Default")),
 			"{out:?}"
 		);
 	}
@@ -12122,7 +12133,7 @@ mod tests {
 			use super::super::{valued_wallpaper_line, wallpaper_heading_repaired};
 			const IMAGES: [&str; 5] = [
 				"/p/a.png",
-				"\"C:\\Users\\x\\a b.png\"",
+				"'C:\\Users\\x\\a b.png'",
 				"/p/a.png  # mine",
 				"''",
 				"'/p/#1.png'",
