@@ -156,12 +156,21 @@ VERSION_MANIFEST="source/Cargo.toml"            # the single version source
 ## rebuilt) when --quick is NOT passed. Linux -> .deb + .rpm (cargo-deb /
 ## cargo-generate-rpm, metadata in source/Cargo.toml). Windows -> a single self-
 ## contained NSIS installer .exe per arch (makensis), which upgrades an existing
-## install in place. macOS (.dmg) and BSD are deferred: this box has no Apple SDK
-## / FreeBSD sysroot to cross-build their binaries. ARM64 packages follow the same
-## --no-arm gate as the ARM release builds. Packages go in RELEASE_ARTIFACT_DIR
-## and fold into the sha256sums. Set PACKAGE_ENABLE=0 (or --no-package) to skip.
+## install in place. macOS is built on a Mac by the private runner below. BSD is
+## deferred: this box has no FreeBSD sysroot to cross-build for. ARM64 packages
+## follow the same --no-arm gate as the ARM release builds. Packages go in
+## RELEASE_ARTIFACT_DIR and fold into the sha256sums. Set PACKAGE_ENABLE=0 (or
+## --no-package) to skip.
 PACKAGE_ENABLE=1
 NSIS_TEMPLATE="cicd/packaging/windows/installer.nsi.in"
+
+## Stage 6, after the packages: the macOS build and the Microsoft Store bundle.
+## Both need signing material that stays out of this repo, so their scripts live
+## in a private one. They run only when that repo is checked out at this path and
+## has its runner, which takes --public <this repo>, does its own waiting on the
+## Mac and the Windows box, and exits 0 when it built or skipped and 1 when a job
+## failed. Its output stays in the private repo. Empty, or --no-private, to skip.
+PRIVATE_RUNNER="${SILK_PRIVATE_RUNNER-$(cd "${root}/../.." && pwd)/silkterm-private/repo/cicd/run.bash}"
 
 ## Stage 4: profiler (non-gating artifact, not a pass/fail test). Builds an
 ## optimized+symbols binary (cargo --profile $PROFILE_PROFILE --features
@@ -206,8 +215,8 @@ DOGFOOD_DESTS=(
 	"windows-x86_64|${EXE_NAME}.exe|${HOME}/synced/0-0/common/exec/app/mswin"
 	## ARM64 builds are released but not dogfooded: an app dir is per-OS, so only
 	## one binary can hold the name, and both boxes here are x86_64.
-	## macOS is deferred (no Mac, no SDK). Dest recorded for when there is one:
-	#"macos-arm64|${EXE_NAME}|${HOME}/synced/0-0/common/exec/app/macos"
+	## The Mac build comes back from the private runner as one universal binary.
+	"macos-universal|${EXE_NAME}|${HOME}/synced/0-0/common/exec/app/macos"
 )
 ## Dropped beside each installed binary. The icon is what a .desktop entry points
 ## at, by way of the launcher's symlink dir. Empty either to skip it.

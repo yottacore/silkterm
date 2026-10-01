@@ -29,7 +29,8 @@
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
-##	   6. packages (.deb/.rpm per Linux arch; NSIS installer .exe per Windows arch)
+##	   6. packages (.deb/.rpm per Linux arch; NSIS installer .exe per Windows arch),
+##	      then the private runner (macOS on a Mac, the Microsoft Store bundle)
 ##	   7. dogfood (install each build to the synced app dir for its platform)
 ##	   8. backup + publish to git (runs from repo root)
 ##	- Syntax:
@@ -45,6 +46,7 @@
 ##	   --no-windows        skip the Windows cross targets (Linux artifacts only) -
 ##	                       what a Windows box's own pipeline delegates here
 ##	   --no-package        skip the packages stage (.deb/.rpm/installer)
+##	   --no-private        skip the private runner (macOS, Microsoft Store)
 ##	   --no-fuzz           skip the fuzz soak (the short one in the test run still runs)
 ##	   --no-profile        skip the profiler stage
 ##	   --no-dogfood        skip the dogfood install
@@ -102,6 +104,7 @@ while (($#)); do case "$1" in
 	--no-arm)                 no_arm=1; shift ;;                ## drop ARM64 builds + packages
 	--no-windows)             no_windows=1; shift ;;            ## drop the Windows cross targets
 	--no-package)             PACKAGE_ENABLE=0; shift ;;
+	--no-private)             PRIVATE_RUNNER=""; shift ;;
 	--no-profile)             PROFILE_ENABLE=0; shift ;;
 	--no-dogfood)             DOGFOOD_DESTS=(); shift ;;
 	--no-publish)             GIT_PUBLISH=(); shift ;;
@@ -406,9 +409,16 @@ if ((PACKAGE_ENABLE)) && ((! quick)); then
 		pkg_kinds="${pkg_kinds} + NSIS installer .exe (Windows)"
 	fi
 	fEcho_Clean "Packages ............: ${pkg_kinds}, per built arch"
-	fEcho_Clean "  deferred ..........: macOS (.dmg), BSD - no cross toolchain on this box"
+	fEcho_Clean "  deferred ..........: BSD - no cross toolchain on this box"
 else
 	fEcho_Clean "Packages ............: $( ((quick)) && echo '(skipped --quick)' || echo '(disabled)')"
+fi
+if ((quick)); then
+	fEcho_Clean "Private runner ......: (skipped --quick)"
+elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
+	fEcho_Clean "Private runner ......: ${PRIVATE_RUNNER} (macOS, Microsoft Store)"
+else
+	fEcho_Clean "Private runner ......: (not checked out)"
 fi
 if ((${#DOGFOOD_DESTS[@]})); then
 	fEcho_Clean "Dogfood .............: install to the synced app dir per target"
@@ -986,7 +996,7 @@ fi
 ## Stage 6: packages. Build distributables from the stage-5 binaries (never rebuilt).
 ## Linux -> .deb + .rpm per built arch (cargo-deb / cargo-generate-rpm, metadata in
 ## source/Cargo.toml); Windows -> one self-contained NSIS installer .exe per arch
-## (upgrades in place). macOS (.dmg) + BSD are deferred - no cross toolchain here.
+## (upgrades in place). macOS comes from the private runner; BSD is deferred.
 ## Skipped under --quick; a missing tool warns (non-gating) rather than aborting.
 build_packages(){
 	((PACKAGE_ENABLE)) || { fEcho_Clean "packages disabled"; return 0; }
@@ -1053,6 +1063,23 @@ if ((quick)); then
 	fEcho_Clean "packages skipped (--quick)"
 else
 	build_packages
+fi
+## The private runner builds on boxes that are often off or busy, so it skips
+## those itself and says so. Only a job that ran and failed stops the run.
+if ((quick)); then
+	fEcho_Clean "private runner skipped (--quick)"
+elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
+	fEcho_Clean "private runner (macOS, Microsoft Store) ..."
+	privStart="$(mktemp)"
+	"${PRIVATE_RUNNER}" --public "${root}" || fDie "a private runner job failed"
+	fEcho "OK: private runner"
+	## The Mac build joins this run's set only if the runner made it just now. One
+	## left from an earlier run of the same version must not be dogfooded again.
+	macBin="${PRIVATE_RUNNER%/cicd/*}/dist/${ver}/macos/${EXE_NAME}-${ver}-macos-universal"
+	if [[ -f "${macBin}" && "${macBin}" -nt "${privStart}" ]]; then built_arts+=("macos-universal|${macBin}"); fi
+	rm -f "${privStart}"
+else
+	fEcho_Clean "private runner not checked out; skipped"
 fi
 
 ## Stage 7: dogfood. Install each build under a fixed name in the synced app dir

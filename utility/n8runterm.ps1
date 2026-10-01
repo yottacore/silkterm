@@ -587,9 +587,70 @@ function fUpdateShortcut {
 		fNote "no runterm wrapper installed; menu entry left alone"
 		return
 	}
-	## macOS has neither, and a .desktop there is just litter.
 	if     ($Platform -eq "windows") { fWriteStartMenuLink -Wrapper $wrapper }
-	elseif ($Platform -eq "linux")   { fWriteDesktopEntry  -Wrapper $wrapper }
+	elseif ($Platform -eq "macos")   { fWriteMacApp        -Wrapper $wrapper }
+	else                             { fWriteDesktopEntry  -Wrapper $wrapper }
+}
+
+
+## macOS has no menu files. An app in ~/Applications is what Spotlight, Launchpad
+## and the Dock find, so the entry is a small bundle whose program is a script
+## that runs the wrapper.
+function fWriteMacApp {
+	param([Parameter(Mandatory)][string]$Wrapper)
+
+	$app      = Join-Path $InstallRoot "SilkTerm (dogfood).app"
+	$contents = Join-Path $app "Contents"
+	$script   = Join-Path $contents "MacOS/runterm"
+	$plist    = Join-Path $contents "Info.plist"
+	$icns     = Join-Path $contents "Resources/silkterm.icns"
+
+	## Started from the Finder, it gets launchd's bare PATH, which has neither
+	## Homebrew nor ~/.local/bin, so the wrapper would not find pwsh.
+	$quoted     = "'" + ($Wrapper -replace "'", "'\''") + "'"
+	$wantScript = @(
+		"#!/bin/bash"
+		'export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"'
+		"exec $quoted `"`$@`""
+	) -join "`n"
+	$wantPlist = @(
+		'<?xml version="1.0" encoding="UTF-8"?>'
+		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+		'<plist version="1.0">'
+		'<dict>'
+		"`t<key>CFBundleExecutable</key><string>runterm</string>"
+		"`t<key>CFBundleIconFile</key><string>silkterm</string>"
+		"`t<key>CFBundleIdentifier</key><string>com.yottacore.silkterm.dogfood</string>"
+		"`t<key>CFBundleName</key><string>SilkTerm (dogfood)</string>"
+		"`t<key>CFBundlePackageType</key><string>APPL</string>"
+		'</dict>'
+		'</plist>'
+	) -join "`n"
+
+	$haveScript = (Get-Content -LiteralPath $script -Raw -ErrorAction SilentlyContinue)
+	$havePlist  = (Get-Content -LiteralPath $plist -Raw -ErrorAction SilentlyContinue)
+	$iconDue    = (Test-Path -LiteralPath $IconPath) -and -not (Test-Path -LiteralPath $icns)
+	if ($haveScript -and $haveScript.TrimEnd() -eq $wantScript -and
+	    $havePlist -and $havePlist.TrimEnd() -eq $wantPlist -and -not $iconDue) { return }
+
+	try {
+		fEnsureDir (Split-Path -Parent $script)
+		fEnsureDir (Split-Path -Parent $icns)
+		Set-Content -LiteralPath $script -Value $wantScript -Encoding utf8
+		Set-Content -LiteralPath $plist  -Value $wantPlist  -Encoding utf8
+		& chmod 755 $script
+		## The logo is wider than it is tall, and an icon has to be square. The
+		## padding sips adds is transparent.
+		if (Test-Path -LiteralPath $IconPath) {
+			$square = Join-Path ([System.IO.Path]::GetTempPath()) "silkterm-icon-$PID.png"
+			& sips -p 512 512 $IconPath --out $square *> $null
+			& sips -s format icns $square --out $icns *> $null
+			Remove-Item -LiteralPath $square -ErrorAction SilentlyContinue
+		}
+		fNote "refreshed $app"
+	} catch {
+		fWarn "couldn't write the app bundle ($($_.Exception.Message))"
+	}
 }
 
 
@@ -953,6 +1014,7 @@ if ($script:GuiFeedback -and $script:RunWarnings.Count) {
 
 
 ##	History:
+##		- 2026-10-01: An app in ~/Applications is the menu entry on a Mac.
 ##		- 2026-09-08: Refresh a menu entry that already points at the wrapper
 ##		  wherever it was filed, rather than always adding one of our own.
 ##		- 2026-09-08: Name the Dropbox spelling beside 'synced' for both the build
