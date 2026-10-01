@@ -3,7 +3,7 @@
 
 //! Minimap: the whole scroll buffer in miniature, in its own column beside the
 //! text. The buffer always maps linearly onto the column and never slides. See
-//! the minimap design doc under project/design_docs.
+//! the minimap design doc under `project/design_docs`.
 
 use std::collections::{HashMap, VecDeque};
 use std::ops::Range;
