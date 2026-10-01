@@ -2379,6 +2379,7 @@ struct State {
 	reveal_want: Option<winit::dpi::PhysicalSize<u32>>,
 	reveal_deadline: Instant,
 	pending_size: Option<(usize, usize)>, // debounced remember-size: persisted after the size holds, not per resize tick
+	maximize_on_reveal: bool,
 	pending_size_at: Instant,
 	menu: Option<ContextMenu>,
 	tab_close_arm: Option<usize>, // tab whose close button is held down (closes on release)
@@ -3953,11 +3954,7 @@ impl State {
 	fn save_window_size(&mut self, w: u32, h: u32) {
 		// skip the creation/programmatic resizes that fire before the first frame,
 		// so they don't clobber the remembered size with the launch size
-		if !remember_resize(
-			self.size_tracked,
-			self.window.fullscreen().is_some(),
-			self.window.is_maximized(),
-		) {
+		if !self.size_tracked {
 			return;
 		}
 		let px_to_cells = |px: f32, cell: f32, chrome: f32| {
@@ -3980,13 +3977,30 @@ impl State {
 			return;
 		}
 		self.pending_size = None;
+		// Read once the size has held, not in the resize event: the window
+		// manager may set the maximized state after the resize it caused.
+		let fullscreen = self.window.fullscreen().is_some();
+		let maximized = self.window.is_maximized();
 		let orig = (*config::settings()).clone();
-		if cols == orig.remembered_columns && rows == orig.remembered_rows {
+		let mut new = orig.clone();
+		if remember_resize(self.size_tracked, fullscreen, maximized) {
+			new.remembered_columns = cols;
+			new.remembered_rows = rows;
+		}
+		// a fullscreen window hides whether the one under it is maximized
+		if !fullscreen {
+			new.remembered_maximized = maximized;
+		}
+		let kept = |s: &config::Settings| {
+			(
+				s.remembered_columns,
+				s.remembered_rows,
+				s.remembered_maximized,
+			)
+		};
+		if kept(&new) == kept(&orig) {
 			return;
 		}
-		let mut new = orig.clone();
-		new.remembered_columns = cols;
-		new.remembered_rows = rows;
 		// If the file's open elsewhere persist skips it (retried on the next resize
 		// or at exit); the live size still updates in memory either way.
 		let _ = config::persist(&orig, &new);
@@ -6311,7 +6325,16 @@ impl State {
 			});
 			if settled || Instant::now() >= self.reveal_deadline {
 				self.revealed = true;
+				// Maximized only now: X11 drops the request for a window not yet
+				// mapped, and on Windows it would show the window early. The
+				// remembered size stays underneath as the restored size.
+				if self.maximize_on_reveal && cfg!(windows) {
+					self.window.set_maximized(true);
+				}
 				self.window.set_visible(true);
+				if self.maximize_on_reveal && !cfg!(windows) {
+					self.window.set_maximized(true);
+				}
 				self.shell_scan_at = Some(Instant::now() + SHELL_SCAN_DELAY);
 				self.shell_scan_cap = Some(Instant::now() + SHELL_SCAN_MAX_WAIT);
 				if self.bench_id.is_some() {
@@ -6565,6 +6588,18 @@ fn window_px(
 // line is held here, or it ends the launch in create_texture.
 fn fit_px(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
 	(w.clamp(1, max_dim), h.clamp(1, max_dim))
+}
+
+// Open maximized? Only when the last window was left that way and the
+// setting is on. A size or fullscreen asked for on the command line wins.
+fn launch_maximized(s: &config::Settings, cli: &crate::cli::WindowOpts) -> bool {
+	s.remember_maximized
+		&& s.remembered_maximized
+		&& cli.columns.is_none()
+		&& cli.rows.is_none()
+		&& cli.pixel_width.is_none()
+		&& cli.pixel_height.is_none()
+		&& !cli.fullscreen.unwrap_or(false)
 }
 
 // Is this resize the size to launch at next time? Only once a frame has been
@@ -7080,6 +7115,7 @@ impl ApplicationHandler<UserEvent> for App {
 			gfx.device.limits().max_texture_dimension_2d,
 		);
 		let want = winit::dpi::PhysicalSize::new(want_w, want_h);
+		let maximize_on_reveal = launch_maximized(&settings, cli_win);
 		let mut scrim = scrim;
 		// If the resize applies synchronously (Windows), the first frame is already at
 		// the final size - reveal on it. Otherwise (async X11/Wayland) wait for the
@@ -7159,6 +7195,7 @@ impl ApplicationHandler<UserEvent> for App {
 			reveal_deadline: Instant::now() + Duration::from_millis(400),
 			pending_size: None,
 			pending_size_at: Instant::now(),
+			maximize_on_reveal,
 			menu: None,
 			tab_close_arm: None,
 			tab_edit: None,
@@ -8873,10 +8910,10 @@ mod tests {
 		Caret, CloseScope, Conserve, ContextMenu, CopyMetrics, Entry, Idle, IdleClock, MenuAction,
 		PaneWakes, RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, TAB_CLOSE_M, TabEdit, VT_SETTLE,
 		ViewState, VtHeal, accel_at, accel_clash, close_scope, copybox_fit, copybox_place, fit_px,
-		focus_ring, is_copy_chord, key_is_typed, menu_metrics, mia, msub, mta, needs_folder_read,
-		new_window_command, notice_due, pace_frame, pane_wake, rating_step, release_deadline,
-		remember_resize, rotation_live, rotation_next, settings_after_reload, tab_close_box,
-		tab_command_line, tab_title_w, typed_title, view_menu_items, window_px,
+		focus_ring, is_copy_chord, key_is_typed, launch_maximized, menu_metrics, mia, msub, mta,
+		needs_folder_read, new_window_command, notice_due, pace_frame, pane_wake, rating_step,
+		release_deadline, remember_resize, rotation_live, rotation_next, settings_after_reload,
+		tab_close_box, tab_command_line, tab_title_w, typed_title, view_menu_items, window_px,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -9126,6 +9163,48 @@ mod tests {
 		assert!(!remember_resize(true, false, true));
 		// nothing before the first frame, as before
 		assert!(!remember_resize(false, false, false));
+	}
+
+	// A window left maximized opens maximized, unless the setting is off or the
+	// command line asked for a size or fullscreen of its own.
+	// Test ID: ErPSaVM
+	#[test]
+	fn a_window_left_maximized_opens_maximized() {
+		use crate::cli::WindowOpts;
+		let mut s = crate::config::Settings::default();
+		let plain = WindowOpts::default();
+		assert!(
+			!launch_maximized(&s, &plain),
+			"a fresh config opens restored"
+		);
+		s.remembered_maximized = true;
+		assert!(launch_maximized(&s, &plain));
+		for cli in [
+			WindowOpts {
+				columns: Some(80),
+				..Default::default()
+			},
+			WindowOpts {
+				rows: Some(24),
+				..Default::default()
+			},
+			WindowOpts {
+				pixel_width: Some(800),
+				..Default::default()
+			},
+			WindowOpts {
+				pixel_height: Some(600),
+				..Default::default()
+			},
+			WindowOpts {
+				fullscreen: Some(true),
+				..Default::default()
+			},
+		] {
+			assert!(!launch_maximized(&s, &cli), "{cli:?}");
+		}
+		s.remember_maximized = false;
+		assert!(!launch_maximized(&s, &plain), "the setting is off");
 	}
 
 	// Only a focused window's own eased frame is evidence; every other pass

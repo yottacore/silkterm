@@ -202,7 +202,7 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 
 - A pixel-valued setting steps in whole pixels. Only line height keeps decimals.
 
-- The dialog opens at the size its tallest tab wants, or at what the screen leaves, whichever is smaller. The screen's share is the work area, which is what a window can occupy once the taskbar and any docks have taken theirs, less the frame the window manager puts around it. A monitor's full height is not that, and using it is how the footer buttons end up behind a taskbar.
+- The dialog opens at the size its tallest tab wants, or at what the screen leaves, whichever is smaller. The Shell tab is left out of that, since its list grows with each shell and scrolls instead. The screen's share is the work area, which is what a window can occupy once the taskbar and any docks have taken theirs, less the frame the window manager puts around it. A monitor's full height is not that, and using it is how the footer buttons end up behind a taskbar.
 
 - It can be resized. A resize that passes within a few pixels of the default size settles on it, and the size it is left at is used again for the rest of the session. Nothing about it is written to the config: a new run opens at the default size again.
 

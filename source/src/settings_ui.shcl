@@ -748,6 +748,12 @@ rows:
 		indent: 1
 		setting: window.rows
 
+	RememberMaximized:
+		label: Remember maximized
+		kind: toggle
+		setting: window.remember_maximized
+		help: "Reopen maximized when the window was last closed maximized."
+
 	TabRegularWidth:
 		label: Tab width regular %
 		kind: slider
