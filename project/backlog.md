@@ -178,7 +178,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The merge gate fails on clippy at a doc comment in the minimap source
 	- ID: 2026093016391134
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20260930-163911
 	- Opened by: CC
@@ -189,6 +189,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: clippy is clean on dev.
 	- Reproduced: Yes, 20260930 on the Linux box, on branch testtmp, whose copy of the file and lint config match dev.
 	- Origin: b349520, "minimap design doc". Confirmed.
+	- Actual fix: The path is in backticks.
+	- Branch: clipfix
+	- Commit: ae4ca9f
+	- Verified: clippy with `-D warnings` is clean on the whole workspace, native and for the Windows target.
 	- Closed:
 
 - Test files go under one dated folder in the system temp dir
