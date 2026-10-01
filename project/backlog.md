@@ -109,6 +109,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (ErPQry8). Seen to fail on the old sizing.
 	- Closed:
 
+- Integrate and test shcl 3.0.0-beta.1 from shcl's dev branch, at b10c2009
+	- ID: 2026100115322364
+	- Type: Task
+	- Status: Waiting on signoff
+	- Needs external testing: A dogfood look at a Settings save on a file with a stray line, on Linux and Windows.
+	- Priority: Avg
+	- Opened: 20261001-143000
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100115322365, 2026100115322366, 2026100115322367
+	- Target OS: All
+	- Test environment: b23, and vm925w for the unit tests and the `savenotice` scenario
+	- Progress log:
+		- Was on f2a8ad2. b10c2009 is 240 commits on, and its crate still says 2.0.0.
+		- Fixed by this build: a tab-indented line that steps back to a depth nothing uses is written back as it was by the line-keeping save. f2a8ad2 fell back to the whole-file form there and dropped the line. shcl's own save now refuses only where it has to fall back.
+		- SilkTerm side: every save, the rating, the shell adoption and the default shell move use shcl's new rule, so a stray line no longer blocks them. The launch message says such a line is kept but sets nothing.
+		- New in this build: inside double quotes, an escape shcl does not know is an error, and the line sets nothing. `"%LOCALAPPDATA%\silkterm\wallpaper"` was the Windows template's folder line. It is now written with doubled backslashes, and an existing commented line in the old spelling is refreshed at launch.
+		- Still the same: a save that falls back to the whole-file form still refuses beside a stray line. A block written twice and edited is one way to get there, so `savenotice` now uses a stray plus two `shells:` blocks.
+		- Still the same: a file a dogfood build stamped with Format 3 during the beta is never migrated, so a Windows path it holds in double quotes with single backslashes now sets nothing. No release wrote one.
+		- Before and after on the real program: the beta3 build refuses the save beside a stray line and the new build saves it, keeping the line.
+	- Decisions:
+		- Windows paths in the template use double quotes with doubled backslashes, the canonical spelling.
+	- Branch: shcl3e
+	- Test case: `a_rating_is_kept_beside_an_unreadable_line` and `an_old_default_shell_waits_for_a_save_that_can_happen`, both watched red with the old gate put back. `savenotice` passes on vm925w. All unit tests pass here, and on vm925w all but the known `a_run_folder_already_there_is_never_adopted`.
+
 - Option: remember maximized state
 	- ID: 2026093018413683
 	- Type: Feature
@@ -404,6 +429,51 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: Command+, does not open Settings.
 	- Expected behavior: Command+, opens Settings, on macOS only.
 	- Closed:
+
+- shcl: a bad escape on a line that opens a block drops the whole block
+	- ID: 2026100115322365
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261001-153223
+	- Opened by: CC
+	- Related IDs: 2026100115322364
+	- Steps to reproduce:
+		- `wallpaper: "C:\Users\x.png"`, then `\trotate:` and `\t\tenabled: false` under it.
+	- Incorrect behavior: the first line is E023 and every line under it is E018, so four lines are lost and `wallpaper.rotate.enabled` reads NotFound. f2a8ad2 read them all.
+	- Expected behavior: the bad value sets nothing, and the block under it still loads.
+	- Possible cause: the E018 rule for lines under a skipped line also covers a line skipped only for its value.
+	- Progress log:
+		- A silent wrong answer, for shcl to look at. SilkTerm's wallpaper heading repair happens to bring the block back for this one key.
+		- Rough edge, same build: lines a keep-lines save adds take their indent from the first child of the nearest block. One block indented two tabs a level makes every new block in the file do the same.
+		- Rough edge, same build: the Format line still says 3, so a file stamped during the beta is taken as current, and `migrate` leaves its single-backslash paths alone.
+
+- The launch names an unreadable line two lines short of where the file has it
+	- ID: 2026100115322366
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261001-153223
+	- Opened by: CC
+	- Related IDs: 2026100115322364
+	- Target OS: All
+	- Steps to reproduce:
+		- Start with `--config` on a three-line file: `window:`, `\t\topacity: 1.0`, `\tmargin: 4`.
+	- Incorrect behavior: the console says line 198, and the margin line is at 200 in the file after the launch.
+	- Expected behavior: the line number the file has.
+	- Reproduced: 20261001 on b23, with this branch and with the beta3 build. The Windows notice gives the right number.
+
+- Renames judge a commented line by where a whole-file save would put it, though most saves keep lines now
+	- ID: 2026100115322367
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261001-153223
+	- Opened by: CC
+	- Related IDs: 2026100115322364
+	- Progress log:
+		- `saved_paths` walks `to_canonical()`. A keep-lines save leaves a commented line where it is, so the answer can differ from what the save writes.
+		- `a_commented_new_name_counts_where_a_save_puts_it` pins the current behavior. Left as it was on `shcl3e`.
 
 - A launch from the Start menu as an MSIX package opens the first shell in System32
 	- ID: 2026092617015083
