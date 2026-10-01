@@ -123,6 +123,10 @@ $Root    = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $AppName = "SilkTerm"
 $ExeName = "silkterm"
 
+## One folder for every file the tests write, shared by both cargo test runs and
+## the installer tests. TEMP and TMP stay put, so builds keep the system temp dir.
+. (Join-Path $Root "cicd\tests\_testdir.ps1"); fTestDir_Make
+
 ## The single version source (first `version = "..."` line).
 $VersionManifest = Join-Path $Root "source\Cargo.toml"
 
@@ -215,6 +219,26 @@ function fExec {
 	)
 	& $File @CmdArgs
 	if ($LASTEXITCODE -ne 0) { fDie "$What failed (exit $LASTEXITCODE): $File $($CmdArgs -join ' ')" }
+}
+
+## The installer tests. They run in this process and point TEMP and TMP at the
+## test run folder, so both go back afterward for the builds that follow.
+function fInstallerTests {
+	fTestDir_Keep {
+		## install.ps1's signature check, with the OpenSSH that ships on Windows.
+		fExec "installer signing" (Join-Path $Root "cicd\tests\release\verify-sign.ps1")
+		fEcho "OK: installer signing"
+		## ...and its temp folder step, where the shared temp folder is the one it guards against.
+		fExec "installer temp folder" (Join-Path $Root "cicd\tests\install\tempdir.ps1")
+		fEcho "OK: installer temp folder"
+		## ...and a real install, upgrade and repair, under both PowerShells. Called
+		## directly, since fExec's array would reach -Shell as a plain value.
+		foreach ($shell in @("pwsh", "powershell")) {
+			& (Join-Path $Root "cicd\tests\install\windows.ps1") -Shell $shell
+			if ($LASTEXITCODE -ne 0) { fDie "installer on Windows ($shell) failed" }
+		}
+		fEcho "OK: installer on Windows"
+	}
 }
 
 ## First `version = "x"` from the manifest.
@@ -849,19 +873,7 @@ function fMain {
 	fSection "3  Tests"
 	fExec "tests" "cargo" @("test")
 	fEcho "OK: tests passed"
-	## install.ps1's signature check, with the OpenSSH that ships on Windows.
-	fExec "installer signing" (Join-Path $Root "cicd\tests\release\verify-sign.ps1")
-	fEcho "OK: installer signing"
-	## ...and its temp folder step, where the shared temp folder is the one it guards against.
-	fExec "installer temp folder" (Join-Path $Root "cicd\tests\install\tempdir.ps1")
-	fEcho "OK: installer temp folder"
-	## ...and a real install, upgrade and repair, under both PowerShells. Called
-	## directly, since fExec's array would reach -Shell as a plain value.
-	foreach ($shell in @("pwsh", "powershell")) {
-		& (Join-Path $Root "cicd\tests\install\windows.ps1") -Shell $shell
-		if ($LASTEXITCODE -ne 0) { fDie "installer on Windows ($shell) failed" }
-	}
-	fEcho "OK: installer on Windows"
+	fInstallerTests
 	fLintAdvisory
 
 	## Stage 4: release builds (x86_64 msvc + gnu always; ARM64 when ready).

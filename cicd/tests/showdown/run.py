@@ -25,6 +25,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _testdir  # noqa: E402
+_testdir.use()
+
 ME_DIR = Path(__file__).resolve().parent
 REPO = ME_DIR.parents[2]
 UTILITY = REPO / "utility"
@@ -244,10 +248,12 @@ fakes = scratch / "fakes"
 fakes.mkdir()
 (fakes / "sway").write_text(f"""#!/usr/bin/env python3
 import os, socket, time
-run = {str(runtime)!r}
+## Bound by name from inside the folder, since a full path under the temp dir
+## can pass the 107-byte limit on a Unix socket path.
+os.chdir({str(runtime)!r})
 for name in (f"sway-ipc.{{os.getuid()}}.{{os.getpid()}}.sock", f"wayland-{{os.getpid()}}"):
 	sock = socket.socket(socket.AF_UNIX)
-	sock.bind(os.path.join(run, name))
+	sock.bind(name)
 	sock.listen(1)
 	globals()[name] = sock
 time.sleep(120)
@@ -343,7 +349,9 @@ check("a +candy row whose profile stepped down is refused",
 	got.returncode != 0 and "automatic=true profile=low" in got.stderr, got.stdout + got.stderr)
 fake.unlink()
 kept = candy.parents[2] if candy.is_file() else None
-if kept and kept.name.startswith("sizebench.") and kept.parent == Path("/tmp"):
+check("the size rig keeps its folder under the temp dir it was given",
+	kept is not None and kept.parent == work, str(kept))
+if kept and kept.name.startswith("sizebench.") and kept.parent == work:
 	shutil.rmtree(kept, ignore_errors=True)
 
 ## README note 9 names the rig behind each group of columns. Each has to be the
@@ -367,3 +375,5 @@ print("all passed")
 ##		- 20260917 JC: Created.
 ##		- 20260918 JC: Both rigs start SilkTerm on settings of their own.
 ##		- 20260926 JC: Payloads, scene weights and cell rates.
+##		- 20260930 JC: The size rig keeps its folder under the temp dir it was given. The fake
+##		  compositor binds its sockets by name.

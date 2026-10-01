@@ -20,6 +20,7 @@ param(
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
 $sshKeygen = Get-Command ssh-keygen -ErrorAction SilentlyContinue
 if (-not $sshKeygen) { Write-Host '  skip installer signing (no ssh-keygen)'; exit 0 }

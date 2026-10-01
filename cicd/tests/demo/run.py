@@ -24,6 +24,10 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _testdir  # noqa: E402
+_testdir.use()
+
 ME_DIR = Path(__file__).resolve().parent
 RECORDER = ME_DIR.parents[1] / "utility/demo-video/demo-video.py"
 

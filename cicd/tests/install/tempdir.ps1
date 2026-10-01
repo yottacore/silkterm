@@ -19,6 +19,7 @@ param(
 )
 
 Set-StrictMode -Version 2.0
+. (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 $failures = 0
 function fCheck([string]$What, [bool]$Ok) {
 	if ($Ok) { Write-Output "  ok   $What" } else { Write-Output "  FAIL $What"; $script:failures++ }

@@ -9181,7 +9181,8 @@ mod tests {
 		use crate::profile::Profile;
 		let _guard = config::test_config_lock();
 		let _ = config::settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_appstep_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_appstep_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -9323,7 +9324,8 @@ mod tests {
 		let _guard = config::test_config_lock();
 		let saved = config::settings();
 		let _store = config::test_store_lock();
-		let dir = std::env::temp_dir().join(format!("silkterm_ratingkept_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_ratingkept_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");

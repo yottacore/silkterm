@@ -1595,7 +1595,7 @@ mod tests {
 	#[test]
 	fn a_pane_hands_its_program_and_arguments_down_whole() {
 		let wsl = ["wsl.exe".to_string()];
-		let opts = super::pane_options(Some(&wsl), Some(std::env::temp_dir()));
+		let opts = super::pane_options(Some(&wsl), Some(crate::testdir::run_dir().to_path_buf()));
 		assert!(
 			opts.escape_args,
 			"a split argv has to be joined back with quotes"
@@ -1673,7 +1673,7 @@ mod tests {
 
 		use super::peb_cwd;
 		let real = |dir: &std::path::Path| std::fs::canonicalize(dir).expect("canonicalize");
-		let started_in = std::env::temp_dir();
+		let started_in = crate::testdir::run_dir().to_path_buf();
 		let moved_to = std::path::PathBuf::from(r"C:\Windows");
 
 		// Each shell is held open on its own stdin pipe, and runs NOTHING. That is

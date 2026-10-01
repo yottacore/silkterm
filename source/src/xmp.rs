@@ -262,7 +262,7 @@ mod tests {
 	// Test ID: EllRmPB
 	#[test]
 	fn walks_a_png_and_a_jpeg_to_the_packet() {
-		let dir = std::env::temp_dir().join(format!("silkterm_xmp_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_xmp_{}", std::process::id()));
 		std::fs::create_dir_all(&dir).unwrap();
 		let cases = [
 			("a.png", png_file(DOC)),
@@ -422,7 +422,7 @@ mod tests {
 		#[test]
 		fn a_corrupt_image_cannot_take_the_wallpaper_worker_down() {
 			let path =
-				std::env::temp_dir().join(format!("silkfuzz-xmp-{}.bin", std::process::id()));
+				crate::testdir::run_dir().join(format!("silkfuzz-xmp-{}.bin", std::process::id()));
 			let corpus = fuzz::corpus("xmp");
 			for case in &corpus {
 				check(case, &path);

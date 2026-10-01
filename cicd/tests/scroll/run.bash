@@ -53,6 +53,8 @@
 set -Eeuo pipefail
 
 meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
 root="$(cd "${meDir}/../../.." && pwd)"                     ## repo root (github/)
 headless="${root}/cicd/utility/gui-headless.bash"
 

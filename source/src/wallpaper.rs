@@ -578,7 +578,8 @@ mod tests {
 	// Test ID: EjwZbJB
 	#[test]
 	fn folder_scan_filters_and_sorts() {
-		let dir = std::env::temp_dir().join(format!("silkterm_wp_scan_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_wp_scan_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		for name in ["b.png", "a.JPG", "c.jpeg", "notes.txt", "c.gif", ".hidden"] {
@@ -603,7 +604,7 @@ mod tests {
 	#[test]
 	fn an_unreadable_image_still_lands_on_the_builtin() {
 		let mut s = flat_settings();
-		let missing = std::env::temp_dir().join("silkterm_no_such_wallpaper.png");
+		let missing = crate::testdir::run_dir().join("silkterm_no_such_wallpaper.png");
 		let _ = std::fs::remove_file(&missing);
 		assert!(prepare(&s, Some(&missing), false, &|| false).is_some());
 		// a rotation folder doesn't change that: the picked file supplies nothing
@@ -627,7 +628,7 @@ mod tests {
 		let packet = "<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=''>\
 			<wallpaper:Blur>1e-40</wallpaper:Blur></rdf:Description></rdf:RDF></x:xmpmeta>";
 		let path =
-			std::env::temp_dir().join(format!("silkterm_wp_blur_{}.png", std::process::id()));
+			crate::testdir::run_dir().join(format!("silkterm_wp_blur_{}.png", std::process::id()));
 		std::fs::write(&path, tagged_png(packet)).unwrap();
 		s.wallpaper_blur = 0.0;
 		s.wallpaper_honor_xmp_look = true;
@@ -688,7 +689,8 @@ mod tests {
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn a_huge_image_costs_its_decode_and_no_more() {
-		let dir = std::env::temp_dir().join(format!("silkterm_wp_huge_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_wp_huge_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("huge.png");
@@ -865,7 +867,8 @@ mod tests {
 	#[test]
 	fn an_empty_rotation_folder_falls_back_to_the_builtin() {
 		let mut s = flat_settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_wp_empty_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_wp_empty_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		s.wallpaper_folder = Some(dir.clone());
@@ -916,7 +919,8 @@ mod tests {
 	// Test ID: Er2UJeM
 	#[test]
 	fn rotation_off_stops_rotating_and_keeps_the_folder() {
-		let dir = std::env::temp_dir().join(format!("silkterm_wp_rot_off_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_wp_rot_off_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		image::GrayImage::new(2, 2).save(dir.join("a.png")).unwrap();
@@ -947,8 +951,8 @@ mod tests {
 			"<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=''>{tags}\
 			</rdf:Description></rdf:RDF></x:xmpmeta>"
 		);
-		let path =
-			std::env::temp_dir().join(format!("silkterm_wp_{name}_{}.png", std::process::id()));
+		let path = crate::testdir::run_dir()
+			.join(format!("silkterm_wp_{name}_{}.png", std::process::id()));
 		std::fs::write(&path, tagged_png(&packet)).unwrap();
 		path
 	}
@@ -998,7 +1002,7 @@ mod tests {
 	#[test]
 	fn the_blur_mixes_in_linear_light() {
 		let path =
-			std::env::temp_dir().join(format!("silkterm_wp_edge_{}.png", std::process::id()));
+			crate::testdir::run_dir().join(format!("silkterm_wp_edge_{}.png", std::process::id()));
 		let mut edge = image::RgbaImage::new(16, 1);
 		for (x, _, px) in edge.enumerate_pixels_mut() {
 			let v = if x < 8 { 0 } else { 255 };
@@ -1022,7 +1026,8 @@ mod tests {
 	// Test ID: Eq4Yrbi
 	#[test]
 	fn a_cleared_wallpaper_shows_nothing_with_or_without_a_folder() {
-		let dir = std::env::temp_dir().join(format!("silkterm_wp_cleared_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_wp_cleared_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		for folder in [None, Some(dir.clone())] {

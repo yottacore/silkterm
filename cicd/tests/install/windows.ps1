@@ -22,6 +22,7 @@ param(
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) { Write-Host '  skip installer on Windows (not Windows)'; exit 0 }
 

@@ -20,6 +20,7 @@ param(
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
 $text = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Installer).Path)
 

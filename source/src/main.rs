@@ -42,6 +42,10 @@ mod shells;
 mod sysfont;
 mod tabtitle;
 mod term;
+// One temp folder per test run, shared by every test that writes files.
+// Test-only.
+#[cfg(test)]
+mod testdir;
 mod text;
 mod theme;
 mod tip;

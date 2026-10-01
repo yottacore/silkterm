@@ -14,6 +14,8 @@
 
 set -euo pipefail
 meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
 
 if ! command -v pwsh >/dev/null 2>&1; then
 	echo "  skip cicd-win.ps1 pieces (no pwsh)"

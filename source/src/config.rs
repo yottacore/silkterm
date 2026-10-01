@@ -6364,7 +6364,8 @@ mod tests {
 	fn a_fresh_file_keeps_the_order_the_scan_found() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_freshshells_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_freshshells_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, default_config()).unwrap();
@@ -6528,8 +6529,8 @@ mod tests {
 	// Test ID: EpyvpeC
 	#[test]
 	fn an_old_default_shell_waits_for_a_save_that_can_happen() {
-		let dir =
-			std::env::temp_dir().join(format!("silkterm_default_shell_{}", std::process::id()));
+		let dir = crate::testdir::run_dir()
+			.join(format!("silkterm_default_shell_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let mut doc = shcl::Document::parse(default_config());
@@ -6635,7 +6636,8 @@ mod tests {
 	fn the_file_keeps_the_users_values_under_a_profile() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_cfgprof_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgprof_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(
@@ -6675,7 +6677,7 @@ mod tests {
 		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_cfgwp_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgwp_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -6735,7 +6737,8 @@ mod tests {
 	fn a_session_step_down_never_reaches_the_file() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_cfgstep_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgstep_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -6946,7 +6949,8 @@ mod tests {
 	// Test ID: EpHaZLU
 	#[test]
 	fn a_launch_time_rewrite_never_truncates_the_config() {
-		let dir = std::env::temp_dir().join(format!("silkterm_cfgatomic_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgatomic_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).expect("temp dir");
 		let path = dir.join("config.shcl");
@@ -6982,7 +6986,8 @@ mod tests {
 	#[test]
 	fn a_refused_save_leaves_word_for_the_window() {
 		let _guard = super::test_config_lock();
-		let dir = std::env::temp_dir().join(format!("silkterm_refused_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_refused_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let doc = shcl::Document::parse("window:\n\t\tmargin: 4\n\tstray: 1\n");
@@ -7013,7 +7018,8 @@ mod tests {
 	// Test ID: EpHOR0K
 	#[test]
 	fn a_save_that_failed_is_not_reported_as_a_save() {
-		let dir = std::env::temp_dir().join(format!("silkterm_cfgfail_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgfail_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let doc = shcl::Document::parse("font.size: 12.0\n");
 		// a directory that is not there is the cheapest unwritable path
@@ -7034,7 +7040,7 @@ mod tests {
 	type RestorePublish = fn(&str, &str) -> Result<(), String>;
 
 	fn restore_test_dir(what: &str) -> std::path::PathBuf {
-		let dir = std::env::temp_dir().join(format!("silkterm_{what}_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{what}_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		dir
@@ -7469,7 +7475,7 @@ mod tests {
 	fn persist_writes_nothing_for_a_nan_on_both_sides() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_cfgnan_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_cfgnan_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, "font.use_system_size: false\nfont.size: 17\n").unwrap();
@@ -7508,7 +7514,8 @@ mod tests {
 		// read below (parallel-suite flake: truncated read -> defaults).
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_cfgsave_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgsave_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, "wallpaper.opacity: .1\ntext.scrim.ramp: \"s\"\n").unwrap();
@@ -7558,7 +7565,8 @@ mod tests {
 	#[cfg(target_os = "linux")]
 	#[test]
 	fn config_open_elsewhere_sees_a_holder() {
-		let path = std::env::temp_dir().join(format!("silkterm_busy_{}.shcl", std::process::id()));
+		let path =
+			crate::testdir::run_dir().join(format!("silkterm_busy_{}.shcl", std::process::id()));
 		std::fs::write(&path, "margin: 8.0\n").unwrap();
 		assert!(!config_open_elsewhere(&path), "nobody holds it yet");
 
@@ -7868,7 +7876,8 @@ mod tests {
 		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_ratingclean_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_ratingclean_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -8015,7 +8024,7 @@ mod tests {
 		let _guard = super::test_config_lock();
 		let _ = settings();
 		let dir =
-			std::env::temp_dir().join(format!("silkterm_ratingparity_{}", std::process::id()));
+			crate::testdir::run_dir().join(format!("silkterm_ratingparity_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -8198,8 +8207,8 @@ mod tests {
 		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir =
-			std::env::temp_dir().join(format!("silkterm_ratingrequote_{}", std::process::id()));
+		let dir = crate::testdir::run_dir()
+			.join(format!("silkterm_ratingrequote_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -8500,7 +8509,7 @@ mod tests {
 		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_{tag}_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{tag}_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -8566,7 +8575,8 @@ mod tests {
 		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_ratinglost_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_ratinglost_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -8613,7 +8623,8 @@ mod tests {
 	fn a_held_settings_file_keeps_no_rating() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_ratingheld_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_ratingheld_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -8661,7 +8672,8 @@ mod tests {
 		use std::os::unix::fs::PermissionsExt;
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_ratinglink_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_ratinglink_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let real = dir.join("real.shcl");
@@ -8699,7 +8711,8 @@ mod tests {
 	#[test]
 	fn a_launch_rewrite_keeps_a_linked_private_settings_file() {
 		use std::os::unix::fs::PermissionsExt;
-		let dir = std::env::temp_dir().join(format!("silkterm_launchlink_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_launchlink_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let real = dir.join("real.shcl");
@@ -8728,7 +8741,8 @@ mod tests {
 	#[cfg(unix)]
 	#[test]
 	fn a_launch_rewrite_writes_through_no_link_left_at_a_temp_name() {
-		let dir = std::env::temp_dir().join(format!("silkterm_launchplant_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_launchplant_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -8770,7 +8784,8 @@ mod tests {
 	fn a_rating_writes_through_no_link_left_at_a_temp_name() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_ratingplant_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_ratingplant_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -9363,7 +9378,8 @@ mod tests {
 	// Test ID: EqwBj7o
 	#[test]
 	fn a_save_writes_only_the_lines_it_changed() {
-		let dir = std::env::temp_dir().join(format!("silkterm_keeplines_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_keeplines_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -9779,7 +9795,8 @@ mod tests {
 	// Test ID: ElmIYG0
 	#[test]
 	fn legacy_config_converts_with_values_carried() {
-		let dir = std::env::temp_dir().join(format!("silkterm_convert_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_convert_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let legacy = "## my own note\n\
@@ -9900,7 +9917,8 @@ mod tests {
 	// Test ID: ElmIYG1
 	#[test]
 	fn a_new_format_config_never_converts() {
-		let dir = std::env::temp_dir().join(format!("silkterm_noconvert_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_noconvert_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, default_config()).unwrap();
@@ -9945,8 +9963,8 @@ mod tests {
 		);
 		assert_eq!(converted_config_text(&out), None, "converted twice:\n{out}");
 
-		let dir =
-			std::env::temp_dir().join(format!("silkterm_convert_shells_{}", std::process::id()));
+		let dir = crate::testdir::run_dir()
+			.join(format!("silkterm_convert_shells_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, &text).unwrap();
@@ -9967,7 +9985,7 @@ mod tests {
 	fn a_flat_wallpaper_converts_to_the_image_and_survives_a_save() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_flatwp_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_flatwp_{}", std::process::id()));
 		let flat = "wallpaper: /home/x/Pictures/a.png\nbackground_opacity: 0.5\nwallpaper_fit: zoom\nwallpaper_blur: 3\nbackground_contrast_mask_auto: 0.8\nfont_size: 13\n";
 		// the carried values are placed in hash order, so one round proves little
 		for round in 0..16 {
@@ -10033,7 +10051,8 @@ mod tests {
 	// Test ID: EpZcBUP
 	#[test]
 	fn a_flat_key_named_like_a_block_never_lands_on_its_heading() {
-		let dir = std::env::temp_dir().join(format!("silkterm_flathead_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_flathead_{}", std::process::id()));
 		let heads = active_headings(default_config());
 		assert!(heads.iter().any(|(_, p)| p == "wallpaper"));
 		for (_, head) in heads.iter().filter(|(_, p)| !p.contains('.')) {
@@ -10071,7 +10090,7 @@ mod tests {
 	fn an_image_left_on_the_wallpaper_heading_moves_to_image() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_wphead_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wphead_{}", std::process::id()));
 		let damaged = misplaced_image(default_config());
 		let saved = {
 			let mut doc = shcl::Document::parse(&damaged);
@@ -10233,7 +10252,7 @@ mod tests {
 	fn a_busy_launch_defers_the_wallpaper_repair() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_wpbusy_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wpbusy_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -10292,7 +10311,7 @@ mod tests {
 	#[test]
 	fn a_repair_keeps_a_linked_private_settings_file() {
 		use std::os::unix::fs::PermissionsExt;
-		let dir = std::env::temp_dir().join(format!("silkterm_wplink_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wplink_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let real = dir.join("real.shcl");
@@ -10339,7 +10358,8 @@ mod tests {
 	#[test]
 	fn a_conversion_keeps_a_linked_private_settings_file() {
 		use std::os::unix::fs::PermissionsExt;
-		let dir = std::env::temp_dir().join(format!("silkterm_convlink_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_convlink_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let real = dir.join("real.shcl");
@@ -10396,7 +10416,8 @@ mod tests {
 	#[test]
 	fn a_conversion_that_cannot_write_keeps_no_backup() {
 		use std::os::unix::fs::PermissionsExt;
-		let dir = std::env::temp_dir().join(format!("silkterm_convfail_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_convfail_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		let locked = dir.join("locked");
 		std::fs::create_dir_all(&locked).unwrap();
@@ -10443,7 +10464,8 @@ mod tests {
 			std::fs::write(path, "font_").map_err(|e| e.to_string())?;
 			Err("cut short".to_string())
 		};
-		let dir = std::env::temp_dir().join(format!("silkterm_convkeep_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_convkeep_{}", std::process::id()));
 		let flat = "font_size: 13\n";
 		// (what, writer, the settings file after, the backup kept)
 		for (what, write, file, kept) in [
@@ -10755,7 +10777,8 @@ mod tests {
 		type Reader = fn(&Settings) -> String;
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_savemoves_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_savemoves_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -10992,7 +11015,7 @@ mod tests {
 	fn the_default_wallpaper_folder_is_found_in_the_usual_place() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_wpdir_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wpdir_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -11055,7 +11078,7 @@ mod tests {
 	fn a_wallpaper_in_the_usual_place_is_found() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_wpfile_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wpfile_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(dir.join("backgrounds")).unwrap();
 		let path = dir.join("config.shcl");
@@ -11087,7 +11110,7 @@ mod tests {
 	fn a_reset_keeps_every_earlier_config() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_reset_{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silkterm_reset_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -11116,7 +11139,8 @@ mod tests {
 		assert!(!Settings::default().hide_single_tab);
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir = std::env::temp_dir().join(format!("silkterm_hidetab_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_hidetab_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -11257,7 +11281,7 @@ mod tests {
 	// Test ID: EoGez3w
 	#[test]
 	fn a_save_that_would_drop_a_line_is_refused() {
-		let dir = std::env::temp_dir().join(format!("silk-lostgate-{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silk-lostgate-{}", std::process::id()));
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
 		let text = "window:\n\t\tmargin: 8.0\n\trows: 40\n";
@@ -11284,7 +11308,7 @@ mod tests {
 	// Test ID: EqtUcp6
 	#[test]
 	fn a_save_keeps_a_space_indented_stray() {
-		let dir = std::env::temp_dir().join(format!("silk-keptstray-{}", std::process::id()));
+		let dir = crate::testdir::run_dir().join(format!("silk-keptstray-{}", std::process::id()));
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
 		let text = "window:\n\tmargin: 8.0\n  rows: 40\n";
@@ -11318,7 +11342,7 @@ mod tests {
 	// Test ID: EllvVHE
 	#[test]
 	fn a_straggler_lands_beside_its_siblings_not_with_a_second_paragraph() {
-		let path = std::env::temp_dir().join("silkterm_backfill_straggler_test.shcl");
+		let path = crate::testdir::run_dir().join("silkterm_backfill_straggler_test.shcl");
 		// interval_s is missing from an otherwise-present rotation block
 		let drifted = "wallpaper:\n\
 			\n\
@@ -11377,7 +11401,8 @@ mod tests {
 	// Test ID: ElmIYG4
 	#[test]
 	fn pipeline_convert_migrate_backfill_on_disk() {
-		let dir = std::env::temp_dir().join(format!("silkterm_pipeline_{}", std::process::id()));
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_pipeline_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
 		let path = dir.join("config.shcl");
 		let drifted = "scrollback: 5000\n\
@@ -11590,7 +11615,7 @@ mod tests {
 				.get_string("shell.default")
 				.is_ok();
 			let text = if flat || shell {
-				let dir = std::env::temp_dir().join(format!(
+				let dir = crate::testdir::run_dir().join(format!(
 					"silkterm_savefuzz_{}_{}",
 					std::process::id(),
 					CASE.fetch_add(1, Ordering::Relaxed)
