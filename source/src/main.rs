@@ -28,6 +28,8 @@ mod gfx;
 mod input;
 mod integration;
 mod links;
+#[cfg(any(test, target_os = "macos"))]
+mod macmenu;
 mod minimap;
 mod palette;
 mod pane;

@@ -556,8 +556,8 @@ impl App {
 	}
 }
 
-#[derive(Clone, Copy)]
-enum MenuAction {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MenuAction {
 	OpenLink,
 	CopyLink,
 	Copy,
@@ -597,7 +597,7 @@ impl MenuAction {
 	// The flyover for a row that needs one. Most do not: "Copy" and "New tab"
 	// say what they do, and a tip on every row would be noise the reader has to
 	// learn to ignore. Empty means no tip.
-	fn help(self) -> &'static str {
+	pub(crate) fn help(self) -> &'static str {
 		match self {
 			MenuAction::PasteSelection => {
 				"Paste what was last highlighted with the mouse, without it having been copied first."
@@ -652,7 +652,7 @@ impl MenuAction {
 // must be unique per menu, so low-priority items (and ones that already have a
 // hotkey) go without.
 #[derive(Clone)]
-enum Entry {
+pub(crate) enum Entry {
 	Item {
 		label: String,
 		action: MenuAction,
@@ -796,7 +796,7 @@ fn shell_submenu(
 
 // What the View menu needs to know to draw its checkmarks. Every field reads
 // the same way: true means the thing is on, and its row is checked.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash)]
 struct ViewState {
 	read_only: bool,
 	fullscreen: bool,
@@ -933,6 +933,75 @@ fn panes_menu_items(shells: &[ShellEntry]) -> Vec<Entry> {
 
 fn help_menu_items() -> Vec<Entry> {
 	vec![mia('A', "About\u{2026}", MenuAction::About)]
+}
+
+// Menu-bar dropdown `idx`, in MENU_BAR order.
+fn bar_menu(
+	idx: usize,
+	view: ViewState,
+	copy_select: bool,
+	copy_output: bool,
+	shells: &[ShellEntry],
+) -> Vec<Entry> {
+	match idx {
+		0 => file_menu_items(),
+		1 => edit_menu_items(copy_select, copy_output),
+		2 => view_menu_items(view),
+		3 => tabs_menu_items(shells),
+		4 => panes_menu_items(shells),
+		_ => help_menu_items(),
+	}
+}
+
+// Every dropdown with its title, which is what the macOS menu bar is built from.
+#[cfg(any(test, target_os = "macos"))]
+fn window_menus(
+	view: ViewState,
+	copy_select: bool,
+	copy_output: bool,
+	shells: &[ShellEntry],
+) -> Vec<(&'static str, Vec<Entry>)> {
+	MENU_BAR
+		.iter()
+		.enumerate()
+		.map(|(idx, title)| {
+			(
+				*title,
+				bar_menu(idx, view, copy_select, copy_output, shells),
+			)
+		})
+		.collect()
+}
+
+// The in-window menu bar starts hidden on macOS, where the system menu bar
+// carries the same menus. `--hide-menu` decides either way.
+fn menu_bar_at_launch(hide_menu: Option<bool>, mac: bool) -> bool {
+	!hide_menu.unwrap_or(mac)
+}
+
+// Every row turned on, and two shells, so each menu shows all it can.
+#[cfg(test)]
+pub(crate) fn sample_window_menus() -> Vec<(&'static str, Vec<Entry>)> {
+	let shell = |slug: &str| ShellEntry {
+		slug: slug.into(),
+		title: slug.into(),
+		command: slug.into(),
+		active: true,
+		comment: String::new(),
+		last_seen: String::new(),
+	};
+	let view = ViewState {
+		read_only: true,
+		fullscreen: true,
+		window_frame: true,
+		menu_bar: true,
+		tab_strip: true,
+		minimap: true,
+		bare: true,
+		remote: true,
+		next_wallpaper: true,
+	};
+	window_menus(view, true, true, &[shell("bash"), shell("zsh")])
 }
 
 // What the right-click menu needs to know about the pane and window it opens
@@ -3696,30 +3765,58 @@ impl State {
 		true
 	}
 
+	// What the menu-bar dropdowns show: the View checkmarks, and the focused
+	// pane's two copy modes.
+	fn bar_state(&self) -> (ViewState, bool, bool) {
+		let p = self.tabs.cur().panes.get(&self.tabs.cur().focused);
+		let settings = config::settings();
+		let view = ViewState {
+			read_only: p.is_some_and(|p| p.read_only),
+			fullscreen: self.window.fullscreen().is_some(),
+			window_frame: self.decorated,
+			menu_bar: self.menu_bar,
+			tab_strip: !settings.hide_single_tab,
+			minimap: settings.minimap,
+			bare: self.bare,
+			remote: settings.remote_override,
+			next_wallpaper: self.can_rotate(),
+		};
+		(
+			view,
+			p.is_some_and(|p| p.copy_select),
+			p.is_some_and(|p| p.copy_output),
+		)
+	}
+
 	// The dropdown entries for top-level menu-bar entry `idx` (File/Edit/...).
 	fn bar_menu_items(&self, idx: usize) -> Vec<Entry> {
-		let p = self.tabs.cur().panes.get(&self.tabs.cur().focused);
-		let read_only = p.is_some_and(|p| p.read_only);
-		let copy_select = p.is_some_and(|p| p.copy_select);
-		let copy_output = p.is_some_and(|p| p.copy_output);
-		match idx {
-			0 => file_menu_items(),
-			1 => edit_menu_items(copy_select, copy_output),
-			2 => view_menu_items(ViewState {
-				read_only,
-				fullscreen: self.window.fullscreen().is_some(),
-				window_frame: self.decorated,
-				menu_bar: self.menu_bar,
-				tab_strip: !config::settings().hide_single_tab,
-				minimap: config::settings().minimap,
-				bare: self.bare,
-				remote: config::settings().remote_override,
-				next_wallpaper: self.can_rotate(),
-			}),
-			3 => tabs_menu_items(&config::settings().shells),
-			4 => panes_menu_items(&config::settings().shells),
-			_ => help_menu_items(),
+		let (view, copy_select, copy_output) = self.bar_state();
+		bar_menu(
+			idx,
+			view,
+			copy_select,
+			copy_output,
+			&config::settings().shells,
+		)
+	}
+
+	#[cfg(target_os = "macos")]
+	fn bar_menus(&self) -> Vec<(&'static str, Vec<Entry>)> {
+		let (view, copy_select, copy_output) = self.bar_state();
+		window_menus(view, copy_select, copy_output, &config::settings().shells)
+	}
+
+	// Changes whenever anything the menus show does, so the macOS menu bar is
+	// rebuilt only then.
+	#[cfg(target_os = "macos")]
+	fn bar_menus_key(&self) -> u64 {
+		use std::hash::{Hash, Hasher};
+		let mut hasher = std::collections::hash_map::DefaultHasher::new();
+		self.bar_state().hash(&mut hasher);
+		for shell in &config::settings().shells {
+			(shell.active, &shell.title).hash(&mut hasher);
 		}
+		hasher.finish()
 	}
 
 	// Open the dropdown for top-level menu `idx`, anchored under its title.
@@ -6978,7 +7075,7 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		let cli_win = &self.cli.win;
 		let decorated = !cli_win.hide_frame.unwrap_or(false);
-		let menu_bar = !cli_win.hide_menu.unwrap_or(false);
+		let menu_bar = menu_bar_at_launch(cli_win.hide_menu, cfg!(target_os = "macos"));
 		let win_title = cli_win.title.clone();
 		let win_opacity = cli_win.opacity;
 		// When both pixel dims are given, the window must be BORN at that size, not
@@ -7376,6 +7473,22 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 			UserEvent::SetWallpaper(image) => state.lock_wallpaper(image),
 			UserEvent::ReloadSettings => state.reload_config(),
+			// a pick from the macOS menu bar, run as the in-window menu runs one
+			UserEvent::Menu(action) => {
+				// with a dialog or notice up this only brings it forward, as a
+				// click in the window does, so a second Settings cannot replace
+				// the one open
+				if let Some(up) = self.notice.as_ref().or(self.dialog.as_ref()) {
+					up.window.focus_window();
+					return;
+				}
+				state.note_active("menu bar");
+				state.menu = None;
+				state.bar_open = None;
+				let target = state.tabs.cur().focused;
+				state.apply_menu(action, target, &self.proxy);
+				state.dirty = true;
+			}
 			UserEvent::VtSwitched => {
 				// Return to our console (the watcher signals only returns).
 				// Rebuild unconditionally: focus may move to another window or
@@ -8375,6 +8488,14 @@ impl ApplicationHandler<UserEvent> for App {
 		if self.state.as_ref().is_some_and(|state| state.quit) {
 			event_loop.exit();
 			return;
+		}
+		#[cfg(target_os = "macos")]
+		if let Some(state) = self.state.as_ref() {
+			crate::macmenu::refresh(
+				state.bar_menus_key(),
+				|| crate::macmenu::layout(&state.bar_menus()),
+				&self.proxy,
+			);
 		}
 		// cicd profiler: in profile mode run for SILK_PROFILE_SECS then exit, so
 		// main can dump the flamegraph (the workload runs in the startup pane).
@@ -10440,6 +10561,20 @@ mod tests {
 					.any(|entry| matches!(entry, Entry::Sep)),
 				"no rule between the tab rows and the pane rows"
 			);
+		}
+	}
+
+	// macOS has the system menu bar, so the in-window one starts hidden there
+	// unless --hide-menu says otherwise. Elsewhere nothing changes.
+	// Test ID: ErUnxsD
+	#[test]
+	fn the_in_window_menu_bar_starts_hidden_on_macos_only() {
+		use super::menu_bar_at_launch;
+		assert!(menu_bar_at_launch(None, false));
+		assert!(!menu_bar_at_launch(None, true));
+		for mac in [false, true] {
+			assert!(menu_bar_at_launch(Some(false), mac));
+			assert!(!menu_bar_at_launch(Some(true), mac));
 		}
 	}
 

@@ -46,6 +46,9 @@ pub enum UserEvent {
 	// Linux GL path only; never constructed elsewhere.
 	#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 	VtSwitched,
+	// a pick from the macOS menu bar (macmenu.rs); never constructed elsewhere
+	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+	Menu(crate::app::MenuAction),
 }
 
 // One line to roll the folding back, should a platform ever need every notice

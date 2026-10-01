@@ -175,10 +175,18 @@ pub enum Hotkey {
 // Ctrl form free (Ctrl+T, Ctrl+W, Ctrl+V), and pane split, close and focus
 // cycling are menu-only by design.
 pub fn hotkey_for(key: &Key, mods: ModifiersState, menu_bar: bool) -> Option<Hotkey> {
+	hotkey_on(key, mods, menu_bar, cfg!(target_os = "macos"))
+}
+
+// `hotkey_for` with the platform passed in, so the macOS chords can be checked
+// from any box.
+fn hotkey_on(key: &Key, mods: ModifiersState, menu_bar: bool, mac: bool) -> Option<Hotkey> {
 	let ctrl = mods.control_key();
 	let shift = mods.shift_key();
+	if is_settings_chord(key, mods, mac) {
+		return Some(Hotkey::Settings);
+	}
 	match key {
-		Key::Character(typed) if ctrl && !shift && typed == "," => return Some(Hotkey::Settings),
 		Key::Named(NamedKey::F11) => return Some(Hotkey::Fullscreen),
 		Key::Named(NamedKey::ContextMenu) => return Some(Hotkey::ContextMenu),
 		_ => {}
@@ -214,6 +222,17 @@ pub fn hotkey_for(key: &Key, mods: ModifiersState, menu_bar: bool) -> Option<Hot
 		_ => return None,
 	};
 	Some(hotkey)
+}
+
+// Ctrl+, everywhere, and Command+, as well on macOS, where every app opens its
+// settings with it. The menu bar's Settings item normally takes Command+, before
+// the window sees it; this covers the press when it does not.
+fn is_settings_chord(key: &Key, mods: ModifiersState, mac: bool) -> bool {
+	if !matches!(key, Key::Character(typed) if typed == ",") || mods.shift_key() {
+		return false;
+	}
+	let command = mac && mods.super_key() && !mods.control_key() && !mods.alt_key();
+	mods.control_key() || command
 }
 
 // Where a write to the desktop clipboard comes from.
@@ -736,6 +755,27 @@ mod tests {
 		assert_eq!(chord("V", CTRL_SHIFT), Some(Hotkey::Paste));
 		assert_eq!(chord("C", CTRL_SHIFT), Some(Hotkey::Copy));
 		assert_eq!(chord("v", CTRL), None);
+	}
+
+	// Command+, is Settings on macOS and nowhere else. Ctrl+, stays on every
+	// platform, and Command with anything more is not the chord.
+	// Test ID: ErUnDJY
+	#[test]
+	fn command_comma_opens_settings_on_macos_only() {
+		const COMMAND: ModifiersState = ModifiersState::SUPER;
+		let on = |mods, mac| hotkey_on(&Key::Character(",".into()), mods, true, mac);
+		assert_eq!(on(COMMAND, true), Some(Hotkey::Settings));
+		assert_eq!(on(COMMAND, false), None, "Super+, off macOS");
+		assert_eq!(on(CTRL, true), Some(Hotkey::Settings));
+		assert_eq!(on(CTRL, false), Some(Hotkey::Settings));
+		for extra in [ModifiersState::SHIFT, ModifiersState::ALT] {
+			assert_ne!(on(COMMAND.union(extra), true), Some(Hotkey::Settings));
+		}
+		assert_eq!(on(NONE, true), None);
+		assert_eq!(
+			hotkey_on(&Key::Character(".".into()), COMMAND, true, true),
+			None
+		);
 	}
 
 	// Pane split, close and focus cycling are menu-only, so every other chord

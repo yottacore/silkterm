@@ -70,6 +70,8 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 
 - The menu bar is File, Edit, View, Tabs, Panes, Help. A new action goes in the menu whose noun it acts on.
 
+- On macOS the same menus go in the system menu bar, after an app menu holding About, Settings…, Hide and Quit, and the in-window bar starts hidden. Help is left off there, since About was its only row. Only the app menu rows take Command keys.
+
 - The right side of the menu bar carries the focused pane's two auto-copy checkboxes, so their state is visible without opening anything. It is the only thing on the bar that is not a menu. When the window narrows it sheds its lead-in, then its words, then itself, rather than overlapping the titles.
 
 - The right-click menu is the pane's own menu. It is a selection from the bar, not a copy of it: the actions worth reaching without traveling, plus items that only make sense at the pointer, such as the two link actions that appear only when the click was on a link. It carries one window-chrome row, Menu bar, because with the bar hidden nothing else can bring it back.
@@ -254,6 +256,7 @@ Rules that go with them:
 	- Ctrl+PageUp and Ctrl+PageDown walk the tabs; add Shift to carry the tab with you.
 	- Ctrl+Plus, Ctrl+Minus and Ctrl+0 size the font for this session.
 	- Ctrl+, opens Settings. F11 is fullscreen.
+	- On macOS, Command+, opens Settings too.
 
 - Alt plus a menu title's first letter opens that menu. The Menu key opens the right-click menu on the focused pane.
 

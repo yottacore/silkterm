@@ -146,7 +146,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the menu is inside the window, not in the macOS menu bar
 	- ID: 2026100114435587
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: On b26, the macOS menu bar shows the SilkTerm menu (About SilkTerm, Settings, Services, Hide SilkTerm, Hide others, Show all, Quit SilkTerm), then File, Edit, View, Tabs and Panes, and no menu bar shows inside the window. Each row does what the same row does in the window. The check marks follow the focused pane and the View toggles, and the shell submenus list the active shells. Command+Q quits and the window size is remembered. Command+H hides. With Settings or About open, a menu pick brings that dialog forward instead. View > Menu bar brings the in-window bar back.
 	- Severity: Avg
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -156,6 +157,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
 	- Incorrect behavior: The menu is drawn in the application window.
 	- Expected behavior: The menu is in the macOS menu bar at the top of the screen.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and the fix pinned by tests.
+	- Actual cause: The menus were only ever drawn inside the window. The macOS menu bar had only the small default app menu that winit puts up.
+	- Progress log:
+		- Question: View > Menu bar now means the in-window bar, which on a Mac could be read as the system one. Should it say "Menu bar in window" there?
+		- Question: The rows still name their Ctrl shortcuts in the label, such as "New tab (Ctrl+Shift+T)", since those are the chords that work. Should Mac versions with Command (Command+T, Command+C and so on) be added as menu keys? That would add bindings, so it was left out.
+	- Decisions:
+		- The in-window bar is hidden by default on macOS, not removed. The system menu bar has every row it has, but not its always-visible copy-mode boxes.
+	- Actual fix:
+		- On macOS the system menu bar is built from the same lists the in-window menus use. The SilkTerm menu comes first with About, Settings (Command+,), Services, Hide, Hide others, Show all and Quit. Then File, Edit, View, Tabs and Panes, minus those rows. Help is left off, since About was its only row.
+		- A pick runs the same action as the in-window menu. While a dialog or notice is up it only brings that forward, as a click in the window does. The bar is rebuilt when a check mark or the shell list changes. Rows with a tip in the window carry it as a tooltip.
+		- The in-window bar starts hidden on macOS. View > Menu bar, the right-click menu's Menu bar row and `--hide-menu=false` bring it back. Linux and Windows are unchanged.
+		- Quit goes through the app's own exit, not winit's default menu.
+	- Swept: Every row of the in-window bar is on the system menu bar, checked by test. The right-click menu is unchanged. The `--hide-menu` help text and the UI style guide say what macOS does.
+	- Test case: `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8), `the_mac_menu_bar_reaches_every_row_of_the_window_menus` (ErUnDUL) and `the_in_window_menu_bar_starts_hidden_on_macos_only` (ErUnxsD). The last fails with the old launch default. The first two pin the new menu bar layout, which had no old version.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macmenu
+	- Commit:
 	- Closed:
 
 - Test files go under one dated folder in the system temp dir
@@ -238,7 +256,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: On b26, Command+, opens Settings from the terminal, and the menu bar shows it beside Settings. With Settings already open it brings that one forward. Ctrl+, still opens Settings too.
 	- Severity: Low
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -247,6 +266,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: macOS
 	- Incorrect behavior: Command+, does not open Settings.
 	- Expected behavior: Command+, opens Settings, on macOS only.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by tests.
+	- Actual cause: Only Ctrl+, was a Settings chord, and no menu on macOS had Settings with Command+,.
+	- Actual fix:
+		- Settings in the macOS menu bar's SilkTerm menu takes Command+,. It is part of 2026100114435587.
+		- The key handling also takes Command+, as Settings on macOS, for a press the menu bar does not take. Command+, with Shift or Option is not the chord. Other platforms are unchanged.
+	- Swept: The one Settings chord check, used by the main window. The menu bar adds Command keys only to the SilkTerm menu's Settings, Hide, Hide others and Quit, checked by test. Hide, Hide others and Quit had the same keys in winit's default menu.
+	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE). Both fail with the macOS Command+, arm taken out, which is the old behavior.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macmenu
+	- Commit:
 	- Closed:
 
 - The launch names an unreadable line two lines short of where the file has it

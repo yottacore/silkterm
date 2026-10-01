@@ -789,7 +789,7 @@ Window options (must precede any tab/pane):
   --pixel-height N            initial height in pixels (alternate)
   --background-opacity F      window see-through opacity 0..1
   --hide-windowframe[=BOOL]   start without WM decorations
-  --hide-menu[=BOOL]          start with the menu bar hidden
+  --hide-menu[=BOOL]          start with the menu bar hidden (default on macOS)
   --fullscreen[=BOOL]         start fullscreen
   --config PATH               use an alternate config file
   --reset-config              rename the config aside and start from defaults
