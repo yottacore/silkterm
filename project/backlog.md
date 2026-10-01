@@ -121,7 +121,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: window transparency does not work
 	- ID: 2026100114435574
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: On b26, turn on Transparency. The desktop shows through the terminal background at the opacity set, while text, menus, tabs and Settings stay solid. A light theme lets through as much as a dark one. Turning it off makes the window solid again, with no relaunch.
 	- Severity: Avg
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -132,6 +133,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Turn on transparency.
 	- Incorrect behavior: The window stays opaque.
 	- Expected behavior: The desktop shows through, as on Linux and Windows.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
+	- Actual cause: The window was already built transparent. The drawing surface was not. Metal offers only Opaque and PostMultiplied, never PreMultiplied, and the pick fell back to the first one offered, Opaque. That marks the layer opaque, and the transparency gate saw an opaque surface too.
+	- Actual fix: On Metal the surface takes PostMultiplied, which only marks the layer not opaque. macOS still reads it as premultiplied, which is what the app draws, so the light-mode premultiply fix from 20260928 carries over unchanged. Linux and Windows pick what they did before.
+	- Swept: The one place a surface's alpha mode is picked, shared by the main window, the Windows composited path and the dialogs. The X11 GL path sets its own and is not used on macOS.
+	- Test case: `each_platform_picks_a_see_through_alpha_mode_where_it_has_one` (ErUlBTl). It fails with the old pick and passes with the new one.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macglass
+	- Commit: c79e3aa
 	- Closed:
 
 - macOS: the menu is inside the window, not in the macOS menu bar
