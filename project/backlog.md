@@ -173,7 +173,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8), `the_mac_menu_bar_reaches_every_row_of_the_window_menus` (ErUnDUL) and `the_in_window_menu_bar_starts_hidden_on_macos_only` (ErUnxsD). The last fails with the old launch default. The first two pin the new menu bar layout, which had no old version.
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
 	- Branch: macmenu
-	- Commit:
+	- Commit: 02482bb
 	- Closed:
 
 - Test files go under one dated folder in the system temp dir
@@ -275,7 +275,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE). Both fail with the macOS Command+, arm taken out, which is the old behavior.
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
 	- Branch: macmenu
-	- Commit:
+	- Commit: 02482bb
 	- Closed:
 
 - The launch names an unreadable line two lines short of where the file has it
