@@ -21,7 +21,7 @@ use glyphon::{Buffer, Color as GColor, Shaping, TextArea, TextBounds};
 use crate::bgimage::{ImageRenderer, WpProbe};
 use crate::clipboard::Clipboard;
 use crate::config;
-use crate::gfx::{Gfx, Rebirth, RectInstance, RectRenderer, VramProbe};
+use crate::gfx::{Gfx, NoFrame, Rebirth, RectInstance, RectRenderer, VramProbe};
 use crate::input::{self, ClickSelect, CopyFrom, Hotkey, WheelRoute, is_copy_chord};
 use crate::pane::{BarHit, CopyKind, Dir, Pane, PaneManager, Rect};
 use crate::shells::ShellEntry;
@@ -1657,6 +1657,13 @@ fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	new.performance_profile = pick.key().to_string();
 	config::update(new);
 	None
+}
+
+// Whether a window still hidden is shown now. Normally once a frame is on screen
+// at the size asked for, and at the deadline whatever the size. On macOS a hidden
+// window is never given a frame at all, so there it is shown before one is drawn.
+fn reveal_due(drawn_at_size: bool, past_deadline: bool, occluded: bool) -> bool {
+	occluded || past_deadline || drawn_at_size
 }
 
 // Whether this launch owes a rating. A machine already rated once is only
@@ -4843,6 +4850,27 @@ impl State {
 	// animation), so panes re-shape text; false lets them reuse the cached frame.
 	// A frame, on the device the window has. No device means nothing drawn and
 	// no animation to keep frames coming for.
+	fn reveal_window(&mut self) {
+		self.revealed = true;
+		// Maximized only now: X11 drops the request for a window not yet
+		// mapped, and on Windows it would show the window early. The
+		// remembered size stays underneath as the restored size.
+		if self.maximize_on_reveal && cfg!(windows) {
+			self.window.set_maximized(true);
+		}
+		self.window.set_visible(true);
+		if self.maximize_on_reveal && !cfg!(windows) {
+			self.window.set_maximized(true);
+		}
+		self.shell_scan_at = Some(Instant::now() + SHELL_SCAN_DELAY);
+		self.shell_scan_cap = Some(Instant::now() + SHELL_SCAN_MAX_WAIT);
+		if self.bench_id.is_some() {
+			self.bench_at = Some(Instant::now() + BENCH_DELAY);
+			self.bench_cap = Some(Instant::now() + BENCH_MAX_WAIT);
+			self.bench_banner = Some(Instant::now());
+		}
+	}
+
 	fn render(&mut self, force_rebuild: bool) -> bool {
 		let Some(mut gpu) = self.gpu.take() else {
 			return false;
@@ -5989,8 +6017,23 @@ impl State {
 
 		crate::perf::since(&crate::perf::PREP_NS, prep);
 		let acquire = crate::perf::mark();
-		let Some(frame) = gpu.gfx.begin_frame() else {
-			return animating;
+		let frame = match gpu.gfx.begin_frame() {
+			Ok(frame) => frame,
+			Err(why) => {
+				// The prepares above wrote buffers that wgpu keeps until a submit, so
+				// a frame that kept failing to acquire kept every one of them. A Mac
+				// lost tens of MB a second that way, until the driver hung.
+				gpu.gfx.queue.submit(std::iter::empty());
+				if !self.revealed
+					&& reveal_due(
+						false,
+						Instant::now() >= self.reveal_deadline,
+						why == NoFrame::Occluded,
+					) {
+					self.reveal_window();
+				}
+				return animating;
+			}
 		};
 		crate::perf::since(&crate::perf::ACQUIRE_NS, acquire);
 		let encode = crate::perf::mark();
@@ -6323,25 +6366,8 @@ impl State {
 			let settled = self.reveal_want.is_none_or(|w| {
 				gpu.gfx.config.width == w.width && gpu.gfx.config.height == w.height
 			});
-			if settled || Instant::now() >= self.reveal_deadline {
-				self.revealed = true;
-				// Maximized only now: X11 drops the request for a window not yet
-				// mapped, and on Windows it would show the window early. The
-				// remembered size stays underneath as the restored size.
-				if self.maximize_on_reveal && cfg!(windows) {
-					self.window.set_maximized(true);
-				}
-				self.window.set_visible(true);
-				if self.maximize_on_reveal && !cfg!(windows) {
-					self.window.set_maximized(true);
-				}
-				self.shell_scan_at = Some(Instant::now() + SHELL_SCAN_DELAY);
-				self.shell_scan_cap = Some(Instant::now() + SHELL_SCAN_MAX_WAIT);
-				if self.bench_id.is_some() {
-					self.bench_at = Some(Instant::now() + BENCH_DELAY);
-					self.bench_cap = Some(Instant::now() + BENCH_MAX_WAIT);
-					self.bench_banner = Some(Instant::now());
-				}
+			if reveal_due(settled, Instant::now() >= self.reveal_deadline, false) {
+				self.reveal_window();
 			}
 		}
 		// This frame carried whatever the wallpaper worker answered, so the scan's
@@ -8912,8 +8938,9 @@ mod tests {
 		ViewState, VtHeal, accel_at, accel_clash, close_scope, copybox_fit, copybox_place, fit_px,
 		focus_ring, is_copy_chord, key_is_typed, launch_maximized, menu_metrics, mia, msub, mta,
 		needs_folder_read, new_window_command, notice_due, pace_frame, pane_wake, rating_step,
-		release_deadline, remember_resize, rotation_live, rotation_next, settings_after_reload,
-		tab_close_box, tab_command_line, tab_title_w, typed_title, view_menu_items, window_px,
+		release_deadline, remember_resize, reveal_due, rotation_live, rotation_next,
+		settings_after_reload, tab_close_box, tab_command_line, tab_title_w, typed_title,
+		view_menu_items, window_px,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -9323,6 +9350,17 @@ mod tests {
 			subgroup_max_size: 0,
 			transient_saves_memory: false,
 		}
+	}
+
+	// The window starts hidden and is shown once a frame is drawn. Metal will not
+	// hand a hidden window a frame, so waiting for one hung the Mac build.
+	// Test ID: ErUBJ18
+	#[test]
+	fn a_hidden_window_that_cannot_draw_is_shown_anyway() {
+		assert!(reveal_due(false, false, true));
+		assert!(!reveal_due(false, false, false));
+		assert!(reveal_due(false, true, false));
+		assert!(reveal_due(true, false, false));
 	}
 
 	// Which launches owe a rating. Pulled out of the launch path when every write

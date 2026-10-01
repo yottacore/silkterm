@@ -594,25 +594,36 @@ function fUpdateShortcut {
 
 
 ## macOS has no menu files. An app in ~/Applications is what Spotlight, Launchpad
-## and the Dock find, so the entry is a small bundle whose program is a script
-## that runs the wrapper.
+## and the Dock find. Its program is a script that has the launcher copy and
+## rotate, then runs the build in its own process through a link inside the
+## bundle. So the terminal IS the app: one Dock icon, which can be kept there.
+## Started by the launcher instead, it would be a second program with no bundle,
+## and the Dock would show the app quitting and a nameless one appearing.
 function fWriteMacApp {
 	param([Parameter(Mandatory)][string]$Wrapper)
 
 	$app      = Join-Path $InstallRoot "SilkTerm (dogfood).app"
 	$contents = Join-Path $app "Contents"
 	$script   = Join-Path $contents "MacOS/runterm"
+	$link     = Join-Path $contents "MacOS/silkterm"
 	$plist    = Join-Path $contents "Info.plist"
 	$icns     = Join-Path $contents "Resources/silkterm.icns"
 
 	## Started from the Finder, it gets launchd's bare PATH, which has neither
-	## Homebrew nor ~/.local/bin, so the wrapper would not find pwsh.
-	$quoted     = "'" + ($Wrapper -replace "'", "'\''") + "'"
-	$wantScript = @(
-		"#!/bin/bash"
-		'export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"'
-		"exec $quoted `"`$@`""
-	) -join "`n"
+	## Homebrew nor ~/.local/bin, so the wrapper would not find pwsh. With no build
+	## held, the wrapper runs as usual and falls back to another terminal.
+	$q = { param($s) "'" + ($s -replace "'", "'\''") + "'" }
+	$wantScript = @'
+#!/bin/bash
+export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+here="$(cd "$(dirname "$0")" && pwd)"
+@WRAPPER@ --install-only >/dev/null 2>&1
+held="$(basename "$(readlink @LATEST@)")"
+if [ -x "$here/silkterm" ] && [[ "$held" =~ ^@PREFIX@_([0-9]{8}-[0-9]{6})_([a-z0-9]+) ]]; then
+	exec "$here/silkterm" "--title=SilkTerm [dogfood ${BASH_REMATCH[2]} ${BASH_REMATCH[1]}]" "$@"
+fi
+exec @WRAPPER@ "$@"
+'@.TrimEnd().Replace("@WRAPPER@", (& $q $Wrapper)).Replace("@LATEST@", (& $q $LatestLink)).Replace("@PREFIX@", $DogfoodPrefix)
 	$wantPlist = @(
 		'<?xml version="1.0" encoding="UTF-8"?>'
 		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
@@ -623,15 +634,18 @@ function fWriteMacApp {
 		"`t<key>CFBundleIdentifier</key><string>com.yottacore.silkterm.dogfood</string>"
 		"`t<key>CFBundleName</key><string>SilkTerm (dogfood)</string>"
 		"`t<key>CFBundlePackageType</key><string>APPL</string>"
+		"`t<key>NSHighResolutionCapable</key><true/>"
 		'</dict>'
 		'</plist>'
 	) -join "`n"
 
 	$haveScript = (Get-Content -LiteralPath $script -Raw -ErrorAction SilentlyContinue)
 	$havePlist  = (Get-Content -LiteralPath $plist -Raw -ErrorAction SilentlyContinue)
+	$haveLink   = (Get-Item -LiteralPath $link -Force -ErrorAction SilentlyContinue)
 	$iconDue    = (Test-Path -LiteralPath $IconPath) -and -not (Test-Path -LiteralPath $icns)
 	if ($haveScript -and $haveScript.TrimEnd() -eq $wantScript -and
-	    $havePlist -and $havePlist.TrimEnd() -eq $wantPlist -and -not $iconDue) { return }
+	    $havePlist -and $havePlist.TrimEnd() -eq $wantPlist -and
+	    $haveLink -and $haveLink.LinkTarget -eq $LatestLink -and -not $iconDue) { return }
 
 	try {
 		fEnsureDir (Split-Path -Parent $script)
@@ -639,6 +653,8 @@ function fWriteMacApp {
 		Set-Content -LiteralPath $script -Value $wantScript -Encoding utf8
 		Set-Content -LiteralPath $plist  -Value $wantPlist  -Encoding utf8
 		& chmod 755 $script
+		if ($haveLink) { Remove-Item -LiteralPath $link -Force }
+		New-Item -ItemType SymbolicLink -Path $link -Target $LatestLink | Out-Null
 		## The logo is wider than it is tall, and an icon has to be square. The
 		## padding sips adds is transparent.
 		if (Test-Path -LiteralPath $IconPath) {
@@ -1014,7 +1030,8 @@ if ($script:GuiFeedback -and $script:RunWarnings.Count) {
 
 
 ##	History:
-##		- 2026-10-01: An app in ~/Applications is the menu entry on a Mac.
+##		- 2026-10-01: An app in ~/Applications is the menu entry on a Mac. It runs
+##		  the build in its own process, so the Dock sees one program.
 ##		- 2026-09-08: Refresh a menu entry that already points at the wrapper
 ##		  wherever it was filed, rather than always adding one of our own.
 ##		- 2026-09-08: Name the Dropbox spelling beside 'synced' for both the build

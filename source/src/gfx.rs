@@ -172,6 +172,14 @@ impl Blit {
 	}
 }
 
+// Why begin_frame had nothing to draw into. Metal answers Occluded for a window
+// that is hidden, minimized or fully covered, and draws nothing until it shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoFrame {
+	Occluded,
+	Other,
+}
+
 // A frame in flight, returned by `begin_frame` and consumed by `end_frame`.
 pub enum Frame {
 	Native(wgpu::SurfaceTexture),
@@ -703,23 +711,24 @@ impl Gfx {
 		})
 	}
 
-	// Acquire the frame's render target. None -> skip this frame (surface lost).
-	pub fn begin_frame(&mut self) -> Option<Frame> {
+	// Acquire the frame's render target, or say why there is none this time.
+	pub fn begin_frame(&mut self) -> Result<Frame, NoFrame> {
 		match &self.backend {
 			Backend::Native(surface) => {
 				use wgpu::CurrentSurfaceTexture::*;
 				match surface.get_current_texture() {
 					Success(surface_tex) | Suboptimal(surface_tex) => {
-						Some(Frame::Native(surface_tex))
+						Ok(Frame::Native(surface_tex))
 					}
 					Outdated | Lost => {
 						surface.configure(&self.device, &self.config);
-						None
+						Err(NoFrame::Other)
 					}
-					_ => None,
+					Occluded => Err(NoFrame::Occluded),
+					_ => Err(NoFrame::Other),
 				}
 			}
-			Backend::Gl { .. } => Some(Frame::Gl),
+			Backend::Gl { .. } => Ok(Frame::Gl),
 		}
 	}
 
