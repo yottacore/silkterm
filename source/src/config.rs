@@ -568,7 +568,7 @@ impl Default for Settings {
 			columns: 160,
 			rows: 48,
 			remember_size: true,
-			remember_maximized: true,
+			remember_maximized: false,
 			hide_single_tab: false,
 			tab_shows_shell: true,
 			tab_shows_program: true,
@@ -3583,6 +3583,8 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	// on by default until it was clear that it replaces a PS1 set in .bashrc,
 	// which Debian's own files do
 	("shell.bash_prompt", "true  ## Default"),
+	// shipped on for its first day
+	("window.remember_maximized", "true  ## Default"),
 ];
 
 // The whole pre-nesting flat namespace, old key -> new nested path. Primary
@@ -5948,7 +5950,7 @@ window:
 	remembered_columns: 160
 	remembered_rows: 48
 
-	# remember_maximized: true  ## Default
+	# remember_maximized: false  ## Default
 	remembered_maximized: false
 
 	# hide_single_tab: false  ## Default

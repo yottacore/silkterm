@@ -92,26 +92,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: Not applicable for the pipeline glue. The launcher harness and the engine, docs, tables and TOC tests pass.
 	- Closed:
 
-- Option: remember maximized state
-	- ID: 2026093018413683
-	- Type: Feature
-	- Status: Waiting on signoff
-	- Needs external testing: A look on Windows and under Wayland. Only X11 was run.
-	- Priority: Avg
-	- Opened: 20260930-184136
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- A window closed maximized opens maximized next launch, behind a setting.
-	- Progress log:
-		- 20260930: Built. "Remember maximized" on the Window tab, on by default. The state is kept in `window.remembered_maximized`, beside the remembered size, which stays the size the window goes back to when un-maximized.
-		- 20260930: A size or fullscreen given on the command line wins over it.
-		- 20260930: Checked on b23 under xfwm4: maximize, close, relaunch opens maximized; un-maximize goes back to the remembered size and saves the state off; a resize by hand still saves the size.
-	- Branch: maxdlg
-	- Test case: `a_window_left_maximized_opens_maximized` (ErPSaVM), and `the_template_carries_the_remembered_size_as_live_lines` now covers the new line. Both seen to fail.
-	- Closed:
-
 - Size the Settings dialog to the tallest tab with no dynamic content
 	- ID: 2026093018413684
 	- Type: Enhancement
@@ -128,6 +108,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: maxdlg
 	- Test case: `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (ErPQry8). Seen to fail on the old sizing.
 	- Closed:
+
+- Option: remember maximized state
+	- ID: 2026093018413683
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A look on Windows and under Wayland. Only X11 was run.
+	- Priority: Avg
+	- Opened: 20260930-184136
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- A window closed maximized opens maximized next launch, behind a setting.
+	- Progress log:
+		- 20260930: Built. "Remember maximized" on the Window tab, on by default. The state is kept in `window.remembered_maximized`, beside the remembered size, which stays the size the window goes back to when un-maximized.
+		- 20260930: A size or fullscreen given on the command line wins over it.
+		- 20260930: Checked on b23 under xfwm4: maximize, close, relaunch opens maximized; un-maximize goes back to the remembered size and saves the state off; a resize by hand still saves the size.
+		- 20261001: Off by default now. A config still carrying the old commented default line gets the new one.
+	- Branch: maxdlg, maxoff
+	- Test case: `a_window_left_maximized_opens_maximized` (ErPSaVM), and `the_template_carries_the_remembered_size_as_live_lines` now covers the new line. Both seen to fail.
+	- Acceptance signoff: JC, 20261001, with the default changed to off.
+	- Closed: 20261001
 
 - A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
 	- ID: 2026092821452948

@@ -404,7 +404,7 @@ A window nobody is looking at draws no frames, and a minimized window or hidden 
 
 - With `remember_size` on, the size written down is an ordinary window's. A fullscreen or maximized window is not a size to come back to, so neither is remembered: unfullscreening would otherwise leave every later launch opening at the size of the screen. The window's own columns and rows stay as they were, and a resize by hand still replaces them.
 
-- Maximized is remembered on its own, under `remember_maximized`. A window closed maximized opens maximized, with the remembered size still under it, so un-maximizing goes back to that size. A size or fullscreen asked for on the command line wins over it. The state is read once a resize has held, not in the resize event, since the window manager may set it after the resize it caused.
+- Maximized is remembered on its own, under `remember_maximized`, which is off by default. A window closed maximized opens maximized, with the remembered size still under it, so un-maximizing goes back to that size. A size or fullscreen asked for on the command line wins over it. The state is read once a resize has held, not in the resize event, since the window manager may set it after the resize it caused.
 
 - A number given on the command line is held to the range of the setting it stands for, the same range the file's copy of that setting is held to. A count of rows or columns is also held to what the graphics device can draw, since the window is a texture and a refusal there ends the launch rather than the setting.
 
