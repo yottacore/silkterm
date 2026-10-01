@@ -284,7 +284,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: On b26, open Settings with the terminal at the top, the middle and the bottom of the screen. The whole dialog stays below the menu bar and above the Dock, buttons in view, centered over the terminal where it fits. Again with the Dock on the side and hidden. About opens over the terminal too.
 	- Severity: High
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -295,12 +296,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Open Settings.
 	- Incorrect behavior: The dialog is nearly the height of the screen, and it is placed so the buttons sit below the bottom edge.
 	- Expected behavior: The dialog is a sensible size and fits on the screen, buttons included.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
+	- Actual cause:
+		- macOS had no work-area read, so the height cap was the whole display less a title bar, and nothing placed the dialog.
+		- macOS centers a new window at its first, smaller size, and a window that grows keeps its bottom edge. A dialog that tall was then pushed down from under the menu bar, and its buttons went off the bottom.
+		- Text a third too big made the natural height taller still (2026100114435561).
+	- Actual fix:
+		- The cap comes off the screen's visible frame, which leaves out the menu bar and the Dock.
+		- The dialog is centered over the terminal and moved onto that area, the same as on Windows. The placement is shared, so on Windows a dialog over a terminal on a monitor left of or above the primary now stays there instead of moving to the primary.
+	- Swept: Both callers of the work area, the size caps and the placement. About takes the same placement.
+	- Test case: `a_mac_dialog_fits_between_the_menu_bar_and_the_dock` (ErUj5Ic) and `a_dialog_stays_on_a_monitor_left_of_the_primary` (ErUj5MS). The first fails with the old cap, the second with the old clamp.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macsize
+	- Commit: 747356f
 	- Closed:
 
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: On b26, terminal text at the size `defaults read -g NSFixedPitchFontSize` gives, or about 11 pt when that is unset, and the menus, tabs and Settings at the size of other apps' interface text. A config with the system size switched off keeps its own size.
 	- Severity: Avg
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -310,6 +325,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
 	- Incorrect behavior: Both the interface fonts and the terminal font are too big. Neither seems to follow the system font size.
 	- Expected behavior: Both start from the size macOS uses.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
+	- Actual cause:
+		- Sizes macOS reports in points were converted at 96 per inch, as on Windows and Linux. A Mac point already is a logical pixel, so everything came out a third too big. The interface's 13 pt became 17.3.
+		- The terminal size was read only from the `NSFixedPitchFontSize` default. Where nobody set it, there was no size to follow and the 17 pixel fallback was used.
+	- Actual fix:
+		- A Mac point is taken as a logical pixel.
+		- The fixed-width size comes from AppKit, which answers with its default when nobody has set one. The interface size is AppKit's system size, still 13 pt.
+		- The family still comes only from a font somebody picked, so the font list is not dropped for Menlo.
+	- Swept: Both point conversions, the terminal size and the interface size.
+	- Test case: `a_mac_point_is_already_a_logical_pixel` (ErUj5E3). It fails with the old conversion.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macsize
+	- Commit: 747356f
 	- Closed:
 
 - macOS: window transparency does not work
