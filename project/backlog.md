@@ -394,7 +394,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: It stages under ProgramData because one account copies the files in and the console user runs the scenario. Each account's `%TEMP%` is private to it, so this needs its own look on a Windows box.
 	- Closed:
 
-- Remember window and font size per monitor
+- Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
 	- Status: Queued
@@ -408,13 +408,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- If "remember size" is enabled:
 			- Anytime the *user* resizes the window, remember that as the main default (regardless of window).
 				- Ditto for font size.
-			- Also store the size per-monitor.
+			- Also store the size per unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 				- Ditto for font size.
-			- When the user opens SilkTerm on that monitor, size it based on that monitor's saved setting.
+			- When the user opens SilkTerm on that monitor, size it based on that monitor's saved setting (fallback to main saved default).
 				- Ditto for font size.
-			- If the user drags an already-open terminal to a different monitor, and that monitor has its own size settings saved, change the window to that size, once moving has stopped.
+			- If the user drags an already-open terminal to a different monitor, and that monitor has its own size settings saved, change the window to that size, once moving has stopped (fallback to main saved default).
 				- Ditto for font size.
 		- The per-monitor sizes go in the config file only, not the Settings dialog.
+	- Notes:
+		- Resolution and DPI by themselves may not be enough, if the DPI information is disconnected from actual inches. It's the *actual* physical DPI, combined with resolution, that's important, and will have to best approximate.
+		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
 	- Closed:
 
 - macOS: Command+, should open Settings
@@ -434,7 +437,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - shcl: a bad escape on a line that opens a block drops the whole block
 	- ID: 2026100115322365
 	- Type: Task
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261001-153223
 	- Opened by: CC
@@ -448,6 +451,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A silent wrong answer, for shcl to look at. SilkTerm's wallpaper heading repair happens to bring the block back for this one key.
 		- Rough edge, same build: lines a keep-lines save adds take their indent from the first child of the nearest block. One block indented two tabs a level makes every new block in the file do the same.
 		- Rough edge, same build: the Format line still says 3, so a file stamped during the beta is taken as current, and `migrate` leaves its single-backslash paths alone.
+	- Fix: Use '\\' inside double quotes, for Windows paths. (Or anything that requires an actual backslash.)
+	- Note: 20261001, the template has written Windows paths that way since `shcl3e`. The two rough edges stay with shcl.
+	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`.
+	- Acceptance signoff: Self-closed: the fix line names what the template already does.
+	- Closed: 20261001-191500
 
 - The launch names an unreadable line two lines short of where the file has it
 	- ID: 2026100115322366

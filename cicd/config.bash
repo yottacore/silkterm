@@ -263,8 +263,8 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## Everything else under target/ that is not a final build is scratch too: the
 ## before and after builds kept for a comparison, their captures, and a docs
 ## backup from the 09-15 history rewrite. source/target and the clipboard-race
-## test crate's target are stray lint and test builds. A new scratch dir under
-## target/ needs a line here.
+## test crate's target are stray lint and test builds, and target/darwin is a
+## macOS type check. A new scratch dir under target/ needs a line here.
 ##
 ## The wallpaper originals (about 350 MB) and duplicates (80 MB) sit behind the
 ## private/wallpaper/source symlink, which rar follows. The originals are the
@@ -275,6 +275,7 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## script adds the flag and passes each line through as one argument.
 export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/mmap-bench
+*/target/darwin
 */target/lightnew
 */target/lightold
 */target/mapopt
