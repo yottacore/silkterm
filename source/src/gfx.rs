@@ -12,6 +12,7 @@ use glutin::prelude::*;
 use glutin::surface::{Surface as GlWindowSurface, SurfaceAttributesBuilder, WindowSurface};
 use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasWindowHandle;
+#[cfg(not(target_os = "macos"))]
 use wgpu::hal::api::Gles;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes};
@@ -642,20 +643,7 @@ impl Gfx {
 		};
 		let _ = surface.set_swap_interval(&ctx, interval);
 
-		// wrap glutin's GL context as a wgpu device (hal external interop)
-		let exposed = unsafe {
-			wgpu::hal::gles::Adapter::new_external(
-				|name| {
-					std::ffi::CString::new(name).map_or(std::ptr::null(), |cstr| {
-						gl_display.get_proc_address(&cstr).cast()
-					})
-				},
-				wgpu::GlBackendOptions::default(),
-			)
-		}
-		.ok_or_else(|| anyhow::anyhow!("wgpu GL external adapter init failed"))?;
-
-		let adapter = unsafe { instance.create_adapter_from_hal::<Gles>(exposed) };
+		let adapter = gl_adapter(&instance, &gl_display)?;
 		let adapter_info = adapter.get_info();
 		if log {
 			log_renderer(&adapter_info, true);
@@ -1424,7 +1412,39 @@ fn offscreen_tex(
 // sRGB-capable, so the blit shader sRGB-encodes explicitly and writes raw here.
 const FB_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
+// wrap glutin's GL context as a wgpu adapter (hal external interop)
+#[cfg(not(target_os = "macos"))]
+fn gl_adapter(
+	instance: &wgpu::Instance,
+	gl_display: &glutin::display::Display,
+) -> anyhow::Result<wgpu::Adapter> {
+	let exposed = unsafe {
+		wgpu::hal::gles::Adapter::new_external(
+			|name| {
+				std::ffi::CString::new(name).map_or(std::ptr::null(), |cstr| {
+					gl_display.get_proc_address(&cstr).cast()
+				})
+			},
+			wgpu::GlBackendOptions::default(),
+		)
+	}
+	.ok_or_else(|| anyhow::anyhow!("wgpu GL external adapter init failed"))?;
+	Ok(unsafe { instance.create_adapter_from_hal::<Gles>(exposed) })
+}
+
+// wgpu builds no GL backend on macOS (Metal only), and the GL path is X11-only
+// anyway, so there it just reports itself unavailable and resumed() falls back
+// to the native surface.
+#[cfg(target_os = "macos")]
+fn gl_adapter(
+	_instance: &wgpu::Instance,
+	_gl_display: &glutin::display::Display,
+) -> anyhow::Result<wgpu::Adapter> {
+	anyhow::bail!("no wgpu GL backend on macOS")
+}
+
 // A wgpu texture aliasing the GL default framebuffer (fbo 0 = glutin's window).
+#[cfg(not(target_os = "macos"))]
 fn default_fb(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32) -> wgpu::Texture {
 	// Safety: aliasing the GL default framebuffer is sound only while every GL
 	// call stays on the winit main thread - rendering here is single-threaded
@@ -1449,6 +1469,12 @@ fn default_fb(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32
 			},
 		)
 	}
+}
+
+// Only Backend::Gl calls this, and gl_adapter() above never lets one be built on macOS.
+#[cfg(target_os = "macos")]
+fn default_fb(_: &wgpu::Device, _: wgpu::TextureFormat, _: u32, _: u32) -> wgpu::Texture {
+	unreachable!("no GL backend on macOS")
 }
 
 #[repr(C)]
