@@ -112,16 +112,21 @@ x11rb = "0.13"
 # XErrorEvent, for the GLX error hook in gfx.rs. Already in the tree through winit.
 x11-dl = "2.21"
 
-# macOS: the system font sizes (sysfont.rs) and the part of the screen a window
-# can use, below the menu bar and clear of the Dock (dialog.rs). Already in the
-# tree through wgpu and glutin.
+# macOS: the system font sizes (sysfont.rs), the part of the screen a window
+# can use, below the menu bar and clear of the Dock (dialog.rs), and the menu
+# bar itself (macmenu.rs). Already in the tree through wgpu and glutin.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSGeometry"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSGeometry", "NSString"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "objc2-core-foundation",
+    "NSApplication",
+    "NSCell",
+    "NSEvent",
     "NSFont",
+    "NSMenu",
+    "NSMenuItem",
     "NSResponder",
     "NSScreen",
     "NSView",
