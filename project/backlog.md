@@ -253,6 +253,68 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: clippy with `-D warnings` is clean on the whole workspace, native and for the Windows target.
 	- Closed:
 
+- macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
+	- ID: 2026100114435547
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Steps to reproduce:
+		- Open Settings.
+	- Incorrect behavior: The dialog is nearly the height of the screen, and it is placed so the buttons sit below the bottom edge.
+	- Expected behavior: The dialog is a sensible size and fits on the screen, buttons included.
+	- Closed:
+
+- macOS: the interface and terminal fonts are too big
+	- ID: 2026100114435561
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435547
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Incorrect behavior: Both the interface fonts and the terminal font are too big. Neither seems to follow the system font size.
+	- Expected behavior: Both start from the size macOS uses.
+	- Closed:
+
+- macOS: window transparency does not work
+	- ID: 2026100114435574
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Steps to reproduce:
+		- Turn on transparency.
+	- Incorrect behavior: The window stays opaque.
+	- Expected behavior: The desktop shows through, as on Linux and Windows.
+	- Closed:
+
+- macOS: the menu is inside the window, not in the macOS menu bar
+	- ID: 2026100114435587
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435613
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Incorrect behavior: The menu is drawn in the application window.
+	- Expected behavior: The menu is in the macOS menu bar at the top of the screen.
+	- Closed:
+
 - Test files go under one dated folder in the system temp dir
 	- ID: 2026093013113320
 	- Type: Task
@@ -302,6 +364,43 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- What the harness writes on the remote test box goes under `%TEMP%`, in one dated folder per run, as the parent asks. That is its staging folder under `C:\ProgramData\silkrig`, and a scenario's own scratch, such as the path announce folder.
 	- Note: It stages under ProgramData because one account copies the files in and the console user runs the scenario. Each account's `%TEMP%` is private to it, so this needs its own look on a Windows box.
+	- Closed:
+
+- Remember window and font size per monitor
+	- ID: 2026100114435600
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026093018413683, and the old-format "Remember last size" item.
+	- Target OS: All
+	- Requirements:
+		- If "remember size" is enabled:
+			- Anytime the *user* resizes the window, remember that as the main default (regardless of window).
+				- Ditto for font size.
+			- Also store the size per-monitor.
+				- Ditto for font size.
+			- When the user opens SilkTerm on that monitor, size it based on that monitor's saved setting.
+				- Ditto for font size.
+			- If the user drags an already-open terminal to a different monitor, and that monitor has its own size settings saved, change the window to that size, once moving has stopped.
+				- Ditto for font size.
+		- The per-monitor sizes go in the config file only, not the Settings dialog.
+	- Closed:
+
+- macOS: Command+, should open Settings
+	- ID: 2026100114435613
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435587
+	- Target OS: macOS
+	- Incorrect behavior: Command+, does not open Settings.
+	- Expected behavior: Command+, opens Settings, on macOS only.
 	- Closed:
 
 - A launch from the Start menu as an MSIX package opens the first shell in System32
