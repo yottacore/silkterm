@@ -9205,6 +9205,11 @@ mod tests {
 			"a fresh config opens restored"
 		);
 		s.remembered_maximized = true;
+		assert!(
+			!launch_maximized(&s, &plain),
+			"the setting is off by default"
+		);
+		s.remember_maximized = true;
 		assert!(launch_maximized(&s, &plain));
 		for cli in [
 			WindowOpts {
