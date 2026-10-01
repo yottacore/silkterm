@@ -15,10 +15,11 @@ function fText($h) { $sb = New-Object System.Text.StringBuilder 2048; [void][Sil
 function fClass($h) { $sb = New-Object System.Text.StringBuilder 256; [void][SilkBox.Win]::GetClassNameW($h, $sb, 256); $sb.ToString() }
 
 $cfg = Join-Path $OutDir "savenotice-config.shcl"
-##	The last line steps back to a depth nothing uses, so the reader cannot place
-##	it. A line indented with spaces is kept as written since shcl 3.0, and saves
-##	go through beside it.
-fFreshConfig $cfg @("window:", "`t`topacity: 1.0", "`tmargin: 4")
+##	The margin line steps back to a depth nothing uses, so the reader cannot place
+##	it. shcl writes such a line back as it was, and saves go through beside it,
+##	unless the save falls back to the canonical form. A shells block written twice
+##	makes the shell scan's save do that.
+fFreshConfig $cfg @("window:", "`t`topacity: 1.0", "`tmargin: 4", "shells:", "`tcmd:", "`t`tcommand: cmd.exe", "shells:", "`tpwsh:", "`t`tcommand: pwsh.exe")
 
 $p = fStartSilk $Exe @("--config=$cfg", "--columns", "100", "--rows", "30") @{}
 $h = fWaitWindow $p 40
