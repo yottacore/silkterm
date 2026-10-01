@@ -176,6 +176,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 02482bb
 	- Closed:
 
+- macOS: Command+, should open Settings
+	- ID: 2026100114435613
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On b26, Command+, opens Settings from the terminal, and the menu bar shows it beside Settings. With Settings already open it brings that one forward. Ctrl+, still opens Settings too.
+	- Severity: Low
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435587
+	- Target OS: macOS
+	- Incorrect behavior: Command+, does not open Settings.
+	- Expected behavior: Command+, opens Settings, on macOS only.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by tests.
+	- Actual cause: Only Ctrl+, was a Settings chord, and no menu on macOS had Settings with Command+,.
+	- Actual fix:
+		- Settings in the macOS menu bar's SilkTerm menu takes Command+,. It is part of 2026100114435587.
+		- The key handling also takes Command+, as Settings on macOS, for a press the menu bar does not take. Command+, with Shift or Option is not the chord. Other platforms are unchanged.
+	- Swept: The one Settings chord check, used by the main window. The menu bar adds Command keys only to the SilkTerm menu's Settings, Hide, Hide others and Quit, checked by test. Hide, Hide others and Quit had the same keys in winit's default menu.
+	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE). Both fail with the macOS Command+, arm taken out, which is the old behavior.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macmenu
+	- Commit: 02482bb
+	- Closed:
+
 - Test files go under one dated folder in the system temp dir
 	- ID: 2026093013113320
 	- Type: Task
@@ -251,31 +276,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Resolution and DPI by themselves may not be enough, if the DPI information is disconnected from actual inches. It's the *actual* physical DPI, combined with resolution, that's important, and will have to best approximate.
 		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
-	- Closed:
-
-- macOS: Command+, should open Settings
-	- ID: 2026100114435613
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs external testing: On b26, Command+, opens Settings from the terminal, and the menu bar shows it beside Settings. With Settings already open it brings that one forward. Ctrl+, still opens Settings too.
-	- Severity: Low
-	- Opened: 20261001-144356
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435587
-	- Target OS: macOS
-	- Incorrect behavior: Command+, does not open Settings.
-	- Expected behavior: Command+, opens Settings, on macOS only.
-	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by tests.
-	- Actual cause: Only Ctrl+, was a Settings chord, and no menu on macOS had Settings with Command+,.
-	- Actual fix:
-		- Settings in the macOS menu bar's SilkTerm menu takes Command+,. It is part of 2026100114435587.
-		- The key handling also takes Command+, as Settings on macOS, for a press the menu bar does not take. Command+, with Shift or Option is not the chord. Other platforms are unchanged.
-	- Swept: The one Settings chord check, used by the main window. The menu bar adds Command keys only to the SilkTerm menu's Settings, Hide, Hide others and Quit, checked by test. Hide, Hide others and Quit had the same keys in winit's default menu.
-	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE). Both fail with the macOS Command+, arm taken out, which is the old behavior.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: macmenu
-	- Commit: 02482bb
 	- Closed:
 
 - The launch names an unreadable line two lines short of where the file has it
