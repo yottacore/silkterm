@@ -567,6 +567,9 @@ pub(crate) enum MenuAction {
 	ToggleCopySelect,
 	ToggleCopyOutput,
 	NewTab,
+	// a row on the macOS menu bar only; elsewhere it is Ctrl+Shift+N alone
+	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+	NewWindow,
 	// New tab running the shell at this index in the stored list (config
 	// `shells.*`; see the Tabs menu's "New tab with shell").
 	NewTabShell(usize),
@@ -973,15 +976,138 @@ fn window_menus(
 		.collect()
 }
 
-// The in-window menu bar starts hidden on macOS, where the system menu bar
-// carries the same menus. `--hide-menu` decides either way.
+// macOS has no in-window menu bar, since the system menu bar carries the same
+// menus and a second bar would break the Mac's own menu contract. `--hide-menu`
+// is accepted there and does nothing.
 fn menu_bar_at_launch(hide_menu: Option<bool>, mac: bool) -> bool {
-	!hide_menu.unwrap_or(mac)
+	!mac && !hide_menu.unwrap_or(false)
+}
+
+// A row's label without the shortcut shown after it: "Copy" for
+// "Copy (Ctrl+Shift+C)".
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) fn plain_label(label: &str) -> &str {
+	match label.rsplit_once(" (") {
+		Some((plain, hint)) if hint.ends_with(')') => plain,
+		_ => label,
+	}
+}
+
+// The key binding a menu row shares its shortcut with, if it has one.
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
+	match action {
+		MenuAction::Copy => Some(Hotkey::Copy),
+		MenuAction::Paste => Some(Hotkey::Paste),
+		MenuAction::NewTab => Some(Hotkey::NewTab),
+		MenuAction::NewWindow => Some(Hotkey::NewWindow),
+		MenuAction::CloseTab => Some(Hotkey::CloseTab),
+		MenuAction::FontBigger => Some(Hotkey::Zoom(1)),
+		MenuAction::FontSmaller => Some(Hotkey::Zoom(-1)),
+		MenuAction::FontReset => Some(Hotkey::ZoomReset),
+		MenuAction::ToggleFullscreen => Some(Hotkey::Fullscreen),
+		MenuAction::Settings => Some(Hotkey::Settings),
+		MenuAction::Quit => Some(Hotkey::Quit),
+		MenuAction::OpenLink
+		| MenuAction::CopyLink
+		| MenuAction::PasteSelection
+		| MenuAction::ToggleReadOnly
+		| MenuAction::ToggleCopySelect
+		| MenuAction::ToggleCopyOutput
+		| MenuAction::NewTabShell(_)
+		| MenuAction::SplitVertical
+		| MenuAction::SplitHorizontal
+		| MenuAction::SplitShell(..)
+		| MenuAction::Close
+		| MenuAction::ToggleFrame
+		| MenuAction::ToggleMenuBar
+		| MenuAction::ToggleSingleTab
+		| MenuAction::ToggleMinimap
+		| MenuAction::ToggleBare
+		| MenuAction::ToggleRemote
+		| MenuAction::NextWallpaper
+		| MenuAction::ReloadConfig
+		| MenuAction::About => None,
+	}
+}
+
+// A menu less the rows `drop` picks, inside submenus too, with no separator
+// left at either end or doubled up where a row went.
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) fn without_rows(entries: Vec<Entry>, drop: fn(MenuAction) -> bool) -> Vec<Entry> {
+	let mut out: Vec<Entry> = Vec::with_capacity(entries.len());
+	for entry in entries {
+		match entry {
+			Entry::Item { action, .. } if drop(action) => {}
+			Entry::Sub {
+				label,
+				accel,
+				items,
+			} => out.push(Entry::Sub {
+				label,
+				accel,
+				items: without_rows(items, drop),
+			}),
+			Entry::Sep if out.last().is_none_or(|last| matches!(last, Entry::Sep)) => {}
+			entry => out.push(entry),
+		}
+	}
+	if matches!(out.last(), Some(Entry::Sep)) {
+		out.pop();
+	}
+	out
+}
+
+// A menu as a Mac shows it: no Menu bar row, since the system menu bar is the
+// only one there, and each shortcut spelled as its Command chord.
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) fn mac_entries(entries: Vec<Entry>) -> Vec<Entry> {
+	without_rows(entries, |action| action == MenuAction::ToggleMenuBar)
+		.into_iter()
+		.map(|entry| match entry {
+			Entry::Item {
+				label,
+				action,
+				check,
+				accel,
+			} => {
+				let label = match menu_hotkey(action).and_then(input::command_chord) {
+					Some(chord) => format!("{} ({})", plain_label(&label), chord.spoken()),
+					None => label,
+				};
+				Entry::Item {
+					label,
+					action,
+					check,
+					accel,
+				}
+			}
+			Entry::Sub {
+				label,
+				accel,
+				items,
+			} => Entry::Sub {
+				label,
+				accel,
+				items: mac_entries(items),
+			},
+			Entry::Sep => Entry::Sep,
+		})
+		.collect()
 }
 
 // Every row turned on, and two shells, so each menu shows all it can.
 #[cfg(test)]
 pub(crate) fn sample_window_menus() -> Vec<(&'static str, Vec<Entry>)> {
+	sample_window_menus_copying(true, true)
+}
+
+// The same, with the focused pane's two copy modes as given.
+#[cfg(test)]
+pub(crate) fn sample_window_menus_copying(
+	copy_select: bool,
+	copy_output: bool,
+) -> Vec<(&'static str, Vec<Entry>)> {
 	let shell = |slug: &str| ShellEntry {
 		slug: slug.into(),
 		title: slug.into(),
@@ -1001,7 +1127,12 @@ pub(crate) fn sample_window_menus() -> Vec<(&'static str, Vec<Entry>)> {
 		remote: true,
 		next_wallpaper: true,
 	};
-	window_menus(view, true, true, &[shell("bash"), shell("zsh")])
+	window_menus(
+		view,
+		copy_select,
+		copy_output,
+		&[shell("bash"), shell("zsh")],
+	)
 }
 
 // What the right-click menu needs to know about the pane and window it opens
@@ -3534,6 +3665,8 @@ impl State {
 			next_wallpaper: self.can_rotate(),
 		};
 		let entries = context_menu_items(on, &config::settings().shells);
+		#[cfg(target_os = "macos")]
+		let entries = mac_entries(entries);
 		self.bar_open = None;
 		self.popup(target, entries, mx, my);
 	}
@@ -4003,6 +4136,7 @@ impl State {
 				}
 			}
 			MenuAction::NewTab => self.new_tab(proxy),
+			MenuAction::NewWindow => self.new_window(),
 			MenuAction::NewTabShell(index) => self.new_tab_with(proxy, shell_argv(index)),
 			MenuAction::CloseTab => self.close_tab(),
 			MenuAction::FontBigger => self.font_zoom(1),
@@ -4013,8 +4147,9 @@ impl State {
 				self.decorated = !self.decorated;
 				self.window.set_decorations(self.decorated);
 			}
+			// a Mac has no in-window bar to bring back (`menu_bar_at_launch`)
 			MenuAction::ToggleMenuBar => {
-				self.menu_bar = !self.menu_bar;
+				self.menu_bar = !self.menu_bar && !cfg!(target_os = "macos");
 				self.relayout_all();
 			}
 			MenuAction::ToggleBare => self.toggle_bare(),
@@ -8417,7 +8552,14 @@ impl ApplicationHandler<UserEvent> for App {
 						state.dirty = true;
 						return;
 					}
+					Some(Hotkey::Quit) => {
+						state.quit = true;
+						return;
+					}
 					None => {}
+				}
+				if !input::reaches_shell(state.mods, cfg!(target_os = "macos")) {
+					return;
 				}
 				let focused = state.tabs.cur().focused;
 				let app_cursor = state
@@ -8493,7 +8635,7 @@ impl ApplicationHandler<UserEvent> for App {
 		if let Some(state) = self.state.as_ref() {
 			crate::macmenu::refresh(
 				state.bar_menus_key(),
-				|| crate::macmenu::layout(&state.bar_menus()),
+				|| crate::macmenu::layout(state.bar_menus()),
 				&self.proxy,
 			);
 		}
@@ -10564,18 +10706,109 @@ mod tests {
 		}
 	}
 
-	// macOS has the system menu bar, so the in-window one starts hidden there
-	// unless --hide-menu says otherwise. Elsewhere nothing changes.
-	// Test ID: ErUnxsD
+	// Off since macOS has no in-window bar at all (20261002): `--hide-menu=false`
+	// no longer brings it back there. `there_is_no_in_window_menu_bar_on_macos`
+	// covers it.
+	// // macOS has the system menu bar, so the in-window one starts hidden there
+	// // unless --hide-menu says otherwise. Elsewhere nothing changes.
+	// // Test ID: ErUnxsD
+	// #[test]
+	// fn the_in_window_menu_bar_starts_hidden_on_macos_only() {
+	// 	use super::menu_bar_at_launch;
+	// 	assert!(menu_bar_at_launch(None, false));
+	// 	assert!(!menu_bar_at_launch(None, true));
+	// 	for mac in [false, true] {
+	// 		assert!(menu_bar_at_launch(Some(false), mac));
+	// 		assert!(!menu_bar_at_launch(Some(true), mac));
+	// 	}
+	// }
+
+	// The system menu bar is the only one on a Mac: `--hide-menu` is taken and
+	// ignored there, and no menu row offers the in-window bar. Elsewhere nothing
+	// changes.
+	// Test ID: ErZrS8g
 	#[test]
-	fn the_in_window_menu_bar_starts_hidden_on_macos_only() {
-		use super::menu_bar_at_launch;
-		assert!(menu_bar_at_launch(None, false));
-		assert!(!menu_bar_at_launch(None, true));
-		for mac in [false, true] {
-			assert!(menu_bar_at_launch(Some(false), mac));
-			assert!(!menu_bar_at_launch(Some(true), mac));
+	fn there_is_no_in_window_menu_bar_on_macos() {
+		use super::{mac_entries, menu_bar_at_launch};
+		for hide_menu in [None, Some(false), Some(true)] {
+			assert!(!menu_bar_at_launch(hide_menu, true), "{hide_menu:?}");
 		}
+		assert!(menu_bar_at_launch(None, false));
+		assert!(menu_bar_at_launch(Some(false), false));
+		assert!(!menu_bar_at_launch(Some(true), false));
+		let shells = [shell("bash", true)];
+		for next_wallpaper in [false, true] {
+			let ctx = CtxState {
+				link: true,
+				read_only: false,
+				copy_select: false,
+				copy_output: false,
+				menu_bar: false,
+				next_wallpaper,
+			};
+			let window = context_menu_items(ctx, &shells);
+			assert!(actions_in(&window).contains(&MenuAction::ToggleMenuBar));
+			let mac = mac_entries(window);
+			assert!(!actions_in(&mac).contains(&MenuAction::ToggleMenuBar));
+			assert!(!matches!(mac.first(), Some(Entry::Sep)));
+			assert!(!matches!(mac.last(), Some(Entry::Sep)));
+			assert!(
+				!mac.windows(2)
+					.any(|pair| matches!(pair, [Entry::Sep, Entry::Sep]))
+			);
+		}
+	}
+
+	// The right-click menu on a Mac names the Command chord for each row that has
+	// one, never a Ctrl one, and keeps its accelerator letters.
+	// Test ID: ErZrSS3
+	#[test]
+	fn the_mac_right_click_menu_shows_command_chords() {
+		use super::mac_entries;
+		let shells = [shell("bash", true)];
+		let ctx = CtxState {
+			link: true,
+			read_only: false,
+			copy_select: false,
+			copy_output: false,
+			menu_bar: false,
+			next_wallpaper: true,
+		};
+		let window = context_menu_items(ctx, &shells);
+		let mac = mac_entries(window.clone());
+		let label = |entries: &[Entry], want: MenuAction| {
+			entries.iter().find_map(|entry| match entry {
+				Entry::Item { label, action, .. } if *action == want => Some(label.clone()),
+				_ => None,
+			})
+		};
+		for (action, shown) in [
+			(MenuAction::Copy, "Copy (Command+C)"),
+			(MenuAction::Paste, "Paste (Command+V)"),
+			(MenuAction::NewTab, "New tab (Command+T)"),
+			(MenuAction::Settings, "Settings\u{2026} (Command+,)"),
+			(MenuAction::PasteSelection, "Paste Selection"),
+		] {
+			assert_eq!(label(&mac, action).as_deref(), Some(shown));
+		}
+		let mut rows = 0;
+		for entry in &mac {
+			let Some(text) = entry_label(entry) else {
+				continue;
+			};
+			rows += 1;
+			assert!(!text.contains("Ctrl"), "{text}");
+			if let Some((label, pos)) = entry_accel(entry) {
+				let before = window
+					.iter()
+					.filter_map(entry_accel)
+					.find(|(old, _)| old.split(" (").next() == label.split(" (").next());
+				let (old, old_pos) = before.expect("row came across");
+				assert_eq!(label[pos..].chars().next(), old[old_pos..].chars().next());
+			}
+		}
+		assert!(rows > 10);
+		assert_eq!(accel_clash(&mac), None);
 	}
 
 	// Test ID: Er2UvPp
