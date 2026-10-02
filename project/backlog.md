@@ -34,6 +34,56 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- The launch names an unreadable line two lines short of where the file has it
+	- ID: 2026100115322366
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261001-153223
+	- Opened by: CC
+	- Related IDs: 2026100115322364
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Start with `--config` on a three-line file: `window:`, `\t\topacity: 1.0`, `\tmargin: 4`.
+	- Incorrect behavior: the console says line 198, and the margin line is at 200 in the file after the launch.
+	- Expected behavior: the line number the file has.
+	- Reproduced: 20261001 on b23, with this branch and with the beta3 build. The Windows notice gives the right number.
+	- Actual cause:
+		- Not shcl. The launch prints its messages once its own rewrites are done, and the line numbers are right for the file at that moment.
+		- The performance rating then writes `profile:` and `rated_hardware:` into the `performance:` block at the top, once the window is up. That moves every line below it down by two.
+		- The Windows notice is worked out at the moment a save is refused, so it sees the file as it is then.
+	- Progress log:
+		- 20261001: Reproduced on the real program: the console said 198, the file had the line at 200. The extra lines were the rating's two.
+	- Actual fix:
+		- The launch keeps what it printed about the file. A later write to the same file prints again whatever now reads differently, so the last message names the line the file has. The first one still names the old number.
+		- On the real program the console now ends with line 200, where the file has it.
+	- Swept: all three kinds of launch message go through the restate (the unreadable-line and spelling notes, shcl's own errors, and the bad-value and set-twice notes). Every write goes through the one writer, so the rating, the shell list and a Settings save are all covered.
+	- Branch: cfglines
+	- Commit: 7b3be64
+	- Test case: `a_rating_write_restates_the_lines_the_launch_named` (ErUrgB9). Seen to fail with the restate taken out, and pass with it.
+	- Verified: native and Windows-target clippy, and the native unit tests (991 passed).
+
+- Renames judge a commented line by where a whole-file save would put it, though most saves keep lines now
+	- ID: 2026100115322367
+	- Type: Task
+	- Status: Waiting on signoff
+	- Priority: Low
+	- Opened: 20261001-153223
+	- Opened by: CC
+	- Related IDs: 2026100115322364
+	- Progress log:
+		- `saved_paths` walks `to_canonical()`. A keep-lines save leaves a commented line where it is, so the answer can differ from what the save writes.
+		- `a_commented_new_name_counts_where_a_save_puts_it` pins the current behavior. Left as it was on `shcl3e`.
+		- 20261001: `saved_paths` now walks the text the save writes: the lines kept, or the canonical form only where shcl falls back to it. A save that would be refused writes nothing, so the file as it is gives the answer there, as before.
+		- What a user sees: a `# highlight:` comment at column 0 between `colors:` lines no longer stops `focus:` being renamed to `highlight:`. A save keeps that comment at column 0, so it never moves into the block, and the rename fires the same before a save and after one.
+		- The old test fails with this, since it compares against the canonical form, which no save writes for that file now. It is commented out in place with the reason.
+	- Swept: the other two non-test uses of the canonical form in config.rs write it on purpose (the old flat-file conversion) or spell one value on an empty document (the rating). Neither predicts a save.
+	- Branch: cfglines
+	- Commit: 7b3be64
+	- Test case: `a_commented_new_name_counts_where_the_save_that_runs_puts_it` (ErUrgUh). Seen to fail on the old `saved_paths`, and pass on the new one.
+	- Verified: native and Windows-target clippy, and the native unit tests (991 passed).
+
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
 	- Type: Bug
@@ -277,33 +327,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Resolution and DPI by themselves may not be enough, if the DPI information is disconnected from actual inches. It's the *actual* physical DPI, combined with resolution, that's important, and will have to best approximate.
 		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
 	- Closed:
-
-- The launch names an unreadable line two lines short of where the file has it
-	- ID: 2026100115322366
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261001-153223
-	- Opened by: CC
-	- Related IDs: 2026100115322364
-	- Target OS: All
-	- Steps to reproduce:
-		- Start with `--config` on a three-line file: `window:`, `\t\topacity: 1.0`, `\tmargin: 4`.
-	- Incorrect behavior: the console says line 198, and the margin line is at 200 in the file after the launch.
-	- Expected behavior: the line number the file has.
-	- Reproduced: 20261001 on b23, with this branch and with the beta3 build. The Windows notice gives the right number.
-
-- Renames judge a commented line by where a whole-file save would put it, though most saves keep lines now
-	- ID: 2026100115322367
-	- Type: Task
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261001-153223
-	- Opened by: CC
-	- Related IDs: 2026100115322364
-	- Progress log:
-		- `saved_paths` walks `to_canonical()`. A keep-lines save leaves a commented line where it is, so the answer can differ from what the save writes.
-		- `a_commented_new_name_counts_where_a_save_puts_it` pins the current behavior. Left as it was on `shcl3e`.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
