@@ -5,20 +5,10 @@
 // the in-window menus draw, so it is checked on every platform; only `native`
 // talks to AppKit.
 
-use crate::app::{Entry, MenuAction};
+use crate::app::{Entry, MenuAction, mac_entries, menu_hotkey, plain_label, without_rows};
+use crate::input::{CommandChord, command, command_chord};
 
 pub const APP_NAME: &str = "SilkTerm";
-
-/// A menu key equivalent. Command is always held; `option` adds Option.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct KeyEquivalent {
-	pub key: &'static str,
-	pub option: bool,
-}
-
-const fn command(key: &'static str) -> KeyEquivalent {
-	KeyEquivalent { key, option: false }
-}
 
 /// App menu rows `AppKit` carries out by itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,12 +25,12 @@ pub enum BarItem {
 		label: String,
 		action: MenuAction,
 		check: Option<bool>,
-		key: Option<KeyEquivalent>,
+		key: Option<CommandChord>,
 	},
 	System {
 		label: String,
 		item: SystemItem,
-		key: Option<KeyEquivalent>,
+		key: Option<CommandChord>,
 	},
 	Submenu {
 		label: String,
@@ -64,13 +54,21 @@ fn in_app_menu(action: MenuAction) -> bool {
 	)
 }
 
-fn app_menu() -> BarMenu {
-	let action = |label: String, action, key| BarItem::Action {
+// The row's Command chord, the same one the key bindings answer to.
+fn key_for(action: MenuAction) -> Option<CommandChord> {
+	menu_hotkey(action).and_then(command_chord)
+}
+
+fn action_row(label: String, action: MenuAction) -> BarItem {
+	BarItem::Action {
 		label,
 		action,
 		check: None,
-		key,
-	};
+		key: key_for(action),
+	}
+}
+
+fn app_menu() -> BarMenu {
 	let system = |label: &str, item, key| BarItem::System {
 		label: label.into(),
 		item,
@@ -79,13 +77,9 @@ fn app_menu() -> BarMenu {
 	BarMenu {
 		title: APP_NAME.into(),
 		items: vec![
-			action(format!("About {APP_NAME}"), MenuAction::About, None),
+			action_row(format!("About {APP_NAME}"), MenuAction::About),
 			BarItem::Separator,
-			action(
-				"Settings\u{2026}".into(),
-				MenuAction::Settings,
-				Some(command(",")),
-			),
+			action_row("Settings\u{2026}".into(), MenuAction::Settings),
 			BarItem::Separator,
 			system("Services", SystemItem::Services, None),
 			BarItem::Separator,
@@ -97,74 +91,62 @@ fn app_menu() -> BarMenu {
 			system(
 				"Hide others",
 				SystemItem::HideOthers,
-				Some(KeyEquivalent {
-					key: "h",
+				Some(CommandChord {
 					option: true,
+					..command("h")
 				}),
 			),
 			system("Show all", SystemItem::ShowAll, None),
 			BarItem::Separator,
-			action(
-				format!("Quit {APP_NAME}"),
-				MenuAction::Quit,
-				Some(command("q")),
-			),
+			action_row(format!("Quit {APP_NAME}"), MenuAction::Quit),
 		],
 	}
 }
 
-fn bar_items(entries: &[Entry]) -> Vec<BarItem> {
-	let items = entries
-		.iter()
-		.filter_map(|entry| match entry {
-			Entry::Item { action, .. } if in_app_menu(*action) => None,
+// The label drops its shortcut, since the menu bar draws the Command chord
+// beside the row itself.
+fn bar_items(entries: Vec<Entry>) -> Vec<BarItem> {
+	entries
+		.into_iter()
+		.map(|entry| match entry {
 			Entry::Item {
 				label,
 				action,
 				check,
 				..
-			} => Some(BarItem::Action {
-				label: label.clone(),
-				action: *action,
-				check: *check,
-				key: None,
-			}),
-			Entry::Sub { label, items, .. } => Some(BarItem::Submenu {
-				label: label.clone(),
+			} => BarItem::Action {
+				label: plain_label(&label).into(),
+				action,
+				check,
+				key: key_for(action),
+			},
+			Entry::Sub { label, items, .. } => BarItem::Submenu {
+				label,
 				items: bar_items(items),
-			}),
-			Entry::Sep => Some(BarItem::Separator),
+			},
+			Entry::Sep => BarItem::Separator,
 		})
-		.collect();
-	tidy(items)
-}
-
-// A row that moved to the app menu can leave a separator with nothing on one
-// side of it.
-fn tidy(items: Vec<BarItem>) -> Vec<BarItem> {
-	let mut out: Vec<BarItem> = Vec::with_capacity(items.len());
-	for item in items {
-		let sep = item == BarItem::Separator;
-		if sep && out.last().is_none_or(|last| *last == BarItem::Separator) {
-			continue;
-		}
-		out.push(item);
-	}
-	if out.last() == Some(&BarItem::Separator) {
-		out.pop();
-	}
-	out
+		.collect()
 }
 
 /// The whole menu bar: the app menu, then each in-window menu by its title, less
-/// the rows the app menu took. A menu left with nothing in it is dropped.
-pub fn layout(window_menus: &[(&str, Vec<Entry>)]) -> Vec<BarMenu> {
+/// the rows the app menu took and the in-window bar's own toggle. File gains New
+/// window, which elsewhere is a key alone. A menu left with nothing in it is
+/// dropped.
+pub fn layout(window_menus: Vec<(&str, Vec<Entry>)>) -> Vec<BarMenu> {
 	let mut menus = vec![app_menu()];
 	for (title, entries) in window_menus {
-		let items = bar_items(entries);
+		let mut items = bar_items(without_rows(mac_entries(entries), in_app_menu));
+		if title == "File" {
+			let mut first = vec![action_row("New window".into(), MenuAction::NewWindow)];
+			if !items.is_empty() {
+				first.push(BarItem::Separator);
+			}
+			items.splice(0..0, first);
+		}
 		if !items.is_empty() {
 			menus.push(BarMenu {
-				title: (*title).into(),
+				title: title.into(),
 				items,
 			});
 		}
@@ -189,8 +171,9 @@ mod native {
 	use objc2_foundation::NSString;
 	use winit::event_loop::EventLoopProxy;
 
-	use super::{BarItem, BarMenu, KeyEquivalent, SystemItem};
+	use super::{BarItem, BarMenu, SystemItem};
 	use crate::app::MenuAction;
+	use crate::input::CommandChord;
 	use crate::term::UserEvent;
 
 	struct Ivars {
@@ -353,7 +336,7 @@ mod native {
 		mtm: MainThreadMarker,
 		label: &str,
 		action: Option<objc2::runtime::Sel>,
-		key: Option<KeyEquivalent>,
+		key: Option<CommandChord>,
 	) -> Retained<NSMenuItem> {
 		let key_text = NSString::from_str(key.map_or("", |k| k.key));
 		// SAFETY: every selector passed here is one AppKit or MenuTarget answers.
@@ -365,10 +348,18 @@ mod native {
 				&key_text,
 			)
 		};
-		if key.is_some_and(|k| k.option) {
-			row.setKeyEquivalentModifierMask(
-				NSEventModifierFlags::Command | NSEventModifierFlags::Option,
-			);
+		if let Some(key) = key {
+			let mut mask = NSEventModifierFlags::Command;
+			for (held, flag) in [
+				(key.shift, NSEventModifierFlags::Shift),
+				(key.option, NSEventModifierFlags::Option),
+				(key.control, NSEventModifierFlags::Control),
+			] {
+				if held {
+					mask |= flag;
+				}
+			}
+			row.setKeyEquivalentModifierMask(mask);
 		}
 		row
 	}
@@ -401,7 +392,7 @@ mod tests {
 	// Test ID: ErUnDN8
 	#[test]
 	fn the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus() {
-		let menus = layout(&window_menus());
+		let menus = layout(window_menus());
 		let titles: Vec<&str> = menus.iter().map(|m| m.title.as_str()).collect();
 		// Help held only About, which moved to the app menu
 		assert_eq!(
@@ -457,58 +448,177 @@ mod tests {
 		}
 	}
 
-	// Command+, is Settings, and only the standard app menu rows take a key, so
-	// the bar adds no other chord.
-	// Test ID: ErUnDRE
-	#[test]
-	fn command_comma_is_settings_and_the_bar_binds_nothing_else() {
-		let menus = layout(&window_menus());
-		let (title, settings) = find(&menus, MenuAction::Settings).expect("Settings");
-		assert_eq!(title, "SilkTerm");
-		assert!(matches!(
-			settings,
-			BarItem::Action {
-				key: Some(KeyEquivalent {
-					key: ",",
-					option: false
-				}),
-				..
+	// Off since the menu rows take Apple's standard Command chords (20261002),
+	// so the bar binds more than the app menu's keys.
+	// `the_mac_menu_bar_shows_the_command_chords` covers it.
+	// // Command+, is Settings, and only the standard app menu rows take a key, so
+	// // the bar adds no other chord.
+	// // Test ID: ErUnDRE
+	// #[test]
+	// fn command_comma_is_settings_and_the_bar_binds_nothing_else() {
+	// 	let menus = layout(&window_menus());
+	// 	let (title, settings) = find(&menus, MenuAction::Settings).expect("Settings");
+	// 	assert_eq!(title, "SilkTerm");
+	// 	assert!(matches!(
+	// 		settings,
+	// 		BarItem::Action {
+	// 			key: Some(KeyEquivalent {
+	// 				key: ",",
+	// 				option: false
+	// 			}),
+	// 			..
+	// 		}
+	// 	));
+	// 	let mut keys = Vec::new();
+	// 	for menu in &menus {
+	// 		for item in &menu.items {
+	// 			match item {
+	// 				BarItem::Action {
+	// 					label,
+	// 					key: Some(key),
+	// 					..
+	// 				}
+	// 				| BarItem::System {
+	// 					label,
+	// 					key: Some(key),
+	// 					..
+	// 				} => keys.push((label.as_str(), key.key, key.option)),
+	// 				_ => {}
+	// 			}
+	// 		}
+	// 	}
+	// 	assert_eq!(
+	// 		keys,
+	// 		[
+	// 			("Settings\u{2026}", ",", false),
+	// 			("Hide SilkTerm", "h", false),
+	// 			("Hide others", "h", true),
+	// 			("Quit SilkTerm", "q", false),
+	// 		]
+	// 	);
+	// }
+
+	// Off since a Mac has no in-window bar (20261002): View > Menu bar is gone
+	// from the system menu bar, and File gains New window.
+	// `the_mac_menu_bar_reaches_every_window_row_but_its_toggle` covers it.
+	// // The in-window bar starts hidden on a Mac, which is only fair while the
+	// // menu bar reaches every one of its rows.
+	// // Test ID: ErUnDUL
+	// #[test]
+	// fn the_mac_menu_bar_reaches_every_row_of_the_window_menus() {
+	// 	fn entry_actions(entries: &[Entry], out: &mut Vec<MenuAction>) {
+	// 		for entry in entries {
+	// 			match entry {
+	// 				Entry::Item { action, .. } => out.push(*action),
+	// 				Entry::Sub { items, .. } => entry_actions(items, out),
+	// 				Entry::Sep => {}
+	// 			}
+	// 		}
+	// 	}
+	// 	let window = window_menus();
+	// 	let mut want = Vec::new();
+	// 	for (_, entries) in &window {
+	// 		entry_actions(entries, &mut want);
+	// 	}
+	// 	assert!(want.iter().any(|a| matches!(a, MenuAction::NewTabShell(_))));
+	// 	let menus = layout(&window);
+	// 	let mut have = Vec::new();
+	// 	for menu in &menus {
+	// 		actions(&menu.items, &mut have);
+	// 	}
+	// 	for action in &want {
+	// 		assert!(have.contains(action), "{action:?} is not on the menu bar");
+	// 	}
+	// 	// and nothing twice, so the app menu's three left their old homes
+	// 	for (i, action) in have.iter().enumerate() {
+	// 		assert!(!have[i + 1..].contains(action), "{action:?} twice");
+	// 	}
+	// 	// the check marks come across
+	// 	let (_, row) = find(&menus, MenuAction::ToggleMinimap).expect("Minimap");
+	// 	assert!(matches!(row, BarItem::Action { check: Some(_), .. }));
+	// }
+
+	fn keys(items: &[BarItem], out: &mut Vec<(String, CommandChord)>) {
+		for item in items {
+			match item {
+				BarItem::Action {
+					label,
+					key: Some(key),
+					..
+				}
+				| BarItem::System {
+					label,
+					key: Some(key),
+					..
+				} => out.push((label.clone(), *key)),
+				BarItem::Submenu { items, .. } => keys(items, out),
+				_ => {}
 			}
-		));
-		let mut keys = Vec::new();
-		for menu in &menus {
-			for item in &menu.items {
+		}
+	}
+
+	// Each row with an Apple standard shortcut shows its Command chord, drawn by
+	// the menu bar beside a plain label. Every chord the key bindings answer to
+	// is on a row, and no row carries a chord they do not.
+	// Test ID: ErZrSlO
+	#[test]
+	fn the_mac_menu_bar_shows_the_command_chords() {
+		fn labels(items: &[BarItem]) {
+			for item in items {
 				match item {
-					BarItem::Action {
-						label,
-						key: Some(key),
-						..
+					BarItem::Action { label, .. } | BarItem::System { label, .. } => {
+						assert!(!label.contains('('), "{label}");
 					}
-					| BarItem::System {
-						label,
-						key: Some(key),
-						..
-					} => keys.push((label.as_str(), key.key, key.option)),
-					_ => {}
+					BarItem::Submenu { items, .. } => labels(items),
+					BarItem::Separator => {}
 				}
 			}
 		}
+		let menus = layout(window_menus());
+		let mut have = Vec::new();
+		for menu in &menus {
+			keys(&menu.items, &mut have);
+		}
+		let shown: Vec<(&str, String)> = have
+			.iter()
+			.map(|(label, key)| (label.as_str(), key.spoken()))
+			.collect();
 		assert_eq!(
-			keys,
+			shown,
 			[
-				("Settings\u{2026}", ",", false),
-				("Hide SilkTerm", "h", false),
-				("Hide others", "h", true),
-				("Quit SilkTerm", "q", false),
+				("Settings\u{2026}", "Command+,".to_string()),
+				("Hide SilkTerm", "Command+H".to_string()),
+				("Hide others", "Option+Command+H".to_string()),
+				("Quit SilkTerm", "Command+Q".to_string()),
+				("New window", "Command+N".to_string()),
+				("Copy", "Command+C".to_string()),
+				("Paste", "Command+V".to_string()),
+				("Increase font size", "Command+Plus".to_string()),
+				("Decrease font size", "Command+Minus".to_string()),
+				("Reset font size", "Command+0".to_string()),
+				("Fullscreen", "Control+Command+F".to_string()),
+				("New tab", "Command+T".to_string()),
+				("Close tab", "Command+W".to_string()),
 			]
 		);
+		for (hotkey, chord) in crate::input::COMMAND_CHORDS {
+			assert!(
+				have.iter().any(|(_, key)| key == chord),
+				"{hotkey:?} has no row"
+			);
+		}
+		for menu in &menus {
+			labels(&menu.items);
+		}
 	}
 
-	// The in-window bar starts hidden on a Mac, which is only fair while the
-	// menu bar reaches every one of its rows.
-	// Test ID: ErUnDUL
+	// A Mac has no in-window bar, so the system one reaches every row of the
+	// in-window menus but the toggle that would bring that bar back. The copy
+	// modes, shown at the right of the in-window bar elsewhere, are check rows on
+	// Edit that follow the focused pane.
+	// Test ID: ErZrT4e
 	#[test]
-	fn the_mac_menu_bar_reaches_every_row_of_the_window_menus() {
+	fn the_mac_menu_bar_reaches_every_window_row_but_its_toggle() {
 		fn entry_actions(entries: &[Entry], out: &mut Vec<MenuAction>) {
 			for entry in entries {
 				match entry {
@@ -523,21 +633,55 @@ mod tests {
 		for (_, entries) in &window {
 			entry_actions(entries, &mut want);
 		}
+		assert!(want.contains(&MenuAction::ToggleMenuBar));
 		assert!(want.iter().any(|a| matches!(a, MenuAction::NewTabShell(_))));
-		let menus = layout(&window);
+		let menus = layout(window);
 		let mut have = Vec::new();
 		for menu in &menus {
 			actions(&menu.items, &mut have);
 		}
 		for action in &want {
-			assert!(have.contains(action), "{action:?} is not on the menu bar");
+			if *action == MenuAction::ToggleMenuBar {
+				assert!(!have.contains(action), "the in-window bar has a way back");
+			} else {
+				assert!(have.contains(action), "{action:?} is not on the menu bar");
+			}
 		}
-		// and nothing twice, so the app menu's three left their old homes
 		for (i, action) in have.iter().enumerate() {
 			assert!(!have[i + 1..].contains(action), "{action:?} twice");
 		}
-		// the check marks come across
+		let file = menus.iter().find(|m| m.title == "File").expect("File");
+		assert!(matches!(
+			file.items.first(),
+			Some(BarItem::Action {
+				action: MenuAction::NewWindow,
+				..
+			})
+		));
 		let (_, row) = find(&menus, MenuAction::ToggleMinimap).expect("Minimap");
 		assert!(matches!(row, BarItem::Action { check: Some(_), .. }));
+		for copy_select in [false, true] {
+			for copy_output in [false, true] {
+				let menus = layout(crate::app::sample_window_menus_copying(
+					copy_select,
+					copy_output,
+				));
+				for (action, on) in [
+					(MenuAction::ToggleCopySelect, copy_select),
+					(MenuAction::ToggleCopyOutput, copy_output),
+				] {
+					let (title, row) = find(&menus, action).expect("copy mode row");
+					assert_eq!(title, "Edit");
+					assert!(
+						matches!(row, BarItem::Action { check: Some(c), .. } if *c == on),
+						"{action:?}"
+					);
+				}
+			}
+		}
+		for menu in &menus {
+			assert_ne!(menu.items.first(), Some(&BarItem::Separator));
+			assert_ne!(menu.items.last(), Some(&BarItem::Separator));
+		}
 	}
 }

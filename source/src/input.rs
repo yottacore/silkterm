@@ -169,6 +169,107 @@ pub enum Hotkey {
 	MoveTab { forward: bool },
 	Copy,
 	Paste,
+	// Command+Q on macOS, for a press the menu bar does not take
+	Quit,
+}
+
+/// A Command chord on macOS: the key, plus whatever else is held with Command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandChord {
+	pub key: &'static str,
+	pub shift: bool,
+	pub option: bool,
+	pub control: bool,
+}
+
+pub const fn command(key: &'static str) -> CommandChord {
+	CommandChord {
+		key,
+		shift: false,
+		option: false,
+		control: false,
+	}
+}
+
+impl CommandChord {
+	/// How a menu label spells it, in Apple's modifier order: `Command+C`,
+	/// `Control+Command+F`.
+	#[cfg(any(test, target_os = "macos"))]
+	pub fn spoken(self) -> String {
+		let key = match self.key {
+			"+" => "Plus".to_string(),
+			"-" => "Minus".to_string(),
+			key => key.to_ascii_uppercase(),
+		};
+		let mut out = String::new();
+		for (held, name) in [
+			(self.control, "Control+"),
+			(self.option, "Option+"),
+			(self.shift, "Shift+"),
+		] {
+			if held {
+				out.push_str(name);
+			}
+		}
+		out.push_str("Command+");
+		out.push_str(&key);
+		out
+	}
+
+	fn matches(self, typed: &str, mods: ModifiersState) -> bool {
+		typed.eq_ignore_ascii_case(self.key)
+			&& mods.shift_key() == self.shift
+			&& mods.alt_key() == self.option
+			&& mods.control_key() == self.control
+	}
+}
+
+// The macOS chords, taken from Apple's standard shortcuts for the actions that
+// have one. The menu bar shows these same chords (macmenu.rs). Command never
+// reaches the shell, so none of them takes a key from it.
+#[rustfmt::skip]
+pub const COMMAND_CHORDS: &[(Hotkey, CommandChord)] = &[
+	(Hotkey::Settings,   command(",")),
+	(Hotkey::NewWindow,  command("n")),
+	(Hotkey::NewTab,     command("t")),
+	(Hotkey::CloseTab,   command("w")),
+	(Hotkey::Copy,       command("c")),
+	(Hotkey::Paste,      command("v")),
+	(Hotkey::Zoom(1),    command("+")),
+	(Hotkey::Zoom(-1),   command("-")),
+	(Hotkey::ZoomReset,  command("0")),
+	(Hotkey::Fullscreen, CommandChord { key: "f", shift: false, option: false, control: true }),
+	(Hotkey::Quit,       command("q")),
+];
+
+/// The Command chord a hotkey has on macOS, if it has one.
+#[cfg(any(test, target_os = "macos"))]
+pub fn command_chord(hotkey: Hotkey) -> Option<CommandChord> {
+	COMMAND_CHORDS
+		.iter()
+		.find(|(each, _)| *each == hotkey)
+		.map(|(_, chord)| *chord)
+}
+
+// A Command press on macOS, read against the table. "+" is Shift+"=" on most
+// layouts, so both spellings count, as they do for Ctrl.
+fn command_hotkey(key: &Key, mods: ModifiersState) -> Option<Hotkey> {
+	let Key::Character(typed) = key else {
+		return None;
+	};
+	if (typed == "=" || typed == "+") && !mods.alt_key() && !mods.control_key() {
+		return Some(Hotkey::Zoom(1));
+	}
+	COMMAND_CHORDS
+		.iter()
+		.find(|(_, chord)| chord.matches(typed, mods))
+		.map(|(hotkey, _)| *hotkey)
+}
+
+/// Whether a press can go on to the shell. On macOS nothing typed with Command
+/// held does, as in every other terminal there.
+pub fn reaches_shell(mods: ModifiersState, mac: bool) -> bool {
+	!(mac && mods.super_key())
 }
 
 // Which hotkey a press is, if any. Chords that shells bind keep their plain
@@ -181,12 +282,14 @@ pub fn hotkey_for(key: &Key, mods: ModifiersState, menu_bar: bool) -> Option<Hot
 // `hotkey_for` with the platform passed in, so the macOS chords can be checked
 // from any box.
 fn hotkey_on(key: &Key, mods: ModifiersState, menu_bar: bool, mac: bool) -> Option<Hotkey> {
+	// Command chords are a set of their own on a Mac, and only the table's count
+	if mac && mods.super_key() {
+		return command_hotkey(key, mods);
+	}
 	let ctrl = mods.control_key();
 	let shift = mods.shift_key();
-	if is_settings_chord(key, mods, mac) {
-		return Some(Hotkey::Settings);
-	}
 	match key {
+		Key::Character(typed) if ctrl && !shift && typed == "," => return Some(Hotkey::Settings),
 		Key::Named(NamedKey::F11) => return Some(Hotkey::Fullscreen),
 		Key::Named(NamedKey::ContextMenu) => return Some(Hotkey::ContextMenu),
 		_ => {}
@@ -222,17 +325,6 @@ fn hotkey_on(key: &Key, mods: ModifiersState, menu_bar: bool, mac: bool) -> Opti
 		_ => return None,
 	};
 	Some(hotkey)
-}
-
-// Ctrl+, everywhere, and Command+, as well on macOS, where every app opens its
-// settings with it. The menu bar's Settings item normally takes Command+, before
-// the window sees it; this covers the press when it does not.
-fn is_settings_chord(key: &Key, mods: ModifiersState, mac: bool) -> bool {
-	if !matches!(key, Key::Character(typed) if typed == ",") || mods.shift_key() {
-		return false;
-	}
-	let command = mac && mods.super_key() && !mods.control_key() && !mods.alt_key();
-	mods.control_key() || command
 }
 
 // Where a write to the desktop clipboard comes from.
@@ -776,6 +868,99 @@ mod tests {
 			hotkey_on(&Key::Character(".".into()), COMMAND, true, true),
 			None
 		);
+	}
+
+	// On a Mac each action with an Apple standard shortcut answers to it, and
+	// nothing else held with Command does. Off a Mac, Super chords stay free. No
+	// Ctrl chord moves either way.
+	// Test ID: ErZrRVm
+	#[test]
+	fn the_command_chords_work_on_macos_and_leave_ctrl_alone() {
+		const COMMAND: ModifiersState = ModifiersState::SUPER;
+		let held = |chord: CommandChord| {
+			let mut mods = COMMAND;
+			for (on, flag) in [
+				(chord.shift, ModifiersState::SHIFT),
+				(chord.option, ModifiersState::ALT),
+				(chord.control, CTRL),
+			] {
+				if on {
+					mods |= flag;
+				}
+			}
+			mods
+		};
+		let on =
+			|typed: &str, mods, mac| hotkey_on(&Key::Character(typed.into()), mods, false, mac);
+		for (hotkey, chord) in COMMAND_CHORDS {
+			assert_eq!(
+				on(chord.key, held(*chord), true),
+				Some(*hotkey),
+				"{chord:?}"
+			);
+			assert_eq!(
+				on(chord.key, held(*chord), false),
+				None,
+				"{chord:?} off macOS"
+			);
+		}
+		let find = |hotkey| command_chord(hotkey).map(CommandChord::spoken);
+		assert_eq!(find(Hotkey::NewTab).as_deref(), Some("Command+T"));
+		assert_eq!(find(Hotkey::CloseTab).as_deref(), Some("Command+W"));
+		assert_eq!(find(Hotkey::NewWindow).as_deref(), Some("Command+N"));
+		assert_eq!(find(Hotkey::Copy).as_deref(), Some("Command+C"));
+		assert_eq!(find(Hotkey::Paste).as_deref(), Some("Command+V"));
+		assert_eq!(find(Hotkey::Settings).as_deref(), Some("Command+,"));
+		assert_eq!(find(Hotkey::Quit).as_deref(), Some("Command+Q"));
+		assert_eq!(find(Hotkey::Zoom(1)).as_deref(), Some("Command+Plus"));
+		assert_eq!(find(Hotkey::Zoom(-1)).as_deref(), Some("Command+Minus"));
+		assert_eq!(find(Hotkey::ZoomReset).as_deref(), Some("Command+0"));
+		assert_eq!(
+			find(Hotkey::Fullscreen).as_deref(),
+			Some("Control+Command+F")
+		);
+		// "+" is Shift+"=", so Command+= counts too
+		assert_eq!(on("=", COMMAND, true), Some(Hotkey::Zoom(1)));
+		assert_eq!(
+			on("+", COMMAND.union(ModifiersState::SHIFT), true),
+			Some(Hotkey::Zoom(1))
+		);
+		// a different modifier set is a different chord
+		assert_eq!(on("t", COMMAND.union(ModifiersState::SHIFT), true), None);
+		assert_eq!(on("c", COMMAND.union(ModifiersState::ALT), true), None);
+		assert_eq!(on("f", COMMAND, true), None, "no Find yet");
+		assert_eq!(on("k", COMMAND, true), None);
+		// every Ctrl chord means what it meant before
+		let mut keys: Vec<String> = ('a'..='z').map(String::from).collect();
+		keys.extend([",", "-", "=", "+", "0", ".", "["].map(String::from));
+		for mods in [
+			CTRL,
+			CTRL_SHIFT,
+			CTRL.union(ModifiersState::ALT),
+			ModifiersState::ALT,
+		] {
+			for typed in &keys {
+				assert_eq!(
+					on(typed, mods, true),
+					on(typed, mods, false),
+					"{mods:?} {typed}"
+				);
+			}
+		}
+	}
+
+	// Nothing typed with Command held reaches the shell on a Mac. Elsewhere a
+	// Super chord goes on as it always has.
+	// Test ID: ErZrRpZ
+	#[test]
+	fn command_never_reaches_the_shell_on_macos() {
+		const COMMAND: ModifiersState = ModifiersState::SUPER;
+		assert!(!reaches_shell(COMMAND, true));
+		assert!(!reaches_shell(COMMAND.union(CTRL), true));
+		assert!(reaches_shell(COMMAND, false));
+		for mods in [NONE, CTRL, CTRL_SHIFT, ModifiersState::ALT] {
+			assert!(reaches_shell(mods, true), "{mods:?}");
+		}
 	}
 
 	// Pane split, close and focus cycling are menu-only, so every other chord

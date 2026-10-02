@@ -57,6 +57,7 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 - Units go on the end of the label, separated by a space, with no brackets: `Opacity %`, `Blur px`, `Blink rate ms`. The value beside the control carries the number alone.
 
 - Keyboard shortcuts shown in a menu go in parentheses at the end of the item, spelled with `+` between every part and no spaces: `Copy (Ctrl+Shift+C)`, `Fullscreen (F11)`.
+	- On macOS a row with a Command chord shows that chord instead, with the modifiers in Apple's order: `Copy (Command+C)`, `Fullscreen (Control+Command+F)`. The system menu bar draws the chord itself, so its labels carry none.
 
 - Say what a thing is, not what the code calls it. "File or folder", not "Path". "Visibility", not "Alpha". "Handle" and "Track", not "Thumb" and "Trough".
 
@@ -70,11 +71,15 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 
 - The menu bar is File, Edit, View, Tabs, Panes, Help. A new action goes in the menu whose noun it acts on.
 
-- On macOS the same menus go in the system menu bar, after an app menu holding About, Settings…, Hide and Quit, and the in-window bar starts hidden. Help is left off there, since About was its only row. Only the app menu rows take Command keys.
+- On macOS the same menus go in the system menu bar, after an app menu holding About, Settings…, Hide and Quit. There is no in-window bar there at all, so View has no Menu bar row and `--hide-menu` does nothing. File gains New window. Help is left off, since About was its only row. Each row with an Apple standard shortcut takes its Command chord.
 
 - The right side of the menu bar carries the focused pane's two auto-copy checkboxes, so their state is visible without opening anything. It is the only thing on the bar that is not a menu. When the window narrows it sheds its lead-in, then its words, then itself, rather than overlapping the titles.
 
+- On macOS the two auto-copy switches are the Copy on select and Copy on output rows in Edit, checked to follow the focused pane. The system menu bar has no place for a control that is not a menu.
+
 - The right-click menu is the pane's own menu. It is a selection from the bar, not a copy of it: the actions worth reaching without traveling, plus items that only make sense at the pointer, such as the two link actions that appear only when the click was on a link. It carries one window-chrome row, Menu bar, because with the bar hidden nothing else can bring it back.
+
+- On macOS the right-click menu has no Menu bar row, since there is no in-window bar to bring back.
 
 - Order within a menu: the most-used action first, related actions adjacent, destructive actions last in their group.
 
@@ -256,7 +261,14 @@ Rules that go with them:
 	- Ctrl+PageUp and Ctrl+PageDown walk the tabs; add Shift to carry the tab with you.
 	- Ctrl+Plus, Ctrl+Minus and Ctrl+0 size the font for this session.
 	- Ctrl+, opens Settings. F11 is fullscreen.
-	- On macOS, Command+, opens Settings too.
+
+- On macOS the actions with an Apple standard shortcut take it as well, as a key and on the menu row. The Ctrl chords above still work there.
+	- Command+N new window, Command+T new tab, Command+W close tab.
+	- Command+C copy, Command+V paste.
+	- Command+Plus, Command+Minus and Command+0 size the font.
+	- Command+, opens Settings, Control+Command+F is fullscreen, Command+Q quits. Command+H and Option+Command+H hide.
+	- Nothing typed with Command held reaches the shell, so no Command chord takes a key from it.
+	- With no in-window bar, Option plus a letter always goes to the shell.
 
 - Alt plus a menu title's first letter opens that menu. The Menu key opens the right-click menu on the focused pane.
 
@@ -279,6 +291,8 @@ Things the built interface does differently from the rules above. Each is a smal
 - `Paste Selection` keeps a capital S so that the accelerator has a letter to take. Documented as an exception, but a better fix would free a letter elsewhere.
 
 - `Copy on select` sits at the bottom of the Cursor tab, which is not where its subject is. It was asked for there and a test pins it, so it stays until that changes.
+
+- On macOS the auto-copy switches show their state only in the Edit menu, not at a glance as the in-window bar shows them elsewhere. The bar's dimming of them while the window is in the background has no counterpart there either.
 
 - The right-click menu no longer offers Fullscreen, Window frame or Bare window, so with the menu bar hidden they are reachable only by F11 or by putting the bar back. Acceptable while Menu bar stays on that menu, but worth another look if the bar is ever hidden by default.
 

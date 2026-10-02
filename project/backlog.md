@@ -197,7 +197,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100114435587
 	- Type: Bug
 	- Status: Waiting for testing
-	- Needs external testing: On b26, the macOS menu bar shows the SilkTerm menu (About SilkTerm, Settings, Services, Hide SilkTerm, Hide others, Show all, Quit SilkTerm), then File, Edit, View, Tabs and Panes, and no menu bar shows inside the window. Each row does what the same row does in the window. The check marks follow the focused pane and the View toggles, and the shell submenus list the active shells. Command+Q quits and the window size is remembered. Command+H hides. With Settings or About open, a menu pick brings that dialog forward instead. View > Menu bar brings the in-window bar back.
+	- Needs external testing: On b26, the macOS menu bar shows the SilkTerm menu (About SilkTerm, Settings, Services, Hide SilkTerm, Hide others, Show all, Quit SilkTerm), then File, Edit, View, Tabs and Panes, and no menu bar shows inside the window. Each row does what the same row does in the window. The check marks follow the focused pane and the View toggles, and the shell submenus list the active shells. Command+Q quits and the window size is remembered. Command+H hides. With Settings or About open, a menu pick brings that dialog forward instead.
+		- 20261002: No in-window bar comes up with `--hide-menu=false`, and neither View nor the right-click menu has a Menu bar row. File starts with New window, which opens one. Edit's Copy on select and Copy on output check marks follow the focused pane, also when changed from the right-click menu. Full screen covers the macOS menu bar. View has one fullscreen row, with no second Enter Full Screen added by macOS beside it.
 	- Severity: Avg
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -211,19 +212,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual cause: The menus were only ever drawn inside the window. The macOS menu bar had only the small default app menu that winit puts up.
 	- Progress log:
 		- Question: View > Menu bar now means the in-window bar, which on a Mac could be read as the system one. Should it say "Menu bar in window" there?
+			- Answered 20261002: no in-window bar on macOS at all. See Decisions.
 		- Question: The rows still name their Ctrl shortcuts in the label, such as "New tab (Ctrl+Shift+T)", since those are the chords that work. Should Mac versions with Command (Command+T, Command+C and so on) be added as menu keys? That would add bindings, so it was left out.
+			- Answered 20261002: yes, as menu keys and as key bindings. See Decisions.
 	- Decisions:
 		- The in-window bar is hidden by default on macOS, not removed. The system menu bar has every row it has, but not its always-visible copy-mode boxes.
+			- Superseded by the first 20261002 decision.
+		- 20261002: macOS has no in-window menu bar at all. Full screen should cover the macOS menu bar, and if it does not, it is still not SilkTerm's place to break the macOS menu contract. No View > Menu bar row, no right-click Menu bar row, and `--hide-menu` does nothing there. The right-click menu stays.
+		- 20261002: Menu rows on macOS take Apple's standard Command chords, and the same chords work as key bindings. Command never reaches the shell on macOS, and no Ctrl chord is taken from the terminal. Labels on macOS show the Command chord, not the Ctrl one. Other platforms do not change.
 	- Actual fix:
 		- On macOS the system menu bar is built from the same lists the in-window menus use. The SilkTerm menu comes first with About, Settings (Command+,), Services, Hide, Hide others, Show all and Quit. Then File, Edit, View, Tabs and Panes, minus those rows. Help is left off, since About was its only row.
 		- A pick runs the same action as the in-window menu. While a dialog or notice is up it only brings that forward, as a click in the window does. The bar is rebuilt when a check mark or the shell list changes. Rows with a tip in the window carry it as a tooltip.
-		- The in-window bar starts hidden on macOS. View > Menu bar, the right-click menu's Menu bar row and `--hide-menu=false` bring it back. Linux and Windows are unchanged.
 		- Quit goes through the app's own exit, not winit's default menu.
-	- Swept: Every row of the in-window bar is on the system menu bar, checked by test. The right-click menu is unchanged. The `--hide-menu` help text and the UI style guide say what macOS does.
-	- Test case: `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8), `the_mac_menu_bar_reaches_every_row_of_the_window_menus` (ErUnDUL) and `the_in_window_menu_bar_starts_hidden_on_macos_only` (ErUnxsD). The last fails with the old launch default. The first two pin the new menu bar layout, which had no old version.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: macmenu
-	- Commit: 02482bb
+		- 20261002: There is no in-window bar on macOS. `--hide-menu` is accepted and ignored there, and its help text says so. There is no config setting for the bar. The Menu bar rows are gone from View and from the right-click menu, and the toggle does nothing there if reached anyway. Linux and Windows are unchanged.
+		- 20261002: The copy-mode boxes on the in-window bar show and flip the focused pane's Copy on select and Copy on output. On macOS those are the two check rows already in Edit, which follow the focused pane. What is lost is seeing their state without opening a menu, and the dimming that marks them inactive while the window is in the background. The UI style guide lists that as a known deviation.
+		- 20261002: File gains New window on macOS, for Command+N. Rows show their Command chords beside a plain label (2026100114435613).
+	- Swept: Every row of the in-window menus but Menu bar is on the system menu bar, checked by test. Every place the in-window bar could come back on macOS: the launch default, `--hide-menu`, the View row, the right-click row, the toggle itself, and Bare window, which only restores what was on. There is no config key. The `--hide-menu` help text and the UI style guide say what macOS does.
+	- Test case: `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8), `there_is_no_in_window_menu_bar_on_macos` (ErZrS8g) and `the_mac_menu_bar_reaches_every_window_row_but_its_toggle` (ErZrT4e). The last two fail with the in-window bar back on macOS. The old `the_mac_menu_bar_reaches_every_row_of_the_window_menus` (ErUnDUL) and `the_in_window_menu_bar_starts_hidden_on_macos_only` (ErUnxsD) are commented out, since the 20261002 decision changed what they pin.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS. Each new test was seen failing with its part of the change undone.
+	- Branch: macmenu, macmenu2
+	- Commit: 02482bb, bb66e6e
 	- Closed:
 
 - macOS: Command+, should open Settings
@@ -231,6 +239,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Bug
 	- Status: Waiting for testing
 	- Needs external testing: On b26, Command+, opens Settings from the terminal, and the menu bar shows it beside Settings. With Settings already open it brings that one forward. Ctrl+, still opens Settings too.
+		- 20261002: The menu rows show Command+N, T, W, C, V, Plus, Minus, 0, Control+Command+F, and the app menu's Command+, H, Option+H and Q, with no Ctrl chord in any label. Each chord works from the keyboard, Command+= as well as Command+Plus. Command+K or any other unbound Command chord types nothing at the shell. Ctrl+Shift+T, Ctrl+Shift+C and the other Ctrl chords still work, and plain Ctrl+T, Ctrl+W and Ctrl+V still reach the shell. The right-click menu reads "Copy (Command+C)" and so on.
 	- Severity: Low
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -244,11 +253,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix:
 		- Settings in the macOS menu bar's SilkTerm menu takes Command+,. It is part of 2026100114435587.
 		- The key handling also takes Command+, as Settings on macOS, for a press the menu bar does not take. Command+, with Shift or Option is not the chord. Other platforms are unchanged.
-	- Swept: The one Settings chord check, used by the main window. The menu bar adds Command keys only to the SilkTerm menu's Settings, Hide, Hide others and Quit, checked by test. Hide, Hide others and Quit had the same keys in winit's default menu.
-	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE). Both fail with the macOS Command+, arm taken out, which is the old behavior.
+		- 20261002: Command+, is now one of a table of Apple standard chords on macOS: Command+N new window, Command+T new tab, Command+W close tab, Command+C copy, Command+V paste, Command+Plus, Minus and 0 for the font size, Control+Command+F fullscreen and Command+Q quit. The menu bar rows and the key bindings both read that one table. There is no Find yet, so no Command+F.
+		- 20261002: On macOS a press with Command held never reaches the shell. Before, an unbound one such as Command+K typed the letter. Every Ctrl chord means what it did before.
+		- 20261002: On macOS the right-click menu spells its shortcuts as Command chords, and the menu bar labels carry none, since the menu bar draws the chord itself.
+	- Note: 20261002: Not covered here. The Settings dialog's text boxes take Ctrl+C, X, V and A only, so on macOS Command+C and Command+V there now go to the menu bar, which just brings the dialog forward. While a tab name is being edited, Command+V from the menu bar pastes into the shell, not the name. Both were read from the code, not seen.
+	- Swept: The one key binding function and the one menu bar builder. Every chord in the table is on a menu row and every menu row's chord is in the table, checked by test. Every Ctrl chord is checked to mean the same with the Mac chords on. The right-click menu is the only other menu that shows shortcuts.
+	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY), `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm), `command_never_reaches_the_shell_on_macos` (ErZrRpZ), `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) and `the_mac_right_click_menu_shows_command_chords` (ErZrSS3). The four new ones fail with their part of the change undone. The old `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE) is commented out, since the bar now binds more than the app menu's keys.
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: macmenu
-	- Commit: 02482bb
+	- Branch: macmenu, macmenu2
+	- Commit: 02482bb, bb66e6e
 	- Closed:
 
 - Test files go under one dated folder in the system temp dir
