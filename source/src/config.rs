@@ -1290,7 +1290,11 @@ fn fence_run(line: &str) -> Option<(char, usize)> {
 // which keeps the file's ACLs. A path that is not UTF-8 is refused rather than
 // converted lossily, which could name a different file.
 pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> Result<(), String> {
-	write_config_atomic_with(path, text, shcl::write_file_atomic)
+	write_config_atomic_with(path, text, shcl::write_file_atomic)?;
+	for line in restated_launch_messages(path, text) {
+		eprintln!("{line}");
+	}
+	Ok(())
 }
 
 // Windows' replace can fail after the old file is gone (1176, 1177), and shcl
@@ -2171,6 +2175,10 @@ struct RawColors {
 }
 
 fn load() -> Settings {
+	// A launch's own writes come before it says anything about the file.
+	if let Ok(mut held) = LAUNCH_SAID.lock() {
+		*held = None;
+	}
 	adopt_legacy_config();
 	let Some(path) = config_path() else {
 		return Settings::default();
@@ -2209,15 +2217,62 @@ fn load() -> Settings {
 		// read under its old spelling, which matters most where a rename hands an
 		// old name to a new setting (colors.focus).
 		Ok(text) => {
-			let text = loaded_text(&text);
-			for line in config_complaints(&text) {
-				eprintln!("{APP_NAME}: {}: {line}", path.display());
+			let (raw, said) = read_config_text(&loaded_text(&text), &path);
+			for line in &said {
+				eprintln!("{line}");
 			}
-			read_raw(&text, &path)
+			remember_launch_messages(&path, said);
+			raw
 		}
 		Err(_) => RawConfig::default(),
 	};
 	resolve(raw)
+}
+
+// The values in a config text, and everything a launch prints about it.
+fn read_config_text(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
+	let mut said: Vec<String> = config_complaints(text)
+		.into_iter()
+		.map(|line| format!("{APP_NAME}: {}: {line}", path.display()))
+		.collect();
+	let (raw, read) = read_raw(text, path);
+	said.extend(read);
+	(raw, said)
+}
+
+// What the last launch printed about the settings file. A write after it can
+// move the lines it named: the performance rating adds lines near the top once
+// the window is up. Such a write says again whatever now reads differently, so
+// the last word names the line the file has.
+static LAUNCH_SAID: std::sync::Mutex<Option<(std::path::PathBuf, Vec<String>)>> =
+	std::sync::Mutex::new(None);
+
+fn remember_launch_messages(path: &std::path::Path, said: Vec<String>) {
+	if let Ok(mut held) = LAUNCH_SAID.lock() {
+		*held = Some((path.to_path_buf(), said));
+	}
+}
+
+// The messages a write of `text` to `path` brings that were not said already.
+// They are remembered as said.
+fn restated_launch_messages(path: &std::path::Path, text: &str) -> Vec<String> {
+	let Ok(mut held) = LAUNCH_SAID.lock() else {
+		return Vec::new();
+	};
+	let Some((at, said)) = held.as_mut() else {
+		return Vec::new();
+	};
+	if at != path {
+		return Vec::new();
+	}
+	let (_, now) = read_config_text(&loaded_text(text), path);
+	let new: Vec<String> = now
+		.iter()
+		.filter(|line| !said.contains(line))
+		.cloned()
+		.collect();
+	*said = now;
+	new
 }
 
 // What is wrong with a config file that nothing else says out loud. All three
@@ -2327,6 +2382,7 @@ fn config_complaints(text: &str) -> Vec<String> {
 struct Reader<'a> {
 	doc: shcl::Document,
 	path: &'a std::path::Path,
+	said: std::cell::RefCell<Vec<String>>,
 }
 
 // The color in `key: #rrggbb` with nothing but a comment after it, which is
@@ -2364,11 +2420,11 @@ impl Reader<'_> {
 		match got {
 			Ok(v) => Some(v),
 			Err(shcl::Status::BadType) => {
-				eprintln!(
+				self.said.borrow_mut().push(format!(
 					"{APP_NAME}: {}{}: ignoring invalid value for `{key}`",
 					self.path.display(),
 					line_list(&self.doc.lines(key))
-				);
+				));
 				None
 			}
 			Err(shcl::Status::Multiple) => {
@@ -2376,11 +2432,11 @@ impl Reader<'_> {
 				// default is what actually takes effect - which used to happen
 				// in silence, and reads as the setting being ignored outright.
 				// Cite every line: the point is that there IS more than one.
-				eprintln!(
+				self.said.borrow_mut().push(format!(
 					"{APP_NAME}: {}{}: `{key}` is set more than once, so its default is used",
 					self.path.display(),
 					line_list(&self.doc.lines(key))
-				);
+				));
 				None
 			}
 			Err(_) => None,
@@ -2404,22 +2460,30 @@ impl Reader<'_> {
 // Parse the config and pull out every key we know. The parser is forgiving by
 // design - a malformed line becomes a diagnostic and is skipped rather than
 // sinking the whole document - so this needs no retry loop of its own, and no
-// leading-zero rewriting (`.25` is a valid float here).
-fn read_raw(text: &str, path: &std::path::Path) -> RawConfig {
+// leading-zero rewriting (`.25` is a valid float here). Also answers what the
+// read has to say about the file, for the caller to print.
+fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 	let doc = shcl::Document::parse(text);
-	for d in doc.diagnostics() {
-		if matches!(d.severity, shcl::Severity::Error) {
-			eprintln!(
+	let said: Vec<String> = doc
+		.diagnostics()
+		.iter()
+		.filter(|d| matches!(d.severity, shcl::Severity::Error))
+		.map(|d| {
+			format!(
 				"{APP_NAME}: {} line {}: {} [{}]",
 				path.display(),
 				d.line,
 				d.message,
 				d.code
-			);
-		}
-	}
-	let r = Reader { doc, path };
-	RawConfig {
+			)
+		})
+		.collect();
+	let r = Reader {
+		doc,
+		path,
+		said: std::cell::RefCell::new(said),
+	};
+	let raw = RawConfig {
 		use_system_font: r.b("font.use_system_family"),
 		use_system_font_size: r.b("font.use_system_size"),
 		font_family: r.s("font.family"),
@@ -2535,7 +2599,8 @@ fn read_raw(text: &str, path: &std::path::Path) -> RawConfig {
 		},
 		user_themes: read_user_themes(&r.doc),
 		shells: read_shells(&r.doc),
-	}
+	};
+	(raw, r.said.into_inner())
 }
 
 // Saved themes, in file order. A slug with no readable colors at all is skipped;
@@ -4279,17 +4344,18 @@ fn rewritten_by<'a>(text: &'a str, steps: &[LaunchStep]) -> std::borrow::Cow<'a,
 }
 
 // Every setting path, active and commented, in the text a save would write. A
-// save writes a commented line at the depth of the setting below it, so a
-// commented new name can move into the old name's block, and a rename that a
-// save turns on or off moved a value at the next launch. A file that lost a
-// line has no canonical form that keeps it, so it has none to agree with.
+// save that keeps the lines leaves a comment where it is, but one that falls
+// back to the canonical form writes it at the depth of the setting below it, so
+// a commented new name can move into the old name's block, and a rename that a
+// save turns on or off moved a value at the next launch. A save that would be
+// refused writes nothing, so the file as it is has the answer.
 fn saved_paths(text: &str) -> Option<std::collections::HashSet<String>> {
-	let doc = shcl::Document::parse(text);
-	if doc.lost_count() > 0 {
+	let doc = parse_kept(text);
+	if save_refused(&doc) {
 		return None;
 	}
 	Some(
-		walk_settings(&doc.to_canonical())
+		walk_settings(&saved_text(&doc))
 			.into_iter()
 			.filter_map(|w| match w {
 				WalkLine::Setting { path, .. } => Some(path),
@@ -6637,10 +6703,13 @@ mod tests {
 	// Test ID: Er2UFeR
 	#[test]
 	fn word_separators_come_from_the_file() {
-		let s = resolve(read_raw(
-			"selection:\n\tword_separators: \" ,;\"\n",
-			std::path::Path::new("test.shcl"),
-		));
+		let s = resolve(
+			read_raw(
+				"selection:\n\tword_separators: \" ,;\"\n",
+				std::path::Path::new("test.shcl"),
+			)
+			.0,
+		);
 		assert_eq!(s.word_separators, " ,;");
 	}
 
@@ -6662,10 +6731,13 @@ mod tests {
 			]
 		);
 		assert_eq!(parse_pairs("() ab x"), [('(', ')'), ('a', 'b')]);
-		let s = resolve(read_raw(
-			"selection:\n\tpairs: \"()\"\n",
-			std::path::Path::new("test.shcl"),
-		));
+		let s = resolve(
+			read_raw(
+				"selection:\n\tpairs: \"()\"\n",
+				std::path::Path::new("test.shcl"),
+			)
+			.0,
+		);
 		assert_eq!(s.selection_pairs, "()");
 	}
 
@@ -8877,10 +8949,13 @@ mod tests {
 	#[test]
 	fn a_bad_line_drops_only_its_own_setting() {
 		let p = std::path::Path::new("test.shcl");
-		let s = resolve(read_raw(
-			"scroll.scrollback: 4242\nwindow.margin: not-a-number\ncolors.focus: \"#abcdef\"\n",
-			p,
-		));
+		let s = resolve(
+			read_raw(
+				"scroll.scrollback: 4242\nwindow.margin: not-a-number\ncolors.focus: \"#abcdef\"\n",
+				p,
+			)
+			.0,
+		);
 		assert_eq!(s.scrollback, 4242, "settings before the bad line survive");
 		assert_eq!(s.focus, [0xab, 0xcd, 0xef], "and settings after it");
 		assert_eq!(
@@ -8960,7 +9035,7 @@ mod tests {
 			("cursor.blink_rate_ms",             limits::BLINK_MS.0,    limits::BLINK_MS.1),
 			("wallpaper.rotate.interval_s",      limits::ROTATE_S.0,    limits::ROTATE_S.1),
 		];
-		let read = |key: &str, value: &str| resolve(read_raw(&format!("{key}: {value}\n"), p));
+		let read = |key: &str, value: &str| resolve(read_raw(&format!("{key}: {value}\n"), p).0);
 		let of = |s: &Settings, key: &str| -> f32 {
 			match key {
 				"font.size" => s.font_size,
@@ -9112,10 +9187,13 @@ mod tests {
 		let before = settings();
 		let was_dark = OS_DARK.load(Ordering::Relaxed);
 		OS_DARK.store(true, Ordering::Relaxed);
-		let mut s = resolve(read_raw(
-			"theme_mode: system\ncolors.background: \"#123456\"\n",
-			std::path::Path::new("test.shcl"),
-		));
+		let mut s = resolve(
+			read_raw(
+				"theme_mode: system\ncolors.background: \"#123456\"\n",
+				std::path::Path::new("test.shcl"),
+			)
+			.0,
+		);
 		// one from the command line, which the file never holds
 		s.fg = [1, 2, 3];
 		update(s);
@@ -9139,12 +9217,15 @@ mod tests {
 	#[test]
 	fn a_setting_written_twice_falls_back_and_is_reported() {
 		let p = std::path::Path::new("test.shcl");
-		let s = resolve(read_raw(
-			"font:\n\tfamily: \"One\"\n\tsize: 13.0\n\tfamily: \"Two\"\n",
-			p,
-		));
+		let s = resolve(
+			read_raw(
+				"font:\n\tfamily: \"One\"\n\tsize: 13.0\n\tfamily: \"Two\"\n",
+				p,
+			)
+			.0,
+		);
 		// as good as absent: neither spelling wins
-		let absent = resolve(read_raw("font:\n\tsize: 13.0\n", p));
+		let absent = resolve(read_raw("font:\n\tsize: 13.0\n", p).0);
 		assert_eq!(
 			s.font_family, absent.font_family,
 			"a repeated key falls back as if it were not there"
@@ -9205,10 +9286,7 @@ mod tests {
 				});
 			assert_eq!(active, Some(true), "{want} is not a live line");
 		}
-		let s = resolve(read_raw(
-			default_config(),
-			std::path::Path::new("test.shcl"),
-		));
+		let s = resolve(read_raw(default_config(), std::path::Path::new("test.shcl")).0);
 		let d = Settings::default();
 		assert_eq!(
 			(
@@ -9275,7 +9353,7 @@ mod tests {
 		// between the two loads being compared.
 		let _guard = super::test_config_lock();
 		let path = std::path::Path::new("test.shcl");
-		let base = resolve(read_raw(default_config(), path));
+		let base = resolve(read_raw(default_config(), path).0);
 		let lines: Vec<&str> = default_config().lines().collect();
 		let mut checked = 0;
 		for w in walk_settings(default_config()) {
@@ -9309,7 +9387,7 @@ mod tests {
 			edited[index] = &bare;
 			let text = edited.join("\n") + "\n";
 			assert!(
-				resolve(read_raw(&text, path)) == base,
+				resolve(read_raw(&text, path).0) == base,
 				"uncommenting `{}` changes what loads",
 				lines[index].trim()
 			);
@@ -9516,7 +9594,10 @@ mod tests {
 		// fills the window, ignoring aspect; a file that names no fit gets it too
 		assert_eq!(d.wallpaper_default_fit, Fit::Stretch);
 		let p = std::path::Path::new("test.shcl");
-		assert_eq!(resolve(read_raw("", p)).wallpaper_default_fit, Fit::Stretch);
+		assert_eq!(
+			resolve(read_raw("", p).0).wallpaper_default_fit,
+			Fit::Stretch
+		);
 		assert_eq!((d.columns, d.rows), (160, 48));
 		assert_eq!(d.margin, 8.0);
 		assert_eq!(d.bg, [0, 0, 0], "an all-black background");
@@ -9531,20 +9612,20 @@ mod tests {
 	fn scrim_function_and_ramp_resolve() {
 		let p = std::path::Path::new("test.shcl");
 		for f in ["dilate", "sdf", "dt", "gaussian"] {
-			let s = resolve(read_raw(&format!("text.scrim.function: \"{f}\"\n"), p));
+			let s = resolve(read_raw(&format!("text.scrim.function: \"{f}\"\n"), p).0);
 			assert_eq!(s.text_scrim_function, f);
 		}
 		for r in ["sigmoid", "half_normal", "linear", "log", "exp"] {
-			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{r}\"\n"), p));
+			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{r}\"\n"), p).0);
 			assert_eq!(s.text_scrim_ramp, r);
 		}
 		for (old, new) in [("s", "sigmoid"), ("gaussian", "half_normal")] {
-			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{old}\"\n"), p));
+			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{old}\"\n"), p).0);
 			assert_eq!(s.text_scrim_ramp, new, "{old} should still parse");
 		}
-		let s = resolve(read_raw("text.scrim.function: \"bogus\"\n", p));
+		let s = resolve(read_raw("text.scrim.function: \"bogus\"\n", p).0);
 		assert_eq!(s.text_scrim_function, "sdf", "unknown -> default");
-		let s = resolve(read_raw("text.scrim.ramp: \"bogus\"\n", p));
+		let s = resolve(read_raw("text.scrim.ramp: \"bogus\"\n", p).0);
 		assert_eq!(s.text_scrim_ramp, "exp", "unknown -> default");
 	}
 
@@ -9583,17 +9664,17 @@ mod tests {
 	#[test]
 	fn system_font_size_split_inference() {
 		let p = std::path::Path::new("test.shcl");
-		let s = resolve(read_raw("", p));
+		let s = resolve(read_raw("", p).0);
 		assert!(s.use_system_font && s.use_system_font_size, "defaults on");
-		let s = resolve(read_raw("font.use_system_family: false\n", p));
+		let s = resolve(read_raw("font.use_system_family: false\n", p).0);
 		assert!(!s.use_system_font_size, "size follows the face toggle");
-		let s = resolve(read_raw("font.size: 20.0\n", p));
+		let s = resolve(read_raw("font.size: 20.0\n", p).0);
 		assert!(s.use_system_font, "explicit size keeps the system face");
 		assert!(
 			!s.use_system_font_size,
 			"explicit size wins over the OS size"
 		);
-		let s = resolve(read_raw("font.size: 20.0\nfont.use_system_size: true\n", p));
+		let s = resolve(read_raw("font.size: 20.0\nfont.use_system_size: true\n", p).0);
 		assert!(s.use_system_font_size, "explicit key beats the inference");
 	}
 
@@ -9778,24 +9859,27 @@ mod tests {
 	#[test]
 	fn copy_on_select_key_parses_and_defaults_off() {
 		let p = std::path::Path::new("test.shcl");
-		assert!(!resolve(read_raw("", p)).copy_on_select, "default off");
-		assert!(resolve(read_raw("shell.copy_on_select: true\n", p)).copy_on_select);
+		assert!(!resolve(read_raw("", p).0).copy_on_select, "default off");
+		assert!(resolve(read_raw("shell.copy_on_select: true\n", p).0).copy_on_select);
 	}
 
 	// Test ID: Em1S9yq
 	#[test]
 	fn hyperlink_keys_parse_in_their_block() {
 		let p = std::path::Path::new("test.shcl");
-		let d = resolve(read_raw("", p));
+		let d = resolve(read_raw("", p).0);
 		assert!(d.hyperlinks, "on by default");
 		assert!(
 			d.hyperlink_open_command.is_empty(),
 			"opener is the desktop's"
 		);
-		let s = resolve(read_raw(
-			"hyperlinks:\n\tenabled: false\n\topen_command: \"firefox --new-tab\"\n",
-			p,
-		));
+		let s = resolve(
+			read_raw(
+				"hyperlinks:\n\tenabled: false\n\topen_command: \"firefox --new-tab\"\n",
+				p,
+			)
+			.0,
+		);
 		assert!(!s.hyperlinks);
 		assert_eq!(s.hyperlink_open_command, "firefox --new-tab");
 	}
@@ -9808,14 +9892,16 @@ mod tests {
 		let raw = read_raw(
 			"scroll.output_ease_lines: 20.0\n",
 			std::path::Path::new("test.shcl"),
-		);
+		)
+		.0;
 		let s = resolve(raw);
 		assert!(s.output_ease_lines < 20.0, "over-range value must clamp");
 		assert!(s.output_ease_lines <= crate::scroll::MAX_BACKLOG);
 		let raw = read_raw(
 			"scroll.output_ease_lines: -3.0\n",
 			std::path::Path::new("test.shcl"),
-		);
+		)
+		.0;
 		assert!(resolve(raw).output_ease_lines >= 0.0);
 	}
 
@@ -9824,7 +9910,7 @@ mod tests {
 	#[test]
 	fn parse_lenient_drops_only_the_bad_line() {
 		let text = "transparency.opacity: 0.7\ncursor_blink: enable\nwindow.margin: 12.0\n";
-		let raw = read_raw(text, std::path::Path::new("test.shcl"));
+		let raw = read_raw(text, std::path::Path::new("test.shcl")).0;
 		assert_eq!(raw.opacity, Some(0.7)); // before the bad line
 		assert_eq!(raw.margin, Some(12.0)); // after the bad line
 	}
@@ -9840,7 +9926,8 @@ mod tests {
 		let raw = read_raw(
 			"colors.menu_background: \"#123456\"\ncolors.dialog_foreground: \"#abcdef\"\n",
 			std::path::Path::new("test.shcl"),
-		);
+		)
+		.0;
 		let s = resolve(raw);
 		assert_eq!(s.menu_bg, [0x12, 0x34, 0x56]);
 		assert_eq!(s.dialog_fg, [0xab, 0xcd, 0xef]);
@@ -9949,7 +10036,7 @@ mod tests {
 			"text_glow: false\ntext_glow_radius: 7\ntext_glow_softness: 0.3\ncursor_glow: true\ntext_glow_border: 2.5\ntext_glow_ramp: \"s\"\n",
 		)
 		.expect("a flat file converts");
-		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert!(!s.text_scrim, "{out}");
 		assert_eq!(s.text_scrim_radius, 7.0, "{out}");
 		assert_eq!(s.text_scrim_softness, 0.3, "{out}");
@@ -10585,7 +10672,7 @@ mod tests {
 		let out = migrate_config_text("scroll:\n\tinview_tau_ms: 45.0\n").expect("should migrate");
 		assert_eq!(out, "scroll:\n\tsingle_screen_tau_ms: 45.0\n");
 		// the value has to survive the trip through the loader, not just the text
-		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert!((s.scroll_single_screen_tau_ms - 45.0).abs() < f32::EPSILON);
 		// the dotted spelling reads and rewrites the same way
 		assert_eq!(
@@ -10617,7 +10704,7 @@ mod tests {
 		);
 		let out = migrate_config_text("scroll:\n\tminimap:\n\t\tkeep_for: \"less vim\"\n")
 			.expect("should migrate");
-		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert_eq!(s.minimap_tui_whitelist, "less vim");
 	}
 
@@ -10632,7 +10719,7 @@ mod tests {
 		// first launch: the one color there is becomes the calm one
 		let once = migrate_config_text("colors:\n\tfocus: \"#abcdef\"\n").expect("should migrate");
 		assert_eq!(once, "colors:\n\thighlight: \"#abcdef\"\n");
-		let s = resolve(read_raw(&once, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(&once, std::path::Path::new("test.shcl")).0);
 		assert_eq!(s.highlight, [0xab, 0xcd, 0xef]);
 		assert_eq!(
 			s.focus,
@@ -10644,7 +10731,7 @@ mod tests {
 		// is a no-op - the file has reached its resting state
 		let both = "colors:\n\thighlight: \"#abcdef\"\n\tfocus: \"#123456\"\n";
 		assert!(migrate_config_text(both).is_none());
-		let s = resolve(read_raw(both, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(both, std::path::Path::new("test.shcl")).0);
 		assert_eq!(s.highlight, [0xab, 0xcd, 0xef]);
 		assert_eq!(s.focus, [0x12, 0x34, 0x56]);
 
@@ -10670,7 +10757,7 @@ mod tests {
 		)
 		.expect("should migrate");
 		assert_eq!(out, "scroll:\n\tramp_up_ms: 200.0\n");
-		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")));
+		let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
 		assert!((s.scroll_ramp_up_ms - 200.0).abs() < f32::EPSILON);
 		// the old fraction never leaks into the new duration
 		assert!((s.scroll_ease_in_ms - Settings::default().scroll_ease_in_ms).abs() < f32::EPSILON);
@@ -10789,43 +10876,88 @@ mod tests {
 		}
 	}
 
-	// Whether a rename's new name is already present is judged where a save puts
-	// a commented line, or the first save turns the rename on or off.
-	// Test ID: EpZCS14
+	// Off since `saved_paths` judges by what a save writes. It compared against
+	// `to_canonical()`, which moves the column-0 comment into the block, but a
+	// save that keeps the lines leaves it where it is, so the rename fires
+	// before and after a save alike and `colors.focus` is renamed.
+	// `a_commented_new_name_counts_where_the_save_that_runs_puts_it` covers it.
+	// // Whether a rename's new name is already present is judged where a save puts
+	// // a commented line, or the first save turns the rename on or off.
+	// // Test ID: EpZCS14
+	// #[test]
+	// fn a_commented_new_name_counts_where_a_save_puts_it() {
+	// 	let saved = |t: &str| shcl::Document::parse(t).to_canonical();
+	// 	let load = |t: &str| {
+	// 		shcl::Document::parse(&migrate_config_text(t).unwrap_or_else(|| t.to_string()))
+	// 	};
+	// 	let blocked =
+	// 		"colors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+	// 	let free = "colors:\n\tbackground: \"#000000\"\n\tfocus: \"#112233\"\n";
+	// 	for ending in ["\n", "\r\n"] {
+	// 		let blocked = blocked.replace('\n', ending);
+	// 		assert!(
+	// 			saved(&blocked).contains("\t# highlight:"),
+	// 			"a save no longer moves this comment, so the case proves nothing"
+	// 		);
+	// 		let (raw, after) = (load(&blocked), load(&saved(&blocked)));
+	// 		for path in ["colors.focus", "colors.highlight"] {
+	// 			assert_eq!(
+	// 				raw.get_string(path),
+	// 				after.get_string(path),
+	// 				"{path} loads the same before and after a save ({ending:?})"
+	// 			);
+	// 		}
+	// 		assert_eq!(raw.get_string("colors.focus").as_deref(), Ok("#112233"));
+	//
+	// 		// nothing blocks the rename here, so it still fires
+	// 		let free = free.replace('\n', ending);
+	// 		for doc in [load(&free), load(&saved(&free))] {
+	// 			assert_eq!(
+	// 				doc.get_string("colors.highlight").as_deref(),
+	// 				Ok("#112233"),
+	// 				"{ending:?}"
+	// 			);
+	// 		}
+	// 	}
+	// }
+
+	// A rename's new name counts where the save that actually runs leaves a
+	// commented line. A save that keeps the lines leaves a column-0 comment at
+	// column 0, so it never blocks the rename, before a save or after one.
+	// Test ID: ErUrgUh
 	#[test]
-	fn a_commented_new_name_counts_where_a_save_puts_it() {
-		let saved = |t: &str| shcl::Document::parse(t).to_canonical();
+	fn a_commented_new_name_counts_where_the_save_that_runs_puts_it() {
 		let load = |t: &str| {
 			shcl::Document::parse(&migrate_config_text(t).unwrap_or_else(|| t.to_string()))
 		};
-		let blocked =
+		// what a Settings save of an unrelated value writes
+		let saved = |t: &str| {
+			let mut doc = parse_kept(t);
+			assert!(doc.set_string("colors.background", "#010101"));
+			saved_text(&doc)
+		};
+		let column_0 =
 			"colors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
-		let free = "colors:\n\tbackground: \"#000000\"\n\tfocus: \"#112233\"\n";
 		for ending in ["\n", "\r\n"] {
-			let blocked = blocked.replace('\n', ending);
+			let text = column_0.replace('\n', ending);
+			let after = saved(&text);
 			assert!(
-				saved(&blocked).contains("\t# highlight:"),
-				"a save no longer moves this comment, so the case proves nothing"
+				after.contains(&format!("{ending}# highlight:")),
+				"the save keeps the comment where it is: {after:?}"
 			);
-			let (raw, after) = (load(&blocked), load(&saved(&blocked)));
-			for path in ["colors.focus", "colors.highlight"] {
-				assert_eq!(
-					raw.get_string(path),
-					after.get_string(path),
-					"{path} loads the same before and after a save ({ending:?})"
-				);
-			}
-			assert_eq!(raw.get_string("colors.focus").as_deref(), Ok("#112233"));
-
-			// nothing blocks the rename here, so it still fires
-			let free = free.replace('\n', ending);
-			for doc in [load(&free), load(&saved(&free))] {
+			for doc in [load(&text), load(&after)] {
 				assert_eq!(
 					doc.get_string("colors.highlight").as_deref(),
 					Ok("#112233"),
 					"{ending:?}"
 				);
 			}
+		}
+		// a commented new name inside the block still blocks it, before and after
+		let blocked = "colors:\n\tfocus: \"#112233\"\n\t# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+		for doc in [load(blocked), load(&saved(blocked))] {
+			assert_eq!(doc.get_string("colors.focus").as_deref(), Ok("#112233"));
+			assert!(doc.get_string("colors.highlight").is_err());
 		}
 	}
 
@@ -11368,6 +11500,58 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// The launch names a line it cannot read, and the rating then writes two
+	// lines above it once the window is up. The last word on the console has to
+	// name the line where the file has it after that.
+	// Test ID: ErUrgB9
+	#[test]
+	fn a_rating_write_restates_the_lines_the_launch_named() {
+		let _guard = super::test_config_lock();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfglines_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "window:\n\t\topacity: 1.0\n\tmargin: 4\n").unwrap();
+		set_config_override(path.clone());
+		let _ = load();
+		let said = || {
+			LAUNCH_SAID
+				.lock()
+				.unwrap()
+				.clone()
+				.map(|(_, said)| said)
+				.unwrap_or_default()
+		};
+		let at = |text: &str| text.lines().position(|l| l == "\tmargin: 4").unwrap() + 1;
+		let before = at(&std::fs::read_to_string(&path).unwrap());
+		assert!(
+			said()
+				.iter()
+				.any(|m| m.contains(&format!("line {before}:"))),
+			"{:?}",
+			said()
+		);
+
+		let kept = keep_rating(&RatingLines {
+			profile: Some("low"),
+			rated_hardware: Some("0123456789abcdef"),
+			check_next_run: None,
+		});
+		assert_eq!(kept, Kept::Written);
+		let now = at(&std::fs::read_to_string(&path).unwrap());
+		assert!(now > before, "the rating went in above the line");
+		let said = said();
+		for cites in [
+			format!("could not be read line {now} "),
+			format!("line {now}: indentation"),
+			format!("`window.opacity` line {} ", now - 1),
+		] {
+			assert!(said.iter().any(|m| m.contains(&cites)), "{cites}: {said:?}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// A stray indented with spaces used to be dropped too, and every save of
 	// the file refused. shcl 3.0 keeps it as written, so the save goes through
 	// and the line is still there, still reported, and still sets nothing.
@@ -11901,7 +12085,7 @@ mod tests {
 			let _ = with_shcl_banner(&text);
 			let _ = reverted_text(&text, &["font.size", "window.rows"]);
 			let _ = disabled_text(&text, &["font.size", "window.rows"]);
-			let _ = resolve(read_raw(&text, path));
+			let _ = resolve(read_raw(&text, path).0);
 
 			// Saving is writing the canonical form of what was read. Doing that
 			// twice must give the same file, or every save walks the config away
