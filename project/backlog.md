@@ -681,6 +681,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Answered by the decision above. Option+Command+W is the Mac default for Close pane, so the menu bar's Panes row, the right-click menu, the Keys tab and the template's `keys:` line all show it. A Mac config whose commented line still says "none" is brought up to it. Nothing else on a Mac uses that chord; Hide others is Option+Command+H.
 		- 20261003: Two checks that pinned no Mac chord for Close pane are commented out and replaced, in `a_menu_row_shows_the_chord_its_hotkey_answers_to` and `the_keys_tab_shows_the_mac_chords_on_a_mac`. The Mac exception in `every_default_chord_reads_and_none_is_shared` is gone. The Mac half of `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` presses Shift+Command+W now, since the old chord is the default.
 		- 20261003: Off a Mac, Alt+Super+W opens the menu title W, as Alt plus any letter does with Super held. That is older than this change; `the_command_chords_are_the_only_program_chords_on_macos` now allows it.
+			- Note: 20261003, fixed under 2026100311020484, and the test is strict again.
 	- Verified:
 		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
 		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
@@ -805,32 +806,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
-
-- Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
-	- ID: 2026100311020484
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261003-110204
-	- Opened by: CC
-	- Related IDs: 2026100220292607
-	- Target OS: Linux, Windows
-	- Steps to reproduce:
-		- With the menu bar shown, hold Alt and Super and press the letter of a menu title, such as F.
-	- Incorrect behavior: The menu opens, as if only Alt were held.
-	- Expected behavior: A chord with Super held is not a menu shortcut.
-	- Reproduced: No. Seen in a unit test on 20261003, `the_command_chords_are_the_only_program_chords_on_macos`, which now allows it off a Mac.
-	- Actual cause: The menu letter check asked only that Alt was held and Ctrl was not, so Super held as well still counted.
-	- Actual fix:
-		- One check, `opens_menu_title` in input.rs, says a letter is a menu title only with Alt alone or Alt+Shift. The title underlines shown while Alt is held use it too, so they no longer show with Ctrl or Super held.
-		- `the_command_chords_are_the_only_program_chords_on_macos` is back to its strict form: no Command chord does anything off a Mac.
-	- Swept: The menu title letter (`hotkey_in`, which `hotkey_on` and `hotkey_for` both call) and the title underlines in app.rs, both fixed. The bound chords in keys.rs, including the Alt+Shift pane chords, already match the exact set of Ctrl, Alt, Shift and Command held. No bare Alt press opens the menu bar; Alt alone only shows the underlines. A letter typed with a menu already open picks its row whatever is held, left as is.
-	- Verified: The unit tests, and clippy for Linux, Windows and macOS.
-	- Branch: altsuper
-	- Commit: 2d4100b
-	- Test case: `a_letter_opens_a_menu_title_only_with_alt_alone_or_alt_shift` (Erf6miU), and `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5) in its strict form. Both seen failing without the fix.
-	- Acceptance signoff: Self-closed: intent clear, tests pass.
-	- Closed: 20261003-110559
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
@@ -1168,6 +1143,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
+	- ID: 2026100311020484
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-110204
+	- Opened by: CC
+	- Related IDs: 2026100220292607
+	- Target OS: Linux, Windows
+	- Steps to reproduce:
+		- With the menu bar shown, hold Alt and Super and press the letter of a menu title, such as F.
+	- Incorrect behavior: The menu opens, as if only Alt were held.
+	- Expected behavior: A chord with Super held is not a menu shortcut.
+	- Reproduced: No. Seen in a unit test on 20261003, `the_command_chords_are_the_only_program_chords_on_macos`, which now allows it off a Mac.
+	- Actual cause: The menu letter check asked only that Alt was held and Ctrl was not, so Super held as well still counted.
+	- Actual fix:
+		- One check, `opens_menu_title` in input.rs, says a letter is a menu title only with Alt alone or Alt+Shift. The title underlines shown while Alt is held use it too, so they no longer show with Ctrl or Super held.
+		- `the_command_chords_are_the_only_program_chords_on_macos` is back to its strict form: no Command chord does anything off a Mac.
+	- Swept: The menu title letter (`hotkey_in`, which `hotkey_on` and `hotkey_for` both call) and the title underlines in app.rs, both fixed. The bound chords in keys.rs, including the Alt+Shift pane chords, already match the exact set of Ctrl, Alt, Shift and Command held. No bare Alt press opens the menu bar; Alt alone only shows the underlines. A letter typed with a menu already open picks its row whatever is held, left as is.
+	- Verified: The unit tests, and clippy for Linux, Windows and macOS.
+	- Branch: altsuper
+	- Commit: 2d4100b
+	- Test case: `a_letter_opens_a_menu_title_only_with_alt_alone_or_alt_shift` (Erf6miU), and `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5) in its strict form. Both seen failing without the fix.
+	- Acceptance signoff: Self-closed: intent clear, tests pass.
+	- Closed: 20261003-110559
 
 - A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
 	- ID: 2026092821452948
