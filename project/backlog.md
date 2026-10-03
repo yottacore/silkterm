@@ -636,7 +636,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100307252506
 	- Type: Feature
 	- Status: Waiting for testing
-	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
+	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
 	- Needs external testing:
 		- vm925w: the Keys tab in a real Settings window, which is a child window there. Ctrl, Alt and Alt+Shift chords set by pressing them, a chord held with the Windows key, AltGr, Escape and Backspace, and the new chord working in the terminal after OK.
 		- b26: Command chords set while Settings has focus, including ones the menu bar owns such as Command+W, Command+Q and Command+,. The menu bar may act on those before the dialog sees them, and Command+Q could quit. Option plus a letter may read as the character it types.
@@ -678,7 +678,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100220292607
 	- Type: Feature
 	- Status: Waiting for testing
-	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
+	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
 	- Needs external testing:
 		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
 		- b26: Option+Command+W closes the pane and Command+W still closes the tab. The Panes row on the menu bar, the right-click menu and the Keys tab show Option+Command+W.
@@ -837,6 +837,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- The lint report counts a passing test whose name has "warning" in it as a warning
+	- ID: 2026100312190395
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-121903
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run the pipeline, then `bash cicd/utility/lint-report.bash --check`.
+	- Incorrect behavior: The line `ok EreHnyt ui_spec::tests::a_warning_needs_a_label_of_its_own` is listed as a warning, so the usual count of 31 reads 32.
+	- Expected behavior: Test result lines are never counted. Only real compiler, lint and cargo-deny warnings are.
+	- Reproduced: 20261003 on b23, on the pipeline run at 8877157.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
