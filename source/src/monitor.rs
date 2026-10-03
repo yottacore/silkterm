@@ -19,13 +19,19 @@ pub struct MonitorId {
 }
 
 impl MonitorId {
-	// The monitor the window is on now. None when the platform cannot say,
-	// which on Wayland is the case until the window has been shown.
+	// The monitor the window is on now, at the scale the window is drawn at.
+	// None when the platform cannot say, which on Wayland is the case until
+	// the window has been shown.
 	pub fn of_window(window: &Window) -> Option<Self> {
+		let scale = window.scale_factor();
+		#[cfg(target_os = "linux")]
+		if let Some((px, mm)) = x11_monitor_under(window) {
+			return Self::new(px.0, px.1, scale, mm.map(|mm| upright(mm, px)));
+		}
 		let monitor = window.current_monitor()?;
 		let px = monitor.size();
-		let size_mm = physical_mm(window, &monitor).map(|mm| upright(mm, (px.width, px.height)));
-		Self::new(px.width, px.height, monitor.scale_factor(), size_mm)
+		let size_mm = physical_mm(&monitor).map(|mm| upright(mm, (px.width, px.height)));
+		Self::new(px.width, px.height, scale, size_mm)
 	}
 
 	pub fn new(width: u32, height: u32, scale: f64, size_mm: Option<(u32, u32)>) -> Option<Self> {
@@ -87,30 +93,84 @@ fn edid_mm(edid: &[u8]) -> Option<(u32, u32)> {
 	plausible((u32::from(edid[21]) * 10, u32::from(edid[22]) * 10))
 }
 
+// On X11 the server is asked which monitor the window overlaps most, and
+// that monitor's mode and millimeters. winit keeps a list it may not have
+// refreshed since the resolution changed.
 #[cfg(target_os = "linux")]
-fn physical_mm(window: &Window, monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
+fn x11_monitor_under(window: &Window) -> Option<((u32, u32), Option<(u32, u32)>)> {
 	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-	use winit::platform::x11::MonitorHandleExtX11;
+	use x11rb::connection::Connection;
 	use x11rb::protocol::randr::ConnectionExt as _;
+	use x11rb::protocol::xproto::ConnectionExt as _;
 
-	// On Wayland the id is a Wayland one, and DISPLAY is Xwayland's.
-	if !matches!(
-		window.window_handle().ok()?.as_raw(),
-		RawWindowHandle::Xlib(_) | RawWindowHandle::Xcb(_)
-	) {
-		return None;
+	let xid = match window.window_handle().ok()?.as_raw() {
+		RawWindowHandle::Xlib(h) => h.window as u32,
+		RawWindowHandle::Xcb(h) => h.window.get(),
+		_ => return None,
+	};
+	let (conn, screen) = x11rb::connect(None).ok()?;
+	let root = conn.setup().roots.get(screen)?.root;
+	let size = conn.get_geometry(xid).ok()?.reply().ok()?;
+	let at = conn
+		.translate_coordinates(xid, root, 0, 0)
+		.ok()?
+		.reply()
+		.ok()?;
+	let win = (
+		i64::from(at.dst_x),
+		i64::from(at.dst_y),
+		i64::from(size.width),
+		i64::from(size.height),
+	);
+	let resources = conn
+		.randr_get_screen_resources_current(root)
+		.ok()?
+		.reply()
+		.ok()?;
+	let mut best: Option<(i64, x11rb::protocol::randr::GetCrtcInfoReply)> = None;
+	for crtc in resources.crtcs {
+		let Some(info) = conn
+			.randr_get_crtc_info(crtc, resources.config_timestamp)
+			.ok()
+			.and_then(|cookie| cookie.reply().ok())
+		else {
+			continue;
+		};
+		if info.mode == 0 || info.outputs.is_empty() {
+			continue;
+		}
+		let overlap = overlap(
+			win,
+			(
+				i64::from(info.x),
+				i64::from(info.y),
+				i64::from(info.width),
+				i64::from(info.height),
+			),
+		);
+		if best.as_ref().is_none_or(|(most, _)| overlap > *most) {
+			best = Some((overlap, info));
+		}
 	}
-	// winit's X11 monitor id is the RandR CRTC; its first output is the panel.
-	let crtc = monitor.native_id();
-	let (conn, _) = x11rb::connect(None).ok()?;
-	let info = conn.randr_get_crtc_info(crtc, 0).ok()?.reply().ok()?;
-	let output = *info.outputs.first()?;
-	let out = conn.randr_get_output_info(output, 0).ok()?.reply().ok()?;
-	Some((out.mm_width, out.mm_height))
+	let (_, crtc) = best?;
+	let mm = conn
+		.randr_get_output_info(crtc.outputs[0], resources.config_timestamp)
+		.ok()
+		.and_then(|cookie| cookie.reply().ok())
+		.map(|out| (out.mm_width, out.mm_height));
+	Some(((u32::from(crtc.width), u32::from(crtc.height)), mm))
+}
+
+// Shared area of two (x, y, width, height) rectangles.
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+fn overlap(a: (i64, i64, i64, i64), b: (i64, i64, i64, i64)) -> i64 {
+	let w = (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0);
+	let h = (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1);
+	w.max(0) * h.max(0)
 }
 
 #[cfg(windows)]
-fn physical_mm(_window: &Window, monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
+fn physical_mm(monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 	use windows_sys::Win32::Graphics::Gdi::{DISPLAY_DEVICEW, EnumDisplayDevicesW};
 	use windows_sys::Win32::System::Registry::{
 		HKEY_LOCAL_MACHINE, RRF_RT_REG_BINARY, RegGetValueW,
@@ -182,7 +242,7 @@ fn edid_key(interface: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "macos")]
-fn physical_mm(_window: &Window, monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
+fn physical_mm(monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 	use winit::platform::macos::MonitorHandleExtMacOS;
 
 	#[repr(C)]
@@ -202,9 +262,63 @@ fn physical_mm(_window: &Window, monitor: &winit::monitor::MonitorHandle) -> Opt
 	Some((size.width.round() as u32, size.height.round() as u32))
 }
 
-#[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
-fn physical_mm(_window: &Window, _monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
+// Wayland tells a program nothing of a monitor's size.
+#[cfg(not(any(windows, target_os = "macos")))]
+fn physical_mm(_monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 	None
+}
+
+// Is a mouse button down anywhere on the screen? A window being dragged by
+// its title bar sees no button events of its own, and a pause in the drag
+// looks the same as the drop.
+#[cfg(target_os = "linux")]
+pub fn button_held(window: &Window) -> bool {
+	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+	use x11rb::connection::Connection;
+	use x11rb::protocol::xproto::{ConnectionExt as _, KeyButMask};
+
+	let x11 = window.window_handle().is_ok_and(|handle| {
+		matches!(
+			handle.as_raw(),
+			RawWindowHandle::Xlib(_) | RawWindowHandle::Xcb(_)
+		)
+	});
+	if !x11 {
+		return false;
+	}
+	let Ok((conn, screen)) = x11rb::connect(None) else {
+		return false;
+	};
+	let root = conn.setup().roots[screen].root;
+	conn.query_pointer(root)
+		.ok()
+		.and_then(|cookie| cookie.reply().ok())
+		.is_some_and(|reply| {
+			reply
+				.mask
+				.intersects(KeyButMask::BUTTON1 | KeyButMask::BUTTON2 | KeyButMask::BUTTON3)
+		})
+}
+
+#[cfg(windows)]
+pub fn button_held(_window: &Window) -> bool {
+	use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+		GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON,
+	};
+	// SAFETY: a plain query; the high bit means down now.
+	[VK_LBUTTON, VK_RBUTTON]
+		.into_iter()
+		.any(|key| unsafe { GetAsyncKeyState(i32::from(key)) } < 0)
+}
+
+#[cfg(target_os = "macos")]
+pub fn button_held(_window: &Window) -> bool {
+	objc2_app_kit::NSEvent::pressedMouseButtons() != 0
+}
+
+#[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
+pub fn button_held(_window: &Window) -> bool {
+	false
 }
 
 #[cfg(test)]
@@ -275,6 +389,21 @@ mod tests {
 		edid[0] = 1;
 		assert_eq!(edid_mm(&edid), None, "not an EDID");
 		assert_eq!(edid_mm(&edid[..100]), None, "too short");
+	}
+
+	// Test ID: EreYcuV
+	#[test]
+	fn the_monitor_a_window_overlaps_most_wins() {
+		let left = (0, 0, 1920, 1080);
+		let right = (1920, 0, 2560, 1440);
+		assert_eq!(overlap((1800, 100, 400, 300), left), 120 * 300);
+		assert_eq!(overlap((1800, 100, 400, 300), right), 280 * 300);
+		assert_eq!(overlap((5000, 0, 10, 10), right), 0, "apart");
+		assert_eq!(
+			overlap((-50, -50, 100, 100), left),
+			50 * 50,
+			"partly off screen"
+		);
 	}
 
 	// Test ID: EreYcuP

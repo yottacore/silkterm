@@ -669,7 +669,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
 	- Progress log:
 		- 20261002: Added the Settings grouping and the README line. The README waits for the feature, so it doesn't claim something that isn't built.
-		- 20261003: Started on branch `permon`. Done: the per-monitor store, the Per monitor switch under Remember last size, and opening at the monitor's own size. Left: resizing after a move between monitors, and the font size.
+		- 20261003: Started on branch `permon`. Done: the per-monitor store, the Per monitor switch under Remember last size, and opening at the monitor's own size.
+		- 20261003: Done: a window moved to another monitor takes that monitor's size once it has stopped. Left: the font size.
 	- Closed:
 
 - Settings: a Keys tab to see and change hotkeys

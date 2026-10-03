@@ -145,8 +145,9 @@ libc = "0.2"
 # main.rs), join the launching console so the CLI-only flags can print, ask
 # whether standard input is a console at all (config::launched_from_shell), and
 # walk the process table for the shell's live child (copy-output's stand-in for a
-# foreground process group - see term.rs at_shell_prompt), and ask whether a
-# settings file's name is only waiting for its delete (config.rs delete_pending).
+# foreground process group - see term.rs at_shell_prompt), ask whether a
+# settings file's name is only waiting for its delete (config.rs delete_pending),
+# and read a monitor's EDID and the mouse buttons (monitor.rs).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Wdk_Foundation",
@@ -164,6 +165,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Registry",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }

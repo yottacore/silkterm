@@ -359,6 +359,41 @@ pub fn remember_grid(s: &mut Settings, monitor: Option<&str>, columns: usize, ro
 	}
 }
 
+// The window sizes the file holds now, put into the live settings. Every
+// window is its own process, so another may have kept a size since this one
+// loaded. Nothing is written.
+pub fn refresh_window_memory() {
+	let Some(path) = config_path() else {
+		return;
+	};
+	let Ok(text) = std::fs::read_to_string(&path) else {
+		return;
+	};
+	let mut live = (*settings()).clone();
+	window_memory_from(&loaded_text(&text), &path, &mut live);
+	update(live);
+}
+
+fn window_memory_from(text: &str, path: &std::path::Path, s: &mut Settings) {
+	let r = Reader {
+		doc: shcl::Document::parse(text),
+		path,
+		said: std::cell::RefCell::new(Vec::new()),
+	};
+	let d = Settings::default();
+	s.remembered_columns = numi(
+		r.u("window.remembered_columns"),
+		d.remembered_columns,
+		limits::GRID,
+	);
+	s.remembered_rows = numi(
+		r.u("window.remembered_rows"),
+		d.remembered_rows,
+		limits::GRID,
+	);
+	s.monitor_sizes = read_monitor_sizes(&r);
+}
+
 // Resolved, validated settings used throughout the app. PartialEq is for the
 // template test, which loads the shipped config twice and compares the whole
 // result; anything less would miss whichever field a bad `## Default` moved.
@@ -9856,6 +9891,36 @@ mod tests {
 		assert_eq!(
 			back,
 			vec![entry("x", 1, Settings::default().remembered_rows)]
+		);
+	}
+
+	// What another window kept is read back the way a launch reads it.
+	// Test ID: EreYcuT
+	#[test]
+	fn a_window_reads_back_the_sizes_another_window_kept() {
+		let p = std::path::Path::new("test.shcl");
+		let text = default_config()
+			.replace("remembered_columns: 160", "remembered_columns: 132")
+			.replace(
+				"\t# remember_maximized:",
+				"\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\n\t# remember_maximized:",
+			);
+		let launch = resolve(read_raw(&text, p).0);
+		let mut live = Settings::default();
+		window_memory_from(&text, p, &mut live);
+		assert_eq!(live.remembered_columns, 132);
+		assert_eq!(live.monitor_sizes.len(), 1);
+		assert_eq!(
+			(
+				live.remembered_columns,
+				live.remembered_rows,
+				&live.monitor_sizes
+			),
+			(
+				launch.remembered_columns,
+				launch.remembered_rows,
+				&launch.monitor_sizes
+			)
 		);
 	}
 
