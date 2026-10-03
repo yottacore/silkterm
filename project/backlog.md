@@ -34,29 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Settings: a revert arrow leaves the value in force when a save put it above its commented default
-	- ID: 2026100309455678
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20261003-094556
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100307252506, 2026100219054510
-	- Target OS: All
-	- Steps to reproduce:
-		- Start from a fresh config. In Settings, untick Choose automatically on the Silk tab and Apply. Click its revert arrow and press OK. Relaunch.
-	- Incorrect behavior: Choose automatically is still off. The same goes for any hotkey set on the Keys tab.
-	- Expected behavior: it is back on, and the file is as it shipped.
-	- Reproduced: 20261003 on b23, by test, for `performance.automatic` and `keys.close_pane`. `scroll.smooth` went back, but left a second copy of its commented line.
-	- Actual cause: a save adds a set value as a new line, sometimes above the template's commented line. The revert took the last line for the path, which was the comment, and left the value alone.
-	- Actual fix: the revert edits the setting's active line. Where the template's commented line is already in the file, the value line goes, rather than becoming a second copy of it.
-	- Test case: `a_revert_takes_out_a_value_saved_beside_its_default` (Erekiyk). It failed before the fix and passes after.
-	- Swept: the cleared font family box goes through the same line lookup, and comments out the active line too.
-	- Branch: keystab
-	- Commit: 9f26b24
-	- Closed:
-
 - Copy on select: on by default, and remembered across launches
 	- ID: 2026100307115829
 	- Type: Enhancement
@@ -160,40 +137,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 6531c55, 6d10356, aaec440, d154a64
 	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_second_conversion_keeps_a_second_copy` (EreLZMm), `copies_made_in_one_second_never_replace_each_other` (Erf0QeH), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX), `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` (Erf0Qhu), `a_conversion_notice_says_how_many_and_where_the_copy_is` (Erf0Qkx), `a_save_that_loses_a_setting_converting_leaves_a_notice_for_the_window` (ErfTRqP).
 	- Closed:
-
-- The launch names an unreadable line two lines short of where the file has it
-	- ID: 2026100115322366
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261001-153223
-	- Opened by: CC
-	- Related IDs: 2026100115322364
-	- Target OS: All
-	- Test environment: b23
-	- Steps to reproduce:
-		- Start with `--config` on a three-line file: `window:`, `\t\topacity: 1.0`, `\tmargin: 4`.
-	- Incorrect behavior: the console says line 198, and the margin line is at 200 in the file after the launch.
-	- Expected behavior: the line number the file has.
-	- Reproduced: 20261001 on b23, with this branch and with the beta3 build. The Windows notice gives the right number.
-	- Actual cause:
-		- Not shcl. The launch prints its messages once its own rewrites are done, and the line numbers are right for the file at that moment.
-		- The performance rating then writes `profile:` and `rated_hardware:` into the `performance:` block at the top, once the window is up. That moves every line below it down by two.
-		- The Windows notice is worked out at the moment a save is refused, so it sees the file as it is then.
-	- Progress log:
-		- 20261001: Reproduced on the real program: the console said 198, the file had the line at 200. The extra lines were the rating's two.
-		- Question: Is a second, corrected message fine, or should the messages wait until the rating has written?
-			- Answered 20261002: best judgement, given the goals. The next shcl beta might help.
-	- Decisions:
-		- 20261002: The second message stays for now. The clean fix is for the rating to fill in the template's commented `profile:` and `rated_hardware:` lines where they are, so no line moves and the first message is right. shcl's keep-lines save can't do that yet, so it is filed as 2026100219054510. Holding the messages for the rating was turned down, since they could come late, or never if the window closes first.
-	- Actual fix:
-		- The launch keeps what it printed about the file. A later write to the same file prints again whatever now reads differently, so the last message names the line the file has. The first one still names the old number.
-		- On the real program the console now ends with line 200, where the file has it.
-	- Swept: all three kinds of launch message go through the restate (the unreadable-line and spelling notes, shcl's own errors, and the bad-value and set-twice notes). Every write goes through the one writer, so the rating, the shell list and a Settings save are all covered.
-	- Branch: cfglines
-	- Commit: 7b3be64
-	- Test case: `a_rating_write_restates_the_lines_the_launch_named` (ErUrgB9). Seen to fail with the restate taken out, and pass with it.
-	- Verified: native and Windows-target clippy, and the native unit tests (991 passed).
 
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
@@ -780,6 +723,67 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
+- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
+	- ID: 2026100312470535
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470540
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Have something else keep the GPU busy, or holding most of its memory.
+		- Move to another virtual desktop and back to one with a SilkTerm window.
+	- Incorrect behavior:
+		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
+		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
+	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
+	- Reproduced: No. Seen on b23 when moving between virtual desktops. Not known yet if a window left on screen would also stop painting.
+	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
+	- Notes:
+		- Before RC1.
+		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
+
+- Free resources when idle: on by default
+	- ID: 2026100312470540
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470535
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Default "Free resources when idle" to on.
+	- Notes:
+		- When this is on, an idle window lets its GPU device go and gets a new one when it wakes. That is the same path a busy GPU can break, so test it under GPU load, after or along with 2026100312470535.
+
+- When a shcl upgrade breaks the config format, keep the old file and write a new one from scratch
+	- ID: 2026100312470546
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100220292612
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When wiring a new version of shcl into the code, first see if it has a new API to do the conversion, or at least help with it.
+		- Check if the new shcl version has breaking changes. If so:
+			- Rename the latest config file `[origname]_backup_YYYYmmDD-HHMMSS_format-v[shcl version].shcl`.
+			- Write a new config file with the same path and name as before, from scratch through shcl, using whatever settings and conversions shcl can handle or are salvageable.
+		- Future versions of shcl might do the config backup and conversion. Be careful not to race, conflict with, or trample what shcl might do.
+	- Notes:
+		- 20261003: 2026100220292612 already keeps a copy on every format upgrade, as `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`. N is the old file's Format number, which has matched shcl's major version so far. It copies the file and then converts it in place, rather than writing a new one from scratch.
+		- 20261003: shcl 3.0's `migrate_unstamped` is the help shcl gives today. It respells a 2.x file, and does no backup.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -854,6 +858,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- Settings: a revert arrow leaves the value in force when a save put it above its commented default
+	- ID: 2026100309455678
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261003-094556
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100307252506, 2026100219054510
+	- Target OS: All
+	- Steps to reproduce:
+		- Start from a fresh config. In Settings, untick Choose automatically on the Silk tab and Apply. Click its revert arrow and press OK. Relaunch.
+	- Incorrect behavior: Choose automatically is still off. The same goes for any hotkey set on the Keys tab.
+	- Expected behavior: it is back on, and the file is as it shipped.
+	- Reproduced: 20261003 on b23, by test, for `performance.automatic` and `keys.close_pane`. `scroll.smooth` went back, but left a second copy of its commented line.
+	- Actual cause: a save adds a set value as a new line, sometimes above the template's commented line. The revert took the last line for the path, which was the comment, and left the value alone.
+	- Actual fix: the revert edits the setting's active line. Where the template's commented line is already in the file, the value line goes, rather than becoming a second copy of it.
+	- Test case: `a_revert_takes_out_a_value_saved_beside_its_default` (Erekiyk). It failed before the fix and passes after.
+	- Swept: the cleared font family box goes through the same line lookup, and comments out the active line too.
+	- Branch: keystab
+	- Commit: 9f26b24
+	- Acceptance signoff: Self-closed: hard to check by hand, and its test failed before the fix and passes on dev.
+	- Closed: 20261003-124705
 
 - The merge gate fails on clippy at a doc comment in the minimap source
 	- ID: 2026093016391134
@@ -1163,6 +1191,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- The launch names an unreadable line two lines short of where the file has it
+	- ID: 2026100115322366
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261001-153223
+	- Opened by: CC
+	- Related IDs: 2026100115322364
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Start with `--config` on a three-line file: `window:`, `\t\topacity: 1.0`, `\tmargin: 4`.
+	- Incorrect behavior: the console says line 198, and the margin line is at 200 in the file after the launch.
+	- Expected behavior: the line number the file has.
+	- Reproduced: 20261001 on b23, with this branch and with the beta3 build. The Windows notice gives the right number.
+	- Actual cause:
+		- Not shcl. The launch prints its messages once its own rewrites are done, and the line numbers are right for the file at that moment.
+		- The performance rating then writes `profile:` and `rated_hardware:` into the `performance:` block at the top, once the window is up. That moves every line below it down by two.
+		- The Windows notice is worked out at the moment a save is refused, so it sees the file as it is then.
+	- Progress log:
+		- 20261001: Reproduced on the real program: the console said 198, the file had the line at 200. The extra lines were the rating's two.
+		- Question: Is a second, corrected message fine, or should the messages wait until the rating has written?
+			- Answered 20261002: best judgement, given the goals. The next shcl beta might help.
+	- Decisions:
+		- 20261002: The second message stays for now. The clean fix is for the rating to fill in the template's commented `profile:` and `rated_hardware:` lines where they are, so no line moves and the first message is right. shcl's keep-lines save can't do that yet, so it is filed as 2026100219054510. Holding the messages for the rating was turned down, since they could come late, or never if the window closes first.
+	- Actual fix:
+		- The launch keeps what it printed about the file. A later write to the same file prints again whatever now reads differently, so the last message names the line the file has. The first one still names the old number.
+		- On the real program the console now ends with line 200, where the file has it.
+	- Swept: all three kinds of launch message go through the restate (the unreadable-line and spelling notes, shcl's own errors, and the bad-value and set-twice notes). Every write goes through the one writer, so the rating, the shell list and a Settings save are all covered.
+	- Branch: cfglines
+	- Commit: 7b3be64
+	- Test case: `a_rating_write_restates_the_lines_the_launch_named` (ErUrgB9). Seen to fail with the restate taken out, and pass with it.
+	- Verified: native and Windows-target clippy, and the native unit tests (991 passed).
+	- Acceptance signoff: Self-closed: hard to check by hand, and its test failed before the fix and passes on dev.
+	- Closed: 20261003-124705
 
 - Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
 	- ID: 2026100311020484
