@@ -838,29 +838,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- The lint report counts a passing test whose name has "warning" in it as a warning
-	- ID: 2026100312190395
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261003-121903
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23
-	- Steps to reproduce:
-		- Run the pipeline, then `bash cicd/utility/lint-report.bash --check`.
-	- Incorrect behavior: The line `ok EreHnyt ui_spec::tests::a_warning_needs_a_label_of_its_own` is listed as a warning, so the usual count of 31 reads 32.
-	- Expected behavior: Test result lines are never counted. Only real compiler, lint and cargo-deny warnings are.
-	- Reproduced: 20261003 on b23, on the pipeline run at 8877157.
-	- Cause: The report greps every line holding "warning", and cicd's test result lines carry the test name.
-	- Fix: The report drops cargo test result lines (status, test ID, name) and script `[ OK: ... (ID) ]` lines before counting.
-	- Test case: ErfQEMd, in `cicd/tests/gates/run.bash`. Fails before the fix, passes after.
-	- Verified: On a copy of the 20261003-112257 log the count drops from 32 to 31. A planted `warning: unused variable` line still counts. Shellcheck is clean.
-	- Swept: No other cicd script greps logs for warnings.
-	- Branch: lint-test-names
-	- Acceptance signoff: Self-closed: mechanical.
-	- Closed: 20261003-122100
-
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
 	- Type: Bug
@@ -1197,6 +1174,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- The lint report counts a passing test whose name has "warning" in it as a warning
+	- ID: 2026100312190395
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-121903
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run the pipeline, then `bash cicd/utility/lint-report.bash --check`.
+	- Incorrect behavior: The line `ok EreHnyt ui_spec::tests::a_warning_needs_a_label_of_its_own` is listed as a warning, so the usual count of 31 reads 32.
+	- Expected behavior: Test result lines are never counted. Only real compiler, lint and cargo-deny warnings are.
+	- Reproduced: 20261003 on b23, on the pipeline run at 8877157.
+	- Cause: The report greps every line holding "warning", and cicd's test result lines carry the test name.
+	- Fix: The report drops cargo test result lines (status, test ID, name) and script `[ OK: ... (ID) ]` lines before counting.
+	- Test case: ErfQEMd, in `cicd/tests/gates/run.bash`. Fails before the fix, passes after.
+	- Verified: On a copy of the 20261003-112257 log the count drops from 32 to 31. A planted `warning: unused variable` line still counts. Shellcheck is clean.
+	- Swept: No other cicd script greps logs for warnings.
+	- Branch: lint-test-names
+	- Acceptance signoff: Self-closed: mechanical.
+	- Closed: 20261003-122100
 
 - Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
 	- ID: 2026100311020484
