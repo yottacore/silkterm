@@ -640,7 +640,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
-	- Status: Started
+	- Status: Waiting for testing
+	- Needs external testing:
+		- Two real monitors that differ, on X11, Windows and macOS. The window opens at each monitor's own size and font zoom, and takes the other's once dropped there, never while still held. A resize right after the drop is kept, and the window does not swap sizes when it straddles the two.
+		- On Windows and macOS, that the monitor's name in the config ends in its size in mm.
+		- Wayland: opening on a second output, and a drag between outputs.
+		- A look at the Per monitor row on the Window tab.
 	- Priority: Avg
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -671,6 +676,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261002: Added the Settings grouping and the README line. The README waits for the feature, so it doesn't claim something that isn't built.
 		- 20261003: Started on branch `permon`. Done: the per-monitor store, the Per monitor switch under Remember last size, and opening at the monitor's own size.
 		- 20261003: Done: a window moved to another monitor takes that monitor's size once it has stopped. Left: the font size.
+		- 20261003: Done: the font zoom is kept with the size, both as the last one anywhere and per monitor, and used at launch and after a move. The README line is in. Checked on one monitor only, by changing its resolution under the window. A real two-monitor look is owed.
+		- Calls made here, for signoff:
+			- The font zoom is remembered under Remember last size, with no switch of its own, as px on the font size. Zooming saves the grid too, so the window reopens at the same pixel size.
+			- A monitor with no entry of its own gets the last size anywhere, at launch and after a move, as the requirements say.
+			- A size or font size from the command line stays through moves until the user resizes or zooms.
+			- The per-monitor sizes are kept only while both switches are on. The last size anywhere is kept either way, as before.
+	- Note: A monitor is told apart by its resolution, its scale percent, and its physical size in mm where the system gives it. X11 reads the size from the X server, Windows from the EDID it keeps in the registry, and macOS from `CGDisplayScreenSize`. Wayland gives no size, so there it is resolution and scale.
+	- Note: Wayland gives a window no position and no move events. It opens at the last size anywhere, and looks for its monitor just after it opens, on a scale change, and when the pointer comes back after a drag. So there a window may resize a moment after it opens.
+	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_carries_the_remembered_size_as_live_lines`.
+	- Verified:
+		- The unit tests on Linux, and clippy with warnings as errors for Linux, Windows and macOS.
+		- On one X11 monitor: opening at the monitor's own size and zoom, a move taking the other's, a resize before the move saved for the monitor it left, a resize right after the move kept, and a command-line size held until resized by hand.
+		- The window's own resize after a move is not saved as the user's. With that check taken out, the last size anywhere was overwritten.
+	- Branch: permon
+	- Commit: 684d3a0, 754c9cb
 	- Closed:
 
 - Settings: a Keys tab to see and change hotkeys

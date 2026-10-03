@@ -408,6 +408,15 @@ A window nobody is looking at draws no frames, and a minimized window or hidden 
 
 - Maximized is remembered on its own, under `remember_maximized`, which is off by default. A window closed maximized opens maximized, with the remembered size still under it, so un-maximizing goes back to that size. A size or fullscreen asked for on the command line wins over it. The state is read once a resize has held, not in the resize event, since the window manager may set it after the resize it caused.
 
+- The font zoom is remembered with the size, as px on the font size. Zooming keeps the window's pixel size and changes its grid, so both are saved, and the next launch opens at the same pixel size rather than the old grid drawn bigger. A font size on the command line wins, and its zoom is not saved.
+
+- With `remember_per_monitor` on as well, each monitor keeps its own size and zoom under `window.monitors`. The last size set anywhere is still kept, and a monitor with no entry of its own opens at it. A monitor is named for its resolution, its scale and its physical size in mm where that is cheap to read: from the X server on X11, the EDID Windows keeps in the registry, and `CGDisplayScreenSize` on macOS. Wayland gives a program no physical size, so there it is resolution and scale.
+	- A window moved to another monitor takes that monitor's size once it has been still for a moment with no mouse button down, so never in the middle of a drag. A size the user set after the move began wins over it, and one set before the move is saved for the monitor it was set on.
+	- The window's own resize, and the one the system makes for a new scale, are not saved as the user's. The move that the window's own resize can cause is not taken as a new move, or a window on the edge of two monitors could swap between their sizes.
+	- A size given on the command line stays through a move until the user resizes the window.
+	- On X11 the server is asked which monitor the window overlaps most, rather than winit, whose list may predate a resolution change.
+	- Wayland tells a window neither where it is nor that it moved. It looks once just after it opens, on a scale change, and when the pointer comes back after a drag.
+
 - A number given on the command line is held to the range of the setting it stands for, the same range the file's copy of that setting is held to. A count of rows or columns is also held to what the graphics device can draw, since the window is a texture and a refusal there ends the launch rather than the setting.
 
 ### Variables in a setting (2026-08-30)

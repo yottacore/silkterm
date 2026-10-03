@@ -2,11 +2,11 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! Which monitor a window is on, told apart well enough to keep a window size
-//! for each one: its resolution, the scale the OS set for it, and its physical
-//! size where the platform says so cheaply. The physical size comes from the X
-//! server on X11, the monitor's EDID on Windows and `CGDisplayScreenSize` on
-//! macOS.
-//! Wayland gives a program no way to ask, so there it is resolution and scale.
+//! for each one: its resolution, the scale the window is drawn at there, and
+//! its physical size where the platform says so cheaply. The physical size
+//! comes from the X server on X11, the monitor's EDID on Windows and
+//! `CGDisplayScreenSize` on macOS. Wayland gives a program no way to ask, so
+//! there it is resolution and scale.
 
 use winit::window::Window;
 
@@ -206,25 +206,32 @@ fn physical_mm(monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 		.unwrap_or(device.DeviceID.len());
 	let subkey = edid_key(&String::from_utf16_lossy(&device.DeviceID[..len]))?;
 	let (subkey, value) = (wide(&subkey), wide("EDID"));
-	let mut edid = [0u8; 256];
-	let mut size = edid.len() as u32;
-	// SAFETY: the buffer and its size go together, and both strings end in 0.
-	let status = unsafe {
-		RegGetValueW(
-			HKEY_LOCAL_MACHINE,
-			subkey.as_ptr(),
-			value.as_ptr(),
-			RRF_RT_REG_BINARY,
-			std::ptr::null_mut(),
-			edid.as_mut_ptr().cast(),
-			&raw mut size,
-		)
+	// Asked twice, since an EDID with extension blocks is longer than the
+	// first block, which is all that is read from it.
+	let read = |data: *mut u8, size: &mut u32| {
+		// SAFETY: `data` is null or has room for `size` bytes, and both strings end in 0.
+		unsafe {
+			RegGetValueW(
+				HKEY_LOCAL_MACHINE,
+				subkey.as_ptr(),
+				value.as_ptr(),
+				RRF_RT_REG_BINARY,
+				std::ptr::null_mut(),
+				data.cast(),
+				size,
+			)
+		}
 	};
-	// ERROR_MORE_DATA still filled nothing, and the first block is all we read.
-	if status != 0 {
+	let mut size = 0u32;
+	if read(std::ptr::null_mut(), &mut size) != 0 || size == 0 {
 		return None;
 	}
-	edid_mm(&edid[..size as usize])
+	let mut edid = vec![0u8; size as usize];
+	if read(edid.as_mut_ptr(), &mut size) != 0 {
+		return None;
+	}
+	edid.truncate(size as usize);
+	edid_mm(&edid)
 }
 
 // `\\?\DISPLAY#DEL40F4#5&1a2b&0&UID4352#{e6f07b5f-...}` names the monitor's

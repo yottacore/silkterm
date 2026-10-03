@@ -318,48 +318,86 @@ pub enum Fit {
 	Stretch, // fill exactly, ignore aspect
 }
 
-// The window size kept for one monitor, named by `monitor::MonitorId::key`.
+// The window size and font zoom kept for one monitor, named by
+// `monitor::MonitorId::key`. The zoom is px on the font size, as
+// `font_zoom_px` has it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MonitorSize {
 	pub key: String,
 	pub columns: usize,
 	pub rows: usize,
+	pub font_zoom: i32,
 }
 
-// The grid to open at, or to take on arriving at another monitor, while
-// remember_size is on: the monitor's own when it has one, else the last size
-// the window was given anywhere.
-pub fn remembered_grid(s: &Settings, monitor: Option<&str>) -> (usize, usize) {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeptWindow {
+	pub columns: usize,
+	pub rows: usize,
+	pub font_zoom: i32,
+}
+
+// What to open at, or to take on arriving at another monitor, while
+// remember_size is on: the monitor's own when it has one, else the last the
+// window was given anywhere.
+pub fn remembered_window(s: &Settings, monitor: Option<&str>) -> KeptWindow {
+	let last = KeptWindow {
+		columns: s.remembered_columns,
+		rows: s.remembered_rows,
+		font_zoom: s.remembered_font_zoom,
+	};
 	monitor
 		.filter(|_| s.remember_per_monitor)
 		.and_then(|key| s.monitor_sizes.iter().find(|m| m.key == key))
-		.map_or((s.remembered_columns, s.remembered_rows), |m| {
-			(m.columns, m.rows)
+		.map_or(last, |m| KeptWindow {
+			columns: m.columns,
+			rows: m.rows,
+			font_zoom: m.font_zoom,
 		})
 }
 
-// Note a size the user gave the window: the last size anywhere, and the
-// monitor's own when sizes are kept per monitor.
-pub fn remember_grid(s: &mut Settings, monitor: Option<&str>, columns: usize, rows: usize) {
-	s.remembered_columns = columns;
-	s.remembered_rows = rows;
+// Note a size or a font zoom the user gave the window. It is the last one
+// anywhere, and the monitor's own when they are kept per monitor. A monitor
+// seen for the first time starts from what it would have opened at.
+pub fn remember_window(
+	s: &mut Settings,
+	monitor: Option<&str>,
+	grid: Option<(usize, usize)>,
+	font_zoom: Option<i32>,
+) {
+	if let Some((columns, rows)) = grid {
+		s.remembered_columns = columns;
+		s.remembered_rows = rows;
+	}
+	if let Some(zoom) = font_zoom {
+		s.remembered_font_zoom = zoom;
+	}
 	let Some(key) = monitor.filter(|_| s.remember_size && s.remember_per_monitor) else {
 		return;
 	};
-	match s.monitor_sizes.iter_mut().find(|m| m.key == key) {
-		Some(entry) => {
-			entry.columns = columns;
-			entry.rows = rows;
-		}
-		None => s.monitor_sizes.push(MonitorSize {
+	if grid.is_none() && font_zoom.is_none() {
+		return;
+	}
+	if !s.monitor_sizes.iter().any(|m| m.key == key) {
+		s.monitor_sizes.push(MonitorSize {
 			key: key.to_string(),
-			columns,
-			rows,
-		}),
+			columns: s.remembered_columns,
+			rows: s.remembered_rows,
+			font_zoom: s.remembered_font_zoom,
+		});
+	}
+	let Some(entry) = s.monitor_sizes.iter_mut().find(|m| m.key == key) else {
+		return;
+	};
+	if let Some((columns, rows)) = grid {
+		entry.columns = columns;
+		entry.rows = rows;
+	}
+	if let Some(zoom) = font_zoom {
+		entry.font_zoom = zoom;
 	}
 }
 
-// The window sizes the file holds now, put into the live settings. Every
+// The window sizes in the file now, put into the live settings. Every
 // window is its own process, so another may have kept a size since this one
 // loaded. Nothing is written.
 pub fn refresh_window_memory() {
@@ -391,6 +429,7 @@ fn window_memory_from(text: &str, path: &std::path::Path, s: &mut Settings) {
 		d.remembered_rows,
 		limits::GRID,
 	);
+	s.remembered_font_zoom = zoom(r.i("window.remembered_font_zoom"), d.remembered_font_zoom);
 	s.monitor_sizes = read_monitor_sizes(&r);
 }
 
@@ -489,6 +528,7 @@ pub struct Settings {
 	pub remembered_columns: usize, // last actual window size (not shown in the dialog)
 	pub remembered_rows: usize,
 	pub remembered_maximized: bool, // was the window last left maximized
+	pub remembered_font_zoom: i32,  // last font zoom, px on the font size
 	pub monitor_sizes: Vec<MonitorSize>, // window.monitors, in file order; file only
 	pub word_separators: String,    // delimiters for double-click word selection
 	pub selection_pairs: String,    // matched pairs a double-click selects inside of
@@ -666,6 +706,7 @@ impl Default for Settings {
 			remembered_columns: 160,
 			remembered_rows: 48,
 			remembered_maximized: false,
+			remembered_font_zoom: 0,
 			monitor_sizes: Vec::new(),
 			// alacritty's default delimiters minus ':', so a Windows drive path
 			// (C:\...) stays whole on a double-click - and namespaced idents
@@ -2122,6 +2163,12 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	if s.remembered_maximized != orig.remembered_maximized {
 		doc.put_bool("window.remembered_maximized", s.remembered_maximized);
 	}
+	if s.remembered_font_zoom != orig.remembered_font_zoom {
+		doc.put_int(
+			"window.remembered_font_zoom",
+			i64::from(s.remembered_font_zoom),
+		);
+	}
 	write_monitor_sizes(&mut doc, &orig.monitor_sizes, &s.monitor_sizes);
 	if s.word_separators != orig.word_separators {
 		doc.put_string("selection.word_separators", &s.word_separators);
@@ -2355,6 +2402,7 @@ struct RawConfig {
 	remembered_columns: Option<usize>,
 	remembered_rows: Option<usize>,
 	remembered_maximized: Option<bool>,
+	remembered_font_zoom: Option<i64>,
 	monitor_sizes: Vec<MonitorSize>,
 	word_separators: Option<String>,
 	selection_pairs: Option<String>,
@@ -2683,6 +2731,9 @@ impl Reader<'_> {
 	fn f(&self, key: &str) -> Option<f32> {
 		self.note(key, self.doc.get_float(key)).map(|v| v as f32)
 	}
+	fn i(&self, key: &str) -> Option<i64> {
+		self.note(key, self.doc.get_int(key))
+	}
 	fn u(&self, key: &str) -> Option<usize> {
 		self.note(key, self.doc.get_int(key))
 			.map(|v| v.max(0) as usize)
@@ -2809,6 +2860,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		remembered_columns: r.u("window.remembered_columns"),
 		remembered_rows: r.u("window.remembered_rows"),
 		remembered_maximized: r.b("window.remembered_maximized"),
+		remembered_font_zoom: r.i("window.remembered_font_zoom"),
 		monitor_sizes: read_monitor_sizes(&r),
 		word_separators: r.s("selection.word_separators"),
 		selection_pairs: r.s("selection.pairs"),
@@ -2924,7 +2976,7 @@ fn write_user_themes(
 	}
 }
 
-const MONITOR_SIZE_FIELDS: &[&str] = &["columns", "rows"];
+const MONITOR_SIZE_FIELDS: &[&str] = &["columns", "rows", "font_zoom"];
 
 // `window.monitors.<monitor>.<field>`, for a field an entry is read for.
 fn is_monitor_size_path(path: &str) -> bool {
@@ -2933,21 +2985,23 @@ fn is_monitor_size_path(path: &str) -> bool {
 		.is_some_and(|(key, field)| !key.is_empty() && MONITOR_SIZE_FIELDS.contains(&field))
 }
 
-// The sizes kept per monitor. An entry with neither number readable sets
-// nothing, and a missing half takes the default.
+// The sizes kept per monitor. An entry with nothing readable sets nothing,
+// and a number missing from one takes the default.
 fn read_monitor_sizes(r: &Reader) -> Vec<MonitorSize> {
 	let mut out = Vec::new();
 	for key in r.doc.children("window.monitors") {
 		let at = format!("window.monitors.{key}");
 		let columns = r.u(&format!("{at}.columns"));
 		let rows = r.u(&format!("{at}.rows"));
-		if columns.is_none() && rows.is_none() {
+		let font_zoom = r.i(&format!("{at}.font_zoom"));
+		if columns.is_none() && rows.is_none() && font_zoom.is_none() {
 			continue;
 		}
 		let d = Settings::default();
 		out.push(MonitorSize {
 			columns: numi(columns, d.remembered_columns, limits::GRID),
 			rows: numi(rows, d.remembered_rows, limits::GRID),
+			font_zoom: zoom(font_zoom, d.remembered_font_zoom),
 			key,
 		});
 	}
@@ -2966,6 +3020,9 @@ fn write_monitor_sizes(doc: &mut shcl::Document, orig: &[MonitorSize], now: &[Mo
 		}
 		if before.is_none_or(|b| b.rows != entry.rows) {
 			doc.put_int(&format!("{at}.rows"), entry.rows as i64);
+		}
+		if before.is_none_or(|b| b.font_zoom != entry.font_zoom) {
+			doc.put_int(&format!("{at}.font_zoom"), i64::from(entry.font_zoom));
 		}
 	}
 }
@@ -3148,6 +3205,7 @@ pub(crate) mod limits {
 	pub const MARGIN:             (f32, f32) = (0.0, 1_000.0);
 	pub const ROTATE_S:           (f32, f32) = (0.0, 604_800.0);
 	pub const GRID:               (usize, usize) = (1, 1_000);
+	pub const FONT_ZOOM:          (i32, i32) = (-400, 400); // px; the size it gives is held to 4..128 again
 	pub const IDLE_MIN:           (usize, usize) = (1, 10_080); // a week
 	pub const SCROLLBACK:         (usize, usize) = (0, 1_000_000);
 }
@@ -3162,6 +3220,11 @@ fn numf(raw: Option<f32>, default: f32, (lo, hi): (f32, f32)) -> f32 {
 
 fn numi(raw: Option<usize>, default: usize, (lo, hi): (usize, usize)) -> usize {
 	raw.map_or(default, |v| v.clamp(lo, hi))
+}
+
+fn zoom(raw: Option<i64>, default: i32) -> i32 {
+	let (lo, hi) = limits::FONT_ZOOM;
+	raw.map_or(default, |v| v.clamp(i64::from(lo), i64::from(hi)) as i32)
 }
 
 fn resolve(raw: RawConfig) -> Settings {
@@ -3429,6 +3492,7 @@ fn resolve(raw: RawConfig) -> Settings {
 		remembered_columns: numi(raw.remembered_columns, d.remembered_columns, limits::GRID),
 		remembered_rows: numi(raw.remembered_rows, d.remembered_rows, limits::GRID),
 		remembered_maximized: raw.remembered_maximized.unwrap_or(d.remembered_maximized),
+		remembered_font_zoom: zoom(raw.remembered_font_zoom, d.remembered_font_zoom),
 		monitor_sizes: raw.monitor_sizes,
 		word_separators: raw.word_separators.unwrap_or(d.word_separators),
 		selection_pairs: raw.selection_pairs.unwrap_or(d.selection_pairs),
@@ -3553,10 +3617,11 @@ pub fn system_font_size_active(s: &Settings) -> bool {
 	s.use_system_font_size && crate::sysfont::monospace().size_pt.is_some()
 }
 
-// Session-only font zoom (Ctrl+-/+/= hotkeys), in logical px added to the
-// effective size. Never persisted; process-wide is per-window since each
-// window is its own process. Per-pane scoping is deferred - it needs per-pane
-// text metrics the single-TextCtx architecture doesn't have.
+// Font zoom (Ctrl+-/+/= hotkeys), in logical px added to the effective size.
+// Kept with the window size while remember_size is on (remembered_window).
+// Process-wide is per-window since each window is its own process. Per-pane
+// scoping is deferred - it needs per-pane text metrics the single-TextCtx
+// architecture doesn't have.
 static FONT_ZOOM_PX: AtomicI32 = AtomicI32::new(0);
 pub fn font_zoom_px() -> i32 {
 	FONT_ZOOM_PX.load(Ordering::Relaxed)
@@ -3570,9 +3635,20 @@ pub fn nudge_font_zoom(dir: i32) {
 	} else {
 		current.font_size
 	};
-	let z = font_zoom_px() + dir;
-	let z = z.clamp((4.0 - base).ceil() as i32, (128.0 - base).floor() as i32);
-	FONT_ZOOM_PX.store(z, Ordering::Relaxed);
+	FONT_ZOOM_PX.store(zoom_within(font_zoom_px() + dir, base), Ordering::Relaxed);
+}
+// Put the zoom at `px`, held the same way a step is.
+pub fn set_font_zoom(px: i32) {
+	let current = settings();
+	let base = if system_font_size_active(&current) {
+		default_font_size()
+	} else {
+		current.font_size
+	};
+	FONT_ZOOM_PX.store(zoom_within(px, base), Ordering::Relaxed);
+}
+fn zoom_within(px: i32, base: f32) -> i32 {
+	px.clamp((4.0 - base).ceil() as i32, (128.0 - base).floor() as i32)
 }
 // Drop the session zoom, back to the configured (or system) size.
 pub fn reset_font_zoom() {
@@ -6379,10 +6455,11 @@ window:
 	# remember_size: true  ## Default
 	remembered_columns: 160
 	remembered_rows: 48
+	remembered_font_zoom: 0
 
-	## While remember_size is on, also keep a size for each monitor. A window
-	## opens at its monitor's size, and takes the size of the one it is moved
-	## to once it stops there. The sizes go under monitors:, one block per
+	## While remember_size is on, also keep a size and font zoom for each
+	## monitor. A window opens at its monitor's, and takes those of the one it
+	## is moved to once it stops there. They go under monitors:, one block per
 	## monitor, named for its resolution, its scale and, where the system
 	## reports it, its physical size in millimeters.
 	# remember_per_monitor: true  ## Default
@@ -9782,6 +9859,7 @@ mod tests {
 		for want in [
 			"window.remembered_columns",
 			"window.remembered_rows",
+			"window.remembered_font_zoom",
 			"window.remembered_maximized",
 		] {
 			let active = walk_settings(default_config())
@@ -9798,57 +9876,81 @@ mod tests {
 			(
 				s.remembered_columns,
 				s.remembered_rows,
+				s.remembered_font_zoom,
 				s.remembered_maximized
 			),
 			(
 				d.remembered_columns,
 				d.remembered_rows,
+				d.remembered_font_zoom,
 				d.remembered_maximized
 			)
 		);
 	}
 
-	// A size set by hand is the last size anywhere, and with remember_size and
-	// remember_per_monitor on, that monitor's own too. Opening on a monitor
-	// with no size of its own takes the last size anywhere.
+	// A size or zoom set by hand is the last one anywhere, and with
+	// remember_size and remember_per_monitor on, that monitor's own too.
+	// Opening on a monitor with none of its own takes the last anywhere.
 	// Test ID: EreYcuQ
 	#[test]
 	fn a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there() {
 		let mut s = Settings::default();
 		let (a, b) = (Some("2560x1440_125pct_597x336mm"), Some("1920x1080_100pct"));
-		remember_grid(&mut s, a, 200, 60);
-		remember_grid(&mut s, b, 100, 30);
-		assert_eq!(remembered_grid(&s, a), (200, 60));
-		assert_eq!(remembered_grid(&s, b), (100, 30));
+		let kept = |columns, rows, font_zoom| KeptWindow {
+			columns,
+			rows,
+			font_zoom,
+		};
+		remember_window(&mut s, a, Some((200, 60)), Some(3));
+		remember_window(&mut s, b, Some((100, 30)), Some(0));
+		assert_eq!(remembered_window(&s, a), kept(200, 60, 3));
+		assert_eq!(remembered_window(&s, b), kept(100, 30, 0));
+		let last = kept(100, 30, 0);
 		assert_eq!(
-			remembered_grid(&s, Some("3840x2160_150pct")),
-			(100, 30),
-			"no entry: the last size"
+			remembered_window(&s, Some("3840x2160_150pct")),
+			last,
+			"no entry"
 		);
-		assert_eq!(
-			remembered_grid(&s, None),
-			(100, 30),
-			"monitor unknown: the last size"
-		);
-		remember_grid(&mut s, a, 210, 61);
+		assert_eq!(remembered_window(&s, None), last, "monitor unknown");
+		remember_window(&mut s, a, Some((210, 61)), Some(3));
 		assert_eq!(
 			s.monitor_sizes.len(),
 			2,
 			"an entry is updated, not added again"
 		);
-		assert_eq!(remembered_grid(&s, a), (210, 61));
+		assert_eq!(remembered_window(&s, a), kept(210, 61, 3));
+
+		// a zoom alone, as in a maximized window, leaves the size as it was;
+		// a monitor seen first that way starts from the last size anywhere
+		remember_window(&mut s, a, None, Some(-2));
+		assert_eq!(remembered_window(&s, a), kept(210, 61, -2));
+		remember_window(&mut s, Some("800x600_100pct"), None, Some(1));
+		assert_eq!(
+			remembered_window(&s, Some("800x600_100pct")),
+			kept(210, 61, 1)
+		);
+		// a font size from the command line is not a zoom to keep
+		remember_window(&mut s, a, Some((150, 40)), None);
+		assert_eq!(remembered_window(&s, a), kept(150, 40, -2));
 
 		// switched off, a monitor's entry is neither used nor written
 		s.remember_per_monitor = false;
-		assert_eq!(remembered_grid(&s, b), (210, 61));
-		remember_grid(&mut s, b, 90, 25);
+		assert_eq!(remembered_window(&s, b), kept(150, 40, 1));
+		remember_window(&mut s, b, Some((90, 25)), Some(4));
 		s.remember_per_monitor = true;
-		assert_eq!(remembered_grid(&s, b), (100, 30));
+		assert_eq!(remembered_window(&s, b), kept(100, 30, 0));
 		// and nothing is kept per monitor while remember_size is off
 		s.remember_size = false;
-		remember_grid(&mut s, Some("800x600_100pct"), 80, 24);
-		assert_eq!(s.monitor_sizes.len(), 2);
-		assert_eq!((s.remembered_columns, s.remembered_rows), (80, 24));
+		remember_window(&mut s, Some("640x480_100pct"), Some((80, 24)), Some(0));
+		assert_eq!(s.monitor_sizes.len(), 3);
+		assert_eq!(
+			(
+				s.remembered_columns,
+				s.remembered_rows,
+				s.remembered_font_zoom
+			),
+			(80, 24, 0)
+		);
 	}
 
 	// The per-monitor sizes read back from the file as written, and a write
@@ -9858,25 +9960,26 @@ mod tests {
 	#[test]
 	fn monitor_sizes_round_trip_and_leave_another_windows_alone() {
 		let p = std::path::Path::new("test.shcl");
-		let entry = |key: &str, columns, rows| MonitorSize {
+		let entry = |key: &str, columns, rows, font_zoom| MonitorSize {
 			key: key.into(),
 			columns,
 			rows,
+			font_zoom,
 		};
 		// another window kept B and changed A's rows since this one loaded
 		let mut doc = shcl::Document::parse(
-			"window:\n\tmonitors:\n\t\ta_100pct:\n\t\t\tcolumns: 100\n\t\t\trows: 41\n\t\tb_100pct:\n\t\t\tcolumns: 70\n\t\t\trows: 20\n",
+			"window:\n\tmonitors:\n\t\ta_100pct:\n\t\t\tcolumns: 100\n\t\t\trows: 41\n\t\t\tfont_zoom: 0\n\t\tb_100pct:\n\t\t\tcolumns: 70\n\t\t\trows: 20\n\t\t\tfont_zoom: -1\n",
 		);
-		let loaded = vec![entry("a_100pct", 100, 40)];
-		let mine = vec![entry("a_100pct", 120, 40), entry("c_150pct", 90, 30)];
+		let loaded = vec![entry("a_100pct", 100, 40, 0)];
+		let mine = vec![entry("a_100pct", 120, 40, 2), entry("c_150pct", 90, 30, 0)];
 		write_monitor_sizes(&mut doc, &loaded, &mine);
 		let back = resolve(read_raw(&doc.to_canonical(), p).0).monitor_sizes;
 		assert_eq!(
 			back,
 			vec![
-				entry("a_100pct", 120, 41),
-				entry("b_100pct", 70, 20),
-				entry("c_150pct", 90, 30)
+				entry("a_100pct", 120, 41, 2),
+				entry("b_100pct", 70, 20, -1),
+				entry("c_150pct", 90, 30, 0)
 			]
 		);
 		// a written file is a fixed point: nothing changed, nothing written
@@ -9884,13 +9987,15 @@ mod tests {
 		write_monitor_sizes(&mut doc, &back, &back);
 		assert_eq!(doc.to_canonical(), text);
 
-		// names are folded to lower case, as the keys are written
-		// out of range is held to the grid's range; neither number is no entry
-		let odd = "window:\n\tmonitors:\n\t\tx:\n\t\t\tcolumns: 0\n\t\ty:\n\t\t\tnote: 1\n";
+		// Names are folded to lower case, which is how the keys are written.
+		// A number out of range is held to its range, a missing one takes the
+		// default, and an entry with nothing readable is no entry.
+		let odd = "window:\n\tmonitors:\n\t\tX:\n\t\t\tcolumns: 0\n\t\t\tfont_zoom: 9999\n\t\ty:\n\t\t\tnote: 1\n";
 		let back = resolve(read_raw(odd, p).0).monitor_sizes;
+		let d = Settings::default();
 		assert_eq!(
 			back,
-			vec![entry("x", 1, Settings::default().remembered_rows)]
+			vec![entry("x", 1, d.remembered_rows, limits::FONT_ZOOM.1)]
 		);
 	}
 
@@ -9901,24 +10006,30 @@ mod tests {
 		let p = std::path::Path::new("test.shcl");
 		let text = default_config()
 			.replace("remembered_columns: 160", "remembered_columns: 132")
+			.replace("remembered_font_zoom: 0", "remembered_font_zoom: -3")
 			.replace(
 				"\t# remember_maximized:",
-				"\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\n\t# remember_maximized:",
+				"\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 2\n\n\t# remember_maximized:",
 			);
 		let launch = resolve(read_raw(&text, p).0);
 		let mut live = Settings::default();
 		window_memory_from(&text, p, &mut live);
-		assert_eq!(live.remembered_columns, 132);
+		assert_eq!(
+			(live.remembered_columns, live.remembered_font_zoom),
+			(132, -3)
+		);
 		assert_eq!(live.monitor_sizes.len(), 1);
 		assert_eq!(
 			(
 				live.remembered_columns,
 				live.remembered_rows,
+				live.remembered_font_zoom,
 				&live.monitor_sizes
 			),
 			(
 				launch.remembered_columns,
 				launch.remembered_rows,
+				launch.remembered_font_zoom,
 				&launch.monitor_sizes
 			)
 		);

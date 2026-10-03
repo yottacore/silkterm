@@ -4543,6 +4543,11 @@ impl State {
 			return;
 		}
 		self.watch.size_pinned = false;
+		self.note_grid(w, h);
+	}
+
+	// The grid the window shows at this size, waiting to be saved.
+	fn note_grid(&mut self, w: u32, h: u32) {
 		let px_to_cells = |px: f32, cell: f32, chrome: f32| {
 			(((px - 2.0 * self.text.margin - chrome) / cell).floor() as i64).max(1) as usize
 		};
@@ -4573,9 +4578,10 @@ impl State {
 		let maximized = self.window.is_maximized();
 		let orig = (*config::settings()).clone();
 		let mut new = orig.clone();
-		if remember_resize(self.size_tracked, fullscreen, maximized) {
-			config::remember_grid(&mut new, self.watch.key.as_deref(), cols, rows);
-		}
+		let grid =
+			remember_resize(self.size_tracked, fullscreen, maximized).then_some((cols, rows));
+		let zoom = (!self.watch.font_pinned).then(config::font_zoom_px);
+		config::remember_window(&mut new, self.watch.key.as_deref(), grid, zoom);
 		// a fullscreen window hides whether the one under it is maximized
 		if !fullscreen {
 			new.remembered_maximized = maximized;
@@ -4585,6 +4591,7 @@ impl State {
 				s.remembered_columns,
 				s.remembered_rows,
 				s.remembered_maximized,
+				s.remembered_font_zoom,
 				s.monitor_sizes.clone(),
 			)
 		};
@@ -4597,10 +4604,19 @@ impl State {
 		config::update(new);
 	}
 
-	// A move, or a new scale, starts the wait for the window to settle.
+	// A move starts the wait for the window to settle.
 	fn note_moved(&mut self) {
 		let now = Instant::now();
 		if now < self.watch.ignore_moves_until {
+			return;
+		}
+		self.start_settle(now);
+	}
+
+	// Nothing before the window is shown: a resize then would hold up the
+	// reveal, which waits for the launch size. The reveal looks once itself.
+	fn start_settle(&mut self, now: Instant) {
+		if !self.revealed {
 			return;
 		}
 		self.watch.moved_at.get_or_insert(now);
@@ -4656,11 +4672,17 @@ impl State {
 		}
 		// another window may have kept a size for this monitor since this one loaded
 		config::refresh_window_memory();
-		let (cols, rows) = config::remembered_grid(&config::settings(), self.watch.key.as_deref());
+		let kept = config::remembered_window(&config::settings(), self.watch.key.as_deref());
+		// the zoom first, since the grid's size in pixels depends on it
+		if !self.watch.font_pinned && kept.font_zoom != config::font_zoom_px() {
+			config::set_font_zoom(kept.font_zoom);
+			self.rebuild_text(config::display_scale(self.window.scale_factor()));
+			self.dirty = true;
+		}
 		let now = Instant::now();
 		self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
 		self.watch.ignore_moves_until = now + OWN_RESIZE_GRACE;
-		self.request_grid(cols, rows);
+		self.request_grid(kept.columns, kept.rows);
 	}
 
 	// Ask for the window size that shows this grid with the chrome as it is.
@@ -5305,13 +5327,15 @@ impl State {
 	// scale factor or font, then relayout. Shared by settings-driven font
 	// rebuilds and DPI scale-factor changes. The surface itself is reconfigured
 	// separately (a Resized event follows a scale change).
-	// Session font zoom (hotkeys / View menu): step the zoom offset and rebuild
-	// the text context at the new effective size. Window-wide, never persisted.
+	// Font zoom (hotkeys / View menu): step the zoom offset and rebuild the
+	// text context at the new effective size. Window-wide, and remembered with
+	// the window's size.
 	fn font_zoom(&mut self, dir: i32) {
 		config::nudge_font_zoom(dir);
 		let scale = config::display_scale(self.window.scale_factor());
 		self.rebuild_text(scale);
 		self.dirty = true;
+		self.note_zoom();
 	}
 
 	fn font_zoom_reset(&mut self) {
@@ -5322,6 +5346,19 @@ impl State {
 		let scale = config::display_scale(self.window.scale_factor());
 		self.rebuild_text(scale);
 		self.dirty = true;
+		self.note_zoom();
+	}
+
+	// The window keeps its size and shows a different grid, so both are
+	// saved: the next launch opens at this zoom and at this size, not at the
+	// old grid drawn bigger.
+	fn note_zoom(&mut self) {
+		if !self.size_tracked {
+			return;
+		}
+		self.watch.font_pinned = false;
+		let (w, h) = self.surface_px;
+		self.note_grid(w, h);
 	}
 
 	// Force the next frame through a full prepare + scrim build. Call whenever
@@ -7304,15 +7341,17 @@ fn launch_maximized(s: &config::Settings, cli: &crate::cli::WindowOpts) -> bool 
 }
 
 // Which monitor the window's size is kept for, and the wait for a move to
-// another one to settle (monitor.rs, config::remembered_grid).
+// another one to settle (monitor.rs, config::remembered_window).
 struct MonitorWatch {
 	key: Option<String>,
 	check_at: Option<Instant>,
 	moved_at: Option<Instant>, // when the move being waited out began
 	ignore_resize_until: Instant,
 	ignore_moves_until: Instant, // the window's own resize can move it, too
-	// The command line set the size, and it holds until a resize by hand.
+	// The command line set the size, or the font size, and it stays until
+	// the user resizes the window, or zooms the font.
 	size_pinned: bool,
+	font_pinned: bool,
 	// Wayland tells a window neither where it is nor that it moved, so the
 	// pointer coming back after a drag is the sign to look.
 	positionless: bool,
@@ -7808,6 +7847,16 @@ impl ApplicationHandler<UserEvent> for App {
 		// off-X11 and on compositors that don't honor the hint.
 		set_blur_behind(&window, config::settings().transparent_background_blur);
 
+		// remember_size opens at the last size and font zoom, this monitor's own
+		// where they are kept. A size or font size on the command line wins.
+		let settings = config::settings();
+		let monitor = crate::monitor::MonitorId::of_window(&window).map(|m| m.key());
+		let kept = config::remembered_window(&settings, monitor.as_deref());
+		let font_pinned = cli_win.style.font_size.is_some();
+		if settings.remember_size && !font_pinned {
+			config::set_font_zoom(kept.font_zoom);
+		}
+
 		// Transparency only ever affects the terminal background (per-pixel), never
 		// the whole window - so there's no compositor whole-window-opacity fallback.
 		let scale = config::display_scale(window.scale_factor());
@@ -7822,14 +7871,9 @@ impl ApplicationHandler<UserEvent> for App {
 		// exact column/row count at this size. If the request applies
 		// synchronously winit returns the new size (no Resized event), so adopt
 		// it here; otherwise a Resized event reconfigures the surface.
-		let settings = config::settings();
 		// CLI columns/rows override config; --pixel-width/height override either
 		// dimension directly. Add the menu-bar height (when shown) so the content
 		// still gets the requested row count (the tab bar only appears with >1 tab).
-		// remember_size launches at the last actual size, this monitor's own
-		// where one is kept; CLI columns/rows still override
-		let monitor = crate::monitor::MonitorId::of_window(&window).map(|m| m.key());
-		let kept = config::remembered_grid(&settings, monitor.as_deref());
 		let watch = MonitorWatch {
 			key: monitor,
 			check_at: None,
@@ -7840,15 +7884,16 @@ impl ApplicationHandler<UserEvent> for App {
 				|| cli_win.rows.is_some()
 				|| cli_win.pixel_width.is_some()
 				|| cli_win.pixel_height.is_some(),
+			font_pinned,
 			positionless: window.outer_position().is_err(),
 		};
 		let cols = cli_win.columns.unwrap_or(if settings.remember_size {
-			kept.0
+			kept.columns
 		} else {
 			settings.columns
 		});
 		let rows = cli_win.rows.unwrap_or(if settings.remember_size {
-			kept.1
+			kept.rows
 		} else {
 			settings.rows
 		});
@@ -8240,8 +8285,7 @@ impl ApplicationHandler<UserEvent> for App {
 				state.dirty = true;
 				let now = Instant::now();
 				state.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
-				state.watch.moved_at.get_or_insert(now);
-				state.watch.check_at = Some(now + MONITOR_SETTLE);
+				state.start_settle(now);
 			}
 
 			WindowEvent::Moved(_) => state.note_moved(),
