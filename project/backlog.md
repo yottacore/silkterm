@@ -633,21 +633,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - At the RC release, convert the config to the new format and keep the old file beside it
 	- ID: 2026100220292612
 	- Type: Feature
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs external testing: The unit tests on Windows (vm925w), where the copy is hard-linked on NTFS. A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that the copy appears beside the roaming config.
 	- Priority: Avg
 	- Opened: 20261002-202926
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: the old-format item about removing the code that migrates old config files.
 	- Target OS: All
+	- Test environment: b23
 	- Requirements:
 		- Upon RC release, convert settings to the new format.
 		- Keep the old config file under a suffixed name, still ending in `.shcl`.
 		- If any settings can't be salvaged, warn the user.
 	- Notes:
 		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
+			- Note: 20261003: The shcl 3 conversion keeps a copy now. See the progress log.
 	- Decisions:
 		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
+	- Progress log:
+		- 20261003: Any write that moves the file to a newer format first copies it to `config.format<N>.shcl` beside it. N is the Format number the file had. A file with no Format line counts as 2, since that is how the conversion reads it. The copy is made in the writer every settings write goes through, so a Settings save that converts a file a busy launch left alone keeps one too.
+		- 20261003: A copy already there is never replaced, and the file is still converted. If the copy can't be made, the write is refused. The copy is written under a name of its own and then linked into place, so two windows converting at once leave one whole copy. On a filesystem with no hard links it is written in place.
+		- 20261003: A 2.x line holding a list in brackets has no 3.0 spelling. It stays as written and sets nothing, and the launch that converts prints the count and where the copy is. Unreadable lines and unknown keys were already reported at every launch, so those are left to that.
+		- 20261003: The footer refresh no longer puts the Format line on a file still in 2.x spellings. A file whose conversion was put off could get the line without the respelling, and then never convert.
+		- 20261003: The flat pre-nesting conversion keeps its `.bak`. It is a layout change and has no format number. A flat file has no Format line, so the 2.x step that runs before it already keeps the untouched original as `config.format2.shcl`.
+		- 20261003: README and design.md say where the copy goes.
+	- Note: Launch notices go to the terminal, like every other launch message about the file. A desktop launch or a Windows release build shows none of them.
+	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
+	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
+	- Branch: fmtcopy
+	- Commit: 6531c55, 6d10356
+	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_copy_already_there_is_left_as_it_was` (EreLZMm), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX).
 	- Closed:
 
 - macOS: the first launch hangs with no window, using more and more memory
