@@ -282,7 +282,7 @@ fn hotkey_in(
 	}
 	// This shadows the shell's Meta+<those letters> (Meta-f word-forward), the
 	// usual menu-bar tradeoff.
-	if !mac && menu_bar && mods.alt_key() && !mods.control_key() {
+	if !mac && menu_bar && opens_menu_title(mods) {
 		if let Key::Character(typed) = key {
 			if let Some(ch) = typed.chars().next() {
 				return Some(Hotkey::MenuTitle(ch.to_ascii_uppercase()));
@@ -290,6 +290,12 @@ fn hotkey_in(
 		}
 	}
 	None
+}
+
+// Alt, with or without Shift, is what makes a letter a menu title. Ctrl rules
+// out AltGr, which Windows reports as Ctrl+Alt; Super makes it some other chord.
+pub fn opens_menu_title(mods: ModifiersState) -> bool {
+	mods.alt_key() && !mods.control_key() && !mods.super_key()
 }
 
 // Where a write to the desktop clipboard comes from.
@@ -995,12 +1001,9 @@ mod tests {
 				Some(hotkey),
 				"{chord:?}"
 			);
-			// off a Mac, Alt plus a letter opens a menu title even with Super held
-			assert!(
-				matches!(
-					hotkey_on(&press, held(chord), true, false),
-					None | Some(Hotkey::MenuTitle(_))
-				),
+			assert_eq!(
+				hotkey_on(&press, held(chord), true, false),
+				None,
 				"{chord:?} off macOS"
 			);
 		}
@@ -1283,6 +1286,32 @@ mod tests {
 				_ => assert_eq!(hotkey, None, "Ctrl+Shift+{c}"),
 			}
 		}
+	}
+
+	// Only Alt, with or without Shift, makes a letter a menu title. Super or
+	// Ctrl held with it is some other chord (AltGr arrives as Ctrl+Alt on
+	// Windows), so it goes on to the shell.
+	// Test ID: Erf6miU
+	#[test]
+	fn a_letter_opens_a_menu_title_only_with_alt_alone_or_alt_shift() {
+		const ALT: ModifiersState = ModifiersState::ALT;
+		let on = |mods| hotkey_on(&Key::Character("f".into()), mods, true, false);
+		assert_eq!(on(ALT), Some(Hotkey::MenuTitle('F')));
+		assert_eq!(
+			on(ALT.union(ModifiersState::SHIFT)),
+			Some(Hotkey::MenuTitle('F'))
+		);
+		for extra in [
+			COMMAND,
+			CTRL,
+			COMMAND.union(ModifiersState::SHIFT),
+			COMMAND.union(CTRL),
+		] {
+			assert_eq!(on(ALT.union(extra)), None, "{extra:?}");
+			assert!(!opens_menu_title(ALT.union(extra)), "{extra:?}");
+		}
+		assert!(opens_menu_title(ALT));
+		assert!(!opens_menu_title(NONE));
 	}
 
 	// On a Mac the pane chords are iTerm2's: Command+D splits right,
