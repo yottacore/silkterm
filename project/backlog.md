@@ -140,7 +140,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100220292612
 	- Type: Feature
 	- Status: Waiting on signoff
-	- Needs external testing: The unit tests on Windows (vm925w), where the copy is hard-linked on NTFS. A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
+	- Needs external testing: A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
 	- Priority: Avg
 	- Opened: 20261002-202926
 	- Opened by: JC
@@ -176,6 +176,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
 		- 20261003: The unit suite passes, 1057 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID, markdown and table checks pass. With a taken name counted as done, the second-copy and same-second tests failed. With same bytes not counted as the same copy, the same-second and race tests failed. With the loss not handed to the window, the notice test failed. With no hard links, the race test saw a part copy in three runs out of three.
 		- 20261003: Seen on Linux: a launch on a 2.x `--config mine.shcl` with a list in brackets made `mine_backup_<time>_format-v2.shcl` and put the notice up over the terminal after its first frame. The next launch made no copy and showed no notice.
+		- 20261003: On vm925w at 8877157, on NTFS, a lone `cargo test` passed, 1035 tests. These copy tests passed by name: `a_launch_keeps_the_2x_file_beside_the_converted_one`, `a_second_conversion_keeps_a_second_copy`, `copies_made_in_one_second_never_replace_each_other`, `launches_converting_at_once_leave_one_whole_copy`, `the_footer_never_stamps_a_2x_file`, `a_setting_the_conversion_cannot_keep_is_reported`, `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` and `every_settings_write_goes_through_the_restore`. `a_write_that_cannot_keep_the_old_file_is_refused` is Unix only, so it does not run there.
 	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
 		- 20261003: No `format2` or `.format<N>` name is left in the code, README or design.md. The local-time stamp is one function now, shared with the test folder. The notice is put up only in `show_notice`, and `take_conversion_loss` is read only in the window's event loop.
 	- Branch: fmtcopy, fmtbak
@@ -550,8 +551,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100220260484
 	- Type: Enhancement
 	- Status: Waiting for testing
-	- Needs external testing: On vm925w, a `cicd-win.ps1 -Quick` run that passes, a lone `cargo test` that passes, and a wingui run, pass or fail, each leave no new `test_silkterm_*` folder in `%TEMP%`. The new Rust tests and `cicd/tests/testdir/remove.ps1` pass there, with their junction cases.
-		- The tests went in before the code they check: 367e15a and 53e4295 should fail there, and c283f5b and 8c498b1 pass.
+	- Needs external testing: On vm925w, the tests went in before the code they check: 367e15a and 53e4295 should fail there, and c283f5b and 8c498b1 pass.
 	- Priority: Avg
 	- Opened: 20261002-202604
 	- Opened by: JC
@@ -572,6 +572,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: Folders left by earlier runs have no mark and stay. They are removed by hand, once.
 	- Test case: `cicd/tests/testdir/run.bash` (ErOj67l) steps A2, A3, C2, E, F, F2 and G; `cicd/tests/testdir/remove.ps1` (ErbiCgJ); `a_marked_run_folder_is_removed` (ErbiCgE), `a_run_folder_without_this_runs_mark_is_left` (ErbiCgF), `a_link_in_place_of_the_run_folder_is_left` (ErbiCgG), `a_link_inside_the_run_folder_is_not_followed` (ErbiCgH) and `a_run_that_fails_keeps_its_folder` (ErbiCgI); `cicd/tests/cicd-win/run.bash` (Er2UgYE); `cicd/tests/wingui/harness-test.bash` (EqH4isr). Each fails with the check it pins taken out.
 	- Verified: The gate, each changed script test on its own, a lone full `cargo test`, and clippy for Linux, Windows and macOS.
+		- 20261003: On vm925w at 8877157, `%TEMP%\test_silkterm_*` was listed for both accounts before and after each run, and no run left a new folder. A `cicd-win.ps1 -Yes -Quick -NoPublish -NoDogfood -NoSync` run passed, with its test run folder removal stage. Its folder was there while it ran. A lone `cargo test` passed, 1035 tests, with the five `testdir::tests` tests. A wingui `smoke` run passed, and a wingui run of an unknown scenario failed.
 	- Branch: testrm
 	- Commit: a497b6d, 174abde
 
@@ -635,7 +636,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100307252506
 	- Type: Feature
 	- Status: Waiting for testing
-	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
+	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
 	- Needs external testing:
 		- vm925w: the Keys tab in a real Settings window, which is a child window there. Ctrl, Alt and Alt+Shift chords set by pressing them, a chord held with the Windows key, AltGr, Escape and Backspace, and the new chord working in the terminal after OK.
 		- b26: Command chords set while Settings has focus, including ones the menu bar owns such as Command+W, Command+Q and Command+,. The menu bar may act on those before the dialog sees them, and Command+Q could quit. Option plus a letter may read as the character it types.
@@ -677,7 +678,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100220292607
 	- Type: Feature
 	- Status: Waiting for testing
-	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
+	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
 	- Needs external testing:
 		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
 		- b26: Option+Command+W closes the pane and Command+W still closes the tab. The Panes row on the menu bar, the right-click menu and the Keys tab show Option+Command+W.
@@ -836,6 +837,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- The lint report counts a passing test whose name has "warning" in it as a warning
+	- ID: 2026100312190395
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-121903
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run the pipeline, then `bash cicd/utility/lint-report.bash --check`.
+	- Incorrect behavior: The line `ok EreHnyt ui_spec::tests::a_warning_needs_a_label_of_its_own` is listed as a warning, so the usual count of 31 reads 32.
+	- Expected behavior: Test result lines are never counted. Only real compiler, lint and cargo-deny warnings are.
+	- Reproduced: 20261003 on b23, on the pipeline run at 8877157.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
