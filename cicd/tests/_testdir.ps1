@@ -88,8 +88,47 @@ function fTestDir_Remove {
 		[Parameter(Mandatory)][string]$Dir,
 		[Parameter(Mandatory)][string]$Token
 	)
-	Remove-Item -LiteralPath $Dir -Recurse -Force
+	$reason = fTestDir_NotOurs $Dir $Token
+	if ($reason) { Write-Warning "test run folder: left $Dir in place: $reason"; return $false }
+	##	Windows will not remove a folder in use as the current one.
+	$here = (Get-Location).ProviderPath
+	if ($here -eq $Dir -or $here.StartsWith($Dir + [System.IO.Path]::DirectorySeparatorChar)) { Set-Location -LiteralPath (Split-Path $Dir) }
+	try { fTestDir_Delete ([System.IO.DirectoryInfo]$Dir) }
+	catch { Write-Warning "test run folder: could not remove ${Dir}: $($_.Exception.Message)"; return $false }
 	return $true
+}
+
+function fTestDir_NotOurs([string]$Dir, [string]$Token) {
+	##	Why $Dir is not this run's folder, or nothing when it is.
+	if ((Split-Path -Leaf $Dir) -notmatch '^test_silkterm_\d{8}-\d{8}$') { return 'not named like a run folder' }
+	$info = [System.IO.DirectoryInfo]$Dir
+	if (-not $info.Exists) { return 'not a folder' }
+	if ($info.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return 'it is a link' }
+	$marker = [System.IO.FileInfo](Join-Path $Dir '.test_silkterm_owner')
+	if (-not $marker.Exists -or ($marker.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return 'no owner mark' }
+	$line = @([System.IO.File]::ReadAllLines($marker.FullName)) | Select-Object -First 1
+	if ($null -eq $line -or $line.Trim() -ne $Token) { return "another run's owner mark" }
+	return ''
+}
+
+function fTestDir_Delete([System.IO.DirectoryInfo]$Folder) {
+	##	Its own walk, since Remove-Item -Recurse in Windows PowerShell 5.1 follows
+	##	junctions, and a .NET recursive delete stops at a read-only file.
+	$readOnly = [System.IO.FileAttributes]::ReadOnly
+	$Folder.Attributes = $Folder.Attributes -band -bnot $readOnly
+	foreach ($entry in $Folder.GetFileSystemInfos()) {
+		$isFolder = [bool]($entry.Attributes -band [System.IO.FileAttributes]::Directory)
+		if ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+			if ($isFolder -and (fTestDir_OnWindows)) { [System.IO.Directory]::Delete($entry.FullName, $false) }
+			else { [System.IO.File]::Delete($entry.FullName) }
+		} elseif ($isFolder) {
+			fTestDir_Delete $entry
+		} else {
+			$entry.Attributes = $entry.Attributes -band -bnot $readOnly
+			$entry.Delete()
+		}
+	}
+	$Folder.Delete()
 }
 
 function fTestDir_End {
