@@ -678,6 +678,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: ce9412c
 	- Test case: `idle_release_ships_on` (Erg8fz0) and `an_existing_config_learns_that_the_idle_release_ships_on` (Erg8g2c).
 
+- The event loop does blocking work on every pass
+	- ID: 2026100314050005
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs local test suite run?: No
+	- Needs external testing: macOS on b26: the menu bar still follows a hotkey rebinding and a View menu state change (fullscreen, Read only), and is not rebuilt while nothing changes.
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Nothing that waits on the X server, reads the environment or builds strings runs on every `about_to_wait` pass.
+	- Progress log:
+		- 20261003: `freeze_sync` runs on every pass and every redraw. Its `hidden()` asks `is_minimized()`, which on X11 is a property request that waits for its reply.
+		- 20261003: `idle_rule` reads `SILK_IDLE_SECS` twice per pass through `release_deadline`. The file's own note at `env_flag` says to read the environment once.
+		- 20261003: on macOS, `bar_menus_key` asks for the fullscreen state and builds a string per hotkey on every pass.
+		- 20261003: `monitor.rs` opens a new X11 connection in `x11_monitor_under` and again in `button_held`. That runs every 250 ms during a window drag.
+		- 20261003: Measured on Xvfb, not the real desktop. With output every 16 ms, `freeze_sync` took 240 to 275 us a call and was most of a pass's own time outside the frame (283 to 538 us). An idle window with the cursor animating: 61 us a call.
+		- 20261003: winit's X11 backend sends nothing when a window is minimized; it never reads `_NET_WM_STATE` changes or unmap. A minimize with focus gives `Focused(false)`; one without focus gives no event at all. A restore gives `Focused`, `Occluded(false)` and a redraw.
+		- 20261003: Done: the minimized answer is kept for 250 ms and dropped on focus, occlusion, resize and redraw events, so a restore is still seen at once and the WM's redraw still does the catch-up (G89). Same runs after: 56 to 77 us a call, 93 to 118 us a pass outside the frame; idle 26 us a call. Those runs draw about 17 frames a second, so at 60 the saving is larger.
+		- 20261003: Done: `SILK_IDLE_SECS` is read once per process.
+		- 20261003: Done: the macOS menu key hashes the bindings in force directly instead of building a `keys.<name>` string per hotkey. The fullscreen read is winit's own cached flag on macOS, not a call into AppKit, so it stays.
+		- 20261003: Left alone: the monitor check during a drag. It costs about 130 us a check, four a second, only while a button is held, then once more when the move settles. Keeping a second X connection open for the life of the process would save little.
+	- Origin: 6d543d37 (2026-08-30) for `freeze_sync`, 90073855 (2026-09-17) for `idle_rule`, 02482bb7 (2026-10-01) for the menu key, 754c9cb (2026-10-03) for the monitor check. No earlier review item. Plausible when filed; measured 20261003.
+	- Verified: minimize and restore during output, focused and unfocused. A focused minimize froze within 11 ms and an unfocused one within 104 ms. The catch-up frame came 3 ms after the restore. A minimized window still let its device go and got it back on restore. Frame counts matched the old build.
+	- Verified: full unit suite passes. Clippy is clean for Linux, Windows and macOS targets.
+	- Swept: every environment read in the source. Only `SILK_PROFILE_OUT`, in profiling builds, is still read per pass; the rest are read once or on a rare event. Every `self.window` state query in app.rs; none other runs per pass. `config_paths()` callers: the rest are tests or config reads, not per pass.
+	- Branch: loopwork
+	- Commit: 2e1e8e5
+	- Test case: `the_idle_wait_switch_is_read_once` (fails on the old code, passes now), `the_minimized_state_is_asked_at_most_once_per_recheck` (at most four asks in a second of 60 passes, and the restore events), `the_bindings_in_force_give_every_hotkey`.
+	- Note: Code review 20261003 item 5.
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
@@ -886,38 +918,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Origin: e52a6909 (2026-09-03) for `shown()`, c6eaa04 (2026-06-28) for `row_y`, d48646ca (2026-07-02) for `dlg()`. No earlier review item. Plausible, cost not measured.
 	- Test case: Owed. A count of `Settings` clones per dialog frame, which should be at most one.
 	- Note: Code review 20261003 item 4.
-
-- The event loop does blocking work on every pass
-	- ID: 2026100314050005
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: No
-	- Needs external testing: macOS on b26: the menu bar still follows a hotkey rebinding and a View menu state change (fullscreen, Read only), and is not rebuilt while nothing changes.
-	- Priority: Avg
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Nothing that waits on the X server, reads the environment or builds strings runs on every `about_to_wait` pass.
-	- Progress log:
-		- 20261003: `freeze_sync` runs on every pass and every redraw. Its `hidden()` asks `is_minimized()`, which on X11 is a property request that waits for its reply.
-		- 20261003: `idle_rule` reads `SILK_IDLE_SECS` twice per pass through `release_deadline`. The file's own note at `env_flag` says to read the environment once.
-		- 20261003: on macOS, `bar_menus_key` asks for the fullscreen state and builds a string per hotkey on every pass.
-		- 20261003: `monitor.rs` opens a new X11 connection in `x11_monitor_under` and again in `button_held`. That runs every 250 ms during a window drag.
-		- 20261003: Measured on Xvfb, not the real desktop. With output every 16 ms, `freeze_sync` took 240 to 275 us a call and was most of a pass's own time outside the frame (283 to 538 us). An idle window with the cursor animating: 61 us a call.
-		- 20261003: winit's X11 backend sends nothing when a window is minimized; it never reads `_NET_WM_STATE` changes or unmap. A minimize with focus gives `Focused(false)`; one without focus gives no event at all. A restore gives `Focused`, `Occluded(false)` and a redraw.
-		- 20261003: Done: the minimized answer is kept for 250 ms and dropped on focus, occlusion, resize and redraw events, so a restore is still seen at once and the WM's redraw still does the catch-up (G89). Same runs after: 56 to 77 us a call, 93 to 118 us a pass outside the frame; idle 26 us a call. Those runs draw about 17 frames a second, so at 60 the saving is larger.
-		- 20261003: Done: `SILK_IDLE_SECS` is read once per process.
-		- 20261003: Done: the macOS menu key hashes the bindings in force directly instead of building a `keys.<name>` string per hotkey. The fullscreen read is winit's own cached flag on macOS, not a call into AppKit, so it stays.
-		- 20261003: Left alone: the monitor check during a drag. It costs about 130 us a check, four a second, only while a button is held, then once more when the move settles. Keeping a second X connection open for the life of the process would save little.
-	- Origin: 6d543d37 (2026-08-30) for `freeze_sync`, 90073855 (2026-09-17) for `idle_rule`, 02482bb7 (2026-10-01) for the menu key, 754c9cb (2026-10-03) for the monitor check. No earlier review item. Plausible when filed; measured 20261003.
-	- Verified: minimize and restore during output, focused and unfocused. A focused minimize froze within 11 ms and an unfocused one within 104 ms. The catch-up frame came 3 ms after the restore. A minimized window still let its device go and got it back on restore. Frame counts matched the old build.
-	- Verified: full unit suite passes. Clippy is clean for Linux, Windows and macOS targets.
-	- Swept: every environment read in the source. Only `SILK_PROFILE_OUT`, in profiling builds, is still read per pass; the rest are read once or on a rare event. Every `self.window` state query in app.rs; none other runs per pass. `config_paths()` callers: the rest are tests or config reads, not per pass.
-	- Branch: loopwork
-	- Commit: 2e1e8e5
-	- Test case: `the_idle_wait_switch_is_read_once` (fails on the old code, passes now), `the_minimized_state_is_asked_at_most_once_per_recheck` (at most four asks in a second of 60 passes, and the restore events), `the_bindings_in_force_give_every_hotkey`.
-	- Note: Code review 20261003 item 5.
 
 - A Settings save on a config that was deleted while running says it saved and writes nothing
 	- ID: 2026100316135866
