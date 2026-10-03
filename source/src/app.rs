@@ -4558,8 +4558,8 @@ impl State {
 		let orig = (*config::settings()).clone();
 		let mut new = orig.clone();
 		if remember_resize(self.size_tracked, fullscreen, maximized) {
-			new.remembered_columns = cols;
-			new.remembered_rows = rows;
+			let monitor = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key());
+			config::remember_grid(&mut new, monitor.as_deref(), cols, rows);
 		}
 		// a fullscreen window hides whether the one under it is maximized
 		if !fullscreen {
@@ -4570,6 +4570,7 @@ impl State {
 				s.remembered_columns,
 				s.remembered_rows,
 				s.remembered_maximized,
+				s.monitor_sizes.clone(),
 			)
 		};
 		if kept(&new) == kept(&orig) {
@@ -7686,14 +7687,17 @@ impl ApplicationHandler<UserEvent> for App {
 		// CLI columns/rows override config; --pixel-width/height override either
 		// dimension directly. Add the menu-bar height (when shown) so the content
 		// still gets the requested row count (the tab bar only appears with >1 tab).
-		// remember_size launches at the last actual size; CLI columns/rows still override
+		// remember_size launches at the last actual size, this monitor's own
+		// where one is kept; CLI columns/rows still override
+		let monitor = crate::monitor::MonitorId::of_window(&window).map(|m| m.key());
+		let kept = config::remembered_grid(&settings, monitor.as_deref());
 		let cols = cli_win.columns.unwrap_or(if settings.remember_size {
-			settings.remembered_columns
+			kept.0
 		} else {
 			settings.columns
 		});
 		let rows = cli_win.rows.unwrap_or(if settings.remember_size {
-			settings.remembered_rows
+			kept.1
 		} else {
 			settings.rows
 		});

@@ -734,7 +734,14 @@ rows:
 		label: Remember last size
 		kind: toggle
 		setting: window.remember_size
-		help: "Reopen at whatever size the window was last closed at, ignoring the two below."
+		help: "Reopen at whatever size the window was last closed at, ignoring Columns and Rows."
+
+	RememberPerMonitor:
+		label: Per monitor
+		kind: toggle
+		indent: 1
+		setting: window.remember_per_monitor
+		help: "Keep a size for each monitor, told apart by its resolution, scale and physical size. A window moved to another monitor takes that monitor's size once it stops there."
 
 	Columns:
 		label: Columns
@@ -1009,6 +1016,7 @@ gates:
 	IdleMin: IdleRelease
 	FontSize: !SystemFontSize
 
+	RememberPerMonitor: RememberSize
 	Columns: !RememberSize
 	Rows: !RememberSize
 
