@@ -5,11 +5,35 @@
 // file a test writes goes under. A runner that sets SILKTERM_TEST_DIR hands its
 // own folder down instead, so a whole pipeline run shares one. The scripts
 // under cicd/tests keep the same contract in _testdir.bash, .py and .ps1.
+// A folder this process made is removed when the run passes, and kept when a
+// test panicked. One named by SILKTERM_TEST_DIR is never removed.
 
-use std::io::{self, ErrorKind};
+use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+
+const OWNER_FILE: &str = ".test_silkterm_owner";
+static PANICKED: AtomicBool = AtomicBool::new(false);
+static OWNED: OnceLock<Owned> = OnceLock::new();
+
+#[derive(Debug)]
+struct Owned {
+	dir: PathBuf,
+	token: String,
+}
+
+#[derive(Debug)]
+enum Removal {
+	Removed,
+	NotOurs(&'static str),
+	Failed(io::Error),
+}
+
+unsafe extern "C" {
+	fn atexit(callback: extern "C" fn()) -> std::ffi::c_int;
+}
 
 /// The run's test folder: made once per process, shared by every test in it.
 pub fn run_dir() -> &'static Path {
@@ -18,8 +42,79 @@ pub fn run_dir() -> &'static Path {
 		let given = std::env::var_os("SILKTERM_TEST_DIR")
 			.filter(|dir| !dir.is_empty())
 			.map(PathBuf::from);
-		make_run_dir(&std::env::temp_dir(), given, local_stamp).expect("test run folder")
+		let adopted = given.is_some();
+		let dir = make_run_dir(&std::env::temp_dir(), given, local_stamp).expect("test run folder");
+		if adopted {
+			return dir;
+		}
+		let token = mark_owned(&dir).expect("test run folder");
+		// Cloned so the exit handler never reads the path back from anywhere a
+		// test could change.
+		let _ = OWNED.set(Owned {
+			dir: dir.clone(),
+			token,
+		});
+		// A failing test stops before its own cleanup, so its files are the
+		// record of what it wrote. Any panic keeps the folder.
+		let previous = std::panic::take_hook();
+		std::panic::set_hook(Box::new(move |info| {
+			PANICKED.store(true, Ordering::Relaxed);
+			previous(info);
+		}));
+		// The test harness has no end-of-run hook. A pass returns from main and
+		// the C runtime's exit runs this. A failed registration only leaves the
+		// folder behind.
+		// SAFETY: atexit only stores the function pointer.
+		let _ = unsafe { atexit(remove_at_exit) };
+		dir
 	})
+}
+
+fn mark_owned(dir: &Path) -> io::Result<String> {
+	let nanos = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.unwrap_or_default()
+		.as_nanos();
+	let token = format!("{}-{nanos}", std::process::id());
+	let mut marker = std::fs::File::create_new(dir.join(OWNER_FILE))?;
+	writeln!(marker, "{token}")?;
+	Ok(token)
+}
+
+fn remove_if_owned(dir: &Path, _token: &str) -> Removal {
+	match std::fs::remove_dir_all(dir) {
+		Ok(()) => Removal::Removed,
+		Err(e) => Removal::Failed(e),
+	}
+}
+
+// Never eprintln! or unwrap here: a panic in an extern "C" function aborts.
+extern "C" fn remove_at_exit() {
+	let Some(owned) = OWNED.get() else {
+		return;
+	};
+	let mut stderr = io::stderr();
+	if PANICKED.load(Ordering::Relaxed) {
+		let _ = writeln!(stderr, "test files kept in {}", owned.dir.display());
+		return;
+	}
+	match remove_if_owned(&owned.dir, &owned.token) {
+		Removal::Removed => {}
+		Removal::NotOurs(reason) => {
+			let _ = writeln!(
+				stderr,
+				"test run folder: left {} in place: {reason}",
+				owned.dir.display()
+			);
+		}
+		Removal::Failed(e) => {
+			let _ = writeln!(
+				stderr,
+				"test run folder: could not remove {}: {e}",
+				owned.dir.display()
+			);
+		}
+	}
 }
 
 fn make_run_dir(
@@ -259,5 +354,110 @@ mod tests {
 				return;
 			}
 		}
+	}
+
+	// A marked run folder under a base of the test's own.
+	fn marked_folder(what: &str) -> (PathBuf, PathBuf, String) {
+		let base = base_for(what);
+		let dir = make_run_dir(&base, None, || "20260101-00000000".to_string()).unwrap();
+		let token = mark_owned(&dir).unwrap();
+		(base, dir, token)
+	}
+
+	// A junction on Windows, since anyone can make one there and a symlink needs
+	// a privilege.
+	fn link_folder(target: &Path, at: &Path) {
+		#[cfg(unix)]
+		std::os::unix::fs::symlink(target, at).unwrap();
+		#[cfg(windows)]
+		{
+			let made = std::process::Command::new("cmd")
+				.args(["/C", "mklink", "/J"])
+				.arg(at)
+				.arg(target)
+				.output()
+				.unwrap();
+			assert!(
+				made.status.success(),
+				"{}",
+				String::from_utf8_lossy(&made.stdout)
+			);
+		}
+	}
+
+	// Test ID: ErbiCgE
+	#[test]
+	fn a_marked_run_folder_is_removed() {
+		let (base, dir, token) = marked_folder("removed");
+		std::fs::create_dir_all(dir.join("a").join("b")).unwrap();
+		std::fs::write(dir.join("a").join("b").join("file"), "x").unwrap();
+		let read_only = dir.join("a").join("read-only");
+		std::fs::write(&read_only, "x").unwrap();
+		let mut permissions = std::fs::metadata(&read_only).unwrap().permissions();
+		permissions.set_readonly(true);
+		std::fs::set_permissions(&read_only, permissions).unwrap();
+		let got = remove_if_owned(&dir, &token);
+		assert!(matches!(got, Removal::Removed), "{got:?}");
+		assert!(std::fs::symlink_metadata(&dir).is_err());
+		std::fs::remove_dir_all(&base).unwrap();
+	}
+
+	// Test ID: ErbiCgF
+	#[test]
+	fn a_run_folder_without_this_runs_mark_is_left() {
+		let (base, dir, token) = marked_folder("unmarked");
+		std::fs::write(dir.join("file"), "x").unwrap();
+		std::fs::remove_file(dir.join(OWNER_FILE)).unwrap();
+		let got = remove_if_owned(&dir, &token);
+		assert!(matches!(got, Removal::NotOurs(_)), "{got:?}");
+		assert!(dir.join("file").is_file());
+		std::fs::write(dir.join(OWNER_FILE), "1-2\n").unwrap();
+		let got = remove_if_owned(&dir, &token);
+		assert!(matches!(got, Removal::NotOurs(_)), "{got:?}");
+		assert!(dir.join("file").is_file());
+		std::fs::remove_dir_all(&base).unwrap();
+	}
+
+	// Test ID: ErbiCgG
+	#[test]
+	fn a_link_in_place_of_the_run_folder_is_left() {
+		let (base, dir, token) = marked_folder("swapped");
+		let target = base.join("elsewhere");
+		std::fs::create_dir(&target).unwrap();
+		std::fs::copy(dir.join(OWNER_FILE), target.join(OWNER_FILE)).unwrap();
+		std::fs::write(target.join("file"), "x").unwrap();
+		std::fs::remove_dir_all(&dir).unwrap();
+		link_folder(&target, &dir);
+		let got = remove_if_owned(&dir, &token);
+		assert!(matches!(got, Removal::NotOurs(_)), "{got:?}");
+		assert!(target.join("file").is_file());
+		assert!(target.join(OWNER_FILE).is_file());
+		std::fs::remove_dir_all(&base).unwrap();
+	}
+
+	// Test ID: ErbiCgH
+	#[test]
+	fn a_link_inside_the_run_folder_is_not_followed() {
+		let (base, dir, token) = marked_folder("inner_link");
+		let outside = base.join("outside");
+		std::fs::create_dir(&outside).unwrap();
+		std::fs::write(outside.join("file"), "x").unwrap();
+		link_folder(&outside, &dir.join("link"));
+		let got = remove_if_owned(&dir, &token);
+		assert!(matches!(got, Removal::Removed), "{got:?}");
+		assert!(outside.join("file").is_file());
+		std::fs::remove_dir_all(&base).unwrap();
+	}
+
+	// Started on its own by cicd/tests/testdir/run.bash, which checks the folder
+	// is kept and named. Does nothing in a normal run.
+	// Test ID: ErbiCgI
+	#[test]
+	fn a_run_that_fails_keeps_its_folder() {
+		if std::env::var_os("SILKTERM_TEST_FAIL_ON_PURPOSE").is_none() {
+			return;
+		}
+		std::fs::write(run_dir().join("kept"), "kept").unwrap();
+		panic!("failed on purpose");
 	}
 }
