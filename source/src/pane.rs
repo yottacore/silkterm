@@ -112,9 +112,10 @@ const PROMPT_SKEL_MIN: usize = 6;
 // under ~3 frames stale while costing nothing when nothing is contending.
 const LOCK_WAIT_AFTER: u32 = 2;
 
-// The two independent auto-copy triggers a pane can have on (session-only, never
-// persisted). Each is a per-pane bool; the enum just names which one a UI action
-// or menu row refers to.
+// The two independent auto-copy triggers a pane can have on. Each is a per-pane
+// bool; the enum just names which one a UI action or menu row refers to. Copy on
+// output is session-only. A copy-on-select toggle is saved as the default for new
+// panes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CopyKind {
 	Select, // copy the highlighted selection the moment a select finishes

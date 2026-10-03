@@ -255,7 +255,7 @@ shell:
 	## replaces a prompt set in .bashrc.
 	# bash_prompt: false  ## Default
 
-	# copy_on_select: false  ## Default
+	# copy_on_select: true  ## Default
 
 ##
 ## This config file format is SHCL.
