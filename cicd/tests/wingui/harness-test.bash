@@ -3,10 +3,10 @@
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' The PowerShell being matched needs literal '$'.
 
 ##	- Purpose:
-##		Two things the Windows scenario harness got wrong, checked without a box.
+##		Three things the Windows scenario harness got wrong, checked without a box.
 ##		It ran whatever binary the box last built, so a result could be for an
-##		older commit. And its cleanup stopped every process named silkterm, on
-##		boxes other people use.
+##		older commit. Its cleanup stopped every process named silkterm, on
+##		boxes other people use. And it kept its files outside the temp folder.
 ##	- Test ID: EqH4isr
 ##	- History: At bottom of file.
 
@@ -35,7 +35,15 @@ while [[ "${1:-}" == --* ]]; do [[ "$1" == --host ]] && shift; shift; done
 echo "$*" >> "${STUB_LOG}"
 case "${1:-}" in
 	hosts) if [[ -n "${STUB_DOWN:-}" ]]; then echo "box      down  192.0.2.1"; else echo "box      up    192.0.2.1"; fi ;;
-	run) cp "$2" "${STUB_DIR}/launcher-$(date +%s%N).ps1"; echo "VERDICT pass" ;;
+	run)
+		if grep -qE $'^fStage\r?$' "$2"; then
+			cp "$2" "${STUB_DIR}/stage.ps1"
+			[[ -n "${STUB_NOSTAGE:-}" ]] && { echo "test run folder: refused"; exit 1; }
+			echo "RUNFOR wintest"
+			printf 'RUNDIR %s\r\n' 'C:\Users\wintest\AppData\Local\Temp\test_silkterm_20260101-00000000'
+		else
+			cp "$2" "${STUB_DIR}/launcher-$(date +%s%N).ps1"; echo "VERDICT pass"
+		fi ;;
 esac
 STUB
 chmod +x "${work}/win-remote"
@@ -50,6 +58,29 @@ fNamesCommit(){ grep -qF "testing ${commit}" <<< "${out}" ;}
 fCheck "the binary under test is sent to the box" fSent
 fCheck "the scenario runs the binary sent, not the box's own build" fRunsSent
 fCheck "the result names the commit tested" fNamesCommit
+
+## Where it all goes: one run folder in the console user's temp folder, made
+## on the box, since that user's temp folder is not the ssh account's.
+runDir='C:\Users\wintest\AppData\Local\Temp\test_silkterm_20260101-00000000'
+fStaged(){ [[ -f "${work}/stage.ps1" ]] && grep -q '^function fTestDir_Make' "${work}/stage.ps1" ;}
+fSentThere(){ grep -qFx "push ${work}/silkterm.exe ${runDir}\silkterm.exe" "${work}/calls" ;}
+fRunsThere(){ [[ -n "${launcher}" ]] && grep -qFx "\$dir = '${runDir}'" "${launcher}" && grep -qF -- '-RunDir `"$dir`"' "${launcher}" ;}
+fScratchThere(){ grep -qE $'^\\$env:TEMP = \\$RunDir\r?$' "${meDir}/_run.ps1" && grep -qE $'^\\$env:TMP = \\$RunDir\r?$' "${meDir}/_run.ps1" ;}
+fNoOtherFolder(){ ! grep -qi 'programdata' "${launcher}" "${work}/stage.ps1" "${meDir}"/*.ps1 ;}
+fChecksUser(){ grep -qFx "\$runFor = 'wintest'" "${launcher}" ;}
+fCheck "the run folder is made on the box by the same rule as every test run" fStaged
+fCheck "the binary goes in it" fSentThere
+fCheck "the scenario runs there" fRunsThere
+fCheck "and points its temp folder there, for its own scratch and the app's" fScratchThere
+fCheck "a scenario stops if the console changed hands since the folder was made" fChecksUser
+fCheck "nothing the harness sends uses a folder outside it" fNoOtherFolder
+
+rc=0
+: > "${work}/calls-nostage"
+out="$(STUB_NOSTAGE=1 STUB_LOG="${work}/calls-nostage" STUB_DIR="${work}" WINRIG_HELD=1 WINGUI_WIN_REMOTE="${work}/win-remote" \
+	WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" --keep smoke 2>&1)" || rc=$?
+fCheck "a box that makes no run folder fails the run" test "${rc}" -ne 0
+fCheck "without sending or running a scenario" bash -c '! grep -qE "^push |^run .*launcher" "$1"' _ "${work}/calls-nostage"
 
 ## A box that is off is a skip: the run passes, and nothing is sent or run.
 rc=0
@@ -96,9 +127,33 @@ else
 	echo "  skip the cleanup half: pwsh not found"
 fi
 
+## A user's temp folder from what the registry holds, unexpanded, against
+## their profile and never the ssh account's.
+if command -v pwsh >/dev/null 2>&1; then
+	cat > "${work}/usertemp.ps1" <<PS
+\$ast = [System.Management.Automation.Language.Parser]::ParseFile("${meDir}/_stage.ps1", [ref]\$null, [ref]\$null)
+\$fn = \$ast.Find({ param(\$n) \$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and \$n.Name -eq 'fUserTemp' }, \$true)
+Invoke-Expression \$fn.Extent.Text
+\$env:USERPROFILE = 'C:\Users\sshacct'
+\$env:LOCALAPPDATA = 'C:\Users\sshacct\AppData\Local'
+fUserTemp '%USERPROFILE%\AppData\Local\Temp' 'C:\Users\wintest'
+fUserTemp '%LocalAppData%\Temp' 'C:\Users\wintest'
+fUserTemp '' 'C:\Users\wintest'
+fUserTemp 'D:\scratch' 'C:\Users\wintest'
+PS
+	mapfile -t temps < <(pwsh -NoProfile -File "${work}/usertemp.ps1")
+	fCheck "a user's temp folder is under their own profile" test "${temps[0]:-}" = 'C:\Users\wintest\AppData\Local\Temp'
+	fCheck "also when written against their local app data" test "${temps[1]:-}" = 'C:\Users\wintest\AppData\Local\Temp'
+	fCheck "and the Windows default when the registry has none" test "${temps[2]:-}" = 'C:\Users\wintest\AppData\Local\Temp'
+	fCheck "a folder set outright is kept" test "${temps[3]:-}" = 'D:\scratch'
+else
+	echo "  skip the temp folder half: pwsh not found"
+fi
+
 ((failures == 0)) || { echo "${failures} check(s) failed"; exit 1; }
 echo "all passed"
 
 ##	Script history:
 ##		- 20260918: Created.
 ##		- 20260926: A box that is down is a skip.
+##		- 20261002: The run folder is in the console user's temp folder.
