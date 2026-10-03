@@ -23,7 +23,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
 $sshKeygen = Get-Command ssh-keygen -ErrorAction SilentlyContinue
-if (-not $sshKeygen) { Write-Host '  skip installer signing (no ssh-keygen)'; exit 0 }
+if (-not $sshKeygen) { Write-Host '  skip installer signing (no ssh-keygen)'; fTestDir_End 0; exit 0 }
 
 ##	ssh-keygen with an Arguments string, so an empty passphrase (`-N ""`)
 ##	reaches it the same way on 5.1 and 7, which pass an empty argument
@@ -135,6 +135,7 @@ try {
 } finally {
 	Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
+fTestDir_End $rc
 exit $rc
 
 ##	History:

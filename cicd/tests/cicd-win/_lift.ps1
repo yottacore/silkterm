@@ -71,9 +71,11 @@ fCheck 'a mapped path is not' (-not (fHas '/cargo/registry/src/x.rs and /silkter
 fCheck 'nor is a longer name that starts the same' (-not (fHas 'C:\Users\somebodyelse\x.rs'))
 
 ##	The installer tests, with stand-ins that each take the run folder the way
-##	the real ones do and note the temp folder they saw. One takes the Windows
-##	branch, so TEMP and TMP move too. Afterward the pipeline's own temp folder,
-##	which the release builds use, must be what it was, TMP still unset.
+##	the real ones do, note the temp folder they saw, and end the way the real
+##	ones do. One takes the Windows branch, so TEMP and TMP move too. Afterward
+##	the pipeline's own temp folder, which the release builds use, must be what
+##	it was, TMP still unset. The pipeline's run folder is made here the way
+##	cicd-win.ps1 makes it, and only the pipeline's own fTestDir_End removes it.
 . (Join-Path $PSScriptRoot '../_testdir.ps1')
 function fEcho { }
 function fDie { param([string]$Msg); throw $Msg }
@@ -81,7 +83,7 @@ $Root = Join-Path $Work 'root'
 $seen = Join-Path $Work 'seen.txt'
 $helper = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../_testdir.ps1')).Path
 $stub = { param([string]$Extra)
-	"param([string]`$Shell)`n. '$helper'`n$Extra`nfTestDir_Use`nAdd-Content -LiteralPath '$seen' -Value ([System.IO.Path]::GetTempPath() + '|' + `$env:TEMP + '|' + `$env:TMP)`nexit 0"
+	"param([string]`$Shell)`n. '$helper'`n$Extra`nfTestDir_Use`nAdd-Content -LiteralPath '$seen' -Value ([System.IO.Path]::GetTempPath() + '|' + `$env:TEMP + '|' + `$env:TMP)`nfTestDir_End 0`nexit 0"
 }
 foreach ($rel in 'cicd/tests/release/verify-sign.ps1', 'cicd/tests/install/tempdir.ps1', 'cicd/tests/install/windows.ps1') {
 	$path = Join-Path $Root $rel
@@ -91,8 +93,10 @@ foreach ($rel in 'cicd/tests/release/verify-sign.ps1', 'cicd/tests/install/tempd
 }
 $sys = Join-Path $Work 'sys'
 New-Item -ItemType Directory -Path $sys -Force | Out-Null
-$env:SILKTERM_TEST_DIR = Join-Path $Work 'run'
 $env:TEMP = $sys; $env:TMPDIR = $sys; Remove-Item env:TMP -ErrorAction SilentlyContinue
+Remove-Item env:SILKTERM_TEST_DIR -ErrorAction SilentlyContinue
+fTestDir_Make
+$run = $env:SILKTERM_TEST_DIR
 fInstallerTests
 fCheck 'the installer tests leave TMPDIR as it was' ($env:TMPDIR -eq $sys)
 fCheck 'and TEMP' ($env:TEMP -eq $sys)
@@ -102,6 +106,10 @@ $lines = @(Get-Content -LiteralPath $seen)
 $inRun = @($lines | Where-Object { $_.Split('|')[0].StartsWith($env:SILKTERM_TEST_DIR) })
 fCheck 'while each installer test had the run folder as its temp folder' ($lines.Count -eq 4 -and $inRun.Count -eq 4)
 fCheck 'with TEMP and TMP there too in the one that takes the Windows branch' ($lines.Count -eq 4 -and $lines[1].EndsWith("|$($env:SILKTERM_TEST_DIR)|$($env:SILKTERM_TEST_DIR)"))
+fCheck 'the pipeline made its run folder in the system temp folder' ((Split-Path $run) -eq $sys.TrimEnd('/', '\'))
+fCheck 'and none of the installer tests removed it' (Test-Path -LiteralPath $run)
+fTestDir_End 0
+fCheck 'while the pipeline''s own fTestDir_End 0 does' (-not (Test-Path -LiteralPath $run))
 
 ##	The path map, from folders whose names hold a backslash and a quote. The
 ##	TOML reader on the other end decides whether they were escaped right.
@@ -121,3 +129,4 @@ exit 0
 ##	History:
 ##		- 20260926 JC: Created.
 ##		- 20260930 JC: The installer tests leave the temp folder alone.
+##		- 20261002 JC: Only the pipeline removes its run folder.

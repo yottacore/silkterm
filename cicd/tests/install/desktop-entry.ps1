@@ -85,7 +85,8 @@ try {
 	Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if ($failures -gt 0) { exit 1 }
+if ($failures -gt 0) { fTestDir_End 1; exit 1 }
+fTestDir_End 0
 exit 0
 
 ##	History:

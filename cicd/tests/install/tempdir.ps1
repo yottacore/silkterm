@@ -28,7 +28,7 @@ function fCheck([string]$What, [bool]$Ok) {
 $text = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Installer).Path)
 ##	From the name through the step that makes the folder and its failure path.
 $m = [regex]::Match($text, '(?ms)^\s*\$tmpDir = .*?^\s*catch \{[^\r\n]*')
-if (-not $m.Success) { Write-Output "  FAIL no temp folder step found in $Installer"; exit 1 }
+if (-not $m.Success) { Write-Output "  FAIL no temp folder step found in $Installer"; fTestDir_End 1; exit 1 }
 $statements = [System.Management.Automation.Language.Parser]::ParseInput($m.Value, [ref]$null, [ref]$null).EndBlock.Statements
 $pick = [scriptblock]::Create($statements[0].Extent.Text)
 $make = [scriptblock]::Create((($statements | Select-Object -Skip 1) | ForEach-Object { $_.Extent.Text }) -join "`n")
@@ -54,8 +54,9 @@ try {
 	foreach ($dir in $made) { Remove-Item -Recurse -Force -LiteralPath $dir -ErrorAction SilentlyContinue }
 }
 
-if ($failures) { Write-Output "$failures failed"; exit 1 }
+if ($failures) { Write-Output "$failures failed"; fTestDir_End 1; exit 1 }
 Write-Output 'all passed'
+fTestDir_End 0
 exit 0
 
 ##	History:

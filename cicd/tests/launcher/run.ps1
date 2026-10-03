@@ -364,8 +364,9 @@ try {
 	if ($null -ne $realWayland) { $env:WAYLAND_DISPLAY = $realWayland }
 }
 
-if ($script:Failures -gt 0) { Write-Host "$($script:Failures) failed"; exit 1 }
+if ($script:Failures -gt 0) { Write-Host "$($script:Failures) failed"; fTestDir_End 1; exit 1 }
 Write-Host "all passed"
+fTestDir_End 0
 
 ##	History:
 ##		- 2026-09-28: LOCALAPPDATA and APPDATA are sandboxed too.
