@@ -806,6 +806,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
+- Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
+	- ID: 2026100311020484
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-110204
+	- Opened by: CC
+	- Related IDs: 2026100220292607
+	- Target OS: Linux, Windows
+	- Steps to reproduce:
+		- With the menu bar shown, hold Alt and Super and press the letter of a menu title, such as F.
+	- Incorrect behavior: The menu opens, as if only Alt were held.
+	- Expected behavior: A chord with Super held is not a menu shortcut.
+	- Reproduced: No. Seen in a unit test on 20261003, `the_command_chords_are_the_only_program_chords_on_macos`, which now allows it off a Mac.
+
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
 	- Type: Bug
