@@ -52,8 +52,6 @@ pub struct App {
 	// context, so it can be larger than the main window.
 	dialog: Option<crate::dialog::DialogWin>,
 	dialog_dirty: bool,
-	// the dialog window's held keys, read by a press
-	dialog_mods: ModifiersState,
 	// A save that could not be written, waiting to be said, and the notice
 	// saying one. It is its own window so it can stand over an open Settings.
 	// Windows shows the system's message box instead, and `notice` stays None.
@@ -95,7 +93,6 @@ impl App {
 			cli,
 			dialog: None,
 			dialog_dirty: false,
-			dialog_mods: ModifiersState::empty(),
 			notice: None,
 			notice_dirty: false,
 			notice_owed: None,
@@ -190,10 +187,8 @@ impl App {
 				button,
 				..
 			} => {
-				let button =
-					input::acting_button(button, self.dialog_mods, cfg!(target_os = "macos"));
 				if let Some(d) = &mut self.dialog {
-					match button {
+					match input::acting_button(button, d.mods(), cfg!(target_os = "macos")) {
 						MouseButton::Left => {
 							// clipboard for the field context-menu commands
 							let clip = self.state.as_mut().map(|s| &mut s.clipboard);
@@ -281,8 +276,8 @@ impl App {
 				}
 			}
 			WindowEvent::ModifiersChanged(mods) => {
-				self.dialog_mods = mods.state();
 				if let Some(d) = &mut self.dialog {
+					d.set_mods(mods.state());
 					d.set_keys(input::edit_keys(mods.state(), cfg!(target_os = "macos")));
 					self.dialog_dirty = true;
 				}
