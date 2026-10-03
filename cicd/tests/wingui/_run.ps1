@@ -5,10 +5,15 @@
 param(
 	[Parameter(Mandatory)] [string] $Scenario,
 	[Parameter(Mandatory)] [string] $Exe,
-	[Parameter(Mandatory)] [string] $OutDir
+	[Parameter(Mandatory)] [string] $OutDir,
+	[Parameter(Mandatory)] [string] $RunDir
 )
 
 $ErrorActionPreference = "Stop"
+##	What the scenario and the app under test write goes in the run's folder too.
+$env:SILKTERM_TEST_DIR = $RunDir
+$env:TEMP = $RunDir
+$env:TMP = $RunDir
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $result = Join-Path $OutDir "result.txt"
 $script:startedList = Join-Path $OutDir "started.txt"

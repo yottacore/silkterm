@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' The PowerShell being generated needs literal '$'.
+#  shellcheck disable=2001  ## 'See if you can use ${variable//search/replace} instead.' Complains about good uses of sed.
 
 ##	- Purpose:
 ##		Run a graphical scenario against a real Windows desktop and bring back the
@@ -26,10 +27,6 @@ source "${meDir}/../_testdir.bash"; fTestDir_Use
 root="$(cd "${meDir}/../../.." && pwd)"
 winRemote="${WINGUI_WIN_REMOTE:-${root}/cicd/utility/win-remote.bash}"
 shotDir="${root}/cicd/artifacts/wingui"
-##	These boxes are shared, so a run may not use a fixed folder or task name -
-##	two at once would read each other's answers and cancel each other's tasks.
-token="$(date +%Y%m%d-%H%M%S)-$$"
-remoteDir="C:\\ProgramData\\silkrig\\run-${token}"
 
 origArgs=("$@")
 host=(); keep=0
@@ -50,15 +47,17 @@ scenarios=("$@"); ((${#scenarios[@]})) || scenarios=(smoke)
 ##	pinned to origin/dev - otherwise every edit here would need a push before it
 ##	could be run once.
 bundle="$(mktemp --suffix=.tgz)"
-launcher=""; sweep=""
+launcher=""; sweep=""; stage=""
 ##	install.ps1 goes along for the scenario that checks its PATH change.
-tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash . -C "${root}" install.ps1
-trap 'rm -f "${bundle}" "${launcher}" "${sweep}"' EXIT
+tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1
+trap 'rm -f "${bundle}" "${launcher}" "${sweep}" "${stage}"' EXIT
 
 ##	Nothing to build for when every box is off.
-if ! "${winRemote}" "${host[@]}" --optional hosts 2>/dev/null | grep -q ' up '; then
-	echo "wingui: no box up, skipped"; exit 0
-fi
+declare -a boxes=()
+while read -r box state _; do
+	if [[ "${state}" == "up" ]]; then boxes+=("${box}"); fi
+done < <("${winRemote}" "${host[@]}" --optional hosts 2>/dev/null || true)
+if ((! ${#boxes[@]})); then echo "wingui: no box up, skipped"; exit 0; fi
 
 commit="$(git -C "${root}" rev-parse --short HEAD)"
 [[ -z "$(git -C "${root}" status --porcelain 2>/dev/null)" ]] || commit+="+uncommitted"
@@ -75,25 +74,25 @@ if [[ -z "${exe}" ]]; then
 fi
 [[ -f "${exe}" ]] || { echo "wingui: no binary at ${exe}"; exit 1; }
 echo "wingui: testing ${commit}, $(basename "${exe}") $(stat -c %s "${exe}") bytes"
-"${winRemote}" "${host[@]}" --optional push "${exe}" "${remoteDir}\\silkterm.exe" >/dev/null
+
+##	PowerShell single quotes, so a path is taken as written.
+fQuote(){ local -r text="${1//\'/\'\'}"; printf "'%s'" "${text}" ;}
 
 fRun() {
-	local scenario="$1"
+	local box="$1" scenario="$2"
 	launcher="$(mktemp --suffix=.ps1)"
 	{
 		printf '$ErrorActionPreference = "Stop"\n'
 		printf '. "$PSScriptRoot\\_env.ps1"\n'
 		printf '$scenario = "%s"\n' "${scenario}"
-		printf '$dir = "%s"\n' "${remoteDir}"
+		printf '$dir = %s\n' "$(fQuote "${runDir}")"
+		printf '$runFor = %s\n' "$(fQuote "${runFor}")"
 		printf '$b64 = @"\n%s\n"@\n' "$(base64 -w120 "${bundle}")"
 		cat <<'PS'
 $work = Join-Path $dir "wingui"
 $out  = Join-Path $dir "out"
 Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $work, $out | Out-Null
-##	The scenario runs as the console user, who is usually not the account that made
-##	this directory - and ProgramData only lets a creator write its own files.
-icacls "C:\ProgramData\silkrig" /grant "*S-1-5-32-545:(OI)(CI)M" /T /Q 2>&1 | Out-Null
 $tgz = Join-Path $dir "wingui.tgz"
 [IO.File]::WriteAllBytes($tgz, [Convert]::FromBase64String(($b64 -replace '\s', '')))
 tar.exe -xzf $tgz -C $work
@@ -112,13 +111,15 @@ $who = $env:USERNAME
 foreach ($l in (quser 2>$null | Select-Object -Skip 1)) {
 	if ($l -match '^\s*>?(\S+)\s+.*?(\d+)\s+(Active|Disc)\b' -and [int]$Matches[2] -eq $consoleId) { $who = $Matches[1] }
 }
+##	The run's folder is in that user's temp folder, which nobody else can use.
+if ($who -ne $runFor) { "VERDICT fail the console is now $who's, and the run folder is in ${runFor}'s temp folder"; exit 1 }
 
 ##	An interactive-token task is the one route into that session that needs no
 ##	stored password: it runs as that user, on their desktop.
 $pwsh = (Get-Command pwsh).Source
 $name = "silkrig-" + (Split-Path $dir -Leaf)
 $me   = "$env:COMPUTERNAME\$who"
-$arg  = "-NoProfile -STA -ExecutionPolicy Bypass -File `"$work\_run.ps1`" -Scenario $scenario -Exe `"$exe`" -OutDir `"$out`""
+$arg  = "-NoProfile -STA -ExecutionPolicy Bypass -File `"$work\_run.ps1`" -Scenario $scenario -Exe `"$exe`" -OutDir `"$out`" -RunDir `"$dir`""
 $act  = New-ScheduledTaskAction -Execute $pwsh -Argument $arg
 $pri  = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive
 ##	Always clear the last answer first. A result file left by the scenario before
@@ -149,26 +150,55 @@ if (-not $line) { "VERDICT fail no verdict line in the result"; exit 1 }
 if ($line -like "VERDICT fail*") { exit 1 }
 PS
 	} > "${launcher}"
-	"${winRemote}" "${host[@]}" --optional run "${launcher}" 2>&1
+	"${winRemote}" --host "${box}" --optional run "${launcher}" 2>&1
+}
+
+##	One box at a time, since each run folder is in its own box's console user's
+##	temp folder, made there by _stage.ps1 and read back.
+fBox(){
+	local -r box="$1"
+	local said scenario
+	local -i boxFailed=0
+	stage="$(mktemp --suffix=.ps1)"
+	cat "${meDir}/../_testdir.ps1" "${meDir}/_stage.ps1" > "${stage}"
+	said="$("${winRemote}" --host "${box}" --optional run "${stage}" 2>&1 | tr -d '\r' || true)"
+	runDir="$(sed -n 's/^RUNDIR //p' <<< "${said}")"
+	runFor="$(sed -n 's/^RUNFOR //p' <<< "${said}")"
+	if [[ -z "${runDir}" || -z "${runFor}" ]]; then
+		if grep -q 'skipped' <<< "${said}"; then echo "wingui: ${box} went away, skipped"; return 0; fi
+		sed 's/^/  /' <<< "${said}"
+		echo "wingui: ${box}: no run folder was made"
+		return 1
+	fi
+	echo "wingui: ${box}: ${runDir}"
+	##	Checked here, since errexit is off inside a function called with ||. A
+	##	scenario with no binary would only skip.
+	if ! "${winRemote}" --host "${box}" --optional push "${exe}" "${runDir}\\silkterm.exe" >/dev/null; then
+		echo "wingui: ${box}: sending the binary failed"
+		return 1
+	fi
+	for scenario in "${scenarios[@]}"; do
+		echo "== wingui: ${scenario}"
+		if ! fRun "${box}" "${scenario}" | sed 's/^/  /'; then boxFailed=1; fi
+	done
+	##	Shots are the whole point of a graphical test, so bring them home.
+	if ((! keep)); then
+		mkdir -p "${shotDir}"
+		"${winRemote}" --host "${box}" --optional pull "${runDir}\\out\\shots" "${shotDir}" >/dev/null 2>&1 || true
+		##	Take the run's folder away with it, so a shared box does not accumulate them.
+		sweep="$(mktemp --suffix=.ps1)"
+		printf 'Remove-Item -Recurse -Force -LiteralPath %s -ErrorAction SilentlyContinue\n' "$(fQuote "${runDir}")" > "${sweep}"
+		"${winRemote}" --host "${box}" --optional run "${sweep}" >/dev/null 2>&1 || true
+	fi
+	return "${boxFailed}"
 }
 
 failed=0
-for scenario in "${scenarios[@]}"; do
-	echo "== wingui: ${scenario}"
-	if ! fRun "${scenario}" | sed 's/^/  /'; then failed=1; fi
+runDir=""; runFor=""
+for box in "${boxes[@]}"; do
+	fBox "${box}" || failed=1
 done
-
-##	Shots are the whole point of a graphical test, so bring them home.
-if ((! keep)); then
-	mkdir -p "${shotDir}"
-	"${winRemote}" "${host[@]}" --optional pull "${remoteDir}\\out\\shots" "${shotDir}" >/dev/null 2>&1 || true
-	find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev/null | sort || true
-	##	Take the run's folder away with it, so a shared box does not accumulate them.
-	sweep="$(mktemp --suffix=.ps1)"
-	printf 'Remove-Item -Recurse -Force "%s" -ErrorAction SilentlyContinue\n' "${remoteDir}" > "${sweep}"
-	"${winRemote}" "${host[@]}" --optional run "${sweep}" >/dev/null 2>&1 || true
-	rm -f "${sweep}"
-fi
+if ((! keep)); then find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev/null | sort || true; fi
 
 ((failed == 0))
 
@@ -176,3 +206,4 @@ fi
 ##		- 20260908: Created.
 ##		- 20260910: holds the boxes for the whole run.
 ##		- 20260918: sends a binary built from the tree under test, and stops only what it started.
+##		- 20261002: stages in the console user's temp folder, one box at a time.

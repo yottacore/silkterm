@@ -145,8 +145,29 @@ mod tests {
 		std::fs::write(planted.join("marker"), "planted").unwrap();
 		let target = base.join("elsewhere");
 		std::fs::create_dir(&target).unwrap();
+		let linked = base.join("test_silkterm_20260101-00000002");
 		#[cfg(unix)]
-		std::os::unix::fs::symlink(&target, base.join("test_silkterm_20260101-00000002")).unwrap();
+		std::os::unix::fs::symlink(&target, &linked).unwrap();
+		// A junction, since anyone can make one there and a symlink needs a privilege.
+		#[cfg(windows)]
+		{
+			let made = std::process::Command::new("cmd")
+				.args(["/C", "mklink", "/J"])
+				.arg(&linked)
+				.arg(&target)
+				.output()
+				.unwrap();
+			assert!(
+				made.status.success(),
+				"{}",
+				String::from_utf8_lossy(&made.stdout)
+			);
+		}
+		assert!(
+			std::fs::symlink_metadata(&linked).is_ok(),
+			"nothing planted at {}",
+			linked.display()
+		);
 		let mut stamps = [
 			"20260101-00000001",
 			"20260101-00000002",
