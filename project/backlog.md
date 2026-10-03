@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Copy on select: on by default, and remembered across launches
 	- ID: 2026100307115829
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Closed
 	- Priority: Avg
 	- Opened: 20261003-071158
 	- Opened by: JC
@@ -56,7 +56,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
 	- ID: 2026100220292617
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Closed
 	- Priority: Avg
 	- Opened: 20261002-202926
 	- Opened by: JC
@@ -86,7 +86,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - At the RC release, convert the config to the new format and keep the old file beside it
 	- ID: 2026100220292612
 	- Type: Feature
-	- Status: Waiting on signoff
+	- Status: Testing
 	- Needs external testing: A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
 	- Priority: Avg
 	- Opened: 20261002-202926
@@ -783,6 +783,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261003: 2026100220292612 already keeps a copy on every format upgrade, as `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`. N is the old file's Format number, which has matched shcl's major version so far. It copies the file and then converts it in place, rather than writing a new one from scratch.
 		- 20261003: shcl 3.0's `migrate_unstamped` is the help shcl gives today. It respells a 2.x file, and does no backup.
+
+- A pipeline test that converts old config files
+	- ID: 2026100313404573
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261003-134045
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100220292612, 2026100312470546
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A test in the pipeline that creates config files in the old shcl formats, and tests the automatic conversion, the one SilkTerm does without help from shcl.
+		- Run it to close 2026100220292612.
+
+- macOS: a universal binary for both x86_64 and ARM
+	- ID: 2026100313404572
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261003-134045
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100113403226
+	- Target OS: macOS
+	- Requirements:
+		- Before RC1.
+		- macOS gets one universal binary for both x86_64 and ARM, if the binary size allows it.
+	- Notes:
+		- 20261003: b26 already builds a universal app for dogfood. This item is about what the release gives users, and whether its size is acceptable.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
