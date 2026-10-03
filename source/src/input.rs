@@ -292,10 +292,10 @@ fn hotkey_in(
 	None
 }
 
-// Alt, with or without Shift, is what makes a letter a menu title. Ctrl rules
-// out AltGr, which Windows reports as Ctrl+Alt; Super makes it some other chord.
+// Only Alt alone makes a letter a menu title. Ctrl rules out AltGr, which
+// Windows reports as Ctrl+Alt; Shift or Super makes it some other chord.
 pub fn opens_menu_title(mods: ModifiersState) -> bool {
-	mods.alt_key() && !mods.control_key() && !mods.super_key()
+	mods == ModifiersState::ALT
 }
 
 // Where a write to the desktop clipboard comes from.
@@ -1288,20 +1288,26 @@ mod tests {
 		}
 	}
 
-	// Only Alt, with or without Shift, makes a letter a menu title. Super or
-	// Ctrl held with it is some other chord (AltGr arrives as Ctrl+Alt on
-	// Windows), so it goes on to the shell.
+	// Only Alt alone makes a letter a menu title. Shift, Super or Ctrl held
+	// with it is some other chord (AltGr arrives as Ctrl+Alt on Windows), so it
+	// goes on to the shell.
 	// Test ID: Erf6miU
 	#[test]
-	fn a_letter_opens_a_menu_title_only_with_alt_alone_or_alt_shift() {
+	fn a_letter_opens_a_menu_title_only_with_alt_alone() {
 		const ALT: ModifiersState = ModifiersState::ALT;
 		let on = |mods| hotkey_on(&Key::Character("f".into()), mods, true, false);
 		assert_eq!(on(ALT), Some(Hotkey::MenuTitle('F')));
 		assert_eq!(
-			on(ALT.union(ModifiersState::SHIFT)),
-			Some(Hotkey::MenuTitle('F'))
+			hotkey_on(
+				&Key::Character("F".into()),
+				ALT.union(ModifiersState::SHIFT),
+				true,
+				false
+			),
+			None
 		);
 		for extra in [
+			ModifiersState::SHIFT,
 			COMMAND,
 			CTRL,
 			COMMAND.union(ModifiersState::SHIFT),
