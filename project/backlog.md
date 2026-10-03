@@ -759,7 +759,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: for Option+Command+W, every Mac chord in `keys.rs`, the app menu and Window menu rows in `macmenu.rs`, the template, the Keys tab, the UI style guide and the split-panes design doc.
 	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` spells a chord by hand any more.
 	- Branch: panekeys, mackeys
-	- Commit: 4cafdde
+	- Commit: 4cafdde, f4bd3f7
 	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
 	- Closed:
 
@@ -781,7 +781,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: a Ctrl+click right after a window gets the focus acts as a plain click
 	- ID: 2026100310321918
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing:
+		- b26: hold Ctrl and click into a SilkTerm window that doesn't have the focus. That first click opens the right-click menu. The same on a Settings dialog that doesn't have the focus.
+		- b26: bring a window forward with Ctrl held, from the Dock or its title bar, then Ctrl+click in it before pressing anything else. The menu opens.
 	- Severity: Low
 	- Opened: 20261003-103219
 	- Opened by: CC
@@ -793,8 +796,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The click is a plain left click. The window doesn't know Ctrl is down until a modifier key changes.
 	- Expected behavior: A Ctrl+click opens the right-click menu, as it does once the window knows Ctrl is held.
 	- Reproduced: No. Read from winit 0.30.13's macOS code on 20261003. A window that gains the focus reports only that, with no held keys.
+	- Possible cause: none found. winit 0.30.13 on macOS reads the held keys from each click, key press and mouse move, from that event's own flags, and reports a change just before the event. The click that brings a window forward reaches the window, since SilkTerm leaves winit's first-click setting on. So a Ctrl+click on a window that just got the focus should already arrive with Ctrl held. Read only, not seen on a Mac.
+	- Progress log:
+		- 20261003: No code changed. Seeding the held keys from the system when the focus arrives was weighed and left out. winit reports a change only against its own last value, which it clears when the window loses the focus. A Ctrl seeded that way and let go before any other event would never be reported, so it would stick, as in 2026100220463754.
+		- 20261003: If b26 shows the bug anyway, the cause is elsewhere. `SILK_KEYDBG=1` prints each held-key and focus change for the terminal window, which is the next thing to look at.
 	- Decisions:
 		- 20261003: It should work as expected, where that is reasonably possible.
+	- Actual fix: none, see the progress log.
+	- Branch: mackeys
+	- Test case: none. The gap would be in winit's macOS event code, which no test here can drive. The app's half, a left press with Ctrl held acting as a right press, is `ctrl_click_is_the_right_click_on_macos_only`.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
