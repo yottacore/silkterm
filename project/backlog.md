@@ -841,6 +841,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- macOS gets one universal binary for both x86_64 and ARM, if the binary size allows it.
 	- Notes:
 		- 20261003: b26 already builds a universal app for dogfood. This item is about what the release gives users, and whether its size is acceptable.
+	- Decisions:
+		- 20261003: Ship universal at any size, as most Mac apps do. Report the size on the item.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
