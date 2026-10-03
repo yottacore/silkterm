@@ -249,6 +249,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- In a Settings text box: Command+A, C, X and V work from the keyboard, and Edit > Copy and Paste on the menu bar work too. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. Ctrl or Command plus a letter types nothing. Command+PageUp and PageDown change tab, and Ctrl+Tab moves focus like Tab.
 		- In a tab rename: Command+A selects the name. Ctrl or Command plus a letter types nothing.
 		- This replaces the lines in 2026100114435613's check that say the Ctrl chords still work.
+		- 20261002: Ctrl+click opens the right-click menu instead of being a plain click (2026100220260471).
 	- Severity: Avg
 	- Opened: 20261002-190545
 	- Opened by: JC
@@ -307,6 +308,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS. On Linux in the program: typing, Ctrl+V, Ctrl+C and X, Ctrl+Left and Ctrl+Backspace, a drag, a double-click, Select all and Paste from the right-click menu, a middle-click, and Edit > Copy and Paste from the menu bar all acted on the name, and nothing reached the shell.
 	- Branch: tabedit
 	- Commit: 2034f15
+
+- macOS: Ctrl+click should open the right-click menu
+	- ID: 2026100220260471
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On b26. In a pane at a shell prompt, Ctrl+click opens the right-click menu at the pointer, and letting go does not pick a row. On a URL the menu starts with Open link and Copy link. In vim with `:set mouse=a`, Ctrl+click opens the menu and the vim cursor does not move.
+		- Double-click a tab to rename it. Ctrl+click on the name opens Cut, Copy, Paste, Delete and Select all. Ctrl+click on a pane ends the rename and opens the pane menu.
+		- Ctrl+Shift+click and Ctrl+Command+click open the menu too. A plain click still selects, Command+click still opens a link, and a two-finger click still opens the menu.
+		- In Settings, Ctrl+click in a text box opens its Cut, Copy, Paste, Delete and Select all menu.
+	- Severity: Avg
+	- Opened: 20261002-202604
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100219054469
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: Since Command took the place of Ctrl on macOS, Ctrl+click is a plain click. Before that it opened links.
+	- Expected behavior: Ctrl+click opens the right-click menu, as it does in other Mac apps.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Yes, Ctrl+click opens the right-click menu on a Mac.
+	- Actual cause: Once Command took over links and block selection on a Mac, nothing read Ctrl at a mouse press, so a Ctrl+click went through as a left click.
+	- Actual fix: On a Mac a left press with Ctrl held acts as a right press, in the terminal window and in the Settings and About window. Other keys held with it do not change that. Linux and Windows are unchanged.
+		- A Ctrl+click on a tab in the tab bar now does nothing, as a right-click there does. In the About box a Ctrl+click on a link does nothing too, since that box has no right-click menu.
+	- Branch: ctrlclick
+	- Commit: b2223d0, 0de1dac
+	- Test case: `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg). It fails with the change undone, and with it applied on every platform. The two press handlers have no test, since they need a live window; the b26 check above covers them.
 
 - macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
 	- ID: 2026100219054497
@@ -409,22 +437,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
-- macOS: Ctrl+click should open the right-click menu
-	- ID: 2026100220260471
+- macOS: a plain click in a reopened Settings can act as a Ctrl+click
+	- ID: 2026100220463754
 	- Type: Bug
 	- Status: Queued
 	- Severity: Avg
-	- Opened: 20261002-202604
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100219054469
+	- Opened: 20261002-204637
+	- Opened by: CC
+	- Related IDs: 2026100220260471
 	- Target OS: macOS
 	- Test environment: b26
-	- Incorrect behavior: Since Command took the place of Ctrl on macOS, Ctrl+click is a plain click. Before that it opened links.
-	- Expected behavior: Ctrl+click opens the right-click menu, as it does in other Mac apps.
-	- Reproduced: No. Read from the code on 20261002.
-	- Decisions:
-		- 20261002: Yes, Ctrl+click opens the right-click menu on a Mac.
+	- Steps to reproduce:
+		- Open Settings. Hold Ctrl and press Esc, so Settings closes with Ctrl still down. Let go of Ctrl.
+		- Open Settings again and click a checkbox with no keys held.
+	- Incorrect behavior: The click acts as a right-click. A checkbox does not change, and a text box opens its Cut, Copy, Paste menu. It stays that way until a modifier key is pressed and let go inside Settings.
+	- Expected behavior: A plain click is a left click.
+	- Reproduced: No. Read from the code on 20261002. Details in the ctrlclick design's review round 0.
+	- Origin: 2026100220260471, branch ctrlclick, b2223d0. Plausible.
 
 - A test run removes its own dated folder when it finishes
 	- ID: 2026100220260484

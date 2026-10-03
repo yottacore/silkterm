@@ -270,6 +270,7 @@ Rules that go with them:
 	- Command+Plus, Command+Minus and Command+0 size the font.
 	- Command+, opens Settings, Control+Command+F is fullscreen, Command+Q quits. Command+H and Option+Command+H hide, and Command+M minimizes.
 	- Command+click opens a link, and Command held at a press selects a block.
+	- Ctrl+click is the right-click, so it opens the right-click menu wherever a right-click does.
 	- Nothing typed with Command held reaches the shell, so no Command chord takes a key from it.
 	- With no in-window bar, Option plus a letter always goes to the shell.
 
