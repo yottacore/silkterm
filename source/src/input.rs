@@ -137,6 +137,8 @@ pub fn shortcut_held(mods: ModifiersState, mac: bool) -> bool {
 /// What the held keys mean to a text box in a dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct EditKeys {
+	// the accelerator key for a dialog's buttons; a Mac has none, and Option
+	// types a character there
 	pub alt: bool,
 	pub shift: bool,
 	// copy, cut, paste and select all, and the dialog's tab switching
@@ -150,12 +152,13 @@ pub struct EditKeys {
 }
 
 /// A Mac holds Command for the shortcuts, Option to move by words and Command
-/// to go to either end, as its own text fields do. Control types nothing there.
+/// to go to either end, as its own text fields do. Control types nothing there,
+/// and Option plus a letter types whatever the layout puts there.
 /// Elsewhere Ctrl does the first two.
 pub fn edit_keys(mods: ModifiersState, mac: bool) -> EditKeys {
 	if mac {
 		EditKeys {
-			alt: mods.alt_key(),
+			alt: false,
 			shift: mods.shift_key(),
 			shortcut: mods.super_key(),
 			word: mods.alt_key(),
@@ -1231,6 +1234,19 @@ mod tests {
 				..EditKeys::default()
 			}
 		);
+	}
+
+	// Option plus a letter types on a Mac, often a character the layout has
+	// nowhere else, such as "{" on a German one. Only elsewhere is Alt a
+	// dialog's accelerator key.
+	// Test ID: ErbKdHM
+	#[test]
+	fn option_types_on_a_mac_and_alt_is_an_accelerator_elsewhere() {
+		let option = ModifiersState::ALT;
+		let mac = edit_keys(option, true);
+		assert!(!mac.alt && mac.types && mac.word);
+		let pc = edit_keys(option, false);
+		assert!(pc.alt && pc.types && !pc.word);
 	}
 
 	// Nothing typed with Command held reaches the shell on a Mac. Elsewhere a

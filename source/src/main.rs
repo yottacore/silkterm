@@ -49,6 +49,7 @@ mod term;
 #[cfg(test)]
 mod testdir;
 mod text;
+mod textedit;
 mod theme;
 mod tip;
 mod ui_spec;

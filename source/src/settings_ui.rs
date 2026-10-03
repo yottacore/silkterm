@@ -28,6 +28,7 @@ use crate::gfx::RectInstance;
 use crate::pane::Rect;
 use crate::pick::{self, Picker};
 use crate::profile::Profile;
+use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at};
 use crate::ui_spec::{self, Key, Kind, Layout, Spec, ui};
 use std::borrow::Cow;
 
@@ -340,106 +341,6 @@ impl EditState {
 		true
 	}
 }
-fn prev_boundary(s: &str, i: usize) -> usize {
-	let mut j = i.min(s.len());
-	while j > 0 {
-		j -= 1;
-		if s.is_char_boundary(j) {
-			return j;
-		}
-	}
-	0
-}
-fn next_boundary(s: &str, i: usize) -> usize {
-	let mut j = i;
-	while j < s.len() {
-		j += 1;
-		if s.is_char_boundary(j) {
-			return j;
-		}
-	}
-	s.len()
-}
-// Word motion (Ctrl+Left/Right, Ctrl+Backspace/Delete, double-click): a word is
-// a run of alphanumerics/underscore; everything else is a separator.
-fn is_word_char(c: char) -> bool {
-	c.is_alphanumeric() || c == '_'
-}
-fn word_left(s: &str, i: usize) -> usize {
-	let mut j = i.min(s.len());
-	// skip separators, then the word itself
-	while j > 0 {
-		let p = prev_boundary(s, j);
-		if s[p..].chars().next().is_some_and(is_word_char) {
-			break;
-		}
-		j = p;
-	}
-	while j > 0 {
-		let p = prev_boundary(s, j);
-		if !s[p..].chars().next().is_some_and(is_word_char) {
-			break;
-		}
-		j = p;
-	}
-	j
-}
-fn word_right(s: &str, i: usize) -> usize {
-	let mut j = i.min(s.len());
-	while j < s.len() && !s[j..].chars().next().is_some_and(is_word_char) {
-		j = next_boundary(s, j);
-	}
-	while j < s.len() && s[j..].chars().next().is_some_and(is_word_char) {
-		j = next_boundary(s, j);
-	}
-	j
-}
-// Byte range of the word (or separator run) under byte index `i` (double-click).
-fn word_at(s: &str, i: usize) -> (usize, usize) {
-	if s.is_empty() {
-		return (0, 0);
-	}
-	let i = if i >= s.len() {
-		prev_boundary(s, s.len())
-	} else {
-		i
-	};
-	let wordy = s[i..].chars().next().is_some_and(is_word_char);
-	let mut a = i;
-	while a > 0 {
-		let p = prev_boundary(s, a);
-		if s[p..].chars().next().is_some_and(is_word_char) != wordy {
-			break;
-		}
-		a = p;
-	}
-	let mut b = next_boundary(s, i);
-	while b < s.len() && s[b..].chars().next().is_some_and(is_word_char) == wordy {
-		b = next_boundary(s, b);
-	}
-	(a, b)
-}
-// Byte index of the caret nearest a click at `rel_x` px into the text (0 = the
-// field's left text edge). Walks char boundaries, picking the one whose measured
-// prefix width is closest to the click.
-fn caret_from_click(text: &str, rel_x: f32, measure: &mut impl FnMut(&str) -> f32) -> usize {
-	if rel_x <= 0.0 {
-		return 0;
-	}
-	let (mut best_caret, mut best_dist) = (0usize, f32::MAX);
-	let mut i = 0;
-	loop {
-		let dist = (measure(&text[..i]) - rel_x).abs();
-		if dist < best_dist {
-			best_dist = dist;
-			best_caret = i;
-		}
-		if i >= text.len() {
-			return best_caret;
-		}
-		i = next_boundary(text, i);
-	}
-}
 
 // One arrow-key increment for a slider: ~1/100 of the range normally, ~1/10 with
 // Shift (so ~100 / ~10 steps span it), rounded to a whole unit (>=1) for int fields.
@@ -460,7 +361,7 @@ pub enum Action {
 }
 
 // Field context-menu commands (right-click / Menu key in an editable field).
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EditCmd {
 	Cut,
 	Copy,
@@ -5130,20 +5031,14 @@ impl SettingsDialog {
 	}
 	pub fn backspace(&mut self) {
 		self.dismiss_menu();
-		let (word, line) = (self.word, self.line);
+		let reach = self.reach();
 		if let Some(edit) = &mut self.edit {
 			if edit.remove_selection() {
 				self.reparse_edit();
 				return;
 			}
 			if edit.cur > 0 {
-				let prev = if line {
-					0
-				} else if word {
-					word_left(&edit.buf, edit.cur)
-				} else {
-					prev_boundary(&edit.buf, edit.cur)
-				};
+				let prev = reach_left(&edit.buf, edit.cur, reach);
 				edit.buf.replace_range(prev..edit.cur, "");
 				edit.cur = prev;
 				self.reparse_edit();
@@ -5152,18 +5047,15 @@ impl SettingsDialog {
 	}
 	pub fn delete_forward(&mut self) {
 		self.dismiss_menu();
-		let word = self.word;
+		// Command+Delete is nothing on a Mac, so only the word key reaches far
+		let reach = Reach::new(self.word, false);
 		if let Some(edit) = &mut self.edit {
 			if edit.remove_selection() {
 				self.reparse_edit();
 				return;
 			}
 			if edit.cur < edit.buf.len() {
-				let next = if word {
-					word_right(&edit.buf, edit.cur)
-				} else {
-					next_boundary(&edit.buf, edit.cur)
-				};
+				let next = reach_right(&edit.buf, edit.cur, reach);
 				edit.buf.replace_range(edit.cur..next, "");
 				self.reparse_edit();
 			}
@@ -5190,44 +5082,31 @@ impl SettingsDialog {
 			}
 		}
 	}
+	fn reach(&self) -> Reach {
+		Reach::new(self.word, self.line)
+	}
 	pub fn cursor_left(&mut self) {
 		let Some(edit) = &self.edit else { return };
-		if self.line {
-			self.move_caret(0);
-			return;
-		}
+		let reach = self.reach();
 		// plain Left with a selection collapses to its start
-		if !self.shift {
+		if !self.shift && reach != Reach::End {
 			if let Some((a, _)) = edit.sel_range() {
 				self.move_caret(a);
 				return;
 			}
 		}
-		let to = if self.word {
-			word_left(&edit.buf, edit.cur)
-		} else {
-			prev_boundary(&edit.buf, edit.cur)
-		};
-		self.move_caret(to);
+		self.move_caret(reach_left(&edit.buf, edit.cur, reach));
 	}
 	pub fn cursor_right(&mut self) {
 		let Some(edit) = &self.edit else { return };
-		if self.line {
-			self.move_caret(edit.buf.len());
-			return;
-		}
-		if !self.shift {
+		let reach = self.reach();
+		if !self.shift && reach != Reach::End {
 			if let Some((_, b)) = edit.sel_range() {
 				self.move_caret(b);
 				return;
 			}
 		}
-		let to = if self.word {
-			word_right(&edit.buf, edit.cur)
-		} else {
-			next_boundary(&edit.buf, edit.cur)
-		};
-		self.move_caret(to);
+		self.move_caret(reach_right(&edit.buf, edit.cur, reach));
 	}
 	pub fn cursor_home(&mut self) {
 		if self.edit.is_some() {
@@ -9095,30 +8974,6 @@ mod tests {
 		assert_eq!(d.edited.opacity, 0.5);
 	}
 
-	// Test ID: EitjFLH
-	#[test]
-	fn caret_from_click_picks_nearest() {
-		let mut m = |s: &str| s.chars().count() as f32; // 1 unit per ascii char
-		assert_eq!(super::caret_from_click("hello", -5.0, &mut m), 0);
-		assert_eq!(super::caret_from_click("hello", 0.0, &mut m), 0);
-		assert_eq!(super::caret_from_click("hello", 2.4, &mut m), 2);
-		assert_eq!(super::caret_from_click("hello", 100.0, &mut m), 5);
-	}
-
-	// Test ID: EkI1Txg
-	#[test]
-	fn word_motion_and_word_at() {
-		let s = "foo bar_baz/qux.png";
-		assert_eq!(super::word_left(s, 7), 4); // inside bar_baz -> its start
-		assert_eq!(super::word_left(s, 4), 0); // at bar_baz -> foo start
-		assert_eq!(super::word_right(s, 0), 3); // foo end
-		assert_eq!(super::word_right(s, 3), 11); // past the space, bar_baz end
-		assert_eq!(super::word_at(s, 5), (4, 11)); // bar_baz
-		assert_eq!(super::word_at(s, 3), (3, 4)); // the separator run
-		assert_eq!(super::word_at("", 0), (0, 0));
-		assert_eq!(super::word_at(s, s.len()), (16, 19)); // clamps to last word (png)
-	}
-
 	// "File or folder" says where the picture comes from. With Rotate folder on
 	// that is the folder, shipped as the usual place; with it off, the image. A
 	// named image wins at run time, so it shows whichever way the switch is set.
@@ -9251,6 +9106,20 @@ mod tests {
 		d.set_mods(false, true, true);
 		d.cursor_right();
 		assert_eq!(d.selected_text().as_deref(), Some("png"));
+	}
+
+	// On a Mac, Option held is no button accelerator, so Option plus a letter
+	// types what the layout gives it, here "{" as on a German layout.
+	// Test ID: ErbKdLR
+	#[test]
+	fn option_types_into_a_mac_text_box() {
+		use winit::keyboard::ModifiersState as M;
+		let (mut d, _) = mk_text_edit("a");
+		d.cursor_end();
+		d.set_keys(crate::input::edit_keys(M::ALT, true));
+		assert!(!d.alt(), "the dialog would take it as Alt+letter");
+		d.char_input('{');
+		assert_eq!(d.edit.as_ref().unwrap().buf, "a{");
 	}
 
 	// A text box on a Mac moves by words with Option, goes to either end with
