@@ -367,6 +367,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: maccmd
 	- Commit: 7179fa9
 
+- A test run removes its own dated folder when it finishes
+	- ID: 2026100220260484
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs external testing: On vm925w, a `cicd-win.ps1 -Quick` run that passes, a lone `cargo test` that passes, and a wingui run, pass or fail, each leave no new `test_silkterm_*` folder in `%TEMP%`. The new Rust tests and `cicd/tests/testdir/remove.ps1` pass there, with their junction cases.
+		- The tests went in before the code they check: 367e15a and 53e4295 should fail there, and c283f5b and 8c498b1 pass.
+	- Priority: Avg
+	- Opened: 20261002-202604
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026093013113320, 2026093015422119
+	- Target OS: All
+	- Requirements:
+		- When a run finishes, its `test_silkterm_<stamp>` folder in the temp dir is removed, on every platform and on the Windows test boxes.
+	- Progress log:
+		- 20261002: Run folders stay behind after a run. vm925w had five in `%TEMP%` after the 2026093015422119 checks.
+	- Decisions:
+		- 20261002: Yes, a run removes its own folder.
+	- Done:
+		- A run that made its folder removes it when it passes, and keeps it when it fails, with a `test files kept in` line on stderr. That holds for the Rust tests, the Bash, Python and PowerShell test scripts, `cicd.bash` and `cicd-win.ps1`. A folder handed down through `SILKTERM_TEST_DIR` is never removed.
+		- Only a folder with the run's own mark goes. A link put in its place, or one inside it, is never followed.
+		- The wingui harness removes the run folder on the box after every run, pass or fail, also when the binary could not be sent, unless `--keep`. It makes no local folder before it holds the boxes.
+	- Note: `cicd/tests/testdir/run.bash` steps A2, D and F changed, since a passing run no longer leaves its folder for them to look at.
+	- Note: Folders left by earlier runs have no mark and stay. They are removed by hand, once.
+	- Test case: `cicd/tests/testdir/run.bash` (ErOj67l) steps A2, A3, C2, E, F, F2 and G; `cicd/tests/testdir/remove.ps1` (ErbiCgJ); `a_marked_run_folder_is_removed` (ErbiCgE), `a_run_folder_without_this_runs_mark_is_left` (ErbiCgF), `a_link_in_place_of_the_run_folder_is_left` (ErbiCgG), `a_link_inside_the_run_folder_is_not_followed` (ErbiCgH) and `a_run_that_fails_keeps_its_folder` (ErbiCgI); `cicd/tests/cicd-win/run.bash` (Er2UgYE); `cicd/tests/wingui/harness-test.bash` (EqH4isr). Each fails with the check it pins taken out.
+	- Verified: The gate, each changed script test on its own, a lone full `cargo test`, and clippy for Linux, Windows and macOS.
+	- Branch: testrm
+	- Commit: a497b6d
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
@@ -454,23 +483,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: A plain click is a left click.
 	- Reproduced: No. Read from the code on 20261002. Details in the ctrlclick design's review round 0.
 	- Origin: 2026100220260471, branch ctrlclick, b2223d0. Plausible.
-
-- A test run removes its own dated folder when it finishes
-	- ID: 2026100220260484
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261002-202604
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026093013113320, 2026093015422119
-	- Target OS: All
-	- Requirements:
-		- When a run finishes, its `test_silkterm_<stamp>` folder in the temp dir is removed, on every platform and on the Windows test boxes.
-	- Progress log:
-		- 20261002: Run folders stay behind after a run. vm925w had five in `%TEMP%` after the 2026093015422119 checks.
-	- Decisions:
-		- 20261002: Yes, a run removes its own folder.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
