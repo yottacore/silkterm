@@ -1288,7 +1288,8 @@ fn fence_run(line: &str) -> Option<(char, usize)> {
 // file keeps its mode, and the temp file is created exclusively, so a link left
 // at its name is never written through. On Windows the publish is ReplaceFile,
 // which keeps the file's ACLs. A path that is not UTF-8 is refused rather than
-// converted lossily, which could name a different file.
+// converted lossily, which could name a different file. A write that moves the
+// file to a newer SHCL format keeps the old one first (`keep_old_format`).
 pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> Result<(), String> {
 	write_config_atomic_with(path, text, shcl::write_file_atomic)?;
 	for line in restated_launch_messages(path, text) {
@@ -1314,7 +1315,131 @@ fn write_config_atomic_with(
 		let perms = std::fs::metadata(&real).ok()?.permissions();
 		Some((real, perms))
 	});
-	publish(file, text).or_else(|e| restore_config(before, text, e))
+	let kept = keep_old_format(path, text)?;
+	publish(file, text).or_else(|e| restore_config(before, text, e))?;
+	if let Some(said) = kept {
+		eprintln!("{said}");
+	}
+	Ok(())
+}
+
+// A file with no Format line is read as shcl 2.x, the last format without one.
+const UNSTAMPED_FORMAT: u32 = 2;
+
+fn format_of(text: &str) -> u32 {
+	shcl::format_version(text).unwrap_or(UNSTAMPED_FORMAT)
+}
+
+// Where a file in format `n` is kept when it is converted: `config.shcl` ->
+// `config.format2.shcl`, beside it, so it still opens as SHCL.
+fn old_format_path(path: &std::path::Path, n: u32) -> Option<PathBuf> {
+	let name = path.file_name()?.to_string_lossy().into_owned();
+	let stem = name.strip_suffix(".shcl").unwrap_or(&name);
+	Some(path.with_file_name(format!("{stem}.format{n}.shcl")))
+}
+
+// Before a write moves the file to a newer format, the file as it is now is
+// copied to `old_format_path`. That covers every conversion, and a save that
+// converts a file a launch left alone. A copy already there is never replaced:
+// it is the older file, or the same one from another window converting at the
+// same moment. The write is refused when the copy cannot be made. Answers what
+// to say once the write has gone through.
+fn keep_old_format(path: &std::path::Path, text: &str) -> Result<Option<String>, String> {
+	let Some(new) = shcl::format_version(text) else {
+		return Ok(None);
+	};
+	let body = match std::fs::read(path) {
+		Ok(body) => body,
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+		Err(e) => return Err(format!("could not read {} to keep it: {e}", path.display())),
+	};
+	let old = format_of(&String::from_utf8_lossy(&body));
+	if new <= old || body.iter().all(u8::is_ascii_whitespace) {
+		return Ok(None);
+	}
+	let Some(copy) = old_format_path(path, old) else {
+		return Ok(None);
+	};
+	#[cfg(unix)]
+	let perms = std::fs::metadata(path).ok().map(|meta| meta.permissions());
+	#[cfg(not(unix))]
+	let perms = None;
+	let made = write_new_file(&copy, &body, perms.as_ref())
+		.map_err(|e| format!("could not keep the old file at {}: {e}", copy.display()))?;
+	Ok(Some(if made {
+		format!(
+			"{APP_NAME}: {} converted to SHCL format {new}; the old file is kept at {}",
+			path.display(),
+			copy.display()
+		)
+	} else {
+		format!(
+			"{APP_NAME}: {} converted to SHCL format {new}; {} was already there and is left as it was",
+			path.display(),
+			copy.display()
+		)
+	}))
+}
+
+// Writes `body` at `dest` only while nothing has that name, and never leaves a
+// part of it there. It is written under a name of its own and then linked to
+// `dest`, which fails rather than replace anything, so two launches doing this
+// at once leave one whole copy. Answers false when the name was taken. Where
+// the filesystem has no hard links, it is written at `dest` directly.
+fn write_new_file(
+	dest: &std::path::Path,
+	body: &[u8],
+	perms: Option<&std::fs::Permissions>,
+) -> std::io::Result<bool> {
+	use std::io::Write;
+	let name = dest
+		.file_name()
+		.map(|n| n.to_string_lossy().into_owned())
+		.unwrap_or_default();
+	let mut opts = std::fs::OpenOptions::new();
+	opts.write(true).create_new(true);
+	#[cfg(unix)]
+	std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+	let fill = |file: &mut std::fs::File, at: &std::path::Path| {
+		// Private before it holds anything, as the config is. Elsewhere the mode is
+		// only a read-only flag, which would stop the temp name being removed.
+		if let Some(perms) = perms {
+			std::fs::set_permissions(at, perms.clone())?;
+		}
+		file.write_all(body)?;
+		file.sync_all()
+	};
+	let mut n = 0u32;
+	let (temp, mut file) = loop {
+		n += 1;
+		let temp = dest.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+		match opts.open(&temp) {
+			Ok(file) => break (temp, file),
+			Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && n < BACKUPS_MAX => {}
+			Err(e) => return Err(e),
+		}
+	};
+	let filled = fill(&mut file, &temp);
+	drop(file);
+	let attempt = filled.map(|()| std::fs::hard_link(&temp, dest));
+	let _ = std::fs::remove_file(&temp);
+	match attempt? {
+		Ok(()) => return Ok(true),
+		Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
+		// vfat answers EPERM, not "unsupported", so any other failure tries this
+		Err(_) => {}
+	}
+	let mut file = match opts.open(dest) {
+		Ok(file) => file,
+		Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
+		Err(e) => return Err(e),
+	};
+	let filled = fill(&mut file, dest);
+	drop(file);
+	if filled.is_err() {
+		let _ = std::fs::remove_file(dest);
+	}
+	filled.map(|()| true)
 }
 
 // Writes the text where the file was, only while nothing is at that name. The
@@ -2203,7 +2328,8 @@ fn load() -> Settings {
 	// FYI) if the file looks open in another program. A heading an earlier
 	// conversion left holding the wallpaper image is put right before that, or
 	// the file reads as pre-nesting and converts again. Ahead of all of it, a
-	// file shcl 2.x wrote is respelled for 3.0, since every step parses it.
+	// file shcl 2.x wrote is respelled for 3.0, since every step parses it, and
+	// the 2.x file is kept beside it as `config.format2.shcl`.
 	convert_shcl2_config(&path);
 	repair_wallpaper_heading(&path);
 	convert_legacy_config(&path);
@@ -5378,13 +5504,40 @@ fn convert_shcl2_config(path: &std::path::Path) {
 			"{APP_NAME}: could not update config {}: {e}",
 			path.display()
 		);
+		return;
 	}
+	for line in shcl2_losses(&text, path) {
+		eprintln!("{line}");
+	}
+}
+
+// What the conversion could not carry over. shcl counts the lines 2.x gave a
+// bracketed list to: the new format has no way to write one, so they stay as
+// written and set nothing. A line it cannot read at all is said at every launch
+// by `config_complaints`.
+fn shcl2_losses(text: &str, path: &std::path::Path) -> Vec<String> {
+	let lost = shcl::migrate_unstamped(text, true).lost;
+	if lost == 0 {
+		return Vec::new();
+	}
+	let kept = old_format_path(path, format_of(text))
+		.map(|copy| format!(" The old file is at {}.", copy.display()))
+		.unwrap_or_default();
+	vec![format!(
+		"{APP_NAME}: {}: {lost} line(s) set a list in brackets, which the new format cannot hold; they are kept as written but set nothing.{kept}",
+		path.display()
+	)]
 }
 
 fn refresh_shcl_banner(path: &std::path::Path) {
 	let Ok(text) = std::fs::read_to_string(path) else {
 		return;
 	};
+	// The footer's Format line says a file was converted. One still in 2.x
+	// spellings, because its conversion was put off, waits for the next launch.
+	if from_shcl2_text(&text).is_some() {
+		return;
+	}
 	let Some(out) = with_shcl_banner(&text) else {
 		return;
 	};
@@ -9501,6 +9654,222 @@ mod tests {
 		);
 		// and the shipped template has nothing to do
 		assert!(from_shcl2_text(default_config()).is_none());
+	}
+
+	// A 2.x file as a launch finds it: a UNC path the conversion respells.
+	const SHCL2_FILE: &str =
+		"shell:\n\tunc: \\\\\\\\server\\\\share\n\tdir: \"C:\\\\Users\\\\new\"\n";
+
+	fn format_test_dir(what: &str) -> PathBuf {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{what}_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		dir
+	}
+
+	fn dir_names(dir: &std::path::Path) -> Vec<String> {
+		let mut names: Vec<String> = std::fs::read_dir(dir)
+			.unwrap()
+			.map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+			.collect();
+		names.sort();
+		names
+	}
+
+	// The launch that converts a 2.x file keeps it, byte for byte, as
+	// `config.format2.shcl`, and reads the settings it had. The next launch has
+	// nothing to convert and leaves the copy alone.
+	// Test ID: EreLZJY
+	#[test]
+	fn a_launch_keeps_the_2x_file_beside_the_converted_one() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("fmtcopy_launch");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+		}
+		set_config_override(path.clone());
+
+		let _ = load();
+		let copy = dir.join("config.format2.shcl");
+		assert_eq!(std::fs::read_to_string(&copy).unwrap(), SHCL2_FILE);
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			shcl::format_version(&now),
+			Some(shcl::FORMAT_MAJOR),
+			"{now}"
+		);
+		assert_eq!(
+			shcl::Document::parse(&now)
+				.get_string("shell.unc")
+				.as_deref(),
+			Ok("\\\\server\\share")
+		);
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			let mode = std::fs::metadata(&copy).unwrap().permissions().mode();
+			assert_eq!(mode & 0o777, 0o600, "the copy is as private as the file");
+		}
+
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		assert_eq!(std::fs::read_to_string(&copy).unwrap(), SHCL2_FILE);
+		assert_eq!(dir_names(&dir), ["config.format2.shcl", "config.shcl"]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A copy already at the name is never replaced, whichever conversion made it,
+	// and the file is still converted. A current file gets no copy at all.
+	// Test ID: EreLZMm
+	#[test]
+	fn a_copy_already_there_is_left_as_it_was() {
+		let dir = format_test_dir("fmtcopy_kept");
+		let path = dir.join("config.shcl");
+		let copy = dir.join("config.format2.shcl");
+		std::fs::write(&copy, "font:\n\tsize: 9\n").unwrap();
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		convert_shcl2_config(&path);
+		assert_eq!(
+			std::fs::read_to_string(&copy).unwrap(),
+			"font:\n\tsize: 9\n"
+		);
+		assert_eq!(
+			shcl::format_version(&std::fs::read_to_string(&path).unwrap()),
+			Some(shcl::FORMAT_MAJOR)
+		);
+		assert_eq!(dir_names(&dir), ["config.format2.shcl", "config.shcl"]);
+
+		// a save of a current file, and a write over a blank one, keep nothing
+		std::fs::remove_file(&copy).unwrap();
+		write_config_atomic(&path, default_config()).unwrap();
+		std::fs::write(&path, "\n").unwrap();
+		write_config_atomic(&path, default_config()).unwrap();
+		assert_eq!(dir_names(&dir), ["config.shcl"]);
+
+		// a file named by --config keeps its own name, still ending in .shcl
+		assert_eq!(
+			old_format_path(std::path::Path::new("/a/mine.shcl"), 2),
+			Some(PathBuf::from("/a/mine.format2.shcl"))
+		);
+		assert_eq!(
+			old_format_path(std::path::Path::new("/a/mine.conf"), 2),
+			Some(PathBuf::from("/a/mine.conf.format2.shcl"))
+		);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Several windows can launch at once, and each converts the file it read.
+	// Exactly one whole copy comes of it, and no temp file is left.
+	// Test ID: EreLZQQ
+	#[test]
+	fn launches_converting_at_once_leave_one_whole_copy() {
+		let dir = format_test_dir("fmtcopy_race");
+		let path = dir.join("config.shcl");
+		// big enough that a copy written in place would be seen half done
+		let body = format!(
+			"{SHCL2_FILE}{}",
+			"## filler line for size\n".repeat(200_000)
+		);
+		for _round in 0..5 {
+			let _ = std::fs::remove_file(dir.join("config.format2.shcl"));
+			std::fs::write(&path, &body).unwrap();
+			let start = std::sync::Barrier::new(5);
+			let copy = dir.join("config.format2.shcl");
+			let torn = std::sync::atomic::AtomicBool::new(false);
+			let done = std::sync::atomic::AtomicBool::new(false);
+			std::thread::scope(|scope| {
+				scope.spawn(|| {
+					start.wait();
+					while !done.load(std::sync::atomic::Ordering::Relaxed) {
+						if let Ok(seen) = std::fs::read(&copy)
+							&& seen != body.as_bytes()
+						{
+							torn.store(true, std::sync::atomic::Ordering::Relaxed);
+						}
+					}
+				});
+				let launches: Vec<_> = (0..4)
+					.map(|_| {
+						scope.spawn(|| {
+							start.wait();
+							convert_shcl2_config(&path);
+						})
+					})
+					.collect();
+				for launch in launches {
+					launch.join().unwrap();
+				}
+				done.store(true, std::sync::atomic::Ordering::Relaxed);
+			});
+			assert!(
+				!torn.load(std::sync::atomic::Ordering::Relaxed),
+				"a part copy was seen"
+			);
+			assert_eq!(std::fs::read(&copy).unwrap(), body.as_bytes());
+			assert_eq!(dir_names(&dir), ["config.format2.shcl", "config.shcl"]);
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// No file moves to a newer format without its copy: a file that cannot be
+	// read to keep is not written over.
+	// Test ID: EreLZTl
+	#[cfg(unix)]
+	#[test]
+	fn a_write_that_cannot_keep_the_old_file_is_refused() {
+		use std::os::unix::fs::PermissionsExt;
+		let dir = format_test_dir("fmtcopy_refused");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o200)).unwrap();
+		let readable = std::fs::read(&path).is_ok();
+		let result = write_config_atomic(&path, default_config());
+		std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+		if !readable {
+			// root reads anything, so this only means something for a user
+			assert!(result.is_err(), "written with no copy kept");
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), SHCL2_FILE);
+			assert_eq!(dir_names(&dir), ["config.shcl"]);
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The footer's Format line marks a file converted, so it must not go onto one
+	// whose conversion was put off. Its backslashes would then read the 3.0 way
+	// and nothing would convert it again.
+	// Test ID: EreLZX8
+	#[test]
+	fn the_footer_never_stamps_a_2x_file() {
+		let dir = format_test_dir("fmtcopy_footer");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		refresh_shcl_banner(&path);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), SHCL2_FILE);
+		assert_eq!(dir_names(&dir), ["config.shcl"]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A line 2.x gave a bracketed list binds nothing after the conversion, and
+	// the launch says so, naming the copy that still has it.
+	// Test ID: EreLZaX
+	#[test]
+	fn a_setting_the_conversion_cannot_keep_is_reported() {
+		let path = std::path::Path::new("/cfg/config.shcl");
+		let text = "font:\n\tfamily:[One, Two]\n\tsize: 13\n";
+		let said = shcl2_losses(text, path);
+		assert_eq!(said.len(), 1, "{said:?}");
+		assert!(said[0].contains("1 line(s)"), "{said:?}");
+		assert!(said[0].contains("/cfg/config.format2.shcl"), "{said:?}");
+		assert!(shcl2_losses(SHCL2_FILE, path).is_empty());
+		let out = from_shcl2_text(text).unwrap();
+		eprintln!(
+			"converted:\n{out}\ncomplaints: {:?}",
+			config_complaints(&out)
+		);
 	}
 
 	// shcl 2.0.0 wrote `# enabled: true` above `# rotate:` and indented under

@@ -392,6 +392,8 @@ Settings names are meant to read plainly, but a few of them - scrim, contrast ma
 
 To start over from the shipped defaults, run `silkterm --reset-config`. The old file is kept alongside as `config.shcl.bak` rather than deleted.
 
+When an update converts the file to a newer format, the file as it was is kept alongside as `config.format2.shcl`, the number being the old format's. A line the new format can't hold stays in the file as written, and SilkTerm says so when started from a terminal.
+
 Drop a few images into a `wallpaper` folder next to the config and SilkTerm picks one each launch, favoring whatever it hasn't shown lately. Naming a wallpaper in the config, or passing one on the command line, takes precedence. The [wallpaper pack](#wallpaper-pack) is a ready-made folder to start from.
 
 ### Shell integration
