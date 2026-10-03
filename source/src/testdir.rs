@@ -81,7 +81,36 @@ fn mark_owned(dir: &Path) -> io::Result<String> {
 	Ok(token)
 }
 
-fn remove_if_owned(dir: &Path, _token: &str) -> Removal {
+// Only the folder this process made and marked. remove_dir_all removes a link
+// inside as a link and never follows it.
+fn remove_if_owned(dir: &Path, token: &str) -> Removal {
+	let Ok(meta) = std::fs::symlink_metadata(dir) else {
+		return Removal::NotOurs("it is gone");
+	};
+	if meta.file_type().is_symlink() {
+		return Removal::NotOurs("it is a link");
+	}
+	#[cfg(windows)]
+	{
+		use std::os::windows::fs::MetadataExt;
+		use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+		if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+			return Removal::NotOurs("it is a link");
+		}
+	}
+	if !meta.is_dir() {
+		return Removal::NotOurs("not a folder");
+	}
+	let marker = dir.join(OWNER_FILE);
+	if !std::fs::symlink_metadata(&marker).is_ok_and(|meta| meta.is_file()) {
+		return Removal::NotOurs("no owner mark");
+	}
+	let Ok(text) = std::fs::read_to_string(&marker) else {
+		return Removal::NotOurs("owner mark unreadable");
+	};
+	if text.lines().next().map(str::trim) != Some(token) {
+		return Removal::NotOurs("another run's owner mark");
+	}
 	match std::fs::remove_dir_all(dir) {
 		Ok(()) => Removal::Removed,
 		Err(e) => Removal::Failed(e),
