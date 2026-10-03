@@ -809,7 +809,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
 	- ID: 2026100311020484
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261003-110204
 	- Opened by: CC
@@ -820,6 +820,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The menu opens, as if only Alt were held.
 	- Expected behavior: A chord with Super held is not a menu shortcut.
 	- Reproduced: No. Seen in a unit test on 20261003, `the_command_chords_are_the_only_program_chords_on_macos`, which now allows it off a Mac.
+	- Actual cause: The menu letter check asked only that Alt was held and Ctrl was not, so Super held as well still counted.
+	- Actual fix:
+		- One check, `opens_menu_title` in input.rs, says a letter is a menu title only with Alt alone or Alt+Shift. The title underlines shown while Alt is held use it too, so they no longer show with Ctrl or Super held.
+		- `the_command_chords_are_the_only_program_chords_on_macos` is back to its strict form: no Command chord does anything off a Mac.
+	- Swept: The menu title letter (`hotkey_in`, which `hotkey_on` and `hotkey_for` both call) and the title underlines in app.rs, both fixed. The bound chords in keys.rs, including the Alt+Shift pane chords, already match the exact set of Ctrl, Alt, Shift and Command held. No bare Alt press opens the menu bar; Alt alone only shows the underlines. A letter typed with a menu already open picks its row whatever is held, left as is.
+	- Verified: The unit tests, and clippy for Linux, Windows and macOS.
+	- Branch: altsuper
+	- Commit: 2d4100b
+	- Test case: `a_letter_opens_a_menu_title_only_with_alt_alone_or_alt_shift` (Erf6miU), and `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5) in its strict form. Both seen failing without the fix.
+	- Acceptance signoff: Self-closed: intent clear, tests pass.
+	- Closed: 20261003-110559
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
