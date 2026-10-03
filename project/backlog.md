@@ -34,36 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- The pipeline's fuzz soak fails: a Settings save loses `scroll.inview_tau_ms` at the next launch
-	- ID: 2026100311103811
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: High
-	- Opened: 20261003-111038
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23
-	- Steps to reproduce:
-		- `SILK_FUZZ_SEED=30 cargo test --bin silkterm fuzz::a_settings_save_moves_no_value_at_the_next_launch`
-	- Incorrect behavior: The value loads at launch but is not found at the next launch after a save. The case is a file with two `scroll:` blocks, the second one holding `inview_tau_ms: 219`.
-	- Expected behavior: A save moves no value.
-	- Reproduced: 20261003 on b23, on dev 3349635 and on f435323, from before that day's round. So none of that round's work caused it.
-	- Actual cause:
-		- Not shcl, and none of the renames table, backfill or the format copy. The rename check decides whether `single_screen_tau_ms` is already in the file, and the file has it only as a comment at column 0 between two `scroll:` lines.
-		- Since 20261001 (`cfglines`) that check judged the comment where a save that keeps the lines leaves it: at column 0, outside `scroll:`, so the rename fired. But shcl keeps the lines or falls back to the whole-file form by what the save changes, not by the file. The fallback moves the comment into `scroll:`, and then the rename no longer fires. In this file a window size save falls back and a font size save does not.
-		- So the old name loaded as the new setting before the save, and as itself after it.
-	- Origin: 7b3be64 (`cfglines`, 2026100115322367). Confirmed.
-	- Progress log:
-		- 20261003: Seeds run in order from 0, so every full pipeline run reaches seed 30 in its 20 second soak and stops there. The short soak in a plain test run stops before it. The run from 20261001 got past the soak to the profiler stage, so the change that exposed it is likely between that run and f435323. Not bisected.
-		- 20261003: Traced to 7b3be64. Seed 30 passes with the `saved_paths` from before it and fails with its own.
-	- Actual fix: The rename check judges a commented line where the whole-file form puts it again. Every save agrees on that place, whichever way it writes. A file with an unreadable line is still judged as it is, since a fallback there is refused.
-	- Against: 2026100115322367, which made a column-0 `# highlight:` between `colors:` lines stop blocking the `focus:` rename. It blocks again. Its test is commented out with the reason.
-	- Swept: `saved_paths` is the only place that predicts a save, and `migrated_text` its only caller. The rating write and the old flat-file conversion write the whole-file form on purpose.
-	- Branch: fuzz30
-	- Commit: 9f80558
-	- Test case: `a_commented_new_name_counts_the_same_whichever_save_runs` (ErfAH9f). Seen to fail on the old check and pass on the new one. Seed 30 of `config::tests::fuzz::a_settings_save_moves_no_value_at_the_next_launch` fails on the old check and passes on the new one. Not added to the fuzz corpus, since the unit test covers it and a new file there would change what the other config targets mutate.
-	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
-
 - Settings: a revert arrow leaves the value in force when a save put it above its commented default
 	- ID: 2026100309455678
 	- Type: Bug
@@ -136,54 +106,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `transparency_is_the_last_group_on_the_background_tab`, `the_transparency_row_warns_that_it_needs_the_compositor`, `a_triangle_keeps_its_direction_at_any_scale` and `a_warning_needs_a_label_of_its_own`. Each failed on the old code and passes now.
 	- Closed:
 
-- At the RC release, convert the config to the new format and keep the old file beside it
-	- ID: 2026100220292612
-	- Type: Feature
-	- Status: Waiting on signoff
-	- Needs external testing: A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: the old-format item about removing the code that migrates old config files.
-	- Target OS: All
-	- Test environment: b23
-	- Requirements:
-		- Upon RC release, convert settings to the new format.
-		- Keep the old config file under a suffixed name, still ending in `.shcl`.
-		- If any settings can't be salvaged, warn the user.
-	- Notes:
-		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
-			- Note: 20261003: The shcl 3 conversion keeps a copy now. See the progress log.
-	- Decisions:
-		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
-		- 20261003: Every older version is kept, never one per format. The copy is named `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, with the time it was made and the format it had. This replaces the `config.format<N>.shcl` name above.
-		- 20261003: Settings the conversion can't keep get a warning dialog, not only the terminal message.
-	- Progress log:
-		- 20261003: Any write that moves the file to a newer format first copies it to `config.format<N>.shcl` beside it. N is the Format number the file had. A file with no Format line counts as 2, since that is how the conversion reads it. The copy is made in the writer every settings write goes through, so a Settings save that converts a file a busy launch left alone keeps one too.
-		- 20261003: A copy already there is never replaced, and the file is still converted. If the copy can't be made, the write is refused. The copy is written under a name of its own and then linked into place, so two windows converting at once leave one whole copy. On a filesystem with no hard links it is written in place.
-		- 20261003: A 2.x line holding a list in brackets has no 3.0 spelling. It stays as written and sets nothing, and the launch that converts prints the count and where the copy is. Unreadable lines and unknown keys were already reported at every launch, so those are left to that.
-		- 20261003: The footer refresh no longer puts the Format line on a file still in 2.x spellings. A file whose conversion was put off could get the line without the respelling, and then never convert.
-		- 20261003: The flat pre-nesting conversion keeps its `.bak`. It is a layout change and has no format number. A flat file has no Format line, so the 2.x step that runs before it already keeps the untouched original as `config.format2.shcl`.
-		- 20261003: README and design.md say where the copy goes.
-		- 20261003: The copy is now `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, replacing the `config.format<N>.shcl` name above. The time is local, as the test folders and the pipeline's log names are. A file named by `--config` uses its own name, less any `.shcl`, in place of `config`: `mine.shcl` keeps `mine_backup_..._format-v2.shcl`, and `mine.conf` keeps `mine.conf_backup_..._format-v2.shcl`.
-		- 20261003: Every conversion makes a new copy, and none is ever replaced. The link-or-fail step stays. A name already taken in the same second moves on to `_2` before the `.shcl`, then `_3`, and so on. A name already holding the same bytes counts as the same copy, so two windows converting the same file at once still leave one.
-		- 20261003: Settings the conversion can't keep now also get the notice window a refused save uses, once the terminal is on screen. Titled "Settings not converted", it names the file, says how many settings could not be converted and now do nothing, and gives the copy's name in the same folder. Windows shows the same text in the system message box. The terminal line is unchanged apart from the new name.
-		- 20261003: A Settings save that converts a file a busy launch left alone keeps a copy, but says nothing about lost settings, on the terminal or in a notice. That was already so before this round.
-		- 20261003: `a_copy_already_there_is_left_as_it_was` (EreLZMm) is reworked as `a_second_conversion_keeps_a_second_copy`, since a copy already there no longer stops a new one. `every_settings_write_goes_through_the_restore` now looks for the publish in `write_config_keeping`, which `write_config_atomic` calls, so the one writer still names it once.
-	- Note: Launch notices go to the terminal, like every other launch message about the file. A desktop launch or a Windows release build shows none of them.
-		- Note: 20261003: Settings the conversion can't keep are the exception now, with a notice window too.
-	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
-		- 20261003: The unit suite passes, 1057 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID, markdown and table checks pass. With a taken name counted as done, the second-copy and same-second tests failed. With same bytes not counted as the same copy, the same-second and race tests failed. With the loss not handed to the window, the notice test failed. With no hard links, the race test saw a part copy in three runs out of three.
-		- 20261003: Seen on Linux: a launch on a 2.x `--config mine.shcl` with a list in brackets made `mine_backup_<time>_format-v2.shcl` and put the notice up over the terminal after its first frame. The next launch made no copy and showed no notice.
-		- 20261003: On vm925w at 8877157, on NTFS, a lone `cargo test` passed, 1035 tests. These copy tests passed by name: `a_launch_keeps_the_2x_file_beside_the_converted_one`, `a_second_conversion_keeps_a_second_copy`, `copies_made_in_one_second_never_replace_each_other`, `launches_converting_at_once_leave_one_whole_copy`, `the_footer_never_stamps_a_2x_file`, `a_setting_the_conversion_cannot_keep_is_reported`, `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` and `every_settings_write_goes_through_the_restore`. `a_write_that_cannot_keep_the_old_file_is_refused` is Unix only, so it does not run there.
-	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
-		- 20261003: No `format2` or `.format<N>` name is left in the code, README or design.md. The local-time stamp is one function now, shared with the test folder. The notice is put up only in `show_notice`, and `take_conversion_loss` is read only in the window's event loop.
-	- Branch: fmtcopy, fmtbak
-	- Commit: 6531c55, 6d10356, aaec440
-	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_second_conversion_keeps_a_second_copy` (EreLZMm), `copies_made_in_one_second_never_replace_each_other` (Erf0QeH), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX), `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` (Erf0Qhu), `a_conversion_notice_says_how_many_and_where_the_copy_is` (Erf0Qkx).
-	- Closed:
-
 - The launch names an unreadable line two lines short of where the file has it
 	- ID: 2026100115322366
 	- Type: Bug
@@ -216,26 +138,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: cfglines
 	- Commit: 7b3be64
 	- Test case: `a_rating_write_restates_the_lines_the_launch_named` (ErUrgB9). Seen to fail with the restate taken out, and pass with it.
-	- Verified: native and Windows-target clippy, and the native unit tests (991 passed).
-
-- Renames judge a commented line by where a whole-file save would put it, though most saves keep lines now
-	- ID: 2026100115322367
-	- Type: Task
-	- Status: Waiting on signoff
-	- Priority: Low
-	- Opened: 20261001-153223
-	- Opened by: CC
-	- Related IDs: 2026100115322364
-	- Progress log:
-		- `saved_paths` walks `to_canonical()`. A keep-lines save leaves a commented line where it is, so the answer can differ from what the save writes.
-		- `a_commented_new_name_counts_where_a_save_puts_it` pins the current behavior. Left as it was on `shcl3e`.
-		- 20261001: `saved_paths` now walks the text the save writes: the lines kept, or the canonical form only where shcl falls back to it. A save that would be refused writes nothing, so the file as it is gives the answer there, as before.
-		- What a user sees: a `# highlight:` comment at column 0 between `colors:` lines no longer stops `focus:` being renamed to `highlight:`. A save keeps that comment at column 0, so it never moves into the block, and the rename fires the same before a save and after one.
-		- The old test fails with this, since it compares against the canonical form, which no save writes for that file now. It is commented out in place with the reason.
-	- Swept: the other two non-test uses of the canonical form in config.rs write it on purpose (the old flat-file conversion) or spell one value on an empty document (the rating). Neither predicts a save.
-	- Branch: cfglines
-	- Commit: 7b3be64
-	- Test case: `a_commented_new_name_counts_where_the_save_that_runs_puts_it` (ErUrgUh). Seen to fail on the old `saved_paths`, and pass on the new one.
 	- Verified: native and Windows-target clippy, and the native unit tests (991 passed).
 
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
@@ -823,6 +725,56 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
+- At the RC release, convert the config to the new format and keep the old file beside it
+	- ID: 2026100220292612
+	- Type: Feature
+	- Status: Queued
+	- Needs external testing: A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: the old-format item about removing the code that migrates old config files.
+	- Target OS: All
+	- Test environment: b23
+	- Requirements:
+		- Upon RC release, convert settings to the new format.
+		- Keep the old config file under a suffixed name, still ending in `.shcl`.
+		- If any settings can't be salvaged, warn the user.
+	- Notes:
+		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
+			- Note: 20261003: The shcl 3 conversion keeps a copy now. See the progress log.
+	- Decisions:
+		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
+		- 20261003: Every older version is kept, never one per format. The copy is named `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, with the time it was made and the format it had. This replaces the `config.format<N>.shcl` name above.
+		- 20261003: Settings the conversion can't keep get a warning dialog, not only the terminal message.
+		- 20261003: Two windows converting the same file in the same second may leave one copy. The notice title "Settings not converted" is fine.
+		- 20261003: A Settings save that converts the file warns only when settings could not be converted. A clean conversion stays quiet.
+	- Progress log:
+		- 20261003: Any write that moves the file to a newer format first copies it to `config.format<N>.shcl` beside it. N is the Format number the file had. A file with no Format line counts as 2, since that is how the conversion reads it. The copy is made in the writer every settings write goes through, so a Settings save that converts a file a busy launch left alone keeps one too.
+		- 20261003: A copy already there is never replaced, and the file is still converted. If the copy can't be made, the write is refused. The copy is written under a name of its own and then linked into place, so two windows converting at once leave one whole copy. On a filesystem with no hard links it is written in place.
+		- 20261003: A 2.x line holding a list in brackets has no 3.0 spelling. It stays as written and sets nothing, and the launch that converts prints the count and where the copy is. Unreadable lines and unknown keys were already reported at every launch, so those are left to that.
+		- 20261003: The footer refresh no longer puts the Format line on a file still in 2.x spellings. A file whose conversion was put off could get the line without the respelling, and then never convert.
+		- 20261003: The flat pre-nesting conversion keeps its `.bak`. It is a layout change and has no format number. A flat file has no Format line, so the 2.x step that runs before it already keeps the untouched original as `config.format2.shcl`.
+		- 20261003: README and design.md say where the copy goes.
+		- 20261003: The copy is now `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, replacing the `config.format<N>.shcl` name above. The time is local, as the test folders and the pipeline's log names are. A file named by `--config` uses its own name, less any `.shcl`, in place of `config`: `mine.shcl` keeps `mine_backup_..._format-v2.shcl`, and `mine.conf` keeps `mine.conf_backup_..._format-v2.shcl`.
+		- 20261003: Every conversion makes a new copy, and none is ever replaced. The link-or-fail step stays. A name already taken in the same second moves on to `_2` before the `.shcl`, then `_3`, and so on. A name already holding the same bytes counts as the same copy, so two windows converting the same file at once still leave one.
+		- 20261003: Settings the conversion can't keep now also get the notice window a refused save uses, once the terminal is on screen. Titled "Settings not converted", it names the file, says how many settings could not be converted and now do nothing, and gives the copy's name in the same folder. Windows shows the same text in the system message box. The terminal line is unchanged apart from the new name.
+		- 20261003: A Settings save that converts a file a busy launch left alone keeps a copy, but says nothing about lost settings, on the terminal or in a notice. That was already so before this round.
+		- 20261003: `a_copy_already_there_is_left_as_it_was` (EreLZMm) is reworked as `a_second_conversion_keeps_a_second_copy`, since a copy already there no longer stops a new one. `every_settings_write_goes_through_the_restore` now looks for the publish in `write_config_keeping`, which `write_config_atomic` calls, so the one writer still names it once.
+	- Note: Launch notices go to the terminal, like every other launch message about the file. A desktop launch or a Windows release build shows none of them.
+		- Note: 20261003: Settings the conversion can't keep are the exception now, with a notice window too.
+	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
+		- 20261003: The unit suite passes, 1057 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID, markdown and table checks pass. With a taken name counted as done, the second-copy and same-second tests failed. With same bytes not counted as the same copy, the same-second and race tests failed. With the loss not handed to the window, the notice test failed. With no hard links, the race test saw a part copy in three runs out of three.
+		- 20261003: Seen on Linux: a launch on a 2.x `--config mine.shcl` with a list in brackets made `mine_backup_<time>_format-v2.shcl` and put the notice up over the terminal after its first frame. The next launch made no copy and showed no notice.
+		- 20261003: On vm925w at 8877157, on NTFS, a lone `cargo test` passed, 1035 tests. These copy tests passed by name: `a_launch_keeps_the_2x_file_beside_the_converted_one`, `a_second_conversion_keeps_a_second_copy`, `copies_made_in_one_second_never_replace_each_other`, `launches_converting_at_once_leave_one_whole_copy`, `the_footer_never_stamps_a_2x_file`, `a_setting_the_conversion_cannot_keep_is_reported`, `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` and `every_settings_write_goes_through_the_restore`. `a_write_that_cannot_keep_the_old_file_is_refused` is Unix only, so it does not run there.
+	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
+		- 20261003: No `format2` or `.format<N>` name is left in the code, README or design.md. The local-time stamp is one function now, shared with the test folder. The notice is put up only in `show_notice`, and `take_conversion_loss` is read only in the window's event loop.
+	- Branch: fmtcopy, fmtbak
+	- Commit: 6531c55, 6d10356, aaec440
+	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_second_conversion_keeps_a_second_copy` (EreLZMm), `copies_made_in_one_second_never_replace_each_other` (Erf0QeH), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX), `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` (Erf0Qhu), `a_conversion_notice_says_how_many_and_where_the_copy_is` (Erf0Qkx).
+	- Closed:
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -836,6 +788,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When changing the cursor size and animation, change to 50% width.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
+	- Closed:
+
+- Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
+	- ID: 2026100311020484
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-110204
+	- Opened by: CC
+	- Related IDs: 2026100220292607
+	- Target OS: Linux, Windows
+	- Steps to reproduce:
+		- With the menu bar shown, hold Alt and Super and press the letter of a menu title, such as F.
+	- Incorrect behavior: The menu opens, as if only Alt were held.
+	- Expected behavior: A chord with Super held is not a menu shortcut.
+	- Reproduced: No. Seen in a unit test on 20261003, `the_command_chords_are_the_only_program_chords_on_macos`, which now allows it off a Mac.
+	- Decisions:
+		- 20261003: Alt+Shift plus a letter does not open a menu either. Only Alt alone does.
+	- Actual cause: The menu letter check asked only that Alt was held and Ctrl was not, so Super held as well still counted.
+	- Actual fix:
+		- One check, `opens_menu_title` in input.rs, says a letter is a menu title only with Alt alone or Alt+Shift. The title underlines shown while Alt is held use it too, so they no longer show with Ctrl or Super held.
+		- `the_command_chords_are_the_only_program_chords_on_macos` is back to its strict form: no Command chord does anything off a Mac.
+	- Swept: The menu title letter (`hotkey_in`, which `hotkey_on` and `hotkey_for` both call) and the title underlines in app.rs, both fixed. The bound chords in keys.rs, including the Alt+Shift pane chords, already match the exact set of Ctrl, Alt, Shift and Command held. No bare Alt press opens the menu bar; Alt alone only shows the underlines. A letter typed with a menu already open picks its row whatever is held, left as is.
+	- Verified: The unit tests, and clippy for Linux, Windows and macOS.
+	- Branch: altsuper
+	- Commit: 2d4100b
+	- Test case: `a_letter_opens_a_menu_title_only_with_alt_alone_or_alt_shift` (Erf6miU), and `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5) in its strict form. Both seen failing without the fix.
+	- Acceptance signoff:
 	- Closed:
 
 - macOS: the first launch hangs with no window, using more and more memory
@@ -865,6 +845,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- The pipeline's fuzz soak fails: a Settings save loses `scroll.inview_tau_ms` at the next launch
+	- ID: 2026100311103811
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261003-111038
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- `SILK_FUZZ_SEED=30 cargo test --bin silkterm fuzz::a_settings_save_moves_no_value_at_the_next_launch`
+	- Incorrect behavior: The value loads at launch but is not found at the next launch after a save. The case is a file with two `scroll:` blocks, the second one holding `inview_tau_ms: 219`.
+	- Expected behavior: A save moves no value.
+	- Reproduced: 20261003 on b23, on dev 3349635 and on f435323, from before that day's round. So none of that round's work caused it.
+	- Actual cause:
+		- Not shcl, and none of the renames table, backfill or the format copy. The rename check decides whether `single_screen_tau_ms` is already in the file, and the file has it only as a comment at column 0 between two `scroll:` lines.
+		- Since 20261001 (`cfglines`) that check judged the comment where a save that keeps the lines leaves it: at column 0, outside `scroll:`, so the rename fired. But shcl keeps the lines or falls back to the whole-file form by what the save changes, not by the file. The fallback moves the comment into `scroll:`, and then the rename no longer fires. In this file a window size save falls back and a font size save does not.
+		- So the old name loaded as the new setting before the save, and as itself after it.
+	- Origin: 7b3be64 (`cfglines`, 2026100115322367). Confirmed.
+	- Progress log:
+		- 20261003: Seeds run in order from 0, so every full pipeline run reaches seed 30 in its 20 second soak and stops there. The short soak in a plain test run stops before it. The run from 20261001 got past the soak to the profiler stage, so the change that exposed it is likely between that run and f435323. Not bisected.
+		- 20261003: Traced to 7b3be64. Seed 30 passes with the `saved_paths` from before it and fails with its own.
+	- Actual fix: The rename check judges a commented line where the whole-file form puts it again. Every save agrees on that place, whichever way it writes. A file with an unreadable line is still judged as it is, since a fallback there is refused.
+	- Against: 2026100115322367, which made a column-0 `# highlight:` between `colors:` lines stop blocking the `focus:` rename. It blocks again. Its test is commented out with the reason.
+	- Swept: `saved_paths` is the only place that predicts a save, and `migrated_text` its only caller. The rating write and the old flat-file conversion write the whole-file form on purpose.
+	- Branch: fuzz30
+	- Commit: 9f80558
+	- Test case: `a_commented_new_name_counts_the_same_whichever_save_runs` (ErfAH9f). Seen to fail on the old check and pass on the new one. Seed 30 of `config::tests::fuzz::a_settings_save_moves_no_value_at_the_next_launch` fails on the old check and passes on the new one. Not added to the fuzz corpus, since the unit test covers it and a new file there would change what the other config targets mutate.
+	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
+	- Acceptance signoff: JC, 20261003.
+	- Closed: 20261003-193000
 
 - The merge gate fails on clippy at a doc comment in the minimap source
 	- ID: 2026093016391134
@@ -1198,32 +1210,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: mechanical.
 	- Closed: 20261003-122100
 
-- Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
-	- ID: 2026100311020484
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261003-110204
-	- Opened by: CC
-	- Related IDs: 2026100220292607
-	- Target OS: Linux, Windows
-	- Steps to reproduce:
-		- With the menu bar shown, hold Alt and Super and press the letter of a menu title, such as F.
-	- Incorrect behavior: The menu opens, as if only Alt were held.
-	- Expected behavior: A chord with Super held is not a menu shortcut.
-	- Reproduced: No. Seen in a unit test on 20261003, `the_command_chords_are_the_only_program_chords_on_macos`, which now allows it off a Mac.
-	- Actual cause: The menu letter check asked only that Alt was held and Ctrl was not, so Super held as well still counted.
-	- Actual fix:
-		- One check, `opens_menu_title` in input.rs, says a letter is a menu title only with Alt alone or Alt+Shift. The title underlines shown while Alt is held use it too, so they no longer show with Ctrl or Super held.
-		- `the_command_chords_are_the_only_program_chords_on_macos` is back to its strict form: no Command chord does anything off a Mac.
-	- Swept: The menu title letter (`hotkey_in`, which `hotkey_on` and `hotkey_for` both call) and the title underlines in app.rs, both fixed. The bound chords in keys.rs, including the Alt+Shift pane chords, already match the exact set of Ctrl, Alt, Shift and Command held. No bare Alt press opens the menu bar; Alt alone only shows the underlines. A letter typed with a menu already open picks its row whatever is held, left as is.
-	- Verified: The unit tests, and clippy for Linux, Windows and macOS.
-	- Branch: altsuper
-	- Commit: 2d4100b
-	- Test case: `a_letter_opens_a_menu_title_only_with_alt_alone_or_alt_shift` (Erf6miU), and `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5) in its strict form. Both seen failing without the fix.
-	- Acceptance signoff: Self-closed: intent clear, tests pass.
-	- Closed: 20261003-110559
-
 - A cursor blink or fade can wait for an unrelated event, like the minimap's redraw did
 	- ID: 2026092821452948
 	- Type: Bug
@@ -1518,6 +1504,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff:
 	- Superseded by ID: 2026093009280571
 	- Closed: 20260930-092805
+
+- Renames judge a commented line by where a whole-file save would put it, though most saves keep lines now
+	- ID: 2026100115322367
+	- Type: Task
+	- Status: Moot
+	- Priority: Low
+	- Opened: 20261001-153223
+	- Opened by: CC
+	- Related IDs: 2026100115322364
+	- Progress log:
+		- `saved_paths` walks `to_canonical()`. A keep-lines save leaves a commented line where it is, so the answer can differ from what the save writes.
+		- `a_commented_new_name_counts_where_a_save_puts_it` pins the current behavior. Left as it was on `shcl3e`.
+		- 20261001: `saved_paths` now walks the text the save writes: the lines kept, or the canonical form only where shcl falls back to it. A save that would be refused writes nothing, so the file as it is gives the answer there, as before.
+		- What a user sees: a `# highlight:` comment at column 0 between `colors:` lines no longer stops `focus:` being renamed to `highlight:`. A save keeps that comment at column 0, so it never moves into the block, and the rename fires the same before a save and after one.
+		- The old test fails with this, since it compares against the canonical form, which no save writes for that file now. It is commented out in place with the reason.
+	- Decisions:
+		- 20261003: The fix for 2026100311103811 is kept. It judges a commented line where the whole-file save puts it again, which undoes this change.
+	- Swept: the other two non-test uses of the canonical form in config.rs write it on purpose (the old flat-file conversion) or spell one value on an empty document (the rating). Neither predicts a save.
+	- Branch: cfglines
+	- Commit: 7b3be64
+	- Test case: `a_commented_new_name_counts_where_the_save_that_runs_puts_it` (ErUrgUh). Seen to fail on the old `saved_paths`, and pass on the new one.
+	- Verified: native and Windows-target clippy, and the native unit tests (991 passed).
+	- Closed: 20261003-193000
 
 ## Old format
 
