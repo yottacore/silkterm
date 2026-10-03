@@ -643,6 +643,56 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_hotkey_row_takes_the_next_chord_pressed` (Erejamb), `a_chord_another_hotkey_had_is_said_on_both_rows` (Erejaq5), `the_keys_tab_shows_the_mac_chords_on_a_mac` (Erejatf), `a_hotkey_row_draws_its_chords_and_its_note_in_the_box` (ErejaxH), `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` (Erejb15), `a_pressed_chord_is_the_one_the_press_matches` (ErejaW7), `the_files_own_values_are_kept_apart_from_the_result` (Erejaj5), `every_hotkey_has_one_row_on_the_keys_tab` (ErektRs), `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (extended), `a_resize_settles_on_the_natural_size_and_lets_go_past_the_snap` (extended), and the generic `every_row_survives_a_save_and_a_relaunch` and `a_row_changed_after_its_revert_keeps_the_change`.
 	- Closed:
 
+- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
+	- ID: 2026100220292607
+	- Type: Feature
+	- Status: Waiting for testing
+	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
+	- Needs external testing:
+		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
+		- b26: Option+Command+W closes the pane and Command+W still closes the tab. The Panes row on the menu bar, the right-click menu and the Keys tab show Option+Command+W.
+		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before v1.
+		- Figure out hotkeys for splitting panes and changing panes.
+		- Then implement hotkey management.
+		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
+	- Notes:
+		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` holds that and will need to change.
+		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
+	- Decisions:
+		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
+		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
+		- 20261003: On macOS, Option+Command+W closes the pane. Command+W stays close tab.
+	- Progress log:
+		- 20261003: One table of hotkeys, defaults plus the config file's `keys:` values, is what the key handler, the in-window menus and the macOS menu bar all read. A menu row shows the first chord its hotkey answers to, so a change in the file shows there too.
+		- 20261003: Windows Terminal's defaults checked: Alt+Shift+Plus duplicates the pane to the right, Alt+Shift+Minus down, and Alt+arrows move focus. It closes a pane with Ctrl+Shift+W, which is close tab here, so Alt+Shift+W per the decision.
+		- 20261003: A bad value keeps its default and is reported at launch with its line. A chord set for one hotkey is taken from any hotkey that has it by default, with a launch note. "none" turns a hotkey off, and quotes are optional.
+		- 20261003: A focus move goes to the nearest pane that way. On a tie, the pane the last move came from wins, then the top or left one, so a move and its opposite go back and forth.
+		- 20261003: Lost to the shell on Linux and Windows: fish's Alt+arrows, tmux's prefix plus Alt+arrows, nano's Alt+Up and Alt+Down, emacs' Meta+Left, Meta+Right and Meta+Shift+W, and readline's Meta+_ (Meta+. still does it). Readline's Alt+b and Alt+f stay free. The split-panes design doc has the list. Nothing is lost on macOS.
+		- 20261003: Changed along the way: F11, the Menu key and Ctrl+F4 now need exactly their keys held, where extra modifiers used to count. Ctrl+Alt+Shift+T, which is how Windows sees AltGr+Shift+T, no longer opens a tab.
+		- 20261003: `no_chord_splits_closes_or_cycles_panes` is commented out, since it pinned the menu-only decision this item reverses. Its Ctrl and Ctrl+Shift checks still hold and moved to `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
+		- 20261003: Open question: macOS has no close-pane chord by default. iTerm2 uses Command+W, which is close tab here. Leave it unbound, or pick one?
+		- 20261003: Answered by the decision above. Option+Command+W is the Mac default for Close pane, so the menu bar's Panes row, the right-click menu, the Keys tab and the template's `keys:` line all show it. A Mac config whose commented line still says "none" is brought up to it. Nothing else on a Mac uses that chord; Hide others is Option+Command+H.
+		- 20261003: Two checks that pinned no Mac chord for Close pane are commented out and replaced, in `a_menu_row_shows_the_chord_its_hotkey_answers_to` and `the_keys_tab_shows_the_mac_chords_on_a_mac`. The Mac exception in `every_default_chord_reads_and_none_is_shared` is gone. The Mac half of `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` presses Shift+Command+W now, since the old chord is the default.
+		- 20261003: Off a Mac, Alt+Super+W opens the menu title W, as Alt plus any letter does with Super held. That is older than this change; `the_command_chords_are_the_only_program_chords_on_macos` now allows it.
+	- Verified:
+		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
+		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
+		- 20261003, Option+Command+W: the unit suite passes, 1057 tests, and fmt plus clippy for Linux, macOS and Windows are clean. With the Mac default put back to "none", five tests fail: the menu bar list, the Panes row label, the Keys tab row, the default check and the macOS chord test. The refresh of an old "none" line passed for a Linux template; the macOS-only entry itself is unrun. None of it ran on a Mac.
+		- In a real window on Linux, the four Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
+	- Swept: for Option+Command+W, every Mac chord in `keys.rs`, the app menu and Window menu rows in `macmenu.rs`, the template, the Keys tab, the UI style guide and the split-panes design doc.
+	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` spells a chord by hand any more.
+	- Branch: panekeys, mackeys
+	- Commit: 4cafdde, f4bd3f7
+	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
+	- Closed:
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
@@ -696,88 +746,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: tabedit
 	- Commit: 2034f15
 
-- shcl: a keep-lines save adds a set value as a new line, beside its commented default
-	- ID: 2026100219054510
-	- Type: Task
-	- Status: Stalled
-	- Priority: Low
-	- Opened: 20261002-190545
-	- Opened by: CC
-	- Related IDs: 2026100115322366
-	- Steps to reproduce:
-		- A file with `performance:` and under it `# profile: "max"  ## Default`. Load it keeping lines, set `performance.profile`, and save keeping lines.
-	- Incorrect behavior: the comment stays and the value goes in as a new line, so every line below moves down one.
-	- Expected behavior: the commented line is filled in where it is, so nothing below it moves.
-	- Reproduced: 20261001 on b23, on the real program with shcl b10c2009. The rating added `profile:` and `rated_hardware:` and kept the template's two commented lines. shcl's dev branch has nothing for it as of 20261002.
-	- Progress log:
-		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
-		- Stalled until a shcl beta has it.
-
-- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
-	- ID: 2026100220292607
-	- Type: Feature
-	- Status: Waiting for testing
-	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
-	- Needs external testing:
-		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
-		- b26: Option+Command+W closes the pane and Command+W still closes the tab. The Panes row on the menu bar, the right-click menu and the Keys tab show Option+Command+W.
-		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Before v1.
-		- Figure out hotkeys for splitting panes and changing panes.
-		- Then implement hotkey management.
-		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
-	- Notes:
-		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` holds that and will need to change.
-		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
-	- Decisions:
-		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
-		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
-		- 20261003: On macOS, Option+Command+W closes the pane. Command+W stays close tab.
-	- Progress log:
-		- 20261003: One table of hotkeys, defaults plus the config file's `keys:` values, is what the key handler, the in-window menus and the macOS menu bar all read. A menu row shows the first chord its hotkey answers to, so a change in the file shows there too.
-		- 20261003: Windows Terminal's defaults checked: Alt+Shift+Plus duplicates the pane to the right, Alt+Shift+Minus down, and Alt+arrows move focus. It closes a pane with Ctrl+Shift+W, which is close tab here, so Alt+Shift+W per the decision.
-		- 20261003: A bad value keeps its default and is reported at launch with its line. A chord set for one hotkey is taken from any hotkey that has it by default, with a launch note. "none" turns a hotkey off, and quotes are optional.
-		- 20261003: A focus move goes to the nearest pane that way. On a tie, the pane the last move came from wins, then the top or left one, so a move and its opposite go back and forth.
-		- 20261003: Lost to the shell on Linux and Windows: fish's Alt+arrows, tmux's prefix plus Alt+arrows, nano's Alt+Up and Alt+Down, emacs' Meta+Left, Meta+Right and Meta+Shift+W, and readline's Meta+_ (Meta+. still does it). Readline's Alt+b and Alt+f stay free. The split-panes design doc has the list. Nothing is lost on macOS.
-		- 20261003: Changed along the way: F11, the Menu key and Ctrl+F4 now need exactly their keys held, where extra modifiers used to count. Ctrl+Alt+Shift+T, which is how Windows sees AltGr+Shift+T, no longer opens a tab.
-		- 20261003: `no_chord_splits_closes_or_cycles_panes` is commented out, since it pinned the menu-only decision this item reverses. Its Ctrl and Ctrl+Shift checks still hold and moved to `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
-		- 20261003: Open question: macOS has no close-pane chord by default. iTerm2 uses Command+W, which is close tab here. Leave it unbound, or pick one?
-		- 20261003: Answered by the decision above. Option+Command+W is the Mac default for Close pane, so the menu bar's Panes row, the right-click menu, the Keys tab and the template's `keys:` line all show it. A Mac config whose commented line still says "none" is brought up to it. Nothing else on a Mac uses that chord; Hide others is Option+Command+H.
-		- 20261003: Two checks that pinned no Mac chord for Close pane are commented out and replaced, in `a_menu_row_shows_the_chord_its_hotkey_answers_to` and `the_keys_tab_shows_the_mac_chords_on_a_mac`. The Mac exception in `every_default_chord_reads_and_none_is_shared` is gone. The Mac half of `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` presses Shift+Command+W now, since the old chord is the default.
-		- 20261003: Off a Mac, Alt+Super+W opens the menu title W, as Alt plus any letter does with Super held. That is older than this change; `the_command_chords_are_the_only_program_chords_on_macos` now allows it.
-	- Verified:
-		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
-		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
-		- 20261003, Option+Command+W: the unit suite passes, 1057 tests, and fmt plus clippy for Linux, macOS and Windows are clean. With the Mac default put back to "none", five tests fail: the menu bar list, the Panes row label, the Keys tab row, the default check and the macOS chord test. The refresh of an old "none" line passed for a Linux template; the macOS-only entry itself is unrun. None of it ran on a Mac.
-		- In a real window on Linux, the four Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
-	- Swept: for Option+Command+W, every Mac chord in `keys.rs`, the app menu and Window menu rows in `macmenu.rs`, the template, the Keys tab, the UI style guide and the split-panes design doc.
-	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` spells a chord by hand any more.
-	- Branch: panekeys, mackeys
-	- Commit: 4cafdde, f4bd3f7
-	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
-	- Closed:
-
-- Demo: the cursor goes to 50% width when the cursor size and animation change
-	- ID: 2026092812581720
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20260928-125817
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- When changing the cursor size and animation, change to 50% width.
-	- Decisions:
-		- 20260928: Held for the release, with the other demo recorder change.
-	- Closed:
-
 - macOS: a Ctrl+click right after a window gets the focus acts as a plain click
 	- ID: 2026100310321918
 	- Type: Bug
@@ -805,6 +773,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix: none, see the progress log.
 	- Branch: mackeys
 	- Test case: none. The gap would be in winit's macOS event code, which no test here can drive. The app's half, a left press with Ctrl held acting as a right press, is `ctrl_click_is_the_right_click_on_macos_only`.
+
+- shcl: a keep-lines save adds a set value as a new line, beside its commented default
+	- ID: 2026100219054510
+	- Type: Task
+	- Status: Stalled
+	- Priority: Low
+	- Opened: 20261002-190545
+	- Opened by: CC
+	- Related IDs: 2026100115322366
+	- Steps to reproduce:
+		- A file with `performance:` and under it `# profile: "max"  ## Default`. Load it keeping lines, set `performance.profile`, and save keeping lines.
+	- Incorrect behavior: the comment stays and the value goes in as a new line, so every line below moves down one.
+	- Expected behavior: the commented line is filled in where it is, so nothing below it moves.
+	- Reproduced: 20261001 on b23, on the real program with shcl b10c2009. The rating added `profile:` and `rated_hardware:` and kept the template's two commented lines. shcl's dev branch has nothing for it as of 20261002.
+	- Progress log:
+		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
+		- Stalled until a shcl beta has it.
+
+- Demo: the cursor goes to 50% width when the cursor size and animation change
+	- ID: 2026092812581720
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20260928-125817
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- When changing the cursor size and animation, change to 50% width.
+	- Decisions:
+		- 20260928: Held for the release, with the other demo recorder change.
+	- Closed:
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
