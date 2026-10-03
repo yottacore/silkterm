@@ -34,55 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Copy on select: on by default, and remembered across launches
-	- ID: 2026100307115829
-	- Type: Enhancement
-	- Status: Closed
-	- Priority: Avg
-	- Opened: 20261003-071158
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Test environment: b23
-	- Requirements:
-		- Default to enabled.
-		- Remember selection across launches.
-	- Progress log:
-		- 20261003: `shell.copy_on_select` now ships on. An old config's commented `false` default line is refreshed to `true`. A line set by hand is left alone.
-		- 20261003: Turning Copy on select on or off from a menu saves it as the setting. New tabs and the next launch start with it. Other panes already open keep their own.
-		- 20261003: Unit tests pass. A look at the menu toggle in a real window is still owed.
-	- Branch: copysel
-
-- Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
-	- ID: 2026100220292617
-	- Type: Enhancement
-	- Status: Closed
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435574
-	- Target OS: All
-	- Test environment: b23
-	- Requirements:
-		- A warning icon next to Transparency, with a tip saying it relies on the desktop compositor and may not work.
-		- Move Transparency and its rows to the last section on the Background tab.
-	- Notes:
-		- The macOS half of the same note is 2026100114435574.
-	- Decisions:
-		- 20261003: No heading for the moved group. The Transparency toggle heads it, as other toggles head their groups.
-	- Progress log:
-		- 20261003: Transparency, Opacity % and Blur-behind are now the last group on the Background tab, after Contrast mask. The tab has no titled sections, so the group moved as it was, without a heading of its own.
-		- 20261003: A warning mark follows the Transparency label: a small triangle with an exclamation mark, in the label's color. Its tip reads "Transparency relies on the desktop compositor, and may not work on every desktop." The row's own tip is unchanged.
-		- 20261003: No row had a warning mark before, so this is a new row field, `warning:`, which any row with a label can use. The UI style guide and the Settings dialog design doc say so.
-		- 20261003: Fixed along the way: the dialog scaled a triangle's direction as if it were a length, so at any scale but 1 it pointed the wrong way. Nothing in the dialog drew one before this.
-		- 20261003: Looked at in a window at scale 1 and 2, both tips included. Not seen on Windows or macOS.
-	- Verified: unit tests, the format check, and lints for Linux and Windows pass.
-	- Note: `space_toggles_focused_boolean` now presses Space on Wallpaper, since that is the tab's first row after the move.
-	- Branch: seethrutip
-	- Test case: `transparency_is_the_last_group_on_the_background_tab`, `the_transparency_row_warns_that_it_needs_the_compositor`, `a_triangle_keeps_its_direction_at_any_scale` and `a_warning_needs_a_label_of_its_own`. Each failed on the old code and passes now.
-	- Closed:
-
 - The shipped prompts no longer name real machines
 	- ID: 2026100314195000
 	- Type: Enhancement
@@ -104,6 +55,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: The bash prompt file is rewritten from the binary at each launch, so a host color added to it does not last. On the machines that were in the table, the bash prompt's host is now white.
 	- Test case: `the_shipped_prompts_color_no_named_machine` (Erftpx4). It failed on each old script and passes on both new ones.
 	- Branch: hostnames
+
+- A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
+	- ID: 2026092618142600
+	- Type: Bug
+	- Status: Testing
+	- Severity: High
+	- Opened: 20260926-181426
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Have a shell installed that the list does not have yet.
+		- Start two SilkTerm windows a few seconds apart, and let both scans run.
+	- Incorrect behavior: The new shell goes to the top of the list, so the next launch opens on it. Here it was a second Node.js entry, or maybe Python.
+	- Expected behavior: A new shell goes at the end, and the default shell stays the same.
+	- Reproduced: Yes, on b23 in a unit test of the save. Not seen on screen, since the live list was fixed by hand before this was looked at.
+	- Actual cause:
+		- A save compared the list against what the window loaded, not against the file. There is no file watcher, so a window that loaded before another one saved took out only the entries it knew about. The new entry was left above all of them.
+		- The live file fits this. Its second Node.js entry came from a launch with nvm on PATH.
+		- Not shcl. A fresh scan and a reorder both save in the right order through the line-keeping save.
+	- Actual fix: The save merges three ways against the file. Another window's new entries stay at the end, its removals stay gone, and its edits stay unless this window changed the same entry.
+	- Branch: cfgorder
+	- Commit: c6d68c1
+	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
+	- Closed:
 
 - At the RC release, convert the config to the new format and keep the old file beside it
 	- ID: 2026100220292612
@@ -158,31 +134,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: fmtcopy, fmtbak, fmtwarn
 	- Commit: 6531c55, 6d10356, aaec440, d154a64
 	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_second_conversion_keeps_a_second_copy` (EreLZMm), `copies_made_in_one_second_never_replace_each_other` (Erf0QeH), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX), `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` (Erf0Qhu), `a_conversion_notice_says_how_many_and_where_the_copy_is` (Erf0Qkx), `a_save_that_loses_a_setting_converting_leaves_a_notice_for_the_window` (ErfTRqP).
-	- Closed:
-
-- A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
-	- ID: 2026092618142600
-	- Type: Bug
-	- Status: Testing
-	- Severity: High
-	- Opened: 20260926-181426
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Steps to reproduce:
-		- Have a shell installed that the list does not have yet.
-		- Start two SilkTerm windows a few seconds apart, and let both scans run.
-	- Incorrect behavior: The new shell goes to the top of the list, so the next launch opens on it. Here it was a second Node.js entry, or maybe Python.
-	- Expected behavior: A new shell goes at the end, and the default shell stays the same.
-	- Reproduced: Yes, on b23 in a unit test of the save. Not seen on screen, since the live list was fixed by hand before this was looked at.
-	- Actual cause:
-		- A save compared the list against what the window loaded, not against the file. There is no file watcher, so a window that loaded before another one saved took out only the entries it knew about. The new entry was left above all of them.
-		- The live file fits this. Its second Node.js entry came from a launch with nvm on PATH.
-		- Not shcl. A fresh scan and a reorder both save in the right order through the line-keeping save.
-	- Actual fix: The save merges three ways against the file. Another window's new entries stay at the end, its removals stay gone, and its edits stay unless this window changed the same entry.
-	- Branch: cfgorder
-	- Commit: c6d68c1
-	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
 	- Closed:
 
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
@@ -1506,6 +1457,91 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
 
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
+	- Status: Done
+	- Priority|Severity: Avg
+	- Opened: 20260930-100803
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
+	- Actual cause: All four are faults in the tests. None is timing.
+		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
+		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Progress log:
+		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
+	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
+	- Branch: wintests
+	- Commit: 731d528
+	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
+	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
+	- Swept:
+		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
+		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
+		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
+		- The Windows run this item came from named only these four. That full suite was not run again.
+	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
+	- Closed: 20260930-125357
+
+- Copy on select: on by default, and remembered across launches
+	- ID: 2026100307115829
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261003-071158
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Test environment: b23
+	- Requirements:
+		- Default to enabled.
+		- Remember selection across launches.
+	- Progress log:
+		- 20261003: `shell.copy_on_select` now ships on. An old config's commented `false` default line is refreshed to `true`. A line set by hand is left alone.
+		- 20261003: Turning Copy on select on or off from a menu saves it as the setting. New tabs and the next launch start with it. Other panes already open keep their own.
+		- 20261003: Unit tests pass. A look at the menu toggle in a real window is still owed.
+	- Branch: copysel
+
+- Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
+	- ID: 2026100220292617
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435574
+	- Target OS: All
+	- Test environment: b23
+	- Requirements:
+		- A warning icon next to Transparency, with a tip saying it relies on the desktop compositor and may not work.
+		- Move Transparency and its rows to the last section on the Background tab.
+	- Notes:
+		- The macOS half of the same note is 2026100114435574.
+	- Decisions:
+		- 20261003: No heading for the moved group. The Transparency toggle heads it, as other toggles head their groups.
+	- Progress log:
+		- 20261003: Transparency, Opacity % and Blur-behind are now the last group on the Background tab, after Contrast mask. The tab has no titled sections, so the group moved as it was, without a heading of its own.
+		- 20261003: A warning mark follows the Transparency label: a small triangle with an exclamation mark, in the label's color. Its tip reads "Transparency relies on the desktop compositor, and may not work on every desktop." The row's own tip is unchanged.
+		- 20261003: No row had a warning mark before, so this is a new row field, `warning:`, which any row with a label can use. The UI style guide and the Settings dialog design doc say so.
+		- 20261003: Fixed along the way: the dialog scaled a triangle's direction as if it were a length, so at any scale but 1 it pointed the wrong way. Nothing in the dialog drew one before this.
+		- 20261003: Looked at in a window at scale 1 and 2, both tips included. Not seen on Windows or macOS.
+	- Verified: unit tests, the format check, and lints for Linux and Windows pass.
+	- Note: `space_toggles_focused_boolean` now presses Space on Wallpaper, since that is the tab's first row after the move.
+	- Branch: seethrutip
+	- Test case: `transparency_is_the_last_group_on_the_background_tab`, `the_transparency_row_warns_that_it_needs_the_compositor`, `a_triangle_keeps_its_direction_at_any_scale` and `a_warning_needs_a_label_of_its_own`. Each failed on the old code and passes now.
+	- Closed:
+
 - Test files go under one dated folder in the system temp dir
 	- ID: 2026093013113320
 	- Type: Task
@@ -1715,6 +1751,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- Windows: open scripts and folders in SilkTerm
+	- ID: 2026093009280571
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
+	- Priority|Severity: Avg
+	- Opened: 20260930-092805
+	- Opened by: JC
+	- Assigned to: JC
+	- Related IDs: 2026092810510800
+	- Target OS: Windows
+	- Test environment: vm925w, Windows 11 25H2
+	- Requirements:
+		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
+			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
+			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
+			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
+		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
+			- Windows only. Other platforms don't show them.
+		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
+		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
+		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
+		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
+		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
+		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
+	- Branch: winassoc
+	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
+	- Acceptance signoff: 20260930-183819
 
 - The launch names an unreadable line two lines short of where the file has it
 	- ID: 2026100115322366
@@ -1949,74 +2017,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: The clipboard and handle leak items already said so. The nano item, which the ledger test pins, now does too.
 	- Test case: None, the items are notes.
 	- Closed: 20260929-170507
-
-- Four unit tests fail on Windows
-	- ID: 2026093010080316
-	- Type: Bug
-	- Status: Done
-	- Priority|Severity: Avg
-	- Opened: 20260930-100803
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w, `cargo test`
-	- Steps to reproduce: Run `cargo test` on Windows.
-	- Incorrect behavior:
-		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
-		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
-		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
-	- Expected behavior: They pass, as on Linux.
-	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
-	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
-	- Actual cause: All four are faults in the tests. None is timing.
-		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
-		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
-	- Progress log:
-		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
-	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
-	- Branch: wintests
-	- Commit: 731d528
-	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
-	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
-	- Swept:
-		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
-		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
-		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
-		- The Windows run this item came from named only these four. That full suite was not run again.
-	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
-	- Closed: 20260930-125357
-
-- Windows: open scripts and folders in SilkTerm
-	- ID: 2026093009280571
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
-	- Priority|Severity: Avg
-	- Opened: 20260930-092805
-	- Opened by: JC
-	- Assigned to: JC
-	- Related IDs: 2026092810510800
-	- Target OS: Windows
-	- Test environment: vm925w, Windows 11 25H2
-	- Requirements:
-		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
-			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
-			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
-			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
-		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
-			- Windows only. Other platforms don't show them.
-		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
-		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
-	- Estimated effort: Avg
-	- Progress log:
-		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
-		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
-		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
-		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
-		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
-	- Branch: winassoc
-	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
-	- Acceptance signoff: 20260930-183819
 
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082
