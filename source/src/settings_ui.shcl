@@ -18,7 +18,7 @@
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 ## Left to right along the top. Every heading below names one of these.
-tabs: "Silk", "Background", "Text", "Cursor", "Movement", "Themes", "Window", "Shell"
+tabs: "Silk", "Background", "Text", "Cursor", "Movement", "Themes", "Window", "Shell", "Keys"
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Layout
@@ -144,7 +144,7 @@ icons:
 ## keeps its column. A row back at the shallower depth ends the sub-group.
 ##
 ## kind:      heading | toggle | slider | color | text | radio | dropdown |
-##            pair | buttons | shells
+##            pair | buttons | shells | hotkey
 ## label:     what the row is called on screen
 ## setting:   the config.shcl path the revert arrow comments out
 ## range:     slider low, high
@@ -966,6 +966,154 @@ rows:
 		windows: true
 		help: "Add Open in SilkTerm to the right-click menu of folders and drives, and of the empty space in a folder. On Windows 11 it is under Show more options."
 		revert_help: "Take Open in SilkTerm off the folder menu."
+
+
+	## ---------------------------------------------------------------------- Keys
+
+	## Every hotkey under `keys:` in the config file, grouped the way the menu
+	## bar groups what they do. A row is set by pressing the new chord in its box;
+	## the file keeps the same spellings a hand edit would. The tab is a long list
+	## and scrolls, so it is left out of the dialog's height, as the Shell tab is.
+	KeysFile:
+		kind: heading
+		label: File
+		tab: Keys
+
+	HotkeyNewWindow:
+		label: "New window"
+		kind: hotkey
+		setting: keys.new_window
+
+	HotkeySettings:
+		label: "Settings"
+		kind: hotkey
+		setting: keys.settings
+
+	HotkeyQuit:
+		label: "Quit"
+		kind: hotkey
+		setting: keys.quit
+
+	KeysEdit:
+		kind: heading
+		label: Edit
+		tab: Keys
+
+	HotkeyCopy:
+		label: "Copy"
+		kind: hotkey
+		setting: keys.copy
+
+	HotkeyPaste:
+		label: "Paste"
+		kind: hotkey
+		setting: keys.paste
+
+	KeysView:
+		kind: heading
+		label: View
+		tab: Keys
+
+	HotkeyFontBigger:
+		label: "Increase font size"
+		kind: hotkey
+		setting: keys.font_bigger
+
+	HotkeyFontSmaller:
+		label: "Decrease font size"
+		kind: hotkey
+		setting: keys.font_smaller
+
+	HotkeyFontReset:
+		label: "Reset font size"
+		kind: hotkey
+		setting: keys.font_reset
+
+	HotkeyFullscreen:
+		label: "Fullscreen"
+		kind: hotkey
+		setting: keys.fullscreen
+
+	HotkeyContextMenu:
+		label: "Right-click menu"
+		kind: hotkey
+		setting: keys.context_menu
+		help: "Opens the right-click menu on the focused pane, the way the Menu key does by default."
+
+	KeysTabs:
+		kind: heading
+		label: Tabs
+		tab: Keys
+
+	HotkeyNewTab:
+		label: "New tab"
+		kind: hotkey
+		setting: keys.new_tab
+
+	HotkeyCloseTab:
+		label: "Close tab"
+		kind: hotkey
+		setting: keys.close_tab
+
+	HotkeyPrevTab:
+		label: "Previous tab"
+		kind: hotkey
+		setting: keys.previous_tab
+
+	HotkeyNextTab:
+		label: "Next tab"
+		kind: hotkey
+		setting: keys.next_tab
+
+	HotkeyMoveTabBack:
+		label: "Move tab left"
+		kind: hotkey
+		setting: keys.move_tab_back
+
+	HotkeyMoveTabForward:
+		label: "Move tab right"
+		kind: hotkey
+		setting: keys.move_tab_forward
+
+	KeysPanes:
+		kind: heading
+		label: Panes
+		tab: Keys
+
+	HotkeySplitRight:
+		label: "Split vertical"
+		kind: hotkey
+		setting: keys.split_right
+
+	HotkeySplitDown:
+		label: "Split horizontal"
+		kind: hotkey
+		setting: keys.split_down
+
+	HotkeyClosePane:
+		label: "Close pane"
+		kind: hotkey
+		setting: keys.close_pane
+
+	HotkeyFocusLeft:
+		label: "Go to pane on left"
+		kind: hotkey
+		setting: keys.focus_left
+
+	HotkeyFocusRight:
+		label: "Go to pane on right"
+		kind: hotkey
+		setting: keys.focus_right
+
+	HotkeyFocusUp:
+		label: "Go to pane above"
+		kind: hotkey
+		setting: keys.focus_up
+
+	HotkeyFocusDown:
+		label: "Go to pane below"
+		kind: hotkey
+		setting: keys.focus_down
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Graying

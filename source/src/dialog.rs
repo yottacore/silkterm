@@ -539,6 +539,15 @@ impl DialogWin {
 		self.mods
 	}
 
+	// A press while a Keys row waits for its new chord, which takes every key
+	// until it has one. False when nothing is waiting.
+	pub fn capture_key(&mut self, key: &winit::keyboard::Key) -> bool {
+		match &mut self.content {
+			Content::Settings(dialog) => dialog.capture_key(key, self.mods),
+			Content::About { .. } => false,
+		}
+	}
+
 	// Copy or Paste from the macOS menu bar, which takes Command+C and
 	// Command+V before the dialog sees them.
 	pub fn menu_edit(&mut self, cmd: EditCmd, clip: Option<&mut crate::clipboard::Clipboard>) {
@@ -1979,10 +1988,11 @@ fn caps_from(screen: (f32, f32), decor: (f32, f32), scale: f32) -> (f32, f32) {
 }
 
 // Magnetic snap: a size within `snap` of the one the content wants settles
-// exactly on it, and anything further away is left alone.
+// exactly on it, and anything further away is left alone. A part pixel rounds
+// up, since a window a fraction short of the content scrolls sideways by it.
 fn snap_to(have: f32, want: f32, snap: f32) -> f32 {
 	if (have - want).abs() <= snap {
-		want.round()
+		want.ceil()
 	} else {
 		have
 	}
@@ -2197,6 +2207,10 @@ mod tests {
 		assert_eq!(snap_to(far, want, DLG_SNAP), far);
 		// already there: the snap is a no-op, which is what stops it looping
 		assert_eq!(snap_to(want, want, DLG_SNAP), want);
+		// content a fraction wider than a whole pixel gets the next pixel, or the
+		// window is short of it and scrolls sideways by the fraction
+		assert_eq!(snap_to(705.0, 706.4, DLG_SNAP), 707.0);
+		assert_eq!(snap_to(707.0, 706.4, DLG_SNAP), 707.0);
 	}
 
 	// A scale change leaves the window at the pixels it already had, and the

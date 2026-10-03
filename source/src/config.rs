@@ -3566,11 +3566,18 @@ fn read_keys(r: &Reader) -> Vec<(crate::input::Hotkey, Vec<crate::keys::Chord>)>
 		.collect()
 }
 
-// Put a changed hotkey's chords in the file, by the platform's own names.
+// Put a hotkey's changed value in the file, by the platform's own names. Only
+// the value set for that hotkey is written, never what it was left with after
+// another took a chord from it, so the file says what a hand edit would. One
+// put back to its default writes nothing here: the Settings revert puts the
+// template's line back (`revert_keys`).
 fn write_keys(doc: &mut shcl::Document, orig: &crate::keys::Bindings, now: &crate::keys::Bindings) {
 	for (hotkey, path) in crate::keys::config_paths() {
-		let chords = now.chords(hotkey);
-		if chords != orig.chords(hotkey) {
+		let own = now.own(hotkey);
+		if own == orig.own(hotkey) {
+			continue;
+		}
+		if let Some(chords) = own {
 			doc.put_string(
 				&path,
 				&crate::keys::value_text(chords, cfg!(target_os = "macos")),
@@ -8213,11 +8220,16 @@ mod tests {
 		set_config_override(path.clone());
 		reload_from_disk(); // lays the template down
 		let pristine = std::fs::read_to_string(&path).unwrap();
-		let flips: [(&str, fn(&mut Settings)); 2] = [
+		let flips: [(&str, fn(&mut Settings)); 3] = [
 			("performance.automatic", |s| {
 				s.performance_automatic = !s.performance_automatic;
 			}),
 			("scroll.smooth", |s| s.scroll_smooth = !s.scroll_smooth),
+			("keys.close_pane", |s| {
+				s.keys = s
+					.keys
+					.with_own(crate::input::Hotkey::ClosePane, Some(Vec::new()));
+			}),
 		];
 		for (key, flip) in flips {
 			let base = reload_from_disk();
@@ -10242,8 +10254,20 @@ mod tests {
 			let mut edited = lines.clone();
 			edited[index] = &bare;
 			let text = edited.join("\n") + "\n";
+			let mut loaded = resolve(read_raw(&text, path).0);
+			// A hotkey uncommented is set in the file, which Settings shows on its
+			// Keys tab, but it answers to the same chords.
+			for (hotkey, _) in crate::keys::config_paths() {
+				assert_eq!(
+					loaded.keys.chords(hotkey),
+					base.keys.chords(hotkey),
+					"uncommenting `{}` changes what {hotkey:?} answers to",
+					lines[index].trim()
+				);
+			}
+			loaded.keys = base.keys.clone();
 			assert!(
-				resolve(read_raw(&text, path).0) == base,
+				loaded == base,
 				"uncommenting `{}` changes what loads",
 				lines[index].trim()
 			);

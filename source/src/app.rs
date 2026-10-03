@@ -224,6 +224,10 @@ impl App {
 			} if key_is_typed(key_event.state, is_synthetic) => {
 				let key_event = input::name_typed(key_event);
 				if let Some(d) = &mut self.dialog {
+					if d.capture_key(&key_event.logical_key) {
+						self.dialog_dirty = true;
+						return;
+					}
 					match &key_event.logical_key {
 						Key::Named(NamedKey::Escape) => act = d.key_escape(),
 						Key::Named(NamedKey::Enter) => {
