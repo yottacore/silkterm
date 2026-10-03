@@ -43,7 +43,7 @@ fi
 
 ## Everything below installs for real. One scratch tree, thrown away at the end.
 work="$(mktemp -d)"
-trap 'rm -rf "${work}"' EXIT
+trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 
 ## A stand-in release: for each version, a program that records that it ran
 ## and a line naming its version, plus the checksums file the installer

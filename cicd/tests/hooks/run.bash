@@ -28,7 +28,8 @@ if ! command -v rustfmt >/dev/null 2>&1; then
 fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-hooks.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+trap fEnd EXIT
 
 ## A repository of our own, so nothing here can reach the real one. The identity
 ## is local because this tree has no global one (user.useConfigOnly).

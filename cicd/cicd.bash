@@ -485,7 +485,8 @@ if [[ -n "${LINT_LOG_DIR:-}" ]] && mkdir -p "${root}/${LINT_LOG_DIR}" 2>/dev/nul
 		END { for (; blanks > 0; blanks--) print "" }
 	' | tee "${lint_log}.part") 2>&1
 	lint_tee=$!
-	trap 'rc=$?; fFinishLog; exit $rc' EXIT
+	## fTestDir_End before fFinishLog, so its line reaches the log.
+	trap 'rc=$?; fTestDir_End "${rc}"; fFinishLog; exit $rc' EXIT
 fi
 
 ## Stage 0: remote sync. Make sure the local branch can be safely refreshed from

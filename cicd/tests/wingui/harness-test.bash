@@ -24,7 +24,7 @@ fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; el
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-wingui.XXXXXX")"
 declare -a started=()
-fEnd(){ local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; rm -rf "${work}"; }
+fEnd(){ local -r rc=$?; local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; rm -rf "${work}"; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ## The binary. A stand-in win-remote records what it is asked and keeps the

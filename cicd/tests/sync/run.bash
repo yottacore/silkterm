@@ -23,7 +23,7 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-sync.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset GIT_DIR GIT_WORK_TREE
 

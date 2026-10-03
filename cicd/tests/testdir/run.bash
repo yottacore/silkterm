@@ -30,7 +30,7 @@ fShowTail(){ tail -n 25 "${1}" | sed 's/^/      /'; }
 
 work="$(mktemp -d)"
 declare -a locked=()
-fEnd(){ local dir; for dir in "${locked[@]}"; do chmod 755 "${dir}"; rm -rf "${dir}"; done; rm -rf "${work}"; }
+fEnd(){ local -r rc=$?; local dir; for dir in "${locked[@]}"; do chmod 755 "${dir}"; rm -rf "${dir}"; done; rm -rf "${work}"; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 stampRe='^test_silkterm_[0-9]{8}-[0-9]{8}$'

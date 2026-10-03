@@ -31,7 +31,7 @@ if ! command -v makensis >/dev/null 2>&1; then
 	echo "  skip installer step (no makensis)"
 else
 	work="$(mktemp -d)"
-	trap 'rm -rf "${work}"' EXIT
+	trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 
 	## A stand-in repository holding nothing but the template and icon the step reads.
 	fakeRoot="${work}/repo"
@@ -95,7 +95,7 @@ fi
 ## and the two package tools, so what is checked is the names, the calls and
 ## the checksums.
 pkgWork="$(mktemp -d)"
-trap 'rm -rf "${work:-}" "${pkgWork}"' EXIT
+trap 'rc=$?; rm -rf "${work:-}" "${pkgWork}"; fTestDir_End "${rc}"' EXIT
 (
 	engine="${realRoot}/cicd/cicd.bash"
 	fEcho(){ echo "    $*"; }

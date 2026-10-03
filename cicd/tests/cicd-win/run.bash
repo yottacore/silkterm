@@ -23,7 +23,7 @@ if ! command -v pwsh >/dev/null 2>&1; then
 fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-cicdwin.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }

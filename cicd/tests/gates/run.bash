@@ -23,7 +23,7 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-gates.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 
 ## A run: cicd.bash's logging block lifted out as it stands, then two warnings
 ## with a pause between them that the test controls.
@@ -33,7 +33,7 @@ fMakeRun(){  ## fMakeRun <dir> <exit code>
 	{
 		echo 'set -Eeuo pipefail'
 		echo "root='${dir}'; LINT_LOG_DIR=lint; stamp=20260101-000000; _letterbox='****'"
-		echo 'gfs_rotate(){ :; }'
+		echo 'gfs_rotate(){ :; }; fTestDir_End(){ :; }'
 		sed -n '/^fFinishLog(){/,/^fi$/p' "${cicd}/cicd.bash"
 		echo 'echo "warning: unused variable one"'
 		echo "touch '${dir}/ready'"
