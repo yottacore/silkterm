@@ -697,7 +697,7 @@ impl Default for Settings {
 			tab_shows_title: true,
 			tab_shows_directory: true,
 			title_shows_tab: true,
-			idle_release: false,
+			idle_release: true,
 			idle_release_hidden_min: 30,
 			idle_release_min: 240,
 			tab_regular_pct: 10.0,
@@ -4158,6 +4158,8 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("colors.from_wallpaper", "false  ## Default"),
 	// copy on select shipped off
 	("shell.copy_on_select", "false  ## Default"),
+	// so did letting an idle window's GPU device go
+	("window.idle_release", "false  ## Default"),
 	// Seven lines named an example rather than the default they were marked
 	// with, so uncommenting one changed what loaded. The values below are the
 	// examples they used to carry.
@@ -6715,7 +6717,7 @@ window:
 	## take it back the moment the window is used again. The first wait is for
 	## a window that is minimized or covered, the second for one that is only
 	## unfocused with nothing printing.
-	# idle_release: false  ## Default
+	# idle_release: true  ## Default
 	# idle_release_hidden_min: 30  ## Default
 	# idle_release_min: 240  ## Default
 
@@ -11300,6 +11302,22 @@ mod tests {
 		assert!(!resolve(read_raw("shell.copy_on_select: false\n", p).0).copy_on_select);
 	}
 
+	// Test ID: Erg8fz0
+	#[test]
+	fn idle_release_ships_on() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(Settings::default().idle_release);
+		assert!(resolve(read_raw("", p).0).idle_release, "default on");
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "window.idle_release").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# idle_release: true  ## Default")
+		);
+		assert!(!resolve(read_raw("window.idle_release: false\n", p).0).idle_release);
+	}
+
 	// Test ID: Em1S9yq
 	#[test]
 	fn hyperlink_keys_parse_in_their_block() {
@@ -12856,6 +12874,16 @@ mod tests {
 
 	// The table above is kept by hand, so nothing can catch an entry that was
 	// simply never added. This names the one default that changed most recently.
+	// Test ID: Erg8g2c
+	#[test]
+	fn an_existing_config_learns_that_the_idle_release_ships_on() {
+		let out = migrate_config_text("window:\n\t# idle_release: false  ## Default\n")
+			.expect("the outgoing default should be refreshed");
+		assert!(out.contains("# idle_release: true  ## Default"), "{out:?}");
+		// an active line is their own choice
+		assert!(migrate_config_text("window:\n\tidle_release: false\n").is_none());
+	}
+
 	// Test ID: EreA6Db
 	#[test]
 	fn an_existing_config_learns_that_copy_on_select_ships_on() {

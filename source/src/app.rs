@@ -10111,10 +10111,20 @@ mod tests {
 			bench_busy: false,
 			since,
 		};
-		let mut cfg = config::Settings::default();
+		// The release shipped off until 2026100312470540 turned it on by default,
+		// which `idle_release_ships_on` pins now.
+		// let mut cfg = config::Settings::default();
+		// assert!(
+		// 	release_deadline(&cfg, &idle(false, true)).is_none(),
+		// 	"off by default"
+		// );
+		let mut cfg = config::Settings {
+			idle_release: false,
+			..config::Settings::default()
+		};
 		assert!(
 			release_deadline(&cfg, &idle(false, true)).is_none(),
-			"off by default"
+			"switched off"
 		);
 		cfg.idle_release = true;
 		cfg.idle_release_hidden_min = 30;
