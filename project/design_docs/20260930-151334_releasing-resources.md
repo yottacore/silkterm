@@ -40,7 +40,7 @@ A terminal is often left open for days, many at a time. SilkTerm is built so tha
 
 - A minimized window, a covered window where the desktop reports it, and a tab that is not shown draw nothing. They never stop reading their programs' output, and they catch up in one cut when shown.
 
-- "Free resources when idle" on the Window tab, off by default, lets an unused window give its GPU device back.
+- "Free resources when idle" on the Window tab, on by default, lets an unused window give its GPU device back.
 	- A window counts as unused with no input, no focus change and no output from any pane while it can be seen.
 	- It lets go after "Minutes when hidden", 30 by default, if minimized or covered, and after "Minutes otherwise", 240 by default, if only unfocused.
 	- It takes the device back on any sign of life: a key, a click, the pointer entering, focus, being shown, a shell printing while it can be seen, or the desktop asking for a repaint.
@@ -88,7 +88,7 @@ A terminal is often left open for days, many at a time. SilkTerm is built so tha
 
 ### Letting the GPU go on a long idle
 
-- Off by default. Switched on, a window that has sat unused lets its GPU device go, with everything uploaded to it, and takes it back the moment it is used again. The shells run on and the grid keeps up. Only drawing stops. The case is many windows open for days, each holding a device, a swapchain, two glyph atlases, the scrim's textures and a wallpaper the whole time.
+- On by default. A window that has sat unused lets its GPU device go, with everything uploaded to it, and takes it back the moment it is used again. The shells run on and the grid keeps up. Only drawing stops. The case is many windows open for days, each holding a device, a swapchain, two glyph atlases, the scrim's textures and a wallpaper the whole time.
 
 - Unused means no input, no focus change and no output from any pane while the window can be seen. Output into a hidden window does not count, or a program printing in a minimized window would keep the device for good. There are two waits, both in minutes on the Window tab. A shorter one is for a window that is minimized, or covered where the desktop reports it. A longer one is for a window that is only unfocused, since that one may be on a second screen being read. A window with focus and on screen never lets go.
 
@@ -160,6 +160,8 @@ So the switch is detected instead. A watcher notes the console the window starte
 
 - Any output restarting the idle clock. Only output while the window can be seen does. Backlog: "The feature that is supposed to release the GPU after a timeout, doesn't seem to be doing anything".
 
+- The release shipped off by default. It is on by default since before RC1. Backlog: "Free resources when idle: on by default".
+
 ## Research findings
 
 - About 3 ms to let the device go and about 25 ms to take it back, with no CPU at all while released. Measured on Linux under software GL only.
@@ -187,6 +189,8 @@ So the switch is detected instead. A watcher notes the console the window starte
 - "Show in window title, if GPU and CPU savings are in effect" (Opened 20260918-112508)
 
 - "After a crash in VSCodium required switching to VT-1" (Opened 20260917-164802)
+
+- "Free resources when idle: on by default" (Opened 20261003-124705)
 
 - "Severe - VT bug" (Opened 20260722-100516)
 

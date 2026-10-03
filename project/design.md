@@ -390,7 +390,7 @@ Three defects came out of building it, all fixed with it: a program could put co
 
 ### Releasing resources
 
-A window nobody is looking at draws no frames, and a minimized window or hidden tab freezes its rendering but never its reading. Optionally, an unused window gives its GPU device back and takes it again on any sign of life. After a return from a text console, the whole device is rebuilt. Full design: [Releasing resources](design_docs/20260930-151334_releasing-resources.md).
+A window nobody is looking at draws no frames, and a minimized window or hidden tab freezes its rendering but never its reading. By default, an unused window gives its GPU device back and takes it again on any sign of life. After a return from a text console, the whole device is rebuilt. Full design: [Releasing resources](design_docs/20260930-151334_releasing-resources.md).
 
 ### Configuration format
 
