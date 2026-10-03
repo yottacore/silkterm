@@ -34,6 +34,44 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- When a shcl upgrade breaks the config format, keep the old file and write a new one from scratch
+	- ID: 2026100312470546
+	- Type: Feature
+	- Status: Waiting on signoff
+	- Needs external testing: The new unit tests on Windows, at the next vm925w run.
+	- Priority: Avg
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100220292612, 2026100315553545
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When wiring a new version of shcl into the code, first see if it has a new API to do the conversion, or at least help with it.
+		- Check if the new shcl version has breaking changes. If so:
+			- Rename the latest config file `[origname]_backup_YYYYmmDD-HHMMSS_format-v[shcl version].shcl`.
+			- Write a new config file with the same path and name as before, from scratch through shcl, using whatever settings and conversions shcl can handle or are salvageable.
+		- Future versions of shcl might do the config backup and conversion. Be careful not to race, conflict with, or trample what shcl might do.
+	- Notes:
+		- 20261003: 2026100220292612 already keeps a copy on every format upgrade, as `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`. N is the old file's Format number, which has matched shcl's major version so far. It copies the file and then converts it in place, rather than writing a new one from scratch.
+		- 20261003: shcl 3.0's `migrate_unstamped` is the help shcl gives today. It respells a 2.x file, and does no backup.
+	- Decisions:
+		- 20261003: Keep the in-place conversion whenever shcl can migrate the file. Write a new file from scratch, keeping what still parses, only when shcl can't read or migrate it. The old file is kept under the name 2026100220292612 already uses, `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, not a second scheme.
+	- Progress log:
+		- 20261003: shcl b10c2009, and its dev branch at e9e4a6c, have `migrate`, `migrate_unstamped` and `format_version`, and nothing that converts a whole file or keeps a copy. The CLI's `migrate --write` keeps `config_old_v2.shcl`, but the library has no such call, so nothing here can race it today.
+		- 20261003: A file shcl cannot migrate is one its stamped `migrate` gives no Format line, as for a raw block that never closes. `migrate_unstamped`, the call for a program that writes its own footer, cannot say so, so the stamped call is asked too. Filed as shcl friction, 2026100315553545.
+		- 20261003: A file shcl cannot read is one that is not UTF-8. Before, such a file loaded as all defaults with no message, and a Settings save said it saved and wrote nothing. In an older format it is now written new, and a line that does not decode is left out. A current-format file that is not UTF-8 is no upgrade and is left as it was.
+		- 20261003: The new file is the template with every setting that still reads carried to it, as the pre-nesting conversion carries values. Themes, per-monitor sizes and the shell list carry too. Each line shcl cannot read, and each setting with nowhere to go, counts as lost.
+		- 20261003: Lost settings are said by the same writer, terminal line and notice as a conversion in place. The text says the file could not be converted in place, so a new one was written, and how many settings could not be carried over. The notice title stays "Settings not converted".
+		- 20261003: Before this, a 2.x file with a raw block that never closed was converted in place with no copy kept, since the new footer landed inside the block and the file never read as a newer format. It now gets a copy and a new file.
+		- 20261003: The choice is made in one place, `upgrade` in config.rs, so a later shcl that converts whole files can take it over there.
+		- 20261003: README and design.md say what happens to such a file.
+	- Verified: The unit suite passes, 1074 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID check passes. With the old behavior put back, the three rewrite tests failed, and the pipeline test failed its can't-migrate, can't-read and notice checks. The new fuzz target ran 36754 cases clean in 60 seconds, and failed on seed 68 with unreadable lines carried over.
+	- Swept: Every reader that parses the settings file goes through `read_settings_text`: the launch, `read_doc` for Settings saves and the shell adoption, and the window size refresh. The other launch steps run after the conversion and read what it wrote. Revert, clear and the rating write still write the text as read and never convert, as before.
+	- Branch: fmtfresh
+	- Commit: 8553a33
+	- Test case: `a_file_shcl_cannot_migrate_is_written_new` (ErgDo2H), `a_file_shcl_cannot_read_is_written_new` (ErgDoNP), `a_current_file_shcl_cannot_read_is_left_alone` (ErgDoiP), `a_save_on_a_file_shcl_cannot_read_writes_it_new` (ErgDp3N), `a_rewritten_file_notice_says_it_was_written_new` (ErgDpOZ), the fuzz target `an_upgrade_settles_in_one_pass` (ErgHEfO), and `cicd/tests/config-convert/run.bash` (ErgDpjX).
+
 - The shipped prompts no longer name real machines
 	- ID: 2026100314195000
 	- Type: Enhancement
@@ -79,61 +117,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: cfgorder
 	- Commit: c6d68c1
 	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
-	- Closed:
-
-- At the RC release, convert the config to the new format and keep the old file beside it
-	- ID: 2026100220292612
-	- Type: Feature
-	- Status: Testing
-	- Needs external testing: A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: the old-format item about removing the code that migrates old config files.
-	- Target OS: All
-	- Test environment: b23
-	- Requirements:
-		- Upon RC release, convert settings to the new format.
-		- Keep the old config file under a suffixed name, still ending in `.shcl`.
-		- If any settings can't be salvaged, warn the user.
-	- Notes:
-		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
-			- Note: 20261003: The shcl 3 conversion keeps a copy now. See the progress log.
-	- Decisions:
-		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
-		- 20261003: Every older version is kept, never one per format. The copy is named `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, with the time it was made and the format it had. This replaces the `config.format<N>.shcl` name above.
-		- 20261003: Settings the conversion can't keep get a warning dialog, not only the terminal message.
-		- 20261003: Two windows converting the same file in the same second may leave one copy. The notice title "Settings not converted" is fine.
-		- 20261003: A Settings save that converts the file warns only when settings could not be converted. A clean conversion stays quiet.
-	- Progress log:
-		- 20261003: Any write that moves the file to a newer format first copies it to `config.format<N>.shcl` beside it. N is the Format number the file had. A file with no Format line counts as 2, since that is how the conversion reads it. The copy is made in the writer every settings write goes through, so a Settings save that converts a file a busy launch left alone keeps one too.
-		- 20261003: A copy already there is never replaced, and the file is still converted. If the copy can't be made, the write is refused. The copy is written under a name of its own and then linked into place, so two windows converting at once leave one whole copy. On a filesystem with no hard links it is written in place.
-		- 20261003: A 2.x line holding a list in brackets has no 3.0 spelling. It stays as written and sets nothing, and the launch that converts prints the count and where the copy is. Unreadable lines and unknown keys were already reported at every launch, so those are left to that.
-		- 20261003: The footer refresh no longer puts the Format line on a file still in 2.x spellings. A file whose conversion was put off could get the line without the respelling, and then never convert.
-		- 20261003: The flat pre-nesting conversion keeps its `.bak`. It is a layout change and has no format number. A flat file has no Format line, so the 2.x step that runs before it already keeps the untouched original as `config.format2.shcl`.
-		- 20261003: README and design.md say where the copy goes.
-		- 20261003: The copy is now `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, replacing the `config.format<N>.shcl` name above. The time is local, as the test folders and the pipeline's log names are. A file named by `--config` uses its own name, less any `.shcl`, in place of `config`: `mine.shcl` keeps `mine_backup_..._format-v2.shcl`, and `mine.conf` keeps `mine.conf_backup_..._format-v2.shcl`.
-		- 20261003: Every conversion makes a new copy, and none is ever replaced. The link-or-fail step stays. A name already taken in the same second moves on to `_2` before the `.shcl`, then `_3`, and so on. A name already holding the same bytes counts as the same copy, so two windows converting the same file at once still leave one.
-		- 20261003: Settings the conversion can't keep now also get the notice window a refused save uses, once the terminal is on screen. Titled "Settings not converted", it names the file, says how many settings could not be converted and now do nothing, and gives the copy's name in the same folder. Windows shows the same text in the system message box. The terminal line is unchanged apart from the new name.
-		- 20261003: A Settings save that converts a file a busy launch left alone keeps a copy, but says nothing about lost settings, on the terminal or in a notice. That was already so before this round.
-		- 20261003: `a_copy_already_there_is_left_as_it_was` (EreLZMm) is reworked as `a_second_conversion_keeps_a_second_copy`, since a copy already there no longer stops a new one. `every_settings_write_goes_through_the_restore` now looks for the publish in `write_config_keeping`, which `write_config_atomic` calls, so the one writer still names it once.
-		- 20261003: Settings the conversion can't keep are now said by the writer every settings write goes through, not by the launch step. So a Settings save that converts a file a busy launch left alone gives the same terminal line and the same "Settings not converted" notice, with the count and the copy. A clean conversion says nothing. The launch says it the same way as before.
-		- 20261003: The count is read from the copy, which is the file as it was. The window takes it from its event loop as for a launch, so the notice comes up once, in the window that wrote.
-		- 20261003: Per write path. A Settings save, a window or font size save, a menu toggle and a shell list update all go through `persist`, which converts a file a launch left alone, so each reports a loss. The default shell move reads the file the same way and reports too. The rating write, revert, clear, backfill, migrate and the wallpaper repair write the text as it was read and never convert. The pre-nesting conversion runs after the 2.x step, so it finds the file converted already. A new file and a PowerShell profile have nothing to convert.
-	- Note: Launch notices go to the terminal, like every other launch message about the file. A desktop launch or a Windows release build shows none of them.
-		- Note: 20261003: Settings the conversion can't keep are the exception now, with a notice window too.
-	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
-		- 20261003: The unit suite passes, 1057 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID, markdown and table checks pass. With a taken name counted as done, the second-copy and same-second tests failed. With same bytes not counted as the same copy, the same-second and race tests failed. With the loss not handed to the window, the notice test failed. With no hard links, the race test saw a part copy in three runs out of three.
-		- 20261003: Seen on Linux: a launch on a 2.x `--config mine.shcl` with a list in brackets made `mine_backup_<time>_format-v2.shcl` and put the notice up over the terminal after its first frame. The next launch made no copy and showed no notice.
-		- 20261003: On vm925w at 8877157, on NTFS, a lone `cargo test` passed, 1035 tests. These copy tests passed by name: `a_launch_keeps_the_2x_file_beside_the_converted_one`, `a_second_conversion_keeps_a_second_copy`, `copies_made_in_one_second_never_replace_each_other`, `launches_converting_at_once_leave_one_whole_copy`, `the_footer_never_stamps_a_2x_file`, `a_setting_the_conversion_cannot_keep_is_reported`, `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` and `every_settings_write_goes_through_the_restore`. `a_write_that_cannot_keep_the_old_file_is_refused` is Unix only, so it does not run there.
-		- 20261003: The unit suite passes, 1059 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID and markdown checks pass. With the loss said only by the launch step again, the new save test failed and the launch test still passed.
-	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
-		- 20261003: No `format2` or `.format<N>` name is left in the code, README or design.md. The local-time stamp is one function now, shared with the test folder. The notice is put up only in `show_notice`, and `take_conversion_loss` is read only in the window's event loop.
-		- 20261003: Every caller of `write_config_atomic` and `write_doc` was checked for whether it can convert, per the progress log. The loss is worked out only in `write_config_keeping`, and `convert_shcl2_config` no longer has its own copy of it.
-	- Branch: fmtcopy, fmtbak, fmtwarn
-	- Commit: 6531c55, 6d10356, aaec440, d154a64
-	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_second_conversion_keeps_a_second_copy` (EreLZMm), `copies_made_in_one_second_never_replace_each_other` (Erf0QeH), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX), `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` (Erf0Qhu), `a_conversion_notice_says_how_many_and_where_the_copy_is` (Erf0Qkx), `a_save_that_loses_a_setting_converting_leaves_a_notice_for_the_window` (ErfTRqP).
 	- Closed:
 
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
@@ -764,41 +747,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
-- When a shcl upgrade breaks the config format, keep the old file and write a new one from scratch
-	- ID: 2026100312470546
-	- Type: Feature
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261003-124705
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100220292612
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- When wiring a new version of shcl into the code, first see if it has a new API to do the conversion, or at least help with it.
-		- Check if the new shcl version has breaking changes. If so:
-			- Rename the latest config file `[origname]_backup_YYYYmmDD-HHMMSS_format-v[shcl version].shcl`.
-			- Write a new config file with the same path and name as before, from scratch through shcl, using whatever settings and conversions shcl can handle or are salvageable.
-		- Future versions of shcl might do the config backup and conversion. Be careful not to race, conflict with, or trample what shcl might do.
-	- Notes:
-		- 20261003: 2026100220292612 already keeps a copy on every format upgrade, as `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`. N is the old file's Format number, which has matched shcl's major version so far. It copies the file and then converts it in place, rather than writing a new one from scratch.
-		- 20261003: shcl 3.0's `migrate_unstamped` is the help shcl gives today. It respells a 2.x file, and does no backup.
-
-- A pipeline test that converts old config files
-	- ID: 2026100313404573
+- shcl: `migrate_unstamped` cannot say a migration did not finish
+	- ID: 2026100315553545
 	- Type: Task
+	- Status: Stalled
+	- Priority: Low
+	- Opened: 20261003-155535
+	- Opened by: CC
+	- Related IDs: 2026100312470546
+	- Steps to reproduce:
+		- `shcl::migrate_unstamped("notes: ```\nnever closed\n", true)`, at b10c2009 or dev e9e4a6c.
+	- Incorrect behavior: it returns `current: false`, `ambiguous: 0` and `lost: 0`, the same as a migration that finished. A program that then writes its own footer, which is what `migrate_unstamped` is for, puts the Format line inside the raw block, so the file never reads as current. Only the stamped `migrate` shows it, by leaving the Format line off.
+	- Expected behavior: `Migration` says when the migration could not finish, so the caller can tell without running the stamped call as well.
+	- Reproduced: 20261003 on b23, through SilkTerm. A 2.x file with a raw block that never closed was converted in place and no copy of the old file was kept, because the result never read as a newer format.
+	- Progress log:
+		- A missing capability, and a silent wrong answer for a caller that writes its own footer. SilkTerm asks the stamped `migrate` as well, in `upgrade` in config.rs, and writes such a file new (2026100312470546).
+		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
+		- Stalled until a shcl beta has it.
+
+- A current-format config that is not UTF-8 loads as defaults with no message, and a Settings save on it says it worked but writes nothing
+	- ID: 2026100315581313
+	- Type: Bug
 	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261003-134045
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100220292612, 2026100312470546
+	- Severity: Avg
+	- Opened: 20261003-155813
+	- Opened by: CC
+	- Related IDs: 2026100312470546
 	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- A test in the pipeline that creates config files in the old shcl formats, and tests the automatic conversion, the one SilkTerm does without help from shcl.
-		- Run it to close 2026100220292612.
+	- Steps to reproduce:
+		- Put a byte that is not valid UTF-8 into a config file that already has the current Format line.
+		- Launch, then change a setting in Settings and save.
+	- Incorrect behavior: The launch shows defaults and says nothing about the file. The save reports success, and the file is unchanged.
+	- Expected behavior: The launch says the file could not be read. A save either writes or says it did not.
+	- Reproduced: No. Found by reading the code while working 2026100312470546, which handles only an old-format file.
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
@@ -1496,6 +1477,87 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- At the RC release, convert the config to the new format and keep the old file beside it
+	- ID: 2026100220292612
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: the old-format item about removing the code that migrates old config files.
+	- Target OS: All
+	- Test environment: b23
+	- Requirements:
+		- Upon RC release, convert settings to the new format.
+		- Keep the old config file under a suffixed name, still ending in `.shcl`.
+		- If any settings can't be salvaged, warn the user.
+	- Notes:
+		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
+			- Note: 20261003: The shcl 3 conversion keeps a copy now. See the progress log.
+	- Decisions:
+		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
+		- 20261003: Every older version is kept, never one per format. The copy is named `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, with the time it was made and the format it had. This replaces the `config.format<N>.shcl` name above.
+		- 20261003: Settings the conversion can't keep get a warning dialog, not only the terminal message.
+		- 20261003: Two windows converting the same file in the same second may leave one copy. The notice title "Settings not converted" is fine.
+		- 20261003: A Settings save that converts the file warns only when settings could not be converted. A clean conversion stays quiet.
+	- Progress log:
+		- 20261003: Any write that moves the file to a newer format first copies it to `config.format<N>.shcl` beside it. N is the Format number the file had. A file with no Format line counts as 2, since that is how the conversion reads it. The copy is made in the writer every settings write goes through, so a Settings save that converts a file a busy launch left alone keeps one too.
+		- 20261003: A copy already there is never replaced, and the file is still converted. If the copy can't be made, the write is refused. The copy is written under a name of its own and then linked into place, so two windows converting at once leave one whole copy. On a filesystem with no hard links it is written in place.
+		- 20261003: A 2.x line holding a list in brackets has no 3.0 spelling. It stays as written and sets nothing, and the launch that converts prints the count and where the copy is. Unreadable lines and unknown keys were already reported at every launch, so those are left to that.
+		- 20261003: The footer refresh no longer puts the Format line on a file still in 2.x spellings. A file whose conversion was put off could get the line without the respelling, and then never convert.
+		- 20261003: The flat pre-nesting conversion keeps its `.bak`. It is a layout change and has no format number. A flat file has no Format line, so the 2.x step that runs before it already keeps the untouched original as `config.format2.shcl`.
+		- 20261003: README and design.md say where the copy goes.
+		- 20261003: The copy is now `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, replacing the `config.format<N>.shcl` name above. The time is local, as the test folders and the pipeline's log names are. A file named by `--config` uses its own name, less any `.shcl`, in place of `config`: `mine.shcl` keeps `mine_backup_..._format-v2.shcl`, and `mine.conf` keeps `mine.conf_backup_..._format-v2.shcl`.
+		- 20261003: Every conversion makes a new copy, and none is ever replaced. The link-or-fail step stays. A name already taken in the same second moves on to `_2` before the `.shcl`, then `_3`, and so on. A name already holding the same bytes counts as the same copy, so two windows converting the same file at once still leave one.
+		- 20261003: Settings the conversion can't keep now also get the notice window a refused save uses, once the terminal is on screen. Titled "Settings not converted", it names the file, says how many settings could not be converted and now do nothing, and gives the copy's name in the same folder. Windows shows the same text in the system message box. The terminal line is unchanged apart from the new name.
+		- 20261003: A Settings save that converts a file a busy launch left alone keeps a copy, but says nothing about lost settings, on the terminal or in a notice. That was already so before this round.
+		- 20261003: `a_copy_already_there_is_left_as_it_was` (EreLZMm) is reworked as `a_second_conversion_keeps_a_second_copy`, since a copy already there no longer stops a new one. `every_settings_write_goes_through_the_restore` now looks for the publish in `write_config_keeping`, which `write_config_atomic` calls, so the one writer still names it once.
+		- 20261003: Settings the conversion can't keep are now said by the writer every settings write goes through, not by the launch step. So a Settings save that converts a file a busy launch left alone gives the same terminal line and the same "Settings not converted" notice, with the count and the copy. A clean conversion says nothing. The launch says it the same way as before.
+		- 20261003: The count is read from the copy, which is the file as it was. The window takes it from its event loop as for a launch, so the notice comes up once, in the window that wrote.
+		- 20261003: Per write path. A Settings save, a window or font size save, a menu toggle and a shell list update all go through `persist`, which converts a file a launch left alone, so each reports a loss. The default shell move reads the file the same way and reports too. The rating write, revert, clear, backfill, migrate and the wallpaper repair write the text as it was read and never convert. The pre-nesting conversion runs after the 2.x step, so it finds the file converted already. A new file and a PowerShell profile have nothing to convert.
+		- 20261003: The pipeline test for old config files passed (2026100313404573), which closes this item.
+	- Note: Launch notices go to the terminal, like every other launch message about the file. A desktop launch or a Windows release build shows none of them.
+		- Note: 20261003: Settings the conversion can't keep are the exception now, with a notice window too.
+	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
+		- 20261003: The unit suite passes, 1057 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID, markdown and table checks pass. With a taken name counted as done, the second-copy and same-second tests failed. With same bytes not counted as the same copy, the same-second and race tests failed. With the loss not handed to the window, the notice test failed. With no hard links, the race test saw a part copy in three runs out of three.
+		- 20261003: Seen on Linux: a launch on a 2.x `--config mine.shcl` with a list in brackets made `mine_backup_<time>_format-v2.shcl` and put the notice up over the terminal after its first frame. The next launch made no copy and showed no notice.
+		- 20261003: On vm925w at 8877157, on NTFS, a lone `cargo test` passed, 1035 tests. These copy tests passed by name: `a_launch_keeps_the_2x_file_beside_the_converted_one`, `a_second_conversion_keeps_a_second_copy`, `copies_made_in_one_second_never_replace_each_other`, `launches_converting_at_once_leave_one_whole_copy`, `the_footer_never_stamps_a_2x_file`, `a_setting_the_conversion_cannot_keep_is_reported`, `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` and `every_settings_write_goes_through_the_restore`. `a_write_that_cannot_keep_the_old_file_is_refused` is Unix only, so it does not run there.
+		- 20261003: The unit suite passes, 1059 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID and markdown checks pass. With the loss said only by the launch step again, the new save test failed and the launch test still passed.
+	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
+		- 20261003: No `format2` or `.format<N>` name is left in the code, README or design.md. The local-time stamp is one function now, shared with the test folder. The notice is put up only in `show_notice`, and `take_conversion_loss` is read only in the window's event loop.
+		- 20261003: Every caller of `write_config_atomic` and `write_doc` was checked for whether it can convert, per the progress log. The loss is worked out only in `write_config_keeping`, and `convert_shcl2_config` no longer has its own copy of it.
+	- Branch: fmtcopy, fmtbak, fmtwarn
+	- Commit: 6531c55, 6d10356, aaec440, d154a64
+	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_second_conversion_keeps_a_second_copy` (EreLZMm), `copies_made_in_one_second_never_replace_each_other` (Erf0QeH), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX), `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` (Erf0Qhu), `a_conversion_notice_says_how_many_and_where_the_copy_is` (Erf0Qkx), `a_save_that_loses_a_setting_converting_leaves_a_notice_for_the_window` (ErfTRqP), and the pipeline test `cicd/tests/config-convert/run.bash` (ErgDpjX).
+	- Note: 20261003: Closed on that pipeline test's run. The Windows dogfood look under "Needs external testing" was not done.
+	- Acceptance signoff: Self-closed: the pipeline test for old config files passed, as 2026100313404573 set out.
+	- Closed: 20261003-155631
+
+- A pipeline test that converts old config files
+	- ID: 2026100313404573
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261003-134045
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100220292612, 2026100312470546
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A test in the pipeline that creates config files in the old shcl formats, and tests the automatic conversion, the one SilkTerm does without help from shcl.
+		- Run it to close 2026100220292612.
+	- Progress log:
+		- 20261003: `cicd/tests/config-convert/run.bash` runs in the pipeline's test stage. It writes a pre-nesting flat file, a shcl 2.x file with no Format line, one stamped Format 2, one shcl cannot migrate and one it cannot read, and launches the built program on each. It checks the converted file and its values, the one copy of the old file byte for byte under the `config_backup_..._format-v2.shcl` name, what the launch says was lost, and that a second launch changes nothing. Where Xvfb is installed, it also checks that lost settings bring up the notice window.
+	- Verified: 20261003: Passes on b23 against the debug and the release build of fmtfresh, 77 checks. Without 2026100312470546's code it fails 20, all on the two files shcl cannot convert and the notice.
+	- Branch: fmtfresh
+	- Commit: 8553a33
+	- Test case: `cicd/tests/config-convert/run.bash` (ErgDpjX).
+	- Acceptance signoff: Self-closed: the test asked for is in the pipeline and passes.
+	- Closed: 20261003-155631
 
 - Copy on select: on by default, and remembered across launches
 	- ID: 2026100307115829

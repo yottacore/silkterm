@@ -404,7 +404,7 @@ pub fn refresh_window_memory() {
 	let Some(path) = config_path() else {
 		return;
 	};
-	let Ok(text) = std::fs::read_to_string(&path) else {
+	let Some(text) = read_settings_text(&path) else {
 		return;
 	};
 	let mut live = (*settings()).clone();
@@ -1257,7 +1257,7 @@ pub fn keep_session_on_apply(live: &Settings, opened: &Settings, edited: &mut Se
 // becomes a diagnostic, not a failed load), so unlike the old strict TOML path
 // this cannot bail on a file the loader reads fine and silently save nothing.
 fn read_doc(path: &std::path::Path) -> Option<shcl::Document> {
-	let text = std::fs::read_to_string(path).ok()?;
+	let text = read_settings_text(path)?;
 	// a launch that found the file busy left it as 2.x wrote it
 	Some(parse_kept(&from_shcl2_text(&text).unwrap_or(text)))
 }
@@ -1440,11 +1440,7 @@ fn write_config_keeping(path: &std::path::Path, text: &str) -> Result<Option<Pat
 // The copy is the file exactly as it was before the conversion.
 fn lost_converting(path: &std::path::Path, copy: &std::path::Path) -> Option<ConversionLoss> {
 	let old = std::fs::read(copy).ok()?;
-	shcl2_losses(
-		&String::from_utf8_lossy(&old),
-		path,
-		Some(copy.to_path_buf()),
-	)
+	conversion_losses(&old, path, Some(copy.to_path_buf()))
 }
 
 #[cfg(test)]
@@ -2605,12 +2601,12 @@ fn load() -> Settings {
 	migrate_config(&path);
 	backfill_config(&path);
 	refresh_shcl_banner(&path);
-	let raw = match std::fs::read_to_string(&path) {
+	let raw = match read_settings_text(&path) {
 		// The writes above defer when the file looks open elsewhere, so parse the
 		// migrated text rather than what is on disk: a renamed key must never be
 		// read under its old spelling, which matters most where a rename hands an
 		// old name to a new setting (colors.focus).
-		Ok(text) => {
+		Some(text) => {
 			let (raw, said) = read_config_text(&loaded_text(&text), &path);
 			for line in &said {
 				eprintln!("{line}");
@@ -2618,7 +2614,7 @@ fn load() -> Settings {
 			remember_launch_messages(&path, said);
 			raw
 		}
-		Err(_) => RawConfig::default(),
+		None => RawConfig::default(),
 	};
 	resolve(raw)
 }
@@ -4500,7 +4496,6 @@ fn convert_legacy_config_with(
 
 // The conversion as text: None for a file that is not pre-nesting.
 fn converted_config_text(text: &str) -> Option<String> {
-	let lines: Vec<&str> = text.lines().collect();
 	let walked = walk_settings(text);
 	// A line shcl cannot read sets nothing, whatever it is called. The walk puts
 	// a line that steps back to a depth nothing uses at the top level, where an
@@ -4518,6 +4513,33 @@ fn converted_config_text(text: &str) -> Option<String> {
 	if !legacy {
 		return None;
 	}
+	Some(rebuilt_config_text(text, &[]).0)
+}
+
+// The template with every active setting of `text` that still reads carried
+// over, and how many lines holding a setting it left behind: each one shcl
+// cannot read, and each setting it reads that has nowhere to go. Lines listed
+// in `garbled` (0-based) did not decode and are never carried.
+fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
+	let lines: Vec<&str> = text.lines().collect();
+	let walked = walk_settings(text);
+	// shcl reads the garbled lines as comments, so a block under one reads as
+	// lines with no parent
+	let clean: String = text
+		.split('\n')
+		.enumerate()
+		.map(|(index, line)| {
+			if garbled.contains(&index) {
+				format!("#{line}")
+			} else {
+				line.to_string()
+			}
+		})
+		.collect::<Vec<_>>()
+		.join("\n");
+	let parsed = shcl::Document::parse(&clean);
+	let unread = unreadable_lines(&parsed);
+	let read = |index: usize| !unread.contains(&(index + 1)) && !garbled.contains(&index);
 
 	// active values: current-format paths carry as themselves (a mixed file
 	// loses nothing), old spellings map through the table, best (lowest table
@@ -4540,6 +4562,13 @@ fn converted_config_text(text: &str) -> Option<String> {
 	let mut extras: Vec<String> = Vec::new();
 	let mut had_font_family = false;
 	let mut had_use_system = false;
+	let mut left: std::collections::BTreeSet<usize> = unread.iter().map(|line| line - 1).collect();
+	left.extend(garbled.iter().copied().filter(|index| {
+		lines.get(*index).is_some_and(|line| {
+			let line = line.trim();
+			!line.is_empty() && !line.starts_with('#')
+		})
+	}));
 	for w in &walked {
 		let WalkLine::Setting {
 			index,
@@ -4550,7 +4579,13 @@ fn converted_config_text(text: &str) -> Option<String> {
 		else {
 			continue;
 		};
-		if !active || *header || !read(*index) {
+		if !active || *header {
+			continue;
+		}
+		// A value that opens a raw block would carry without its body. No
+		// setting takes one.
+		if !read(*index) || fence_run(lines[*index]).is_some() {
+			left.insert(*index);
 			continue;
 		}
 		let Some(value) = line_setting_value(lines[*index]) else {
@@ -4578,15 +4613,26 @@ fn converted_config_text(text: &str) -> Option<String> {
 			// a mapped path that has since been retired stays retired - the
 			// old value is still in the .bak, but never resurrects here
 			if !CONFIG_REMOVED.contains(&new.as_str()) {
-				let slot = carry.entry(new).or_insert((rank, value.to_string()));
-				if rank < slot.0 {
-					*slot = (rank, value.to_string());
+				match carry.entry(new) {
+					std::collections::hash_map::Entry::Vacant(slot) => {
+						slot.insert((rank, value.to_string()));
+					}
+					// two spellings of one setting keep one
+					std::collections::hash_map::Entry::Occupied(mut slot) => {
+						left.insert(*index);
+						if rank < slot.get().0 {
+							slot.insert((rank, value.to_string()));
+						}
+					}
 				}
 			}
-		} else if p.starts_with("themes.") {
+		} else if p.starts_with("themes.") || is_monitor_size_path(p) {
 			extras.push(format!("{p}: {value}"));
+		} else if !p.starts_with("shells.") {
+			// dropped from the new file, still in the copy
+			left.insert(*index);
 		}
-		// anything else: dropped from the new file, still in the .bak
+		// a shell list carries whole, below
 	}
 	// Old semantics: no use_system_font line + an explicit font_family meant
 	// "use that font" - keep meaning that, not the new template's default.
@@ -4612,13 +4658,13 @@ fn converted_config_text(text: &str) -> Option<String> {
 	joined.push('\n');
 	// The shell list is the user's, and its order names the default shell, so it
 	// carries whole and in order rather than as sorted dotted lines.
-	let shells = read_shells(&shcl::Document::parse(text));
+	let shells = read_shells(&parsed);
 	if !shells.is_empty() {
 		let mut doc = shcl::Document::parse(&joined);
 		write_shells(&mut doc, &[], &shells);
 		joined = doc.to_canonical();
 	}
-	Some(joined)
+	(joined, left.len())
 }
 
 // Migrate an existing config in place across program updates: rename keys whose
@@ -5941,28 +5987,100 @@ fn run_at(lines: &[&str], run: &[&str]) -> Option<usize> {
 	(0..=lines.len() - run.len()).find(|&i| lines[i..i + run.len()] == *run)
 }
 
-// A file shcl 2.x wrote has no Format line, and 3.0 reads a few of its
-// spellings differently. The one that matters here is a backslash outside
-// double quotes, which a Windows path is full of. shcl rewrites the file once
-// so it reads the same. The footer's Format line is what says it was done, so
-// the footer goes on in place of migrate's own stamp wherever it is ours.
-fn from_shcl2_text(text: &str) -> Option<String> {
-	let migrated = shcl::migrate_unstamped(text, true);
-	if migrated.current {
-		return None;
+// How a file in an older SHCL format reaches the current one, and how many
+// settings it leaves behind. shcl's migration respells the file in place,
+// comments and layout kept, wherever it can. A file shcl cannot read (not
+// UTF-8) or cannot migrate is written new from the template instead, carrying
+// every setting that still reads. The writer keeps the old file either way.
+// This is the one place that chooses, so a later shcl that converts whole files
+// can take it over here.
+#[derive(Debug, PartialEq)]
+enum Upgrade {
+	Current,
+	InPlace { text: String, lost: usize },
+	Rewritten { text: String, lost: usize },
+}
+
+fn upgrade(body: &[u8]) -> Upgrade {
+	let Ok(text) = std::str::from_utf8(body) else {
+		return rewritten_unreadable(body);
+	};
+	// shcl 2.x wrote no Format line, and 3.0 reads a few of its spellings
+	// differently, most of all a backslash outside double quotes, which a
+	// Windows path is full of. `migrate_unstamped` cannot say when it could not
+	// finish, so the stamped `migrate` is asked: it adds the Format line only
+	// to a file it migrated whole, and not, for one, to a raw block that never
+	// closes.
+	let stamped = shcl::migrate(text, true);
+	if stamped.current {
+		return Upgrade::Current;
 	}
+	if shcl::format_version(&stamped.text).is_none_or(|n| n < shcl::FORMAT_MAJOR) {
+		let respelled = shcl::migrate_unstamped(text, true).text;
+		let (text, lost) = rebuilt_config_text(&respelled, &[]);
+		return Upgrade::Rewritten { text, lost };
+	}
+	// The footer's Format line is what says it was done, so the footer goes on
+	// in place of migrate's own stamp wherever it is ours.
+	let migrated = shcl::migrate_unstamped(text, true);
 	// None here is a footer somebody rewrote, which gets migrate's stamp
 	let out = with_shcl_banner(&migrated.text)
 		.filter(|out| out.contains(shcl::FORMAT_LINE))
-		.unwrap_or_else(|| shcl::migrate(text, true).text);
-	(out != text).then_some(out)
+		.unwrap_or(stamped.text);
+	if out == text {
+		return Upgrade::Current;
+	}
+	Upgrade::InPlace {
+		text: out,
+		lost: migrated.lost,
+	}
+}
+
+// Not UTF-8. A file in the current format stays as it is, unread, as before.
+// A line that does not decode is left out, and counted when it held a setting.
+fn rewritten_unreadable(body: &[u8]) -> Upgrade {
+	let lossy = String::from_utf8_lossy(body);
+	if format_of(&lossy) >= shcl::FORMAT_MAJOR {
+		return Upgrade::Current;
+	}
+	let garbled: Vec<usize> = body
+		.split(|b| *b == b'\n')
+		.enumerate()
+		.filter(|(_, line)| std::str::from_utf8(line).is_err())
+		.map(|(index, _)| index)
+		.collect();
+	// migrate keeps every line where it was, so the indexes still match
+	let respelled = shcl::migrate_unstamped(&lossy, true).text;
+	let (text, lost) = rebuilt_config_text(&respelled, &garbled);
+	Upgrade::Rewritten { text, lost }
+}
+
+// The text an older file converts to, or None for a current one.
+fn upgraded_text(body: &[u8]) -> Option<String> {
+	match upgrade(body) {
+		Upgrade::Current => None,
+		Upgrade::InPlace { text, .. } | Upgrade::Rewritten { text, .. } => Some(text),
+	}
+}
+
+fn from_shcl2_text(text: &str) -> Option<String> {
+	upgraded_text(text.as_bytes())
+}
+
+// The settings file's text as a reader takes it. A file shcl cannot read reads
+// as what its conversion writes, if it is in an older format.
+fn read_settings_text(path: &std::path::Path) -> Option<String> {
+	match String::from_utf8(std::fs::read(path).ok()?) {
+		Ok(text) => Some(text),
+		Err(e) => upgraded_text(e.as_bytes()),
+	}
 }
 
 fn convert_shcl2_config(path: &std::path::Path) {
-	let Ok(text) = std::fs::read_to_string(path) else {
+	let Ok(body) = std::fs::read(path) else {
 		return;
 	};
-	let Some(out) = from_shcl2_text(&text) else {
+	let Some(out) = upgraded_text(&body) else {
 		return;
 	};
 	if config_open_elsewhere(path) {
@@ -5977,20 +6095,26 @@ fn convert_shcl2_config(path: &std::path::Path) {
 	}
 }
 
-// What the conversion could not carry over. shcl counts the lines 2.x gave a
-// bracketed list to: the new format has no way to write one, so they stay as
-// written and set nothing. A line it cannot read at all is said at every launch
-// by `config_complaints`.
-fn shcl2_losses(
-	text: &str,
+// What the conversion of `body`, the file as it was, could not carry over. In
+// place, shcl counts the lines 2.x gave a bracketed list to: the new format has
+// no way to write one, so they stay as written and set nothing. A line it
+// cannot read at all is said at every launch by `config_complaints`. A new
+// file counts every setting it left behind.
+fn conversion_losses(
+	body: &[u8],
 	path: &std::path::Path,
 	backup: Option<PathBuf>,
 ) -> Option<ConversionLoss> {
-	let lost = shcl::migrate_unstamped(text, true).lost;
+	let (lost, how) = match upgrade(body) {
+		Upgrade::Current => return None,
+		Upgrade::InPlace { lost, .. } => (lost, Converted::InPlace),
+		Upgrade::Rewritten { lost, .. } => (lost, Converted::Rewritten),
+	};
 	(lost > 0).then(|| ConversionLoss {
 		path: path.to_path_buf(),
 		backup,
 		lost,
+		how,
 	})
 }
 
@@ -6002,6 +6126,14 @@ pub struct ConversionLoss {
 	pub path: PathBuf,
 	pub backup: Option<PathBuf>,
 	pub lost: usize,
+	pub how: Converted,
+}
+
+// Whether the file was converted where it stood or written new (`upgrade`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Converted {
+	InPlace,
+	Rewritten,
 }
 
 impl ConversionLoss {
@@ -6011,11 +6143,18 @@ impl ConversionLoss {
 			.as_ref()
 			.map(|copy| format!(" The old file is at {}.", copy.display()))
 			.unwrap_or_default();
-		format!(
-			"{APP_NAME}: {}: {} line(s) set a list in brackets, which the new format cannot hold; they are kept as written but set nothing.{kept}",
-			self.path.display(),
-			self.lost
-		)
+		match self.how {
+			Converted::InPlace => format!(
+				"{APP_NAME}: {}: {} line(s) set a list in brackets, which the new format cannot hold; they are kept as written but set nothing.{kept}",
+				self.path.display(),
+				self.lost
+			),
+			Converted::Rewritten => format!(
+				"{APP_NAME}: {}: could not be converted in place, so a new file was written; {} setting(s) could not be carried over.{kept}",
+				self.path.display(),
+				self.lost
+			),
+		}
 	}
 }
 
@@ -10858,12 +10997,15 @@ mod tests {
 		let copy =
 			std::path::Path::new("/cfg").join("config_backup_20261003-142233_format-v2.shcl");
 		let text = "font:\n\tfamily:[One, Two]\n\tsize: 13\n";
-		let loss = shcl2_losses(text, path, Some(copy.clone())).unwrap();
+		let loss = conversion_losses(text.as_bytes(), path, Some(copy.clone())).unwrap();
 		assert_eq!(loss.lost, 1);
 		let said = loss.terminal_line();
 		assert!(said.contains("1 line(s)"), "{said}");
 		assert!(said.contains(&copy.display().to_string()), "{said}");
-		assert_eq!(shcl2_losses(SHCL2_FILE, path, Some(copy)), None);
+		assert_eq!(
+			conversion_losses(SHCL2_FILE.as_bytes(), path, Some(copy)),
+			None
+		);
 		// and every later launch still names the line
 		let out = from_shcl2_text(text).unwrap();
 		let complaints = config_complaints(&out);
@@ -10937,6 +11079,131 @@ mod tests {
 		assert!(persist(&orig, &edited));
 		assert_eq!(backups_in(&dir, "config").len(), 2, "a copy is still kept");
 		assert_eq!(take_conversion_loss(), None, "nothing was lost");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A file shcl can migrate is converted where it stands. One it cannot, here
+	// a raw block that never closes, is written new from the template with the
+	// settings that still read, and every line it could not carry is counted.
+	// Test ID: ErgDo2H
+	#[test]
+	fn a_file_shcl_cannot_migrate_is_written_new() {
+		assert!(
+			matches!(
+				upgrade(SHCL2_FILE.as_bytes()),
+				Upgrade::InPlace { lost: 0, .. }
+			),
+			"a file shcl can migrate stays where it is"
+		);
+		let text = "font:\n\tsize: 19\n\tfamily:[One, Two]\nwindow:\n\tcolumns: 103\nnotes: ```\nline one\nwindow.rows: 40\n";
+		let Upgrade::Rewritten { text: out, lost } = upgrade(text.as_bytes()) else {
+			panic!("not written new");
+		};
+		assert_eq!(lost, 2, "the list and the raw block");
+		let doc = shcl::Document::parse(&out);
+		assert_eq!(doc.get_float("font.size"), Ok(19.0), "{out}");
+		assert_eq!(doc.get_int("window.columns"), Ok(103), "{out}");
+		assert_eq!(shcl::format_version(&out), Some(shcl::FORMAT_MAJOR));
+		assert!(out.ends_with(SHCL_BANNER), "{out}");
+		assert!(!out.contains("```"), "{out}");
+		assert!(config_complaints(&out).is_empty(), "{out}");
+		assert_eq!(from_shcl2_text(&out), None, "settled");
+		assert_eq!(next_launch_text(text), next_launch_text(&out));
+	}
+
+	// A file that is not UTF-8 cannot be read by shcl at all. In an older format
+	// it is kept byte for byte and written new, with the settings that still
+	// read, and the launch says what it could not carry, as for any conversion.
+	// The next launch has nothing to do.
+	// Test ID: ErgDoNP
+	#[test]
+	fn a_file_shcl_cannot_read_is_written_new() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("fmtfresh_launch");
+		let path = dir.join("config.shcl");
+		let body: &[u8] = b"font:\n\tsize: 19\n# caf\xe9\nwindow:\n\tcolumns: 103\nwallpaper:\n\timage: /pics/caf\xe9.jpg\n";
+		std::fs::write(&path, body).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
+		assert_eq!(s.columns, 103);
+		let kept = backups_in(&dir, "config");
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+		let copy = dir.join(&kept[0]);
+		assert_eq!(std::fs::read(&copy).unwrap(), body);
+		let now = std::fs::read_to_string(&path).expect("UTF-8 now");
+		assert_eq!(
+			shcl::format_version(&now),
+			Some(shcl::FORMAT_MAJOR),
+			"{now}"
+		);
+		assert!(!now.contains('\u{fffd}'), "{now}");
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!((loss.lost, loss.how), (1, Converted::Rewritten));
+		assert_eq!(loss.backup, Some(copy));
+		assert!(
+			loss.terminal_line().contains("1 setting(s)"),
+			"{}",
+			loss.terminal_line()
+		);
+
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
+		assert_eq!(backups_in(&dir, "config").len(), 1);
+		assert_eq!(take_conversion_loss(), None);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A current file that is not UTF-8 is no upgrade, so it is left as it was.
+	// Test ID: ErgDoiP
+	#[test]
+	fn a_current_file_shcl_cannot_read_is_left_alone() {
+		let body = [
+			b"font:\n\tsize: 19\n# caf\xe9\n".as_slice(),
+			shcl::FORMAT_LINE.as_bytes(),
+			b"\n",
+		]
+		.concat();
+		assert!(std::str::from_utf8(&body).is_err());
+		assert_eq!(upgrade(&body), Upgrade::Current);
+		assert_eq!(
+			conversion_losses(&body, std::path::Path::new("/c"), None),
+			None
+		);
+	}
+
+	// A Settings save that finds an old file shcl cannot read writes it new and
+	// keeps the old one, and says what it could not carry as a launch would.
+	// Test ID: ErgDp3N
+	#[test]
+	fn a_save_on_a_file_shcl_cannot_read_writes_it_new() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("fmtfresh_save");
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let orig = Settings::default();
+		let mut edited = orig.clone();
+		edited.font_size += 1.0;
+
+		let body: &[u8] = b"window:\n\tcolumns: 103\n\tti\xe9tle: x\n";
+		std::fs::write(&path, body).unwrap();
+		assert!(persist(&orig, &edited));
+		let now = std::fs::read_to_string(&path).expect("UTF-8 now");
+		let doc = shcl::Document::parse(&now);
+		assert_eq!(doc.get_int("window.columns"), Ok(103), "{now}");
+		assert_eq!(
+			doc.get_float("font.size").ok(),
+			Some(f64::from(edited.font_size)),
+			"{now}"
+		);
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!((loss.lost, loss.how), (1, Converted::Rewritten));
+		let copy = loss.backup.expect("a copy was kept");
+		assert_eq!(std::fs::read(&copy).unwrap(), body);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -13844,6 +14111,50 @@ mod tests {
 					Ok(None),
 					"\nfile:\n{text}\nafter one pass:\n{out}"
 				);
+			});
+		}
+
+		// Whatever an old file holds, what it converts to is current: the next
+		// launch converts nothing, and a file written new has no line shcl cannot
+		// read. Bytes that are not UTF-8 and a raw block that never closes are the
+		// files shcl's own migration gives up on.
+		// Test ID: ErgHEfO
+		#[test]
+		fn an_upgrade_settles_in_one_pass() {
+			use super::super::{Upgrade, from_shcl2_text, unreadable_lines, upgrade};
+			fuzz::soak("config-upgrade", |seed| {
+				let mut rng = fuzz::Rng::new(seed);
+				let mut case = config(&mut rng);
+				if rng.chance(3) && !case.is_empty() {
+					let at = rng.below(case.len());
+					case.insert(at, 0xe9);
+				}
+				if rng.chance(3) {
+					case.extend_from_slice(b"notes: ```\nnever closed\n");
+				}
+				let shown = String::from_utf8_lossy(&case).into_owned();
+				match upgrade(&case) {
+					Upgrade::Current => {}
+					Upgrade::InPlace { text, .. } => {
+						assert_eq!(
+							from_shcl2_text(&text),
+							None,
+							"\nfile:\n{shown}\nconverted:\n{text}"
+						);
+					}
+					Upgrade::Rewritten { text, .. } => {
+						assert_eq!(
+							from_shcl2_text(&text),
+							None,
+							"\nfile:\n{shown}\nwritten:\n{text}"
+						);
+						let unread = unreadable_lines(&shcl::Document::parse(&text));
+						assert!(
+							unread.is_empty(),
+							"lines {unread:?}\nfile:\n{shown}\nwritten:\n{text}"
+						);
+					}
+				}
 			});
 		}
 
