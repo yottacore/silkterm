@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Copy on select: on by default, and remembered across launches
 	- ID: 2026100307115829
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Closed
 	- Priority: Avg
 	- Opened: 20261003-071158
 	- Opened by: JC
@@ -56,7 +56,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
 	- ID: 2026100220292617
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Closed
 	- Priority: Avg
 	- Opened: 20261002-202926
 	- Opened by: JC
@@ -86,7 +86,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - At the RC release, convert the config to the new format and keep the old file beside it
 	- ID: 2026100220292612
 	- Type: Feature
-	- Status: Waiting on signoff
+	- Status: Testing
 	- Needs external testing: A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
 	- Priority: Avg
 	- Opened: 20261002-202926
