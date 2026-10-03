@@ -215,6 +215,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 747356f
 	- Closed:
 
+- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
+	- ID: 2026100312470535
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: A dogfood look on b23 with the GPU busy or nearly full. Move to another desktop and back, end the load, and leave the window alone. It should paint on its own. Try it once with "Free resources when idle" on and short idle times too. Started from a terminal with `SILK_IDLEDBG=1`, it prints any refused frame or rebuild.
+	- Severity: High
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470540
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Have something else keep the GPU busy, or holding most of its memory.
+		- Move to another virtual desktop and back to one with a SilkTerm window.
+	- Incorrect behavior:
+		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
+		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
+	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
+	- Reproduced: No. Seen on b23 when moving between virtual desktops. Not known yet if a window left on screen would also stop painting.
+	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
+	- Actual cause:
+		- A frame the GPU refused was dropped. The pass that asked for it had already cleared its redraw flag, so nothing asked again until the desktop sent another redraw. That covers a surface that timed out or went out of date, and on X11 a buffer swap that failed, whose error was ignored.
+		- A device that could not be built again after the idle release waited for the next key, click or focus change.
+		- Which one happened on b23 is not known. The terminal window always draws through GL on X11, so the failed swap and the rebuild are the likely ones. It is also not known whether "Free resources when idle" was on at the time.
+	- Notes:
+		- Before RC1.
+		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
+		- 20261003: Settings and the notice window had the same gap, and get the same retry.
+		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
+		- 20261003: Not covered. A GL error that arrives after the swap has returned is not seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu wants a lost surface made again, and the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can hold the window up for about a second inside wgpu.
+	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays owed and is tried again the same way, with longer waits, while the window shows. A refused frame no longer keeps animation frames coming, so the wait is the only pace while the GPU says no.
+	- Progress log:
+		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
+		- 20261003: Verified: three refused rebuilds were tried again at about 0.25, 0.5 and 1 s, and the device came back with no input. Eight refused frames backed off from 16 ms to 2 s, and the window painted again with no input. An idle release and wake with nothing refused still works.
+	- Swept: every frame and rebuild site. The terminal's acquire and GL swap in `render_with`, reached from both `about_to_wait` and the desktop's redraw. The dialog and notice windows' acquire and swap in `DialogWin::render`. `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
+	- Branch: gpuload
+	- Commit: 8cb6a4d
+	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_owed_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
+
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
 	- Type: Bug
@@ -745,30 +785,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
-- The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
-	- ID: 2026100312470535
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261003-124705
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100312470540
-	- Target OS: All
-	- Test environment: b23
-	- Steps to reproduce:
-		- Have something else keep the GPU busy, or holding most of its memory.
-		- Move to another virtual desktop and back to one with a SilkTerm window.
-	- Incorrect behavior:
-		- SilkTerm doesn't paint. The only thing visible is the window frame, and other windows and the desktop behind the terminal area.
-		- When whatever was using the GPU ends, the blank window is still not repainted. Switching to a different virtual desktop and back repaints it.
-	- Expected behavior: The window paints as soon as the GPU can take the work, and never stays blank once the load is gone.
-	- Reproduced: No. Seen on b23 when moving between virtual desktops. Not known yet if a window left on screen would also stop painting.
-	- Possible cause: A frame that can't get its surface or GPU device under that load is dropped, and nothing tries again until the desktop asks for a redraw.
-	- Notes:
-		- Before RC1.
-		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
-
 - Settings: the revert arrow on "Program's own title" does nothing
 	- ID: 2026100314050001
 	- Type: Bug
@@ -956,6 +972,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Origin: 6d543d37 (2026-08-30) for `freeze_sync`, 90073855 (2026-09-17) for `idle_rule`, 02482bb7 (2026-10-01) for the menu key, 754c9cb (2026-10-03) for the monitor check. No earlier review item. Plausible, cost not measured.
 	- Test case: Owed. The env read can be pinned by test. The X11 trip needs a timing on the rig.
 	- Note: Code review 20261003 item 5.
+
+- A config unit test fails when run beside the other "refused" tests
+	- ID: 2026100314502236
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-145022
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- `cargo test --bin silkterm -- refused`
+	- Incorrect behavior: `a_refused_save_leaves_word_for_the_window` fails at "a save that went through". The refusal it takes is for the `silk-lostgate` folder of another test.
+	- Expected behavior: It passes whatever runs beside it.
+	- Reproduced: 20261003 on b23, three runs out of three with that filter. It passes alone, on one test thread, and in the full suite.
+	- Possible cause: `a_save_that_would_drop_a_line_is_refused` leaves its refusal in the shared slot and does not take `test_config_lock`, so it can land between the other test's takes.
 
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
