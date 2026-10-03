@@ -258,6 +258,76 @@ impl Chord {
 	}
 }
 
+/// What a key press makes of a hotkey being set in Settings.
+#[derive(Debug, PartialEq)]
+pub enum Press {
+	/// a modifier on its own, so the key is still to come
+	Held,
+	Chord(Chord),
+	/// a key that cannot be a hotkey, and why
+	Refused(String),
+}
+
+/// Read a press the way the key handler will later match it, so a chord set by
+/// pressing it is one that press answers to. Shift on a sign or a digit is
+/// kept as Shift on the key under it, "{" as Shift+[.
+pub fn press(key: &Key, mods: ModifiersState, mac: bool) -> Press {
+	let shift = mods.shift_key();
+	let name = match key {
+		Key::Named(
+			NamedKey::Shift
+			| NamedKey::Control
+			| NamedKey::Alt
+			| NamedKey::AltGraph
+			| NamedKey::Super
+			| NamedKey::Meta
+			| NamedKey::Hyper
+			| NamedKey::CapsLock
+			| NamedKey::NumLock
+			| NamedKey::Fn,
+		) => return Press::Held,
+		Key::Named(named) if NAMED_KEYS.iter().any(|(_, each)| each == named) => {
+			KeyName::Named(*named)
+		}
+		Key::Character(typed) => {
+			let mut chars = typed.chars();
+			let (Some(ch), None) = (chars.next(), chars.next()) else {
+				return Press::Refused("That key cannot be a hotkey".into());
+			};
+			match ch {
+				'+' | '=' => KeyName::Plus,
+				'-' | '_' => KeyName::Minus,
+				_ if ch.is_whitespace() || ch.is_control() => {
+					return Press::Refused("That key cannot be a hotkey".into());
+				}
+				_ => {
+					let base = shift
+						.then(|| (' '..='~').find(|base| us_shifted(*base) == Some(typed.as_str())))
+						.flatten();
+					KeyName::Char(base.unwrap_or_else(|| ch.to_lowercase().next().unwrap_or(ch)))
+				}
+			}
+		}
+		_ => return Press::Refused("That key cannot be a hotkey".into()),
+	};
+	let chord = Chord {
+		key: name,
+		ctrl: mods.control_key(),
+		alt: mods.alt_key(),
+		shift,
+		command: mods.super_key(),
+	};
+	if !(chord.ctrl || chord.alt || chord.command || name.free_alone()) {
+		let need = if mac {
+			"Control, Option or Command"
+		} else {
+			"Ctrl, Alt or Super"
+		};
+		return Press::Refused(format!("{} needs {need} held", chord.spoken(mac)));
+	}
+	Press::Chord(chord)
+}
+
 /// Read a hotkey's value from the config file: one or more chords separated by
 /// spaces, or "none" for no chord at all.
 pub fn parse_value(text: &str) -> Result<Vec<Chord>, String> {
@@ -323,6 +393,15 @@ pub fn config_path(hotkey: Hotkey) -> Option<String> {
 		.map(|(_, name, ..)| format!("keys.{name}"))
 }
 
+/// The hotkey a config path binds, `keys.split_right`.
+pub fn hotkey_at(path: &str) -> Option<Hotkey> {
+	let name = path.strip_prefix("keys.")?;
+	TABLE
+		.iter()
+		.find(|(_, each, ..)| *each == name)
+		.map(|(hotkey, ..)| *hotkey)
+}
+
 /// Every hotkey that can be bound, with its config path, in table order.
 pub fn config_paths() -> impl Iterator<Item = (Hotkey, String)> {
 	TABLE
@@ -355,17 +434,34 @@ pub fn template_lines(mac: bool) -> String {
 	out
 }
 
+/// A chord one hotkey lost to another: one the file set for `by` that `from`
+/// has by default, or one the file set for both, which the first in the table
+/// keeps.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Taken {
+	pub chord: Chord,
+	pub from: Hotkey,
+	pub by: Hotkey,
+	/// the file set it for `from` too
+	pub both_set: bool,
+}
+
 /// The hotkeys in force: the defaults, less any the config turned off or moved,
 /// plus whatever it added. A chord answers to one hotkey only.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bindings {
 	// in table order
 	list: Vec<(Hotkey, Vec<Chord>)>,
+	// the file's own values, in table order. A save writes these and nothing
+	// else, so what the file says stays what a hand edit would have said.
+	own: Vec<(Hotkey, Vec<Chord>)>,
+	taken: Vec<Taken>,
+	mac: bool,
 }
 
 impl Bindings {
 	pub fn defaults(mac: bool) -> Self {
-		Self::with(mac, &[]).0
+		Self::resolve(mac, &[])
 	}
 
 	/// The defaults with the config file's own values put in. A chord set for
@@ -373,6 +469,12 @@ impl Bindings {
 	/// for the same chord leave it with the first. Also answers what to tell
 	/// the user about either.
 	pub fn with(mac: bool, set: &[(Hotkey, Vec<Chord>)]) -> (Self, Vec<String>) {
+		let bindings = Self::resolve(mac, set);
+		let notes = bindings.notes();
+		(bindings, notes)
+	}
+
+	fn resolve(mac: bool, set: &[(Hotkey, Vec<Chord>)]) -> Self {
 		// (hotkey, chords, whether the file set them)
 		let mut list: Vec<(Hotkey, Vec<Chord>, bool)> = TABLE
 			.iter()
@@ -388,32 +490,26 @@ impl Bindings {
 				},
 			)
 			.collect();
-		let mut notes = Vec::new();
-		let path = |hotkey| config_path(hotkey).unwrap_or_default();
+		let own = list
+			.iter()
+			.filter(|(.., from_file)| *from_file)
+			.map(|(hotkey, chords, _)| (*hotkey, chords.clone()))
+			.collect();
+		let mut taken = Vec::new();
 		// the chords the file set are claimed first, then the defaults, in order
-		let mut taken: Vec<(Chord, Hotkey, bool)> = Vec::new();
+		let mut claimed: Vec<(Chord, Hotkey)> = Vec::new();
 		for pass_set in [true, false] {
-			for (hotkey, chords, from_file) in list.iter_mut().filter(|b| b.2 == pass_set) {
+			for (hotkey, chords, _) in list.iter_mut().filter(|b| b.2 == pass_set) {
 				chords.retain(|chord| {
-					let Some((_, owner, owner_set)) = taken.iter().find(|(c, ..)| c == chord)
-					else {
-						taken.push((*chord, *hotkey, *from_file));
+					let Some((_, owner)) = claimed.iter().find(|(c, _)| c == chord) else {
+						claimed.push((*chord, *hotkey));
 						return true;
 					};
-					let spoken = chord.spoken(mac);
-					notes.push(if pass_set && *owner_set {
-						format!(
-							"`{}` and `{}` both use {spoken} - only `{}` answers to it",
-							path(*owner),
-							path(*hotkey),
-							path(*owner)
-						)
-					} else {
-						format!(
-							"{spoken} is set for `{}`, so `{}` no longer answers to it",
-							path(*owner),
-							path(*hotkey)
-						)
+					taken.push(Taken {
+						chord: *chord,
+						from: *hotkey,
+						by: *owner,
+						both_set: pass_set,
 					});
 					false
 				});
@@ -423,7 +519,60 @@ impl Bindings {
 			.into_iter()
 			.map(|(hotkey, chords, _)| (hotkey, chords))
 			.collect();
-		(Self { list }, notes)
+		Self {
+			list,
+			own,
+			taken,
+			mac,
+		}
+	}
+
+	// What the launch tells the user about each chord one hotkey lost to another.
+	fn notes(&self) -> Vec<String> {
+		let path = |hotkey| config_path(hotkey).unwrap_or_default();
+		self.taken
+			.iter()
+			.map(|taken| {
+				let spoken = taken.chord.spoken(self.mac);
+				let (by, from) = (path(taken.by), path(taken.from));
+				if taken.both_set {
+					format!("`{by}` and `{from}` both use {spoken} - only `{by}` answers to it")
+				} else {
+					format!("{spoken} is set for `{by}`, so `{from}` no longer answers to it")
+				}
+			})
+			.collect()
+	}
+
+	/// The value the config file sets for a hotkey, if it sets one. "none" is
+	/// set, and empty.
+	pub fn own(&self, hotkey: Hotkey) -> Option<&[Chord]> {
+		self.own
+			.iter()
+			.find(|(each, _)| *each == hotkey)
+			.map(|(_, chords)| chords.as_slice())
+	}
+
+	/// These bindings with one hotkey's own value changed, or put back to its
+	/// default with None.
+	#[must_use]
+	pub fn with_own(&self, hotkey: Hotkey, chords: Option<Vec<Chord>>) -> Self {
+		let mut set: Vec<(Hotkey, Vec<Chord>)> = self
+			.own
+			.iter()
+			.filter(|(each, _)| *each != hotkey)
+			.cloned()
+			.collect();
+		if let Some(chords) = chords {
+			set.push((hotkey, chords));
+		}
+		Self::resolve(self.mac, &set)
+	}
+
+	/// Every chord one hotkey lost to another, in the order the launch reports
+	/// them.
+	pub fn taken(&self) -> &[Taken] {
+		&self.taken
 	}
 
 	/// The hotkey a press is, if any. A press with exactly the chord's keys held
@@ -670,5 +819,123 @@ mod tests {
 			b.hotkey(&Key::Named(NamedKey::F11), ModifiersState::SHIFT),
 			None
 		);
+	}
+
+	// A chord set in Settings by pressing it is one that same press answers to
+	// afterwards, on either platform, and reads back from the file as written.
+	// Test ID: ErejaW7
+	#[test]
+	fn a_pressed_chord_is_the_one_the_press_matches() {
+		let ctrl = ModifiersState::CONTROL;
+		let ctrl_shift = ctrl.union(ModifiersState::SHIFT);
+		let ctrl_alt = ctrl.union(ModifiersState::ALT);
+		let command = ModifiersState::SUPER;
+		let option_command = command.union(ModifiersState::ALT);
+		let left = Key::Named(NamedKey::ArrowLeft);
+		for (mac, key, mods, spoken) in [
+			(false, typed("T"), ctrl_shift, "Ctrl+Shift+T"),
+			(false, typed("r"), ctrl_alt, "Ctrl+Alt+R"),
+			(false, typed("+"), ALT_SHIFT, "Alt+Shift+Plus"),
+			(false, typed("_"), ALT_SHIFT, "Alt+Shift+Minus"),
+			(false, typed("="), ctrl, "Ctrl+Plus"),
+			(false, typed("{"), ctrl_shift, "Ctrl+Shift+["),
+			(false, typed("!"), ctrl_shift, "Ctrl+Shift+1"),
+			(false, typed(","), ctrl, "Ctrl+,"),
+			(false, Key::Named(NamedKey::F5), NONE, "F5"),
+			(false, left.clone(), ModifiersState::ALT, "Alt+Left"),
+			(true, typed("d"), command, "Command+D"),
+			(
+				true,
+				typed("{"),
+				command.union(ModifiersState::SHIFT),
+				"Shift+Command+[",
+			),
+			(true, left.clone(), option_command, "Option+Command+Left"),
+		] {
+			let Press::Chord(chord) = press(&key, mods, mac) else {
+				panic!("{spoken} was not read as a chord");
+			};
+			assert_eq!(chord.spoken(mac), spoken);
+			assert_eq!(Chord::parse(spoken), Ok(chord), "{spoken} reads back");
+			let (bound, _) = Bindings::with(mac, &[(Hotkey::Quit, vec![chord])]);
+			assert_eq!(bound.hotkey(&key, mods), Some(Hotkey::Quit), "{spoken}");
+		}
+		// a modifier alone is the start of a chord, not one
+		for named in [
+			NamedKey::Shift,
+			NamedKey::Control,
+			NamedKey::Alt,
+			NamedKey::Super,
+		] {
+			assert_eq!(press(&Key::Named(named), ctrl, false), Press::Held);
+		}
+		// a key that would stop typing at the shell says what it needs
+		for (mac, needs) in [
+			(false, "Ctrl, Alt or Super"),
+			(true, "Control, Option or Command"),
+		] {
+			let Press::Refused(why) = press(&typed("T"), ModifiersState::SHIFT, mac) else {
+				panic!("Shift+T taken as a hotkey");
+			};
+			assert_eq!(why, format!("Shift+T needs {needs} held"));
+		}
+		assert!(matches!(
+			press(&Key::Named(NamedKey::Enter), NONE, false),
+			Press::Refused(_)
+		));
+		assert!(matches!(
+			press(&Key::Named(NamedKey::MediaPlay), ctrl, false),
+			Press::Refused(_)
+		));
+	}
+
+	// What the file set is kept apart from what each hotkey answers to, so a
+	// save can write the one without the other, and a chord lost to another
+	// hotkey is known to both sides.
+	// Test ID: Erejaj5
+	#[test]
+	fn the_files_own_values_are_kept_apart_from_the_result() {
+		let base = Bindings::defaults(false);
+		assert!(base.own(Hotkey::CloseTab).is_none());
+		let moved = base.with_own(Hotkey::ClosePane, Some(vec![chord("Ctrl+Shift+W")]));
+		assert_eq!(
+			moved.own(Hotkey::ClosePane),
+			Some(&[chord("Ctrl+Shift+W")][..])
+		);
+		assert!(
+			moved.own(Hotkey::CloseTab).is_none(),
+			"close_tab lost a chord, set nothing"
+		);
+		assert_eq!(moved.chords(Hotkey::CloseTab), [chord("Ctrl+F4")]);
+		assert_eq!(
+			moved.taken(),
+			[Taken {
+				chord: chord("Ctrl+Shift+W"),
+				from: Hotkey::CloseTab,
+				by: Hotkey::ClosePane,
+				both_set: false,
+			}]
+		);
+		// the same as the file saying it
+		let (from_file, _) =
+			Bindings::with(false, &[(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")])]);
+		assert_eq!(moved, from_file);
+		// "none" is a value of its own, and None puts the default back
+		let off = moved.with_own(Hotkey::Copy, Some(Vec::new()));
+		assert_eq!(off.own(Hotkey::Copy), Some(&[][..]));
+		assert!(off.chords(Hotkey::Copy).is_empty());
+		assert_eq!(off.with_own(Hotkey::Copy, None), moved);
+		assert_eq!(moved.with_own(Hotkey::ClosePane, None), base);
+		// two set the same way: the first in the table keeps it, and says so
+		let both = base
+			.with_own(Hotkey::SplitDown, Some(vec![chord("Alt+D")]))
+			.with_own(Hotkey::SplitRight, Some(vec![chord("Alt+D")]));
+		assert_eq!(both.taken().len(), 1);
+		assert!(both.taken()[0].both_set);
+		assert_eq!(both.taken()[0].by, Hotkey::SplitRight);
+		assert!(both.chords(Hotkey::SplitDown).is_empty());
+		assert_eq!(hotkey_at("keys.split_down"), Some(Hotkey::SplitDown));
+		assert_eq!(hotkey_at("split_down"), None);
+		assert_eq!(hotkey_at("keys.bogus"), None);
 	}
 }

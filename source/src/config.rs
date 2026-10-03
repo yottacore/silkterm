@@ -3566,11 +3566,18 @@ fn read_keys(r: &Reader) -> Vec<(crate::input::Hotkey, Vec<crate::keys::Chord>)>
 		.collect()
 }
 
-// Put a changed hotkey's chords in the file, by the platform's own names.
+// Put a hotkey's changed value in the file, by the platform's own names. Only
+// the value set for that hotkey is written, never what it was left with after
+// another took a chord from it, so the file says what a hand edit would. One
+// put back to its default writes nothing here: the Settings revert puts the
+// template's line back (`revert_keys`).
 fn write_keys(doc: &mut shcl::Document, orig: &crate::keys::Bindings, now: &crate::keys::Bindings) {
 	for (hotkey, path) in crate::keys::config_paths() {
-		let chords = now.chords(hotkey);
-		if chords != orig.chords(hotkey) {
+		let own = now.own(hotkey);
+		if own == orig.own(hotkey) {
+			continue;
+		}
+		if let Some(chords) = own {
 			doc.put_string(
 				&path,
 				&crate::keys::value_text(chords, cfg!(target_os = "macos")),
@@ -4893,40 +4900,87 @@ pub fn disable_keys(keys: &[&str]) {
 	}
 }
 
+// What becomes of one setting's line.
+enum LineEdit {
+	Keep,
+	Put(String),
+	Drop,
+}
+
 // Rewrite the named settings' own lines, leaving everything above them alone.
 //
 // A line edit rather than a document one on purpose: removing the node takes its
 // leading comments with it, so reverting a scrim setting used to destroy seven
 // lines of documentation, and a note written above a value went the same way.
-// `line_for` is given the key, the file's own indentation and the current line,
-// and answers the replacement or None to leave it. Answers None when nothing
-// needs writing.
+// `line_for` is given the key, the file's own indentation, the current line and
+// every other commented line for that key, and answers what becomes of it.
+// Answers None when nothing needs writing.
+//
+// A setting's own line is its active one. A save adds a set value as a new
+// line, sometimes above the commented default it replaces, and taking the
+// last line for the path found that comment instead, so a revert left the
+// value in force.
 fn edit_setting_lines(
 	text: &str,
 	keys: &[&str],
-	line_for: impl Fn(&str, &str, &str) -> Option<String>,
+	line_for: impl Fn(&str, &str, &str, &[&str]) -> LineEdit,
 ) -> Option<String> {
-	let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
-	let at = paths_at(&lines);
+	let mut lines: Vec<Option<String>> = text.lines().map(|l| Some(l.to_string())).collect();
+	let mut active: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+	let mut commented: std::collections::HashMap<String, Vec<usize>> =
+		std::collections::HashMap::new();
+	for w in walk_settings(text) {
+		let WalkLine::Setting {
+			index,
+			path,
+			active: is_active,
+			..
+		} = w
+		else {
+			continue;
+		};
+		if is_active {
+			active.insert(path, index);
+		} else {
+			commented.entry(path).or_default().push(index);
+		}
+	}
 	let mut changed = false;
 	for key in keys {
-		let Some(&i) = at.get(*key) else { continue };
-		let indent: String = lines[i]
+		let others = commented.get(*key).map_or(&[][..], Vec::as_slice);
+		let Some(i) = active.get(*key).copied().or_else(|| others.last().copied()) else {
+			continue;
+		};
+		let Some(line) = lines[i].clone() else {
+			continue;
+		};
+		let indent: String = line
 			.chars()
 			.take_while(|c| *c == '\t' || *c == ' ')
 			.collect();
-		let Some(replacement) = line_for(key, &indent, &lines[i]) else {
-			continue;
-		};
-		if lines[i] != replacement {
-			lines[i] = replacement;
-			changed = true;
+		let rest: Vec<&str> = others
+			.iter()
+			.filter(|&&k| k != i)
+			.filter_map(|&k| lines[k].as_deref())
+			.collect();
+		match line_for(key, &indent, &line, &rest) {
+			LineEdit::Keep => {}
+			LineEdit::Put(replacement) => {
+				if line != replacement {
+					lines[i] = Some(replacement);
+					changed = true;
+				}
+			}
+			LineEdit::Drop => {
+				lines[i] = None;
+				changed = true;
+			}
 		}
 	}
 	if !changed {
 		return None;
 	}
-	let mut out = lines.join("\n");
+	let mut out = lines.into_iter().flatten().collect::<Vec<_>>().join("\n");
 	if text.ends_with('\n') {
 		out.push('\n');
 	}
@@ -4934,19 +4988,33 @@ fn edit_setting_lines(
 }
 
 // One setting's line commented out, so the setting is as good as absent.
-fn commented(indent: &str, line: &str) -> Option<String> {
+fn commented(indent: &str, line: &str) -> LineEdit {
 	let body = line.trim_start();
-	(!body.starts_with('#')).then(|| format!("{indent}# {body}"))
+	if body.starts_with('#') {
+		LineEdit::Keep
+	} else {
+		LineEdit::Put(format!("{indent}# {body}"))
+	}
 }
 
-// The file with each named setting put back the way the template ships it.
+// The file with each named setting put back the way the template ships it. A
+// value saved beside the template's own commented line just goes, rather than
+// leaving a second copy of that line, which would pile up one more each time.
 fn reverted_text(text: &str, keys: &[&str]) -> Option<String> {
 	let template: std::collections::HashMap<String, String> =
 		setting_lines(default_config()).into_iter().collect();
-	edit_setting_lines(text, keys, |key, indent, line| match template.get(key) {
-		Some(shipped) => Some(format!("{indent}{}", shipped.trim_start())),
-		// nothing ships it, so commenting it out is the whole revert
-		None => commented(indent, line),
+	edit_setting_lines(text, keys, |key, indent, line, others| {
+		match template.get(key) {
+			Some(shipped)
+				if !line.trim_start().starts_with('#')
+					&& others.iter().any(|other| other.trim() == shipped.trim()) =>
+			{
+				LineEdit::Drop
+			}
+			Some(shipped) => LineEdit::Put(format!("{indent}{}", shipped.trim_start())),
+			// nothing ships it, so commenting it out is the whole revert
+			None => commented(indent, line),
+		}
 	})
 }
 
@@ -4954,7 +5022,7 @@ fn reverted_text(text: &str, keys: &[&str]) -> Option<String> {
 // means - "not set" - which is not the same as the template's default, and the
 // template ships some of these with a value.
 fn disabled_text(text: &str, keys: &[&str]) -> Option<String> {
-	edit_setting_lines(text, keys, |_, indent, line| commented(indent, line))
+	edit_setting_lines(text, keys, |_, indent, line, _| commented(indent, line))
 }
 
 // Insert any settings the shipped template defines that `path` lacks,
@@ -8136,6 +8204,46 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// A save can add a value as a new line above the template's commented one.
+	// The revert has to find the value, not the comment, and leave the file as
+	// it shipped rather than with a second copy of the commented line.
+	// Test ID: Erekiyk
+	#[test]
+	fn a_revert_takes_out_a_value_saved_beside_its_default() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_revertline_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		reload_from_disk(); // lays the template down
+		let pristine = std::fs::read_to_string(&path).unwrap();
+		let flips: [(&str, fn(&mut Settings)); 3] = [
+			("performance.automatic", |s| {
+				s.performance_automatic = !s.performance_automatic;
+			}),
+			("scroll.smooth", |s| s.scroll_smooth = !s.scroll_smooth),
+			("keys.close_pane", |s| {
+				s.keys = s
+					.keys
+					.with_own(crate::input::Hotkey::ClosePane, Some(Vec::new()));
+			}),
+		];
+		for (key, flip) in flips {
+			let base = reload_from_disk();
+			let mut changed = base.clone();
+			flip(&mut changed);
+			assert!(persist(&base, &changed));
+			assert!(reload_from_disk() == changed, "{key} was saved");
+			revert_keys(&[key]);
+			assert!(reload_from_disk() == base, "{key} went back to its default");
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), pristine, "{key}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// A file from before hotkeys gets the whole keys block at its next launch,
 	// every line commented at its default, and loads the same bindings.
 	// Test ID: EreU3sd
@@ -10146,8 +10254,20 @@ mod tests {
 			let mut edited = lines.clone();
 			edited[index] = &bare;
 			let text = edited.join("\n") + "\n";
+			let mut loaded = resolve(read_raw(&text, path).0);
+			// A hotkey uncommented is set in the file, which Settings shows on its
+			// Keys tab, but it answers to the same chords.
+			for (hotkey, _) in crate::keys::config_paths() {
+				assert_eq!(
+					loaded.keys.chords(hotkey),
+					base.keys.chords(hotkey),
+					"uncommenting `{}` changes what {hotkey:?} answers to",
+					lines[index].trim()
+				);
+			}
+			loaded.keys = base.keys.clone();
 			assert!(
-				resolve(read_raw(&text, path).0) == base,
+				loaded == base,
 				"uncommenting `{}` changes what loads",
 				lines[index].trim()
 			);

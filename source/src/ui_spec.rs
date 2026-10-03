@@ -70,6 +70,11 @@ keys![
 	ColMenuBg, ColMenuFg, ColDialogBg, ColDialogFg,
 	Theme, ThemeMode, ThemeActions,
 	OpenBatch, OpenPowerShell, OpenVbScript, OpenFolder,
+	HotkeyNewWindow, HotkeySettings, HotkeyQuit, HotkeyCopy, HotkeyPaste,
+	HotkeyFontBigger, HotkeyFontSmaller, HotkeyFontReset, HotkeyFullscreen, HotkeyContextMenu,
+	HotkeyNewTab, HotkeyCloseTab, HotkeyPrevTab, HotkeyNextTab, HotkeyMoveTabBack, HotkeyMoveTabForward,
+	HotkeySplitRight, HotkeySplitDown, HotkeyClosePane,
+	HotkeyFocusLeft, HotkeyFocusRight, HotkeyFocusUp, HotkeyFocusDown,
 ];
 
 pub enum Kind {
@@ -97,6 +102,9 @@ pub enum Kind {
 	// one row here and many on screen, so its height follows the list's length
 	// rather than the row metrics - see `SettingsDialog::row_h_for`.
 	ShellList,
+	// One hotkey's chords, set by pressing the new ones. The hotkey is the one
+	// the row's `setting:` binds under `keys:`.
+	Hotkey(crate::input::Hotkey),
 	Header(&'static str), // a section heading, no control
 }
 
@@ -422,6 +430,14 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			"shells" => Kind::ShellList,
 			"color" => Kind::Color,
 			"text" => Kind::Text,
+			"hotkey" => {
+				let Some(hotkey) = paths.first().and_then(|path| crate::keys::hotkey_at(path))
+				else {
+					problems.push(format!("rows.{name}: a hotkey row needs a keys. setting"));
+					continue;
+				};
+				Kind::Hotkey(hotkey)
+			}
 			"radio" | "dropdown" => {
 				// A dropdown whose list is only known at run time (the themes) has
 				// no options here; the code fills it, so an empty list is allowed.
@@ -772,6 +788,46 @@ mod tests {
 			problems
 				.iter()
 				.any(|p| p.contains("margin") && p.contains("Windows")),
+			"{problems:?}"
+		);
+	}
+
+	// Every hotkey the config file can bind has one row on the Keys tab, and a
+	// row naming a path that binds nothing is refused. A hotkey added to the
+	// table with no row would otherwise be settable only by hand.
+	// Test ID: ErektRs
+	#[test]
+	fn every_hotkey_has_one_row_on_the_keys_tab() {
+		let ui = ui();
+		let keys_tab = ui
+			.tabs
+			.iter()
+			.position(|t| *t == "Keys")
+			.expect("a Keys tab");
+		for (hotkey, path) in crate::keys::config_paths() {
+			let rows: Vec<&super::Spec> = ui
+				.specs
+				.iter()
+				.filter(|s| matches!(s.kind, Kind::Hotkey(h) if h == hotkey))
+				.collect();
+			assert_eq!(rows.len(), 1, "{path}");
+			assert_eq!(rows[0].tab, keys_tab, "{path}");
+			assert_eq!(ui.settings_of(rows[0].key), [path.as_str()]);
+		}
+		let rows = ui
+			.specs
+			.iter()
+			.filter(|s| matches!(s.kind, Kind::Hotkey(_)))
+			.count();
+		assert_eq!(rows, crate::keys::config_paths().count());
+		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\tHotkeyCopy:\n\t\tlabel: Copy\n\t\tkind: hotkey\n\t\tsetting: keys.bogus\n";
+		let Err(problems) = parse(bad) else {
+			panic!("a hotkey row binding nothing must be reported")
+		};
+		assert!(
+			problems
+				.iter()
+				.any(|p| p.contains("hotkeycopy") && p.contains("keys.")),
 			"{problems:?}"
 		);
 	}

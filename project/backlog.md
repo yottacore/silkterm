@@ -34,6 +34,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Settings: a revert arrow leaves the value in force when a save put it above its commented default
+	- ID: 2026100309455678
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20261003-094556
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100307252506, 2026100219054510
+	- Target OS: All
+	- Steps to reproduce:
+		- Start from a fresh config. In Settings, untick Choose automatically on the Silk tab and Apply. Click its revert arrow and press OK. Relaunch.
+	- Incorrect behavior: Choose automatically is still off. The same goes for any hotkey set on the Keys tab.
+	- Expected behavior: it is back on, and the file is as it shipped.
+	- Reproduced: 20261003 on b23, by test, for `performance.automatic` and `keys.close_pane`. `scroll.smooth` went back, but left a second copy of its commented line.
+	- Actual cause: a save adds a set value as a new line, sometimes above the template's commented line. The revert took the last line for the path, which was the comment, and left the value alone.
+	- Actual fix: the revert edits the setting's active line. Where the template's commented line is already in the file, the value line goes, rather than becoming a second copy of it.
+	- Test case: `a_revert_takes_out_a_value_saved_beside_its_default` (Erekiyk). It failed before the fix and passes after.
+	- Swept: the cleared font family box goes through the same line lookup, and comments out the active line too.
+	- Branch: keystab
+	- Commit: 9f26b24
+	- Closed:
+
 - Copy on select: on by default, and remembered across launches
 	- ID: 2026100307115829
 	- Type: Enhancement
@@ -608,6 +631,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 684d3a0, 754c9cb, 8624cc2
 	- Closed:
 
+- Settings: a Keys tab to see and change hotkeys
+	- ID: 2026100307252506
+	- Type: Feature
+	- Status: Waiting for testing
+	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
+	- Needs external testing:
+		- vm925w: the Keys tab in a real Settings window, which is a child window there. Ctrl, Alt and Alt+Shift chords set by pressing them, a chord held with the Windows key, AltGr, Escape and Backspace, and the new chord working in the terminal after OK.
+		- b26: Command chords set while Settings has focus, including ones the menu bar owns such as Command+W, Command+Q and Command+,. The menu bar may act on those before the dialog sees them, and Command+Q could quit. Option plus a letter may read as the character it types.
+	- Priority: Avg
+	- Opened: 20261003-072525
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100220292607
+	- Related IDs: 2026100309455678
+	- Target OS: All
+	- Requirements:
+		- Before the RC1 cut.
+		- A Keys tab in Settings that lists every hotkey and lets each one be changed or turned off.
+		- It saves to the same config block that the hotkey item adds.
+	- Progress log:
+		- 20261003: A Keys tab, last of nine, with a row for every hotkey under the File, Edit, View, Tabs and Panes headings, named as the menu rows are. Each row is a box with the chords it answers to, "Off" for none, and a revert arrow.
+		- 20261003: Enter, Space or a click on the box waits for the next chord, and every key goes to it until one comes. Escape leaves the row as it was. Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused in the box, with what it needs held. Walking onto a row with Tab does not start it.
+		- 20261003: A chord another hotkey has by default is taken from it the way the file takes it, and both rows say so in dim text after the chords. A chord another hotkey was set to moves to the latest press, and the row it left says where it went.
+		- 20261003: A save writes only the value set for each hotkey, never what another was left with, so the file reads as a hand edit would. The revert arrow puts the template's line back. shcl adds a set value at the top of the `keys:` block rather than in place of its commented line, as it does for every setting (2026100219054510).
+		- 20261003: On a Mac the rows show the Command chords in Apple's order, and Command held at a press is the chord's Command. The platform is passed in, so the Mac rows are tested here.
+		- 20261003: The tab is left out of the dialog's height, as the Shell tab is, and scrolls. The nine tabs are now the widest thing in the dialog, so every tab is a little wider. The style guide lists the tab count as a known deviation.
+		- 20261003: Changed along the way. The dialog's snap to its natural size rounded down, which left a window a part pixel too narrow, with a sideways scrollbar, once the tab strip set the width. It rounds up now. A revert that missed a value saved above its commented default is its own item, 2026100309455678.
+		- 20261003: Known limit: a value is merged with what another window saved per hotkey, not per chord. Two windows that set the same chord for two hotkeys leave both set, and the launch note says which one answers.
+		- 20261003: Open for signoff: one press sets one chord, so a second chord, such as Ctrl+F4 beside Ctrl+Shift+W, can only be added in the file. The labels, the "Off" wording and the prompt text in the box are a first pass.
+	- Note: 20261003: `every_commented_default_line_loads_as_the_default` compares hotkeys by the chords they answer to. An uncommented `keys:` line is now set in the file, which the Keys tab shows with a lit revert arrow, though what it answers to is the same.
+	- Verified:
+		- The unit suite passes, 1054 tests. fmt, and clippy for Linux, Windows and macOS, are clean. The test ID, markdown, TOC and table checks pass.
+		- Each new check failed with its part taken out: the tab left out of the height, the chord moving off another set hotkey, the save writing only set values, Escape ending the wait, and the snap rounding up.
+		- In a real window on Linux, at scale 1 and 2: the tab, the wait prompt, a refused bare letter, Ctrl+Shift+N taken from New window for New tab with both notes, OK writing `new_tab:` only, the new chord opening a tab, the Tabs menu showing it, the revert arrow taking the line back out, and Escape ending the wait before a second one closed Settings.
+	- Swept: every match on the row kinds is exhaustive or was checked by hand (the draw, the hit tests, the focus ring, Space, Enter and the tip). The two generic row tests drive every hotkey row through a save, a revert and a relaunch. The other window size requests in `dialog.rs` already round up.
+	- Branch: keystab
+	- Commit: e217029
+	- Test case: `a_hotkey_row_takes_the_next_chord_pressed` (Erejamb), `a_chord_another_hotkey_had_is_said_on_both_rows` (Erejaq5), `the_keys_tab_shows_the_mac_chords_on_a_mac` (Erejatf), `a_hotkey_row_draws_its_chords_and_its_note_in_the_box` (ErejaxH), `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` (Erejb15), `a_pressed_chord_is_the_one_the_press_matches` (ErejaW7), `the_files_own_values_are_kept_apart_from_the_result` (Erejaj5), `every_hotkey_has_one_row_on_the_keys_tab` (ErektRs), `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (extended), `a_resize_settles_on_the_natural_size_and_lets_go_past_the_snap` (extended), and the generic `every_row_survives_a_save_and_a_relaunch` and `a_row_changed_after_its_revert_keeps_the_change`.
+	- Closed:
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
@@ -691,22 +754,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When changing the cursor size and animation, change to 50% width.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
-	- Closed:
-
-- Settings: a Keys tab to see and change hotkeys
-	- ID: 2026100307252506
-	- Type: Feature
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261003-072525
-	- Opened by: JC
-	- Assigned to: CC
-	- Prereq IDs: 2026100220292607
-	- Target OS: All
-	- Requirements:
-		- Before the RC1 cut.
-		- A Keys tab in Settings that lists every hotkey and lets each one be changed or turned off.
-		- It saves to the same config block that the hotkey item adds.
 	- Closed:
 
 - macOS: the first launch hangs with no window, using more and more memory

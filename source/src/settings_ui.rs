@@ -25,12 +25,15 @@
 use crate::config::{self, Settings};
 use crate::fileassoc::Assoc;
 use crate::gfx::RectInstance;
+use crate::input::Hotkey;
+use crate::keys::Chord;
 use crate::pane::Rect;
 use crate::pick::{self, Picker};
 use crate::profile::Profile;
 use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at};
 use crate::ui_spec::{self, Key, Kind, Layout, Spec, ui};
 use std::borrow::Cow;
+use winit::keyboard::ModifiersState;
 
 // The declared geometry, all of it in DIP (see the units note above).
 fn lay() -> &'static Layout {
@@ -232,6 +235,8 @@ const UNSAVED_THEME: &str = "[unsaved]";
 
 // A slider's handle, centered on the value, so it overhangs the track's ends.
 const SLIDER_HANDLE_W: f32 = 10.0;
+// What a hotkey row's box says while it waits for the new chord.
+const CAPTURE_PROMPT: &str = "Press keys - Esc cancels, Backspace turns off";
 
 // Clear space between the two halves of a row that carries two controls, DIP.
 const PAIR_GAP: f32 = 12.0;
@@ -625,7 +630,17 @@ pub struct SettingsDialog {
 	prompt: Option<Prompt>,            // the name / confirm box a theme action puts over the panel
 	pick: Option<Picker>,              // the color picker a chip opens, modal over the panel
 	edit: Option<EditState>,           // row being typed (hex for Color, path for Text)
-	edit_drag: Option<usize>,          // field row being drag-selected with the mouse
+	// A hotkey row waiting for its new chord, and what was wrong with the last
+	// press, if anything was.
+	capture: Option<usize>,
+	capture_refused: Option<String>,
+	// Chords a press here took off another hotkey the file had set them for:
+	// (that hotkey, the chord, the one that has it now). Kept to say so on the
+	// row that lost it, since the bindings no longer see a clash.
+	moved: Vec<(Hotkey, Chord, Hotkey)>,
+	// Chords are spoken the Mac's way. Held so a test can ask for either.
+	mac: bool,
+	edit_drag: Option<usize>, // field row being drag-selected with the mouse
 	select_all_on_up: bool, // a fresh single-click field entry: select all on release unless it became a drag
 	// multi-click detection (double = select word, triple = select all)
 	last_click: Option<(std::time::Instant, f32, f32)>,
@@ -787,10 +802,12 @@ impl SettingsDialog {
 
 	// Natural height of one tab's rows (gaps included). Static so `new` can size
 	// the window before Self exists; row_y must walk rows the same way.
-	// The tabs whose height never changes after the dialog opens.
+	// The tabs the dialog's height is taken from. The shell list's height moves
+	// with the data, and the hotkeys are a long fixed list; both scroll instead.
 	fn fixed_tabs(specs: &[Spec]) -> impl Iterator<Item = usize> + '_ {
 		(0..tab_titles().len()).filter(|&t| {
-			!Self::visible(specs, t).any(|(_, spec)| matches!(spec.kind, Kind::ShellList))
+			!Self::visible(specs, t)
+				.any(|(_, spec)| matches!(spec.kind, Kind::ShellList | Kind::Hotkey(_)))
 		})
 	}
 	fn tab_content_h(specs: &[Spec], tab: usize, line_h: f32, shells: usize) -> f32 {
@@ -877,6 +894,10 @@ impl SettingsDialog {
 			prompt: None,
 			pick: None,
 			edit: None,
+			capture: None,
+			capture_refused: None,
+			moved: Vec::new(),
+			mac: cfg!(target_os = "macos"),
 			edit_drag: None,
 			select_all_on_up: false,
 			last_click: None,
@@ -1631,6 +1652,7 @@ impl SettingsDialog {
 	// Ctrl+Tab / Ctrl+Shift+Tab: cycle the active tab, focusing its first control.
 	fn tab_switch(&mut self, forward: bool) {
 		self.commit_edit();
+		self.capture_end();
 		self.open = None;
 		let n = self.tab_ws.len();
 		if n == 0 {
@@ -1863,6 +1885,7 @@ impl SettingsDialog {
 			Kind::Dropdown(_) => self.dd_open(i),
 			Kind::Buttons(_) => self.row_button(i, part),
 			Kind::ShellList => self.shell_activate(i, part),
+			Kind::Hotkey(_) => self.capture_start(i),
 			_ => {}
 		}
 		Action::None
@@ -2172,6 +2195,145 @@ impl SettingsDialog {
 		let k = self.edited.shells.len() - 1;
 		self.focus = Some(Focus::Row(i, shell_part_index(k, ShellPart::Command)));
 		self.open_edit(shell_field_row(k, true), true);
+	}
+
+	// ---- hotkey rows -----------------------------------------------------------
+
+	fn hotkey_of(&self, i: usize) -> Option<Hotkey> {
+		match self.specs[i].kind {
+			Kind::Hotkey(hotkey) => Some(hotkey),
+			_ => None,
+		}
+	}
+	// The hotkey a row's setting is, found through the declarations so the two
+	// cannot disagree.
+	fn hotkey_for_key(&self, key: Key) -> Option<Hotkey> {
+		let at = self.specs.iter().position(|spec| spec.key == key)?;
+		self.hotkey_of(at)
+	}
+	// The name a hotkey goes by on its own row, for a note on another one.
+	fn hotkey_label(&self, hotkey: Hotkey) -> &'static str {
+		self.specs
+			.iter()
+			.find(|spec| matches!(spec.kind, Kind::Hotkey(each) if each == hotkey))
+			.map_or("", |spec| spec.label)
+	}
+	// What a hotkey row's box shows: its chords, whether it has none, and what
+	// is worth saying about a chord it lost or took. A lost chord is said the way
+	// the launch says it about the file.
+	fn hotkey_text(&self, i: usize) -> (String, bool, String) {
+		let Some(hotkey) = self.hotkey_of(i) else {
+			return (String::new(), false, String::new());
+		};
+		if self.capture == Some(i) {
+			let why = self.capture_refused.as_deref().unwrap_or(CAPTURE_PROMPT);
+			return (String::new(), false, why.into());
+		}
+		let keys = &self.edited.keys;
+		let chords = keys.chords(hotkey);
+		let shown = if chords.is_empty() {
+			"Off".to_string()
+		} else {
+			chords
+				.iter()
+				.map(|chord| chord.spoken(self.mac))
+				.collect::<Vec<_>>()
+				.join(" or ")
+		};
+		let mut notes = Vec::new();
+		for taken in keys.taken() {
+			let spoken = taken.chord.spoken(self.mac);
+			if taken.from == hotkey {
+				notes.push(format!(
+					"{spoken} is set for {}",
+					self.hotkey_label(taken.by)
+				));
+			} else if taken.by == hotkey && taken.both_set {
+				notes.push(format!(
+					"{spoken} is also set for {}",
+					self.hotkey_label(taken.from)
+				));
+			} else if taken.by == hotkey {
+				notes.push(format!(
+					"took {spoken} from {}",
+					self.hotkey_label(taken.from)
+				));
+			}
+		}
+		for (from, chord, by) in &self.moved {
+			if *from == hotkey && keys.chords(*by).contains(chord) {
+				notes.push(format!(
+					"{} is set for {}",
+					chord.spoken(self.mac),
+					self.hotkey_label(*by)
+				));
+			}
+		}
+		(shown, chords.is_empty(), notes.join("; "))
+	}
+	// Wait for the next chord on a hotkey row. Every key goes to it until one is
+	// taken, so nothing starts this but a deliberate press or click on the box.
+	fn capture_start(&mut self, i: usize) {
+		self.commit_edit();
+		self.open = None;
+		self.focus = Some(Focus::Row(i, 0));
+		self.capture = Some(i);
+		self.capture_refused = None;
+	}
+	fn capture_end(&mut self) {
+		self.capture = None;
+		self.capture_refused = None;
+	}
+	// A key press while a hotkey row waits. Escape on its own leaves the row as
+	// it was, and Backspace or Delete on its own turns the hotkey off. Answers
+	// whether the press was taken, so the caller sends it nowhere else.
+	pub fn capture_key(&mut self, key: &winit::keyboard::Key, mods: ModifiersState) -> bool {
+		use winit::keyboard::{Key as Pressed, NamedKey};
+		let Some(i) = self.capture else {
+			return false;
+		};
+		let Some(hotkey) = self.hotkey_of(i) else {
+			self.capture_end();
+			return false;
+		};
+		let bare = !(mods.control_key() || mods.alt_key() || mods.shift_key() || mods.super_key());
+		match key {
+			Pressed::Named(NamedKey::Escape) if bare => self.capture_end(),
+			Pressed::Named(NamedKey::Backspace | NamedKey::Delete) if bare => {
+				self.set_hotkey(hotkey, Vec::new());
+				self.capture_end();
+			}
+			_ => match crate::keys::press(key, mods, self.mac) {
+				crate::keys::Press::Held => {}
+				crate::keys::Press::Refused(why) => self.capture_refused = Some(why),
+				crate::keys::Press::Chord(chord) => {
+					self.set_hotkey(hotkey, vec![chord]);
+					self.capture_end();
+				}
+			},
+		}
+		true
+	}
+	// Give a hotkey new chords of its own. A chord another hotkey's own value
+	// has is taken off that one, so the latest press wins; one another has only
+	// by default leaves it the way the file would make it.
+	fn set_hotkey(&mut self, hotkey: Hotkey, chords: Vec<Chord>) {
+		self.moved.retain(|(from, ..)| *from != hotkey);
+		let mut keys = self.edited.keys.clone();
+		for &chord in &chords {
+			for (other, _) in crate::keys::config_paths() {
+				let Some(own) = keys.own(other).filter(|_| other != hotkey) else {
+					continue;
+				};
+				if !own.contains(&chord) {
+					continue;
+				}
+				let rest = own.iter().copied().filter(|each| *each != chord).collect();
+				keys = keys.with_own(other, Some(rest));
+				self.moved.push((other, chord, hotkey));
+			}
+		}
+		self.edited.keys = keys.with_own(hotkey, Some(chords));
 	}
 
 	// The warning mark: just after the label's text, centered in the row.
@@ -2490,6 +2652,7 @@ impl SettingsDialog {
 						..first
 					}
 				}
+				Kind::Hotkey(_) => self.textbox(i),
 				_ => self.checkbox(i),
 			};
 			let hit = if matches!(self.specs[i].kind, Kind::ShellList) {
@@ -2555,7 +2718,7 @@ impl SettingsDialog {
 				}
 			}
 			Kind::Toggle => self.checkbox(i),
-			Kind::Text => self.textbox(i),
+			Kind::Text | Kind::Hotkey(_) => self.textbox(i),
 			Kind::Color if p == 0 => self.swatch(i),
 			Kind::Color => self.hexbox(i),
 			Kind::Radio(opts) => {
@@ -2580,7 +2743,9 @@ impl SettingsDialog {
 	// couple of pixels out and only the hex field's own border stands down.
 	fn ring_is_the_box(&self, i: usize, part: u16) -> bool {
 		match self.specs[i].kind {
-			Kind::Text | Kind::Dropdown(_) | Kind::Buttons(_) | Kind::Color => true,
+			Kind::Text | Kind::Dropdown(_) | Kind::Buttons(_) | Kind::Color | Kind::Hotkey(_) => {
+				true
+			}
 			Kind::Slider { .. } => part == 1,
 			// the two fields and the Add button are boxes; the checkbox and the
 			// icon buttons are not, so they keep the ring a couple of pixels out
@@ -3837,6 +4002,11 @@ impl SettingsDialog {
 	fn is_default(&self, key: Key) -> bool {
 		let edited = &self.edited;
 		let defaults = &self.defaults;
+		// set in the file is not default, even to the shipped chord: a chord set
+		// there takes priority over one a hotkey has by default
+		if let Some(hotkey) = self.hotkey_for_key(key) {
+			return edited.keys.own(hotkey).is_none();
+		}
 		match key {
 			Key::Transparency => edited.transparent_background == defaults.transparent_background,
 			Key::BackdropBlur => {
@@ -3974,6 +4144,12 @@ impl SettingsDialog {
 	// Revert a setting to its default and remember its config key(s), so Apply
 	// can comment them out in config.shcl (config::revert_keys).
 	fn revert(&mut self, key: Key) {
+		if let Some(hotkey) = self.hotkey_for_key(key) {
+			self.edited.keys = self.edited.keys.with_own(hotkey, None);
+			self.moved.retain(|(from, ..)| *from != hotkey);
+			self.queue_revert(key);
+			return;
+		}
 		match key {
 			Key::Transparency
 			| Key::BackdropBlur
@@ -4107,6 +4283,10 @@ impl SettingsDialog {
 				self.set_f32(key, value);
 			}
 		}
+		self.queue_revert(key);
+	}
+	// The row's line goes back to the template's at Apply.
+	fn queue_revert(&mut self, key: Key) {
 		for cfg_key in ui().settings_of(key) {
 			if !self.reverted.contains(cfg_key) {
 				self.reverted.push(cfg_key);
@@ -4159,6 +4339,8 @@ impl SettingsDialog {
 			_ => 1,
 		};
 		self.last_click = Some((now, x, y));
+		// a click anywhere stops a hotkey row waiting; one on its box starts it again
+		self.capture_end();
 		// the picker is modal over the panel: it takes the click either way
 		if self.pick.is_some() {
 			if self.emenu.is_some() {
@@ -4336,6 +4518,12 @@ impl SettingsDialog {
 					let text_box = self.textbox(i);
 					if text_box.contains(x, y) {
 						self.field_click(i, Some((i, 0)), text_box, x, measure);
+						return Action::None;
+					}
+				}
+				Kind::Hotkey(_) => {
+					if self.textbox(i).contains(x, y) {
+						self.capture_start(i);
 						return Action::None;
 					}
 				}
@@ -5311,6 +5499,11 @@ impl SettingsDialog {
 					self.pick_open(i);
 					Action::None
 				}
+				// Enter sets the hotkey, the way it presses a focused button
+				Kind::Hotkey(_) => {
+					self.capture_start(i);
+					Action::None
+				}
 				_ => Action::Ok,
 			}
 		} else {
@@ -5557,6 +5750,28 @@ impl SettingsDialog {
 					}
 					if focused {
 						self.caret_quad(&mut out, text_box, &mut measure);
+					}
+				}
+				Kind::Hotkey(_) => {
+					let key_box = self.textbox(i);
+					out.push(q(
+						key_box.x,
+						key_box.y,
+						key_box.w,
+						key_box.h,
+						dlg().field_bg,
+					));
+					if !self.ring_on(i, 0) {
+						border(
+							&mut out,
+							key_box,
+							1.0,
+							if self.capture == Some(i) {
+								dlg().focus_out
+							} else {
+								dlg().panel_border
+							},
+						);
 					}
 				}
 				Kind::Toggle => {
@@ -6020,6 +6235,28 @@ impl SettingsDialog {
 							row_text_y(text_box.y, text_box.h),
 						)
 					});
+				}
+				Kind::Hotkey(_) => {
+					let key_box = self.textbox(i);
+					let (shown, off, note) = self.hotkey_text(i);
+					let ty = row_text_y(key_box.y, key_box.h);
+					let mut tx = key_box.x + lay().field_pad;
+					if !shown.is_empty() {
+						let width = measure(&shown);
+						out.push(TextItem {
+							color: if off { dlg().dim } else { dlg().text },
+							clip: Some(intersect(key_box)),
+							..mk(shown, tx, ty)
+						});
+						tx += width + line_h;
+					}
+					if !note.is_empty() {
+						out.push(TextItem {
+							color: dlg().dim,
+							clip: Some(intersect(key_box)),
+							..mk(note, tx, ty)
+						});
+					}
 				}
 				Kind::Dual { keys, labels } => {
 					for p in 0u16..2 {
@@ -6908,6 +7145,21 @@ mod tests {
 		assert!((d.viewport().h - tallest).abs() < 0.01, "no room left over");
 		d.tab = shell_tab;
 		assert!(d.max_scroll() > 0.0, "a long shell list scrolls");
+		// the hotkeys are a long list too, and would make every tab that tall
+		let keys_tab = tab_titles().iter().position(|t| *t == "Keys").unwrap();
+		assert!(!fixed.contains(&keys_tab), "the Keys tab is left out");
+		d.tab = keys_tab;
+		assert!(d.max_scroll() > 0.0, "the hotkey list scrolls");
+		// and a row walked onto by keyboard comes into view
+		d.focus = None;
+		for _ in 0..20 {
+			d.focus_move(true);
+		}
+		let Some(super::Focus::Row(i, _)) = d.focus else {
+			panic!("focus left the rows")
+		};
+		let vp = d.viewport();
+		assert!(d.row_y(i) >= vp.y && d.row_y(i) + d.row_screen_h(i) <= vp.y + vp.h);
 	}
 
 	// Too narrow, and the rows keep their natural width and slide sideways under
@@ -7227,6 +7479,11 @@ mod tests {
 					d.set_radio(key, next);
 				}
 			}
+			// a chord no default uses, so nothing else moves
+			super::Kind::Hotkey(hotkey) => {
+				let chord = crate::keys::Chord::parse("Ctrl+Alt+Shift+F9").unwrap();
+				d.set_hotkey(hotkey, vec![chord]);
+			}
 			// no single value to nudge: a push-button row, a heading, or the
 			// shells grid (a list, exercised by its own tests)
 			super::Kind::Buttons(_) | super::Kind::Header(_) | super::Kind::ShellList => {}
@@ -7240,6 +7497,12 @@ mod tests {
 			super::Kind::Text => d.get_text(key),
 			super::Kind::Toggle | super::Kind::Dual { .. } => format!("{}", d.get_toggle(key)),
 			super::Kind::Radio(_) | super::Kind::Dropdown(_) => format!("{}", d.get_radio(key)),
+			// what it answers to, and what the file sets for it
+			super::Kind::Hotkey(hotkey) => format!(
+				"{:?} {:?}",
+				d.edited.keys.chords(hotkey),
+				d.edited.keys.own(hotkey)
+			),
 			super::Kind::Buttons(_) | super::Kind::Header(_) | super::Kind::ShellList => {
 				String::new()
 			}
@@ -11525,5 +11788,325 @@ mod tests {
 				.collect();
 			assert_eq!(turns, [3.0], "at {scale}x");
 		}
+	}
+
+	// The Keys tab, with every row on the defaults for the platform asked for,
+	// whatever the box's own config binds.
+	fn keys_dialog(mac: bool) -> (SettingsDialog, usize) {
+		let mut d = mk_dialog(4000.0);
+		d.mac = mac;
+		d.orig.keys = crate::keys::Bindings::defaults(mac);
+		d.edited.keys = crate::keys::Bindings::defaults(mac);
+		let tab = tab_titles()
+			.iter()
+			.position(|title| *title == "Keys")
+			.expect("a Keys tab");
+		d.tab = tab;
+		(d, tab)
+	}
+	fn row_of(d: &SettingsDialog, key: Key) -> usize {
+		d.specs
+			.iter()
+			.position(|spec| spec.key == key)
+			.unwrap_or_else(|| panic!("no row for {}", key.name()))
+	}
+	fn shown_on(d: &SettingsDialog, i: usize) -> String {
+		let (chords, _, note) = d.hotkey_text(i);
+		format!("{chords} | {note}")
+	}
+
+	// A hotkey row waits for the next chord only once asked, takes every key
+	// while it waits, and ends on a chord, on Escape or on Backspace.
+	// Test ID: Erejamb
+	#[test]
+	fn a_hotkey_row_takes_the_next_chord_pressed() {
+		use crate::input::Hotkey;
+		use winit::keyboard::{Key as Pressed, ModifiersState, NamedKey};
+		let (mut d, _) = keys_dialog(false);
+		let i = row_of(&d, Key::HotkeySplitRight);
+		let ctrl_alt = ModifiersState::CONTROL.union(ModifiersState::ALT);
+		let typed = |text: &str| Pressed::Character(text.into());
+		// walking onto it by keyboard does not start it, or Tab could never leave
+		d.focus = Some(super::Focus::Row(i - 1, 0));
+		d.key_tab();
+		assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
+		assert!(d.capture.is_none());
+		assert!(!d.capture_key(&typed("r"), ctrl_alt), "nothing is waiting");
+		assert_eq!(shown_on(&d, i), "Alt+Shift+Plus | ");
+
+		d.key_space();
+		assert_eq!(d.capture, Some(i));
+		assert!(shown_on(&d, i).contains(super::CAPTURE_PROMPT));
+		assert!(d.capture_key(&Pressed::Named(NamedKey::Control), ModifiersState::CONTROL));
+		assert_eq!(d.capture, Some(i), "a modifier alone is not the chord");
+		assert!(d.capture_key(&typed("r"), ModifiersState::empty()));
+		assert_eq!(d.capture, Some(i), "a bare letter is refused");
+		assert!(shown_on(&d, i).contains("R needs Ctrl, Alt or Super held"));
+		assert!(d.capture_key(&Pressed::Named(NamedKey::Tab), ModifiersState::CONTROL));
+		assert_eq!(
+			d.capture, None,
+			"Ctrl+Tab is a chord here, not a tab switch"
+		);
+		assert_eq!(shown_on(&d, i), "Ctrl+Tab | ");
+		assert_eq!(
+			d.tab,
+			tab_titles().iter().position(|t| *t == "Keys").unwrap()
+		);
+
+		// Enter starts it as well, and Escape leaves the row as it was
+		assert_eq!(d.key_enter(), super::Action::None);
+		assert!(d.capture_key(&Pressed::Named(NamedKey::Escape), ModifiersState::empty()));
+		assert_eq!(d.capture, None);
+		assert_eq!(shown_on(&d, i), "Ctrl+Tab | ");
+
+		d.key_space();
+		assert!(d.capture_key(&typed("r"), ctrl_alt));
+		assert_eq!(shown_on(&d, i), "Ctrl+Alt+R | ");
+		assert!(!d.is_default(Key::HotkeySplitRight));
+		// Backspace turns it off, which is set too, and "Off" says so
+		d.key_space();
+		assert!(d.capture_key(
+			&Pressed::Named(NamedKey::Backspace),
+			ModifiersState::empty()
+		));
+		assert!(d.edited.keys.chords(Hotkey::SplitRight).is_empty());
+		assert_eq!(d.edited.keys.own(Hotkey::SplitRight), Some(&[][..]));
+		let (shown, off, _) = d.hotkey_text(i);
+		assert_eq!((shown.as_str(), off), ("Off", true));
+		// the revert arrow puts the shipped chord back and queues the line
+		d.row_revert(i);
+		assert!(d.is_default(Key::HotkeySplitRight));
+		assert_eq!(shown_on(&d, i), "Alt+Shift+Plus | ");
+		assert_eq!(d.take_reverted(), ["keys.split_right"]);
+
+		// a click on the box starts it, and a click anywhere else stops it
+		let mut m = chars7;
+		let r = d.textbox(i);
+		d.mouse_down_dip(r.x + 4.0, r.y + r.h / 2.0, &mut m);
+		assert_eq!(d.capture, Some(i));
+		let label = d.label_x(i);
+		d.mouse_down_dip(label + 2.0, r.y + r.h / 2.0, &mut m);
+		assert_eq!(d.capture, None);
+		assert_eq!(shown_on(&d, i), "Alt+Shift+Plus | ");
+	}
+
+	// A chord pressed for one hotkey that another has is said on both rows, the
+	// way the launch says it about the file. One the other hotkey had only by
+	// default stays the file's business; one it had been set to moves.
+	// Test ID: Erejaq5
+	#[test]
+	fn a_chord_another_hotkey_had_is_said_on_both_rows() {
+		use crate::input::Hotkey;
+		use winit::keyboard::{Key as Pressed, ModifiersState};
+		let (mut d, _) = keys_dialog(false);
+		let close_tab = row_of(&d, Key::HotkeyCloseTab);
+		let close_pane = row_of(&d, Key::HotkeyClosePane);
+		let ctrl_shift = ModifiersState::CONTROL.union(ModifiersState::SHIFT);
+		d.capture_start(close_pane);
+		assert!(d.capture_key(&Pressed::Character("W".into()), ctrl_shift));
+		assert_eq!(
+			shown_on(&d, close_tab),
+			"Ctrl+F4 | Ctrl+Shift+W is set for Close pane"
+		);
+		assert_eq!(
+			shown_on(&d, close_pane),
+			"Ctrl+Shift+W | took Ctrl+Shift+W from Close tab"
+		);
+		assert!(
+			d.is_default(Key::HotkeyCloseTab),
+			"close_tab itself was not set"
+		);
+
+		// set for one, then pressed for another: the latest press has it
+		let right = row_of(&d, Key::HotkeySplitRight);
+		let down = row_of(&d, Key::HotkeySplitDown);
+		let alt_d = Pressed::Character("d".into());
+		d.capture_start(right);
+		assert!(d.capture_key(&alt_d, ModifiersState::ALT));
+		d.capture_start(down);
+		assert!(d.capture_key(&alt_d, ModifiersState::ALT));
+		assert_eq!(shown_on(&d, down), "Alt+D | ");
+		assert_eq!(
+			shown_on(&d, right),
+			"Off | Alt+D is set for Split horizontal"
+		);
+		assert_eq!(d.edited.keys.own(Hotkey::SplitRight), Some(&[][..]));
+		assert!(d.edited.keys.taken().iter().all(|t| !t.both_set));
+		// once the chord moves on again there is nothing left to say
+		d.capture_start(down);
+		assert!(d.capture_key(&Pressed::Character("e".into()), ModifiersState::ALT));
+		assert_eq!(shown_on(&d, right), "Off | ");
+
+		// two set the same way in the file are both named
+		d.edited.keys = crate::keys::Bindings::with(
+			false,
+			&[
+				(
+					Hotkey::SplitDown,
+					vec![crate::keys::Chord::parse("Alt+D").unwrap()],
+				),
+				(
+					Hotkey::SplitRight,
+					vec![crate::keys::Chord::parse("Alt+D").unwrap()],
+				),
+			],
+		)
+		.0;
+		d.moved.clear();
+		assert_eq!(
+			shown_on(&d, right),
+			"Alt+D | Alt+D is also set for Split horizontal"
+		);
+		assert_eq!(shown_on(&d, down), "Off | Alt+D is set for Split vertical");
+	}
+
+	// On a Mac the rows show Command chords in Apple's order, and Command held
+	// at a press is the chord's Command.
+	// Test ID: Erejatf
+	#[test]
+	fn the_keys_tab_shows_the_mac_chords_on_a_mac() {
+		use winit::keyboard::{Key as Pressed, ModifiersState};
+		let (mut d, _) = keys_dialog(true);
+		let right = row_of(&d, Key::HotkeySplitRight);
+		assert_eq!(shown_on(&d, right), "Command+D | ");
+		let prev = row_of(&d, Key::HotkeyPrevTab);
+		assert_eq!(shown_on(&d, prev), "Shift+Command+[ or Command+PageUp | ");
+		assert_eq!(shown_on(&d, row_of(&d, Key::HotkeyClosePane)), "Off | ");
+		d.capture_start(right);
+		assert!(d.capture_key(&Pressed::Character("r".into()), ModifiersState::empty()));
+		assert!(shown_on(&d, right).contains("R needs Control, Option or Command held"));
+		let option_command = ModifiersState::SUPER.union(ModifiersState::ALT);
+		assert!(d.capture_key(&Pressed::Character("r".into()), option_command));
+		assert_eq!(shown_on(&d, right), "Option+Command+R | ");
+	}
+
+	// The tab draws what each row says: its chords, then the note in the dim
+	// color, both inside the box.
+	// Test ID: ErejaxH
+	#[test]
+	fn a_hotkey_row_draws_its_chords_and_its_note_in_the_box() {
+		use winit::keyboard::{Key as Pressed, ModifiersState};
+		let (mut d, _) = keys_dialog(false);
+		let close_tab = row_of(&d, Key::HotkeyCloseTab);
+		let close_pane = row_of(&d, Key::HotkeyClosePane);
+		d.capture_start(close_pane);
+		let ctrl_shift = ModifiersState::CONTROL.union(ModifiersState::SHIFT);
+		assert!(d.capture_key(&Pressed::Character("W".into()), ctrl_shift));
+		let texts = d.texts_dip(d.line_h, chars7);
+		let r = d.textbox(close_tab);
+		let in_box: Vec<&super::TextItem> = texts
+			.iter()
+			.filter(|t| t.x >= r.x && t.x < r.x + r.w && t.y >= r.y - 1.0 && t.y < r.y + r.h)
+			.collect();
+		assert_eq!(in_box.len(), 2, "chords and note");
+		assert_eq!(in_box[0].text, "Ctrl+F4");
+		assert_eq!(in_box[0].color, super::dlg().text);
+		assert_eq!(in_box[1].text, "Ctrl+Shift+W is set for Close pane");
+		assert_eq!(in_box[1].color, super::dlg().dim);
+		assert!(in_box[1].x > in_box[0].x + chars7("Ctrl+F4"));
+		assert!(in_box.iter().all(|t| t.clip.is_some()));
+	}
+
+	// A hotkey set in Settings goes into the `keys:` block the way a hand edit
+	// puts it there, and loads as the same thing. The revert puts the template's
+	// own line back.
+	// Test ID: Erejb15
+	#[test]
+	fn a_hotkey_set_in_settings_saves_as_a_hand_edit_would() {
+		use winit::keyboard::{Key as Pressed, ModifiersState};
+		let _guard = config::test_config_lock();
+		let _ = config::settings(); // memoize before the override goes in
+		let mac = cfg!(target_os = "macos");
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_keystab_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		config::reload_from_disk(); // lays the template down
+		let pristine = std::fs::read_to_string(&path).unwrap();
+		let shipped = format!(
+			"# close_pane: \"{}\"  ## Default",
+			crate::keys::value_text(
+				crate::keys::Bindings::defaults(mac).chords(crate::input::Hotkey::ClosePane),
+				mac
+			)
+		);
+		assert!(pristine.contains(&shipped), "{pristine}");
+
+		let (mut d, _) = keys_dialog(mac);
+		d.orig = config::reload_from_disk();
+		d.edited = d.orig.clone();
+		let i = row_of(&d, Key::HotkeyClosePane);
+		d.capture_start(i);
+		let (key, mods) = if mac {
+			("w", ModifiersState::SUPER.union(ModifiersState::ALT))
+		} else {
+			("W", ModifiersState::CONTROL.union(ModifiersState::SHIFT))
+		};
+		assert!(d.capture_key(&Pressed::Character(key.into()), mods));
+		let value =
+			crate::keys::value_text(d.edited.keys.chords(crate::input::Hotkey::ClosePane), mac);
+		assert!(config::persist(&d.orig, &d.edited));
+		config::revert_keys(&d.take_reverted());
+		let saved = std::fs::read_to_string(&path).unwrap();
+		// only the hotkey that was set is in the file; the one that lost a
+		// chord to it is not
+		let active = |text: &str| -> Vec<String> {
+			text.lines()
+				.map(str::trim)
+				.filter(|line| {
+					crate::keys::config_paths()
+						.any(|(_, p)| line.starts_with(&format!("{}:", &p["keys.".len()..])))
+				})
+				.map(String::from)
+				.collect()
+		};
+		let lines = active(&saved);
+		assert_eq!(lines.len(), 1, "{saved}");
+		let written = lines[0]
+			.trim_start_matches("close_pane:")
+			.trim()
+			.trim_matches('"');
+		assert_eq!(written, value);
+
+		// the same as uncommenting the line and typing the chord in
+		let by_hand = pristine.replace(&shipped, &format!("close_pane: \"{value}\""));
+		let _ = std::fs::write(&path, &by_hand);
+		let hand = config::reload_from_disk();
+		let _ = std::fs::write(&path, &saved);
+		let after = config::reload_from_disk();
+		assert!(after.keys == hand.keys, "loads as the hand edit does");
+		assert!(after.keys == d.edited.keys, "loads as it was set");
+
+		// the revert arrow takes it out of the file again
+		d.orig = after.clone();
+		d.edited = after;
+		d.row_revert(i);
+		assert!(config::persist(&d.orig, &d.edited));
+		config::revert_keys(&d.take_reverted());
+		let reverted = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(reverted, pristine, "the file is back as it shipped");
+		assert!(config::reload_from_disk().keys == crate::keys::Bindings::defaults(mac));
+
+		// signs the file format has its own use for still read back as written
+		let base = config::reload_from_disk();
+		for sign in ["#", "\"", "\\", ";", ":", "'", "[", ","] {
+			let chord = crate::keys::Chord::parse(&format!("Ctrl+Alt+{sign}")).expect(sign);
+			let mut d = mk_dialog(4000.0);
+			d.orig = base.clone();
+			d.edited = base.clone();
+			d.set_hotkey(crate::input::Hotkey::Quit, vec![chord]);
+			assert!(config::persist(&d.orig, &d.edited), "{sign}");
+			let back = config::reload_from_disk();
+			assert_eq!(
+				back.keys.own(crate::input::Hotkey::Quit),
+				Some(&[chord][..]),
+				"{sign}"
+			);
+			let _ = std::fs::write(&path, &pristine);
+			config::reload_from_disk();
+		}
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 }
