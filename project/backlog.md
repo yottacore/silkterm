@@ -55,6 +55,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows notice is worked out at the moment a save is refused, so it sees the file as it is then.
 	- Progress log:
 		- 20261001: Reproduced on the real program: the console said 198, the file had the line at 200. The extra lines were the rating's two.
+		- Question: Is a second, corrected message fine, or should the messages wait until the rating has written?
+			- Answered 20261002: best judgement, given the goals. The next shcl beta might help.
+	- Decisions:
+		- 20261002: The second message stays for now. The clean fix is for the rating to fill in the template's commented `profile:` and `rated_hardware:` lines where they are, so no line moves and the first message is right. shcl's keep-lines save can't do that yet, so it is filed as 2026100219054510. Holding the messages for the rating was turned down, since they could come late, or never if the window closes first.
 	- Actual fix:
 		- The launch keeps what it printed about the file. A later write to the same file prints again whatever now reads differently, so the last message names the line the file has. The first one still names the old number.
 		- On the real program the console now ends with line 200, where the file has it.
@@ -220,6 +224,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Superseded by the first 20261002 decision.
 		- 20261002: macOS has no in-window menu bar at all. Full screen should cover the macOS menu bar, and if it does not, it is still not SilkTerm's place to break the macOS menu contract. No View > Menu bar row, no right-click Menu bar row, and `--hide-menu` does nothing there. The right-click menu stays.
 		- 20261002: Menu rows on macOS take Apple's standard Command chords, and the same chords work as key bindings. Command never reaches the shell on macOS, and no Ctrl chord is taken from the terminal. Labels on macOS show the Command chord, not the Ctrl one. Other platforms do not change.
+			- The Ctrl half is superseded 20261002: on macOS the program's own chords move from Ctrl to Command (2026100219054469).
 	- Actual fix:
 		- On macOS the system menu bar is built from the same lists the in-window menus use. The SilkTerm menu comes first with About, Settings (Command+,), Services, Hide, Hide others, Show all and Quit. Then File, Edit, View, Tabs and Panes, minus those rows. Help is left off, since About was its only row.
 		- A pick runs the same action as the in-window menu. While a dialog or notice is up it only brings that forward, as a click in the window does. The bar is rebuilt when a check mark or the shell list changes. Rows with a tip in the window carry it as a tooltip.
@@ -257,12 +262,80 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261002: On macOS a press with Command held never reaches the shell. Before, an unbound one such as Command+K typed the letter. Every Ctrl chord means what it did before.
 		- 20261002: On macOS the right-click menu spells its shortcuts as Command chords, and the menu bar labels carry none, since the menu bar draws the chord itself.
 	- Note: 20261002: Not covered here. The Settings dialog's text boxes take Ctrl+C, X, V and A only, so on macOS Command+C and Command+V there now go to the menu bar, which just brings the dialog forward. While a tab name is being edited, Command+V from the menu bar pastes into the shell, not the name. Both were read from the code, not seen.
+		- 20261002: Command chords take the place of Ctrl ones everywhere on macOS, the terminal included (2026100219054469). A tab rename gets paste and full text editing (2026100219054483).
 	- Swept: The one key binding function and the one menu bar builder. Every chord in the table is on a menu row and every menu row's chord is in the table, checked by test. Every Ctrl chord is checked to mean the same with the Mac chords on. The right-click menu is the only other menu that shows shortcuts.
 	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY), `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm), `command_never_reaches_the_shell_on_macos` (ErZrRpZ), `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) and `the_mac_right_click_menu_shows_command_chords` (ErZrSS3). The four new ones fail with their part of the change undone. The old `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE) is commented out, since the bar now binds more than the app menu's keys.
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
 	- Branch: macmenu, macmenu2
 	- Commit: 02482bb, bb66e6e
 	- Closed:
+
+- shcl: a keep-lines save adds a set value as a new line, beside its commented default
+	- ID: 2026100219054510
+	- Type: Task
+	- Status: Stalled
+	- Priority: Low
+	- Opened: 20261002-190545
+	- Opened by: CC
+	- Related IDs: 2026100115322366
+	- Steps to reproduce:
+		- A file with `performance:` and under it `# profile: "max"  ## Default`. Load it keeping lines, set `performance.profile`, and save keeping lines.
+	- Incorrect behavior: the comment stays and the value goes in as a new line, so every line below moves down one.
+	- Expected behavior: the commented line is filled in where it is, so nothing below it moves.
+	- Reproduced: 20261001 on b23, on the real program with shcl b10c2009. The rating added `profile:` and `rated_hardware:` and kept the template's two commented lines. shcl's dev branch has nothing for it as of 20261002.
+	- Progress log:
+		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
+		- Stalled until a shcl beta has it.
+
+- macOS: the program's own shortcuts still use Ctrl in places, where a Mac uses Command
+	- ID: 2026100219054469
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435613, 2026100114435587, 2026100219054483
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: The Settings dialog's text boxes take Ctrl+C, X, V and A only, so Command+C and Command+V there go to the menu bar, which just brings the dialog forward. The terminal's own Ctrl and Ctrl+Shift chords, such as Ctrl+Shift+T, Ctrl+Shift+C and Ctrl+, still work beside the Command ones.
+	- Expected behavior: On macOS every shortcut the program itself takes uses Command where other platforms use Ctrl. That includes the Settings text boxes, the tab rename and the terminal window. Ctrl chords then go to the shell.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Use the Mac's Command chords everywhere on macOS, instead of Ctrl, including on the terminal itself. This replaces the 20261002 call on 2026100114435587 that kept every Ctrl chord working beside the Command ones.
+
+- Tab rename: Paste from the menu bar goes into the shell, and the box has only basic editing
+	- ID: 2026100219054483
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100219054469, 2026100114435613
+	- Target OS: All
+	- Incorrect behavior: While a tab is being renamed, Paste from the macOS menu bar, which Command+V reaches, pastes into the shell, not the name. The box takes typing, the arrows, Home, End, Backspace, Delete, Ctrl+A and Ctrl+V, and nothing else.
+	- Expected behavior: A paste goes into the name being typed, from a key or from a menu. The box does full text editing.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Paste into the tab. Full text editing in the tab.
+
+- macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
+	- ID: 2026100219054497
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435587, 2026100114435613
+	- Target OS: macOS
+	- Test environment: b26
+	- Requirements:
+		- Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, as in other Mac apps.
+		- The macOS menu bar has a Window menu, with Minimize (Command+M) and the other rows Mac apps have there.
+	- Decisions:
+		- 20261002: Yes to both.
 
 - Test files go under one dated folder in the system temp dir
 	- ID: 2026093013113320
