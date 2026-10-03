@@ -768,18 +768,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A current-format config that is not UTF-8 loads as defaults with no message, and a Settings save on it says it worked but writes nothing
 	- ID: 2026100315581313
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs external testing: The new unit tests on Windows, at the next vm925w run.
 	- Severity: Avg
 	- Opened: 20261003-155813
 	- Opened by: CC
-	- Related IDs: 2026100312470546
+	- Related IDs: 2026100312470546, 2026100316135866
 	- Target OS: All
 	- Steps to reproduce:
 		- Put a byte that is not valid UTF-8 into a config file that already has the current Format line.
 		- Launch, then change a setting in Settings and save.
 	- Incorrect behavior: The launch shows defaults and says nothing about the file. The save reports success, and the file is unchanged.
 	- Expected behavior: The launch says the file could not be read. A save either writes or says it did not.
-	- Reproduced: No. Found by reading the code while working 2026100312470546, which handles only an old-format file.
+	- Reproduced: 20261003 on b23, on dev 7895ffa. A unit test loaded the file as all defaults, and `persist` answered that it saved and wrote nothing. First found by reading the code while working 2026100312470546, which handles only an old-format file.
+	- Origin: The not-UTF-8 read in `read_settings_text` answered nothing for a current file, and `persist` took nothing to read as nothing to do. 2026100312470546 kept that on purpose for a current file. Confirmed.
+	- Actual fix:
+		- The file is still left as it is on disk, as 2026100312470546 decided, so no copy is needed. The launch reads every line that decodes, with the others read as blank.
+		- The launch names those lines on the terminal and puts up the "Settings not saved" notice once the window is on screen. The notice says the lines are not UTF-8 text.
+		- Every save refuses, since a write would delete those lines. A Settings OK gets the notice each time and closes, as for any refused save. A save nobody asked for, such as a resize, is said once a session.
+		- The rating write says the file has a line that cannot be read, where it said the file cannot be written.
+		- A Settings save that cannot read the file for another reason, such as permissions, now says so on the terminal and is not reported as a save. A missing file is still skipped, filed as 2026100316135866.
+	- Swept: Every writer of the file. `persist` carries the Settings save, window size and font zoom, per-monitor sizes, the copy toggles and the shells found at launch, and refuses now. The rating write refuses with the right words. The launch steps and `adopt_default_shell` write nothing to such a file, and the launch says why. Revert and clear run only after a `persist` that wrote. `write_doc` only gets what `read_doc` read. `--reset-config` moves the bytes aside unread. The window size refresh reads the lines that decode.
+	- Test case: `a_current_file_that_is_not_utf8_loads_what_reads` (ErgK1sy) and `a_save_on_a_current_file_that_is_not_utf8_is_refused` (ErgK2CS), both seen to fail on the old code and pass on the new. `a_notice_for_lines_that_are_not_utf8_says_so` (ErgK2Vb). `cicd/tests/config-convert/run.bash` (ErgDpjX) gained a current-file case and a "Settings not saved" notice check on a launch that saves nothing. Its new checks failed on the old binary, and the notice check failed with only the window half put back.
+	- Verified: The unit suite passes, 1077 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. The pipeline test passes.
+	- Branch: badutf8
+	- Commit: 54c8d73
+
+- A Settings save on a config that was deleted while running says it saved and writes nothing
+	- ID: 2026100316135866
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-161358
+	- Opened by: CC
+	- Related IDs: 2026100315581313
+	- Target OS: All
+	- Steps to reproduce:
+		- Launch, then delete the config file.
+		- Change a setting in Settings and press OK, or resize the window.
+	- Incorrect behavior: The dialog closes as if it saved. Nothing is written, and the next launch starts from the defaults.
+	- Expected behavior: The save writes the file, or says it did not.
+	- Reproduced: No. Found by reading `persist` while working 2026100315581313.
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
