@@ -437,6 +437,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
+- macOS: a plain click in a reopened Settings can act as a Ctrl+click
+	- ID: 2026100220463754
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261002-204637
+	- Opened by: CC
+	- Related IDs: 2026100220260471
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- Open Settings. Hold Ctrl and press Esc, so Settings closes with Ctrl still down. Let go of Ctrl.
+		- Open Settings again and click a checkbox with no keys held.
+	- Incorrect behavior: The click acts as a right-click. A checkbox does not change, and a text box opens its Cut, Copy, Paste menu. It stays that way until a modifier key is pressed and let go inside Settings.
+	- Expected behavior: A plain click is a left click.
+	- Reproduced: No. Read from the code on 20261002. Details in the ctrlclick design's review round 0.
+	- Origin: 2026100220260471, branch ctrlclick, b2223d0. Plausible.
+
 - A test run removes its own dated folder when it finishes
 	- ID: 2026100220260484
 	- Type: Enhancement
