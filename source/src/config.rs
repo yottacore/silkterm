@@ -9863,12 +9863,15 @@ mod tests {
 		let said = shcl2_losses(text, path);
 		assert_eq!(said.len(), 1, "{said:?}");
 		assert!(said[0].contains("1 line(s)"), "{said:?}");
-		assert!(said[0].contains("/cfg/config.format2.shcl"), "{said:?}");
+		let copy = std::path::Path::new("/cfg").join("config.format2.shcl");
+		assert!(said[0].contains(&copy.display().to_string()), "{said:?}");
 		assert!(shcl2_losses(SHCL2_FILE, path).is_empty());
+		// and every later launch still names the line
 		let out = from_shcl2_text(text).unwrap();
-		eprintln!(
-			"converted:\n{out}\ncomplaints: {:?}",
-			config_complaints(&out)
+		let complaints = config_complaints(&out);
+		assert!(
+			complaints.iter().any(|c| c.contains("line 2")),
+			"{complaints:?}"
 		);
 	}
 
