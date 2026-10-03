@@ -638,6 +638,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
 	- Closed:
 
+- Free resources when idle: on by default
+	- ID: 2026100312470540
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs external testing: A dogfood look on b23 with the GPU busy or nearly full, with the new default and short idle times. The window should let its device go, come back on use, and paint without a key or click if a rebuild is refused at first. Started from a terminal with `SILK_IDLEDBG=1`, it prints each release, rebuild and refusal.
+	- Priority: Avg
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470535
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Default "Free resources when idle" to on.
+	- Notes:
+		- When this is on, an idle window lets its GPU device go and gets a new one when it wakes. That is the same path a busy GPU can break, so test it under GPU load, after or along with 2026100312470535.
+	- Progress log:
+		- 20261003: `window.idle_release` now ships on. An old config's commented `false` default line is refreshed to `true`. A line set by hand is left alone. The two waits stay at 30 and 240 minutes.
+		- 20261003: No performance profile sets this. It is not among the fields a profile governs, so the profiles needed no change.
+		- 20261003: The releasing resources design doc and design.md said off or optional, and now say on. README, the glossary, the UI style guide and the Settings help state no default.
+		- 20261003: Verified: with no `idle_release` line and both waits at 1 minute, an unfocused window let its device go after a minute and took it back when the pointer came in, then showed "(resources restored)". Three more cycles at 6 seconds each painted after every wake, with file handles and threads back to the same counts each time. Software GL only.
+		- 20261003: Verified: the full unit suite, clippy for Linux and Windows, and fmt pass. Both new tests fail with the old default put back.
+		- 20261003: Old test assertion "off by default" in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` is commented out, since it pinned the old default. The test now checks the switched-off case directly.
+	- Swept: `Settings::default()`, the template line, `SUPERSEDED_DEFAULTS`, the profile governed lists (`Shadow` in profile.rs, `GOVERNED` in settings_ui.rs), and every `.md` and `.shcl` naming the setting.
+	- Branch: idleon
+	- Commit: ce9412c
+	- Test case: `idle_release_ships_on` (Erg8fz0) and `an_existing_config_learns_that_the_idle_release_ships_on` (Erg8g2c).
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
@@ -735,34 +763,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
-
-- Free resources when idle: on by default
-	- ID: 2026100312470540
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs external testing: A dogfood look on b23 with the GPU busy or nearly full, with the new default and short idle times. The window should let its device go, come back on use, and paint without a key or click if a rebuild is refused at first. Started from a terminal with `SILK_IDLEDBG=1`, it prints each release, rebuild and refusal.
-	- Priority: Avg
-	- Opened: 20261003-124705
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100312470535
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- Default "Free resources when idle" to on.
-	- Notes:
-		- When this is on, an idle window lets its GPU device go and gets a new one when it wakes. That is the same path a busy GPU can break, so test it under GPU load, after or along with 2026100312470535.
-	- Progress log:
-		- 20261003: `window.idle_release` now ships on. An old config's commented `false` default line is refreshed to `true`. A line set by hand is left alone. The two waits stay at 30 and 240 minutes.
-		- 20261003: No performance profile sets this. It is not among the fields a profile governs, so the profiles needed no change.
-		- 20261003: The releasing resources design doc and design.md said off or optional, and now say on. README, the glossary, the UI style guide and the Settings help state no default.
-		- 20261003: Verified: with no `idle_release` line and both waits at 1 minute, an unfocused window let its device go after a minute and took it back when the pointer came in, then showed "(resources restored)". Three more cycles at 6 seconds each painted after every wake, with file handles and threads back to the same counts each time. Software GL only.
-		- 20261003: Verified: the full unit suite, clippy for Linux and Windows, and fmt pass. Both new tests fail with the old default put back.
-		- 20261003: Old test assertion "off by default" in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` is commented out, since it pinned the old default. The test now checks the switched-off case directly.
-	- Swept: `Settings::default()`, the template line, `SUPERSEDED_DEFAULTS`, the profile governed lists (`Shadow` in profile.rs, `GOVERNED` in settings_ui.rs), and every `.md` and `.shcl` naming the setting.
-	- Branch: idleon
-	- Commit: ce9412c
-	- Test case: `idle_release_ships_on` (Erg8fz0) and `an_existing_config_learns_that_the_idle_release_ships_on` (Erg8g2c).
 
 - When a shcl upgrade breaks the config format, keep the old file and write a new one from scratch
 	- ID: 2026100312470546
@@ -4834,6 +4834,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Rows on the Window tab: "Free resources when idle", "Minutes when hidden" (30), "Minutes otherwise" (240). Config keys `window.idle_release`, `window.idle_release_hidden_min`, `window.idle_release_min`.
 	- Pinned by: `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` and `output_into_a_hidden_window_does_not_hold_its_device`.
 	- Note: 20260930, the planning bullets above were answered by the Done bullets: nothing is disabled under transparency, and the label is "Free resources when idle". The design is in the [releasing resources design doc](design_docs/20260930-151334_releasing-resources.md).
+	- Note: 20261003, on by default now, per 2026100312470540.
 	- Opened: 20260905-181131
 	- Closed: 20260917-070723
 
