@@ -2224,12 +2224,7 @@ fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 // both cases - which is how the release is exercised without leaving a window
 // alone for half an hour.
 fn idle_rule(cfg: &config::Settings) -> (bool, Duration, Duration) {
-	if let Some(secs) = std::env::var("SILK_IDLE_SECS")
-		.ok()
-		.and_then(|raw| raw.parse::<f32>().ok())
-		.filter(|secs| secs.is_finite() && *secs >= 0.0)
-	{
-		let wait = Duration::from_secs_f32(secs);
+	if let Some(wait) = idle_secs() {
 		return (true, wait, wait);
 	}
 	let minutes = |m: usize| Duration::from_secs(m as u64 * 60);
@@ -2238,6 +2233,19 @@ fn idle_rule(cfg: &config::Settings) -> (bool, Duration, Duration) {
 		minutes(cfg.idle_release_hidden_min),
 		minutes(cfg.idle_release_min),
 	)
+}
+
+// SILK_IDLE_SECS, read once, since every loop pass asks for the idle rule.
+fn idle_secs() -> Option<Duration> {
+	use std::sync::OnceLock;
+	static WAIT: OnceLock<Option<Duration>> = OnceLock::new();
+	*WAIT.get_or_init(|| {
+		std::env::var("SILK_IDLE_SECS")
+			.ok()
+			.and_then(|raw| raw.parse::<f32>().ok())
+			.filter(|secs| secs.is_finite() && *secs >= 0.0)
+			.map(Duration::from_secs_f32)
+	})
 }
 
 // SILK_IDLEDBG=1: the idle release's comings and goings on stderr, stamped
@@ -2896,6 +2904,7 @@ struct State {
 	// unfreeze - one dirty catch-up frame, hard-cut. Read and written only by
 	// freeze_sync, which both render entry points go through.
 	was_hidden: bool,
+	minimized: MinimizedProbe,
 	// Deadline of the next animation frame while SILK_MAX_FPS pins the rate; None
 	// otherwise, which is every ordinary run. See `max_fps`.
 	next_frame: Option<Instant>,
@@ -2953,6 +2962,50 @@ fn freeze_frame(was_hidden: bool, hidden: bool) -> Frame {
 		Frame::CatchUp
 	} else {
 		Frame::Draw
+	}
+}
+
+// How long a minimized answer stands. On X11 the answer is a property read
+// the loop waits on, and winit reports no event when a window is minimized.
+// Events that come with a restore forget the answer (`restore_sign`), so a
+// reveal is not held up by it.
+const MINIMIZED_RECHECK: Duration = Duration::from_millis(250);
+
+// An event a restore brings. The WM's redraw is one, and it reaches
+// `freeze_sync` before `about_to_wait` does (G89), so it must see the
+// window as shown, not a minimized answer from before.
+fn restore_sign(event: &WindowEvent) -> bool {
+	matches!(
+		event,
+		WindowEvent::Focused(_)
+			| WindowEvent::Occluded(_)
+			| WindowEvent::Resized(_)
+			| WindowEvent::RedrawRequested
+	)
+}
+
+// The window's minimized state as last asked, so a pass asks at most once per
+// MINIMIZED_RECHECK rather than every time.
+#[derive(Default)]
+struct MinimizedProbe {
+	answer: bool,
+	asked: Option<Instant>,
+}
+
+impl MinimizedProbe {
+	fn get(&mut self, now: Instant, ask: impl FnOnce() -> bool) -> bool {
+		let stale = self
+			.asked
+			.is_none_or(|at| now.saturating_duration_since(at) >= MINIMIZED_RECHECK);
+		if stale {
+			self.answer = ask();
+			self.asked = Some(now);
+		}
+		self.answer
+	}
+
+	fn forget(&mut self) {
+		self.asked = None;
 	}
 }
 
@@ -4346,8 +4399,9 @@ impl State {
 		for shell in &settings.shells {
 			(shell.active, &shell.title).hash(&mut hasher);
 		}
-		for (hotkey, _) in crate::keys::config_paths() {
-			settings.keys.chords(hotkey).hash(&mut hasher);
+		// in table order, so each hotkey's chords keep one place in the hash
+		for (_, chords) in settings.keys.in_force() {
+			chords.hash(&mut hasher);
 		}
 		hasher.finish()
 	}
@@ -4977,9 +5031,18 @@ impl State {
 	// says so. Both render entry points check it - a frame built here would bank
 	// the whole buffered backlog into the output ease, and the reveal would then
 	// play it back as if it had just arrived.
-	fn hidden(&self) -> bool {
-		self.revealed
-			&& (self.occluded || (FREEZE_MINIMIZED && self.window.is_minimized().unwrap_or(false)))
+	fn hidden(&mut self) -> bool {
+		if !self.revealed {
+			return false;
+		}
+		if self.occluded {
+			return true;
+		}
+		let window = &self.window;
+		FREEZE_MINIMIZED
+			&& self
+				.minimized
+				.get(Instant::now(), || window.is_minimized().unwrap_or(false))
 	}
 
 	// The freeze edge, owned in one place because both render entry points reach
@@ -8139,6 +8202,7 @@ impl ApplicationHandler<UserEvent> for App {
 			scrim_sig: None,
 			occluded: false,
 			was_hidden: false,
+			minimized: MinimizedProbe::default(),
 			next_frame: None,
 			wp_count: 0,
 			wp_current: None,
@@ -8336,6 +8400,9 @@ impl ApplicationHandler<UserEvent> for App {
 		let Some(state) = self.state.as_mut() else {
 			return;
 		};
+		if restore_sign(&event) {
+			state.minimized.forget();
+		}
 		// The startup benchmark owns the window while its banner is up: anything
 		// typed or clicked would change what is being timed. Closing still works.
 		if state.bench_banner.is_some()
@@ -10009,6 +10076,94 @@ mod tests {
 			);
 		}
 		println!("debug switches checked");
+	}
+
+	// SILK_IDLE_SECS is read once per process. The idle rule is asked twice on
+	// every loop pass, and it went to the environment each time. Run in a child
+	// copy of this test binary, since the answer is cached per process.
+	// Test ID: ErgPfvU
+	#[test]
+	fn the_idle_wait_switch_is_read_once() {
+		let out = std::process::Command::new(std::env::current_exe().unwrap())
+			.args(["--exact", "app::tests::idle_wait_child", "--nocapture"])
+			.env("SILK_IDLE_WAIT_CHILD", "1")
+			.env("SILK_IDLE_SECS", "5")
+			.output()
+			.unwrap();
+		let text = String::from_utf8_lossy(&out.stdout);
+		assert!(
+			out.status.success(),
+			"{text}{}",
+			String::from_utf8_lossy(&out.stderr)
+		);
+		assert!(text.contains("idle wait checked"), "{text}");
+	}
+
+	// Test ID: ErgPfzH
+	#[test]
+	fn idle_wait_child() {
+		if std::env::var_os("SILK_IDLE_WAIT_CHILD").is_none() {
+			return; // only does anything when the test above starts it
+		}
+		let cfg = config::Settings::default();
+		let five = Duration::from_secs(5);
+		assert_eq!(super::idle_rule(&cfg), (true, five, five));
+		// SAFETY: this child runs this one test, so no other thread is reading
+		// the environment.
+		unsafe { std::env::set_var("SILK_IDLE_SECS", "9") };
+		assert_eq!(
+			super::idle_rule(&cfg),
+			(true, five, five),
+			"read again after the first pass"
+		);
+		println!("idle wait checked");
+	}
+
+	// The minimized state is a round trip to the X server, and a pass at the
+	// frame rate asked it every time. A second at 60 passes now asks at most
+	// once per MINIMIZED_RECHECK, and an event that forgets the answer gets a
+	// fresh one on the next pass.
+	// Test ID: ErgPg2b
+	#[test]
+	fn the_minimized_state_is_asked_at_most_once_per_recheck() {
+		use super::{MINIMIZED_RECHECK, MinimizedProbe};
+		use winit::event::WindowEvent;
+		let mut probe = MinimizedProbe::default();
+		let start = Instant::now();
+		let mut asks = 0;
+		for pass in 0..60u32 {
+			let now = start + Duration::from_secs(1) * pass / 60;
+			// minimized a third of the way in, with nothing reported
+			let minimized = pass >= 20;
+			let seen = probe.get(now, || {
+				asks += 1;
+				minimized
+			});
+			if now >= start + Duration::from_millis(333) + MINIMIZED_RECHECK {
+				assert!(seen, "still not seen at pass {pass}");
+			}
+		}
+		let most = Duration::from_secs(1)
+			.div_duration_f32(MINIMIZED_RECHECK)
+			.ceil() as u32;
+		assert!(asks <= most, "{asks} asks in a second, at most {most}");
+		// a restore forgets the answer, so the next pass sees it at once
+		assert!(super::restore_sign(&WindowEvent::RedrawRequested));
+		assert!(super::restore_sign(&WindowEvent::Occluded(false)));
+		assert!(super::restore_sign(&WindowEvent::Focused(true)));
+		assert!(super::restore_sign(&WindowEvent::Resized(
+			winit::dpi::PhysicalSize::new(640, 480)
+		)));
+		assert!(!super::restore_sign(&WindowEvent::Moved(
+			winit::dpi::PhysicalPosition::new(0, 0)
+		)));
+		probe.forget();
+		let after = start + Duration::from_secs(1);
+		assert!(!probe.get(after, || false));
+		assert!(
+			!probe.get(after, || panic!("asked again straight after")),
+			"the answer stands until the recheck"
+		);
 	}
 
 	// The strength scale went from 10% to 20% per doubling in August and design.md

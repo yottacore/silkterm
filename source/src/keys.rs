@@ -600,6 +600,12 @@ impl Bindings {
 	pub fn shown(&self, hotkey: Hotkey) -> Option<Chord> {
 		self.chords(hotkey).first().copied()
 	}
+
+	/// Every hotkey with the chords it answers to, in table order.
+	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+	pub fn in_force(&self) -> &[(Hotkey, Vec<Chord>)] {
+		&self.list
+	}
 }
 
 /// What is wrong with the `keys:` values in a config, each with the line it is
@@ -781,6 +787,22 @@ mod tests {
 		assert!(notes.is_empty());
 		assert_eq!(b.hotkey(&typed("+"), ALT_SHIFT), None);
 		assert_eq!(b.shown(Hotkey::SplitDown), Some(chord("Alt+Shift+Minus")));
+	}
+
+	// The macOS menu bar is rebuilt when a hash of `in_force` changes, so it
+	// has to give every hotkey's chords, the same as asking for each one.
+	// Test ID: ErgPg5v
+	#[test]
+	fn the_bindings_in_force_give_every_hotkey() {
+		for mac in [false, true] {
+			let (b, _) = Bindings::with(mac, &[(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")])]);
+			let listed: Vec<Hotkey> = b.in_force().iter().map(|(hotkey, _)| *hotkey).collect();
+			let table: Vec<Hotkey> = TABLE.iter().map(|row| row.0).collect();
+			assert_eq!(listed, table, "mac {mac}");
+			for (hotkey, chords) in b.in_force() {
+				assert_eq!(chords.as_slice(), b.chords(*hotkey), "{hotkey:?}");
+			}
+		}
 	}
 
 	// A bad value is reported with its line and leaves the default in place,
