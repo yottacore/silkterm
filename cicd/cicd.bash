@@ -717,6 +717,18 @@ if [[ -x "${root}/cicd/tests/gates/run.bash" ]]; then
 fi
 ## This script's own steps: the build retry, the dogfood tag, the options, the
 ## running-copy check, the build number and the host line.
+## Old config files converted by the program just built: in place where shcl
+## can migrate them, written new where it cannot, the old file kept either way.
+## Exit 3 means there was no binary to run, which is a skip and never an OK.
+if [[ -x "${root}/cicd/tests/config-convert/run.bash" ]]; then
+	fEcho_Clean "config conversion ..."
+	convertRc=0; "${root}/cicd/tests/config-convert/run.bash" >/dev/null || convertRc=$?
+	case "${convertRc}" in
+		0) fEcho "OK: config conversion ($(fTestId cicd/tests/config-convert/run.bash))" ;;
+		3) fEcho "WARNING: config conversion skipped, no binary to run" ;;
+		*) fDie "config conversion test failed ($(fTestId cicd/tests/config-convert/run.bash))" ;;
+	esac
+fi
 if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
 	fEcho_Clean "pipeline steps ..."
 	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed ($(fTestId cicd/tests/engine/run.bash))"

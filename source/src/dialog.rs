@@ -1714,19 +1714,26 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 // What a launch says when converting the settings file left settings behind:
 // how many, and the name the file as it was is kept under, in the same folder.
 pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>) {
-	let lost = if loss.lost == 1 {
-		"One setting could not be converted and now does nothing.".to_string()
-	} else {
-		format!(
-			"{} settings could not be converted and now do nothing.",
-			loss.lost
-		)
+	let (done, lost) = match (loss.how, loss.lost) {
+		(config::Converted::InPlace, 1) => (
+			"converted its settings file to a new format.",
+			"One setting could not be converted and now does nothing.".to_string(),
+		),
+		(config::Converted::InPlace, n) => (
+			"converted its settings file to a new format.",
+			format!("{n} settings could not be converted and now do nothing."),
+		),
+		(config::Converted::Rewritten, 1) => (
+			"could not convert its settings file to the new format, so it wrote a new one.",
+			"One setting could not be carried over to the new file.".to_string(),
+		),
+		(config::Converted::Rewritten, n) => (
+			"could not convert its settings file to the new format, so it wrote a new one.",
+			format!("{n} settings could not be carried over to the new file."),
+		),
 	};
 	let mut paras = vec![
-		format!(
-			"{} converted its settings file to a new format.",
-			config::APP_NAME
-		),
+		format!("{} {done}", config::APP_NAME),
 		loss.path.display().to_string(),
 		lost,
 	];
@@ -2086,6 +2093,7 @@ mod tests {
 				backup: backup
 					.map(|name| std::path::Path::new("/home/me/.config/silkterm").join(name)),
 				lost,
+				how: config::Converted::InPlace,
 			})
 		};
 		let (title, paras) = said(2, Some("config_backup_20261003-142233_format-v2.shcl"));
@@ -2106,6 +2114,41 @@ mod tests {
 			"One setting could not be converted and now does nothing."
 		);
 		assert_eq!(one.len(), 3, "no copy, nothing said about one");
+	}
+
+	// A file that could not be converted in place was written new, and its
+	// notice says so, with what was left behind and the copy that still has it.
+	// Test ID: ErgDpOZ
+	#[test]
+	fn a_rewritten_file_notice_says_it_was_written_new() {
+		let said = |lost: usize| {
+			conversion_notice(&config::ConversionLoss {
+				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
+				backup: Some(std::path::PathBuf::from(
+					"/home/me/.config/silkterm/config_backup_20261003-142233_format-v2.shcl",
+				)),
+				lost,
+				how: config::Converted::Rewritten,
+			})
+		};
+		let (title, paras) = said(3);
+		assert_eq!(title, "Settings not converted");
+		assert_eq!(
+			paras[0],
+			format!(
+				"{} could not convert its settings file to the new format, so it wrote a new one.",
+				config::APP_NAME
+			)
+		);
+		assert_eq!(
+			paras[2],
+			"3 settings could not be carried over to the new file."
+		);
+		assert!(paras[3].ends_with("config_backup_20261003-142233_format-v2.shcl."));
+		assert_eq!(
+			said(1).1[2],
+			"One setting could not be carried over to the new file."
+		);
 	}
 
 	// What a refused save says: which file, which lines, and what that costs.
@@ -2400,6 +2443,7 @@ mod tests {
 							.into(),
 					),
 					lost: 2,
+					how: config::Converted::InPlace,
 				})
 				.1,
 			),
