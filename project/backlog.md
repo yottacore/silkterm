@@ -784,6 +784,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: 2026100220292612 already keeps a copy on every format upgrade, as `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`. N is the old file's Format number, which has matched shcl's major version so far. It copies the file and then converts it in place, rather than writing a new one from scratch.
 		- 20261003: shcl 3.0's `migrate_unstamped` is the help shcl gives today. It respells a 2.x file, and does no backup.
 
+- A pipeline test that converts old config files
+	- ID: 2026100313404573
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261003-134045
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100220292612, 2026100312470546
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A test in the pipeline that creates config files in the old shcl formats, and tests the automatic conversion, the one SilkTerm does without help from shcl.
+		- Run it to close 2026100220292612.
+
+- macOS: a universal binary for both x86_64 and ARM
+	- ID: 2026100313404572
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261003-134045
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100113403226
+	- Target OS: macOS
+	- Requirements:
+		- Before RC1.
+		- macOS gets one universal binary for both x86_64 and ARM, if the binary size allows it.
+	- Notes:
+		- 20261003: b26 already builds a universal app for dogfood. This item is about what the release gives users, and whether its size is acceptable.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
