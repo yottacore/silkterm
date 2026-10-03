@@ -82,9 +82,12 @@ fi
 
 ##	Distil warnings/advisories. rustc/clippy/cargo-deny all say "warning"; deny adds
 ##	RUSTSEC ids + vulnerable/unmaintained/yanked. Hard errors only appear in a failed
-##	run's log (a passing run aborts on the first error). Drop the "0 warnings" noise.
+##	run's log (a passing run aborts on the first error). Drop the "0 warnings" noise,
+##	and test result lines, whose test names can hold any of these words: cargo test's
+##	"<status> <ID> <name>" (test-id.py --annotate) and a script's "[ OK: <what> (<ID>) ]".
 warns="$(grep -inE 'warning|rustsec-|vulnerab|unmaintained|yanked|error\[' "$log" 2>/dev/null \
-	| grep -viE 'generated 0 warnings|: 0 warnings|no warnings|0 warnings emitted' || true)"
+	| grep -viE 'generated 0 warnings|: 0 warnings|no warnings|0 warnings emitted' \
+	| grep -vE '^[0-9]+:((ok|FAILED|ignored) +([0-9A-Za-z]{7}|-------)  [^ ]|\[ OK: .* \([0-9A-Za-z]{7}\) \]$)' || true)"
 if [[ -n "$warns" ]]; then n=$(printf '%s\n' "$warns" | grep -c .); else n=0; fi
 
 tag="FLAG"; ((check)) && tag="NEW"
@@ -99,3 +102,4 @@ fi
 
 ##	Script history:
 ##		- 20260709: Created.
+##		- 20261003: Test result lines no longer count as warnings.
