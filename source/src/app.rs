@@ -5854,9 +5854,11 @@ impl State {
 					instances.push(rect_inst(x, 0.0, w, menu_h, config::menu_hover()));
 				}
 			}
-			// Alt held (no dropdown open): underline each title's accelerator
-			// letter, like the open-dropdown items do (press the letter to open).
-			let marks = bar_title_underlines(self.mods.alt_key(), self.bar_open, &MENU_BAR);
+			// Alt held, alone or with Shift (no dropdown open): underline each
+			// title's accelerator letter, like the open-dropdown items do (press the
+			// letter to open).
+			let marks =
+				bar_title_underlines(input::opens_menu_title(self.mods), self.bar_open, &MENU_BAR);
 			if !marks.is_empty() {
 				let attrs = crate::text::ui_attrs();
 				let rule = self.text.dip(CHROME_HAIRLINE);
