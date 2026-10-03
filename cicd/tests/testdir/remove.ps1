@@ -38,13 +38,18 @@ function fCase([string]$Name, [string]$Body, [string]$Given = '') {
 	$null = New-Item -ItemType Directory -Path $base
 	$file = Join-Path $work "$Name.ps1"
 	Set-Content -LiteralPath $file -Value ". '$helper'`nfTestDir_Use`n`$dir = `$env:SILKTERM_TEST_DIR`n$Body"
+	##	Warnings come back as plain lines on stdout, the same on both shells.
+	##	Windows PowerShell 5.1 wraps a warning at the window width, which splits
+	##	a long one across lines.
+	$run = Join-Path $work "$Name-run.ps1"
+	Set-Content -LiteralPath $run -Value "& '$file' 3>&1 | ForEach-Object { if (`$_ -is [System.Management.Automation.WarningRecord]) { [Console]::Out.WriteLine('WARNING: ' + `$_.Message) } else { `$_ } }`nexit `$LASTEXITCODE"
 	$saved = @{ SILKTERM_TEST_DIR = $env:SILKTERM_TEST_DIR; TEMP = $env:TEMP; TMP = $env:TMP; TMPDIR = $env:TMPDIR }
 	##	Windows PowerShell 5.1 turns a native command's stderr into an error, which Stop would throw.
 	$ErrorActionPreference = 'Continue'
 	try {
 		if ($Given) { $env:SILKTERM_TEST_DIR = $Given } else { Remove-Item env:SILKTERM_TEST_DIR -ErrorAction SilentlyContinue }
 		$env:TEMP = $base; $env:TMP = $base; $env:TMPDIR = $base
-		$out = & $shell -NoProfile -NonInteractive -File $file 2>&1 | Out-String
+		$out = & $shell -NoProfile -NonInteractive -File $run 2>&1 | Out-String
 		$code = $LASTEXITCODE
 	} finally {
 		foreach ($name in $saved.Keys) {
