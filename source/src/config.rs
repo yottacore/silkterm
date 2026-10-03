@@ -1420,12 +1420,31 @@ pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> Result<
 }
 
 // The same write, answering where the old file was kept when it converted one.
+// Settings the conversion could not keep are said here, so a save that converts
+// a file a busy launch left alone says it as the launch would. A clean
+// conversion says nothing.
 fn write_config_keeping(path: &std::path::Path, text: &str) -> Result<Option<PathBuf>, String> {
 	let kept = publish_keeping(path, text, shcl::write_file_atomic)?;
 	for line in restated_launch_messages(path, text) {
 		eprintln!("{line}");
 	}
+	if let Some(loss) = kept.as_deref().and_then(|copy| lost_converting(path, copy)) {
+		eprintln!("{}", loss.terminal_line());
+		if let Ok(mut owed) = LOST_IN_CONVERSION.lock() {
+			*owed = Some(loss);
+		}
+	}
 	Ok(kept)
+}
+
+// The copy is the file exactly as it was before the conversion.
+fn lost_converting(path: &std::path::Path, copy: &std::path::Path) -> Option<ConversionLoss> {
+	let old = std::fs::read(copy).ok()?;
+	shcl2_losses(
+		&String::from_utf8_lossy(&old),
+		path,
+		Some(copy.to_path_buf()),
+	)
 }
 
 #[cfg(test)]
@@ -5948,21 +5967,11 @@ fn convert_shcl2_config(path: &std::path::Path) {
 		note_config_busy(path);
 		return;
 	}
-	let backup = match write_config_keeping(path, &out) {
-		Ok(backup) => backup,
-		Err(e) => {
-			eprintln!(
-				"{APP_NAME}: could not update config {}: {e}",
-				path.display()
-			);
-			return;
-		}
-	};
-	if let Some(loss) = shcl2_losses(&text, path, backup) {
-		eprintln!("{}", loss.terminal_line());
-		if let Ok(mut owed) = LOST_IN_CONVERSION.lock() {
-			*owed = Some(loss);
-		}
+	if let Err(e) = write_config_atomic(path, &out) {
+		eprintln!(
+			"{APP_NAME}: could not update config {}: {e}",
+			path.display()
+		);
 	}
 }
 
@@ -5983,8 +5992,9 @@ fn shcl2_losses(
 	})
 }
 
-// Settings a launch's conversion could not keep. The terminal hears at once;
-// the window says it in a notice once it is on screen, as for a refused save.
+// Settings a conversion could not keep, at launch or in a later write. The
+// terminal hears at once; the window says it in a notice once it is on screen,
+// as for a refused save.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConversionLoss {
 	pub path: PathBuf,
@@ -10882,6 +10892,45 @@ mod tests {
 
 		std::fs::write(&path, SHCL2_FILE).unwrap();
 		let _ = load();
+		assert_eq!(take_conversion_loss(), None, "nothing was lost");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A Settings save that converts a file a busy launch left alone says what it
+	// lost as the launch does, once, with the count and the copy. A save that
+	// converts without losing anything still keeps a copy and says nothing.
+	// Test ID: ErfTRqP
+	#[test]
+	fn a_save_that_loses_a_setting_converting_leaves_a_notice_for_the_window() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("fmtcopy_save");
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let orig = Settings::default();
+		let mut edited = orig.clone();
+		edited.font_size += 1.0;
+
+		let text = "font:\n\tfamily:[One, Two]\n";
+		std::fs::write(&path, text).unwrap();
+		assert!(persist(&orig, &edited));
+		let now = std::fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			shcl::format_version(&now),
+			Some(shcl::FORMAT_MAJOR),
+			"{now}"
+		);
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!(loss.path, path);
+		assert_eq!(loss.lost, 1);
+		let copy = loss.backup.expect("a copy was kept");
+		assert_eq!(copy.parent(), Some(dir.as_path()));
+		assert_eq!(std::fs::read_to_string(&copy).unwrap(), text);
+		assert_eq!(take_conversion_loss(), None, "taken once");
+
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		assert!(persist(&orig, &edited));
+		assert_eq!(backups_in(&dir, "config").len(), 2, "a copy is still kept");
 		assert_eq!(take_conversion_loss(), None, "nothing was lost");
 		let _ = std::fs::remove_dir_all(&dir);
 	}

@@ -59,7 +59,7 @@ pub struct App {
 	notice: Option<crate::dialog::DialogWin>,
 	notice_dirty: bool,
 	notice_owed: Option<config::Refusal>,
-	// settings the launch's conversion of the file could not keep, said the same way
+	// settings a conversion of the file could not keep, said the same way
 	loss_owed: Option<config::ConversionLoss>,
 	// files already reported this session (see notice_due)
 	told: Vec<std::path::PathBuf>,
@@ -9369,8 +9369,9 @@ impl ApplicationHandler<UserEvent> for App {
 				self.notice_owed = Some(refusal);
 			}
 		}
-		// The launch converted the file and lost settings doing it. Said once the
-		// terminal is on screen, since nothing may hold up the first frame.
+		// A write converted the file and lost settings doing it: the launch's, or a
+		// save that converted a file the launch left alone. Said once the terminal
+		// is on screen, since nothing may hold up the first frame.
 		if self.state.as_ref().is_some_and(|state| state.revealed) {
 			if let Some(loss) = config::take_conversion_loss() {
 				self.loss_owed = Some(loss);
