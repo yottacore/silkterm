@@ -4855,19 +4855,23 @@ fn rewritten_by<'a>(text: &'a str, steps: &[LaunchStep]) -> std::borrow::Cow<'a,
 	out.map_or(std::borrow::Cow::Borrowed(text), std::borrow::Cow::Owned)
 }
 
-// Every setting path, active and commented, in the text a save would write. A
+// Every setting path, active and commented, where every save agrees on it. A
 // save that keeps the lines leaves a comment where it is, but one that falls
 // back to the canonical form writes it at the depth of the setting below it, so
 // a commented new name can move into the old name's block, and a rename that a
-// save turns on or off moved a value at the next launch. A save that would be
-// refused writes nothing, so the file as it is has the answer.
+// save turns on or off moved a value at the next launch. shcl picks between the
+// two by what the save changes, not by the file: a window size save can fall
+// back where a font size save keeps the lines. So the answer is the canonical
+// form's, which is also the canonical form of whatever either save writes.
+// Where the file has a lost line a fallback is refused and only the lines are
+// kept, so the file as it is has the answer.
 fn saved_paths(text: &str) -> Option<std::collections::HashSet<String>> {
 	let doc = parse_kept(text);
-	if save_refused(&doc) {
+	if doc.lost_count() > 0 {
 		return None;
 	}
 	Some(
-		walk_settings(&saved_text(&doc))
+		walk_settings(&doc.to_canonical())
 			.into_iter()
 			.filter_map(|w| match w {
 				WalkLine::Setting { path, .. } => Some(path),
@@ -12302,41 +12306,91 @@ mod tests {
 	// 	}
 	// }
 
-	// A rename's new name counts where the save that actually runs leaves a
-	// commented line. A save that keeps the lines leaves a column-0 comment at
-	// column 0, so it never blocks the rename, before a save or after one.
-	// Test ID: ErUrgUh
+	// Off since `saved_paths` judges by the canonical form again. It held that a
+	// save keeps a column-0 comment at column 0, but shcl falls back to the
+	// canonical form by what a save changes, and that moves the comment into the
+	// block. `a_commented_new_name_counts_the_same_whichever_save_runs` covers it.
+	// // A rename's new name counts where the save that actually runs leaves a
+	// // commented line. A save that keeps the lines leaves a column-0 comment at
+	// // column 0, so it never blocks the rename, before a save or after one.
+	// // Test ID: ErUrgUh
+	// #[test]
+	// fn a_commented_new_name_counts_where_the_save_that_runs_puts_it() {
+	// 	let load = |t: &str| {
+	// 		shcl::Document::parse(&migrate_config_text(t).unwrap_or_else(|| t.to_string()))
+	// 	};
+	// 	// what a Settings save of an unrelated value writes
+	// 	let saved = |t: &str| {
+	// 		let mut doc = parse_kept(t);
+	// 		assert!(doc.set_string("colors.background", "#010101"));
+	// 		saved_text(&doc)
+	// 	};
+	// 	let column_0 =
+	// 		"colors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+	// 	for ending in ["\n", "\r\n"] {
+	// 		let text = column_0.replace('\n', ending);
+	// 		let after = saved(&text);
+	// 		assert!(
+	// 			after.contains(&format!("{ending}# highlight:")),
+	// 			"the save keeps the comment where it is: {after:?}"
+	// 		);
+	// 		for doc in [load(&text), load(&after)] {
+	// 			assert_eq!(
+	// 				doc.get_string("colors.highlight").as_deref(),
+	// 				Ok("#112233"),
+	// 				"{ending:?}"
+	// 			);
+	// 		}
+	// 	}
+	// 	// a commented new name inside the block still blocks it, before and after
+	// 	let blocked = "colors:\n\tfocus: \"#112233\"\n\t# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+	// 	for doc in [load(blocked), load(&saved(blocked))] {
+	// 		assert_eq!(doc.get_string("colors.focus").as_deref(), Ok("#112233"));
+	// 		assert!(doc.get_string("colors.highlight").is_err());
+	// 	}
+	// }
+
+	// A rename's new name counts the same whichever save runs. shcl keeps the
+	// lines or falls back to the canonical form by what the save changes, so one
+	// file can get either, and the canonical form moves a column-0 comment into
+	// the block. Here a font size save keeps the lines, and a window size save
+	// falls back past the space-indented comment that closes `window:`.
+	// Test ID: ErfAH9f
 	#[test]
-	fn a_commented_new_name_counts_where_the_save_that_runs_puts_it() {
-		let load = |t: &str| {
-			shcl::Document::parse(&migrate_config_text(t).unwrap_or_else(|| t.to_string()))
-		};
-		// what a Settings save of an unrelated value writes
-		let saved = |t: &str| {
-			let mut doc = parse_kept(t);
-			assert!(doc.set_string("colors.background", "#010101"));
-			saved_text(&doc)
-		};
-		let column_0 =
-			"colors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
+	fn a_commented_new_name_counts_the_same_whichever_save_runs() {
+		let load = |t: &str| shcl::Document::parse(&next_launch_text(t));
+		let file = "window:\n\trows: 30\n    # x:\ncolors:\n\tfocus: \"#112233\"\n# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
 		for ending in ["\n", "\r\n"] {
-			let text = column_0.replace('\n', ending);
-			let after = saved(&text);
+			let text = file.replace('\n', ending);
+			let mut font = parse_kept(&text);
+			assert!(font.set_float("font.size", 15.5));
+			let (font, kept) = font.to_text_keep_lines();
+			assert!(kept, "the font size save keeps the lines: {font:?}");
+			let mut size = parse_kept(&text);
+			assert!(size.set_int("window.columns", 100));
+			let (size, kept) = size.to_text_keep_lines();
 			assert!(
-				after.contains(&format!("{ending}# highlight:")),
-				"the save keeps the comment where it is: {after:?}"
+				!kept && size.contains("\n\t# highlight:"),
+				"the window size save falls back and moves the comment: {size:?}"
 			);
-			for doc in [load(&text), load(&after)] {
-				assert_eq!(
-					doc.get_string("colors.highlight").as_deref(),
-					Ok("#112233"),
-					"{ending:?}"
-				);
+			let before = load(&text);
+			for after in [load(&font), load(&size)] {
+				for path in ["colors.focus", "colors.highlight"] {
+					assert_eq!(
+						before.get_string(path),
+						after.get_string(path),
+						"{path} {ending:?}"
+					);
+				}
 			}
+			// the canonical form has the comment in the block, so it blocks
+			assert_eq!(before.get_string("colors.focus").as_deref(), Ok("#112233"));
 		}
-		// a commented new name inside the block still blocks it, before and after
+		// a commented new name inside the block blocks it, before and after
 		let blocked = "colors:\n\tfocus: \"#112233\"\n\t# highlight: \"#aabbcc\"\n\tbackground: \"#000000\"\n";
-		for doc in [load(blocked), load(&saved(blocked))] {
+		let mut doc = parse_kept(blocked);
+		assert!(doc.set_string("colors.background", "#010101"));
+		for doc in [load(blocked), load(&saved_text(&doc))] {
 			assert_eq!(doc.get_string("colors.focus").as_deref(), Ok("#112233"));
 			assert!(doc.get_string("colors.highlight").is_err());
 		}
