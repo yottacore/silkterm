@@ -1700,6 +1700,34 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 	)
 }
 
+// What a launch says when converting the settings file left settings behind:
+// how many, and the name the file as it was is kept under, in the same folder.
+pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>) {
+	let lost = if loss.lost == 1 {
+		"One setting could not be converted and now does nothing.".to_string()
+	} else {
+		format!(
+			"{} settings could not be converted and now do nothing.",
+			loss.lost
+		)
+	};
+	let mut paras = vec![
+		format!(
+			"{} converted its settings file to a new format.",
+			config::APP_NAME
+		),
+		loss.path.display().to_string(),
+		lost,
+	];
+	if let Some(name) = loss.backup.as_ref().and_then(|b| b.file_name()) {
+		paras.push(format!(
+			"The file as it was before is kept in the same folder, as {}.",
+			name.to_string_lossy()
+		));
+	}
+	("Settings not converted".to_string(), paras)
+}
+
 // Notice geometry, DIP (see config::dip). Windows draws its own message box.
 #[cfg(not(target_os = "windows"))]
 const NOTICE_WRAP: f32 = 440.0; // widest a paragraph runs before it wraps
@@ -2030,11 +2058,44 @@ mod tests {
 
 	use super::{
 		ABOUT_PAD, AboutSource, DLG_DECOR_HEADROOM, DLG_MAX_H, DLG_SNAP, Rect, caps_from,
-		dialog_origin, flip_cocoa_rect, layout_about, layout_source, refusal_notice,
-		size_within_caps, snap_to, tip_gate, usable_screen,
+		conversion_notice, dialog_origin, flip_cocoa_rect, layout_about, layout_source,
+		refusal_notice, size_within_caps, snap_to, tip_gate, usable_screen,
 	};
 	use crate::config;
 	use crate::text::{TextCtx, ui_attrs};
+
+	// What a conversion that left settings behind says: which file, how many,
+	// and the name of the copy beside it.
+	// Test ID: Erf0Qkx
+	#[test]
+	fn a_conversion_notice_says_how_many_and_where_the_copy_is() {
+		let said = |lost: usize, backup: Option<&str>| {
+			conversion_notice(&config::ConversionLoss {
+				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
+				backup: backup
+					.map(|name| std::path::Path::new("/home/me/.config/silkterm").join(name)),
+				lost,
+			})
+		};
+		let (title, paras) = said(2, Some("config_backup_20261003-142233_format-v2.shcl"));
+		assert_eq!(title, "Settings not converted");
+		assert_eq!(paras.len(), 4, "{paras:?}");
+		assert_eq!(paras[1], "/home/me/.config/silkterm/config.shcl");
+		assert_eq!(
+			paras[2],
+			"2 settings could not be converted and now do nothing."
+		);
+		assert_eq!(
+			paras[3],
+			"The file as it was before is kept in the same folder, as config_backup_20261003-142233_format-v2.shcl."
+		);
+		let (_, one) = said(1, None);
+		assert_eq!(
+			one[2],
+			"One setting could not be converted and now does nothing."
+		);
+		assert_eq!(one.len(), 3, "no copy, nothing said about one");
+	}
 
 	// What a refused save says: which file, which lines, and what that costs.
 	// Test ID: EqGnMOw
@@ -2316,6 +2377,18 @@ mod tests {
 					path: "/home/me/.config/silkterm/config.shcl".into(),
 					lines: vec![12],
 					lost: 1,
+				})
+				.1,
+			),
+			#[cfg(not(target_os = "windows"))]
+			AboutSource::Notice(
+				conversion_notice(&config::ConversionLoss {
+					path: "/home/me/.config/silkterm/config.shcl".into(),
+					backup: Some(
+						"/home/me/.config/silkterm/config_backup_20261003-142233_format-v2.shcl"
+							.into(),
+					),
+					lost: 2,
 				})
 				.1,
 			),
