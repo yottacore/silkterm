@@ -69,7 +69,7 @@ impl Clipboard {
 // the selection straight back, so what happened at THIS end is worth having in
 // the trace before blaming the key that asked for it.
 fn trace(which: &str, len: usize, result: Result<(), Box<dyn std::error::Error + Send + Sync>>) {
-	if !crate::app::env_flag("SILK_KEYDBG") {
+	if !crate::app::env_flag(crate::app::EnvFlag::KeyDbg) {
 		return;
 	}
 	match result {

@@ -96,7 +96,7 @@ impl Field {
 			Field::Red => Some(0),
 			Field::Green => Some(1),
 			Field::Blue => Some(2),
-			_ => None,
+			Field::Brightness | Field::Saturation | Field::Hex => None,
 		}
 	}
 	// What the box shows while nobody is typing in it.
@@ -106,7 +106,9 @@ impl Field {
 			Field::Hex => crate::config::format_hex(rgb),
 			Field::Brightness => whole(c.v * 100.0),
 			Field::Saturation => whole(c.s * 100.0),
-			_ => whole(f32::from(rgb[self.channel().unwrap_or(0)]) / 255.0 * 100.0),
+			Field::Red | Field::Green | Field::Blue => {
+				whole(f32::from(rgb[self.channel().unwrap_or(0)]) / 255.0 * 100.0)
+			}
 		}
 	}
 	// A typed buffer read back into the model. None where it says nothing yet -
@@ -116,7 +118,7 @@ impl Field {
 			Field::Hex => crate::config::parse_hex(buf).map(|rgb| from_rgb(rgb, c)),
 			Field::Brightness => pct(buf).map(|p| Hsv { v: p, ..c }),
 			Field::Saturation => pct(buf).map(|p| Hsv { s: p, ..c }),
-			_ => {
+			Field::Red | Field::Green | Field::Blue => {
 				let p = pct(buf)?;
 				let mut rgb = to_rgb(c);
 				rgb[self.channel()?] = (p * 255.0).round().clamp(0.0, 255.0) as u8;
@@ -138,7 +140,7 @@ impl Field {
 				..c
 			},
 			Field::Hex => c,
-			_ => {
+			Field::Red | Field::Green | Field::Blue => {
 				let Some(ch) = self.channel() else { return c };
 				let mut rgb = to_rgb(c);
 				let now = f32::from(rgb[ch]) / 255.0;
@@ -154,7 +156,9 @@ impl Field {
 			Field::Hex => {
 				(ch == '#' || ch.is_ascii_hexdigit()) && len < 7 && (ch != '#' || at_start)
 			}
-			_ => ch.is_ascii_digit() && len < 3,
+			Field::Red | Field::Green | Field::Blue | Field::Brightness | Field::Saturation => {
+				ch.is_ascii_digit() && len < 3
+			}
 		}
 	}
 }

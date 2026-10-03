@@ -3668,7 +3668,7 @@ impl PaneManager {
 			let alt = pane.mode.contains(TermMode::ALT_SCREEN);
 			let running = match pane.term.task() {
 				crate::term::Task::Running(name) => Some(name),
-				_ => None,
+				crate::term::Task::Last(_) | crate::term::Task::Idle => None,
 			};
 			let want = minimap::wanted(cfg, alt, running.as_deref());
 			if want != pane.map_on {

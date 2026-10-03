@@ -207,6 +207,257 @@ const RAMP_DOWN_MAX: f32 = 4500.0;
 const EASE_OUT_MIN: f32 = 13.0;
 const EASE_OUT_MAX: f32 = 1300.0;
 
+// The keys the per-kind accessors below match on, as one pattern per list of
+// kinds: `keys_of!(toggle | radio)`. Each accessor names its own kind's keys
+// one by one and the rest through this, so a key added to `ui_spec` or left
+// out of an accessor fails to compile instead of falling to a catch-all.
+// `every_row_kind_matches_its_key_list` holds the lists against the rows.
+// Built up in one pass rather than one macro per kind, which clippy reads as
+// nested or-patterns.
+macro_rules! keys_of {
+	($($kind:ident)|+) => {
+		keys_of!(@ [] $($kind)+)
+	};
+	(@ [$($acc:tt)*]) => {
+		$($acc)*
+	};
+	(@ [$($acc:tt)*] slider $($rest:ident)*) => {
+		keys_of!(@ [$($acc)*
+			| Key::Opacity
+			| Key::BgOpacity
+			| Key::BgBlur
+			| Key::BgContrastSize
+			| Key::BgContrastStrength
+			| Key::BgContrastAuto
+			| Key::ScrimRadius
+			| Key::ScrimSoftness
+			| Key::ScrimStrength
+			| Key::Outline
+			| Key::MinContrast
+			| Key::CursorBlink
+			| Key::CursorHeight
+			| Key::CursorWidth
+			| Key::CursorResume
+			| Key::FontSize
+			| Key::LineHeight
+			| Key::Margin
+			| Key::TabRegularWidth
+			| Key::TabMaxWidth
+			| Key::ScrollEaseIn
+			| Key::ScrollRampUp
+			| Key::SingleScreenTau
+			| Key::ScrollRampDown
+			| Key::ScrollEaseOut
+			| Key::WheelLines
+			| Key::ScrollbarThickness
+			| Key::MinimapWidth
+			| Key::Columns
+			| Key::Rows
+			| Key::IdleHiddenMin
+			| Key::IdleMin
+		] $($rest)*)
+	};
+	(@ [$($acc:tt)*] toggle $($rest:ident)*) => {
+		keys_of!(@ [$($acc)*
+			| Key::PerfAuto
+			| Key::PerfCheckHardware
+			| Key::PerfCheckNext
+			| Key::SystemFont
+			| Key::SystemFontSize
+			| Key::Transparency
+			| Key::BackdropBlur
+			| Key::TextScrim
+			| Key::CursorScrim
+			| Key::CursorOutline
+			| Key::RememberSize
+			| Key::RememberPerMonitor
+			| Key::RememberMaximized
+			| Key::TabShowsTitle
+			| Key::TabShowsShell
+			| Key::TabShowsProgram
+			| Key::TabShowsDirectory
+			| Key::TitleShowsTab
+			| Key::IdleRelease
+			| Key::CopyOnSelect
+			| Key::ShellIntegration
+			| Key::BashPrompt
+			| Key::Hyperlinks
+			| Key::BgContrastMask
+			| Key::BgEnabled
+			| Key::BgRotate
+			| Key::BgHonorXmp
+			| Key::BgHonorXmpLook
+			| Key::ColFromWallpaper
+			| Key::SmoothScroll
+			| Key::Scrollbar
+			| Key::ScrollbarAutoHide
+			| Key::Minimap
+		] $($rest)*)
+	};
+	// radio buttons and dropdowns both
+	(@ [$($acc:tt)*] radio $($rest:ident)*) => {
+		keys_of!(@ [$($acc)*
+			| Key::PerfProfile
+			| Key::BgFit
+			| Key::ScrimFunction
+			| Key::ScrimRamp
+			| Key::CursorAnimation
+			| Key::Theme
+			| Key::ThemeMode
+		] $($rest)*)
+	};
+	(@ [$($acc:tt)*] color $($rest:ident)*) => {
+		keys_of!(@ [$($acc)*
+			| Key::ColBg
+			| Key::ColFg
+			| Key::ColCursor
+			| Key::ColHighlight
+			| Key::ColFocus
+			| Key::ColGutter
+			| Key::ColMenuBg
+			| Key::ColMenuFg
+			| Key::ColDialogBg
+			| Key::ColDialogFg
+			| Key::ColScrollbarThumb
+			| Key::ColScrollbarTrough
+		] $($rest)*)
+	};
+	(@ [$($acc:tt)*] text $($rest:ident)*) => {
+		keys_of!(@ [$($acc)*
+			| Key::BgImage
+			| Key::FontFamily
+			| Key::LinkOpenCommand
+			| Key::StartupDirectory
+		] $($rest)*)
+	};
+	// read and written through `Bindings`
+	(@ [$($acc:tt)*] hotkey $($rest:ident)*) => {
+		keys_of!(@ [$($acc)*
+			| Key::HotkeyNewWindow
+			| Key::HotkeySettings
+			| Key::HotkeyQuit
+			| Key::HotkeyCopy
+			| Key::HotkeyPaste
+			| Key::HotkeyFontBigger
+			| Key::HotkeyFontSmaller
+			| Key::HotkeyFontReset
+			| Key::HotkeyFullscreen
+			| Key::HotkeyContextMenu
+			| Key::HotkeyNewTab
+			| Key::HotkeyCloseTab
+			| Key::HotkeyPrevTab
+			| Key::HotkeyNextTab
+			| Key::HotkeyMoveTabBack
+			| Key::HotkeyMoveTabForward
+			| Key::HotkeySplitRight
+			| Key::HotkeySplitDown
+			| Key::HotkeyClosePane
+			| Key::HotkeyFocusLeft
+			| Key::HotkeyFocusRight
+			| Key::HotkeyFocusUp
+			| Key::HotkeyFocusDown
+		] $($rest)*)
+	};
+	// headings and two-setting rows (`None`), the theme buttons, and the shells
+	// list, which is a list rather than one value
+	(@ [$($acc:tt)*] valueless $($rest:ident)*) => {
+		keys_of!(@ [$($acc)*
+			| Key::None
+			| Key::Shells
+			| Key::ThemeActions
+		] $($rest)*)
+	};
+	// the file-type rows, whose arrow undoes a registration
+	(@ [$($acc:tt)*] assoc $($rest:ident)*) => {
+		keys_of!(@ [$($acc)*
+			| Key::OpenBatch
+			| Key::OpenPowerShell
+			| Key::OpenVbScript
+			| Key::OpenFolder
+		] $($rest)*)
+	};
+}
+
+// A slider's value in the dialog's own units, read from `s`. One list for the
+// shown value and the default, so the two cannot disagree on a transform.
+fn slider_of(s: &Settings, key: Key) -> f32 {
+	match key {
+		Key::Opacity => to_percent(s.opacity),
+		Key::BgOpacity => to_percent(s.wallpaper_opacity),
+		Key::BgBlur => s.wallpaper_blur,
+		Key::BgContrastSize => to_percent(s.wallpaper_contrast_mask_size),
+		Key::BgContrastStrength => to_percent(s.wallpaper_contrast_mask_strength),
+		Key::BgContrastAuto => to_percent(s.wallpaper_contrast_mask_auto),
+		Key::ScrimRadius => s.text_scrim_radius,
+		Key::ScrimSoftness => to_percent(s.text_scrim_softness),
+		Key::ScrimStrength => s.text_scrim_strength,
+		Key::Outline => s.text_outline,
+		Key::MinContrast => to_percent(s.text_min_contrast),
+		Key::CursorBlink => s.cursor_blink_rate_ms,
+		Key::CursorHeight => s.cursor_size_height,
+		Key::CursorWidth => s.cursor_size_width,
+		Key::CursorResume => s.cursor_animation_resume_s,
+		Key::FontSize => s.font_size,
+		Key::LineHeight => s.line_height_scale,
+		Key::Margin => s.margin,
+		Key::TabRegularWidth => s.tab_regular_pct,
+		Key::TabMaxWidth => s.tab_max_pct,
+		// shown as an intuitive 1..100 speed (higher = faster); stored as tau
+		Key::ScrollEaseIn => falling_slider(s.scroll_ease_in_ms, EASE_IN_MIN, EASE_IN_MAX),
+		Key::ScrollRampUp => falling_slider(s.scroll_ramp_up_ms, RAMP_UP_MIN, RAMP_UP_MAX),
+		Key::SingleScreenTau => tau_to_speed(s.scroll_single_screen_tau_ms),
+		Key::ScrollRampDown => falling_slider(s.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX),
+		Key::ScrollEaseOut => falling_slider(s.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX),
+		Key::WheelLines => s.wheel_lines,
+		Key::ScrollbarThickness => s.scrollbar_thickness,
+		Key::MinimapWidth => s.minimap_width,
+		Key::Columns => s.columns as f32,
+		Key::Rows => s.rows as f32,
+		Key::IdleHiddenMin => s.idle_release_hidden_min as f32,
+		Key::IdleMin => s.idle_release_min as f32,
+		keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => 0.0,
+	}
+}
+// A switch's state in `s`, for the shown value, the default and the revert.
+fn toggle_of(s: &Settings, key: Key) -> bool {
+	match key {
+		Key::PerfAuto => s.performance_automatic,
+		Key::PerfCheckHardware => s.performance_check_hardware,
+		Key::PerfCheckNext => s.performance_check_next_run,
+		Key::SystemFont => s.use_system_font,
+		Key::SystemFontSize => s.use_system_font_size,
+		Key::Transparency => s.transparent_background,
+		Key::BackdropBlur => s.transparent_background_blur,
+		Key::TextScrim => s.text_scrim,
+		Key::CursorScrim => s.cursor_scrim,
+		Key::CursorOutline => s.cursor_outline,
+		Key::RememberSize => s.remember_size,
+		Key::RememberPerMonitor => s.remember_per_monitor,
+		Key::RememberMaximized => s.remember_maximized,
+		Key::TabShowsTitle => s.tab_shows_title,
+		Key::TabShowsShell => s.tab_shows_shell,
+		Key::TabShowsProgram => s.tab_shows_program,
+		Key::TabShowsDirectory => s.tab_shows_directory,
+		Key::TitleShowsTab => s.title_shows_tab,
+		Key::IdleRelease => s.idle_release,
+		Key::CopyOnSelect => s.copy_on_select,
+		Key::ShellIntegration => s.shell_integration,
+		Key::BashPrompt => s.bash_prompt,
+		Key::Hyperlinks => s.hyperlinks,
+		Key::BgContrastMask => s.wallpaper_contrast_mask,
+		Key::BgEnabled => s.wallpaper_enabled,
+		Key::BgRotate => s.wallpaper_rotate_enabled,
+		Key::BgHonorXmp => s.wallpaper_honor_xmp,
+		Key::BgHonorXmpLook => s.wallpaper_honor_xmp_look,
+		Key::ColFromWallpaper => s.colors_from_wallpaper,
+		Key::SmoothScroll => s.scroll_smooth,
+		Key::Scrollbar => s.scrollbar,
+		Key::ScrollbarAutoHide => s.scrollbar_auto_hide,
+		Key::Minimap => s.minimap,
+		keys_of!(slider | radio | color | text | hotkey | valueless | assoc) => false,
+	}
+}
+
 // The rows a performance profile sets - one list, so the dialog's display rule
 // and profile.rs's field list cannot drift apart without a test noticing.
 const GOVERNED: &[Key] = &[
@@ -3490,52 +3741,7 @@ impl SettingsDialog {
 		}
 	}
 	fn get_f32(&self, key: Key) -> f32 {
-		let shown = self.shown();
-		let settings = &*shown;
-		match key {
-			Key::Opacity => to_percent(settings.opacity),
-			Key::BgOpacity => to_percent(settings.wallpaper_opacity),
-			Key::BgBlur => settings.wallpaper_blur,
-			Key::BgContrastSize => to_percent(settings.wallpaper_contrast_mask_size),
-			Key::BgContrastStrength => to_percent(settings.wallpaper_contrast_mask_strength),
-			Key::BgContrastAuto => to_percent(settings.wallpaper_contrast_mask_auto),
-			Key::ScrimRadius => settings.text_scrim_radius,
-			Key::ScrimSoftness => to_percent(settings.text_scrim_softness),
-			Key::ScrimStrength => settings.text_scrim_strength,
-			Key::Outline => settings.text_outline,
-			Key::MinContrast => to_percent(settings.text_min_contrast),
-			Key::CursorBlink => settings.cursor_blink_rate_ms,
-			Key::CursorHeight => settings.cursor_size_height,
-			Key::CursorWidth => settings.cursor_size_width,
-			Key::CursorResume => settings.cursor_animation_resume_s,
-			Key::FontSize => settings.font_size,
-			Key::LineHeight => settings.line_height_scale,
-			Key::Margin => settings.margin,
-			Key::TabRegularWidth => settings.tab_regular_pct,
-			Key::TabMaxWidth => settings.tab_max_pct,
-			// shown as an intuitive 1..100 speed (higher = faster); stored as tau
-			Key::ScrollEaseIn => {
-				falling_slider(settings.scroll_ease_in_ms, EASE_IN_MIN, EASE_IN_MAX)
-			}
-			Key::ScrollRampUp => {
-				falling_slider(settings.scroll_ramp_up_ms, RAMP_UP_MIN, RAMP_UP_MAX)
-			}
-			Key::SingleScreenTau => tau_to_speed(settings.scroll_single_screen_tau_ms),
-			Key::ScrollRampDown => {
-				falling_slider(settings.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX)
-			}
-			Key::ScrollEaseOut => {
-				falling_slider(settings.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX)
-			}
-			Key::WheelLines => settings.wheel_lines,
-			Key::ScrollbarThickness => settings.scrollbar_thickness,
-			Key::MinimapWidth => settings.minimap_width,
-			Key::Columns => settings.columns as f32,
-			Key::Rows => settings.rows as f32,
-			Key::IdleHiddenMin => settings.idle_release_hidden_min as f32,
-			Key::IdleMin => settings.idle_release_min as f32,
-			_ => 0.0,
-		}
+		slider_of(&self.shown(), key)
 	}
 	fn set_f32(&mut self, key: Key, value: f32) {
 		self.leave_profile(key);
@@ -3589,7 +3795,7 @@ impl SettingsDialog {
 				settings.idle_release_hidden_min = value.round().max(1.0) as usize;
 			}
 			Key::IdleMin => settings.idle_release_min = value.round().max(1.0) as usize,
-			_ => {}
+			keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => {}
 		}
 	}
 	// "File or folder" is where the picture comes from. A named image wins at
@@ -3633,7 +3839,7 @@ impl SettingsDialog {
 			Key::FontFamily => self.edited.font_family.clone().unwrap_or_default(),
 			Key::LinkOpenCommand => self.edited.hyperlink_open_command.clone(),
 			Key::StartupDirectory => self.edited.startup_directory.clone(),
-			_ => String::new(),
+			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => String::new(),
 		}
 	}
 	fn set_text(&mut self, key: Key, text: &str) {
@@ -3679,54 +3885,18 @@ impl SettingsDialog {
 			}
 			Key::LinkOpenCommand => self.edited.hyperlink_open_command = trimmed.to_string(),
 			Key::StartupDirectory => self.edited.startup_directory = trimmed.to_string(),
-			_ => {}
+			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => {}
 		}
 	}
+	// The two system-font switches read what is STORED, like every other row.
+	// Where the desktop names no font to follow they are grayed and the flyover
+	// says why - that is how the dialog says "inert" everywhere else. Showing
+	// them unchecked instead misreported the setting: the box sat unchecked
+	// beside a dimmed revert arrow, claiming unchecked was the default when the
+	// default is on. `gate_ok` still asks the EFFECTIVE state, so the family
+	// field it overrides stays editable.
 	fn get_toggle(&self, key: Key) -> bool {
-		let s = self.shown();
-		match key {
-			// These two read what is STORED, like every other row. Where the desktop
-			// names no font to follow they are grayed and the flyover says why -
-			// that is how the dialog says "inert" everywhere else. Showing them
-			// unchecked instead misreported the setting: the box sat unchecked
-			// beside a dimmed revert arrow, claiming unchecked was the default when
-			// the default is on. `gate_ok` still asks the EFFECTIVE state, so the
-			// family field it overrides stays editable.
-			Key::PerfAuto => s.performance_automatic,
-			Key::PerfCheckHardware => s.performance_check_hardware,
-			Key::PerfCheckNext => s.performance_check_next_run,
-			Key::SystemFont => s.use_system_font,
-			Key::SystemFontSize => s.use_system_font_size,
-			Key::Transparency => s.transparent_background,
-			Key::BackdropBlur => s.transparent_background_blur,
-			Key::TextScrim => s.text_scrim,
-			Key::CursorScrim => s.cursor_scrim,
-			Key::CursorOutline => s.cursor_outline,
-			Key::RememberSize => s.remember_size,
-			Key::RememberPerMonitor => s.remember_per_monitor,
-			Key::RememberMaximized => s.remember_maximized,
-			Key::TabShowsTitle => s.tab_shows_title,
-			Key::TabShowsShell => s.tab_shows_shell,
-			Key::TabShowsProgram => s.tab_shows_program,
-			Key::TabShowsDirectory => s.tab_shows_directory,
-			Key::TitleShowsTab => s.title_shows_tab,
-			Key::IdleRelease => s.idle_release,
-			Key::CopyOnSelect => s.copy_on_select,
-			Key::ShellIntegration => s.shell_integration,
-			Key::BashPrompt => s.bash_prompt,
-			Key::Hyperlinks => s.hyperlinks,
-			Key::BgContrastMask => s.wallpaper_contrast_mask,
-			Key::BgEnabled => s.wallpaper_enabled,
-			Key::BgRotate => s.wallpaper_rotate_enabled,
-			Key::BgHonorXmp => s.wallpaper_honor_xmp,
-			Key::BgHonorXmpLook => s.wallpaper_honor_xmp_look,
-			Key::ColFromWallpaper => s.colors_from_wallpaper,
-			Key::SmoothScroll => s.scroll_smooth,
-			Key::Scrollbar => s.scrollbar,
-			Key::ScrollbarAutoHide => s.scrollbar_auto_hide,
-			Key::Minimap => s.minimap,
-			_ => false,
-		}
+		toggle_of(&self.shown(), key)
 	}
 	fn set_toggle(&mut self, key: Key, on: bool) {
 		self.leave_profile(key);
@@ -3771,7 +3941,7 @@ impl SettingsDialog {
 			Key::Scrollbar => self.edited.scrollbar = on,
 			Key::ScrollbarAutoHide => self.edited.scrollbar_auto_hide = on,
 			Key::Minimap => self.edited.minimap = on,
-			_ => {}
+			keys_of!(slider | radio | color | text | hotkey | valueless | assoc) => {}
 		}
 	}
 	fn get_radio(&self, key: Key) -> usize {
@@ -3813,7 +3983,7 @@ impl SettingsDialog {
 				"system" => 2,
 				_ => 0, // dark
 			},
-			_ => 0,
+			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => 0,
 		}
 	}
 	fn set_radio(&mut self, key: Key, idx: usize) {
@@ -3893,7 +4063,7 @@ impl SettingsDialog {
 				.to_string();
 				self.adopt_theme();
 			}
-			_ => {}
+			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => {}
 		}
 	}
 	// A control grayed out because a prerequisite toggle is off (the opacity
@@ -3946,7 +4116,7 @@ impl SettingsDialog {
 			Key::ColDialogFg => settings.dialog_fg,
 			Key::ColScrollbarThumb => settings.scrollbar_thumb,
 			Key::ColScrollbarTrough => settings.scrollbar_trough,
-			_ => [0, 0, 0],
+			keys_of!(slider | toggle | radio | text | hotkey | valueless | assoc) => [0, 0, 0],
 		}
 	}
 	fn set_col(&mut self, key: Key, color: [u8; 3]) {
@@ -3964,7 +4134,7 @@ impl SettingsDialog {
 			Key::ColDialogFg => settings.dialog_fg = color,
 			Key::ColScrollbarThumb => settings.scrollbar_thumb = color,
 			Key::ColScrollbarTrough => settings.scrollbar_trough = color,
-			_ => {}
+			keys_of!(slider | toggle | radio | text | hotkey | valueless | assoc) => {}
 		}
 	}
 
@@ -3994,7 +4164,7 @@ impl SettingsDialog {
 			// chrome, not a palette color - the same neutral under every theme
 			Key::ColScrollbarThumb => config::SCROLLBAR_THUMB_DEF,
 			Key::ColScrollbarTrough => config::SCROLLBAR_TROUGH_DEF,
-			_ => [0, 0, 0],
+			keys_of!(slider | toggle | radio | text | hotkey | valueless | assoc) => [0, 0, 0],
 		}
 	}
 
@@ -4008,53 +4178,13 @@ impl SettingsDialog {
 			return edited.keys.own(hotkey).is_none();
 		}
 		match key {
-			Key::Transparency => edited.transparent_background == defaults.transparent_background,
-			Key::BackdropBlur => {
-				edited.transparent_background_blur == defaults.transparent_background_blur
-			}
-			Key::TextScrim => edited.text_scrim == defaults.text_scrim,
-			Key::CursorScrim => edited.cursor_scrim == defaults.cursor_scrim,
-			Key::CursorOutline => edited.cursor_outline == defaults.cursor_outline,
-			Key::BgContrastMask => {
-				edited.wallpaper_contrast_mask == defaults.wallpaper_contrast_mask
-			}
-			Key::SystemFont => edited.use_system_font == defaults.use_system_font,
-			Key::SystemFontSize => edited.use_system_font_size == defaults.use_system_font_size,
-			Key::RememberSize => edited.remember_size == defaults.remember_size,
-			Key::RememberPerMonitor => edited.remember_per_monitor == defaults.remember_per_monitor,
-			Key::RememberMaximized => edited.remember_maximized == defaults.remember_maximized,
-			Key::TabShowsTitle => edited.tab_shows_title == defaults.tab_shows_title,
-			Key::TabShowsShell => edited.tab_shows_shell == defaults.tab_shows_shell,
-			Key::TabShowsProgram => edited.tab_shows_program == defaults.tab_shows_program,
-			Key::TabShowsDirectory => edited.tab_shows_directory == defaults.tab_shows_directory,
-			Key::TitleShowsTab => edited.title_shows_tab == defaults.title_shows_tab,
-			Key::IdleRelease => edited.idle_release == defaults.idle_release,
-			Key::CopyOnSelect => edited.copy_on_select == defaults.copy_on_select,
-			Key::ShellIntegration => edited.shell_integration == defaults.shell_integration,
-			Key::BashPrompt => edited.bash_prompt == defaults.bash_prompt,
-			Key::Hyperlinks => edited.hyperlinks == defaults.hyperlinks,
-			Key::SmoothScroll => edited.scroll_smooth == defaults.scroll_smooth,
-			Key::Scrollbar => edited.scrollbar == defaults.scrollbar,
-			Key::ScrollbarAutoHide => edited.scrollbar_auto_hide == defaults.scrollbar_auto_hide,
-			Key::Minimap => edited.minimap == defaults.minimap,
+			keys_of!(toggle) => toggle_of(edited, key) == toggle_of(defaults, key),
+			keys_of!(slider) => self.get_f32(key) == self.default_f32(key),
+			keys_of!(color) => self.get_col(key) == self.default_col(key),
 			Key::BgFit => edited.wallpaper_default_fit == defaults.wallpaper_default_fit,
-			Key::BgEnabled => edited.wallpaper_enabled == defaults.wallpaper_enabled,
-			Key::BgRotate => edited.wallpaper_rotate_enabled == defaults.wallpaper_rotate_enabled,
-			Key::BgHonorXmp => edited.wallpaper_honor_xmp == defaults.wallpaper_honor_xmp,
-			Key::BgHonorXmpLook => {
-				edited.wallpaper_honor_xmp_look == defaults.wallpaper_honor_xmp_look
-			}
-			Key::ColFromWallpaper => edited.colors_from_wallpaper == defaults.colors_from_wallpaper,
 			Key::ScrimRamp => edited.text_scrim_ramp == defaults.text_scrim_ramp,
 			Key::ScrimFunction => edited.text_scrim_function == defaults.text_scrim_function,
 			Key::CursorAnimation => edited.cursor_animation == defaults.cursor_animation,
-			Key::PerfAuto => edited.performance_automatic == defaults.performance_automatic,
-			Key::PerfCheckHardware => {
-				edited.performance_check_hardware == defaults.performance_check_hardware
-			}
-			Key::PerfCheckNext => {
-				edited.performance_check_next_run == defaults.performance_check_next_run
-			}
 			Key::PerfProfile => {
 				edited.performance_profile == defaults.performance_profile
 					&& !edited.remote_override
@@ -4072,74 +4202,16 @@ impl SettingsDialog {
 			Key::StartupDirectory => edited.startup_directory == defaults.startup_directory,
 			Key::Theme => edited.theme == defaults.theme,
 			Key::ThemeMode => edited.theme_mode == defaults.theme_mode,
-			Key::ColBg
-			| Key::ColFg
-			| Key::ColCursor
-			| Key::ColHighlight
-			| Key::ColFocus
-			| Key::ColGutter
-			| Key::ColMenuBg
-			| Key::ColMenuFg
-			| Key::ColDialogBg
-			| Key::ColDialogFg
-			| Key::ColScrollbarThumb
-			| Key::ColScrollbarTrough => self.get_col(key) == self.default_col(key),
-			// buttons and headings hold nothing to revert
-			Key::None | Key::ThemeActions => true,
+			// buttons, headings and the shells list hold nothing to revert, and a
+			// hotkey with a row was answered above
+			keys_of!(valueless | hotkey) => true,
 			// nothing to put back until Register has saved something
-			Key::OpenBatch | Key::OpenPowerShell | Key::OpenVbScript | Key::OpenFolder => {
-				assoc_of(key).is_none_or(|assoc| !self.assoc_on[assoc_slot(assoc)])
-			}
-			// the sliders
-			_ => self.get_f32(key) == self.default_f32(key),
+			keys_of!(assoc) => assoc_of(key).is_none_or(|assoc| !self.assoc_on[assoc_slot(assoc)]),
 		}
 	}
 	// Default for a slider key, in get_f32's own units (speed for SingleScreenTau).
 	fn default_f32(&self, key: Key) -> f32 {
-		let defaults = &self.defaults;
-		match key {
-			Key::Opacity => to_percent(defaults.opacity),
-			Key::BgOpacity => to_percent(defaults.wallpaper_opacity),
-			Key::BgBlur => defaults.wallpaper_blur,
-			Key::BgContrastSize => to_percent(defaults.wallpaper_contrast_mask_size),
-			Key::BgContrastStrength => to_percent(defaults.wallpaper_contrast_mask_strength),
-			Key::BgContrastAuto => to_percent(defaults.wallpaper_contrast_mask_auto),
-			Key::ScrimRadius => defaults.text_scrim_radius,
-			Key::ScrimSoftness => to_percent(defaults.text_scrim_softness),
-			Key::ScrimStrength => defaults.text_scrim_strength,
-			Key::Outline => defaults.text_outline,
-			Key::MinContrast => to_percent(defaults.text_min_contrast),
-			Key::CursorBlink => defaults.cursor_blink_rate_ms,
-			Key::CursorHeight => defaults.cursor_size_height,
-			Key::CursorWidth => defaults.cursor_size_width,
-			Key::CursorResume => defaults.cursor_animation_resume_s,
-			Key::FontSize => defaults.font_size,
-			Key::LineHeight => defaults.line_height_scale,
-			Key::Margin => defaults.margin,
-			Key::TabRegularWidth => defaults.tab_regular_pct,
-			Key::TabMaxWidth => defaults.tab_max_pct,
-			Key::ScrollEaseIn => {
-				falling_slider(defaults.scroll_ease_in_ms, EASE_IN_MIN, EASE_IN_MAX)
-			}
-			Key::ScrollRampUp => {
-				falling_slider(defaults.scroll_ramp_up_ms, RAMP_UP_MIN, RAMP_UP_MAX)
-			}
-			Key::SingleScreenTau => tau_to_speed(defaults.scroll_single_screen_tau_ms),
-			Key::ScrollRampDown => {
-				falling_slider(defaults.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX)
-			}
-			Key::ScrollEaseOut => {
-				falling_slider(defaults.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX)
-			}
-			Key::WheelLines => defaults.wheel_lines,
-			Key::ScrollbarThickness => defaults.scrollbar_thickness,
-			Key::MinimapWidth => defaults.minimap_width,
-			Key::Columns => defaults.columns as f32,
-			Key::Rows => defaults.rows as f32,
-			Key::IdleHiddenMin => defaults.idle_release_hidden_min as f32,
-			Key::IdleMin => defaults.idle_release_min as f32,
-			_ => 0.0,
-		}
+		slider_of(&self.defaults, key)
 	}
 	// Revert a setting to its default and remember its config key(s), so Apply
 	// can comment them out in config.shcl (config::revert_keys).
@@ -4151,75 +4223,7 @@ impl SettingsDialog {
 			return;
 		}
 		match key {
-			Key::Transparency
-			| Key::BackdropBlur
-			| Key::TextScrim
-			| Key::CursorScrim
-			| Key::CursorOutline
-			| Key::SystemFont
-			| Key::SystemFontSize
-			| Key::RememberSize
-			| Key::RememberPerMonitor
-			| Key::RememberMaximized
-			| Key::TabShowsShell
-			| Key::TabShowsProgram
-			| Key::TabShowsDirectory
-			| Key::TitleShowsTab
-			| Key::IdleRelease
-			| Key::CopyOnSelect
-			| Key::ShellIntegration
-			| Key::BashPrompt
-			| Key::Hyperlinks
-			| Key::BgEnabled
-			| Key::BgRotate
-			| Key::BgHonorXmp
-			| Key::BgHonorXmpLook
-			| Key::ColFromWallpaper
-			| Key::Scrollbar
-			| Key::ScrollbarAutoHide
-			| Key::Minimap
-			| Key::SmoothScroll
-			| Key::PerfAuto
-			| Key::PerfCheckHardware
-			| Key::PerfCheckNext
-			| Key::BgContrastMask => {
-				let default_val = match key {
-					Key::PerfAuto => self.defaults.performance_automatic,
-					Key::PerfCheckHardware => self.defaults.performance_check_hardware,
-					Key::PerfCheckNext => self.defaults.performance_check_next_run,
-					Key::Transparency => self.defaults.transparent_background,
-					Key::BackdropBlur => self.defaults.transparent_background_blur,
-					Key::TextScrim => self.defaults.text_scrim,
-					Key::CursorScrim => self.defaults.cursor_scrim,
-					Key::CursorOutline => self.defaults.cursor_outline,
-					Key::SystemFont => self.defaults.use_system_font,
-					Key::SystemFontSize => self.defaults.use_system_font_size,
-					Key::CopyOnSelect => self.defaults.copy_on_select,
-					Key::ShellIntegration => self.defaults.shell_integration,
-					Key::BashPrompt => self.defaults.bash_prompt,
-					Key::Hyperlinks => self.defaults.hyperlinks,
-					Key::BgContrastMask => self.defaults.wallpaper_contrast_mask,
-					Key::BgEnabled => self.defaults.wallpaper_enabled,
-					Key::BgRotate => self.defaults.wallpaper_rotate_enabled,
-					Key::BgHonorXmp => self.defaults.wallpaper_honor_xmp,
-					Key::BgHonorXmpLook => self.defaults.wallpaper_honor_xmp_look,
-					Key::ColFromWallpaper => self.defaults.colors_from_wallpaper,
-					Key::SmoothScroll => self.defaults.scroll_smooth,
-					Key::Scrollbar => self.defaults.scrollbar,
-					Key::ScrollbarAutoHide => self.defaults.scrollbar_auto_hide,
-					Key::Minimap => self.defaults.minimap,
-					Key::IdleRelease => self.defaults.idle_release,
-					Key::TabShowsTitle => self.defaults.tab_shows_title,
-					Key::TabShowsShell => self.defaults.tab_shows_shell,
-					Key::TabShowsProgram => self.defaults.tab_shows_program,
-					Key::TabShowsDirectory => self.defaults.tab_shows_directory,
-					Key::TitleShowsTab => self.defaults.title_shows_tab,
-					Key::RememberMaximized => self.defaults.remember_maximized,
-					Key::RememberPerMonitor => self.defaults.remember_per_monitor,
-					_ => self.defaults.remember_size,
-				};
-				self.set_toggle(key, default_val);
-			}
+			keys_of!(toggle) => self.set_toggle(key, toggle_of(&self.defaults, key)),
 			Key::BgFit => self.edited.wallpaper_default_fit = self.defaults.wallpaper_default_fit,
 			Key::ScrimRamp => self.edited.text_scrim_ramp = self.defaults.text_scrim_ramp.clone(),
 			Key::ScrimFunction => {
@@ -4259,29 +4263,22 @@ impl SettingsDialog {
 			Key::StartupDirectory => {
 				self.edited.startup_directory = self.defaults.startup_directory.clone();
 			}
-			Key::ColBg
-			| Key::ColFg
-			| Key::ColCursor
-			| Key::ColHighlight
-			| Key::ColFocus
-			| Key::ColGutter
-			| Key::ColMenuBg
-			| Key::ColMenuFg
-			| Key::ColDialogBg
-			| Key::ColDialogFg
-			| Key::ColScrollbarThumb
-			| Key::ColScrollbarTrough => {
+			keys_of!(color) => {
 				let color = self.default_col(key);
 				self.set_col(key, color);
 			}
-			// direct: set_f32 would also clear use_system_font_size (its "explicit
-			// size" side effect), which a revert must not do
-			Key::FontSize => self.edited.font_size = self.defaults.font_size,
-			Key::None => {}
-			_ => {
+			// direct for the font size: set_f32 would also clear
+			// use_system_font_size (its "explicit size" side effect), which a revert
+			// must not do
+			keys_of!(slider) if key == Key::FontSize => {
+				self.edited.font_size = self.defaults.font_size;
+			}
+			keys_of!(slider) => {
 				let value = self.default_f32(key);
 				self.set_f32(key, value);
 			}
+			// hotkeys went back above, and `row_revert` undoes a registration
+			keys_of!(valueless | assoc | hotkey) => {}
 		}
 		self.queue_revert(key);
 	}
@@ -7644,6 +7641,95 @@ mod tests {
 		config::revert_keys(&d.take_reverted());
 		assert_eq!(config::reload_from_disk().margin, d.defaults.margin);
 		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Every revert arrow, clicked on a row moved off its default, puts every
+	// setting it answers for back. "Program's own title" was missing from one arm
+	// of `revert` and fell to the slider arm, which did nothing for a toggle.
+	// Test ID: Erg35nf
+	#[test]
+	fn every_revert_arrow_puts_its_row_back_to_the_default() {
+		let mut d = mk_dialog(4000.0);
+		d.edited = d.defaults.clone();
+		d.edited.performance_profile = "custom".to_string();
+		d.adopt_theme();
+		let base = d.edited.clone();
+		let spec_of = |d: &SettingsDialog, key: Key| {
+			d.specs
+				.iter()
+				.position(|s| match s.kind {
+					super::Kind::Dual { keys, .. } => keys.contains(&key),
+					_ => s.key == key,
+				})
+				.unwrap()
+		};
+		let mut checked = 0;
+		for i in 0..d.specs.len() {
+			// the file-type rows' arrow undoes a registration, tested on its own
+			if !d.has_revert(i) || matches!(d.specs[i].kind, super::Kind::Buttons(_)) {
+				continue;
+			}
+			d.tab = d.specs[i].tab;
+			for key in d.row_keys(i) {
+				let at = spec_of(&d, key);
+				d.edited = base.clone();
+				d.moved.clear();
+				d.reverted.clear();
+				let want = row_value(&d, at, key);
+				nudge(&mut d, at, key);
+				// one step from Custom can be the default profile
+				if key == Key::PerfProfile && d.is_default(key) {
+					nudge(&mut d, at, key);
+				}
+				assert_ne!(row_value(&d, at, key), want, "{key:?} did not budge");
+				assert!(!d.is_default(key), "{key:?} moved but reads as default");
+				d.row_revert(i);
+				assert!(d.is_default(key), "{key:?} is not default after its revert");
+				// the base is Custom on purpose, so the rows show their own values
+				if key != Key::PerfProfile {
+					assert_eq!(row_value(&d, at, key), want, "{key:?} did not go back");
+				}
+				checked += 1;
+			}
+		}
+		assert!(checked > 80, "only {checked} settings checked");
+	}
+
+	// The key lists the accessors match on have to agree with the rows. A switch
+	// filed under the sliders would compile and read as off forever.
+	// Test ID: Erg4Cz0
+	#[test]
+	fn every_row_kind_matches_its_key_list() {
+		let listed = |key: Key| match key {
+			keys_of!(slider) => "slider",
+			keys_of!(toggle) => "toggle",
+			keys_of!(radio) => "radio",
+			keys_of!(color) => "color",
+			keys_of!(text) => "text",
+			keys_of!(hotkey) => "hotkey",
+			keys_of!(valueless | assoc) => "other",
+		};
+		let d = mk_dialog(4000.0);
+		let mut checked = 0;
+		for spec in d.specs {
+			let (keys, want) = match spec.kind {
+				super::Kind::Slider { .. } => (vec![spec.key], "slider"),
+				super::Kind::Toggle => (vec![spec.key], "toggle"),
+				super::Kind::Dual { keys, .. } => (keys.to_vec(), "toggle"),
+				super::Kind::Radio(_) | super::Kind::Dropdown(_) => (vec![spec.key], "radio"),
+				super::Kind::Color => (vec![spec.key], "color"),
+				super::Kind::Text => (vec![spec.key], "text"),
+				super::Kind::Hotkey(_) => (vec![spec.key], "hotkey"),
+				super::Kind::Buttons(_) | super::Kind::ShellList | super::Kind::Header(_) => {
+					(vec![spec.key], "other")
+				}
+			};
+			for key in keys {
+				assert_eq!(listed(key), want, "{:?} on row {:?}", key, spec.label);
+				checked += 1;
+			}
+		}
+		assert!(checked > 100, "only {checked} keys checked");
 	}
 
 	// The rule for a tip is not a quota, it is whether the tip says anything the
