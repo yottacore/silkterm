@@ -11681,9 +11681,14 @@ mod tests {
 			label(&mac, MenuAction::SplitHorizontal).as_deref(),
 			Some("Split horizontal (Shift+Command+D)")
 		);
+		// Close pane had no Mac chord until 20261003
+		// assert_eq!(
+		// 	label(&mac, MenuAction::Close).as_deref(),
+		// 	Some("Close pane")
+		// );
 		assert_eq!(
 			label(&mac, MenuAction::Close).as_deref(),
-			Some("Close pane")
+			Some("Close pane (Option+Command+W)")
 		);
 		let chord = |text| Chord::parse(text).expect(text);
 		let (moved, _) = Bindings::with(

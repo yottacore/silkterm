@@ -275,7 +275,7 @@ Rules that go with them:
 	- Command+Shift+[ and Command+Shift+] walk the tabs. So do Command+PageUp and Command+PageDown, and Shift with those two carries the tab with you.
 	- Command+Plus, Command+Minus and Command+0 size the font.
 	- Command+, opens Settings, Control+Command+F is fullscreen, Command+Q quits. Command+H and Option+Command+H hide, and Command+M minimizes.
-	- Command+D splits right and Command+Shift+D splits down, and Command+Option+arrows move between panes, as in iTerm2. Close pane has no chord there by default.
+	- Command+D splits right and Command+Shift+D splits down, and Command+Option+arrows move between panes, as in iTerm2. Option+Command+W closes the pane, since Command+W closes the tab.
 	- Command+click opens a link, and Command held at a press selects a block.
 	- Ctrl+click is the right-click, so it opens the right-click menu wherever a right-click does.
 	- Nothing typed with Command held reaches the shell, so no Command chord takes a key from it.

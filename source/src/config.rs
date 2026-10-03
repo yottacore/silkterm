@@ -4172,6 +4172,9 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("shell.bash_prompt", "true  ## Default"),
 	// shipped on for its first day
 	("window.remember_maximized", "true  ## Default"),
+	// Close pane had no chord on a Mac for its first day
+	#[cfg(target_os = "macos")]
+	("keys.close_pane", "\"none\"  ## Default"),
 ];
 
 // The whole pre-nesting flat namespace, old key -> new nested path. Primary

@@ -995,9 +995,12 @@ mod tests {
 				Some(hotkey),
 				"{chord:?}"
 			);
-			assert_eq!(
-				hotkey_on(&press, held(chord), true, false),
-				None,
+			// off a Mac, Alt plus a letter opens a menu title even with Super held
+			assert!(
+				matches!(
+					hotkey_on(&press, held(chord), true, false),
+					None | Some(Hotkey::MenuTitle(_))
+				),
 				"{chord:?} off macOS"
 			);
 		}
@@ -1283,8 +1286,9 @@ mod tests {
 	}
 
 	// On a Mac the pane chords are iTerm2's: Command+D splits right,
-	// Command+Shift+D splits down and Command+Option+arrows move. Option+arrows
-	// and the Alt+Shift chords go to the shell there.
+	// Command+Shift+D splits down and Command+Option+arrows move. Command+W
+	// closes the tab, so Option+Command+W closes the pane. Option+arrows and
+	// the Alt+Shift chords go to the shell there.
 	// Test ID: EreU3sa
 	#[test]
 	fn command_d_splits_and_command_option_arrows_move_on_macos() {
@@ -1300,6 +1304,11 @@ mod tests {
 			Some(Hotkey::SplitDown)
 		);
 		assert_eq!(mac(d(), CTRL), None);
+		// Command holds back the character Option would type, so the press
+		// arrives as "w"
+		let w = || Key::Character("w".into());
+		assert_eq!(mac(w(), COMMAND.union(OPTION)), Some(Hotkey::ClosePane));
+		assert_eq!(mac(w(), COMMAND), Some(Hotkey::CloseTab));
 		for (key, toward) in [
 			(NamedKey::ArrowLeft, Toward::Left),
 			(NamedKey::ArrowRight, Toward::Right),

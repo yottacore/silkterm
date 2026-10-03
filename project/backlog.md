@@ -716,10 +716,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
 	- ID: 2026100220292607
 	- Type: Feature
-	- Status: Queued
+	- Status: Waiting for testing
 	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
 	- Needs external testing:
 		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
+		- b26: Option+Command+W closes the pane and Command+W still closes the tab. The Panes row on the menu bar, the right-click menu and the Keys tab show Option+Command+W.
 		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
 	- Priority: Avg
 	- Opened: 20261002-202926
@@ -747,14 +748,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Changed along the way: F11, the Menu key and Ctrl+F4 now need exactly their keys held, where extra modifiers used to count. Ctrl+Alt+Shift+T, which is how Windows sees AltGr+Shift+T, no longer opens a tab.
 		- 20261003: `no_chord_splits_closes_or_cycles_panes` is commented out, since it pinned the menu-only decision this item reverses. Its Ctrl and Ctrl+Shift checks still hold and moved to `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
 		- 20261003: Open question: macOS has no close-pane chord by default. iTerm2 uses Command+W, which is close tab here. Leave it unbound, or pick one?
+		- 20261003: Answered by the decision above. Option+Command+W is the Mac default for Close pane, so the menu bar's Panes row, the right-click menu, the Keys tab and the template's `keys:` line all show it. A Mac config whose commented line still says "none" is brought up to it. Nothing else on a Mac uses that chord; Hide others is Option+Command+H.
+		- 20261003: Two checks that pinned no Mac chord for Close pane are commented out and replaced, in `a_menu_row_shows_the_chord_its_hotkey_answers_to` and `the_keys_tab_shows_the_mac_chords_on_a_mac`. The Mac exception in `every_default_chord_reads_and_none_is_shared` is gone. The Mac half of `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` presses Shift+Command+W now, since the old chord is the default.
+		- 20261003: Off a Mac, Alt+Super+W opens the menu title W, as Alt plus any letter does with Super held. That is older than this change; `the_command_chords_are_the_only_program_chords_on_macos` now allows it.
 	- Verified:
 		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
 		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
+		- 20261003, Option+Command+W: the unit suite passes, 1057 tests, and fmt plus clippy for Linux, macOS and Windows are clean. With the Mac default put back to "none", five tests fail: the menu bar list, the Panes row label, the Keys tab row, the default check and the macOS chord test. The refresh of an old "none" line passed for a Linux template; the macOS-only entry itself is unrun. None of it ran on a Mac.
 		- In a real window on Linux, the four Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
+	- Swept: for Option+Command+W, every Mac chord in `keys.rs`, the app menu and Window menu rows in `macmenu.rs`, the template, the Keys tab, the UI style guide and the split-panes design doc.
 	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` spells a chord by hand any more.
-	- Branch: panekeys
+	- Branch: panekeys, mackeys
 	- Commit: 4cafdde
-	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`.
+	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
 	- Closed:
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change

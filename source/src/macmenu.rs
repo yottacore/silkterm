@@ -715,6 +715,7 @@ mod tests {
 				("Close tab", "Command+W".to_string()),
 				("Split vertical", "Command+D".to_string()),
 				("Split horizontal", "Shift+Command+D".to_string()),
+				("Close pane", "Option+Command+W".to_string()),
 				("Minimize", "Command+M".to_string()),
 				("Show previous tab", "Shift+Command+[".to_string()),
 				("Show next tab", "Shift+Command+]".to_string()),

@@ -11971,7 +11971,12 @@ mod tests {
 		assert_eq!(shown_on(&d, right), "Command+D | ");
 		let prev = row_of(&d, Key::HotkeyPrevTab);
 		assert_eq!(shown_on(&d, prev), "Shift+Command+[ or Command+PageUp | ");
-		assert_eq!(shown_on(&d, row_of(&d, Key::HotkeyClosePane)), "Off | ");
+		// Close pane had no Mac chord until 20261003
+		// assert_eq!(shown_on(&d, row_of(&d, Key::HotkeyClosePane)), "Off | ");
+		assert_eq!(
+			shown_on(&d, row_of(&d, Key::HotkeyClosePane)),
+			"Option+Command+W | "
+		);
 		d.capture_start(right);
 		assert!(d.capture_key(&Pressed::Character("r".into()), ModifiersState::empty()));
 		assert!(shown_on(&d, right).contains("R needs Control, Option or Command held"));
@@ -12039,8 +12044,9 @@ mod tests {
 		d.edited = d.orig.clone();
 		let i = row_of(&d, Key::HotkeyClosePane);
 		d.capture_start(i);
+		// a chord other than the default, which on a Mac is Option+Command+W
 		let (key, mods) = if mac {
-			("w", ModifiersState::SUPER.union(ModifiersState::ALT))
+			("W", ModifiersState::SUPER.union(ModifiersState::SHIFT))
 		} else {
 			("W", ModifiersState::CONTROL.union(ModifiersState::SHIFT))
 		};

@@ -352,8 +352,9 @@ pub fn value_text(chords: &[Chord], mac: bool) -> String {
 
 // Every hotkey there is: its name under `keys:` in the config file, then its
 // default chords on Linux and Windows, then on macOS. On a Mac the chords are
-// Apple's standard ones where an action has one; the pane chords are iTerm2's.
-// Elsewhere the pane chords are Windows Terminal's. Groups in the template
+// Apple's standard ones where an action has one, and the pane chords are
+// iTerm2's but for closing one, since Command+W closes the tab here. Elsewhere
+// the pane chords are Windows Terminal's. Groups in the template
 // follow the blank-line breaks in `TEMPLATE_GROUPS`.
 #[rustfmt::skip]
 const TABLE: &[(Hotkey, &str, &str, &str)] = &[
@@ -367,7 +368,7 @@ const TABLE: &[(Hotkey, &str, &str, &str)] = &[
 	(Hotkey::MoveTab { forward: true }, "move_tab_forward", "Ctrl+Shift+PageDown",  "Shift+Command+PageDown"),
 	(Hotkey::SplitRight,                "split_right",      "Alt+Shift+Plus",       "Command+D"),
 	(Hotkey::SplitDown,                 "split_down",       "Alt+Shift+Minus",      "Shift+Command+D"),
-	(Hotkey::ClosePane,                 "close_pane",       "Alt+Shift+W",          "none"),
+	(Hotkey::ClosePane,                 "close_pane",       "Alt+Shift+W",          "Option+Command+W"),
 	(Hotkey::Focus(Toward::Left),       "focus_left",       "Alt+Left",             "Option+Command+Left"),
 	(Hotkey::Focus(Toward::Right),      "focus_right",      "Alt+Right",            "Option+Command+Right"),
 	(Hotkey::Focus(Toward::Up),         "focus_up",         "Alt+Up",               "Option+Command+Up"),
@@ -660,7 +661,7 @@ mod tests {
 			let (bindings, notes) = Bindings::with(mac, &[]);
 			assert!(notes.is_empty(), "{notes:?}");
 			for (hotkey, _) in config_paths() {
-				if !(mac && hotkey == Hotkey::ClosePane || !mac && hotkey == Hotkey::Quit) {
+				if mac || hotkey != Hotkey::Quit {
 					assert!(bindings.shown(hotkey).is_some(), "{hotkey:?} mac={mac}");
 				}
 			}
