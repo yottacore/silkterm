@@ -66,6 +66,7 @@ try:
 	demo = load()
 except ImportError as e:
 	print(f"  skip the recorder cannot load here ({e})")
+	_testdir.end(0)
 	sys.exit(0)
 
 def done(rec):
@@ -215,6 +216,7 @@ else:
 	done(rec)
 	shutil.rmtree(sentinel, ignore_errors=True)
 
+_testdir.end(1 if failures else 0)
 if failures:
 	print(f"{failures} failed")
 	sys.exit(1)

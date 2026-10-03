@@ -225,6 +225,7 @@ for exe, name, version in ((bundle / "usr/bin/wez-gui", "wez", "20240203"),
 		got_name == name and build.split("+", 1)[0] == version, f"{got_name} {build}")
 
 shutil.rmtree(scratch, ignore_errors=True)
+_testdir.end(1 if failures else 0)
 if failures:
 	print(f"{failures} failed")
 	sys.exit(1)
