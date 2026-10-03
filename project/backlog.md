@@ -355,6 +355,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: b2223d0, 0de1dac
 	- Test case: `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg). It fails with the change undone, and with it applied on every platform. The two press handlers have no test, since they need a live window; the b26 check above covers them.
 
+- macOS: a plain click in a reopened Settings can act as a Ctrl+click
+	- ID: 2026100220463754
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On b26. Open Settings, hold Ctrl and press Esc, then let go of Ctrl. Open Settings again and click a checkbox with no keys held: it changes. Do the same with Enter in place of Esc.
+		- After closing Settings that way, open About and click its link: the link opens.
+		- Ctrl+click in a Settings text box still opens its Cut, Copy, Paste menu, and a plain click after letting go of Ctrl is a plain click again.
+	- Severity: Avg
+	- Opened: 20261002-204637
+	- Opened by: CC
+	- Related IDs: 2026100220260471
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- Open Settings. Hold Ctrl and press Esc, so Settings closes with Ctrl still down. Let go of Ctrl.
+		- Open Settings again and click a checkbox with no keys held.
+	- Incorrect behavior: The click acts as a right-click. A checkbox does not change, and a text box opens its Cut, Copy, Paste menu. It stays that way until a modifier key is pressed and let go inside Settings.
+	- Expected behavior: A plain click is a left click.
+	- Reproduced: No. Read from the code on 20261002. Details in the ctrlclick design's review round 0.
+		- 20261003: Not run, since it needs a Mac. winit 0.30.13's macOS code backs the reading. A closing window drops its delegate before it gives up the focus, so it never reports Ctrl let go. A window that gains the focus reports only that, with no held keys.
+	- Origin: 2026100220260471, branch ctrlclick, b2223d0. Plausible.
+	- Actual cause: The held keys a press in a dialog reads were kept for the program, not for the dialog window, and only that window's reports changed them. A dialog closed with Ctrl down left Ctrl recorded, and the next dialog started out with it.
+	- Actual fix: Each dialog window keeps its own held keys, starting with none. They go when the window goes, whether it closed or another dialog took its place.
+	- Swept: Every place held keys are kept for a window. The Settings text boxes' keys already belonged to the dialog. The notice window keeps none. The terminal window's keys are cleared when it loses the focus, on X11, Wayland, Windows and macOS alike, so they never stick down. Both places that open a dialog replace it without the close path, and both are covered now.
+	- Note: On a Mac, a window that gains the focus while Ctrl is already down does not know it until a key changes, so a Ctrl+click right then is a plain click. The terminal window has the same gap. Left alone, since it never sticks and the next key change corrects it.
+	- Test case: None. A press reads its keys from a live dialog window, which the unit tests cannot make, and the fault needs a Mac's focus rules. The b26 check above covers it. `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg) still pins what a press does with the keys it is given.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: heldkeys
+	- Commit: 669c2d9
+
 - macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
 	- ID: 2026100219054497
 	- Type: Feature
@@ -484,36 +514,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
-
-- macOS: a plain click in a reopened Settings can act as a Ctrl+click
-	- ID: 2026100220463754
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs external testing: On b26. Open Settings, hold Ctrl and press Esc, then let go of Ctrl. Open Settings again and click a checkbox with no keys held: it changes. Do the same with Enter in place of Esc.
-		- After closing Settings that way, open About and click its link: the link opens.
-		- Ctrl+click in a Settings text box still opens its Cut, Copy, Paste menu, and a plain click after letting go of Ctrl is a plain click again.
-	- Severity: Avg
-	- Opened: 20261002-204637
-	- Opened by: CC
-	- Related IDs: 2026100220260471
-	- Target OS: macOS
-	- Test environment: b26
-	- Steps to reproduce:
-		- Open Settings. Hold Ctrl and press Esc, so Settings closes with Ctrl still down. Let go of Ctrl.
-		- Open Settings again and click a checkbox with no keys held.
-	- Incorrect behavior: The click acts as a right-click. A checkbox does not change, and a text box opens its Cut, Copy, Paste menu. It stays that way until a modifier key is pressed and let go inside Settings.
-	- Expected behavior: A plain click is a left click.
-	- Reproduced: No. Read from the code on 20261002. Details in the ctrlclick design's review round 0.
-		- 20261003: Not run, since it needs a Mac. winit 0.30.13's macOS code backs the reading. A closing window drops its delegate before it gives up the focus, so it never reports Ctrl let go. A window that gains the focus reports only that, with no held keys.
-	- Origin: 2026100220260471, branch ctrlclick, b2223d0. Plausible.
-	- Actual cause: The held keys a press in a dialog reads were kept for the program, not for the dialog window, and only that window's reports changed them. A dialog closed with Ctrl down left Ctrl recorded, and the next dialog started out with it.
-	- Actual fix: Each dialog window keeps its own held keys, starting with none. They go when the window goes, whether it closed or another dialog took its place.
-	- Swept: Every place held keys are kept for a window. The Settings text boxes' keys already belonged to the dialog. The notice window keeps none. The terminal window's keys are cleared when it loses the focus, on X11, Wayland, Windows and macOS alike, so they never stick down. Both places that open a dialog replace it without the close path, and both are covered now.
-	- Note: On a Mac, a window that gains the focus while Ctrl is already down does not know it until a key changes, so a Ctrl+click right then is a plain click. The terminal window has the same gap. Left alone, since it never sticks and the next key change corrects it.
-	- Test case: None. A press reads its keys from a live dialog window, which the unit tests cannot make, and the fault needs a Mac's focus rules. The b26 check above covers it. `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg) still pins what a press does with the keys it is given.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: heldkeys
-	- Commit: 669c2d9
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -766,42 +766,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
 
-- Four unit tests fail on Windows
-	- ID: 2026093010080316
-	- Type: Bug
-	- Status: Done
-	- Priority|Severity: Avg
-	- Opened: 20260930-100803
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w, `cargo test`
-	- Steps to reproduce: Run `cargo test` on Windows.
-	- Incorrect behavior:
-		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
-		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
-		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
-	- Expected behavior: They pass, as on Linux.
-	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
-	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
-	- Actual cause: All four are faults in the tests. None is timing.
-		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
-		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
-	- Progress log:
-		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
-	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
-	- Branch: wintests
-	- Commit: 731d528
-	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
-	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
-	- Swept:
-		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
-		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
-		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
-		- The Windows run this item came from named only these four. That full suite was not run again.
-	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
-	- Closed: 20260930-125357
-
 - Test files go under one dated folder in the system temp dir
 	- ID: 2026093013113320
 	- Type: Task
@@ -944,38 +908,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_window_left_maximized_opens_maximized` (ErPSaVM), and `the_template_carries_the_remembered_size_as_live_lines` now covers the new line. Both seen to fail.
 	- Acceptance signoff: JC, 20261001, with the default changed to off.
 	- Closed: 20261001
-
-- Windows: open scripts and folders in SilkTerm
-	- ID: 2026093009280571
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
-	- Priority|Severity: Avg
-	- Opened: 20260930-092805
-	- Opened by: JC
-	- Assigned to: JC
-	- Related IDs: 2026092810510800
-	- Target OS: Windows
-	- Test environment: vm925w, Windows 11 25H2
-	- Requirements:
-		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
-			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
-			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
-			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
-		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
-			- Windows only. Other platforms don't show them.
-		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
-		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
-	- Estimated effort: Avg
-	- Progress log:
-		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
-		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
-		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
-		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
-		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
-	- Branch: winassoc
-	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
-	- Acceptance signoff: 20260930-183819
 
 - shcl: a bad escape on a line that opens a block drops the whole block
 	- ID: 2026100115322365
@@ -1185,6 +1117,74 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: The clipboard and handle leak items already said so. The nano item, which the ledger test pins, now does too.
 	- Test case: None, the items are notes.
 	- Closed: 20260929-170507
+
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
+	- Status: Done
+	- Priority|Severity: Avg
+	- Opened: 20260930-100803
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
+	- Actual cause: All four are faults in the tests. None is timing.
+		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
+		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Progress log:
+		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
+	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
+	- Branch: wintests
+	- Commit: 731d528
+	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
+	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
+	- Swept:
+		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
+		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
+		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
+		- The Windows run this item came from named only these four. That full suite was not run again.
+	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
+	- Closed: 20260930-125357
+
+- Windows: open scripts and folders in SilkTerm
+	- ID: 2026093009280571
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
+	- Priority|Severity: Avg
+	- Opened: 20260930-092805
+	- Opened by: JC
+	- Assigned to: JC
+	- Related IDs: 2026092810510800
+	- Target OS: Windows
+	- Test environment: vm925w, Windows 11 25H2
+	- Requirements:
+		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
+			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
+			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
+			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
+		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
+			- Windows only. Other platforms don't show them.
+		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
+		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
+		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
+		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
+		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
+		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
+	- Branch: winassoc
+	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
+	- Acceptance signoff: 20260930-183819
 
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082
