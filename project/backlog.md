@@ -53,6 +53,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Unit tests pass. A look at the menu toggle in a real window is still owed.
 	- Branch: copysel
 
+- Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
+	- ID: 2026100220292617
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435574
+	- Target OS: All
+	- Test environment: b23
+	- Requirements:
+		- A warning icon next to Transparency, with a tip saying it relies on the desktop compositor and may not work.
+		- Move Transparency and its rows to the last section on the Background tab.
+	- Notes:
+		- The macOS half of the same note is 2026100114435574.
+	- Progress log:
+		- 20261003: Transparency, Opacity % and Blur-behind are now the last group on the Background tab, after Contrast mask. The tab has no titled sections, so the group moved as it was, without a heading of its own.
+		- 20261003: A warning mark follows the Transparency label: a small triangle with an exclamation mark, in the label's color. Its tip reads "Transparency relies on the desktop compositor, and may not work on every desktop." The row's own tip is unchanged.
+		- 20261003: No row had a warning mark before, so this is a new row field, `warning:`, which any row with a label can use. The UI style guide and the Settings dialog design doc say so.
+		- 20261003: Fixed along the way: the dialog scaled a triangle's direction as if it were a length, so at any scale but 1 it pointed the wrong way. Nothing in the dialog drew one before this.
+		- 20261003: Looked at in a window at scale 1 and 2, both tips included. Not seen on Windows or macOS.
+	- Verified: unit tests, the format check, and lints for Linux and Windows pass.
+	- Note: `space_toggles_focused_boolean` now presses Space on Wallpaper, since that is the tab's first row after the move.
+	- Branch: seethrutip
+	- Test case: `transparency_is_the_last_group_on_the_background_tab`, `the_transparency_row_warns_that_it_needs_the_compositor`, `a_triangle_keeps_its_direction_at_any_scale` and `a_warning_needs_a_label_of_its_own`. Each failed on the old code and passes now.
+	- Closed:
+
 - The launch names an unreadable line two lines short of where the file has it
 	- ID: 2026100115322366
 	- Type: Bug
@@ -620,34 +648,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
 	- Decisions:
 		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
-	- Closed:
-
-- Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
-	- ID: 2026100220292617
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435574
-	- Target OS: All
-	- Test environment: b23
-	- Requirements:
-		- A warning icon next to Transparency, with a tip saying it relies on the desktop compositor and may not work.
-		- Move Transparency and its rows to the last section on the Background tab.
-	- Notes:
-		- The macOS half of the same note is 2026100114435574.
-	- Progress log:
-		- 20261003: Transparency, Opacity % and Blur-behind are now the last group on the Background tab, after Contrast mask. The tab has no titled sections, so the group moved as it was, without a heading of its own.
-		- 20261003: A warning mark follows the Transparency label: a small triangle with an exclamation mark, in the label's color. Its tip reads "Transparency relies on the desktop compositor, and may not work on every desktop." The row's own tip is unchanged.
-		- 20261003: No row had a warning mark before, so this is a new row field, `warning:`, which any row with a label can use. The UI style guide and the Settings dialog design doc say so.
-		- 20261003: Fixed along the way: the dialog scaled a triangle's direction as if it were a length, so at any scale but 1 it pointed the wrong way. Nothing in the dialog drew one before this.
-		- 20261003: Looked at in a window at scale 1 and 2, both tips included. Not seen on Windows or macOS.
-	- Verified: unit tests, the format check, and lints for Linux and Windows pass.
-	- Note: `space_toggles_focused_boolean` now presses Space on Wallpaper, since that is the tab's first row after the move.
-	- Branch: seethrutip
-	- Test case: `transparency_is_the_last_group_on_the_background_tab`, `the_transparency_row_warns_that_it_needs_the_compositor`, `a_triangle_keeps_its_direction_at_any_scale` and `a_warning_needs_a_label_of_its_own`. Each failed on the old code and passes now.
 	- Closed:
 
 - macOS: the first launch hangs with no window, using more and more memory
