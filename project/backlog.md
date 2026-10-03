@@ -239,12 +239,81 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 02482bb, bb66e6e
 	- Closed:
 
+- macOS: the program's own shortcuts still use Ctrl in places, where a Mac uses Command
+	- ID: 2026100219054469
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On b26, in the terminal, Ctrl+Shift+T, W, N, C and V, Ctrl+, , Ctrl+Plus, Minus and 0, Ctrl+PageUp and PageDown, and Ctrl+F4 all reach the shell and do none of the program's actions. Ctrl+Shift+C interrupts, as Ctrl+C does. The Command chords do each of those jobs. Command+click opens a link, Command held at a press makes a block selection, and Ctrl+click is a plain click. F11 still toggles fullscreen when macOS lets it through.
+		- In a Settings text box: Command+A, C, X and V work from the keyboard, and Edit > Copy and Paste on the menu bar work too. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. Ctrl or Command plus a letter types nothing. Command+PageUp and PageDown change tab, and Ctrl+Tab moves focus like Tab.
+		- In a tab rename: Command+A selects the name. Ctrl or Command plus a letter types nothing.
+		- This replaces the lines in 2026100114435613's check that say the Ctrl chords still work.
+	- Severity: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435613, 2026100114435587, 2026100219054483
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: The Settings dialog's text boxes take Ctrl+C, X, V and A only, so Command+C and Command+V there go to the menu bar, which just brings the dialog forward. The terminal's own Ctrl and Ctrl+Shift chords, such as Ctrl+Shift+T, Ctrl+Shift+C and Ctrl+, still work beside the Command ones.
+	- Expected behavior: On macOS every shortcut the program itself takes uses Command where other platforms use Ctrl. That includes the Settings text boxes, the tab rename and the terminal window. Ctrl chords then go to the shell.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Use the Mac's Command chords everywhere on macOS, instead of Ctrl, including on the terminal itself. This replaces the 20261002 call on 2026100114435587 that kept every Ctrl chord working beside the Command ones.
+	- Actual cause: The key handling took the Ctrl chords on every platform, and on a Mac took the Command ones beside them. The Settings text boxes, the tab rename, the link click and the block selection read Ctrl alone. On a Mac the menu bar takes Command+C and V first, and a pick with Settings open only brought it forward.
+	- Actual fix:
+		- On a Mac the program's chords are the Command ones from the one table the menu bar reads, and no Ctrl chord is the program's. The Ctrl chords go to the shell. Linux and Windows are unchanged.
+		- The tab chords move too: Command+PageUp and PageDown walk the tabs, and Shift with them carries the tab, as Ctrl does elsewhere. Command+Shift+[ and ] are 2026100219054497.
+		- Command+click opens a link and Command held at a press selects a block.
+		- A Settings text box takes Command+A, C, X and V. Edit > Copy and Paste on the menu bar now act on the box when Settings is open. Moving by words is Option, the Mac's word key, since Command+Left and Right go to either end in a Mac text box. Command+Backspace erases to the start. Ctrl plus a letter types nothing.
+		- The tab rename takes Command+A, and Command+V when it is pressed as a key. Neither Command nor Ctrl plus a letter types into the name. Paste from the menu bar is 2026100219054483.
+		- Ctrl+Shift+C copies an unfocused window's selection elsewhere; on a Mac that is Command+C.
+	- Note: F11 is not a Ctrl chord, so it still toggles fullscreen on a Mac. macOS usually takes F11 for itself.
+	- Swept: Every reader of Ctrl as a program key in `app.rs`, `dialog.rs`, `settings_ui.rs` and `input.rs`: the key bindings, the unfocused copy, the tab rename, the link click, the block selection, the Settings text boxes and the dialog's tab keys. Menu labels on a Mac already came from the Command table. Shortcut text in the UI style guide, the README, design.md and three feature designs. No tip, help text or Settings text names a Ctrl chord.
+	- Test case: `command_comma_is_the_only_settings_chord_on_macos` (ErbGP9B), `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5), `the_shortcut_key_is_command_on_macos_and_ctrl_elsewhere` (ErbGPK5) and `a_mac_text_box_takes_the_mac_keys` (ErbGPQa). Each fails with its part of the change undone.
+		- The old `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm) are commented out, since they pinned the Ctrl chords working on a Mac.
+		- The Linux key tests now ask for the Linux answer by name, so they also hold when run on a Mac. `only_a_held_ctrl_shift_c_is_the_copy_chord` (EpyCuGe) passes the platform in.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: maccmd
+	- Commit: 7179fa9
+
+- macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
+	- ID: 2026100219054497
+	- Type: Feature
+	- Status: Waiting for testing
+	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
+		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
+		- With Settings open, the two tab rows and their chords change the dialog's tab.
+		- Neither View nor Window has Show Tab Bar, Merge All Windows or a second pair of tab rows, since the system's own window tabs are off.
+	- Priority: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435587, 2026100114435613
+	- Target OS: macOS
+	- Test environment: b26
+	- Requirements:
+		- Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, as in other Mac apps.
+		- The macOS menu bar has a Window menu, with Minimize (Command+M) and the other rows Mac apps have there.
+	- Decisions:
+		- 20261002: Yes to both.
+	- Done:
+		- Command+Shift+[ and ] are in the Command chord table, so they work as keys and show on the Window menu's Show previous tab and Show next tab rows. A Mac reports Shift+[ as "{" on a US layout, so both spellings count, and the menu row is handed "{" with Command, the form macOS matches.
+		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are carried out by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
+		- The system's own window tabs are turned off. They would add a Show Tab Bar row to View, and tab rows to Window that take Ctrl+Tab from the shell, beside SilkTerm's own tabs.
+		- With Settings open, the tab rows change the dialog's tab, as they reach it before the dialog sees the keys.
+	- Note: Each window is its own process, so the window list and Bring all to front reach only that window and its dialogs.
+	- Test case: `command_shift_brackets_walk_the_tabs_on_macos` (ErbGPGY) and `the_mac_window_menu_minimizes_zooms_and_walks_the_tabs` (ErbGPNM), which fail with the chords or the Window menu taken out. `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8) and `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) now list the Window menu and its chords.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: maccmd
+	- Commit: 7179fa9
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
 	- Status: Waiting for testing
 	- Needs external testing: On b26, Command+, opens Settings from the terminal, and the menu bar shows it beside Settings. With Settings already open it brings that one forward. Ctrl+, still opens Settings too.
 		- 20261002: The menu rows show Command+N, T, W, C, V, Plus, Minus, 0, Control+Command+F, and the app menu's Command+, H, Option+H and Q, with no Ctrl chord in any label. Each chord works from the keyboard, Command+= as well as Command+Plus. Command+K or any other unbound Command chord types nothing at the shell. Ctrl+Shift+T, Ctrl+Shift+C and the other Ctrl chords still work, and plain Ctrl+T, Ctrl+W and Ctrl+V still reach the shell. The right-click menu reads "Copy (Command+C)" and so on.
+		- 20261002: The Ctrl lines above are replaced by 2026100219054469's test row. On macOS the Ctrl chords now all go to the shell.
 	- Severity: Low
 	- Opened: 20261001-144356
 	- Opened by: JC
@@ -287,43 +356,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
-- macOS: the program's own shortcuts still use Ctrl in places, where a Mac uses Command
-	- ID: 2026100219054469
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs external testing: On b26, in the terminal, Ctrl+Shift+T, W, N, C and V, Ctrl+, , Ctrl+Plus, Minus and 0, Ctrl+PageUp and PageDown, and Ctrl+F4 all reach the shell and do none of the program's actions. Ctrl+Shift+C interrupts, as Ctrl+C does. The Command chords do each of those jobs. Command+click opens a link, Command held at a press makes a block selection, and Ctrl+click is a plain click. F11 still toggles fullscreen when macOS lets it through.
-		- In a Settings text box: Command+A, C, X and V work from the keyboard, and Edit > Copy and Paste on the menu bar work too. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. Ctrl or Command plus a letter types nothing. Command+PageUp and PageDown change tab, and Ctrl+Tab moves focus like Tab.
-		- In a tab rename: Command+A selects the name. Ctrl or Command plus a letter types nothing.
-		- This replaces the lines in 2026100114435613's check that say the Ctrl chords still work.
-	- Severity: Avg
-	- Opened: 20261002-190545
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435613, 2026100114435587, 2026100219054483
-	- Target OS: macOS
-	- Test environment: b26
-	- Incorrect behavior: The Settings dialog's text boxes take Ctrl+C, X, V and A only, so Command+C and Command+V there go to the menu bar, which just brings the dialog forward. The terminal's own Ctrl and Ctrl+Shift chords, such as Ctrl+Shift+T, Ctrl+Shift+C and Ctrl+, still work beside the Command ones.
-	- Expected behavior: On macOS every shortcut the program itself takes uses Command where other platforms use Ctrl. That includes the Settings text boxes, the tab rename and the terminal window. Ctrl chords then go to the shell.
-	- Reproduced: No. Read from the code on 20261002.
-	- Decisions:
-		- 20261002: Use the Mac's Command chords everywhere on macOS, instead of Ctrl, including on the terminal itself. This replaces the 20261002 call on 2026100114435587 that kept every Ctrl chord working beside the Command ones.
-	- Actual cause: The key handling took the Ctrl chords on every platform, and on a Mac took the Command ones beside them. The Settings text boxes, the tab rename, the link click and the block selection read Ctrl alone. On a Mac the menu bar takes Command+C and V first, and a pick with Settings open only brought it forward.
-	- Actual fix:
-		- On a Mac the program's chords are the Command ones from the one table the menu bar reads, and no Ctrl chord is the program's. The Ctrl chords go to the shell. Linux and Windows are unchanged.
-		- The tab chords move too: Command+PageUp and PageDown walk the tabs, and Shift with them carries the tab, as Ctrl does elsewhere. Command+Shift+[ and ] are 2026100219054497.
-		- Command+click opens a link and Command held at a press selects a block.
-		- A Settings text box takes Command+A, C, X and V. Edit > Copy and Paste on the menu bar now act on the box when Settings is open. Moving by words is Option, the Mac's word key, since Command+Left and Right go to either end in a Mac text box. Command+Backspace erases to the start. Ctrl plus a letter types nothing.
-		- The tab rename takes Command+A, and Command+V when it is pressed as a key. Neither Command nor Ctrl plus a letter types into the name. Paste from the menu bar is 2026100219054483.
-		- Ctrl+Shift+C copies an unfocused window's selection elsewhere; on a Mac that is Command+C.
-	- Note: F11 is not a Ctrl chord, so it still toggles fullscreen on a Mac. macOS usually takes F11 for itself.
-	- Swept: Every reader of Ctrl as a program key in `app.rs`, `dialog.rs`, `settings_ui.rs` and `input.rs`: the key bindings, the unfocused copy, the tab rename, the link click, the block selection, the Settings text boxes and the dialog's tab keys. Menu labels on a Mac already came from the Command table. Shortcut text in the UI style guide, the README, design.md and three feature designs. No tip, help text or Settings text names a Ctrl chord.
-	- Test case: `command_comma_is_the_only_settings_chord_on_macos` (ErbGP9B), `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5), `the_shortcut_key_is_command_on_macos_and_ctrl_elsewhere` (ErbGPK5) and `a_mac_text_box_takes_the_mac_keys` (ErbGPQa). Each fails with its part of the change undone.
-		- The old `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm) are commented out, since they pinned the Ctrl chords working on a Mac.
-		- The Linux key tests now ask for the Linux answer by name, so they also hold when run on a Mac. `only_a_held_ctrl_shift_c_is_the_copy_chord` (EpyCuGe) passes the platform in.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: maccmd
-	- Commit: 7179fa9
-
 - Tab rename: Paste from the menu bar goes into the shell, and the box has only basic editing
 	- ID: 2026100219054483
 	- Type: Bug
@@ -339,50 +371,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: No. Read from the code on 20261002.
 	- Decisions:
 		- 20261002: Paste into the tab. Full text editing in the tab.
-
-- macOS: Option plus a letter types nothing into a Settings text box
-	- ID: 2026100219240881
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261002-192408
-	- Opened by: CC
-	- Related IDs: 2026100219054469, 2026100219054483
-	- Target OS: macOS
-	- Incorrect behavior: On a Mac, Option plus a letter types a character such as "ø". In a Settings text box Option is read as Alt, so the press is taken as a footer button accelerator and nothing is typed. A tab rename also drops a character typed with Option.
-	- Expected behavior: The character is typed. A Mac has no Alt accelerators on buttons.
-	- Reproduced: No. Read from the code on 20261002, while working on 2026100219054469. Plausible.
-
-- macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
-	- ID: 2026100219054497
-	- Type: Feature
-	- Status: Waiting for testing
-	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
-		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
-		- With Settings open, the two tab rows and their chords change the dialog's tab.
-		- Neither View nor Window has Show Tab Bar, Merge All Windows or a second pair of tab rows, since the system's own window tabs are off.
-	- Priority: Avg
-	- Opened: 20261002-190545
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435587, 2026100114435613
-	- Target OS: macOS
-	- Test environment: b26
-	- Requirements:
-		- Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, as in other Mac apps.
-		- The macOS menu bar has a Window menu, with Minimize (Command+M) and the other rows Mac apps have there.
-	- Decisions:
-		- 20261002: Yes to both.
-	- Done:
-		- Command+Shift+[ and ] are in the Command chord table, so they work as keys and show on the Window menu's Show previous tab and Show next tab rows. A Mac reports Shift+[ as "{" on a US layout, so both spellings count, and the menu row is handed "{" with Command, the form macOS matches.
-		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are carried out by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
-		- The system's own window tabs are turned off. They would add a Show Tab Bar row to View, and tab rows to Window that take Ctrl+Tab from the shell, beside SilkTerm's own tabs.
-		- With Settings open, the tab rows change the dialog's tab, as they reach it before the dialog sees the keys.
-	- Note: Each window is its own process, so the window list and Bring all to front reach only that window and its dialogs.
-	- Test case: `command_shift_brackets_walk_the_tabs_on_macos` (ErbGPGY) and `the_mac_window_menu_minimizes_zooms_and_walks_the_tabs` (ErbGPNM), which fail with the chords or the Window menu taken out. `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8) and `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) now list the Window menu and its chords.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: maccmd
-	- Commit: 7179fa9
 
 - Test files go under one dated folder in the system temp dir
 	- ID: 2026093013113320
@@ -460,6 +448,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Resolution and DPI by themselves may not be enough, if the DPI information is disconnected from actual inches. It's the *actual* physical DPI, combined with resolution, that's important, and will have to best approximate.
 		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
 	- Closed:
+
+- macOS: Option plus a letter types nothing into a Settings text box
+	- ID: 2026100219240881
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261002-192408
+	- Opened by: CC
+	- Related IDs: 2026100219054469, 2026100219054483
+	- Target OS: macOS
+	- Incorrect behavior: On a Mac, Option plus a letter types a character such as "ø". In a Settings text box Option is read as Alt, so the press is taken as a footer button accelerator and nothing is typed. A tab rename also drops a character typed with Option.
+	- Expected behavior: The character is typed. A Mac has no Alt accelerators on buttons.
+	- Reproduced: No. Read from the code on 20261002, while working on 2026100219054469. Plausible.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
