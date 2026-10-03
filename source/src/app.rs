@@ -52,6 +52,8 @@ pub struct App {
 	// context, so it can be larger than the main window.
 	dialog: Option<crate::dialog::DialogWin>,
 	dialog_dirty: bool,
+	// the dialog window's held keys, read by a press
+	dialog_mods: ModifiersState,
 	// A save that could not be written, waiting to be said, and the notice
 	// saying one. It is its own window so it can stand over an open Settings.
 	// Windows shows the system's message box instead, and `notice` stays None.
@@ -93,6 +95,7 @@ impl App {
 			cli,
 			dialog: None,
 			dialog_dirty: false,
+			dialog_mods: ModifiersState::empty(),
 			notice: None,
 			notice_dirty: false,
 			notice_owed: None,
@@ -183,33 +186,39 @@ impl App {
 				}
 			}
 			WindowEvent::MouseInput {
-				state,
+				state: ElementState::Pressed,
+				button,
+				..
+			} => {
+				let button =
+					input::acting_button(button, self.dialog_mods, cfg!(target_os = "macos"));
+				if let Some(d) = &mut self.dialog {
+					match button {
+						MouseButton::Left => {
+							// clipboard for the field context-menu commands
+							let clip = self.state.as_mut().map(|s| &mut s.clipboard);
+							act = d.mouse_down(clip);
+							self.dialog_dirty = true;
+						}
+						MouseButton::Right => {
+							// gray the menu's Paste when the clipboard holds nothing
+							let paste_ok = self.state.as_mut().is_some_and(|s| {
+								s.clipboard.get_clipboard().is_some_and(|t| !t.is_empty())
+							});
+							d.mouse_right(paste_ok);
+							self.dialog_dirty = true;
+						}
+						_ => {}
+					}
+				}
+			}
+			WindowEvent::MouseInput {
+				state: ElementState::Released,
 				button: MouseButton::Left,
 				..
 			} => {
 				if let Some(d) = &mut self.dialog {
-					match state {
-						ElementState::Pressed => {
-							// clipboard for the field context-menu commands
-							let clip = self.state.as_mut().map(|s| &mut s.clipboard);
-							act = d.mouse_down(clip);
-						}
-						ElementState::Released => act = d.mouse_up(),
-					}
-					self.dialog_dirty = true;
-				}
-			}
-			WindowEvent::MouseInput {
-				state: ElementState::Pressed,
-				button: MouseButton::Right,
-				..
-			} => {
-				if let Some(d) = &mut self.dialog {
-					// gray the menu's Paste when the clipboard holds nothing
-					let paste_ok = self.state.as_mut().is_some_and(|s| {
-						s.clipboard.get_clipboard().is_some_and(|t| !t.is_empty())
-					});
-					d.mouse_right(paste_ok);
+					act = d.mouse_up();
 					self.dialog_dirty = true;
 				}
 			}
@@ -272,6 +281,7 @@ impl App {
 				}
 			}
 			WindowEvent::ModifiersChanged(mods) => {
+				self.dialog_mods = mods.state();
 				if let Some(d) = &mut self.dialog {
 					d.set_keys(input::edit_keys(mods.state(), cfg!(target_os = "macos")));
 					self.dialog_dirty = true;
@@ -8202,6 +8212,10 @@ impl ApplicationHandler<UserEvent> for App {
 				button,
 				..
 			} => {
+				// First, since every branch below reads the button: a Ctrl+click
+				// on a Mac must reach the rename menu, and must not be reported
+				// to an app tracking the mouse, as a right press is not.
+				let button = input::acting_button(button, state.mods, cfg!(target_os = "macos"));
 				let (x, y) = state.mouse;
 				// A rename ends wherever the next click goes, unless it goes back to
 				// the tab being renamed (the tab-strip branch below handles a left

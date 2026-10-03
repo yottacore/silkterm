@@ -134,6 +134,16 @@ pub fn shortcut_held(mods: ModifiersState, mac: bool) -> bool {
 	}
 }
 
+/// The button a press acts as. On a Mac, Ctrl+click is the right-click, as in
+/// every Mac app there. Elsewhere a press is the button pressed.
+pub fn acting_button(button: MouseButton, mods: ModifiersState, mac: bool) -> MouseButton {
+	if mac && button == MouseButton::Left && mods.control_key() {
+		MouseButton::Right
+	} else {
+		button
+	}
+}
+
 /// What the held keys mean to a text box in a dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct EditKeys {
@@ -1234,6 +1244,48 @@ mod tests {
 				..EditKeys::default()
 			}
 		);
+	}
+
+	// Ctrl decides alone, whatever else is held. Linux and Windows keep
+	// Ctrl+click for links and block selection.
+	// Test ID: ErbblFg
+	#[test]
+	fn ctrl_click_is_the_right_click_on_macos_only() {
+		let buttons = [
+			MouseButton::Left,
+			MouseButton::Right,
+			MouseButton::Middle,
+			MouseButton::Back,
+			MouseButton::Forward,
+			MouseButton::Other(5),
+		];
+		let keys = [
+			ModifiersState::CONTROL,
+			ModifiersState::SHIFT,
+			ModifiersState::ALT,
+			ModifiersState::SUPER,
+		];
+		for mac in [true, false] {
+			for button in buttons {
+				for combo in 0..16usize {
+					let mods = keys
+						.iter()
+						.enumerate()
+						.filter(|(bit, _)| combo & (1 << bit) != 0)
+						.fold(ModifiersState::empty(), |acc, (_, key)| acc | *key);
+					let expected = if mac && button == MouseButton::Left && mods.control_key() {
+						MouseButton::Right
+					} else {
+						button
+					};
+					assert_eq!(
+						acting_button(button, mods, mac),
+						expected,
+						"{button:?} {mods:?} mac={mac}"
+					);
+				}
+			}
+		}
 	}
 
 	// Option plus a letter types on a Mac, often a character the layout has
