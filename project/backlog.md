@@ -569,6 +569,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` holds that and will need to change.
 		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
+	- Decisions:
+		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
+		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
+	- Closed:
+
+- Settings: a Keys tab to see and change hotkeys
+	- ID: 2026100307252506
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261003-072525
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100220292607
+	- Target OS: All
+	- Requirements:
+		- Before the RC1 cut.
+		- A Keys tab in Settings that lists every hotkey and lets each one be changed or turned off.
+		- It saves to the same config block that the hotkey item adds.
 	- Closed:
 
 - At the RC release, convert the config to the new format and keep the old file beside it
@@ -587,6 +606,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- If any settings can't be salvaged, warn the user.
 	- Notes:
 		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
+	- Decisions:
+		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
 	- Closed:
 
 - Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
