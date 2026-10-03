@@ -3,10 +3,11 @@
 #  shellcheck disable=2016  ## 'Expressions don't expand in single quotes.' The PowerShell being matched needs literal '$'.
 
 ##	- Purpose:
-##		Three things the Windows scenario harness got wrong, checked without a box.
+##		Four things the Windows scenario harness got wrong, checked without a box.
 ##		It ran whatever binary the box last built, so a result could be for an
 ##		older commit. Its cleanup stopped every process named silkterm, on
-##		boxes other people use. And it kept its files outside the temp folder.
+##		boxes other people use. It kept its files outside the temp folder. And it
+##		left run folders behind, here and on the box.
 ##	- Test ID: EqH4isr
 ##	- History: At bottom of file.
 
@@ -34,6 +35,8 @@ cat > "${work}/win-remote" <<'STUB'
 while [[ "${1:-}" == --* ]]; do [[ "$1" == --host ]] && shift; shift; done
 echo "$*" >> "${STUB_LOG}"
 case "${1:-}" in
+	hold) shift; WINRIG_HELD=1 exec "$@" ;;
+	push) [[ -z "${STUB_PUSHFAIL:-}" ]] || exit 1 ;;
 	hosts) if [[ -n "${STUB_DOWN:-}" ]]; then echo "box      down  192.0.2.1"; else echo "box      up    192.0.2.1"; fi ;;
 	run)
 		if grep -qE $'^fStage\r?$' "$2"; then
@@ -41,6 +44,9 @@ case "${1:-}" in
 			[[ -n "${STUB_NOSTAGE:-}" ]] && { echo "test run folder: refused"; exit 1; }
 			echo "RUNFOR wintest"
 			printf 'RUNDIR %s\r\n' 'C:\Users\wintest\AppData\Local\Temp\test_silkterm_20260101-00000000'
+			printf 'RUNTOKEN %s\r\n' '4242-1234567890'
+		elif grep -qE '^if \(fTestDir_Remove -Dir' "$2"; then
+			cp "$2" "${STUB_DIR}/sweep-$(date +%s%N).ps1"; echo "${STUB_SWEPT:-REMOVED}"
 		else
 			cp "$2" "${STUB_DIR}/launcher-$(date +%s%N).ps1"; echo "VERDICT pass"
 		fi ;;
@@ -74,6 +80,32 @@ fCheck "the scenario runs there" fRunsThere
 fCheck "and points its temp folder there, for its own scratch and the app's" fScratchThere
 fCheck "a scenario stops if the console changed hands since the folder was made" fChecksUser
 fCheck "nothing the harness sends uses a folder outside it" fNoOtherFolder
+
+## The run folder on the box goes once the run is over, pass or fail, and only
+## by the helper's checks against the stage's token. --keep keeps it. The local
+## run folder goes too, so the first pass, before the hold, must not make one.
+fSweeps(){ find "${1}" -maxdepth 1 -name 'sweep-*.ps1' | wc -l ;}
+fCheck "--keep leaves the folder on the box" test "$(fSweeps "${work}")" -eq 0
+mkdir "${work}/swept" "${work}/swept-base"
+rc=0
+out="$(env -u SILKTERM_TEST_DIR TMPDIR="${work}/swept-base" STUB_LOG="${work}/swept/calls" STUB_DIR="${work}/swept" \
+	WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
+sweep="$(find "${work}/swept" -name 'sweep-*.ps1' | head -1)"
+fSweepsOurs(){ [[ -n "${sweep}" ]] && grep -qFx "if (fTestDir_Remove -Dir '${runDir}' -Token '4242-1234567890') { 'REMOVED' } else { 'NOT REMOVED' }" "${sweep}" ;}
+fCheck "a run that passes sweeps the box's run folder with the stage's token" fSweepsOurs
+fCheck "through the helper's own checks" grep -q '^function fTestDir_Remove' "${sweep:-/dev/null}"
+fCheck "and leaves no run folder in the local temp dir" test "${rc}" -eq 0 -a -z "$(ls -A "${work}/swept-base")"
+mkdir "${work}/pushfail"
+rc=0
+out="$(STUB_PUSHFAIL=1 STUB_LOG="${work}/pushfail/calls" STUB_DIR="${work}/pushfail" WINRIG_HELD=1 \
+	WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
+fCheck "a box the binary cannot be sent to fails the run" test "${rc}" -ne 0
+fCheck "and still has its run folder swept" test "$(fSweeps "${work}/pushfail")" -eq 1
+mkdir "${work}/refused"
+out="$(STUB_SWEPT=$'WARNING: test run folder: left it in place: no owner mark\nNOT REMOVED' STUB_LOG="${work}/refused/calls" \
+	STUB_DIR="${work}/refused" WINRIG_HELD=1 WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" \
+	"${meDir}/run.bash" smoke 2>&1)" || true
+fCheck "a sweep that removed nothing says so, and why" bash -c 'grep -qFx "wingui: box: run folder not removed:" <<< "$1" && grep -qF "no owner mark" <<< "$1"' _ "${out}"
 
 rc=0
 : > "${work}/calls-nostage"
@@ -157,3 +189,4 @@ echo "all passed"
 ##		- 20260918: Created.
 ##		- 20260926: A box that is down is a skip.
 ##		- 20261002: The run folder is in the console user's temp folder.
+##		- 20261002: Run folders are removed, here and on the box.

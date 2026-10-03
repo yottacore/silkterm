@@ -22,8 +22,6 @@
 
 set -euo pipefail
 meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=cicd/tests/_testdir.bash
-source "${meDir}/../_testdir.bash"; fTestDir_Use
 root="$(cd "${meDir}/../../.." && pwd)"
 winRemote="${WINGUI_WIN_REMOTE:-${root}/cicd/utility/win-remote.bash}"
 shotDir="${root}/cicd/artifacts/wingui"
@@ -42,6 +40,10 @@ scenarios=("$@"); ((${#scenarios[@]})) || scenarios=(smoke)
 ##	Keep the boxes for the whole run, or another session can get in between a
 ##	scenario and fetching its shots.
 [[ -n "${WINRIG_HELD:-}" ]] || exec "${winRemote}" "${host[@]}" --optional hold "$0" "${origArgs[@]}"
+##	Only after the exec, which runs no trap, so the held pass makes the run
+##	folder and removes it.
+# shellcheck source=cicd/tests/_testdir.bash
+source "${meDir}/../_testdir.bash"; fTestDir_Use
 
 ##	The harness ships itself rather than coming from the remote clone, which is
 ##	pinned to origin/dev - otherwise every edit here would need a push before it
@@ -50,7 +52,8 @@ bundle="$(mktemp --suffix=.tgz)"
 launcher=""; sweep=""; stage=""
 ##	install.ps1 goes along for the scenario that checks its PATH change.
 tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1
-trap 'rm -f "${bundle}" "${launcher}" "${sweep}" "${stage}"' EXIT
+fEnd(){ local -r rc=$?; rm -f "${bundle}" "${launcher}" "${sweep}" "${stage}"; fTestDir_End "${rc}"; }
+trap fEnd EXIT
 
 ##	Nothing to build for when every box is off.
 declare -a boxes=()
@@ -164,7 +167,8 @@ fBox(){
 	said="$("${winRemote}" --host "${box}" --optional run "${stage}" 2>&1 | tr -d '\r' || true)"
 	runDir="$(sed -n 's/^RUNDIR //p' <<< "${said}")"
 	runFor="$(sed -n 's/^RUNFOR //p' <<< "${said}")"
-	if [[ -z "${runDir}" || -z "${runFor}" ]]; then
+	runToken="$(sed -n 's/^RUNTOKEN //p' <<< "${said}")"
+	if [[ -z "${runDir}" || -z "${runFor}" || -z "${runToken}" ]]; then
 		if grep -q 'skipped' <<< "${said}"; then echo "wingui: ${box} went away, skipped"; return 0; fi
 		sed 's/^/  /' <<< "${said}"
 		echo "wingui: ${box}: no run folder was made"
@@ -175,26 +179,37 @@ fBox(){
 	##	scenario with no binary would only skip.
 	if ! "${winRemote}" --host "${box}" --optional push "${exe}" "${runDir}\\silkterm.exe" >/dev/null; then
 		echo "wingui: ${box}: sending the binary failed"
-		return 1
+		boxFailed=1
+	else
+		for scenario in "${scenarios[@]}"; do
+			echo "== wingui: ${scenario}"
+			if ! fRun "${box}" "${scenario}" | sed 's/^/  /'; then boxFailed=1; fi
+		done
+		##	Shots are the whole point of a graphical test, so bring them home.
+		if ((! keep)); then
+			mkdir -p "${shotDir}"
+			"${winRemote}" --host "${box}" --optional pull "${runDir}\\out\\shots" "${shotDir}" >/dev/null 2>&1 || true
+		fi
 	fi
-	for scenario in "${scenarios[@]}"; do
-		echo "== wingui: ${scenario}"
-		if ! fRun "${box}" "${scenario}" | sed 's/^/  /'; then boxFailed=1; fi
-	done
-	##	Shots are the whole point of a graphical test, so bring them home.
+	##	Take the run's folder away, pass or fail, so a shared box does not pile
+	##	them up. Only the folder the stage made and marked.
 	if ((! keep)); then
-		mkdir -p "${shotDir}"
-		"${winRemote}" --host "${box}" --optional pull "${runDir}\\out\\shots" "${shotDir}" >/dev/null 2>&1 || true
-		##	Take the run's folder away with it, so a shared box does not accumulate them.
 		sweep="$(mktemp --suffix=.ps1)"
-		printf 'Remove-Item -Recurse -Force -LiteralPath %s -ErrorAction SilentlyContinue\n' "$(fQuote "${runDir}")" > "${sweep}"
-		"${winRemote}" --host "${box}" --optional run "${sweep}" >/dev/null 2>&1 || true
+		{
+			cat "${meDir}/../_testdir.ps1"
+			printf "\nif (fTestDir_Remove -Dir %s -Token %s) { 'REMOVED' } else { 'NOT REMOVED' }\n" "$(fQuote "${runDir}")" "$(fQuote "${runToken}")"
+		} > "${sweep}"
+		said="$("${winRemote}" --host "${box}" --optional run "${sweep}" 2>&1 | tr -d '\r' || true)"
+		if ! grep -qx 'REMOVED' <<< "${said}"; then
+			echo "wingui: ${box}: run folder not removed:"
+			sed 's/^/  /' <<< "${said}"
+		fi
 	fi
 	return "${boxFailed}"
 }
 
 failed=0
-runDir=""; runFor=""
+runDir=""; runFor=""; runToken=""
 for box in "${boxes[@]}"; do
 	fBox "${box}" || failed=1
 done
@@ -207,3 +222,4 @@ if ((! keep)); then find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev
 ##		- 20260910: holds the boxes for the whole run.
 ##		- 20260918: sends a binary built from the tree under test, and stops only what it started.
 ##		- 20261002: stages in the console user's temp folder, one box at a time.
+##		- 20261002: removes the run folder on the box only when it has the run's mark, also after a failed send.
