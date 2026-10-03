@@ -747,6 +747,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Before RC1.
 		- 20261003: At filing, b23's GPU had 7.7 GB of its 8 GB in use.
 
+- Settings: the revert arrow on "Program's own title" does nothing
+	- ID: 2026100314050001
+	- Type: Bug
+	- Status: Queued
+	- Needs local test suite run?: Yes
+	- Severity: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Open Settings, Tabs. Turn "Program's own title" away from its default.
+		- Click its revert arrow.
+	- Incorrect behavior: The box does not change back. `revert` lists every toggle in one outer match, and `TabShowsTitle` is missing from it. The key falls to the slider arm at the end, which does nothing for a toggle.
+	- Expected behavior: The box goes back to its default, like every other toggle.
+	- Reproduced: No. Read from the code.
+	- Origin: d83fb601 (2026-09-20) added the inner arm for this key but not the outer one. No earlier review saw it. Plausible.
+	- Possible cause: 14 per-key accessors in `settings_ui.rs` end in a catch-all `_` arm, so a key left out of one compiles and quietly does the wrong thing. `ui_spec.rs` says `Key` exists so that a missed key fails to compile.
+	- Sweep: the `_` arms in `get_f32`, `set_f32`, `get_toggle`, `set_toggle`, `get_radio`, `set_radio`, `get_col`, `set_col`, `default_col`, `is_default`, `default_f32`, `revert`, `get_text` and `set_text`. The same kind of arm in `pick.rs` (five on `Field`), in `pane.rs` on `term::Task`, and in `app.rs` `env_flag`.
+	- Note: `env_flag`'s arm already ties two debug switches together. `SILK_IDLEDBG` falls into `SILK_DLGDBG`'s cached value, so whichever is read first decides both.
+	- Test case: Owed. A test that reverts every row and checks it reads as default would catch this one and its siblings.
+	- Note: Code review 20261003 item 1.
+
 - Free resources when idle: on by default
 	- ID: 2026100312470540
 	- Type: Enhancement
@@ -829,6 +851,418 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- The tab strip and its tip are rebuilt and measured again on every frame
+	- ID: 2026100314050002
+	- Type: Enhancement
+	- Status: Queued
+	- Needs local test suite run?: Yes
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Build each tab's label forms only when what they show changes: a title, a task or folder probe, a tab or pane change, a resize, or a font change.
+		- Measure the tab tip once when its lines are built, not every frame.
+		- Skip the work while the tab bar is hidden.
+	- Progress log:
+		- 20261003: `render_with` calls `rebuild_tab_layout` on every frame, before it checks whether the bar shows. Per tab, that clones the title, command and folder, takes the shell list lock and hashes the list, reads `HOME`, and builds about eight joined strings. `path_forms` clones a growing prefix list once per folder level. The window title asks again for the active tab.
+		- 20261003: `tab_tip_layout` shapes every tip line each frame through `measure_mono_text`, whose own comment says it is uncached because the tip changes twice a second at most.
+		- 20261003: `task()`, `cwd()` and `friendly` each gained a throttle or memo to survive being called this often. A layout kept between frames would make those simpler.
+	- Origin: 395620ed (2026-08-23) for the per-frame call, c20128ca and 9e45d8f1 (2026-08-21) for the tip. No earlier review item. Plausible, since the cost is not measured.
+	- Test case: Owed. A count of label builds across idle frames, with a threshold.
+	- Note: Code review 20261003 item 2.
+
+- Settings: every label is shaped again on each pointer move
+	- ID: 2026100314050003
+	- Type: Enhancement
+	- Status: Queued
+	- Needs local test suite run?: Yes
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Keep shaped text between dialog frames and shape again only what changed.
+		- A pointer move that changes no hover state does not redraw.
+		- Work out the hover tip once per render.
+	- Progress log:
+		- 20261003: Each `CursorMoved` over a dialog sets it dirty. `dialog.rs` `render` then builds a new glyphon buffer and shapes it for every text item, and rebuilds the rects and texts. A tab with 40 rows shapes 60 to 100 buffers per mouse event.
+		- 20261003: `hover_tip` runs twice per render with the same pointer, once for `over` and once for `found`.
+	- Origin: ec82922 (2026-07-06) for the reshape, c0a7f19 (2026-10-03) for the second `hover_tip`. No earlier review item. Plausible, cost not measured.
+	- Test case: Owed. A count of shaped buffers across two renders with no change.
+	- Note: Code review 20261003 item 3.
+
+- Settings: the dialog repeats whole-table work for each row on every frame
+	- ID: 2026100314050004
+	- Type: Enhancement
+	- Status: Queued
+	- Needs local test suite run?: Yes
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Read a value without copying the whole settings.
+		- Work out each row's top once per frame, not by walking every declaration per rect.
+		- Build the dialog colors once per frame and pass them down.
+	- Progress log:
+		- 20261003: `shown()` clones the whole `Settings` on every value read whenever the performance profile is not Custom, which is the default. Each visible row reads three to six values in `rects` and `texts`, and `hover_tip` reads more.
+		- 20261003: `row_y` filters all the declarations on each call, then `gap_above`, `leads_subgroup`, `next_row` and `paired_with` walk forward again. Every rect helper goes through it. `hotkey_for_key`, `needs_of` and `settings_of` are linear lookups too.
+		- 20261003: `dlg()` takes the settings lock twice and builds a 14-field struct. It is called from about 126 places, several per row.
+	- Origin: e52a6909 (2026-09-03) for `shown()`, c6eaa04 (2026-06-28) for `row_y`, d48646ca (2026-07-02) for `dlg()`. No earlier review item. Plausible, cost not measured.
+	- Test case: Owed. A count of `Settings` clones per dialog frame, which should be at most one.
+	- Note: Code review 20261003 item 4.
+
+- The event loop does blocking work on every pass
+	- ID: 2026100314050005
+	- Type: Enhancement
+	- Status: Queued
+	- Needs local test suite run?: Yes
+	- Needs external testing: macOS, for the menu key
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Nothing that waits on the X server, reads the environment or builds strings runs on every `about_to_wait` pass.
+	- Progress log:
+		- 20261003: `freeze_sync` runs on every pass and every redraw. Its `hidden()` asks `is_minimized()`, which on X11 is a property request that waits for its reply.
+		- 20261003: `idle_rule` reads `SILK_IDLE_SECS` twice per pass through `release_deadline`. The file's own note at `env_flag` says to read the environment once.
+		- 20261003: on macOS, `bar_menus_key` asks for the fullscreen state and builds a string per hotkey on every pass.
+		- 20261003: `monitor.rs` opens a new X11 connection in `x11_monitor_under` and again in `button_held`. That runs every 250 ms during a window drag.
+	- Origin: 6d543d37 (2026-08-30) for `freeze_sync`, 90073855 (2026-09-17) for `idle_rule`, 02482bb7 (2026-10-01) for the menu key, 754c9cb (2026-10-03) for the monitor check. No earlier review item. Plausible, cost not measured.
+	- Test case: Owed. The env read can be pinned by test. The X11 trip needs a timing on the rig.
+	- Note: Code review 20261003 item 5.
+
+- Code style: public items are commented with `//`, not `///`
+	- ID: 2026100314050006
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: Of about 900 public items outside the tests, 64 have a `///` doc. 531 have a plain `//` comment and 304 have nothing. `keys.rs`, `tabtitle.rs` and `sysfont.rs` use `///`, and most other files do not. `shells.rs` and `fileassoc.rs` open with `//` where 23 other files use `//!`.
+	- Expected behavior: The style guide says "Document public items with `///`".
+	- Origin: c6eaa04 (2026-06-28) onward, in every file. No earlier review item. Confirmed.
+	- Note: Most of the text already exists. The fix is mostly a change of comment form, then one line for the items with none. `buildnum.rs` stays on `//`, since `build.rs` includes it and `//!` would not compile there.
+	- Test case: A check in the docs gate that a public item outside the tests has a `///` line above it.
+	- Note: Code review 20261003 item 6.
+
+- Code style: comments sit on the wrong item, are stale, or are banner dividers
+	- ID: 2026100314050007
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: About 30 comments describe a function that a later insert pushed further down, so they now sit above something else. Two point at names that no longer exist. One paragraph in `pane.rs` is a leftover copy. Eleven `// ----` and four `// ••••` banner rules divide `settings_ui.rs`, `pane.rs` and `minimap.rs`.
+	- Expected behavior: Each comment sits on what it explains, and the style guide allows no banners.
+	- Sweep:
+		- config.rs: the `settings()` note above `is_dark`, the `persist` note above `cleared_keys`, a stale `setting_lines` note stacked on its replacement.
+		- app.rs: notes for `rebuild_text`, `recover_gpu`, `render`, `about_to_wait` and `rotation_next` each sit one function early. One at 7690 has no code under it.
+		- settings_ui.rs: `dlg`, `tab_content_h`, `commit_baseline`, `texts_dip`'s `line_h` and `chrome_widths` notes, a stale `new(0.0, 0.0)` note, and a footer note that says left-aligned for a centered label.
+		- pane.rs: `fnv_row`, `pair_inside`, the scrim field note split by `readable`, the duplicate de-bold paragraph, and `BarHit::Thumb` naming an `f32` it does not have.
+		- text.rs: `mono_bold_weight`, `shaped_ink`, and `vmetrics` called a 3-tuple. coloremoji.rs: `color_faces`. term.rs: `wsl_cd`. sysfont.rs: `resolve_sans_family`, now `resolve_ui_family`.
+		- tabtitle.rs: the `elapsed` doc on `tip_value`. dialog.rs: the About layout note on `size_within_caps`.
+	- Origin: mostly inserts between a comment and its function, for example dfaf7fa (2026-09-21) in text.rs and 3506af9 (2026-09-08) in pane.rs. Banners from 5456e2a (2026-07-09) and 76cd488 (2026-08-02). No earlier review item. Confirmed.
+	- Test case: None for placement. A grep in the docs gate for banner rules in `.rs` files.
+	- Note: Code review 20261003 item 7.
+
+- Code style: public types do not derive `Debug`
+	- ID: 2026100314050008
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: 62 public structs and enums have no `Debug`. They include `Settings`, whose `PartialEq` exists so tests can compare two of them, and plain data such as `Scroll`, `Slide`, `VramProbe`, `Monospace`, `Bench` and `Rating`.
+	- Expected behavior: The directive says to derive `Debug` on all public types. A type that wraps a GPU or window handle can have a short hand-written one.
+	- Origin: c6eaa04 (2026-06-28) onward. `Settings` at 805d4a53 (2026-09-16). No earlier review item. Confirmed.
+	- Test case: The build. A `missing_debug_implementations` lint, if one can be scoped to this crate.
+	- Note: Code review 20261003 item 8.
+
+- Code style: single letters name parameters, fields and long-lived values
+	- ID: 2026100314050009
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: Most of the 1251 single-letter names are fine closure, color and geometry names. The ones that are not:
+		- config.rs: the `Reader` methods are `b`, `f`, `i`, `u` and `s`, called about 100 times. `s` is the edited settings through the 400-line `persist`, where `r` is a rounding closure, while `r` is the `Reader` everywhere else.
+		- `s: &Settings` as a parameter at 43 sites in 9 files.
+		- settings_ui.rs: `k` means a shell entry, a tab, a radio option, a menu item or a theme index. `p` means a part index or the color picker.
+		- app.rs: the menu builders `mi`, `mia`, `msub`, `mt` and `mta`. `h` is a hasher and a height in one function.
+		- pane.rs: `Node::Split { a, b }`. In the cell loop `c` is the column while `cell.c` is the character.
+		- cli.rs: `a` for the parser through all of `parse()`, and the field `Args.i`. pick.rs: `c: Hsv` on ten functions.
+		- demo-video.py: every `seg_*` takes `(r, t, m)` for recorder, typist and mouse.
+	- Expected behavior: Names are meaningful and searchable.
+	- Origin: c6eaa04 (2026-06-28) for most, 367c777e (2026-07-31) for `Reader`. No earlier review item. Confirmed.
+	- Test case: None. A rename is checked by the build.
+	- Note: Code review 20261003 item 9.
+
+- Code style: unwrap and unsafe without a reason, and three ways to handle a poisoned lock
+	- ID: 2026100314050010
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior:
+		- About 40 `unwrap` or `expect` calls outside the tests give no reason. The settings store at config.rs 831 and 1171, five lock unwraps in perf.rs, four in text.rs, `NonZeroU32::new(..).unwrap()` in gfx.rs, eight env reads in build.rs, and two on the chrome cache in app.rs.
+		- text.rs repeats one `expect` message seven times.
+		- A poisoned lock is unwrapped in some places, skipped with `.ok()` in others, and taken with `PoisonError::into_inner` in a third set, sometimes in one file.
+		- Seven `unsafe` blocks in cwd.rs and profile.rs have no `// SAFETY:` line, where about 25 others do.
+		- main.rs reads `SILK_PROFILE_OUT` a second time and unwraps it, after reading and dropping it ten lines up.
+	- Expected behavior: No unwrap outside tests unless a comment says why it cannot fail. One way to handle each case.
+	- Origin: c6eaa04 (2026-06-28) for the store, cd0f50b (2026-08-30) for perf.rs, 9007385 (2026-09-17) for text.rs. No earlier review item. Confirmed.
+	- Note: With `panic = "abort"` a lock is never poisoned in a release build. One comment can say so where the policy is chosen.
+	- Test case: None. clippy's `unwrap_used` and `expect_used` could be turned on with an allow at each justified site.
+	- Note: Code review 20261003 item 10.
+
+- Code style: fixed choices are kept as strings, float codes and flags that must agree
+	- ID: 2026100314050011
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior:
+		- Five settings that take one of a fixed list of words are `String`: the scrim ramp and function, the cursor animation, the theme mode and the performance profile. The words are matched again in four or five files, with no compiler check.
+		- The theme mode is lowercased into a new string 2 to 4 times per frame through `is_dark_mode`.
+		- Scrim and quad shader modes go through Rust as `f32` codes. A caller in settings_ui.rs tests one as `(params[0] - 3.0).abs() > 0.5`.
+		- `Cli.hierarchical` always equals `!tabs.is_empty()`. The five info flags in `Cli` are one choice. `Content::About`'s `notice` always matches its `source`.
+	- Expected behavior: Enums with one exhaustive match, and state derived rather than stored twice. `Fit` and bgimage.rs already work this way.
+	- Origin: 20f2b413 (2026-08-04) and e4060188 (2026-07-01) for the settings, f9deff9 (2026-07-08) for the scrim codes, e79a250 (2026-08-05) for `is_dark_mode`. No earlier review item. Confirmed.
+	- Test case: Owed. Each enum's parse and key round trip, and the config fuzz.
+	- Note: Code review 20261003 item 11.
+
+- Code style: 35 files have no license header
+	- ID: 2026100314050012
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: `source/build.rs` has no header. Neither do 34 scripts: every `cicd/tests/wingui/*.ps1` and `cicd/utility/win-jobs/*.ps1`, eight files in `utility/include/`, `utility/update-showdown.py`, `cicd/tests/scroll/analyze.py`, both scroll scene files, `cicd/utility/mmap-bench/run.bash` and `source/src/shell_integration.ps1`. install.bash, install.ps1 and termbench.py keep History at the top. Six scripts have no History.
+	- Expected behavior: Every source file starts with the SPDX line and the copyright line, and History sits at the bottom.
+	- Note: shell_integration.ps1 is pasted into a user's profile, so leaving its header out may be on purpose. The two scroll scenes run under `dash` but end in `.bash`.
+	- Origin: 3221c6f (2026-07-15) for build.rs, cecc4c7 (2026-09-08) for the wingui files. The header test in `buildnum.rs` reads only `source/src/`. Confirmed.
+	- Test case: Widen the header test to `build.rs` and every tracked script.
+	- Note: Code review 20261003 item 12.
+
+- Code style: bash scripts drift from the house conventions
+	- ID: 2026100314050013
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: Linux
+	- Incorrect behavior:
+		- 45 functions and about 80 variables are snake_case, mostly in cicd.bash, gui-headless.bash, termbench-run.bash and the scroll test. release.bash has its own `die` and plain `echo`.
+		- install.bash uses `[ ]` on 60 lines. Bash 3.2 has `[[ ]]`, and the same file already uses it.
+		- 755 expansions are not braced, most in gui-headless.bash and both git hooks.
+	- Expected behavior: `fCamelCase` functions, camelCase variables, `[[ ]]`, and `"${var}"`.
+	- Note: `retry_build` is named in the project notes, and the gfs helpers are shared with other projects, so those renames go with their references.
+	- Origin: db4d40b (2026-08-01) for cicd.bash, c09beb3 (2026-08-06) for install.bash, c7678e6 (2026-09-17) for gui-headless.bash. No earlier review item. Confirmed.
+	- Test case: The install test and the hooks test cover the two most-used files.
+	- Note: Code review 20261003 item 13.
+
+- The pipeline starts a process per item in two loops
+	- ID: 2026100314050014
+	- Type: Bug
+	- Status: Queued
+	- Needs local test suite run?: Yes
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: Linux
+	- Incorrect behavior:
+		- cicd.bash `fInUse` runs `readlink` once for every process on the box, about 1,500 here. It runs once per dogfood destination that already has a file, so up to about 4,500 forks per full run.
+		- gfs-rotate.bash starts about ten `date` and `basename` processes per file it rotates, twice per run.
+	- Expected behavior: No fork per item in a loop. `[[ "${exe}" -ef "${want}" ]]` does the first check as a builtin. `printf '%(...)T'` and `${f##*/}` do the second.
+	- Note: gfs-rotate.bash is a shared helper, so the fix goes to its canonical copy too, which is outside this tree.
+	- Origin: 9ac3d4b (2026-09-26) for `fInUse`, b887d3d (2026-06-28) for gfs-rotate. No earlier review item. Confirmed for the fork count; the time is not measured.
+	- Test case: Owed. Time `fInUse` against a stand-in proc list, with a threshold.
+	- Note: Code review 20261003 item 14.
+
+- Code style: the PowerShell scripts follow bash conventions
+	- ID: 2026100314050015
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: Windows
+	- Incorrect behavior:
+		- All 164 functions are `fCamelCase`. None is Verb-Noun, so the approved-verb lint can never fire.
+		- No script has comment-based help. Three use `[CmdletBinding()]`. `install.ps1` has two untyped parameters.
+		- Nine scripts set `Set-StrictMode -Version 2.0`, not Latest, with no reason given.
+		- 29 calls pass three or more positional arguments, and five use the `-EA` alias.
+		- Eight loops grow an array with `+=`.
+	- Expected behavior: The PowerShell section of the directives.
+	- Progress log:
+		- 20261003: The naming half needs a call first: rename to Verb-Noun, or record `fCamelCase` as a house allowance with its reason, the way Write-Host is.
+	- Origin: c09beb3 (2026-08-06) for install.ps1, 96da710 (2026-07-22) for cicd-win.ps1, 4050e29 (2026-09-08) for n8runterm.ps1. No earlier review item. Confirmed.
+	- Test case: The PowerShell lint, with the positional and alias rules added.
+	- Note: Code review 20261003 item 15.
+
+- Code style: the Python scripts miss most of the Python rules
+	- ID: 2026100314050016
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior:
+		- 5 of 314 functions have type hints, all in `_testdir.py`.
+		- test-id.py and flame-report.py name functions in `fCamelCase`. Six files use camelCase locals.
+		- 74 `%` formats and 67 `os.path` calls.
+		- Seven files are opened without `with`. demo-video.py passes an `open()` to `Popen` as stdout and never closes it.
+		- 18 `subprocess.run` calls have no `check=`.
+	- Expected behavior: Type hints on every signature, PEP 8 names, f-strings, pathlib and context managers.
+	- Origin: aa3f36a (2026-07-09) for flame-report.py, 2511765 (2026-09-26) for test-id.py, 07c8506 (2026-09-17) for demo-video.py. No earlier review item. Confirmed.
+	- Test case: A ruff and mypy pass in the lint stage, once item 17's config exists.
+	- Note: Code review 20261003 item 16.
+
+- No linter config for Python or PowerShell indentation, and the style guide covers Rust only
+	- ID: 2026100314050017
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior:
+		- There is no `pyproject.toml` or ruff config, so nothing checks the Python files.
+		- `cicd/PSScriptAnalyzerSettings.psd1` has no `Rules` block, so `PSUseConsistentIndentation` never runs.
+		- `style-guide.md` has Rust sections only, while about 22,000 lines are bash, PowerShell and Python.
+	- Expected behavior: The directive's table names a config per language, and the public guide covers the code it governs.
+	- Note: The Python files use tabs where the directive's default is four spaces. Existing code is not reindented, so the config should pin tabs. `analyze.py` is the one file in spaces.
+	- Origin: fe07eaa (2026-09-24) for the PowerShell settings, 4e7beb1 (2026-07-21) for the guide. No earlier review item. Confirmed.
+	- Test case: Each new rule seen to fail once on a planted fault.
+	- Note: Code review 20261003 item 17.
+
+- Small repeated work on the frame and drag paths
+	- ID: 2026100314050018
+	- Type: Enhancement
+	- Status: Queued
+	- Needs local test suite run?: Yes
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Buffers a frame fills are kept and cleared, not built from empty.
+		- A frame reads settings from the snapshot it already has.
+		- Work the cell loop already did is not done again.
+	- Progress log:
+		- 20261003: `render_with` starts about a dozen new vectors and maps each frame. `tops` and `slides` copy what `p.draw()` already has. `scrim_cells` copies every background quad even on frames that do not rebuild the scrim.
+		- 20261003: `Pane::build` starts its background quad list from empty on every full rebuild, while `rows_scratch` and `cells_scratch` beside it are reused for that reason.
+		- 20261003: `TextCtx::prepare` and its two siblings take a `Vec` by value, so three new vectors are built per frame. `task()` and `cwd()` clone a string and a path per tab per frame.
+		- 20261003: `snapshot_rows` and `strip_rows` resolve every cell's colors again after the cell loop did, with a new `Readable` memo each call, though `Pane` keeps one across frames.
+		- 20261003: the menu and tip color getters each take the settings lock. `render_with` calls them per separator and per row while it already has `cfg`.
+		- 20261003: a drag select takes the terminal lock twice per mouse move, once only to read the scroll offset.
+	- Origin: c6eaa04 (2026-06-28) for the frame vectors and the quad list, 349c92bf (2026-07-31) for `scrim_cells`, a92aeb1 (2026-08-30) for `snapshot_rows`, ec82922 (2026-07-06) for the drag. No earlier review item. Plausible, each one small and none measured.
+	- Test case: Owed. Allocation counts per idle frame from the profiler, with a threshold.
+	- Note: Code review 20261003 item 18.
+
+- The git-aware bash prompt starts about six processes per prompt
+	- ID: 2026100314050019
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Outside a git working tree the prompt starts no process.
+		- Inside one it starts as few as it can.
+	- Progress log:
+		- 20261003: x9ps1-git.bash runs `which git`, then `git status` even outside a repository, up to three more `git config` and `git remote` calls, and two `$( )` subshells. The PowerShell copy walks up for `.git` first to avoid exactly this.
+		- 20261003: The prompt is off by default, so only those who turn it on pay. Git Bash on Windows pays the most, since its process start is slowest.
+	- Decisions:
+		- Fixed in x9ps1-git first, then the copy taken again unchanged, with a test on each side.
+	- Origin: 4aca2f7 (2026-08-30) and a7eb82d (2026-09-17). No earlier review item. Confirmed for the process count; the delay is not measured.
+	- Test case: Owed. A process count per prompt outside a repository, which should be zero.
+	- Note: Code review 20261003 item 19.
+
+- The dogfood launcher makes three slow Windows queries per launch
+	- ID: 2026100314050020
+	- Type: Enhancement
+	- Status: Queued
+	- Needs external testing: vm925w
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: Windows
+	- Requirements:
+		- A launch through runterm does no WMI query and no Start menu walk when nothing needs them.
+	- Progress log:
+		- 20261003: n8runterm.ps1 asks `Get-CimInstance Win32_Process` for its parent, where pwsh 7 has `(Get-Process -Id $PID).Parent`. `fRotate` reads every process's path even when nothing will be deleted. The shortcut search walks both Start menus and opens every `.lnk` through COM.
+	- Origin: 94b62ab (2026-07-19), 4050e29 (2026-09-08), 8a88445 (2026-09-08). No earlier review item. Plausible, not timed.
+	- Note: The live launcher copies sit outside the repo, so a fix reaches them only when they are replaced.
+	- Test case: Owed. A timed launch on vm925w before and after.
+	- Note: Code review 20261003 item 20.
+
+- Repeated blocks that should be one helper
+	- ID: 2026100314050021
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Progress log:
+		- 20261003: app.rs: one wake-merge `match` pasted 15 times in `about_to_wait`, and the settings read, clone, persist and update sequence written out 11 times.
+		- 20261003: settings_ui.rs and dialog.rs: the quad, border and text closures copied four or five times each. `texts_dip` has its own copy of `clip_rect`.
+		- 20261003: gfx.rs and bgimage.rs build the same VRAM readback probe. The Oklab matrix is in autotheme.rs and palette.rs. `LUMA` is defined twice and `text::gray_of` writes out `config::luma` by hand.
+		- 20261003: config.rs works out the base font size the same way in three functions. A program's base name is found four ways across shells.rs and integration.rs, and `shells::launch` strips `.exe` from a name that has none. macmenu.rs has its own `APP_NAME`.
+		- 20261003: cicd.bash has 21 near-identical test script blocks. cicd-win.ps1 repeats one stash block.
+	- Origin: 754c9cb8 (2026-10-03) for the wake merge, 5456e2a (2026-07-09) for the dialog closures, 2acb998 (2026-07-22) for the probe, 02482bb (2026-10-01) for `APP_NAME`. No earlier review item. Confirmed.
+	- Test case: The existing tests over each area. No new behavior.
+	- Note: Code review 20261003 item 21.
+
+- Errors are plain strings in most modules and `anyhow` in a few
+	- ID: 2026100314050022
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Progress log:
+		- 20261003: config.rs, cli.rs, ctl.rs, fileassoc.rs, integration.rs and build.rs return `Result<_, String>`. gfx.rs, dialog.rs, term.rs, pane.rs and main.rs use `anyhow`. config.rs also reports through `bool` plus a printed line, and `backfilled_text` uses its `String` error for a setting name, not a message.
+		- 20261003: The directive prefers `anyhow` for an application. The call is to move to it, or to write `String` errors into the style guide as the house choice.
+	- Origin: c6eaa04 (2026-06-28) for cli.rs, f61b1769 (2026-09-16) for config.rs. No earlier review item. Confirmed.
+	- Test case: None until the call is made.
+	- Note: Code review 20261003 item 22.
+
+- app.rs and settings_ui.rs each do too many jobs
+	- ID: 2026100314050023
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Progress log:
+		- 20261003: app.rs is about 9,800 lines before its tests. It has the menu model, the tab strip and rename field, the idle and GPU release states, the VT watcher, benchmark and rating control, wallpaper rotation, monitor checks and the command-line layout. `render_with` is about 1,500 lines and `State` has about 90 fields.
+		- 20261003: Chrome is built inline with the pane frame, so its cost is paid every frame. Items 2 and 18 come from that. A chrome layer kept between frames and changed by events would remove most of it.
+		- 20261003: settings_ui.rs is about 6,900 lines before its tests, with shells, themes, the picker and the prompt in one file.
+	- Origin: c6eaa04 (2026-06-28), grown since. No earlier review item. Plausible.
+	- Test case: The existing tests. Behavior does not change.
+	- Note: Code review 20261003 item 23.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
@@ -7297,6 +7731,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260707-022408
 
 ### Canceled
+
+- 🚫 Code review 20261003: observations not filed.
+	- Decided against: merging the GL flip-blit into the frame's one queue submit. It reopens if a profile shows the second submit.
+	- Decided against: stopping `links::find_at` from trying start points past the pointer. It runs once per pointer cell change and the scan is short.
+	- Decided against: the clippy `or_fun_call` and `clone_on_ref_ptr` hits. They are on cold paths or are plain handle clones, each a one-lint fix.
+	- Decided against: reindenting the Python files to four spaces. Existing code keeps its indent.
+	- Decided against: the per-host color table in the shipped prompt scripts, under this review. It is outside the style and performance rules, and the copy comes from x9ps1-git unchanged.
+	- Opened: 20261003-140500
+	- Closed: 20261003-140500
 
 - 🚫 Dogfood: the launcher when the network build host is down.
 	- Moot. The launcher reads only the synced app dir now, so there is no network source to be unreachable and no bounded wait to exercise. What the build host being down costs is a stale app dir, which is the same as any other day it did not run.
