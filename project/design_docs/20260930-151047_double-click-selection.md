@@ -36,7 +36,7 @@ A double-click in SilkTerm tries to grab the thing a person meant: a whole path 
 
 ## Specification
 
-- A single click places nothing and clears a selection. A drag selects from cell to cell. Ctrl held at the press selects a block instead.
+- A single click places nothing and clears a selection. A drag selects from cell to cell. Ctrl held at the press selects a block instead, or Command on macOS.
 
 - A double-click asks three questions in order, and the first that answers wins:
 	- Is it a shape SilkTerm can name? URLs, file URIs, drive paths, UNC paths, absolute Unix paths, `~/` paths, git remotes and scp targets are taken whole.
@@ -55,7 +55,7 @@ A double-click in SilkTerm tries to grab the thing a person meant: a whole path 
 
 - Four ways to copy, each with its own rule:
 	- Right-click Copy always copies.
-	- Ctrl+Shift+C copies, even while the window's focus is uncertain.
+	- Ctrl+Shift+C, or Command+C on macOS, copies even while the window's focus is uncertain.
 	- Copy on select copies when a drag that SilkTerm itself saw ends. It sets the clipboard and, on Linux, the primary selection.
 	- A program may set the clipboard with an escape sequence, but only from the pane in use.
 
@@ -121,7 +121,7 @@ Copy kept breaking, and the reason is that there are four ways to copy, each wit
 
 - **Right-click Copy** has no gate.
 
-- **Ctrl+Shift+C** copies even while the window's focus flag reads false. It types nothing, so it cannot be the stray arrow key the focus gate exists to stop.
+- **Ctrl+Shift+C**, Command+C on macOS, copies even while the window's focus flag reads false. It types nothing, so it cannot be the stray arrow key the focus gate exists to stop.
 
 - **Copy on select** runs only after a drag SilkTerm saw itself. A program that tracks the mouse takes the drag, so SilkTerm has nothing to copy, and such a program copies for itself through the next route. It sets both the clipboard and the primary selection. `shell.copy_on_select` keeps it on across launches.
 

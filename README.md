@@ -187,7 +187,7 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Read-only output toggle**. Typing and paste stop reaching the program. Select and copy still work.
 
-- **Clickable links**. Hover a URL to underline it, Ctrl+click to open it, or use the right-click menu. Only known-safe schemes are ever treated as links, and an app that has taken over the mouse keeps it.
+- **Clickable links**. Hover a URL to underline it, Ctrl+click to open it (Command+click on macOS), or use the right-click menu. Only known-safe schemes are ever treated as links, and an app that has taken over the mouse keeps it.
 
 - **Smart double-click text selection**. Recognizes paths, URL, git remotes, quoted text, bracketed text, etc.
 

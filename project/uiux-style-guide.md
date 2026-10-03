@@ -72,6 +72,7 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 - The menu bar is File, Edit, View, Tabs, Panes, Help. A new action goes in the menu whose noun it acts on.
 
 - On macOS the same menus go in the system menu bar, after an app menu holding About, Settings…, Hide and Quit. There is no in-window bar there at all, so View has no Menu bar row and `--hide-menu` does nothing. File gains New window. Help is left off, since About was its only row. Each row with an Apple standard shortcut takes its Command chord.
+	- A Window menu comes last, with Minimize, Zoom, Show previous tab, Show next tab and Bring all to front. macOS adds the list of open windows under them. Each window is its own process, so that list holds only the one window and its dialogs.
 
 - The right side of the menu bar carries the focused pane's two auto-copy checkboxes, so their state is visible without opening anything. It is the only thing on the bar that is not a menu. When the window narrows it sheds its lead-in, then its words, then itself, rather than overlapping the titles.
 
@@ -262,11 +263,13 @@ Rules that go with them:
 	- Ctrl+Plus, Ctrl+Minus and Ctrl+0 size the font for this session.
 	- Ctrl+, opens Settings. F11 is fullscreen.
 
-- On macOS the actions with an Apple standard shortcut take it as well, as a key and on the menu row. The Ctrl chords above still work there.
+- On macOS the program's chords are Command ones, Apple's standard shortcut where an action has one, as a key and on the menu row. No Ctrl chord is the program's there, so every one goes to the shell.
 	- Command+N new window, Command+T new tab, Command+W close tab.
 	- Command+C copy, Command+V paste.
+	- Command+Shift+[ and Command+Shift+] walk the tabs. So do Command+PageUp and Command+PageDown, and Shift with those two carries the tab with you.
 	- Command+Plus, Command+Minus and Command+0 size the font.
-	- Command+, opens Settings, Control+Command+F is fullscreen, Command+Q quits. Command+H and Option+Command+H hide.
+	- Command+, opens Settings, Control+Command+F is fullscreen, Command+Q quits. Command+H and Option+Command+H hide, and Command+M minimizes.
+	- Command+click opens a link, and Command held at a press selects a block.
 	- Nothing typed with Command held reaches the shell, so no Command chord takes a key from it.
 	- With no in-window bar, Option plus a letter always goes to the shell.
 
@@ -275,6 +278,8 @@ Rules that go with them:
 - In an open menu, arrows move, Right enters a submenu, Left leaves one or steps to the next dropdown, Enter picks, Escape closes, and a letter picks the row carrying it.
 
 - Inside a dialog, Tab and Shift+Tab move focus, Ctrl+Tab and Ctrl+PgUp/PgDn change tab, Enter is OK and Escape is Cancel. That holds with a field open: Enter closes it and takes OK, Escape cancels. Neither takes a second press.
+	- On macOS Command+Shift+[ and ] change tab, and so do Command+PgUp/PgDn. Ctrl+Tab moves focus like Tab, since Command+Tab belongs to the system.
+	- A text box on macOS takes the Mac's own keys: Command+C, X, V and A, Option to move or erase by words, Command+Left and Right for either end, and Command+Backspace to erase to the start.
 
 - A text, color or number box opens with its value selected as soon as focus arrives, by key or by click, so typing replaces it.
 

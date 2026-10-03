@@ -6,18 +6,24 @@
 // talks to AppKit.
 
 use crate::app::{Entry, MenuAction, mac_entries, menu_hotkey, plain_label, without_rows};
-use crate::input::{CommandChord, command, command_chord};
+use crate::input::{CommandChord, command, command_chord, us_shifted};
 
 pub const APP_NAME: &str = "SilkTerm";
 
-/// App menu rows `AppKit` carries out by itself.
+/// App and Window menu rows `AppKit` carries out by itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemItem {
 	Services,
 	Hide,
 	HideOthers,
 	ShowAll,
+	Minimize,
+	Zoom,
+	BringAllToFront,
 }
+
+/// The title of the menu `AppKit` keeps the window list in.
+pub const WINDOW_MENU: &str = "Window";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BarItem {
@@ -68,12 +74,15 @@ fn action_row(label: String, action: MenuAction) -> BarItem {
 	}
 }
 
-fn app_menu() -> BarMenu {
-	let system = |label: &str, item, key| BarItem::System {
+fn system(label: &str, item: SystemItem, key: Option<CommandChord>) -> BarItem {
+	BarItem::System {
 		label: label.into(),
 		item,
 		key,
-	};
+	}
+}
+
+fn app_menu() -> BarMenu {
 	BarMenu {
 		title: APP_NAME.into(),
 		items: vec![
@@ -100,6 +109,39 @@ fn app_menu() -> BarMenu {
 			BarItem::Separator,
 			action_row(format!("Quit {APP_NAME}"), MenuAction::Quit),
 		],
+	}
+}
+
+// Apple's Window menu, with SilkTerm's own tabs where a Mac app has its window
+// tabs. `AppKit` adds the list of open windows below these, and on newer
+// releases its own tiling rows. Each window is a process of its own, so the
+// list and Bring all to front reach only this one's.
+fn window_menu() -> BarMenu {
+	BarMenu {
+		title: WINDOW_MENU.into(),
+		items: vec![
+			system("Minimize", SystemItem::Minimize, Some(command("m"))),
+			system("Zoom", SystemItem::Zoom, None),
+			BarItem::Separator,
+			action_row("Show previous tab".into(), MenuAction::PrevTab),
+			action_row("Show next tab".into(), MenuAction::NextTab),
+			BarItem::Separator,
+			system("Bring all to front", SystemItem::BringAllToFront, None),
+		],
+	}
+}
+
+/// What a row hands `AppKit` for its chord. A Command+Shift chord on a key
+/// whose shifted form is another character is named by that character with no
+/// Shift in the mask, the form `AppKit` matches the press against.
+pub fn key_equivalent(chord: CommandChord) -> CommandChord {
+	match us_shifted(chord.key) {
+		Some(key) if chord.shift => CommandChord {
+			key,
+			shift: false,
+			..chord
+		},
+		_ => chord,
 	}
 }
 
@@ -130,9 +172,9 @@ fn bar_items(entries: Vec<Entry>) -> Vec<BarItem> {
 }
 
 /// The whole menu bar: the app menu, then each in-window menu by its title, less
-/// the rows the app menu took and the in-window bar's own toggle. File gains New
-/// window, which elsewhere is a key alone. A menu left with nothing in it is
-/// dropped.
+/// the rows the app menu took and the in-window bar's own toggle, then Window.
+/// File gains New window, which elsewhere is a key alone. A menu left with
+/// nothing in it is dropped.
 pub fn layout(window_menus: Vec<(&str, Vec<Entry>)>) -> Vec<BarMenu> {
 	let mut menus = vec![app_menu()];
 	for (title, entries) in window_menus {
@@ -151,6 +193,7 @@ pub fn layout(window_menus: Vec<(&str, Vec<Entry>)>) -> Vec<BarMenu> {
 			});
 		}
 	}
+	menus.push(window_menu());
 	menus
 }
 
@@ -171,7 +214,7 @@ mod native {
 	use objc2_foundation::NSString;
 	use winit::event_loop::EventLoopProxy;
 
-	use super::{BarItem, BarMenu, SystemItem};
+	use super::{BarItem, BarMenu, SystemItem, WINDOW_MENU, key_equivalent};
 	use crate::app::MenuAction;
 	use crate::input::CommandChord;
 	use crate::term::UserEvent;
@@ -257,6 +300,10 @@ mod native {
 				let top = NSMenuItem::new(mtm);
 				let sub = submenu(mtm, &app, &menu.title, &menu.items, &target, &mut actions);
 				top.setSubmenu(Some(&sub));
+				// AppKit keeps the open windows listed here
+				if menu.title == WINDOW_MENU {
+					app.setWindowsMenu(Some(&sub));
+				}
 				bar.addItem(&top);
 			}
 			*target.ivars().actions.borrow_mut() = actions;
@@ -303,13 +350,17 @@ mod native {
 					}
 					row
 				}
-				// no target: these go up the responder chain to NSApplication
+				// no target: these go up the responder chain, to the key window
+				// or to NSApplication
 				BarItem::System { label, item, key } => {
 					let action = match item {
 						SystemItem::Services => None,
 						SystemItem::Hide => Some(sel!(hide:)),
 						SystemItem::HideOthers => Some(sel!(hideOtherApplications:)),
 						SystemItem::ShowAll => Some(sel!(unhideAllApplications:)),
+						SystemItem::Minimize => Some(sel!(performMiniaturize:)),
+						SystemItem::Zoom => Some(sel!(performZoom:)),
+						SystemItem::BringAllToFront => Some(sel!(arrangeInFront:)),
 					};
 					let row = menu_item(mtm, label, action, *key);
 					if *item == SystemItem::Services {
@@ -338,6 +389,7 @@ mod native {
 		action: Option<objc2::runtime::Sel>,
 		key: Option<CommandChord>,
 	) -> Retained<NSMenuItem> {
+		let key = key.map(key_equivalent);
 		let key_text = NSString::from_str(key.map_or("", |k| k.key));
 		// SAFETY: every selector passed here is one AppKit or MenuTarget answers.
 		let row = unsafe {
@@ -397,7 +449,9 @@ mod tests {
 		// Help held only About, which moved to the app menu
 		assert_eq!(
 			titles,
-			["SilkTerm", "File", "Edit", "View", "Tabs", "Panes"]
+			[
+				"SilkTerm", "File", "Edit", "View", "Tabs", "Panes", "Window"
+			]
 		);
 		let app: Vec<String> = menus[0]
 			.items
@@ -599,6 +653,9 @@ mod tests {
 				("Fullscreen", "Control+Command+F".to_string()),
 				("New tab", "Command+T".to_string()),
 				("Close tab", "Command+W".to_string()),
+				("Minimize", "Command+M".to_string()),
+				("Show previous tab", "Shift+Command+[".to_string()),
+				("Show next tab", "Shift+Command+]".to_string()),
 			]
 		);
 		for (hotkey, chord) in crate::input::COMMAND_CHORDS {
@@ -682,6 +739,69 @@ mod tests {
 		for menu in &menus {
 			assert_ne!(menu.items.first(), Some(&BarItem::Separator));
 			assert_ne!(menu.items.last(), Some(&BarItem::Separator));
+		}
+	}
+
+	// The Window menu has Apple's rows, with SilkTerm's tabs where a Mac app has
+	// its window tabs, and comes last so the window list goes in it. A
+	// Command+Shift chord on a bracket is handed over as the shifted
+	// character, the form AppKit matches.
+	// Test ID: ErbGPNM
+	#[test]
+	fn the_mac_window_menu_minimizes_zooms_and_walks_the_tabs() {
+		let menus = layout(window_menus());
+		let window = menus.last().expect("menus");
+		assert_eq!(window.title, WINDOW_MENU);
+		let rows: Vec<String> = window
+			.items
+			.iter()
+			.map(|item| match item {
+				BarItem::Action { label, key, .. } | BarItem::System { label, key, .. } => {
+					match key {
+						Some(key) => format!("{label} {}", key.spoken()),
+						None => label.clone(),
+					}
+				}
+				BarItem::Submenu { label, .. } => format!("{label} >"),
+				BarItem::Separator => "-".into(),
+			})
+			.collect();
+		assert_eq!(
+			rows,
+			[
+				"Minimize Command+M",
+				"Zoom",
+				"-",
+				"Show previous tab Shift+Command+[",
+				"Show next tab Shift+Command+]",
+				"-",
+				"Bring all to front",
+			]
+		);
+		for (action, hotkey) in [
+			(MenuAction::PrevTab, crate::input::Hotkey::PrevTab),
+			(MenuAction::NextTab, crate::input::Hotkey::NextTab),
+		] {
+			assert_eq!(crate::app::menu_hotkey(action), Some(hotkey));
+			assert_eq!(find(&menus, action).map(|(title, _)| title), Some("Window"));
+		}
+		let previous = command_chord(crate::input::Hotkey::PrevTab).expect("chord");
+		let handed = key_equivalent(previous);
+		assert_eq!((handed.key, handed.shift), ("{", false));
+		let next = key_equivalent(command_chord(crate::input::Hotkey::NextTab).expect("chord"));
+		assert_eq!((next.key, next.shift), ("}", false));
+		for chord in [
+			command("c"),
+			CommandChord {
+				shift: true,
+				..command("t")
+			},
+			CommandChord {
+				option: true,
+				..command("h")
+			},
+		] {
+			assert_eq!(key_equivalent(chord), chord);
 		}
 	}
 }

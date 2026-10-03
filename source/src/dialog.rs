@@ -514,11 +514,27 @@ impl DialogWin {
 		}
 	}
 
-	// Modifier state (from ModifiersChanged): Alt underlines button accelerators;
-	// Shift/Ctrl steer Tab-key focus / tab switching.
-	pub fn set_mods(&mut self, alt: bool, shift: bool, ctrl: bool) {
+	// Modifier state (from ModifiersChanged), already read for the platform:
+	// Alt underlines button accelerators; Shift and the shortcut key steer
+	// Tab-key focus and tab switching.
+	pub fn set_keys(&mut self, keys: crate::input::EditKeys) {
 		if let Content::Settings(dialog) = &mut self.content {
-			dialog.set_mods(alt, shift, ctrl);
+			dialog.set_keys(keys);
+		}
+	}
+
+	// Copy or Paste from the macOS menu bar, which takes Command+C and
+	// Command+V before the dialog sees them.
+	pub fn menu_edit(&mut self, cmd: EditCmd, clip: Option<&mut crate::clipboard::Clipboard>) {
+		if let Content::Settings(dialog) = &mut self.content {
+			edit_cmd(dialog, cmd, clip);
+		}
+	}
+
+	// The tab to the left or right, from the macOS Window menu's tab rows.
+	pub fn switch_tab(&mut self, forward: bool) {
+		if let Content::Settings(dialog) = &mut self.content {
+			dialog.switch_tab(forward);
 		}
 	}
 
@@ -557,8 +573,9 @@ impl DialogWin {
 	}
 
 	// A character key: while Alt is held it's an accelerator (Cancel/Apply/OK);
-	// while Ctrl is held it's an edit shortcut (select-all/copy/cut/paste);
-	// otherwise it types into the focused field.
+	// while the shortcut key (Ctrl, Command on a Mac) is held it's an edit
+	// shortcut (select-all/copy/cut/paste); otherwise it types into the focused
+	// field.
 	pub fn key_char(
 		&mut self,
 		ch: char,
@@ -567,28 +584,14 @@ impl DialogWin {
 		match &mut self.content {
 			Content::Settings(dialog) if dialog.alt() => map_action(dialog.alt_key(ch)),
 			Content::Settings(dialog) if dialog.ctrl() => {
-				match ch.to_ascii_lowercase() {
-					'a' => dialog.select_all(),
-					'c' => {
-						if let (Some(clip), Some(text)) = (clip, dialog.selected_text()) {
-							clip.set_clipboard(text);
-						}
-					}
-					'x' => {
-						if let (Some(clip), Some(text)) = (clip, dialog.selected_text()) {
-							clip.set_clipboard(text);
-							dialog.delete_selection();
-						}
-					}
-					'v' => {
-						if let Some(text) =
-							clip.and_then(super::clipboard::Clipboard::get_clipboard)
-						{
-							dialog.insert_str(&text);
-						}
-					}
-					_ => {}
-				}
+				let cmd = match ch.to_ascii_lowercase() {
+					'a' => EditCmd::SelectAll,
+					'c' => EditCmd::Copy,
+					'x' => EditCmd::Cut,
+					'v' => EditCmd::Paste,
+					_ => return None,
+				};
+				edit_cmd(dialog, cmd, clip);
 				None
 			}
 			Content::Settings(dialog) => {
@@ -1422,7 +1425,8 @@ fn restack_parent_below(dialog: &Window, parent: Option<&RawWindowHandle>, dbg: 
 fn restack_parent_below(_d: &Window, _p: Option<&RawWindowHandle>, _dbg: bool, _kind: &str) {}
 
 // Field context-menu command against the active edit; the clipboard glue lives
-// here (settings_ui stays clipboard-free), mirroring the Ctrl+letter shortcuts.
+// here (settings_ui stays clipboard-free). The Ctrl+letter shortcuts, Command on
+// a Mac, come here too.
 fn edit_cmd(
 	dialog: &mut SettingsDialog,
 	cmd: EditCmd,
