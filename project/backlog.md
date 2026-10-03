@@ -276,6 +276,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: maccmd
 	- Commit: 7179fa9
 
+- Tab rename: Paste from the menu bar goes into the shell, and the box has only basic editing
+	- ID: 2026100219054483
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On b26, while a tab is being renamed: Edit > Copy and Paste on the menu bar, and Command+C and V, act on the name and nothing reaches the shell. Command+X and A cut and select all. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. A click, a drag, a double-click and a triple-click in the name place the caret, select, take a word and take it all. Right-click opens Cut, Copy, Paste, Delete and Select all. Any other menu pick, such as Command+T, keeps the name first.
+	- Severity: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100219054469, 2026100114435613
+	- Target OS: All
+	- Incorrect behavior: While a tab is being renamed, Paste from the macOS menu bar, which Command+V reaches, pastes into the shell, not the name. The box takes typing, the arrows, Home, End, Backspace, Delete, Ctrl+A and Ctrl+V, and nothing else.
+	- Expected behavior: A paste goes into the name being typed, from a key or from a menu. The box does full text editing.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Paste into the tab. Full text editing in the tab.
+	- Actual cause: The rename took only a few keys, and anything from a menu or the mouse went to the terminal. A click on the menu bar ended the rename, so Edit > Paste then went to the shell. On a Mac the menu bar takes Command+C and V before the window sees them, so they went to the shell with the rename still up.
+	- Actual fix:
+		- The rename edits as a Settings text box does, through one shared set of caret rules (`textedit.rs`) and the same per-platform keys: copy, cut, paste and select all, Shift+Delete, Shift+Insert and Ctrl+Insert, moving and erasing by words, Shift to select, and the Mac's Command and Option keys. A paste is one line.
+		- The mouse: a click places the caret, Shift+click extends, a drag selects, a double-click takes a word and a third click the whole name. A middle-click pastes the primary selection where it was clicked.
+		- Right-click, the Menu key or Shift+F10 opens Cut, Copy, Paste, Delete and Select all, less the rows with nothing to act on.
+		- A press on the menu bar or an open menu leaves the rename up. Copy, Paste and Paste Selection from any menu, the macOS menu bar included, act on the name. Any other pick keeps the name first, as a click elsewhere does.
+		- The tab's hover tip no longer comes back over the rename box when the pointer has not moved since the double-click.
+	- Note: The Settings boxes have no undo, so neither does the rename. Selecting in the name does not set the primary selection, as in the Settings boxes.
+	- Swept: Every way a key, a paste or a copy reaches the shell while a rename is up: the key handler (the rename takes every key first), the in-window menu bar and its submenus, the right-click menu, the macOS menu bar, the middle button, and the keyboard copy and paste chords. There is no file drop or input method handling. The Settings boxes' caret code now uses the same shared rules.
+	- Test case: `a_tab_rename_takes_the_text_box_keys` (ErbKd5c), `a_tab_rename_edits_like_a_text_box` (ErbKd9K), `menus_reach_a_tab_rename` (ErbKdDM) and `each_reach_stops_where_its_keys_say` (ErbKd1H). The first three fail with their part of the change undone. `renaming_a_tab_stays_on_character_boundaries` (EoSiOoS) takes the new calls. `caret_from_click_picks_nearest` (EitjFLH) and `word_motion_and_word_at` (EkI1Txg) moved with the code to `textedit.rs`. The tip fix has no test, since it lives in window state no test builds.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS. On Linux in the program: typing, Ctrl+V, Ctrl+C and X, Ctrl+Left and Ctrl+Backspace, a drag, a double-click, Select all and Paste from the right-click menu, a middle-click, and Edit > Copy and Paste from the menu bar all acted on the name, and nothing reached the shell.
+	- Branch: tabedit
+	- Commit: 2034f15
+
 - macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
 	- ID: 2026100219054497
 	- Type: Feature
@@ -339,6 +369,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 02482bb, bb66e6e
 	- Closed:
 
+- macOS: Option plus a letter types nothing into a Settings text box
+	- ID: 2026100219240881
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On b26, Option+O types "ø" into a Settings text box and into a tab rename, and Option held underlines nothing on the Settings buttons. With a German layout, if one is set up there, Option+8 types "{".
+	- Severity: Low
+	- Opened: 20261002-192408
+	- Opened by: CC
+	- Related IDs: 2026100219054469, 2026100219054483
+	- Target OS: macOS
+	- Incorrect behavior: On a Mac, Option plus a letter types a character such as "ø". In a Settings text box Option is read as Alt, so the press is taken as a footer button accelerator and nothing is typed. A tab rename also drops a character typed with Option.
+	- Expected behavior: The character is typed. A Mac has no Alt accelerators on buttons.
+	- Reproduced: No. Read from the code on 20261002, while working on 2026100219054469. Plausible.
+	- Actual cause: On a Mac the text boxes read Option as Alt. In Settings an Alt press went to the footer button accelerators, and the tab rename dropped any character typed with Alt held. A Mac reports the character Option makes, and it was lost.
+	- Actual fix: On a Mac, Option is never the accelerator key, so a character typed with it goes into the box. It still moves and erases by words with the arrows and Backspace. Linux and Windows are unchanged.
+	- Swept: Every reader of the held Alt key in the text boxes: the Settings key handling, its button underlines, the dropdown opener on Alt+Down, and the tab rename. The terminal reads Option on its own and is unchanged.
+	- Test case: `option_types_on_a_mac_and_alt_is_an_accelerator_elsewhere` (ErbKdHM), `option_types_into_a_mac_text_box` (ErbKdLR), and the Option lines in `a_tab_rename_takes_the_text_box_keys` (ErbKd5c). Each fails with the change undone.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: tabedit
+	- Commit: 2034f15
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -355,36 +406,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
-
-- Tab rename: Paste from the menu bar goes into the shell, and the box has only basic editing
-	- ID: 2026100219054483
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs external testing: On b26, while a tab is being renamed: Edit > Copy and Paste on the menu bar, and Command+C and V, act on the name and nothing reaches the shell. Command+X and A cut and select all. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. A click, a drag, a double-click and a triple-click in the name place the caret, select, take a word and take it all. Right-click opens Cut, Copy, Paste, Delete and Select all. Any other menu pick, such as Command+T, keeps the name first.
-	- Severity: Avg
-	- Opened: 20261002-190545
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100219054469, 2026100114435613
-	- Target OS: All
-	- Incorrect behavior: While a tab is being renamed, Paste from the macOS menu bar, which Command+V reaches, pastes into the shell, not the name. The box takes typing, the arrows, Home, End, Backspace, Delete, Ctrl+A and Ctrl+V, and nothing else.
-	- Expected behavior: A paste goes into the name being typed, from a key or from a menu. The box does full text editing.
-	- Reproduced: No. Read from the code on 20261002.
-	- Decisions:
-		- 20261002: Paste into the tab. Full text editing in the tab.
-	- Actual cause: The rename took only a few keys, and anything from a menu or the mouse went to the terminal. A click on the menu bar ended the rename, so Edit > Paste then went to the shell. On a Mac the menu bar takes Command+C and V before the window sees them, so they went to the shell with the rename still up.
-	- Actual fix:
-		- The rename edits as a Settings text box does, through one shared set of caret rules (`textedit.rs`) and the same per-platform keys: copy, cut, paste and select all, Shift+Delete, Shift+Insert and Ctrl+Insert, moving and erasing by words, Shift to select, and the Mac's Command and Option keys. A paste is one line.
-		- The mouse: a click places the caret, Shift+click extends, a drag selects, a double-click takes a word and a third click the whole name. A middle-click pastes the primary selection where it was clicked.
-		- Right-click, the Menu key or Shift+F10 opens Cut, Copy, Paste, Delete and Select all, less the rows with nothing to act on.
-		- A press on the menu bar or an open menu leaves the rename up. Copy, Paste and Paste Selection from any menu, the macOS menu bar included, act on the name. Any other pick keeps the name first, as a click elsewhere does.
-		- The tab's hover tip no longer comes back over the rename box when the pointer has not moved since the double-click.
-	- Note: The Settings boxes have no undo, so neither does the rename. Selecting in the name does not set the primary selection, as in the Settings boxes.
-	- Swept: Every way a key, a paste or a copy reaches the shell while a rename is up: the key handler (the rename takes every key first), the in-window menu bar and its submenus, the right-click menu, the macOS menu bar, the middle button, and the keyboard copy and paste chords. There is no file drop or input method handling. The Settings boxes' caret code now uses the same shared rules.
-	- Test case: `a_tab_rename_takes_the_text_box_keys` (ErbKd5c), `a_tab_rename_edits_like_a_text_box` (ErbKd9K), `menus_reach_a_tab_rename` (ErbKdDM) and `each_reach_stops_where_its_keys_say` (ErbKd1H). The first three fail with their part of the change undone. `renaming_a_tab_stays_on_character_boundaries` (EoSiOoS) takes the new calls. `caret_from_click_picks_nearest` (EitjFLH) and `word_motion_and_word_at` (EkI1Txg) moved with the code to `textedit.rs`. The tip fix has no test, since it lives in window state no test builds.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS. On Linux in the program: typing, Ctrl+V, Ctrl+C and X, Ctrl+Left and Ctrl+Backspace, a drag, a double-click, Select all and Paste from the right-click menu, a middle-click, and Edit > Copy and Paste from the menu bar all acted on the name, and nothing reached the shell.
-	- Branch: tabedit
-	- Commit: 2034f15
 
 - Test files go under one dated folder in the system temp dir
 	- ID: 2026093013113320
@@ -462,27 +483,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Resolution and DPI by themselves may not be enough, if the DPI information is disconnected from actual inches. It's the *actual* physical DPI, combined with resolution, that's important, and will have to best approximate.
 		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
 	- Closed:
-
-- macOS: Option plus a letter types nothing into a Settings text box
-	- ID: 2026100219240881
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs external testing: On b26, Option+O types "ø" into a Settings text box and into a tab rename, and Option held underlines nothing on the Settings buttons. With a German layout, if one is set up there, Option+8 types "{".
-	- Severity: Low
-	- Opened: 20261002-192408
-	- Opened by: CC
-	- Related IDs: 2026100219054469, 2026100219054483
-	- Target OS: macOS
-	- Incorrect behavior: On a Mac, Option plus a letter types a character such as "ø". In a Settings text box Option is read as Alt, so the press is taken as a footer button accelerator and nothing is typed. A tab rename also drops a character typed with Option.
-	- Expected behavior: The character is typed. A Mac has no Alt accelerators on buttons.
-	- Reproduced: No. Read from the code on 20261002, while working on 2026100219054469. Plausible.
-	- Actual cause: On a Mac the text boxes read Option as Alt. In Settings an Alt press went to the footer button accelerators, and the tab rename dropped any character typed with Alt held. A Mac reports the character Option makes, and it was lost.
-	- Actual fix: On a Mac, Option is never the accelerator key, so a character typed with it goes into the box. It still moves and erases by words with the arrows and Backspace. Linux and Windows are unchanged.
-	- Swept: Every reader of the held Alt key in the text boxes: the Settings key handling, its button underlines, the dropdown opener on Alt+Down, and the tab rename. The terminal reads Option on its own and is unchanged.
-	- Test case: `option_types_on_a_mac_and_alt_is_an_accelerator_elsewhere` (ErbKdHM), `option_types_into_a_mac_text_box` (ErbKdLR), and the Option lines in `a_tab_rename_takes_the_text_box_keys` (ErbKd5c). Each fails with the change undone.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: tabedit
-	- Commit: 2034f15
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
