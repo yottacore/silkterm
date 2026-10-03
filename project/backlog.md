@@ -2124,13 +2124,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - **Stop here to work on releasing RC1**.
 
-- ✅ Create another, private repo for macOS and [WinUI 3 + Windows App SDK] builds.
-	- Opened: 20260924-113215
-	- 20261001: The repo is in use for the Mac build and Store packaging. Tracked as issue 2026100113403226. WinUI 3 is not started.
-
-- 🔘 After October and/or when updated silkterm has run on all hosts: Remove code that migrates and/or updates old config files.
-	- Opened: 20260924-113215
-
 - **Stop here to work on releasing v1.0.0 with Windows and macOS store releases**.
 
 ### Done
