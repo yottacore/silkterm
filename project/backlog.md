@@ -488,7 +488,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: a plain click in a reopened Settings can act as a Ctrl+click
 	- ID: 2026100220463754
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: On b26. Open Settings, hold Ctrl and press Esc, then let go of Ctrl. Open Settings again and click a checkbox with no keys held: it changes. Do the same with Enter in place of Esc.
+		- After closing Settings that way, open About and click its link: the link opens.
+		- Ctrl+click in a Settings text box still opens its Cut, Copy, Paste menu, and a plain click after letting go of Ctrl is a plain click again.
 	- Severity: Avg
 	- Opened: 20261002-204637
 	- Opened by: CC
@@ -501,7 +504,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The click acts as a right-click. A checkbox does not change, and a text box opens its Cut, Copy, Paste menu. It stays that way until a modifier key is pressed and let go inside Settings.
 	- Expected behavior: A plain click is a left click.
 	- Reproduced: No. Read from the code on 20261002. Details in the ctrlclick design's review round 0.
+		- 20261003: Not run, since it needs a Mac. winit 0.30.13's macOS code backs the reading. A closing window drops its delegate before it gives up the focus, so it never reports Ctrl let go. A window that gains the focus reports only that, with no held keys.
 	- Origin: 2026100220260471, branch ctrlclick, b2223d0. Plausible.
+	- Actual cause: The held keys a press in a dialog reads were kept for the program, not for the dialog window, and only that window's reports changed them. A dialog closed with Ctrl down left Ctrl recorded, and the next dialog started out with it.
+	- Actual fix: Each dialog window keeps its own held keys, starting with none. They go when the window goes, whether it closed or another dialog took its place.
+	- Swept: Every place held keys are kept for a window. The Settings text boxes' keys already belonged to the dialog. The notice window keeps none. The terminal window's keys are cleared when it loses the focus, on X11, Wayland, Windows and macOS alike, so they never stick down. Both places that open a dialog replace it without the close path, and both are covered now.
+	- Note: On a Mac, a window that gains the focus while Ctrl is already down does not know it until a key changes, so a Ctrl+click right then is a plain click. The terminal window has the same gap. Left alone, since it never sticks and the next key change corrects it.
+	- Test case: None. A press reads its keys from a live dialog window, which the unit tests cannot make, and the fault needs a Mac's focus rules. The b26 check above covers it. `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg) still pins what a press does with the keys it is given.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: heldkeys
+	- Commit: 669c2d9
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
