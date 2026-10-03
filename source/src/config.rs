@@ -594,7 +594,7 @@ impl Default for Settings {
 			selection_pairs: DEFAULT_SELECTION_PAIRS.to_owned(),
 			command_line: String::new(),
 			startup_directory: HOME_TOKEN.to_string(),
-			copy_on_select: false,
+			copy_on_select: true,
 			shell_integration: true,
 			bash_prompt: false,
 			hyperlinks: true,
@@ -3630,6 +3630,8 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("scroll.minimap.enabled", "false  ## Default"),
 	// wallpaper text colors shipped off while the measurements were being made
 	("colors.from_wallpaper", "false  ## Default"),
+	// copy on select shipped off
+	("shell.copy_on_select", "false  ## Default"),
 	// Seven lines named an example rather than the default they were marked
 	// with, so uncommenting one changed what loaded. The values below are the
 	// examples they used to carry.
@@ -6101,7 +6103,7 @@ shell:
 	## replaces a prompt set in .bashrc.
 	# bash_prompt: false  ## Default
 
-	# copy_on_select: false  ## Default
+	# copy_on_select: true  ## Default
 
 ##
 ## This config file format is SHCL.
@@ -9857,10 +9859,10 @@ mod tests {
 
 	// Test ID: EkrTZxY
 	#[test]
-	fn copy_on_select_key_parses_and_defaults_off() {
+	fn copy_on_select_key_parses_and_defaults_on() {
 		let p = std::path::Path::new("test.shcl");
-		assert!(!resolve(read_raw("", p).0).copy_on_select, "default off");
-		assert!(resolve(read_raw("shell.copy_on_select: true\n", p).0).copy_on_select);
+		assert!(resolve(read_raw("", p).0).copy_on_select, "default on");
+		assert!(!resolve(read_raw("shell.copy_on_select: false\n", p).0).copy_on_select);
 	}
 
 	// Test ID: Em1S9yq
@@ -11369,6 +11371,17 @@ mod tests {
 
 	// The table above is kept by hand, so nothing can catch an entry that was
 	// simply never added. This names the one default that changed most recently.
+	// Test ID: EreA6Db
+	#[test]
+	fn an_existing_config_learns_that_copy_on_select_ships_on() {
+		let out = migrate_config_text("shell:\n\t# copy_on_select: false  ## Default\n")
+			.expect("the outgoing default should be refreshed");
+		assert!(
+			out.contains("# copy_on_select: true  ## Default"),
+			"{out:?}"
+		);
+	}
+
 	// Test ID: EqSm2Rl
 	#[test]
 	fn an_existing_config_learns_that_wallpaper_text_colors_ship_on() {

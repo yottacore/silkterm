@@ -34,6 +34,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Copy on select: on by default, and remembered across launches
+	- ID: 2026100307115829
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261003-071158
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Test environment: b23
+	- Requirements:
+		- Default to enabled.
+		- Remember selection across launches.
+	- Progress log:
+		- 20261003: `shell.copy_on_select` now ships on. An old config's commented `false` default line is refreshed to `true`. A line set by hand is left alone.
+		- 20261003: Turning Copy on select on or off from a menu saves it as the setting. New tabs and the next launch start with it. Other panes already open keep their own.
+		- 20261003: Unit tests pass. A look at the menu toggle in a real window is still owed.
+	- Branch: copysel
+
 - The launch names an unreadable line two lines short of where the file has it
 	- ID: 2026100115322366
 	- Type: Bug

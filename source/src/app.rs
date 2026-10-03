@@ -4346,6 +4346,17 @@ impl State {
 		};
 		let now = !p.copy_enabled(kind);
 		p.set_copy(kind, now);
+		// the last choice is what the next launch and new tabs start with.
+		// Other panes keep their own, which is why this skips apply_new_settings.
+		if kind == CopyKind::Select {
+			let orig = (*config::settings()).clone();
+			if orig.copy_on_select != now {
+				let mut new = orig.clone();
+				new.copy_on_select = now;
+				let _ = config::persist(&orig, &new);
+				config::update(new);
+			}
+		}
 		if self.tabs.cur().panes.contains_key(&target) {
 			self.tabs.cur_mut().focused = target;
 		}
