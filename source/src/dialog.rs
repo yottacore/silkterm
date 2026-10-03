@@ -1695,17 +1695,19 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 			}
 		}
 	};
-	let it = if refusal.lines.len() > 1 || (refusal.lines.is_empty() && refusal.lost > 1) {
-		"them"
-	} else {
-		"it"
+	let many = refusal.lines.len() > 1 || (refusal.lines.is_empty() && refusal.lost > 1);
+	let it = if many { "them" } else { "it" };
+	let since = match (refusal.why, many) {
+		(config::Unreadable::Syntax, _) => ",",
+		(config::Unreadable::NotUtf8, false) => ", since it is not UTF-8 text,",
+		(config::Unreadable::NotUtf8, true) => ", since they are not UTF-8 text,",
 	};
 	(
 		"Settings not saved".to_string(),
 		vec![
 			format!("{} cannot save its settings file.", config::APP_NAME),
 			refusal.path.display().to_string(),
-			format!("{which} cannot be read, and saving now would delete {it}."),
+			format!("{which} cannot be read{since} and saving now would delete {it}."),
 			"Until that is fixed, changes such as the window size, new shells and anything set in Settings are used now but not kept.".to_string(),
 		],
 	)
@@ -2160,6 +2162,7 @@ mod tests {
 				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
 				lines: lines.to_vec(),
 				lost,
+				why: crate::config::Unreadable::Syntax,
 			};
 			refusal_notice(&refusal)
 		};
@@ -2186,6 +2189,31 @@ mod tests {
 		assert_eq!(
 			said(&[], 3).1[2],
 			"3 lines cannot be read, and saving now would delete them."
+		);
+	}
+
+	// Lines that are not UTF-8 look fine in some editors, so the notice says
+	// what is wrong with them.
+	// Test ID: ErgK2Vb
+	#[test]
+	fn a_notice_for_lines_that_are_not_utf8_says_so() {
+		let said = |lines: &[usize]| {
+			refusal_notice(&crate::config::Refusal {
+				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
+				lines: lines.to_vec(),
+				lost: lines.len(),
+				why: crate::config::Unreadable::NotUtf8,
+			})
+		};
+		let (title, paras) = said(&[3]);
+		assert_eq!(title, "Settings not saved");
+		assert_eq!(
+			paras[2],
+			"Line 3 cannot be read, since it is not UTF-8 text, and saving now would delete it."
+		);
+		assert_eq!(
+			said(&[3, 40]).1[2],
+			"Lines 3 and 40 cannot be read, since they are not UTF-8 text, and saving now would delete them."
 		);
 	}
 
@@ -2431,6 +2459,7 @@ mod tests {
 					path: "/home/me/.config/silkterm/config.shcl".into(),
 					lines: vec![12],
 					lost: 1,
+					why: config::Unreadable::Syntax,
 				})
 				.1,
 			),

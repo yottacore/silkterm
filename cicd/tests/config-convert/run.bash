@@ -11,9 +11,11 @@
 ##			- One shcl cannot migrate (a raw block that never closes) and one it
 ##			  cannot read (not UTF-8), each written new from the template with the
 ##			  settings that still read.
-##		A second launch on each must change nothing. Where Xvfb is installed, one
-##		launch on the private display checks that lost settings bring up the
-##		notice window too.
+##		A second launch on each must change nothing. A file in the current format
+##		that is not UTF-8 is no conversion: it is left as it was, and the launch
+##		says which lines it could not read. Where Xvfb is installed, launches on
+##		the private display check that lost settings, and a file no save can
+##		keep, bring up the notice window too.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary).
 ##	- Test ID: ErgDpjX
@@ -199,44 +201,88 @@ fConverts unreadable new 1
 fCheck "unreadable: font.size carried" fHas font.size 15 "${work}/unreadable/config.shcl"
 fCheck "unreadable: window.columns carried" fHas window.columns 101 "${work}/unreadable/config.shcl"
 
+echo "a current file that is not UTF-8"
+mkdir -p "${work}/current"
+printf '## caf\xe9, kept as written\nfont:\n\tsize: 15\nwindow:\n\tcolumns: 101\n\n##    Format   3\n' >"${work}/current/config.shcl"
+fCheck "current: the fixture is not UTF-8" fNotUtf8 "${work}/current/config.shcl"
+cp -p "${work}/current/config.shcl" "${work}/current/original"
+fLaunch "${work}/current" "${work}/current/said.txt"
+fCheck "current: the launch did not panic" fNotSaid 'panicked' "${work}/current/said.txt"
+fCheck "current: the file is left byte for byte" cmp -s "${work}/current/original" "${work}/current/config.shcl"
+fCheck "current: no copy is kept" test "$(fCopies "${work}/current" | wc -l)" = 0
+fCheck "current: the launch names the line it could not read" fSaid "${work}/current/config.shcl: not UTF-8 text at line 1 - those lines set nothing, and changes are not saved to this file until they are fixed" "${work}/current/said.txt"
+fCheck "current: and reports nothing converted" fNotSaid 'converted to SHCL|set a list in brackets|could not be carried' "${work}/current/said.txt"
+
 ## The notice window, on the private display only.
-fNotice(){
+display=""; auth=""
+fDisplay(){
 	if ! command -v Xvfb >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1 || [[ ! -x "${headless}" ]]; then
 		echo "  skip the notice window (no Xvfb, xdotool or gui-headless.bash)"
-		return 0
+		return 1
 	fi
 	export CICD_HEADLESS_DISPLAY="${CICD_HEADLESS_DISPLAY:-:98}"
-	local -r display="${CICD_HEADLESS_DISPLAY}"
+	display="${CICD_HEADLESS_DISPLAY}"
+	auth="/tmp/cicd-gui-headless-${USER:-$(id -un)}/Xauthority-${display#:}"
 	local status=""
 	status="$("${headless}" status 2>/dev/null || true)"
 	if [[ "${status}" == *"no Xvfb"* ]]; then
-		if ! "${headless}" start >/dev/null 2>&1; then echo "  skip the notice window (the display on ${display} did not start)"; return 0; fi
+		if ! "${headless}" start >/dev/null 2>&1; then echo "  skip the notice window (the display on ${display} did not start)"; return 1; fi
 		startedDisplay=1
 	fi
-	local -r auth="/tmp/cicd-gui-headless-${USER:-$(id -un)}/Xauthority-${display#:}"
-	local -r dir="${work}/notice"
-	fFixture notice 'font:' "${tab}size: 15" "${tab}family:[One, Two]" 'notes: ```' 'never closed'
+}
+
+fLaunchShown(){  ## fLaunchShown <case dir>
+	local -r dir="${1}"
 	mkdir -p "${dir}/home"
 	DISPLAY="${display}" XAUTHORITY="${auth}" LIBGL_ALWAYS_SOFTWARE=1 \
 		HOME="${dir}/home" XDG_CONFIG_HOME="${dir}/home/.config" XDG_DATA_HOME="${dir}/home/.local/share" XDG_RUNTIME_DIR="${dir}/home" \
-		"${bin}" --config "${dir}/config.shcl" --shell "/bin/dash -c 'sleep 60'" >/dev/null 2>"${dir}/said.txt" &
+		"${bin}" --config "${dir}/config.shcl" --shell "/bin/dash -c 'sleep 60'" >/dev/null 2>>"${dir}/said.txt" &
 	noticePid=$!
+}
+
+fNotice(){  ## fNotice <case> <window title>
+	local -r name="${1}" title="${2}"
+	fLaunchShown "${work}/${name}"
 	local window="" _
 	for _ in {1..240}; do
-		window="$(DISPLAY="${display}" XAUTHORITY="${auth}" xdotool search --name '^Settings not converted$' 2>/dev/null || true)"
+		window="$(DISPLAY="${display}" XAUTHORITY="${auth}" xdotool search --name "^${title}\$" 2>/dev/null || true)"
 		if [[ -n "${window}" ]]; then break; fi
 		kill -0 "${noticePid}" 2>/dev/null || break
 		sleep 0.25
 	done
-	fCheck "notice: lost settings bring up the notice window" test -n "${window}"
+	fCheck "${name}: the notice window \"${title}\" comes up" test -n "${window}"
 	fStopOurs "${noticePid}"; noticePid=""
-	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; startedDisplay=0; fi
 }
+
 echo "the notice window"
-fNotice
+if fDisplay; then
+	fFixture notice 'font:' "${tab}size: 15" "${tab}family:[One, Two]" 'notes: ```' 'never closed'
+	fNotice notice 'Settings not converted'
+	## The launch says it even when nothing tries to save. A first launch has
+	## the shell scan save what it finds, so the bad line goes in after one.
+	dir="${work}/notsaved"
+	fFixture notsaved 'font:' "${tab}size: 15"
+	fLaunchShown "${dir}"
+	for _ in {1..240}; do
+		if grep -q '^shells:' "${dir}/config.shcl"; then break; fi
+		kill -0 "${noticePid}" 2>/dev/null || break
+		sleep 0.25
+	done
+	sleep 1
+	fStopOurs "${noticePid}"; noticePid=""
+	fCheck "notsaved: the first launch kept the shells it found" grep -q '^shells:' "${dir}/config.shcl"
+	{ printf '## caf\xe9\n'; cat "${dir}/config.shcl"; } >"${dir}/bad" && mv "${dir}/bad" "${dir}/config.shcl"
+	cp -p "${dir}/config.shcl" "${dir}/original"
+	: >"${dir}/said.txt"
+	fNotice notsaved 'Settings not saved'
+	fCheck "notsaved: the file is left byte for byte" cmp -s "${dir}/original" "${dir}/config.shcl"
+	fCheck "notsaved: and no save was tried" fLacks 'could not save config' "${dir}/said.txt"
+	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; startedDisplay=0; fi
+fi
 
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20261003 JC: Created.
+##		- 20261003 JC: A current file that is not UTF-8.
