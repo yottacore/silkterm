@@ -509,6 +509,49 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: testrm
 	- Commit: a497b6d, 174abde
 
+- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
+	- ID: 2026100220292607
+	- Type: Feature
+	- Status: Waiting for testing
+	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
+	- Needs external testing:
+		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
+		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before v1.
+		- Figure out hotkeys for splitting panes and changing panes.
+		- Then implement hotkey management.
+		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
+	- Notes:
+		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` holds that and will need to change.
+		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
+	- Decisions:
+		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
+		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
+	- Progress log:
+		- 20261003: One table of hotkeys, defaults plus the config file's `keys:` values, is what the key handler, the in-window menus and the macOS menu bar all read. A menu row shows the first chord its hotkey answers to, so a change in the file shows there too.
+		- 20261003: Windows Terminal's defaults checked: Alt+Shift+Plus duplicates the pane to the right, Alt+Shift+Minus down, and Alt+arrows move focus. It closes a pane with Ctrl+Shift+W, which is close tab here, so Alt+Shift+W per the decision.
+		- 20261003: A bad value keeps its default and is reported at launch with its line. A chord set for one hotkey is taken from any hotkey that has it by default, with a launch note. "none" turns a hotkey off, and quotes are optional.
+		- 20261003: A focus move goes to the nearest pane that way. On a tie, the pane the last move came from wins, then the top or left one, so a move and its opposite go back and forth.
+		- 20261003: Lost to the shell on Linux and Windows: fish's Alt+arrows, tmux's prefix plus Alt+arrows, nano's Alt+Up and Alt+Down, emacs' Meta+Left, Meta+Right and Meta+Shift+W, and readline's Meta+_ (Meta+. still does it). Readline's Alt+b and Alt+f stay free. The split-panes design doc has the list. Nothing is lost on macOS.
+		- 20261003: Changed along the way: F11, the Menu key and Ctrl+F4 now need exactly their keys held, where extra modifiers used to count. Ctrl+Alt+Shift+T, which is how Windows sees AltGr+Shift+T, no longer opens a tab.
+		- 20261003: `no_chord_splits_closes_or_cycles_panes` is commented out, since it pinned the menu-only decision this item reverses. Its Ctrl and Ctrl+Shift checks still hold and moved to `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
+		- 20261003: Open question: macOS has no close-pane chord by default. iTerm2 uses Command+W, which is close tab here. Leave it unbound, or pick one?
+	- Verified:
+		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
+		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
+		- In a real window on Linux, the four Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
+	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` spells a chord by hand any more.
+	- Branch: panekeys
+	- Commit: 4cafdde
+	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`.
+	- Closed:
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
@@ -626,28 +669,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
 	- Progress log:
 		- 20261002: Added the Settings grouping and the README line. The README waits for the feature, so it doesn't claim something that isn't built.
-	- Closed:
-
-- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
-	- ID: 2026100220292607
-	- Type: Feature
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Before v1.
-		- Figure out hotkeys for splitting panes and changing panes.
-		- Then implement hotkey management.
-		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
-	- Notes:
-		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` holds that and will need to change.
-		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
-	- Decisions:
-		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
-		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
 	- Closed:
 
 - Settings: a Keys tab to see and change hotkeys

@@ -950,6 +950,48 @@ pub enum Dir {
 	Horizontal,
 }
 
+// Which way a focus move goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Toward {
+	Left,
+	Right,
+	Up,
+	Down,
+}
+
+// The pane next to `from` in that direction: the nearest one wholly on that
+// side that shares some of its edge. Of several the same distance off, the one
+// the last move came from, so a move and its opposite go back and forth, then
+// the top or left one. None at the window's edge; a move does not wrap around.
+pub fn neighbor_toward(
+	from: (PaneId, Rect),
+	panes: &[(PaneId, Rect)],
+	toward: Toward,
+	came_from: Option<PaneId>,
+) -> Option<PaneId> {
+	// panes laid out side by side can touch, or sit a divider apart; a pixel of
+	// slack keeps a rounding error from hiding a neighbor
+	const SLACK: f32 = 1.0;
+	let (from_id, f) = from;
+	let overlap = |a: f32, a_len: f32, b: f32, b_len: f32| (a + a_len).min(b + b_len) - a.max(b);
+	let near = |gap: f32| (gap / SLACK).round() as i64;
+	panes
+		.iter()
+		.filter(|(id, _)| *id != from_id)
+		.filter_map(|(id, r)| {
+			let (gap, shared, start) = match toward {
+				Toward::Right => (r.x - (f.x + f.w), overlap(f.y, f.h, r.y, r.h), r.y),
+				Toward::Left => (f.x - (r.x + r.w), overlap(f.y, f.h, r.y, r.h), r.y),
+				Toward::Down => (r.y - (f.y + f.h), overlap(f.x, f.w, r.x, r.w), r.x),
+				Toward::Up => (f.y - (r.y + r.h), overlap(f.x, f.w, r.x, r.w), r.x),
+			};
+			let other = came_from != Some(*id);
+			(gap > -SLACK && shared > 0.0).then_some((*id, near(gap.max(0.0)), other, start))
+		})
+		.min_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)).then(a.3.total_cmp(&b.3)))
+		.map(|(id, ..)| id)
+}
+
 // ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 // Scrollbar
 // ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -3431,6 +3473,8 @@ pub struct PaneManager {
 	pub panes: HashMap<PaneId, Pane>,
 	root: Node,
 	pub focused: PaneId,
+	// The pane a keyboard focus move last left, which wins a tie on the way back.
+	came_from: Option<PaneId>,
 	// CLI `--title` for this tab; overrides the computed "<shell> [program]".
 	pub title_override: Option<String>,
 	// When this tab was opened, for the tip's elapsed time. A tab, not a pane:
@@ -3454,6 +3498,7 @@ impl PaneManager {
 			panes,
 			root: Node::Leaf(id),
 			focused: id,
+			came_from: None,
 			title_override: None,
 			created: std::time::Instant::now(),
 		})
@@ -3661,6 +3706,21 @@ impl PaneManager {
 				pane.last_cells.clear();
 			}
 		}
+	}
+
+	// Move the focus to the pane beside the focused one. False when there is
+	// none that way.
+	pub fn move_focus(&mut self, toward: Toward) -> bool {
+		let Some(from) = self.panes.get(&self.focused).map(|p| p.full) else {
+			return false;
+		};
+		let all: Vec<(PaneId, Rect)> = self.panes.iter().map(|(id, p)| (*id, p.full)).collect();
+		let Some(to) = neighbor_toward((self.focused, from), &all, toward, self.came_from) else {
+			return false;
+		};
+		self.came_from = Some(self.focused);
+		self.focused = to;
+		true
 	}
 
 	pub fn pane_at(&self, x: f32, y: f32) -> Option<PaneId> {
@@ -5211,6 +5271,76 @@ mod tests {
 			b: Box::new(b),
 		}
 	}
+	// A focus move goes to the pane beside the focused one, across the divider
+	// the real layout leaves, and goes nowhere at the window's edge. Where two
+	// panes sit the same distance off, the one the last move left wins, then
+	// the top or left one.
+	//
+	//   +---+---+---+
+	//   |   | 2 |   |
+	//   | 1 +---+ 4 |
+	//   |   | 3 |   |
+	//   +---+---+---+
+	//   |     5     |
+	//   +-----------+
+	// Test ID: EreU3sY
+	#[test]
+	fn a_focus_move_lands_on_the_pane_beside_it() {
+		use super::{Toward, neighbor_toward};
+		let middle = split(Dir::Horizontal, 0.5, false, leaf(2), leaf(3));
+		let top = split(
+			Dir::Vertical,
+			1.0 / 3.0,
+			false,
+			leaf(1),
+			split(Dir::Vertical, 0.5, false, middle, leaf(4)),
+		);
+		let root = split(Dir::Horizontal, 0.75, false, top, leaf(5));
+		let mut rects = Vec::new();
+		let area = Rect {
+			x: 0.0,
+			y: 0.0,
+			w: 300.0,
+			h: 200.0,
+		};
+		for scale in [1.0, 2.0] {
+			rects.clear();
+			layout(&root, area, scale, &mut rects);
+			let go = |id, toward| {
+				let rect = rects.iter().find(|(each, _)| *each == id).expect("pane").1;
+				neighbor_toward((id, rect), &rects, toward, None)
+			};
+			assert_eq!(go(1, Toward::Right), Some(2), "same gap, 2 is on top");
+			assert_eq!(go(1, Toward::Left), None);
+			assert_eq!(go(1, Toward::Up), None);
+			assert_eq!(go(1, Toward::Down), Some(5));
+			assert_eq!(go(2, Toward::Down), Some(3));
+			assert_eq!(go(3, Toward::Up), Some(2));
+			assert_eq!(go(3, Toward::Down), Some(5));
+			assert_eq!(go(3, Toward::Right), Some(4));
+			assert_eq!(go(2, Toward::Left), Some(1));
+			assert_eq!(go(4, Toward::Left), Some(2));
+			assert_eq!(go(4, Toward::Right), None);
+			assert_eq!(go(5, Toward::Up), Some(1), "1, 3 and 4 tie, 1 is left");
+			assert_eq!(go(5, Toward::Down), None);
+		}
+		// one pane alone has nowhere to go
+		let alone = [(7, area)];
+		for toward in [Toward::Left, Toward::Right, Toward::Up, Toward::Down] {
+			assert_eq!(neighbor_toward((7, area), &alone, toward, None), None);
+		}
+		// back the way it came, rather than to the top or left one
+		let back = |id, toward, came_from| {
+			let rect = rects.iter().find(|(each, _)| *each == id).expect("pane").1;
+			neighbor_toward((id, rect), &rects, toward, came_from)
+		};
+		assert_eq!(back(3, Toward::Left, None), Some(1));
+		assert_eq!(back(1, Toward::Right, Some(3)), Some(3));
+		assert_eq!(back(5, Toward::Up, Some(4)), Some(4));
+		// a pane further off does not win by having been left last
+		assert_eq!(back(1, Toward::Right, Some(4)), Some(2));
+	}
+
 	fn widths(root: &Node, w: f32) -> Vec<(u64, f32)> {
 		let mut out = Vec::new();
 		layout(

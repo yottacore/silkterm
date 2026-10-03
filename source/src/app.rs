@@ -827,24 +827,16 @@ struct ViewState {
 // order and the accelerators can be held to the style guide by test.
 fn view_menu_items(on: ViewState) -> Vec<Entry> {
 	let mut items = vec![
-		mia(
-			'I',
-			"Increase font size (Ctrl+Plus)",
-			MenuAction::FontBigger,
-		),
-		mia(
-			'D',
-			"Decrease font size (Ctrl+Minus)",
-			MenuAction::FontSmaller,
-		),
-		mia('e', "Reset font size (Ctrl+0)", MenuAction::FontReset),
+		mia('I', "Increase font size", MenuAction::FontBigger),
+		mia('D', "Decrease font size", MenuAction::FontSmaller),
+		mia('e', "Reset font size", MenuAction::FontReset),
 		Entry::Sep,
 		mta('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
 		Entry::Sep,
 		mta(
 			'F',
 			on.fullscreen,
-			"Fullscreen (F11)",
+			"Fullscreen",
 			MenuAction::ToggleFullscreen,
 		),
 		// every toggle below names the thing itself and is checked while it is
@@ -906,7 +898,7 @@ fn split_shells(shells: &[ShellEntry]) -> Vec<Entry> {
 fn file_menu_items() -> Vec<Entry> {
 	vec![
 		mia('R', "Reload config", MenuAction::ReloadConfig),
-		mia('S', "Settings\u{2026} (Ctrl+,)", MenuAction::Settings),
+		mia('S', "Settings\u{2026}", MenuAction::Settings),
 		Entry::Sep,
 		mia('Q', "Quit", MenuAction::Quit),
 	]
@@ -914,8 +906,8 @@ fn file_menu_items() -> Vec<Entry> {
 
 fn edit_menu_items(copy_select: bool, copy_output: bool) -> Vec<Entry> {
 	vec![
-		mia('C', "Copy (Ctrl+Shift+C)", MenuAction::Copy),
-		mia('P', "Paste (Ctrl+Shift+V)", MenuAction::Paste),
+		mia('C', "Copy", MenuAction::Copy),
+		mia('P', "Paste", MenuAction::Paste),
 		mia('S', "Paste Selection", MenuAction::PasteSelection),
 		Entry::Sep,
 		mt(copy_select, "Copy on select", MenuAction::ToggleCopySelect),
@@ -924,12 +916,9 @@ fn edit_menu_items(copy_select: bool, copy_output: bool) -> Vec<Entry> {
 }
 
 fn tabs_menu_items(shells: &[ShellEntry]) -> Vec<Entry> {
-	let mut items = vec![mia('N', "New tab (Ctrl+Shift+T)", MenuAction::NewTab)];
+	let mut items = vec![mia('N', "New tab", MenuAction::NewTab)];
 	items.extend(new_tab_shells(shells, Some('S')));
-	items.extend([
-		Entry::Sep,
-		mia('C', "Close tab (Ctrl+Shift+W)", MenuAction::CloseTab),
-	]);
+	items.extend([Entry::Sep, mia('C', "Close tab", MenuAction::CloseTab)]);
 	items
 }
 
@@ -992,6 +981,48 @@ fn menu_bar_at_launch(hide_menu: Option<bool>, mac: bool) -> bool {
 	!mac && !hide_menu.unwrap_or(false)
 }
 
+// Each row that does what a hotkey does shows the chord that hotkey answers to
+// first, from the bindings in force, so a rebinding shows up here too. The
+// menus are built without them, and every place one opens comes through here.
+pub(crate) fn with_shortcuts(
+	entries: Vec<Entry>,
+	keys: &crate::keys::Bindings,
+	mac: bool,
+) -> Vec<Entry> {
+	entries
+		.into_iter()
+		.map(|entry| match entry {
+			Entry::Item {
+				label,
+				action,
+				check,
+				accel,
+			} => {
+				let label = match menu_hotkey(action).and_then(|hotkey| keys.shown(hotkey)) {
+					Some(chord) => format!("{label} ({})", chord.spoken(mac)),
+					None => label,
+				};
+				Entry::Item {
+					label,
+					action,
+					check,
+					accel,
+				}
+			}
+			Entry::Sub {
+				label,
+				accel,
+				items,
+			} => Entry::Sub {
+				label,
+				accel,
+				items: with_shortcuts(items, keys, mac),
+			},
+			Entry::Sep => Entry::Sep,
+		})
+		.collect()
+}
+
 // A row's label without the shortcut shown after it: "Copy" for
 // "Copy (Ctrl+Shift+C)".
 #[cfg(any(test, target_os = "macos"))]
@@ -1002,8 +1033,7 @@ pub(crate) fn plain_label(label: &str) -> &str {
 	}
 }
 
-// The key binding a menu row shares its shortcut with, if it has one.
-#[cfg(any(test, target_os = "macos"))]
+// The hotkey a menu row does the same thing as, if there is one.
 pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 	match action {
 		MenuAction::Copy => Some(Hotkey::Copy),
@@ -1019,6 +1049,9 @@ pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 		MenuAction::ToggleFullscreen => Some(Hotkey::Fullscreen),
 		MenuAction::Settings => Some(Hotkey::Settings),
 		MenuAction::Quit => Some(Hotkey::Quit),
+		MenuAction::SplitVertical => Some(Hotkey::SplitRight),
+		MenuAction::SplitHorizontal => Some(Hotkey::SplitDown),
+		MenuAction::Close => Some(Hotkey::ClosePane),
 		MenuAction::OpenLink
 		| MenuAction::CopyLink
 		| MenuAction::PasteSelection
@@ -1027,10 +1060,7 @@ pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 		| MenuAction::ToggleCopySelect
 		| MenuAction::ToggleCopyOutput
 		| MenuAction::NewTabShell(_)
-		| MenuAction::SplitVertical
-		| MenuAction::SplitHorizontal
 		| MenuAction::SplitShell(..)
-		| MenuAction::Close
 		| MenuAction::ToggleFrame
 		| MenuAction::ToggleMenuBar
 		| MenuAction::ToggleSingleTab
@@ -1071,41 +1101,10 @@ pub(crate) fn without_rows(entries: Vec<Entry>, drop: fn(MenuAction) -> bool) ->
 }
 
 // A menu as a Mac shows it: no Menu bar row, since the system menu bar is the
-// only one there, and each shortcut spelled as its Command chord.
+// only one there.
 #[cfg(any(test, target_os = "macos"))]
 pub(crate) fn mac_entries(entries: Vec<Entry>) -> Vec<Entry> {
 	without_rows(entries, |action| action == MenuAction::ToggleMenuBar)
-		.into_iter()
-		.map(|entry| match entry {
-			Entry::Item {
-				label,
-				action,
-				check,
-				accel,
-			} => {
-				let label = match menu_hotkey(action).and_then(input::command_chord) {
-					Some(chord) => format!("{} ({})", plain_label(&label), chord.spoken()),
-					None => label,
-				};
-				Entry::Item {
-					label,
-					action,
-					check,
-					accel,
-				}
-			}
-			Entry::Sub {
-				label,
-				accel,
-				items,
-			} => Entry::Sub {
-				label,
-				accel,
-				items: mac_entries(items),
-			},
-			Entry::Sep => Entry::Sep,
-		})
-		.collect()
 }
 
 // Every row turned on, and two shells, so each menu shows all it can.
@@ -1176,8 +1175,8 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	// horizontal", 'N' on "New tab" - and a duplicate would make the older
 	// item unreachable, since the first match wins
 	entries.extend([
-		mia('C', "Copy (Ctrl+Shift+C)", MenuAction::Copy),
-		mia('P', "Paste (Ctrl+Shift+V)", MenuAction::Paste),
+		mia('C', "Copy", MenuAction::Copy),
+		mia('P', "Paste", MenuAction::Paste),
 		mia('S', "Paste Selection", MenuAction::PasteSelection),
 		Entry::Sep,
 		mt(
@@ -1192,7 +1191,7 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 		),
 		mta('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
 		Entry::Sep,
-		mia('N', "New tab (Ctrl+Shift+T)", MenuAction::NewTab),
+		mia('N', "New tab", MenuAction::NewTab),
 	]);
 	entries.extend(new_tab_shells(shells, None));
 	entries.extend([
@@ -1215,7 +1214,7 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	entries.extend([
 		Entry::Sep,
 		mi("Reload config", MenuAction::ReloadConfig),
-		mi("Settings\u{2026} (Ctrl+,)", MenuAction::Settings),
+		mi("Settings\u{2026}", MenuAction::Settings),
 	]);
 	entries
 }
@@ -3972,7 +3971,12 @@ impl State {
 			menu_bar: self.menu_bar,
 			next_wallpaper: self.can_rotate(),
 		};
-		let entries = context_menu_items(on, &config::settings().shells);
+		let settings = config::settings();
+		let entries = with_shortcuts(
+			context_menu_items(on, &settings.shells),
+			&settings.keys,
+			cfg!(target_os = "macos"),
+		);
 		#[cfg(target_os = "macos")]
 		let entries = mac_entries(entries);
 		self.bar_open = None;
@@ -4232,12 +4236,11 @@ impl State {
 	// The dropdown entries for top-level menu-bar entry `idx` (File/Edit/...).
 	fn bar_menu_items(&self, idx: usize) -> Vec<Entry> {
 		let (view, copy_select, copy_output) = self.bar_state();
-		bar_menu(
-			idx,
-			view,
-			copy_select,
-			copy_output,
-			&config::settings().shells,
+		let settings = config::settings();
+		with_shortcuts(
+			bar_menu(idx, view, copy_select, copy_output, &settings.shells),
+			&settings.keys,
+			cfg!(target_os = "macos"),
 		)
 	}
 
@@ -4254,8 +4257,12 @@ impl State {
 		use std::hash::{Hash, Hasher};
 		let mut hasher = std::collections::hash_map::DefaultHasher::new();
 		self.bar_state().hash(&mut hasher);
-		for shell in &config::settings().shells {
+		let settings = config::settings();
+		for shell in &settings.shells {
 			(shell.active, &shell.title).hash(&mut hasher);
+		}
+		for (hotkey, _) in crate::keys::config_paths() {
+			settings.keys.chords(hotkey).hash(&mut hasher);
 		}
 		hasher.finish()
 	}
@@ -8742,7 +8749,7 @@ impl ApplicationHandler<UserEvent> for App {
 				// eat it while right-click Copy works.
 				if IGNORE_KEYS_WHILE_UNFOCUSED && !state.focused {
 					if state.menu.is_none()
-						&& is_copy_chord(state.mods, &key.logical_key, cfg!(target_os = "macos"))
+						&& is_copy_chord(&config::settings().keys, state.mods, &key.logical_key)
 					{
 						state.copy_selection();
 					}
@@ -8907,6 +8914,25 @@ impl ApplicationHandler<UserEvent> for App {
 						state.quit = true;
 						return;
 					}
+					// the same as the Panes menu's rows, on the focused pane
+					Some(hotkey @ (Hotkey::SplitRight | Hotkey::SplitDown | Hotkey::ClosePane)) => {
+						let action = match hotkey {
+							Hotkey::SplitRight => MenuAction::SplitVertical,
+							Hotkey::SplitDown => MenuAction::SplitHorizontal,
+							_ => MenuAction::Close,
+						};
+						let focused = state.tabs.cur().focused;
+						state.apply_menu(action, focused, &self.proxy);
+						state.dirty = true;
+						return;
+					}
+					Some(Hotkey::Focus(toward)) => {
+						if state.tabs.cur_mut().move_focus(toward) {
+							state.update_title();
+							state.dirty = true;
+						}
+						return;
+					}
 					None => {}
 				}
 				if !input::reaches_shell(state.mods, cfg!(target_os = "macos")) {
@@ -8986,7 +9012,7 @@ impl ApplicationHandler<UserEvent> for App {
 		if let Some(state) = self.state.as_ref() {
 			crate::macmenu::refresh(
 				state.bar_menus_key(),
-				|| crate::macmenu::layout(state.bar_menus()),
+				|| crate::macmenu::layout(state.bar_menus(), &config::settings().keys),
 				&self.proxy,
 			);
 		}
@@ -9562,7 +9588,7 @@ mod tests {
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
 		bar_title_underlines, context_menu_items, default_dir_for, edit_menu_items, entry_accel,
 		entry_label, file_menu_items, help_menu_items, menubar_text_slot, pane_shell,
-		pane_split_dir, panes_menu_items, push_back, split_shells, tabs_menu_items,
+		pane_split_dir, panes_menu_items, push_back, split_shells, tabs_menu_items, with_shortcuts,
 	};
 	use super::{EditCmd, Reach, TabEditKey, tab_edit_key, tab_edit_menu_items, tab_edit_takes};
 	use crate::config;
@@ -10830,24 +10856,25 @@ mod tests {
 	fn only_a_held_ctrl_shift_c_is_the_copy_chord() {
 		use winit::keyboard::{Key, ModifiersState, NamedKey};
 		let both = ModifiersState::CONTROL | ModifiersState::SHIFT;
-		assert!(is_copy_chord(both, &Key::Character("c".into()), false));
-		assert!(is_copy_chord(both, &Key::Character("C".into()), false));
+		let keys = crate::keys::Bindings::defaults(false);
+		assert!(is_copy_chord(&keys, both, &Key::Character("c".into())));
+		assert!(is_copy_chord(&keys, both, &Key::Character("C".into())));
 		assert!(!is_copy_chord(
+			&keys,
 			ModifiersState::empty(),
-			&Key::Character("c".into()),
-			false
+			&Key::Character("c".into())
 		));
 		assert!(!is_copy_chord(
+			&keys,
 			ModifiersState::CONTROL,
-			&Key::Character("c".into()),
-			false
+			&Key::Character("c".into())
 		));
-		assert!(!is_copy_chord(both, &Key::Character("v".into()), false));
-		assert!(!is_copy_chord(both, &Key::Named(NamedKey::ArrowUp), false));
+		assert!(!is_copy_chord(&keys, both, &Key::Character("v".into())));
+		assert!(!is_copy_chord(&keys, both, &Key::Named(NamedKey::ArrowUp)));
 		assert!(!is_copy_chord(
+			&crate::keys::Bindings::defaults(true),
 			ModifiersState::empty(),
-			&Key::Character("c".into()),
-			true
+			&Key::Character("c".into())
 		));
 	}
 
@@ -11133,6 +11160,7 @@ mod tests {
 			menu_bar: true,
 			next_wallpaper: true,
 		};
+		let keys = crate::keys::Bindings::defaults(false);
 		vec![
 			("File", file_menu_items()),
 			("Edit", edit_menu_items(true, true)),
@@ -11142,6 +11170,9 @@ mod tests {
 			("Help", help_menu_items()),
 			("right-click", context_menu_items(ctx, shells)),
 		]
+		.into_iter()
+		.map(|(name, items)| (name, with_shortcuts(items, &keys, false)))
+		.collect()
 	}
 
 	// The shortcut in "Label (Ctrl+Shift+C)", if the row shows one.
@@ -11330,6 +11361,83 @@ mod tests {
 		}
 	}
 
+	// A row that does what a hotkey does shows the chord that hotkey answers to,
+	// from the bindings in force: the pane rows show the pane chords, a chord
+	// moved in the config file shows where it went, and a hotkey turned off
+	// shows nothing.
+	// Test ID: EreU3se
+	#[test]
+	fn a_menu_row_shows_the_chord_its_hotkey_answers_to() {
+		use crate::input::Hotkey;
+		use crate::keys::{Bindings, Chord};
+		let shells = [shell("bash", true)];
+		let ctx = CtxState {
+			link: false,
+			read_only: false,
+			copy_select: false,
+			copy_output: false,
+			menu_bar: true,
+			next_wallpaper: false,
+		};
+		let label = |entries: &[Entry], want: MenuAction| {
+			entries.iter().find_map(|entry| match entry {
+				Entry::Item { label, action, .. } if *action == want => Some(label.clone()),
+				_ => None,
+			})
+		};
+		let pc = Bindings::defaults(false);
+		for items in [
+			with_shortcuts(panes_menu_items(&shells), &pc, false),
+			with_shortcuts(context_menu_items(ctx, &shells), &pc, false),
+		] {
+			for (action, shown) in [
+				(MenuAction::SplitVertical, "Split vertical (Alt+Shift+Plus)"),
+				(
+					MenuAction::SplitHorizontal,
+					"Split horizontal (Alt+Shift+Minus)",
+				),
+				(MenuAction::Close, "Close pane (Alt+Shift+W)"),
+			] {
+				assert_eq!(label(&items, action).as_deref(), Some(shown));
+			}
+		}
+		let mac = with_shortcuts(panes_menu_items(&shells), &Bindings::defaults(true), true);
+		assert_eq!(
+			label(&mac, MenuAction::SplitVertical).as_deref(),
+			Some("Split vertical (Command+D)")
+		);
+		assert_eq!(
+			label(&mac, MenuAction::SplitHorizontal).as_deref(),
+			Some("Split horizontal (Shift+Command+D)")
+		);
+		assert_eq!(
+			label(&mac, MenuAction::Close).as_deref(),
+			Some("Close pane")
+		);
+		let chord = |text| Chord::parse(text).expect(text);
+		let (moved, _) = Bindings::with(
+			false,
+			&[
+				(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")]),
+				(Hotkey::SplitRight, Vec::new()),
+			],
+		);
+		let tabs = with_shortcuts(tabs_menu_items(&shells), &moved, false);
+		assert_eq!(
+			label(&tabs, MenuAction::CloseTab).as_deref(),
+			Some("Close tab (Ctrl+F4)")
+		);
+		let panes = with_shortcuts(panes_menu_items(&shells), &moved, false);
+		assert_eq!(
+			label(&panes, MenuAction::Close).as_deref(),
+			Some("Close pane (Ctrl+Shift+W)")
+		);
+		assert_eq!(
+			label(&panes, MenuAction::SplitVertical).as_deref(),
+			Some("Split vertical")
+		);
+	}
+
 	// The right-click menu on a Mac names the Command chord for each row that has
 	// one, never a Ctrl one, and keeps its accelerator letters.
 	// Test ID: ErZrSS3
@@ -11346,7 +11454,11 @@ mod tests {
 			next_wallpaper: true,
 		};
 		let window = context_menu_items(ctx, &shells);
-		let mac = mac_entries(window.clone());
+		let mac = mac_entries(with_shortcuts(
+			window.clone(),
+			&crate::keys::Bindings::defaults(true),
+			true,
+		));
 		let label = |entries: &[Entry], want: MenuAction| {
 			entries.iter().find_map(|entry| match entry {
 				Entry::Item { label, action, .. } if *action == want => Some(label.clone()),

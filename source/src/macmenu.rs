@@ -5,8 +5,10 @@
 // the in-window menus draw, so it is checked on every platform; only `native`
 // talks to AppKit.
 
+use winit::keyboard::NamedKey;
+
 use crate::app::{Entry, MenuAction, mac_entries, menu_hotkey, plain_label, without_rows};
-use crate::input::{CommandChord, command, command_chord, us_shifted};
+use crate::keys::{Bindings, Chord, KeyName, us_shifted};
 
 pub const APP_NAME: &str = "SilkTerm";
 
@@ -31,12 +33,12 @@ pub enum BarItem {
 		label: String,
 		action: MenuAction,
 		check: Option<bool>,
-		key: Option<CommandChord>,
+		key: Option<Chord>,
 	},
 	System {
 		label: String,
 		item: SystemItem,
-		key: Option<CommandChord>,
+		key: Option<Chord>,
 	},
 	Submenu {
 		label: String,
@@ -60,21 +62,36 @@ fn in_app_menu(action: MenuAction) -> bool {
 	)
 }
 
-// The row's Command chord, the same one the key bindings answer to.
-fn key_for(action: MenuAction) -> Option<CommandChord> {
-	menu_hotkey(action).and_then(command_chord)
+// Command plus a key, for the rows `AppKit` carries out itself.
+pub fn command(key: char) -> Chord {
+	Chord {
+		key: KeyName::Char(key),
+		ctrl: false,
+		alt: false,
+		shift: false,
+		command: true,
+	}
 }
 
-fn action_row(label: String, action: MenuAction) -> BarItem {
+// The row's chord, the first one its hotkey answers to. Only a chord with
+// Command goes on a row: `AppKit` takes a row's chord before the window sees
+// the press, and one without Command would take keys the shell is owed.
+fn key_for(keys: &Bindings, action: MenuAction) -> Option<Chord> {
+	menu_hotkey(action)
+		.and_then(|hotkey| keys.shown(hotkey))
+		.filter(|chord| chord.command)
+}
+
+fn action_row(keys: &Bindings, label: String, action: MenuAction) -> BarItem {
 	BarItem::Action {
 		label,
 		action,
 		check: None,
-		key: key_for(action),
+		key: key_for(keys, action),
 	}
 }
 
-fn system(label: &str, item: SystemItem, key: Option<CommandChord>) -> BarItem {
+fn system(label: &str, item: SystemItem, key: Option<Chord>) -> BarItem {
 	BarItem::System {
 		label: label.into(),
 		item,
@@ -82,32 +99,32 @@ fn system(label: &str, item: SystemItem, key: Option<CommandChord>) -> BarItem {
 	}
 }
 
-fn app_menu() -> BarMenu {
+fn app_menu(keys: &Bindings) -> BarMenu {
 	BarMenu {
 		title: APP_NAME.into(),
 		items: vec![
-			action_row(format!("About {APP_NAME}"), MenuAction::About),
+			action_row(keys, format!("About {APP_NAME}"), MenuAction::About),
 			BarItem::Separator,
-			action_row("Settings\u{2026}".into(), MenuAction::Settings),
+			action_row(keys, "Settings\u{2026}".into(), MenuAction::Settings),
 			BarItem::Separator,
 			system("Services", SystemItem::Services, None),
 			BarItem::Separator,
 			system(
 				&format!("Hide {APP_NAME}"),
 				SystemItem::Hide,
-				Some(command("h")),
+				Some(command('h')),
 			),
 			system(
 				"Hide others",
 				SystemItem::HideOthers,
-				Some(CommandChord {
-					option: true,
-					..command("h")
+				Some(Chord {
+					alt: true,
+					..command('h')
 				}),
 			),
 			system("Show all", SystemItem::ShowAll, None),
 			BarItem::Separator,
-			action_row(format!("Quit {APP_NAME}"), MenuAction::Quit),
+			action_row(keys, format!("Quit {APP_NAME}"), MenuAction::Quit),
 		],
 	}
 }
@@ -116,38 +133,80 @@ fn app_menu() -> BarMenu {
 // tabs. `AppKit` adds the list of open windows below these, and on newer
 // releases its own tiling rows. Each window is a process of its own, so the
 // list and Bring all to front reach only this one's.
-fn window_menu() -> BarMenu {
+fn window_menu(keys: &Bindings) -> BarMenu {
 	BarMenu {
 		title: WINDOW_MENU.into(),
 		items: vec![
-			system("Minimize", SystemItem::Minimize, Some(command("m"))),
+			system("Minimize", SystemItem::Minimize, Some(command('m'))),
 			system("Zoom", SystemItem::Zoom, None),
 			BarItem::Separator,
-			action_row("Show previous tab".into(), MenuAction::PrevTab),
-			action_row("Show next tab".into(), MenuAction::NextTab),
+			action_row(keys, "Show previous tab".into(), MenuAction::PrevTab),
+			action_row(keys, "Show next tab".into(), MenuAction::NextTab),
 			BarItem::Separator,
 			system("Bring all to front", SystemItem::BringAllToFront, None),
 		],
 	}
 }
 
-/// What a row hands `AppKit` for its chord. A Command+Shift chord on a key
-/// whose shifted form is another character is named by that character with no
-/// Shift in the mask, the form `AppKit` matches the press against.
-pub fn key_equivalent(chord: CommandChord) -> CommandChord {
-	match us_shifted(chord.key) {
-		Some(key) if chord.shift => CommandChord {
-			key,
-			shift: false,
-			..chord
+/// What a row hands `AppKit` for its chord: the character the press is matched
+/// against, and the keys held. A Shift chord on a key whose shifted form is
+/// another character is named by that character with no Shift held, the form
+/// `AppKit` matches. None for a key `AppKit` has no character for.
+pub fn key_equivalent(chord: Chord) -> Option<(String, Chord)> {
+	// AppKit's private-use characters for the keys that type nothing
+	let function = |code: u32| char::from_u32(code).map(String::from);
+	let text = match chord.key {
+		KeyName::Char(key) => match us_shifted(key) {
+			Some(shifted) if chord.shift => {
+				return Some((
+					shifted.into(),
+					Chord {
+						shift: false,
+						..chord
+					},
+				));
+			}
+			_ => key.to_string(),
 		},
-		_ => chord,
-	}
+		KeyName::Plus => "+".into(),
+		KeyName::Minus => "-".into(),
+		KeyName::Named(named) => match named {
+			NamedKey::ArrowUp => function(0xf700)?,
+			NamedKey::ArrowDown => function(0xf701)?,
+			NamedKey::ArrowLeft => function(0xf702)?,
+			NamedKey::ArrowRight => function(0xf703)?,
+			NamedKey::F1 => function(0xf704)?,
+			NamedKey::F2 => function(0xf705)?,
+			NamedKey::F3 => function(0xf706)?,
+			NamedKey::F4 => function(0xf707)?,
+			NamedKey::F5 => function(0xf708)?,
+			NamedKey::F6 => function(0xf709)?,
+			NamedKey::F7 => function(0xf70a)?,
+			NamedKey::F8 => function(0xf70b)?,
+			NamedKey::F9 => function(0xf70c)?,
+			NamedKey::F10 => function(0xf70d)?,
+			NamedKey::F11 => function(0xf70e)?,
+			NamedKey::F12 => function(0xf70f)?,
+			NamedKey::Insert => function(0xf727)?,
+			NamedKey::Delete => function(0xf728)?,
+			NamedKey::Home => function(0xf729)?,
+			NamedKey::End => function(0xf72b)?,
+			NamedKey::PageUp => function(0xf72c)?,
+			NamedKey::PageDown => function(0xf72d)?,
+			NamedKey::Backspace => "\u{8}".into(),
+			NamedKey::Tab => "\t".into(),
+			NamedKey::Enter => "\r".into(),
+			NamedKey::Escape => "\u{1b}".into(),
+			NamedKey::Space => " ".into(),
+			_ => return None,
+		},
+	};
+	Some((text, chord))
 }
 
 // The label drops its shortcut, since the menu bar draws the Command chord
 // beside the row itself.
-fn bar_items(entries: Vec<Entry>) -> Vec<BarItem> {
+fn bar_items(keys: &Bindings, entries: Vec<Entry>) -> Vec<BarItem> {
 	entries
 		.into_iter()
 		.map(|entry| match entry {
@@ -160,11 +219,11 @@ fn bar_items(entries: Vec<Entry>) -> Vec<BarItem> {
 				label: plain_label(&label).into(),
 				action,
 				check,
-				key: key_for(action),
+				key: key_for(keys, action),
 			},
 			Entry::Sub { label, items, .. } => BarItem::Submenu {
 				label,
-				items: bar_items(items),
+				items: bar_items(keys, items),
 			},
 			Entry::Sep => BarItem::Separator,
 		})
@@ -174,13 +233,13 @@ fn bar_items(entries: Vec<Entry>) -> Vec<BarItem> {
 /// The whole menu bar: the app menu, then each in-window menu by its title, less
 /// the rows the app menu took and the in-window bar's own toggle, then Window.
 /// File gains New window, which elsewhere is a key alone. A menu left with
-/// nothing in it is dropped.
-pub fn layout(window_menus: Vec<(&str, Vec<Entry>)>) -> Vec<BarMenu> {
-	let mut menus = vec![app_menu()];
+/// nothing in it is dropped. Each row's chord is the one `keys` shows for it.
+pub fn layout(window_menus: Vec<(&str, Vec<Entry>)>, keys: &Bindings) -> Vec<BarMenu> {
+	let mut menus = vec![app_menu(keys)];
 	for (title, entries) in window_menus {
-		let mut items = bar_items(without_rows(mac_entries(entries), in_app_menu));
+		let mut items = bar_items(keys, without_rows(mac_entries(entries), in_app_menu));
 		if title == "File" {
-			let mut first = vec![action_row("New window".into(), MenuAction::NewWindow)];
+			let mut first = vec![action_row(keys, "New window".into(), MenuAction::NewWindow)];
 			if !items.is_empty() {
 				first.push(BarItem::Separator);
 			}
@@ -193,7 +252,7 @@ pub fn layout(window_menus: Vec<(&str, Vec<Entry>)>) -> Vec<BarMenu> {
 			});
 		}
 	}
-	menus.push(window_menu());
+	menus.push(window_menu(keys));
 	menus
 }
 
@@ -216,7 +275,7 @@ mod native {
 
 	use super::{BarItem, BarMenu, SystemItem, WINDOW_MENU, key_equivalent};
 	use crate::app::MenuAction;
-	use crate::input::CommandChord;
+	use crate::keys::Chord;
 	use crate::term::UserEvent;
 
 	struct Ivars {
@@ -387,10 +446,10 @@ mod native {
 		mtm: MainThreadMarker,
 		label: &str,
 		action: Option<objc2::runtime::Sel>,
-		key: Option<CommandChord>,
+		key: Option<Chord>,
 	) -> Retained<NSMenuItem> {
-		let key = key.map(key_equivalent);
-		let key_text = NSString::from_str(key.map_or("", |k| k.key));
+		let key = key.and_then(key_equivalent);
+		let key_text = NSString::from_str(key.as_ref().map_or("", |(text, _)| text.as_str()));
 		// SAFETY: every selector passed here is one AppKit or MenuTarget answers.
 		let row = unsafe {
 			NSMenuItem::initWithTitle_action_keyEquivalent(
@@ -400,12 +459,13 @@ mod native {
 				&key_text,
 			)
 		};
-		if let Some(key) = key {
-			let mut mask = NSEventModifierFlags::Command;
+		if let Some((_, key)) = key {
+			let mut mask = NSEventModifierFlags::empty();
 			for (held, flag) in [
+				(key.command, NSEventModifierFlags::Command),
 				(key.shift, NSEventModifierFlags::Shift),
-				(key.option, NSEventModifierFlags::Option),
-				(key.control, NSEventModifierFlags::Control),
+				(key.alt, NSEventModifierFlags::Option),
+				(key.ctrl, NSEventModifierFlags::Control),
 			] {
 				if held {
 					mask |= flag;
@@ -444,7 +504,7 @@ mod tests {
 	// Test ID: ErUnDN8
 	#[test]
 	fn the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus() {
-		let menus = layout(window_menus());
+		let menus = layout(window_menus(), &Bindings::defaults(true));
 		let titles: Vec<&str> = menus.iter().map(|m| m.title.as_str()).collect();
 		// Help held only About, which moved to the app menu
 		assert_eq!(
@@ -592,7 +652,7 @@ mod tests {
 	// 	assert!(matches!(row, BarItem::Action { check: Some(_), .. }));
 	// }
 
-	fn keys(items: &[BarItem], out: &mut Vec<(String, CommandChord)>) {
+	fn keys(items: &[BarItem], out: &mut Vec<(String, Chord)>) {
 		for item in items {
 			match item {
 				BarItem::Action {
@@ -628,14 +688,14 @@ mod tests {
 				}
 			}
 		}
-		let menus = layout(window_menus());
+		let menus = layout(window_menus(), &Bindings::defaults(true));
 		let mut have = Vec::new();
 		for menu in &menus {
 			keys(&menu.items, &mut have);
 		}
 		let shown: Vec<(&str, String)> = have
 			.iter()
-			.map(|(label, key)| (label.as_str(), key.spoken()))
+			.map(|(label, key)| (label.as_str(), key.spoken(true)))
 			.collect();
 		assert_eq!(
 			shown,
@@ -653,14 +713,29 @@ mod tests {
 				("Fullscreen", "Control+Command+F".to_string()),
 				("New tab", "Command+T".to_string()),
 				("Close tab", "Command+W".to_string()),
+				("Split vertical", "Command+D".to_string()),
+				("Split horizontal", "Shift+Command+D".to_string()),
 				("Minimize", "Command+M".to_string()),
 				("Show previous tab", "Shift+Command+[".to_string()),
 				("Show next tab", "Shift+Command+]".to_string()),
 			]
 		);
-		for (hotkey, chord) in crate::input::COMMAND_CHORDS {
+		// every hotkey with a row shows the chord it answers to first; the focus
+		// moves, the tab carrying and the Menu key have no row
+		let bound = Bindings::defaults(true);
+		for (hotkey, _) in crate::keys::config_paths() {
+			use crate::input::Hotkey;
+			if matches!(
+				hotkey,
+				Hotkey::Focus(_) | Hotkey::MoveTab { .. } | Hotkey::ContextMenu
+			) {
+				continue;
+			}
+			let Some(chord) = bound.shown(hotkey) else {
+				continue;
+			};
 			assert!(
-				have.iter().any(|(_, key)| key == chord),
+				have.iter().any(|(_, key)| *key == chord),
 				"{hotkey:?} has no row"
 			);
 		}
@@ -692,7 +767,7 @@ mod tests {
 		}
 		assert!(want.contains(&MenuAction::ToggleMenuBar));
 		assert!(want.iter().any(|a| matches!(a, MenuAction::NewTabShell(_))));
-		let menus = layout(window);
+		let menus = layout(window, &Bindings::defaults(true));
 		let mut have = Vec::new();
 		for menu in &menus {
 			actions(&menu.items, &mut have);
@@ -719,10 +794,10 @@ mod tests {
 		assert!(matches!(row, BarItem::Action { check: Some(_), .. }));
 		for copy_select in [false, true] {
 			for copy_output in [false, true] {
-				let menus = layout(crate::app::sample_window_menus_copying(
-					copy_select,
-					copy_output,
-				));
+				let menus = layout(
+					crate::app::sample_window_menus_copying(copy_select, copy_output),
+					&Bindings::defaults(true),
+				);
 				for (action, on) in [
 					(MenuAction::ToggleCopySelect, copy_select),
 					(MenuAction::ToggleCopyOutput, copy_output),
@@ -742,6 +817,44 @@ mod tests {
 		}
 	}
 
+	// A chord moved in the config file goes with it to the menu bar row, and one
+	// without Command stays off the bar, since AppKit would take the press from
+	// the shell.
+	// Test ID: EreU3sf
+	#[test]
+	fn the_mac_menu_bar_follows_the_bindings() {
+		use crate::input::Hotkey;
+		let chord = |text| Chord::parse(text).expect(text);
+		let (keys, _) = Bindings::with(
+			true,
+			&[
+				(Hotkey::SplitRight, vec![chord("Option+Command+R")]),
+				(Hotkey::ClosePane, vec![chord("Shift+Command+W")]),
+				(Hotkey::Copy, vec![chord("Control+Option+C")]),
+			],
+		);
+		let menus = layout(window_menus(), &keys);
+		let key_of = |want| match find(&menus, want) {
+			Some((_, BarItem::Action { key, .. })) => key.map(|k| k.spoken(true)),
+			_ => panic!("{want:?} has no row"),
+		};
+		assert_eq!(
+			key_of(MenuAction::SplitVertical).as_deref(),
+			Some("Option+Command+R")
+		);
+		assert_eq!(
+			key_of(MenuAction::Close).as_deref(),
+			Some("Shift+Command+W")
+		);
+		assert_eq!(key_of(MenuAction::Copy), None);
+		assert_eq!(
+			key_of(MenuAction::SplitHorizontal).as_deref(),
+			Some("Shift+Command+D")
+		);
+		let defaults = layout(window_menus(), &Bindings::defaults(true));
+		assert_ne!(defaults, menus);
+	}
+
 	// The Window menu has Apple's rows, with SilkTerm's tabs where a Mac app has
 	// its window tabs, and comes last so the window list goes in it. A
 	// Command+Shift chord on a bracket is handed over as the shifted
@@ -749,7 +862,7 @@ mod tests {
 	// Test ID: ErbGPNM
 	#[test]
 	fn the_mac_window_menu_minimizes_zooms_and_walks_the_tabs() {
-		let menus = layout(window_menus());
+		let menus = layout(window_menus(), &Bindings::defaults(true));
 		let window = menus.last().expect("menus");
 		assert_eq!(window.title, WINDOW_MENU);
 		let rows: Vec<String> = window
@@ -758,7 +871,7 @@ mod tests {
 			.map(|item| match item {
 				BarItem::Action { label, key, .. } | BarItem::System { label, key, .. } => {
 					match key {
-						Some(key) => format!("{label} {}", key.spoken()),
+						Some(key) => format!("{label} {}", key.spoken(true)),
 						None => label.clone(),
 					}
 				}
@@ -785,23 +898,31 @@ mod tests {
 			assert_eq!(crate::app::menu_hotkey(action), Some(hotkey));
 			assert_eq!(find(&menus, action).map(|(title, _)| title), Some("Window"));
 		}
-		let previous = command_chord(crate::input::Hotkey::PrevTab).expect("chord");
-		let handed = key_equivalent(previous);
-		assert_eq!((handed.key, handed.shift), ("{", false));
-		let next = key_equivalent(command_chord(crate::input::Hotkey::NextTab).expect("chord"));
-		assert_eq!((next.key, next.shift), ("}", false));
-		for chord in [
-			command("c"),
-			CommandChord {
-				shift: true,
-				..command("t")
-			},
-			CommandChord {
-				option: true,
-				..command("h")
-			},
+		let bound = Bindings::defaults(true);
+		let previous = bound.shown(crate::input::Hotkey::PrevTab).expect("chord");
+		let (text, handed) = key_equivalent(previous).expect("a key");
+		assert_eq!((text.as_str(), handed.shift), ("{", false));
+		let next = bound.shown(crate::input::Hotkey::NextTab).expect("chord");
+		let (text, handed) = key_equivalent(next).expect("a key");
+		assert_eq!((text.as_str(), handed.shift), ("}", false));
+		for (chord, text) in [
+			(command('c'), "c"),
+			(
+				Chord {
+					shift: true,
+					..command('t')
+				},
+				"t",
+			),
+			(
+				Chord {
+					alt: true,
+					..command('h')
+				},
+				"h",
+			),
 		] {
-			assert_eq!(key_equivalent(chord), chord);
+			assert_eq!(key_equivalent(chord), Some((text.to_string(), chord)));
 		}
 	}
 }
