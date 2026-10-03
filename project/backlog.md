@@ -407,32 +407,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
-- Test files go under one dated folder in the system temp dir
-	- ID: 2026093013113320
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20260930-131133
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- All test files go somewhere under `%TEMP%` on Windows, or `/tmp/` elsewhere.
-		- Each run gets a subfolder named something like `test_silkterm_YYYYmmDD-HHMMSSNN`.
-	- Note: Most Rust tests already use the system temp dir, but each picks its own name at the top level of it. The script tests use `mktemp`, and a few write under `target/`.
-	- Decisions:
-		- 20260930: The base is the system temp dir, which follows `TMPDIR` on Linux and macOS. A box whose `/tmp` is unreliable points `TMPDIR` somewhere else for test runs, and nothing box-specific goes in the repo.
-	- Test case: ErOj67l (`cicd/tests/testdir/run.bash`), and the `testdir::tests` Rust tests `a_run_folder_is_made_fresh_under_the_temp_base` (ErOj5oB), `a_run_folder_already_there_is_never_adopted` (ErOj5oC), `a_run_folder_gives_up_when_every_name_is_taken` (ErOj5oD), `a_run_folder_the_runner_gives_is_used` (ErOj5oE) and `a_run_folder_is_stamped_in_local_time` (ErOj5oF). Each seen to fail on the old behavior. Er2UgYE (`cicd/tests/cicd-win/run.bash`) pins that the Windows pipeline's installer tests leave its temp folder alone. ErOj5oC now plants a junction on Windows and checks that something was planted; it failed on vm925w before and passes there now.
-	- Progress log:
-		- 20260930: Done on Linux. Each run makes one `test_silkterm_<stamp>` folder under the temp dir, shared by the Rust tests and the script tests a pipeline run starts. The remote Windows box's staging is split off as 2026093015422119.
-		- 20260930: Back to open. On Windows, `a_run_folder_already_there_is_never_adopted` fails. The test plants a link at the second name on Unix only, so on Windows that name is free and the run folder takes it, while the test expects the third. A fault in the test, not in the run folder. Finding F164. The installer tests inside a real `cicd-win.ps1` run are still untested.
-		- 20261002: F164 fixed. On Windows the test plants a junction at the second name, since anyone can make one there. The child item for the GUI harness is done too.
-	- Swept: every other test that plants a symlink is Unix only as a whole, so only this one planted on one platform and asserted on all.
-	- Verified: on vm925w, the full `cargo test` (982 passed), and a `cicd-win.ps1 -Quick` run whose tests, installer signing, installer temp folder and installer on Windows steps all passed, with the release builds after them. The installer test temp folder checks in `cicd/tests/cicd-win/_lift.ps1` also pass there, so the pipeline's TEMP and TMP go back as they were.
-	- Branch: testtmp, wintmp
-	- Commit: abc3c03 (merge), 1b53604
-	- Acceptance signoff: Self-closed: a test fixture fix, and the Windows checks the item waited on all passed.
-	- Closed: 20261002-201950
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -447,28 +421,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
-
-- The Windows GUI harness keeps its files outside %TEMP% on the test box
-	- ID: 2026093015422119
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20260930-154221
-	- Opened by: CC
-	- Parent ID: 2026093013113320
-	- Target OS: Windows
-	- Requirements:
-		- What the harness writes on the remote test box goes under `%TEMP%`, in one dated folder per run, as the parent asks. That is its staging folder under `C:\ProgramData\silkrig`, and a scenario's own scratch, such as the path announce folder.
-	- Note: It stages under ProgramData because one account copies the files in and the console user runs the scenario. Each account's `%TEMP%` is private to it, so this needs its own look on a Windows box.
-	- Progress log:
-		- 20261002: The run folder is made on the box in the console user's `%TEMP%`, by the same rule as every other test run, and the binary and harness go in it. A scenario and the app it starts use it as their temp folder, so the path announce folder goes there too. Each box gets its own folder, so boxes run one at a time. A scenario stops if the console changed hands since the folder was made.
-	- Swept: no script the harness sends to a box names ProgramData now. The unlock helper's `console.ps1` still writes its one-shot script there; it is not part of the scenario harness.
-	- Verified: all eight pipeline scenarios pass on vm925w from `C:\Users\wintest\AppData\Local\Temp\test_silkterm_<stamp>`, nothing new appears under ProgramData, and the folder is gone after the run. Not run on b29w.
-	- Branch: wintmp
-	- Commit: 1b53604
-	- Test case: EqH4isr (`cicd/tests/wingui/harness-test.bash`), with new checks for where the folder is made, what goes in it, the scratch folder, the console check, a box that makes no folder, and how a user's temp folder is worked out. The new checks fail on the old harness.
-	- Acceptance signoff: Self-closed: the requirement was explicit, and the scenarios pass on vm925w.
-	- Closed: 20261002-201950
 
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
@@ -658,6 +610,54 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Test files go under one dated folder in the system temp dir
+	- ID: 2026093013113320
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20260930-131133
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- All test files go somewhere under `%TEMP%` on Windows, or `/tmp/` elsewhere.
+		- Each run gets a subfolder named something like `test_silkterm_YYYYmmDD-HHMMSSNN`.
+	- Note: Most Rust tests already use the system temp dir, but each picks its own name at the top level of it. The script tests use `mktemp`, and a few write under `target/`.
+	- Decisions:
+		- 20260930: The base is the system temp dir, which follows `TMPDIR` on Linux and macOS. A box whose `/tmp` is unreliable points `TMPDIR` somewhere else for test runs, and nothing box-specific goes in the repo.
+	- Test case: ErOj67l (`cicd/tests/testdir/run.bash`), and the `testdir::tests` Rust tests `a_run_folder_is_made_fresh_under_the_temp_base` (ErOj5oB), `a_run_folder_already_there_is_never_adopted` (ErOj5oC), `a_run_folder_gives_up_when_every_name_is_taken` (ErOj5oD), `a_run_folder_the_runner_gives_is_used` (ErOj5oE) and `a_run_folder_is_stamped_in_local_time` (ErOj5oF). Each seen to fail on the old behavior. Er2UgYE (`cicd/tests/cicd-win/run.bash`) pins that the Windows pipeline's installer tests leave its temp folder alone. ErOj5oC now plants a junction on Windows and checks that something was planted; it failed on vm925w before and passes there now.
+	- Progress log:
+		- 20260930: Done on Linux. Each run makes one `test_silkterm_<stamp>` folder under the temp dir, shared by the Rust tests and the script tests a pipeline run starts. The remote Windows box's staging is split off as 2026093015422119.
+		- 20260930: Back to open. On Windows, `a_run_folder_already_there_is_never_adopted` fails. The test plants a link at the second name on Unix only, so on Windows that name is free and the run folder takes it, while the test expects the third. A fault in the test, not in the run folder. Finding F164. The installer tests inside a real `cicd-win.ps1` run are still untested.
+		- 20261002: F164 fixed. On Windows the test plants a junction at the second name, since anyone can make one there. The child item for the GUI harness is done too.
+	- Swept: every other test that plants a symlink is Unix only as a whole, so only this one planted on one platform and asserted on all.
+	- Verified: on vm925w, the full `cargo test` (982 passed), and a `cicd-win.ps1 -Quick` run whose tests, installer signing, installer temp folder and installer on Windows steps all passed, with the release builds after them. The installer test temp folder checks in `cicd/tests/cicd-win/_lift.ps1` also pass there, so the pipeline's TEMP and TMP go back as they were.
+	- Branch: testtmp, wintmp
+	- Commit: abc3c03 (merge), 1b53604
+	- Acceptance signoff: Self-closed: a test fixture fix, and the Windows checks the item waited on all passed.
+	- Closed: 20261002-201950
+
+- The Windows GUI harness keeps its files outside %TEMP% on the test box
+	- ID: 2026093015422119
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20260930-154221
+	- Opened by: CC
+	- Parent ID: 2026093013113320
+	- Target OS: Windows
+	- Requirements:
+		- What the harness writes on the remote test box goes under `%TEMP%`, in one dated folder per run, as the parent asks. That is its staging folder under `C:\ProgramData\silkrig`, and a scenario's own scratch, such as the path announce folder.
+	- Note: It stages under ProgramData because one account copies the files in and the console user runs the scenario. Each account's `%TEMP%` is private to it, so this needs its own look on a Windows box.
+	- Progress log:
+		- 20261002: The run folder is made on the box in the console user's `%TEMP%`, by the same rule as every other test run, and the binary and harness go in it. A scenario and the app it starts use it as their temp folder, so the path announce folder goes there too. Each box gets its own folder, so boxes run one at a time. A scenario stops if the console changed hands since the folder was made.
+	- Swept: no script the harness sends to a box names ProgramData now. The unlock helper's `console.ps1` still writes its one-shot script there; it is not part of the scenario harness.
+	- Verified: all eight pipeline scenarios pass on vm925w from `C:\Users\wintest\AppData\Local\Temp\test_silkterm_<stamp>`, nothing new appears under ProgramData, and the folder is gone after the run. Not run on b29w.
+	- Branch: wintmp
+	- Commit: 1b53604
+	- Test case: EqH4isr (`cicd/tests/wingui/harness-test.bash`), with new checks for where the folder is made, what goes in it, the scratch folder, the console check, a box that makes no folder, and how a user's temp folder is worked out. The new checks fail on the old harness.
+	- Acceptance signoff: Self-closed: the requirement was explicit, and the scenarios pass on vm925w.
+	- Closed: 20261002-201950
 
 - macOS builds and Microsoft Store packaging in the private repo
 	- ID: 2026100113403226
