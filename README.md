@@ -179,6 +179,8 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Window decorations and/or the menu can be disabled**, for "nothing but terminal". Fullscreen can also be toggled.
 
+- **Window size and font zoom are remembered per monitor**, by its resolution and DPI. A window moved to another monitor takes that monitor's size once it stops moving. On Wayland a window only learns which monitor it is on once it is showing, so there it may resize just after it opens.
+
 - **Robust Unicode and emoji support**. With internal Unicode fallback rendering for the glyphs that the chosen display font can't display.
 
 - **Text brightens on "bell"**. (An idea borrowed from Windows Terminal, and surely others.)

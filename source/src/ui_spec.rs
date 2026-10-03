@@ -58,7 +58,7 @@ keys![
 	Outline, MinContrast, CursorScrim, CursorOutline,
 	CursorBlink, CursorHeight, CursorWidth, CursorAnimation, CursorResume,
 	SystemFont, SystemFontSize, FontFamily, FontSize, LineHeight,
-	Columns, Rows, RememberSize, RememberMaximized, Margin, TabRegularWidth, TabMaxWidth,
+	Columns, Rows, RememberSize, RememberPerMonitor, RememberMaximized, Margin, TabRegularWidth, TabMaxWidth,
 	IdleRelease, IdleHiddenMin, IdleMin,
 	TabShowsTitle, TabShowsShell, TabShowsProgram, TabShowsDirectory, TitleShowsTab,
 	Shells, StartupDirectory, ShellIntegration, BashPrompt, CopyOnSelect, Hyperlinks, LinkOpenCommand,

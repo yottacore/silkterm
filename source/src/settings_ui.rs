@@ -3538,6 +3538,7 @@ impl SettingsDialog {
 			Key::CursorScrim => s.cursor_scrim,
 			Key::CursorOutline => s.cursor_outline,
 			Key::RememberSize => s.remember_size,
+			Key::RememberPerMonitor => s.remember_per_monitor,
 			Key::RememberMaximized => s.remember_maximized,
 			Key::TabShowsTitle => s.tab_shows_title,
 			Key::TabShowsShell => s.tab_shows_shell,
@@ -3583,6 +3584,7 @@ impl SettingsDialog {
 			Key::CursorScrim => self.edited.cursor_scrim = on,
 			Key::CursorOutline => self.edited.cursor_outline = on,
 			Key::RememberSize => self.edited.remember_size = on,
+			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,
 			Key::TabShowsTitle => self.edited.tab_shows_title = on,
 			Key::TabShowsShell => self.edited.tab_shows_shell = on,
@@ -3849,6 +3851,7 @@ impl SettingsDialog {
 			Key::SystemFont => edited.use_system_font == defaults.use_system_font,
 			Key::SystemFontSize => edited.use_system_font_size == defaults.use_system_font_size,
 			Key::RememberSize => edited.remember_size == defaults.remember_size,
+			Key::RememberPerMonitor => edited.remember_per_monitor == defaults.remember_per_monitor,
 			Key::RememberMaximized => edited.remember_maximized == defaults.remember_maximized,
 			Key::TabShowsTitle => edited.tab_shows_title == defaults.tab_shows_title,
 			Key::TabShowsShell => edited.tab_shows_shell == defaults.tab_shows_shell,
@@ -3980,6 +3983,7 @@ impl SettingsDialog {
 			| Key::SystemFont
 			| Key::SystemFontSize
 			| Key::RememberSize
+			| Key::RememberPerMonitor
 			| Key::RememberMaximized
 			| Key::TabShowsShell
 			| Key::TabShowsProgram
@@ -4035,6 +4039,7 @@ impl SettingsDialog {
 					Key::TabShowsDirectory => self.defaults.tab_shows_directory,
 					Key::TitleShowsTab => self.defaults.title_shows_tab,
 					Key::RememberMaximized => self.defaults.remember_maximized,
+					Key::RememberPerMonitor => self.defaults.remember_per_monitor,
 					_ => self.defaults.remember_size,
 				};
 				self.set_toggle(key, default_val);
@@ -11109,7 +11114,11 @@ mod tests {
 					Key::ColFocus,
 				],
 			),
-			("Window", Key::RememberSize, &[Key::Columns, Key::Rows]),
+			(
+				"Window",
+				Key::RememberSize,
+				&[Key::RememberPerMonitor, Key::Columns, Key::Rows],
+			),
 		];
 		for &(tab, lead, want) in groups {
 			let i = at(lead);

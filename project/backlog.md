@@ -552,6 +552,62 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`.
 	- Closed:
 
+- Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
+	- ID: 2026100114435600
+	- Type: Feature
+	- Status: Waiting for testing
+	- Needs external testing:
+		- Two real monitors that differ, on X11, Windows and macOS. The window opens at each monitor's own size and font zoom, and takes the other's once dropped there, never while still held. A resize right after the drop is kept, and the window does not swap sizes when it straddles the two.
+		- On Windows and macOS, that the monitor's name in the config ends in its size in mm.
+		- Wayland: opening on a second output, and a drag between outputs.
+		- A look at the Per monitor row on the Window tab.
+	- Priority: Avg
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026093018413683, and the old-format "Remember last size" item.
+	- Target OS: All
+	- Requirements:
+		- If "remember size" is enabled:
+			- Anytime the *user* resizes the window, remember that as the main default (regardless of window).
+				- Ditto for font size.
+			- Also store the size per unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
+				- Ditto for font size.
+			- When the user opens SilkTerm on that monitor, size it based on that monitor's saved setting (fallback to main saved default).
+				- Ditto for font size.
+			- If the user drags an already-open terminal to a different monitor, and that monitor has its own size settings saved, change the window to that size, once moving has stopped (fallback to main saved default).
+				- Ditto for font size.
+		- The per-monitor sizes go in the config file only, not the Settings dialog.
+		- The Window tab keeps the size settings together:
+			- "Remember last size".
+				- Under it, a toggle that saves the size per monitor. It only applies while "Remember last size" is on.
+			- "Remember maximized", on its own and not tied to the other two.
+			- The first two are on by default. "Remember maximized" stays off.
+		- When this is done, the README says that window size and font zoom are remembered per monitor resolution and DPI.
+	- Notes:
+		- Resolution and DPI by themselves may not be enough, if the DPI information is disconnected from actual inches. It's the *actual* physical DPI, combined with resolution, that's important, and will have to best approximate.
+		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
+	- Progress log:
+		- 20261002: Added the Settings grouping and the README line. The README waits for the feature, so it doesn't claim something that isn't built.
+		- 20261003: Started on branch `permon`. Done: the per-monitor store, the Per monitor switch under Remember last size, and opening at the monitor's own size.
+		- 20261003: Done: a window moved to another monitor takes that monitor's size once it has stopped. Left: the font size.
+		- 20261003: Done: the font zoom is kept with the size, both as the last one anywhere and per monitor, and used at launch and after a move. The README line is in. Checked on one monitor only, by changing its resolution under the window. A real two-monitor look is owed.
+		- Calls made here, for signoff:
+			- The font zoom is remembered under Remember last size, with no switch of its own, as px on the font size. Zooming saves the grid too, so the window reopens at the same pixel size.
+			- A monitor with no entry of its own gets the last size anywhere, at launch and after a move, as the requirements say.
+			- A size or font size from the command line stays through moves until the user resizes or zooms.
+			- The per-monitor sizes are kept only while both switches are on. The last size anywhere is kept either way, as before.
+	- Note: A monitor is told apart by its resolution, its scale percent, and its physical size in mm where the system gives it. X11 reads the size from the X server, Windows from the EDID it keeps in the registry, and macOS from `CGDisplayScreenSize`. Wayland gives no size, so there it is resolution and scale.
+	- Note: Wayland gives a window no position and no move events. It opens at the last size anywhere, and looks for its monitor just after it opens, on a scale change, and when the pointer comes back after a drag. So there a window may resize a moment after it opens.
+	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_carries_the_remembered_size_as_live_lines`.
+	- Verified:
+		- The unit tests on Linux, and clippy with warnings as errors for Linux, Windows and macOS.
+		- On one X11 monitor: opening at the monitor's own size and zoom, a move taking the other's, a resize before the move saved for the monitor it left, a resize right after the move kept, and a command-line size held until resized by hand.
+		- The window's own resize after a move is not saved as the user's. With that check taken out, the last size anywhere was overwritten.
+	- Branch: permon
+	- Commit: 684d3a0, 754c9cb, 8624cc2
+	- Closed:
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
@@ -635,40 +691,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When changing the cursor size and animation, change to 50% width.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
-	- Closed:
-
-- Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
-	- ID: 2026100114435600
-	- Type: Feature
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261001-144356
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026093018413683, and the old-format "Remember last size" item.
-	- Target OS: All
-	- Requirements:
-		- If "remember size" is enabled:
-			- Anytime the *user* resizes the window, remember that as the main default (regardless of window).
-				- Ditto for font size.
-			- Also store the size per unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
-				- Ditto for font size.
-			- When the user opens SilkTerm on that monitor, size it based on that monitor's saved setting (fallback to main saved default).
-				- Ditto for font size.
-			- If the user drags an already-open terminal to a different monitor, and that monitor has its own size settings saved, change the window to that size, once moving has stopped (fallback to main saved default).
-				- Ditto for font size.
-		- The per-monitor sizes go in the config file only, not the Settings dialog.
-		- The Window tab keeps the size settings together:
-			- "Remember last size".
-				- Under it, a toggle that saves the size per monitor. It only applies while "Remember last size" is on.
-			- "Remember maximized", on its own and not tied to the other two.
-			- The first two are on by default. "Remember maximized" stays off.
-		- When this is done, the README says that window size and font zoom are remembered per monitor resolution and DPI.
-	- Notes:
-		- Resolution and DPI by themselves may not be enough, if the DPI information is disconnected from actual inches. It's the *actual* physical DPI, combined with resolution, that's important, and will have to best approximate.
-		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
-	- Progress log:
-		- 20261002: Added the Settings grouping and the README line. The README waits for the feature, so it doesn't claim something that isn't built.
 	- Closed:
 
 - Settings: a Keys tab to see and change hotkeys
