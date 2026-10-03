@@ -281,6 +281,8 @@ Rules that go with them:
 	- On macOS Command+Shift+[ and ] change tab, and so do Command+PgUp/PgDn. Ctrl+Tab moves focus like Tab, since Command+Tab belongs to the system.
 	- A text box on macOS takes the Mac's own keys: Command+C, X, V and A, Option to move or erase by words, Command+Left and Right for either end, and Command+Backspace to erase to the start.
 
+- A tab being renamed is a text box too, with the same keys as one in a dialog. Its right-click menu has Cut, Copy, Paste, Delete and Select all. While it is up, Copy, Paste and Paste Selection on any menu act on the name.
+
 - A text, color or number box opens with its value selected as soon as focus arrives, by key or by click, so typing replaces it.
 
 - In a number box, Up and Down step the value by a hundredth of its range, or a tenth with Shift held, whether the box is open or merely focused. Left and Right move the caret while it is open, and step the value while it is not.

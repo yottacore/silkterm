@@ -523,6 +523,8 @@ Guiding constraint: GitHub is dumb git hosting plus optional release storage, no
 Double-clicking a tab renames it in place. The strip has always drawn what the shell is doing, which is right most of the time and wrong when several tabs are running the same thing in the same tree.
 
 - The edit starts with what the tab already says, all of it selected, so typing replaces it and any other key edits it. Enter or Tab keeps the change, Escape drops it, and a click anywhere else keeps it. Selection, Home and End, and paste all work; a pasted newline becomes a space, since a tab is one line high.
+	- 20261002: The box edits as a Settings text box does, with the same keys on each platform: copy, cut, paste and select all, moving and erasing by words, and Shift to select. A click places the caret, a drag selects, a double-click takes a word and a third click the whole name. Right-click opens Cut, Copy, Paste, Delete and Select all, and a middle-click pastes the primary selection.
+	- 20261002: Opening a menu leaves the rename up. Copy, Paste and Paste Selection there act on the name, as Edit > Copy and Paste on the macOS menu bar do. Any other pick keeps the change first, as a click elsewhere does.
 
 - Committing a blank title, or one that matches what the tab would have said on its own, puts it back to naming the shell. Those are the two ways out of a hand-typed title, and neither needs a control of its own.
 
