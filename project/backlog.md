@@ -92,6 +92,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Move Transparency and its rows to the last section on the Background tab.
 	- Notes:
 		- The macOS half of the same note is 2026100114435574.
+	- Decisions:
+		- 20261003: No heading for the moved group. The Transparency toggle heads it, as other toggles head their groups.
 	- Progress log:
 		- 20261003: Transparency, Opacity % and Blur-behind are now the last group on the Background tab, after Contrast mask. The tab has no titled sections, so the group moved as it was, without a heading of its own.
 		- 20261003: A warning mark follows the Transparency label: a small triangle with an exclamation mark, in the label's color. Its tip reads "Transparency relies on the desktop compositor, and may not work on every desktop." The row's own tip is unchanged.
@@ -102,42 +104,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: `space_toggles_focused_boolean` now presses Space on Wallpaper, since that is the tab's first row after the move.
 	- Branch: seethrutip
 	- Test case: `transparency_is_the_last_group_on_the_background_tab`, `the_transparency_row_warns_that_it_needs_the_compositor`, `a_triangle_keeps_its_direction_at_any_scale` and `a_warning_needs_a_label_of_its_own`. Each failed on the old code and passes now.
-	- Closed:
-
-- At the RC release, convert the config to the new format and keep the old file beside it
-	- ID: 2026100220292612
-	- Type: Feature
-	- Status: Waiting on signoff
-	- Needs external testing: The unit tests on Windows (vm925w), where the copy is hard-linked on NTFS. A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that the copy appears beside the roaming config.
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: the old-format item about removing the code that migrates old config files.
-	- Target OS: All
-	- Test environment: b23
-	- Requirements:
-		- Upon RC release, convert settings to the new format.
-		- Keep the old config file under a suffixed name, still ending in `.shcl`.
-		- If any settings can't be salvaged, warn the user.
-	- Notes:
-		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
-			- Note: 20261003: The shcl 3 conversion keeps a copy now. See the progress log.
-	- Decisions:
-		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
-	- Progress log:
-		- 20261003: Any write that moves the file to a newer format first copies it to `config.format<N>.shcl` beside it. N is the Format number the file had. A file with no Format line counts as 2, since that is how the conversion reads it. The copy is made in the writer every settings write goes through, so a Settings save that converts a file a busy launch left alone keeps one too.
-		- 20261003: A copy already there is never replaced, and the file is still converted. If the copy can't be made, the write is refused. The copy is written under a name of its own and then linked into place, so two windows converting at once leave one whole copy. On a filesystem with no hard links it is written in place.
-		- 20261003: A 2.x line holding a list in brackets has no 3.0 spelling. It stays as written and sets nothing, and the launch that converts prints the count and where the copy is. Unreadable lines and unknown keys were already reported at every launch, so those are left to that.
-		- 20261003: The footer refresh no longer puts the Format line on a file still in 2.x spellings. A file whose conversion was put off could get the line without the respelling, and then never convert.
-		- 20261003: The flat pre-nesting conversion keeps its `.bak`. It is a layout change and has no format number. A flat file has no Format line, so the 2.x step that runs before it already keeps the untouched original as `config.format2.shcl`.
-		- 20261003: README and design.md say where the copy goes.
-	- Note: Launch notices go to the terminal, like every other launch message about the file. A desktop launch or a Windows release build shows none of them.
-	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
-	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
-	- Branch: fmtcopy
-	- Commit: 6531c55, 6d10356
-	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_copy_already_there_is_left_as_it_was` (EreLZMm), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX).
 	- Closed:
 
 - The launch names an unreadable line two lines short of where the file has it
@@ -532,49 +498,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: testrm
 	- Commit: a497b6d, 174abde
 
-- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
-	- ID: 2026100220292607
-	- Type: Feature
-	- Status: Waiting for testing
-	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
-	- Needs external testing:
-		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
-		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Before v1.
-		- Figure out hotkeys for splitting panes and changing panes.
-		- Then implement hotkey management.
-		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
-	- Notes:
-		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` holds that and will need to change.
-		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
-	- Decisions:
-		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
-		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
-	- Progress log:
-		- 20261003: One table of hotkeys, defaults plus the config file's `keys:` values, is what the key handler, the in-window menus and the macOS menu bar all read. A menu row shows the first chord its hotkey answers to, so a change in the file shows there too.
-		- 20261003: Windows Terminal's defaults checked: Alt+Shift+Plus duplicates the pane to the right, Alt+Shift+Minus down, and Alt+arrows move focus. It closes a pane with Ctrl+Shift+W, which is close tab here, so Alt+Shift+W per the decision.
-		- 20261003: A bad value keeps its default and is reported at launch with its line. A chord set for one hotkey is taken from any hotkey that has it by default, with a launch note. "none" turns a hotkey off, and quotes are optional.
-		- 20261003: A focus move goes to the nearest pane that way. On a tie, the pane the last move came from wins, then the top or left one, so a move and its opposite go back and forth.
-		- 20261003: Lost to the shell on Linux and Windows: fish's Alt+arrows, tmux's prefix plus Alt+arrows, nano's Alt+Up and Alt+Down, emacs' Meta+Left, Meta+Right and Meta+Shift+W, and readline's Meta+_ (Meta+. still does it). Readline's Alt+b and Alt+f stay free. The split-panes design doc has the list. Nothing is lost on macOS.
-		- 20261003: Changed along the way: F11, the Menu key and Ctrl+F4 now need exactly their keys held, where extra modifiers used to count. Ctrl+Alt+Shift+T, which is how Windows sees AltGr+Shift+T, no longer opens a tab.
-		- 20261003: `no_chord_splits_closes_or_cycles_panes` is commented out, since it pinned the menu-only decision this item reverses. Its Ctrl and Ctrl+Shift checks still hold and moved to `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
-		- 20261003: Open question: macOS has no close-pane chord by default. iTerm2 uses Command+W, which is close tab here. Leave it unbound, or pick one?
-	- Verified:
-		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
-		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
-		- In a real window on Linux, the four Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
-	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` spells a chord by hand any more.
-	- Branch: panekeys
-	- Commit: 4cafdde
-	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`.
-	- Closed:
-
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
@@ -650,6 +573,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Before the RC1 cut.
 		- A Keys tab in Settings that lists every hotkey and lets each one be changed or turned off.
 		- It saves to the same config block that the hotkey item adds.
+	- Decisions:
+		- 20261003: One chord per press is enough. A second chord for one hotkey goes in the config file. Nine tabs is accepted.
 	- Progress log:
 		- 20261003: A Keys tab, last of nine, with a row for every hotkey under the File, Edit, View, Tabs and Panes headings, named as the menu rows are. Each row is a box with the chords it answers to, "Off" for none, and a revert arrow.
 		- 20261003: Enter, Space or a click on the box waits for the next chord, and every key goes to it until one comes. Escape leaves the row as it was. Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused in the box, with what it needs held. Walking onto a row with Tab does not start it.
@@ -741,6 +666,88 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
+- At the RC release, convert the config to the new format and keep the old file beside it
+	- ID: 2026100220292612
+	- Type: Feature
+	- Status: Queued
+	- Needs external testing: The unit tests on Windows (vm925w), where the copy is hard-linked on NTFS. A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that the copy appears beside the roaming config.
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: the old-format item about removing the code that migrates old config files.
+	- Target OS: All
+	- Test environment: b23
+	- Requirements:
+		- Upon RC release, convert settings to the new format.
+		- Keep the old config file under a suffixed name, still ending in `.shcl`.
+		- If any settings can't be salvaged, warn the user.
+	- Notes:
+		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
+			- Note: 20261003: The shcl 3 conversion keeps a copy now. See the progress log.
+	- Decisions:
+		- 20261003: Built now, and for every format upgrade, not only at RC. A launch that converts the file first copies it to `config.format<N>.shcl` beside it, with N the old format, and never overwrites a copy already there. Settings that can't be kept get a notice at launch.
+		- 20261003: Every older version is kept, never one per format. The copy is named `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, with the time it was made and the format it had. This replaces the `config.format<N>.shcl` name above.
+		- 20261003: Settings the conversion can't keep get a warning dialog, not only the terminal message.
+	- Progress log:
+		- 20261003: Any write that moves the file to a newer format first copies it to `config.format<N>.shcl` beside it. N is the Format number the file had. A file with no Format line counts as 2, since that is how the conversion reads it. The copy is made in the writer every settings write goes through, so a Settings save that converts a file a busy launch left alone keeps one too.
+		- 20261003: A copy already there is never replaced, and the file is still converted. If the copy can't be made, the write is refused. The copy is written under a name of its own and then linked into place, so two windows converting at once leave one whole copy. On a filesystem with no hard links it is written in place.
+		- 20261003: A 2.x line holding a list in brackets has no 3.0 spelling. It stays as written and sets nothing, and the launch that converts prints the count and where the copy is. Unreadable lines and unknown keys were already reported at every launch, so those are left to that.
+		- 20261003: The footer refresh no longer puts the Format line on a file still in 2.x spellings. A file whose conversion was put off could get the line without the respelling, and then never convert.
+		- 20261003: The flat pre-nesting conversion keeps its `.bak`. It is a layout change and has no format number. A flat file has no Format line, so the 2.x step that runs before it already keeps the untouched original as `config.format2.shcl`.
+		- 20261003: README and design.md say where the copy goes.
+	- Note: Launch notices go to the terminal, like every other launch message about the file. A desktop launch or a Windows release build shows none of them.
+	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
+	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
+	- Branch: fmtcopy
+	- Commit: 6531c55, 6d10356
+	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_copy_already_there_is_left_as_it_was` (EreLZMm), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX).
+	- Closed:
+
+- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
+	- ID: 2026100220292607
+	- Type: Feature
+	- Status: Queued
+	- Needs local test suite run?: Yes, a full pipeline run. Only the unit suite and the lints ran.
+	- Needs external testing:
+		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
+		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before v1.
+		- Figure out hotkeys for splitting panes and changing panes.
+		- Then implement hotkey management.
+		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
+	- Notes:
+		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` holds that and will need to change.
+		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
+	- Decisions:
+		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
+		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
+		- 20261003: On macOS, Option+Command+W closes the pane. Command+W stays close tab.
+	- Progress log:
+		- 20261003: One table of hotkeys, defaults plus the config file's `keys:` values, is what the key handler, the in-window menus and the macOS menu bar all read. A menu row shows the first chord its hotkey answers to, so a change in the file shows there too.
+		- 20261003: Windows Terminal's defaults checked: Alt+Shift+Plus duplicates the pane to the right, Alt+Shift+Minus down, and Alt+arrows move focus. It closes a pane with Ctrl+Shift+W, which is close tab here, so Alt+Shift+W per the decision.
+		- 20261003: A bad value keeps its default and is reported at launch with its line. A chord set for one hotkey is taken from any hotkey that has it by default, with a launch note. "none" turns a hotkey off, and quotes are optional.
+		- 20261003: A focus move goes to the nearest pane that way. On a tie, the pane the last move came from wins, then the top or left one, so a move and its opposite go back and forth.
+		- 20261003: Lost to the shell on Linux and Windows: fish's Alt+arrows, tmux's prefix plus Alt+arrows, nano's Alt+Up and Alt+Down, emacs' Meta+Left, Meta+Right and Meta+Shift+W, and readline's Meta+_ (Meta+. still does it). Readline's Alt+b and Alt+f stay free. The split-panes design doc has the list. Nothing is lost on macOS.
+		- 20261003: Changed along the way: F11, the Menu key and Ctrl+F4 now need exactly their keys held, where extra modifiers used to count. Ctrl+Alt+Shift+T, which is how Windows sees AltGr+Shift+T, no longer opens a tab.
+		- 20261003: `no_chord_splits_closes_or_cycles_panes` is commented out, since it pinned the menu-only decision this item reverses. Its Ctrl and Ctrl+Shift checks still hold and moved to `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
+		- 20261003: Open question: macOS has no close-pane chord by default. iTerm2 uses Command+W, which is close tab here. Leave it unbound, or pick one?
+	- Verified:
+		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
+		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
+		- In a real window on Linux, the four Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
+	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` spells a chord by hand any more.
+	- Branch: panekeys
+	- Commit: 4cafdde
+	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`.
+	- Closed:
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -755,6 +762,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- macOS: a Ctrl+click right after a window gets the focus acts as a plain click
+	- ID: 2026100310321918
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261003-103219
+	- Opened by: CC
+	- Related IDs: 2026100220463754, 2026100220260471
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- Hold Ctrl, then click into a SilkTerm window or Settings that doesn't have the focus, or bring it forward with Ctrl still held and then click.
+	- Incorrect behavior: The click is a plain left click. The window doesn't know Ctrl is down until a modifier key changes.
+	- Expected behavior: A Ctrl+click opens the right-click menu, as it does once the window knows Ctrl is held.
+	- Reproduced: No. Read from winit 0.30.13's macOS code on 20261003. A window that gains the focus reports only that, with no held keys.
+	- Decisions:
+		- 20261003: It should work as expected, where that is reasonably possible.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
