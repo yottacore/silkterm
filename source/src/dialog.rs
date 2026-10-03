@@ -14,7 +14,7 @@ use winit::raw_window_handle::RawWindowHandle;
 use winit::window::{Window, WindowId};
 
 use crate::config;
-use crate::gfx::{Gfx, RectInstance, RectRenderer};
+use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, RectInstance, RectRenderer, Retry};
 use crate::pane::Rect;
 use crate::settings_ui::{Action, EditCmd, SettingsDialog, View};
 use crate::text::{TextCtx, ui_attrs};
@@ -81,6 +81,8 @@ pub struct DialogWin {
 	// the wake cadence the app loop should keep while something animates
 	last_frame: std::time::Instant,
 	anim_wake: Option<u64>,
+	// a frame the surface refused, drawn again on this (read by the app loop)
+	pub refused: Retry,
 	// what the pointer is resting on, and since when: flyover help waits the same
 	// DELAY here as it does in the tab strip and the menus
 	tip: crate::tip::Dwell<Rect>,
@@ -235,6 +237,7 @@ impl DialogWin {
 			mouse: (0.0, 0.0),
 			last_frame: std::time::Instant::now(),
 			anim_wake: None,
+			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
 			parent,
 			snapped: false,
@@ -277,6 +280,7 @@ impl DialogWin {
 			mouse: (0.0, 0.0),
 			last_frame: std::time::Instant::now(),
 			anim_wake: None,
+			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
 			parent,
 			snapped: false,
@@ -360,6 +364,7 @@ impl DialogWin {
 			mouse: (0.0, 0.0),
 			last_frame: std::time::Instant::now(),
 			anim_wake: None,
+			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
 			parent,
 			snapped: false,
@@ -887,6 +892,8 @@ impl DialogWin {
 			self.anim_wake = Some(self.anim_wake.map_or(ms, |have| have.min(ms)));
 		}
 		let Ok(frame) = self.gfx.begin_frame() else {
+			// nothing else asks again (see the terminal's own refused frame)
+			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 			return;
 		};
 		let view = self.gfx.frame_view(&frame);
@@ -1299,7 +1306,11 @@ impl DialogWin {
 			let _ = self.text.render_overlay(&mut pass);
 		}
 		self.gfx.queue.submit(Some(encoder.finish()));
-		self.gfx.end_frame(frame);
+		if self.gfx.end_frame(frame).is_ok() {
+			self.refused = Retry::default();
+		} else {
+			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+		}
 		self.text.trim_atlas();
 	}
 }

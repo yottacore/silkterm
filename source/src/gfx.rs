@@ -4,6 +4,7 @@
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::{Duration, Instant};
 
 use glutin::config::GlConfig;
 use glutin::context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version};
@@ -179,6 +180,39 @@ pub enum NoFrame {
 	Occluded,
 	Other,
 }
+
+// Backoff for GPU work that was refused: a frame with no surface to draw into,
+// or a device that would not come back. Nothing else asks again once the load
+// is gone, and a GPU that stays unavailable must not cost a spin. The delay
+// doubles per miss up to a cap, and a success starts it over.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct Retry {
+	pub misses: u32,
+	pub at: Option<Instant>,
+}
+
+impl Retry {
+	// Another refusal; the next try waits longer. Returns the wait.
+	pub fn missed(&mut self, now: Instant, first: Duration, cap: Duration) -> Duration {
+		let wait = first.saturating_mul(1 << self.misses.min(16)).min(cap);
+		self.misses = self.misses.saturating_add(1);
+		self.at = Some(now + wait);
+		wait
+	}
+
+	// True once, when the wait is over. The miss count stays, so the next
+	// refusal waits longer.
+	pub fn take_due(&mut self, now: Instant) -> bool {
+		let due = self.at.is_some_and(|at| now >= at);
+		if due {
+			self.at = None;
+		}
+		due
+	}
+}
+
+pub const FRAME_RETRY_FIRST: Duration = Duration::from_millis(16);
+pub const FRAME_RETRY_MAX: Duration = Duration::from_secs(2);
 
 // A frame in flight, returned by `begin_frame` and consumed by `end_frame`.
 pub enum Frame {
@@ -743,9 +777,14 @@ impl Gfx {
 		}
 	}
 
-	pub fn end_frame(&self, frame: Frame) {
+	// Err when the frame never reached the window. Only the GL path can tell:
+	// a native present reports through wgpu's error handler instead.
+	pub fn end_frame(&self, frame: Frame) -> Result<(), NoFrame> {
 		match (frame, &self.backend) {
-			(Frame::Native(surface_tex), _) => surface_tex.present(),
+			(Frame::Native(surface_tex), _) => {
+				surface_tex.present();
+				Ok(())
+			}
 			(
 				Frame::Gl,
 				Backend::Gl {
@@ -784,9 +823,10 @@ impl Gfx {
 					pass.draw(0..3, 0..1);
 				}
 				self.queue.submit(Some(enc.finish()));
-				let _ = surface.swap_buffers(ctx);
+				// glutin reports a GLX error raised by the swap
+				surface.swap_buffers(ctx).map_err(|_| NoFrame::Other)
 			}
-			_ => {}
+			_ => Ok(()),
 		}
 	}
 
