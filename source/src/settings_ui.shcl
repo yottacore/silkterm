@@ -163,6 +163,8 @@ icons:
 ##            shipped default back
 ## windows:   true for a row that exists only on Windows. On a heading it takes
 ##            the whole group, and every row in it has to say so as well.
+## warning:   flyover for a warning mark drawn after the label, for a row that
+##            may not work on every desktop
 
 rows:
 
@@ -351,27 +353,6 @@ rows:
 		label: Background
 		tab: Background
 
-	Transparency:
-		label: Transparency
-		kind: toggle
-		setting: transparency.enabled
-		help: "See through the terminal background. On Windows this takes effect on the next launch."
-
-	Opacity:
-		label: Opacity %
-		kind: slider
-		range: 0, 100
-		whole: true
-		indent: 1
-		setting: transparency.opacity
-
-	BackdropBlur:
-		label: Blur-behind
-		kind: toggle
-		indent: 1
-		setting: transparency.blur_behind
-		help: "Blur whatever is behind the window, where the desktop can do it."
-
 	BgEnabled:
 		label: Wallpaper
 		kind: toggle
@@ -462,6 +443,29 @@ rows:
 		indent: 1
 		setting: wallpaper.contrast_mask.auto
 		help: "How much of the masking is left to the picture itself rather than the setting above."
+
+	## Last on the tab, since it is the one that depends on the desktop.
+	Transparency:
+		label: Transparency
+		kind: toggle
+		setting: transparency.enabled
+		help: "See through the terminal background. On Windows this takes effect on the next launch."
+		warning: "Transparency relies on the desktop compositor, and may not work on every desktop."
+
+	Opacity:
+		label: Opacity %
+		kind: slider
+		range: 0, 100
+		whole: true
+		indent: 1
+		setting: transparency.opacity
+
+	BackdropBlur:
+		label: Blur-behind
+		kind: toggle
+		indent: 1
+		setting: transparency.blur_behind
+		help: "Blur whatever is behind the window, where the desktop can do it."
 
 	## ---------------------------------------------------------------------- Text
 
@@ -973,9 +977,6 @@ gates:
 	PerfCheckHardware: PerfAuto
 	PerfCheckNext: PerfAuto
 
-	Opacity: Transparency
-	BackdropBlur: Transparency
-
 	BgImage: BgEnabled
 	BgRotate: BgEnabled
 	BgOpacity: BgEnabled
@@ -986,6 +987,8 @@ gates:
 	BgContrastSize: BgEnabled, BgContrastMask
 	BgContrastStrength: BgEnabled, BgContrastMask
 	BgContrastAuto: BgEnabled, BgContrastMask
+	Opacity: Transparency
+	BackdropBlur: Transparency
 
 	ScrimStrength: TextScrim
 	ScrimRadius: TextScrim

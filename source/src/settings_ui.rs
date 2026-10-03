@@ -236,6 +236,18 @@ const SLIDER_HANDLE_W: f32 = 10.0;
 // Clear space between the two halves of a row that carries two controls, DIP.
 const PAIR_GAP: f32 = 12.0;
 
+// The warning mark after a label, in UI line heights, so it grows with the
+// interface font. Ratios, because the label column is measured in physical
+// pixels and the layout in DIP.
+const WARN_GAP: f32 = 0.35;
+const WARN_W: f32 = 0.95;
+const WARN_H: f32 = 0.82;
+
+// What a warning mark adds to its label's width, in the units `line_h` is in.
+fn warning_room(line_h: f32) -> f32 {
+	line_h * (WARN_GAP + WARN_W)
+}
+
 // `r` cut down to what falls inside `to`. Zero width when nothing does.
 fn clip_rect(r: Rect, to: Rect) -> Rect {
 	let x0 = r.x.max(to.x);
@@ -1044,12 +1056,15 @@ impl SettingsDialog {
 		}
 	}
 	// Scale a batch of quads out to physical pixels. `params.y` is a stroke width
-	// or corner radius, so it is a measurement too and scales with the rest.
+	// or corner radius, so it is a measurement too and scales with the rest. A
+	// triangle's is a count of quarter-turns, which a scale would turn it by.
 	fn quads_px(&self, quads: &mut [RectInstance]) {
 		for quad in quads {
 			quad.pos = [self.to_px(quad.pos[0]), self.to_px(quad.pos[1])];
 			quad.size = [self.to_px(quad.size[0]), self.to_px(quad.size[1])];
-			quad.params[1] = self.to_px(quad.params[1]);
+			if (quad.params[0] - 3.0).abs() > 0.5 {
+				quad.params[1] = self.to_px(quad.params[1]);
+			}
 		}
 	}
 	fn texts_px(&self, items: &mut [TextItem]) {
@@ -1093,9 +1108,14 @@ impl SettingsDialog {
 		let s = self.scale;
 		self.animate_dip(dt, &mut |t| measure(t) / s)
 	}
-	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(&'static str, Rect)> {
+	pub fn hover_tip(
+		&self,
+		mx: f32,
+		my: f32,
+		measure: &mut impl FnMut(&str) -> f32,
+	) -> Option<(&'static str, Rect)> {
 		let s = self.scale;
-		self.hover_tip_dip(mx / s, my / s)
+		self.hover_tip_dip(mx / s, my / s, &mut |t| measure(t) / s)
 			.map(|(tip, anchor)| (tip, self.rect_px(anchor)))
 	}
 
@@ -2154,6 +2174,16 @@ impl SettingsDialog {
 		self.open_edit(shell_field_row(k, true), true);
 	}
 
+	// The warning mark: just after the label's text, centered in the row.
+	fn warning_box(&self, i: usize, measure: &mut impl FnMut(&str) -> f32) -> Rect {
+		let h = self.line_h * WARN_H;
+		Rect {
+			x: self.label_x(i) + measure(self.specs[i].label) + self.line_h * WARN_GAP,
+			y: self.centered_in_row(i, h),
+			w: self.line_h * WARN_W,
+			h,
+		}
+	}
 	// Left edge of a row's label: its own sub-group depth in from the panel pad.
 	fn label_x(&self, i: usize) -> f32 {
 		if self.specs[i].beside {
@@ -2391,7 +2421,12 @@ impl SettingsDialog {
 	// The flyover to show while the cursor rests on something that has one:
 	// (text, anchor rect to hang the tip box under). Why a control is GRAYED
 	// wins over what it does - that is the more urgent question when it is.
-	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(&'static str, Rect)> {
+	fn hover_tip_dip(
+		&self,
+		mx: f32,
+		my: f32,
+		measure: &mut impl FnMut(&str) -> f32,
+	) -> Option<(&'static str, Rect)> {
 		if self.modal() {
 			return None; // the box covers the panel; nothing behind it answers
 		}
@@ -2420,6 +2455,19 @@ impl SettingsDialog {
 			if self.has_revert(i) && !self.specs[i].revert_help.is_empty() && arrow.contains(mx, my)
 			{
 				return Some((self.specs[i].revert_help, arrow));
+			}
+			// the mark answers over the row's whole height, and before the row's
+			// own tip, whose span it sits inside
+			if !self.specs[i].warning.is_empty() {
+				let mark = self.warning_box(i, measure);
+				let hit = Rect {
+					y: self.row_y(i),
+					h: self.row_screen_h(i),
+					..mark
+				};
+				if hit.contains(mx, my) {
+					return Some((self.specs[i].warning, mark));
+				}
 			}
 			let grayed = self.disabled(self.specs[i].key);
 			let tip = match self.disabled_tip(self.specs[i].key).filter(|_| grayed) {
@@ -5394,6 +5442,9 @@ impl SettingsDialog {
 			if self.specs[i].tab != self.tab || Self::header_is_tab_title(&self.specs[i]) {
 				continue;
 			}
+			if !self.specs[i].warning.is_empty() {
+				self.warning_quads(i, &mut out, &mut measure);
+			}
 			match self.specs[i].kind {
 				Kind::Slider { min, max, int } => {
 					let off = self.disabled(self.specs[i].key);
@@ -5777,6 +5828,40 @@ impl SettingsDialog {
 		out.push(q(add.x, add.y, add.w, add.h, dlg().btn_bg));
 		if !self.ring_on(i, self.parts_of(i).saturating_sub(1)) {
 			border(out, add, 1.0, dlg().panel_border);
+		}
+	}
+
+	// A triangle with an exclamation mark cut out of it, in the label's color. All
+	// quads, for the same reason as the grid's icons: no interface font can be
+	// relied on to carry the sign. Not red, since red is only for removal.
+	fn warning_quads(
+		&self,
+		i: usize,
+		out: &mut Vec<RectInstance>,
+		measure: &mut impl FnMut(&str) -> f32,
+	) {
+		let r = self.warning_box(i, measure);
+		let color = if self.disabled(self.specs[i].key) {
+			dlg().dim
+		} else {
+			dlg().text
+		};
+		out.push(RectInstance {
+			pos: [r.x, r.y],
+			size: [r.w, r.h],
+			color: config::srgb_f32(color),
+			params: [3.0, 3.0],
+		});
+		let stroke = (r.w * 0.13).max(1.5);
+		let x = r.x + (r.w - stroke) / 2.0;
+		let cut = config::srgb_f32(dlg().panel_bg);
+		for (top, h) in [(0.36, 0.32), (0.76, 0.0)] {
+			out.push(RectInstance {
+				pos: [x, r.y + r.h * top],
+				size: [stroke, (r.h * h).max(stroke)],
+				color: cut,
+				..Default::default()
+			});
 		}
 	}
 
@@ -6518,12 +6603,21 @@ pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> (f32, f32, 
 	let attrs = crate::text::ui_attrs();
 	let dip = |v: f32| config::dip(v, scale);
 	// an indented label starts further right, so the column has to clear the
-	// deepest one plus its own indent - not merely the longest string
+	// deepest one plus its own indent - not merely the longest string - and a
+	// warning mark after one
+	let line_h = text.ui_line_h;
 	let label_w = ui()
 		.specs
 		.iter()
 		.map(|spec| {
-			text.measure_ui_text(spec.label, &attrs) + f32::from(spec.indent) * dip(lay().indent)
+			let mark = if spec.warning.is_empty() {
+				0.0
+			} else {
+				warning_room(line_h)
+			};
+			text.measure_ui_text(spec.label, &attrs)
+				+ f32::from(spec.indent) * dip(lay().indent)
+				+ mark
 		})
 		.fold(0.0f32, f32::max);
 	let label_w = measured_plus(label_w, lay().label_gap, scale);
@@ -6590,6 +6684,11 @@ mod tests {
 	};
 	use crate::config;
 	use crate::pick;
+
+	// A stand-in for the UI font: every character the same width.
+	fn chars7(s: &str) -> f32 {
+		s.chars().count() as f32 * 7.0
+	}
 
 	fn mk_dialog(max_h: f32) -> SettingsDialog {
 		mk_dialog_at(max_h, 1.0)
@@ -7476,7 +7575,7 @@ mod tests {
 		d.tab = d.specs[i].tab;
 		let ctl = d.checkbox(i);
 		let tip = d
-			.hover_tip_dip(ctl.x + 1.0, ctl.y + 1.0)
+			.hover_tip_dip(ctl.x + 1.0, ctl.y + 1.0, &mut chars7)
 			.map(|(text, _)| text);
 		assert_eq!(tip, Some(PROFILE_TIP));
 
@@ -7765,7 +7864,10 @@ mod tests {
 			Key::OpenFolder,
 		] {
 			let (d, i) = mk_assoc_dialog(key, store.clone());
-			let tip = |r: crate::pane::Rect| d.hover_tip(r.x + 2.0, r.y + 2.0).map(|(tip, _)| tip);
+			let tip = |r: crate::pane::Rect| {
+				d.hover_tip(r.x + 2.0, r.y + 2.0, &mut chars7)
+					.map(|(tip, _)| tip)
+			};
 			assert!(!d.specs[i].help.is_empty() && !d.specs[i].revert_help.is_empty());
 			assert_eq!(tip(d.row_btn_rect(i, 0)), Some(d.specs[i].help), "{key:?}");
 			assert_eq!(
@@ -8457,17 +8559,19 @@ mod tests {
 			// the flyover explains WHY it is grayed, in place of the row's own
 			// help text, and only over the row
 			assert_eq!(
-				d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip),
+				d.hover_tip(bx.x + 2.0, bx.y + 2.0, &mut chars7)
+					.map(|(tip, _)| tip),
 				Some("The desktop reports no monospace font to follow.")
 			);
-			assert!(d.hover_tip(bx.x + 2.0, bx.y - 200.0).is_none());
+			assert!(d.hover_tip(bx.x + 2.0, bx.y - 200.0, &mut chars7).is_none());
 			// the family field stays editable, since it is what actually resolves
 			assert!(!d.disabled(Key::FontFamily));
 		} else {
 			assert!(!d.disabled(Key::SystemFont));
 			// live, so the row explains what it does rather than why it cannot
 			assert_ne!(
-				d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip),
+				d.hover_tip(bx.x + 2.0, bx.y + 2.0, &mut chars7)
+					.map(|(tip, _)| tip),
 				Some("The desktop reports no monospace font to follow.")
 			);
 			// following the OS grays the field it overrides
@@ -8744,10 +8848,10 @@ mod tests {
 	fn space_toggles_focused_boolean() {
 		let mut d = mk_dialog(2000.0);
 		d.tab = 1;
-		d.key_tab(); // first focusable = Transparency (a toggle)
-		let before = d.edited.transparent_background;
+		d.key_tab(); // first focusable = Wallpaper (a toggle)
+		let before = d.get_toggle(super::Key::BgEnabled);
 		d.key_space();
-		assert_eq!(d.edited.transparent_background, !before);
+		assert_eq!(d.get_toggle(super::Key::BgEnabled), !before);
 	}
 
 	// Test ID: EitjFLG
@@ -9786,7 +9890,10 @@ mod tests {
 		assert_eq!(d.scroll, 0.0, "the panel scrolled under the box");
 		assert_eq!(d.get_col(Key::ColBg), before, "the color moved on its own");
 		assert!(d.edit.is_none(), "an edit opened on a row behind the box");
-		assert_eq!(d.hover_tip_dip(d.rect.x + 4.0, d.rect.y + 40.0), None);
+		assert_eq!(
+			d.hover_tip_dip(d.rect.x + 4.0, d.rect.y + 40.0, &mut chars7),
+			None
+		);
 		// and the row it belongs to is still the one it opened on
 		assert_eq!(d.pick.as_ref().map(|p| p.row), Some(i));
 	}
@@ -10848,7 +10955,7 @@ mod tests {
 			};
 			assert!(!want.is_empty(), "{label} has no tip declared");
 			let (tip, anchor) = d
-				.hover_tip_dip(r.x + r.w / 2.0, r.y + r.h / 2.0)
+				.hover_tip_dip(r.x + r.w / 2.0, r.y + r.h / 2.0, &mut chars7)
 				.unwrap_or_else(|| panic!("{label} shows no tip"));
 			assert_eq!(tip, want, "{label} shows the wrong tip");
 			assert!(
@@ -10875,6 +10982,7 @@ mod tests {
 			beside: false,
 			revert_help: "",
 			windows: false,
+			warning: "",
 		};
 		let specs = [
 			row(Key::PerfCheckHardware, 0),
@@ -11299,5 +11407,114 @@ mod tests {
 		assert_eq!(d.key_space(), super::Action::None);
 		d.char_input('S');
 		assert_eq!(d.edit.as_ref().unwrap().buf, "DejaVu S");
+	}
+
+	// Transparency and its two rows are the last group on the Background tab,
+	// after everything that works whatever the desktop.
+	// Test ID: EreHnnq
+	#[test]
+	fn transparency_is_the_last_group_on_the_background_tab() {
+		let specs = &super::ui().specs;
+		let background = tab_titles()
+			.iter()
+			.position(|t| *t == "Background")
+			.expect("a Background tab");
+		let keys: Vec<Key> = specs
+			.iter()
+			.filter(|s| s.tab == background && !matches!(s.kind, Kind::Header(_)))
+			.map(|s| s.key)
+			.collect();
+		assert_eq!(
+			keys[keys.len() - 3..],
+			[Key::Transparency, Key::Opacity, Key::BackdropBlur],
+			"{keys:?}"
+		);
+	}
+
+	// The Transparency row carries a warning mark after its label, with its own
+	// flyover, and it is the only row that does.
+	// Test ID: EreHnrx
+	#[test]
+	fn the_transparency_row_warns_that_it_needs_the_compositor() {
+		let mut d = mk_dialog(4000.0);
+		let warned: Vec<Key> = d
+			.specs
+			.iter()
+			.filter(|s| !s.warning.is_empty())
+			.map(|s| s.key)
+			.collect();
+		assert_eq!(warned, [Key::Transparency]);
+		let i = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::Transparency)
+			.unwrap();
+		assert!(d.specs[i].warning.contains("compositor"));
+		d.tab = d.specs[i].tab;
+		let mark = d.warning_box(i, &mut chars7);
+		// after the label's text, and clear of the checkbox
+		assert!(mark.x > d.label_x(i) + chars7(d.specs[i].label));
+		assert!(
+			mark.x + mark.w <= d.checkbox(i).x,
+			"the mark runs into the checkbox"
+		);
+		// drawn: one triangle, where the mark is
+		let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
+		let triangles: Vec<_> = rows
+			.iter()
+			.filter(|r| (r.params[0] - 3.0).abs() < f32::EPSILON)
+			.collect();
+		assert_eq!(triangles.len(), 1, "one mark on the tab");
+		assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
+		assert!(
+			(triangles[0].params[1] - 3.0).abs() < f32::EPSILON,
+			"points up"
+		);
+		// its own tip over it, the row's own over the label
+		let (cx, cy) = (mark.x + mark.w / 2.0, mark.y + mark.h / 2.0);
+		assert_eq!(
+			d.hover_tip_dip(cx, cy, &mut chars7).map(|(tip, _)| tip),
+			Some(d.specs[i].warning)
+		);
+		let label = d.label_x(i) + 2.0;
+		assert_eq!(
+			d.hover_tip_dip(label, cy, &mut chars7).map(|(tip, _)| tip),
+			Some(d.specs[i].help)
+		);
+		// no other tab draws one
+		let background = d.tab;
+		for tab in (0..tab_titles().len()).filter(|t| *t != background) {
+			d.tab = tab;
+			let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
+			assert!(
+				!rows
+					.iter()
+					.any(|r| (r.params[0] - 3.0).abs() < f32::EPSILON),
+				"a triangle on tab {tab}"
+			);
+		}
+	}
+
+	// A triangle's params.y is a count of quarter-turns, not a length, so the
+	// boundary must not scale it. At 2x the mark turned to point the other way.
+	// Test ID: EreHnvO
+	#[test]
+	fn a_triangle_keeps_its_direction_at_any_scale() {
+		for scale in [1.0, 1.25, 1.5, 2.0] {
+			let mut d = mk_dialog_at(4000.0, scale);
+			let i = d
+				.specs
+				.iter()
+				.position(|s| s.key == Key::Transparency)
+				.unwrap();
+			d.tab = d.specs[i].tab;
+			let (_, rows) = d.rects(18.0 * scale, |s| chars7(s) * scale);
+			let turns: Vec<f32> = rows
+				.iter()
+				.filter(|r| (r.params[0] - 3.0).abs() < f32::EPSILON)
+				.map(|r| r.params[1])
+				.collect();
+			assert_eq!(turns, [3.0], "at {scale}x");
+		}
 	}
 }

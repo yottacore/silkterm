@@ -1505,7 +1505,7 @@ pub struct RectInstance {
 	pub size: [f32; 2],
 	pub color: [f32; 4],
 	// params.x = mode (0 solid quad, 1 close-"X" mark, 2 rounded quad,
-	// 3 triangle - a submenu arrow, or a move-this-row arrow,
+	// 3 triangle - a submenu arrow, or the Settings warning mark,
 	// 4 the color picker's saturation/brightness square, 5 its hue strip),
 	// params.y = stroke px for the X, corner radius for the rounded quad,
 	// quarter-turns clockwise for the triangle (0 right, 1 down, 2 left, 3 up).

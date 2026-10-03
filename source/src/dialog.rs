@@ -863,7 +863,13 @@ impl DialogWin {
 				.iter()
 				.find(|link| link.tooltip.is_some() && link.rect.contains(mx, my))
 				.map(|link| link.rect),
-			Content::Settings(dialog) => dialog.hover_tip(mx, my).map(|(_, anchor)| anchor),
+			Content::Settings(dialog) => {
+				let attrs = ui_attrs();
+				let text = &mut self.text;
+				dialog
+					.hover_tip(mx, my, &mut |s| text.measure_ui_text(s, &attrs))
+					.map(|(_, anchor)| anchor)
+			}
 		};
 		let (tip_anchor, tip_wake) = tip_gate(&mut self.tip, over, now);
 		// a resting pointer gets its tip with no further input, so the wake the
@@ -1072,9 +1078,12 @@ impl DialogWin {
 				// to outrun the panel would otherwise be clamped to the edge and run
 				// off it, and the panel's width is not ours to grow.
 				let (mx, my) = self.mouse;
-				if let Some((tip, anchor)) = dialog
-					.hover_tip(mx, my)
-					.filter(|(_, anchor)| tip_anchor == Some(*anchor))
+				let found = {
+					let attrs = ui_attrs();
+					let text = &mut self.text;
+					dialog.hover_tip(mx, my, &mut |s| text.measure_ui_text(s, &attrs))
+				};
+				if let Some((tip, anchor)) = found.filter(|(_, anchor)| tip_anchor == Some(*anchor))
 				{
 					let border_col = crate::settings_ui::dialog_border();
 					let q = |x: f32, y: f32, bw: f32, bh: f32, color: [u8; 3]| RectInstance {
