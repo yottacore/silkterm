@@ -736,28 +736,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
-- Settings: the revert arrow on "Program's own title" does nothing
-	- ID: 2026100314050001
-	- Type: Bug
-	- Status: Queued
-	- Needs local test suite run?: Yes
-	- Severity: Avg
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Steps to reproduce:
-		- Open Settings, Tabs. Turn "Program's own title" away from its default.
-		- Click its revert arrow.
-	- Incorrect behavior: The box does not change back. `revert` lists every toggle in one outer match, and `TabShowsTitle` is missing from it. The key falls to the slider arm at the end, which does nothing for a toggle.
-	- Expected behavior: The box goes back to its default, like every other toggle.
-	- Reproduced: No. Read from the code.
-	- Origin: d83fb601 (2026-09-20) added the inner arm for this key but not the outer one. No earlier review saw it. Plausible.
-	- Possible cause: 14 per-key accessors in `settings_ui.rs` end in a catch-all `_` arm, so a key left out of one compiles and quietly does the wrong thing. `ui_spec.rs` says `Key` exists so that a missed key fails to compile.
-	- Sweep: the `_` arms in `get_f32`, `set_f32`, `get_toggle`, `set_toggle`, `get_radio`, `set_radio`, `get_col`, `set_col`, `default_col`, `is_default`, `default_f32`, `revert`, `get_text` and `set_text`. The same kind of arm in `pick.rs` (five on `Field`), in `pane.rs` on `term::Task`, and in `app.rs` `env_flag`.
-	- Note: `env_flag`'s arm already ties two debug switches together. `SILK_IDLEDBG` falls into `SILK_DLGDBG`'s cached value, so whichever is read first decides both.
-	- Test case: Owed. A test that reverts every row and checks it reads as default would catch this one and its siblings.
-	- Note: Code review 20261003 item 1.
-
 - Free resources when idle: on by default
 	- ID: 2026100312470540
 	- Type: Enhancement
@@ -923,22 +901,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Origin: 6d543d37 (2026-08-30) for `freeze_sync`, 90073855 (2026-09-17) for `idle_rule`, 02482bb7 (2026-10-01) for the menu key, 754c9cb (2026-10-03) for the monitor check. No earlier review item. Plausible, cost not measured.
 	- Test case: Owed. The env read can be pinned by test. The X11 trip needs a timing on the rig.
 	- Note: Code review 20261003 item 5.
-
-- A config unit test fails when run beside the other "refused" tests
-	- ID: 2026100314502236
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261003-145022
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23
-	- Steps to reproduce:
-		- `cargo test --bin silkterm -- refused`
-	- Incorrect behavior: `a_refused_save_leaves_word_for_the_window` fails at "a save that went through". The refusal it takes is for the `silk-lostgate` folder of another test.
-	- Expected behavior: It passes whatever runs beside it.
-	- Reproduced: 20261003 on b23, three runs out of three with that filter. It passes alone, on one test thread, and in the full suite.
-	- Possible cause: `a_save_that_would_drop_a_line_is_refused` leaves its refusal in the shared slot and does not take `test_config_lock`, so it can land between the other test's takes.
 
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
@@ -1333,6 +1295,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- Settings: the revert arrow on "Program's own title" does nothing
+	- ID: 2026100314050001
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: No. The full unit suite passed on the branch.
+	- Severity: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Open Settings, Tabs. Turn "Program's own title" away from its default.
+		- Click its revert arrow.
+	- Incorrect behavior: The box does not change back. `revert` lists every toggle in one outer match, and `TabShowsTitle` is missing from it. The key falls to the slider arm at the end, which does nothing for a toggle.
+	- Expected behavior: The box goes back to its default, like every other toggle.
+	- Reproduced: 20261003 on b23, by test. Of all the revert arrows, only this one left its row as it was.
+	- Origin: d83fb601 (2026-09-20) added the inner arm for this key but not the outer one. No earlier review saw it. Confirmed.
+	- Possible cause: 14 per-key accessors in `settings_ui.rs` end in a catch-all `_` arm, so a key left out of one compiles and quietly does the wrong thing. `ui_spec.rs` says `Key` exists so that a missed key fails to compile.
+	- Actual cause: as above.
+	- Actual fix: every accessor now names every key, its own kind one by one and the rest through one list per kind of row (`keys_of!`). A key left out of an accessor, or new in `ui_spec.rs`, no longer compiles. Slider and switch values are read through one function each, for the shown value, the default and the revert, so those lists exist once. `env_flag` takes a switch from a list, and each switch keeps its own answer.
+	- Sweep: the `_` arms in `get_f32`, `set_f32`, `get_toggle`, `set_toggle`, `get_radio`, `set_radio`, `get_col`, `set_col`, `default_col`, `is_default`, `default_f32`, `revert`, `get_text` and `set_text`. The same kind of arm in `pick.rs` (five on `Field`), in `pane.rs` on `term::Task`, and in `app.rs` `env_flag`.
+	- Note: `env_flag`'s arm already ties two debug switches together. `SILK_IDLEDBG` falls into `SILK_DLGDBG`'s cached value, so whichever is read first decides both.
+	- Swept: all 14 accessors named above. The five `Field` arms in `pick.rs` and the `term::Task` arm in `pane.rs` name their variants. `env_flag`, with `SILK_IDLEDBG` given its own answer. Left on purpose: `assoc_of` and `disabled_tip` in `settings_ui.rs`, which answer for a few keys and nothing for the rest. The other `_` arms there match on row kinds or numbers, not keys. The other cached switches, in `perf.rs` and `pane.rs`, hold one switch each.
+	- Test case: `every_revert_arrow_puts_its_row_back_to_the_default` (Erg35nf) failed before the fix and passes after. `every_row_kind_matches_its_key_list` (Erg4Cz0) holds the key lists against the rows. `each_debug_switch_reads_its_own_variable` (Erg4k2j) failed on `SILK_IDLEDBG` before the fix and passes after.
+	- Branch: keyarms
+	- Commit: 4238022
+	- Acceptance signoff: Self-closed: reproduced, its tests failed before the fix and pass after, and the sweep is answered.
+	- Closed: 20261003-151345
+	- Note: Code review 20261003 item 1.
 
 - Settings: a revert arrow leaves the value in force when a save put it above its commented default
 	- ID: 2026100309455678
@@ -1783,6 +1775,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- A config unit test fails when run beside the other "refused" tests
+	- ID: 2026100314502236
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-145022
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- `cargo test --bin silkterm -- refused`
+	- Incorrect behavior: `a_refused_save_leaves_word_for_the_window` fails at "a save that went through". The refusal it takes is for the `silk-lostgate` folder of another test.
+	- Expected behavior: It passes whatever runs beside it.
+	- Reproduced: 20261003 on b23, three runs out of three with that filter. It passes alone, on one test thread, and in the full suite.
+	- Possible cause: `a_save_that_would_drop_a_line_is_refused` leaves its refusal in the shared slot and does not take `test_config_lock`, so it can land between the other test's takes.
+	- Actual cause: as above. With that one test skipped, the same filter passed 5 runs of 5.
+	- Actual fix: it takes `test_config_lock`. The lock's comment now says it covers the refusal slot too.
+	- Swept: every test that installs a config override already took the lock. Two more tests can fill the refusal slot and now take it: `an_old_default_shell_waits_for_a_save_that_can_happen`, whose second case is refused, and the config save fuzz test, whose next launch adopts a default shell. Three other tests call the same writer without the lock, but each expects its save to go through, so none can leave a refusal.
+	- Test case: none new, since the fault was in the tests. `cargo test --bin silkterm -- refused` failed 3 runs of 3 before and passed 8 of 8 after. The full unit suite passes.
+	- Branch: keyarms
+	- Commit: 693f457
+	- Acceptance signoff: Self-closed: the cause was confirmed and the failing run passes.
+	- Closed: 20261003-151345
 
 - The launch names an unreadable line two lines short of where the file has it
 	- ID: 2026100115322366

@@ -123,7 +123,7 @@ impl App {
 	// Events for the pop-out dialog window (its own surface/input).
 	fn handle_dialog_event(&mut self, event: WindowEvent) {
 		use crate::dialog::DialogAction as DA;
-		if env_flag("SILK_DLGDBG") {
+		if env_flag(EnvFlag::DlgDbg) {
 			match &event {
 				WindowEvent::KeyboardInput {
 					event: k,
@@ -1691,20 +1691,46 @@ fn key_is_typed(state: ElementState, is_synthetic: bool) -> bool {
 	state == ElementState::Pressed && !is_synthetic
 }
 
-// SILK_DUMP / SILK_DLGDBG / SILK_KEYDBG are consulted per frame / per event;
-// read the env once (var_os takes the env lock and scans environ every call).
-// Same pattern as pane.rs scroll_dbg.
-pub(crate) fn env_flag(name: &str) -> bool {
+// Debug switches consulted per frame or per event. Each reads the environment
+// once, since var_os takes the env lock and scans environ every call. Same
+// pattern as pane.rs scroll_dbg.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum EnvFlag {
+	Dump,
+	DlgDbg,
+	KeyDbg,
+	IdleDbg,
+}
+impl EnvFlag {
+	#[cfg(test)]
+	const ALL: [EnvFlag; 4] = [
+		EnvFlag::Dump,
+		EnvFlag::DlgDbg,
+		EnvFlag::KeyDbg,
+		EnvFlag::IdleDbg,
+	];
+	fn var(self) -> &'static str {
+		match self {
+			EnvFlag::Dump => "SILK_DUMP",
+			EnvFlag::DlgDbg => "SILK_DLGDBG",
+			EnvFlag::KeyDbg => "SILK_KEYDBG",
+			EnvFlag::IdleDbg => "SILK_IDLEDBG",
+		}
+	}
+}
+pub(crate) fn env_flag(flag: EnvFlag) -> bool {
 	use std::sync::OnceLock;
 	static DUMP: OnceLock<bool> = OnceLock::new();
 	static DLGDBG: OnceLock<bool> = OnceLock::new();
 	static KEYDBG: OnceLock<bool> = OnceLock::new();
-	let cell = match name {
-		"SILK_DUMP" => &DUMP,
-		"SILK_KEYDBG" => &KEYDBG,
-		_ => &DLGDBG,
+	static IDLEDBG: OnceLock<bool> = OnceLock::new();
+	let cell = match flag {
+		EnvFlag::Dump => &DUMP,
+		EnvFlag::DlgDbg => &DLGDBG,
+		EnvFlag::KeyDbg => &KEYDBG,
+		EnvFlag::IdleDbg => &IDLEDBG,
 	};
-	*cell.get_or_init(|| std::env::var_os(name).is_some())
+	*cell.get_or_init(|| std::env::var_os(flag.var()).is_some())
 }
 
 // SILK_MAX_FPS pins the animation frame rate instead of letting vblank set it.
@@ -2219,7 +2245,7 @@ fn idle_rule(cfg: &config::Settings) -> (bool, Duration, Duration) {
 fn idledbg(msg: &str) {
 	use std::sync::OnceLock;
 	static T0: OnceLock<Instant> = OnceLock::new();
-	if !env_flag("SILK_IDLEDBG") {
+	if !env_flag(EnvFlag::IdleDbg) {
 		return;
 	}
 	let t = T0.get_or_init(Instant::now).elapsed().as_secs_f32();
@@ -7170,7 +7196,7 @@ impl State {
 			);
 			self.bench_at = push_back(self.bench_at, self.bench_cap, Instant::now() + BENCH_DELAY);
 		}
-		if env_flag("SILK_DUMP") {
+		if env_flag(EnvFlag::Dump) {
 			gpu.gfx.dump_offscreen("/tmp/silk_offscreen.png");
 		}
 		// Trim only on a frame that prepared. The trim clears glyphon's in-use set,
@@ -8368,7 +8394,7 @@ impl ApplicationHandler<UserEvent> for App {
 
 			WindowEvent::ModifiersChanged(mods) => {
 				state.mods = mods.state();
-				if env_flag("SILK_KEYDBG") {
+				if env_flag(EnvFlag::KeyDbg) {
 					eprintln!("[mods] {:?}", mods.state());
 				}
 				// Alt toggles the menu-bar accelerator underlines, so redraw.
@@ -8377,7 +8403,7 @@ impl ApplicationHandler<UserEvent> for App {
 
 			// Window focus gates copy-output: a background window never copies.
 			WindowEvent::Focused(focused) => {
-				if env_flag("SILK_KEYDBG") {
+				if env_flag(EnvFlag::KeyDbg) {
 					eprintln!("[focus] {focused}");
 				}
 				state.focused = focused;
@@ -9009,7 +9035,7 @@ impl ApplicationHandler<UserEvent> for App {
 				..
 			} => {
 				let key_at = crate::perf::key_mark();
-				if env_flag("SILK_KEYDBG") {
+				if env_flag(EnvFlag::KeyDbg) {
 					eprintln!(
 						"[key] {:?} {:?} synthetic={is_synthetic} focused={} mods=[{}{}{}]",
 						key.logical_key,
@@ -9930,6 +9956,53 @@ mod tests {
 	use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Retry};
 	use std::time::{Duration, Instant};
 	use winit::event::ElementState;
+
+	// Each debug switch keeps its own cached answer. SILK_IDLEDBG used to share
+	// SILK_DLGDBG's, so whichever was read first answered for both. Run in a
+	// child copy of this test binary, since the answers are cached per process.
+	// Test ID: Erg4k2j
+	#[test]
+	fn each_debug_switch_reads_its_own_variable() {
+		for set in super::EnvFlag::ALL {
+			let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+			child.args(["--exact", "app::tests::debug_switch_child", "--nocapture"]);
+			for flag in super::EnvFlag::ALL {
+				child.env_remove(flag.var());
+			}
+			let out = child
+				.env("SILK_DEBUG_SWITCH_CHILD", set.var())
+				.env(set.var(), "1")
+				.output()
+				.unwrap();
+			let text = String::from_utf8_lossy(&out.stdout);
+			assert!(
+				out.status.success(),
+				"{set:?}: {text}{}",
+				String::from_utf8_lossy(&out.stderr)
+			);
+			assert!(text.contains("debug switches checked"), "{set:?}: {text}");
+		}
+	}
+
+	// Test ID: Erg4kMG
+	#[test]
+	fn debug_switch_child() {
+		use super::{EnvFlag, env_flag};
+		let Some(set) = std::env::var_os("SILK_DEBUG_SWITCH_CHILD") else {
+			return; // only does anything when the test above starts it
+		};
+		// the one that is set goes first, so a shared cache would answer for the rest
+		let set = EnvFlag::ALL.into_iter().find(|f| set == f.var()).unwrap();
+		assert!(env_flag(set), "{set:?}");
+		for flag in EnvFlag::ALL {
+			assert_eq!(
+				env_flag(flag),
+				flag.var() == set.var(),
+				"{flag:?} with {set:?} set"
+			);
+		}
+		println!("debug switches checked");
+	}
 
 	// The strength scale went from 10% to 20% per doubling in August and design.md
 	// kept the old numbers for weeks, with nothing to catch it. Both places that
