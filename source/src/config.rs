@@ -6145,6 +6145,8 @@ static CONFIG_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 // Serializes the tests that install a config-path override. The override is
 // process-global, so two of them running at once would each read the other's
 // file - and they live in different modules, so the guard has to live here.
+// The refusal `write_doc` leaves for the window is process-global too, so a
+// test whose save can be refused takes this as well.
 #[cfg(test)]
 pub fn test_config_lock() -> std::sync::MutexGuard<'static, ()> {
 	static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -7309,6 +7311,7 @@ mod tests {
 	// Test ID: EpyvpeC
 	#[test]
 	fn an_old_default_shell_waits_for_a_save_that_can_happen() {
+		let _guard = super::test_config_lock();
 		let dir = crate::testdir::run_dir()
 			.join(format!("silkterm_default_shell_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
@@ -12974,6 +12977,7 @@ mod tests {
 	// Test ID: EoGez3w
 	#[test]
 	fn a_save_that_would_drop_a_line_is_refused() {
+		let _guard = super::test_config_lock();
 		let dir = crate::testdir::run_dir().join(format!("silk-lostgate-{}", std::process::id()));
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
@@ -13431,6 +13435,8 @@ mod tests {
 		// Test ID: EpZCS16
 		#[test]
 		fn a_settings_save_moves_no_value_at_the_next_launch() {
+			// the next launch adopts a default shell, a save that can be refused
+			let _guard = super::super::test_config_lock();
 			let corpus = fuzz::corpus("config");
 			for case in &corpus {
 				save_check(case);
