@@ -178,7 +178,7 @@ One monospace family is pinned for every weight, found from one search order on 
 
 - Punctuation is trimmed the way a reader would. A full stop or comma after a URL belongs to the sentence, and so does a closing bracket the URL is sitting inside. One the URL itself opened is part of it. A URL that wraps across rows is one link, found from either half.
 
-- Hovering underlines, Ctrl+click opens, and Command+click on macOS. The underline appears on a plain hover with no modifier, since a link the user cannot see is a link they will not try. Opening needs Ctrl so it can never be confused with selecting. The press arms and the release opens, so a slipped press can be dragged off to cancel. A right-click on a link puts "Open link" and "Copy link" at the top of the menu, and only there.
+- Hovering underlines, Ctrl+click opens, and Command+click on macOS. The underline appears on a plain hover with no modifier, since a link the user cannot see is a link they will not try. Opening needs Ctrl so it can never be confused with selecting. The press arms and the release opens, so a slipped press can be dragged off to cancel. A right-click on a link puts "Open link" and "Copy link" at the top of the menu, and only there. On macOS Ctrl+click is the right-click, so it opens the menu with the link rows.
 
 - An app that is watching the mouse itself owns the pointer, so nothing underlines over it - holding Shift asks for the local behavior instead, the same bypass selection already uses. The right-click menu continues to win over such an app, as all our chrome does.
 
