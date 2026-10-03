@@ -1256,10 +1256,56 @@ pub fn keep_session_on_apply(live: &Settings, opened: &Settings, edited: &mut Se
 // Read the config as an editable document. The parser is forgiving (a bad line
 // becomes a diagnostic, not a failed load), so unlike the old strict TOML path
 // this cannot bail on a file the loader reads fine and silently save nothing.
-fn read_doc(path: &std::path::Path) -> Option<shcl::Document> {
-	let text = read_settings_text(path)?;
+// A current file with lines that are not UTF-8 is no document to save: shcl
+// never sees those lines, so a write would delete them.
+fn read_doc(path: &std::path::Path) -> Result<shcl::Document, Unread> {
+	let read = read_settings(path).map_err(|e| match e.kind() {
+		std::io::ErrorKind::NotFound => Unread::Missing,
+		_ => Unread::Failed(e),
+	})?;
+	if !read.undecoded.is_empty() {
+		return Err(Unread::NotUtf8(read.undecoded));
+	}
 	// a launch that found the file busy left it as 2.x wrote it
-	Some(parse_kept(&from_shcl2_text(&text).unwrap_or(text)))
+	Ok(parse_kept(
+		&from_shcl2_text(&read.text).unwrap_or(read.text),
+	))
+}
+
+// Why a save found no document to edit.
+#[derive(Debug)]
+enum Unread {
+	Missing,
+	// the lines that do not decode, numbered from 1
+	NotUtf8(Vec<usize>),
+	Failed(std::io::Error),
+}
+
+// Whether a save that found no document wrote, as `write_doc` answers. A file
+// that is not there is left for the next launch to make, as before. The others
+// say why on the terminal, and lines that do not decode leave word for the
+// window, since only a hand edit can make the file savable again.
+fn unread_save(path: &std::path::Path, unread: Unread) -> bool {
+	match unread {
+		Unread::Missing => return true,
+		Unread::NotUtf8(lines) => {
+			eprintln!(
+				"{APP_NAME}: could not save config {}: not UTF-8 text at{}, and saving would delete it",
+				path.display(),
+				line_list(&lines)
+			);
+			leave_refusal(Refusal {
+				path: path.to_path_buf(),
+				lost: lines.len(),
+				lines,
+				why: Unreadable::NotUtf8,
+			});
+		}
+		Unread::Failed(e) => {
+			eprintln!("{APP_NAME}: could not read config {}: {e}", path.display());
+		}
+	}
+	false
 }
 
 // A parse whose save writes back every line no edit touched, as it was typed.
@@ -1849,12 +1895,37 @@ pub struct Refusal {
 	pub path: std::path::PathBuf,
 	pub lines: Vec<usize>,
 	pub lost: usize,
+	pub why: Unreadable,
+}
+
+// Why the lines a save would delete cannot be read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unreadable {
+	// shcl reads the text and cannot place the line
+	Syntax,
+	// the bytes are not UTF-8, so shcl never sees the line
+	NotUtf8,
 }
 
 static REFUSED: std::sync::Mutex<Option<Refusal>> = std::sync::Mutex::new(None);
 
 pub fn take_refusal() -> Option<Refusal> {
 	REFUSED.lock().ok()?.take()
+}
+
+fn leave_refusal(refusal: Refusal) {
+	if let Ok(mut refused) = REFUSED.lock() {
+		*refused = Some(refusal);
+	}
+}
+
+// A launch that found the file can never be saved as it is. The window says so
+// once it is on screen, as for settings a conversion lost, rather than at the
+// first save, which may be a resize nobody connects with it.
+static REFUSED_AT_LAUNCH: std::sync::Mutex<Option<Refusal>> = std::sync::Mutex::new(None);
+
+pub fn take_launch_refusal() -> Option<Refusal> {
+	REFUSED_AT_LAUNCH.lock().ok()?.take()
 }
 
 fn unreadable_lines(doc: &shcl::Document) -> Vec<usize> {
@@ -1880,13 +1951,12 @@ fn write_doc(path: &std::path::Path, doc: &shcl::Document) -> bool {
 		0
 	};
 	if lost > 0 {
-		if let Ok(mut refused) = REFUSED.lock() {
-			*refused = Some(Refusal {
-				path: path.to_path_buf(),
-				lines: unreadable_lines(doc),
-				lost,
-			});
-		}
+		leave_refusal(Refusal {
+			path: path.to_path_buf(),
+			lines: unreadable_lines(doc),
+			lost,
+			why: Unreadable::Syntax,
+		});
 	}
 	let written = if lost > 0 {
 		Err(shcl::SaveError::Refused {
@@ -1984,8 +2054,9 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 		note_config_busy(&path);
 		return false;
 	}
-	let Some(mut doc) = read_doc(&path) else {
-		return true;
+	let mut doc = match read_doc(&path) {
+		Ok(doc) => doc,
+		Err(unread) => return unread_save(&path, unread),
 	};
 	// Both sides diff as the user's own values. A live copy carries a profile's
 	// values over them, and those must never reach the file.
@@ -2568,6 +2639,9 @@ fn load() -> Settings {
 	if let Ok(mut held) = LAUNCH_SAID.lock() {
 		*held = None;
 	}
+	if let Ok(mut held) = REFUSED_AT_LAUNCH.lock() {
+		*held = None;
+	}
 	adopt_legacy_config();
 	let Some(path) = config_path() else {
 		return Settings::default();
@@ -2601,22 +2675,42 @@ fn load() -> Settings {
 	migrate_config(&path);
 	backfill_config(&path);
 	refresh_shcl_banner(&path);
-	let raw = match read_settings_text(&path) {
+	let raw = match read_settings(&path) {
 		// The writes above defer when the file looks open elsewhere, so parse the
 		// migrated text rather than what is on disk: a renamed key must never be
 		// read under its old spelling, which matters most where a rename hands an
 		// old name to a new setting (colors.focus).
-		Some(text) => {
-			let (raw, said) = read_config_text(&loaded_text(&text), &path);
+		Ok(read) => {
+			let (raw, mut said) = read_config_text(&loaded_text(&read.text), &path);
+			if !read.undecoded.is_empty() {
+				said.push(not_utf8_line(&path, &read.undecoded));
+				if let Ok(mut held) = REFUSED_AT_LAUNCH.lock() {
+					*held = Some(Refusal {
+						path: path.clone(),
+						lost: read.undecoded.len(),
+						lines: read.undecoded,
+						why: Unreadable::NotUtf8,
+					});
+				}
+			}
 			for line in &said {
 				eprintln!("{line}");
 			}
 			remember_launch_messages(&path, said);
 			raw
 		}
-		None => RawConfig::default(),
+		Err(_) => RawConfig::default(),
 	};
 	resolve(raw)
+}
+
+// The launch reads around them, and no save can keep them.
+fn not_utf8_line(path: &std::path::Path, lines: &[usize]) -> String {
+	format!(
+		"{APP_NAME}: {}: not UTF-8 text at{} - those lines set nothing, and changes are not saved to this file until they are fixed",
+		path.display(),
+		line_list(lines)
+	)
 }
 
 // The values in a config text, and everything a launch prints about it.
@@ -4957,7 +5051,8 @@ fn saved_paths(text: &str) -> Option<std::collections::HashSet<String>> {
 // It runs BEFORE that removal, and only while the key is actively set: a config
 // that never had one, or has already been through this, is not touched at all.
 fn adopt_default_shell(path: &std::path::Path) {
-	let Some(doc) = read_doc(path) else { return };
+	// a launch with lines that do not decode says so itself
+	let Ok(doc) = read_doc(path) else { return };
 	let Some(adopted) = adopted_shell_doc(&doc) else {
 		return;
 	};
@@ -5520,7 +5615,7 @@ pub enum Kept {
 	// another process holds the file (Linux); nothing written
 	Busy,
 	// the file has a line the parse drops, and the values could not go in beside
-	// it; nothing written
+	// it, or a line that is not UTF-8; nothing written
 	Unreadable,
 	// the file reads clean, but the values could not go in so that they read back
 	// and every other setting reads as it did; nothing written
@@ -5556,8 +5651,10 @@ pub fn keep_rating(lines: &RatingLines) -> Kept {
 	let Some(path) = config_path() else {
 		return Kept::Unwritable("no settings file location".to_string());
 	};
-	let text = match std::fs::read_to_string(&path) {
-		Ok(text) => text,
+	let text = match std::fs::read(&path).map(String::from_utf8) {
+		Ok(Ok(text)) => text,
+		// a write would delete the lines that do not decode
+		Ok(Err(_)) => return Kept::Unreadable,
 		Err(e) => return Kept::Unwritable(format!("could not read {}: {e}", path.display())),
 	};
 	let out = match with_rating_lines(&text, lines) {
@@ -6043,12 +6140,7 @@ fn rewritten_unreadable(body: &[u8]) -> Upgrade {
 	if format_of(&lossy) >= shcl::FORMAT_MAJOR {
 		return Upgrade::Current;
 	}
-	let garbled: Vec<usize> = body
-		.split(|b| *b == b'\n')
-		.enumerate()
-		.filter(|(_, line)| std::str::from_utf8(line).is_err())
-		.map(|(index, _)| index)
-		.collect();
+	let garbled = garbled_indexes(body);
 	// migrate keeps every line where it was, so the indexes still match
 	let respelled = shcl::migrate_unstamped(&lossy, true).text;
 	let (text, lost) = rebuilt_config_text(&respelled, &garbled);
@@ -6067,13 +6159,64 @@ fn from_shcl2_text(text: &str) -> Option<String> {
 	upgraded_text(text.as_bytes())
 }
 
-// The settings file's text as a reader takes it. A file shcl cannot read reads
-// as what its conversion writes, if it is in an older format.
-fn read_settings_text(path: &std::path::Path) -> Option<String> {
-	match String::from_utf8(std::fs::read(path).ok()?) {
-		Ok(text) => Some(text),
-		Err(e) => upgraded_text(e.as_bytes()),
+// The indexes of the lines in `body` that are not UTF-8. A newline byte is
+// never part of a longer character, so each line decodes or not on its own.
+fn garbled_indexes(body: &[u8]) -> Vec<usize> {
+	body.split(|b| *b == b'\n')
+		.enumerate()
+		.filter(|(_, line)| std::str::from_utf8(line).is_err())
+		.map(|(index, _)| index)
+		.collect()
+}
+
+// The settings file's text as a reader takes it, and the lines left out of it.
+struct SettingsText {
+	text: String,
+	// numbered from 1
+	undecoded: Vec<usize>,
+}
+
+// A file shcl cannot read reads as what its conversion writes, if it is in an
+// older format. A current one is no conversion and stays as it is on disk, so
+// its lines that are not UTF-8 read as blank: the rest of the file still counts,
+// and every line keeps its number.
+fn read_settings(path: &std::path::Path) -> std::io::Result<SettingsText> {
+	let body = match String::from_utf8(std::fs::read(path)?) {
+		Ok(text) => {
+			return Ok(SettingsText {
+				text,
+				undecoded: Vec::new(),
+			});
+		}
+		Err(e) => e.into_bytes(),
+	};
+	if let Some(text) = upgraded_text(&body) {
+		return Ok(SettingsText {
+			text,
+			undecoded: Vec::new(),
+		});
 	}
+	let garbled = garbled_indexes(&body);
+	let text = body
+		.split(|b| *b == b'\n')
+		.enumerate()
+		.map(|(index, line)| {
+			if garbled.contains(&index) {
+				std::borrow::Cow::Borrowed("")
+			} else {
+				String::from_utf8_lossy(line)
+			}
+		})
+		.collect::<Vec<_>>()
+		.join("\n");
+	Ok(SettingsText {
+		text,
+		undecoded: garbled.iter().map(|index| index + 1).collect(),
+	})
+}
+
+fn read_settings_text(path: &std::path::Path) -> Option<String> {
+	read_settings(path).ok().map(|read| read.text)
 }
 
 fn convert_shcl2_config(path: &std::path::Path) {
@@ -7940,6 +8083,7 @@ mod tests {
 				path: path.clone(),
 				lines: vec![3],
 				lost: 1,
+				why: Unreadable::Syntax,
 			})
 		);
 		assert_eq!(take_refusal(), None, "taken once");
@@ -11204,6 +11348,91 @@ mod tests {
 		assert_eq!((loss.lost, loss.how), (1, Converted::Rewritten));
 		let copy = loss.backup.expect("a copy was kept");
 		assert_eq!(std::fs::read(&copy).unwrap(), body);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	fn not_utf8_current_file() -> Vec<u8> {
+		[
+			b"font:\n\tsize: 19\n# caf\xe9\nwindow:\n\tcolumns: 103\n".as_slice(),
+			shcl::FORMAT_LINE.as_bytes(),
+			b"\n",
+		]
+		.concat()
+	}
+
+	// A current file that is not UTF-8 used to load as all defaults with no
+	// word. It is still left as it was, but every line that decodes is read.
+	// Test ID: ErgK1sy
+	#[test]
+	fn a_current_file_that_is_not_utf8_loads_what_reads() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("notutf8_launch");
+		let path = dir.join("config.shcl");
+		let body = not_utf8_current_file();
+		std::fs::write(&path, &body).unwrap();
+		set_config_override(path.clone());
+
+		let s = load();
+		assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
+		assert_eq!(s.columns, 103);
+		assert_eq!(std::fs::read(&path).unwrap(), body, "left as it was");
+		assert_eq!(dir_names(&dir), vec!["config.shcl".to_string()]);
+		let said = LAUNCH_SAID.lock().unwrap().clone().expect("said").1;
+		assert!(said.contains(&not_utf8_line(&path, &[3])), "{said:?}");
+		assert_eq!(
+			take_launch_refusal(),
+			Some(Refusal {
+				path: path.clone(),
+				lines: vec![3],
+				lost: 1,
+				why: Unreadable::NotUtf8,
+			})
+		);
+		assert_eq!(take_launch_refusal(), None, "taken once");
+
+		let fixed = String::from_utf8_lossy(&body).replace('\u{fffd}', "e");
+		std::fs::write(&path, &fixed).unwrap();
+		let _ = load();
+		assert_eq!(take_launch_refusal(), None, "a fixed file says nothing");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A save on that file used to say it saved and write nothing. Writing it
+	// would drop the line that does not decode, so it is refused, and the
+	// window hears of it as for any refused save.
+	// Test ID: ErgK2CS
+	#[test]
+	fn a_save_on_a_current_file_that_is_not_utf8_is_refused() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("notutf8_save");
+		let path = dir.join("config.shcl");
+		let body = not_utf8_current_file();
+		std::fs::write(&path, &body).unwrap();
+		set_config_override(path.clone());
+		let orig = Settings::default();
+		let mut edited = orig.clone();
+		edited.font_size += 1.0;
+
+		let _ = take_refusal();
+		assert!(!persist(&orig, &edited), "nothing was written");
+		assert_eq!(
+			take_refusal(),
+			Some(Refusal {
+				path: path.clone(),
+				lines: vec![3],
+				lost: 1,
+				why: Unreadable::NotUtf8,
+			})
+		);
+		assert_eq!(std::fs::read(&path).unwrap(), body);
+
+		// the rating's own writer says it could not keep the result
+		let kept = keep_rating(&RatingLines {
+			profile: Some("high"),
+			..RatingLines::default()
+		});
+		assert_eq!(kept, Kept::Unreadable);
+		assert_eq!(std::fs::read(&path).unwrap(), body);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
