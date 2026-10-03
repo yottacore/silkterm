@@ -83,6 +83,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `transparency_is_the_last_group_on_the_background_tab`, `the_transparency_row_warns_that_it_needs_the_compositor`, `a_triangle_keeps_its_direction_at_any_scale` and `a_warning_needs_a_label_of_its_own`. Each failed on the old code and passes now.
 	- Closed:
 
+- The shipped prompts no longer name real machines
+	- ID: 2026100314195000
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Yes
+	- Priority: Low
+	- Opened: 20261003-141950
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Neither prompt that SilkTerm installs colors a host by a real machine name.
+		- Each keeps an example of how to color one.
+	- Progress log:
+		- 20261003: The PowerShell block colors the host name from `$SilkTermHostColor` only, else white. Its comment shows how to set it per machine above the block.
+		- 20261003: The bash prompt's host color case has one commented example and the default arm. This copy now differs from x9ps1-git in that one table, and the comment over `BASH_PROMPT` says so.
+		- 20261003: shell-integration.md shows the new block.
+	- Decisions:
+		- 20261003: Remove the machine names from both shipped prompts and leave an example.
+	- Note: The bash prompt file is rewritten from the binary at each launch, so a host color added to it does not last. On the machines that were in the table, the bash prompt's host is now white.
+	- Test case: `the_shipped_prompts_color_no_named_machine` (Erftpx4). It failed on each old script and passes on both new ones.
+	- Branch: hostnames
+
 - At the RC release, convert the config to the new format and keep the old file beside it
 	- ID: 2026100220292612
 	- Type: Feature
@@ -1112,6 +1134,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The PowerShell section of the directives.
 	- Progress log:
 		- 20261003: The naming half needs a call first: rename to Verb-Noun, or record `fCamelCase` as a house allowance with its reason, the way Write-Host is.
+		- 20261003: `PSUseApprovedVerbs` is now in the lint's excluded rules, with the reason beside it.
+	- Decisions:
+		- 20261003: `fCamelCase` function names stay. They are an exception for this project only. The rest of the item stands.
 	- Origin: c09beb3 (2026-08-06) for install.ps1, 96da710 (2026-07-22) for cicd-win.ps1, 4050e29 (2026-09-08) for n8runterm.ps1. No earlier review item. Confirmed.
 	- Test case: The PowerShell lint, with the positional and alias rules added.
 	- Note: Code review 20261003 item 15.
@@ -1244,8 +1269,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261003: config.rs, cli.rs, ctl.rs, fileassoc.rs, integration.rs and build.rs return `Result<_, String>`. gfx.rs, dialog.rs, term.rs, pane.rs and main.rs use `anyhow`. config.rs also reports through `bool` plus a printed line, and `backfilled_text` uses its `String` error for a setting name, not a message.
 		- 20261003: The directive prefers `anyhow` for an application. The call is to move to it, or to write `String` errors into the style guide as the house choice.
+	- Decisions:
+		- 20261003: Move to `anyhow`, with `.context()` where a message names the file or step. It is the usual choice for an application, and it keeps the source error. `backfilled_text` and `unbury` get a small named error type instead, since their `String` is a setting name, not a message.
 	- Origin: c6eaa04 (2026-06-28) for cli.rs, f61b1769 (2026-09-16) for config.rs. No earlier review item. Confirmed.
-	- Test case: None until the call is made.
+	- Test case: The existing tests over each module. Messages a test reads stay the same.
 	- Note: Code review 20261003 item 22.
 
 - app.rs and settings_ui.rs each do too many jobs
@@ -7737,7 +7764,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decided against: stopping `links::find_at` from trying start points past the pointer. It runs once per pointer cell change and the scan is short.
 	- Decided against: the clippy `or_fun_call` and `clone_on_ref_ptr` hits. They are on cold paths or are plain handle clones, each a one-lint fix.
 	- Decided against: reindenting the Python files to four spaces. Existing code keeps its indent.
-	- Decided against: the per-host color table in the shipped prompt scripts, under this review. It is outside the style and performance rules, and the copy comes from x9ps1-git unchanged.
 	- Opened: 20261003-140500
 	- Closed: 20261003-140500
 

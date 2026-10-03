@@ -141,14 +141,7 @@ function fMain() {
 	## Unique hostname colors, with default; feel free to add, change, delete
 	local colorHostname=""
 	case "${HOSTNAME}" in
-		"b12")       colorHostname="${styleBold}   ; ${fgGreen}"    ;;
-		"b15")       colorHostname="${styleBold}   ; ${fgBlue}"     ;;
-		"b16")       colorHostname="${styleBold}   ; ${fgRed}"      ;;
-		"b17")       colorHostname="${styleBold}   ; ${fgPurple}"   ;;
-		"b23")       colorHostname="${styleBold}   ; ${fgRed}"      ;;
-		"vm925w")    colorHostname="${styleBold}   ; ${fgCyan}"     ;;
-		"xub2004a")  colorHostname="${styleBold}   ; ${fgGreen}"    ;;
-		"t2nsn")     colorHostname="${styleBold}   ; ${fgPurple}"   ;;
+#		"myserver")  colorHostname="${styleBold}   ; ${fgRed}"      ;;
 		*)           colorHostname="${styleLight}  ; ${fgWhite} "   ;;
 	esac
 

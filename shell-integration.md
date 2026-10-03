@@ -113,20 +113,10 @@ if ($Host.Name -eq 'ConsoleHost' -and -not [Console]::IsOutputRedirected) {
 	}
 	catch { }
 	# A machine you are logged into by mistake should look wrong immediately, so
-	# the host name is colored per machine. For your own, set $SilkTermHostColor
-	# ABOVE this block, such as $SilkTermHostColor = '1;33'. A line added here is
-	# replaced on a later launch.
-	$global:__SilkTermHostColor = if ($global:SilkTermHostColor) { $global:SilkTermHostColor } else { switch ([Environment]::MachineName.ToLowerInvariant()) {
-		'b12' { '1;32' }
-		'b15' { '1;34' }
-		'b16' { '1;31' }
-		'b17' { '1;35' }
-		'b23' { '1;31' }
-		'vm925w' { '1;36' }
-		'xub2004a' { '1;32' }
-		't2nsn' { '1;35' }
-		default { '1;37' }
-	} }
+	# the host name can be colored per machine. Set $SilkTermHostColor ABOVE this
+	# block, since a line added here is replaced on a later launch. For example:
+	#   if ([Environment]::MachineName -eq 'myserver') { $SilkTermHostColor = '1;31' }
+	$global:__SilkTermHostColor = if ($global:SilkTermHostColor) { $global:SilkTermHostColor } else { '1;37' }
 
 	function global:__SilkTermPaint {
 		param([string]$Code, [string]$Text)
