@@ -34,95 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- A current-format config that is not UTF-8 loads as defaults with no message, and a Settings save on it says it worked but writes nothing
-	- ID: 2026100315581313
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Needs external testing: The new unit tests on Windows, at the next vm925w run.
-	- Severity: Avg
-	- Opened: 20261003-155813
-	- Opened by: CC
-	- Related IDs: 2026100312470546, 2026100316135866
-	- Target OS: All
-	- Steps to reproduce:
-		- Put a byte that is not valid UTF-8 into a config file that already has the current Format line.
-		- Launch, then change a setting in Settings and save.
-	- Incorrect behavior: The launch shows defaults and says nothing about the file. The save reports success, and the file is unchanged.
-	- Expected behavior: The launch says the file could not be read. A save either writes or says it did not.
-	- Reproduced: 20261003 on b23, on dev 7895ffa. A unit test loaded the file as all defaults, and `persist` answered that it saved and wrote nothing. First found by reading the code while working 2026100312470546, which handles only an old-format file.
-	- Origin: The not-UTF-8 read in `read_settings_text` answered nothing for a current file, and `persist` took nothing to read as nothing to do. 2026100312470546 kept that on purpose for a current file. Confirmed.
-	- Actual fix:
-		- The file is still left as it is on disk, as 2026100312470546 decided, so no copy is needed. The launch reads every line that decodes, with the others read as blank.
-		- The launch names those lines on the terminal and puts up the "Settings not saved" notice once the window is on screen. The notice says the lines are not UTF-8 text.
-		- Every save refuses, since a write would delete those lines. A Settings OK gets the notice each time and closes, as for any refused save. A save nobody asked for, such as a resize, is said once a session.
-		- The rating write says the file has a line that cannot be read, where it said the file cannot be written.
-		- A Settings save that cannot read the file for another reason, such as permissions, now says so on the terminal and is not reported as a save. A missing file is still skipped, filed as 2026100316135866.
-	- Swept: Every writer of the file. `persist` carries the Settings save, window size and font zoom, per-monitor sizes, the copy toggles and the shells found at launch, and refuses now. The rating write refuses with the right words. The launch steps and `adopt_default_shell` write nothing to such a file, and the launch says why. Revert and clear run only after a `persist` that wrote. `write_doc` only gets what `read_doc` read. `--reset-config` moves the bytes aside unread. The window size refresh reads the lines that decode.
-	- Test case: `a_current_file_that_is_not_utf8_loads_what_reads` (ErgK1sy) and `a_save_on_a_current_file_that_is_not_utf8_is_refused` (ErgK2CS), both seen to fail on the old code and pass on the new. `a_notice_for_lines_that_are_not_utf8_says_so` (ErgK2Vb). `cicd/tests/config-convert/run.bash` (ErgDpjX) gained a current-file case and a "Settings not saved" notice check on a launch that saves nothing. Its new checks failed on the old binary, and the notice check failed with only the window half put back.
-	- Verified: The unit suite passes, 1077 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. The pipeline test passes.
-	- Branch: badutf8
-	- Commit: 54c8d73
-
-- When a shcl upgrade breaks the config format, keep the old file and write a new one from scratch
-	- ID: 2026100312470546
-	- Type: Feature
-	- Status: Waiting on signoff
-	- Needs external testing: The new unit tests on Windows, at the next vm925w run.
-	- Priority: Avg
-	- Opened: 20261003-124705
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100220292612, 2026100315553545
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- When wiring a new version of shcl into the code, first see if it has a new API to do the conversion, or at least help with it.
-		- Check if the new shcl version has breaking changes. If so:
-			- Rename the latest config file `[origname]_backup_YYYYmmDD-HHMMSS_format-v[shcl version].shcl`.
-			- Write a new config file with the same path and name as before, from scratch through shcl, using whatever settings and conversions shcl can handle or are salvageable.
-		- Future versions of shcl might do the config backup and conversion. Be careful not to race, conflict with, or trample what shcl might do.
-	- Notes:
-		- 20261003: 2026100220292612 already keeps a copy on every format upgrade, as `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`. N is the old file's Format number, which has matched shcl's major version so far. It copies the file and then converts it in place, rather than writing a new one from scratch.
-		- 20261003: shcl 3.0's `migrate_unstamped` is the help shcl gives today. It respells a 2.x file, and does no backup.
-	- Decisions:
-		- 20261003: Keep the in-place conversion whenever shcl can migrate the file. Write a new file from scratch, keeping what still parses, only when shcl can't read or migrate it. The old file is kept under the name 2026100220292612 already uses, `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, not a second scheme.
-	- Progress log:
-		- 20261003: shcl b10c2009, and its dev branch at e9e4a6c, have `migrate`, `migrate_unstamped` and `format_version`, and nothing that converts a whole file or keeps a copy. The CLI's `migrate --write` keeps `config_old_v2.shcl`, but the library has no such call, so nothing here can race it today.
-		- 20261003: A file shcl cannot migrate is one its stamped `migrate` gives no Format line, as for a raw block that never closes. `migrate_unstamped`, the call for a program that writes its own footer, cannot say so, so the stamped call is asked too. Filed as shcl friction, 2026100315553545.
-		- 20261003: A file shcl cannot read is one that is not UTF-8. Before, such a file loaded as all defaults with no message, and a Settings save said it saved and wrote nothing. In an older format it is now written new, and a line that does not decode is left out. A current-format file that is not UTF-8 is no upgrade and is left as it was.
-		- 20261003: The new file is the template with every setting that still reads carried to it, as the pre-nesting conversion carries values. Themes, per-monitor sizes and the shell list carry too. Each line shcl cannot read, and each setting with nowhere to go, counts as lost.
-		- 20261003: Lost settings are said by the same writer, terminal line and notice as a conversion in place. The text says the file could not be converted in place, so a new one was written, and how many settings could not be carried over. The notice title stays "Settings not converted".
-		- 20261003: Before this, a 2.x file with a raw block that never closed was converted in place with no copy kept, since the new footer landed inside the block and the file never read as a newer format. It now gets a copy and a new file.
-		- 20261003: The choice is made in one place, `upgrade` in config.rs, so a later shcl that converts whole files can take it over there.
-		- 20261003: README and design.md say what happens to such a file.
-	- Verified: The unit suite passes, 1074 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID check passes. With the old behavior put back, the three rewrite tests failed, and the pipeline test failed its can't-migrate, can't-read and notice checks. The new fuzz target ran 36754 cases clean in 60 seconds, and failed on seed 68 with unreadable lines carried over.
-	- Swept: Every reader that parses the settings file goes through `read_settings_text`: the launch, `read_doc` for Settings saves and the shell adoption, and the window size refresh. The other launch steps run after the conversion and read what it wrote. Revert, clear and the rating write still write the text as read and never convert, as before.
-	- Branch: fmtfresh
-	- Commit: 8553a33
-	- Test case: `a_file_shcl_cannot_migrate_is_written_new` (ErgDo2H), `a_file_shcl_cannot_read_is_written_new` (ErgDoNP), `a_current_file_shcl_cannot_read_is_left_alone` (ErgDoiP), `a_save_on_a_file_shcl_cannot_read_writes_it_new` (ErgDp3N), `a_rewritten_file_notice_says_it_was_written_new` (ErgDpOZ), the fuzz target `an_upgrade_settles_in_one_pass` (ErgHEfO), and `cicd/tests/config-convert/run.bash` (ErgDpjX).
-
-- The shipped prompts no longer name real machines
-	- ID: 2026100314195000
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: Yes
-	- Priority: Low
-	- Opened: 20261003-141950
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Neither prompt that SilkTerm installs colors a host by a real machine name.
-		- Each keeps an example of how to color one.
-	- Progress log:
-		- 20261003: The PowerShell block colors the host name from `$SilkTermHostColor` only, else white. Its comment shows how to set it per machine above the block.
-		- 20261003: The bash prompt's host color case has one commented example and the default arm. This copy now differs from x9ps1-git in that one table, and the comment over `BASH_PROMPT` says so.
-		- 20261003: shell-integration.md shows the new block.
-	- Decisions:
-		- 20261003: Remove the machine names from both shipped prompts and leave an example.
-	- Note: The bash prompt file is rewritten from the binary at each launch, so a host color added to it does not last. On the machines that were in the table, the bash prompt's host is now white.
-	- Test case: `the_shipped_prompts_color_no_named_machine` (Erftpx4). It failed on each old script and passes on both new ones.
-	- Branch: hostnames
-
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600
 	- Type: Bug
@@ -217,6 +128,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: gpuload
 	- Commit: 8cb6a4d
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_owed_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
+	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
 
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
@@ -472,35 +384,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: maccmd
 	- Commit: 7179fa9
 
-- A test run removes its own dated folder when it finishes
-	- ID: 2026100220260484
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs external testing: On vm925w, the tests went in before the code they check: 367e15a and 53e4295 should fail there, and c283f5b and 8c498b1 pass.
-	- Priority: Avg
-	- Opened: 20261002-202604
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026093013113320, 2026093015422119
-	- Target OS: All
-	- Requirements:
-		- When a run finishes, its `test_silkterm_<stamp>` folder in the temp dir is removed, on every platform and on the Windows test boxes.
-	- Progress log:
-		- 20261002: Run folders stay behind after a run. vm925w had five in `%TEMP%` after the 2026093015422119 checks.
-	- Decisions:
-		- 20261002: Yes, a run removes its own folder.
-	- Done:
-		- A run that made its folder removes it when it passes, and keeps it when it fails, with a `test files kept in` line on stderr. That holds for the Rust tests, the Bash, Python and PowerShell test scripts, `cicd.bash` and `cicd-win.ps1`. A folder handed down through `SILKTERM_TEST_DIR` is never removed.
-		- Only a folder with the run's own mark goes. A link put in its place, or one inside it, is never followed.
-		- The wingui harness removes the run folder on the box after every run, pass or fail, also when the binary could not be sent, unless `--keep`. It makes no local folder before it holds the boxes.
-	- Note: `cicd/tests/testdir/run.bash` steps A2, D and F changed, since a passing run no longer leaves its folder for them to look at.
-	- Note: Folders left by earlier runs have no mark and stay. They are removed by hand, once.
-	- Test case: `cicd/tests/testdir/run.bash` (ErOj67l) steps A2, A3, C2, E, F, F2 and G; `cicd/tests/testdir/remove.ps1` (ErbiCgJ); `a_marked_run_folder_is_removed` (ErbiCgE), `a_run_folder_without_this_runs_mark_is_left` (ErbiCgF), `a_link_in_place_of_the_run_folder_is_left` (ErbiCgG), `a_link_inside_the_run_folder_is_not_followed` (ErbiCgH) and `a_run_that_fails_keeps_its_folder` (ErbiCgI); `cicd/tests/cicd-win/run.bash` (Er2UgYE); `cicd/tests/wingui/harness-test.bash` (EqH4isr). Each fails with the check it pins taken out.
-	- Verified: The gate, each changed script test on its own, a lone full `cargo test`, and clippy for Linux, Windows and macOS.
-		- 20261003: On vm925w at 8877157, `%TEMP%\test_silkterm_*` was listed for both accounts before and after each run, and no run left a new folder. A `cicd-win.ps1 -Yes -Quick -NoPublish -NoDogfood -NoSync` run passed, with its test run folder removal stage. Its folder was there while it ran. A lone `cargo test` passed, 1035 tests, with the five `testdir::tests` tests. A wingui `smoke` run passed, and a wingui run of an unknown scenario failed.
-	- Branch: testrm
-	- Commit: a497b6d, 174abde
-
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
@@ -650,34 +533,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
 	- Closed:
 
-- Free resources when idle: on by default
-	- ID: 2026100312470540
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs external testing: A dogfood look on b23 with the GPU busy or nearly full, with the new default and short idle times. The window should let its device go, come back on use, and paint without a key or click if a rebuild is refused at first. Started from a terminal with `SILK_IDLEDBG=1`, it prints each release, rebuild and refusal.
-	- Priority: Avg
-	- Opened: 20261003-124705
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100312470535
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- Default "Free resources when idle" to on.
-	- Notes:
-		- When this is on, an idle window lets its GPU device go and gets a new one when it wakes. That is the same path a busy GPU can break, so test it under GPU load, after or along with 2026100312470535.
-	- Progress log:
-		- 20261003: `window.idle_release` now ships on. An old config's commented `false` default line is refreshed to `true`. A line set by hand is left alone. The two waits stay at 30 and 240 minutes.
-		- 20261003: No performance profile sets this. It is not among the fields a profile governs, so the profiles needed no change.
-		- 20261003: The releasing resources design doc and design.md said off or optional, and now say on. README, the glossary, the UI style guide and the Settings help state no default.
-		- 20261003: Verified: with no `idle_release` line and both waits at 1 minute, an unfocused window let its device go after a minute and took it back when the pointer came in, then showed "(resources restored)". Three more cycles at 6 seconds each painted after every wake, with file handles and threads back to the same counts each time. Software GL only.
-		- 20261003: Verified: the full unit suite, clippy for Linux and Windows, and fmt pass. Both new tests fail with the old default put back.
-		- 20261003: Old test assertion "off by default" in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` is commented out, since it pinned the old default. The test now checks the switched-off case directly.
-	- Swept: `Settings::default()`, the template line, `SUPERSEDED_DEFAULTS`, the profile governed lists (`Shadow` in profile.rs, `GOVERNED` in settings_ui.rs), and every `.md` and `.shcl` naming the setting.
-	- Branch: idleon
-	- Commit: ce9412c
-	- Test case: `idle_release_ships_on` (Erg8fz0) and `an_existing_config_learns_that_the_idle_release_ships_on` (Erg8g2c).
-
 - The event loop does blocking work on every pass
 	- ID: 2026100314050005
 	- Type: Enhancement
@@ -825,6 +680,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A missing capability, and a silent wrong answer for a caller that writes its own footer. SilkTerm asks the stamped `migrate` as well, in `upgrade` in config.rs, and writes such a file new (2026100312470546).
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
+
+- A current-format config that is not UTF-8 loads as defaults with no message, and a Settings save on it says it worked but writes nothing
+	- ID: 2026100315581313
+	- Type: Bug
+	- Status: Queued
+	- Needs external testing: The new unit tests on Windows, at the next vm925w run.
+	- Severity: Avg
+	- Opened: 20261003-155813
+	- Opened by: CC
+	- Related IDs: 2026100312470546, 2026100316135866
+	- Target OS: All
+	- Steps to reproduce:
+		- Put a byte that is not valid UTF-8 into a config file that already has the current Format line.
+		- Launch, then change a setting in Settings and save.
+	- Incorrect behavior: The launch shows defaults and says nothing about the file. The save reports success, and the file is unchanged.
+	- Expected behavior: The launch says the file could not be read. A save either writes or says it did not.
+	- Reproduced: 20261003 on b23, on dev 7895ffa. A unit test loaded the file as all defaults, and `persist` answered that it saved and wrote nothing. First found by reading the code while working 2026100312470546, which handles only an old-format file.
+	- Origin: The not-UTF-8 read in `read_settings_text` answered nothing for a current file, and `persist` took nothing to read as nothing to do. 2026100312470546 kept that on purpose for a current file. Confirmed.
+	- Actual fix:
+		- The file is still left as it is on disk, as 2026100312470546 decided, so no copy is needed. The launch reads every line that decodes, with the others read as blank.
+		- The launch names those lines on the terminal and puts up the "Settings not saved" notice once the window is on screen. The notice says the lines are not UTF-8 text.
+		- Every save refuses, since a write would delete those lines. A Settings OK gets the notice each time and closes, as for any refused save. A save nobody asked for, such as a resize, is said once a session.
+		- The rating write says the file has a line that cannot be read, where it said the file cannot be written.
+		- A Settings save that cannot read the file for another reason, such as permissions, now says so on the terminal and is not reported as a save. A missing file is still skipped, filed as 2026100316135866.
+	- Swept: Every writer of the file. `persist` carries the Settings save, window size and font zoom, per-monitor sizes, the copy toggles and the shells found at launch, and refuses now. The rating write refuses with the right words. The launch steps and `adopt_default_shell` write nothing to such a file, and the launch says why. Revert and clear run only after a `persist` that wrote. `write_doc` only gets what `read_doc` read. `--reset-config` moves the bytes aside unread. The window size refresh reads the lines that decode.
+	- Test case: `a_current_file_that_is_not_utf8_loads_what_reads` (ErgK1sy) and `a_save_on_a_current_file_that_is_not_utf8_is_refused` (ErgK2CS), both seen to fail on the old code and pass on the new. `a_notice_for_lines_that_are_not_utf8_says_so` (ErgK2Vb). `cicd/tests/config-convert/run.bash` (ErgDpjX) gained a current-file case and a "Settings not saved" notice check on a launch that saves nothing. Its new checks failed on the old binary, and the notice check failed with only the window half put back.
+	- Verified: The unit suite passes, 1077 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. The pipeline test passes.
+	- Branch: badutf8
+	- Commit: 54c8d73
+	- Decisions:
+		- 20261003: Rewrite the file and keep a backup, rather than refusing saves. Start over with defaults in the worst case.
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
@@ -1520,6 +1406,107 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
 
+- When a shcl upgrade breaks the config format, keep the old file and write a new one from scratch
+	- ID: 2026100312470546
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: The new unit tests on Windows, at the next vm925w run.
+	- Priority: Avg
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100220292612, 2026100315553545
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When wiring a new version of shcl into the code, first see if it has a new API to do the conversion, or at least help with it.
+		- Check if the new shcl version has breaking changes. If so:
+			- Rename the latest config file `[origname]_backup_YYYYmmDD-HHMMSS_format-v[shcl version].shcl`.
+			- Write a new config file with the same path and name as before, from scratch through shcl, using whatever settings and conversions shcl can handle or are salvageable.
+		- Future versions of shcl might do the config backup and conversion. Be careful not to race, conflict with, or trample what shcl might do.
+	- Notes:
+		- 20261003: 2026100220292612 already keeps a copy on every format upgrade, as `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`. N is the old file's Format number, which has matched shcl's major version so far. It copies the file and then converts it in place, rather than writing a new one from scratch.
+		- 20261003: shcl 3.0's `migrate_unstamped` is the help shcl gives today. It respells a 2.x file, and does no backup.
+	- Decisions:
+		- 20261003: Keep the in-place conversion whenever shcl can migrate the file. Write a new file from scratch, keeping what still parses, only when shcl can't read or migrate it. The old file is kept under the name 2026100220292612 already uses, `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, not a second scheme.
+	- Progress log:
+		- 20261003: shcl b10c2009, and its dev branch at e9e4a6c, have `migrate`, `migrate_unstamped` and `format_version`, and nothing that converts a whole file or keeps a copy. The CLI's `migrate --write` keeps `config_old_v2.shcl`, but the library has no such call, so nothing here can race it today.
+		- 20261003: A file shcl cannot migrate is one its stamped `migrate` gives no Format line, as for a raw block that never closes. `migrate_unstamped`, the call for a program that writes its own footer, cannot say so, so the stamped call is asked too. Filed as shcl friction, 2026100315553545.
+		- 20261003: A file shcl cannot read is one that is not UTF-8. Before, such a file loaded as all defaults with no message, and a Settings save said it saved and wrote nothing. In an older format it is now written new, and a line that does not decode is left out. A current-format file that is not UTF-8 is no upgrade and is left as it was.
+		- 20261003: The new file is the template with every setting that still reads carried to it, as the pre-nesting conversion carries values. Themes, per-monitor sizes and the shell list carry too. Each line shcl cannot read, and each setting with nowhere to go, counts as lost.
+		- 20261003: Lost settings are said by the same writer, terminal line and notice as a conversion in place. The text says the file could not be converted in place, so a new one was written, and how many settings could not be carried over. The notice title stays "Settings not converted".
+		- 20261003: Before this, a 2.x file with a raw block that never closed was converted in place with no copy kept, since the new footer landed inside the block and the file never read as a newer format. It now gets a copy and a new file.
+		- 20261003: The choice is made in one place, `upgrade` in config.rs, so a later shcl that converts whole files can take it over there.
+		- 20261003: README and design.md say what happens to such a file.
+	- Verified: The unit suite passes, 1074 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID check passes. With the old behavior put back, the three rewrite tests failed, and the pipeline test failed its can't-migrate, can't-read and notice checks. The new fuzz target ran 36754 cases clean in 60 seconds, and failed on seed 68 with unreadable lines carried over.
+	- Swept: Every reader that parses the settings file goes through `read_settings_text`: the launch, `read_doc` for Settings saves and the shell adoption, and the window size refresh. The other launch steps run after the conversion and read what it wrote. Revert, clear and the rating write still write the text as read and never convert, as before.
+	- Branch: fmtfresh
+	- Commit: 8553a33
+	- Test case: `a_file_shcl_cannot_migrate_is_written_new` (ErgDo2H), `a_file_shcl_cannot_read_is_written_new` (ErgDoNP), `a_current_file_shcl_cannot_read_is_left_alone` (ErgDoiP), `a_save_on_a_file_shcl_cannot_read_writes_it_new` (ErgDp3N), `a_rewritten_file_notice_says_it_was_written_new` (ErgDpOZ), the fuzz target `an_upgrade_settles_in_one_pass` (ErgHEfO), and `cicd/tests/config-convert/run.bash` (ErgDpjX).
+	- Acceptance signoff: Self-closed: its unit tests and `cicd/tests/config-convert/run.bash` pass on dev 1ab651f. The native Windows run of the unit tests is still owed, and the code is shared.
+	- Closed: 20261003-165133
+
+- A test run removes its own dated folder when it finishes
+	- ID: 2026100220260484
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: On vm925w, the tests went in before the code they check: 367e15a and 53e4295 should fail there, and c283f5b and 8c498b1 pass.
+	- Priority: Avg
+	- Opened: 20261002-202604
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026093013113320, 2026093015422119
+	- Target OS: All
+	- Requirements:
+		- When a run finishes, its `test_silkterm_<stamp>` folder in the temp dir is removed, on every platform and on the Windows test boxes.
+	- Progress log:
+		- 20261002: Run folders stay behind after a run. vm925w had five in `%TEMP%` after the 2026093015422119 checks.
+	- Decisions:
+		- 20261002: Yes, a run removes its own folder.
+	- Done:
+		- A run that made its folder removes it when it passes, and keeps it when it fails, with a `test files kept in` line on stderr. That holds for the Rust tests, the Bash, Python and PowerShell test scripts, `cicd.bash` and `cicd-win.ps1`. A folder handed down through `SILKTERM_TEST_DIR` is never removed.
+		- Only a folder with the run's own mark goes. A link put in its place, or one inside it, is never followed.
+		- The wingui harness removes the run folder on the box after every run, pass or fail, also when the binary could not be sent, unless `--keep`. It makes no local folder before it holds the boxes.
+	- Note: `cicd/tests/testdir/run.bash` steps A2, D and F changed, since a passing run no longer leaves its folder for them to look at.
+	- Note: Folders left by earlier runs have no mark and stay. They are removed by hand, once.
+	- Test case: `cicd/tests/testdir/run.bash` (ErOj67l) steps A2, A3, C2, E, F, F2 and G; `cicd/tests/testdir/remove.ps1` (ErbiCgJ); `a_marked_run_folder_is_removed` (ErbiCgE), `a_run_folder_without_this_runs_mark_is_left` (ErbiCgF), `a_link_in_place_of_the_run_folder_is_left` (ErbiCgG), `a_link_inside_the_run_folder_is_not_followed` (ErbiCgH) and `a_run_that_fails_keeps_its_folder` (ErbiCgI); `cicd/tests/cicd-win/run.bash` (Er2UgYE); `cicd/tests/wingui/harness-test.bash` (EqH4isr). Each fails with the check it pins taken out.
+	- Verified: The gate, each changed script test on its own, a lone full `cargo test`, and clippy for Linux, Windows and macOS.
+		- 20261003: On vm925w at 8877157, `%TEMP%\test_silkterm_*` was listed for both accounts before and after each run, and no run left a new folder. A `cicd-win.ps1 -Yes -Quick -NoPublish -NoDogfood -NoSync` run passed, with its test run folder removal stage. Its folder was there while it ran. A lone `cargo test` passed, 1035 tests, with the five `testdir::tests` tests. A wingui `smoke` run passed, and a wingui run of an unknown scenario failed.
+	- Branch: testrm
+	- Commit: a497b6d, 174abde
+	- Acceptance signoff: Self-closed: the vm925w checks ran on 20261003 and passed, and its tests pass on dev.
+	- Closed: 20261003-165133
+
+- Free resources when idle: on by default
+	- ID: 2026100312470540
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261003-124705
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470535
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Default "Free resources when idle" to on.
+	- Notes:
+		- When this is on, an idle window lets its GPU device go and gets a new one when it wakes. That is the same path a busy GPU can break, so test it under GPU load, after or along with 2026100312470535.
+	- Progress log:
+		- 20261003: `window.idle_release` now ships on. An old config's commented `false` default line is refreshed to `true`. A line set by hand is left alone. The two waits stay at 30 and 240 minutes.
+		- 20261003: No performance profile sets this. It is not among the fields a profile governs, so the profiles needed no change.
+		- 20261003: The releasing resources design doc and design.md said off or optional, and now say on. README, the glossary, the UI style guide and the Settings help state no default.
+		- 20261003: Verified: with no `idle_release` line and both waits at 1 minute, an unfocused window let its device go after a minute and took it back when the pointer came in, then showed "(resources restored)". Three more cycles at 6 seconds each painted after every wake, with file handles and threads back to the same counts each time. Software GL only.
+		- 20261003: Verified: the full unit suite, clippy for Linux and Windows, and fmt pass. Both new tests fail with the old default put back.
+		- 20261003: Old test assertion "off by default" in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` is commented out, since it pinned the old default. The test now checks the switched-off case directly.
+	- Swept: `Settings::default()`, the template line, `SUPERSEDED_DEFAULTS`, the profile governed lists (`Shadow` in profile.rs, `GOVERNED` in settings_ui.rs), and every `.md` and `.shcl` naming the setting.
+	- Branch: idleon
+	- Commit: ce9412c
+	- Test case: `idle_release_ships_on` (Erg8fz0) and `an_existing_config_learns_that_the_idle_release_ships_on` (Erg8g2c).
+	- Note: 20261003, the look under GPU load is owed by 2026100312470535, which this shares its path with.
+	- Acceptance signoff: Self-closed: the default and its refresh are pinned by tests that pass on dev 1ab651f, and the release and wake cycle ran on Xvfb.
+	- Closed: 20261003-165133
+
 - At the RC release, convert the config to the new format and keep the old file beside it
 	- ID: 2026100220292612
 	- Type: Feature
@@ -2108,6 +2095,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: smallfix
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
 	- Closed: 20260929-170546
+
+- The shipped prompts no longer name real machines
+	- ID: 2026100314195000
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: Yes
+	- Priority: Low
+	- Opened: 20261003-141950
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Neither prompt that SilkTerm installs colors a host by a real machine name.
+		- Each keeps an example of how to color one.
+	- Progress log:
+		- 20261003: The PowerShell block colors the host name from `$SilkTermHostColor` only, else white. Its comment shows how to set it per machine above the block.
+		- 20261003: The bash prompt's host color case has one commented example and the default arm. This copy now differs from x9ps1-git in that one table, and the comment over `BASH_PROMPT` says so.
+		- 20261003: shell-integration.md shows the new block.
+	- Decisions:
+		- 20261003: Remove the machine names from both shipped prompts and leave an example.
+	- Note: The bash prompt file is rewritten from the binary at each launch, so a host color added to it does not last. On the machines that were in the table, the bash prompt's host is now white.
+	- Test case: `the_shipped_prompts_color_no_named_machine` (Erftpx4). It failed on each old script and passes on both new ones.
+	- Branch: hostnames
+	- Acceptance signoff: Self-closed: its test passes on dev 1ab651f, in a full unit suite run.
+	- Closed: 20261003-165133
 
 - The showdown rigs cannot take XTerm's speed figure again
 	- ID: 2026092820352466
