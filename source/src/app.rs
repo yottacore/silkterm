@@ -271,12 +271,7 @@ impl App {
 			}
 			WindowEvent::ModifiersChanged(mods) => {
 				if let Some(d) = &mut self.dialog {
-					let mod_state = mods.state();
-					d.set_mods(
-						mod_state.alt_key(),
-						mod_state.shift_key(),
-						mod_state.control_key(),
-					);
+					d.set_keys(input::edit_keys(mods.state(), cfg!(target_os = "macos")));
 					self.dialog_dirty = true;
 				}
 			}
@@ -570,6 +565,11 @@ pub(crate) enum MenuAction {
 	// a row on the macOS menu bar only; elsewhere it is Ctrl+Shift+N alone
 	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 	NewWindow,
+	// the macOS Window menu's tab rows; elsewhere these are keys alone
+	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+	PrevTab,
+	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+	NextTab,
 	// New tab running the shell at this index in the stored list (config
 	// `shells.*`; see the Tabs menu's "New tab with shell").
 	NewTabShell(usize),
@@ -1001,6 +1001,8 @@ pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 		MenuAction::Paste => Some(Hotkey::Paste),
 		MenuAction::NewTab => Some(Hotkey::NewTab),
 		MenuAction::NewWindow => Some(Hotkey::NewWindow),
+		MenuAction::PrevTab => Some(Hotkey::PrevTab),
+		MenuAction::NextTab => Some(Hotkey::NextTab),
 		MenuAction::CloseTab => Some(Hotkey::CloseTab),
 		MenuAction::FontBigger => Some(Hotkey::Zoom(1)),
 		MenuAction::FontSmaller => Some(Hotkey::Zoom(-1)),
@@ -4137,6 +4139,8 @@ impl State {
 			}
 			MenuAction::NewTab => self.new_tab(proxy),
 			MenuAction::NewWindow => self.new_window(),
+			MenuAction::PrevTab => self.step_tab(false),
+			MenuAction::NextTab => self.step_tab(true),
 			MenuAction::NewTabShell(index) => self.new_tab_with(proxy, shell_argv(index)),
 			MenuAction::CloseTab => self.close_tab(),
 			MenuAction::FontBigger => self.font_zoom(1),
@@ -4315,6 +4319,18 @@ impl State {
 
 	fn close_tab(&mut self) {
 		self.close_tab_at(self.tabs.active);
+	}
+
+	// the tab to the left or right, round the end
+	fn step_tab(&mut self, forward: bool) {
+		if forward {
+			self.tabs.next();
+		} else {
+			self.tabs.prev();
+		}
+		self.freeze_catchup();
+		self.update_title();
+		self.dirty = true;
 	}
 
 	// A pane whose shell has gone: close just that pane, then its tab, then the
@@ -7208,6 +7224,14 @@ impl ApplicationHandler<UserEvent> for App {
 		if self.state.is_some() {
 			return;
 		}
+		// AppKit's own window tabs would add a second set of tab rows to the
+		// menus, one of them taking Ctrl+Tab from the shell. SilkTerm has tabs
+		// of its own.
+		#[cfg(target_os = "macos")]
+		{
+			use winit::platform::macos::ActiveEventLoopExtMacOS;
+			event_loop.set_allows_automatic_window_tabbing(false);
+		}
 		let cli_win = &self.cli.win;
 		let decorated = !cli_win.hide_frame.unwrap_or(false);
 		let menu_bar = menu_bar_at_launch(cli_win.hide_menu, cfg!(target_os = "macos"));
@@ -7612,9 +7636,23 @@ impl ApplicationHandler<UserEvent> for App {
 			UserEvent::Menu(action) => {
 				// with a dialog or notice up this only brings it forward, as a
 				// click in the window does, so a second Settings cannot replace
-				// the one open
-				if let Some(up) = self.notice.as_ref().or(self.dialog.as_ref()) {
-					up.window.focus_window();
+				// the one open. Copy, Paste and the tab rows are Command+C, V and
+				// Shift+[ ] there, so they go to the dialog.
+				if let Some(n) = &self.notice {
+					n.window.focus_window();
+					return;
+				}
+				if let Some(d) = self.dialog.as_mut() {
+					d.window.focus_window();
+					let clip = Some(&mut state.clipboard);
+					match action {
+						MenuAction::Copy => d.menu_edit(crate::settings_ui::EditCmd::Copy, clip),
+						MenuAction::Paste => d.menu_edit(crate::settings_ui::EditCmd::Paste, clip),
+						MenuAction::PrevTab => d.switch_tab(false),
+						MenuAction::NextTab => d.switch_tab(true),
+						_ => return,
+					}
+					self.dialog_dirty = true;
 					return;
 				}
 				state.note_active("menu bar");
@@ -8018,16 +8056,15 @@ impl ApplicationHandler<UserEvent> for App {
 								state.window.set_cursor(CursorIcon::Grabbing);
 								state.cursor_icon = CursorIcon::Grabbing;
 							}
-						} else if let Some((id, link)) = state
-							.mods
-							.control_key()
-							.then(|| state.link_at_pointer())
-							.flatten()
+						} else if let Some((id, link)) =
+							input::shortcut_held(state.mods, cfg!(target_os = "macos"))
+								.then(|| state.link_at_pointer())
+								.flatten()
 						{
-							// Ctrl+click a link: arm here, open on the release over the
-							// same link, so a slipped press can be dragged off to
-							// cancel. Ctrl elsewhere still starts a block selection -
-							// only a press ON a link is taken.
+							// Ctrl+click a link, Command+click on a Mac: arm here, open
+							// on the release over the same link, so a slipped press can
+							// be dragged off to cancel. The same key elsewhere still
+							// starts a block selection - only a press ON a link is taken.
 							state.focus_at(x, y);
 							state.link_arm = Some((id, link.url));
 						} else {
@@ -8041,8 +8078,10 @@ impl ApplicationHandler<UserEvent> for App {
 								(state.text.cell_w, state.text.cell_h),
 							);
 							state.last_click = Some((now, x, y));
-							let kind =
-								input::click_select(state.click_count, state.mods.control_key());
+							let kind = input::click_select(
+								state.click_count,
+								input::shortcut_held(state.mods, cfg!(target_os = "macos")),
+							);
 							let pairs = if kind == ClickSelect::Word {
 								config::selection_pairs()
 							} else {
@@ -8340,7 +8379,9 @@ impl ApplicationHandler<UserEvent> for App {
 				// the bare arrow that gate is for, and a flag lagging the WM must not
 				// eat it while right-click Copy works.
 				if IGNORE_KEYS_WHILE_UNFOCUSED && !state.focused {
-					if state.menu.is_none() && is_copy_chord(state.mods, &key.logical_key) {
+					if state.menu.is_none()
+						&& is_copy_chord(state.mods, &key.logical_key, cfg!(target_os = "macos"))
+					{
 						state.copy_selection();
 					}
 					return;
@@ -8423,8 +8464,8 @@ impl ApplicationHandler<UserEvent> for App {
 				// A tab rename takes every key while it is up: the tab strip is the
 				// only thing on screen accepting typing, so nothing reaches the shell.
 				if state.tab_edit.is_some() {
-					let ctrl = state.mods.control_key();
-					let shift = state.mods.shift_key();
+					let keys = input::edit_keys(state.mods, cfg!(target_os = "macos"));
+					let shift = keys.shift;
 					match &key.logical_key {
 						// Tab commits too - there is nowhere for it to move to.
 						Key::Named(NamedKey::Enter | NamedKey::Tab) => state.commit_tab_edit(),
@@ -8447,23 +8488,27 @@ impl ApplicationHandler<UserEvent> for App {
 						Key::Named(NamedKey::End) => {
 							state.edit_tab(|edit| edit.move_caret(Caret::End, shift));
 						}
-						Key::Named(NamedKey::Space) if !ctrl => {
+						Key::Named(NamedKey::Space) if keys.types => {
 							state.edit_tab(|edit| edit.insert(" "));
 						}
-						Key::Character(typed) if ctrl && typed.eq_ignore_ascii_case("a") => {
+						Key::Character(typed)
+							if keys.shortcut && typed.eq_ignore_ascii_case("a") =>
+						{
 							state.edit_tab(|edit| {
 								edit.anchor = 0;
 								edit.caret = edit.text.len();
 							});
 						}
-						Key::Character(typed) if ctrl && typed.eq_ignore_ascii_case("v") => {
+						Key::Character(typed)
+							if keys.shortcut && typed.eq_ignore_ascii_case("v") =>
+						{
 							if let Some(text) = state.clipboard.get_clipboard() {
 								// one line: a tab is one line high
 								let flat = text.replace(['\n', '\r', '\t'], " ");
 								state.edit_tab(move |edit| edit.insert(&flat));
 							}
 						}
-						Key::Character(typed) if !ctrl && !state.mods.alt_key() => {
+						Key::Character(typed) if keys.types && !keys.alt => {
 							let typed = typed.to_string();
 							state.edit_tab(move |edit| edit.insert(&typed));
 						}
@@ -8521,14 +8566,7 @@ impl ApplicationHandler<UserEvent> for App {
 						return;
 					}
 					Some(hotkey @ (Hotkey::PrevTab | Hotkey::NextTab)) => {
-						if hotkey == Hotkey::PrevTab {
-							state.tabs.prev();
-						} else {
-							state.tabs.next();
-						}
-						state.freeze_catchup();
-						state.update_title();
-						state.dirty = true;
+						state.step_tab(hotkey == Hotkey::NextTab);
 						return;
 					}
 					Some(Hotkey::MoveTab { forward }) => {
@@ -9177,7 +9215,7 @@ impl ApplicationHandler<UserEvent> for App {
 }
 
 impl State {
-	// Ctrl+Shift+C, focused window or not
+	// Ctrl+Shift+C or Command+C, focused window or not
 	fn copy_selection(&mut self) {
 		if !input::copy_allowed(CopyFrom::Chord, self.focused, true) {
 			return;
@@ -10266,18 +10304,25 @@ mod tests {
 	fn only_a_held_ctrl_shift_c_is_the_copy_chord() {
 		use winit::keyboard::{Key, ModifiersState, NamedKey};
 		let both = ModifiersState::CONTROL | ModifiersState::SHIFT;
-		assert!(is_copy_chord(both, &Key::Character("c".into())));
-		assert!(is_copy_chord(both, &Key::Character("C".into())));
+		assert!(is_copy_chord(both, &Key::Character("c".into()), false));
+		assert!(is_copy_chord(both, &Key::Character("C".into()), false));
 		assert!(!is_copy_chord(
 			ModifiersState::empty(),
-			&Key::Character("c".into())
+			&Key::Character("c".into()),
+			false
 		));
 		assert!(!is_copy_chord(
 			ModifiersState::CONTROL,
-			&Key::Character("c".into())
+			&Key::Character("c".into()),
+			false
 		));
-		assert!(!is_copy_chord(both, &Key::Character("v".into())));
-		assert!(!is_copy_chord(both, &Key::Named(NamedKey::ArrowUp)));
+		assert!(!is_copy_chord(both, &Key::Character("v".into()), false));
+		assert!(!is_copy_chord(both, &Key::Named(NamedKey::ArrowUp), false));
+		assert!(!is_copy_chord(
+			ModifiersState::empty(),
+			&Key::Character("c".into()),
+			true
+		));
 	}
 
 	// The demo capture samples on a fixed clock, so a pinned rate that drifts is

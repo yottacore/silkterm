@@ -735,7 +735,10 @@ pub struct SettingsDialog {
 	focus: Option<Focus>, // keyboard-focused control/button (None = mouse-only)
 	alt: bool,            // Alt held: underline button accelerators (Cancel/Apply/OK)
 	shift: bool,          // Shift held (Shift+Tab walks focus backwards)
-	ctrl: bool,           // Ctrl held (Ctrl+Tab switches tabs)
+	ctrl: bool,           // the shortcut key held: Ctrl, or Command on a Mac
+	word: bool,           // the arrows and erase keys go by words
+	line: bool,           // the arrows go to either end, Backspace to the start
+	types: bool,          // a character key types
 	// UI-font-driven geometry: rows/title/buttons grow with the desktop font so
 	// a large or wide (e.g. bold serif) interface font never truncates. The
 	// consts above are the floor (the classic look at small sizes).
@@ -976,6 +979,9 @@ impl SettingsDialog {
 			alt: false,
 			shift: false,
 			ctrl: false,
+			word: false,
+			line: false,
+			types: true,
 			line_h,
 			label_w,
 			btn_w,
@@ -1476,10 +1482,25 @@ impl SettingsDialog {
 	// Alt-key accelerators: while Alt is held the buttons underline their first
 	// letter (Cancel/Apply/OK), and Alt+that-letter triggers the button. Shift
 	// (Shift+Tab) and Ctrl (Ctrl+Tab) steer keyboard focus / tab switching.
+	#[cfg(test)]
 	pub fn set_mods(&mut self, alt: bool, shift: bool, ctrl: bool) {
-		self.alt = alt;
-		self.shift = shift;
-		self.ctrl = ctrl;
+		self.set_keys(crate::input::EditKeys {
+			alt,
+			shift,
+			shortcut: ctrl,
+			word: ctrl,
+			line: false,
+			types: !ctrl,
+		});
+	}
+	// The held keys as the platform reads them (`input::edit_keys`).
+	pub fn set_keys(&mut self, keys: crate::input::EditKeys) {
+		self.alt = keys.alt;
+		self.shift = keys.shift;
+		self.ctrl = keys.shortcut;
+		self.word = keys.word;
+		self.line = keys.line;
+		self.types = keys.types;
 	}
 	pub fn alt(&self) -> bool {
 		self.alt
@@ -1724,7 +1745,13 @@ impl SettingsDialog {
 	}
 	// Ctrl+PageUp / Ctrl+PageDown cycle the active tab (PageDown = next).
 	pub fn key_page(&mut self, forward: bool) {
-		if self.ctrl && !self.modal() {
+		if self.ctrl {
+			self.switch_tab(forward);
+		}
+	}
+	// The next or previous tab, unless a box is up over the dialog.
+	pub fn switch_tab(&mut self, forward: bool) {
+		if !self.modal() {
 			self.tab_switch(forward);
 		}
 	}
@@ -4972,7 +4999,7 @@ impl SettingsDialog {
 
 	pub fn char_input(&mut self, c: char) {
 		self.dismiss_menu();
-		if self.ctrl {
+		if !self.types {
 			return; // Ctrl+letter is a shortcut (copy/paste/...), never types
 		}
 		// typing into a keyboard-focused (but not-yet-open) field opens it with
@@ -5103,14 +5130,16 @@ impl SettingsDialog {
 	}
 	pub fn backspace(&mut self) {
 		self.dismiss_menu();
-		let ctrl = self.ctrl;
+		let (word, line) = (self.word, self.line);
 		if let Some(edit) = &mut self.edit {
 			if edit.remove_selection() {
 				self.reparse_edit();
 				return;
 			}
 			if edit.cur > 0 {
-				let prev = if ctrl {
+				let prev = if line {
+					0
+				} else if word {
 					word_left(&edit.buf, edit.cur)
 				} else {
 					prev_boundary(&edit.buf, edit.cur)
@@ -5123,14 +5152,14 @@ impl SettingsDialog {
 	}
 	pub fn delete_forward(&mut self) {
 		self.dismiss_menu();
-		let ctrl = self.ctrl;
+		let word = self.word;
 		if let Some(edit) = &mut self.edit {
 			if edit.remove_selection() {
 				self.reparse_edit();
 				return;
 			}
 			if edit.cur < edit.buf.len() {
-				let next = if ctrl {
+				let next = if word {
 					word_right(&edit.buf, edit.cur)
 				} else {
 					next_boundary(&edit.buf, edit.cur)
@@ -5141,10 +5170,11 @@ impl SettingsDialog {
 		}
 	}
 	// Caret movement within the focused field (Left/Right/Home/End). Shift
-	// extends the selection; Ctrl jumps by words; a plain move collapses any
-	// selection to its edge (standard).
+	// extends the selection; Ctrl jumps by words (Option on a Mac, where Command
+	// goes to either end); a plain move collapses any selection to its edge
+	// (standard).
 	fn move_caret(&mut self, to: usize) {
-		let (shift, _) = (self.shift, self.ctrl);
+		let shift = self.shift;
 		if let Some(edit) = &mut self.edit {
 			if shift {
 				if edit.sel.is_none() {
@@ -5162,6 +5192,10 @@ impl SettingsDialog {
 	}
 	pub fn cursor_left(&mut self) {
 		let Some(edit) = &self.edit else { return };
+		if self.line {
+			self.move_caret(0);
+			return;
+		}
 		// plain Left with a selection collapses to its start
 		if !self.shift {
 			if let Some((a, _)) = edit.sel_range() {
@@ -5169,7 +5203,7 @@ impl SettingsDialog {
 				return;
 			}
 		}
-		let to = if self.ctrl {
+		let to = if self.word {
 			word_left(&edit.buf, edit.cur)
 		} else {
 			prev_boundary(&edit.buf, edit.cur)
@@ -5178,13 +5212,17 @@ impl SettingsDialog {
 	}
 	pub fn cursor_right(&mut self) {
 		let Some(edit) = &self.edit else { return };
+		if self.line {
+			self.move_caret(edit.buf.len());
+			return;
+		}
 		if !self.shift {
 			if let Some((_, b)) = edit.sel_range() {
 				self.move_caret(b);
 				return;
 			}
 		}
-		let to = if self.ctrl {
+		let to = if self.word {
 			word_right(&edit.buf, edit.cur)
 		} else {
 			next_boundary(&edit.buf, edit.cur)
@@ -9213,6 +9251,58 @@ mod tests {
 		d.set_mods(false, true, true);
 		d.cursor_right();
 		assert_eq!(d.selected_text().as_deref(), Some("png"));
+	}
+
+	// A text box on a Mac moves by words with Option, goes to either end with
+	// Command, and types nothing with Command or Control held. Command+Shift+[
+	// and ] reach the tabs through the menu bar.
+	// Test ID: ErbGPQa
+	#[test]
+	fn a_mac_text_box_takes_the_mac_keys() {
+		use crate::input::edit_keys;
+		use winit::keyboard::ModifiersState as M;
+		let (mut d, _) = mk_text_edit("foo bar.png");
+		d.cursor_end();
+		let mac = |mods| edit_keys(mods, true);
+		d.set_keys(mac(M::ALT));
+		d.cursor_left();
+		assert_eq!(d.edit.as_ref().unwrap().cur, 8, "Option+Left, a word");
+		d.set_keys(mac(M::SUPER));
+		d.cursor_left();
+		assert_eq!(d.edit.as_ref().unwrap().cur, 0, "Command+Left, the start");
+		d.set_keys(mac(M::SUPER | M::SHIFT));
+		d.cursor_right();
+		assert_eq!(d.selected_text().as_deref(), Some("foo bar.png"));
+		d.set_keys(mac(M::empty()));
+		d.cursor_right();
+		assert_eq!(d.edit.as_ref().unwrap().cur, 11);
+		d.cursor_left();
+		d.cursor_left();
+		for held in [M::SUPER, M::CONTROL] {
+			d.set_keys(mac(held));
+			d.char_input('c');
+			assert_eq!(d.edit.as_ref().unwrap().buf, "foo bar.png", "{held:?}");
+		}
+		d.set_keys(mac(M::SUPER));
+		d.backspace();
+		assert_eq!(d.edit.as_ref().unwrap().buf, "ng", "Command+Backspace");
+		assert_eq!(d.edit.as_ref().unwrap().cur, 0);
+		d.set_keys(mac(M::CONTROL));
+		d.cursor_right();
+		assert_eq!(d.edit.as_ref().unwrap().cur, 1, "Control+Right, one step");
+
+		let mut d = mk_dialog(2000.0);
+		d.switch_tab(true);
+		assert_eq!(d.tab, 1);
+		d.switch_tab(false);
+		d.switch_tab(false);
+		assert_eq!(d.tab, tab_titles().len() - 1);
+		// Ctrl+Tab walks focus there, since Command+Tab is the app switcher
+		d.tab = 1;
+		d.set_keys(mac(M::CONTROL));
+		d.key_tab();
+		d.key_page(true);
+		assert_eq!(d.tab, 1);
 	}
 
 	// Test ID: EkI1Txj

@@ -56,7 +56,7 @@ A terminal is a grid of cells, and fonts do not know that. SilkTerm picks one mo
 
 - Every family in the built-in list has a real bold face.
 
-- The font size follows the desktop's fixed-width size unless a size is set. Ctrl+Minus, Ctrl+Plus and Ctrl+0 change it a pixel at a time.
+- The font size follows the desktop's fixed-width size unless a size is set. Ctrl+Minus, Ctrl+Plus and Ctrl+0 change it a pixel at a time. On macOS it is Command with the same keys.
 
 - A cell takes at most nine combining marks.
 
