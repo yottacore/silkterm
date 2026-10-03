@@ -739,7 +739,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Free resources when idle: on by default
 	- ID: 2026100312470540
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: A dogfood look on b23 with the GPU busy or nearly full, with the new default and short idle times. The window should let its device go, come back on use, and paint without a key or click if a rebuild is refused at first. Started from a terminal with `SILK_IDLEDBG=1`, it prints each release, rebuild and refusal.
 	- Priority: Avg
 	- Opened: 20261003-124705
 	- Opened by: JC
@@ -751,6 +752,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Default "Free resources when idle" to on.
 	- Notes:
 		- When this is on, an idle window lets its GPU device go and gets a new one when it wakes. That is the same path a busy GPU can break, so test it under GPU load, after or along with 2026100312470535.
+	- Progress log:
+		- 20261003: `window.idle_release` now ships on. An old config's commented `false` default line is refreshed to `true`. A line set by hand is left alone. The two waits stay at 30 and 240 minutes.
+		- 20261003: No performance profile sets this. It is not among the fields a profile governs, so the profiles needed no change.
+		- 20261003: The releasing resources design doc and design.md said off or optional, and now say on. README, the glossary, the UI style guide and the Settings help state no default.
+		- 20261003: Verified: with no `idle_release` line and both waits at 1 minute, an unfocused window let its device go after a minute and took it back when the pointer came in, then showed "(resources restored)". Three more cycles at 6 seconds each painted after every wake, with file handles and threads back to the same counts each time. Software GL only.
+		- 20261003: Verified: the full unit suite, clippy for Linux and Windows, and fmt pass. Both new tests fail with the old default put back.
+		- 20261003: Old test assertion "off by default" in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` is commented out, since it pinned the old default. The test now checks the switched-off case directly.
+	- Swept: `Settings::default()`, the template line, `SUPERSEDED_DEFAULTS`, the profile governed lists (`Shadow` in profile.rs, `GOVERNED` in settings_ui.rs), and every `.md` and `.shcl` naming the setting.
+	- Branch: idleon
+	- Commit: ce9412c
+	- Test case: `idle_release_ships_on` (Erg8fz0) and `an_existing_config_learns_that_the_idle_release_ships_on` (Erg8g2c).
 
 - When a shcl upgrade breaks the config format, keep the old file and write a new one from scratch
 	- ID: 2026100312470546
