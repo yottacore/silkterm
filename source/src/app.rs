@@ -5854,8 +5854,8 @@ impl State {
 					instances.push(rect_inst(x, 0.0, w, menu_h, config::menu_hover()));
 				}
 			}
-			// Alt held, alone or with Shift (no dropdown open): underline each
-			// title's accelerator letter, like the open-dropdown items do (press the
+			// Alt held alone (no dropdown open): underline each title's
+			// accelerator letter, like the open-dropdown items do (press the
 			// letter to open).
 			let marks =
 				bar_title_underlines(input::opens_menu_title(self.mods), self.bar_open, &MENU_BAR);

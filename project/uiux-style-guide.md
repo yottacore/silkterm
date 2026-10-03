@@ -282,6 +282,7 @@ Rules that go with them:
 	- With no in-window bar, Option plus a letter always goes to the shell.
 
 - Alt plus a menu title's first letter opens that menu. The Menu key opens the right-click menu on the focused pane.
+	- Only Alt alone does it, and the title underlines show only then. With Shift, Ctrl or Super held too, the letter is some other chord or goes to the shell.
 
 - Every hotkey above can be changed or turned off under `keys:` in the config file, apart from Alt plus a menu title's letter. A menu row shows the chord its hotkey answers to first, so a change shows there too. The Settings dialog's Keys tab lists every one and changes them the same way.
 
