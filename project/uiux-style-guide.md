@@ -138,6 +138,8 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - Why a row is grayed out beats what it does, so a row grayed by the machine says so in its flyover in place of its usual text. A row grayed by another setting says nothing extra, because the switch that did it is the row above. A row set by the performance profile is not grayed at all - it takes input, and its flyover says that it is showing the profile's value and that changing it switches the profile to Custom.
 
+- A row that may not work on every desktop has a warning mark after its label: a small triangle in the label's color, never red. The mark has its own flyover saying what the row depends on, and the row keeps its usual one.
+
 ### The color picker
 
 - A chip opens a box over the panel, modal the way a prompt is: a saturation and brightness square, a hue strip down its right side, six value boxes, and Cancel and OK at the bottom right with OK the default.

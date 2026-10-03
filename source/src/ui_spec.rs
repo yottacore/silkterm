@@ -124,6 +124,9 @@ pub struct Spec {
 	// Only in the Windows build. Test builds keep it everywhere, so its layout
 	// and behavior are tested on every platform.
 	pub windows: bool,
+	// Flyover for a warning mark after the label: a row that may not work
+	// everywhere. Empty means no mark.
+	pub warning: &'static str,
 }
 
 // One setting a control has to wait on, resolved from the file's gate lines.
@@ -515,6 +518,12 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 				));
 			}
 		}
+		let warning = doc.get_string(&at("warning")).unwrap_or_default();
+		// the mark sits after the label in the label column, which a heading and
+		// half a line do not have
+		if !warning.is_empty() && (label.is_empty() || beside || matches!(kind, Kind::Header(_))) {
+			problems.push(format!("rows.{name}: a warning needs a label of its own"));
+		}
 		let windows = doc.get_bool(&at("windows")).unwrap_or(false);
 		if matches!(kind, Kind::Header(_)) {
 			group_windows = windows;
@@ -533,6 +542,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			beside,
 			revert_help: doc.get_string(&at("revert_help")).map_or("", keep),
 			windows,
+			warning: keep(warning),
 		});
 	}
 
@@ -716,6 +726,38 @@ mod tests {
 			Key::OpenFolder,
 		] {
 			assert!(ui.specs.iter().all(|s| s.key != key), "{}", key.name());
+		}
+	}
+
+	// A warning mark sits after a label in the label column, so a row with no
+	// label there cannot carry one.
+	// Test ID: EreHnyt
+	#[test]
+	fn a_warning_needs_a_label_of_its_own() {
+		let head =
+			"tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n";
+		let margin = "\tMargin:\n\t\tlabel: x\n\t\tkind: toggle\n\t\tsetting: margin\n";
+		let fine = format!("{head}{margin}\t\twarning: \"Careful.\"\n");
+		let Err(problems) = parse(&fine) else {
+			panic!("a fragment with no layout block parses clean")
+		};
+		assert!(
+			!problems.iter().any(|p| p.contains("warning")),
+			"a labelled row may warn: {problems:?}"
+		);
+		for bad in [
+			format!("{head}\t\twarning: \"Careful.\"\n{margin}"),
+			format!(
+				"{head}{margin}\tRows:\n\t\tkind: toggle\n\t\tbeside: true\n\t\tsetting: rows\n\t\twarning: \"Careful.\"\n"
+			),
+		] {
+			let Err(problems) = parse(&bad) else {
+				panic!("a warning with no label column must be reported: {bad}")
+			};
+			assert!(
+				problems.iter().any(|p| p.contains("warning")),
+				"{problems:?}"
+			);
 		}
 	}
 
