@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use glyphon::{Color as GColor, Shaping, TextArea, TextBounds};
 use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::ModifiersState;
 use winit::raw_window_handle::RawWindowHandle;
 use winit::window::{Window, WindowId};
 
@@ -91,6 +92,10 @@ pub struct DialogWin {
 	// what the screen leaves this window, physical pixels. The snap may not pull
 	// it back past this. Unbounded for About, which cannot be resized.
 	caps: (f32, f32),
+	// The held keys, as this window last reported them. They live and die with
+	// the window: a closing macOS window never hears its keys let go, and one
+	// that gains the focus is told nothing until a key changes.
+	mods: ModifiersState,
 }
 
 impl DialogWin {
@@ -234,6 +239,7 @@ impl DialogWin {
 			parent,
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
+			mods: ModifiersState::empty(),
 		})
 	}
 
@@ -275,6 +281,7 @@ impl DialogWin {
 			parent,
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
+			mods: ModifiersState::empty(),
 		})
 	}
 
@@ -357,6 +364,7 @@ impl DialogWin {
 			parent,
 			snapped: false,
 			caps: (max_w, max_h),
+			mods: ModifiersState::empty(),
 		})
 	}
 
@@ -521,6 +529,14 @@ impl DialogWin {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.set_keys(keys);
 		}
+	}
+
+	pub fn set_mods(&mut self, mods: ModifiersState) {
+		self.mods = mods;
+	}
+
+	pub fn mods(&self) -> ModifiersState {
+		self.mods
 	}
 
 	// Copy or Paste from the macOS menu bar, which takes Command+C and
