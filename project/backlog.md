@@ -793,7 +793,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Alt+Super plus a letter opens an in-window menu, as Alt plus a letter does
 	- ID: 2026100311020484
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261003-110204
 	- Opened by: CC
@@ -806,17 +806,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: No. Seen in a unit test on 20261003, `the_command_chords_are_the_only_program_chords_on_macos`, which now allows it off a Mac.
 	- Decisions:
 		- 20261003: Alt+Shift plus a letter does not open a menu either. Only Alt alone does.
+	- Progress log:
+		- 20261003: Closed with Alt alone or Alt+Shift opening a menu, then reopened by the decision above.
 	- Actual cause: The menu letter check asked only that Alt was held and Ctrl was not, so Super held as well still counted.
 	- Actual fix:
-		- One check, `opens_menu_title` in input.rs, says a letter is a menu title only with Alt alone or Alt+Shift. The title underlines shown while Alt is held use it too, so they no longer show with Ctrl or Super held.
+		- One check, `opens_menu_title` in input.rs, says a letter is a menu title only with Alt alone. The title underlines shown while Alt is held use it too, so they show only with Alt alone.
+		- The UI/UX style guide says so under the menu chords.
 		- `the_command_chords_are_the_only_program_chords_on_macos` is back to its strict form: no Command chord does anything off a Mac.
-	- Swept: The menu title letter (`hotkey_in`, which `hotkey_on` and `hotkey_for` both call) and the title underlines in app.rs, both fixed. The bound chords in keys.rs, including the Alt+Shift pane chords, already match the exact set of Ctrl, Alt, Shift and Command held. No bare Alt press opens the menu bar; Alt alone only shows the underlines. A letter typed with a menu already open picks its row whatever is held, left as is.
-	- Verified: The unit tests, and clippy for Linux, Windows and macOS.
-	- Branch: altsuper
-	- Commit: 2d4100b
-	- Test case: `a_letter_opens_a_menu_title_only_with_alt_alone_or_alt_shift` (Erf6miU), and `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5) in its strict form. Both seen failing without the fix.
-	- Acceptance signoff:
-	- Closed:
+	- Swept:
+		- 20261003: The menu title letter and the title underlines both go through `opens_menu_title`, now Alt alone. The Alt+Shift pane chords in keys.rs are bound chords, which come before the menu title, so they are unchanged. The Settings dialog's Alt button letters are its own check, left as is. No doc, glossary or design doc said Alt+Shift opens a menu; the code comments that did are fixed.
+		- The menu title letter (`hotkey_in`, which `hotkey_on` and `hotkey_for` both call) and the title underlines in app.rs, both fixed. The bound chords in keys.rs, including the Alt+Shift pane chords, already match the exact set of Ctrl, Alt, Shift and Command held. No bare Alt press opens the menu bar; Alt alone only shows the underlines. A letter typed with a menu already open picks its row whatever is held, left as is.
+	- Verified: 20261003, the unit tests, fmt, and clippy for Linux, Windows and macOS.
+	- Branch: altsuper, then altonly
+	- Commit: 2d4100b, then 33f67ae
+	- Test case: `a_letter_opens_a_menu_title_only_with_alt_alone` (Erf6miU), which failed with the Alt+Shift rule and passes with Alt alone. `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5) in its strict form. Both seen failing without the fix.
+	- Acceptance signoff: Self-closed: the fix is what the decision spelled out, and its test passes.
+	- Closed: 20261003-123523
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
