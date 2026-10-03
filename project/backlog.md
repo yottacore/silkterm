@@ -407,6 +407,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
 
+- macOS: Ctrl+click should open the right-click menu
+	- ID: 2026100220260471
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261002-202604
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100219054469
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: Since Command took the place of Ctrl on macOS, Ctrl+click is a plain click. Before that it opened links.
+	- Expected behavior: Ctrl+click opens the right-click menu, as it does in other Mac apps.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Yes, Ctrl+click opens the right-click menu on a Mac.
+
+- A test run removes its own dated folder when it finishes
+	- ID: 2026100220260484
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261002-202604
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026093013113320, 2026093015422119
+	- Target OS: All
+	- Requirements:
+		- When a run finishes, its `test_silkterm_<stamp>` folder in the temp dir is removed, on every platform and on the Windows test boxes.
+	- Progress log:
+		- 20261002: Run folders stay behind after a run. vm925w had five in `%TEMP%` after the 2026093015422119 checks.
+	- Decisions:
+		- 20261002: Yes, a run removes its own folder.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
