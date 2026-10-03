@@ -22,7 +22,8 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d)"
-trap 'rm -rf "${work}"' EXIT
+fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+trap fEnd EXIT
 cd "${work}"
 git init -q .
 ## The artifact directory is gitignored in the real tree, as it has to be now that

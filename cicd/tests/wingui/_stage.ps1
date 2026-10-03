@@ -1,4 +1,6 @@
-##	Makes the run's folder on the box and prints it, as RUNFOR and RUNDIR lines.
+##	Makes the run's folder on the box and prints it, as RUNFOR, RUNDIR and
+##	RUNTOKEN lines. run.bash removes the folder with the token once the run is
+##	over, so this never calls fTestDir_End.
 ##	Sent over ssh by run.bash with _testdir.ps1 ahead of it. The scenario runs
 ##	as whoever holds the console, and a temp folder is private to its account,
 ##	so the folder goes in that user's temp folder, not the ssh account's.
@@ -42,6 +44,7 @@ function fStage {
 	if ($LASTEXITCODE) { throw "cannot give $who the run folder $env:SILKTERM_TEST_DIR" }
 	"RUNFOR $who"
 	"RUNDIR $env:SILKTERM_TEST_DIR"
+	"RUNTOKEN $script:TestDirToken"
 }
 
 fStage

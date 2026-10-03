@@ -168,11 +168,15 @@ if ! ((wayland)) && "$headless" status 2>/dev/null | grep -q 'no Xvfb'; then
 fi
 
 cleanup(){
+	local -r rc=$?
 	if ((keep)); then
 		fEcho_Clean "kept: traces in ${work}  (display left up)"
+		## The traces are inside the run folder, so it stays too.
+		fTestDir_End 1
 	else
 		((started_headless)) && "$headless" stop >/dev/null 2>&1 || true
 		rm -rf "$work" 2>/dev/null || true
+		fTestDir_End "${rc}"
 	fi
 }
 trap cleanup EXIT

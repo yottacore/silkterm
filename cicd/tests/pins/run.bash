@@ -22,7 +22,8 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-pins.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+trap fEnd EXIT
 
 ## "name|version" for each pin whose platform is one of $2..., straight from the file.
 fListed(){ local -r file="${1}"; shift; awk -F'|' -v want=" $* " 'NF == 4 && $1 !~ /^#/ && index(want, " " $3 " ") { print $1 "|" $2 }' "${file}" | sort; }

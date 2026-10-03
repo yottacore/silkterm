@@ -110,7 +110,7 @@ rm -f "${countDir}/two" "${countDir}/none"; rmdir "${countDir}"
 
 ## run.bash where something it needs is missing: 3, so cicd says skipped, not OK
 fakeBin="$(mktemp -d)"
-trap 'rm -f "${fakeBin}/dirname" "${fakeBin}/python3"; rmdir "${fakeBin}" 2>/dev/null || true' EXIT
+trap 'rc=$?; rm -f "${fakeBin}/dirname" "${fakeBin}/python3"; rmdir "${fakeBin}" 2>/dev/null || true; fTestDir_End "${rc}"' EXIT
 ln -s "$(command -v dirname)" "${fakeBin}/dirname"
 ln -s "$(command -v python3)" "${fakeBin}/python3"
 fRun(){

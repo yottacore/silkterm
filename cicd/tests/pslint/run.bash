@@ -26,7 +26,7 @@ if ! command -v pwsh >/dev/null 2>&1; then
 fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-pslint.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 
 ## A function with an unapproved verb, which the settings keep at warning level.
 printf 'function Frob-Thing { param([string]$Name) $Name }\nFrob-Thing -Name x\n' >"${work}/finding.ps1"

@@ -24,7 +24,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
-if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) { Write-Host '  skip installer on Windows (not Windows)'; exit 0 }
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) { Write-Host '  skip installer on Windows (not Windows)'; fTestDir_End 0; exit 0 }
 
 $installer = (Resolve-Path -LiteralPath $Installer).Path
 $stubrun = Join-Path $PSScriptRoot 'stubrun.ps1'
@@ -133,7 +133,8 @@ try {
 	Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if ($failures -gt 0) { exit 1 }
+if ($failures -gt 0) { fTestDir_End 1; exit 1 }
+fTestDir_End 0
 exit 0
 
 ##	History:

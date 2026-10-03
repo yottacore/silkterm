@@ -366,6 +366,7 @@ check("note 9 says the size rig is an X server drawing in software at its grid",
 	and "Xvfb" in size_rig_text and 'grid="100x30"' in size_rig_text)
 
 shutil.rmtree(scratch, ignore_errors=True)
+_testdir.end(1 if failures else 0)
 if failures:
 	print(f"{failures} failed")
 	sys.exit(1)

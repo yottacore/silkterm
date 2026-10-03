@@ -26,7 +26,7 @@ fCheck "nothing in the publish script is eval'd" \
 ## Runs against a real repository from here on: a bare remote and a clone of it,
 ## with git's own config kept out so nothing on this box decides the result.
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-publish.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset GIT_CONFIG_COUNT GIT_DIR GIT_WORK_TREE GIT_AUTO_MESSAGE GIT_BACKUP_AND_PUBLISH_MESSAGE
 export GIT_BACKUP_AND_PUBLISH_NOBACKUP=1 GIT_EDITOR=false

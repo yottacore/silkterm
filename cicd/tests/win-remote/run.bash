@@ -23,7 +23,7 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-winremote.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 
 ## An ssh that answers for every address not listed in STUB_DOWN, and notes each
 ## command it was given; an scp that does the same for its target. Neither ever

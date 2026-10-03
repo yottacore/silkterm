@@ -24,7 +24,8 @@ failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-rotate.XXXXXX")"
-trap 'rm -rf "${work}"' EXIT
+fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
+trap fEnd EXIT
 unset GFS_KEEP_FREQUENT GFS_KEEP_HOURLY GFS_KEEP_DAILY GFS_KEEP_WEEKLY GFS_KEEP_MONTHLY GFS_KEEP_YEARLY
 export TZ=UTC
 export GFS_NOW

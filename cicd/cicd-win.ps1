@@ -204,7 +204,7 @@ function fEcho     { param([string]$Msg = ""); if ($Msg) { fEcho_Clean "[ $Msg ]
 function fSection  { param([string]$Msg);      fEcho_Clean; fEcho_Clean $script:Letterbox; fEcho $Msg }
 function fNote     { param([string]$Msg); fEcho_Clean $Msg }
 function fWarn     { param([string]$Msg); fEcho "WARNING: $Msg" }
-function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; exit 1 }
+function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fTestDir_End 1; exit 1 }
 
 
 #••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -874,6 +874,9 @@ function fMain {
 	fExec "tests" "cargo" @("test")
 	fEcho "OK: tests passed"
 	fInstallerTests
+	## In a process of its own, since fTestDir_Use moves TEMP and TMP for the whole process.
+	fExec "test run folder removal" "pwsh" @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\testdir\remove.ps1"))
+	fEcho "OK: test run folder removal"
 	fLintAdvisory
 
 	## Stage 4: release builds (x86_64 msvc + gnu always; ARM64 when ready).
@@ -919,6 +922,7 @@ function fMain {
 
 try {
 	fMain
+	fTestDir_End 0
 } finally {
 	try { Stop-Transcript | Out-Null } catch {}
 }
