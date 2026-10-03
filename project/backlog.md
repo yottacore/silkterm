@@ -807,7 +807,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: A save moves no value.
 	- Reproduced: 20261003 on b23, on dev 3349635 and on f435323, from before that day's round. So none of that round's work caused it.
 	- Progress log:
-		- 20261003: Seeds run in order from 0, so every full pipeline run reaches seed 30 in its 20 second soak and stops there. The short soak in a plain test run stops before it. The full run from 20261001 passed, so the change that exposed it is between that run and f435323.
+		- 20261003: Seeds run in order from 0, so every full pipeline run reaches seed 30 in its 20 second soak and stops there. The short soak in a plain test run stops before it. The run from 20261001 got past the soak to the profiler stage, so the change that exposed it is likely between that run and f435323. Not bisected.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
