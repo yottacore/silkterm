@@ -193,6 +193,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: The one place a surface's alpha mode is picked, shared by the main window, the Windows composited path and the dialogs. The X11 GL path sets its own and is not used on macOS.
 	- Test case: `each_platform_picks_a_see_through_alpha_mode_where_it_has_one` (ErUlBTl). It fails with the old pick and passes with the new one.
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Progress log:
+		- 20261002: Reported again: the transparency settings do nothing on macOS. Not known yet whether that build had this fix.
 	- Branch: macglass
 	- Commit: c79e3aa
 	- Closed:
@@ -477,9 +479,71 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- If the user drags an already-open terminal to a different monitor, and that monitor has its own size settings saved, change the window to that size, once moving has stopped (fallback to main saved default).
 				- Ditto for font size.
 		- The per-monitor sizes go in the config file only, not the Settings dialog.
+		- The Window tab keeps the size settings together:
+			- "Remember last size".
+				- Under it, a toggle that saves the size per monitor. It only applies while "Remember last size" is on.
+			- "Remember maximized", on its own and not tied to the other two.
+			- The first two are on by default. "Remember maximized" stays off.
+		- When this is done, the README says that window size and font zoom are remembered per monitor resolution and DPI.
 	- Notes:
 		- Resolution and DPI by themselves may not be enough, if the DPI information is disconnected from actual inches. It's the *actual* physical DPI, combined with resolution, that's important, and will have to best approximate.
 		- If determining *actual* physical DPI isn't possible, then just resolution and DPI (e.g. Windows' desktop zoom factor) may have to do.
+	- Progress log:
+		- 20261002: Added the Settings grouping and the README line. The README waits for the feature, so it doesn't claim something that isn't built.
+	- Closed:
+
+- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
+	- ID: 2026100220292607
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before v1.
+		- Figure out hotkeys for splitting panes and changing panes.
+		- Then implement hotkey management.
+		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
+	- Notes:
+		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` holds that and will need to change.
+		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
+	- Closed:
+
+- At the RC release, convert the config to the new format and keep the old file beside it
+	- ID: 2026100220292612
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: the old-format item about removing the code that migrates old config files.
+	- Target OS: All
+	- Requirements:
+		- Upon RC release, convert settings to the new format.
+		- Keep the old config file under a suffixed name, still ending in `.shcl`.
+		- If any settings can't be salvaged, warn the user.
+	- Notes:
+		- Today the shcl 3 conversion rewrites the file in place and keeps no copy. Only the older flat-file conversion moves the original aside, to `.bak`.
+	- Closed:
+
+- Transparency setting: a warning that it depends on the desktop, and a place at the end of its tab
+	- ID: 2026100220292617
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435574
+	- Target OS: All
+	- Requirements:
+		- A warning icon next to Transparency, with a tip saying it relies on the desktop compositor and may not work.
+		- Move Transparency and its rows to the last section on the Background tab.
+	- Notes:
+		- The macOS half of the same note is 2026100114435574.
 	- Closed:
 
 - macOS: the first launch hangs with no window, using more and more memory
@@ -1152,115 +1216,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260924-113215
 
 - **Stop here to work on releasing v1.0.0 with Windows and macOS store releases**.
-
-- 🔘 "Old CRT mode" (boolean that might overrides - but not change - some theme settings):
-	- Sub-settings
-	- "Electron gun scan lines", that look authentic. (Need to research why those exist, and how they work - are they static? Do they follow text?)
-		- A slider from 0 to 100%, with the default being very subte.
-	- Color: Mono white, mono green, mono amber, CGA, EGA, modern (latter uses existing theme setting).
-		- Dropdown box. Default EGA.
-	- Tube bulge: As if looking at an early rounded tube. (A fish-eye view effect.)
-		- A slider from 0 to 100%, with the default being very subte.
-	- Vignette:
-		- A slider from 0 to 100%, with the default being very subte.
-	- Frame
-		- If not "[none]", replaces window decorations with a simulated CRT frame front bezel.
-		- Dropdown box: [none], "1964 IBM 2260", "1977 Hazeltine 1500", "1977 Commodore PET", "1983 IBM 5153", "1983 Commodore 1702", "1986 Apple II", "1987 IBM 8513", "1996 Sony Multiscan CPD-200SX", "NEC MultiSync 95", "1999 ViewSonic E771", "2003 Dell E773c", "ViewSonic P225F", "Brazil", "Sci-Fi 1", "Sci-Fi 2"
-			- With preview
-
-- 🔘 Rolling epic "GPU FX": Take more advantage of fundamental nature of underlying GPU terminal (all with non-GPU fallbacks - including no feature at all if necessary):
-	- Note: These effects should come in "prepackaged effects" that can be applied to similar other types of on-screen elements.
-		- Ideally as packaged plug-ins (think shader kits or something that be traded online and dropped into a directory for auto-discovery).
-		- Reasonably easy for others to write new effect plugins that can be dropped-in, discovered at silkterm startup, loaded, and avaiable as an option.
-		- Security model. Some plugins may need access to screen contents, others may not. If access to contents, make sure it can't do anything else - e.g. write to the filesystem, network, etc. Also, no reading from the filesystem, network, sockets - anything - except own config file.
-	- 🔘 Effect 1: When a "copy on output" or "copy on select" happens, make the relevant checkbox and label gently burst with a glow and tiny fine sparkles for about a second - as if a fairy just blinged it with a magic wand in a movie.
-		- Needs to be subtle and non-annoying over long-run, but definitely noticeable.
-		- Tunable in config.
-		- If it doesn't work well on non-GPU acellerated platforms, just some kind of noticeable blink. But still need visual feedback.
-			- Need to decide what kind of feedback if not practical on non-GPU.
-	- 🔘 Effect 2: When a command or program returns to the prompt, give a burst of visual feedback, with a strength linearly proportional to the amount of time it took.
-		- With an upper limit of course - say, an hour, config-tunable.
-		- Config-tunable selection of predefined burst effects.
-		- Default (and so far only): A glowing bright gold pulse that the cursor gives off upon arriving back at the shell prompt, as if a yellow sun that shed an outer layer of blasma in a burst.
-	- Opened: 20260714-091630
-
-- 🔘 When other settings are changed automatically based on a user action to a different setting (e.g. "Choose automatically" and/or "Profile", visually alert the user to the change:
-	- Use Effect 1 from "Rolling epic 'GPU FX'", around the setting that gets programmatically changed based on a user doing something elsewhere.
-	- Opened: 20260919-154614
-
-- 🔘 At startup, offer to copy the wallpaper pack from the repo to the local wallpaper directory.
-	- The README now carries a one-liner for it (Wallpaper pack section), so this item is only about the in-app offer.
-	- Show it once, on a first run with no config file and no wallpaper directory. Window title "First-time setup". Buttons bottom right: "Download background images now" and "Close".
-	- Body text:
-
-		~~~text
-		Welcome to SilkTerm!
-
-		This has been a labor of love, by a guy who works in a terminal most of the time. It's the coolest program I've ever written, and that I've personally ever used. I think (and hope) you'll agree!
-
-		The dimmed background image you see is a small default one baked into the executable. (That you can turn off in Settings.)
-
-		By default, SilkTerm looks in [WALLPAPER_DIRECTORY] for additional background images to randomly rotate on each startup. (This can also be disabled.)
-
-		**Would you like to download a [X MB] set of [NUMBER] official SilkTerm backgrounds to that directory? These are specifically created or selected for use by SilkTerm - that are all minimally disruptive, optimally-sized, with proper attribution, and with embedded metadata to help SilkTerm either zoom or stretch to fit, according to what will look best.**
-
-		This is the last time you'll see this message, but you can get back to the download prompt again at any time through Help|About.
-		~~~
-
-	- Add a "Wallpaper …" button to Help > About that opens the same offer again. Window title "SilkTerm background wallpaper download", same two buttons, and the same body text minus the welcome and the last line.
-	- Note: the dialog copy was specified 20260826.
-	- Opened: 20260817-120024
-
-- 🔘 At high text scrim blur radius and low softness, the blur has boxy artifacts.
-	- Cause: the scrim is a separable blur with a truncated kernel. The hard cutoff leaves a faint edge that low softness amplifies into a visible square, and the linear and s-curve falloffs are not true Gaussians, so their support reads as a diamond or box rather than a circle. The fix is a look-versus-performance tradeoff (wider extent, more taps, or a windowed kernel) that wants eyeballing. Deferred to a visual pass.
-	- 🔘 New feature: Adjustable blur quality in settings:
-		- High: Very high quality, may require a higher-end GPU, no visible artifacts at all.
-		- Medium (default): The current quality.
-		- Low: Trash quality, only looks OK at small blur radii.
-	- Opened: 20260724-080316
-
-- 🔘 Ability to change hotkeys, and/or assign new ones dynamically. Including a "capture" dialog.
-	- Opened: 20260703-100322
-
-- 🛠️ Settings dialog:
-	- 🔘 The wallpaper "Randomize" sub-group: new window, new tab, new pane, and an interval from one second to a week. Needs engine work rather than dialog work. Rotation is still the existing "Rotate folder" switch.
-	- 🔘 The four wallpaper minimum and maximum contrast and saturation percentages. Engine work for the same reason.
-	- 🔘 The three "Animation pauses on" checkboxes on the Cursor tab: loss of window focus, loss of pane activity, input inactivity. The first two are source constants today, so exposing them is more than adding a row.
-	- Note: the rest of the dialog rework is done, under Done - Features and enhancements.
-	- Opened: 20260719-085918
-
-- 🔘 Wallpaper control enhancements:
-	- "Randomize" checkbox
-		- [ ] New window
-		- [ ] New tab
-		- [ ] New pane (defer to when this is technically possible)
-		- [ ] Interval
-			- Slider 1 second to 1 week
-	- Minimum contrast % at 0% background image visibility  [at 0% background image visibility - not useful since wallpaper would be invisible, but establishes the floor and range.]
-		- Default 50%
-	- Maximum contrast % [at 100% background image visibility]
-		- Default 100%.
-	- Minimum saturation % [at 0% background image visibility - not useful since wallpaper would be invisible, but establishes the floor and range.]
-		- Default 50%
-	- Maximum saturation % [at 100% background image visibility]
-		- Default 100%.
-	- Note: the same rows are also listed under Settings dialog above. This item has their defaults.
-	- Opened: 20260724-080316
-
-- 🛠️ Command-line options:
-	- 🔘 Per-pane scope for the style options. `--font-name`, `--font-size`, `--background-color`, `--foreground-color`, `--wallpaper` and its stretch, zoom and opacity all apply to the whole window today. Varying them per pane needs a per-pane renderer the single text context does not have.
-	- 🔘 Per-pane `--title`. Accepted and reserved, but nothing displays it yet.
-	- 🔘 Short forms. Only `-h` and `-v` have one so far.
-	- 🔘 Finer negotiation with the config's own command line. Any real argument today ignores the stored one wholesale, rather than settling window-level options field by field.
-	- Note: the rest of the option set is done, under Done - Features and enhancements.
-	- Opened: 20260628-083740
-
-- 🔘 Additional "File" menu option: "Save entire current layout to config" (current or specified config).
-	- Including window, tab, shell, and pane layout and configurations - everything.
-	- One possibly to make this easier, store non-default per-tab and per-pane configurations as a "command line" in the config, that each override all other config settings. E.g.:
-		- Emits the create/select form: `--new-tab` / `--new-pane` (with explicit `--splits`, direction, and non-default `--size`) for structure, plus `--tab=<id>` / `--pane=<id>` for per-entity overrides. Always writes explicit directions and sizes (never the "more space" default) so a saved layout reproduces regardless of window size.
-	- Alternately, lean on shcl hierarchical format for nested configurations.
-	- Opened: 20260628-083740
 
 ### Done
 
@@ -6849,14 +6804,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Since 20260917 the ledger carries on across a region that shares rows with the one in flight (the nano fix), so only regions sharing none still start it over. Stacked panes are that case: they still need a ledger entry and a slide per region, as section 5 says.
 	- Opened: 20260911-113647
 
-- ✋ Detach a tab into a new window, and dock a tab into an existing window, both with the mouse.
-	- Needs multi-window, which does not exist yet. The rest of the tab interface is done.
-	- Opened: 20260703-091342
-
-- ✋ Flip the scrim color under text that had to be lifted for contrast.
-	- Better than moving the text color, but it is a shader answer rather than the per-cell one already built. See the contrast item under Done.
-	- Opened: 20260830-201602
-
 - ✋ Terminal throughput benchmark: the Windows speed rows.
 	- Deferred, and the machine was never the problem. Measured twice on deliberately different hardware: a laptop, then Windows in a VM on the reference host with a discrete card passed through, which is the setup the table's own notes promised would fix it. Neither pass produced anything publishable. Figures and reasoning are in `utility/include/ancillary-notes.fods`, under three `VM` sheets beside the original ones.
 	- There is no correction factor to find. The terminals that run on both platforms disagree about the host-to-guest ratio by more than a factor of two, so one multiplier cannot serve the table. That is measured now, not inferred from everything clustering the way it did on the laptop.
@@ -6877,27 +6824,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✋ Can't replicate on different monitors that also have different DPI. Don't have access to original setup. Only observed once, and was in a hurry to shutdown, so it could have been a fluke. Leaving open on backlog just in case.
 	- Opened: 20260816-103257
 
-- ✋ Feature: Minority Report mode: Borderless, transparent, changes perspective depending on screen location.
-	- Top feature once the backlog is mostly worked through. Nothing remotely like this exists.
-	- It would be highly impractical for actual long terminal sessions. But I'm pretty sure Alacritty's underlying plumbing doesn't prevent this. (Or, can be patched to do it.)
-	- Opened: 20260703-071620
-
 - ✋ Build packages when cicd.bash `--quick` isn't specified:
 	- ✋ Deferred (no cross toolchain): macOS `.dmg` (needs an Apple SDK / osxcross - license-gated) and BSD packages (needs a FreeBSD sysroot). AppImage/Flatpak also future.
 	- Opened: 20260724-080316
-
-- ✋ Config file: For each feature listed below, allow user to list programs (comma-delimited), that, when running, temporarily disable:
-	- Smooth scrolling. (Comma-delimited.)
-	- Smooth cursor movement and blink. (Comma-delimited.)
-	- Text scrim and outline
-		- Note: Should not affect existing still-visible text renedered before the program's output, or new output following the output from the affected program that is still visible. (Comma-delimited.)
-	- ✋ Deferred: the scrim disable is meant to apply only to that program's own output within a pane, not per-pane / per-tab / per-window - so surrounding text (the prompt above, the resumed prompt below, unrelated scrollback) keeps its scrim. That is the hard part: the scrim is a single window-global pass with no per-region concept. Honoring "just this command's output" for a normal-screen command like `ls` needs:
-		- Tracking each command's output boundaries in the byte stream (start when the fg pgid becomes the command, end when it returns to the shell - the copy-on-output machinery),
-		- Mapping those logical lines onto current grid rows and re-mapping them every frame as things scroll and scrollback evicts, and
-		- Excluding exactly those cells from the coverage source. Fullscreen apps (vim/nano/less/htop) are the easy sub-case (the whole pane is their output), but the requested normal-screen case is not.
-		- Do not implement this as per-pane scrim on/off.
-		- Smooth-scroll and smooth-cursor disable are individually tractable (per-pane, gated on the foreground program) if ever wanted on their own; only the scrim sub-item is the blocker. Kept as one deferred item.
-	- Opened: 20260708-115155
 
 - ✋ Feature: (Git) Implement branch protection rules on main:
 	- ✋ Require a pull request before merging (blocks direct pushes), and
