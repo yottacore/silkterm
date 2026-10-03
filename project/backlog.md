@@ -669,8 +669,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - At the RC release, convert the config to the new format and keep the old file beside it
 	- ID: 2026100220292612
 	- Type: Feature
-	- Status: Queued
-	- Needs external testing: The unit tests on Windows (vm925w), where the copy is hard-linked on NTFS. A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that the copy appears beside the roaming config.
+	- Status: Waiting on signoff
+	- Needs external testing: The unit tests on Windows (vm925w), where the copy is hard-linked on NTFS. A dogfood launch of a release build on a real 2.x config, on Linux and on Windows. On Windows, check that `config_backup_<time>_format-v2.shcl` appears beside the roaming config with the local time in its name, and that a 2.x file with a list in brackets brings up the system message box naming the count and the copy.
 	- Priority: Avg
 	- Opened: 20261002-202926
 	- Opened by: JC
@@ -696,12 +696,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: The footer refresh no longer puts the Format line on a file still in 2.x spellings. A file whose conversion was put off could get the line without the respelling, and then never convert.
 		- 20261003: The flat pre-nesting conversion keeps its `.bak`. It is a layout change and has no format number. A flat file has no Format line, so the 2.x step that runs before it already keeps the untouched original as `config.format2.shcl`.
 		- 20261003: README and design.md say where the copy goes.
+		- 20261003: The copy is now `config_backup_YYYYmmDD-HHMMSS_format-v<N>.shcl`, replacing the `config.format<N>.shcl` name above. The time is local, as the test folders and the pipeline's log names are. A file named by `--config` uses its own name, less any `.shcl`, in place of `config`: `mine.shcl` keeps `mine_backup_..._format-v2.shcl`, and `mine.conf` keeps `mine.conf_backup_..._format-v2.shcl`.
+		- 20261003: Every conversion makes a new copy, and none is ever replaced. The link-or-fail step stays. A name already taken in the same second moves on to `_2` before the `.shcl`, then `_3`, and so on. A name already holding the same bytes counts as the same copy, so two windows converting the same file at once still leave one.
+		- 20261003: Settings the conversion can't keep now also get the notice window a refused save uses, once the terminal is on screen. Titled "Settings not converted", it names the file, says how many settings could not be converted and now do nothing, and gives the copy's name in the same folder. Windows shows the same text in the system message box. The terminal line is unchanged apart from the new name.
+		- 20261003: A Settings save that converts a file a busy launch left alone keeps a copy, but says nothing about lost settings, on the terminal or in a notice. That was already so before this round.
+		- 20261003: `a_copy_already_there_is_left_as_it_was` (EreLZMm) is reworked as `a_second_conversion_keeps_a_second_copy`, since a copy already there no longer stops a new one. `every_settings_write_goes_through_the_restore` now looks for the publish in `write_config_keeping`, which `write_config_atomic` calls, so the one writer still names it once.
 	- Note: Launch notices go to the terminal, like every other launch message about the file. A desktop launch or a Windows release build shows none of them.
+		- Note: 20261003: Settings the conversion can't keep are the exception now, with a notice window too.
 	- Verified: The unit suite passes, 1021 tests. fmt and clippy are clean for Linux and for the Windows target. The test ID and markdown checks pass. With the copy turned off, the launch and refusal tests failed. With the copy written in place instead of linked, the race test saw a part copy in three runs out of three. Without the footer guard, the footer test failed.
+		- 20261003: The unit suite passes, 1057 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID, markdown and table checks pass. With a taken name counted as done, the second-copy and same-second tests failed. With same bytes not counted as the same copy, the same-second and race tests failed. With the loss not handed to the window, the notice test failed. With no hard links, the race test saw a part copy in three runs out of three.
+		- 20261003: Seen on Linux: a launch on a 2.x `--config mine.shcl` with a list in brackets made `mine_backup_<time>_format-v2.shcl` and put the notice up over the terminal after its first frame. The next launch made no copy and showed no notice.
 	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
-	- Branch: fmtcopy
+		- 20261003: No `format2` or `.format<N>` name is left in the code, README or design.md. The local-time stamp is one function now, shared with the test folder. The notice is put up only in `show_notice`, and `take_conversion_loss` is read only in the window's event loop.
+	- Branch: fmtcopy, fmtbak
 	- Commit: 6531c55, 6d10356
-	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_copy_already_there_is_left_as_it_was` (EreLZMm), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX).
+	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_second_conversion_keeps_a_second_copy` (EreLZMm), `copies_made_in_one_second_never_replace_each_other` (Erf0QeH), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX), `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` (Erf0Qhu), `a_conversion_notice_says_how_many_and_where_the_copy_is` (Erf0Qkx).
 	- Closed:
 
 - Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share

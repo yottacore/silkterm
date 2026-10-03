@@ -53,11 +53,14 @@ pub struct App {
 	dialog: Option<crate::dialog::DialogWin>,
 	dialog_dirty: bool,
 	// A save that could not be written, waiting to be said, and the notice
-	// saying one. It is its own window so it can stand over an open Settings.
+	// saying it or the one below. It is its own window so it can stand over an
+	// open Settings.
 	// Windows shows the system's message box instead, and `notice` stays None.
 	notice: Option<crate::dialog::DialogWin>,
 	notice_dirty: bool,
 	notice_owed: Option<config::Refusal>,
+	// settings the launch's conversion of the file could not keep, said the same way
+	loss_owed: Option<config::ConversionLoss>,
 	// files already reported this session (see notice_due)
 	told: Vec<std::path::PathBuf>,
 	// where the Settings dialog was when it last closed, and when that was
@@ -96,6 +99,7 @@ impl App {
 			notice: None,
 			notice_dirty: false,
 			notice_owed: None,
+			loss_owed: None,
 			told: Vec::new(),
 			settings_view: None,
 			settings_size: None,
@@ -456,10 +460,13 @@ impl App {
 		if self.notice.is_some() {
 			return;
 		}
-		let Some(refusal) = self.notice_owed.take() else {
+		let (title, paras) = if let Some(loss) = self.loss_owed.take() {
+			crate::dialog::conversion_notice(&loss)
+		} else if let Some(refusal) = self.notice_owed.take() {
+			crate::dialog::refusal_notice(&refusal)
+		} else {
 			return;
 		};
-		let (title, paras) = crate::dialog::refusal_notice(&refusal);
 		let parent = self
 			.dialog
 			.as_ref()
@@ -9360,7 +9367,14 @@ impl ApplicationHandler<UserEvent> for App {
 				self.notice_owed = Some(refusal);
 			}
 		}
-		if self.notice_owed.is_some() {
+		// The launch converted the file and lost settings doing it. Said once the
+		// terminal is on screen, since nothing may hold up the first frame.
+		if self.state.as_ref().is_some_and(|state| state.revealed) {
+			if let Some(loss) = config::take_conversion_loss() {
+				self.loss_owed = Some(loss);
+			}
+		}
+		if self.notice_owed.is_some() || self.loss_owed.is_some() {
 			self.show_notice(event_loop);
 		}
 		if self.notice_dirty {

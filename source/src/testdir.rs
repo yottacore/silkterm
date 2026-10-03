@@ -182,52 +182,9 @@ fn make_run_dir(
 
 // Local time, like every other stamp the project writes by hand. NN is
 // hundredths of a second.
-#[cfg(unix)]
 fn local_stamp() -> String {
-	let now = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap_or_default();
-	let seconds = libc::time_t::try_from(now.as_secs()).unwrap_or(libc::time_t::MAX);
-	// SAFETY: tm is plain data, so all zeros is a valid value, and localtime_r
-	// only writes the tm it is handed.
-	let fields = unsafe {
-		let mut fields: libc::tm = std::mem::zeroed();
-		libc::localtime_r(&raw const seconds, &raw mut fields);
-		fields
-	};
-	format!(
-		"{:04}{:02}{:02}-{:02}{:02}{:02}{:02}",
-		fields.tm_year + 1900,
-		fields.tm_mon + 1,
-		fields.tm_mday,
-		fields.tm_hour,
-		fields.tm_min,
-		fields.tm_sec,
-		now.subsec_millis() / 10
-	)
-}
-
-#[cfg(windows)]
-fn local_stamp() -> String {
-	use windows_sys::Win32::Foundation::SYSTEMTIME;
-	use windows_sys::Win32::System::SystemInformation::GetLocalTime;
-	// SAFETY: SYSTEMTIME is plain data, so all zeros is a valid value, and
-	// GetLocalTime only fills the struct it is handed.
-	let now = unsafe {
-		let mut now: SYSTEMTIME = std::mem::zeroed();
-		GetLocalTime(&raw mut now);
-		now
-	};
-	format!(
-		"{:04}{:02}{:02}-{:02}{:02}{:02}{:02}",
-		now.wYear,
-		now.wMonth,
-		now.wDay,
-		now.wHour,
-		now.wMinute,
-		now.wSecond,
-		now.wMilliseconds / 10
-	)
+	let (stamp, hundredths) = crate::config::local_stamp();
+	format!("{stamp}{hundredths:02}")
 }
 
 #[cfg(test)]

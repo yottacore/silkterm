@@ -1416,21 +1416,35 @@ fn fence_run(line: &str) -> Option<(char, usize)> {
 // converted lossily, which could name a different file. A write that moves the
 // file to a newer SHCL format keeps the old one first (`keep_old_format`).
 pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> Result<(), String> {
-	write_config_atomic_with(path, text, shcl::write_file_atomic)?;
+	write_config_keeping(path, text).map(|_| ())
+}
+
+// The same write, answering where the old file was kept when it converted one.
+fn write_config_keeping(path: &std::path::Path, text: &str) -> Result<Option<PathBuf>, String> {
+	let kept = publish_keeping(path, text, shcl::write_file_atomic)?;
 	for line in restated_launch_messages(path, text) {
 		eprintln!("{line}");
 	}
-	Ok(())
+	Ok(kept)
 }
 
-// Windows' replace can fail after the old file is gone (1176, 1177), and shcl
-// then deletes its temp copy too, so the text is written at the empty name
-// rather than lost. The publish is a parameter so a test can fail it that way.
+#[cfg(test)]
 fn write_config_atomic_with(
 	path: &std::path::Path,
 	text: &str,
 	publish: fn(&str, &str) -> Result<(), String>,
 ) -> Result<(), String> {
+	publish_keeping(path, text, publish).map(|_| ())
+}
+
+// Windows' replace can fail after the old file is gone (1176, 1177), and shcl
+// then deletes its temp copy too, so the text is written at the empty name
+// rather than lost. The publish is a parameter so a test can fail it that way.
+fn publish_keeping(
+	path: &std::path::Path,
+	text: &str,
+	publish: fn(&str, &str) -> Result<(), String>,
+) -> Result<Option<PathBuf>, String> {
 	let Some(file) = path.to_str() else {
 		return Err(format!("{} is not a UTF-8 path", path.display()));
 	};
@@ -1442,10 +1456,14 @@ fn write_config_atomic_with(
 	});
 	let kept = keep_old_format(path, text)?;
 	publish(file, text).or_else(|e| restore_config(before, text, e))?;
-	if let Some(said) = kept {
-		eprintln!("{said}");
+	if let (Some(backup), Some(new)) = (&kept, shcl::format_version(text)) {
+		eprintln!(
+			"{APP_NAME}: {} converted to SHCL format {new}; the old file is kept at {}",
+			path.display(),
+			backup.display()
+		);
 	}
-	Ok(())
+	Ok(kept)
 }
 
 // A file with no Format line is read as shcl 2.x, the last format without one.
@@ -1455,22 +1473,39 @@ fn format_of(text: &str) -> u32 {
 	shcl::format_version(text).unwrap_or(UNSTAMPED_FORMAT)
 }
 
-// Where a file in format `n` is kept when it is converted: `config.shcl` ->
-// `config.format2.shcl`, beside it, so it still opens as SHCL.
-fn old_format_path(path: &std::path::Path, n: u32) -> Option<PathBuf> {
-	let name = path.file_name()?.to_string_lossy().into_owned();
-	let stem = name.strip_suffix(".shcl").unwrap_or(&name);
-	Some(path.with_file_name(format!("{stem}.format{n}.shcl")))
+// The name a file in format `n` is kept under when it is converted, beside it
+// and still ending in .shcl: `config.shcl` ->
+// `config_backup_20261003-142233_format-v2.shcl`. A second one made in the same
+// second gets `_2` before the `.shcl`, and so on.
+fn backup_name(stem: &str, stamp: &str, n: u32, attempt: u32) -> String {
+	let again = if attempt > 1 {
+		format!("_{attempt}")
+	} else {
+		String::new()
+	};
+	format!("{stem}_backup_{stamp}_format-v{n}{again}.shcl")
 }
 
 // Before a write moves the file to a newer format, the file as it is now is
-// copied to `old_format_path`. That covers every conversion, and a save that
-// converts a file a launch left alone. A copy already there is never replaced:
-// it is the older file, or the same one from another window converting at the
-// same moment. The write is refused when the copy cannot be made. Answers what
-// to say once the write has gone through.
-fn keep_old_format(path: &std::path::Path, text: &str) -> Result<Option<String>, String> {
+// copied beside it under a `backup_name` stamped with the local time. That
+// covers every conversion, and a save that converts a file a launch left
+// alone. Every older version is kept: a backup already there is never
+// replaced. The write is refused when the copy cannot be made. Answers where
+// the copy is.
+fn keep_old_format(path: &std::path::Path, text: &str) -> Result<Option<PathBuf>, String> {
+	let (stamp, _) = local_stamp();
+	keep_old_format_at(path, text, &stamp)
+}
+
+fn keep_old_format_at(
+	path: &std::path::Path,
+	text: &str,
+	stamp: &str,
+) -> Result<Option<PathBuf>, String> {
 	let Some(new) = shcl::format_version(text) else {
+		return Ok(None);
+	};
+	let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
 		return Ok(None);
 	};
 	let body = match std::fs::read(path) {
@@ -1482,42 +1517,34 @@ fn keep_old_format(path: &std::path::Path, text: &str) -> Result<Option<String>,
 	if new <= old || body.iter().all(u8::is_ascii_whitespace) {
 		return Ok(None);
 	}
-	let Some(copy) = old_format_path(path, old) else {
-		return Ok(None);
-	};
+	let stem = name.strip_suffix(".shcl").unwrap_or(&name);
 	#[cfg(unix)]
 	let perms = std::fs::metadata(path).ok().map(|meta| meta.permissions());
 	#[cfg(not(unix))]
 	let perms = None;
-	let made = write_new_file(&copy, &body, perms.as_ref())
-		.map_err(|e| format!("could not keep the old file at {}: {e}", copy.display()))?;
-	Ok(Some(if made {
-		format!(
-			"{APP_NAME}: {} converted to SHCL format {new}; the old file is kept at {}",
-			path.display(),
-			copy.display()
-		)
-	} else {
-		format!(
-			"{APP_NAME}: {} converted to SHCL format {new}; {} was already there and is left as it was",
-			path.display(),
-			copy.display()
-		)
-	}))
+	write_new_file(
+		|attempt| path.with_file_name(backup_name(stem, stamp, old, attempt)),
+		&body,
+		perms.as_ref(),
+	)
+	.map(Some)
+	.map_err(|e| format!("could not keep the old file beside {}: {e}", path.display()))
 }
 
-// Writes `body` at `dest` only while nothing has that name, and never leaves a
-// part of it there. It is written under a name of its own and then linked to
-// `dest`, which fails rather than replace anything, so two launches doing this
-// at once leave one whole copy. Answers false when the name was taken. Where
-// the filesystem has no hard links, it is written at `dest` directly.
+// Writes `body` at the first of `names(1)`, `names(2)` and on that nothing has,
+// and never leaves a part of it there. It is written under a name of its own
+// and then linked, which fails rather than replace anything. A name already
+// holding the same bytes is the same copy, from another window converting at
+// the same moment, so two at once leave one whole copy. Where the filesystem
+// has no hard links, each name is written directly. Answers where it went.
 fn write_new_file(
-	dest: &std::path::Path,
+	names: impl Fn(u32) -> PathBuf,
 	body: &[u8],
 	perms: Option<&std::fs::Permissions>,
-) -> std::io::Result<bool> {
+) -> std::io::Result<PathBuf> {
 	use std::io::Write;
-	let name = dest
+	let first = names(1);
+	let name = first
 		.file_name()
 		.map(|n| n.to_string_lossy().into_owned())
 		.unwrap_or_default();
@@ -1534,10 +1561,11 @@ fn write_new_file(
 		file.write_all(body)?;
 		file.sync_all()
 	};
+	let same = |at: &std::path::Path| std::fs::read(at).is_ok_and(|seen| seen == body);
 	let mut n = 0u32;
 	let (temp, mut file) = loop {
 		n += 1;
-		let temp = dest.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+		let temp = first.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
 		match opts.open(&temp) {
 			Ok(file) => break (temp, file),
 			Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && n < BACKUPS_MAX => {}
@@ -1546,25 +1574,104 @@ fn write_new_file(
 	};
 	let filled = fill(&mut file, &temp);
 	drop(file);
-	let attempt = filled.map(|()| std::fs::hard_link(&temp, dest));
+	let linked = filled.map(|()| {
+		for attempt in 1..=BACKUPS_MAX {
+			let dest = names(attempt);
+			match std::fs::hard_link(&temp, &dest) {
+				Ok(()) => return Some(Ok(dest)),
+				Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+					if same(&dest) {
+						return Some(Ok(dest));
+					}
+				}
+				// vfat answers EPERM, not "unsupported", so any other failure tries a
+				// plain write
+				Err(_) => return None,
+			}
+		}
+		Some(Err(no_free_name()))
+	});
 	let _ = std::fs::remove_file(&temp);
-	match attempt? {
-		Ok(()) => return Ok(true),
-		Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
-		// vfat answers EPERM, not "unsupported", so any other failure tries this
-		Err(_) => {}
+	if let Some(done) = linked? {
+		return done;
 	}
-	let mut file = match opts.open(dest) {
-		Ok(file) => file,
-		Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
-		Err(e) => return Err(e),
+	for attempt in 1..=BACKUPS_MAX {
+		let dest = names(attempt);
+		let mut file = match opts.open(&dest) {
+			Ok(file) => file,
+			Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+				if same(&dest) {
+					return Ok(dest);
+				}
+				continue;
+			}
+			Err(e) => return Err(e),
+		};
+		let filled = fill(&mut file, &dest);
+		drop(file);
+		if let Err(e) = filled {
+			let _ = std::fs::remove_file(&dest);
+			return Err(e);
+		}
+		return Ok(dest);
+	}
+	Err(no_free_name())
+}
+
+fn no_free_name() -> std::io::Error {
+	std::io::Error::new(
+		std::io::ErrorKind::AlreadyExists,
+		format!("{BACKUPS_MAX} copies already made this second"),
+	)
+}
+
+// The local time to the second, `YYYYmmDD-HHMMSS`, and the hundredths past it.
+// Local, as the test folders and the pipeline's log names are.
+#[cfg(unix)]
+pub(crate) fn local_stamp() -> (String, u32) {
+	let now = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.unwrap_or_default();
+	let seconds = libc::time_t::try_from(now.as_secs()).unwrap_or(libc::time_t::MAX);
+	// SAFETY: tm is plain data, so all zeros is a valid value, and localtime_r
+	// only writes the tm it is handed.
+	let fields = unsafe {
+		let mut fields: libc::tm = std::mem::zeroed();
+		libc::localtime_r(&raw const seconds, &raw mut fields);
+		fields
 	};
-	let filled = fill(&mut file, dest);
-	drop(file);
-	if filled.is_err() {
-		let _ = std::fs::remove_file(dest);
-	}
-	filled.map(|()| true)
+	(
+		format!(
+			"{:04}{:02}{:02}-{:02}{:02}{:02}",
+			fields.tm_year + 1900,
+			fields.tm_mon + 1,
+			fields.tm_mday,
+			fields.tm_hour,
+			fields.tm_min,
+			fields.tm_sec,
+		),
+		now.subsec_millis() / 10,
+	)
+}
+
+#[cfg(windows)]
+pub(crate) fn local_stamp() -> (String, u32) {
+	use windows_sys::Win32::Foundation::SYSTEMTIME;
+	use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+	// SAFETY: SYSTEMTIME is plain data, so all zeros is a valid value, and
+	// GetLocalTime only fills the struct it is handed.
+	let now = unsafe {
+		let mut now: SYSTEMTIME = std::mem::zeroed();
+		GetLocalTime(&raw mut now);
+		now
+	};
+	(
+		format!(
+			"{:04}{:02}{:02}-{:02}{:02}{:02}",
+			now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond,
+		),
+		u32::from(now.wMilliseconds / 10),
+	)
 }
 
 // Writes the text where the file was, only while nothing is at that name. The
@@ -2471,7 +2578,7 @@ fn load() -> Settings {
 	// conversion left holding the wallpaper image is put right before that, or
 	// the file reads as pre-nesting and converts again. Ahead of all of it, a
 	// file shcl 2.x wrote is respelled for 3.0, since every step parses it, and
-	// the 2.x file is kept beside it as `config.format2.shcl`.
+	// the 2.x file is kept beside it as `config_backup_<time>_format-v2.shcl`.
 	convert_shcl2_config(&path);
 	repair_wallpaper_heading(&path);
 	convert_legacy_config(&path);
@@ -5834,15 +5941,21 @@ fn convert_shcl2_config(path: &std::path::Path) {
 		note_config_busy(path);
 		return;
 	}
-	if let Err(e) = write_config_atomic(path, &out) {
-		eprintln!(
-			"{APP_NAME}: could not update config {}: {e}",
-			path.display()
-		);
-		return;
-	}
-	for line in shcl2_losses(&text, path) {
-		eprintln!("{line}");
+	let backup = match write_config_keeping(path, &out) {
+		Ok(backup) => backup,
+		Err(e) => {
+			eprintln!(
+				"{APP_NAME}: could not update config {}: {e}",
+				path.display()
+			);
+			return;
+		}
+	};
+	if let Some(loss) = shcl2_losses(&text, path, backup) {
+		eprintln!("{}", loss.terminal_line());
+		if let Ok(mut owed) = LOST_IN_CONVERSION.lock() {
+			*owed = Some(loss);
+		}
 	}
 }
 
@@ -5850,18 +5963,47 @@ fn convert_shcl2_config(path: &std::path::Path) {
 // bracketed list to: the new format has no way to write one, so they stay as
 // written and set nothing. A line it cannot read at all is said at every launch
 // by `config_complaints`.
-fn shcl2_losses(text: &str, path: &std::path::Path) -> Vec<String> {
+fn shcl2_losses(
+	text: &str,
+	path: &std::path::Path,
+	backup: Option<PathBuf>,
+) -> Option<ConversionLoss> {
 	let lost = shcl::migrate_unstamped(text, true).lost;
-	if lost == 0 {
-		return Vec::new();
+	(lost > 0).then(|| ConversionLoss {
+		path: path.to_path_buf(),
+		backup,
+		lost,
+	})
+}
+
+// Settings a launch's conversion could not keep. The terminal hears at once;
+// the window says it in a notice once it is on screen, as for a refused save.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConversionLoss {
+	pub path: PathBuf,
+	pub backup: Option<PathBuf>,
+	pub lost: usize,
+}
+
+impl ConversionLoss {
+	fn terminal_line(&self) -> String {
+		let kept = self
+			.backup
+			.as_ref()
+			.map(|copy| format!(" The old file is at {}.", copy.display()))
+			.unwrap_or_default();
+		format!(
+			"{APP_NAME}: {}: {} line(s) set a list in brackets, which the new format cannot hold; they are kept as written but set nothing.{kept}",
+			self.path.display(),
+			self.lost
+		)
 	}
-	let kept = old_format_path(path, format_of(text))
-		.map(|copy| format!(" The old file is at {}.", copy.display()))
-		.unwrap_or_default();
-	vec![format!(
-		"{APP_NAME}: {}: {lost} line(s) set a list in brackets, which the new format cannot hold; they are kept as written but set nothing.{kept}",
-		path.display()
-	)]
+}
+
+static LOST_IN_CONVERSION: std::sync::Mutex<Option<ConversionLoss>> = std::sync::Mutex::new(None);
+
+pub fn take_conversion_loss() -> Option<ConversionLoss> {
+	LOST_IN_CONVERSION.lock().ok()?.take()
 }
 
 fn refresh_shcl_banner(path: &std::path::Path) {
@@ -8097,12 +8239,18 @@ mod tests {
 		}
 		let publish = "shcl::write_file_atomic";
 		assert_eq!(body.matches(publish).count(), 1, "{publish} is named once");
-		let start = body.find("fn write_config_atomic(").expect("the writer");
 		// "\n}" alone: a Windows checkout can end the line with "\r\n"
-		let end = start + body[start..].find("\n}").expect("its end");
+		let fn_body = |name: &str| {
+			let start = body.find(&format!("fn {name}(")).expect("the writer");
+			&body[start..start + body[start..].find("\n}").expect("its end")]
+		};
 		assert!(
-			body[start..end].contains(publish),
-			"{publish} is called from write_config_atomic"
+			fn_body("write_config_atomic").contains("write_config_keeping("),
+			"write_config_atomic is write_config_keeping"
+		);
+		assert!(
+			fn_body("write_config_keeping").contains(publish),
+			"{publish} is called from write_config_keeping"
 		);
 	}
 
@@ -10401,9 +10549,36 @@ mod tests {
 		names
 	}
 
+	// The copies beside a config, by name: everything but the file itself and a
+	// temp name still being written.
+	fn backups_in(dir: &std::path::Path, stem: &str) -> Vec<String> {
+		dir_names(dir)
+			.into_iter()
+			.filter(|name| name.starts_with(&format!("{stem}_backup_")))
+			.collect()
+	}
+
+	// `<stem>_backup_YYYYmmDD-HHMMSS_format-v<n>.shcl`, as `backup_name` makes it.
+	fn is_backup_name(name: &str, stem: &str, n: u32) -> bool {
+		let Some(rest) = name.strip_prefix(&format!("{stem}_backup_")) else {
+			return false;
+		};
+		let Some(stamp) = rest.strip_suffix(&format!("_format-v{n}.shcl")) else {
+			return false;
+		};
+		stamp.len() == 15
+			&& stamp.chars().enumerate().all(|(at, c)| {
+				if at == 8 {
+					c == '-'
+				} else {
+					c.is_ascii_digit()
+				}
+			})
+	}
+
 	// The launch that converts a 2.x file keeps it, byte for byte, as
-	// `config.format2.shcl`, and reads the settings it had. The next launch has
-	// nothing to convert and leaves the copy alone.
+	// `config_backup_<time>_format-v2.shcl`, and reads the settings it had. The
+	// next launch has nothing to convert and leaves the copy alone.
 	// Test ID: EreLZJY
 	#[test]
 	fn a_launch_keeps_the_2x_file_beside_the_converted_one() {
@@ -10419,7 +10594,10 @@ mod tests {
 		set_config_override(path.clone());
 
 		let _ = load();
-		let copy = dir.join("config.format2.shcl");
+		let kept = backups_in(&dir, "config");
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
+		let copy = dir.join(&kept[0]);
 		assert_eq!(std::fs::read_to_string(&copy).unwrap(), SHCL2_FILE);
 		let now = std::fs::read_to_string(&path).unwrap();
 		assert_eq!(
@@ -10443,52 +10621,105 @@ mod tests {
 		let _ = load();
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), now, "settled");
 		assert_eq!(std::fs::read_to_string(&copy).unwrap(), SHCL2_FILE);
-		assert_eq!(dir_names(&dir), ["config.format2.shcl", "config.shcl"]);
+		assert_eq!(dir_names(&dir), ["config.shcl", kept[0].as_str()]);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// A copy already at the name is never replaced, whichever conversion made it,
-	// and the file is still converted. A current file gets no copy at all.
+	// Every older version is kept. A second conversion makes a second copy and
+	// leaves the first as it was, and a current file gets no copy at all.
 	// Test ID: EreLZMm
 	#[test]
-	fn a_copy_already_there_is_left_as_it_was() {
+	fn a_second_conversion_keeps_a_second_copy() {
 		let dir = format_test_dir("fmtcopy_kept");
 		let path = dir.join("config.shcl");
-		let copy = dir.join("config.format2.shcl");
-		std::fs::write(&copy, "font:\n\tsize: 9\n").unwrap();
 		std::fs::write(&path, SHCL2_FILE).unwrap();
 		convert_shcl2_config(&path);
+		let first = backups_in(&dir, "config");
+		assert_eq!(first.len(), 1, "{first:?}");
+
+		let other = "font:\n\tfamily: \"C:\\\\Fonts\\\\mine.ttf\"\n";
+		std::fs::write(&path, other).unwrap();
+		convert_shcl2_config(&path);
+		let both = backups_in(&dir, "config");
+		assert_eq!(both.len(), 2, "{both:?}");
+		assert!(both.contains(&first[0]), "{both:?}");
 		assert_eq!(
-			std::fs::read_to_string(&copy).unwrap(),
-			"font:\n\tsize: 9\n"
+			std::fs::read_to_string(dir.join(&first[0])).unwrap(),
+			SHCL2_FILE,
+			"the first copy is untouched"
 		);
+		let second = both.iter().find(|name| **name != first[0]).unwrap();
+		assert_eq!(std::fs::read_to_string(dir.join(second)).unwrap(), other);
 		assert_eq!(
 			shcl::format_version(&std::fs::read_to_string(&path).unwrap()),
 			Some(shcl::FORMAT_MAJOR)
 		);
-		assert_eq!(dir_names(&dir), ["config.format2.shcl", "config.shcl"]);
 
 		// a save of a current file, and a write over a blank one, keep nothing
-		std::fs::remove_file(&copy).unwrap();
 		write_config_atomic(&path, default_config()).unwrap();
 		std::fs::write(&path, "\n").unwrap();
 		write_config_atomic(&path, default_config()).unwrap();
-		assert_eq!(dir_names(&dir), ["config.shcl"]);
+		assert_eq!(backups_in(&dir, "config"), both);
 
 		// a file named by --config keeps its own name, still ending in .shcl
+		for (name, stem) in [("mine.shcl", "mine"), ("mine.conf", "mine.conf")] {
+			let mine = dir.join(name);
+			std::fs::write(&mine, SHCL2_FILE).unwrap();
+			convert_shcl2_config(&mine);
+			let kept = backups_in(&dir, stem);
+			assert_eq!(kept.len(), 1, "{kept:?}");
+			assert!(is_backup_name(&kept[0], stem, 2), "{kept:?}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Two conversions in the same second never share a name: the second takes
+	// `_2`, and a name already holding something else is passed over untouched.
+	// The same bytes again are the same copy.
+	// Test ID: Erf0QeH
+	#[test]
+	fn copies_made_in_one_second_never_replace_each_other() {
+		let dir = format_test_dir("fmtcopy_second");
+		let path = dir.join("config.shcl");
+		let stamp = "20261003-142233";
+		let keep = |body: &str| {
+			std::fs::write(&path, body).unwrap();
+			keep_old_format_at(&path, default_config(), stamp)
+				.unwrap()
+				.unwrap()
+		};
+		let first = keep(SHCL2_FILE);
 		assert_eq!(
-			old_format_path(std::path::Path::new("/a/mine.shcl"), 2),
-			Some(PathBuf::from("/a/mine.format2.shcl"))
+			first,
+			dir.join("config_backup_20261003-142233_format-v2.shcl")
 		);
+		std::fs::write(
+			dir.join("config_backup_20261003-142233_format-v2_2.shcl"),
+			"planted",
+		)
+		.unwrap();
+		let other = "font:\n\tsize: 9\n";
+		let second = keep(other);
 		assert_eq!(
-			old_format_path(std::path::Path::new("/a/mine.conf"), 2),
-			Some(PathBuf::from("/a/mine.conf.format2.shcl"))
+			second,
+			dir.join("config_backup_20261003-142233_format-v2_3.shcl")
 		);
+		assert_eq!(std::fs::read_to_string(&first).unwrap(), SHCL2_FILE);
+		assert_eq!(
+			std::fs::read_to_string(dir.join("config_backup_20261003-142233_format-v2_2.shcl"))
+				.unwrap(),
+			"planted"
+		);
+		assert_eq!(std::fs::read_to_string(&second).unwrap(), other);
+		assert_eq!(keep(other), second, "the same file again is the same copy");
+		assert_eq!(backups_in(&dir, "config").len(), 3);
+		assert_eq!(dir_names(&dir).len(), 4, "no temp file is left");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	// Several windows can launch at once, and each converts the file it read.
-	// Exactly one whole copy comes of it, and no temp file is left.
+	// Every copy that comes of it is whole, they are one copy unless the clock
+	// ticked between them, and no temp file is left.
 	// Test ID: EreLZQQ
 	#[test]
 	fn launches_converting_at_once_leave_one_whole_copy() {
@@ -10500,20 +10731,29 @@ mod tests {
 			"## filler line for size\n".repeat(200_000)
 		);
 		for _round in 0..5 {
-			let _ = std::fs::remove_file(dir.join("config.format2.shcl"));
+			for name in backups_in(&dir, "config") {
+				std::fs::remove_file(dir.join(name)).unwrap();
+			}
 			std::fs::write(&path, &body).unwrap();
 			let start = std::sync::Barrier::new(5);
-			let copy = dir.join("config.format2.shcl");
 			let torn = std::sync::atomic::AtomicBool::new(false);
 			let done = std::sync::atomic::AtomicBool::new(false);
 			std::thread::scope(|scope| {
 				scope.spawn(|| {
 					start.wait();
+					// the names are not known ahead, and listing the folder every pass
+					// would be too slow to catch a part copy, so each found is read a
+					// while before looking again
 					while !done.load(std::sync::atomic::Ordering::Relaxed) {
-						if let Ok(seen) = std::fs::read(&copy)
-							&& seen != body.as_bytes()
-						{
-							torn.store(true, std::sync::atomic::Ordering::Relaxed);
+						for name in backups_in(&dir, "config") {
+							let copy = dir.join(name);
+							for _ in 0..200 {
+								if let Ok(seen) = std::fs::read(&copy)
+									&& seen != body.as_bytes()
+								{
+									torn.store(true, std::sync::atomic::Ordering::Relaxed);
+								}
+							}
 						}
 					}
 				});
@@ -10534,8 +10774,17 @@ mod tests {
 				!torn.load(std::sync::atomic::Ordering::Relaxed),
 				"a part copy was seen"
 			);
-			assert_eq!(std::fs::read(&copy).unwrap(), body.as_bytes());
-			assert_eq!(dir_names(&dir), ["config.format2.shcl", "config.shcl"]);
+			let kept = backups_in(&dir, "config");
+			assert!((1..=2).contains(&kept.len()), "{kept:?}");
+			for name in &kept {
+				assert!(is_backup_name(name, "config", 2), "{kept:?}");
+				assert_eq!(std::fs::read(dir.join(name)).unwrap(), body.as_bytes());
+			}
+			assert_eq!(
+				dir_names(&dir).len(),
+				kept.len() + 1,
+				"no temp file is left"
+			);
 		}
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -10584,13 +10833,15 @@ mod tests {
 	#[test]
 	fn a_setting_the_conversion_cannot_keep_is_reported() {
 		let path = std::path::Path::new("/cfg/config.shcl");
+		let copy =
+			std::path::Path::new("/cfg").join("config_backup_20261003-142233_format-v2.shcl");
 		let text = "font:\n\tfamily:[One, Two]\n\tsize: 13\n";
-		let said = shcl2_losses(text, path);
-		assert_eq!(said.len(), 1, "{said:?}");
-		assert!(said[0].contains("1 line(s)"), "{said:?}");
-		let copy = std::path::Path::new("/cfg").join("config.format2.shcl");
-		assert!(said[0].contains(&copy.display().to_string()), "{said:?}");
-		assert!(shcl2_losses(SHCL2_FILE, path).is_empty());
+		let loss = shcl2_losses(text, path, Some(copy.clone())).unwrap();
+		assert_eq!(loss.lost, 1);
+		let said = loss.terminal_line();
+		assert!(said.contains("1 line(s)"), "{said}");
+		assert!(said.contains(&copy.display().to_string()), "{said}");
+		assert_eq!(shcl2_losses(SHCL2_FILE, path, Some(copy)), None);
 		// and every later launch still names the line
 		let out = from_shcl2_text(text).unwrap();
 		let complaints = config_complaints(&out);
@@ -10598,6 +10849,34 @@ mod tests {
 			complaints.iter().any(|c| c.contains("line 2")),
 			"{complaints:?}"
 		);
+	}
+
+	// The launch that loses a setting leaves word for the window, with the count
+	// and the copy it really made. A launch that loses nothing leaves none.
+	// Test ID: Erf0Qhu
+	#[test]
+	fn a_launch_that_loses_a_setting_leaves_a_notice_for_the_window() {
+		let _guard = test_config_lock();
+		let _ = take_conversion_loss();
+		let dir = format_test_dir("fmtcopy_notice");
+		let path = dir.join("config.shcl");
+		let text = "font:\n\tfamily:[One, Two]\n\tsize: 13\n";
+		std::fs::write(&path, text).unwrap();
+		set_config_override(path.clone());
+
+		let _ = load();
+		let loss = take_conversion_loss().expect("a notice is owed");
+		assert_eq!(loss.path, path);
+		assert_eq!(loss.lost, 1);
+		let copy = loss.backup.expect("a copy was kept");
+		assert_eq!(copy.parent(), Some(dir.as_path()));
+		assert_eq!(std::fs::read_to_string(&copy).unwrap(), text);
+		assert_eq!(take_conversion_loss(), None, "taken once");
+
+		std::fs::write(&path, SHCL2_FILE).unwrap();
+		let _ = load();
+		assert_eq!(take_conversion_loss(), None, "nothing was lost");
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	// shcl 2.0.0 wrote `# enabled: true` above `# rotate:` and indented under
