@@ -21,7 +21,10 @@ use glyphon::{Buffer, Color as GColor, Shaping, TextArea, TextBounds};
 use crate::bgimage::{ImageRenderer, WpProbe};
 use crate::clipboard::Clipboard;
 use crate::config;
-use crate::gfx::{Gfx, NoFrame, Rebirth, RectInstance, RectRenderer, VramProbe};
+use crate::gfx::{
+	FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, NoFrame, Rebirth, RectInstance, RectRenderer, Retry,
+	VramProbe,
+};
 use crate::input::{self, ClickSelect, CopyFrom, Hotkey, WheelRoute, is_copy_chord};
 use crate::pane::{BarHit, CopyKind, Dir, Pane, PaneManager, Rect};
 use crate::settings_ui::EditCmd;
@@ -2059,6 +2062,8 @@ fn pane_wake<'a, P: PaneWakes + 'a>(
 struct IdleClock {
 	since: Instant,
 	wake_owed: bool,
+	// a rebuild the GPU refused, tried again on this
+	retry: Retry,
 }
 
 impl IdleClock {
@@ -2066,7 +2071,35 @@ impl IdleClock {
 		IdleClock {
 			since: Instant::now(),
 			wake_owed: false,
+			retry: Retry::default(),
 		}
+	}
+
+	// The device back now: it is owed, there is a screen to draw on, and no
+	// refused rebuild is waiting out its backoff.
+	fn rebuild_due(&self, hidden: bool, now: Instant) -> bool {
+		self.wake_owed && !hidden && self.retry.at.is_none_or(|at| now >= at)
+	}
+
+	// A busy or full GPU can refuse the device, and only input used to try
+	// again, so a window left alone stayed blank after the load was gone. It
+	// stays owed and is tried again on a backoff instead. True on the first
+	// refusal of a run.
+	fn rebuild_failed(&mut self, now: Instant) -> bool {
+		self.wake_owed = true;
+		self.retry
+			.missed(now, REBUILD_RETRY_FIRST, REBUILD_RETRY_MAX);
+		self.retry.misses == 1
+	}
+
+	fn rebuilt(&mut self) {
+		self.wake_owed = false;
+		self.retry = Retry::default();
+	}
+
+	// When the loop has to wake for a refused rebuild.
+	fn rebuild_wake(&self, hidden: bool) -> Option<Instant> {
+		self.retry.at.filter(|_| self.wake_owed && !hidden)
 	}
 
 	// A sign of life. True when it is the one that makes the device owed.
@@ -2093,6 +2126,11 @@ impl IdleClock {
 		}
 	}
 }
+
+// A refused rebuild waits longer than a refused frame (`Retry`), since each
+// try is a whole device and maybe an adapter.
+const REBUILD_RETRY_FIRST: Duration = Duration::from_millis(250);
+const REBUILD_RETRY_MAX: Duration = Duration::from_secs(5);
 
 // What the window title says about the device. Nothing normally, a note while
 // it is let go, another while it comes back, and a last one for a few seconds
@@ -2867,6 +2905,8 @@ struct State {
 	gl: bool, // born on the glutin GL path (X11): the one with a VT watcher and sentinels
 	adapter_info: wgpu::AdapterInfo, // for the About dialog, which may open before a rebuild
 	idle: IdleClock,
+	// a frame the surface refused, drawn again on this (see `Retry`)
+	frame_retry: Retry,
 	conserve: Conserve,
 	vt_heal: VtHeal,
 }
@@ -5013,7 +5053,8 @@ impl State {
 		self.chrome = None;
 		self.invalidate_prepared();
 		self.rebirth = Some(gpu.release());
-		self.idle.wake_owed = false;
+		self.idle.rebuilt();
+		self.frame_retry = Retry::default();
 		// no frame draws while released, so nothing else would update the title
 		self.conserve = Conserve::Saving;
 		self.update_title();
@@ -5024,7 +5065,7 @@ impl State {
 	// The device again, on the same window, and everything that lived on it
 	// built afresh. The wallpaper is decoded again rather than having been kept,
 	// as after a VT switch (recover_gpu). A failure leaves the window released
-	// and the next sign of life tries again.
+	// and owed, and it is tried again on a backoff while the window shows.
 	fn rebuild_gpu(&mut self) {
 		let Some(rebirth) = self.rebirth.as_ref() else {
 			return;
@@ -5033,11 +5074,13 @@ impl State {
 		let gfx = match Gfx::rebuild(rebirth, &self.window) {
 			Ok(gfx) => gfx,
 			Err(e) => {
-				eprintln!(
-					"{}: could not bring the GPU device back ({e}); trying again on the next input",
-					config::APP_NAME
-				);
-				self.idle.wake_owed = false;
+				if self.idle.rebuild_failed(Instant::now()) {
+					eprintln!(
+						"{}: could not bring the GPU device back ({e}); trying again",
+						config::APP_NAME
+					);
+				}
+				idledbg(&format!("rebuild refused: {e}"));
 				return;
 			}
 		};
@@ -5055,7 +5098,7 @@ impl State {
 			wallpaper_img: None,
 			scrim,
 		});
-		self.idle.wake_owed = false;
+		self.idle.rebuilt();
 		self.idle.since = Instant::now();
 		self.vram_next = Instant::now() + VRAM_CHECK_IVL;
 		// the window may have been resized while there was no surface to follow
@@ -6757,7 +6800,15 @@ impl State {
 					) {
 					self.reveal_window();
 				}
-				return animating;
+				// The pass already cleared what asked for this frame, so it is owed
+				// here or nothing asks again until the desktop does (a busy or full
+				// GPU times out the acquire). The backoff paces the retry, not the
+				// animation, so a surface that keeps refusing cannot spin.
+				let wait =
+					self.frame_retry
+						.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+				idledbg(&format!("frame refused ({why:?}), again in {wait:?}"));
+				return false;
 			}
 		};
 		crate::perf::since(&crate::perf::ACQUIRE_NS, acquire);
@@ -7080,7 +7131,16 @@ impl State {
 		crate::perf::since(&crate::perf::ENCODE_NS, encode);
 		let submit = crate::perf::mark();
 		gpu.gfx.queue.submit(Some(encoder.finish()));
-		gpu.gfx.end_frame(frame);
+		// the GL path's twin of the refused acquire above: a swap that failed
+		let presented = gpu.gfx.end_frame(frame).is_ok();
+		if presented {
+			self.frame_retry = Retry::default();
+		} else {
+			let wait = self
+				.frame_retry
+				.missed(Instant::now(), FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+			idledbg(&format!("frame not presented, again in {wait:?}"));
+		}
 		crate::perf::since(&crate::perf::SUBMIT_NS, submit);
 		crate::perf::painted();
 		// The window was created hidden; reveal it once a real frame is on screen at
@@ -7120,7 +7180,7 @@ impl State {
 		if !text_same {
 			self.text.trim_atlas();
 		}
-		animating
+		animating && presented
 	}
 }
 
@@ -8070,6 +8130,7 @@ impl ApplicationHandler<UserEvent> for App {
 			gl,
 			adapter_info,
 			idle: IdleClock::new(),
+			frame_retry: Retry::default(),
 			conserve: Conserve::Off,
 			vt_heal: VtHeal::default(),
 		});
@@ -9355,6 +9416,13 @@ impl ApplicationHandler<UserEvent> for App {
 		{
 			self.dialog_dirty = true;
 		}
+		if self
+			.dialog
+			.as_mut()
+			.is_some_and(|d| d.refused.take_due(Instant::now()))
+		{
+			self.dialog_dirty = true;
+		}
 		if self.dialog_dirty {
 			if let Some(d) = &mut self.dialog {
 				d.render();
@@ -9379,6 +9447,13 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		if self.notice_owed.is_some() || self.loss_owed.is_some() {
 			self.show_notice(event_loop);
+		}
+		if self
+			.notice
+			.as_mut()
+			.is_some_and(|n| n.refused.take_due(Instant::now()))
+		{
+			self.notice_dirty = true;
 		}
 		if self.notice_dirty {
 			if let Some(n) = &mut self.notice {
@@ -9565,7 +9640,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// up (on X11 the dialog's context cannot outlive the terminal's).
 		let dialog_up = self.dialog.is_some() || self.notice.is_some();
 		if state.gpu.is_none() {
-			if state.idle.wake_owed && !hidden {
+			if state.idle.rebuild_due(hidden, Instant::now()) {
 				state.rebuild_gpu();
 			}
 		} else if !dialog_up
@@ -9577,6 +9652,9 @@ impl ApplicationHandler<UserEvent> for App {
 			// the dialogs' warm context is a second device; it comes back
 			// with the first (see the warm-up at the top of this pass)
 			self.gpu_warm.release();
+		}
+		if !hidden && state.gpu.is_some() && state.frame_retry.take_due(Instant::now()) {
+			state.dirty = true;
 		}
 		// A pass that draws nothing pauses the watch too, or the next ease's first
 		// period would be the whole idle gap before it.
@@ -9707,6 +9785,23 @@ impl ApplicationHandler<UserEvent> for App {
 			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
 			(other_flow, _) => other_flow,
 		};
+		// a frame or a device the GPU refused is tried again on its backoff
+		let refused = if state.gpu.is_some() {
+			state.frame_retry.at.filter(|_| !hidden)
+		} else {
+			state.idle.rebuild_wake(hidden)
+		};
+		let refused = [self.dialog.as_ref(), self.notice.as_ref()]
+			.into_iter()
+			.flatten()
+			.filter_map(|d| d.refused.at)
+			.chain(refused)
+			.min();
+		let flow = match (flow, refused) {
+			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
+			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
+			(other_flow, _) => other_flow,
+		};
 		// wake a parked cursor at its scheduled resume time, even when idle
 		let flow = match (flow, cursor_wake) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
@@ -9832,6 +9927,7 @@ mod tests {
 	};
 	use super::{EditCmd, Reach, TabEditKey, tab_edit_key, tab_edit_menu_items, tab_edit_takes};
 	use crate::config;
+	use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Retry};
 	use std::time::{Duration, Instant};
 	use winit::event::ElementState;
 
@@ -9993,6 +10089,7 @@ mod tests {
 		let mut clock = IdleClock {
 			since: long_ago,
 			wake_owed: false,
+			retry: Retry::default(),
 		};
 		assert!(!clock.output(false, true));
 		assert_eq!(clock.since, long_ago, "hidden output restarted the clock");
@@ -10005,11 +10102,81 @@ mod tests {
 		let mut seen = IdleClock {
 			since: long_ago,
 			wake_owed: false,
+			retry: Retry::default(),
 		};
 		assert!(!seen.output(false, false));
 		assert!(seen.since > long_ago, "output on screen is a sign of life");
 		assert!(seen.output(true, false));
 		assert!(seen.wake_owed);
+	}
+
+	// A frame the surface refused under GPU load was dropped, and with the pass
+	// that asked for it already done, nothing drew again until the desktop asked.
+	// Test ID: Erfy7et
+	#[test]
+	fn a_refused_frame_is_drawn_again_on_a_backoff() {
+		let now = Instant::now();
+		let mut retry = Retry::default();
+		retry.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+		let wake = retry.at.expect("a refused frame is owed");
+		assert!(wake > now, "not on the same pass, or it spins");
+		assert!(!retry.take_due(now));
+		assert!(retry.take_due(wake), "due once the wait is over");
+		assert!(!retry.take_due(wake), "taken once");
+		assert_eq!(retry.at, None);
+
+		let mut last = Duration::ZERO;
+		for _ in 0..40 {
+			let wait = retry.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
+			assert!(wait >= last, "each miss waits at least as long");
+			assert!(wait <= FRAME_RETRY_MAX);
+			last = wait;
+		}
+		assert_eq!(
+			last, FRAME_RETRY_MAX,
+			"a GPU that stays busy is asked at the cap"
+		);
+
+		retry = Retry::default();
+		assert_eq!(
+			retry.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX),
+			FRAME_RETRY_FIRST,
+			"a drawn frame starts the backoff over"
+		);
+	}
+
+	// A device the GPU refused on the way back from the idle release used to
+	// wait for input, so a window nobody touched stayed blank after the load.
+	// Test ID: Erfy7yk
+	#[test]
+	fn a_refused_rebuild_stays_owed_and_is_tried_again() {
+		let now = Instant::now();
+		let mut clock = IdleClock::new();
+		clock.owe(true);
+		assert!(clock.rebuild_due(false, now));
+		assert!(
+			!clock.rebuild_due(true, now),
+			"a hidden window waits for the reveal"
+		);
+
+		assert!(clock.rebuild_failed(now), "the first refusal is reported");
+		assert!(!clock.rebuild_failed(now), "and only the first");
+		let wake = clock
+			.rebuild_wake(false)
+			.expect("the loop wakes for the retry");
+		assert!(wake > now);
+		assert!(!clock.rebuild_due(false, now), "not before the backoff");
+		assert!(clock.rebuild_due(false, wake), "tried again with no input");
+		assert_eq!(clock.rebuild_wake(true), None, "no wakes while hidden");
+
+		// a return to the console releases and rebuilds with nothing owed yet
+		let mut healed = IdleClock::new();
+		healed.rebuild_failed(now);
+		assert!(healed.wake_owed);
+
+		clock.rebuilt();
+		assert!(!clock.wake_owed);
+		assert_eq!(clock.retry, Retry::default());
 	}
 
 	// Test ID: EqFWtPs
