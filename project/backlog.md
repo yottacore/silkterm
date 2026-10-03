@@ -709,7 +709,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: Every settings write goes through `write_config_atomic`. The only other moves of the file are `--reset-config` and the move from the old config folder, and neither changes the format. PowerShell profile writes pass the same writer but have no Format line, so they never get a copy.
 		- 20261003: No `format2` or `.format<N>` name is left in the code, README or design.md. The local-time stamp is one function now, shared with the test folder. The notice is put up only in `show_notice`, and `take_conversion_loss` is read only in the window's event loop.
 	- Branch: fmtcopy, fmtbak
-	- Commit: 6531c55, 6d10356
+	- Commit: 6531c55, 6d10356, aaec440
 	- Test case: `a_launch_keeps_the_2x_file_beside_the_converted_one` (EreLZJY), `a_second_conversion_keeps_a_second_copy` (EreLZMm), `copies_made_in_one_second_never_replace_each_other` (Erf0QeH), `launches_converting_at_once_leave_one_whole_copy` (EreLZQQ), `a_write_that_cannot_keep_the_old_file_is_refused` (EreLZTl), `the_footer_never_stamps_a_2x_file` (EreLZX8), `a_setting_the_conversion_cannot_keep_is_reported` (EreLZaX), `a_launch_that_loses_a_setting_leaves_a_notice_for_the_window` (Erf0Qhu), `a_conversion_notice_says_how_many_and_where_the_copy_is` (Erf0Qkx).
 	- Closed:
 
