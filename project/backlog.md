@@ -795,7 +795,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The pipeline's fuzz soak fails: a Settings save loses `scroll.inview_tau_ms` at the next launch
 	- ID: 2026100311103811
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Severity: High
 	- Opened: 20261003-111038
 	- Opened by: CC
@@ -806,8 +806,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The value loads at launch but is not found at the next launch after a save. The case is a file with two `scroll:` blocks, the second one holding `inview_tau_ms: 219`.
 	- Expected behavior: A save moves no value.
 	- Reproduced: 20261003 on b23, on dev 3349635 and on f435323, from before that day's round. So none of that round's work caused it.
+	- Actual cause:
+		- Not shcl, and none of the renames table, backfill or the format copy. The rename check decides whether `single_screen_tau_ms` is already in the file, and the file has it only as a comment at column 0 between two `scroll:` lines.
+		- Since 20261001 (`cfglines`) that check judged the comment where a save that keeps the lines leaves it: at column 0, outside `scroll:`, so the rename fired. But shcl keeps the lines or falls back to the whole-file form by what the save changes, not by the file. The fallback moves the comment into `scroll:`, and then the rename no longer fires. In this file a window size save falls back and a font size save does not.
+		- So the old name loaded as the new setting before the save, and as itself after it.
+	- Origin: 7b3be64 (`cfglines`, 2026100115322367). Confirmed.
 	- Progress log:
 		- 20261003: Seeds run in order from 0, so every full pipeline run reaches seed 30 in its 20 second soak and stops there. The short soak in a plain test run stops before it. The run from 20261001 got past the soak to the profiler stage, so the change that exposed it is likely between that run and f435323. Not bisected.
+		- 20261003: Traced to 7b3be64. Seed 30 passes with the `saved_paths` from before it and fails with its own.
+	- Actual fix: The rename check judges a commented line where the whole-file form puts it again. Every save agrees on that place, whichever way it writes. A file with an unreadable line is still judged as it is, since a fallback there is refused.
+	- Against: 2026100115322367, which made a column-0 `# highlight:` between `colors:` lines stop blocking the `focus:` rename. It blocks again. Its test is commented out with the reason.
+	- Swept: `saved_paths` is the only place that predicts a save, and `migrated_text` its only caller. The rating write and the old flat-file conversion write the whole-file form on purpose.
+	- Branch: fuzz30
+	- Commit: 9f80558
+	- Test case: `a_commented_new_name_counts_the_same_whichever_save_runs` (ErfAH9f). Seen to fail on the old check and pass on the new one. Seed 30 of `config::tests::fuzz::a_settings_save_moves_no_value_at_the_next_launch` fails on the old check and passes on the new one. Not added to the fuzz corpus, since the unit test covers it and a new file there would change what the other config targets mutate.
+	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
