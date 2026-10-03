@@ -457,7 +457,8 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 
 // The prompt script itself, compiled in so the binary is the one source of it.
 // x9ps1-git is a separate MIT project of the same author; this is a copy of its
-// `bin/x9ps1-git`, and the version it carries is in its own header.
+// `bin/x9ps1-git`, and the version it carries is in its own header. One change:
+// its host color table is cut to a commented example, so no machine names ship.
 const BASH_PROMPT: &str = include_str!("x9ps1-git.bash");
 
 // What the script is called once it is on disk. No extension, because it is
@@ -1395,5 +1396,37 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 			doc.contains(snippet.trim_end()),
 			"shell-integration.md no longer carries the snippet verbatim"
 		);
+	}
+
+	// Both prompts go into other people's shells, so a host color table may only
+	// show an example. A real machine name in a live line would ship with them.
+	// Test ID: Erftpx4
+	#[test]
+	fn the_shipped_prompts_color_no_named_machine() {
+		let live = |text: &'static str| {
+			text.lines()
+				.map(str::trim_start)
+				.filter(|line| !line.starts_with('#'))
+		};
+		let named: Vec<&str> = live(SNIPPET)
+			.filter(|line| line.starts_with('\'') && line.contains("{ '"))
+			.collect();
+		assert!(named.is_empty(), "{named:?}");
+		let color = live(SNIPPET)
+			.find(|line| line.starts_with("$global:__SilkTermHostColor ="))
+			.expect("the host color line");
+		assert!(!color.contains("MachineName"), "{color}");
+		let arms = BASH_PROMPT
+			.split("case \"${HOSTNAME}\" in")
+			.nth(1)
+			.and_then(|rest| rest.split("esac").next())
+			.expect("the host color case");
+		let arms: Vec<&str> = arms
+			.lines()
+			.map(str::trim_start)
+			.filter(|line| line.contains(')') && !line.starts_with('#'))
+			.collect();
+		assert_eq!(arms.len(), 1, "{arms:?}");
+		assert!(arms[0].starts_with("*)"), "{arms:?}");
 	}
 }
