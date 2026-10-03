@@ -27,6 +27,7 @@ mod fuzz;
 mod gfx;
 mod input;
 mod integration;
+mod keys;
 mod links;
 #[cfg(any(test, target_os = "macos"))]
 mod macmenu;

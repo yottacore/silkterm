@@ -265,18 +265,25 @@ Rules that go with them:
 	- Ctrl+Plus, Ctrl+Minus and Ctrl+0 size the font for this session.
 	- Ctrl+, opens Settings. F11 is fullscreen.
 
+- Panes take Alt+Shift chords and Alt+arrows, as in Windows Terminal.
+	- Alt+Shift+Plus splits right, Alt+Shift+Minus splits down, and Alt+Shift+W closes the pane.
+	- Alt+arrows move to the pane that way. Of two the same distance off, the one the last move came from wins, then the top or left one.
+
 - On macOS the program's chords are Command ones, Apple's standard shortcut where an action has one, as a key and on the menu row. No Ctrl chord is the program's there, so every one goes to the shell.
 	- Command+N new window, Command+T new tab, Command+W close tab.
 	- Command+C copy, Command+V paste.
 	- Command+Shift+[ and Command+Shift+] walk the tabs. So do Command+PageUp and Command+PageDown, and Shift with those two carries the tab with you.
 	- Command+Plus, Command+Minus and Command+0 size the font.
 	- Command+, opens Settings, Control+Command+F is fullscreen, Command+Q quits. Command+H and Option+Command+H hide, and Command+M minimizes.
+	- Command+D splits right and Command+Shift+D splits down, and Command+Option+arrows move between panes, as in iTerm2. Close pane has no chord there by default.
 	- Command+click opens a link, and Command held at a press selects a block.
 	- Ctrl+click is the right-click, so it opens the right-click menu wherever a right-click does.
 	- Nothing typed with Command held reaches the shell, so no Command chord takes a key from it.
 	- With no in-window bar, Option plus a letter always goes to the shell.
 
 - Alt plus a menu title's first letter opens that menu. The Menu key opens the right-click menu on the focused pane.
+
+- Every hotkey above can be changed or turned off under `keys:` in the config file, apart from Alt plus a menu title's letter. A menu row shows the chord its hotkey answers to first, so a change shows there too.
 
 - In an open menu, arrows move, Right enters a submenu, Left leaves one or steps to the next dropdown, Enter picks, Escape closes, and a letter picks the row carrying it.
 

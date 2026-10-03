@@ -7,6 +7,9 @@ use alacritty_terminal::term::TermMode;
 use winit::event::{KeyEvent, MouseButton};
 use winit::keyboard::{Key, ModifiersState, NamedKey, SmolStr};
 
+use crate::keys::Bindings;
+use crate::pane::Toward;
+
 // A mouse event to report to the PTY. Wheel notches ride buttons 64/65; `None`
 // is the "no button" code (3) used for bare motion and the X10 release.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -208,18 +211,14 @@ pub fn wheel_route(mode: TermMode, shift: bool) -> WheelRoute {
 	}
 }
 
-// Ctrl+Shift+C, or Command+C on a Mac, read off the held modifiers. A grab's
-// pass-through arrives with them zeroed, so it never matches.
-pub fn is_copy_chord(mods: ModifiersState, key: &Key, mac: bool) -> bool {
-	if mac {
-		return mods.super_key() && command_hotkey(key, mods) == Some(Hotkey::Copy);
-	}
-	mods.control_key()
-		&& mods.shift_key()
-		&& matches!(key, Key::Character(typed) if typed.eq_ignore_ascii_case("c"))
+// The copy chord, read off the held modifiers. A grab's pass-through arrives
+// with them zeroed, so it never matches.
+pub fn is_copy_chord(keys: &Bindings, mods: ModifiersState, key: &Key) -> bool {
+	keys.hotkey(key, mods) == Some(Hotkey::Copy)
 }
 
-// A key the terminal keeps rather than typing at the shell.
+// A key the terminal keeps rather than typing at the shell. Every one but
+// `MenuTitle` can be bound in the config file (keys.rs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hotkey {
 	Settings,
@@ -238,127 +237,10 @@ pub enum Hotkey {
 	Paste,
 	// Command+Q on macOS, for a press the menu bar does not take
 	Quit,
-}
-
-/// A Command chord on macOS: the key, plus whatever else is held with Command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CommandChord {
-	pub key: &'static str,
-	pub shift: bool,
-	pub option: bool,
-	pub control: bool,
-}
-
-pub const fn command(key: &'static str) -> CommandChord {
-	CommandChord {
-		key,
-		shift: false,
-		option: false,
-		control: false,
-	}
-}
-
-impl CommandChord {
-	/// How a menu label spells it, in Apple's modifier order: `Command+C`,
-	/// `Control+Command+F`.
-	#[cfg(any(test, target_os = "macos"))]
-	pub fn spoken(self) -> String {
-		let key = match self.key {
-			"+" => "Plus".to_string(),
-			"-" => "Minus".to_string(),
-			key => key.to_ascii_uppercase(),
-		};
-		let mut out = String::new();
-		for (held, name) in [
-			(self.control, "Control+"),
-			(self.option, "Option+"),
-			(self.shift, "Shift+"),
-		] {
-			if held {
-				out.push_str(name);
-			}
-		}
-		out.push_str("Command+");
-		out.push_str(&key);
-		out
-	}
-
-	// A Mac names a Command+Shift press by the shifted character, "{" for
-	// Shift+[ on a US layout, so that spelling counts too.
-	fn matches(self, typed: &str, mods: ModifiersState) -> bool {
-		let spelled = typed.eq_ignore_ascii_case(self.key)
-			|| (self.shift && us_shifted(self.key) == Some(typed));
-		spelled
-			&& mods.shift_key() == self.shift
-			&& mods.alt_key() == self.option
-			&& mods.control_key() == self.control
-	}
-}
-
-/// What Shift makes of a punctuation key on a US layout, for the chords that
-/// take one.
-pub fn us_shifted(key: &str) -> Option<&'static str> {
-	match key {
-		"[" => Some("{"),
-		"]" => Some("}"),
-		_ => None,
-	}
-}
-
-// The macOS chords, taken from Apple's standard shortcuts for the actions that
-// have one. The menu bar shows these same chords (macmenu.rs). Command never
-// reaches the shell, so none of them takes a key from it. On a Mac these are
-// the program's chords, and the Ctrl ones go to the shell.
-#[rustfmt::skip]
-pub const COMMAND_CHORDS: &[(Hotkey, CommandChord)] = &[
-	(Hotkey::Settings,   command(",")),
-	(Hotkey::NewWindow,  command("n")),
-	(Hotkey::NewTab,     command("t")),
-	(Hotkey::CloseTab,   command("w")),
-	(Hotkey::Copy,       command("c")),
-	(Hotkey::Paste,      command("v")),
-	(Hotkey::Zoom(1),    command("+")),
-	(Hotkey::Zoom(-1),   command("-")),
-	(Hotkey::ZoomReset,  command("0")),
-	(Hotkey::Fullscreen, CommandChord { key: "f", shift: false, option: false, control: true }),
-	(Hotkey::Quit,       command("q")),
-	(Hotkey::PrevTab,    CommandChord { key: "[", shift: true, option: false, control: false }),
-	(Hotkey::NextTab,    CommandChord { key: "]", shift: true, option: false, control: false }),
-];
-
-/// The Command chord a hotkey has on macOS, if it has one.
-#[cfg(any(test, target_os = "macos"))]
-pub fn command_chord(hotkey: Hotkey) -> Option<CommandChord> {
-	COMMAND_CHORDS
-		.iter()
-		.find(|(each, _)| *each == hotkey)
-		.map(|(_, chord)| *chord)
-}
-
-// A Command press on macOS, read against the table. "+" is Shift+"=" on most
-// layouts, so both spellings count, as they do for Ctrl. The page keys walk and
-// carry tabs as they do with Ctrl elsewhere; they have no menu row.
-fn command_hotkey(key: &Key, mods: ModifiersState) -> Option<Hotkey> {
-	let plain = !mods.alt_key() && !mods.control_key();
-	let typed = match key {
-		Key::Named(page @ (NamedKey::PageUp | NamedKey::PageDown)) if plain => {
-			let forward = *page == NamedKey::PageDown;
-			return Some(match (mods.shift_key(), forward) {
-				(true, _) => Hotkey::MoveTab { forward },
-				(false, true) => Hotkey::NextTab,
-				(false, false) => Hotkey::PrevTab,
-			});
-		}
-		Key::Character(typed) => typed,
-		_ => return None,
-	};
-	if (typed == "=" || typed == "+") && plain {
-		return Some(Hotkey::Zoom(1));
-	}
-	COMMAND_CHORDS
-		.iter()
-		.find(|(_, chord)| chord.matches(typed, mods))
-		.map(|(hotkey, _)| *hotkey)
+	SplitRight,
+	SplitDown,
+	ClosePane,
+	Focus(Toward),
 }
 
 /// Whether a press can go on to the shell. On macOS nothing typed with Command
@@ -367,67 +249,47 @@ pub fn reaches_shell(mods: ModifiersState, mac: bool) -> bool {
 	!(mac && mods.super_key())
 }
 
-// Which hotkey a press is, if any. Chords that shells bind keep their plain
-// Ctrl form free (Ctrl+T, Ctrl+W, Ctrl+V), and pane split, close and focus
-// cycling are menu-only by design.
+// Which hotkey a press is, if any, by the bindings in force.
 pub fn hotkey_for(key: &Key, mods: ModifiersState, menu_bar: bool) -> Option<Hotkey> {
-	hotkey_on(key, mods, menu_bar, cfg!(target_os = "macos"))
+	hotkey_in(
+		&crate::config::settings().keys,
+		key,
+		mods,
+		menu_bar,
+		cfg!(target_os = "macos"),
+	)
 }
 
-// `hotkey_for` with the platform passed in, so the macOS chords can be checked
-// from any box.
+// `hotkey_for` on the default bindings, with the platform passed in, so either
+// platform's chords can be checked from any box.
+#[cfg(test)]
 fn hotkey_on(key: &Key, mods: ModifiersState, menu_bar: bool, mac: bool) -> Option<Hotkey> {
-	// On a Mac the program's chords are the Command ones, and every Ctrl chord
-	// goes to the shell. There is no in-window bar there for Alt to open.
-	if mac {
-		if mods.super_key() {
-			return command_hotkey(key, mods);
-		}
-		return match key {
-			Key::Named(NamedKey::F11) => Some(Hotkey::Fullscreen),
-			Key::Named(NamedKey::ContextMenu) => Some(Hotkey::ContextMenu),
-			_ => None,
-		};
-	}
-	let ctrl = mods.control_key();
-	let shift = mods.shift_key();
-	match key {
-		Key::Character(typed) if ctrl && !shift && typed == "," => return Some(Hotkey::Settings),
-		Key::Named(NamedKey::F11) => return Some(Hotkey::Fullscreen),
-		Key::Named(NamedKey::ContextMenu) => return Some(Hotkey::ContextMenu),
-		_ => {}
+	hotkey_in(&Bindings::defaults(mac), key, mods, menu_bar, mac)
+}
+
+// The bound chords come first, so a binding on Alt+letter wins over the menu
+// title. Alt+letter opens a title only where there is an in-window bar, which a
+// Mac does not have.
+fn hotkey_in(
+	keys: &Bindings,
+	key: &Key,
+	mods: ModifiersState,
+	menu_bar: bool,
+	mac: bool,
+) -> Option<Hotkey> {
+	if let Some(hotkey) = keys.hotkey(key, mods) {
+		return Some(hotkey);
 	}
 	// This shadows the shell's Meta+<those letters> (Meta-f word-forward), the
 	// usual menu-bar tradeoff.
-	if menu_bar && mods.alt_key() && !ctrl {
+	if !mac && menu_bar && mods.alt_key() && !mods.control_key() {
 		if let Key::Character(typed) = key {
 			if let Some(ch) = typed.chars().next() {
 				return Some(Hotkey::MenuTitle(ch.to_ascii_uppercase()));
 			}
 		}
 	}
-	if !ctrl {
-		return None;
-	}
-	let hotkey = match key {
-		Key::Character(typed) if shift && typed.eq_ignore_ascii_case("t") => Hotkey::NewTab,
-		Key::Character(typed) if shift && typed.eq_ignore_ascii_case("w") => Hotkey::CloseTab,
-		Key::Named(NamedKey::F4) => Hotkey::CloseTab,
-		// new window, starting in the focused pane's current directory
-		Key::Character(typed) if shift && typed.eq_ignore_ascii_case("n") => Hotkey::NewWindow,
-		// "+" is Shift+"=" on most layouts, so both spellings count
-		Key::Character(typed) if typed == "-" => Hotkey::Zoom(-1),
-		Key::Character(typed) if typed == "=" || typed == "+" => Hotkey::Zoom(1),
-		Key::Character(typed) if typed == "0" => Hotkey::ZoomReset,
-		Key::Named(NamedKey::PageUp) if shift => Hotkey::MoveTab { forward: false },
-		Key::Named(NamedKey::PageDown) if shift => Hotkey::MoveTab { forward: true },
-		Key::Named(NamedKey::PageUp) => Hotkey::PrevTab,
-		Key::Named(NamedKey::PageDown) => Hotkey::NextTab,
-		k if is_copy_chord(mods, k, false) => Hotkey::Copy,
-		Key::Character(typed) if shift && typed.eq_ignore_ascii_case("v") => Hotkey::Paste,
-		_ => return None,
-	};
-	Some(hotkey)
+	None
 }
 
 // Where a write to the desktop clipboard comes from.
@@ -683,6 +545,7 @@ mod tests {
 	use winit::keyboard::NativeKey;
 
 	use super::*;
+	use crate::keys::{Chord, KeyName};
 
 	const NONE: ModifiersState = ModifiersState::empty();
 
@@ -1061,18 +924,43 @@ mod tests {
 
 	const COMMAND: ModifiersState = ModifiersState::SUPER;
 
-	fn held(chord: CommandChord) -> ModifiersState {
-		let mut mods = COMMAND;
+	fn held(chord: Chord) -> ModifiersState {
+		let mut mods = NONE;
 		for (on, flag) in [
+			(chord.command, COMMAND),
 			(chord.shift, ModifiersState::SHIFT),
-			(chord.option, ModifiersState::ALT),
-			(chord.control, CTRL),
+			(chord.alt, ModifiersState::ALT),
+			(chord.ctrl, CTRL),
 		] {
 			if on {
 				mods |= flag;
 			}
 		}
 		mods
+	}
+
+	// The key a chord is pressed on, as a press would name it.
+	fn pressed(chord: Chord) -> Key {
+		match chord.key {
+			KeyName::Char(ch) => Key::Character(ch.to_string().into()),
+			KeyName::Plus => Key::Character("+".into()),
+			KeyName::Minus => Key::Character("-".into()),
+			KeyName::Named(named) => Key::Named(named),
+		}
+	}
+
+	// Every default chord on a platform with Command held, and its hotkey.
+	fn command_defaults(mac: bool) -> Vec<(Hotkey, Chord)> {
+		let keys = Bindings::defaults(mac);
+		crate::keys::config_paths()
+			.flat_map(|(hotkey, _)| {
+				keys.chords(hotkey)
+					.iter()
+					.filter(|chord| chord.command)
+					.map(move |chord| (hotkey, *chord))
+					.collect::<Vec<_>>()
+			})
+			.collect()
 	}
 
 	// Command+, is Settings on a Mac, and Ctrl+, goes to the shell there.
@@ -1098,19 +986,24 @@ mod tests {
 	#[test]
 	fn the_command_chords_are_the_only_program_chords_on_macos() {
 		let on = |typed: &str, mods, mac| hotkey_on(&Key::Character(typed.into()), mods, true, mac);
-		for (hotkey, chord) in COMMAND_CHORDS {
+		let mac_chords = command_defaults(true);
+		assert!(mac_chords.len() > 15, "{mac_chords:?}");
+		for (hotkey, chord) in mac_chords {
+			let press = pressed(chord);
 			assert_eq!(
-				on(chord.key, held(*chord), true),
-				Some(*hotkey),
+				hotkey_on(&press, held(chord), true, true),
+				Some(hotkey),
 				"{chord:?}"
 			);
 			assert_eq!(
-				on(chord.key, held(*chord), false),
+				hotkey_on(&press, held(chord), true, false),
 				None,
 				"{chord:?} off macOS"
 			);
 		}
-		let find = |hotkey| command_chord(hotkey).map(CommandChord::spoken);
+		assert!(command_defaults(false).is_empty());
+		let mac_keys = Bindings::defaults(true);
+		let find = |hotkey| mac_keys.shown(hotkey).map(|chord| chord.spoken(true));
 		for (hotkey, spoken) in [
 			(Hotkey::NewTab, "Command+T"),
 			(Hotkey::CloseTab, "Command+W"),
@@ -1187,8 +1080,8 @@ mod tests {
 		assert_eq!(on("[", COMMAND, true), None, "no Shift");
 		assert_eq!(on("{", shifted.union(ModifiersState::ALT), true), None);
 		assert_eq!(on("{", shifted.union(CTRL), true), None);
-		assert_eq!(us_shifted("["), Some("{"));
-		assert_eq!(us_shifted("t"), None);
+		assert_eq!(crate::keys::us_shifted('['), Some("{"));
+		assert_eq!(crate::keys::us_shifted('t'), None);
 		let page = |key, mods| hotkey_on(&Key::Named(key), mods, false, true);
 		assert_eq!(page(NamedKey::PageUp, COMMAND), Some(Hotkey::PrevTab));
 		assert_eq!(page(NamedKey::PageDown, COMMAND), Some(Hotkey::NextTab));
@@ -1215,15 +1108,16 @@ mod tests {
 		assert!(shortcut_held(CTRL, false));
 		assert!(!shortcut_held(COMMAND, false));
 		let c = Key::Character("c".into());
-		assert!(is_copy_chord(COMMAND, &c, true));
-		assert!(!is_copy_chord(CTRL_SHIFT, &c, true));
+		let (mac_keys, pc_keys) = (Bindings::defaults(true), Bindings::defaults(false));
+		assert!(is_copy_chord(&mac_keys, COMMAND, &c));
+		assert!(!is_copy_chord(&mac_keys, CTRL_SHIFT, &c));
 		assert!(!is_copy_chord(
+			&mac_keys,
 			COMMAND.union(ModifiersState::SHIFT),
-			&c,
-			true
+			&c
 		));
-		assert!(is_copy_chord(CTRL_SHIFT, &c, false));
-		assert!(!is_copy_chord(COMMAND, &c, false));
+		assert!(is_copy_chord(&pc_keys, CTRL_SHIFT, &c));
+		assert!(!is_copy_chord(&pc_keys, COMMAND, &c));
 		let option = ModifiersState::ALT;
 		let mac = |mods| edit_keys(mods, true);
 		assert!(mac(COMMAND).shortcut && mac(COMMAND).line && !mac(COMMAND).types);
@@ -1315,11 +1209,70 @@ mod tests {
 		}
 	}
 
-	// Pane split, close and focus cycling are menu-only, so every other chord
-	// goes to the shell.
-	// Test ID: Er2UiYH
+	// Off since panes got hotkeys (20261003, 2026100220292607): Alt+Shift+Plus
+	// and Minus split, Alt+Shift+W closes and Alt+arrows move, as in Windows
+	// Terminal. Its Ctrl and Ctrl+Shift checks still hold and moved to
+	// `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
+	// // Pane split, close and focus cycling are menu-only, so every other chord
+	// // goes to the shell.
+	// // Test ID: Er2UiYH
+	// #[test]
+	// fn no_chord_splits_closes_or_cycles_panes() {
+	// 	for c in 'a'..='z' {
+	// 		let hotkey = chord(&c.to_string(), CTRL_SHIFT);
+	// 		match c {
+	// 			't' | 'w' | 'n' | 'c' | 'v' => assert!(hotkey.is_some(), "{c}"),
+	// 			_ => assert_eq!(hotkey, None, "Ctrl+Shift+{c}"),
+	// 		}
+	// 	}
+	// 	for key in [
+	// 		NamedKey::Tab,
+	// 		NamedKey::ArrowLeft,
+	// 		NamedKey::ArrowRight,
+	// 		NamedKey::ArrowUp,
+	// 		NamedKey::ArrowDown,
+	// 	] {
+	// 		assert_eq!(named(key, CTRL), None, "{key:?}");
+	// 		assert_eq!(named(key, CTRL_SHIFT), None, "{key:?}");
+	// 	}
+	// }
+
+	// The pane chords are Windows Terminal's: Alt+Shift+Plus splits right,
+	// Alt+Shift+Minus splits down, Alt+Shift+W closes the pane and Alt+arrows
+	// move between panes. Alt+letter still opens a menu, and no Ctrl or
+	// Ctrl+Shift chord was taken for panes.
+	// Test ID: EreU3sZ
 	#[test]
-	fn no_chord_splits_closes_or_cycles_panes() {
+	fn alt_shift_chords_split_and_close_panes_and_alt_arrows_move() {
+		const ALT: ModifiersState = ModifiersState::ALT;
+		const ALT_SHIFT: ModifiersState = ALT.union(ModifiersState::SHIFT);
+		assert_eq!(chord("+", ALT_SHIFT), Some(Hotkey::SplitRight));
+		assert_eq!(chord("_", ALT_SHIFT), Some(Hotkey::SplitDown));
+		assert_eq!(chord("W", ALT_SHIFT), Some(Hotkey::ClosePane));
+		for (key, toward) in [
+			(NamedKey::ArrowLeft, Toward::Left),
+			(NamedKey::ArrowRight, Toward::Right),
+			(NamedKey::ArrowUp, Toward::Up),
+			(NamedKey::ArrowDown, Toward::Down),
+		] {
+			assert_eq!(named(key, ALT), Some(Hotkey::Focus(toward)));
+			assert_eq!(named(key, ALT_SHIFT), None, "{key:?}");
+			assert_eq!(named(key, CTRL), None, "{key:?}");
+			assert_eq!(named(key, CTRL_SHIFT), None, "{key:?}");
+			assert_eq!(named(key, NONE), None, "{key:?}");
+		}
+		assert_eq!(named(NamedKey::Tab, CTRL), None);
+		assert_eq!(named(NamedKey::Tab, CTRL_SHIFT), None);
+		// the menu titles keep Alt plus their letter, and readline's Alt+b and
+		// Alt+f are no more taken than before
+		for (typed, title) in [("f", 'F'), ("p", 'P'), ("b", 'B')] {
+			assert_eq!(chord(typed, ALT), Some(Hotkey::MenuTitle(title)));
+		}
+		assert_eq!(
+			hotkey_on(&Key::Character("w".into()), ALT, false, false),
+			None,
+			"Alt+W with no menu bar"
+		);
 		for c in 'a'..='z' {
 			let hotkey = chord(&c.to_string(), CTRL_SHIFT);
 			match c {
@@ -1327,15 +1280,46 @@ mod tests {
 				_ => assert_eq!(hotkey, None, "Ctrl+Shift+{c}"),
 			}
 		}
-		for key in [
-			NamedKey::Tab,
-			NamedKey::ArrowLeft,
-			NamedKey::ArrowRight,
-			NamedKey::ArrowUp,
-			NamedKey::ArrowDown,
+	}
+
+	// On a Mac the pane chords are iTerm2's: Command+D splits right,
+	// Command+Shift+D splits down and Command+Option+arrows move. Option+arrows
+	// and the Alt+Shift chords go to the shell there.
+	// Test ID: EreU3sa
+	#[test]
+	fn command_d_splits_and_command_option_arrows_move_on_macos() {
+		const OPTION: ModifiersState = ModifiersState::ALT;
+		let mac = |key: Key, mods| hotkey_on(&key, mods, false, true);
+		let d = || Key::Character("d".into());
+		assert_eq!(mac(d(), COMMAND), Some(Hotkey::SplitRight));
+		assert_eq!(
+			mac(
+				Key::Character("D".into()),
+				COMMAND.union(ModifiersState::SHIFT)
+			),
+			Some(Hotkey::SplitDown)
+		);
+		assert_eq!(mac(d(), CTRL), None);
+		for (key, toward) in [
+			(NamedKey::ArrowLeft, Toward::Left),
+			(NamedKey::ArrowRight, Toward::Right),
+			(NamedKey::ArrowUp, Toward::Up),
+			(NamedKey::ArrowDown, Toward::Down),
 		] {
-			assert_eq!(named(key, CTRL), None, "{key:?}");
-			assert_eq!(named(key, CTRL_SHIFT), None, "{key:?}");
+			assert_eq!(
+				mac(Key::Named(key), COMMAND.union(OPTION)),
+				Some(Hotkey::Focus(toward))
+			);
+			assert_eq!(mac(Key::Named(key), OPTION), None, "{key:?}");
+			assert_eq!(mac(Key::Named(key), COMMAND), None, "{key:?}");
+		}
+		let alt_shift = OPTION.union(ModifiersState::SHIFT);
+		for typed in ["+", "_", "W"] {
+			assert_eq!(
+				mac(Key::Character(typed.into()), alt_shift),
+				None,
+				"{typed}"
+			);
 		}
 	}
 

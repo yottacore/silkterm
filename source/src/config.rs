@@ -474,6 +474,9 @@ pub struct Settings {
 	// The shells the Tabs menu offers, in file order. Written by the background
 	// scan (shells.rs) and by hand; see `write_shells` for what a scan may touch.
 	pub shells: Vec<crate::shells::ShellEntry>,
+	// The hotkeys in force: the defaults with the file's `keys.*` values put in.
+	// The key handler and every menu read these, so a rebinding shows up in all.
+	pub keys: crate::keys::Bindings,
 }
 
 impl Settings {
@@ -627,6 +630,7 @@ impl Default for Settings {
 			wallpaper_colors: None,
 			user_themes: Vec::new(),
 			shells: Vec::new(),
+			keys: crate::keys::Bindings::defaults(cfg!(target_os = "macos")),
 		}
 	}
 }
@@ -2062,6 +2066,9 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	if s.hyperlink_open_command != orig.hyperlink_open_command {
 		doc.put_string("hyperlinks.open_command", &s.hyperlink_open_command);
 	}
+	if s.keys != orig.keys {
+		write_keys(&mut doc, &orig.keys, &s.keys);
+	}
 	if s.wallpaper_folder_raw != orig.wallpaper_folder_raw {
 		let folder = s.wallpaper_folder_raw.trim();
 		doc.put_string(
@@ -2280,6 +2287,7 @@ struct RawConfig {
 	colors: RawColors,
 	user_themes: Vec<crate::theme::UserTheme>,
 	shells: Vec<crate::shells::ShellEntry>,
+	keys: Vec<(crate::input::Hotkey, Vec<crate::keys::Chord>)>,
 }
 
 #[derive(Default)]
@@ -2409,6 +2417,18 @@ fn restated_launch_messages(path: &std::path::Path, text: &str) -> Vec<String> {
 fn config_complaints(text: &str) -> Vec<String> {
 	let doc = shcl::Document::parse(text);
 	let mut out = Vec::new();
+
+	// A hotkey that does not read keeps its default, and one set over another's
+	// default takes it from that one. Both are easy to miss from the keyboard.
+	out.extend(crate::keys::complaints(
+		cfg!(target_os = "macos"),
+		|path| {
+			doc.get_string(path)
+				.ok()
+				.map(|text| (text, doc.lines(path)))
+		},
+		line_list,
+	));
 
 	let lines = unreadable_lines(&doc);
 	if !lines.is_empty() || doc.lost_count() > 0 {
@@ -2725,6 +2745,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		},
 		user_themes: read_user_themes(&r.doc),
 		shells: read_shells(&r.doc),
+		keys: read_keys(&r),
 	};
 	(raw, r.said.into_inner())
 }
@@ -3321,6 +3342,37 @@ fn resolve(raw: RawConfig) -> Settings {
 		stepped_profile: None,
 		user_themes: raw.user_themes,
 		shells: raw.shells,
+		keys: crate::keys::Bindings::with(cfg!(target_os = "macos"), &raw.keys).0,
+	}
+}
+
+// The hotkeys the file sets. A value that does not read is left out, so its
+// default stays: the reader reports one that is not text, and
+// `config_complaints` one that names no key.
+fn read_keys(r: &Reader) -> Vec<(crate::input::Hotkey, Vec<crate::keys::Chord>)> {
+	crate::keys::config_paths()
+		.filter_map(|(hotkey, path)| {
+			let text = r.s(&path)?;
+			if text.trim().is_empty() {
+				return None;
+			}
+			crate::keys::parse_value(&text)
+				.ok()
+				.map(|chords| (hotkey, chords))
+		})
+		.collect()
+}
+
+// Put a changed hotkey's chords in the file, by the platform's own names.
+fn write_keys(doc: &mut shcl::Document, orig: &crate::keys::Bindings, now: &crate::keys::Bindings) {
+	for (hotkey, path) in crate::keys::config_paths() {
+		let chords = now.chords(hotkey);
+		if chords != orig.chords(hotkey) {
+			doc.put_string(
+				&path,
+				&crate::keys::value_text(chords, cfg!(target_os = "macos")),
+			);
+		}
 	}
 }
 
@@ -5908,6 +5960,10 @@ static DEFAULT_CONFIG_TEXT: std::sync::LazyLock<String> = std::sync::LazyLock::n
 	DEFAULT_CONFIG_TEMPLATE
 		.replace("{HOME}", HOME_TOKEN)
 		.replace("{WPDIR}", &wallpaper_dir_escaped())
+		.replace(
+			"{KEYS}",
+			&crate::keys::template_lines(cfg!(target_os = "macos")),
+		)
 });
 
 fn default_config() -> &'static str {
@@ -6231,6 +6287,22 @@ hyperlinks:
 	## Empty uses the desktop's own opener. Example: "firefox --new-tab"
 	# open_command: ""  ## Default
 
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Keys
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+
+keys:
+
+	## Each hotkey is one or more key combinations, separated by spaces. A
+	## combination is the keys held, then the key pressed, joined by "+",
+	## such as "Ctrl+Shift+T". The keys held are Ctrl, Alt, Shift and
+	## Command. On a Mac, Alt is Option; elsewhere, Command is the Windows
+	## or Super key. These keys are written as words: Plus, Minus, Space,
+	## Tab, Enter, Escape, Backspace, Insert, Delete, Home, End, PageUp,
+	## PageDown, Left, Right, Up, Down, Menu, and F1 to F12. "none" turns a
+	## hotkey off. A combination set here is taken from any hotkey that has
+	## it by default.
+{KEYS}
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Shell
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -7741,6 +7813,124 @@ mod tests {
 			body[start..end].contains(publish),
 			"{publish} is called from write_config_atomic"
 		);
+	}
+
+	// A hotkey set in the file is what loads. A bad one keeps its default and
+	// is reported at launch with its line, rather than dropped in silence, and
+	// so is a chord taken from another hotkey's default.
+	// Test ID: EreU3sb
+	#[test]
+	fn a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported() {
+		use crate::input::Hotkey;
+		use crate::keys::Chord;
+		use crate::pane::Toward;
+		let path = std::path::Path::new("test.shcl");
+		let text = "keys:\n\tsplit_right: \"Ctrl+Alt+R\"\n\tsplit_down: \"Ctrl+Alt+Bogus\"\n\tfocus_left: \"none\"\n\tclose_pane: \"Ctrl+Shift+W\"\n\tfocus_up: Alt+K\n\tfont_reset: 5\n";
+		let (raw, said) = read_config_text(text, path);
+		let s = resolve(raw);
+		let d = Settings::default();
+		let chord = |text| Chord::parse(text).expect(text);
+		assert_eq!(s.keys.chords(Hotkey::SplitRight), [chord("Ctrl+Alt+R")]);
+		assert_eq!(
+			s.keys.chords(Hotkey::SplitDown),
+			d.keys.chords(Hotkey::SplitDown)
+		);
+		assert!(s.keys.chords(Hotkey::Focus(Toward::Left)).is_empty());
+		// quotes are optional
+		assert_eq!(s.keys.chords(Hotkey::Focus(Toward::Up)), [chord("Alt+K")]);
+		assert_eq!(
+			s.keys.chords(Hotkey::ZoomReset),
+			d.keys.chords(Hotkey::ZoomReset)
+		);
+		assert_eq!(
+			s.keys.chords(Hotkey::Focus(Toward::Right)),
+			d.keys.chords(Hotkey::Focus(Toward::Right))
+		);
+		let about_keys: Vec<&String> = said.iter().filter(|line| line.contains("keys.")).collect();
+		assert!(
+			about_keys
+				.iter()
+				.any(|line| line.contains("`keys.split_down` line 3 is not used")
+					&& line.contains("Bogus is not a key name")),
+			"{said:?}"
+		);
+		assert!(
+			about_keys
+				.iter()
+				.any(|line| line.contains("`keys.font_reset` line 7 is not used")),
+			"{said:?}"
+		);
+		if !cfg!(target_os = "macos") {
+			assert!(
+				about_keys
+					.iter()
+					.any(|line| line.contains("so `keys.close_tab` no longer answers to it")),
+				"{said:?}"
+			);
+			assert_eq!(about_keys.len(), 3, "{said:?}");
+		}
+	}
+
+	// A changed hotkey goes back into the file under its own name, by the
+	// platform's spelling, and the next load reads the same bindings. The
+	// Settings dialog's Keys tab is to save through this.
+	// Test ID: EreU3sc
+	#[test]
+	fn a_changed_hotkey_is_written_back_by_its_name() {
+		use crate::input::Hotkey;
+		use crate::keys::{Bindings, Chord, value_text};
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let mac = cfg!(target_os = "macos");
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgkeys_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "keys:\n\tclose_pane: \"Ctrl+Shift+W\"\n").unwrap();
+		set_config_override(path.clone());
+		let chord = |text| Chord::parse(text).expect(text);
+		let orig = load();
+		assert_eq!(
+			orig.keys.shown(Hotkey::ClosePane),
+			Some(chord("Ctrl+Shift+W"))
+		);
+		let mut edited = orig.clone();
+		let right = vec![chord("Ctrl+Alt+R"), chord("Ctrl+Alt+Right")];
+		edited.keys = Bindings::with(
+			mac,
+			&[
+				(Hotkey::ClosePane, vec![chord("Ctrl+Shift+W")]),
+				(Hotkey::SplitRight, right.clone()),
+			],
+		)
+		.0;
+		assert!(persist(&orig, &edited));
+		let saved = std::fs::read_to_string(&path).unwrap();
+		let want = format!("split_right: \"{}\"", value_text(&right, mac));
+		assert!(saved.contains(&want), "{want} in {saved}");
+		assert!(saved.contains("close_pane: \"Ctrl+Shift+W\""), "{saved}");
+		assert!(load().keys == edited.keys);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A file from before hotkeys gets the whole keys block at its next launch,
+	// every line commented at its default, and loads the same bindings.
+	// Test ID: EreU3sd
+	#[test]
+	fn an_older_file_gains_the_keys_block_commented() {
+		let text = "window:\n\tmargin: 6\n";
+		let after = backfilled_text(text)
+			.expect("nothing refused")
+			.expect("something added");
+		let path = std::path::Path::new("test.shcl");
+		assert!(after.contains("\nkeys:\n"), "{after}");
+		for (_, path) in crate::keys::config_paths() {
+			let name = path.trim_start_matches("keys.");
+			assert!(after.contains(&format!("\t# {name}: \"")), "{name}");
+		}
+		assert!(after.contains("\"none\" turns a\n"), "{after}");
+		assert!(resolve(read_raw(&after, path).0).keys == Settings::default().keys);
+		assert_eq!(backfilled_text(&after), Ok(None), "settles in one launch");
 	}
 
 	// Test ID: Eq4SnxO
@@ -9460,6 +9650,7 @@ mod tests {
 	// A new file follows the Settings dialog's tabs: Background, Text, Cursor,
 	// Movement, Themes, Window, Shell. The Silk tab borrows rows from the others,
 	// so its performance block leads and the rest keep their home tab's place.
+	// The hotkeys have no tab yet (2026100307252506) and sit before Shell.
 	// Test ID: Er2UFeO
 	#[test]
 	fn the_template_blocks_follow_the_dialog() {
@@ -9491,6 +9682,7 @@ mod tests {
 				"colors",
 				"window",
 				"hyperlinks",
+				"keys",
 				"shell",
 			]
 		);
