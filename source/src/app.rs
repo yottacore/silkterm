@@ -3311,6 +3311,16 @@ impl State {
 		}
 	}
 
+	// While the bar is hidden nothing is built or measured, but every tab's
+	// shell is still asked what it runs. A shell only learns its last command
+	// by being asked while that command runs, so skipping this would lose one
+	// that started and finished before the bar came back.
+	fn probe_tabs(&mut self) {
+		for index in 0..self.tabs.len() {
+			let _ = self.label_facts(index);
+		}
+	}
+
 	// The strip as drawn, measured again only if one of its inputs moved.
 	fn tab_layout(&mut self) -> &TabLayout {
 		if self.tab_layout.key != self.tab_layout_key() {
@@ -6263,7 +6273,7 @@ impl State {
 
 		// tab bar (only with >1 tab), drawn just below the menu bar. Its labels are
 		// brought up to date here, before anything this frame reads the strip, and
-		// not at all while it is hidden.
+		// only probed while it is hidden.
 		let tab_bar_y = self.menubar_h();
 		let tabbar_range = if self.tab_bar_visible() {
 			self.refresh_tab_labels(None);
@@ -6385,6 +6395,7 @@ impl State {
 			}
 			Some((start, instances.len() as u32))
 		} else {
+			self.probe_tabs();
 			None
 		};
 
