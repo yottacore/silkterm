@@ -2197,20 +2197,22 @@ impl Conserve {
 // What the idle release reads of the window (see `release_deadline`).
 struct Idle {
 	focused: bool,
-	hidden: bool,     // minimized, or covered where the desktop says so
-	revealed: bool,   // shown at all yet
-	bench_busy: bool, // a rating owed or running
-	since: Instant,   // the last sign of life
+	hidden: bool,        // minimized, or covered where the desktop says so
+	revealed: bool,      // shown at all yet
+	bench_busy: bool,    // a rating owed or running
+	since: Instant,      // the last sign of life
+	keeps_picture: bool, // still shows its last frame once let go
 }
 
 // When an idle window may let its device go, or None while something keeps
 // it: the switch off, the window not yet shown, a rating owed or running, or a
-// window that has focus and is on screen. Two waits, because a hidden window is
-// known to be out of sight while a merely unfocused one may be on a second
-// monitor being read.
+// window on screen that has focus or would go blank without its device. Two
+// waits, because a hidden window is known to be out of sight while a merely
+// unfocused one may be on a second monitor being read.
 fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 	let (on, when_hidden, otherwise) = idle_rule(cfg);
-	if !on || !idle.revealed || idle.bench_busy || (idle.focused && !idle.hidden) {
+	let kept_on_screen = !idle.hidden && (idle.focused || !idle.keeps_picture);
+	if !on || !idle.revealed || idle.bench_busy || kept_on_screen {
 		return None;
 	}
 	Some(idle.since + if idle.hidden { when_hidden } else { otherwise })
@@ -2896,6 +2898,12 @@ struct State {
 	// frame reuses it instead of re-rendering and re-blurring the whole window.
 	scrim_sig: Option<u64>,
 	occluded: bool, // window fully hidden: skip rendering entirely until it comes back
+	// The last resize was to nothing (minimized on Windows). Read by `hidden`,
+	// since a restore stops reporting minimized before the size comes back.
+	no_area: bool,
+	// The window still shows its last frame once its device is gone (see
+	// `release_deadline`). A Windows window with no redirection bitmap does not.
+	keeps_picture: bool,
 	// last cycle's frozen state (occluded or minimized); the false edge is the
 	// unfreeze - one dirty catch-up frame, hard-cut. Read and written only by
 	// freeze_sync, which both render entry points go through.
@@ -2959,6 +2967,19 @@ fn freeze_frame(was_hidden: bool, hidden: bool) -> Frame {
 	} else {
 		Frame::Draw
 	}
+}
+
+// Nothing of the window is on screen. A window with no area counts, since on
+// Windows a restore stops answering minimized a moment before its size comes
+// back, and a device rebuilt then took 1x1 as the window's size. The grid
+// shrank to two columns with it, and the console host's reflow lost the screen.
+fn window_hidden(
+	revealed: bool,
+	occluded: bool,
+	no_area: bool,
+	minimized: impl FnOnce() -> bool,
+) -> bool {
+	revealed && (occluded || no_area || minimized())
 }
 
 // How long a minimized answer stands. On X11 the answer is a property read
@@ -5028,17 +5049,12 @@ impl State {
 	// the whole buffered backlog into the output ease, and the reveal would then
 	// play it back as if it had just arrived.
 	fn hidden(&mut self) -> bool {
-		if !self.revealed {
-			return false;
-		}
-		if self.occluded {
-			return true;
-		}
 		let window = &self.window;
-		FREEZE_MINIMIZED
-			&& self
-				.minimized
-				.get(Instant::now(), || window.is_minimized().unwrap_or(false))
+		let minimized = &mut self.minimized;
+		window_hidden(self.revealed, self.occluded, self.no_area, || {
+			FREEZE_MINIMIZED
+				&& minimized.get(Instant::now(), || window.is_minimized().unwrap_or(false))
+		})
 	}
 
 	// The freeze edge, owned in one place because both render entry points reach
@@ -5050,6 +5066,10 @@ impl State {
 		let frame = freeze_frame(self.was_hidden, hidden);
 		if frame == Frame::CatchUp {
 			self.freeze_catchup();
+			// Being shown again is a sign of life. Windows sends no occlusion
+			// events, and its repaint on a restore can come before the size
+			// does, while the window still counts as hidden.
+			self.note_active("shown");
 		}
 		self.was_hidden = hidden;
 		frame == Frame::Skip
@@ -5121,6 +5141,7 @@ impl State {
 				revealed: self.revealed,
 				bench_busy: self.bench.is_some() || self.bench_at.is_some(),
 				since: self.idle.since,
+				keeps_picture: self.keeps_picture,
 			},
 		)
 	}
@@ -5193,7 +5214,10 @@ impl State {
 		self.update_title();
 		// the grid moved while nothing drew: one hard-cut catch-up frame
 		self.freeze_catchup();
-		idledbg(&format!("device rebuilt in {:?}", start.elapsed()));
+		idledbg(&format!(
+			"device rebuilt in {:?} at {w}x{h}",
+			start.elapsed()
+		));
 	}
 
 	// Every piece of chrome off at once, and back the way it was.
@@ -8261,6 +8285,8 @@ impl ApplicationHandler<UserEvent> for App {
 			overlay_sig: None,
 			scrim_sig: None,
 			occluded: false,
+			no_area: false,
+			keeps_picture: !(cfg!(windows) && want_transparent),
 			was_hidden: false,
 			minimized: MinimizedProbe::default(),
 			next_frame: None,
@@ -8495,6 +8521,7 @@ impl ApplicationHandler<UserEvent> for App {
 			WindowEvent::CloseRequested => event_loop.exit(),
 
 			WindowEvent::Resized(size) => {
+				state.no_area = size.width == 0 || size.height == 0;
 				state.resize_surface(size.width, size.height);
 				state.relayout_all();
 				state.save_window_size(size.width, size.height);
@@ -10070,7 +10097,7 @@ mod tests {
 		needs_folder_read, new_window_command, notice_due, pace_frame, pane_wake, rating_step,
 		release_deadline, remember_resize, reveal_due, rotation_live, rotation_next,
 		settings_after_reload, settle, tab_close_box, tab_command_line, tab_title_w, typed_title,
-		view_menu_items, window_px,
+		view_menu_items, window_hidden, window_px,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -10325,6 +10352,7 @@ mod tests {
 			revealed: true,
 			bench_busy: false,
 			since,
+			keeps_picture: true,
 		};
 		// The release shipped off until 2026100312470540 turned it on by default,
 		// which `idle_release_ships_on` pins now.
@@ -10373,6 +10401,53 @@ mod tests {
 			release_deadline(&cfg, &unshown).is_none(),
 			"not on screen yet"
 		);
+	}
+
+	// A Windows window drawn through a composition visual has no redirection
+	// bitmap, so nothing is left on screen once its device goes: one let go in
+	// view went black and stayed black until typed into. It waits until it is
+	// out of sight, and only then for the hidden wait.
+	// Test ID: ErksiLn
+	#[test]
+	fn a_window_that_would_go_blank_is_never_let_go_in_view() {
+		let since = Instant::now();
+		let cfg = config::Settings {
+			idle_release: true,
+			idle_release_hidden_min: 30,
+			idle_release_min: 240,
+			..config::Settings::default()
+		};
+		let blanks = |focused, hidden| Idle {
+			focused,
+			hidden,
+			revealed: true,
+			bench_busy: false,
+			since,
+			keeps_picture: false,
+		};
+		assert!(
+			release_deadline(&cfg, &blanks(false, false)).is_none(),
+			"unfocused in view"
+		);
+		assert!(release_deadline(&cfg, &blanks(true, false)).is_none());
+		assert_eq!(
+			release_deadline(&cfg, &blanks(false, true)),
+			Some(since + Duration::from_mins(30))
+		);
+	}
+
+	// A Windows restore stops answering minimized a moment before the size
+	// comes back. A rebuild in that gap read the 0x0 client area, took 1x1 as
+	// the window's size, and the grid went to two columns; the console host's
+	// reflow then left only the prompt's last character on screen.
+	// Test ID: Erksiin
+	#[test]
+	fn a_window_with_no_area_is_hidden_whatever_the_minimized_answer() {
+		assert!(window_hidden(true, false, true, || false));
+		assert!(!window_hidden(true, false, false, || false));
+		assert!(window_hidden(true, false, false, || true));
+		assert!(window_hidden(true, true, false, || false));
+		assert!(!window_hidden(false, true, true, || true), "not shown yet");
 	}
 
 	// A program printing in a minimized window held its device for good, since
