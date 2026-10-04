@@ -823,7 +823,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: a tab never names the program running in it
 	- ID: 2026100410053273
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
+	- Needs external testing: A look in a real SilkTerm window on b26: a tab running an editor, and one running a `sudo` command, names the program.
 	- Severity: Avg
 	- Opened: 20261004-100532
 	- Opened by: CC
@@ -832,8 +833,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test environment: b26
 	- Incorrect behavior: The tab label never shows the program running in the shell, such as an editor.
 	- Expected behavior: The same as on Linux.
+	- Reproduced: 20261004 on b26, through the lookup a tab uses. It gave no name for a running `sleep`.
 	- Possible cause: The running program's name is read from `/proc` (`proc_comm` in term.rs), which macOS does not have. The shell's folder had the same fault, fixed under 2026100408214204.
-	- Reproduced: No. Found by reading the code while fixing 2026100408214204.
+	- Actual cause:
+		- The name came only from `/proc`, so on macOS every lookup came back empty. The same lookup decides the minimap's per-program switch, which never saw a program there either.
+	- Actual fix:
+		- On macOS the name comes from the process's short BSD info, the first 16 bytes of its name, about the same as Linux's 15. That works for another user's process too. `proc_name` was tried first and gives nothing for a root process, so a `sudo` command would have stayed unnamed. Linux is unchanged.
+	- Swept: every `/proc` read in the source, and everything that names a pane's foreground program. The tab label and the minimap both go through `proc_comm`. Copy-output and the reported-folder check use the foreground process group only, which macOS answers. The config busy check, wallpaper memory test and profiler CPU name are Linux only on purpose.
+	- Verified: on b26 the new test fails with the old lookup (no name) and with `proc_name` (no name for pid 1), and passes with the fix; all 24 terminal tests pass there. The terminal tests on Linux, rustfmt, and clippy for Linux and macOS x86_64 pass.
+	- Branch: maccomm
+	- Commit: 0db9f44
+	- Test case: `the_foreground_program_is_named_by_its_process_group` (ErkjAN1). A program leading its own process group is named by the group id, and pid 1, root's, is named too.
+	- Acceptance signoff: Self-closed: reproduced on b26, and the test failed there before the fix and passes after. The look in a real window is owed.
+	- Closed: 20261004-102407
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
