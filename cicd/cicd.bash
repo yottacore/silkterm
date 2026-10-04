@@ -179,8 +179,13 @@ fTestLines(){
 }
 ## True when a process here is running the file at $1. Reads /proc, since fuser is
 ## not on every distro. A Windows build in the synced dir is never run from there.
+## -ef is a builtin stat, so only a process running that very file costs a fork.
+## The readlink after it keeps a hard link elsewhere, or a process in another
+## mount namespace, from counting.
 fInUse(){ local want exe; want="$(readlink -f "$1" 2>/dev/null)" || return 1; [[ -n "$want" ]] || return 1
-	for exe in /proc/[0-9]*/exe; do if [[ "$(readlink "$exe" 2>/dev/null)" == "$want" ]]; then return 0; fi; done; return 1
+	for exe in /proc/[0-9]*/exe; do
+		if [[ "$exe" -ef "$want" && "$(readlink "$exe" 2>/dev/null)" == "$want" ]]; then return 0; fi
+	done; return 1
 }
 ## Tag for a build copy: '<toolchain: gnu|msvc><built on: l|m|b|w><target: l|m|b|w><arch: i|a>'.
 ## Built-on is this host; the target and arch come from the os-arch label the build

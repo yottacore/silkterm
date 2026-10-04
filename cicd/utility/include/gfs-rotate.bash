@@ -50,27 +50,59 @@
 ## redefine these as required interfaces, but only AFTER this module is loaded.
 [[ -v ERRNUM_MSG_ALREADY_SHOWN    ]] || declare -gri ERRNUM_MSG_ALREADY_SHOWN=3
 
-## Echo "<epoch> <YYYYmmDD-HHMMSS>" for a file, from its name if it carries a
-## date, else from its mtime.
+## Dates are done with printf's %(...)T and arithmetic rather than date, since
+## a fork per file per field was most of the run time.
+
+## Set $1 to strftime format $2 of epoch $3. printf reads -1 and -2 as "now" and
+## "shell start", so those two seconds of 1969 go to date.
+_gfs_fmt(){
+	if [[ "$3" == -1 || "$3" == -2 ]]; then printf -v "$1" '%s' "$(date -d "@$3" "+$2")"
+	else printf -v "$1" "%($2)T" "$3"; fi
+}
+
+## Set $1 to the seconds from the epoch to date $2 (YYYYmmDD) at time $3
+## (HHMMSS), all read as UTC. Any digits do; the caller checks the result.
+_gfs_civil(){
+	local -i y=$((10#${2:0:4})) m=$((10#${2:4:2})) d=$((10#${2:6:2})) era yoe doy doe
+	y=$((y - (m <= 2))); era=$(( (y >= 0 ? y : y - 399) / 400 )); yoe=$((y - era * 400))
+	doy=$(( (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1 )); doe=$((yoe * 365 + yoe / 4 - yoe / 100 + doy))
+	printf -v "$1" '%s' "$(( (era * 146097 + doe - 719468) * 86400 + 10#${3:0:2} * 3600 + 10#${3:2:2} * 60 + 10#${3:4:2} ))"
+}
+
+## Set $1 to the epoch of local time $2 $3 (YYYYmmDD HHMMSS), or to "" when there
+## is no such time: a bad date, or one skipped by a clock change. It steps the way
+## glibc's mktime does from a fresh start, so a time a clock change repeats gets
+## the same one of its two instants that date -d gives.
+_gfs_epoch(){
+	local -n epoch_x5q="$1"; local -i wall e i; local s
+	_gfs_civil wall "$2" "$3"; e=wall; epoch_x5q=""
+	for i in 1 2 3; do
+		_gfs_fmt s '%Y%m%d%H%M%S' "$e"; _gfs_civil s "${s:0:8}" "${s:8:6}"
+		e=$((e + wall - s))
+		_gfs_fmt s '%Y%m%d%H%M%S' "$e"
+		if [[ "$s" == "$2$3" ]]; then epoch_x5q="$e"; return 0; fi
+	done
+	return 0
+}
+
+## Set $2 to the epoch and $3 to <YYYYmmDD-HHMMSS> for file $1, from its name if
+## it carries a date, else from its mtime.
 _gfs_ts(){
-	local base d="" t="000000" epoch="" canon
-	base="$(basename "$1")"
+	local -n tsEpoch_w2j="$2" tsCanon_w2j="$3"
+	local base="${1##*/}" d="" t="000000" epoch=""
 	if [[ "$base" =~ (19|20)([0-9]{2})([0-9]{2})([0-9]{2})[-_]?([0-9]{2})([0-9]{2})([0-9]{2}) ]]; then
 		d="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}${BASH_REMATCH[4]}"
 		t="${BASH_REMATCH[5]}${BASH_REMATCH[6]}${BASH_REMATCH[7]}"
 	elif [[ "$base" =~ (19|20)([0-9]{2})([0-9]{2})([0-9]{2}) ]]; then
 		d="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}${BASH_REMATCH[4]}"
 	fi
-	## The "|| true" guards keep an unparseable name (e.g. an impossible date that
-	## matches the pattern but date rejects) from aborting a caller running set -e.
-	[[ -n "$d" ]] && epoch="$(date -d "${d:0:4}-${d:4:2}-${d:6:2} ${t:0:2}:${t:2:2}:${t:4:2}" +%s 2>/dev/null || true)"
+	## An impossible date that still matches the pattern falls through to the mtime.
+	## Only a name with no date at all costs a fork here, and a kept file is renamed
+	## to one with a date.
+	[[ -z "$d" ]] || _gfs_epoch epoch "$d" "$t"
 	[[ -n "$epoch" ]] || epoch="$(stat -c %Y "$1" 2>/dev/null || true)"
-	[[ -n "$epoch" ]] || epoch="$(date +%s)"
-	canon="$(date -d "@${epoch}" +%Y%m%d-%H%M%S 2>/dev/null || true)"
-	[[ -n "$canon" ]] || canon="00000000-000000"
-	## Trailing newline so the caller's `read` returns 0; without it `read` hits
-	## EOF with no delimiter, returns 1, and aborts a set -e caller.
-	printf '%s %s\n' "${epoch}" "${canon}"
+	[[ -n "$epoch" ]] || printf -v epoch '%(%s)T' -1
+	tsEpoch_w2j="$epoch"; _gfs_fmt tsCanon_w2j '%Y%m%d-%H%M%S' "$epoch"
 }
 
 ## Set variable $1 to the count in environment variable $2, or to default $3.
@@ -89,7 +121,7 @@ _gfs_count(){
 
 gfs_rotate(){
 	local dir="$1" prefix="$2" ext="$3"
-	local now="${GFS_NOW:-$(date +%s)}"
+	local now="${GFS_NOW:-}"; [[ -n "$now" ]] || printf -v now '%(%s)T' -1
 	local kFreq kHour kDay kWeek kMonth kYear
 	_gfs_count kFreq  GFS_KEEP_FREQUENT 10; _gfs_count kHour GFS_KEEP_HOURLY 4
 	_gfs_count kDay   GFS_KEEP_DAILY    5;  _gfs_count kWeek GFS_KEEP_WEEKLY 4
@@ -103,7 +135,7 @@ gfs_rotate(){
 	## "epoch<TAB>canon<TAB>path", oldest first.
 	local -a items=(); local f e ct
 	for f in "${cands[@]}"; do
-		read -r e ct < <(_gfs_ts "$f")
+		_gfs_ts "$f" e ct
 		[[ -n "$e" ]] && items+=("${e}"$'\t'"${ct}"$'\t'"${f}")
 	done
 	((${#items[@]})) || return 0
@@ -111,15 +143,16 @@ gfs_rotate(){
 
 	## Latest file in each *completed* period (the still-open current one is skipped
 	##   so it can't be tagged yet - that is what makes the roles retrospective).
-	local curH curD curW curM curY
-	curH="$(date -d "@$now" +%Y%m%d%H)"; curD="$(date -d "@$now" +%Y%m%d)"
-	curW="$(date -d "@$now" +%G%V)";     curM="$(date -d "@$now" +%Y%m)"; curY="$(date -d "@$now" +%Y)"
-	local -A pH pD pW pM pY; local it kH kD kW kM kY
+	## One format per file, "YYYYmmDDHH GGGGVV", cut into the five period keys.
+	local cur curH curD curW curM curY
+	_gfs_fmt cur '%Y%m%d%H %G%V' "$now"
+	curH="${cur:0:10}"; curD="${cur:0:8}"; curW="${cur:11}"; curM="${cur:0:6}"; curY="${cur:0:4}"
+	local -A pH pD pW pM pY; local it k kH kD kW kM kY
 	# shellcheck disable=SC2034  # pH..pY are populated here, read later through the namerefs
 	for it in "${items[@]}"; do
 		e="${it%%$'\t'*}"
-		kH="$(date -d "@$e" +%Y%m%d%H)"; kD="$(date -d "@$e" +%Y%m%d)"
-		kW="$(date -d "@$e" +%G%V)";     kM="$(date -d "@$e" +%Y%m)"; kY="$(date -d "@$e" +%Y)"
+		_gfs_fmt k '%Y%m%d%H %G%V' "$e"
+		kH="${k:0:10}"; kD="${k:0:8}"; kW="${k:11}"; kM="${k:0:6}"; kY="${k:0:4}"
 		[[ "$kH" != "$curH" ]] && pH["$kH"]="$it"
 		[[ "$kD" != "$curD" ]] && pD["$kD"]="$it"
 		[[ "$kW" != "$curW" ]] && pW["$kW"]="$it"
@@ -161,12 +194,12 @@ gfs_rotate(){
 		rest="${it#*$'\t'}"; ct="${rest%%$'\t'*}"; f="${rest#*$'\t'}"
 		r="${role[$it]:-}"
 		if [[ -z "$r" ]]; then
-			rm -f "$f"; printf '  rotate: pruned %s\n' "$(basename "$f")"
+			rm -f "$f"; printf '  rotate: pruned %s\n' "${f##*/}"
 		else
 			want="$dir/${prefix}_${ct}_${r}.${ext}"
 			if [[ "$f" != "$want" ]]; then
 				[[ -e "$want" ]] && continue   # never clobber a same-name collision
-				mv -f "$f" "$want"; printf '  rotate: %s -> %s\n' "$(basename "$f")" "$(basename "$want")"
+				mv -f "$f" "$want"; printf '  rotate: %s -> %s\n' "${f##*/}" "${want##*/}"
 			fi
 		fi
 	done
@@ -182,3 +215,5 @@ declare -i isSourced_t6wq5=0; [[ "${BASH_SOURCE[0]}" == "${0}" ]] || isSourced_t
 ##		- 2026-07-25: Harmonized every copy of this file to one identical file.
 ##		- 2026-09-15: A GFS_KEEP_* value that is not a plain count gets its
 ##		  default. It reached arithmetic, which could run a command.
+##		- 2026-10-04: Dates are read and written by printf and arithmetic, not a
+##		  date fork per file and field. Same names and output as before.
