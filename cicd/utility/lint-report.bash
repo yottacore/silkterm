@@ -50,7 +50,7 @@ fNewest() {
 	local d="$1" best="" newest="" f b t
 	for f in "$d"/run_*.log; do
 		[[ -e "$f" ]] || continue
-		b="$(basename "$f")"; t="${b#run_}"; t="${t%%_*}"; t="${t%.log}"
+		b="${f##*/}"; t="${b#run_}"; t="${t%%_*}"; t="${t%.log}"
 		[[ "$t" > "$best" ]] && { best="$t"; newest="$f"; }
 	done
 	[[ -n "$newest" ]] || return 1

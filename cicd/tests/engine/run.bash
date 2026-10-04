@@ -16,6 +16,8 @@ set -euo pipefail
 meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=cicd/tests/_testdir.bash
 source "${meDir}/../_testdir.bash"; fTestDir_Use
+# shellcheck source=cicd/tests/_forks.bash
+source "${meDir}/../_forks.bash"
 cicd="$(cd "${meDir}/../.." && pwd)"
 engine="${cicd}/cicd.bash"
 
@@ -103,6 +105,40 @@ fCheck "a copy that is running is in use" fInUse "${work}/busy"
 fCheck "and so it is through a link" fInUse "${work}/link"
 fCheck "an idle copy is not" fNot fInUse "${work}/idle"
 fCheck "nor is a file that is not there" fNot fInUse "${work}/none"
+ln "${work}/busy" "${work}/hard"
+fCheck "nor a hard link to the running copy under another name" fNot fInUse "${work}/hard"
+cp "$(command -v sleep)" "${work}/swap"
+"${work}/swap" 60 &
+started+=("$!")
+for _ in {1..50}; do [[ "$(readlink "/proc/${started[1]}/exe" 2>/dev/null)" == "${work}/swap" ]] && break; sleep 0.05; done
+rm -f "${work}/swap"; cp "$(command -v sleep)" "${work}/swap"
+fCheck "nor a new file put where a running one was deleted" fNot fInUse "${work}/swap"
+
+## The same check over a stand-in /proc of 2000 processes. One fork per process
+## was about 4,500 a full run.
+fake="${work}/proc"
+python3 - "${fake}" "${work}" <<'PY'
+import os, sys
+fake, work = sys.argv[1], sys.argv[2]
+for pid in range(1, 2001):
+	os.makedirs(f"{fake}/{pid}")
+	if pid % 7 == 0:
+		continue  # a kernel thread has no exe
+	target = f"{work}/idlehard" if pid == 500 else f"{work}/busy" if pid == 1999 else f"{work}/gone (deleted)" if pid % 5 == 0 else f"{work}/other"
+	os.symlink(target, f"{fake}/{pid}/exe")
+PY
+cp "$(command -v sleep)" "${work}/other"; ln "${work}/idle" "${work}/idlehard"
+eval "$(fLift '^fInUse(){' '^}' | sed "s/^fInUse(){/fInUseFake(){/; s#/proc/#${fake}/#")"
+fFewForks(){
+	local n limit
+	fForkCount n "$(declare -f fInUseFake)" "fInUseFake $(printf '%q' "${work}/idle")"
+	limit=$((forkCountExact ? 10 : 100)); echo "    ${n} forks, limit ${limit}"; ((n <= limit))
+}
+fCheck "the stand-in list finds a running copy" fInUseFake "${work}/busy"
+fCheck "and not an idle one" fNot fInUseFake "${work}/idle"
+fCheck "nor a file whose hard link one process there runs" fNot fInUseFake "${work}/idle"
+fCheck "but that link is in use by its own name" fInUseFake "${work}/idlehard"
+fCheck "and 2000 processes cost a few forks, not one each" fFewForks
 
 ## The build number: a clean tree takes its commit's time, a dirty one the clock,
 ## and a value handed down is kept.
