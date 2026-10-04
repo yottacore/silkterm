@@ -957,7 +957,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: 35 files have no license header
 	- ID: 2026100314050012
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -966,8 +966,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Every source file starts with the SPDX line and the copyright line, and History sits at the bottom.
 	- Note: shell_integration.ps1 is pasted into a user's profile, so leaving its header out may be on purpose. The two scroll scenes run under `dash` but end in `.bash`.
 	- Origin: 3221c6f (2026-07-15) for build.rs, cecc4c7 (2026-09-08) for the wingui files. The header test in `buildnum.rs` reads only `source/src/`. Confirmed.
-	- Test case: Widen the header test to `build.rs` and every tracked script.
 	- Note: Code review 20261003 item 12.
+	- Actual fix:
+		- Every tracked script, `build.rs` and the two small Rust crates under `cicd/` now start with the copyright and license lines. History sits at the bottom of every script.
+		- History moved to the bottom in install.bash, install.ps1, termbench.py, update-showdown.py and runterm.cmd. Ten scripts that had none got one, dated from their first commit.
+		- The `utility/include/` files were all written for this repo and have no copies elsewhere, so they take the Jim Collier GPL form. runterm.cmd takes the Bubbles form, like `n8runterm.ps1` and `runterm` beside it.
+		- The PowerShell headers match the repo's other `.ps1` files, copyright sign included. All of them run under pwsh 7.
+		- shell_integration.ps1 has no header on purpose. Its whole text is written into a user's own profile, and it ships inside the binary, which carries the license. The test names it as exempt.
+		- The two scroll scenes keep `##` comments only, and still run under dash.
+	- Swept: `git ls-files` for every `.bash`, `.sh`, `.py`, `.ps1`, `.cmd` and `.rs` file and every file with a shebang. Left alone as not scripts: `PSScriptAnalyzerSettings.psd1` and the two `.in` templates.
+	- Verified: the new test failed with 58 faults before the fix and passes after. It also failed on one changed marker character, a line of code after a History block, and a History block in a header. shellcheck, PSScriptAnalyzer, the test ID check, the docs check, the wingui harness test and the install test pass. Every edited PowerShell file parses.
+	- Test case: `every_script_carries_the_license_header_with_history_at_the_bottom` (ErloT4L) in `buildnum.rs`. The old `every_source_file_carries_the_license_header` still covers `source/src/`.
+	- Branch: hdrdbg
+	- Commit: 32b7b68
+	- Acceptance signoff: Self-closed: mechanical. The test failed before and passes after.
+	- Closed: 20261004-144333
 
 - Code style: bash scripts drift from the house conventions
 	- ID: 2026100314050013
