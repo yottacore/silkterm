@@ -9537,13 +9537,6 @@ impl ApplicationHandler<UserEvent> for App {
 			if let Some(loss) = config::take_conversion_loss() {
 				self.loss_owed = Some(loss);
 			}
-			// A file the launch found no save can keep. Told once, so the first
-			// resize after it does not say it again.
-			if let Some(refusal) = config::take_launch_refusal() {
-				if notice_due(&mut self.told, &refusal.path, false) {
-					self.notice_owed = Some(refusal);
-				}
-			}
 		}
 		if self.notice_owed.is_some() || self.loss_owed.is_some() {
 			self.show_notice(event_loop);

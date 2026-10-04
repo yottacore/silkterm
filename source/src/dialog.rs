@@ -1676,12 +1676,11 @@ fn layout_source(
 	}
 }
 
-// A notice's window title and its paragraphs. The path is a paragraph of its
-// own, since it is the one part that cannot be wrapped at a space.
-pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
-	let which = match refusal.lines.as_slice() {
-		[] if refusal.lost == 1 => "A line".to_string(),
-		[] => format!("{} lines", refusal.lost),
+// "Line 3", "Lines 3 and 40", or "A line" when shcl could not say which.
+fn line_names(lines: &[usize], lost: usize) -> String {
+	match lines {
+		[] if lost == 1 => "A line".to_string(),
+		[] => format!("{lost} lines"),
 		[one] => format!("Line {one}"),
 		many => {
 			let shown: Vec<String> = many.iter().take(5).map(ToString::to_string).collect();
@@ -1694,20 +1693,21 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 				more => format!("Lines {} and {more} more", shown.join(", ")),
 			}
 		}
-	};
+	}
+}
+
+// A notice's window title and its paragraphs. The path is a paragraph of its
+// own, since it is the one part that cannot be wrapped at a space.
+pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
+	let which = line_names(&refusal.lines, refusal.lost);
 	let many = refusal.lines.len() > 1 || (refusal.lines.is_empty() && refusal.lost > 1);
 	let it = if many { "them" } else { "it" };
-	let since = match (refusal.why, many) {
-		(config::Unreadable::Syntax, _) => ",",
-		(config::Unreadable::NotUtf8, false) => ", since it is not UTF-8 text,",
-		(config::Unreadable::NotUtf8, true) => ", since they are not UTF-8 text,",
-	};
 	(
 		"Settings not saved".to_string(),
 		vec![
 			format!("{} cannot save its settings file.", config::APP_NAME),
 			refusal.path.display().to_string(),
-			format!("{which} cannot be read{since} and saving now would delete {it}."),
+			format!("{which} cannot be read, and saving now would delete {it}."),
 			"Until that is fixed, changes such as the window size, new shells and anything set in Settings are used now but not kept.".to_string(),
 		],
 	)
@@ -1717,6 +1717,7 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 // how many, and the name the file as it was is kept under, in the same folder.
 pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>) {
 	let (done, lost) = match (loss.how, loss.lost) {
+		(config::Converted::Dropped(rewrite), _) => return dropped_notice(loss, rewrite),
 		(config::Converted::InPlace, 1) => (
 			"converted its settings file to a new format.",
 			"One setting could not be converted and now does nothing.".to_string(),
@@ -1739,13 +1740,53 @@ pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>)
 		loss.path.display().to_string(),
 		lost,
 	];
-	if let Some(name) = loss.backup.as_ref().and_then(|b| b.file_name()) {
-		paras.push(format!(
-			"The file as it was before is kept in the same folder, as {}.",
-			name.to_string_lossy()
-		));
-	}
+	paras.extend(backup_para(loss));
 	("Settings not converted".to_string(), paras)
+}
+
+fn backup_para(loss: &config::ConversionLoss) -> Option<String> {
+	let name = loss.backup.as_ref().and_then(|b| b.file_name())?;
+	Some(format!(
+		"The file as it was before is kept in the same folder, as {}.",
+		name.to_string_lossy()
+	))
+}
+
+// A current settings file with lines that are not UTF-8 was written again
+// without them. Some editors show such a line as if nothing were wrong, so the
+// notice names each one, and the copy that still has them.
+fn dropped_notice(
+	loss: &config::ConversionLoss,
+	rewrite: config::Rewrite,
+) -> (String, Vec<String>) {
+	let done = match rewrite {
+		config::Rewrite::Kept => "wrote the file again without it",
+		config::Rewrite::Template => {
+			"wrote a new one from the defaults, with every setting it could still read"
+		}
+	};
+	let which = line_names(&loss.lines, loss.lines.len());
+	let were = if loss.lines.len() == 1 { "was" } else { "were" };
+	let carried = match (rewrite, loss.lost) {
+		(config::Rewrite::Kept, _) | (config::Rewrite::Template, 0) => String::new(),
+		(config::Rewrite::Template, 1) => {
+			" One setting could not be carried over to the new file.".to_string()
+		}
+		(config::Rewrite::Template, n) => {
+			format!(" {n} settings could not be carried over to the new file.")
+		}
+	};
+	let gone = format!("{which} {were} left out.{carried}");
+	let mut paras = vec![
+		format!(
+			"{} found text that is not UTF-8 in its settings file, and {done}.",
+			config::APP_NAME
+		),
+		loss.path.display().to_string(),
+		gone,
+	];
+	paras.extend(backup_para(loss));
+	("Settings file rewritten".to_string(), paras)
 }
 
 // Notice geometry, DIP (see config::dip). Windows draws its own message box.
@@ -2096,6 +2137,7 @@ mod tests {
 					.map(|name| std::path::Path::new("/home/me/.config/silkterm").join(name)),
 				lost,
 				how: config::Converted::InPlace,
+				lines: Vec::new(),
 			})
 		};
 		let (title, paras) = said(2, Some("config_backup_20261003-142233_format-v2.shcl"));
@@ -2131,6 +2173,7 @@ mod tests {
 				)),
 				lost,
 				how: config::Converted::Rewritten,
+				lines: Vec::new(),
 			})
 		};
 		let (title, paras) = said(3);
@@ -2162,7 +2205,6 @@ mod tests {
 				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
 				lines: lines.to_vec(),
 				lost,
-				why: crate::config::Unreadable::Syntax,
 			};
 			refusal_notice(&refusal)
 		};
@@ -2192,28 +2234,81 @@ mod tests {
 		);
 	}
 
-	// Lines that are not UTF-8 look fine in some editors, so the notice says
-	// what is wrong with them.
-	// Test ID: ErgK2Vb
+	// Off since a current file that is not UTF-8 is written again without those
+	// lines (2026100315581313), so no save is refused for them and `Refusal` no
+	// longer says why. `a_notice_for_dropped_lines_names_them_and_the_copy` covers
+	// the notice now.
+	// // Lines that are not UTF-8 look fine in some editors, so the notice says
+	// // what is wrong with them.
+	// // Test ID: ErgK2Vb
+	// #[test]
+	// fn a_notice_for_lines_that_are_not_utf8_says_so() {
+	// 	let said = |lines: &[usize]| {
+	// 		refusal_notice(&crate::config::Refusal {
+	// 			path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
+	// 			lines: lines.to_vec(),
+	// 			lost: lines.len(),
+	// 			why: crate::config::Unreadable::NotUtf8,
+	// 		})
+	// 	};
+	// 	let (title, paras) = said(&[3]);
+	// 	assert_eq!(title, "Settings not saved");
+	// 	assert_eq!(
+	// 		paras[2],
+	// 		"Line 3 cannot be read, since it is not UTF-8 text, and saving now would delete it."
+	// 	);
+	// 	assert_eq!(
+	// 		said(&[3, 40]).1[2],
+	// 		"Lines 3 and 40 cannot be read, since they are not UTF-8 text, and saving now would delete them."
+	// 	);
+	// }
+
+	// A file written again without lines that are not UTF-8 says which lines
+	// went and where the copy that has them is. One that had to start from the
+	// template also says what it could not carry.
+	// Test ID: ErgZJw3
 	#[test]
-	fn a_notice_for_lines_that_are_not_utf8_says_so() {
-		let said = |lines: &[usize]| {
-			refusal_notice(&crate::config::Refusal {
+	fn a_notice_for_dropped_lines_names_them_and_the_copy() {
+		let said = |lines: &[usize], lost: usize, rewrite: config::Rewrite| {
+			conversion_notice(&config::ConversionLoss {
 				path: std::path::PathBuf::from("/home/me/.config/silkterm/config.shcl"),
+				backup: Some(std::path::PathBuf::from(
+					"/home/me/.config/silkterm/config_backup_20261003-142233_format-v3.shcl",
+				)),
+				lost,
+				how: config::Converted::Dropped(rewrite),
 				lines: lines.to_vec(),
-				lost: lines.len(),
-				why: crate::config::Unreadable::NotUtf8,
 			})
 		};
-		let (title, paras) = said(&[3]);
-		assert_eq!(title, "Settings not saved");
+		let (title, paras) = said(&[3], 1, config::Rewrite::Kept);
+		assert_eq!(title, "Settings file rewritten");
 		assert_eq!(
-			paras[2],
-			"Line 3 cannot be read, since it is not UTF-8 text, and saving now would delete it."
+			paras,
+			vec![
+				format!(
+					"{} found text that is not UTF-8 in its settings file, and wrote the file again without it.",
+					config::APP_NAME
+				),
+				"/home/me/.config/silkterm/config.shcl".to_string(),
+				"Line 3 was left out.".to_string(),
+				"The file as it was before is kept in the same folder, as config_backup_20261003-142233_format-v3.shcl.".to_string(),
+			]
+		);
+		let (_, paras) = said(&[3, 40], 2, config::Rewrite::Template);
+		assert_eq!(
+			paras[0],
+			format!(
+				"{} found text that is not UTF-8 in its settings file, and wrote a new one from the defaults, with every setting it could still read.",
+				config::APP_NAME
+			)
 		);
 		assert_eq!(
-			said(&[3, 40]).1[2],
-			"Lines 3 and 40 cannot be read, since they are not UTF-8 text, and saving now would delete them."
+			paras[2],
+			"Lines 3 and 40 were left out. 2 settings could not be carried over to the new file."
+		);
+		assert_eq!(
+			said(&[3], 0, config::Rewrite::Template).1[2],
+			"Line 3 was left out."
 		);
 	}
 
@@ -2459,7 +2554,6 @@ mod tests {
 					path: "/home/me/.config/silkterm/config.shcl".into(),
 					lines: vec![12],
 					lost: 1,
-					why: config::Unreadable::Syntax,
 				})
 				.1,
 			),
@@ -2473,6 +2567,7 @@ mod tests {
 					),
 					lost: 2,
 					how: config::Converted::InPlace,
+					lines: Vec::new(),
 				})
 				.1,
 			),

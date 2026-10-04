@@ -12,10 +12,10 @@
 ##			  cannot read (not UTF-8), each written new from the template with the
 ##			  settings that still read.
 ##		A second launch on each must change nothing. A file in the current format
-##		that is not UTF-8 is no conversion: it is left as it was, and the launch
-##		says which lines it could not read. Where Xvfb is installed, launches on
-##		the private display check that lost settings, and a file no save can
-##		keep, bring up the notice window too.
+##		that is not UTF-8 is written again without the lines that do not decode,
+##		kept the same way, and the launch says which lines went. Where Xvfb is
+##		installed, launches on the private display check that lost settings, and
+##		dropped lines, bring up the notice window too.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary).
 ##	- Test ID: ErgDpjX
@@ -107,7 +107,7 @@ fGet(){  ## fGet <path> <file>
 }
 fHas(){ [[ "$(fGet "${1}" "${3}")" == "${2}" ]]; }  ## fHas <path> <value> <file>
 fCopies(){ find "${1}" -maxdepth 1 -name 'config_backup_*' -printf '%f\n' | sort; }
-fIsCopyName(){ [[ "${1}" =~ ^config_backup_[0-9]{8}-[0-9]{6}_format-v2\.shcl$ ]]; }
+fIsCopyName(){ [[ "${1}" =~ ^config_backup_[0-9]{8}-[0-9]{6}_format-v${2:-2}\.shcl$ ]]; }  ## fIsCopyName <name> [format]
 fSaid(){ grep -qF -- "${1}" "${2}"; }
 fNotSaid(){ ! grep -qE -- "${1}" "${2}"; }
 fLacks(){ ! grep -qF -- "${1}" "${2}"; }
@@ -208,10 +208,27 @@ fCheck "current: the fixture is not UTF-8" fNotUtf8 "${work}/current/config.shcl
 cp -p "${work}/current/config.shcl" "${work}/current/original"
 fLaunch "${work}/current" "${work}/current/said.txt"
 fCheck "current: the launch did not panic" fNotSaid 'panicked' "${work}/current/said.txt"
-fCheck "current: the file is left byte for byte" cmp -s "${work}/current/original" "${work}/current/config.shcl"
-fCheck "current: no copy is kept" test "$(fCopies "${work}/current" | wc -l)" = 0
-fCheck "current: the launch names the line it could not read" fSaid "${work}/current/config.shcl: not UTF-8 text at line 1 - those lines set nothing, and changes are not saved to this file until they are fixed" "${work}/current/said.txt"
+## Off since the file is written again without the line (2026100315581313),
+## where it was left as it was and every save refused.
+## fCheck "current: the file is left byte for byte" cmp -s "${work}/current/original" "${work}/current/config.shcl"
+## fCheck "current: no copy is kept" test "$(fCopies "${work}/current" | wc -l)" = 0
+## fCheck "current: the launch names the line it could not read" fSaid "${work}/current/config.shcl: not UTF-8 text at line 1 - those lines set nothing, and changes are not saved to this file until they are fixed" "${work}/current/said.txt"
+mapfile -t copies < <(fCopies "${work}/current")
+copy="${copies[0]:-none}"
+fCheck "current: one copy of the old file" test "${#copies[@]}" = 1
+fCheck "current: named config_backup_<time>_format-v3.shcl" fIsCopyName "${copy}" 3
+fCheck "current: holding the old file byte for byte" cmp -s "${work}/current/original" "${work}/current/${copy}"
+fCheck "current: the file is UTF-8 now" fUtf8 "${work}/current/config.shcl"
+fCheck "current: without the line" fLacks 'kept as written' "${work}/current/config.shcl"
+fCheck "current: font.size kept" fHas font.size 15 "${work}/current/config.shcl"
+fCheck "current: window.columns kept" fHas window.columns 101 "${work}/current/config.shcl"
+fCheck "current: the launch names the line it left out and the copy" fSaid "${work}/current/config.shcl: not UTF-8 text at line 1, so the file was written again without it. The old file is at ${work}/current/${copy}." "${work}/current/said.txt"
 fCheck "current: and reports nothing converted" fNotSaid 'converted to SHCL|set a list in brackets|could not be carried' "${work}/current/said.txt"
+cp -p "${work}/current/config.shcl" "${work}/current/rewritten"
+fLaunch "${work}/current" "${work}/current/said2.txt"
+fCheck "current: a second launch changes nothing" cmp -s "${work}/current/rewritten" "${work}/current/config.shcl"
+fCheck "current: and keeps no second copy" test "$(fCopies "${work}/current" | wc -l)" = 1
+fCheck "current: and says nothing of it" fLacks 'not UTF-8' "${work}/current/said2.txt"
 
 ## The notice window, on the private display only.
 display=""; auth=""
@@ -258,25 +275,33 @@ echo "the notice window"
 if fDisplay; then
 	fFixture notice 'font:' "${tab}size: 15" "${tab}family:[One, Two]" 'notes: ```' 'never closed'
 	fNotice notice 'Settings not converted'
-	## The launch says it even when nothing tries to save. A first launch has
-	## the shell scan save what it finds, so the bad line goes in after one.
-	dir="${work}/notsaved"
-	fFixture notsaved 'font:' "${tab}size: 15"
-	fLaunchShown "${dir}"
-	for _ in {1..240}; do
-		if grep -q '^shells:' "${dir}/config.shcl"; then break; fi
-		kill -0 "${noticePid}" 2>/dev/null || break
-		sleep 0.25
-	done
-	sleep 1
-	fStopOurs "${noticePid}"; noticePid=""
-	fCheck "notsaved: the first launch kept the shells it found" grep -q '^shells:' "${dir}/config.shcl"
-	{ printf '## caf\xe9\n'; cat "${dir}/config.shcl"; } >"${dir}/bad" && mv "${dir}/bad" "${dir}/config.shcl"
-	cp -p "${dir}/config.shcl" "${dir}/original"
-	: >"${dir}/said.txt"
-	fNotice notsaved 'Settings not saved'
-	fCheck "notsaved: the file is left byte for byte" cmp -s "${dir}/original" "${dir}/config.shcl"
-	fCheck "notsaved: and no save was tried" fLacks 'could not save config' "${dir}/said.txt"
+	## Off since a current file that is not UTF-8 is written again without the
+	## line (2026100315581313), so no save is refused and the notice is the
+	## rewritten one, checked below.
+	## ## The launch says it even when nothing tries to save. A first launch has
+	## ## the shell scan save what it finds, so the bad line goes in after one.
+	## dir="${work}/notsaved"
+	## fFixture notsaved 'font:' "${tab}size: 15"
+	## fLaunchShown "${dir}"
+	## for _ in {1..240}; do
+	## 	if grep -q '^shells:' "${dir}/config.shcl"; then break; fi
+	## 	kill -0 "${noticePid}" 2>/dev/null || break
+	## 	sleep 0.25
+	## done
+	## sleep 1
+	## fStopOurs "${noticePid}"; noticePid=""
+	## fCheck "notsaved: the first launch kept the shells it found" grep -q '^shells:' "${dir}/config.shcl"
+	## { printf '## caf\xe9\n'; cat "${dir}/config.shcl"; } >"${dir}/bad" && mv "${dir}/bad" "${dir}/config.shcl"
+	## cp -p "${dir}/config.shcl" "${dir}/original"
+	## : >"${dir}/said.txt"
+	## fNotice notsaved 'Settings not saved'
+	## fCheck "notsaved: the file is left byte for byte" cmp -s "${dir}/original" "${dir}/config.shcl"
+	## fCheck "notsaved: and no save was tried" fLacks 'could not save config' "${dir}/said.txt"
+	mkdir -p "${work}/dropped"
+	printf '## caf\xe9\nfont:\n\tsize: 15\n\n##    Format   3\n' >"${work}/dropped/config.shcl"
+	fNotice dropped 'Settings file rewritten'
+	fCheck "dropped: the file is UTF-8 now" fUtf8 "${work}/dropped/config.shcl"
+	fCheck "dropped: and no save was refused" fLacks 'could not save config' "${work}/dropped/said.txt"
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; startedDisplay=0; fi
 fi
 
@@ -286,3 +311,4 @@ echo "all passed"
 ##	History:
 ##		- 20261003 JC: Created.
 ##		- 20261003 JC: A current file that is not UTF-8.
+##		- 20261003 JC: That file is written again without the lines, not left.
