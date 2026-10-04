@@ -1,0 +1,22 @@
+##	Ruff settings for the repo's own Python scripts. The forks keep their own.
+##	cicd/utility/py-lint.py runs the check, and its indentation test, in the
+##	lint stage.
+extend-exclude = ["forks"]
+
+[lint]
+##	Ruff's default set, less what the scripts still break. Each one left out is
+##	a handful of lines, to come back in with the naming and idiom pass.
+ignore = [
+	"E401",  ## several imports on one line
+	"E702",  ## semicolon between statements
+	"E731",  ## a lambda assigned to a name
+	"E741",  ## `l` as a name
+]
+
+[format]
+##	Tabs, like the rest of the repo. Not run in the pipeline: existing files
+##	are not reformatted to match.
+indent-style = "tab"
+quote-style = "preserve"
+##	The one script indented with spaces.
+exclude = ["cicd/tests/scroll/analyze.py"]

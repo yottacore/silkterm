@@ -2,7 +2,8 @@
 
 ##	- Purpose:
 ##		cicd.bash gates on ps-lint.ps1, so the lint has to fail on a finding, pass
-##		a clean script, and leave alone what the settings file excludes. Run on
+##		a clean script, and leave alone what the settings file excludes. The same
+##		for its tab check, which lets spaces line up after the tabs. Run on
 ##		scripts written here, never tracked, so the pipeline's own lint of the
 ##		repository never sees them.
 ##	- Test ID: Er2UgYC
@@ -28,12 +29,18 @@ fi
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-pslint.XXXXXX")"
 trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 
-## A function with an unapproved verb, which the settings keep at warning level.
-printf 'function Frob-Thing { param([string]$Name) $Name }\nFrob-Thing -Name x\n' >"${work}/finding.ps1"
+## An alias, which the settings keep at warning level.
+printf 'gci\n' >"${work}/finding.ps1"
 ## Clean.
 printf 'function Get-Thing { param([string]$Name) $Name }\nGet-Thing -Name x\n' >"${work}/clean.ps1"
 ## Write-Host, which the settings exclude for console scripts.
 printf "Write-Host 'hello'\n" >"${work}/excluded.ps1"
+## An unapproved verb, excluded since functions here are fCamelCase.
+printf 'function Frob-Thing { param([string]$Name) $Name }\nFrob-Thing -Name x\n' >"${work}/verb.ps1"
+## A block indented with spaces.
+printf 'if ($true) {\n    Get-Date\n}\n' >"${work}/spaces.ps1"
+## Tabs, then spaces to line up a continuation, and a here-string whose text starts with spaces.
+printf 'if ($true) {\n\t$x = (1 -eq 1) -and\n\t     (2 -eq 2)\n\t$x\n}\n$t = @"\n    text\n"@\n$t\n' >"${work}/aligned.ps1"
 
 fLint(){ rc=0; out="$(pwsh -NoProfile -NonInteractive -File "${lint}" "$@" 2>&1)" || rc=$?; }
 
@@ -45,14 +52,22 @@ fi
 fCheck "a clean script passes" test "${rc}" -eq 0 -a -z "${out}"
 fLint "${work}/finding.ps1"
 fCheck "a finding fails" test "${rc}" -eq 1
-fCheck "and is named with its line and rule" grep -qF "finding.ps1:1: PSUseApprovedVerbs:" <<<"${out}"
+fCheck "and is named with its line and rule" grep -qF "finding.ps1:1: PSAvoidUsingCmdletAliases:" <<<"${out}"
 fLint "${work}/clean.ps1" "${work}/finding.ps1"
 fCheck "one bad script among several still fails" test "${rc}" -eq 1
 fLint "${work}/excluded.ps1"
 fCheck "a rule the settings exclude is not reported" test "${rc}" -eq 0
+fLint "${work}/verb.ps1"
+fCheck "an unapproved verb is not reported" test "${rc}" -eq 0 -a -z "${out}"
+fLint "${work}/spaces.ps1"
+fCheck "a block indented with spaces fails" test "${rc}" -eq 1
+fCheck "and is named with its line" grep -qF "spaces.ps1:2: Indentation:" <<<"${out}"
+fLint "${work}/aligned.ps1"
+fCheck "spaces after tabs, and here-string text, pass" test "${rc}" -eq 0 -a -z "${out}"
 
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
 ##	History:
 ##		- 20260926 JC: Created.
+##		- 20261004 JC: Tab indentation cases; the finding no longer an unapproved verb.

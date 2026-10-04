@@ -5,7 +5,7 @@
 <!-- TOC ignore:true -->
 # Style guide
 
-The canonical style reference for SilkTerm. It covers prose, comments, naming, Rust conventions, formatting, and commit messages. When something here conflicts with a language's own well-established idioms or its enforced formatter, the idiom and the formatter win - see [Formatting](#formatting).
+The canonical style reference for SilkTerm. It covers prose, comments, naming, Rust, Bash, PowerShell and Python conventions, formatting, and commit messages. When something here conflicts with a language's own well-established idioms or its enforced formatter, the idiom and the formatter win - see [Formatting](#formatting).
 
 <!-- TOC ignore:true -->
 ## Table of contents
@@ -22,6 +22,9 @@ The canonical style reference for SilkTerm. It covers prose, comments, naming, R
 	- [Types and abstraction](#types-and-abstraction)
 	- [Iterators](#iterators)
 	- [Documentation](#documentation)
+- [Bash](#bash)
+- [PowerShell](#powershell)
+- [Python](#python)
 - [Formatting](#formatting)
 - [Commit messages](#commit-messages)
 
@@ -115,6 +118,34 @@ Edition 2024. The guiding aim is code that is consistent within and across files
 
 - Name things fully; no cryptic abbreviations.
 
+## Bash
+
+- Scripts end in `.bash`.
+
+- Functions are fCamelCase, such as `fDie` or `fTestDir_Use`. Variables are camelCase. Settings read from a config file, and environment variables, are UPPER_SNAKE_CASE.
+
+- Use `[[ ]]` for tests, not `[ ]`.
+
+- Brace and quote expansions: `"${name}"`, not `$name`.
+
+- Indent with tabs. There is no formatter, but scripts must pass `shellcheck` at warning level.
+
+## PowerShell
+
+- Functions are fCamelCase, the same as in Bash, rather than PowerShell's Verb-Noun. This is a choice for this project only. `PSUseApprovedVerbs` is off in `cicd/PSScriptAnalyzerSettings.psd1` for that reason, and each other rule turned off there says why.
+
+- Scripts must pass PSScriptAnalyzer at warning level with those settings.
+
+- Indent with tabs. Spaces may follow the tabs to line up a continuation.
+
+## Python
+
+- Names follow PEP 8: snake_case for functions and variables.
+
+- Indent with tabs, like the rest of the repo, not PEP 8's four spaces. Spaces may follow the tabs to line up a continuation. One older script uses spaces and is left as it is.
+
+- Scripts must pass ruff with the rules in `ruff.toml`.
+
 ## Formatting
 
 - Rust is formatted by `rustfmt`. Run it and let its output win - do not hand-format against it.
@@ -125,7 +156,7 @@ Edition 2024. The guiding aim is code that is consistent within and across files
 
 - Code is expected to pass `clippy`. The build gate runs `clippy -D warnings`. Writing to the stricter `clippy::pedantic` bar is encouraged.
 
-- Scripts with an enforced linter (Bash under `shellcheck`) must pass it.
+- Scripts with an enforced linter (Bash under `shellcheck`, PowerShell under PSScriptAnalyzer, Python under ruff) must pass it.
 
 ## Commit messages
 
