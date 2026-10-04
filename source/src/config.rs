@@ -1506,6 +1506,9 @@ fn publish_keeping(
 	text: &str,
 	publish: fn(&str, &str) -> Result<(), String>,
 ) -> Result<Option<PathBuf>, String> {
+	if !may_write(path) {
+		return Ok(None);
+	}
 	let Some(file) = path.to_str() else {
 		return Err(format!("{} is not a UTF-8 path", path.display()));
 	};
@@ -2044,7 +2047,7 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	let mut doc = match read_doc(&path) {
 		Ok(doc) => doc,
 		Err(Unread::Missing) => {
-			if let Some(dir) = path.parent() {
+			if let Some(dir) = path.parent().filter(|_| may_write(&path)) {
 				let _ = std::fs::create_dir_all(dir);
 			}
 			regrown_doc(&path, &orig.shells)
@@ -2639,7 +2642,7 @@ fn load() -> Settings {
 	let Some(path) = config_path() else {
 		return Settings::default();
 	};
-	if !path.exists() {
+	if !path.exists() && may_write(&path) {
 		if let Some(dir) = path.parent() {
 			let _ = std::fs::create_dir_all(dir);
 		}
@@ -3935,6 +3938,9 @@ const RESTORE_PAUSE: std::time::Duration = std::time::Duration::from_millis(100)
 // Move a config aside to the first free `.bak` name - so doing it twice never
 // overwrites the copy from the first time. Returns where it went.
 fn backup_aside(path: &std::path::Path) -> Option<PathBuf> {
+	if !may_write(path) {
+		return None;
+	}
 	let name = path.file_name()?.to_string_lossy().into_owned();
 	let backup = (1u32..=BACKUPS_MAX)
 		.map(|n| match n {
@@ -3964,6 +3970,9 @@ fn backup_aside(path: &std::path::Path) -> Option<PathBuf> {
 // text the caller read, so the backup is exactly what was rewritten.
 fn backup_copy(path: &std::path::Path, body: &[u8]) -> Option<PathBuf> {
 	use std::io::Write;
+	if !may_write(path) {
+		return None;
+	}
 	let name = path.file_name()?.to_string_lossy().into_owned();
 	#[cfg(unix)]
 	let perms = std::fs::metadata(path).ok()?.permissions();
@@ -6612,6 +6621,14 @@ fn test_override() -> &'static std::sync::Mutex<Option<PathBuf>> {
 	OVERRIDE.get_or_init(|| std::sync::Mutex::new(None))
 }
 
+// Stands in for the box's own settings file, so a test can show what a run
+// with no override would do to it without going near the real one.
+#[cfg(test)]
+fn test_native_config() -> &'static std::sync::Mutex<Option<PathBuf>> {
+	static NATIVE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+	&NATIVE
+}
+
 // The directory name under whichever base a platform hands us. One spelling, so
 // the config dir, the data dir and the legacy probe cannot drift apart.
 const APP_DIR: &str = "silkterm";
@@ -6676,17 +6693,32 @@ fn config_base_for(
 }
 
 fn config_path() -> Option<PathBuf> {
+	// Every override a test sets goes through this door as well (G52), so the
+	// OnceLock adds nothing there, and leaving it out lets a test go back to none.
 	#[cfg(test)]
-	if let Some(p) = test_override()
+	let chosen = test_override()
+		.lock()
+		.unwrap_or_else(std::sync::PoisonError::into_inner)
+		.clone();
+	#[cfg(not(test))]
+	let chosen = CONFIG_OVERRIDE.get().cloned();
+	chosen.or_else(native_config_path)
+}
+
+// The settings file with no `--config`: the box's own.
+fn native_config_path() -> Option<PathBuf> {
+	#[cfg(test)]
+	if let Some(path) = test_native_config()
 		.lock()
 		.unwrap_or_else(std::sync::PoisonError::into_inner)
 		.clone()
 	{
-		return Some(p);
+		return Some(path);
 	}
-	if let Some(p) = CONFIG_OVERRIDE.get() {
-		return Some(p.clone());
-	}
+	env_config_path()
+}
+
+fn env_config_path() -> Option<PathBuf> {
 	let xdg = env_path("XDG_CONFIG_HOME");
 	let home = home_dir();
 	let appdata = env_path("APPDATA");
@@ -6701,6 +6733,44 @@ fn config_path() -> Option<PathBuf> {
 
 pub fn config_dir() -> Option<PathBuf> {
 	Some(config_path()?.parent()?.to_path_buf())
+}
+
+// A test run reads the box's own config on purpose (G6), but writes nothing
+// there or beside it: a test's launch once refreshed a line in a real file. A
+// test that needs a write points the config at a file of its own.
+#[cfg(test)]
+pub(crate) fn may_write(path: &std::path::Path) -> bool {
+	let seam = test_native_config()
+		.lock()
+		.unwrap_or_else(std::sync::PoisonError::into_inner)
+		.clone();
+	let mut dirs: Vec<PathBuf> = [seam, env_config_path()]
+		.into_iter()
+		.flatten()
+		.filter_map(|file| file.parent().map(std::path::Path::to_path_buf))
+		.collect();
+	dirs.extend(data_dir_for(
+		host_layout(),
+		env_path("XDG_CONFIG_HOME").is_some(),
+		env_path("LOCALAPPDATA").as_deref(),
+		None,
+	));
+	let real: Vec<PathBuf> = dirs.iter().flat_map(std::fs::canonicalize).collect();
+	dirs.extend(real);
+	// a link into the box's folder, or a name not made yet
+	let mut names = vec![path.to_path_buf()];
+	names.extend(std::fs::canonicalize(path));
+	if let (Some(parent), Some(name)) = (path.parent(), path.file_name()) {
+		names.extend(std::fs::canonicalize(parent).map(|dir| dir.join(name)));
+	}
+	!names
+		.iter()
+		.any(|name| dirs.iter().any(|dir| name.starts_with(dir)))
+}
+
+#[cfg(not(test))]
+pub(crate) fn may_write(_: &std::path::Path) -> bool {
+	true
 }
 
 // Where bulk, machine-local data goes. On Windows that is Local rather than
@@ -6779,7 +6849,7 @@ fn adopt_legacy_config() {
 	let (Some(native), Some(legacy)) = (config_path(), legacy_config_path()) else {
 		return;
 	};
-	if !legacy.exists() {
+	if !legacy.exists() || !may_write(&native) {
 		return;
 	}
 	if native.exists() {
@@ -7588,6 +7658,111 @@ mod tests {
 			found.iter().map(|f| f.title.clone()).collect::<Vec<_>>()
 		);
 		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A test run with no override reads the box's own file and must leave it,
+	// and its folder, exactly as they were: no launch refresh, conversion, backup
+	// or rewrite, no save, no rating, no reset. A file in a folder of its own
+	// stands in for the box's, so the real one is never at risk here.
+	// Test ID: Erl5E2U
+	#[test]
+	fn a_test_run_never_writes_the_boxs_own_config() {
+		struct PutBack(Option<PathBuf>);
+		impl Drop for PutBack {
+			fn drop(&mut self) {
+				*test_native_config()
+					.lock()
+					.unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+				*test_override()
+					.lock()
+					.unwrap_or_else(std::sync::PoisonError::into_inner) = self.0.take();
+			}
+		}
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let _put_back = PutBack(
+			test_override()
+				.lock()
+				.unwrap_or_else(std::sync::PoisonError::into_inner)
+				.take(),
+		);
+		let stale = default_config().replace(
+			"\t# idle_release: true  ## Default",
+			"\t# idle_release: false  ## Default",
+		);
+		assert_ne!(stale, default_config(), "the template moved");
+		let (first, rest) = default_config().split_once('\n').unwrap();
+		let mut garbled = format!("{first}\n").into_bytes();
+		garbled.extend(b"# caf\xe9\n");
+		garbled.extend(rest.as_bytes());
+		let cases: [(&str, Option<Vec<u8>>); 4] = [
+			("stale commented default", Some(stale.into_bytes())),
+			("shcl 2.x", Some(b"font:\n\tsize: 12\n".to_vec())),
+			("not UTF-8", Some(garbled)),
+			("no file", None),
+		];
+		for (n, (what, body)) in cases.into_iter().enumerate() {
+			let home = crate::testdir::run_dir()
+				.join(format!("silkterm_ownconfig_{}_{n}", std::process::id()));
+			let _ = std::fs::remove_dir_all(&home);
+			std::fs::create_dir_all(&home).unwrap();
+			let dir = home.join(APP_DIR);
+			let path = dir.join("config.shcl");
+			if let Some(body) = &body {
+				std::fs::create_dir_all(&dir).unwrap();
+				std::fs::write(&path, body).unwrap();
+			}
+			*test_native_config()
+				.lock()
+				.unwrap_or_else(std::sync::PoisonError::into_inner) = Some(path.clone());
+			assert_eq!(config_path().as_ref(), Some(&path), "{what}");
+
+			let loaded = load();
+			if let Some(body) = &body {
+				assert!(
+					std::fs::read(&path).unwrap() == *body,
+					"{what}: the launch wrote it"
+				);
+			}
+			let mut moved = loaded.clone();
+			moved.font_size += 1.0;
+			let _ = persist(&loaded, &moved);
+			let _ = keep_rating(&RatingLines {
+				profile: Some("low"),
+				rated_hardware: Some("0123456789abcdef"),
+				check_next_run: Some(false),
+			});
+			disable_keys(&["font.size"]);
+			let _ = reset_config();
+
+			let seen: Vec<String> = std::fs::read_dir(&dir)
+				.map(|list| {
+					list.flatten()
+						.map(|entry| entry.file_name().to_string_lossy().into_owned())
+						.collect()
+				})
+				.unwrap_or_default();
+			match &body {
+				Some(body) => {
+					assert_eq!(seen, ["config.shcl"], "{what}");
+					assert!(
+						std::fs::read(&path).unwrap() == *body,
+						"{what}: file changed"
+					);
+				}
+				None => assert!(!dir.exists(), "{what}: {seen:?}"),
+			}
+			assert!(!may_write(&dir.join(".wallpaper-history")), "{what}");
+			*test_native_config()
+				.lock()
+				.unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+			let _ = std::fs::remove_dir_all(&home);
+		}
+		// asked only, never written
+		if let Some(real) = env_config_path() {
+			assert!(!may_write(&real));
+			assert!(!may_write(&real.with_file_name(".wallpaper-history")));
+		}
 	}
 
 	// Two windows, and the second one loaded before the first one's scan saved a

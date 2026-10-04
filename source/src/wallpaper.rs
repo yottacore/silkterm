@@ -430,7 +430,7 @@ fn load_history() -> Vec<String> {
 }
 
 fn write_history(recent: &[String]) {
-	let Some(path) = config::wallpaper_history_path() else {
+	let Some(path) = config::wallpaper_history_path().filter(|p| config::may_write(p)) else {
 		return;
 	};
 	let mut text = recent.join("\n");
