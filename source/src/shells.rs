@@ -382,9 +382,9 @@ pub fn command_line(argv: &[String]) -> String {
 // bare `pwsh` where the list carries the full path to the same file.
 pub fn friendly(command: &str, stored: &[ShellEntry]) -> String {
 	// Answering costs a PATH search and two canonicalize calls per stored entry,
-	// and the tab strip asks once per tab per frame - tens of thousands of
-	// syscalls a second on a window with a few tabs. The answer only moves when
-	// the stored list does, so it is kept against the list's own content.
+	// and a tab asks again whenever its task or folder moves, and its tip twice a
+	// second. The answer only moves when the stored list does, so it is kept
+	// against the list's own content.
 	let stamp = list_stamp(stored);
 	let mut memo = FRIENDLY_MEMO
 		.lock()

@@ -434,6 +434,9 @@ pub struct TextCtx {
 	// turns that into a lookup. Bounded (cleared) so dynamic tab titles can't
 	// grow it without limit.
 	ui_measure_cache: HashMap<String, f32>,
+	// Which context this is. A font, size or scale change builds a new one, so
+	// anything measured with the old one can tell it is stale by this alone.
+	pub generation: u64,
 }
 
 // Everything of a TextCtx that is made on a wgpu device.
@@ -590,6 +593,10 @@ impl TextCtx {
 			color_glyphs: ColorGlyphs::new(),
 			text_families: HashMap::new(),
 			ui_measure_cache: HashMap::new(),
+			generation: {
+				static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+				NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+			},
 		}
 	}
 
@@ -798,7 +805,7 @@ impl TextCtx {
 	// Width in px of `text` in the TERMINAL font. The tab hover tip is the one
 	// piece of chrome that uses it: its lines are key/value pairs padded to a
 	// column with spaces, which only aligns in a monospace face. Uncached - the
-	// tip rebuilds a few lines twice a second at most.
+	// tip keeps its width until its lines change (`TabTip` in app.rs).
 	pub fn measure_mono_text(&mut self, text: &str) -> f32 {
 		let attrs = mono_attrs();
 		self.measure_at(text, &attrs, self.metrics)

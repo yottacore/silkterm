@@ -278,13 +278,14 @@ impl Dimensions for TermDimensions {
 }
 
 // What a pane's shell is doing, as its tab reports it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Task {
 	/// A command is in the foreground right now.
 	Running(String),
 	/// Back at the prompt; this is the last command that ran.
 	Last(String),
 	/// This shell has never run anything.
+	#[default]
 	Idle,
 }
 
