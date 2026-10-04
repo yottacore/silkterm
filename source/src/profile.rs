@@ -264,6 +264,25 @@ fn values(profile: Profile, s: &mut Settings) {
 	}
 }
 
+// The governed fields as `profile` sets them, over the shipped defaults. Only
+// those fields mean anything here. They depend on the profile alone, so each
+// is built once, and a reader that wants a profile's value of one field needs
+// no copy of the user's whole settings to lay the profile over.
+pub fn values_of(profile: Profile) -> &'static Settings {
+	static VALUES: std::sync::OnceLock<Vec<Settings>> = std::sync::OnceLock::new();
+	let all = VALUES.get_or_init(|| {
+		Profile::ALL
+			.iter()
+			.map(|&each| {
+				let mut s = Settings::default();
+				values(each, &mut s);
+				s
+			})
+			.collect()
+	});
+	&all[profile.index()]
+}
+
 // Shorter eases on the three stretches a slow display shows most, and a halo
 // that costs fewer taps: the square metric with a smaller reach.
 fn quicker(s: &mut Settings) {

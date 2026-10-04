@@ -595,6 +595,35 @@ pub struct Settings {
 	// The hotkeys in force: the defaults with the file's `keys.*` values put in.
 	// The key handler and every menu read these, so a rebinding shows up in all.
 	pub keys: crate::keys::Bindings,
+	#[cfg(test)]
+	pub clone_probe: CloneProbe,
+}
+
+// Counts whole copies of `Settings` made on this thread, so a test can hold a
+// hot path to a number. Test builds only.
+#[cfg(test)]
+thread_local! {
+	static SETTINGS_CLONES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+#[derive(Default)]
+pub struct CloneProbe;
+#[cfg(test)]
+impl Clone for CloneProbe {
+	fn clone(&self) -> Self {
+		SETTINGS_CLONES.with(|n| n.set(n.get() + 1));
+		CloneProbe
+	}
+}
+#[cfg(test)]
+impl PartialEq for CloneProbe {
+	fn eq(&self, _: &Self) -> bool {
+		true
+	}
+}
+#[cfg(test)]
+pub fn settings_clones() -> usize {
+	SETTINGS_CLONES.with(std::cell::Cell::get)
 }
 
 impl Settings {
@@ -752,6 +781,8 @@ impl Default for Settings {
 			user_themes: Vec::new(),
 			shells: Vec::new(),
 			keys: crate::keys::Bindings::defaults(cfg!(target_os = "macos")),
+			#[cfg(test)]
+			clone_probe: CloneProbe,
 		}
 	}
 }
@@ -3741,6 +3772,8 @@ fn resolve(raw: RawConfig) -> Settings {
 		user_themes: raw.user_themes,
 		shells: raw.shells,
 		keys: crate::keys::Bindings::with(cfg!(target_os = "macos"), &raw.keys).0,
+		#[cfg(test)]
+		clone_probe: CloneProbe,
 	}
 }
 
