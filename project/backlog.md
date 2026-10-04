@@ -814,27 +814,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- The tab strip and its tip are rebuilt and measured again on every frame
-	- ID: 2026100314050002
-	- Type: Enhancement
-	- Status: Queued
-	- Needs local test suite run?: Yes
-	- Priority: Avg
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Build each tab's label forms only when what they show changes: a title, a task or folder probe, a tab or pane change, a resize, or a font change.
-		- Measure the tab tip once when its lines are built, not every frame.
-		- Skip the work while the tab bar is hidden.
-	- Progress log:
-		- 20261003: `render_with` calls `rebuild_tab_layout` on every frame, before it checks whether the bar shows. Per tab, that clones the title, command and folder, takes the shell list lock and hashes the list, reads `HOME`, and builds about eight joined strings. `path_forms` clones a growing prefix list once per folder level. The window title asks again for the active tab.
-		- 20261003: `tab_tip_layout` shapes every tip line each frame through `measure_mono_text`, whose own comment says it is uncached because the tip changes twice a second at most.
-		- 20261003: `task()`, `cwd()` and `friendly` each gained a throttle or memo to survive being called this often. A layout kept between frames would make those simpler.
-	- Origin: 395620ed (2026-08-23) for the per-frame call, c20128ca and 9e45d8f1 (2026-08-21) for the tip. No earlier review item. Plausible, since the cost is not measured.
-	- Test case: Owed. A count of label builds across idle frames, with a threshold.
-	- Note: Code review 20261003 item 2.
-
 - Settings: every label is shaped again on each pointer move
 	- ID: 2026100314050003
 	- Type: Enhancement
@@ -1717,6 +1696,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- The tab strip and its tip are rebuilt and measured again on every frame
+	- ID: 2026100314050002
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. The unit suite passed on the branch.
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Build each tab's label forms only when what they show changes: a title, a task or folder probe, a tab or pane change, a resize, or a font change.
+		- Measure the tab tip once when its lines are built, not every frame.
+		- Skip the work while the tab bar is hidden.
+	- Progress log:
+		- 20261003: `render_with` calls `rebuild_tab_layout` on every frame, before it checks whether the bar shows. Per tab, that clones the title, command and folder, takes the shell list lock and hashes the list, reads `HOME`, and builds about eight joined strings. `path_forms` clones a growing prefix list once per folder level. The window title asks again for the active tab.
+		- 20261003: `tab_tip_layout` shapes every tip line each frame through `measure_mono_text`, whose own comment says it is uncached because the tip changes twice a second at most.
+		- 20261003: `task()`, `cwd()` and `friendly` each gained a throttle or memo to survive being called this often. A layout kept between frames would make those simpler.
+		- 20261004: Pinned. With labels built every frame, as dev did, three tabs built 720 times over 240 idle frames, and the tip measured 240 lines over 120 frames.
+		- 20261004: Done. Each tab keeps its label forms and their widths beside the facts they came from: its title, its own title or rename, the shell's command, task and folder. A frame reads the facts and builds again only where they differ. A settings change or a new text context, from a font, zoom or scale change, builds every tab again. The strip is measured again only when a label, the width, the tab count, the active tab or the page moved. The window title reads the active tab's kept label.
+		- 20261004: While the bar is hidden, every tab's shell is still asked what it runs, so a command that ran meanwhile shows as its last one when the bar comes back. Nothing is built or measured then.
+		- 20261004: The tip keeps its measured width until its lines change or the text context does.
+		- 20261004: The `task()` and `cwd()` throttles stay, since a frame still asks every tab. The `friendly` memo stays too, since a tab asks again each time its task or folder moves.
+	- Origin: 395620ed (2026-08-23) for the per-frame call, c20128ca and 9e45d8f1 (2026-08-21) for the tip. No earlier review item. Plausible, since the cost is not measured.
+	- Branch: tabcache
+	- Commit: abb625f, 47f9b76
+	- Test case: `idle_frames_build_no_tab_labels` (Erlb8mF), at most one build per tab over 240 idle frames. `a_tab_label_builds_again_when_what_it_shows_moves` (Erlb98Q), one input at a time. `the_tab_tip_is_measured_once_per_set_of_lines` (Erlb9TL). The hidden-bar probe has no unit test: asking a shell what it runs needs a live terminal, and no test can build one.
+	- Verified: 20261004. All three tests fail with the old always-build code put back and pass with the fix. The invalidation test also fails when the settings check or the text context check is taken out. The unit suite passes, 1101 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not run in a real window. The render and window title callers were read, not run.
+	- Swept: Every caller of `tab_label_forms`. The strip and the window title read the kept labels. Starting and committing a rename still build fresh, as before. The tip's lines are still built every half second, not per frame. The menu tip and the benchmark banner measure through the memoized interface font path. Left alone.
+	- Acceptance signoff: Self-closed: the cost was pinned by tests that fail on the old code, and the rename and the tip read the same text as before.
+	- Closed: 20261004-134602
+	- Note: Code review 20261003 item 2.
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
