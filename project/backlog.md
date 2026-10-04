@@ -141,6 +141,52 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_owed_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
 
+- A shell is listed twice by name, with a different command each time
+	- ID: 2026100408214203
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On b26, a scan into a new throwaway config (`--config`). The Tabs menu and the Shell tab should show "Bash 3.2.57" and "Bash 5.x" with their own commands, and no plain "Bash" twice. Nothing should flash on screen while the versions are asked. The live config's list should not change.
+	- Severity: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100408214202
+	- Target OS: All
+	- Test environment: b26
+	- Steps to reproduce:
+		- On macOS, have Bash installed at both /usr/local/bin/bash and /bin/bash.
+		- Let the shell scan run.
+	- Incorrect behavior: "Bash" shows up twice, once for /usr/local/bin/bash, and again lower down for /bin/bash.
+	- Expected behavior:
+		- Fix it in general, not just for macOS.
+		- If a shell is listed twice by Name but with a different Command:
+			- If one is a symlink of the other, list the shortest path, whether it is the symlink or the real file.
+			- If the shell version is the same, only list the one with the shortest path.
+			- If the shell version is different, add the version to the Name, without extra build info.
+				- E.g. "Bash 3.2.1", "Bash 5.1.0", etc.
+	- Notes:
+		- Before RC1.
+		- 20261004: On a Mac, /bin/bash is Apple's old 3.2, and /usr/local/bin/bash is usually a newer one from Homebrew, so this case likely gets the version names.
+		- 20261004: A change to the scan does not change a list already saved.
+		- 20261004: Duplicates already in a saved list are left alone, and the fix applies to new finds only. A scan only adds shells and switches off missing ones, so a detection fix does not reach an existing list.
+	- Decisions:
+		- 20261004: Leave duplicates already in a saved list alone. The fix applies to new finds only.
+	- Reproduced: 20261004, b23, with the Mac's two bashes stood in. The scan offered "Bash" twice. Tests ErkT4QH, ErkT4Tm, ErkT4Xv and ErkT4bY failed before the fix.
+	- Actual cause:
+		- The scan keeps two different files as two shells, which is right, but names both after the program. On a Mac, PATH finds Homebrew's bash and /etc/shells lists Apple's /bin/bash.
+		- Where one file was reached two ways, the scan kept the first spelling it met, not the shortest.
+	- Actual fix:
+		- One file reached two ways is offered at the shorter path.
+		- Two finds with one name that are different files are asked their version. Same version: one entry, at the shorter path, in the place of the first found, so a login shell keeps the top. Different versions: each name gets its version.
+		- The version is the first dotted number the shell prints for `--version`, with no build info. Only a shared name is asked. Each ask is stopped after 2 seconds, and a shell that does not answer keeps its plain name.
+		- The login shell's "(no rc)" twin follows its shell's path and name, such as "Bash 5.2.37 (no rc)".
+		- A number already at the end of a name grows rather than doubling: "Python 3" becomes "Python 3.12.1".
+	- Swept: the scan is the one place shells are found. `merge` and the saved list are unchanged.
+	- Verified: unit tests, and clippy for Linux, macOS and Windows. No real Mac scan yet.
+	- Branch: shname
+	- Commit: 07ad847
+	- Test case: ErkT4QH `two_versions_of_one_shell_each_carry_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path`, ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`, ErkT4bY `a_shell_and_its_link_are_offered_at_the_shorter_path`, ErkT4gH `a_version_goes_into_a_name_the_way_a_person_would_write_it`, ErkT4k5 `the_version_probe_gives_up_on_a_program_that_never_answers`. The first four failed before the fix.
+
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
 	- Type: Bug
@@ -710,53 +756,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 
-- macOS: "Bash (no rc)" shows in the menu as "Bash", so "Bash" is listed twice
-	- ID: 2026100408214202
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261004-082142
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: macOS
-	- Test environment: b26
-	- Steps to reproduce:
-		- Open the menu that lists the shells.
-	- Incorrect behavior: "Bash (no rc)" shows as "Bash". Renaming it to "Bash no rc" makes it show right.
-	- Expected behavior: The menu shows the shell's full name.
-	- Possible cause: On macOS, `plain_label` in app.rs takes off anything in parentheses at the end of a label, since it expects a shortcut there, like "Copy (Ctrl+Shift+C)". A shell name that ends in parentheses loses that part too.
-	- Notes:
-		- Before RC1.
-
-- A shell is listed twice by name, with a different command each time
-	- ID: 2026100408214203
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261004-082142
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100408214202
-	- Target OS: All
-	- Test environment: b26
-	- Steps to reproduce:
-		- On macOS, have Bash installed at both /usr/local/bin/bash and /bin/bash.
-		- Let the shell scan run.
-	- Incorrect behavior: "Bash" shows up twice, once for /usr/local/bin/bash, and again lower down for /bin/bash.
-	- Expected behavior:
-		- Fix it in general, not just for macOS.
-		- If a shell is listed twice by Name but with a different Command:
-			- If one is a symlink of the other, list the shortest path, whether it is the symlink or the real file.
-			- If the shell version is the same, only list the one with the shortest path.
-			- If the shell version is different, add the version to the Name, without extra build info.
-				- E.g. "Bash 3.2.1", "Bash 5.1.0", etc.
-	- Notes:
-		- Before RC1.
-		- 20261004: On a Mac, /bin/bash is Apple's old 3.2, and /usr/local/bin/bash is usually a newer one from Homebrew, so this case likely gets the version names.
-		- 20261004: A change to the scan does not change a list already saved.
-	- Decisions:
-		- 20261004: Leave duplicates already in a saved list alone. The fix applies to new finds only.
-
 - macOS: the extra prompt info for PowerShell 7 does not work
 	- ID: 2026100408214204
 	- Type: Bug
@@ -1283,6 +1282,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- macOS: "Bash (no rc)" shows in the menu as "Bash", so "Bash" is listed twice
+	- ID: 2026100408214202
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- Open the menu that lists the shells.
+	- Incorrect behavior: "Bash (no rc)" shows as "Bash". Renaming it to "Bash no rc" makes it show right.
+	- Expected behavior: The menu shows the shell's full name.
+	- Possible cause: On macOS, `plain_label` in app.rs takes off anything in parentheses at the end of a label, since it expects a shortcut there, like "Copy (Ctrl+Shift+C)". A shell name that ends in parentheses loses that part too.
+	- Reproduced: 20261004, b23. The Mac menu bar built from a list holding "Bash" and "Bash (no rc)" showed "Bash" twice. Test ErkT4M3 failed before the fix.
+	- Actual cause:
+		- `plain_label` cut a trailing pair of parentheses from every row of the Mac menu bar. It dates from when shortcuts were written into the labels. Shortcuts are now added per row from the key bindings, and the Mac bar is built from rows that never have one, so the cut only ever removed real text.
+	- Notes:
+		- Before RC1.
+	- Actual fix: `plain_label` is gone, and the Mac menu bar shows each label as it is.
+	- Swept:
+		- `plain_label` had one caller, the Mac menu bar in macmenu.rs.
+		- The in-window menus and the right-click menu draw a label whole on every platform.
+		- The tab label's short forms read "(no rc)" as a variant on purpose and show it as a star. That is not a shortcut cut, so it stays.
+		- Two test helpers in app.rs read a trailing shortcut from sample menus. Test code only.
+	- Verified: unit tests, and clippy for Linux, macOS and Windows. The native macOS menu code was not changed.
+	- Branch: shname
+	- Commit: 07ad847
+	- Test case: ErkT4M3 `a_shell_name_in_the_mac_menu_bar_keeps_its_parentheses`. Failed before the fix, passes after.
+	- Acceptance signoff: Self-closed: mechanical. The fix only stops a wrong cut, and its test failed before and passes after.
+	- Closed: 20261004-091507
 
 - A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
 	- ID: 2026092618142600

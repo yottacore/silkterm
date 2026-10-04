@@ -821,27 +821,37 @@ fn launch(command: &str, program: &str) -> String {
 // Everything installed that looks like a shell, in the order it should be
 // offered in (see `Group`).
 pub fn detect() -> Vec<Found> {
-	detect_with(login_shell(), &which, platform_extras)
+	detect_with(login_shell(), &which, platform_extras, &|program| {
+		probe_version(program, VERSION_WAIT)
+	})
 }
 
-// The scan with its three lookups passed in, so a test can install every shell
-// the table knows and read the order a fresh list really arrives in.
+// The scan with its lookups passed in, so a test can install every shell the
+// table knows and read the order a fresh list really arrives in, or hand two
+// shells of one name any version it likes.
 fn detect_with(
 	login: Option<String>,
 	which: &dyn Fn(&str) -> Option<PathBuf>,
 	extras: fn() -> Vec<Found>,
+	version: &dyn Fn(&Path) -> Option<String>,
 ) -> Vec<Found> {
-	let mut out: Vec<Found> = Vec::new();
-	let mut seen: Vec<Ident> = Vec::new();
-	let add = |hit: Found, out: &mut Vec<Found>, seen: &mut Vec<Ident>| {
+	let mut finds: Vec<(Found, Ident)> = Vec::new();
+	let add = |hit: Found, finds: &mut Vec<(Found, Ident)>| {
 		let Some(id) = Ident::of(&hit.command, which) else {
 			return;
 		};
-		if id.exe.is_none() || seen.iter().any(|s| s.same(&id)) {
+		if id.exe.is_none() {
 			return;
 		}
-		seen.push(id);
-		out.push(hit);
+		// One file reached two ways, through a link or a linked folder, is one
+		// shell. It is offered under whichever spelling is shorter.
+		if let Some((kept, _)) = finds.iter_mut().find(|(_, seen)| seen.same(&id)) {
+			if program_len(&hit.command) < program_len(&kept.command) {
+				kept.command = hit.command;
+			}
+			return;
+		}
+		finds.push((hit, id));
 	};
 
 	// On unix the user's own shell leads - and that is load-bearing rather than
@@ -851,30 +861,16 @@ fn detect_with(
 	// say so. It is also the one, and the only one, that gets the twin that skips
 	// its startup files. Windows has no user shell, so ComSpec takes its ordinary
 	// place in the order instead of the top of it.
+	let mut twin = None;
 	if let Some(login) = login {
 		let base = base_name(&login);
-		let title = pretty(&base);
-		let login_cmd = launch(&login, &base);
 		let (at, twin_at) = login_groups(&base);
 		add(
-			Found::new(&title, login_cmd.clone(), "").in_group(at.0, at.1),
-			&mut out,
-			&mut seen,
+			Found::new(&pretty(&base), launch(&login, &base), "").in_group(at.0, at.1),
+			&mut finds,
 		);
-		if let Some((flag, note)) = no_startup_file(&base) {
-			// Switched OFF: it is what you reach for when your own rc file is the
-			// thing you are debugging, not what you want a second copy of in the
-			// menu every day.
-			add(
-				Found::dormant(
-					&format!("{title} ({note})"),
-					format!("{login_cmd} {flag}"),
-					"starts without reading the shell's startup files",
-				)
-				.in_group(twin_at.0, twin_at.1),
-				&mut out,
-				&mut seen,
-			);
+		if !finds.is_empty() {
+			twin = no_startup_file(&base).map(|(flag, note)| (flag, note, twin_at));
 		}
 	}
 	for (seq, (exe, title, comment, group)) in KNOWN.iter().enumerate() {
@@ -882,18 +878,168 @@ fn detect_with(
 			add(
 				Found::new(title, launch(&quoted(&path), exe), comment)
 					.in_group(*group, seq as u32),
-				&mut out,
-				&mut seen,
+				&mut finds,
 			);
 		}
 	}
 	for hit in extras() {
-		add(hit, &mut out, &mut seen);
+		add(hit, &mut finds);
+	}
+	let mut out = apart_by_name(finds, version);
+	// The twin is made from the login shell as it came out of the steps above,
+	// so it runs the same spelling and carries the same version in its name.
+	// `apart_by_name` keeps the first find of a name where it was, so the login
+	// shell is still first.
+	if let (Some((flag, note, at)), Some(login)) = (twin, out.first()) {
+		// Switched OFF: it is what you reach for when your own rc file is the
+		// thing you are debugging, not what you want a second copy of in the
+		// menu every day.
+		let twin = Found::dormant(
+			&format!("{} ({note})", login.title),
+			format!("{} {flag}", login.command),
+			"starts without reading the shell's startup files",
+		)
+		.in_group(at.0, at.1);
+		out.push(twin);
 	}
 	// One sort, at the end: the order is a property of the list, not of the
 	// sequence the looking happened to run in.
 	out.sort_by_key(Found::order);
 	out
+}
+
+// How long the program in a command line is as written, for picking the shorter
+// of two spellings of one file.
+fn program_len(command: &str) -> usize {
+	crate::cli::shell_split(command)
+		.ok()
+		.and_then(|argv| argv.first().map(|program| program.chars().count()))
+		.unwrap_or(usize::MAX)
+}
+
+// Two finds with one name that are different files, such as Apple's bash in
+// /bin and a newer one from Homebrew. Where they report the same version they
+// are one shell installed twice, and the shorter path is offered, in the place
+// of whichever came first. Where they differ, each gets its version in its name
+// so the menu can tell them apart. A shell that will not say keeps its name as
+// it is. Only a shared name is asked about, so a scan with no clash starts
+// nothing.
+fn apart_by_name(
+	finds: Vec<(Found, Ident)>,
+	version: &dyn Fn(&Path) -> Option<String>,
+) -> Vec<Found> {
+	let shared =
+		|title: &str, titles: &[String]| titles.iter().filter(|seen| *seen == title).count() > 1;
+	let titles: Vec<String> = finds.iter().map(|(hit, _)| hit.title.clone()).collect();
+	let mut kept: Vec<(Found, Option<String>)> = Vec::with_capacity(finds.len());
+	for (hit, id) in finds {
+		let asked = if shared(&hit.title, &titles) {
+			id.exe.as_deref().and_then(version)
+		} else {
+			None
+		};
+		let same_version = asked.as_ref().and_then(|asked| {
+			kept.iter_mut().find(|(seen, seen_version)| {
+				seen.title == hit.title && seen_version.as_ref() == Some(asked)
+			})
+		});
+		if let Some((seen, _)) = same_version {
+			if program_len(&hit.command) < program_len(&seen.command) {
+				seen.command.clone_from(&hit.command);
+			}
+			continue;
+		}
+		kept.push((hit, asked));
+	}
+	let titles: Vec<String> = kept.iter().map(|(hit, _)| hit.title.clone()).collect();
+	kept.into_iter()
+		.map(|(mut hit, asked)| {
+			if let (true, Some(asked)) = (shared(&hit.title, &titles), asked) {
+				hit.title = versioned(&hit.title, &asked);
+			}
+			hit
+		})
+		.collect()
+}
+
+// A name with its version in it: "Bash 5.2.37". A number already at the end of
+// the name is taken into the version rather than doubled ("Python 3" becomes
+// "Python 3.12.1"), and a note in parentheses stays last.
+fn versioned(title: &str, version: &str) -> String {
+	let (name, note) = match title.split_once(" (") {
+		Some((name, note)) if title.ends_with(')') => (name, Some(note)),
+		_ => (title, None),
+	};
+	let name = match name.rsplit_once(' ') {
+		Some((head, last))
+			if last.chars().all(|c| c.is_ascii_digit())
+				&& version.starts_with(&format!("{last}.")) =>
+		{
+			format!("{head} {version}")
+		}
+		_ => format!("{name} {version}"),
+	};
+	match note {
+		Some(note) => format!("{name} ({note}"),
+		None => name,
+	}
+}
+
+// How long a shell gets to say its version. One that takes `--version` for
+// something else and sits there is stopped at this point, and keeps its name.
+const VERSION_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+// A shell's version, from what it prints for `--version`. The output is read on
+// a thread of its own, since a program that never closes it would otherwise hold
+// the scan; that thread is left behind rather than waited for.
+fn probe_version(program: &Path, wait: std::time::Duration) -> Option<String> {
+	use std::io::Read;
+	use std::process::{Command, Stdio};
+
+	let mut command = Command::new(program);
+	command
+		.arg("--version")
+		.stdin(Stdio::null())
+		.stdout(Stdio::piped())
+		.stderr(Stdio::null());
+	#[cfg(windows)]
+	{
+		use std::os::windows::process::CommandExt;
+		// a console flashing up over the terminal would be a mystery
+		const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+		command.creation_flags(CREATE_NO_WINDOW);
+	}
+	let mut child = command.spawn().ok()?;
+	let (sender, receiver) = std::sync::mpsc::channel();
+	let reader = child.stdout.take().and_then(|stdout| {
+		std::thread::Builder::new()
+			.name("shell-version".into())
+			.spawn(move || {
+				let mut text = Vec::new();
+				let _ = stdout.take(4096).read_to_end(&mut text);
+				let _ = sender.send(text);
+			})
+			.ok()
+	});
+	let text = reader.and_then(|_| receiver.recv_timeout(wait).ok());
+	let _ = child.kill();
+	let _ = child.wait();
+	parse_version(&String::from_utf8_lossy(&text?))
+}
+
+// The first dotted number in a version banner, without any build tail: "GNU
+// bash, version 5.2.37(1)-release" is 5.2.37, and Node's "v20.11.1" is
+// 20.11.1. A word with digits only inside it, such as "darwin23.0", is not one.
+fn parse_version(text: &str) -> Option<String> {
+	text.split_whitespace().find_map(|word| {
+		let word = word.strip_prefix(['v', 'V']).unwrap_or(word);
+		let end = word
+			.find(|c: char| !c.is_ascii_digit() && c != '.')
+			.unwrap_or(word.len());
+		let number = word[..end].trim_end_matches('.');
+		let parts = number.split('.').count();
+		(parts > 1 && !number.split('.').any(str::is_empty)).then(|| number.to_string())
+	})
 }
 
 // A scan on a box where every shell the table knows is installed, bash is the
@@ -902,7 +1048,11 @@ fn detect_with(
 #[cfg(test)]
 pub(crate) fn detect_every_known() -> Vec<Found> {
 	let installed = |prog: &str| Some(Path::new("/silk-test/bin").join(base_name(prog)));
-	detect_with(Some("/bin/bash".to_string()), &installed, Vec::new)
+	// No two names match here, so nothing may be asked its version.
+	let never = |program: &Path| -> Option<String> {
+		panic!("asked {} for its version", program.display())
+	};
+	detect_with(Some("/bin/bash".to_string()), &installed, Vec::new, &never)
 }
 
 // Where the login shell and its startup-file-free twin belong. Both arms compile
@@ -1988,5 +2138,267 @@ mod tests {
 		let quoted = quoted(Path::new(r"C:\Program Files\Git\bin\bash.exe"));
 		let argv = crate::cli::shell_split(&quoted).expect("splits");
 		assert_eq!(argv, vec![r"C:\Program Files\Git\bin\bash.exe"]);
+	}
+
+	// Every path in `paths` is installed, and a bare name is looked up in that
+	// order, the way PATH would be. None of them exist on any test box, so no
+	// two can turn out to be one file.
+	fn on_path(paths: &'static [&'static str]) -> impl Fn(&str) -> Option<PathBuf> {
+		move |prog: &str| {
+			if prog.contains('/') {
+				return paths.contains(&prog).then(|| PathBuf::from(prog));
+			}
+			paths
+				.iter()
+				.find(|path| base_name(path) == prog)
+				.map(PathBuf::from)
+		}
+	}
+
+	fn mac_shells() -> Vec<Found> {
+		["/silk-test/bin/bash", "/silk-test/bin/zsh"]
+			.into_iter()
+			.map(|path| Found::new(&pretty(&base_name(path)), path.to_string(), ""))
+			.collect()
+	}
+
+	fn titled<'a>(found: &'a [Found], title: &str) -> Vec<&'a str> {
+		found
+			.iter()
+			.filter(|hit| hit.title == title)
+			.map(|hit| hit.command.as_str())
+			.collect()
+	}
+
+	// The Mac case: Apple's bash in /bin and a newer one from Homebrew, found
+	// once on PATH and once in /etc/shells. Two versions, so each name says
+	// which, and only the two that share a name are asked.
+	// Test ID: ErkT4QH
+	#[test]
+	fn two_versions_of_one_shell_each_carry_their_version() {
+		let which = on_path(&[
+			"/silk-test/usr/local/bin/bash",
+			"/silk-test/bin/zsh",
+			"/silk-test/bin/bash",
+		]);
+		let asked = std::cell::RefCell::new(Vec::new());
+		let version = |program: &Path| {
+			asked.borrow_mut().push(program.display().to_string());
+			match program.to_str()? {
+				"/silk-test/bin/bash" => Some("3.2.57".to_string()),
+				"/silk-test/usr/local/bin/bash" => Some("5.2.37".to_string()),
+				_ => None,
+			}
+		};
+		let found = detect_with(
+			Some("/silk-test/bin/zsh".into()),
+			&which,
+			mac_shells,
+			&version,
+		);
+		assert_eq!(titled(&found, "Bash"), Vec::<&str>::new());
+		assert_eq!(titled(&found, "Bash 3.2.57"), ["/silk-test/bin/bash"]);
+		assert_eq!(
+			titled(&found, "Bash 5.2.37"),
+			["/silk-test/usr/local/bin/bash"]
+		);
+		assert_eq!(titled(&found, "Zsh"), ["/silk-test/bin/zsh"]);
+		let mut asked = asked.into_inner();
+		asked.sort();
+		assert_eq!(
+			asked,
+			["/silk-test/bin/bash", "/silk-test/usr/local/bin/bash"]
+		);
+	}
+
+	// One version installed twice is one shell, offered at the shorter path. It
+	// keeps the place of the one found first, here the login shell's, so the
+	// default shell does not move, and its twin follows the path.
+	// Test ID: ErkT4Tm
+	#[test]
+	fn one_version_installed_twice_is_offered_once_at_the_shorter_path() {
+		let which = on_path(&["/silk-test/opt/homebrew/bin/bash", "/silk-test/bin/bash"]);
+		let version = |_: &Path| Some("5.2.37".to_string());
+		let found = detect_with(
+			Some("/silk-test/opt/homebrew/bin/bash".into()),
+			&which,
+			mac_shells,
+			&version,
+		);
+		assert_eq!(found[0].title, "Bash");
+		assert_eq!(found[0].group, Group::Login);
+		assert_eq!(found[0].command, "/silk-test/bin/bash");
+		assert_eq!(found[1].title, "Bash (no rc)");
+		assert_eq!(found[1].command, "/silk-test/bin/bash --norc");
+		assert_eq!(titled(&found, "Bash").len(), 1);
+	}
+
+	// A login shell with its version in its name, and a shell that will not say
+	// what version it is. The twin reads as its shell does, and the silent one
+	// keeps its name rather than being guessed at or dropped.
+	// Test ID: ErkT4Xv
+	#[test]
+	fn a_shell_that_will_not_say_its_version_keeps_its_name() {
+		let which = on_path(&["/silk-test/usr/local/bin/bash", "/silk-test/bin/bash"]);
+		let version = |program: &Path| {
+			(program == Path::new("/silk-test/usr/local/bin/bash")).then(|| "5.2.37".to_string())
+		};
+		let found = detect_with(
+			Some("/silk-test/usr/local/bin/bash".into()),
+			&which,
+			mac_shells,
+			&version,
+		);
+		let titles: Vec<&str> = found.iter().map(|hit| hit.title.as_str()).collect();
+		assert_eq!(titles, ["Bash 5.2.37", "Bash 5.2.37 (no rc)", "Bash"]);
+		assert_eq!(found[2].command, "/silk-test/bin/bash");
+
+		let quiet = |_: &Path| None;
+		let found = detect_with(
+			Some("/silk-test/usr/local/bin/bash".into()),
+			&which,
+			mac_shells,
+			&quiet,
+		);
+		assert_eq!(
+			titled(&found, "Bash"),
+			["/silk-test/usr/local/bin/bash", "/silk-test/bin/bash"]
+		);
+	}
+
+	// A link and the file it points at are one shell, offered under the shorter
+	// path whichever of the two that is. Nothing is asked its version, since the
+	// two are already known to be one file.
+	// Test ID: ErkT4bY
+	#[cfg(unix)]
+	#[test]
+	fn a_shell_and_its_link_are_offered_at_the_shorter_path() {
+		use std::os::unix::fs::symlink;
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_shortest_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		let long = dir.join("Cellar/bash/5.2.37/bin");
+		std::fs::create_dir_all(&long).unwrap();
+		std::fs::create_dir_all(dir.join("bin")).unwrap();
+		let never = |program: &Path| -> Option<String> {
+			panic!("asked {} for its version", program.display())
+		};
+
+		// the real file is the long one, so the link is offered
+		std::fs::write(long.join("bash"), "").unwrap();
+		symlink(long.join("bash"), dir.join("bin/bash")).unwrap();
+		let real = long.join("bash").display().to_string();
+		let link = dir.join("bin/bash").display().to_string();
+		let found = {
+			let link = link.clone();
+			let which = move |prog: &str| match prog {
+				"bash" => Some(PathBuf::from(&link)),
+				_ if prog.contains('/') => Path::new(prog).is_file().then(|| PathBuf::from(prog)),
+				_ => None,
+			};
+			detect_with(Some(real.clone()), &which, Vec::new, &never)
+		};
+		assert_eq!(titled(&found, "Bash"), [link.as_str()]);
+		assert_eq!(found[1].command, format!("{link} --norc"));
+
+		// the link is the long one, so the real file is offered
+		let short = dir.join("bash");
+		std::fs::write(&short, "").unwrap();
+		let deep = dir.join("opt/links/bin/bash");
+		std::fs::create_dir_all(dir.join("opt/links/bin")).unwrap();
+		symlink(&short, &deep).unwrap();
+		let short = short.display().to_string();
+		let deep = deep.display().to_string();
+		let found = {
+			let short = short.clone();
+			let which = move |prog: &str| match prog {
+				"bash" => Some(PathBuf::from(&short)),
+				_ if prog.contains('/') => Path::new(prog).is_file().then(|| PathBuf::from(prog)),
+				_ => None,
+			};
+			detect_with(Some(deep.clone()), &which, Vec::new, &never)
+		};
+		assert_eq!(titled(&found, "Bash"), [short.as_str()]);
+		assert_eq!(found[1].command, format!("{short} --norc"));
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Test ID: ErkT4gH
+	#[test]
+	fn a_version_goes_into_a_name_the_way_a_person_would_write_it() {
+		assert_eq!(versioned("Bash", "5.2.37"), "Bash 5.2.37");
+		assert_eq!(versioned("Python 3", "3.12.1"), "Python 3.12.1");
+		assert_eq!(versioned("PowerShell 7", "7.4.5"), "PowerShell 7.4.5");
+		assert_eq!(versioned("Python 3", "2.7.18"), "Python 3 2.7.18");
+		assert_eq!(
+			versioned("Bash (MSYS2's full)", "5.2.21"),
+			"Bash 5.2.21 (MSYS2's full)"
+		);
+
+		for (banner, want) in [
+			(
+				"GNU bash, version 5.2.37(1)-release (x86_64-pc-linux-gnu)",
+				Some("5.2.37"),
+			),
+			(
+				"GNU bash, version 3.2.57(1)-release (arm64-apple-darwin23)",
+				Some("3.2.57"),
+			),
+			("zsh 5.9 (x86_64-apple-darwin23.0)", Some("5.9")),
+			("fish, version 3.7.1", Some("3.7.1")),
+			("PowerShell 7.4.5", Some("7.4.5")),
+			("v20.11.1", Some("20.11.1")),
+			("tcsh 6.24.10 (Astron) 2022-02-07", Some("6.24.10")),
+			("@(#)MIRBSD KSH R59 2020/10/31", None),
+			("", None),
+		] {
+			assert_eq!(parse_version(banner).as_deref(), want, "{banner}");
+		}
+	}
+
+	// The probe reads what a program prints, and a program that never finishes
+	// is given up on at the limit, not waited for. Its child keeps the output
+	// open past that, which is the case that would hold the scan.
+	// Test ID: ErkT4k5
+	#[cfg(unix)]
+	#[test]
+	fn the_version_probe_gives_up_on_a_program_that_never_answers() {
+		use std::os::unix::fs::PermissionsExt;
+		let dir = crate::testdir::run_dir().join(format!("silkterm_probe_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let script = |name: &str, body: &str| {
+			let path = dir.join(name);
+			std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+			std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+			path
+		};
+		let talks = script(
+			"talks",
+			"echo 'GNU bash, version 5.2.37(1)-release (x86_64-pc-linux-gnu)'",
+		);
+		let hangs = script("hangs", "sleep 3");
+		let wait = std::time::Duration::from_millis(300);
+
+		// a script just written can be busy for a moment while another test's
+		// child still holds it
+		let said = (0..5).find_map(|_| {
+			probe_version(&talks, std::time::Duration::from_secs(5)).or_else(|| {
+				std::thread::sleep(std::time::Duration::from_millis(50));
+				None
+			})
+		});
+		assert_eq!(said.as_deref(), Some("5.2.37"));
+
+		let started = std::time::Instant::now();
+		assert_eq!(probe_version(&hangs, wait), None);
+		assert!(
+			started.elapsed() < std::time::Duration::from_secs(2),
+			"{:?}",
+			started.elapsed()
+		);
+
+		assert_eq!(probe_version(&dir.join("missing"), wait), None);
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 }
