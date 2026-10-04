@@ -961,8 +961,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The pipeline starts a process per item in two loops
 	- ID: 2026100314050014
 	- Type: Bug
-	- Status: Queued
-	- Needs local test suite run?: Yes
+	- Status: Done
+	- Needs local test suite run?: No
 	- Severity: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -973,7 +973,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: No fork per item in a loop. `[[ "${exe}" -ef "${want}" ]]` does the first check as a builtin. `printf '%(...)T'` and `${f##*/}` do the second.
 	- Note: gfs-rotate.bash is a shared helper, so the fix goes to its canonical copy too, which is outside this tree.
 	- Origin: 9ac3d4b (2026-09-26) for `fInUse`, b887d3d (2026-06-28) for gfs-rotate. No earlier review item. Confirmed for the fork count; the time is not measured.
-	- Test case: Owed. Time `fInUse` against a stand-in proc list, with a threshold.
+	- Reproduced: 20261004. Over a stand-in list of 2000 processes the old `fInUse` started 3,432 processes, two for each one with an exe. Rotating 200 files started 2,446 beyond the rm and mv it reports.
+	- Actual fix:
+		- `fInUse` tests each process with `-ef`, a builtin. Only a process running that same file goes on to the old readlink compare, so a hard link under another name still does not count. A file deleted and replaced while its old copy runs is still not in use.
+		- gfs-rotate works out a name's date with arithmetic and writes stamps and period keys with `printf '%(...)T'`. A time a clock change repeats gets the same instant date gave, and one it skips still falls back to the mtime. `basename` became `${f##*/}`.
+		- The canonical gfs-rotate.bash got the same hunks. Before the change it differed from this copy only in one comment word, "labelled", which it keeps.
+	- Swept: `fInUse` is the only /proc scan in the pipeline. `fOwnedRoot` in `utility/include/bench-common.bash` reads only the few processes a benchmark started, so it was left alone. `fNewest` in `cicd/utility/lint-report.bash` ran `basename` per run log and now uses `${f##*/}`, with the same output. The shcl clones under `forks/` have their own gfs-rotate copies and belong to that project.
+	- Note: Left alone: a name with no date still costs one fork for its mtime, but only once, since a kept file is renamed to one with a date. The rm or mv per changed file stays, since batching them could change which of two same-stamp files gets a name.
+	- Verified: 20261004. Both tests below pass, and both fail with the old code put back. Old and new gfs-rotate gave the same output and left the same files for 300 dated files, three runs each, in four time zones, and gave the same date for 429 names in 11 zones. Shellcheck is clean at the gate's level, and the test ID check passes.
+	- Branch: nofork
+	- Commit: 54436fb
+	- Test case: `cicd/tests/engine/run.bash` (Er2UgY7), "and 2000 processes cost a few forks, not one each", plus the new hard link and replaced file checks. `cicd/tests/rotate/run.bash` (Er2UgY9), "names are read and stamps written the way date does it" and "rotating 200 files costs a few forks beyond the files it changes". Both count forks exactly through `cicd/tests/_forks.bash`, or box-wide with a looser limit where that cannot be done.
+	- Acceptance signoff: Self-closed: reproduced, tests fail before and pass after, output unchanged.
+	- Closed: 20261004-151110
 	- Note: Code review 20261003 item 14.
 
 - Code style: the PowerShell scripts follow bash conventions
