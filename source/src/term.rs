@@ -107,9 +107,7 @@ impl EventProxy {
 	}
 
 	fn note_size(&self, size: WindowSize) {
-		if let Ok(mut held) = self.size.lock() {
-			*held = size;
-		}
+		*crate::locks::lock(&self.size) = size;
 	}
 }
 
@@ -227,15 +225,7 @@ impl EventListener for EventProxy {
 			// asking for the background color or the text area size waiting out
 			// its timeout on every start and then guessing.
 			ref query @ (Event::ColorRequest(..) | Event::TextAreaSizeRequest(..)) => {
-				let size = self.size.lock().map_or(
-					WindowSize {
-						num_cols: 0,
-						num_lines: 0,
-						cell_width: 0,
-						cell_height: 0,
-					},
-					|held| *held,
-				);
+				let size = *crate::locks::lock(&self.size);
 				match query_reply(query, size) {
 					Some(bytes) => self.proxy.send_event(UserEvent::PtyWrite(self.id, bytes)),
 					None => Ok(()),
@@ -471,6 +461,7 @@ impl TermInstance {
 	// and a command's while one runs - so a pgid that is neither answers None.
 	#[cfg(unix)]
 	fn running_program(&mut self) -> Option<String> {
+		// SAFETY: takes no pointer, so a closed or reused fd can only answer wrong.
 		let pgid = unsafe { libc::tcgetpgrp(self.master_fd) };
 		if pgid <= 0 || pgid as u32 == self.shell_pid {
 			return None;
@@ -552,6 +543,7 @@ impl TermInstance {
 	// different way, below.
 	#[cfg(unix)]
 	pub fn at_shell_prompt(&self) -> bool {
+		// SAFETY: takes no pointer, so a closed or reused fd can only answer wrong.
 		let pgid = unsafe { libc::tcgetpgrp(self.master_fd) };
 		pgid <= 0 || pgid as u32 == self.shell_pid
 	}
@@ -821,14 +813,17 @@ fn session_env() -> Option<std::collections::HashMap<String, String>> {
 }
 
 // Copy an environment block out of the OS's memory so the parsing above it can
-// be an ordinary function over a slice.
+// be an ordinary function over a slice. Safety: `block` must be a live block
+// that ends in two NULs, as CreateEnvironmentBlock makes.
 #[cfg(windows)]
 unsafe fn read_env_block(block: *const u16) -> Vec<u16> {
 	let mut len = 0;
 	// two NULs in a row close the block
+	// SAFETY: the walk stops at the two NULs, so no read passes the block's end.
 	while unsafe { *block.add(len) } != 0 || unsafe { *block.add(len + 1) } != 0 {
 		len += 1;
 	}
+	// SAFETY: the first `len + 1` units were all just read.
 	unsafe { std::slice::from_raw_parts(block, len + 1) }.to_vec()
 }
 
@@ -901,6 +896,7 @@ fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
 	// SAFETY: all-integer C struct, so zeroed is a valid value; the call writes
 	// at most `size` bytes into it and says how many it wrote.
 	let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
+	// SAFETY: as above.
 	let wrote = unsafe {
 		libc::proc_pidinfo(
 			pid,
@@ -1023,13 +1019,16 @@ fn command_child_name(shell_pid: u32, shell_started: u64) -> Option<String> {
 		TH32CS_SNAPPROCESS,
 	};
 
+	// SAFETY: takes no pointer.
 	let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
 	if snapshot == INVALID_HANDLE_VALUE {
 		return None; // can't tell: answer "no command", i.e. at the prompt
 	}
+	// SAFETY: a C struct of integers and a u16 array, so all zeros is valid.
 	let mut entry: PROCESSENTRY32W = unsafe { std::mem::zeroed() };
 	entry.dwSize = u32::try_from(size_of::<PROCESSENTRY32W>()).unwrap_or(0);
 	let mut found = None;
+	// SAFETY: a live snapshot handle, and a live entry with `dwSize` set.
 	let mut more = unsafe { Process32FirstW(snapshot, &raw mut entry) };
 	while more != 0 {
 		if entry.th32ParentProcessID == shell_pid
@@ -1038,8 +1037,10 @@ fn command_child_name(shell_pid: u32, shell_started: u64) -> Option<String> {
 			found = Some(exe_display_name(&entry.szExeFile));
 			break;
 		}
+		// SAFETY: as for Process32FirstW.
 		more = unsafe { Process32NextW(snapshot, &raw mut entry) };
 	}
+	// SAFETY: closed once, and not used after.
 	unsafe { CloseHandle(snapshot) };
 	found
 }
@@ -1081,10 +1082,12 @@ fn process_start_time(pid: u32) -> Option<u64> {
 		dwLowDateTime: 0,
 		dwHighDateTime: 0,
 	}; 3];
+	// SAFETY: takes no pointer.
 	let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
 	if process.is_null() {
 		return None;
 	}
+	// SAFETY: an open process handle and four live FILETIMEs to write.
 	let ok = unsafe {
 		GetProcessTimes(
 			process,
@@ -1094,6 +1097,7 @@ fn process_start_time(pid: u32) -> Option<u64> {
 			&raw mut ignored[2],
 		)
 	};
+	// SAFETY: closed once, and not used after.
 	unsafe { CloseHandle(process) };
 	(ok != 0).then(|| u64::from(created.dwHighDateTime) << 32 | u64::from(created.dwLowDateTime))
 }
@@ -1490,7 +1494,9 @@ mod tests {
 		use std::time::{Duration, Instant};
 
 		fn cpu_ms() -> u64 {
+			// SAFETY: an all-integer C struct, so all zeros is valid.
 			let mut usage = unsafe { std::mem::zeroed::<libc::rusage>() };
+			// SAFETY: writes into the live struct above.
 			unsafe { libc::getrusage(libc::RUSAGE_SELF, &raw mut usage) };
 			let ms = |t: libc::timeval| t.tv_sec as u64 * 1000 + t.tv_usec as u64 / 1000;
 			ms(usage.ru_utime) + ms(usage.ru_stime)

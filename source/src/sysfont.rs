@@ -411,6 +411,8 @@ mod platform {
 	// The menu font is what native chrome (menus/dialog labels) uses; family,
 	// size, weight and slant all honor the user's "Menu" font setting.
 	pub fn interface() -> super::UiFont {
+		// SAFETY: `ncm` is an all-integer struct, zeroed with `cbSize` set, that
+		// outlives the call, and a screen DC is released on the path that got it.
 		unsafe {
 			let mut ncm: NONCLIENTMETRICSW = core::mem::zeroed();
 			ncm.cbSize = core::mem::size_of::<NONCLIENTMETRICSW>() as u32;
@@ -452,6 +454,7 @@ mod platform {
 	}
 
 	fn message_font_pt() -> Option<f32> {
+		// SAFETY: as in `interface`.
 		unsafe {
 			let mut ncm: NONCLIENTMETRICSW = core::mem::zeroed();
 			ncm.cbSize = core::mem::size_of::<NONCLIENTMETRICSW>() as u32;

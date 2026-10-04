@@ -117,6 +117,13 @@ many_single_char_names = "allow"
 # present-with-value. Option<Option<T>> models that directly.
 option_option = "allow"
 
+# Errors are values. An unwrap or expect outside the tests says why it cannot
+# fail, in the reason of an allow at that site. Tests are exempt (clippy.toml).
+unwrap_used = "warn"
+expect_used = "warn"
+# Every unsafe block says what it relies on, in a `// SAFETY:` line above it.
+undocumented_unsafe_blocks = "warn"
+
 # Profiles only take effect in the workspace root manifest, so they live here,
 # not in source/Cargo.toml.
 

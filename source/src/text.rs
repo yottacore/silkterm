@@ -27,14 +27,14 @@ static MONO_FAMILY: RwLock<Option<&'static str>> = RwLock::new(None);
 static MONO_WEIGHT_BOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(700);
 
 fn mono_family() -> Option<&'static str> {
-	*MONO_FAMILY.read().unwrap()
+	*crate::locks::read(&MONO_FAMILY)
 }
 
 // Re-resolve and pin the monospace family for the current config + font system.
 fn pin_mono_family(fs: &FontSystem) {
 	use std::sync::atomic::Ordering;
 	let name = resolve_mono_family(fs).map(|family| &*Box::leak(family.into_boxed_str()));
-	*MONO_FAMILY.write().unwrap() = name;
+	*crate::locks::write(&MONO_FAMILY) = name;
 	// Snap "bold" to the family's boldest available face so it can never eject the
 	// family. No pinned name (generic Monospace) -> keep 700, nothing to snap to.
 	let bold = match name {
@@ -118,7 +118,7 @@ static UI_WEIGHT_BOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU
 static UI_ITALIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn ui_family() -> Option<&'static str> {
-	*UI_FAMILY.read().unwrap()
+	*crate::locks::read(&UI_FAMILY)
 }
 
 // Nearest face the family actually has to (weight, slant); None when the family
@@ -159,7 +159,7 @@ fn pin_ui_family(fs: &FontSystem) {
 	use std::sync::atomic::Ordering;
 	let sys_font = crate::sysfont::interface();
 	let name = resolve_ui_family(fs).map(|family| &*Box::leak(family.into_boxed_str()));
-	*UI_FAMILY.write().unwrap() = name;
+	*crate::locks::write(&UI_FAMILY) = name;
 	// honor the desktop's weight/slant only when its family actually resolved
 	// (a fallback sans shouldn't inherit "Bold" meant for another face)
 	let using_sys = match (name, &sys_font.family) {
@@ -466,6 +466,24 @@ struct TextGpu {
 	scrim: TextRenderer,
 }
 
+const DETACHED: &str = "text drawn while its GPU half is released";
+
+#[allow(
+	clippy::expect_used,
+	reason = "the window draws only between attach_gpu and detach_gpu (G114)"
+)]
+fn attached(gpu: &mut Option<TextGpu>) -> &mut TextGpu {
+	gpu.as_mut().expect(DETACHED)
+}
+
+#[allow(
+	clippy::expect_used,
+	reason = "the window draws only between attach_gpu and detach_gpu (G114)"
+)]
+fn attached_ref(gpu: Option<&TextGpu>) -> &TextGpu {
+	gpu.expect(DETACHED)
+}
+
 impl TextGpu {
 	fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
 		let cache = Cache::new(device);
@@ -543,9 +561,7 @@ impl TextCtx {
 	}
 
 	fn gpu(&mut self) -> &mut TextGpu {
-		self.gpu
-			.as_mut()
-			.expect("text drawn while its GPU half is released")
+		attached(&mut self.gpu)
 	}
 
 	// Fonts and metrics alone: everything the layout needs and nothing a device
@@ -911,8 +927,7 @@ impl TextCtx {
 			atlas,
 			viewport,
 			..
-		} = gpu.as_mut()
-			.expect("text drawn while its GPU half is released");
+		} = attached(gpu);
 		renderer.prepare_with_custom(
 			device,
 			queue,
@@ -926,10 +941,7 @@ impl TextCtx {
 	}
 
 	pub fn render(&self, pass: &mut wgpu::RenderPass<'_>) -> Result<(), glyphon::RenderError> {
-		let gpu = self
-			.gpu
-			.as_ref()
-			.expect("text drawn while its GPU half is released");
+		let gpu = attached_ref(self.gpu.as_ref());
 		gpu.renderer.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
@@ -945,9 +957,7 @@ impl TextCtx {
 			swash_cache,
 			..
 		} = self;
-		let gpu = gpu
-			.as_mut()
-			.expect("text drawn while its GPU half is released");
+		let gpu = attached(gpu);
 		gpu.overlay.prepare(
 			device,
 			queue,
@@ -963,10 +973,7 @@ impl TextCtx {
 		&self,
 		pass: &mut wgpu::RenderPass<'_>,
 	) -> Result<(), glyphon::RenderError> {
-		let gpu = self
-			.gpu
-			.as_ref()
-			.expect("text drawn while its GPU half is released");
+		let gpu = attached_ref(self.gpu.as_ref());
 		gpu.overlay.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
@@ -988,8 +995,7 @@ impl TextCtx {
 			scrim_atlas,
 			viewport,
 			..
-		} = gpu.as_mut()
-			.expect("text drawn while its GPU half is released");
+		} = attached(gpu);
 		scrim.prepare_with_custom(
 			device,
 			queue,
@@ -1006,10 +1012,7 @@ impl TextCtx {
 		&self,
 		pass: &mut wgpu::RenderPass<'_>,
 	) -> Result<(), glyphon::RenderError> {
-		let gpu = self
-			.gpu
-			.as_ref()
-			.expect("text drawn while its GPU half is released");
+		let gpu = attached_ref(self.gpu.as_ref());
 		gpu.scrim.render(&gpu.scrim_atlas, &gpu.viewport, pass)
 	}
 

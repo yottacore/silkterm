@@ -172,9 +172,9 @@ impl DialogWin {
 			use winit::platform::windows::WindowAttributesExtWindows;
 			attrs = attrs.with_owner_window(h.hwnd.get());
 		}
-		// SAFETY: the handle comes from the live main window on this same thread.
 		#[cfg(target_os = "macos")]
 		if parent.is_some() {
+			// SAFETY: the handle comes from the live main window on this same thread.
 			attrs = unsafe { attrs.with_parent_window(parent) };
 		}
 		// X11: create unmapped so WM_TRANSIENT_FOR + the modal/dialog hints are all
@@ -2076,6 +2076,8 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	let RawWindowHandle::Win32(h) = handle else {
 		return None;
 	};
+	// SAFETY: a dead hwnd only gets a null monitor, checked below. `info` is an
+	// all-integer struct, zeroed with `cbSize` set, and outlives the call.
 	unsafe {
 		let monitor = MonitorFromWindow(h.hwnd.get() as *mut _, MONITOR_DEFAULTTONEAREST);
 		if monitor.is_null() {

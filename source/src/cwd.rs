@@ -71,12 +71,12 @@ impl Reported {
 	// whoever said it. The scan tests want that; the window wants `live`.
 	#[cfg(test)]
 	pub fn get(&self) -> Option<PathBuf> {
-		Some(self.slot.lock().ok()?.as_ref()?.0.clone())
+		Some(crate::locks::lock(&self.slot).as_ref()?.0.clone())
 	}
 
 	// The last report, while the program that sent it is still running.
 	pub fn live(&self) -> Option<PathBuf> {
-		let (dir, speaker) = self.slot.lock().ok()?.clone()?;
+		let (dir, speaker) = crate::locks::lock(&self.slot).clone()?;
 		speaker.is_none_or(still_running).then_some(dir)
 	}
 
@@ -84,6 +84,7 @@ impl Reported {
 		#[cfg(unix)]
 		let speaker = self
 			.tty
+			// SAFETY: takes no pointer, and the fd is held open by the PTY (see `for_tty`).
 			.map(|fd| unsafe { libc::tcgetpgrp(fd) })
 			.filter(|pgid| *pgid > 0)
 			.map(|pgid| pgid as u32);
@@ -93,9 +94,7 @@ impl Reported {
 	}
 
 	fn set_from(&self, dir: PathBuf, speaker: Option<u32>) {
-		if let Ok(mut slot) = self.slot.lock() {
-			*slot = Some((dir, speaker));
-		}
+		*crate::locks::lock(&self.slot) = Some((dir, speaker));
 	}
 }
 
@@ -105,6 +104,7 @@ fn still_running(pid: u32) -> bool {
 	let Ok(pid) = libc::pid_t::try_from(pid) else {
 		return false;
 	};
+	// SAFETY: signal 0 sends nothing; it only asks whether the process exists.
 	let answer = unsafe { libc::kill(pid, 0) };
 	answer == 0 || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }

@@ -54,7 +54,7 @@ pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 		}
 	};
 	remove_on_any_exit(&path);
-	// Sound here: no PTY or render thread exists yet (set_var is unsafe under
+	// SAFETY: no PTY or render thread exists yet (set_var is unsafe under
 	// edition 2024 because of concurrent readers).
 	unsafe { std::env::set_var(ENV_SOCK, &path) };
 	std::thread::spawn(move || {
@@ -263,9 +263,11 @@ mod tests {
 		assert!(path.exists());
 		match how.to_str() {
 			Some("exit") => std::process::exit(2),
+			// SAFETY: raise takes no pointer; it signals this process.
 			Some("sigterm") => unsafe {
 				libc::raise(libc::SIGTERM);
 			},
+			// SAFETY: as above.
 			Some("sighup") => unsafe {
 				libc::raise(libc::SIGHUP);
 			},

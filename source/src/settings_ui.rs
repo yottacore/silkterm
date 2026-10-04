@@ -5021,7 +5021,8 @@ impl SettingsDialog {
 		let inner_w = (field.w - 2.0 * lay().field_pad).max(1.0);
 		let ahead = (lay().view_ahead * self.ui_scale()).min(inner_w / 3.0);
 		let (caret_x, text_w, sig) = {
-			let edit = self.edit.as_ref().unwrap(); // Some: row extracted above
+			#[allow(clippy::unwrap_used, reason = "Some: row extracted above")]
+			let edit = self.edit.as_ref().unwrap();
 			(
 				measure(&edit.buf[..edit.cur]),
 				measure(&edit.buf),
@@ -5029,7 +5030,8 @@ impl SettingsDialog {
 			)
 		};
 		let dragging = self.edit_drag.is_some();
-		let edit = self.edit.as_mut().unwrap(); // Some: row extracted above
+		#[allow(clippy::unwrap_used, reason = "Some: row extracted above")]
+		let edit = self.edit.as_mut().unwrap();
 		if sig == edit.last_sig {
 			edit.blink_t += dt;
 		} else {
