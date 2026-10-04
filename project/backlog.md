@@ -768,6 +768,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: everything that sizes the window or sets its state before it shows. The launch size and the monitor lookup (the one taken after a move still goes by the window), maximize, and `--fullscreen`, which had the same fault. The Settings dialog sets no window state.
 	- Verified: with two monitors, the old build changed size after showing in 2 of 2 launches and the fix in 0 of 2. Maximized, the old build showed at the restored size first in 10 of 10 launches and the fix in 0 of 10. `--fullscreen`, 3 of 3 against 0 of 5. Unit tests and clippy pass.
 	- Branch: sizejump
+	- Commit: 527a597
 	- Test case: `a_window_not_shown_yet_opens_on_the_monitor_under_the_pointer` (ErkYUyK), seen to fail with the pointer ignored. `cicd/tests/startsize/run.bash` (Erkahb9): a remembered size, three maximized launches and `--fullscreen` must each show once, at one size. On the old code the fullscreen case fails every run and the maximized one in most. The two-monitor case is not in it, since its display has one monitor.
 	- Acceptance signoff: Self-closed: both causes reproduced, fixed, and pinned by tests that fail on the old code. The look on the real desktop is owed.
 	- Closed: 20261004-094713
