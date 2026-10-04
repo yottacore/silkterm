@@ -32,7 +32,6 @@ use crate::pick::{self, Picker};
 use crate::profile::Profile;
 use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at};
 use crate::ui_spec::{self, Key, Kind, Layout, Spec, ui};
-use std::borrow::Cow;
 use winit::keyboard::ModifiersState;
 
 // The declared geometry, all of it in DIP (see the units note above).
@@ -107,7 +106,15 @@ fn users_own(mut settings: Settings) -> Settings {
 	settings
 }
 
+// Builds of the dialog colors on this thread. Test builds only.
+#[cfg(test)]
+thread_local! {
+	static DLG_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn dlg() -> Dlg {
+	#[cfg(test)]
+	DLG_BUILDS.with(|n| n.set(n.get() + 1));
 	let base = if config::is_dark() {
 		DARK_DLG
 	} else {
@@ -455,6 +462,49 @@ fn toggle_of(s: &Settings, key: Key) -> bool {
 		Key::ScrollbarAutoHide => s.scrollbar_auto_hide,
 		Key::Minimap => s.minimap,
 		keys_of!(slider | radio | color | text | hotkey | valueless | assoc) => false,
+	}
+}
+
+// The option a radio or dropdown row has chosen, read from `s`.
+fn radio_of(s: &Settings, key: Key) -> usize {
+	match key {
+		Key::PerfProfile => crate::profile::current(s).index(),
+		Key::BgFit => match s.wallpaper_default_fit {
+			config::Fit::Zoom => 1,
+			config::Fit::Stretch => 0,
+		},
+		// display order: SDF, DT, Dilate, Gaussian
+		Key::ScrimFunction => match s.text_scrim_function.as_str() {
+			"dt" => 1,
+			"dilate" => 2,
+			"gaussian" => 3,
+			_ => 0, // sdf
+		},
+		// display order: Exponential, Half-normal, Log, Sigmoid, Linear
+		Key::ScrimRamp => match s.text_scrim_ramp.as_str() {
+			"half_normal" => 1,
+			"log" => 2,
+			"sigmoid" => 3,
+			"linear" => 4,
+			_ => 0, // exp
+		},
+		Key::CursorAnimation => match s.cursor_animation.as_str() {
+			"phase" => 1,
+			"pulse_horizontal" => 3,
+			"pulse_both" => 4,
+			"none" => 0,
+			_ => 2, // pulse_vertical
+		},
+		Key::Theme => crate::theme::all_names(&s.user_themes)
+			.iter()
+			.position(|n| n.eq_ignore_ascii_case(s.theme.trim()))
+			.unwrap_or(0),
+		Key::ThemeMode => match s.theme_mode.as_str() {
+			"light" => 1,
+			"system" => 2,
+			_ => 0, // dark
+		},
+		keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => 0,
 	}
 }
 
@@ -857,6 +907,22 @@ pub struct TextItem {
 	pub scale: f32, // 1.0 normal; >1 for the prominent dialog title
 }
 
+// The row tops from the last walk down a tab, and what that walk started from.
+// A frame asks for a row's top from every rect helper, so `row_y` walks again
+// only when the tab, its first top, the line height or the shell count moves.
+#[derive(Default)]
+struct RowTops {
+	walked: Option<(usize, u32, u32, usize)>,
+	tops: Vec<f32>, // by spec index; a row the tab does not draw has `end`
+	end: f32,
+}
+
+// Walks down a tab to find its row tops, on this thread. Test builds only.
+#[cfg(test)]
+thread_local! {
+	static ROW_WALKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 pub struct SettingsDialog {
 	orig: Settings,
 	edited: Settings,
@@ -900,6 +966,7 @@ pub struct SettingsDialog {
 	pending: usize,       // highlighted option in the open popup (commits on Enter/click)
 	emenu: Option<EMenu>, // open field context menu (right-click / Menu key)
 	mouse: (f32, f32),    // last cursor pos (drag edge-autoscroll replays it)
+	row_tops: std::cell::RefCell<RowTops>,
 	// What the desktop says its monospace font is, read once when the dialog
 	// opens. Held rather than asked for at each use so a test can say what the
 	// desktop reports: that answer is the only thing that grays the system-font
@@ -1157,6 +1224,7 @@ impl SettingsDialog {
 			pending: 0,
 			emenu: None,
 			mouse: (0.0, 0.0),
+			row_tops: std::cell::RefCell::default(),
 			os_font: crate::sysfont::monospace().clone(),
 			assoc: crate::fileassoc::system(),
 			assoc_on: [false; 4],
@@ -2255,23 +2323,37 @@ impl SettingsDialog {
 	// Top of row `i` on the active tab (scrolled). Walks visible rows the same
 	// way tab_content_h does so heights and header gaps stay in sync.
 	fn row_y(&self, i: usize) -> f32 {
-		let mut y = self.rows_y0() - self.scroll;
+		let first = self.rows_y0() - self.scroll;
+		let shells = self.edited.shells.len();
+		let walk = (self.tab, first.to_bits(), self.line_h.to_bits(), shells);
+		let mut cache = self.row_tops.borrow_mut();
+		if cache.walked != Some(walk) {
+			self.walk_rows(&mut cache, first, shells);
+			cache.walked = Some(walk);
+		}
+		cache.tops.get(i).copied().unwrap_or(cache.end)
+	}
+	fn walk_rows(&self, cache: &mut RowTops, first: f32, shells: usize) {
+		#[cfg(test)]
+		ROW_WALKS.with(|n| n.set(n.get() + 1));
+		let mut drawn = vec![false; self.specs.len()];
+		cache.tops.clear();
+		cache.tops.resize(self.specs.len(), 0.0);
+		let mut y = first;
 		let mut prev: Option<&Spec> = None;
 		for (j, spec) in Self::visible(self.specs, self.tab) {
 			y += Self::gap_above(self.specs, j, self.tab, prev);
-			if j == i {
-				return y;
-			}
-			y += Self::row_advance(
-				self.specs,
-				j,
-				self.tab,
-				self.line_h,
-				self.edited.shells.len(),
-			);
+			cache.tops[j] = y;
+			drawn[j] = true;
+			y += Self::row_advance(self.specs, j, self.tab, self.line_h, shells);
 			prev = Some(spec);
 		}
-		y
+		cache.end = y;
+		for (top, drawn) in cache.tops.iter_mut().zip(drawn) {
+			if !drawn {
+				*top = y;
+			}
+		}
 	}
 	// ---- the shells grid ------------------------------------------------------
 	//
@@ -3728,20 +3810,23 @@ impl SettingsDialog {
 		self.adopt_theme();
 	}
 
-	// What the rows display. `edited` is the user's own values; while a profile
+	// What a row displays. `edited` is the user's own values; while a profile
 	// is chosen the governed rows show the profile's instead, and only the
 	// display - Apply still writes `edited`, so Custom finds everything intact.
-	fn shown(&self) -> Cow<'_, Settings> {
-		if crate::profile::current(&self.edited) == Profile::Custom {
-			Cow::Borrowed(&self.edited)
-		} else {
-			let mut settings = self.edited.clone();
-			crate::profile::apply(&mut settings);
-			Cow::Owned(settings)
+	// A profile sets the governed fields from its own values alone and leaves
+	// every other field as it was, so a governed row reads the profile's values
+	// and any other row reads `edited`, with nothing copied. That holds only
+	// while no row's value is read from both kinds of field;
+	// `a_shown_value_is_the_profile_laid_over_the_settings` checks every key.
+	fn shown(&self, key: Key) -> &Settings {
+		match crate::profile::current(&self.edited) {
+			Profile::Custom => &self.edited,
+			_ if !GOVERNED.contains(&key) => &self.edited,
+			profile => crate::profile::values_of(profile),
 		}
 	}
 	fn get_f32(&self, key: Key) -> f32 {
-		slider_of(&self.shown(), key)
+		slider_of(self.shown(key), key)
 	}
 	fn set_f32(&mut self, key: Key, value: f32) {
 		self.leave_profile(key);
@@ -3896,7 +3981,7 @@ impl SettingsDialog {
 	// default is on. `gate_ok` still asks the EFFECTIVE state, so the family
 	// field it overrides stays editable.
 	fn get_toggle(&self, key: Key) -> bool {
-		toggle_of(&self.shown(), key)
+		toggle_of(self.shown(key), key)
 	}
 	fn set_toggle(&mut self, key: Key, on: bool) {
 		self.leave_profile(key);
@@ -3945,46 +4030,7 @@ impl SettingsDialog {
 		}
 	}
 	fn get_radio(&self, key: Key) -> usize {
-		let s = self.shown();
-		match key {
-			Key::PerfProfile => crate::profile::current(&s).index(),
-			Key::BgFit => match s.wallpaper_default_fit {
-				config::Fit::Zoom => 1,
-				config::Fit::Stretch => 0,
-			},
-			// display order: SDF, DT, Dilate, Gaussian
-			Key::ScrimFunction => match s.text_scrim_function.as_str() {
-				"dt" => 1,
-				"dilate" => 2,
-				"gaussian" => 3,
-				_ => 0, // sdf
-			},
-			// display order: Exponential, Half-normal, Log, Sigmoid, Linear
-			Key::ScrimRamp => match s.text_scrim_ramp.as_str() {
-				"half_normal" => 1,
-				"log" => 2,
-				"sigmoid" => 3,
-				"linear" => 4,
-				_ => 0, // exp
-			},
-			Key::CursorAnimation => match s.cursor_animation.as_str() {
-				"phase" => 1,
-				"pulse_horizontal" => 3,
-				"pulse_both" => 4,
-				"none" => 0,
-				_ => 2, // pulse_vertical
-			},
-			Key::Theme => crate::theme::all_names(&s.user_themes)
-				.iter()
-				.position(|n| n.eq_ignore_ascii_case(s.theme.trim()))
-				.unwrap_or(0),
-			Key::ThemeMode => match s.theme_mode.as_str() {
-				"light" => 1,
-				"system" => 2,
-				_ => 0, // dark
-			},
-			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => 0,
-		}
+		radio_of(self.shown(key), key)
 	}
 	fn set_radio(&mut self, key: Key, idx: usize) {
 		self.leave_profile(key);
@@ -5512,6 +5558,7 @@ impl SettingsDialog {
 	// measured prefix widths
 	fn caret_quad(
 		&self,
+		colors: &Dlg,
 		out: &mut Vec<RectInstance>,
 		field: Rect,
 		measure: &mut impl FnMut(&str) -> f32,
@@ -5539,14 +5586,14 @@ impl SettingsDialog {
 				out.push(RectInstance {
 					pos: [x1, field.y + 2.0],
 					size: [x2 - x1, field.h - 4.0],
-					color: config::srgb_f32(mix3(dlg().field_bg, dlg().focus_out, 0.45)),
+					color: config::srgb_f32(mix3(colors.field_bg, colors.focus_out, 0.45)),
 					..Default::default()
 				});
 			}
 		}
 		let x = (left + caret_x).clamp(lo, hi - 1.5);
 		// smooth blink: fade the bar toward the field bg instead of a hard on/off
-		let color = mix3(dlg().field_bg, dlg().focus_out, edit.caret_alpha());
+		let color = mix3(colors.field_bg, colors.focus_out, edit.caret_alpha());
 		out.push(RectInstance {
 			pos: [x, field.y + 2.0],
 			size: [1.5, field.h - 4.0],
@@ -5563,6 +5610,7 @@ impl SettingsDialog {
 		line_h: f32,
 		mut measure: impl FnMut(&str) -> f32,
 	) -> (Vec<RectInstance>, Vec<RectInstance>) {
+		let colors = dlg();
 		let mut fixed = Vec::new();
 		let mut out = Vec::new();
 		let q = |x: f32, y: f32, w: f32, h: f32, color: [u8; 3]| RectInstance {
@@ -5595,16 +5643,16 @@ impl SettingsDialog {
 			self.rect.y,
 			self.rect.w,
 			self.rect.h,
-			dlg().panel_bg,
+			colors.panel_bg,
 		));
-		border(&mut fixed, self.rect, 1.0, dlg().panel_border);
+		border(&mut fixed, self.rect, 1.0, colors.panel_border);
 		// The tab strip: a recessed gutter closed off by a rule, with the tabs
 		// standing on that rule. The current one is a lighter gray rather than an
 		// accent - it says "you are here", which is not the same job as the
 		// highlight color's "look at this".
 		let gut = self.gutter_rect();
-		fixed.push(q(gut.x, gut.y, gut.w, gut.h, dlg().gutter));
-		fixed.push(q(gut.x, gut.y + gut.h, gut.w, 1.0, dlg().panel_border));
+		fixed.push(q(gut.x, gut.y, gut.w, gut.h, colors.gutter));
+		fixed.push(q(gut.x, gut.y + gut.h, gut.w, 1.0, colors.panel_border));
 		let strip = self.tab_strip();
 		for k in 0..self.tab_ws.len() {
 			let r = clip_rect(self.tab_rect(k), strip);
@@ -5617,20 +5665,20 @@ impl SettingsDialog {
 				r.y,
 				r.w,
 				r.h,
-				if active { dlg().tab_hl } else { dlg().tab_bg },
+				if active { colors.tab_hl } else { colors.tab_bg },
 			));
 		}
 		// scrollbar (only when the active tab overflows the viewport)
 		if let Some(thumb) = self.thumb() {
 			let vp = self.viewport();
-			fixed.push(q(thumb.x, vp.y, thumb.w, vp.h, dlg().track));
-			fixed.push(q(thumb.x, thumb.y, thumb.w, thumb.h, dlg().handle));
+			fixed.push(q(thumb.x, vp.y, thumb.w, vp.h, colors.track));
+			fixed.push(q(thumb.x, thumb.y, thumb.w, thumb.h, colors.handle));
 		}
 		// and the sideways one, in the clear space above the footer buttons
 		if let Some(thumb) = self.hthumb() {
 			let track = self.htrack();
-			fixed.push(q(track.x, track.y, track.w, track.h, dlg().track));
-			fixed.push(q(thumb.x, thumb.y, thumb.w, thumb.h, dlg().handle));
+			fixed.push(q(track.x, track.y, track.w, track.h, colors.track));
+			fixed.push(q(thumb.x, thumb.y, thumb.w, thumb.h, colors.handle));
 		}
 
 		for i in 0..self.specs.len() {
@@ -5638,13 +5686,13 @@ impl SettingsDialog {
 				continue;
 			}
 			if !self.specs[i].warning.is_empty() {
-				self.warning_quads(i, &mut out, &mut measure);
+				self.warning_quads(&colors, i, &mut out, &mut measure);
 			}
 			match self.specs[i].kind {
 				Kind::Slider { min, max, int } => {
 					let off = self.disabled(self.specs[i].key);
 					let track = self.track(i);
-					out.push(q(track.x, track.y, track.w, track.h, dlg().track));
+					out.push(q(track.x, track.y, track.w, track.h, colors.track));
 					let value = self.get_f32(self.specs[i].key);
 					let frac = ((value - min) / (max - min)).clamp(0.0, 1.0);
 					let handle_x = track.x + frac * track.w - SLIDER_HANDLE_W / 2.0;
@@ -5655,9 +5703,9 @@ impl SettingsDialog {
 						SLIDER_HANDLE_W,
 						track.h + 12.0,
 						if off {
-							dlg().panel_border
+							colors.panel_border
 						} else {
-							dlg().handle
+							colors.handle
 						},
 					));
 					// editable numeric field
@@ -5667,7 +5715,7 @@ impl SettingsDialog {
 						val_box.y,
 						val_box.w,
 						val_box.h,
-						dlg().field_bg,
+						colors.field_bg,
 					));
 					let focused = matches!(&self.edit, Some(edit) if edit.row == i);
 					if !self.ring_on(i, 1) {
@@ -5676,14 +5724,14 @@ impl SettingsDialog {
 							val_box,
 							1.0,
 							if focused && !off {
-								dlg().focus_out
+								colors.focus_out
 							} else {
-								dlg().panel_border
+								colors.panel_border
 							},
 						);
 					}
 					if focused && !off {
-						self.caret_quad(&mut out, val_box, &mut measure);
+						self.caret_quad(&colors, &mut out, val_box, &mut measure);
 					}
 				}
 				Kind::Color => {
@@ -5696,7 +5744,7 @@ impl SettingsDialog {
 						self.get_col(self.specs[i].key),
 					));
 					if !self.ring_on(i, 0) {
-						border(&mut out, swatch, 1.0, dlg().panel_border);
+						border(&mut out, swatch, 1.0, colors.panel_border);
 					}
 					let hex_box = self.hexbox(i);
 					out.push(q(
@@ -5704,7 +5752,7 @@ impl SettingsDialog {
 						hex_box.y,
 						hex_box.w,
 						hex_box.h,
-						dlg().field_bg,
+						colors.field_bg,
 					));
 					let focused = matches!(&self.edit, Some(edit) if edit.row == i);
 					if !self.ring_on(i, 1) {
@@ -5713,14 +5761,14 @@ impl SettingsDialog {
 							hex_box,
 							1.0,
 							if focused {
-								dlg().focus_out
+								colors.focus_out
 							} else {
-								dlg().panel_border
+								colors.panel_border
 							},
 						);
 					}
 					if focused {
-						self.caret_quad(&mut out, hex_box, &mut measure);
+						self.caret_quad(&colors, &mut out, hex_box, &mut measure);
 					}
 				}
 				Kind::Text => {
@@ -5730,7 +5778,7 @@ impl SettingsDialog {
 						text_box.y,
 						text_box.w,
 						text_box.h,
-						dlg().field_bg,
+						colors.field_bg,
 					));
 					let focused = matches!(&self.edit, Some(edit) if edit.row == i);
 					if !self.ring_on(i, 0) {
@@ -5739,14 +5787,14 @@ impl SettingsDialog {
 							text_box,
 							1.0,
 							if focused {
-								dlg().focus_out
+								colors.focus_out
 							} else {
-								dlg().panel_border
+								colors.panel_border
 							},
 						);
 					}
 					if focused {
-						self.caret_quad(&mut out, text_box, &mut measure);
+						self.caret_quad(&colors, &mut out, text_box, &mut measure);
 					}
 				}
 				Kind::Hotkey(_) => {
@@ -5756,7 +5804,7 @@ impl SettingsDialog {
 						key_box.y,
 						key_box.w,
 						key_box.h,
-						dlg().field_bg,
+						colors.field_bg,
 					));
 					if !self.ring_on(i, 0) {
 						border(
@@ -5764,9 +5812,9 @@ impl SettingsDialog {
 							key_box,
 							1.0,
 							if self.capture == Some(i) {
-								dlg().focus_out
+								colors.focus_out
 							} else {
-								dlg().panel_border
+								colors.panel_border
 							},
 						);
 					}
@@ -5779,9 +5827,9 @@ impl SettingsDialog {
 						check_box.y,
 						check_box.w,
 						check_box.h,
-						dlg().field_bg,
+						colors.field_bg,
 					));
-					border(&mut out, check_box, 1.0, dlg().panel_border);
+					border(&mut out, check_box, 1.0, colors.panel_border);
 					// filled inner square when on (the checkmark glyph is drawn in texts)
 					if self.get_toggle(self.specs[i].key) {
 						out.push(q(
@@ -5790,9 +5838,9 @@ impl SettingsDialog {
 							check_box.w - 8.0,
 							check_box.h - 8.0,
 							if off {
-								dlg().panel_border
+								colors.panel_border
 							} else {
-								dlg().handle
+								colors.handle
 							},
 						));
 					}
@@ -5801,8 +5849,8 @@ impl SettingsDialog {
 					for p in 0u16..2 {
 						let off = self.disabled(keys[p as usize]);
 						let bx = self.dual_box(i, p);
-						out.push(q(bx.x, bx.y, bx.w, bx.h, dlg().field_bg));
-						border(&mut out, bx, 1.0, dlg().panel_border);
+						out.push(q(bx.x, bx.y, bx.w, bx.h, colors.field_bg));
+						border(&mut out, bx, 1.0, colors.panel_border);
 						if self.get_toggle(keys[p as usize]) {
 							out.push(q(
 								bx.x + 4.0,
@@ -5810,9 +5858,9 @@ impl SettingsDialog {
 								bx.w - 8.0,
 								bx.h - 8.0,
 								if off {
-									dlg().panel_border
+									colors.panel_border
 								} else {
-									dlg().handle
+									colors.handle
 								},
 							));
 						}
@@ -5827,16 +5875,16 @@ impl SettingsDialog {
 							radio_rect.y,
 							radio_rect.w,
 							radio_rect.h,
-							dlg().field_bg,
+							colors.field_bg,
 						));
-						border(&mut out, radio_rect, 1.0, dlg().panel_border);
+						border(&mut out, radio_rect, 1.0, colors.panel_border);
 						if k == sel {
 							out.push(q(
 								radio_rect.x + 4.0,
 								radio_rect.y + 4.0,
 								radio_rect.w - 8.0,
 								radio_rect.h - 8.0,
-								dlg().handle,
+								colors.handle,
 							));
 						}
 					}
@@ -5845,16 +5893,16 @@ impl SettingsDialog {
 					// collapsed box only; the open popup is drawn in the overlay pass
 					let off = self.disabled(self.specs[i].key);
 					let box_r = self.dd_box(i);
-					out.push(q(box_r.x, box_r.y, box_r.w, box_r.h, dlg().field_bg));
+					out.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 					if !self.ring_on(i, 0) {
 						border(
 							&mut out,
 							box_r,
 							1.0,
 							if self.open == Some(i) && !off {
-								dlg().focus_out
+								colors.focus_out
 							} else {
-								dlg().panel_border
+								colors.panel_border
 							},
 						);
 					}
@@ -5866,17 +5914,19 @@ impl SettingsDialog {
 					for p in 0..captions.len() as u16 {
 						let r = self.row_btn_rect(i, p);
 						let fill = if self.pressed_row == Some((i, p)) {
-							dlg().btn_hl
+							colors.btn_hl
 						} else {
-							dlg().btn_bg
+							colors.btn_bg
 						};
 						out.push(q(r.x, r.y, r.w, r.h, fill));
 						if !self.ring_on(i, p) {
-							border(&mut out, r, 1.0, dlg().panel_border);
+							border(&mut out, r, 1.0, colors.panel_border);
 						}
 					}
 				}
-				Kind::ShellList => self.shell_rects(i, &mut out, &q, &border, &mut measure),
+				Kind::ShellList => {
+					self.shell_rects(&colors, i, &mut out, &q, &border, &mut measure);
+				}
 				Kind::Header(_) => {
 					let y = self.header_rule_y(i);
 					let x = self.content_x() + lay().pad;
@@ -5885,7 +5935,7 @@ impl SettingsDialog {
 						y,
 						self.layout_w() - lay().pad * 2.0,
 						1.0,
-						dlg().panel_border,
+						colors.panel_border,
 					));
 				}
 			}
@@ -5906,15 +5956,15 @@ impl SettingsDialog {
 					w: r.w + inset * 2.0,
 					h: r.h + inset * 2.0,
 				};
-				border(&mut out, ring, 1.0, dlg().focus_out);
+				border(&mut out, ring, 1.0, colors.focus_out);
 			}
 		}
 		for (btn_idx, (_, r, label)) in self.buttons().into_iter().enumerate() {
 			// pressed button fills with the highlight for click feedback
 			let fill = if self.pressed == Some(btn_idx) {
-				dlg().btn_hl
+				colors.btn_hl
 			} else {
-				dlg().btn_bg
+				colors.btn_bg
 			};
 			fixed.push(q(r.x, r.y, r.w, r.h, fill));
 			let ring = self.focus == Some(Focus::Button(btn_idx));
@@ -5922,11 +5972,11 @@ impl SettingsDialog {
 			// the others take the same quiet gray the tabs use, so "this is the
 			// one Enter fires" stays a single, readable signal.
 			let outline = if ring {
-				dlg().focus_out
+				colors.focus_out
 			} else if btn_idx == 2 {
-				dlg().btn_hl
+				colors.btn_hl
 			} else {
-				dlg().panel_border
+				colors.panel_border
 			};
 			border(&mut fixed, r, if ring { 2.0 } else { 1.0 }, outline);
 			// Alt held: underline the accelerator (the label's first letter). The
@@ -5935,7 +5985,7 @@ impl SettingsDialog {
 			if self.alt && !label.is_empty() {
 				let tx = r.x + (r.w - measure(label)).max(0.0) / 2.0;
 				let ty = r.y + (r.h - line_h) / 2.0 + line_h * 0.82;
-				fixed.push(q(tx, ty, line_h * 0.5, 1.5, dlg().text));
+				fixed.push(q(tx, ty, line_h * 0.5, 1.5, colors.text));
 			}
 		}
 		(fixed, out)
@@ -5951,6 +6001,7 @@ impl SettingsDialog {
 	// decide where it goes.
 	fn shell_rects(
 		&self,
+		colors: &Dlg,
 		i: usize,
 		out: &mut Vec<RectInstance>,
 		q: &impl Fn(f32, f32, f32, f32, [u8; 3]) -> RectInstance,
@@ -5959,7 +6010,7 @@ impl SettingsDialog {
 	) {
 		let scale = self.ui_scale();
 		let mut field = |out: &mut Vec<RectInstance>, r: Rect, row: usize, part: u16| {
-			out.push(q(r.x, r.y, r.w, r.h, dlg().field_bg));
+			out.push(q(r.x, r.y, r.w, r.h, colors.field_bg));
 			let focused = matches!(&self.edit, Some(edit) if edit.row == row);
 			if !self.ring_on(i, part) {
 				border(
@@ -5967,14 +6018,14 @@ impl SettingsDialog {
 					r,
 					1.0,
 					if focused {
-						dlg().focus_out
+						colors.focus_out
 					} else {
-						dlg().panel_border
+						colors.panel_border
 					},
 				);
 			}
 			if focused {
-				self.caret_quad(out, r, measure);
+				self.caret_quad(colors, out, r, measure);
 			}
 		};
 		for k in 0..self.edited.shells.len() {
@@ -5994,8 +6045,8 @@ impl SettingsDialog {
 			);
 			// Active checkbox, drawn the way every other checkbox in the dialog is
 			let box_r = self.shell_active_box(i, k);
-			out.push(q(box_r.x, box_r.y, box_r.w, box_r.h, dlg().field_bg));
-			border(out, box_r, 1.0, dlg().panel_border);
+			out.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
+			border(out, box_r, 1.0, colors.panel_border);
 			if self.edited.shells.get(k).is_some_and(|e| e.active) {
 				let inset = (box_r.w * 0.25).max(3.0);
 				out.push(q(
@@ -6003,7 +6054,7 @@ impl SettingsDialog {
 					box_r.y + inset,
 					box_r.w - inset * 2.0,
 					box_r.h - inset * 2.0,
-					dlg().handle,
+					colors.handle,
 				));
 			}
 			// The grip: three stacked bars, the shape every reorderable list uses.
@@ -6024,27 +6075,27 @@ impl SettingsDialog {
 					top + n as f32 * pitch,
 					bar_w,
 					bar_h,
-					if held { dlg().handle } else { dlg().dim },
+					if held { colors.handle } else { colors.dim },
 				));
 			}
 			// Remove, between the command and the date. Red, because it is the
 			// one control in the whole dialog that destroys something.
 			let r = self.shell_remove_box(i, k);
-			out.push(q(r.x, r.y, r.w, r.h, dlg().btn_bg));
+			out.push(q(r.x, r.y, r.w, r.h, colors.btn_bg));
 			if !self.ring_on(i, shell_part_index(k, ShellPart::Remove)) {
-				border(out, r, 1.0, dlg().panel_border);
+				border(out, r, 1.0, colors.panel_border);
 			}
 			out.push(RectInstance {
 				pos: [r.x, r.y],
 				size: [r.w, r.h],
-				color: config::srgb_f32(dlg().danger),
+				color: config::srgb_f32(colors.danger),
 				params: [1.0, (r.w * 0.12).max(1.2)],
 			});
 		}
 		let add = self.shell_add_box(i);
-		out.push(q(add.x, add.y, add.w, add.h, dlg().btn_bg));
+		out.push(q(add.x, add.y, add.w, add.h, colors.btn_bg));
 		if !self.ring_on(i, self.parts_of(i).saturating_sub(1)) {
-			border(out, add, 1.0, dlg().panel_border);
+			border(out, add, 1.0, colors.panel_border);
 		}
 	}
 
@@ -6053,15 +6104,16 @@ impl SettingsDialog {
 	// relied on to carry the sign. Not red, since red is only for removal.
 	fn warning_quads(
 		&self,
+		colors: &Dlg,
 		i: usize,
 		out: &mut Vec<RectInstance>,
 		measure: &mut impl FnMut(&str) -> f32,
 	) {
 		let r = self.warning_box(i, measure);
 		let color = if self.disabled(self.specs[i].key) {
-			dlg().dim
+			colors.dim
 		} else {
-			dlg().text
+			colors.text
 		};
 		out.push(RectInstance {
 			pos: [r.x, r.y],
@@ -6071,7 +6123,7 @@ impl SettingsDialog {
 		});
 		let stroke = (r.w * 0.13).max(1.5);
 		let x = r.x + (r.w - stroke) / 2.0;
-		let cut = config::srgb_f32(dlg().panel_bg);
+		let cut = config::srgb_f32(colors.panel_bg);
 		for (top, h) in [(0.36, 0.32), (0.76, 0.0)] {
 			out.push(RectInstance {
 				pos: [x, r.y + r.h * top],
@@ -6083,12 +6135,13 @@ impl SettingsDialog {
 	}
 
 	fn texts_dip(&self, line_h: f32, mut measure: impl FnMut(&str) -> f32) -> Vec<TextItem> {
+		let colors = dlg();
 		let mut out = Vec::new();
 		let mk = |text: String, x: f32, y: f32| TextItem {
 			text,
 			x,
 			y,
-			color: dlg().text,
+			color: colors.text,
 			clip: None,
 			bold: false,
 			scale: 1.0,
@@ -6099,7 +6152,11 @@ impl SettingsDialog {
 		for (k, title) in tab_titles().iter().enumerate() {
 			let r = self.tab_rect(k);
 			out.push(TextItem {
-				color: if k == self.tab { dlg().text } else { dlg().dim },
+				color: if k == self.tab {
+					colors.text
+				} else {
+					colors.dim
+				},
 				clip: Some(strip),
 				..mk(
 					(*title).into(),
@@ -6138,7 +6195,7 @@ impl SettingsDialog {
 				continue;
 			}
 			let off = self.disabled(self.specs[i].key);
-			let label_color = if off { dlg().dim } else { dlg().text };
+			let label_color = if off { colors.dim } else { colors.text };
 			// a half-line whose control says what it is carries no label at all
 			if !self.specs[i].label.is_empty() {
 				out.push(TextItem {
@@ -6152,9 +6209,9 @@ impl SettingsDialog {
 				let revert_rect = self.revert_box(i);
 				out.push(TextItem {
 					color: if self.row_is_default(i) {
-						dlg().dim
+						colors.dim
 					} else {
-						dlg().handle
+						colors.handle
 					},
 					clip: Some(vp),
 					..mk(ui().icons.revert.into(), revert_rect.x + 4.0, ty)
@@ -6218,10 +6275,10 @@ impl SettingsDialog {
 							} else {
 								val
 							},
-							dlg().dim,
+							colors.dim,
 						)
 					} else {
-						(val, dlg().text)
+						(val, colors.text)
 					};
 					out.push(TextItem {
 						color,
@@ -6241,7 +6298,7 @@ impl SettingsDialog {
 					if !shown.is_empty() {
 						let width = measure(&shown);
 						out.push(TextItem {
-							color: if off { dlg().dim } else { dlg().text },
+							color: if off { colors.dim } else { colors.text },
 							clip: Some(intersect(key_box)),
 							..mk(shown, tx, ty)
 						});
@@ -6249,7 +6306,7 @@ impl SettingsDialog {
 					}
 					if !note.is_empty() {
 						out.push(TextItem {
-							color: dlg().dim,
+							color: colors.dim,
 							clip: Some(intersect(key_box)),
 							..mk(note, tx, ty)
 						});
@@ -6258,7 +6315,7 @@ impl SettingsDialog {
 				Kind::Dual { keys, labels } => {
 					for p in 0u16..2 {
 						let off = self.disabled(keys[p as usize]);
-						let color = if off { dlg().dim } else { dlg().text };
+						let color = if off { colors.dim } else { colors.text };
 						let bx = self.dual_box(i, p);
 						out.push(TextItem {
 							color,
@@ -6269,7 +6326,7 @@ impl SettingsDialog {
 				}
 				Kind::Radio(options) => {
 					let off = self.disabled(self.specs[i].key);
-					let color = if off { dlg().dim } else { dlg().text };
+					let color = if off { colors.dim } else { colors.text };
 					for (k, opt) in options.iter().enumerate() {
 						let radio_rect = self.radio_box(i, k);
 						out.push(TextItem {
@@ -6281,7 +6338,7 @@ impl SettingsDialog {
 				}
 				Kind::Dropdown(_) => {
 					let off = self.disabled(self.specs[i].key);
-					let color = if off { dlg().dim } else { dlg().text };
+					let color = if off { colors.dim } else { colors.text };
 					let box_r = self.dd_box(i);
 					let label = self.dd_closed_label(i);
 					out.push(TextItem {
@@ -6303,9 +6360,9 @@ impl SettingsDialog {
 					for (p, caption) in captions.iter().enumerate() {
 						let r = self.row_btn_rect(i, p as u16);
 						let color = if self.part_disabled(i, p as u16) {
-							dlg().dim
+							colors.dim
 						} else {
-							dlg().text
+							colors.text
 						};
 						let lx = r.x + (r.w - measure(caption)).max(0.0) / 2.0;
 						out.push(TextItem {
@@ -6328,7 +6385,7 @@ impl SettingsDialog {
 						("Active", cols.active),
 					] {
 						out.push(TextItem {
-							color: dlg().dim,
+							color: colors.dim,
 							clip: Some(vp),
 							..mk((*title).to_string(), tx, head_y)
 						});
@@ -6340,7 +6397,11 @@ impl SettingsDialog {
 						let cmd_row = shell_field_row(k, true);
 						let entry = &self.edited.shells[k];
 						// an inactive shell is still listed, but reads as parked
-						let color = if entry.active { dlg().text } else { dlg().dim };
+						let color = if entry.active {
+							colors.text
+						} else {
+							colors.dim
+						};
 						let text = |row: usize, stored: &str| -> String {
 							match &self.edit {
 								Some(edit) if edit.row == row => edit.buf.clone(),
@@ -6358,7 +6419,7 @@ impl SettingsDialog {
 						});
 						let cmd = text(cmd_row, &entry.command);
 						let (cmd, cmd_color) = if cmd.is_empty() {
-							("(required)".to_string(), dlg().dim)
+							("(required)".to_string(), colors.dim)
 						} else {
 							(cmd, color)
 						};
@@ -6378,7 +6439,7 @@ impl SettingsDialog {
 							entry.last_seen.clone()
 						};
 						out.push(TextItem {
-							color: dlg().dim,
+							color: colors.dim,
 							clip: Some(vp),
 							..mk(
 								seen_text,
@@ -6409,7 +6470,7 @@ impl SettingsDialog {
 	// The open dropdown's popup, as (rects, text), for a second (LoadOp::Load) pass
 	// drawn on top of the dialog so the covered rows' text can't bleed through the
 	// opaque box (same reason the context menu uses its own pass). Empty when closed.
-	fn dropdown_overlay(&self) -> (Vec<RectInstance>, Vec<TextItem>) {
+	fn dropdown_overlay(&self, colors: &Dlg) -> (Vec<RectInstance>, Vec<TextItem>) {
 		let mut rects = Vec::new();
 		let mut texts = Vec::new();
 		let Some(i) = self.open else {
@@ -6427,36 +6488,36 @@ impl SettingsDialog {
 			color: config::srgb_f32(color),
 			..Default::default()
 		};
-		rects.push(q(popup.x, popup.y, popup.w, popup.h, dlg().field_bg));
+		rects.push(q(popup.x, popup.y, popup.w, popup.h, colors.field_bg));
 		let t = 1.0;
 		rects.push(q(
 			popup.x - t,
 			popup.y - t,
 			popup.w + 2.0 * t,
 			t,
-			dlg().panel_border,
+			colors.panel_border,
 		));
 		rects.push(q(
 			popup.x - t,
 			popup.y + popup.h,
 			popup.w + 2.0 * t,
 			t,
-			dlg().panel_border,
+			colors.panel_border,
 		));
-		rects.push(q(popup.x - t, popup.y, t, popup.h, dlg().panel_border));
+		rects.push(q(popup.x - t, popup.y, t, popup.h, colors.panel_border));
 		rects.push(q(
 			popup.x + popup.w,
 			popup.y,
 			t,
 			popup.h,
-			dlg().panel_border,
+			colors.panel_border,
 		));
 		let sel = self.get_radio(self.specs[i].key);
 		let mk = |text: String, x: f32, y: f32| TextItem {
 			text,
 			x,
 			y,
-			color: dlg().text,
+			color: colors.text,
 			clip: None,
 			bold: false,
 			scale: 1.0,
@@ -6464,7 +6525,7 @@ impl SettingsDialog {
 		for (k, opt) in options.iter().enumerate() {
 			let r = self.dd_item_rect(i, n, k);
 			if k == self.pending {
-				rects.push(q(r.x + 1.0, r.y, r.w - 2.0, r.h, dlg().btn_hl));
+				rects.push(q(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
 			}
 			let ty = r.y + (r.h - self.line_h) / 2.0;
 			if k == sel {
@@ -6480,6 +6541,7 @@ impl SettingsDialog {
 	// the same way.
 	fn prompt_overlay(
 		&self,
+		colors: &Dlg,
 		measure: &mut impl FnMut(&str) -> f32,
 	) -> (Vec<RectInstance>, Vec<TextItem>) {
 		let mut rects = Vec::new();
@@ -6503,7 +6565,7 @@ impl SettingsDialog {
 			text,
 			x,
 			y,
-			color: dlg().text,
+			color: colors.text,
 			clip: None,
 			bold: false,
 			scale: 1.0,
@@ -6517,8 +6579,8 @@ impl SettingsDialog {
 			..Default::default()
 		});
 		let box_r = self.prompt_rect();
-		rects.push(q(box_r.x, box_r.y, box_r.w, box_r.h, dlg().panel_bg));
-		border(&mut rects, box_r, 1.0, dlg().panel_border);
+		rects.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.panel_bg));
+		border(&mut rects, box_r, 1.0, colors.panel_border);
 		// a long message is cut at the box's edge rather than drawn past it
 		texts.push(TextItem {
 			clip: Some(box_r),
@@ -6529,13 +6591,13 @@ impl SettingsDialog {
 			)
 		});
 		if let Some(field) = self.prompt_field_rect() {
-			rects.push(q(field.x, field.y, field.w, field.h, dlg().field_bg));
+			rects.push(q(field.x, field.y, field.w, field.h, colors.field_bg));
 			if prompt.focus == PromptFocus::Field {
-				border(&mut rects, field, 1.0, dlg().focus_out);
+				border(&mut rects, field, 1.0, colors.focus_out);
 			} else {
-				border(&mut rects, field, 1.0, dlg().panel_border);
+				border(&mut rects, field, 1.0, colors.panel_border);
 			}
-			self.caret_quad(&mut rects, field, measure);
+			self.caret_quad(colors, &mut rects, field, measure);
 			let view = self.edit.as_ref().map_or(0.0, |e| e.view);
 			texts.push(TextItem {
 				clip: Some(field),
@@ -6549,7 +6611,7 @@ impl SettingsDialog {
 		if let Some(warn) = &prompt.warn {
 			let y = self.prompt_btn_rect(PromptFocus::Ok).y - (self.line_h + lay().row_pad);
 			texts.push(TextItem {
-				color: dlg().btn_hl,
+				color: colors.btn_hl,
 				clip: Some(box_r),
 				..mk(warn.clone(), box_r.x + lay().pad, y)
 			});
@@ -6559,16 +6621,16 @@ impl SettingsDialog {
 				continue;
 			}
 			let r = self.prompt_btn_rect(part);
-			rects.push(q(r.x, r.y, r.w, r.h, dlg().btn_bg));
+			rects.push(q(r.x, r.y, r.w, r.h, colors.btn_bg));
 			let ring = prompt.focus == part;
 			// OK is the default here too, so it keeps the highlight outline when
 			// the keyboard is elsewhere
 			let outline = if ring {
-				dlg().focus_out
+				colors.focus_out
 			} else if part == PromptFocus::Ok {
-				dlg().btn_hl
+				colors.btn_hl
 			} else {
-				dlg().panel_border
+				colors.panel_border
 			};
 			border(&mut rects, r, if ring { 2.0 } else { 1.0 }, outline);
 			let lx = r.x + (r.w - measure(caption)).max(0.0) / 2.0;
@@ -6581,6 +6643,7 @@ impl SettingsDialog {
 	// way the name box is.
 	fn pick_overlay(
 		&self,
+		colors: &Dlg,
 		measure: &mut impl FnMut(&str) -> f32,
 	) -> (Vec<RectInstance>, Vec<TextItem>) {
 		let mut rects = Vec::new();
@@ -6604,7 +6667,7 @@ impl SettingsDialog {
 			text,
 			x,
 			y,
-			color: dlg().text,
+			color: colors.text,
 			clip: None,
 			bold: false,
 			scale: 1.0,
@@ -6629,9 +6692,9 @@ impl SettingsDialog {
 			g.outer.y,
 			g.outer.w,
 			g.outer.h,
-			dlg().panel_bg,
+			colors.panel_bg,
 		));
-		border(&mut rects, g.outer, 1.0, dlg().panel_border);
+		border(&mut rects, g.outer, 1.0, colors.panel_border);
 		texts.push(TextItem {
 			clip: Some(g.title),
 			..mk(self.specs[p.row].label.to_string(), g.title.x, g.title.y)
@@ -6657,9 +6720,9 @@ impl SettingsDialog {
 			(g.strip, p.focus == pick::Focus::Hue),
 		] {
 			if on {
-				border(&mut rects, r, 2.0, dlg().focus_out);
+				border(&mut rects, r, 2.0, colors.focus_out);
 			} else {
-				border(&mut rects, r, 1.0, dlg().panel_border);
+				border(&mut rects, r, 1.0, colors.panel_border);
 			}
 		}
 		let rgb = p.rgb();
@@ -6700,16 +6763,16 @@ impl SettingsDialog {
 					row_text_y(box_r.y, box_r.h),
 				)
 			});
-			rects.push(q(box_r.x, box_r.y, box_r.w, box_r.h, dlg().field_bg));
+			rects.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 			let open = p.focus == pick::Focus::Field(f);
 			border(
 				&mut rects,
 				box_r,
 				1.0,
 				if open {
-					dlg().focus_out
+					colors.focus_out
 				} else {
-					dlg().panel_border
+					colors.panel_border
 				},
 			);
 			let (txt, view) = match &self.edit {
@@ -6717,7 +6780,7 @@ impl SettingsDialog {
 				_ => (f.text(p.hsv), 0.0),
 			};
 			if open {
-				self.caret_quad(&mut rects, box_r, measure);
+				self.caret_quad(colors, &mut rects, box_r, measure);
 			}
 			texts.push(TextItem {
 				clip: Some(box_r),
@@ -6733,14 +6796,14 @@ impl SettingsDialog {
 			(pick::Focus::Cancel, g.cancel, "Cancel"),
 			(pick::Focus::Ok, g.ok, "OK"),
 		] {
-			rects.push(q(r.x, r.y, r.w, r.h, dlg().btn_bg));
+			rects.push(q(r.x, r.y, r.w, r.h, colors.btn_bg));
 			let ring = p.focus == part;
 			let outline = if ring {
-				dlg().focus_out
+				colors.focus_out
 			} else if part == pick::Focus::Ok {
-				dlg().btn_hl
+				colors.btn_hl
 			} else {
-				dlg().panel_border
+				colors.panel_border
 			};
 			border(&mut rects, r, if ring { 2.0 } else { 1.0 }, outline);
 			let lx = r.x + (r.w - measure(caption)).max(0.0) / 2.0;
@@ -6762,12 +6825,13 @@ impl SettingsDialog {
 		&self,
 		measure: &mut impl FnMut(&str) -> f32,
 	) -> (Vec<RectInstance>, Vec<TextItem>) {
-		let (mut rects, mut texts) = self.dropdown_overlay();
+		let colors = dlg();
+		let (mut rects, mut texts) = self.dropdown_overlay(&colors);
 		// the prompt box sits over everything, including an open popup
-		let (prompt_rects, prompt_texts) = self.prompt_overlay(measure);
+		let (prompt_rects, prompt_texts) = self.prompt_overlay(&colors, measure);
 		rects.extend(prompt_rects);
 		texts.extend(prompt_texts);
-		let (pick_rects, pick_texts) = self.pick_overlay(measure);
+		let (pick_rects, pick_texts) = self.pick_overlay(&colors, measure);
 		rects.extend(pick_rects);
 		texts.extend(pick_texts);
 		if self.emenu.is_none() {
@@ -6786,21 +6850,21 @@ impl SettingsDialog {
 			menu.y - t,
 			menu.w + 2.0 * t,
 			menu.h + 2.0 * t,
-			dlg().panel_border,
+			colors.panel_border,
 		));
-		rects.push(q(menu.x, menu.y, menu.w, menu.h, dlg().field_bg));
+		rects.push(q(menu.x, menu.y, menu.w, menu.h, colors.field_bg));
 		let hover = self.emenu.as_ref().and_then(|m| m.hover);
 		for (k, (label, _)) in EDIT_MENU.iter().enumerate() {
 			let r = self.em_item_rect(k);
 			let enabled = self.em_enabled(k);
 			if enabled && hover == Some(k) {
-				rects.push(q(r.x + 1.0, r.y, r.w - 2.0, r.h, dlg().btn_hl));
+				rects.push(q(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
 			}
 			texts.push(TextItem {
 				text: (*label).into(),
 				x: r.x + 10.0,
 				y: r.y + (r.h - self.line_h) / 2.0,
-				color: if enabled { dlg().text } else { dlg().dim },
+				color: if enabled { colors.text } else { colors.dim },
 				clip: None,
 				bold: false,
 				scale: 1.0,
@@ -7950,6 +8014,179 @@ mod tests {
 		assert!(!d.disabled(Key::PerfProfile));
 		d.set_toggle(Key::PerfAuto, false);
 		assert!(!d.disabled(Key::PerfProfile));
+	}
+
+	// What dialog.rs asks of the dialog for one frame.
+	fn one_frame(d: &SettingsDialog, mx: f32, my: f32) {
+		let _ = d.hover_tip(mx, my, &mut chars7);
+		let _ = d.rects(18.0, chars7);
+		let _ = d.texts(18.0, chars7);
+		let _ = d.overlay(&mut chars7);
+		let _ = d.hover_tip(mx, my, &mut chars7);
+	}
+
+	// A frame reads every row's value, and a performance profile is chosen by
+	// default. Laying the profile over a copy of the whole settings for each read
+	// made a frame copy them dozens of times.
+	// Test ID: ErleXuV
+	#[test]
+	fn a_dialog_frame_copies_the_settings_at_most_once() {
+		for profile in super::Profile::ALL {
+			let mut d = mk_dialog(4000.0);
+			d.edited.performance_profile = profile.key().to_string();
+			d.edited.remote_override = profile == super::Profile::Remote;
+			for tab in 0..tab_titles().len() {
+				d.tab = tab;
+				let mid = d.rect.y + d.rect.h / 2.0;
+				let before = crate::config::settings_clones();
+				one_frame(&d, d.rect.x + d.rect.w / 2.0, mid);
+				let copies = crate::config::settings_clones() - before;
+				assert!(
+					copies <= 1,
+					"{profile:?}, tab {tab}: one frame copied the settings {copies} times"
+				);
+			}
+		}
+	}
+
+	// Every rect helper asks for its row's top. Walking the tab from the top for
+	// each one made a frame quadratic in the declarations.
+	// Test ID: ErleYlF
+	#[test]
+	fn a_dialog_frame_walks_the_tab_at_most_once() {
+		let mut d = mk_dialog(300.0);
+		for tab in 0..tab_titles().len() {
+			d.tab = tab;
+			d.scroll = 0.0;
+			// a frame with nothing moved, then one scrolled
+			for scroll in [0.0, 1.0] {
+				d.scroll += scroll;
+				let before = super::ROW_WALKS.with(std::cell::Cell::get);
+				one_frame(&d, d.rect.x + d.rect.w / 2.0, d.rect.y + d.rect.h / 2.0);
+				let walks = super::ROW_WALKS.with(std::cell::Cell::get) - before;
+				assert!(
+					walks <= 1,
+					"tab {tab}: one frame walked the tab {walks} times"
+				);
+			}
+		}
+	}
+
+	// A row's top is kept from one walk to the next, so anything the walk reads
+	// that moves has to start a new one. Each change is made after a walk and
+	// read through what was kept, then against a walk from nothing.
+	// Test ID: Erlg3Ip
+	#[test]
+	fn a_kept_row_top_follows_what_it_was_walked_from() {
+		let shell_tab = mk_dialog(300.0)
+			.specs
+			.iter()
+			.find(|spec| matches!(spec.kind, super::Kind::ShellList))
+			.unwrap()
+			.tab;
+		let changes: [(&str, fn(&mut SettingsDialog)); 5] = [
+			("tab", |d| d.tab = (d.tab + 1) % tab_titles().len()),
+			("scroll", |d| d.scroll += 13.5),
+			("line height", |d| d.line_h += 3.0),
+			("shell count", |d| {
+				d.edited.shells.push(shell_entry("Extra", "/bin/extra"));
+			}),
+			("window top", |d| d.rect.y += 7.0),
+		];
+		for tab in 0..tab_titles().len() {
+			for (what, change) in changes {
+				let mut d = mk_dialog(300.0);
+				d.tab = if what == "shell count" {
+					shell_tab
+				} else {
+					tab
+				};
+				let _ = d.row_y(0);
+				change(&mut d);
+				let kept: Vec<f32> = (0..d.specs.len()).map(|i| d.row_y(i)).collect();
+				*d.row_tops.borrow_mut() = super::RowTops::default();
+				let fresh: Vec<f32> = (0..d.specs.len()).map(|i| d.row_y(i)).collect();
+				assert_eq!(
+					kept, fresh,
+					"tab {tab}: the {what} moved and a row top did not"
+				);
+			}
+		}
+	}
+
+	// The colors come from the live settings, behind a lock. Each of a frame's
+	// three drawing calls builds them once and hands them down, rather than
+	// every quad asking again.
+	// Test ID: Erlfs8O
+	#[test]
+	fn a_dialog_frame_builds_its_colors_once_per_drawing_call() {
+		let mut d = mk_dialog(300.0);
+		for tab in 0..tab_titles().len() {
+			d.tab = tab;
+			let before = super::DLG_BUILDS.with(std::cell::Cell::get);
+			one_frame(&d, d.rect.x + d.rect.w / 2.0, d.rect.y + d.rect.h / 2.0);
+			let builds = super::DLG_BUILDS.with(std::cell::Cell::get) - before;
+			assert!(
+				builds <= 3,
+				"tab {tab}: one frame built the colors {builds} times"
+			);
+		}
+	}
+
+	// A governed row reads the profile's values and every other row reads the
+	// user's. That answers what laying the profile over a copy did only while no
+	// row's value comes from both kinds of field, so every reader is asked for
+	// every row under every profile, on the defaults and on settings moved off
+	// them.
+	// Test ID: ErleYKw
+	#[test]
+	fn a_shown_value_is_the_profile_laid_over_the_settings() {
+		use super::Profile;
+		// every value a row holds, moved once: the far end of a slider, the other
+		// state of a checkbox, the next option
+		fn moved(d: &mut SettingsDialog) {
+			for i in 0..d.specs.len() {
+				let key = d.specs[i].key;
+				if let super::Kind::Dual { keys, .. } = d.specs[i].kind {
+					for part in keys {
+						let was = d.get_toggle(part);
+						d.set_toggle(part, !was);
+					}
+				} else if !matches!(key, Key::PerfProfile | Key::PerfAuto) {
+					nudge(d, i, key);
+				}
+			}
+		}
+		let base = mk_dialog(4000.0);
+		let mut once = mk_dialog(4000.0);
+		moved(&mut once);
+		let mut twice = mk_dialog(4000.0);
+		twice.edited = once.edited.clone();
+		moved(&mut twice);
+		for start in [&base.edited, &once.edited, &twice.edited] {
+			for profile in Profile::ALL {
+				for stepped in [None, Some(Profile::Low), Some(Profile::Standard)] {
+					let mut d = mk_dialog(4000.0);
+					d.edited = start.clone();
+					d.edited.performance_profile = profile.key().to_string();
+					d.edited.remote_override = profile == Profile::Remote;
+					d.edited.performance_automatic = stepped.is_some();
+					d.edited.stepped_profile = stepped;
+					let mut laid = d.edited.clone();
+					crate::profile::apply(&mut laid);
+					for &key in Key::ALL {
+						let case = format!("{key:?} under {profile:?}, stepped {stepped:?}");
+						assert_eq!(
+							d.get_f32(key).to_bits(),
+							super::slider_of(&laid, key).to_bits(),
+							"{case}"
+						);
+						assert_eq!(d.get_toggle(key), super::toggle_of(&laid, key), "{case}");
+						assert_eq!(d.get_radio(key), super::radio_of(&laid, key), "{case}");
+					}
+				}
+			}
+		}
 	}
 
 	// A row's shown value, whichever kind it is, as something comparable.

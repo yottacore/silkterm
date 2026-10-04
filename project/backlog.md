@@ -834,27 +834,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: Owed. A count of shaped buffers across two renders with no change.
 	- Note: Code review 20261003 item 3.
 
-- Settings: the dialog repeats whole-table work for each row on every frame
-	- ID: 2026100314050004
-	- Type: Enhancement
-	- Status: Queued
-	- Needs local test suite run?: Yes
-	- Priority: Avg
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Read a value without copying the whole settings.
-		- Work out each row's top once per frame, not by walking every declaration per rect.
-		- Build the dialog colors once per frame and pass them down.
-	- Progress log:
-		- 20261003: `shown()` clones the whole `Settings` on every value read whenever the performance profile is not Custom, which is the default. Each visible row reads three to six values in `rects` and `texts`, and `hover_tip` reads more.
-		- 20261003: `row_y` filters all the declarations on each call, then `gap_above`, `leads_subgroup`, `next_row` and `paired_with` walk forward again. Every rect helper goes through it. `hotkey_for_key`, `needs_of` and `settings_of` are linear lookups too.
-		- 20261003: `dlg()` takes the settings lock twice and builds a 14-field struct. It is called from about 126 places, several per row.
-	- Origin: e52a6909 (2026-09-03) for `shown()`, c6eaa04 (2026-06-28) for `row_y`, d48646ca (2026-07-02) for `dlg()`. No earlier review item. Plausible, cost not measured.
-	- Test case: Owed. A count of `Settings` clones per dialog frame, which should be at most one.
-	- Note: Code review 20261003 item 4.
-
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
 	- Type: Bug
@@ -1696,6 +1675,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Settings: the dialog repeats whole-table work for each row on every frame
+	- ID: 2026100314050004
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Read a value without copying the whole settings.
+		- Work out each row's top once per frame, not by walking every declaration per rect.
+		- Build the dialog colors once per frame and pass them down.
+	- Progress log:
+		- 20261003: `shown()` clones the whole `Settings` on every value read whenever the performance profile is not Custom, which is the default. Each visible row reads three to six values in `rects` and `texts`, and `hover_tip` reads more.
+		- 20261003: `row_y` filters all the declarations on each call, then `gap_above`, `leads_subgroup`, `next_row` and `paired_with` walk forward again. Every rect helper goes through it. `hotkey_for_key`, `needs_of` and `settings_of` are linear lookups too.
+		- 20261003: `dlg()` takes the settings lock twice and builds a 14-field struct. It is called from about 126 places, several per row.
+	- Origin: e52a6909 (2026-09-03) for `shown()`, c6eaa04 (2026-06-28) for `row_y`, d48646ca (2026-07-02) for `dlg()`. No earlier review item. Plausible, cost not measured.
+	- Reproduced: 20261004. Under Max, one frame of the first tab copied the settings 79 times, walked the tab 192 times for row tops, and built the colors 194 times.
+	- Actual fix:
+		- A governed row reads the profile's own values, built once per profile, and every other row reads the user's. A value read copies nothing, and answers what laying the profile over a copy did.
+		- Row tops come from one walk down the tab, kept until the tab, the scroll, the line height or the shell count moves.
+		- Each of `rects`, `texts` and `overlay` builds the colors once and hands them down.
+	- Swept: the three readers that went through `shown()`; every `row_y` caller, all of which now read the one walk; every function that built the colors inside those three calls.
+	- Note: Left alone: `hotkey_for_key`, `needs_of` and `settings_of` are still linear lookups over short tables, and dialog.rs still asks for a few panel colors itself each frame.
+	- Verified: 20261004, the unit suite passes, 1106 tests. Every layout test passes unchanged. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not looked at in a real window.
+	- Branch: dlgrows
+	- Commit: 8ebf891
+	- Test case: `a_dialog_frame_copies_the_settings_at_most_once` (ErleXuV), `a_dialog_frame_walks_the_tab_at_most_once` (ErleYlF) and `a_dialog_frame_builds_its_colors_once_per_drawing_call` (Erlfs8O), each seen failing before the fix. `a_shown_value_is_the_profile_laid_over_the_settings` (ErleYKw) holds every key under every profile to what the old copy answered. `a_kept_row_top_follows_what_it_was_walked_from` (Erlg3Ip) holds the kept tops to a fresh walk.
+	- Acceptance signoff: Self-closed: reproduced, the tests failed before the fix and pass after, and shown values and row tops are unchanged.
+	- Closed: 20261004-140551
+	- Note: Code review 20261003 item 4.
 
 - The tab strip and its tip are rebuilt and measured again on every frame
 	- ID: 2026100314050002
