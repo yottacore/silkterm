@@ -681,37 +681,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- A current-format config that is not UTF-8 loads as defaults with no message, and a Settings save on it says it worked but writes nothing
-	- ID: 2026100315581313
-	- Type: Bug
-	- Status: Queued
-	- Needs external testing: The new unit tests on Windows, at the next vm925w run.
-	- Severity: Avg
-	- Opened: 20261003-155813
-	- Opened by: CC
-	- Related IDs: 2026100312470546, 2026100316135866
-	- Target OS: All
-	- Steps to reproduce:
-		- Put a byte that is not valid UTF-8 into a config file that already has the current Format line.
-		- Launch, then change a setting in Settings and save.
-	- Incorrect behavior: The launch shows defaults and says nothing about the file. The save reports success, and the file is unchanged.
-	- Expected behavior: The launch says the file could not be read. A save either writes or says it did not.
-	- Reproduced: 20261003 on b23, on dev 7895ffa. A unit test loaded the file as all defaults, and `persist` answered that it saved and wrote nothing. First found by reading the code while working 2026100312470546, which handles only an old-format file.
-	- Origin: The not-UTF-8 read in `read_settings_text` answered nothing for a current file, and `persist` took nothing to read as nothing to do. 2026100312470546 kept that on purpose for a current file. Confirmed.
-	- Actual fix:
-		- The file is still left as it is on disk, as 2026100312470546 decided, so no copy is needed. The launch reads every line that decodes, with the others read as blank.
-		- The launch names those lines on the terminal and puts up the "Settings not saved" notice once the window is on screen. The notice says the lines are not UTF-8 text.
-		- Every save refuses, since a write would delete those lines. A Settings OK gets the notice each time and closes, as for any refused save. A save nobody asked for, such as a resize, is said once a session.
-		- The rating write says the file has a line that cannot be read, where it said the file cannot be written.
-		- A Settings save that cannot read the file for another reason, such as permissions, now says so on the terminal and is not reported as a save. A missing file is still skipped, filed as 2026100316135866.
-	- Swept: Every writer of the file. `persist` carries the Settings save, window size and font zoom, per-monitor sizes, the copy toggles and the shells found at launch, and refuses now. The rating write refuses with the right words. The launch steps and `adopt_default_shell` write nothing to such a file, and the launch says why. Revert and clear run only after a `persist` that wrote. `write_doc` only gets what `read_doc` read. `--reset-config` moves the bytes aside unread. The window size refresh reads the lines that decode.
-	- Test case: `a_current_file_that_is_not_utf8_loads_what_reads` (ErgK1sy) and `a_save_on_a_current_file_that_is_not_utf8_is_refused` (ErgK2CS), both seen to fail on the old code and pass on the new. `a_notice_for_lines_that_are_not_utf8_says_so` (ErgK2Vb). `cicd/tests/config-convert/run.bash` (ErgDpjX) gained a current-file case and a "Settings not saved" notice check on a launch that saves nothing. Its new checks failed on the old binary, and the notice check failed with only the window half put back.
-	- Verified: The unit suite passes, 1077 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. The pipeline test passes.
-	- Branch: badutf8
-	- Commit: 54c8d73
-	- Decisions:
-		- 20261003: Rewrite the file and keep a backup, rather than refusing saves. Start over with defaults in the worst case.
-
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
 	- Type: Enhancement
@@ -1216,6 +1185,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- A current-format config that is not UTF-8 loads as defaults with no message, and a Settings save on it says it worked but writes nothing
+	- ID: 2026100315581313
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: The new unit tests on Windows, at the next vm925w run.
+	- Severity: Avg
+	- Opened: 20261003-155813
+	- Opened by: CC
+	- Related IDs: 2026100312470546, 2026100316135866
+	- Target OS: All
+	- Steps to reproduce:
+		- Put a byte that is not valid UTF-8 into a config file that already has the current Format line.
+		- Launch, then change a setting in Settings and save.
+	- Incorrect behavior: The launch shows defaults and says nothing about the file. The save reports success, and the file is unchanged.
+	- Expected behavior: The launch says the file could not be read. A save either writes or says it did not.
+	- Reproduced: 20261003 on b23, on dev 7895ffa. A unit test loaded the file as all defaults, and `persist` answered that it saved and wrote nothing. First found by reading the code while working 2026100312470546, which handles only an old-format file.
+	- Origin: The not-UTF-8 read in `read_settings_text` answered nothing for a current file, and `persist` took nothing to read as nothing to do. 2026100312470546 kept that on purpose for a current file. Confirmed.
+	- Progress log:
+		- 20261003: First fix (badutf8, 54c8d73): the launch read every line that decodes, named the others, and every save refused, leaving the file as it was. Replaced by the second fix below, per the Decisions row.
+	- Decisions:
+		- 20261003: Rewrite the file and keep a backup, rather than refusing saves. Start over with defaults in the worst case.
+		- 20261003: The rewrite happens at launch, not at the first save. The launch already does every other format rewrite and says it once with the window up. A first save is often a resize or the rating, which nobody connects with the file.
+	- Against: 2026100312470546 left a current file that is not UTF-8 alone. This item's first decision replaces that.
+	- Actual fix:
+		- At launch, such a file is copied to `config_backup_<time>_format-v3.shcl` the way an old-format file is, then written again without the lines that do not decode. It keeps its own layout as long as every other line reads the same without them.
+		- A block heading that does not decode would move its lines into the block above. That file, and one where nothing is left that sets anything, is written new from the template with every setting that still reads. With nothing to carry that is the defaults.
+		- A line of the SHCL footer that does not decode is put back as shipped, since an editor saving in Latin-1 always garbles its copyright sign.
+		- The terminal names the lines and the copy. A "Settings file rewritten" notice says the same once the window is up. The "Settings not saved" refusal for this case is gone.
+		- A launch that finds the file busy leaves it, and the next save or rating write does the same rewrite and says it the same way.
+		- `upgrade` in config.rs makes the choice for this case too, and the copy is made by the same writer.
+	- Swept: Every writer of the file. `persist` (Settings save, window size, font zoom, per-monitor sizes, copy toggles, shells found at launch) reads through `read_doc`, which now gets the rewritten text. The rating write reads it too and writes through the same writer. `adopt_default_shell` uses `read_doc`. The launch's other steps read with `read_to_string`, so they run on the rewritten file, or write nothing to a busy one. The window size refresh reads the rewritten text. `--reset-config` moves the bytes aside unread. The writer keeps a copy before replacing any settings file that is not UTF-8, whoever calls it.
+	- Test case: `a_current_file_that_is_not_utf8_drops_only_those_lines` (ErgZK0Q), `a_launch_writes_a_current_file_that_is_not_utf8_again` (ErgZK4X) and `a_save_on_a_current_file_that_is_not_utf8_writes_it_again` (ErgZK8b) fail with the old answer put back in `upgrade` and pass now. `a_footer_line_that_is_not_utf8_goes_back_as_shipped` (ErgZKCc), seen to fail with the footer step off. `a_notice_for_dropped_lines_names_them_and_the_copy` (ErgZJw3). Fuzz target `a_rewrite_for_lines_that_are_not_utf8_settles` (ErgZKGo). `cicd/tests/config-convert/run.bash` (ErgDpjX) checks the rewrite, the copy, the terminal line and the new notice; those checks failed on a build with the old answer put back.
+		- Commented out, since they pin the refusal: `a_current_file_shcl_cannot_read_is_left_alone` (ErgDoiP), `a_current_file_that_is_not_utf8_loads_what_reads` (ErgK1sy), `a_save_on_a_current_file_that_is_not_utf8_is_refused` (ErgK2CS), `a_notice_for_lines_that_are_not_utf8_says_so` (ErgK2Vb), and the pipeline test's left-alone and `notsaved` checks.
+	- Verified: The unit suite passes, 1083 tests, and a 60 s soak of both upgrade fuzz targets. fmt is clean, clippy is clean for Linux and Windows, and the test ID, markdown spacing and table checks pass. The pipeline test passes, notice window included. A whole config saved in Latin-1 was written again in one launch with its footer whole, and a second launch changed nothing.
+	- Branch: badutf8b
+	- Commit: 3f23f69
+	- Acceptance signoff: Self-closed: does what the decision asked, its tests failed before the fix and pass after, and the sweep is answered.
+	- Closed: 20261003-172228
 
 - Settings: the revert arrow on "Program's own title" does nothing
 	- ID: 2026100314050001
