@@ -788,7 +788,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - With Free resources when idle on, a window on screen but not focused is let go, goes black, and stays black until typed into
 	- ID: 2026100319134501
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261003-191345
 	- Opened by: CC
@@ -802,11 +802,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The window is let go while still on screen, with "(resource conservation mode)" in its title. It keeps its last picture for a while, then goes black, and stays black until typed into.
 	- Expected behavior: A window in view keeps painting, or paints again on its own.
 	- Reproduced: Yes, on vm925w in the builds from before and after the 2026100312470535 fix, with another program loading the GPU. Not tried without the load, so it is not known if the load matters. Only tried with Transparency on, which draws through DX12.
+		- 20261004: Also without any load. The window went black within 4 seconds of being let go in view. With Transparency off it kept its last picture.
+	- Actual cause:
+		- With Transparency on, Windows draws the window through a composition visual, and the window has no surface of its own. Letting the device go takes the picture with it.
+		- An unfocused window in view is let go after "Minutes otherwise", which on this path leaves nothing on screen. The load only put off when it went black.
+	- Actual fix: A window with no surface of its own is never let go while in view. It waits until it is minimized, and then for "Minutes when hidden". Every other window is unchanged.
+	- Progress log:
+		- 20261004: Verified on vm925w, without load and under a lighter load than the one that hung the box: with Transparency on, a window left unfocused in view kept its picture past the idle time, and still let go and came back when minimized. With Transparency off nothing changed. The build from dev went black in the same steps.
+		- 20261004: Verified: both new unit tests fail with the fixes taken out and pass with them. The full unit suite, clippy for Linux and Windows, and fmt pass.
+	- Swept: `release_deadline` is the one decision, and both of its callers, the release and the wake set for it, go through `State::release_deadline`. Dialogs are never let go on idle.
+	- Note: 20261004, the "Minutes otherwise" help still says an unfocused window waits that long. On Windows with Transparency on, a window in view now keeps its device. Rewording the help is left for a decision.
+	- Branch: idlewake
+	- Commit: 7687c4e
+	- Test case: `a_window_that_would_go_blank_is_never_let_go_in_view` (ErksiLn). Also the `idlewake` Windows GUI scenario (Erkt9mD), not in the pipeline.
+	- Acceptance signoff: Self-closed: reproduced without load, fixed, and the test fails on the old code. The change follows the design goal that a window on screen never gives anything up.
+	- Closed: 20261004-112231
 
 - After waking from Free resources when idle, the window sometimes shows only the prompt's last character until typed into
 	- ID: 2026100319134502
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261003-191345
 	- Opened by: CC
@@ -819,6 +834,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The earlier text is missing, and only the last `>` of the prompt shows. Typing brings the rest back.
 	- Expected behavior: The window shows everything it showed before it went idle.
 	- Reproduced: Yes, now and then, on vm925w in the builds from before and after the 2026100312470535 fix, with another program loading the GPU. Not tried without the load.
+		- 20261004: Seen again on vm925w under a lighter load, with Transparency on: the device was rebuilt while the window had no size, and the shell's screen went to 2 by 1 and back. Not seen in six restores without load. The load only makes the gap easier to hit.
+		- 20261004: Earlier runs show it with Transparency off too.
+	- Actual cause:
+		- On Windows a restore stops answering minimized a moment before the window gets its size back. A rebuild in that gap read a 0x0 window, took 1x1 as its size, and shrank the grid to two columns and one row.
+		- The console host reflowed its screen at that width. When the real size came back it repainted only the prompt's last character, and the earlier text stayed in the scrollback.
+	- Actual fix: A window whose last resize was to nothing counts as hidden until a real size arrives, so nothing is drawn or rebuilt in the gap. Coming back into view now brings the device back by itself, since the desktop's repaint that used to do it can arrive inside the gap.
+	- Progress log:
+		- 20261004: Verified on vm925w, with and without the lighter load, Transparency on and off: after each restore with or without focus, the window showed what it showed before it was let go, and every rebuild came back at the full window size.
+		- 20261004: The first try at the fix left a window let go while minimized blank after a restore without focus, because the repaint came inside the gap and nothing else woke it. Fixed by the wake on coming back into view.
+		- 20261004: Verified: the new unit test fails with the fix taken out and passes with it.
+	- Swept: `hidden()` is the one hidden test, read by both render entry points and the rebuild. Every reader of the window's size: the dialogs, which are never minimized on their own, and the surface setup, which reaches a rebuild only through `rebuild_gpu`. `heal_gpu` runs only on a Linux console return, where a minimized window keeps its size.
+	- Branch: idlewake
+	- Commit: 7687c4e
+	- Test case: `a_window_with_no_area_is_hidden_whatever_the_minimized_answer` (Erksiin). Also the restore checks in the `idlewake` Windows GUI scenario (Erkt9mD), not in the pipeline, which catch the gap only now and then.
+	- Acceptance signoff: Self-closed: the cause was caught on the box, and no rebuild at the wrong size was seen after the fix, with or without load.
+	- Closed: 20261004-112231
 
 - A unit test run rewrites the box's live config file
 	- ID: 2026100410244885
