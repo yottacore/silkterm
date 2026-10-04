@@ -881,40 +881,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None. A rename is checked by the build.
 	- Note: Code review 20261003 item 9.
 
-- Code style: unwrap and unsafe without a reason, and three ways to handle a poisoned lock
-	- ID: 2026100314050010
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Incorrect behavior:
-		- About 40 `unwrap` or `expect` calls outside the tests give no reason. The settings store at config.rs 831 and 1171, five lock unwraps in perf.rs, four in text.rs, `NonZeroU32::new(..).unwrap()` in gfx.rs, eight env reads in build.rs, and two on the chrome cache in app.rs.
-		- text.rs repeats one `expect` message seven times.
-		- A poisoned lock is unwrapped in some places, skipped with `.ok()` in others, and taken with `PoisonError::into_inner` in a third set, sometimes in one file.
-		- Seven `unsafe` blocks in cwd.rs and profile.rs have no `// SAFETY:` line, where about 25 others do.
-		- main.rs reads `SILK_PROFILE_OUT` a second time and unwraps it, after reading and dropping it ten lines up.
-	- Expected behavior: No unwrap outside tests unless a comment says why it cannot fail. One way to handle each case.
-	- Origin: c6eaa04 (2026-06-28) for the store, cd0f50b (2026-08-30) for perf.rs, 9007385 (2026-09-17) for text.rs. No earlier review item. Confirmed.
-	- Note: With `panic = "abort"` a lock is never poisoned in a release build. One comment can say so where the policy is chosen.
-	- Note: Code review 20261003 item 10.
-	- Actual fix:
-		- One lock policy, in the new `locks.rs`: `lock`, `read` and `write` take a poisoned lock as it stands. Release builds abort on panic, so only tests and debug builds can see one. Every std lock goes through it. The term lock is a `FairMutex` with no poison, so its try-then-lock order is untouched (G2).
-		- clippy's `unwrap_used`, `expect_used` and `undocumented_unsafe_blocks` are on. Tests are exempt through `clippy.toml`. Each unwrap left outside the tests has an allow with its reason, ten in all, and the GL diagnostic probe allows both for the whole file.
-		- The rest went: the gfx.rs `NonZeroU32` unwraps, two of the four chrome cache unwraps in app.rs, build.rs's file reads and writes (now `?`, with one `cargo_env` for the variables cargo always sets), and the profiler's expects in main.rs, which now keep the path from the first `SILK_PROFILE_OUT` read. text.rs has one message and two helpers in place of seven copies.
-		- Every unsafe block has a `// SAFETY:` line, the seven in cwd.rs and profile.rs and the 28 more the lint found in ctl.rs, gfx.rs, term.rs, dialog.rs and sysfont.rs. A few existing comments only moved to where the lint reads them.
-		- A failure in the profiler build or in build.rs now ends with an error message where it panicked before. Nothing else changes.
-	- Swept:
-		- Every `.lock()`, `.read()` and `.write()` on a std lock outside the tests, in config.rs, cwd.rs, perf.rs, shells.rs, term.rs and text.rs, plus the test-only `PoisonError::into_inner` calls in config.rs. Test code still unwraps its own locks.
-		- Unwraps and unsafe blocks: clippy with the three lints on Linux, Windows, macOS and the profiling feature, all targets.
-	- Verified: build, Windows cross build, Linux release build, full unit suite (1115 passed), rustfmt, and clippy with `-D warnings` for Linux, Windows, macOS and `--features profiling`. An unwrap and an unsafe block without a comment were put in and the lint failed on both.
-	- Branch: unwraps
-	- Commit: a44e556
-	- Test case: Erm4AZ1 `a_poisoned_lock_is_taken_as_it_stands`, which fails when `lock` unwraps. The three clippy lints pin the rest.
-	- Acceptance signoff: Self-closed: mechanical. The policy and the lints are what the item asked for, and the tests and lints pass.
-	- Closed: 20261004-153738
-
 - Code style: fixed choices are kept as strings, float codes and flags that must agree
 	- ID: 2026100314050011
 	- Type: Bug
@@ -2221,6 +2187,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Code style: unwrap and unsafe without a reason, and three ways to handle a poisoned lock
+	- ID: 2026100314050010
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior:
+		- About 40 `unwrap` or `expect` calls outside the tests give no reason. The settings store at config.rs 831 and 1171, five lock unwraps in perf.rs, four in text.rs, `NonZeroU32::new(..).unwrap()` in gfx.rs, eight env reads in build.rs, and two on the chrome cache in app.rs.
+		- text.rs repeats one `expect` message seven times.
+		- A poisoned lock is unwrapped in some places, skipped with `.ok()` in others, and taken with `PoisonError::into_inner` in a third set, sometimes in one file.
+		- Seven `unsafe` blocks in cwd.rs and profile.rs have no `// SAFETY:` line, where about 25 others do.
+		- main.rs reads `SILK_PROFILE_OUT` a second time and unwraps it, after reading and dropping it ten lines up.
+	- Expected behavior: No unwrap outside tests unless a comment says why it cannot fail. One way to handle each case.
+	- Origin: c6eaa04 (2026-06-28) for the store, cd0f50b (2026-08-30) for perf.rs, 9007385 (2026-09-17) for text.rs. No earlier review item. Confirmed.
+	- Note: With `panic = "abort"` a lock is never poisoned in a release build. One comment can say so where the policy is chosen.
+	- Note: Code review 20261003 item 10.
+	- Actual fix:
+		- One lock policy, in the new `locks.rs`: `lock`, `read` and `write` take a poisoned lock as it stands. Release builds abort on panic, so only tests and debug builds can see one. Every std lock goes through it. The term lock is a `FairMutex` with no poison, so its try-then-lock order is untouched (G2).
+		- clippy's `unwrap_used`, `expect_used` and `undocumented_unsafe_blocks` are on. Tests are exempt through `clippy.toml`. Each unwrap left outside the tests has an allow with its reason, ten in all, and the GL diagnostic probe allows both for the whole file.
+		- The rest went: the gfx.rs `NonZeroU32` unwraps, two of the four chrome cache unwraps in app.rs, build.rs's file reads and writes (now `?`, with one `cargo_env` for the variables cargo always sets), and the profiler's expects in main.rs, which now keep the path from the first `SILK_PROFILE_OUT` read. text.rs has one message and two helpers in place of seven copies.
+		- Every unsafe block has a `// SAFETY:` line, the seven in cwd.rs and profile.rs and the 28 more the lint found in ctl.rs, gfx.rs, term.rs, dialog.rs and sysfont.rs. A few existing comments only moved to where the lint reads them.
+		- A failure in the profiler build or in build.rs now ends with an error message where it panicked before. Nothing else changes.
+	- Swept:
+		- Every `.lock()`, `.read()` and `.write()` on a std lock outside the tests, in config.rs, cwd.rs, perf.rs, shells.rs, term.rs and text.rs, plus the test-only `PoisonError::into_inner` calls in config.rs. Test code still unwraps its own locks.
+		- Unwraps and unsafe blocks: clippy with the three lints on Linux, Windows, macOS and the profiling feature, all targets.
+	- Verified: build, Windows cross build, Linux release build, full unit suite (1115 passed), rustfmt, and clippy with `-D warnings` for Linux, Windows, macOS and `--features profiling`. An unwrap and an unsafe block without a comment were put in and the lint failed on both.
+	- Branch: unwraps
+	- Commit: a44e556
+	- Test case: Erm4AZ1 `a_poisoned_lock_is_taken_as_it_stands`, which fails when `lock` unwraps. The three clippy lints pin the rest.
+	- Acceptance signoff: Self-closed: mechanical. The policy and the lints are what the item asked for, and the tests and lints pass.
+	- Closed: 20261004-153738
 
 - Code style: comments sit on the wrong item, are stale, or are banner dividers
 	- ID: 2026100314050007
