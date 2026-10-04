@@ -187,6 +187,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 07ad847
 	- Test case: ErkT4QH `two_versions_of_one_shell_each_carry_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path`, ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`, ErkT4bY `a_shell_and_its_link_are_offered_at_the_shorter_path`, ErkT4gH `a_version_goes_into_a_name_the_way_a_person_would_write_it`, ErkT4k5 `the_version_probe_gives_up_on_a_program_that_never_answers`. The first four failed before the fix.
 
+- macOS: the extra prompt info for PowerShell 7 does not work
+	- ID: 2026100408214204
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: A look in a real SilkTerm pane on b26: a PowerShell 7 tab or split opened from a bash pane inside a git project starts there and shows the git part of the prompt.
+	- Severity: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- With "Update PowerShell profiles" on, open a PowerShell 7 pane, inside a git project.
+	- Incorrect behavior: The git-aware prompt does not show.
+	- Expected behavior: The same prompt as on Windows and Linux.
+	- Reproduced: 20261004 on b26, in part. Neither suspect was the cause. The block is in the profile there, the policy answer is Unrestricted, and the stock prompt carries the help link. Started inside a git project, PowerShell 7.6 shows the full prompt with the git part, with the same bare environment a Dock launch gives. Started anywhere else, it has no git part to show.
+	- Possible cause: Not known. The block in `shell_integration.ps1` only replaces the prompt PowerShell ships, which it knows by a help link inside it. It also goes only into profiles the shell would accept. Either could differ on macOS.
+	- Actual cause:
+		- The PowerShell tab or split did not start in the project. A new pane takes the directory of the pane it came from, and the OS answer for that read `/proc`, which macOS does not have. bash and zsh there never report their directory, so a pane opened from one got no directory and started where SilkTerm was started.
+	- Actual fix:
+		- On macOS the shell's directory is read with `proc_pidinfo`. Linux still reads `/proc`.
+	- Swept: every `/proc` read in the source. Config busy check, wallpaper memory test and profiler CPU name are Linux only on purpose. The twin left open is the tab's running-program name (`proc_comm`), which also reads `/proc`, so a macOS tab never names the program running in it.
+	- Verified: the new test fails on b26 with the old lookup (no directory for a live shell) and passes with the fix; all 23 terminal tests pass there. The terminal tests on Linux, and clippy for Linux and macOS, pass.
+	- Branch: macps
+	- Commit: 40f045f
+	- Test case: `a_unix_shell_reports_where_it_is_now_not_where_it_started` (ErkhGGP). A shell that stays put and one that moves must each read back where they are now.
+	- Notes:
+		- Before RC1.
+		- Note: 20261004, the cause is inferred, not seen in a real pane. It holds if the PowerShell pane was a tab or split opened from a bash or zsh pane in the project. The `/proc` fault is real on macOS either way. Related: 2026100410053273.
+
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
 	- Type: Bug
@@ -738,37 +768,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- macOS: the extra prompt info for PowerShell 7 does not work
-	- ID: 2026100408214204
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: A look in a real SilkTerm pane on b26: a PowerShell 7 tab or split opened from a bash pane inside a git project starts there and shows the git part of the prompt.
-	- Severity: High
-	- Opened: 20261004-082142
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: macOS
-	- Test environment: b26
-	- Steps to reproduce:
-		- With "Update PowerShell profiles" on, open a PowerShell 7 pane, inside a git project.
-	- Incorrect behavior: The git-aware prompt does not show.
-	- Expected behavior: The same prompt as on Windows and Linux.
-	- Reproduced: 20261004 on b26, in part. Neither suspect was the cause. The block is in the profile there, the policy answer is Unrestricted, and the stock prompt carries the help link. Started inside a git project, PowerShell 7.6 shows the full prompt with the git part, with the same bare environment a Dock launch gives. Started anywhere else, it has no git part to show.
-	- Possible cause: Not known. The block in `shell_integration.ps1` only replaces the prompt PowerShell ships, which it knows by a help link inside it. It also goes only into profiles the shell would accept. Either could differ on macOS.
-	- Actual cause:
-		- The PowerShell tab or split did not start in the project. A new pane takes the directory of the pane it came from, and the OS answer for that read `/proc`, which macOS does not have. bash and zsh there never report their directory, so a pane opened from one got no directory and started where SilkTerm was started.
-	- Actual fix:
-		- On macOS the shell's directory is read with `proc_pidinfo`. Linux still reads `/proc`.
-	- Swept: every `/proc` read in the source. Config busy check, wallpaper memory test and profiler CPU name are Linux only on purpose. The twin left open is the tab's running-program name (`proc_comm`), which also reads `/proc`, so a macOS tab never names the program running in it.
-	- Verified: the new test fails on b26 with the old lookup (no directory for a live shell) and passes with the fix; all 23 terminal tests pass there. The terminal tests on Linux, and clippy for Linux and macOS, pass.
-	- Branch: macps
-	- Commit: 40f045f
-	- Test case: `a_unix_shell_reports_where_it_is_now_not_where_it_started` (ErkhGGP). A shell that stays put and one that moves must each read back where they are now.
-	- Acceptance signoff: Self-closed: the cause was measured on b26, and the test failed there before the fix and passes after. The look in a real pane is owed.
-	- Closed: 20261004-100411
-	- Notes:
-		- Before RC1.
-
 - Release page: group the downloads in a table
 	- ID: 2026100408214205
 	- Type: Enhancement
@@ -820,6 +819,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The earlier text is missing, and only the last `>` of the prompt shows. Typing brings the rest back.
 	- Expected behavior: The window shows everything it showed before it went idle.
 	- Reproduced: Yes, now and then, on vm925w in the builds from before and after the 2026100312470535 fix, with another program loading the GPU. Not tried without the load.
+
+- macOS: a tab never names the program running in it
+	- ID: 2026100410053273
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261004-100532
+	- Opened by: CC
+	- Related IDs: 2026100408214204
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: The tab label never shows the program running in the shell, such as an editor.
+	- Expected behavior: The same as on Linux.
+	- Possible cause: The running program's name is read from `/proc` (`proc_comm` in term.rs), which macOS does not have. The shell's folder had the same fault, fixed under 2026100408214204.
+	- Reproduced: No. Found by reading the code while fixing 2026100408214204.
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
