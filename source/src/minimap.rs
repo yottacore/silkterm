@@ -297,9 +297,7 @@ pub fn drag_to(
 	(from_pos - moved).clamp(0.0, total.saturating_sub(rows) as f32)
 }
 
-// ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 // Per-pane cache
-// ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 // A pane's rasterized buffer plus the image composed from it. History lines
 // never change, so each one rasterizes once, at the first compose after it
@@ -1262,9 +1260,7 @@ fn row_hash(grid: &Grid<Cell>, line: Line, cols: usize) -> u64 {
 	hash
 }
 
-// ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 // Renderer
-// ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

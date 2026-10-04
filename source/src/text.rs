@@ -44,9 +44,6 @@ fn pin_mono_family(fs: &FontSystem) {
 	MONO_WEIGHT_BOLD.store(bold, Ordering::Relaxed);
 }
 
-// Weight a terminal bold cell should request: the closest weight to Bold the
-// pinned mono family really ships. Use instead of a literal Weight::BOLD, which
-// kicks the family out (into a proportional fallback) when it has no bold face.
 // What the text pass needs to blend glyph coverage the way an sRGB blend would,
 // which is the weight the font was drawn for: the pair as sRGB grays of the same
 // brightness, and how much of the correction to apply.
@@ -87,6 +84,9 @@ fn gray_of(c: [u8; 3]) -> f32 {
 	crate::config::from_linear(luma)
 }
 
+// Weight a terminal bold cell should request: the closest weight to Bold the
+// pinned mono family really ships. Use instead of a literal Weight::BOLD, which
+// kicks the family out (into a proportional fallback) when it has no bold face.
 pub fn mono_bold_weight() -> glyphon::Weight {
 	use std::sync::atomic::Ordering;
 	glyphon::Weight(MONO_WEIGHT_BOLD.load(Ordering::Relaxed))
@@ -211,7 +211,7 @@ fn ui_vmetrics(fs: &mut FontSystem, ui_px: f32) -> (f32, f32) {
 
 // Baseline y within a single-line UI buffer of height `ui_line_h`: cosmic-text
 // centers the ascent+descent box in the line, so the baseline sits at the line
-// center shifted by (ascent-descent)/2. `vmetrics` is (ascent, descent, cap).
+// center shifted by (ascent-descent)/2. `vmetrics` is (ascent, descent).
 fn ui_baseline_in_buf(ui_line_h: f32, vmetrics: (f32, f32)) -> f32 {
 	let (ascent, descent) = vmetrics;
 	ui_line_h / 2.0 + (ascent - descent) / 2.0
@@ -1064,9 +1064,6 @@ fn bold_matches_cell(fs: &mut FontSystem, metrics: Metrics, cell_w: f32) -> bool
 	(adv - cell_w).abs() < 0.1
 }
 
-// Shape `ch` into `buf` and measure its rasterized ink as `(width_px, left_px)`.
-// None when the face draws nothing - no glyph for it, or a glyph that rasterizes
-// empty (which is what a color-bitmap emoji face does through swash here).
 // A shaped fallback glyph: how wide its ink is, where that ink starts, and
 // whether the face drew it in its own colors.
 #[derive(Clone, Copy)]
@@ -1079,6 +1076,9 @@ struct Ink {
 	baseline: f32,
 }
 
+// Shape `ch` into `buf` and measure its rasterized ink as `(width_px, left_px)`.
+// None when the face draws nothing - no glyph for it, or a glyph that rasterizes
+// empty (which is what a color-bitmap emoji face does through swash here).
 fn shaped_ink(
 	fs: &mut FontSystem,
 	swash: &mut SwashCache,

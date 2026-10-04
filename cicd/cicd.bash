@@ -807,11 +807,12 @@ if [[ -x "${root}/cicd/tests/tables/run.py" ]]; then
 	fEcho "OK: markdown tables ($(fTestId cicd/tests/tables/run.py))"
 fi
 ## Blank lines between top-level bullets and around headings, which no markdown
-## linter here checks. The README and style guide had drifted.
+## linter here checks. The README and style guide had drifted. Also banner rules
+## in .rs comments.
 if [[ -x "${root}/cicd/tests/docs/run.py" ]]; then
-	fEcho_Clean "markdown spacing ..."
-	docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fDie "a markdown file is missing a blank line - see above ($(fTestId cicd/tests/docs/run.py))"; }
-	fEcho "OK: markdown spacing ($(fTestId cicd/tests/docs/run.py))"
+	fEcho_Clean "markdown spacing, banner rules ..."
+	docsOut="$("${root}/cicd/tests/docs/run.py" 2>&1)" || { echo "${docsOut}"; fDie "a markdown file is missing a blank line, or a .rs file has a banner rule - see above ($(fTestId cicd/tests/docs/run.py))"; }
+	fEcho "OK: markdown spacing, banner rules ($(fTestId cicd/tests/docs/run.py))"
 fi
 ## Every test carries an ID, and no two share one.
 if [[ -x "${root}/cicd/utility/test-id.py" ]]; then

@@ -88,7 +88,7 @@ fn sans_serif_detect() -> Option<String> {
 
 #[cfg(not(target_os = "linux"))]
 fn sans_serif_detect() -> Option<String> {
-	None // other platforms fall back to the curated list in text::resolve_sans_family
+	None // other platforms fall back to the curated list in text::resolve_ui_family
 }
 
 #[cfg(target_os = "linux")]

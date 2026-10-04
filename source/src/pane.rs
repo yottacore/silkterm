@@ -547,8 +547,6 @@ fn bell_brighten(color: [u8; 3], t: f32) -> [u8; 3] {
 	[up(color[0]), up(color[1]), up(color[2])]
 }
 
-// FNV-1a over a row's chars: the fingerprint copy-output uses to re-find the
-// arm-time prompt row at capture time (same constants as build()'s inline rows).
 // How long to leave a running command alone before asking again whether it has
 // finished. Matches the throttle the tab-title work already uses; on unix each
 // ask costs a `tcgetpgrp`.
@@ -566,6 +564,8 @@ fn next_capture_poll(
 	(last_output + settle).max(retry_at)
 }
 
+// FNV-1a over a row's chars: the fingerprint copy-output uses to re-find the
+// arm-time prompt row at capture time (same constants as build()'s inline rows).
 fn fnv_row(chars: impl Iterator<Item = char>) -> u64 {
 	let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
 	for c in chars {
@@ -992,9 +992,7 @@ pub fn neighbor_toward(
 		.map(|(id, ..)| id)
 }
 
-// ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 // Scrollbar
-// ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 // Seconds the bar stays up after the last user scroll before it starts fading.
 const BAR_HOLD_S: f32 = 1.1;
@@ -1015,7 +1013,7 @@ const BAR_HOVER_SLOP: f32 = 6.0;
 // Where a press hit the scrollbar.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BarHit {
-	// on the handle: `f32` is the grab offset from the thumb's top edge
+	// on the handle
 	Thumb,
 	// on the track above/below the thumb: pages toward the click
 	TrackUp,
@@ -1268,10 +1266,10 @@ pub struct Pane {
 	// Scrim source with bold stripped (text_scrim_regular_weight): shaped alongside
 	// the main buffer only on rebuild frames that actually contain bold runs.
 	// `scrim_debold` says the buffer is valid for the current content.
-	// Per-build memo for the minimum-contrast lift (see palette::Readable).
-	readable: palette::Readable,
 	scrim_buf: Option<Buffer>,
 	scrim_debold: bool,
+	// Per-build memo for the minimum-contrast lift (see palette::Readable).
+	readable: palette::Readable,
 	// Cursor animation: `cursor_x` (visual column) eases toward the target column
 	// so the cursor slides as you type; `blink_t` drives a smooth fade-blink while
 	// it sits idle. Snaps on a row change so it doesn't slide diagonally on a newline.
@@ -2346,15 +2344,6 @@ impl Pane {
 			}
 		}
 
-		// Scrim source with uniform weight: bold ink is wider, so its halo reads
-		// heavier than the neighbors'. When text_scrim_regular_weight is on and
-		// bold is on screen, shape a parallel buffer with bold stripped for the
-		// scrim pass (crisp text on top keeps its real weight). Costs a second
-		// shape only on rebuild frames that contain bold. Per-cell fallback
-		// glyphs keep their weight - rare, and not worth a second glyph pool.
-		// ctx.debold_safe guards a font (Windows default faces) whose bold advance
-		// differs from cell_w: there the de-bold buffer drifts from the display
-		// buffer along the line, so the scrim would sit wider than the text.
 		// place the per-cell fallback glyphs. Each distinct glyph is shaped once
 		// (harfbuzz fallback matching is the cost) and cached; every cell/color
 		// drawing it reuses that buffer, tinted per-cell via TextArea.default_color.
@@ -2516,9 +2505,7 @@ impl Pane {
 		self.cursor_pause.resume();
 	}
 
-	// ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 	// Scrollbar
-	// ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 	fn bar_applies(&self, cfg: &config::Settings) -> bool {
 		bar_applies_to(
@@ -4082,10 +4069,6 @@ fn paste_payload(text: &str, bracket: bool) -> String {
 	}
 }
 
-// Inside span (start..=end columns) of the highest-precedence matched pair that
-// encloses `col` on `row`. `pairs` is (open, close) in precedence order; the
-// first enclosing non-empty pair wins (so e.g. inside `()` selects the `()`
-// contents even if a lower-precedence `[]` is nested within). None -> no pair.
 // How far a double-click on a bracket looks for its partner, in rows.
 const BRACKET_REACH_ROWS: usize = 200;
 
@@ -4128,6 +4111,10 @@ fn bracket_reach(grid: &Grid<Cell>, point: Point) -> Option<(Point, Point)> {
 	Some((point, point))
 }
 
+// Inside span (start..=end columns) of the highest-precedence matched pair that
+// encloses `col` on `row`. `pairs` is (open, close) in precedence order; the
+// first enclosing non-empty pair wins (so e.g. inside `()` selects the `()`
+// contents even if a lower-precedence `[]` is nested within). None -> no pair.
 fn pair_inside(row: &[char], col: usize, pairs: &[(char, char)]) -> Option<(usize, usize)> {
 	for &(open, close) in pairs {
 		let found = if open == close {
@@ -6646,7 +6633,7 @@ mod tests {
 		assert_eq!(repainted_edge(&last, &last, &(0..25), 25), 0);
 	}
 
-	// ---- App-scroll scenario matrix -------------------------------------------
+	// App-scroll scenario matrix
 	// Per-app regression coverage for the alt-screen slide: each real full-screen
 	// app repaints in a characteristic shape, and the (shift, static-band) pair the
 	// detector extracts decides whether the pane slides smoothly or hard-cuts. These
@@ -7459,7 +7446,7 @@ mod tests {
 		);
 	}
 
-	// ---- Scrolled-off strip -----------------------------------------------------
+	// Scrolled-off strip
 
 	// a marker row for strip tests: one cell whose char encodes the row identity
 	fn strip_row(tag: char) -> Vec<StripCell> {

@@ -797,9 +797,6 @@ fn store() -> &'static RwLock<Arc<Settings>> {
 	})
 }
 
-// Current settings snapshot. Cheap to call (an Arc clone); the settings dialog
-// can swap the whole thing at runtime via `update`. Callers in hot paths should
-// snapshot once per frame rather than per cell.
 // Live OS dark/light bit (winit `Window::theme()`), used only when theme_mode = "system".
 static OS_DARK: AtomicBool = AtomicBool::new(true);
 
@@ -858,6 +855,9 @@ pub fn reapply_for_os(dark: bool) -> bool {
 	true
 }
 
+// Current settings snapshot. Cheap to call (an Arc clone); the settings dialog
+// can swap the whole thing at runtime via `update`. Callers in hot paths should
+// snapshot once per frame rather than per cell.
 pub fn settings() -> Arc<Settings> {
 	store().read().unwrap().clone()
 }
@@ -2040,12 +2040,6 @@ fn unwritable(doc: &shcl::Document, path: &str, applied: bool) {
 	}
 }
 
-// Write the values that differ from `orig` back into the config in place. The
-// user's comments and blank-line grouping survive (see `to_text`); untouched
-// settings keep whatever they were (commented / following the system). Returns
-// false (writing nothing) if the file looks open in another program, so the
-// caller can hold off - e.g. the Settings dialog stays open instead of
-// clobbering an in-flight edit.
 // Settings the user cleared back to "not set". These write nothing - there is no
 // value to write - so without naming them here the old line stays in the file
 // and the setting comes back next launch. One long today; anything optional
@@ -2058,7 +2052,6 @@ fn cleared_keys(orig: &Settings, s: &Settings) -> Vec<&'static str> {
 	out
 }
 
-#[must_use]
 // NaN is never equal to itself, so a plain `!=` reads a NaN on both sides as a
 // change and writes it over the value in the file. Every float setting is
 // compared through this. A NaN only ever arrived from the command line, which
@@ -2067,6 +2060,13 @@ fn same_f32(a: f32, b: f32) -> bool {
 	a == b || (a.is_nan() && b.is_nan())
 }
 
+// Write the values that differ from `orig` back into the config in place. The
+// user's comments and blank-line grouping survive (see `to_text`); untouched
+// settings keep whatever they were (commented / following the system). Returns
+// false (writing nothing) if the file looks open in another program, so the
+// caller can hold off - e.g. the Settings dialog stays open instead of
+// clobbering an in-flight edit.
+#[must_use]
 pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	let Some(path) = config_path() else {
 		return true;
@@ -4112,9 +4112,6 @@ fn default_wallpaper_folder() -> Option<PathBuf> {
 		.find(|sub| sub.is_dir())
 }
 
-// A config file's settings as (key, original-line). Nested settings are written
-// in dotted form, so a key like "colors.focus" needs no table context.
-// Recognizes both active (`k: ...`) and commented (`# k: ...`) lines.
 // Every setting line of `text` as (full path, verbatim line), commented ones
 // included - the walker resolves nesting, so a `# height: 100` two levels down
 // comes back as "cursor.size.height".
