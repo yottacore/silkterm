@@ -748,7 +748,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 		- 20261004: On a Mac, /bin/bash is Apple's old 3.2, and /usr/local/bin/bash is usually a newer one from Homebrew, so this case likely gets the version names.
-		- 20261004: A change to the scan does not change a list already saved. Whether existing lists get cleaned up too is open.
+		- 20261004: A change to the scan does not change a list already saved.
+	- Decisions:
+		- 20261004: Leave duplicates already in a saved list alone. The fix applies to new finds only.
 
 - macOS: the extra prompt info for PowerShell 7 does not work
 	- ID: 2026100408214204
