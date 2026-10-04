@@ -795,6 +795,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The release is now created with the owner and repo read from the origin remote, the same pair the links use.
 	- Verified: 20261004, the new test passes. It fails when a missing file is linked, when the GitHub rename is skipped, or when a row has a trailing pipe. The real beta3 file names give the expected table, and GitHub renders it as a table. The real beta3 download links follow the same pattern. No release was made.
 	- Branch: reltable
+	- Commit: 25e49e4
 	- Test case: Erl3R5g, `cicd/tests/release-notes/run.bash`, in the pipeline.
 
 - A unit test run rewrites the box's live config file
