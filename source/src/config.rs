@@ -7207,7 +7207,8 @@ window:
 	## Let the graphics card's memory go after the window has sat unused, and
 	## take it back the moment the window is used again. The first wait is for
 	## a window that is minimized or covered, the second for one that is only
-	## unfocused with nothing printing.
+	## unfocused with nothing printing. On Windows with transparency on, a
+	## window still on screen is never let go, since it would turn black.
 	# idle_release: true  ## Default
 	# idle_release_hidden_min: 30  ## Default
 	# idle_release_min: 240  ## Default
