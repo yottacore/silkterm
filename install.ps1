@@ -14,25 +14,7 @@
 ##	  & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/yottacore/silkterm/main/install.ps1'))) -Release dev
 ##	- Options: -Release stable|dev, -Target user|system, -Yes, -Version, -Help.
 ##	  The OS, the CPU architecture and the asset name are all detected.
-##	- History:
-##	  - 20260723 JC: Created.
-##	  - 20260806 JC: Made project-agnostic; dropped -Arch for autodetection;
-##	                 added -Version; runs on Windows PowerShell 5.1 as well as 7+;
-##	                 permission and lock failures now explain themselves.
-##	  - 20260807 JC: Safe to run from `irm | iex`, where the text executes in the
-##	                 caller's own shell: no `exit` (it would close their window),
-##	                 no $script: scope (absent in a script block), and StrictMode
-##	                 plus the preference variables scoped to the run.
-##	  - 20260917 JC: The signature check feeds ssh-keygen the checksums file's own
-##	                 bytes on Linux and macOS, where Start-Process rewrote it.
-##	  - 20260924 JC: Release list read correctly on 5.1, which hands an API array
-##	                 over as one object; a -NonInteractive run fails with the -Yes
-##	                 hint instead of quietly aborting; a system install from 32-bit
-##	                 PowerShell goes to the 64-bit Program Files.
-##	  - 20260925 JC: Picks the highest version from the release list and skips
-##	                 drafts; an API error no longer reads as "no full release";
-##	                 upgrades over a running copy; a re-run puts back a missing
-##	                 shortcut, launcher or PATH entry.
+##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	Licensed under The MIT License (MIT). Full text at:
@@ -816,3 +798,23 @@ $state = @{ failed = $false }
 	}
 } | Out-Null
 if ($state.failed -and $runningAsScriptFile) { exit 1 }
+
+##	History:
+##		- 20260723 JC: Created.
+##		- 20260806 JC: Made project-agnostic; dropped -Arch for autodetection;
+##		  added -Version; runs on Windows PowerShell 5.1 as well as 7+;
+##		  permission and lock failures now explain themselves.
+##		- 20260807 JC: Safe to run from `irm | iex`, where the text executes in the
+##		  caller's own shell: no `exit` (it would close their window),
+##		  no $script: scope (absent in a script block), and StrictMode
+##		  plus the preference variables scoped to the run.
+##		- 20260917 JC: The signature check feeds ssh-keygen the checksums file's own
+##		  bytes on Linux and macOS, where Start-Process rewrote it.
+##		- 20260924 JC: Release list read correctly on 5.1, which hands an API array
+##		  over as one object; a -NonInteractive run fails with the -Yes
+##		  hint instead of quietly aborting; a system install from 32-bit
+##		  PowerShell goes to the 64-bit Program Files.
+##		- 20260925 JC: Picks the highest version from the release list and skips
+##		  drafts; an API error no longer reads as "no full release";
+##		  upgrades over a running copy; a re-run puts back a missing
+##		  shortcut, launcher or PATH entry.

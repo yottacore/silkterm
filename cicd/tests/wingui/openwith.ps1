@@ -9,6 +9,11 @@
 ##	already have are touched.
 ##	Test ID: ErNJ7tr
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing opened would be seen" }
 
 $classes = "HKCU:\Software\Classes"
@@ -90,3 +95,6 @@ finally {
 		if (Test-Path "$classes\$k") { Remove-Item "$classes\$k" -Recurse -Force }
 	}
 }
+
+##	History:
+##		- 20260930 JC: Created.

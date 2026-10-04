@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 """Analyze a SILK_SCROLLDBG trace for one scroll scenario.
 
 Reads the per-frame trace on stdin (the `SCROLLDBG ...` lines SilkTerm writes to
@@ -199,3 +205,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+##	History:
+##		- 20260706 JC: Created.

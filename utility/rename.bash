@@ -99,3 +99,6 @@ echo "Next steps:"
 echo "  - review 'git diff' and 'git status'"
 echo "  - 'cargo build' (regenerates Cargo.lock with the new package name)"
 echo "  - if you rename the GitHub repo too, update the 'git remote' URL"
+
+##	History:
+##		- 20260628: First commit.

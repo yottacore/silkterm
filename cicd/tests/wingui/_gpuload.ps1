@@ -7,6 +7,11 @@
 ##	build-tag.txt there naming the build, which goes into every shot's name.
 ##	The checks only prove the steps ran. Whether it painted is read off the shots.
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
 $stress = Join-Path $RunDir "gpu-stress.exe"
@@ -191,3 +196,6 @@ Start-Sleep -Seconds 7
 fStop $p
 Start-Sleep -Milliseconds 500
 foreach ($line in (Get-Content $err -ErrorAction SilentlyContinue | Select-Object -Last 200)) { fNote "dbg $line" }
+
+##	History:
+##		- 20261003 JC: Created.

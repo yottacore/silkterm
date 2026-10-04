@@ -8,6 +8,12 @@
 # and an OPTIMIZED binary - a debug build measures the debug build.
 # Everything it writes goes under target/, which is not tracked: the flood file
 # alone is 32 MiB.
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 set -uo pipefail
 
 scriptDir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"; readonly scriptDir
@@ -81,3 +87,6 @@ print(f'{sys.argv[3]} {sys.argv[4]}: {took:.2f}s {${floodMib}/took:.1f} MiB/s')
 }
 
 fMain "${@}"
+
+##	History:
+##		- 20260920 JC: Created.

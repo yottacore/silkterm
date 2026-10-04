@@ -75,10 +75,10 @@
 ##		utility/include/termbench.py --history       print the table, measure nothing
 ##		utility/include/termbench.py --label 'name/build'
 ##
-##	History:
-##		20260728 Initial.
-##		20260730 Moved under utility/include/, behind update-showdown.py.
-##		20260928 WezTerm's and GNOME Terminal's versions come from their launchers.
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
 
 import argparse
 import array
@@ -1267,3 +1267,8 @@ if __name__ == "__main__":
 	except KeyboardInterrupt:
 		sys.stdout.write("\x1b[0m\r\n")
 		sys.exit(130)
+
+##	History:
+##		20260728 Initial.
+##		20260730 Moved under utility/include/, behind update-showdown.py.
+##		20260928 WezTerm's and GNOME Terminal's versions come from their launchers.

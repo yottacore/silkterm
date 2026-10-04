@@ -23,6 +23,11 @@
 ##		   --keep          leave the working directory behind
 ##
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 set -Eeuo pipefail
 shopt -s inherit_errexit
 

@@ -8,6 +8,11 @@
 ## still, so every alt-screen frame should carry a zero fraction.
 ## POSIX sh (dash).
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 settle="${SILK_SCENE_SETTLE:-13}"   ## seconds to idle past the GL pipeline warmup
 gap="${SILK_SCENE_GAP:-0.25}"       ## seconds between the burst and the alt screen
 
@@ -34,3 +39,6 @@ printf '\033[%d;1H\033[7m^X\033[0m Exit    \033[7m^R\033[0m Read File\033[K' "$r
 printf '\033[2;1H'
 
 while :; do sleep 1; done
+
+##	History:
+##		- 20260827 JC: Created.

@@ -2,6 +2,11 @@
 ##	to the console it was typed at, or nowhere. It went nowhere for a while.
 ##	Test ID: EqH4isq
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 $said = Join-Path $OutDir "consolemsg.txt"
 $c = Start-Process cmd.exe -ArgumentList '/k', "`"$Exe`" --reload-settings" -PassThru
 fTrack $c
@@ -13,3 +18,6 @@ fNote ("console reads: " + $text.Trim())
 [void](fCheck "the console could be read" ($text -ne '' -and $text -notlike '*could not attach*'))
 [void](fCheck "--reload-settings says why it did nothing, on the console it was typed at" ($text -like '*SilkTerm: *'))
 fStop $c
+
+##	History:
+##		- 20260918 JC: Created.

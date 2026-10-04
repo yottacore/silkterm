@@ -234,4 +234,200 @@ mod tests {
 		}
 		assert!(seen > 0, "found no source files, so the scan is broken");
 	}
+
+	// The text after a line's comment marker, or None for a line of code.
+	fn comment_text(line: &str) -> Option<&str> {
+		let line = line.trim_start();
+		if let Some(rest) = line.strip_prefix("//").or_else(|| line.strip_prefix("::")) {
+			return Some(rest.trim_start());
+		}
+		line.starts_with('#')
+			.then(|| line.trim_start_matches('#').trim_start())
+	}
+
+	fn is_history_heading(text: &str) -> bool {
+		let text = text.strip_prefix("- ").unwrap_or(text);
+		text.starts_with("History") || text.starts_with("Script history")
+	}
+
+	// A copyright line's text after "Copyright ": the sign, the year or span,
+	// then the holder. Answers whether it is the Bubbles form, or why it is
+	// neither form.
+	fn copyright_form(text: &str, marker: &str) -> Result<bool, String> {
+		let (bubbles, rest) = if let Some(rest) = text.strip_prefix("© ") {
+			(false, rest)
+		} else if let Some(rest) = text.strip_prefix("(c) ") {
+			(true, rest)
+		} else {
+			return Err(format!("copyright sign in neither form: {text}"));
+		};
+		let (years, holder) = rest.split_once(' ').unwrap_or_default();
+		let year_ok =
+			|year: &str| year.len() == 4 && year.bytes().all(|byte| byte.is_ascii_digit());
+		if !years.split('-').all(year_ok) {
+			return Err(format!("copyright year {years:?}"));
+		}
+		let expected = if bubbles {
+			"Bubbles".to_string()
+		} else {
+			format!("Jim Collier {marker}")
+		};
+		if holder != expected {
+			return Err(format!("copyright holder {holder:?}"));
+		}
+		Ok(bubbles)
+	}
+
+	// Not a heading such as "Copyright and license:".
+	fn is_copyright_line(text: &str) -> bool {
+		text.starts_with("Copyright ©") || text.starts_with("Copyright (")
+	}
+
+	// What is wrong with one script's header and History, if anything.
+	fn script_header_faults(lines: &[&str], cmd: bool, marker: &str) -> Vec<String> {
+		let at = lines
+			.iter()
+			.position(|line| comment_text(line).is_some_and(is_copyright_line));
+		let Some(at) = at else {
+			return vec!["no copyright line".into()];
+		};
+		let mut faults = Vec::new();
+		for (number, line) in lines[..at].iter().enumerate() {
+			let preamble = cmd && (line.starts_with('@') || line.eq_ignore_ascii_case("setlocal"));
+			match comment_text(line) {
+				None if !line.trim().is_empty() && !preamble => {
+					faults.push(format!(
+						"line {} is code above the copyright line",
+						number + 1
+					));
+				}
+				Some(text) if is_history_heading(text) && !text.contains("bottom") => {
+					faults.push(format!(
+						"line {} starts a History in the header",
+						number + 1
+					));
+				}
+				_ => {}
+			}
+		}
+		let copyright = &comment_text(lines[at]).unwrap()["Copyright ".len()..];
+		let bubbles = match copyright_form(copyright, marker) {
+			Ok(bubbles) => bubbles,
+			Err(fault) => {
+				faults.push(fault);
+				false
+			}
+		};
+		let license = lines[at + 1..lines.len().min(at + 5)]
+			.iter()
+			.filter_map(|line| comment_text(line))
+			.find_map(|text| text.strip_prefix("SPDX-License-Identifier: "));
+		match license {
+			Some("MIT") => {}
+			Some("GPL-2.0-or-later") if !bubbles => {}
+			other => faults.push(format!("license under the copyright line is {other:?}")),
+		}
+		let history = lines
+			.iter()
+			.rposition(|line| comment_text(line).is_some_and(is_history_heading))
+			.filter(|&history| history > at);
+		match history {
+			None => faults.push("no History at the bottom".into()),
+			Some(history) => {
+				let code_after = lines[history..]
+					.iter()
+					.any(|line| !line.trim().is_empty() && comment_text(line).is_none());
+				if code_after {
+					faults.push("code after the History".into());
+				}
+			}
+		}
+		faults
+	}
+
+	// The rest of the tree: build.rs, the Rust outside src/, and every script
+	// git tracks. A copyright line in the Jim Collier or the Bubbles form, the
+	// license within a few lines under it, nothing but comments above it, and
+	// History at the bottom of the file, not in the header. Tracked files only,
+	// so a scratch file in a working tree is never judged.
+	// Test ID: ErloT4L
+	#[test]
+	fn every_script_carries_the_license_header_with_history_at_the_bottom() {
+		// shell_integration.ps1 is written whole into a user's PowerShell
+		// profile, so it names no license there. It ships inside the binary,
+		// which does.
+		const EXEMPT: &[&str] = &["source/src/shell_integration.ps1"];
+		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+		let repo = crate_dir.parent().unwrap();
+		let own = std::fs::read_to_string(crate_dir.join("src/buildnum.rs")).unwrap();
+		let marker = own
+			.lines()
+			.nth(1)
+			.and_then(|line| line.split_once(" Jim Collier "))
+			.map(|(_, marker)| marker.to_string())
+			.unwrap();
+		if !repo.join(".git").exists() {
+			eprintln!("not a git checkout, so there is no list of tracked scripts");
+			return;
+		}
+		let listing = std::process::Command::new("git")
+			.args(["ls-files", "-z"])
+			.current_dir(repo)
+			.output()
+			.unwrap();
+		assert!(listing.status.success(), "git ls-files failed");
+		let mut faults = Vec::new();
+		let mut seen = 0;
+		for name in String::from_utf8(listing.stdout).unwrap().split('\0') {
+			let path = repo.join(name);
+			let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+			if name.is_empty() || EXEMPT.contains(&name) || !path.is_file() {
+				continue;
+			}
+			let Ok(text) = std::fs::read_to_string(&path) else {
+				continue;
+			};
+			// cicd-win.ps1 starts with a byte-order mark.
+			let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+			let lines: Vec<&str> = text
+				.lines()
+				.map(|line| line.trim_end_matches('\r'))
+				.collect();
+			if ext == "rs" {
+				if lines.first() != Some(&"// SPDX-License-Identifier: GPL-2.0-or-later") {
+					faults.push(format!("{name}: line 1 is not the license"));
+				}
+				let copyright = lines
+					.get(1)
+					.and_then(|line| line.strip_prefix("// Copyright "));
+				match copyright.map(|text| copyright_form(text, &marker)) {
+					Some(Ok(false)) => {}
+					Some(Ok(true)) => {
+						faults.push(format!("{name}: a GPL file in the Bubbles form"))
+					}
+					Some(Err(fault)) => faults.push(format!("{name}: {fault}")),
+					None => faults.push(format!("{name}: no copyright line under the license")),
+				}
+				seen += 1;
+				continue;
+			}
+			if !matches!(ext, "bash" | "sh" | "py" | "ps1" | "cmd") && !text.starts_with("#!") {
+				continue;
+			}
+			for fault in script_header_faults(&lines, ext == "cmd", &marker) {
+				faults.push(format!("{name}: {fault}"));
+			}
+			seen += 1;
+		}
+		assert!(
+			seen > 100,
+			"found only {seen} scripts, so the scan is broken"
+		);
+		assert!(
+			faults.is_empty(),
+			"{} header faults:\n{}",
+			faults.len(),
+			faults.join("\n")
+		);
+	}
 }

@@ -9,6 +9,11 @@
 ##	Not in the pipeline: about three minutes, and the load is sent by hand.
 ##	Test ID: Erkt9mD
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
 Add-Type -Namespace SilkIdle -Name Win -MemberDefinition @'
@@ -144,3 +149,6 @@ foreach ($arm in @("seethru", "opaque")) {
 	Start-Sleep -Milliseconds 500
 	foreach ($line in (Get-Content $err -ErrorAction SilentlyContinue | Select-Object -Last 250)) { fNote "dbg $line" }
 }
+
+##	History:
+##		- 20261004 JC: Created.

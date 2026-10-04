@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
 // Keeps a GPU busy, full, or both, so a window can be watched under load.
 //
 //	gpu-stress [--vram-mb N | --vram-pct P] [--chunk-mb N] [--touch]

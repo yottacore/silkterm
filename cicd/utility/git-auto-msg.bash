@@ -42,3 +42,6 @@ fi
 ## template text above them.
 rest="$(SC="$scissors" CC="$cc" awk 'f || $0 == ENVIRON["SC"] {f=1; print; next} index($0, ENVIRON["CC"]) == 1 {print}' "$file")"
 printf '%s\n\n%s\n' "$msg" "$rest" >"$file"
+
+##	History:
+##		- 20260628: First commit.

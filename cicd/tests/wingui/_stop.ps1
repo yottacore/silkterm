@@ -1,6 +1,12 @@
 ##	Stops what a run started, by pid, and whatever those processes started in
 ##	turn. The boxes are shared, and a stop by name ended any SilkTerm on the
 ##	box along with whatever its panes were running.
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 param([Parameter(Mandatory)] [string] $List)
 
 if (-not (Test-Path $List)) { return }
@@ -28,3 +34,6 @@ while ($todo.Count) {
 	}
 }
 foreach ($p in $found.Values) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+
+##	History:
+##		- 20260918 JC: Created.

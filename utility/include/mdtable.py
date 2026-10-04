@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 """Markdown tables the way the project's docs write them.
 
 A leading pipe and no trailing one, cells padded so the columns line up, and every
@@ -46,3 +52,6 @@ def render(head, align, data):
 		          for i, c in enumerate(cells)]
 		out.append(("| " + " | ".join(padded)).rstrip())
 	return out
+
+##	History:
+##		- 20260924 JC: Created.

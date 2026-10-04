@@ -121,3 +121,6 @@ git -C "$top" worktree add --detach -q "$tree" "$main_local" \
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$top/target}"
 export CARGO_TARGET_DIR
 "$tree/cicd/cicd.bash" --gate
+
+##	History:
+##		- 20260711: Created.

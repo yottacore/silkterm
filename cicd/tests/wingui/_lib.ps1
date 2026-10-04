@@ -1,6 +1,11 @@
 ##	Helpers for a scenario running inside the console session. Dot-sourced by
 ##	_run.ps1, which has already checked that there is a desktop to draw on.
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -Namespace Silk -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr c);
@@ -426,3 +431,6 @@ function fWorkArea {
 function fStop($p) {
 	if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 }
+
+##	History:
+##		- 20260908 JC: Created.

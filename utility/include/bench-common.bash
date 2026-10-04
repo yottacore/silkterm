@@ -15,6 +15,11 @@
 ##		rhythm does the visual grouping.
 ##
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 ##	Guard against being sourced twice by a wrapper that also sources a rig.
 [[ -n "${_benchCommonLoaded:-}" ]] && return 0
 declare -r _benchCommonLoaded=1

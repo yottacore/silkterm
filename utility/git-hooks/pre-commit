@@ -67,3 +67,6 @@ for f in $files; do
 done
 IFS=$oldIFS
 exit 0
+
+##	History:
+##		- 20260628: First commit.

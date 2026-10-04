@@ -1,3 +1,8 @@
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 $ErrorActionPreference = "Continue"
 . "$PSScriptRoot\_env.ps1"
 
@@ -10,3 +15,6 @@ $code = $LASTEXITCODE
 Pop-Location
 "clippy exit=$code"
 exit $code
+
+##	History:
+##		- 20260908 JC: Created.

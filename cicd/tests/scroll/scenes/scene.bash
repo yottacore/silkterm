@@ -24,6 +24,11 @@
 ## the terminal scroll, the way tmux (and less) drive it.
 ## POSIX sh (dash): no backticks (dash would run them and leak the temp path).
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 shape="${1:-less}"
 settle="${SILK_SCENE_SETTLE:-13}"   ## seconds to idle past the GL pipeline warmup
 step="${SILK_SCENE_STEP:-0.15}"     ## seconds between repaints (one line/step)
@@ -191,3 +196,6 @@ while :; do
 	n=$((n + 1))
 	sleep "$step"
 done
+
+##	History:
+##		- 20260706 JC: Created.

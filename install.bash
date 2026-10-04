@@ -13,16 +13,7 @@
 ##	  The OS, the CPU architecture and the asset name are all detected.
 ##	- Needs: bash >= 3.2 (the macOS system bash; tested on 5 only), curl or
 ##	  wget, and one of sha256sum / shasum / openssl.
-##	- History:
-##	  - 20260723 JC: Created.
-##	  - 20260806 JC: Made project-agnostic; dropped --arch for autodetection;
-##	                 added --version; targets bash 3.2.
-##	  - 20260924 JC: --release or --target with no value says so rather than
-##	                 exiting silently; the tag lookup no longer needs the API's
-##	                 pretty-printed layout.
-##	  - 20260925 JC: Picks the highest version from the release list and skips
-##	                 drafts; an API error no longer reads as "no full release";
-##	                 a re-run puts back a missing launcher.
+##	- History: At bottom of file.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	Licensed under The MIT License (MIT). Full text at:
@@ -629,3 +620,14 @@ if [ "${BASH_SOURCE[0]:-}" = "${0}" ] || [ -z "${BASH_SOURCE[0]:-}" ]; then
 	##	bash 3.2 (the macOS system bash), so only pass it when there is one.
 	if [ "$#" -gt 0 ]; then fMain "$@"; else fMain; fi
 fi
+
+##	History:
+##		- 20260723 JC: Created.
+##		- 20260806 JC: Made project-agnostic; dropped --arch for autodetection;
+##		  added --version; targets bash 3.2.
+##		- 20260924 JC: --release or --target with no value says so rather than
+##		  exiting silently; the tag lookup no longer needs the API's
+##		  pretty-printed layout.
+##		- 20260925 JC: Picks the highest version from the release list and skips
+##		  drafts; an API error no longer reads as "no full release";
+##		  a re-run puts back a missing launcher.
