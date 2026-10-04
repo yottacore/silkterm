@@ -509,13 +509,10 @@ impl TermInstance {
 		dir
 	}
 
-	// Where the OS says the shell process itself is. A deleted dir reads back
-	// with a " (deleted)" suffix, so require it to still exist.
+	// Where the OS says the shell process itself is (see process_cwd).
 	#[cfg(unix)]
 	fn os_cwd(&self) -> Option<std::path::PathBuf> {
-		std::fs::read_link(format!("/proc/{}/cwd", self.shell_pid))
-			.ok()
-			.filter(|dir| dir.is_dir())
+		process_cwd(self.shell_pid)
 	}
 
 	// Windows keeps a process's current directory in its own address space
@@ -871,6 +868,52 @@ fn parse_env_block(block: &[u16]) -> std::collections::HashMap<String, String> {
 			Some((text[..at].to_string(), text[at + 1..].to_string()))
 		})
 		.collect()
+}
+
+// Where a process is now. A deleted dir reads back from /proc with a
+// " (deleted)" suffix, so the answer has to still exist.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
+	std::fs::read_link(format!("/proc/{pid}/cwd"))
+		.ok()
+		.filter(|dir| dir.is_dir())
+}
+
+// macOS has no /proc. bash and zsh never report where they are, so before this
+// a split or new tab from one of them had no directory to inherit and opened
+// where SilkTerm was started - outside the git project, so a PowerShell tab
+// opened from a bash pane there showed no git status in its prompt.
+#[cfg(target_os = "macos")]
+fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
+	use std::os::unix::ffi::OsStrExt;
+	let pid = libc::c_int::try_from(pid).ok().filter(|&pid| pid > 0)?;
+	let size = libc::c_int::try_from(std::mem::size_of::<libc::proc_vnodepathinfo>()).ok()?;
+	// SAFETY: all-integer C struct, so zeroed is a valid value; the call writes
+	// at most `size` bytes into it and says how many it wrote.
+	let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
+	let wrote = unsafe {
+		libc::proc_pidinfo(
+			pid,
+			libc::PROC_PIDVNODEPATHINFO,
+			0,
+			std::ptr::from_mut(&mut info).cast(),
+			size,
+		)
+	};
+	if wrote != size {
+		return None;
+	}
+	// libc splits the path's MAXPATHLEN chars into rows; it ends at the NUL
+	let path: Vec<u8> = info
+		.pvi_cdir
+		.vip_path
+		.iter()
+		.flatten()
+		.map(|&c| u8::from_ne_bytes(c.to_ne_bytes()))
+		.take_while(|&b| b != 0)
+		.collect();
+	let dir = std::path::PathBuf::from(std::ffi::OsStr::from_bytes(&path));
+	(!path.is_empty() && dir.is_dir()).then_some(dir)
 }
 
 // Executable basename of a process from /proc/<pid>/comm (Linux/most Unix).
@@ -1736,6 +1779,67 @@ mod tests {
 		);
 		assert_eq!(
 			roamed.map(|dir| real(&dir)),
+			Some(real(&moved_to)),
+			"the directory the shell moved to never came back"
+		);
+	}
+
+	// The unix half of the same question. bash and zsh never report where they
+	// are, so a split or new tab from one inherits only what the OS can say -
+	// and a Mac, with no /proc, said nothing, so the new pane opened outside the
+	// project it was meant to be in.
+	// Test ID: ErkhGGP
+	#[cfg(unix)]
+	#[test]
+	fn a_unix_shell_reports_where_it_is_now_not_where_it_started() {
+		use std::io::Write;
+		use std::process::{Command, Stdio};
+
+		use super::process_cwd;
+		let real = |dir: &std::path::Path| std::fs::canonicalize(dir).expect("canonicalize");
+		let started_in = crate::testdir::run_dir().join("cwd started");
+		let moved_to = crate::testdir::run_dir().join("cwd moved");
+		std::fs::create_dir_all(&started_in).expect("mkdir");
+		std::fs::create_dir_all(&moved_to).expect("mkdir");
+
+		// each shell waits on its own stdin and runs nothing but a cd
+		let hold = |dir: &std::path::Path| {
+			Command::new("/bin/sh")
+				.current_dir(dir)
+				.stdin(Stdio::piped())
+				.stdout(Stdio::null())
+				.stderr(Stdio::null())
+				.spawn()
+				.expect("spawn /bin/sh")
+		};
+		let mut still = hold(&started_in);
+		let mut roams = hold(&started_in);
+		if let Some(pipe) = roams.stdin.as_mut() {
+			let _ = writeln!(pipe, "cd '{}'", moved_to.display());
+			let _ = pipe.flush();
+		}
+
+		let mut roamed = None;
+		for _ in 0..60 {
+			roamed = process_cwd(roams.id());
+			if roamed.as_deref().map(real) == Some(real(&moved_to)) {
+				break;
+			}
+			std::thread::sleep(std::time::Duration::from_millis(50));
+		}
+		let stayed = process_cwd(still.id());
+		let _ = still.kill();
+		let _ = roams.kill();
+		let _ = still.wait();
+		let _ = roams.wait();
+
+		assert_eq!(
+			stayed.as_deref().map(real),
+			Some(real(&started_in)),
+			"a process that never moved read back somewhere else"
+		);
+		assert_eq!(
+			roamed.as_deref().map(real),
 			Some(real(&moved_to)),
 			"the directory the shell moved to never came back"
 		);

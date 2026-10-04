@@ -5,11 +5,12 @@
 //!
 //! A new tab, split or window starts where the pane it came from is, which
 //! means asking a shell where that is. The OS can answer for a shell that
-//! moves itself (`/proc/<pid>/cwd`, or the PEB on Windows - see `term.rs`),
-//! and cannot answer at all for one that keeps its own idea of where it is:
-//! PowerShell's `Set-Location` never tells the OS. Every terminal has that
-//! hole and every terminal fills it the same way - the shell announces the
-//! directory in an escape sequence and the terminal listens.
+//! moves itself (`/proc/<pid>/cwd`, `proc_pidinfo` on macOS, or the PEB on
+//! Windows - see `term.rs`), and cannot answer at all for one that keeps its
+//! own idea of where it is: PowerShell's `Set-Location` never tells the OS.
+//! Every terminal has that hole and every terminal fills it the same way - the
+//! shell announces the directory in an escape sequence and the terminal
+//! listens.
 //!
 //! Both spellings in use are read. OSC 7 (`ESC ] 7 ; file://host/path`) is
 //! what the unix shells emit, hostname and percent-encoding included. OSC 9;9
