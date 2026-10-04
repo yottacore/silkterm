@@ -339,6 +339,7 @@ pub fn remote_session() -> bool {
 		// SM_REMOTESESSION. The environment check is the backstop for a session
 		// the metric misses, a service-hosted one in particular.
 		const SM_REMOTESESSION: i32 = 0x1000;
+		// SAFETY: takes an index and no pointer, and answers 0 for one it does not know.
 		let metric = unsafe {
 			windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(SM_REMOTESESSION)
 		};
@@ -430,8 +431,11 @@ fn memory_gib() -> u64 {
 	#[cfg(windows)]
 	{
 		use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+		// SAFETY: an all-integer C struct, so all zeros is a valid value.
 		let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
 		status.dwLength = u32::try_from(std::mem::size_of::<MEMORYSTATUSEX>()).unwrap_or(0);
+		// SAFETY: points at a live struct with `dwLength` set, as the call requires;
+		// a wrong length only makes it fail.
 		if unsafe { GlobalMemoryStatusEx(&raw mut status) } != 0 {
 			return status.ullTotalPhys / (1 << 30);
 		}
@@ -439,7 +443,10 @@ fn memory_gib() -> u64 {
 	}
 	#[cfg(not(windows))]
 	{
+		// SAFETY: sysconf takes a name and no pointer, and answers -1 for one it
+		// does not know.
 		let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
+		// SAFETY: as above.
 		let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
 		if pages > 0 && page > 0 {
 			(pages as u64).saturating_mul(page as u64) / (1 << 30)

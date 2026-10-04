@@ -29,6 +29,7 @@ mod input;
 mod integration;
 mod keys;
 mod links;
+mod locks;
 #[cfg(any(test, target_os = "macos"))]
 mod macmenu;
 mod minimap;
@@ -60,6 +61,8 @@ mod wallpaper;
 mod xmp;
 use crate::app::App;
 use crate::term::UserEvent;
+#[cfg(feature = "profiling")]
+use anyhow::Context;
 use winit::event_loop::{ControlFlow, EventLoop};
 // Make stdout/stderr reach the terminal we were launched from.
 //
@@ -207,25 +210,28 @@ fn main() -> anyhow::Result<()> {
 	// cicd profiler stage: SILK_PROFILE_OUT set -> sample this run and write a
 	// flamegraph SVG when the app exits (App exits itself after SILK_PROFILE_SECS).
 	#[cfg(feature = "profiling")]
-	let profile_guard = std::env::var("SILK_PROFILE_OUT").ok().map(|_| {
-		pprof::ProfilerGuardBuilder::default()
-			.frequency(199)
-			.blocklist(&["libc", "libpthread", "vdso", "libgcc"])
-			.build()
-			.expect("pprof: failed to start profiler")
-	});
+	let profile_guard = std::env::var("SILK_PROFILE_OUT")
+		.ok()
+		.map(|out| {
+			pprof::ProfilerGuardBuilder::default()
+				.frequency(199)
+				.blocklist(&["libc", "libpthread", "vdso", "libgcc"])
+				.build()
+				.map(|guard| (guard, out))
+		})
+		.transpose()
+		.context("pprof: failed to start profiler")?;
 	event_loop.run_app(&mut app)?;
 	#[cfg(feature = "profiling")]
-	if let Some(guard) = profile_guard {
-		let out = std::env::var("SILK_PROFILE_OUT").unwrap();
+	if let Some((guard, out)) = profile_guard {
 		let report = guard
 			.report()
 			.build()
-			.expect("pprof: failed to build report");
-		let file = std::fs::File::create(&out).expect("pprof: failed to create SVG");
+			.context("pprof: failed to build report")?;
+		let file = std::fs::File::create(&out).context("pprof: failed to create SVG")?;
 		report
 			.flamegraph(file)
-			.expect("pprof: failed to write flamegraph");
+			.context("pprof: failed to write flamegraph")?;
 		eprintln!("{}: wrote flamegraph -> {out}", config::APP_NAME);
 	}
 	Ok(())

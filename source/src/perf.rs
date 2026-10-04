@@ -228,7 +228,7 @@ pub fn typed(key: Option<Instant>, pane: u64) {
 	let Some(key) = key else {
 		return;
 	};
-	*PENDING.lock().unwrap() = Some(Pending {
+	*crate::locks::lock(&PENDING) = Some(Pending {
 		pane,
 		key,
 		wrote: Instant::now(),
@@ -242,7 +242,7 @@ pub fn echoed(pane: u64) {
 	if !latency_on() {
 		return;
 	}
-	let mut slot = PENDING.lock().unwrap();
+	let mut slot = crate::locks::lock(&PENDING);
 	let Some(pending) = slot.as_mut() else {
 		return;
 	};
@@ -263,7 +263,7 @@ pub fn painted() {
 	if !latency_on() {
 		return;
 	}
-	let mut slot = PENDING.lock().unwrap();
+	let mut slot = crate::locks::lock(&PENDING);
 	let Some(pending) = slot.as_ref() else {
 		return;
 	};
@@ -293,7 +293,7 @@ pub fn painted() {
 		ms(draw),
 		ms(send + echo + draw),
 	);
-	SAMPLES.lock().unwrap().push((send, echo, draw));
+	crate::locks::lock(&SAMPLES).push((send, echo, draw));
 }
 
 // Median and p95 of `sorted`, which must already be sorted.
@@ -306,7 +306,7 @@ fn latency_report() {
 	if !latency_on() {
 		return;
 	}
-	let samples = SAMPLES.lock().unwrap();
+	let samples = crate::locks::lock(&SAMPLES);
 	if samples.is_empty() {
 		eprintln!("[latency] nothing timed - a keystroke needs an echo to measure against");
 		return;
@@ -317,13 +317,15 @@ fn latency_report() {
 	let mut totals: Vec<u32> = samples.iter().map(|s| s.0 + s.1 + s.2).collect();
 	totals.sort_unstable();
 	let (median, p95) = percentiles(&totals);
+	#[allow(clippy::unwrap_used, reason = "`samples` is not empty, checked above")]
+	let worst = *totals.last().unwrap();
 	let ms = |us: u32| f64::from(us) / 1e3;
 	eprintln!(
 		"[latency] {} keystrokes: median {:.2}ms  p95 {:.2}ms  worst {:.2}ms",
 		samples.len(),
 		ms(median),
 		ms(p95),
-		ms(*totals.last().unwrap()),
+		ms(worst),
 	);
 	eprintln!(
 		"[latency] mean legs: send {:.2}ms  echo {:.2}ms  draw {:.2}ms",

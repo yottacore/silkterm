@@ -6,6 +6,11 @@
 // reads it back to PNG. If text shows -> the transparent-path bug is the external
 // context; if not -> glyphon+wgpu-GL is broken generally.
 // Run: DISPLAY=:0.0 cargo run --example glyphon_gl
+#![allow(
+	clippy::unwrap_used,
+	clippy::expect_used,
+	reason = "a dev-only probe, where a failure should stop it on the spot"
+)]
 use glyphon::{
 	Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
 	TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,

@@ -606,6 +606,28 @@ impl Gfx {
 		})
 	}
 
+	// The GL config picker: transparent first, then the deepest alpha.
+	#[allow(
+		clippy::expect_used,
+		reason = "the template asks for nothing, so every config the display has is offered"
+	)]
+	fn most_transparent_config(
+		cfgs: Box<dyn Iterator<Item = glutin::config::Config> + '_>,
+	) -> glutin::config::Config {
+		cfgs.reduce(|best, cand| {
+			let (best_transparent, cand_transparent) = (
+				best.supports_transparency().unwrap_or(false),
+				cand.supports_transparency().unwrap_or(false),
+			);
+			if (cand_transparent, cand.alpha_size()) > (best_transparent, best.alpha_size()) {
+				cand
+			} else {
+				best
+			}
+		})
+		.expect("GL reported no framebuffer configs")
+	}
+
 	// X11-only per-pixel transparency: glutin creates the window with a 32-bit
 	// ARGB visual + transparent GL context, and wgpu runs on it via hal external
 	// interop (PoCs on branch spike/x11-transparency). Returns the window it created.
@@ -622,22 +644,7 @@ impl Gfx {
 		let template = glutin::config::ConfigTemplateBuilder::new();
 		let (window, config) = DisplayBuilder::new()
 			.with_window_attributes(Some(attrs))
-			.build(el, template, |cfgs| {
-				cfgs.reduce(|best, cand| {
-					let (best_transparent, cand_transparent) = (
-						best.supports_transparency().unwrap_or(false),
-						cand.supports_transparency().unwrap_or(false),
-					);
-					if (cand_transparent, cand.alpha_size()) > (best_transparent, best.alpha_size())
-					{
-						cand
-					} else {
-						best
-					}
-				})
-				// unreachable unless GL reports zero framebuffer configs at all
-				.expect("GL reported no framebuffer configs")
-			})
+			.build(el, template, Self::most_transparent_config)
 			.map_err(|e| anyhow::anyhow!("glutin display build: {e}"))?;
 		if !config.supports_transparency().unwrap_or(false) || config.alpha_size() < 8 {
 			return Err(anyhow::anyhow!(
@@ -682,6 +689,8 @@ impl Gfx {
 				let attrs = ContextAttributesBuilder::new()
 					.with_context_api(ContextApi::OpenGl(Some(Version::new(maj, min))))
 					.build(Some(raw));
+				// SAFETY: `raw` is `window`'s handle, and `Gfx` keeps the window
+				// (`_window`, dropped last) for as long as the context.
 				if let Ok(ctx) = unsafe { gl_display.create_context(&config, &attrs) } {
 					picked = Some(ctx);
 					break;
@@ -690,13 +699,14 @@ impl Gfx {
 			picked.ok_or_else(|| anyhow::anyhow!("no GL context could be created"))?
 		};
 		let size = window.inner_size();
+		// SAFETY: as for the context above, the window outlives the surface.
 		let surface = unsafe {
 			gl_display.create_window_surface(
 				&config,
 				&SurfaceAttributesBuilder::<WindowSurface>::new().build(
 					raw,
-					NonZeroU32::new(size.width.max(1)).unwrap(),
-					NonZeroU32::new(size.height.max(1)).unwrap(),
+					NonZeroU32::new(size.width).unwrap_or(NonZeroU32::MIN),
+					NonZeroU32::new(size.height).unwrap_or(NonZeroU32::MIN),
 				),
 			)?
 		};
@@ -860,9 +870,9 @@ impl Gfx {
 	}
 
 	pub fn resize(&mut self, w: u32, h: u32) {
-		if w == 0 || h == 0 {
+		let (Some(nonzero_w), Some(nonzero_h)) = (NonZeroU32::new(w), NonZeroU32::new(h)) else {
 			return;
-		}
+		};
 		self.config.width = w;
 		self.config.height = h;
 		match &mut self.backend {
@@ -877,11 +887,7 @@ impl Gfx {
 				blit,
 				config: _,
 			} => {
-				surface.resize(
-					ctx,
-					NonZeroU32::new(w).unwrap(),
-					NonZeroU32::new(h).unwrap(),
-				);
+				surface.resize(ctx, nonzero_w, nonzero_h);
 				*fb = default_fb(&self.device, FB_FORMAT, w, h);
 				*fb_view = fb.create_view(&wgpu::TextureViewDescriptor::default());
 				*offscreen = offscreen_tex(&self.device, self.format, w, h);
@@ -1508,6 +1514,8 @@ fn gl_adapter(
 	instance: &wgpu::Instance,
 	gl_display: &glutin::display::Display,
 ) -> anyhow::Result<wgpu::Adapter> {
+	// SAFETY: the caller made the context current on this thread just before,
+	// and all GL work stays on this one thread (see `default_fb`).
 	let exposed = unsafe {
 		wgpu::hal::gles::Adapter::new_external(
 			|name| {
@@ -1519,6 +1527,8 @@ fn gl_adapter(
 		)
 	}
 	.ok_or_else(|| anyhow::anyhow!("wgpu GL external adapter init failed"))?;
+	// SAFETY: an external GL adapter is tied to the current context, not to an
+	// instance, so there is no other instance it could belong to.
 	Ok(unsafe { instance.create_adapter_from_hal::<Gles>(exposed) })
 }
 
@@ -1536,10 +1546,10 @@ fn gl_adapter(
 // A wgpu texture aliasing the GL default framebuffer (fbo 0 = glutin's window).
 #[cfg(not(target_os = "macos"))]
 fn default_fb(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32) -> wgpu::Texture {
-	// Safety: aliasing the GL default framebuffer is sound only while every GL
+	let hal = wgpu::hal::gles::Texture::default_framebuffer(format);
+	// SAFETY: aliasing the GL default framebuffer is sound only while every GL
 	// call stays on the winit main thread - rendering here is single-threaded
 	// by construction; don't move GL work onto helper threads.
-	let hal = wgpu::hal::gles::Texture::default_framebuffer(format);
 	unsafe {
 		device.create_texture_from_hal::<Gles>(
 			hal,

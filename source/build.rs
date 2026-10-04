@@ -16,7 +16,7 @@ use std::{env, fs, path::Path};
 // and the tests over there can't be two different implementations.
 include!("src/buildnum.rs");
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
 	println!("cargo:rerun-if-changed=assets/silkterm.rc.in");
 	println!("cargo:rerun-if-changed=assets/icon.ico");
 	println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
@@ -33,16 +33,16 @@ fn main() {
 	// anywhere; it just stops the one host that got it wrong.
 	let target = env::var("TARGET").unwrap_or_default();
 	if !target.contains("windows") {
-		return;
+		return Ok(());
 	}
 
-	let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
-	let out = env::var("OUT_DIR").unwrap();
+	let manifest = cargo_env("CARGO_MANIFEST_DIR");
+	let out = cargo_env("OUT_DIR");
 
-	let major = env::var("CARGO_PKG_VERSION_MAJOR").unwrap();
-	let minor = env::var("CARGO_PKG_VERSION_MINOR").unwrap();
-	let patch = env::var("CARGO_PKG_VERSION_PATCH").unwrap();
-	let ver_str = env::var("CARGO_PKG_VERSION").unwrap();
+	let major = cargo_env("CARGO_PKG_VERSION_MAJOR");
+	let minor = cargo_env("CARGO_PKG_VERSION_MINOR");
+	let patch = cargo_env("CARGO_PKG_VERSION_PATCH");
+	let ver_str = cargo_env("CARGO_PKG_VERSION");
 	let desc = env::var("CARGO_PKG_DESCRIPTION").unwrap_or_default();
 
 	// forward slashes so the absolute path needs no backslash escaping, and works
@@ -52,7 +52,7 @@ fn main() {
 		.to_string_lossy()
 		.replace('\\', "/");
 
-	let template = fs::read_to_string(Path::new(&manifest).join("assets/silkterm.rc.in")).unwrap();
+	let template = fs::read_to_string(Path::new(&manifest).join("assets/silkterm.rc.in"))?;
 	let rc = template
 		.replace("@ICON@", &icon)
 		.replace("@VER_CSV@", &format!("{major},{minor},{patch},0"))
@@ -60,7 +60,7 @@ fn main() {
 		.replace("@DESC@", &desc);
 
 	let rc_path = Path::new(&out).join("silkterm.rc");
-	fs::write(&rc_path, rc).unwrap();
+	fs::write(&rc_path, rc)?;
 
 	// The compiler is chosen for the TARGET. embed-resource chooses off the build
 	// host instead, and that went wrong twice: an msvc host runs rc.exe even for a
@@ -74,11 +74,20 @@ fn main() {
 		if let Err(err) = result.manifest_required() {
 			println!("cargo:warning=windows resources not embedded: {err}");
 		}
-		return;
+		return Ok(());
 	}
 	if let Err(err) = windres_compile(&out, &rc_path) {
 		println!("cargo:warning=windows resources not embedded: {err}");
 	}
+	Ok(())
+}
+
+#[allow(
+	clippy::expect_used,
+	reason = "cargo sets these for every build script run"
+)]
+fn cargo_env(name: &str) -> String {
+	env::var(name).expect("set by cargo for a build script")
 }
 
 // A version alone can't tell two builds apart - every dogfood build of a release

@@ -386,9 +386,7 @@ pub fn friendly(command: &str, stored: &[ShellEntry]) -> String {
 	// second. The answer only moves when the stored list does, so it is kept
 	// against the list's own content.
 	let stamp = list_stamp(stored);
-	let mut memo = FRIENDLY_MEMO
-		.lock()
-		.unwrap_or_else(std::sync::PoisonError::into_inner);
+	let mut memo = crate::locks::lock(&FRIENDLY_MEMO);
 	match memo.as_mut() {
 		Some((seen, map)) if *seen == stamp => {
 			if let Some(hit) = map.get(command) {

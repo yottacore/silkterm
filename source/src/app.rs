@@ -1346,7 +1346,10 @@ impl ContextMenu {
 	}
 	// The popup the keyboard and the pointer are on: the innermost open one.
 	fn inner_mut(&mut self) -> &mut ContextMenu {
+		// Matching on `&mut self.sub` would keep `self` borrowed into the None
+		// arm, so the Some arm borrows again.
 		match self.sub {
+			#[allow(clippy::expect_used, reason = "matched Some just above")]
 			Some(_) => self.sub.as_mut().expect("just matched").inner_mut(),
 			None => self,
 		}
@@ -6608,28 +6611,18 @@ impl State {
 			self.chrome_rev = self.chrome_rev.wrapping_add(1);
 		}
 		{
-			let mut reshaped = false;
-			{
-				let cache = self.chrome.as_mut().unwrap(); // ensured above
-				if cache.tabs.len() > tab_titles.len() {
-					reshaped = true;
-				}
-				cache.tabs.truncate(tab_titles.len());
-			}
+			#[allow(clippy::unwrap_used, reason = "set just above when it was None")]
+			let cache = self.chrome.as_mut().unwrap();
+			let mut reshaped = cache.tabs.len() > tab_titles.len();
+			cache.tabs.truncate(tab_titles.len());
 			let scale = self.text.scale;
 			for (i, title) in tab_titles.into_iter().enumerate() {
 				let title_w = tab_title_w(tab_widths[i], scale);
 				// an unchanged title in an unchanged tab keeps its shaped buffer;
 				// a width change re-wraps it
-				if self
-					.chrome
-					.as_ref()
-					.unwrap()
-					.tabs
-					.get(i)
-					.is_some_and(|(cached, cached_w, _)| {
-						cached == &title && (*cached_w - title_w).abs() < 0.01
-					}) {
+				if cache.tabs.get(i).is_some_and(|(cached, cached_w, _)| {
+					cached == &title && (*cached_w - title_w).abs() < 0.01
+				}) {
 					continue;
 				}
 				reshaped = true;
@@ -6644,7 +6637,6 @@ impl State {
 					None,
 				);
 				buf.shape_until_scroll(&mut self.text.font_system, false);
-				let cache = self.chrome.as_mut().unwrap();
 				if i < cache.tabs.len() {
 					cache.tabs[i] = (title, title_w, buf);
 				} else {
@@ -6747,7 +6739,11 @@ impl State {
 		// glyph-cache lookups are over half the per-frame cost, and an idle cursor
 		// pulse repeats them 30x a second for no visual difference.
 		if !text_same {
-			let chrome = self.chrome.as_ref().unwrap(); // ensured above
+			#[allow(
+				clippy::unwrap_used,
+				reason = "set at the top of the frame when it was None"
+			)]
+			let chrome = self.chrome.as_ref().unwrap();
 			let mut areas: Vec<TextArea> = Vec::new();
 			for p in self.tabs.cur().panes.values() {
 				// app-scroll slide: fill the revealed gap from the scrolled-off strip,

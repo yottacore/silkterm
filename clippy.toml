@@ -1,0 +1,3 @@
+# Tests unwrap freely; the rest of the tree may not (see unwrap_used in Cargo.toml).
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
