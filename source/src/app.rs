@@ -5705,6 +5705,21 @@ impl State {
 		if self.maximize_on_reveal && cfg!(windows) {
 			self.window.set_maximized(true);
 		}
+		// On X11 the state also goes on the window itself before it maps, which
+		// the window manager reads as it maps it. A request after the map alone
+		// shows the window at the restored size first. winit holds a fullscreen
+		// asked for while hidden until after the map, too.
+		let mut states: Vec<&[u8]> = Vec::new();
+		if self.maximize_on_reveal {
+			states.extend([
+				b"_NET_WM_STATE_MAXIMIZED_VERT".as_slice(),
+				b"_NET_WM_STATE_MAXIMIZED_HORZ",
+			]);
+		}
+		if self.window.fullscreen().is_some() {
+			states.push(b"_NET_WM_STATE_FULLSCREEN");
+		}
+		preset_wm_state(&self.window, &states);
 		self.window.set_visible(true);
 		if self.maximize_on_reveal && !cfg!(windows) {
 			self.window.set_maximized(true);
@@ -7456,6 +7471,55 @@ fn set_blur_behind(window: &Window, enable: bool) {
 #[cfg(not(target_os = "linux"))]
 fn set_blur_behind(_window: &Window, _enable: bool) {}
 
+// The initial _NET_WM_STATE of a window not mapped yet. EWMH has a client
+// set the property itself then, since a window manager ignores a state
+// message for a window it does not manage yet.
+#[cfg(target_os = "linux")]
+fn preset_wm_state(window: &Window, states: &[&[u8]]) {
+	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+	use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _, PropMode};
+	use x11rb::wrapper::ConnectionExt as _;
+
+	if states.is_empty() {
+		return;
+	}
+	let Ok(handle) = window.window_handle() else {
+		return;
+	};
+	let xid = match handle.as_raw() {
+		RawWindowHandle::Xlib(h) => h.window as u32,
+		RawWindowHandle::Xcb(h) => h.window.get(),
+		_ => return,
+	};
+	let Ok((conn, _)) = x11rb::connect(None) else {
+		return;
+	};
+	let atom = |name: &[u8]| {
+		conn.intern_atom(false, name)
+			.ok()
+			.and_then(|cookie| cookie.reply().ok())
+			.map(|reply| reply.atom)
+	};
+	let Some(property) = atom(b"_NET_WM_STATE") else {
+		return;
+	};
+	let Some(values) = states
+		.iter()
+		.map(|name| atom(name))
+		.collect::<Option<Vec<_>>>()
+	else {
+		return;
+	};
+	// checked, so the server has it before winit's own connection maps the window
+	if let Ok(cookie) =
+		conn.change_property32(PropMode::APPEND, xid, property, AtomEnum::ATOM, &values)
+	{
+		let _ = cookie.check();
+	}
+}
+#[cfg(not(target_os = "linux"))]
+fn preset_wm_state(_window: &Window, _states: &[&[u8]]) {}
+
 // wgpu's guaranteed floor for max_texture_dimension_2d. The window is born
 // before the device exists, so a birth size is held to the floor, and the
 // grid-derived resize after it to what the device actually reports.
@@ -8008,7 +8072,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// remember_size opens at the last size and font zoom, this monitor's own
 		// where they are kept. A size or font size on the command line wins.
 		let settings = config::settings();
-		let monitor = crate::monitor::MonitorId::of_window(&window).map(|m| m.key());
+		let monitor = crate::monitor::MonitorId::of_new_window(&window).map(|m| m.key());
 		let kept = config::remembered_window(&settings, monitor.as_deref());
 		let font_pinned = cli_win.style.font_size.is_some();
 		if settings.remember_size && !font_pinned {

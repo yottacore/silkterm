@@ -417,6 +417,7 @@ A window nobody is looking at draws no frames, and a minimized window or hidden 
 - With `remember_size` on, the size written down is an ordinary window's. A fullscreen or maximized window is not a size to come back to, so neither is remembered: unfullscreening would otherwise leave every later launch opening at the size of the screen. The window's own columns and rows stay as they were, and a resize by hand still replaces them.
 
 - Maximized is remembered on its own, under `remember_maximized`, which is off by default. A window closed maximized opens maximized, with the remembered size still under it, so un-maximizing goes back to that size. A size or fullscreen asked for on the command line wins over it. The state is read once a resize has held, not in the resize event, since the window manager may set it after the resize it caused.
+	- On X11 the maximized state, and a fullscreen from the command line, are written on the window before it is shown. A window manager ignores a request for a window it does not manage yet, and one sent after showing it showed the window at its restored size first.
 
 - The font zoom is remembered with the size, as px on the font size. Zooming keeps the window's pixel size and changes its grid, so both are saved, and the next launch opens at the same pixel size rather than the old grid drawn bigger. A font size on the command line wins, and its zoom is not saved.
 
@@ -425,6 +426,7 @@ A window nobody is looking at draws no frames, and a minimized window or hidden 
 	- The window's own resize, and the one the system makes for a new scale, are not saved as the user's. The move that the window's own resize can cause is not taken as a new move, or a window on the edge of two monitors could swap between their sizes.
 	- A size given on the command line stays through a move until the user resizes the window.
 	- On X11 the server is asked which monitor the window overlaps most, rather than winit, whose list may predate a resolution change.
+	- A window not shown yet has no place of its own, so the launch takes the monitor under the pointer. That is where xfwm4 opens a window that asks for no position, and where winit takes the window's scale from. Going by where the hidden window sat sized it for the top-left monitor, and it changed size a moment after it showed elsewhere.
 	- Wayland tells a window neither where it is nor that it moved. It looks once just after it opens, on a scale change, and when the pointer comes back after a drag.
 
 - A number given on the command line is held to the range of the setting it stands for, the same range the file's copy of that setting is held to. A count of rows or columns is also held to what the graphics device can draw, since the window is a texture and a refusal there ends the launch rather than the setting.
