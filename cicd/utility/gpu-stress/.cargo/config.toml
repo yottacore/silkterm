@@ -1,0 +1,4 @@
+# Builds land beside the terminal's, under the repo's target/ (relative to the
+# folder holding this .cargo). The mingw linker comes from the repo's own config.
+[build]
+target-dir = "../../../target/gpu-stress"

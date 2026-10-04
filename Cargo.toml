@@ -6,7 +6,7 @@ members = ["source"]
 # clones of the patched dependencies, and the clipboard reproducer is run by
 # hand. Without this, cargo takes any package under this directory for a member
 # it was not told about and refuses to build it on its own.
-exclude = ["forks", "cicd/tests/clipboard-race"]
+exclude = ["forks", "cicd/tests/clipboard-race", "cicd/utility/gpu-stress"]
 resolver = "3"
 
 # Five changes over the released 0.26.0, on one branch. At each new release,

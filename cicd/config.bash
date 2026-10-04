@@ -275,6 +275,8 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## script adds the flag and passes each line through as one argument.
 export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/mmap-bench
+*/target/gpu-stress
+*/target/gpuctl
 */target/darwin
 */target/lightnew
 */target/lightold

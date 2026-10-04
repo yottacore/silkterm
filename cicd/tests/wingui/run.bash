@@ -13,7 +13,8 @@
 ##		With no scenario it runs 'smoke'. Shots come back under cicd/artifacts/wingui.
 ##		The binary is cross-built here from the tree under test and sent along, so
 ##		the result is for this commit and not whatever was last built on the box.
-##		WINGUI_EXE names a binary to send instead.
+##		WINGUI_EXE names a binary to send instead. WINGUI_EXTRA lists more files,
+##		space separated, that go into the run's folder under their own names.
 ##	- Exit: 0 pass or skipped, 1 a scenario failed.
 ##	- History: At bottom of file.
 
@@ -177,7 +178,11 @@ fBox(){
 	echo "wingui: ${box}: ${runDir}"
 	##	Checked here, since errexit is off inside a function called with ||. A
 	##	scenario with no binary would only skip.
-	if ! "${winRemote}" --host "${box}" --optional push "${exe}" "${runDir}\\silkterm.exe" >/dev/null; then
+	local extra extraFailed=0
+	for extra in ${WINGUI_EXTRA:-}; do
+		"${winRemote}" --host "${box}" --optional push "${extra}" "${runDir}\\$(basename "${extra}")" >/dev/null || extraFailed=1
+	done
+	if ! "${winRemote}" --host "${box}" --optional push "${exe}" "${runDir}\\silkterm.exe" >/dev/null || ((extraFailed)); then
 		echo "wingui: ${box}: sending the binary failed"
 		boxFailed=1
 	else
@@ -223,3 +228,4 @@ if ((! keep)); then find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev
 ##		- 20260918: sends a binary built from the tree under test, and stops only what it started.
 ##		- 20261002: stages in the console user's temp folder, one box at a time.
 ##		- 20261002: removes the run folder on the box only when it has the run's mark, also after a failed send.
+##		- 20261003: WINGUI_EXTRA.
