@@ -620,6 +620,14 @@ if command -v pwsh >/dev/null 2>&1; then
 else
 	fEcho "WARNING: pwsh not installed; PowerShell scripts not linted"
 fi
+## First-party Python scripts, with the rules in ruff.toml.
+pyRc=0
+python3 "${root}/cicd/utility/py-lint.py" || pyRc=$?
+case "${pyRc}" in
+	0) fEcho "OK: Python scripts clean" ;;
+	2) fEcho "WARNING: ruff not installed; Python scripts not linted" ;;
+	*) fDie "ruff found problems" ;;
+esac
 ## Private content scrub, when this machine has the private tree. A clone without
 ## it builds as before.
 if [[ -x "${root}/../private/hooks/scrub.bash" ]]; then
@@ -779,6 +787,12 @@ if [[ -x "${root}/cicd/tests/pslint/run.bash" ]]; then
 	fEcho_Clean "PowerShell lint ..."
 	"${root}/cicd/tests/pslint/run.bash" >/dev/null || fDie "PowerShell lint test failed ($(fTestId cicd/tests/pslint/run.bash))"
 	fEcho "OK: PowerShell lint ($(fTestId cicd/tests/pslint/run.bash))"
+fi
+## The Python lint, the same way.
+if [[ -x "${root}/cicd/tests/pylint/run.bash" ]]; then
+	fEcho_Clean "Python lint ..."
+	"${root}/cicd/tests/pylint/run.bash" >/dev/null || fDie "Python lint test failed ($(fTestId cicd/tests/pylint/run.bash))"
+	fEcho "OK: Python lint ($(fTestId cicd/tests/pylint/run.bash))"
 fi
 ## The Windows runner, which steps over a box that is off.
 if [[ -x "${root}/cicd/tests/win-remote/run.bash" ]]; then

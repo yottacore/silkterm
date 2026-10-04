@@ -94,6 +94,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: delcfg
 	- Commit: 312f355
 
+- No linter config for Python or PowerShell indentation, and the style guide covers Rust only
+	- ID: 2026100314050017
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Yes. Stage 3 of cicd.bash, which now runs the Python lint and its test. Both blocks were run alone.
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior:
+		- There is no `pyproject.toml` or ruff config, so nothing checks the Python files.
+		- `cicd/PSScriptAnalyzerSettings.psd1` has no `Rules` block, so `PSUseConsistentIndentation` never runs.
+		- `style-guide.md` has Rust sections only, while about 22,000 lines are bash, PowerShell and Python.
+	- Expected behavior: The directive's table names a config per language, and the public guide covers the code it governs.
+	- Note: The Python files use tabs where the directive's default is four spaces. Existing code is not reindented, so the config should pin tabs. `analyze.py` is the one file in spaces.
+	- Origin: fe07eaa (2026-09-24) for the PowerShell settings, 4e7beb1 (2026-07-21) for the guide. No earlier review item. Confirmed.
+	- Progress log:
+		- PSUseConsistentIndentation set to tabs fails 72 lines in 8 scripts. It reads spaces after the tabs that line up a continuation as bad indentation, and counts `{ @(` on one line as two levels. Fixing those means reformatting code the house style allows. So the rule is in the settings, set for tabs but off, with the reason, and `ps-lint.ps1` checks for tabs itself. Turn the rule on and reformat those lines instead?
+		- Ruff has no rule that asks for tabs. Its formatter can, and `ruff.toml` sets that, but a format check would rewrite 16 of 19 scripts. So `py-lint.py` checks block indentation for tabs itself, and the formatter is not run in the pipeline.
+		- The Python directive table says four spaces. The scripts use tabs, so the config pins tabs.
+		- `ruff.toml` turns off E401, E702, E731 and E741, 10 lines in 5 scripts, for 2026100314050016 to take back.
+		- The PowerShell lint test had failed 3 checks since a192b87. That commit turned off `PSUseApprovedVerbs`, and the test's planted finding was an unapproved verb. The finding is now an alias, and the verb case checks that it stays excluded.
+	- Actual fix [Bug]:
+		- `ruff.toml` with ruff's default rules and the formatter set to tabs, and `cicd/utility/py-lint.py` (ruff, then a tab check on block indentation). cicd.bash gates on it beside the shellcheck and PowerShell lints.
+		- `ps-lint.ps1` checks that indentation is tabs, with spaces allowed after them. Here-string text is skipped.
+		- `style-guide.md` has short Bash, PowerShell and Python sections.
+	- Verified: both lints pass on the tree. Each new check failed once on a planted fault and passed after restore by copy: the PowerShell tab check, its here-string skip, the Python tab check, the `analyze.py` exemption, a rule `ruff.toml` turns off, and a planted fault in a tracked script through the gate's own block.
+	- Swept: every tracked `.ps1`, and every tracked `.py` outside `forks/`. The forks keep their own style.
+	- Branch: lintcfg
+	- Commit: a3fd912
+	- Test case: `cicd/tests/pylint/run.bash` (Erm6IFE), new; `cicd/tests/pslint/run.bash` (Er2UgYC), with the tab cases added.
+	- Note: Code review 20261003 item 17.
+
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
@@ -959,24 +992,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Origin: aa3f36a (2026-07-09) for flame-report.py, 2511765 (2026-09-26) for test-id.py, 07c8506 (2026-09-17) for demo-video.py. No earlier review item. Confirmed.
 	- Test case: A ruff and mypy pass in the lint stage, once item 17's config exists.
 	- Note: Code review 20261003 item 16.
-
-- No linter config for Python or PowerShell indentation, and the style guide covers Rust only
-	- ID: 2026100314050017
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Incorrect behavior:
-		- There is no `pyproject.toml` or ruff config, so nothing checks the Python files.
-		- `cicd/PSScriptAnalyzerSettings.psd1` has no `Rules` block, so `PSUseConsistentIndentation` never runs.
-		- `style-guide.md` has Rust sections only, while about 22,000 lines are bash, PowerShell and Python.
-	- Expected behavior: The directive's table names a config per language, and the public guide covers the code it governs.
-	- Note: The Python files use tabs where the directive's default is four spaces. Existing code is not reindented, so the config should pin tabs. `analyze.py` is the one file in spaces.
-	- Origin: fe07eaa (2026-09-24) for the PowerShell settings, 4e7beb1 (2026-07-21) for the guide. No earlier review item. Confirmed.
-	- Test case: Each new rule seen to fail once on a planted fault.
-	- Note: Code review 20261003 item 17.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018

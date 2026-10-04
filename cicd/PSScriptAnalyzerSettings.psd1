@@ -19,4 +19,16 @@
 		##	Best-effort cleanup and probes, where a failure has nothing to report.
 		'PSAvoidUsingEmptyCatchBlock'
 	)
+	Rules        = @{
+		##	Set for tabs but off. It reads spaces that line up a continuation
+		##	after the tabs as bad indentation, and wants one level per opener,
+		##	so `{ @(` on one line counts twice. About 70 lines in 8 scripts
+		##	would change. ps-lint.ps1 checks for tabs instead.
+		PSUseConsistentIndentation = @{
+			Enable              = $false
+			Kind                = 'tab'
+			IndentationSize     = 4
+			PipelineIndentation = 'IncreaseIndentationForFirstPipeline'
+		}
+	}
 }
