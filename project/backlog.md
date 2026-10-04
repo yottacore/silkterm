@@ -817,6 +817,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261003: Ship universal at any size, as most Mac apps do. Report the size on the item.
 
+- Per monitor size: also tell monitors apart by orientation
+	- ID: 2026100413014600
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261004-130146
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435600
+	- Target OS: All
+	- Requirements:
+		- Before RC1, with the per-monitor size work.
+		- Remembering the window and font size by screen resolution and DPI also takes the monitor's orientation or rotation into account.
+	- Notes:
+		- 20261004: A quarter turn already gives a monitor a different name, since its pixels are read turned (`1440x2560` rather than `2560x1440`), and the size in mm is turned to match. Upside down gives the same name as upright. Checked in the code only, and only the X11 path.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
