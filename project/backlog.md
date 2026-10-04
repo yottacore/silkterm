@@ -243,6 +243,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: macps
 	- Commit: 40f045f
 	- Test case: `a_unix_shell_reports_where_it_is_now_not_where_it_started` (ErkhGGP). A shell that stays put and one that moves must each read back where they are now.
+	- Decision: 20261004, the PowerShell 7 pane was a new tab, so the fix covers it. Still owed the look on b26.
 	- Notes:
 		- Before RC1.
 		- Note: 20261004, the cause is inferred, not seen in a real pane. It holds if the PowerShell pane was a tab or split opened from a bash or zsh pane in the project. The `/proc` fault is real on macOS either way. Related: 2026100410053273.
@@ -1440,6 +1441,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261004: Verified: both new unit tests fail with the fixes taken out and pass with them. The full unit suite, clippy for Linux and Windows, and fmt pass.
 	- Swept: `release_deadline` is the one decision, and both of its callers, the release and the wake set for it, go through `State::release_deadline`. Dialogs are never let go on idle.
 	- Note: 20261004, the "Minutes otherwise" help still says an unfocused window waits that long. On Windows with Transparency on, a window in view now keeps its device. Rewording the help is left for a decision.
+		- Decision: 20261004, reworded. The help and the config comment now say a window on screen with Transparency on is never let go on Windows.
 	- Branch: idlewake
 	- Commit: 7687c4e
 	- Test case: `a_window_that_would_go_blank_is_never_let_go_in_view` (ErksiLn). Also the `idlewake` Windows GUI scenario (Erkt9mD), not in the pipeline.

@@ -811,7 +811,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: window.idle_release_min
-		help: "How long a window that is only unfocused, with nothing printing, waits. Longer, since it may be on a second screen being read."
+		help: "How long a window that is only unfocused, with nothing printing, waits. Longer, since it may be on a second screen being read. On Windows with Transparency on, a window still on screen is never let go, since it would turn black."
 
 	TabText:
 		kind: heading
