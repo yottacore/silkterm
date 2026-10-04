@@ -884,7 +884,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: public types do not derive `Debug`
 	- ID: 2026100314050008
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -892,8 +892,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: 62 public structs and enums have no `Debug`. They include `Settings`, whose `PartialEq` exists so tests can compare two of them, and plain data such as `Scroll`, `Slide`, `VramProbe`, `Monospace`, `Bench` and `Rating`.
 	- Expected behavior: The directive says to derive `Debug` on all public types. A type that wraps a GPU or window handle can have a short hand-written one.
 	- Origin: c6eaa04 (2026-06-28) onward. `Settings` at 805d4a53 (2026-09-16). No earlier review item. Confirmed.
-	- Test case: The build. A `missing_debug_implementations` lint, if one can be scoped to this crate.
 	- Note: Code review 20261003 item 8.
+	- Actual fix:
+		- 63 public types in `source/src/` lacked `Debug`. 45 now derive it.
+		- 18 have a short hand-written one. Most hold a window, the GPU, the PTY or the X11 clipboard. `Pane`, `PaneManager`, `Minimap`, `ColorGlyphs` and `SettingsDialog` hold a whole terminal, raster buffers or three copies of the settings, so they print a few counts and sizes instead.
+		- None of them holds a secret. `Settings` derives it in full.
+	- Note: `missing_debug_implementations` cannot hold this. rustc checks only types reachable from outside the crate, and a binary crate exports none, so it stayed silent with all 63 missing. The test reads the source instead.
+	- Swept: every `pub`, `pub(crate)` and `pub(super)` struct and enum in `source/src/`, on the Linux, Windows and macOS targets.
+	- Verified: the new test failed with all 63 types on the old sources and passes after. clippy with `-D warnings` is clean for Linux, Windows and macOS, and all 1114 unit tests pass.
+	- Test case: `every_public_type_has_debug` (ErlrvUZ) in `buildnum.rs`.
+	- Branch: hdrdbg
+	- Commit: 0783831
+	- Acceptance signoff: Self-closed: mechanical. The test failed before and passes after.
+	- Closed: 20261004-145443
 
 - Code style: single letters name parameters, fields and long-lived values
 	- ID: 2026100314050009
