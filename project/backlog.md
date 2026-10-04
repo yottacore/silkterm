@@ -820,20 +820,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The window shows everything it showed before it went idle.
 	- Reproduced: Yes, now and then, on vm925w in the builds from before and after the 2026100312470535 fix, with another program loading the GPU. Not tried without the load.
 
-- macOS: a tab never names the program running in it
-	- ID: 2026100410053273
+- A unit test run rewrites the box's live config file
+	- ID: 2026100410244885
 	- Type: Bug
 	- Status: Queued
 	- Severity: Avg
-	- Opened: 20261004-100532
+	- Opened: 20261004-102448
 	- Opened by: CC
-	- Related IDs: 2026100408214204
-	- Target OS: macOS
+	- Target OS: All
 	- Test environment: b26
-	- Incorrect behavior: The tab label never shows the program running in the shell, such as an editor.
-	- Expected behavior: The same as on Linux.
-	- Possible cause: The running program's name is read from `/proc` (`proc_comm` in term.rs), which macOS does not have. The shell's folder had the same fault, fixed under 2026100408214204.
-	- Reproduced: No. Found by reading the code while fixing 2026100408214204.
+	- Steps to reproduce:
+		- Run `cargo test` on a box whose config a newer build would refresh, such as an old commented default.
+	- Incorrect behavior: The test process loads the live config and writes it back after migrating it. On b26 a commented `idle_release` default line changed from false to true.
+	- Expected behavior: A test run leaves the real config file alone.
+	- Reproduced: 20261004 on b26. The system log shows the test binary starting the same second the file was written.
+	- Notes:
+		- Note: 20261004, the change on b26 did not alter behavior, since the set value below it was untouched. The next dogfood launch would make the same edit.
+		- Note: 20261004, the private pipeline's test runs on b26 do this too. Two ways out: test runs default to a throwaway home, or loading never writes under test. The tests that read the live config on purpose (G6) need checking either way.
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
@@ -1419,6 +1422,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- macOS: a tab never names the program running in it
+	- ID: 2026100410053273
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: A look in a real SilkTerm window on b26: a tab running an editor, and one running a `sudo` command, names the program.
+	- Severity: Avg
+	- Opened: 20261004-100532
+	- Opened by: CC
+	- Related IDs: 2026100408214204
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: The tab label never shows the program running in the shell, such as an editor.
+	- Expected behavior: The same as on Linux.
+	- Reproduced: 20261004 on b26, through the lookup a tab uses. It gave no name for a running `sleep`.
+	- Possible cause: The running program's name is read from `/proc` (`proc_comm` in term.rs), which macOS does not have. The shell's folder had the same fault, fixed under 2026100408214204.
+	- Actual cause:
+		- The name came only from `/proc`, so on macOS every lookup came back empty. The same lookup decides the minimap's per-program switch, which never saw a program there either.
+	- Actual fix:
+		- On macOS the name comes from the process's short BSD info, the first 16 bytes of its name, about the same as Linux's 15. That works for another user's process too. `proc_name` was tried first and gives nothing for a root process, so a `sudo` command would have stayed unnamed. Linux is unchanged.
+	- Swept: every `/proc` read in the source, and everything that names a pane's foreground program. The tab label and the minimap both go through `proc_comm`. Copy-output and the reported-folder check use the foreground process group only, which macOS answers. The config busy check, wallpaper memory test and profiler CPU name are Linux only on purpose.
+	- Verified: on b26 the new test fails with the old lookup (no name) and with `proc_name` (no name for pid 1), and passes with the fix; all 24 terminal tests pass there. The terminal tests on Linux, rustfmt, and clippy for Linux and macOS x86_64 pass.
+	- Branch: maccomm
+	- Commit: 0db9f44
+	- Test case: `the_foreground_program_is_named_by_its_process_group` (ErkjAN1). A program leading its own process group is named by the group id, and pid 1, root's, is named too.
+	- Acceptance signoff: Self-closed: reproduced on b26, and the test failed there before the fix and passes after. The look in a real window is owed.
+	- Closed: 20261004-102407
 
 - A current-format config that is not UTF-8 loads as defaults with no message, and a Settings save on it says it worked but writes nothing
 	- ID: 2026100315581313

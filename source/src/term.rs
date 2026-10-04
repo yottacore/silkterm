@@ -917,15 +917,65 @@ fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
 }
 
 // Executable basename of a process from /proc/<pid>/comm (Linux/most Unix).
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn proc_comm(pid: u32) -> Option<String> {
 	let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).ok()?;
-	let comm = program_name(comm.trim());
-	if comm.is_empty() {
-		None
-	} else {
-		Some(comm.to_string())
+	named(&comm)
+}
+
+// macOS has no /proc, so a tab there never named the program running in it,
+// and the minimap's per-program switch never saw one either. The short info
+// is asked for rather than `proc_name`, which refuses another user's process,
+// so a `sudo` command went unnamed (measured on pid 1). Like Linux's comm,
+// it is the first 16 bytes of the name.
+#[cfg(target_os = "macos")]
+fn proc_comm(pid: u32) -> Option<String> {
+	// <sys/proc_info.h>; the libc this builds against does not have it yet
+	const PROC_PIDT_SHORTBSDINFO: libc::c_int = 13;
+	let pid = libc::c_int::try_from(pid).ok().filter(|&pid| pid > 0)?;
+	let size = libc::c_int::try_from(std::mem::size_of::<BsdShortInfo>()).ok()?;
+	let mut info = BsdShortInfo::default();
+	// SAFETY: the call writes at most `size` bytes and says how many it wrote
+	let wrote = unsafe {
+		libc::proc_pidinfo(
+			pid,
+			PROC_PIDT_SHORTBSDINFO,
+			0,
+			std::ptr::from_mut(&mut info).cast(),
+			size,
+		)
+	};
+	if wrote != size {
+		return None;
 	}
+	let comm: Vec<u8> = info.comm.iter().copied().take_while(|&b| b != 0).collect();
+	named(&String::from_utf8_lossy(&comm))
+}
+
+// `struct proc_bsdshortinfo` from <sys/proc_info.h>, which libc does not carry.
+#[cfg(target_os = "macos")]
+#[derive(Default)]
+#[repr(C)]
+struct BsdShortInfo {
+	pid: u32,
+	ppid: u32,
+	pgid: u32,
+	status: u32,
+	comm: [u8; 16],
+	flags: u32,
+	uid: u32,
+	gid: u32,
+	ruid: u32,
+	rgid: u32,
+	svuid: u32,
+	svgid: u32,
+	rfu: u32,
+}
+
+#[cfg(unix)]
+fn named(comm: &str) -> Option<String> {
+	let comm = program_name(comm.trim());
+	(!comm.is_empty()).then(|| comm.to_string())
 }
 
 // A process that renames itself writes "name: what it is doing" - tmux's client
@@ -1843,6 +1893,36 @@ mod tests {
 			Some(real(&moved_to)),
 			"the directory the shell moved to never came back"
 		);
+	}
+
+	// A tab names the program in the foreground: the terminal's foreground
+	// process group, looked up by its leader. On a Mac that lookup read /proc,
+	// which is not there, so no tab ever named anything.
+	// Test ID: ErkjAN1
+	#[cfg(unix)]
+	#[test]
+	fn the_foreground_program_is_named_by_its_process_group() {
+		use std::os::unix::process::CommandExt;
+		use std::process::{Command, Stdio};
+
+		let mut child = Command::new("sleep")
+			.arg("30")
+			.process_group(0)
+			.stdin(Stdio::null())
+			.stdout(Stdio::null())
+			.stderr(Stdio::null())
+			.spawn()
+			.expect("spawn sleep");
+		let pid = libc::pid_t::try_from(child.id()).expect("pid");
+		// SAFETY: a plain query on a child this test owns
+		let pgid = unsafe { libc::getpgid(pid) };
+		let name = u32::try_from(pgid).ok().and_then(super::proc_comm);
+		let _ = child.kill();
+		let _ = child.wait();
+		assert_eq!(pgid, pid, "the child did not lead its own group");
+		assert_eq!(name.as_deref(), Some("sleep"));
+		// another user's program, as under sudo: pid 1 is root's everywhere
+		assert!(super::proc_comm(1).is_some(), "a root process went unnamed");
 	}
 
 	// A recycled pid is the failure this guard exists for: the row claims the
