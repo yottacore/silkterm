@@ -5,6 +5,11 @@
 ##	as whoever holds the console, and a temp folder is private to its account,
 ##	so the folder goes in that user's temp folder, not the ssh account's.
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 ##	The registry keeps TEMP unexpanded, and %USERPROFILE% here would be the ssh
 ##	account's own.
 function fUserTemp([string] $Raw, [string] $UserProfile) {
@@ -48,3 +53,6 @@ function fStage {
 }
 
 fStage
+
+##	History:
+##		- 20261002 JC: Created.

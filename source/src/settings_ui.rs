@@ -591,7 +591,7 @@ enum Focus {
 // Where the user was looking when the dialog closed, so reopening it shortly
 // after opens on the same tab and scroll position instead of the top of
 // Appearance. Only the view - edits are discarded on close as before.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct View {
 	tab: usize,
 	scroll: f32,
@@ -907,6 +907,7 @@ struct EMenu {
 	paste_ok: bool,
 }
 
+#[derive(Debug)]
 pub struct TextItem {
 	pub text: String,
 	pub x: f32,
@@ -1005,6 +1006,15 @@ pub struct SettingsDialog {
 	// DIP -> physical pixel factor for the window this dialog lives in. Every
 	// measurement in here is a DIP; this is applied only at the boundary.
 	scale: f32,
+}
+
+// Three whole copies of the settings would bury the rest.
+impl std::fmt::Debug for SettingsDialog {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("SettingsDialog")
+			.field("tab", &self.tab)
+			.finish_non_exhaustive()
+	}
 }
 
 impl SettingsDialog {

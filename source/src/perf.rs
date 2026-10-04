@@ -129,6 +129,7 @@ fn cpu_seconds() -> Option<(f64, f64)> {
 
 // Scope timer for a whole function, where wrapping the body in a closure would
 // fight the borrow checker.
+#[derive(Debug)]
 pub struct Span<'a> {
 	counter: &'a AtomicU64,
 	start: Option<Instant>,

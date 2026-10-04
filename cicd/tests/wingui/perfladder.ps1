@@ -3,6 +3,11 @@
 ##	GPU actually rates has never been seen.
 ##	Test ID: EpJ5h1E
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - the banner cannot be grabbed" }
 
 $cfg = Join-Path $OutDir "perf-config.shcl"
@@ -66,3 +71,6 @@ fNote "second launch early frame differs from settled by $moved2"
 [void](fCheck "the second launch did not re-rate" ((fSetting $cfg "performance.rated_hardware").value -eq $rated.value))
 fNote "config rewritten on second launch: $((Get-Item $cfg).LastWriteTime -ne $stamp)"
 fStop $p2
+
+##	History:
+##		- 20260908 JC: Created.

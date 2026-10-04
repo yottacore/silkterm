@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+
 // Embed the app icon + version info into the Windows PE, so Explorer, taskbar
 // pins and the installer show the real icon, and Properties > Details shows the
 // version/product strings. The .rc is generated from assets/silkterm.rc.in with

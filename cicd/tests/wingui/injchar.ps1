@@ -3,6 +3,11 @@
 ##	some accessibility tools do the same. It used to reach nothing at all here.
 ##	Test ID: EpPhAdU
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed" }
 
 $cfg = Join-Path $OutDir "inj-config.shcl"
@@ -50,3 +55,6 @@ $typed = if (Test-Path $keys) { Get-Content $keys -Raw } else { "" }
 [void](fCheck "ordinary typing still reaches the shell" ($typed -match "silkrig-keys"))
 
 fStop $p
+
+##	History:
+##		- 20260909 JC: Created.

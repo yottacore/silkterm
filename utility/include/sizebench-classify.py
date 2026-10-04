@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 """Install size and resident memory of a running terminal, with the graphics stack split out.
 
 Reads a whole process tree and answers two questions:
@@ -1238,3 +1244,6 @@ def main():
 
 if __name__ == "__main__":
 	sys.exit(main())
+
+##	History:
+##		- 20260730 JC: Created.

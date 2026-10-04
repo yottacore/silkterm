@@ -143,7 +143,7 @@ pub(crate) fn from_oklab(lightness: f32, a: f32, b: f32) -> [u8; 3] {
 // The distinct (fg, bg) pairs on one screen are few - a handful even in a busy
 // TUI - and `readable` is six cube roots. Memo it for the length of a build; a
 // screen with more pairs than the cap just recomputes past that point.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Readable {
 	seen: Vec<([u8; 3], [u8; 3], [u8; 3])>,
 	gap: f32, // what `seen` was computed against; a change to it invalidates them

@@ -6,6 +6,12 @@
 ##	authenticated again, and the way to do that from elsewhere is to connect to it
 ##	once over RDP - reconnecting is a logon, and a logon unlocks. Moving it back
 ##	here afterwards is what drops the remote flag the app reads.
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 param([string] $User = "wintest")
 
 $ErrorActionPreference = "Continue"
@@ -62,3 +68,6 @@ if ([Con.Wts]::WTSQuerySessionInformationW([IntPtr]::Zero, $want.Id, 25, [ref]$b
 	if ($flags -eq 0) { "session $($want.Id) is still locked; connect once over RDP, or scenarios will skip"; exit 1 }
 	if ($flags -eq 1) { "session $($want.Id) is unlocked" }
 }
+
+##	History:
+##		- 20260908 JC: Created.

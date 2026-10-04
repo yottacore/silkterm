@@ -143,3 +143,6 @@ if ((do_publish)); then
 elif ((do_push)); then
 	echo "next (optional): gh release create ${tag} ${prerelease[*]} ${art_dir}/${EXE_NAME}-${ver}-*"
 fi
+
+##	History:
+##		- 20260711: Created.

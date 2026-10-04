@@ -881,20 +881,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for placement. A grep in the docs gate for banner rules in `.rs` files.
 	- Note: Code review 20261003 item 7.
 
-- Code style: public types do not derive `Debug`
-	- ID: 2026100314050008
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Incorrect behavior: 62 public structs and enums have no `Debug`. They include `Settings`, whose `PartialEq` exists so tests can compare two of them, and plain data such as `Scroll`, `Slide`, `VramProbe`, `Monospace`, `Bench` and `Rating`.
-	- Expected behavior: The directive says to derive `Debug` on all public types. A type that wraps a GPU or window handle can have a short hand-written one.
-	- Origin: c6eaa04 (2026-06-28) onward. `Settings` at 805d4a53 (2026-09-16). No earlier review item. Confirmed.
-	- Test case: The build. A `missing_debug_implementations` lint, if one can be scoped to this crate.
-	- Note: Code review 20261003 item 8.
-
 - Code style: single letters name parameters, fields and long-lived values
 	- ID: 2026100314050009
 	- Type: Bug
@@ -953,21 +939,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Origin: 20f2b413 (2026-08-04) and e4060188 (2026-07-01) for the settings, f9deff9 (2026-07-08) for the scrim codes, e79a250 (2026-08-05) for `is_dark_mode`. No earlier review item. Confirmed.
 	- Test case: Owed. Each enum's parse and key round trip, and the config fuzz.
 	- Note: Code review 20261003 item 11.
-
-- Code style: 35 files have no license header
-	- ID: 2026100314050012
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Incorrect behavior: `source/build.rs` has no header. Neither do 34 scripts: every `cicd/tests/wingui/*.ps1` and `cicd/utility/win-jobs/*.ps1`, eight files in `utility/include/`, `utility/update-showdown.py`, `cicd/tests/scroll/analyze.py`, both scroll scene files, `cicd/utility/mmap-bench/run.bash` and `source/src/shell_integration.ps1`. install.bash, install.ps1 and termbench.py keep History at the top. Six scripts have no History.
-	- Expected behavior: Every source file starts with the SPDX line and the copyright line, and History sits at the bottom.
-	- Note: shell_integration.ps1 is pasted into a user's profile, so leaving its header out may be on purpose. The two scroll scenes run under `dash` but end in `.bash`.
-	- Origin: 3221c6f (2026-07-15) for build.rs, cecc4c7 (2026-09-08) for the wingui files. The header test in `buildnum.rs` reads only `source/src/`. Confirmed.
-	- Test case: Widen the header test to `build.rs` and every tracked script.
-	- Note: Code review 20261003 item 12.
 
 - Code style: bash scripts drift from the house conventions
 	- ID: 2026100314050013
@@ -2275,6 +2246,59 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Code style: public types do not derive `Debug`
+	- ID: 2026100314050008
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: 62 public structs and enums have no `Debug`. They include `Settings`, whose `PartialEq` exists so tests can compare two of them, and plain data such as `Scroll`, `Slide`, `VramProbe`, `Monospace`, `Bench` and `Rating`.
+	- Expected behavior: The directive says to derive `Debug` on all public types. A type that wraps a GPU or window handle can have a short hand-written one.
+	- Origin: c6eaa04 (2026-06-28) onward. `Settings` at 805d4a53 (2026-09-16). No earlier review item. Confirmed.
+	- Note: Code review 20261003 item 8.
+	- Actual fix:
+		- 63 public types in `source/src/` lacked `Debug`. 45 now derive it.
+		- 18 have a short hand-written one. Most hold a window, the GPU, the PTY or the X11 clipboard. `Pane`, `PaneManager`, `Minimap`, `ColorGlyphs` and `SettingsDialog` hold a whole terminal, raster buffers or three copies of the settings, so they print a few counts and sizes instead.
+		- None of them holds a secret. `Settings` derives it in full.
+	- Note: `missing_debug_implementations` cannot hold this. rustc checks only types reachable from outside the crate, and a binary crate exports none, so it stayed silent with all 63 missing. The test reads the source instead.
+	- Swept: every `pub`, `pub(crate)` and `pub(super)` struct and enum in `source/src/`, on the Linux, Windows and macOS targets.
+	- Verified: the new test failed with all 63 types on the old sources and passes after. clippy with `-D warnings` is clean for Linux, Windows and macOS, and all 1114 unit tests pass.
+	- Test case: `every_public_type_has_debug` (ErlrvUZ) in `buildnum.rs`.
+	- Branch: hdrdbg
+	- Commit: 0783831
+	- Acceptance signoff: Self-closed: mechanical. The test failed before and passes after.
+	- Closed: 20261004-145443
+
+- Code style: 35 files have no license header
+	- ID: 2026100314050012
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: `source/build.rs` has no header. Neither do 34 scripts: every `cicd/tests/wingui/*.ps1` and `cicd/utility/win-jobs/*.ps1`, eight files in `utility/include/`, `utility/update-showdown.py`, `cicd/tests/scroll/analyze.py`, both scroll scene files, `cicd/utility/mmap-bench/run.bash` and `source/src/shell_integration.ps1`. install.bash, install.ps1 and termbench.py keep History at the top. Six scripts have no History.
+	- Expected behavior: Every source file starts with the SPDX line and the copyright line, and History sits at the bottom.
+	- Note: shell_integration.ps1 is pasted into a user's profile, so leaving its header out may be on purpose. The two scroll scenes run under `dash` but end in `.bash`.
+	- Origin: 3221c6f (2026-07-15) for build.rs, cecc4c7 (2026-09-08) for the wingui files. The header test in `buildnum.rs` reads only `source/src/`. Confirmed.
+	- Note: Code review 20261003 item 12.
+	- Actual fix:
+		- Every tracked script, `build.rs` and the two small Rust crates under `cicd/` now start with the copyright and license lines. History sits at the bottom of every script.
+		- History moved to the bottom in install.bash, install.ps1, termbench.py, update-showdown.py and runterm.cmd. Ten scripts that had none got one, dated from their first commit.
+		- The `utility/include/` files were all written for this repo and have no copies elsewhere, so they take the Jim Collier GPL form. runterm.cmd takes the Bubbles form, like `n8runterm.ps1` and `runterm` beside it.
+		- The PowerShell headers match the repo's other `.ps1` files, copyright sign included. All of them run under pwsh 7.
+		- shell_integration.ps1 has no header on purpose. Its whole text is written into a user's own profile, and it ships inside the binary, which carries the license. The test names it as exempt.
+		- The two scroll scenes keep `##` comments only, and still run under dash.
+	- Swept: `git ls-files` for every `.bash`, `.sh`, `.py`, `.ps1`, `.cmd` and `.rs` file and every file with a shebang. Left alone as not scripts: `PSScriptAnalyzerSettings.psd1` and the two `.in` templates.
+	- Verified: the new test failed with 58 faults before the fix and passes after. It also failed on one changed marker character, a line of code after a History block, and a History block in a header. shellcheck, PSScriptAnalyzer, the test ID check, the docs check, the wingui harness test and the install test pass. Every edited PowerShell file parses.
+	- Test case: `every_script_carries_the_license_header_with_history_at_the_bottom` (ErloT4L) in `buildnum.rs`. The old `every_source_file_carries_the_license_header` still covers `source/src/`.
+	- Branch: hdrdbg
+	- Commit: 32b7b68
+	- Acceptance signoff: Self-closed: mechanical. The test failed before and passes after.
+	- Closed: 20261004-144333
 
 - A config unit test fails when run beside the other "refused" tests
 	- ID: 2026100314502236

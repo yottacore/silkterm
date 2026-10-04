@@ -439,6 +439,16 @@ pub struct TextCtx {
 	pub generation: u64,
 }
 
+impl std::fmt::Debug for TextCtx {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("TextCtx")
+			.field("scale", &self.scale)
+			.field("cell_w", &self.cell_w)
+			.field("cell_h", &self.cell_h)
+			.finish_non_exhaustive()
+	}
+}
+
 // Everything of a TextCtx that is made on a wgpu device.
 struct TextGpu {
 	atlas: TextAtlas,

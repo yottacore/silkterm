@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 """Write one terminal's size and memory cells into the README shootout table.
 
 The speed columns are owned by utility/termbench.py, which refreshes only its own and
@@ -100,3 +106,6 @@ def main():
 
 if __name__ == "__main__":
 	sys.exit(main())
+
+##	History:
+##		- 20260730 JC: Created.

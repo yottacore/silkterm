@@ -9,6 +9,11 @@
 ##	the shell rebuilt its copy after the install.
 ##	Test ID: EqH4iss
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - the Run box cannot be typed into" }
 
 ##	install.ps1's own functions, lifted as they stand. run.bash sends the file.
@@ -60,3 +65,6 @@ try {
 	if (Get-Command fAnnounceEnvironment -ErrorAction SilentlyContinue) { fAnnounceEnvironment }
 	Remove-Item -Recurse -Force -LiteralPath $dir -ErrorAction SilentlyContinue
 }
+
+##	History:
+##		- 20260918 JC: Created.

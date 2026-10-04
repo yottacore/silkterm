@@ -1,6 +1,12 @@
 ##	Prints what is on another process's console. Run as its own process: it has
 ##	to let go of its own console to join that one. A pipe or a redirect would
 ##	give the program a handle to write to, which is the case that always worked.
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 param([Parameter(Mandatory)] [int] $Of, [Parameter(Mandatory)] [string] $Out)
 
 Add-Type -Namespace SilkCon -Name Read -MemberDefinition @'
@@ -28,3 +34,6 @@ public static string Text(uint pid) {
 }
 '@
 [SilkCon.Read]::Text([uint32]$Of) | Set-Content -Path $Out -Encoding UTF8
+
+##	History:
+##		- 20260918 JC: Created.

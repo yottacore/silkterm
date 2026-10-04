@@ -378,6 +378,16 @@ pub struct Minimap {
 	here_px: Option<usize>,
 }
 
+// The store holds a raster for every history row, so leave it out.
+impl std::fmt::Debug for Minimap {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Minimap")
+			.field("hist", &self.hist)
+			.field("shown", &self.shown)
+			.finish_non_exhaustive()
+	}
+}
+
 // The rows, and what composing them needs, in one piece that can go to
 // another thread and come back.
 #[derive(Default)]
@@ -1283,6 +1293,14 @@ pub struct MapRenderer {
 	layout: wgpu::BindGroupLayout,
 	sampler: wgpu::Sampler,
 	panes: HashMap<u64, PaneTex>,
+}
+
+impl std::fmt::Debug for MapRenderer {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("MapRenderer")
+			.field("panes", &self.panes.len())
+			.finish_non_exhaustive()
+	}
 }
 
 impl MapRenderer {

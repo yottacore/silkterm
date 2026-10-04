@@ -4,6 +4,11 @@
 ##	the shell scan's save is refused.
 ##	Test ID: EqH8w4O
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - the box cannot be grabbed" }
 
 Add-Type -Namespace SilkBox -Name Win -MemberDefinition @'
@@ -44,3 +49,6 @@ if (fCheck "a message box came up for the refused save" ($box -ne [IntPtr]::Zero
 	[void](fCheck "the settings file was left as it was" (@(Get-Content $cfg) -contains "`tmargin: 4"))
 }
 fStop $p
+
+##	History:
+##		- 20260918 JC: Created.

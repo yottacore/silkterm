@@ -2,6 +2,11 @@
 ##	the foreground, and what is typed reaches the shell inside it.
 ##	Test ID: EpJ4XDc
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
 $cfg = Join-Path $OutDir "smoke-config.shcl"
@@ -38,3 +43,6 @@ $said = if (Test-Path $proof) { (Get-Content $proof -Raw) } else { "" }
 [void](fCheck "typing reached the shell and it ran the line" ($said -match "silkrig-was-here"))
 
 fStop $p
+
+##	History:
+##		- 20260908 JC: Created.

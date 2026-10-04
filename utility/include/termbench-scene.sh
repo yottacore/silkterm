@@ -8,6 +8,11 @@
 # fitter size any terminal to the same grid without knowing that terminal's geometry
 # options or cell metrics.
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 cd "$REPO_DIR" || exit 1
 
 # The terminal was started on a throwaway account. The measuring tool keeps its run
@@ -31,3 +36,6 @@ done
 # so redirecting it would measure a pipe instead. The report goes out via --out.
 python3 utility/include/termbench.py $BENCH_ARGS --label "$LABEL" --out "$OUT_FILE" 2>"$OUT_FILE.err"
 echo "exit=$?" > "$OUT_FILE.done"
+
+##	History:
+##		- 20260730 JC: Created.

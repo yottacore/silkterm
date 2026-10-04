@@ -2,6 +2,12 @@
 ##	by an interactive scheduled task, because a process arriving over ssh is in
 ##	session 0 and has no desktop at all - which is what made every earlier attempt
 ##	at this look like a permissions problem.
+
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 param(
 	[Parameter(Mandatory)] [string] $Scenario,
 	[Parameter(Mandatory)] [string] $Exe,
@@ -55,3 +61,6 @@ finally {
 	& "$PSScriptRoot\_stop.ps1" -List $script:startedList
 	@("SCENARIO $Scenario", "VERDICT $verdict $reason") + $script:checks | Set-Content -Path $result -Encoding UTF8
 }
+
+##	History:
+##		- 20260908 JC: Created.

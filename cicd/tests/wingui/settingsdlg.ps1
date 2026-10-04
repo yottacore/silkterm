@@ -3,6 +3,11 @@
 ##	about it follows from the main window working.
 ##	Test ID: EpJAgKe
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 if (-not (fSessionUsable)) { fSkip "console session is locked - the dialog cannot be grabbed" }
 
 $cfg = Join-Path $OutDir "dlg-config.shcl"
@@ -50,3 +55,6 @@ fPress "escape"
 Start-Sleep -Seconds 2
 [void](fCheck "escape closes the dialog" (-not ([SilkEnum]::All([uint32]$p.Id) -contains $d)))
 fStop $p
+
+##	History:
+##		- 20260908 JC: Created.

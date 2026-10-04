@@ -32,6 +32,7 @@ const WP_AVOID_MAX: usize = 32;
 
 // What the worker was asked to do. `settings` is a snapshot: the worker must
 // never read the live store, since it outlives the settings it was started with.
+#[derive(Debug)]
 pub struct Request {
 	pub seq: u64,
 	// The newest request's seq, shared with the window. A worker whose own seq

@@ -383,6 +383,7 @@ mod registry {
 		RegOpenKeyExW, RegQueryInfoKeyW, RegQueryValueExW, RegSetValueExW,
 	};
 
+	#[derive(Debug)]
 	pub struct Registry;
 
 	fn wide(s: &str) -> Vec<u16> {

@@ -36,6 +36,11 @@
 ##		--scale 0.05 but ~3 MB/s at full size, a 10x difference. Watch the CV% column;
 ##		a run that got stepped on by other desktop activity shows up there.
 
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Setup

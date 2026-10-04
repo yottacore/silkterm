@@ -41,12 +41,10 @@
 ##		utility/update-showdown.py --term kitty --size-only
 ##		utility/update-showdown.py --list
 ##
-##	History:
-##		20260730 Written, to drive both shootout rigs from one place.
-##		20260730 Ported from shell so it runs on Windows too, and absorbed the
-##		         measure-this-terminal path, which had no wrapper before.
-##		20260928 Both rigs for GNOME Terminal, WezTerm and Tabby; size for Hyper.
-##		20260929 Both rigs for XTerm; its speed runs on a private X server.
+##	History: At bottom of file.
+
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
 
 import argparse
 import os
@@ -409,3 +407,10 @@ def main(argv):
 
 if __name__ == "__main__":
 	sys.exit(main(sys.argv[1:]))
+
+##	History:
+##		20260730 Written, to drive both shootout rigs from one place.
+##		20260730 Ported from shell so it runs on Windows too, and absorbed the
+##		         measure-this-terminal path, which had no wrapper before.
+##		20260928 Both rigs for GNOME Terminal, WezTerm and Tabby; size for Hyper.
+##		20260929 Both rigs for XTerm; its speed runs on a private X server.

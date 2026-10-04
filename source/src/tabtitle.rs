@@ -204,7 +204,7 @@ pub fn task_forms(task: Option<Task>) -> Vec<String> {
 }
 
 /// What the terminal's own rights mean for its title.
-#[derive(Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Rights {
 	/// The word the window title starts with, while the terminal holds them.
 	pub say: Option<&'static str>,

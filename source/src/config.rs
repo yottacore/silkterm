@@ -436,7 +436,7 @@ fn window_memory_from(text: &str, path: &std::path::Path, s: &mut Settings) {
 // Resolved, validated settings used throughout the app. PartialEq is for the
 // template test, which loads the shipped config twice and compares the whole
 // result; anything less would miss whichever field a bad `## Default` moved.
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
 	pub use_system_font: bool, // true = OS monospace FAMILY, overriding font_family
 	pub use_system_font_size: bool, // true = OS monospace SIZE, overriding font_size
@@ -606,7 +606,7 @@ thread_local! {
 	static SETTINGS_CLONES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 #[cfg(test)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct CloneProbe;
 #[cfg(test)]
 impl Clone for CloneProbe {

@@ -15,9 +15,12 @@ SETLOCAL
 ::		file, so the known locations are tried in order. 'synced' is a junction
 ::		to Dropbox that reads as an empty directory on Windows, so the real
 ::		spelling is tried too.
-::	History:
-::		- 20260908 JC: Look under Dropbox as well as 'synced'.
-::		- 20260907 JC: Created.
+::	History: At bottom of file.
+
+::	Copyright (c) 2026 Bubbles
+::	Licensed under The MIT License (MIT). Full text at:
+::		https://mit-license.org/
+::	SPDX-License-Identifier: MIT
 
 ::----------------------------------------------------------------------------
 :MAIN
@@ -65,3 +68,7 @@ goto :EOF
 :ERROR
 	echo [ An error occurred. ]
 ENDLOCAL & exit /b 1
+
+::	History:
+::		- 20260908 JC: Look under Dropbox as well as 'synced'.
+::		- 20260907 JC: Created.

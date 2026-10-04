@@ -12,7 +12,7 @@ use crate::pane::Toward;
 
 // A mouse event to report to the PTY. Wheel notches ride buttons 64/65; `None`
 // is the "no button" code (3) used for bare motion and the X10 release.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseBtn {
 	None,
 	Left,
@@ -299,7 +299,7 @@ pub fn opens_menu_title(mods: ModifiersState) -> bool {
 }
 
 // Where a write to the desktop clipboard comes from.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum CopyFrom {
 	Chord,   // Ctrl+Shift+C, Command+C on macOS
 	Select,  // a finished drag-select, with copy on select on

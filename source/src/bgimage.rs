@@ -25,6 +25,7 @@ struct Uniform {
 }
 
 // Wallpaper VRAM-content probe verdict (see `vram_check_poll`).
+#[derive(Debug)]
 pub enum WpProbe {
 	Intact,
 	Lost,
@@ -56,6 +57,12 @@ pub struct ImageRenderer {
 	probe_ref: Vec<u8>,
 	probe_buf: wgpu::Buffer,
 	probe_inflight: Option<Arc<AtomicU8>>,
+}
+
+impl std::fmt::Debug for ImageRenderer {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("ImageRenderer").finish_non_exhaustive()
+	}
 }
 
 impl ImageRenderer {
