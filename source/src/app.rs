@@ -184,9 +184,12 @@ impl App {
 				}
 			}
 			WindowEvent::CursorMoved { position, .. } => {
+				// a move that changes nothing drawn (no drag, no lit item, no tip
+				// coming or going) gets no frame
 				if let Some(d) = &mut self.dialog {
-					d.set_cursor(position.x as f32, position.y as f32);
-					self.dialog_dirty = true; // slider drag feedback
+					if d.set_cursor(position.x as f32, position.y as f32) {
+						self.dialog_dirty = true;
+					}
 				}
 			}
 			WindowEvent::MouseInput {
@@ -404,8 +407,9 @@ impl App {
 			}
 			WindowEvent::RedrawRequested => n.render(),
 			WindowEvent::CursorMoved { position, .. } => {
-				n.set_cursor(position.x as f32, position.y as f32);
-				self.notice_dirty = true;
+				if n.set_cursor(position.x as f32, position.y as f32) {
+					self.notice_dirty = true;
+				}
 			}
 			WindowEvent::MouseInput {
 				state: ElementState::Pressed,
@@ -9771,12 +9775,13 @@ impl ApplicationHandler<UserEvent> for App {
 				Err(e) => eprintln!("{}: Settings window failed: {e}", config::APP_NAME),
 			}
 		}
-		// a dialog with an animating field edit (view scroll / caret / blink)
-		// keeps re-rendering at the cadence it reports (see dlg_wake below)
+		// a dialog with an animating field edit (view scroll / caret / blink) or a
+		// tip coming due gets its frame when it is owed one, not on every pass,
+		// or each pointer move would draw it again (see dlg_wake below)
 		if self
 			.dialog
 			.as_ref()
-			.is_some_and(|d| d.anim_wake_ms().is_some())
+			.is_some_and(|d| d.owes_frame(Instant::now()))
 		{
 			self.dialog_dirty = true;
 		}
@@ -9828,8 +9833,7 @@ impl ApplicationHandler<UserEvent> for App {
 		let dlg_wake = self
 			.dialog
 			.as_ref()
-			.and_then(super::dialog::DialogWin::anim_wake_ms)
-			.map(|ms| Instant::now() + Duration::from_millis(ms));
+			.and_then(super::dialog::DialogWin::wake_at);
 
 		// re-assert the dialog->terminal stacking a few times after focus (see the
 		// field comment). Cleared when the dialog closes.

@@ -817,8 +817,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings: every label is shaped again on each pointer move
 	- ID: 2026100314050003
 	- Type: Enhancement
-	- Status: Queued
-	- Needs local test suite run?: Yes
+	- Status: Done
+	- Needs local test suite run?: No
 	- Priority: Avg
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -831,7 +831,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Each `CursorMoved` over a dialog sets it dirty. `dialog.rs` `render` then builds a new glyphon buffer and shapes it for every text item, and rebuilds the rects and texts. A tab with 40 rows shapes 60 to 100 buffers per mouse event.
 		- 20261003: `hover_tip` runs twice per render with the same pointer, once for `over` and once for `found`.
 	- Origin: ec82922 (2026-07-06) for the reshape, c0a7f19 (2026-10-03) for the second `hover_tip`. No earlier review item. Plausible, cost not measured.
-	- Test case: Owed. A count of shaped buffers across two renders with no change.
+	- Reproduced: 20261004. With the old behavior put back, a frame of the first tab with nothing changed shaped 64 buffers, and every frame looked up the tip twice. Every pointer move drew a frame, and so did every loop pass while a tip was waiting.
+	- Actual fix:
+		- Shaped text is kept from one frame to the next, found by its text, font, weight, color and line box. A frame shapes only text the last one did not have. A move, a new clip or a new width reuses the shape. A new text context, which a font, size or scale change makes, starts over.
+		- A pointer move draws a frame only when it changed something drawn: a drag, the item lit in a dropdown or menu, a lit About button, or a tip going away.
+		- A frame looks up the tip once. A tip coming due, or a field edit's animation step, gets its frame when it is due, not on every pass of the loop.
+	- Swept: every place `render` shaped text (About lines and tip, Settings rows, overlay and tip); both `set_cursor` callers (Settings or About, and the notice); both reads of the dialog's wake in the loop; every branch of the pointer move in `settings_ui.rs`.
+	- Note: Left alone: `measure_ui_text` already keeps its widths. The notice window still reads no wake of its own, as before.
+	- Verified: 20261004, the unit suite passes, 1112 tests, and the sister item's tests pass unchanged. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not looked at in a real window.
+	- Branch: dlgshape
+	- Test case: `a_dialog_frame_shapes_nothing_the_last_one_did` (ErlkwlW), `a_dialog_frame_shapes_only_text_that_changed` (Erlkwox), `a_kept_buffer_is_shaped_again_when_what_shaping_reads_changes` (ErlkwsK), `a_dialog_frame_looks_up_the_tip_once` (Erlkwvi) and `a_pointer_move_that_changes_nothing_drawn_needs_no_frame` (Erlkwz5), each seen failing with the old behavior put back. `a_pointer_move_says_whether_it_changed_anything` (Erlkwhi) pins what a move reports.
+	- Acceptance signoff: Self-closed: reproduced, the tests failed before the fix and pass after, and the text drawn is unchanged.
+	- Closed: 20261004-142711
 	- Note: Code review 20261003 item 3.
 
 - Code style: public items are commented with `//`, not `///`
