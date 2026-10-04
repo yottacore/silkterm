@@ -129,6 +129,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: With Transparency on, which draws through DX12 on Windows, both builds did the same thing: a window restored without focus was let go after the idle time while still on screen, went black when the load ended, and stayed black until typed into. The fix does not change this, since a window let go on purpose owes no frame. Not tried without load: that run hung vm925w and did not finish.
 		- 20261003: Also seen in both builds with Free resources when idle on, under load: after waking, the window sometimes showed only the last character of the prompt instead of the earlier text, until typed into.
 		- 20261003: Not covered: the Windows terminal draws through wgpu on Vulkan, or DX12 with Transparency, not the X11 GL swap b23 uses, so the failed swap path was never reached. vm925w has no WSL2, so there was no run through Mesa on the same GPU.
+		- 20261003: The black window and the missing text seen in both builds are filed as 2026100319134501 and 2026100319134502.
 	- Swept: every frame and rebuild site. The terminal's acquire and GL swap in `render_with`, reached from both `about_to_wait` and the desktop's redraw. The dialog and notice windows' acquire and swap in `DialogWin::render`. `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
 	- Branch: gpuload
 	- Commit: 8cb6a4d
@@ -685,6 +686,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A missing capability, and a silent wrong answer for a caller that writes its own footer. SilkTerm asks the stamped `migrate` as well, in `upgrade` in config.rs, and writes such a file new (2026100312470546).
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
+
+- With Free resources when idle on, a window on screen but not focused is let go, goes black, and stays black until typed into
+	- ID: 2026100319134501
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261003-191345
+	- Opened by: CC
+	- Related IDs: 2026100312470535, 2026100312470540
+	- Target OS: Windows
+	- Test environment: vm925w
+	- Steps to reproduce:
+		- Turn on Free resources when idle with a short idle time, and Transparency.
+		- Minimize the window, then restore it without giving it focus.
+		- Wait past the idle time with the window in view.
+	- Incorrect behavior: The window is let go while still on screen, with "(resource conservation mode)" in its title. It keeps its last picture for a while, then goes black, and stays black until typed into.
+	- Expected behavior: A window in view keeps painting, or paints again on its own.
+	- Reproduced: Yes, on vm925w in the builds from before and after the 2026100312470535 fix, with another program loading the GPU. Not tried without the load, so it is not known if the load matters. Only tried with Transparency on, which draws through DX12.
+
+- After waking from Free resources when idle, the window sometimes shows only the prompt's last character until typed into
+	- ID: 2026100319134502
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261003-191345
+	- Opened by: CC
+	- Related IDs: 2026100312470535, 2026100312470540
+	- Target OS: Windows
+	- Test environment: vm925w
+	- Steps to reproduce:
+		- Turn on Free resources when idle with a short idle time.
+		- Let the window go idle while minimized, then restore it.
+	- Incorrect behavior: The earlier text is missing, and only the last `>` of the prompt shows. Typing brings the rest back.
+	- Expected behavior: The window shows everything it showed before it went idle.
+	- Reproduced: Yes, now and then, on vm925w in the builds from before and after the 2026100312470535 fix, with another program loading the GPU. Not tried without the load.
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
