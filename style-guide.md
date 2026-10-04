@@ -5,7 +5,7 @@
 <!-- TOC ignore:true -->
 # Style guide
 
-The canonical style reference for SilkTerm. It covers prose, comments, naming, Rust, Bash, PowerShell and Python conventions, formatting, and commit messages. When something here conflicts with a language's own well-established idioms or its enforced formatter, the idiom and the formatter win - see [Formatting](#formatting).
+The style reference for SilkTerm's code, scripts and commit messages. Where it conflicts with a language's own idioms or its formatter, those win. See [Formatting](#formatting).
 
 <!-- TOC ignore:true -->
 ## Table of contents
@@ -34,13 +34,11 @@ The canonical style reference for SilkTerm. It covers prose, comments, naming, R
 
 - Explain *why*, not *what*.
 
-- No narration that restates the next line.
-
-- No decorative flowerboxing.
+- No banner or flowerbox comments. The docs gate fails on a banner rule in Rust code.
 
 ## File headers and licensing
 
-- Every source file carries an SPDX identifier and a copyright line at the top:
+- Every source file starts with an SPDX identifier and a copyright line:
 
 	~~~rust
 	// SPDX-License-Identifier: GPL-2.0-or-later
@@ -53,8 +51,8 @@ The canonical style reference for SilkTerm. It covers prose, comments, naming, R
 
 ## Naming
 
-- Use meaningful, searchable names. It should be easy to read and to search-and-replace `upperBound`; a bare `ub` is not.
-	- But a name doesn't need to be long or globally unique - it needs to be clear and easy to locate. Short conventional names are fine where they read cleanly.
+- Use meaningful, searchable names. `upperBound` is easy to find and replace by hand, and a bare `ub` is not.
+	- A name doesn't need to be long or globally unique. It needs to be clear and easy to find. Short conventional names are fine.
 
 - Single-letter loop counters and iterators (`for i in ...`) are fine when that is the idiomatic choice.
 
@@ -62,19 +60,19 @@ The canonical style reference for SilkTerm. It covers prose, comments, naming, R
 
 ## Rust
 
-Edition 2024. The guiding aim is code that is consistent within and across files: the same error strategy, the same naming, the same module layout throughout.
+Edition 2024. Code should look the same from one file to the next, with one way of handling errors and one naming scheme.
 
 ### Errors
 
 - Errors are values. Return `Result<T, E>` and propagate with `?`.
 
-- No `panic!`, `unwrap()`, or `expect()` outside tests, examples, or provably-unreachable cases. When a case really is unreachable, justify it with a short comment.
+- No `panic!`, `unwrap()` or `expect()` outside tests, except where a case can't happen. Then say why in a short comment. Clippy refuses `unwrap()` and `expect()` there.
 
 - Prefer `thiserror` for library-style error types and `anyhow` for application-level error handling.
 
 ### Ownership and borrowing
 
-- Borrow first. Do not use `.clone()` to satisfy the borrow checker - restructure, borrow, or take a reference instead.
+- Borrow first. Don't use `.clone()` just to get past the borrow checker. Restructure or take a reference instead.
 
 - If a clone is really needed, add a comment saying why.
 
@@ -94,17 +92,17 @@ Edition 2024. The guiding aim is code that is consistent within and across files
 
 - Collapse nested `if let` with `let`-else or, where it reads well, let-chains (`if let ... && ...`).
 
-- Prefer flat combinators (`map`, `and_then`, `unwrap_or_else`) on `Option` and `Result` when they read cleanly. Fall back to `match` for genuine multi-arm logic.
+- Prefer flat combinators like `map` and `and_then` on `Option` and `Result` when they read cleanly. Use `match` when there are really several arms.
 
 ### Types and abstraction
 
 - Model mutually-exclusive states with enums and exhaustive `match`, not boolean flags. Avoid a catch-all `_` arm unless it is truly needed.
 
-- Use the type system to make invalid states unrepresentable where it is cheap - newtypes, typestate.
+- Where it is cheap, use newtypes or typestate so invalid states can't be built.
 
-- Traits and generics for abstraction; `dyn` only for heterogeneity. Compose; do not reach for inheritance-shaped designs.
+- Use traits and generics for abstraction, and `dyn` only when the types really differ. Prefer composition to class hierarchies.
 
-- Derive rather than hand-roll (`Debug`, `Clone`, `PartialEq`, and so on). Derive `Debug` on all public types.
+- Derive `Debug`, `Clone`, `PartialEq` and the rest rather than writing them by hand. Every public type derives `Debug`.
 
 ### Iterators
 
@@ -148,7 +146,7 @@ Edition 2024. The guiding aim is code that is consistent within and across files
 
 ## Formatting
 
-- Rust is formatted by `rustfmt`. Run it and let its output win - do not hand-format against it.
+- Rust is formatted by `rustfmt`. Run it and let its output win over hand formatting.
 
 - The project sets `rustfmt` to hard tabs at width four (`rustfmt.toml`). Tabs indent; spaces align. This is the one deliberate deviation from `rustfmt` defaults; everything else follows the defaults.
 
@@ -156,10 +154,10 @@ Edition 2024. The guiding aim is code that is consistent within and across files
 
 - Code is expected to pass `clippy`. The build gate runs `clippy -D warnings`. Writing to the stricter `clippy::pedantic` bar is encouraged.
 
-- Scripts with an enforced linter (Bash under `shellcheck`, PowerShell under PSScriptAnalyzer, Python under ruff) must pass it.
+- Bash, PowerShell and Python scripts must pass shellcheck, PSScriptAnalyzer and ruff.
 
 ## Commit messages
 
-- Keep them brief and high-level - a short summary of what changed.
+- Keep them short. A one-line summary of what changed is enough.
 
-- Put real detail in the issue, the pull request, or the code, not in a long enumerated commit body.
+- Put the details in the issue or pull request.

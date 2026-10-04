@@ -128,9 +128,9 @@ Enhancement suggestions are tracked as [GitHub issues](https://github.com/yottac
 
 ## Style guides
 
-The canonical style reference is [style-guide.md](style-guide.md). It covers prose, comments, naming, Rust conventions, formatting, and commit messages.
+The style reference is [style-guide.md](style-guide.md), for code, scripts and commit messages.
 
 <!-- TOC ignore:true -->
 ### Commit messages
 
-Keep them brief and high-level - a short summary of what changed. Put real detail in the issue, the pull request, or the code. See the [commit messages](style-guide.md#commit-messages) section of the style guide.
+Keep them short. Put the details in the issue or pull request. See [commit messages](style-guide.md#commit-messages) in the style guide.
