@@ -34,31 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
-	- ID: 2026092618142600
-	- Type: Bug
-	- Status: Testing
-	- Severity: High
-	- Opened: 20260926-181426
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Steps to reproduce:
-		- Have a shell installed that the list does not have yet.
-		- Start two SilkTerm windows a few seconds apart, and let both scans run.
-	- Incorrect behavior: The new shell goes to the top of the list, so the next launch opens on it. Here it was a second Node.js entry, or maybe Python.
-	- Expected behavior: A new shell goes at the end, and the default shell stays the same.
-	- Reproduced: Yes, on b23 in a unit test of the save. Not seen on screen, since the live list was fixed by hand before this was looked at.
-	- Actual cause:
-		- A save compared the list against what the window loaded, not against the file. There is no file watcher, so a window that loaded before another one saved took out only the entries it knew about. The new entry was left above all of them.
-		- The live file fits this. Its second Node.js entry came from a launch with nvm on PATH.
-		- Not shcl. A fresh scan and a reorder both save in the right order through the line-keeping save.
-	- Actual fix: The save merges three ways against the file. Another window's new entries stay at the end, its removals stay gone, and its edits stay unless this window changed the same entry.
-	- Branch: cfgorder
-	- Commit: c6d68c1
-	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
-	- Closed:
-
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
@@ -1294,6 +1269,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- A launch can open on a REPL, because a window that loaded early puts another window's new shell at the top of the list
+	- ID: 2026092618142600
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20260926-181426
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Have a shell installed that the list does not have yet.
+		- Start two SilkTerm windows a few seconds apart, and let both scans run.
+	- Incorrect behavior: The new shell goes to the top of the list, so the next launch opens on it. Here it was a second Node.js entry, or maybe Python.
+	- Expected behavior: A new shell goes at the end, and the default shell stays the same.
+	- Reproduced: Yes, on b23 in a unit test of the save. Not seen on screen, since the live list was fixed by hand before this was looked at.
+	- Actual cause:
+		- A save compared the list against what the window loaded, not against the file. There is no file watcher, so a window that loaded before another one saved took out only the entries it knew about. The new entry was left above all of them.
+		- The live file fits this. Its second Node.js entry came from a launch with nvm on PATH.
+		- Not shcl. A fresh scan and a reorder both save in the right order through the line-keeping save.
+	- Actual fix: The save merges three ways against the file. Another window's new entries stay at the end, its removals stay gone, and its edits stay unless this window changed the same entry.
+	- Branch: cfgorder
+	- Commit: c6d68c1
+	- Test case: `a_stale_window_cannot_put_another_windows_find_on_top`, `a_stale_window_keeps_what_another_window_saved`, `a_fresh_file_keeps_the_order_the_scan_found`, `a_fresh_unix_list_arrives_in_the_designed_order`.
+	- Verified: 20261004, all four pass on dev 76339dd.
+	- Acceptance signoff: Self-closed: the cause was found and pinned by tests, and no repeat has been seen since 20260926.
+	- Closed: 20261004-154900
 
 - The pipeline's fuzz soak fails: a Settings save loses `scroll.inview_tau_ms` at the next launch
 	- ID: 2026100311103811
