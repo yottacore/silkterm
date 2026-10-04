@@ -863,7 +863,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: comments sit on the wrong item, are stale, or are banner dividers
 	- ID: 2026100314050007
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -878,8 +878,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- text.rs: `mono_bold_weight`, `shaped_ink`, and `vmetrics` called a 3-tuple. coloremoji.rs: `color_faces`. term.rs: `wsl_cd`. sysfont.rs: `resolve_sans_family`, now `resolve_ui_family`.
 		- tabtitle.rs: the `elapsed` doc on `tip_value`. dialog.rs: the About layout note on `size_within_caps`.
 	- Origin: mostly inserts between a comment and its function, for example dfaf7fa (2026-09-21) in text.rs and 3506af9 (2026-09-08) in pane.rs. Banners from 5456e2a (2026-07-09) and 76cd488 (2026-08-02). No earlier review item. Confirmed.
-	- Test case: None for placement. A grep in the docs gate for banner rules in `.rs` files.
+	- Test case: None for placement. Banner rules: `cicd/tests/docs/run.py` (Er2UgYD) now fails on any comment line in a tracked `.rs` that opens on a run of four or more of one rule character. It failed on the 21 rule lines before the fix and passes after.
 	- Note: Code review 20261003 item 7.
+	- Actual fix: Each listed comment moved onto what it explains, or was corrected where it was stale. Comment text is unchanged except for the stale parts.
+		- The `#[must_use]` that had drifted onto `same_f32` is back on `persist`.
+		- The stale `setting_lines` note, the duplicate de-bold paragraph in `pane.rs`, and the app.rs note with no code under it are gone.
+		- Stale parts fixed: `BarHit::Thumb` no longer claims an `f32`, `vmetrics` is a pair, `new(0.0, 0.0, ...)`, the footer label is centered, and sysfont names `resolve_ui_family`.
+		- The `// ••••` rules are gone and their titles kept. The `// ---- name ----` rules are now plain `// name` lines.
+	- Swept:
+		- Every site on the Sweep row above. The app.rs note with no code under it was the wallpaper decode note, whose function moved to wallpaper.rs long ago.
+		- A scan of every `.rs` for a comment block with nothing under it found one more split note, the shells grid section in settings_ui.rs, now joined back up. The rest are section titles, file headers and commented-out tests.
+		- The docs gate finds no banner rules left.
+	- Verified: The unit suite passes, 1114 tests. fmt is clean, clippy is clean for Linux and Windows, the Windows build passes, and the test ID check passes.
+	- Branch: comment-fixes
+	- Commit: 3b7d744
+	- Acceptance signoff: Self-closed: mechanical. Comments moved or corrected, and the banner gate failed before and passes after.
+	- Closed: 20261004-152001
 
 - Code style: single letters name parameters, fields and long-lived values
 	- ID: 2026100314050009
