@@ -683,6 +683,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_idle_wait_switch_is_read_once` (fails on the old code, passes now), `the_minimized_state_is_asked_at_most_once_per_recheck` (at most four asks in a second of 60 passes, and the restore events), `the_bindings_in_force_give_every_hotkey`.
 	- Note: Code review 20261003 item 5.
 
+- Settings: every label is shaped again on each pointer move
+	- ID: 2026100314050003
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs local test suite run?: No
+	- Needs external testing: A real-window look on b23. The caret blinks, a field edit eases, and a tip comes up on time, now that the dialog draws only when told to.
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Keep shaped text between dialog frames and shape again only what changed.
+		- A pointer move that changes no hover state does not redraw.
+		- Work out the hover tip once per render.
+	- Progress log:
+		- 20261003: Each `CursorMoved` over a dialog sets it dirty. `dialog.rs` `render` then builds a new glyphon buffer and shapes it for every text item, and rebuilds the rects and texts. A tab with 40 rows shapes 60 to 100 buffers per mouse event.
+		- 20261003: `hover_tip` runs twice per render with the same pointer, once for `over` and once for `found`.
+	- Origin: ec82922 (2026-07-06) for the reshape, c0a7f19 (2026-10-03) for the second `hover_tip`. No earlier review item. Plausible, cost not measured.
+	- Reproduced: 20261004. With the old behavior put back, a frame of the first tab with nothing changed shaped 64 buffers, and every frame looked up the tip twice. Every pointer move drew a frame, and so did every loop pass while a tip was waiting.
+	- Actual fix:
+		- Shaped text is kept from one frame to the next, found by its text, font, weight, color and line box. A frame shapes only text the last one did not have. A move, a new clip or a new width reuses the shape. A new text context, which a font, size or scale change makes, starts over.
+		- A pointer move draws a frame only when it changed something drawn: a drag, the item lit in a dropdown or menu, a lit About button, or a tip going away.
+		- A frame looks up the tip once. A tip coming due, or a field edit's animation step, gets its frame when it is due, not on every pass of the loop.
+	- Swept: every place `render` shaped text (About lines and tip, Settings rows, overlay and tip); both `set_cursor` callers (Settings or About, and the notice); both reads of the dialog's wake in the loop; every branch of the pointer move in `settings_ui.rs`.
+	- Note: Left alone: `measure_ui_text` already keeps its widths. The notice window still reads no wake of its own, as before.
+	- Verified: 20261004, the unit suite passes, 1112 tests, and the sister item's tests pass unchanged. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not looked at in a real window.
+	- Branch: dlgshape
+	- Commit: e894516
+	- Test case: `a_dialog_frame_shapes_nothing_the_last_one_did` (ErlkwlW), `a_dialog_frame_shapes_only_text_that_changed` (Erlkwox), `a_kept_buffer_is_shaped_again_when_what_shaping_reads_changes` (ErlkwsK), `a_dialog_frame_looks_up_the_tip_once` (Erlkwvi) and `a_pointer_move_that_changes_nothing_drawn_needs_no_frame` (Erlkwz5), each seen failing with the old behavior put back. `a_pointer_move_says_whether_it_changed_anything` (Erlkwhi) pins what a move reports.
+	- Note: Code review 20261003 item 3.
+
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
@@ -813,26 +844,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
-
-- Settings: every label is shaped again on each pointer move
-	- ID: 2026100314050003
-	- Type: Enhancement
-	- Status: Queued
-	- Needs local test suite run?: Yes
-	- Priority: Avg
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Keep shaped text between dialog frames and shape again only what changed.
-		- A pointer move that changes no hover state does not redraw.
-		- Work out the hover tip once per render.
-	- Progress log:
-		- 20261003: Each `CursorMoved` over a dialog sets it dirty. `dialog.rs` `render` then builds a new glyphon buffer and shapes it for every text item, and rebuilds the rects and texts. A tab with 40 rows shapes 60 to 100 buffers per mouse event.
-		- 20261003: `hover_tip` runs twice per render with the same pointer, once for `over` and once for `found`.
-	- Origin: ec82922 (2026-07-06) for the reshape, c0a7f19 (2026-10-03) for the second `hover_tip`. No earlier review item. Plausible, cost not measured.
-	- Test case: Owed. A count of shaped buffers across two renders with no change.
-	- Note: Code review 20261003 item 3.
 
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006

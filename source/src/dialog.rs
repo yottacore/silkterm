@@ -5,9 +5,10 @@
 // dialog larger than the main window is still fully visible (the in-surface
 // overlay was clipped by the main window). Each dialog owns its surface + text
 // context and is sized to its content (non-resizable).
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use glyphon::{Color as GColor, Shaping, TextArea, TextBounds};
+use glyphon::{Attrs, Color as GColor, Shaping, TextArea, TextBounds};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::ModifiersState;
 use winit::raw_window_handle::RawWindowHandle;
@@ -86,6 +87,9 @@ pub struct DialogWin {
 	// what the pointer is resting on, and since when: flyover help waits the same
 	// DELAY here as it does in the tab strip and the menus
 	tip: crate::tip::Dwell<Rect>,
+	// the tip the last frame drew, so a dwell that ripens between frames is owed one
+	tip_drawn: Option<Rect>,
+	shaped: ShapedText,
 	// the terminal window this dialog belongs to, so we can restack it beneath
 	// us when we're activated (see raise_parent).
 	parent: Option<RawWindowHandle>,
@@ -239,6 +243,8 @@ impl DialogWin {
 			anim_wake: None,
 			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
+			tip_drawn: None,
+			shaped: ShapedText::default(),
 			parent,
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
@@ -282,6 +288,8 @@ impl DialogWin {
 			anim_wake: None,
 			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
+			tip_drawn: None,
+			shaped: ShapedText::default(),
 			parent,
 			snapped: false,
 			caps: (f32::MAX, f32::MAX),
@@ -366,6 +374,8 @@ impl DialogWin {
 			anim_wake: None,
 			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
+			tip_drawn: None,
+			shaped: ShapedText::default(),
 			parent,
 			snapped: false,
 			caps: (max_w, max_h),
@@ -435,15 +445,16 @@ impl DialogWin {
 		}
 	}
 
-	pub fn set_cursor(&mut self, x: f32, y: f32) {
-		self.mouse = (x, y);
-		if let Content::Settings(dialog) = &mut self.content {
-			// slider drag + open-dropdown hover + field drag-selection
-			let attrs = ui_attrs();
-			let text = &mut self.text;
-			let mut measure = |s: &str| text.measure_ui_text(s, &attrs);
-			dialog.mouse_move(x, y, &mut measure);
-		}
+	// True when the move changed what the window shows, so it is owed a frame.
+	pub fn set_cursor(&mut self, x: f32, y: f32) -> bool {
+		let from = std::mem::replace(&mut self.mouse, (x, y));
+		pointer_moved(
+			&mut self.content,
+			&mut self.text,
+			&mut self.tip,
+			from,
+			(x, y),
+		)
 	}
 
 	pub fn mouse_down(
@@ -699,10 +710,21 @@ impl DialogWin {
 		}
 	}
 
-	// While a field edit animates (view scroll / caret ease / blink), the wake
-	// interval in ms the app loop should keep so frames keep coming.
-	pub fn anim_wake_ms(&self) -> Option<u64> {
-		self.anim_wake
+	// When the loop next owes this dialog a frame with no input: the next step
+	// of a field edit's animation (view scroll, caret ease, blink), or a resting
+	// pointer's tip coming due.
+	pub fn wake_at(&self) -> Option<std::time::Instant> {
+		let anim = self
+			.anim_wake
+			.map(|ms| self.last_frame + std::time::Duration::from_millis(ms));
+		match (anim, self.tip.wake()) {
+			(Some(step), Some(tip)) => Some(step.min(tip)),
+			(step, tip) => step.or(tip),
+		}
+	}
+
+	pub fn owes_frame(&self, now: std::time::Instant) -> bool {
+		frame_due(self.wake_at(), &self.tip, self.tip_drawn, now)
 	}
 
 	pub fn resize(&mut self, w: u32, h: u32) {
@@ -868,36 +890,23 @@ impl DialogWin {
 		} else {
 			None
 		};
-		// Flyover help waits for the pointer to rest, the same as the tab strip and
-		// the menus do. A dialog that answered the moment the pointer crossed a
-		// control would read as a different kind of tip.
-		let (mx, my) = self.mouse;
-		let over = match &self.content {
-			Content::About { links, .. } => links
-				.iter()
-				.find(|link| link.tooltip.is_some() && link.rect.contains(mx, my))
-				.map(|link| link.rect),
-			Content::Settings(dialog) => {
-				let attrs = ui_attrs();
-				let text = &mut self.text;
-				dialog
-					.hover_tip(mx, my, &mut |s| text.measure_ui_text(s, &attrs))
-					.map(|(_, anchor)| anchor)
-			}
-		};
-		let (tip_anchor, tip_wake) = tip_gate(&mut self.tip, over, now);
-		// a resting pointer gets its tip with no further input, so the wake the
-		// dwell asks for joins whatever the field edit wanted
-		if let Some(ms) = tip_wake {
-			self.anim_wake = Some(self.anim_wake.map_or(ms, |have| have.min(ms)));
-		}
+		let (w, h) = (self.gfx.config.width, self.gfx.config.height);
+		let (scene, tip_drawn) = compose(
+			&self.content,
+			&mut self.text,
+			&mut self.shaped,
+			&mut self.tip,
+			self.mouse,
+			now,
+			(w, h),
+		);
+		self.tip_drawn = tip_drawn;
 		let Ok(frame) = self.gfx.begin_frame() else {
 			// nothing else asks again (see the terminal's own refused frame)
 			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 			return;
 		};
 		let view = self.gfx.frame_view(&frame);
-		let (w, h) = (self.gfx.config.width, self.gfx.config.height);
 		self.text.update_viewport(&self.gfx.queue, w, h);
 		// The panel's own colors decide it here, not the terminal's.
 		let cfg = config::settings();
@@ -906,278 +915,7 @@ impl DialogWin {
 			crate::text::text_blend(cfg.dialog_fg, cfg.dialog_bg, cfg.text_dark_on_light),
 		);
 
-		// gather rects (About button + flyover, or the Settings controls) + text
-		let mut rect_inst: Vec<RectInstance> = Vec::new();
-		// rects before `rect_split` draw unclipped; Settings rows after it draw
-		// scissored to the scroll viewport. Both match arms set it.
-		let rect_split;
-		let mut scissor_vp: Option<Rect> = None;
-		// (left, top, scale, color, clip, buffer)
-		let mut bufs: Vec<(f32, f32, f32, [u8; 3], Option<Rect>, glyphon::Buffer)> = Vec::new();
-		// end of the scissored settings rows (an open dropdown appends its popup
-		// rects after this; they draw unscissored, on top, in a second pass)
-		let mut rows_end = 0usize;
-		let mut overlay_range: Option<(u32, u32)> = None;
-		let mut ov_bufs: Vec<(f32, f32, f32, [u8; 3], Option<Rect>, glyphon::Buffer)> = Vec::new();
-		let clear: [u8; 3];
-
-		match &self.content {
-			Content::About {
-				lines,
-				links,
-				notice,
-				..
-			} => {
-				clear = crate::settings_ui::dialog_bg();
-				let (mx, my) = self.mouse;
-				let border_col = crate::settings_ui::dialog_border();
-				// a notice's OK is the default button, outlined the way Settings
-				// outlines its own
-				let btn_border = if *notice {
-					crate::settings_ui::dialog_btn_hl()
-				} else {
-					border_col
-				};
-				let q = |x: f32, y: f32, bw: f32, bh: f32, color: [u8; 3]| RectInstance {
-					pos: [x, y],
-					size: [bw, bh],
-					color: config::srgb_f32(color),
-					..Default::default()
-				};
-				// filled boxes behind button-style links (the Support button),
-				// brightened while hovered
-				for link in links.iter().filter(|link| link.button) {
-					let fill = if link.rect.contains(mx, my) {
-						crate::settings_ui::dialog_btn_hl()
-					} else {
-						crate::settings_ui::dialog_btn()
-					};
-					let r = link.rect;
-					let b = self.text.dip(ABOUT_BORDER);
-					rect_inst.push(q(
-						r.x - b,
-						r.y - b,
-						r.w + 2.0 * b,
-						r.h + 2.0 * b,
-						btn_border,
-					));
-					rect_inst.push(q(r.x, r.y, r.w, r.h, fill));
-				}
-				for line in lines {
-					let mut attrs = ui_attrs();
-					attrs.color_opt =
-						Some(GColor::rgb(line.color[0], line.color[1], line.color[2]));
-					if line.bold {
-						attrs.weight = crate::text::ui_bold_weight();
-					}
-					let mut buf = self.text.new_ui_buffer(w as f32, self.text.ui_line_h);
-					buf.set_text(
-						&mut self.text.font_system,
-						&line.text,
-						&attrs,
-						Shaping::Advanced,
-						None,
-					);
-					buf.shape_until_scroll(&mut self.text.font_system, false);
-					bufs.push((line.x, line.y, line.scale, line.color, None, buf));
-				}
-				// flyover: show the destination URL of the hovered link in a small
-				// box under it (the Support label hides its URL; this reveals it).
-				if let Some((tip, anchor)) = links
-					.iter()
-					.find(|link| tip_anchor == Some(link.rect))
-					.and_then(|link| link.tooltip.as_ref().map(|tip| (tip, link.rect)))
-				{
-					let attrs = ui_attrs();
-					let line_h = self.text.ui_line_h;
-					let tip_w = self.text.measure_ui_text(tip, &attrs);
-					let at = crate::tip::lay_out(
-						anchor,
-						1,
-						tip_w,
-						line_h,
-						(w as f32, h as f32),
-						self.text.scale,
-					);
-					let (b, f) = (at.border, at.fill);
-					rect_inst.push(q(b.x, b.y, b.w, b.h, border_col));
-					rect_inst.push(q(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
-					let dim = crate::settings_ui::dialog_dim();
-					let mut a = ui_attrs();
-					a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
-					let mut buf = self.text.new_ui_buffer(w as f32, line_h);
-					buf.set_text(&mut self.text.font_system, tip, &a, Shaping::Advanced, None);
-					buf.shape_until_scroll(&mut self.text.font_system, false);
-					bufs.push((at.text_x, at.text_y, 1.0, dim, None, buf));
-				}
-				rect_split = rect_inst.len();
-			}
-			Content::Settings(dialog) => {
-				clear = crate::settings_ui::dialog_bg();
-				let line_h = self.text.ui_line_h;
-				let attrs = ui_attrs();
-				let (fixed, rows) = {
-					let text = &mut self.text;
-					dialog.rects(line_h, |s| text.measure_ui_text(s, &attrs))
-				};
-				rect_split = fixed.len();
-				scissor_vp = Some(dialog.viewport_px());
-				rect_inst = fixed;
-				rect_inst.extend(rows);
-				let items = {
-					let text = &mut self.text;
-					let attrs = ui_attrs();
-					dialog.texts(line_h, |s| text.measure_ui_text(s, &attrs))
-				};
-				// The dialog centers its text by line box; this drops each buffer so
-				// what reads as centered is the text itself.
-				let ink_dy = self.text.ui_center_dy();
-				for item in items {
-					let mut attrs = ui_attrs();
-					attrs.color_opt =
-						Some(GColor::rgb(item.color[0], item.color[1], item.color[2]));
-					if item.bold {
-						attrs.weight = crate::text::ui_bold_weight();
-					}
-					let mut buf = self
-						.text
-						.new_ui_buffer(w as f32, self.text.ui_line_h * item.scale.max(1.0));
-					buf.set_text(
-						&mut self.text.font_system,
-						&item.text,
-						&attrs,
-						Shaping::Advanced,
-						None,
-					);
-					buf.shape_until_scroll(&mut self.text.font_system, false);
-					let y = item.y + ink_dy * item.scale.max(1.0);
-					bufs.push((item.x, y, item.scale, item.color, item.clip, buf));
-				}
-				rows_end = rect_inst.len();
-				// open dropdown popup / field context menu: rects appended after the
-				// rows (drawn on top, unscissored, in a second pass); text goes to
-				// the overlay renderer
-				if dialog.overlay_open() {
-					let (ov_rects, ov_texts) = {
-						let text = &mut self.text;
-						let attrs = ui_attrs();
-						dialog.overlay(&mut |s| text.measure_ui_text(s, &attrs))
-					};
-					let start = rect_inst.len() as u32;
-					rect_inst.extend(ov_rects);
-					overlay_range = Some((start, rect_inst.len() as u32));
-					for item in ov_texts {
-						let mut attrs = ui_attrs();
-						attrs.color_opt =
-							Some(GColor::rgb(item.color[0], item.color[1], item.color[2]));
-						if item.bold {
-							attrs.weight = crate::text::ui_bold_weight();
-						}
-						let mut buf = self
-							.text
-							.new_ui_buffer(w as f32, self.text.ui_line_h * item.scale.max(1.0));
-						buf.set_text(
-							&mut self.text.font_system,
-							&item.text,
-							&attrs,
-							Shaping::Advanced,
-							None,
-						);
-						buf.shape_until_scroll(&mut self.text.font_system, false);
-						let y = item.y + ink_dy * item.scale.max(1.0);
-						ov_bufs.push((item.x, y, item.scale, item.color, item.clip, buf));
-					}
-				}
-				// flyover: what a control does, or why it is grayed out. A small box
-				// under it, drawn in the overlay pass so it can't bleed with the row
-				// text (same as the About URL tip). It WRAPS - a sentence long enough
-				// to outrun the panel would otherwise be clamped to the edge and run
-				// off it, and the panel's width is not ours to grow.
-				let (mx, my) = self.mouse;
-				let found = {
-					let attrs = ui_attrs();
-					let text = &mut self.text;
-					dialog.hover_tip(mx, my, &mut |s| text.measure_ui_text(s, &attrs))
-				};
-				if let Some((tip, anchor)) = found.filter(|(_, anchor)| tip_anchor == Some(*anchor))
-				{
-					let border_col = crate::settings_ui::dialog_border();
-					let q = |x: f32, y: f32, bw: f32, bh: f32, color: [u8; 3]| RectInstance {
-						pos: [x, y],
-						size: [bw, bh],
-						color: config::srgb_f32(color),
-						..Default::default()
-					};
-					let attrs = ui_attrs();
-					let scale = self.text.scale;
-					let avail = crate::tip::wrap_budget(w as f32, scale);
-					let lines =
-						crate::tip::wrap(tip, avail, |s| self.text.measure_ui_text(s, &attrs));
-					let tip_w = lines
-						.iter()
-						.map(|l| self.text.measure_ui_text(l, &attrs))
-						.fold(0.0f32, f32::max);
-					let at = crate::tip::lay_out(
-						anchor,
-						lines.len(),
-						tip_w,
-						line_h,
-						(w as f32, h as f32),
-						scale,
-					);
-					let (b, f) = (at.border, at.fill);
-					let start = overlay_range.map_or(rect_inst.len() as u32, |(s, _)| s);
-					rect_inst.push(q(b.x, b.y, b.w, b.h, border_col));
-					rect_inst.push(q(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
-					overlay_range = Some((start, rect_inst.len() as u32));
-					let dim = crate::settings_ui::dialog_dim();
-					let mut a = ui_attrs();
-					a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
-					for (n, text) in lines.iter().enumerate() {
-						let mut buf = self.text.new_ui_buffer(w as f32, line_h);
-						buf.set_text(
-							&mut self.text.font_system,
-							text,
-							&a,
-							Shaping::Advanced,
-							None,
-						);
-						buf.shape_until_scroll(&mut self.text.font_system, false);
-						let ty = at.text_y + line_h * n as f32;
-						ov_bufs.push((at.text_x, ty, 1.0, dim, None, buf));
-					}
-				}
-			}
-		}
-
-		let areas: Vec<TextArea> = bufs
-			.iter()
-			.map(|(x, y, scale, color, clip, buf)| {
-				let bounds = match clip {
-					Some(rect) => TextBounds {
-						left: rect.x as i32,
-						top: rect.y as i32,
-						right: (rect.x + rect.w) as i32,
-						bottom: (rect.y + rect.h) as i32,
-					},
-					None => TextBounds {
-						left: 0,
-						top: 0,
-						right: w as i32,
-						bottom: h as i32,
-					},
-				};
-				TextArea {
-					buffer: buf,
-					left: *x,
-					top: *y,
-					scale: *scale,
-					bounds,
-					default_color: GColor::rgb(color[0], color[1], color[2]),
-					custom_glyphs: &[],
-				}
-			})
-			.collect();
+		let areas = text_areas(&scene.texts, &self.shaped.bufs, (w, h));
 		if let Err(err) = self.text.prepare(&self.gfx.device, &self.gfx.queue, areas) {
 			// same atlas-full recovery as the main window: trim so the next
 			// frame re-prepares with room, instead of dropping the dialog text
@@ -1188,35 +926,8 @@ impl DialogWin {
 			self.text.trim_atlas();
 		}
 		// open-dropdown popup text prepared into the overlay renderer (second pass)
-		if overlay_range.is_some() {
-			let ov_areas: Vec<TextArea> = ov_bufs
-				.iter()
-				.map(|(x, y, scale, color, clip, buf)| {
-					let bounds = match clip {
-						Some(rect) => TextBounds {
-							left: rect.x as i32,
-							top: rect.y as i32,
-							right: (rect.x + rect.w) as i32,
-							bottom: (rect.y + rect.h) as i32,
-						},
-						None => TextBounds {
-							left: 0,
-							top: 0,
-							right: w as i32,
-							bottom: h as i32,
-						},
-					};
-					TextArea {
-						buffer: buf,
-						left: *x,
-						top: *y,
-						scale: *scale,
-						bounds,
-						default_color: GColor::rgb(color[0], color[1], color[2]),
-						custom_glyphs: &[],
-					}
-				})
-				.collect();
+		if scene.overlay_range.is_some() {
+			let ov_areas = text_areas(&scene.overlay_texts, &self.shaped.bufs, (w, h));
 			if let Err(err) = self
 				.text
 				.prepare_overlay(&self.gfx.device, &self.gfx.queue, ov_areas)
@@ -1228,14 +939,15 @@ impl DialogWin {
 				self.text.trim_atlas();
 			}
 		}
+		let rect_inst = &scene.rects;
 		if !rect_inst.is_empty() {
 			self.rects
 				.set_resolution(&self.gfx.queue, w as f32, h as f32);
 			self.rects
-				.upload(&self.gfx.device, &self.gfx.queue, &rect_inst);
+				.upload(&self.gfx.device, &self.gfx.queue, rect_inst);
 		}
 
-		let bg = config::srgb_f32(clear);
+		let bg = config::srgb_f32(scene.clear);
 		let mut encoder = self
 			.gfx
 			.device
@@ -1265,10 +977,11 @@ impl DialogWin {
 				multiview_mask: None,
 			});
 			if !rect_inst.is_empty() {
+				let (rect_split, rows_end) = (scene.rect_split, scene.rows_end);
 				self.rects.draw(&mut pass, 0..rect_split as u32);
 				// scrolled settings rows, clipped to the viewport
 				if rows_end > rect_split {
-					if let Some(vp) = scissor_vp {
+					if let Some(vp) = scene.scissor_vp {
 						let x = vp.x.max(0.0).min(w as f32) as u32;
 						let y = vp.y.max(0.0).min(h as f32) as u32;
 						let sw = vp.w.max(0.0).min(w as f32 - x as f32) as u32;
@@ -1285,7 +998,7 @@ impl DialogWin {
 			let _ = self.text.render(&mut pass);
 		}
 		// second pass: the open dropdown popup on top (preserves the first pass)
-		if let Some((start, end)) = overlay_range {
+		if let Some((start, end)) = scene.overlay_range {
 			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				label: Some("dialog overlay pass"),
 				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1312,6 +1025,449 @@ impl DialogWin {
 			self.refused.missed(now, FRAME_RETRY_FIRST, FRAME_RETRY_MAX);
 		}
 		self.text.trim_atlas();
+	}
+}
+
+// One piece of text placed for drawing, and which of the frame's shaped
+// buffers it draws.
+struct Placed {
+	x: f32,
+	y: f32,
+	scale: f32,
+	color: [u8; 3],
+	clip: Option<Rect>,
+	buf: usize,
+}
+
+// What one frame draws, worked out with no surface.
+struct Scene {
+	clear: [u8; 3],
+	rects: Vec<RectInstance>,
+	// rects before `rect_split` draw unclipped; Settings rows from there to
+	// `rows_end` draw scissored to the scroll viewport
+	rect_split: usize,
+	rows_end: usize,
+	scissor_vp: Option<Rect>,
+	// an open dropdown, field menu or tip, drawn on top in a second pass
+	overlay_range: Option<(u32, u32)>,
+	texts: Vec<Placed>,
+	overlay_texts: Vec<Placed>,
+}
+
+// Shaped dialog text, kept from one frame to the next. Shaping is most of what
+// a frame costs, and a frame mostly shows what the last one did. A buffer is
+// found again by everything shaping reads: the text, its attrs (font, weight,
+// color) and its line box. Where it sits and what clips it are given when it
+// is drawn, so neither needs a new shape. What a frame does not ask for is
+// dropped at the next one.
+#[derive(Default)]
+struct ShapedText {
+	// the text context these were shaped in; a font, size or scale change
+	// builds a new one, and nothing shaped in the old one is any use
+	generation: u64,
+	// this frame's buffers, in the order first asked for
+	bufs: Vec<glyphon::Buffer>,
+	index: HashMap<ShapeKey, usize>,
+	// last frame's, until this one asks for them
+	spare: HashMap<ShapeKey, glyphon::Buffer>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct ShapeKey {
+	text: String,
+	attrs: Attrs<'static>,
+	// the buffer's height, as bits, since an f32 has no Hash
+	height: u32,
+}
+
+impl ShapedText {
+	fn start_frame(&mut self, text: &TextCtx) {
+		self.spare.clear();
+		if self.generation != text.generation {
+			self.generation = text.generation;
+			self.bufs.clear();
+			self.index.clear();
+			return;
+		}
+		let mut last: Vec<Option<glyphon::Buffer>> = std::mem::take(&mut self.bufs)
+			.into_iter()
+			.map(Some)
+			.collect();
+		for (key, slot) in self.index.drain() {
+			if let Some(buf) = last[slot].take() {
+				self.spare.insert(key, buf);
+			}
+		}
+	}
+
+	// This frame's buffer for `line` in `attrs`, shaped only when the last frame
+	// had none like it. A width change lays a kept one out again, which costs
+	// far less than shaping it.
+	fn buffer(
+		&mut self,
+		text: &mut TextCtx,
+		line: &str,
+		attrs: &Attrs<'static>,
+		width: f32,
+		height: f32,
+	) -> usize {
+		let key = ShapeKey {
+			text: line.to_string(),
+			attrs: attrs.clone(),
+			height: height.to_bits(),
+		};
+		if let Some(&slot) = self.index.get(&key) {
+			return slot;
+		}
+		let buf = match self.spare.remove(&key) {
+			Some(mut kept) => {
+				text.resize_buffer(&mut kept, width, height);
+				kept
+			}
+			None => shape(text, line, attrs, width, height),
+		};
+		self.bufs.push(buf);
+		self.index.insert(key, self.bufs.len() - 1);
+		self.bufs.len() - 1
+	}
+}
+
+fn shape(
+	text: &mut TextCtx,
+	line: &str,
+	attrs: &Attrs,
+	width: f32,
+	height: f32,
+) -> glyphon::Buffer {
+	#[cfg(test)]
+	SHAPED.with(|n| n.set(n.get() + 1));
+	let mut buf = text.new_ui_buffer(width, height);
+	buf.set_text(&mut text.font_system, line, attrs, Shaping::Advanced, None);
+	buf.shape_until_scroll(&mut text.font_system, false);
+	buf
+}
+
+// Buffers shaped on this thread, so a test can hold a frame to a number.
+#[cfg(test)]
+thread_local! {
+	static SHAPED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn text_areas<'a>(
+	placed: &[Placed],
+	bufs: &'a [glyphon::Buffer],
+	(w, h): (u32, u32),
+) -> Vec<TextArea<'a>> {
+	placed
+		.iter()
+		.map(|p| {
+			let bounds = match p.clip {
+				Some(rect) => TextBounds {
+					left: rect.x as i32,
+					top: rect.y as i32,
+					right: (rect.x + rect.w) as i32,
+					bottom: (rect.y + rect.h) as i32,
+				},
+				None => TextBounds {
+					left: 0,
+					top: 0,
+					right: w as i32,
+					bottom: h as i32,
+				},
+			};
+			TextArea {
+				buffer: &bufs[p.buf],
+				left: p.x,
+				top: p.y,
+				scale: p.scale,
+				bounds,
+				default_color: GColor::rgb(p.color[0], p.color[1], p.color[2]),
+				custom_glyphs: &[],
+			}
+		})
+		.collect()
+}
+
+// The tip under the pointer, and the rect it hangs from. A frame asks once.
+fn tip_under<'a>(
+	content: &'a Content,
+	text: &mut TextCtx,
+	(mx, my): (f32, f32),
+) -> Option<(&'a str, Rect)> {
+	match content {
+		Content::About { links, .. } => links
+			.iter()
+			.find(|link| link.tooltip.is_some() && link.rect.contains(mx, my))
+			.and_then(|link| link.tooltip.as_deref().map(|tip| (tip, link.rect))),
+		Content::Settings(dialog) => {
+			let attrs = ui_attrs();
+			dialog.hover_tip(mx, my, &mut |s| text.measure_ui_text(s, &attrs))
+		}
+	}
+}
+
+// A pointer move: true when what the window shows moved with it. Settings draws
+// nothing from the pointer itself, only from what a move changes (a drag, the
+// item lit in a dropdown or menu) and the tip. About lights a button under it.
+fn pointer_moved(
+	content: &mut Content,
+	text: &mut TextCtx,
+	tip: &mut crate::tip::Dwell<Rect>,
+	from: (f32, f32),
+	to: (f32, f32),
+) -> bool {
+	let changed = match content {
+		Content::About { links, .. } => {
+			let lit = |(x, y): (f32, f32)| {
+				links
+					.iter()
+					.position(|link| link.button && link.rect.contains(x, y))
+			};
+			lit(from) != lit(to)
+		}
+		Content::Settings(dialog) => {
+			let attrs = ui_attrs();
+			dialog.mouse_move(to.0, to.1, &mut |s| text.measure_ui_text(s, &attrs))
+		}
+	};
+	let over = tip_under(content, text, to).map(|(_, anchor)| anchor);
+	let tip_moved = tip.point_at(over);
+	changed || tip_moved
+}
+
+// Everything one frame draws, worked out with no surface, and the tip it drew.
+// Flyover help waits for the pointer to rest, the same as the tab strip and the
+// menus do. A dialog that answered the moment the pointer crossed a control
+// would read as a different kind of tip. The wake the wait asks for is read
+// through `wake_at`, since a move can start it between frames.
+fn compose(
+	content: &Content,
+	text: &mut TextCtx,
+	shaped: &mut ShapedText,
+	dwell: &mut crate::tip::Dwell<Rect>,
+	mouse: (f32, f32),
+	now: std::time::Instant,
+	size: (u32, u32),
+) -> (Scene, Option<Rect>) {
+	let found = tip_under(content, text, mouse);
+	let (drawn, _) = tip_gate(dwell, found.map(|(_, anchor)| anchor), now);
+	let tip = found.filter(|(_, anchor)| drawn == Some(*anchor));
+	(scene(content, text, shaped, mouse, tip, size), drawn)
+}
+
+// Whether a dialog is owed a frame with no input. A tip that ripened since the
+// last frame counts even once its wake has passed, since `Dwell::wake` stops
+// answering when the time is up.
+fn frame_due(
+	wake: Option<std::time::Instant>,
+	dwell: &crate::tip::Dwell<Rect>,
+	drawn: Option<Rect>,
+	now: std::time::Instant,
+) -> bool {
+	wake.is_some_and(|at| at <= now) || dwell.ripe() != drawn
+}
+
+// Everything one frame draws, with `tip` the flyover to draw, if one is up.
+fn scene(
+	content: &Content,
+	text: &mut TextCtx,
+	shaped: &mut ShapedText,
+	(mx, my): (f32, f32),
+	tip: Option<(&str, Rect)>,
+	(w, h): (u32, u32),
+) -> Scene {
+	shaped.start_frame(text);
+	let q = |x: f32, y: f32, bw: f32, bh: f32, color: [u8; 3]| RectInstance {
+		pos: [x, y],
+		size: [bw, bh],
+		color: config::srgb_f32(color),
+		..Default::default()
+	};
+	let mut rects: Vec<RectInstance> = Vec::new();
+	let mut texts: Vec<Placed> = Vec::new();
+	let mut overlay_texts: Vec<Placed> = Vec::new();
+	let mut overlay_range: Option<(u32, u32)> = None;
+	let line_h = text.ui_line_h;
+	let border_col = crate::settings_ui::dialog_border();
+	match content {
+		Content::About {
+			lines,
+			links,
+			notice,
+			..
+		} => {
+			// a notice's OK is the default button, outlined the way Settings
+			// outlines its own
+			let btn_border = if *notice {
+				crate::settings_ui::dialog_btn_hl()
+			} else {
+				border_col
+			};
+			// filled boxes behind button-style links (the Support button),
+			// brightened while hovered
+			for link in links.iter().filter(|link| link.button) {
+				let fill = if link.rect.contains(mx, my) {
+					crate::settings_ui::dialog_btn_hl()
+				} else {
+					crate::settings_ui::dialog_btn()
+				};
+				let r = link.rect;
+				let b = text.dip(ABOUT_BORDER);
+				rects.push(q(
+					r.x - b,
+					r.y - b,
+					r.w + 2.0 * b,
+					r.h + 2.0 * b,
+					btn_border,
+				));
+				rects.push(q(r.x, r.y, r.w, r.h, fill));
+			}
+			for line in lines {
+				let mut attrs = ui_attrs();
+				attrs.color_opt = Some(GColor::rgb(line.color[0], line.color[1], line.color[2]));
+				if line.bold {
+					attrs.weight = crate::text::ui_bold_weight();
+				}
+				let buf = shaped.buffer(text, &line.text, &attrs, w as f32, line_h);
+				texts.push(Placed {
+					x: line.x,
+					y: line.y,
+					scale: line.scale,
+					color: line.color,
+					clip: None,
+					buf,
+				});
+			}
+			// flyover: show the destination URL of the hovered link in a small
+			// box under it (the Support label hides its URL; this reveals it).
+			if let Some((tip, anchor)) = tip {
+				let attrs = ui_attrs();
+				let tip_w = text.measure_ui_text(tip, &attrs);
+				let at =
+					crate::tip::lay_out(anchor, 1, tip_w, line_h, (w as f32, h as f32), text.scale);
+				let (b, f) = (at.border, at.fill);
+				rects.push(q(b.x, b.y, b.w, b.h, border_col));
+				rects.push(q(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
+				let dim = crate::settings_ui::dialog_dim();
+				let mut a = ui_attrs();
+				a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
+				let buf = shaped.buffer(text, tip, &a, w as f32, line_h);
+				texts.push(Placed {
+					x: at.text_x,
+					y: at.text_y,
+					scale: 1.0,
+					color: dim,
+					clip: None,
+					buf,
+				});
+			}
+			let rect_split = rects.len();
+			Scene {
+				clear: crate::settings_ui::dialog_bg(),
+				rects,
+				rect_split,
+				rows_end: 0,
+				scissor_vp: None,
+				overlay_range,
+				texts,
+				overlay_texts,
+			}
+		}
+		Content::Settings(dialog) => {
+			let attrs = ui_attrs();
+			let (fixed, rows) = dialog.rects(line_h, |s| text.measure_ui_text(s, &attrs));
+			let rect_split = fixed.len();
+			rects = fixed;
+			rects.extend(rows);
+			let items = dialog.texts(line_h, |s| text.measure_ui_text(s, &attrs));
+			// The dialog centers its text by line box; this drops each buffer so
+			// what reads as centered is the text itself.
+			let ink_dy = text.ui_center_dy();
+			let mut place = |text: &mut TextCtx, item: &crate::settings_ui::TextItem| {
+				let mut attrs = ui_attrs();
+				attrs.color_opt = Some(GColor::rgb(item.color[0], item.color[1], item.color[2]));
+				if item.bold {
+					attrs.weight = crate::text::ui_bold_weight();
+				}
+				let tall = item.scale.max(1.0);
+				let buf = shaped.buffer(text, &item.text, &attrs, w as f32, line_h * tall);
+				Placed {
+					x: item.x,
+					y: item.y + ink_dy * tall,
+					scale: item.scale,
+					color: item.color,
+					clip: item.clip,
+					buf,
+				}
+			};
+			for item in &items {
+				texts.push(place(text, item));
+			}
+			let rows_end = rects.len();
+			// open dropdown popup / field context menu: rects appended after the
+			// rows (drawn on top, unscissored, in a second pass); text goes to
+			// the overlay renderer
+			if dialog.overlay_open() {
+				let (ov_rects, ov_texts) = dialog.overlay(&mut |s| text.measure_ui_text(s, &attrs));
+				let start = rects.len() as u32;
+				rects.extend(ov_rects);
+				overlay_range = Some((start, rects.len() as u32));
+				for item in &ov_texts {
+					overlay_texts.push(place(text, item));
+				}
+			}
+			// flyover: what a control does, or why it is grayed out. A small box
+			// under it, drawn in the overlay pass so it can't bleed with the row
+			// text (same as the About URL tip). It WRAPS - a sentence long enough
+			// to outrun the panel would otherwise be clamped to the edge and run
+			// off it, and the panel's width is not ours to grow.
+			if let Some((tip, anchor)) = tip {
+				let scale = text.scale;
+				let avail = crate::tip::wrap_budget(w as f32, scale);
+				let lines = crate::tip::wrap(tip, avail, |s| text.measure_ui_text(s, &attrs));
+				let tip_w = lines
+					.iter()
+					.map(|l| text.measure_ui_text(l, &attrs))
+					.fold(0.0f32, f32::max);
+				let at = crate::tip::lay_out(
+					anchor,
+					lines.len(),
+					tip_w,
+					line_h,
+					(w as f32, h as f32),
+					scale,
+				);
+				let (b, f) = (at.border, at.fill);
+				let start = overlay_range.map_or(rects.len() as u32, |(s, _)| s);
+				rects.push(q(b.x, b.y, b.w, b.h, border_col));
+				rects.push(q(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
+				overlay_range = Some((start, rects.len() as u32));
+				let dim = crate::settings_ui::dialog_dim();
+				let mut a = ui_attrs();
+				a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
+				for (n, line) in lines.iter().enumerate() {
+					let buf = shaped.buffer(text, line, &a, w as f32, line_h);
+					overlay_texts.push(Placed {
+						x: at.text_x,
+						y: at.text_y + line_h * n as f32,
+						scale: 1.0,
+						color: dim,
+						clip: None,
+						buf,
+					});
+				}
+			}
+			Scene {
+				clear: crate::settings_ui::dialog_bg(),
+				rects,
+				rect_split,
+				rows_end,
+				scissor_vp: Some(dialog.viewport_px()),
+				overlay_range,
+				texts,
+				overlay_texts,
+			}
+		}
 	}
 }
 
@@ -2581,5 +2737,392 @@ mod tests {
 				assert!((1.85..2.15).contains(&ratio), "{at1} -> {at2}");
 			}
 		}
+	}
+
+	// The text one frame draws, as the next frame would compare it: what each
+	// piece says, where, in what color and clip.
+	type Drawn = Vec<(String, u32, u32, [u8; 3], Option<(u32, u32, u32, u32)>)>;
+	fn drawn(scene: &super::Scene, shaped: &super::ShapedText) -> Drawn {
+		scene
+			.texts
+			.iter()
+			.chain(&scene.overlay_texts)
+			.map(|p| {
+				let said: String = shaped.bufs[p.buf]
+					.lines
+					.iter()
+					.map(glyphon::BufferLine::text)
+					.collect();
+				let clip = p
+					.clip
+					.map(|r| (r.x.to_bits(), r.y.to_bits(), r.w.to_bits(), r.h.to_bits()));
+				(said, p.x.to_bits(), p.y.to_bits(), p.color, clip)
+			})
+			.collect()
+	}
+
+	fn settings_content(text: &mut TextCtx) -> super::Content {
+		let (label_w, btn_w, row_btn_w, tab_ws) = crate::settings_ui::chrome_widths(text, 1.0);
+		let mut dialog = crate::settings_ui::SettingsDialog::new(
+			0.0,
+			0.0,
+			text.ui_line_h,
+			label_w,
+			btn_w,
+			row_btn_w,
+			tab_ws,
+			f32::MAX,
+			700.0,
+			1.0,
+		);
+		let (w, h) = dialog.size();
+		dialog.set_size(w, h);
+		super::Content::Settings(dialog)
+	}
+
+	fn shaped_so_far() -> usize {
+		super::SHAPED.with(std::cell::Cell::get)
+	}
+
+	// One frame as render works it out, the pointer off the window.
+	fn frame(
+		content: &super::Content,
+		text: &mut TextCtx,
+		shaped: &mut super::ShapedText,
+		size: (u32, u32),
+	) -> super::Scene {
+		let mut dwell = crate::tip::Dwell::default();
+		super::compose(
+			content,
+			text,
+			shaped,
+			&mut dwell,
+			(-1.0, -1.0),
+			Instant::now(),
+			size,
+		)
+		.0
+	}
+
+	fn switch_tab(content: &mut super::Content) {
+		if let super::Content::Settings(dialog) = content {
+			dialog.switch_tab(true);
+		}
+	}
+
+	// A pointer move used to draw the dialog again, and every frame made and
+	// shaped a new buffer for every piece of text on it. A frame that shows what
+	// the last one did shapes nothing, on every tab.
+	// Test ID: ErlkwlW
+	#[test]
+	fn a_dialog_frame_shapes_nothing_the_last_one_did() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut content = settings_content(&mut text);
+		let mut shaped = super::ShapedText::default();
+		for tab in 0..crate::settings_ui::tab_titles().len() {
+			let first = frame(&content, &mut text, &mut shaped, (800, 700));
+			let first = drawn(&first, &shaped);
+			assert!(!first.is_empty(), "tab {tab} drew no text");
+			let before = shaped_so_far();
+			let second = frame(&content, &mut text, &mut shaped, (800, 700));
+			let shapes = shaped_so_far() - before;
+			assert_eq!(
+				shapes, 0,
+				"tab {tab}: a frame with nothing changed shaped {shapes}"
+			);
+			assert_eq!(
+				drawn(&second, &shaped),
+				first,
+				"tab {tab} drew something else"
+			);
+			switch_tab(&mut content);
+		}
+	}
+
+	// What a frame shapes is exactly the text the last frame did not have, as
+	// tabs, values, scrolling and the window's width change under it. A move or
+	// a new clip is the same text somewhere else.
+	// Test ID: Erlkwox
+	#[test]
+	fn a_dialog_frame_shapes_only_text_that_changed() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut content = settings_content(&mut text);
+		let mut shaped = super::ShapedText::default();
+		let keys = |shaped: &super::ShapedText| {
+			shaped
+				.index
+				.keys()
+				.cloned()
+				.collect::<std::collections::HashSet<_>>()
+		};
+		let _ = frame(&content, &mut text, &mut shaped, (800, 700));
+		let mut seen = keys(&shaped);
+		let (mut reshaped, mut kept) = (0, 0);
+		for step in 0..4 * crate::settings_ui::tab_titles().len() {
+			let mut width = 800;
+			match step % 4 {
+				0 => switch_tab(&mut content),
+				1 => {
+					let mut s = (*config::settings()).clone();
+					s.margin += 3.0;
+					s.font_size += 1.0;
+					s.use_system_font_size = false;
+					if let super::Content::Settings(dialog) = &mut content {
+						dialog.start_from(s);
+					}
+				}
+				2 => {
+					if let super::Content::Settings(dialog) = &mut content {
+						dialog.wheel(0.0, -120.0);
+					}
+				}
+				_ => width = 640,
+			}
+			let before = shaped_so_far();
+			let scene = frame(&content, &mut text, &mut shaped, (width, 700));
+			let shapes = shaped_so_far() - before;
+			let now = keys(&shaped);
+			let new = now.difference(&seen).count();
+			assert_eq!(
+				shapes, new,
+				"step {step} shaped {shapes} for {new} new pieces of text"
+			);
+			for p in scene.texts.iter().chain(&scene.overlay_texts) {
+				assert_eq!(
+					shaped.bufs[p.buf].size().0,
+					Some(width as f32),
+					"step {step}"
+				);
+			}
+			if shapes > 0 {
+				reshaped += 1;
+			} else {
+				kept += 1;
+			}
+			seen = now;
+		}
+		assert!(
+			reshaped > 0 && kept > 0,
+			"{reshaped} steps shaped and {kept} did not"
+		);
+	}
+
+	// A kept buffer is found by everything shaping reads. A new color, weight,
+	// font or line box shapes again, and so does a new text context, which is
+	// what a font, size or scale change makes. A new width lays the kept shape
+	// out again, the same as a fresh one.
+	// Test ID: ErlkwsK
+	#[test]
+	fn a_kept_buffer_is_shaped_again_when_what_shaping_reads_changes() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut shaped = super::ShapedText::default();
+		let line_h = text.ui_line_h;
+		let base = ui_attrs();
+		let mut red = ui_attrs();
+		red.color_opt = Some(glyphon::Color::rgb(200, 0, 0));
+		let mut heavy = ui_attrs();
+		heavy.weight = glyphon::Weight(if base.weight.0 == 700 { 400 } else { 700 });
+		let mut serif = ui_attrs();
+		serif.family = glyphon::Family::Serif;
+		let asks = [
+			("Label", &base, line_h),
+			("Label", &red, line_h),
+			("Label", &heavy, line_h),
+			("Label", &serif, line_h),
+			("Label", &base, line_h * 2.0),
+			("Other", &base, line_h),
+		];
+		let ask_all = |shaped: &mut super::ShapedText, text: &mut TextCtx, width: f32| {
+			shaped.start_frame(text);
+			let before = shaped_so_far();
+			let slots: Vec<usize> = asks
+				.iter()
+				.map(|(line, attrs, h)| shaped.buffer(text, line, attrs, width, *h))
+				.collect();
+			(slots, shaped_so_far() - before)
+		};
+		let (slots, shapes) = ask_all(&mut shaped, &mut text, 800.0);
+		assert_eq!(
+			shapes,
+			asks.len(),
+			"each ask differs in something shaping reads"
+		);
+		let unique: std::collections::HashSet<_> = slots.iter().collect();
+		assert_eq!(unique.len(), asks.len());
+		let (_, shapes) = ask_all(&mut shaped, &mut text, 800.0);
+		assert_eq!(shapes, 0, "the same asks a frame later shaped again");
+		// asked twice in one frame: one buffer serves both
+		let again = shaped.buffer(&mut text, "Label", &base, 800.0, line_h);
+		assert_eq!(
+			again,
+			shaped.buffer(&mut text, "Label", &base, 800.0, line_h)
+		);
+		// a narrower window keeps the shape and lays it out to the new width
+		let (slots, shapes) = ask_all(&mut shaped, &mut text, 300.0);
+		assert_eq!(shapes, 0, "a width change shaped again");
+		let glyphs = |buf: &glyphon::Buffer| {
+			buf.layout_runs()
+				.flat_map(|run| run.glyphs.iter().map(|g| (g.glyph_id, g.x.to_bits())))
+				.collect::<Vec<_>>()
+		};
+		for (slot, (line, attrs, h)) in slots.iter().zip(asks) {
+			let kept = &shaped.bufs[*slot];
+			assert_eq!(kept.size(), (Some(300.0), Some(h)));
+			let fresh = super::shape(&mut text, line, attrs, 300.0, h);
+			assert_eq!(
+				glyphs(kept),
+				glyphs(&fresh),
+				"{line} laid out unlike a fresh shape"
+			);
+		}
+		// a new context shapes everything again, and what a frame never asked for
+		// is gone by the next
+		let mut other = TextCtx::new_cpu(2.0);
+		let (_, shapes) = ask_all(&mut shaped, &mut other, 800.0);
+		assert_eq!(shapes, asks.len(), "a new text context reused old shapes");
+		shaped.start_frame(&other);
+		shaped.start_frame(&other);
+		let before = shaped_so_far();
+		let _ = shaped.buffer(&mut other, "Label", &base, 800.0, line_h);
+		assert_eq!(
+			shaped_so_far() - before,
+			1,
+			"a buffer outlived a frame that skipped it"
+		);
+	}
+
+	// A frame used to look up the tip under the pointer twice, once to time it
+	// and once to draw it.
+	// Test ID: Erlkwvi
+	#[test]
+	fn a_dialog_frame_looks_up_the_tip_once() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let content = settings_content(&mut text);
+		let mut shaped = super::ShapedText::default();
+		let mut dwell = crate::tip::Dwell::default();
+		let super::Content::Settings(dialog) = &content else {
+			unreachable!()
+		};
+		let (w, h) = dialog.size();
+		let mut points = vec![(-1.0, -1.0)];
+		for k in 1..40 {
+			points.push((w * k as f32 / 40.0, h * k as f32 / 40.0));
+		}
+		for at in points {
+			let before = crate::settings_ui::hover_tips();
+			let _ = super::compose(
+				&content,
+				&mut text,
+				&mut shaped,
+				&mut dwell,
+				at,
+				Instant::now(),
+				(800, 700),
+			);
+			let asks = crate::settings_ui::hover_tips() - before;
+			assert_eq!(
+				asks, 1,
+				"a frame with the pointer at {at:?} looked the tip up {asks} times"
+			);
+		}
+	}
+
+	// A pointer move draws nothing unless something drawn moved with it: a
+	// lit button, or a tip going away. A tip coming due is owed its frame by
+	// the clock, not by the next move, and it is owed it even once the dwell's
+	// wake has passed, since the wake stops answering then.
+	// Test ID: Erlkwz5
+	#[test]
+	fn a_pointer_move_that_changes_nothing_drawn_needs_no_frame() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut content = settings_content(&mut text);
+		let mut dwell = crate::tip::Dwell::default();
+		let (w, h) = match &content {
+			super::Content::Settings(dialog) => dialog.size(),
+			super::Content::About { .. } => unreachable!(),
+		};
+		let mut from = (0.0, 0.0);
+		let (mut tipped, mut bare) = (None, None);
+		for row in 0..30 {
+			for col in 0..12 {
+				let to = (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0);
+				assert!(
+					!super::pointer_moved(&mut content, &mut text, &mut dwell, from, to),
+					"a move to {to:?} asked for a frame"
+				);
+				match super::tip_under(&content, &mut text, to) {
+					Some((_, anchor)) => tipped = tipped.or(Some((to, anchor))),
+					None => bare = bare.or(Some(to)),
+				}
+				from = to;
+			}
+		}
+		let ((at, anchor), bare) = (tipped.unwrap(), bare.unwrap());
+		let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, from, at);
+		let now = Instant::now();
+		assert!(
+			!super::frame_due(dwell.wake(), &dwell, None, now),
+			"a tip still waiting asked for a frame"
+		);
+		std::thread::sleep(crate::tip::DELAY);
+		assert!(
+			super::frame_due(dwell.wake(), &dwell, None, Instant::now()),
+			"a tip that came due got no frame"
+		);
+		let mut shaped = super::ShapedText::default();
+		let (_, drawn) = super::compose(
+			&content,
+			&mut text,
+			&mut shaped,
+			&mut dwell,
+			at,
+			Instant::now(),
+			(800, 700),
+		);
+		assert_eq!(drawn, Some(anchor));
+		assert!(!super::frame_due(
+			dwell.wake(),
+			&dwell,
+			drawn,
+			Instant::now()
+		));
+		let inside = (at.0 + 1.0, at.1);
+		assert_eq!(
+			super::tip_under(&content, &mut text, inside).map(|(_, r)| r),
+			Some(anchor)
+		);
+		assert!(
+			!super::pointer_moved(&mut content, &mut text, &mut dwell, at, inside),
+			"a move inside the tip's control asked for a frame"
+		);
+		assert!(
+			super::pointer_moved(&mut content, &mut text, &mut dwell, inside, bare),
+			"leaving a tip up drew nothing"
+		);
+		// About lights its button under the pointer
+		let (lines, links, _) = layout_about(&mut text, &adapter());
+		let button = links.iter().find(|l| l.button).unwrap().rect;
+		let mut about = super::Content::About {
+			lines,
+			links,
+			notice: false,
+			source: AboutSource::About(Box::new(adapter())),
+		};
+		let mut dwell = crate::tip::Dwell::default();
+		let on = (button.x + 2.0, button.y + 2.0);
+		let off = (button.x - 5.0, button.y - 5.0);
+		assert!(super::pointer_moved(
+			&mut about, &mut text, &mut dwell, off, on
+		));
+		assert!(!super::pointer_moved(
+			&mut about,
+			&mut text,
+			&mut dwell,
+			on,
+			(on.0 + 1.0, on.1)
+		));
+		assert!(super::pointer_moved(
+			&mut about, &mut text, &mut dwell, on, off
+		));
 	}
 }

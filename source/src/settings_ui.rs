@@ -112,6 +112,16 @@ thread_local! {
 	static DLG_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+// Hover tip lookups on this thread. Test builds only.
+#[cfg(test)]
+thread_local! {
+	static HOVER_TIPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub fn hover_tips() -> usize {
+	HOVER_TIPS.with(std::cell::Cell::get)
+}
+
 fn dlg() -> Dlg {
 	#[cfg(test)]
 	DLG_BUILDS.with(|n| n.set(n.get() + 1));
@@ -1426,9 +1436,9 @@ impl SettingsDialog {
 		let s = self.scale;
 		self.mouse_up_dip(x / s, y / s)
 	}
-	pub fn mouse_move(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) {
+	pub fn mouse_move(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) -> bool {
 		let s = self.scale;
-		self.mouse_move_dip(x / s, y / s, &mut |t| measure(t) / s);
+		self.mouse_move_dip(x / s, y / s, &mut |t| measure(t) / s)
 	}
 	pub fn mouse_right(
 		&mut self,
@@ -1454,6 +1464,8 @@ impl SettingsDialog {
 		my: f32,
 		measure: &mut impl FnMut(&str) -> f32,
 	) -> Option<(&'static str, Rect)> {
+		#[cfg(test)]
+		HOVER_TIPS.with(|n| n.set(n.get() + 1));
 		let s = self.scale;
 		self.hover_tip_dip(mx / s, my / s, &mut |t| measure(t) / s)
 			.map(|(tip, anchor)| (tip, self.rect_px(anchor)))
@@ -4990,7 +5002,7 @@ impl SettingsDialog {
 				.field_rect(row)
 				.is_some_and(|f| mx < f.x || mx > f.x + f.w);
 			if past_edge {
-				self.mouse_move_dip(mx, my, measure);
+				let _ = self.mouse_move_dip(mx, my, measure);
 			}
 		}
 		let row = self.edit.as_ref().map(|e| e.row)?;
@@ -5036,61 +5048,74 @@ impl SettingsDialog {
 		Some(if moving || dragging { 8 } else { 33 })
 	}
 
-	fn mouse_move_dip(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) {
+	// True when the move changed something drawn. Nothing is drawn from the
+	// pointer itself, so a move that changes none of this needs no frame.
+	fn mouse_move_dip(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) -> bool {
 		self.mouse = (x, y);
-		if self.pick.as_ref().is_some_and(|p| p.drag.is_some()) {
+		if let Some(was) = self
+			.pick
+			.as_ref()
+			.filter(|p| p.drag.is_some())
+			.map(|p| p.hsv)
+		{
 			self.pick_drag_to(x, y);
-			return;
+			return self.pick.as_ref().is_some_and(|p| p.hsv != was);
 		}
 		// a line being dragged by its grip, reordered as it travels
 		if let Some(drag) = &self.shell_drag {
 			let (at, grab_dy) = (drag.at, drag.grab_dy);
-			if let Some(i) = self.shell_row() {
-				let want = self.shell_drop_at(i, y, grab_dy);
-				if want != at {
-					self.shell_move_to(at, want);
-					if let Some(drag) = &mut self.shell_drag {
-						drag.at = want;
-					}
-				}
+			let Some(i) = self.shell_row() else {
+				return false;
+			};
+			let want = self.shell_drop_at(i, y, grab_dy);
+			if want == at {
+				return false;
 			}
-			return;
+			self.shell_move_to(at, want);
+			if let Some(drag) = &mut self.shell_drag {
+				drag.at = want;
+			}
+			return true;
 		}
 		// open field context menu: track the hovered item
 		if self.emenu.is_some() {
 			let hover = (0..EDIT_MENU.len()).find(|&k| self.em_item_rect(k).contains(x, y));
-			if let Some(menu) = &mut self.emenu {
-				menu.hover = hover.or(menu.hover);
-			}
-			return;
+			let Some(menu) = &mut self.emenu else {
+				return false;
+			};
+			let was = menu.hover;
+			menu.hover = hover.or(menu.hover);
+			return menu.hover != was;
 		}
 		// drag-selection inside an editable field (a drag past the box edges keeps
 		// selecting: `animate` replays this pos while the view crawls)
 		if let Some(row) = self.edit_drag {
-			if let Some(field) = self.field_rect(row) {
-				let moved = if let Some(edit) = &mut self.edit {
-					let rel_x = x - (field.x + lay().field_pad) + edit.view;
-					let cur = caret_from_click(&edit.buf, rel_x, measure);
-					if cur == edit.cur {
-						false
-					} else {
-						if edit.sel.is_none() {
-							edit.sel = Some(edit.cur);
-						}
-						edit.cur = cur;
-						true
-					}
-				} else {
+			let Some(field) = self.field_rect(row) else {
+				return false;
+			};
+			let moved = if let Some(edit) = &mut self.edit {
+				let rel_x = x - (field.x + lay().field_pad) + edit.view;
+				let cur = caret_from_click(&edit.buf, rel_x, measure);
+				if cur == edit.cur {
 					false
-				};
-				// a click that turned into a drag keeps the dragged range, not select-all
-				if moved {
-					self.select_all_on_up = false;
+				} else {
+					if edit.sel.is_none() {
+						edit.sel = Some(edit.cur);
+					}
+					edit.cur = cur;
+					true
 				}
+			} else {
+				false
+			};
+			// a click that turned into a drag keeps the dragged range, not select-all
+			if moved {
+				self.select_all_on_up = false;
 			}
-			return;
+			return moved;
 		}
 		if let Some(oi) = self.open {
+			let was = self.pending;
 			let n = self.dd_options(oi).len();
 			for k in 0..n {
 				if self.dd_item_rect(oi, n, k).contains(x, y) {
@@ -5098,25 +5123,31 @@ impl SettingsDialog {
 					break;
 				}
 			}
-			return;
+			return self.pending != was;
 		}
 		if let Some(grab) = self.drag_thumb {
+			let was = self.scroll;
 			let vp = self.viewport();
 			let thumb_h = self.thumb().map_or(lay().scrollbar_thumb_min, |t| t.h);
 			let frac = ((y - grab - vp.y) / (vp.h - thumb_h).max(1.0)).clamp(0.0, 1.0);
 			self.scroll = frac * self.max_scroll();
-			return;
+			return self.scroll.to_bits() != was.to_bits();
 		}
 		if let Some(grab) = self.drag_hthumb {
+			let was = self.hscroll;
 			let track = self.htrack();
 			let thumb_w = self.hthumb().map_or(lay().scrollbar_thumb_min, |t| t.w);
 			let frac = ((x - grab - track.x) / (track.w - thumb_w).max(1.0)).clamp(0.0, 1.0);
 			self.hscroll = frac * self.max_hscroll();
-			return;
+			return self.hscroll.to_bits() != was.to_bits();
 		}
-		if self.drag.is_some() {
-			self.drag_to(x);
-		}
+		let Some(i) = self.drag else {
+			return false;
+		};
+		let key = self.specs[i].key;
+		let was = self.get_f32(key);
+		self.drag_to(x);
+		self.get_f32(key).to_bits() != was.to_bits()
 	}
 	// Release: end any slider/thumb drag, and fire an armed button's action only if
 	// the cursor is still over it (a press that drifted off cancels).
@@ -8014,6 +8045,62 @@ mod tests {
 		assert!(!d.disabled(Key::PerfProfile));
 		d.set_toggle(Key::PerfAuto, false);
 		assert!(!d.disabled(Key::PerfProfile));
+	}
+
+	// Nothing is drawn from the pointer itself, so a move is owed a frame only
+	// when it changed something that is: the item lit in an open dropdown, a
+	// dragged slider's value. dialog.rs draws nothing for any other move.
+	// Test ID: Erlkwhi
+	#[test]
+	fn a_pointer_move_says_whether_it_changed_anything() {
+		use super::{Key, Kind};
+		let mut d = mk_dialog(2000.0);
+		d.set_size(700.0, 600.0);
+		let mut m = chars7;
+		for k in 0..60 {
+			let (x, y) = (d.rect.x + 11.0 * k as f32, d.rect.y + 9.0 * k as f32);
+			assert!(
+				!d.mouse_move_dip(x, y, &mut m),
+				"a move to {x},{y} with nothing held changed something"
+			);
+		}
+		// an open dropdown lights the item under the pointer
+		let i = (0..d.specs.len())
+			.find(|&j| matches!(d.specs[j].kind, Kind::Dropdown(_)) && d.dd_options(j).len() >= 2)
+			.unwrap();
+		d.tab = d.specs[i].tab;
+		d.open = Some(i);
+		d.pending = 0;
+		let n = d.dd_options(i).len();
+		let item = d.dd_item_rect(i, n, 1);
+		let (x, y) = (item.x + item.w / 2.0, item.y + item.h / 2.0);
+		assert!(
+			d.mouse_move_dip(x, y, &mut m),
+			"lighting another item drew nothing"
+		);
+		assert_eq!(d.pending, 1);
+		assert!(
+			!d.mouse_move_dip(x + 1.0, y, &mut m),
+			"a move inside the lit item changed something"
+		);
+		d.open = None;
+		// a dragged slider moves with the pointer, and only when its value does
+		d.edited.use_system_font_size = false;
+		d.edited.font_size = 6.0;
+		let i = d.specs.iter().position(|s| s.key == Key::FontSize).unwrap();
+		d.tab = d.specs[i].tab;
+		d.drag = Some(i);
+		let track = d.track(i);
+		let x = track.x + track.w / 2.0;
+		assert!(
+			d.mouse_move_dip(x, track.y, &mut m),
+			"dragging the slider drew nothing"
+		);
+		assert!(d.get_f32(Key::FontSize) > 6.0);
+		assert!(
+			!d.mouse_move_dip(x, track.y + 1.0, &mut m),
+			"a drag that left the value alone changed something"
+		);
 	}
 
 	// What dialog.rs asks of the dialog for one frame.
