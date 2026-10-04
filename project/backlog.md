@@ -799,24 +799,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- macOS: a universal binary for both x86_64 and ARM
-	- ID: 2026100313404572
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261003-134045
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100113403226
-	- Target OS: macOS
-	- Requirements:
-		- Before RC1.
-		- macOS gets one universal binary for both x86_64 and ARM, if the binary size allows it.
-	- Notes:
-		- 20261003: b26 already builds a universal app for dogfood. This item is about what the release gives users, and whether its size is acceptable.
-	- Decisions:
-		- 20261003: Ship universal at any size, as most Mac apps do. Report the size on the item.
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -1735,6 +1717,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- macOS: a universal binary for both x86_64 and ARM
+	- ID: 2026100313404572
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: Run the arm64 half on an Apple silicon Mac. Only the x86_64 half has run so far.
+	- Priority: Avg
+	- Opened: 20261003-134045
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100113403226
+	- Target OS: macOS
+	- Test environment: b26
+	- Version and build: 1.0.0-beta3 build ddgf9
+	- Requirements:
+		- Before RC1.
+		- macOS gets one universal binary for both x86_64 and ARM, if the binary size allows it.
+	- Notes:
+		- 20261003: b26 already builds a universal app for dogfood. This item is about what the release gives users, and whether its size is acceptable.
+		- 20261004: Sizes, 1.0.0-beta3 build ddgf9. The program is 8.28 MB for x86_64 alone, 7.39 MB for arm64 alone, and 15.79 MB universal. The zipped app is 8.32 MB, against 4.14 MB and 3.85 MB for one zipped half. The disk image is 8.97 MB.
+	- Progress log:
+		- 20261004: The macOS build already made the release app universal, not only the dogfood copy. Both halves target macOS 11 and up, and the build stops if either half is missing. It now prints the sizes above on every run.
+	- Verified: 20261004 on b26, from a fresh build of dev. The app in both the zip and the disk image holds x86_64 and arm64, each half asks for macOS 11.0, the signature verifies, and the x86_64 half runs. The missing-half check fails on a one-arch binary.
+	- Decisions:
+		- 20261003: Ship universal at any size, as most Mac apps do. Report the size on the item.
+	- Branch: macuni
+	- Commit: None needed for the program. The build was already universal.
+	- Test case: The build's own check that both halves are in the app, which stops the build otherwise. No separate test, since the binary is only made on a Mac.
+	- Acceptance signoff: Self-closed: already universal, built and measured.
+	- Closed: 20261004-133114
 
 - Per monitor size: also tell monitors apart by orientation
 	- ID: 2026100413014600
