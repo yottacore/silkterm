@@ -741,7 +741,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the extra prompt info for PowerShell 7 does not work
 	- ID: 2026100408214204
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
+	- Needs external testing: A look in a real SilkTerm pane on b26: a PowerShell 7 tab or split opened from a bash pane inside a git project starts there and shows the git part of the prompt.
 	- Severity: High
 	- Opened: 20261004-082142
 	- Opened by: JC
@@ -752,7 +753,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- With "Update PowerShell profiles" on, open a PowerShell 7 pane, inside a git project.
 	- Incorrect behavior: The git-aware prompt does not show.
 	- Expected behavior: The same prompt as on Windows and Linux.
+	- Reproduced: 20261004 on b26, in part. Neither suspect was the cause. The block is in the profile there, the policy answer is Unrestricted, and the stock prompt carries the help link. Started inside a git project, PowerShell 7.6 shows the full prompt with the git part, with the same bare environment a Dock launch gives. Started anywhere else, it has no git part to show.
 	- Possible cause: Not known. The block in `shell_integration.ps1` only replaces the prompt PowerShell ships, which it knows by a help link inside it. It also goes only into profiles the shell would accept. Either could differ on macOS.
+	- Actual cause:
+		- The PowerShell tab or split did not start in the project. A new pane takes the directory of the pane it came from, and the OS answer for that read `/proc`, which macOS does not have. bash and zsh there never report their directory, so a pane opened from one got no directory and started where SilkTerm was started.
+	- Actual fix:
+		- On macOS the shell's directory is read with `proc_pidinfo`. Linux still reads `/proc`.
+	- Swept: every `/proc` read in the source. Config busy check, wallpaper memory test and profiler CPU name are Linux only on purpose. The twin left open is the tab's running-program name (`proc_comm`), which also reads `/proc`, so a macOS tab never names the program running in it.
+	- Verified: the new test fails on b26 with the old lookup (no directory for a live shell) and passes with the fix; all 23 terminal tests pass there. The terminal tests on Linux, and clippy for Linux and macOS, pass.
+	- Branch: macps
+	- Commit: 40f045f
+	- Test case: `a_unix_shell_reports_where_it_is_now_not_where_it_started` (ErkhGGP). A shell that stays put and one that moves must each read back where they are now.
+	- Acceptance signoff: Self-closed: the cause was measured on b26, and the test failed there before the fix and passes after. The look in a real pane is owed.
+	- Closed: 20261004-100411
 	- Notes:
 		- Before RC1.
 
