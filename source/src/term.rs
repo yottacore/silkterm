@@ -917,15 +917,30 @@ fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
 }
 
 // Executable basename of a process from /proc/<pid>/comm (Linux/most Unix).
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn proc_comm(pid: u32) -> Option<String> {
 	let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).ok()?;
+	named(&comm)
+}
+
+// macOS has no /proc, so a tab there never named the program running in it,
+// and the minimap's per-program switch never saw one either.
+#[cfg(target_os = "macos")]
+fn proc_comm(pid: u32) -> Option<String> {
+	let pid = libc::c_int::try_from(pid).ok().filter(|&pid| pid > 0)?;
+	// the kernel keeps at most 2 * MAXCOMLEN (32) bytes of a process name
+	let mut name = [0u8; 64];
+	let size = u32::try_from(name.len()).ok()?;
+	// SAFETY: the call writes at most `size` bytes and returns how many it wrote
+	let wrote = unsafe { libc::proc_name(pid, name.as_mut_ptr().cast(), size) };
+	let wrote = usize::try_from(wrote).ok().filter(|&n| n > 0)?;
+	named(&String::from_utf8_lossy(name.get(..wrote)?))
+}
+
+#[cfg(unix)]
+fn named(comm: &str) -> Option<String> {
 	let comm = program_name(comm.trim());
-	if comm.is_empty() {
-		None
-	} else {
-		Some(comm.to_string())
-	}
+	(!comm.is_empty()).then(|| comm.to_string())
 }
 
 // A process that renames itself writes "name: what it is doing" - tmux's client
@@ -1843,6 +1858,34 @@ mod tests {
 			Some(real(&moved_to)),
 			"the directory the shell moved to never came back"
 		);
+	}
+
+	// A tab names the program in the foreground: the terminal's foreground
+	// process group, looked up by its leader. On a Mac that lookup read /proc,
+	// which is not there, so no tab ever named anything.
+	// Test ID: ErkjAN1
+	#[cfg(unix)]
+	#[test]
+	fn the_foreground_program_is_named_by_its_process_group() {
+		use std::os::unix::process::CommandExt;
+		use std::process::{Command, Stdio};
+
+		let mut child = Command::new("sleep")
+			.arg("30")
+			.process_group(0)
+			.stdin(Stdio::null())
+			.stdout(Stdio::null())
+			.stderr(Stdio::null())
+			.spawn()
+			.expect("spawn sleep");
+		let pid = libc::pid_t::try_from(child.id()).expect("pid");
+		// SAFETY: a plain query on a child this test owns
+		let pgid = unsafe { libc::getpgid(pid) };
+		let name = u32::try_from(pgid).ok().and_then(super::proc_comm);
+		let _ = child.kill();
+		let _ = child.wait();
+		assert_eq!(pgid, pid, "the child did not lead its own group");
+		assert_eq!(name.as_deref(), Some("sleep"));
 	}
 
 	// A recycled pid is the failure this guard exists for: the row claims the
