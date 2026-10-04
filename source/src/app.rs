@@ -1037,16 +1037,6 @@ pub(crate) fn with_shortcuts(
 		.collect()
 }
 
-// A row's label without the shortcut shown after it: "Copy" for
-// "Copy (Ctrl+Shift+C)".
-#[cfg(any(test, target_os = "macos"))]
-pub(crate) fn plain_label(label: &str) -> &str {
-	match label.rsplit_once(" (") {
-		Some((plain, hint)) if hint.ends_with(')') => plain,
-		_ => label,
-	}
-}
-
 // The hotkey a menu row does the same thing as, if there is one.
 pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 	match action {
@@ -1133,10 +1123,20 @@ pub(crate) fn sample_window_menus_copying(
 	copy_select: bool,
 	copy_output: bool,
 ) -> Vec<(&'static str, Vec<Entry>)> {
-	let shell = |slug: &str| ShellEntry {
-		slug: slug.into(),
-		title: slug.into(),
-		command: slug.into(),
+	sample_window_menus_with(copy_select, copy_output, &["bash", "zsh"])
+}
+
+// Every row turned on, with a shell for each title given.
+#[cfg(test)]
+pub(crate) fn sample_window_menus_with(
+	copy_select: bool,
+	copy_output: bool,
+	titles: &[&str],
+) -> Vec<(&'static str, Vec<Entry>)> {
+	let shell = |title: &str| ShellEntry {
+		slug: title.into(),
+		title: title.into(),
+		command: title.into(),
 		active: true,
 		comment: String::new(),
 		last_seen: String::new(),
@@ -1152,12 +1152,8 @@ pub(crate) fn sample_window_menus_copying(
 		remote: true,
 		next_wallpaper: true,
 	};
-	window_menus(
-		view,
-		copy_select,
-		copy_output,
-		&[shell("bash"), shell("zsh")],
-	)
+	let shells: Vec<ShellEntry> = titles.iter().map(|title| shell(title)).collect();
+	window_menus(view, copy_select, copy_output, &shells)
 }
 
 // What the right-click menu needs to know about the pane and window it opens

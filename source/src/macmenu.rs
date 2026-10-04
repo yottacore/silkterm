@@ -7,7 +7,7 @@
 
 use winit::keyboard::NamedKey;
 
-use crate::app::{Entry, MenuAction, mac_entries, menu_hotkey, plain_label, without_rows};
+use crate::app::{Entry, MenuAction, mac_entries, menu_hotkey, without_rows};
 use crate::keys::{Bindings, Chord, KeyName, us_shifted};
 
 pub const APP_NAME: &str = "SilkTerm";
@@ -204,8 +204,9 @@ pub fn key_equivalent(chord: Chord) -> Option<(String, Chord)> {
 	Some((text, chord))
 }
 
-// The label drops its shortcut, since the menu bar draws the Command chord
-// beside the row itself.
+// The rows come in without the shortcut `with_shortcuts` puts in a label, since
+// the menu bar draws the Command chord beside the row itself. A label is used
+// as it is: a shell's name can end in parentheses of its own.
 fn bar_items(keys: &Bindings, entries: Vec<Entry>) -> Vec<BarItem> {
 	entries
 		.into_iter()
@@ -216,7 +217,7 @@ fn bar_items(keys: &Bindings, entries: Vec<Entry>) -> Vec<BarItem> {
 				check,
 				..
 			} => BarItem::Action {
-				label: plain_label(&label).into(),
+				label,
 				action,
 				check,
 				key: key_for(keys, action),
@@ -668,6 +669,37 @@ mod tests {
 				BarItem::Submenu { items, .. } => keys(items, out),
 				_ => {}
 			}
+		}
+	}
+
+	// A shell whose name ends in parentheses keeps them. The bar used to cut
+	// anything in a trailing pair as though it were a shortcut, so "Bash (no
+	// rc)" read as "Bash", twice over beside the ordinary one.
+	// Test ID: ErkT4M3
+	#[test]
+	fn a_shell_name_in_the_mac_menu_bar_keeps_its_parentheses() {
+		fn titles(items: &[BarItem], out: &mut Vec<String>) {
+			for item in items {
+				match item {
+					BarItem::Action {
+						label,
+						action: MenuAction::NewTabShell(_) | MenuAction::SplitShell(..),
+						..
+					} => out.push(label.clone()),
+					BarItem::Submenu { items, .. } => titles(items, out),
+					_ => {}
+				}
+			}
+		}
+		let window = crate::app::sample_window_menus_with(true, true, &["Bash", "Bash (no rc)"]);
+		let menus = layout(window, &Bindings::defaults(true));
+		let mut shown = Vec::new();
+		for menu in &menus {
+			titles(&menu.items, &mut shown);
+		}
+		assert!(!shown.is_empty());
+		for pair in shown.chunks(2) {
+			assert_eq!(pair, ["Bash", "Bash (no rc)"], "{shown:?}");
 		}
 	}
 
