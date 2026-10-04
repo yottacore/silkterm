@@ -687,6 +687,104 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
+- Linux: the window opens at one size, then jumps to another
+	- ID: 2026100408214201
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Linux
+	- Test environment: b23
+	- Steps to reproduce:
+		- Start SilkTerm.
+	- Incorrect behavior: The window shows at one size, then resizes itself.
+	- Expected behavior: The window is already at its final size when it first shows.
+	- Possible cause: This was fixed on 20260720 under Done, in "On open, when it becomes visible, it should already be at its final size". The per-monitor size work on 20261003 (2026100114435600) changed how the starting size is chosen, so it is the first suspect. Not checked.
+	- Notes:
+		- Before RC1.
+
+- macOS: "Bash (no rc)" shows in the menu as "Bash", so "Bash" is listed twice
+	- ID: 2026100408214202
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- Open the menu that lists the shells.
+	- Incorrect behavior: "Bash (no rc)" shows as "Bash". Renaming it to "Bash no rc" makes it show right.
+	- Expected behavior: The menu shows the shell's full name.
+	- Possible cause: On macOS, `plain_label` in app.rs takes off anything in parentheses at the end of a label, since it expects a shortcut there, like "Copy (Ctrl+Shift+C)". A shell name that ends in parentheses loses that part too.
+	- Notes:
+		- Before RC1.
+
+- A shell is listed twice by name, with a different command each time
+	- ID: 2026100408214203
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100408214202
+	- Target OS: All
+	- Test environment: b26
+	- Steps to reproduce:
+		- On macOS, have Bash installed at both /usr/local/bin/bash and /bin/bash.
+		- Let the shell scan run.
+	- Incorrect behavior: "Bash" shows up twice, once for /usr/local/bin/bash, and again lower down for /bin/bash.
+	- Expected behavior:
+		- Fix it in general, not just for macOS.
+		- If a shell is listed twice by Name but with a different Command:
+			- If one is a symlink of the other, list the shortest path, whether it is the symlink or the real file.
+			- If the shell version is the same, only list the one with the shortest path.
+			- If the shell version is different, add the version to the Name, without extra build info.
+				- E.g. "Bash 3.2.1", "Bash 5.1.0", etc.
+	- Notes:
+		- Before RC1.
+		- 20261004: On a Mac, /bin/bash is Apple's old 3.2, and /usr/local/bin/bash is usually a newer one from Homebrew, so this case likely gets the version names.
+		- 20261004: A change to the scan does not change a list already saved. Whether existing lists get cleaned up too is open.
+
+- macOS: the extra prompt info for PowerShell 7 does not work
+	- ID: 2026100408214204
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- With "Update PowerShell profiles" on, open a PowerShell 7 pane, inside a git project.
+	- Incorrect behavior: The git-aware prompt does not show.
+	- Expected behavior: The same prompt as on Windows and Linux.
+	- Possible cause: Not known. The block in `shell_integration.ps1` only replaces the prompt PowerShell ships, which it knows by a help link inside it. It also goes only into profiles the shell would accept. Either could differ on macOS.
+	- Notes:
+		- Before RC1.
+
+- Release page: group the downloads in a table
+	- ID: 2026100408214205
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When creating a release, the notes group the downloads in a table.
+			- CPU architecture in columns.
+			- Target OS in rows.
+	- Notes:
+		- 20261004: `cicd/utility/release.bash` writes the notes now. They say only "See the README for details." and the build number.
+
 - With Free resources when idle on, a window on screen but not focused is let go, goes black, and stays black until typed into
 	- ID: 2026100319134501
 	- Type: Bug
