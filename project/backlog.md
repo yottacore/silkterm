@@ -840,6 +840,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: Left alone: `measure_ui_text` already keeps its widths. The notice window still reads no wake of its own, as before.
 	- Verified: 20261004, the unit suite passes, 1112 tests, and the sister item's tests pass unchanged. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not looked at in a real window.
 	- Branch: dlgshape
+	- Commit: e894516
 	- Test case: `a_dialog_frame_shapes_nothing_the_last_one_did` (ErlkwlW), `a_dialog_frame_shapes_only_text_that_changed` (Erlkwox), `a_kept_buffer_is_shaped_again_when_what_shaping_reads_changes` (ErlkwsK), `a_dialog_frame_looks_up_the_tip_once` (Erlkwvi) and `a_pointer_move_that_changes_nothing_drawn_needs_no_frame` (Erlkwz5), each seen failing with the old behavior put back. `a_pointer_move_says_whether_it_changed_anything` (Erlkwhi) pins what a move reports.
 	- Acceptance signoff: Self-closed: reproduced, the tests failed before the fix and pass after, and the text drawn is unchanged.
 	- Closed: 20261004-142711
