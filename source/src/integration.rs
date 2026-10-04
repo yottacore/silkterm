@@ -363,7 +363,7 @@ fn already_installed(record: Option<&Path>, profile: &Path) -> bool {
 }
 
 fn note_installed(record: Option<&Path>, profile: &Path) {
-	let Some(record) = record else {
+	let Some(record) = record.filter(|r| config::may_write(r)) else {
 		return;
 	};
 	if already_installed(Some(record), profile) {
@@ -502,6 +502,9 @@ fn bash_prompt_path() -> Option<&'static Path> {
 		let path = dir.join(BASH_PROMPT_FILE);
 		if std::fs::read_to_string(&path).is_ok_and(|held| held == BASH_PROMPT) {
 			return Some(path);
+		}
+		if !config::may_write(&path) {
+			return None;
 		}
 		std::fs::create_dir_all(&dir).ok()?;
 		match std::fs::write(&path, BASH_PROMPT) {
