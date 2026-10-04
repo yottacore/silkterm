@@ -801,7 +801,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A unit test run rewrites the box's live config file
 	- ID: 2026100410244885
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261004-102448
 	- Opened by: CC
@@ -815,6 +815,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Note: 20261004, the change on b26 did not alter behavior, since the set value below it was untouched. The next dogfood launch would make the same edit.
 		- Note: 20261004, the private pipeline's test runs on b26 do this too. Two ways out: test runs default to a throwaway home, or loading never writes under test. The tests that read the live config on purpose (G6) need checking either way.
+	- Actual cause: The first settings read in a test process runs the launch steps, and those write the file back when a newer build would change it. Nothing told a test run apart.
+	- Decisions:
+		- 20261004: best guess, reversible. A test process never writes the box's own config or anything in its folder, the data folder included. Reading it stays as it was, so the tests that read it on purpose (G6) still do. A write to a file a test picked for itself still goes through.
+		- A throwaway home for test runs was not taken. It would also stop the reads that G6 relies on.
+	- Actual fix: Under test, every write of the settings file first asks whether the file is in the box's own settings or data folder, and skips it if so. That covers the launch steps, saves, the rating, the reset and every backup beside the file. The wallpaper history, the bash prompt script and the shell integration record ask the same. A normal build is unchanged.
+	- Swept: every writer in config.rs (the shared atomic write, which covers the launch refreshes, conversions, the non-UTF-8 rewrite, `config_backup_*` and `config.format<N>.shcl` copies, saves, the rating, the shell adoption, the default shell move, window size and monitor saves, and key reverts), the `.bak` copy and move, the folder made for a missing file, the move of an old config from `~/.config` on Windows and macOS, `.wallpaper-history`, the bash prompt script, and `shell-integration.installed`. Other writers in the tree touch only test folders or files outside the settings folder.
+	- Verified: the new test fails with the check turned off, in each of its four cases, and passes with it on. The full unit suite and clippy pass on b23. The live config on b23 was byte-identical before and after the runs. Not run on Windows or macOS.
+	- Branch: testcfg
+	- Commit: c98e3c9
+	- Test case: `a_test_run_never_writes_the_boxs_own_config` (Erl5E2U). A file in a folder of its own stands in for the box's, with no override set. A launch, a save, a rating, a key revert and a reset must leave the folder as it was, for a stale commented default, a 2.x file, a file that is not UTF-8, and no file.
+	- Acceptance signoff: Self-closed: reproduced through a stand-in file, and the test fails without the fix and passes with it. Only test runs change.
+	- Closed: 20261004-113953
 
 - macOS: a universal binary for both x86_64 and ARM
 	- ID: 2026100313404572
