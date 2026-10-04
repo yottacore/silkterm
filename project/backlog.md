@@ -895,7 +895,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A Settings save on a config that was deleted while running says it saved and writes nothing
 	- ID: 2026100316135866
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Severity: Low
 	- Opened: 20261003-161358
 	- Opened by: CC
@@ -907,6 +907,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The dialog closes as if it saved. Nothing is written, and the next launch starts from the defaults.
 	- Expected behavior: The save writes the file, or says it did not.
 	- Reproduced: No. Found by reading `persist` while working 2026100315581313.
+		- 20261004 on b23: a unit test deleted the file and saved through `persist`, once with a Settings edit and once with a window size change. Both answered that they saved and wrote nothing.
+	- Actual cause: `persist` took a missing file as nothing to do and answered that it saved.
+	- Decisions:
+		- 20261004: best guess, reversible. The save writes a full new config file from the template with the current settings, the same as a first launch would, and goes through quietly with no notice.
+	- Actual fix:
+		- A save that finds the file gone makes its folder and starts from the template. It carries every setting the file held when the program last read or wrote it, then puts the save's own change on top. The carry is the one a fresh file from `upgrade` uses.
+		- Values that last only the session stay out of the new file, such as a rotated wallpaper or a font given on the command line. The save still writes only what changed against what the window loaded.
+		- The shell list is still three-way against the file. The carried file has the list, so no entry reads as removed. A file the program never saw gets the list the window loaded.
+		- Like any fresh file from the template, the new one does not keep the old file's comments or layout, or a line the template has no place for.
+	- Swept: Every caller of `persist`: Settings OK, window size, font zoom and per-monitor sizes, the copy, minimap and single tab toggles, and shells found at launch. The revert arrow's write and the cleared font's write run after `persist`, so they find the new file. The rating write still says it could not read a missing file, so it does not claim to have saved; left alone. The launch steps run after a launch lays the template down.
+	- Test case: `a_save_on_a_deleted_file_writes_it_new` (ErkRECv) and `a_save_on_a_deleted_file_keeps_the_shell_list` (ErkREXH). Both fail with the old answer put back and pass now. The first also fails when the save starts from the bare template without the carry.
+	- Verified: The unit suite passes, 1085 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not checked in a real window; the two app-side callers were read, not run.
+	- Branch: delcfg
+	- Commit: 312f355
 
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
