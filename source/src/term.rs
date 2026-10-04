@@ -924,17 +924,52 @@ fn proc_comm(pid: u32) -> Option<String> {
 }
 
 // macOS has no /proc, so a tab there never named the program running in it,
-// and the minimap's per-program switch never saw one either.
+// and the minimap's per-program switch never saw one either. The short info
+// is asked for rather than `proc_name`, which refuses another user's process,
+// so a `sudo` command went unnamed (measured on pid 1). Like Linux's comm,
+// it is the first 16 bytes of the name.
 #[cfg(target_os = "macos")]
 fn proc_comm(pid: u32) -> Option<String> {
+	// <sys/proc_info.h>; the libc this builds against does not have it yet
+	const PROC_PIDT_SHORTBSDINFO: libc::c_int = 13;
 	let pid = libc::c_int::try_from(pid).ok().filter(|&pid| pid > 0)?;
-	// the kernel keeps at most 2 * MAXCOMLEN (32) bytes of a process name
-	let mut name = [0u8; 64];
-	let size = u32::try_from(name.len()).ok()?;
-	// SAFETY: the call writes at most `size` bytes and returns how many it wrote
-	let wrote = unsafe { libc::proc_name(pid, name.as_mut_ptr().cast(), size) };
-	let wrote = usize::try_from(wrote).ok().filter(|&n| n > 0)?;
-	named(&String::from_utf8_lossy(name.get(..wrote)?))
+	let size = libc::c_int::try_from(std::mem::size_of::<BsdShortInfo>()).ok()?;
+	let mut info = BsdShortInfo::default();
+	// SAFETY: the call writes at most `size` bytes and says how many it wrote
+	let wrote = unsafe {
+		libc::proc_pidinfo(
+			pid,
+			PROC_PIDT_SHORTBSDINFO,
+			0,
+			std::ptr::from_mut(&mut info).cast(),
+			size,
+		)
+	};
+	if wrote != size {
+		return None;
+	}
+	let comm: Vec<u8> = info.comm.iter().copied().take_while(|&b| b != 0).collect();
+	named(&String::from_utf8_lossy(&comm))
+}
+
+// `struct proc_bsdshortinfo` from <sys/proc_info.h>, which libc does not carry.
+#[cfg(target_os = "macos")]
+#[derive(Default)]
+#[repr(C)]
+struct BsdShortInfo {
+	pid: u32,
+	ppid: u32,
+	pgid: u32,
+	status: u32,
+	comm: [u8; 16],
+	flags: u32,
+	uid: u32,
+	gid: u32,
+	ruid: u32,
+	rgid: u32,
+	svuid: u32,
+	svgid: u32,
+	rfu: u32,
 }
 
 #[cfg(unix)]
@@ -1886,6 +1921,8 @@ mod tests {
 		let _ = child.wait();
 		assert_eq!(pgid, pid, "the child did not lead its own group");
 		assert_eq!(name.as_deref(), Some("sleep"));
+		// another user's program, as under sudo: pid 1 is root's everywhere
+		assert!(super::proc_comm(1).is_some(), "a root process went unnamed");
 	}
 
 	// A recycled pid is the failure this guard exists for: the row claims the
