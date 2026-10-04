@@ -644,6 +644,12 @@ if [[ -x "${root}/cicd/tests/release/run.bash" ]]; then
 	"${root}/cicd/tests/release/run.bash" >/dev/null || fDie "release provenance test failed ($(fTestId cicd/tests/release/run.bash))"
 	fEcho "OK: release provenance ($(fTestId cicd/tests/release/run.bash))"
 fi
+## The release notes link every download by name, and only those uploaded.
+if [[ -x "${root}/cicd/tests/release-notes/run.bash" ]]; then
+	fEcho_Clean "release notes table ..."
+	"${root}/cicd/tests/release-notes/run.bash" >/dev/null || fDie "release notes test failed ($(fTestId cicd/tests/release-notes/run.bash))"
+	fEcho "OK: release notes table ($(fTestId cicd/tests/release-notes/run.bash))"
+fi
 ## Installer and rig hygiene: no secret on a command line, no plain-http
 ## redirect, no adopting somebody else's directory in a shared temp folder.
 if [[ -x "${root}/cicd/tests/install/run.bash" ]]; then
