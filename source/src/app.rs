@@ -91,6 +91,12 @@ pub struct App {
 	profile_deadline: Option<std::time::Instant>,
 }
 
+impl std::fmt::Debug for App {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("App").finish_non_exhaustive()
+	}
+}
+
 impl App {
 	pub fn new(proxy: EventLoopProxy<UserEvent>, cli: crate::cli::Cli) -> Self {
 		Self {
@@ -681,7 +687,7 @@ impl MenuAction {
 // (underlined; typing it picks the item); None = no accelerator - accelerators
 // must be unique per menu, so low-priority items (and ones that already have a
 // hotkey) go without.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum Entry {
 	Item {
 		label: String,

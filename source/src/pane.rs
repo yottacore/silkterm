@@ -1117,7 +1117,7 @@ enum Node {
 
 // result of building one pane's frame: text lives in pane.buffer, the
 // quads come back here for the shared rect renderer
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PaneDraw {
 	pub top: f32,
 	pub bg: Vec<RectInstance>,
@@ -1148,7 +1148,7 @@ pub struct PaneDraw {
 // - rendering as ghost copies that bounce with the ease. Clipping at the
 // content edge cuts them off; the strip owns the gap on the other side of the
 // weld.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Slide {
 	pub strip_top: f32,
 	// the strip rows on screen this frame (see OffStrip::visible), and where the
@@ -1375,6 +1375,16 @@ pub struct Pane {
 	prompt_above: Vec<u64>,
 	prompt_block: Vec<u64>,
 	last_output: std::time::Instant,
+}
+
+// The terminal and the text buffers are far too big to print.
+impl std::fmt::Debug for Pane {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Pane")
+			.field("id", &self.id)
+			.field("rect", &self.rect)
+			.finish_non_exhaustive()
+	}
 }
 
 impl Pane {
@@ -3480,6 +3490,15 @@ pub struct PaneManager {
 	// When this tab was opened, for the tip's elapsed time. A tab, not a pane:
 	// splitting one does not start it over.
 	pub created: std::time::Instant,
+}
+
+impl std::fmt::Debug for PaneManager {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("PaneManager")
+			.field("panes", &self.panes.len())
+			.field("focused", &self.focused)
+			.finish_non_exhaustive()
+	}
 }
 
 impl PaneManager {

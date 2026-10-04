@@ -79,6 +79,7 @@ pub fn place(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f3
 // Everything a caller needs to draw one tip, in physical pixels: the rule round
 // the box, the box itself, and where its first line of text starts. Lines after
 // the first step down by the caller's own line height.
+#[derive(Debug)]
 pub struct Placed {
 	pub border: Rect,
 	pub fill: Rect,
@@ -157,6 +158,7 @@ pub fn beside(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f
 // What the pointer is resting on, and since when. `T` names the thing in
 // whatever terms the caller thinks in - a tab index, a menu row - so the timing
 // rule is written once and the identity stays the caller's business.
+#[derive(Debug)]
 pub struct Dwell<T> {
 	over: Option<(T, Instant)>,
 }

@@ -86,7 +86,7 @@ pub const SLIDE_ROWS: usize = 128;
 // The output chase's speed state. One drives the scrollback view and one the
 // alt-screen slide, so an app's region scroll eases with the same curve as
 // plain output and the five feel sliders shape both.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct Chase {
 	speed: f32,     // catch-up speed, lines/s (the segment the curve is in falls out of it)
 	knee: f32,      // speed where the current Ease-in segment hands off to Ramp-up
@@ -148,6 +148,7 @@ impl Chase {
 	}
 }
 
+#[derive(Debug)]
 pub struct Scroll {
 	target: f32,
 	visual: f32,

@@ -49,7 +49,7 @@ const BEL: u8 = 0x07;
 // On unix it also keeps who said it: the terminal's foreground process group
 // when the report arrived. A zsh started from dash reports, then exits, and dash
 // reports nothing - so the answer has to go with the program that gave it.
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Reported {
 	slot: Arc<Mutex<Option<(PathBuf, Option<u32>)>>>,
 	#[cfg(unix)]
@@ -120,6 +120,14 @@ pub struct TappedPty<P> {
 	pty: P,
 	scan: Scan,
 	reported: Reported,
+}
+
+impl<P> std::fmt::Debug for TappedPty<P> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("TappedPty")
+			.field("reported", &self.reported)
+			.finish_non_exhaustive()
+	}
 }
 
 impl<P> TappedPty<P> {

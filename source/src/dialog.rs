@@ -64,6 +64,7 @@ enum AboutSource {
 	Notice(Vec<String>),
 }
 
+#[derive(Debug)]
 pub enum DialogAction {
 	OpenUrl(String),
 	Apply,         // apply settings, keep the dialog open (live preview)
@@ -102,6 +103,14 @@ pub struct DialogWin {
 	// the window: a closing macOS window never hears its keys let go, and one
 	// that gains the focus is told nothing until a key changes.
 	mods: ModifiersState,
+}
+
+impl std::fmt::Debug for DialogWin {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("DialogWin")
+			.field("window", &self.window.id())
+			.finish_non_exhaustive()
+	}
 }
 
 impl DialogWin {

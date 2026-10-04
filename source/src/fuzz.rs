@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 
 // xorshift64*. Small, fast, and good enough to pick between branches; nothing
 // here needs a real distribution.
+#[derive(Debug)]
 pub struct Rng(u64);
 
 impl Rng {

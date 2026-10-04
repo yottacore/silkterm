@@ -45,7 +45,7 @@ const RASTER_PIN_FRAMES: u64 = 2;
 
 // A color glyph resolved for one char: which face holds it, and the design box
 // the raster covers (font units) so the caller can fit it to a cell.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ColorMetrics {
 	pub id: u16,
 	pub box_w: f32,
@@ -77,6 +77,17 @@ pub struct ColorGlyphs {
 	// tell a raster this frame still needs from one nothing references.
 	rasters: HashMap<(u16, u16, u16), (u64, Vec<u8>)>,
 	frame: u64,
+}
+
+// Counts only: the rasters are pixel buffers.
+impl std::fmt::Debug for ColorGlyphs {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("ColorGlyphs")
+			.field("chars", &self.chars.len())
+			.field("rasters", &self.rasters.len())
+			.field("frame", &self.frame)
+			.finish_non_exhaustive()
+	}
 }
 
 // Should this char be PAINTED, or set in the terminal font? An emoji face

@@ -235,6 +235,76 @@ mod tests {
 		assert!(seen > 0, "found no source files, so the scan is broken");
 	}
 
+	// Every pub struct and enum derives Debug or has its own impl. Read from the
+	// source because rustc's missing_debug_implementations only looks at types
+	// reachable from outside the crate, and a binary exports none.
+	// Test ID: ErlrvUZ
+	#[test]
+	fn every_public_type_has_debug() {
+		let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+		let mut texts = Vec::new();
+		for entry in std::fs::read_dir(src).unwrap().flatten() {
+			let path = entry.path();
+			if path.extension().is_some_and(|ext| ext == "rs") {
+				texts.push((path.clone(), std::fs::read_to_string(&path).unwrap()));
+			}
+		}
+		let mut by_hand = std::collections::HashSet::new();
+		for (_, text) in &texts {
+			for (at, _) in text.match_indices("Debug for ") {
+				let name: String = text[at + "Debug for ".len()..]
+					.chars()
+					.take_while(|c| c.is_alphanumeric() || *c == '_')
+					.collect();
+				by_hand.insert(name);
+			}
+		}
+		let mut missing = Vec::new();
+		let mut seen = 0;
+		for (path, text) in &texts {
+			let lines: Vec<&str> = text.lines().collect();
+			for (number, line) in lines.iter().enumerate() {
+				let Some(rest) = line.trim_start().strip_prefix("pub") else {
+					continue;
+				};
+				let rest = match rest.strip_prefix('(') {
+					Some(scoped) => scoped.split_once(')').map_or("", |(_, after)| after),
+					None => rest,
+				};
+				let Some(rest) = rest
+					.strip_prefix(" struct ")
+					.or_else(|| rest.strip_prefix(" enum "))
+				else {
+					continue;
+				};
+				let name: String = rest
+					.chars()
+					.take_while(|c| c.is_alphanumeric() || *c == '_')
+					.collect();
+				seen += 1;
+				let derived = lines[..number]
+					.iter()
+					.rev()
+					.map(|line| line.trim_start())
+					.take_while(|line| line.starts_with("#[") || line.starts_with("//"))
+					.any(|line| {
+						line.strip_prefix("#[derive(").is_some_and(|list| {
+							list.split([',', ')']).any(|item| item.trim() == "Debug")
+						})
+					});
+				if !derived && !by_hand.contains(&name) {
+					let file = path.file_name().unwrap().to_string_lossy();
+					missing.push(format!("{file}:{} {name}", number + 1));
+				}
+			}
+		}
+		assert!(
+			seen > 100,
+			"found only {seen} public types, so the scan is broken"
+		);
+		assert!(missing.is_empty(), "no Debug on:\n{}", missing.join("\n"));
+	}
+
 	// The text after a line's comment marker, or None for a line of code.
 	fn comment_text(line: &str) -> Option<&str> {
 		let line = line.trim_start();
@@ -403,7 +473,7 @@ mod tests {
 				match copyright.map(|text| copyright_form(text, &marker)) {
 					Some(Ok(false)) => {}
 					Some(Ok(true)) => {
-						faults.push(format!("{name}: a GPL file in the Bubbles form"))
+						faults.push(format!("{name}: a GPL file in the Bubbles form"));
 					}
 					Some(Err(fault)) => faults.push(format!("{name}: {fault}")),
 					None => faults.push(format!("{name}: no copyright line under the license")),

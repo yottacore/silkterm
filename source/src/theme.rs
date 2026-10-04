@@ -110,7 +110,7 @@ const DLG_FG_LIGHT: [u8; 3] = [0x22, 0x24, 0x2c];
 const GUTTER_DARK: [u8; 3] = [0x16, 0x16, 0x1e];
 const GUTTER_LIGHT: [u8; 3] = [0xd3, 0xd3, 0xcf];
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Theme {
 	pub dark: Palette,
 	pub light: Palette,

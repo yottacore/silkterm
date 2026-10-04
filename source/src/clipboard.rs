@@ -18,6 +18,12 @@ pub struct Clipboard {
 	primary: Option<X11ClipboardContext<Primary>>,
 }
 
+impl std::fmt::Debug for Clipboard {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Clipboard").finish_non_exhaustive()
+	}
+}
+
 impl Clipboard {
 	pub fn new() -> Self {
 		Self {

@@ -68,7 +68,7 @@ const COALESCE_WAKEUPS: bool = true;
 // identical notices produced twenty identical reads. `handled` is cleared BEFORE
 // the window acts on it, so a cycle that arrives mid-handling posts a fresh notice
 // rather than being dropped.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct WakeGate {
 	pending: std::sync::atomic::AtomicBool,
 }
@@ -86,7 +86,7 @@ impl WakeGate {
 }
 
 // bridges alacritty's PTY thread back to the winit loop
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct EventProxy {
 	id: PaneId,
 	proxy: EventLoopProxy<UserEvent>,
@@ -259,7 +259,7 @@ fn grid_dims(cols: usize, lines: usize) -> TermDimensions {
 }
 
 // size descriptor handed to the crate; history is set separately via Config
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct TermDimensions {
 	pub columns: usize,
 	pub screen_lines: usize,
@@ -323,6 +323,15 @@ pub struct TermInstance {
 	child_probe: std::cell::RefCell<Option<Option<String>>>,
 	#[allow(clippy::type_complexity)]
 	cwd_cache: std::cell::RefCell<Option<(std::time::Instant, Option<std::path::PathBuf>)>>,
+}
+
+impl std::fmt::Debug for TermInstance {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("TermInstance")
+			.field("cols", &self.cols)
+			.field("lines", &self.lines)
+			.finish_non_exhaustive()
+	}
 }
 
 impl TermInstance {

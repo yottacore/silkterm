@@ -220,6 +220,15 @@ pub enum Frame {
 	Gl,
 }
 
+impl std::fmt::Debug for Frame {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(match self {
+			Self::Native(_) => "Frame::Native",
+			Self::Gl => "Frame::Gl",
+		})
+	}
+}
+
 // A VT switch (Ctrl+Alt+F1 and back) or suspend/resume can silently trash the
 // CONTENTS of GPU textures on the GL path: the context survives, so per-frame
 // procedural draws (rects, cursor) still work, but everything sampled from a
@@ -255,6 +264,7 @@ fn sentinel_pattern() -> Vec<u8> {
 }
 
 // One probe's verdict (see `vram_check_poll`).
+#[derive(Debug)]
 pub enum VramProbe {
 	Intact,
 	// which witness lost its pattern (true = gone)
@@ -379,6 +389,16 @@ pub struct Gfx {
 	_window: Arc<Window>,
 }
 
+impl std::fmt::Debug for Gfx {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Gfx")
+			.field("format", &self.format)
+			.field("transparent", &self.transparent)
+			.field("adapter", &self.adapter_info.name)
+			.finish_non_exhaustive()
+	}
+}
+
 // What is kept of a released `Gfx`, enough to build the device again on the
 // same window. The instance is kept rather than made afresh because on the GL
 // path its teardown terminates an EGL display that the glutin context may
@@ -387,6 +407,15 @@ pub struct Gfx {
 pub enum Rebirth {
 	Native(wgpu::Instance),
 	Gl(wgpu::Instance, glutin::config::Config),
+}
+
+impl std::fmt::Debug for Rebirth {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(match self {
+			Self::Native(_) => "Rebirth::Native",
+			Self::Gl(..) => "Rebirth::Gl",
+		})
+	}
 }
 
 impl Gfx {
@@ -1539,7 +1568,7 @@ fn default_fb(_: &wgpu::Device, _: wgpu::TextureFormat, _: u32, _: u32) -> wgpu:
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct RectInstance {
 	pub pos: [f32; 2],
 	pub size: [f32; 2],
@@ -1578,6 +1607,14 @@ pub struct RectRenderer {
 	bind_group: wgpu::BindGroup,
 	// last resolution written to the uniform (skip the per-frame re-write)
 	last_res: std::cell::Cell<(f32, f32)>,
+}
+
+impl std::fmt::Debug for RectRenderer {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("RectRenderer")
+			.field("capacity", &self.capacity)
+			.finish_non_exhaustive()
+	}
 }
 
 impl RectRenderer {

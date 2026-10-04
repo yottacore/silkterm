@@ -77,6 +77,7 @@ keys![
 	HotkeyFocusLeft, HotkeyFocusRight, HotkeyFocusUp, HotkeyFocusDown,
 ];
 
+#[derive(Debug)]
 pub enum Kind {
 	Slider {
 		min: f32,
@@ -108,6 +109,7 @@ pub enum Kind {
 	Header(&'static str), // a section heading, no control
 }
 
+#[derive(Debug)]
 pub struct Spec {
 	pub label: &'static str,
 	pub key: Key,
@@ -140,12 +142,14 @@ pub struct Spec {
 // One setting a control has to wait on, resolved from the file's gate lines.
 // `numeric` is decided here rather than at every check: a slider is satisfied
 // while it sits above zero, everything else while it is switched on.
+#[derive(Debug)]
 pub struct Need {
 	pub key: Key,
 	pub invert: bool,
 	pub numeric: bool,
 }
 
+#[derive(Debug)]
 pub struct Layout {
 	pub width: f32,
 	pub pad: f32,
@@ -210,18 +214,21 @@ pub struct Layout {
 
 // Flyover text for the footer buttons, which are chrome rather than settings and
 // so have no row of their own to carry it.
+#[derive(Debug)]
 pub struct Help {
 	pub cancel: &'static str,
 	pub apply: &'static str,
 	pub ok: &'static str,
 }
 
+#[derive(Debug)]
 pub struct Icons {
 	pub dropdown_arrow: &'static str,
 	pub dropdown_check: &'static str,
 	pub revert: &'static str,
 }
 
+#[derive(Debug)]
 pub struct Ui {
 	pub tabs: Vec<&'static str>,
 	pub layout: Layout,

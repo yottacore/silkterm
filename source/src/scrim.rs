@@ -106,6 +106,12 @@ pub struct Scrim {
 	enabled: bool,
 }
 
+impl std::fmt::Debug for Scrim {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Scrim").finish_non_exhaustive()
+	}
+}
+
 // The widest halo the distance passes can measure. They tap at most DIST_MAX
 // pixels, and the composite divides by the extent it is given - so an extent past
 // this made every pixel of every pane come out at full halo, a flat plate of

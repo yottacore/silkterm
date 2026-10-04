@@ -8,7 +8,7 @@
 
 use std::sync::OnceLock;
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Monospace {
 	pub family: Option<String>, // e.g. "Monaspace Argon" (style/size stripped)
 	pub size_pt: Option<f32>,   // points
@@ -47,7 +47,7 @@ pub fn px_from_pt(pt: f32) -> f32 {
 	px_from_pt_for(pt, unit)
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct UiFont {
 	pub family: Option<String>, // desktop interface font family, e.g. "GentiumAlt"
 	pub size_pt: Option<f32>,   // points

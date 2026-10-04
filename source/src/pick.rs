@@ -188,6 +188,7 @@ pub enum Grab {
 	Hue,
 }
 
+#[derive(Debug)]
 pub struct Picker {
 	// The Color row the box is editing.
 	pub row: usize,
@@ -213,6 +214,7 @@ impl Picker {
 
 // The metrics the box is built from. All of them grow with the interface font,
 // so a large desktop font gets a proportionally larger box.
+#[derive(Debug)]
 pub struct Metrics {
 	pub pad: f32,
 	pub gap: f32,
@@ -227,6 +229,7 @@ pub struct Metrics {
 	pub min_side: f32,
 }
 
+#[derive(Debug)]
 pub struct Geom {
 	pub outer: Rect,
 	pub title: Rect,

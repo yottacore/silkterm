@@ -502,6 +502,7 @@ pub enum Step {
 	Stalled,       // the display is pacing the frames, not the profile: no answer
 }
 
+#[derive(Debug)]
 pub struct Bench {
 	rungs: &'static [Profile],
 	at: usize,
@@ -601,6 +602,7 @@ pub fn budget_ms(refresh_hz: f32) -> f32 {
 // frame on a slower one as a miss. Asked again four times a second rather than
 // every frame, since on Windows the answer comes from enumerating display
 // modes. That is too few frames at the old budget to fill half a window.
+#[derive(Debug)]
 pub struct FrameBudget {
 	ms: f32,
 	read_at: Instant,
@@ -628,6 +630,7 @@ impl FrameBudget {
 // from hours ago.
 const STALE_S: f32 = 30.0;
 
+#[derive(Debug)]
 pub struct Rating {
 	periods: Vec<f32>,
 	last: Option<Instant>,
