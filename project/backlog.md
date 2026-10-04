@@ -861,7 +861,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: Left alone: `hotkey_for_key`, `needs_of` and `settings_of` are still linear lookups over short tables, and dialog.rs still asks for a few panel colors itself each frame.
 	- Verified: 20261004, the unit suite passes, 1106 tests. Every layout test passes unchanged. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not looked at in a real window.
 	- Branch: dlgrows
-	- Commit:
+	- Commit: 8ebf891
 	- Test case: `a_dialog_frame_copies_the_settings_at_most_once` (ErleXuV), `a_dialog_frame_walks_the_tab_at_most_once` (ErleYlF) and `a_dialog_frame_builds_its_colors_once_per_drawing_call` (Erlfs8O), each seen failing before the fix. `a_shown_value_is_the_profile_laid_over_the_settings` (ErleYKw) holds every key under every profile to what the old copy answered. `a_kept_row_top_follows_what_it_was_walked_from` (Erlg3Ip) holds the kept tops to a fresh walk.
 	- Acceptance signoff: Self-closed: reproduced, the tests failed before the fix and pass after, and shown values and row tops are unchanged.
 	- Closed: 20261004-140551
