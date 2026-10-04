@@ -43,6 +43,7 @@ A terminal is often left open for days, many at a time. SilkTerm is built so tha
 - "Free resources when idle" on the Window tab, on by default, lets an unused window give its GPU device back.
 	- A window counts as unused with no input, no focus change and no output from any pane while it can be seen.
 	- It lets go after "Minutes when hidden", 30 by default, if minimized or covered, and after "Minutes otherwise", 240 by default, if only unfocused.
+	- On Windows with Transparency on, a window in view never lets go, since nothing would be left on screen without its device. It waits until it is minimized.
 	- It takes the device back on any sign of life: a key, a click, the pointer entering, focus, being shown, a shell printing while it can be seen, or the desktop asking for a repaint.
 	- It never lets go while a dialog is open or a hardware rating is due or running.
 
@@ -108,6 +109,10 @@ A terminal is often left open for days, many at a time. SilkTerm is built so tha
 
 - On X11 there is no visible side effect by design. The window keeps showing its last frame, and taking the device back is about 25 ms.
 
+- On Windows with Transparency off the window keeps its last frame too. With Transparency on it draws through a composition visual and has no surface of its own, so letting the device go leaves it black. That window is let go only while minimized.
+
+- A minimized window on Windows reports a size of nothing, and a restore stops answering minimized a moment before the real size comes back. A window with no size counts as hidden, so nothing is drawn or rebuilt in that gap. A rebuild there took 1x1 as the window's size, and the console host's reflow at two columns lost the screen. Coming back into view is a sign of life by itself, since Windows sends no occlusion events and its repaint can come inside the gap.
+
 - The window title says so. "(resource conservation mode)" while released, "(restoring resources ...)" until the wallpaper is back, since the device itself returns too fast to see, then "(resources restored)" for five seconds. Any rebuild shows it, a return from a text console included, and it goes on a `--title` too, since it is news about the window rather than part of its name.
 
 ### After a text console
@@ -166,13 +171,15 @@ So the switch is detected instead. A watcher notes the console the window starte
 
 - About 3 ms to let the device go and about 25 ms to take it back, with no CPU at all while released. Measured on Linux under software GL only.
 
+- On Windows with an RTX 2060, about 0.1 to 0.2 s to let the device go and 0.8 to 1.2 s to take it back, plus the wallpaper. Measured on Vulkan and on the composited DX12 path.
+
 - Idle went from 26.4% of a core to 14.5% once unchanged frames reused their text, and a parked cursor costs about 0.2% against about 14% with the pulse running. A minimized window with busy output went from about 83% of a core to about 0%.
 
 - NVIDIA's video memory purge is hidden from any readback, so a texture that was wiped reads back intact.
 
 ## Roadmap
 
-- The GPU release has not been measured under the NVIDIA driver, on Wayland or on Windows.
+- The GPU release has not been measured under the NVIDIA driver on Linux, on Wayland or on macOS. What a released window shows on Wayland and macOS is not known.
 
 - The warm dialog context's 52 MiB could be dropped when the dialog closes. Not settled.
 
@@ -191,6 +198,10 @@ So the switch is detected instead. A watcher notes the console the window starte
 - "After a crash in VSCodium required switching to VT-1" (Opened 20260917-164802)
 
 - "Free resources when idle: on by default" (Opened 20261003-124705)
+
+- "With Free resources when idle on, a window on screen but not focused is let go, goes black, and stays black until typed into" (Opened 20261003-191345)
+
+- "After waking from Free resources when idle, the window sometimes shows only the prompt's last character until typed into" (Opened 20261003-191345)
 
 - "Severe - VT bug" (Opened 20260722-100516)
 
