@@ -23,9 +23,22 @@ impl MonitorId {
 	// None when the platform cannot say, which on Wayland is the case until
 	// the window has been shown.
 	pub fn of_window(window: &Window) -> Option<Self> {
+		Self::find(window, false)
+	}
+
+	// The monitor a window not shown yet will open on. It has no place of its
+	// own until the window manager maps it, and xfwm4 maps a window that asks
+	// for no position on the monitor under the pointer. winit guesses the
+	// window's scale the same way.
+	pub fn of_new_window(window: &Window) -> Option<Self> {
+		Self::find(window, true)
+	}
+
+	#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+	fn find(window: &Window, at_pointer: bool) -> Option<Self> {
 		let scale = window.scale_factor();
 		#[cfg(target_os = "linux")]
-		if let Some((px, mm)) = x11_monitor_under(window) {
+		if let Some((px, mm)) = x11_monitor_under(window, at_pointer) {
 			return Self::new(px.0, px.1, scale, mm.map(|mm| upright(mm, px)));
 		}
 		let monitor = window.current_monitor()?;
@@ -93,11 +106,15 @@ fn edid_mm(edid: &[u8]) -> Option<(u32, u32)> {
 	plausible((u32::from(edid[21]) * 10, u32::from(edid[22]) * 10))
 }
 
-// On X11 the server is asked which monitor the window overlaps most, and
-// that monitor's mode and millimeters. winit keeps a list it may not have
+// On X11 the server is asked which monitor the window overlaps most, or
+// for a window not shown yet which one the pointer is on, and that
+// monitor's mode and millimeters. winit keeps a list it may not have
 // refreshed since the resolution changed.
 #[cfg(target_os = "linux")]
-fn x11_monitor_under(window: &Window) -> Option<((u32, u32), Option<(u32, u32)>)> {
+fn x11_monitor_under(
+	window: &Window,
+	at_pointer: bool,
+) -> Option<((u32, u32), Option<(u32, u32)>)> {
 	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 	use x11rb::connection::Connection;
 	use x11rb::protocol::randr::ConnectionExt as _;
@@ -122,43 +139,62 @@ fn x11_monitor_under(window: &Window) -> Option<((u32, u32), Option<(u32, u32)>)
 		i64::from(size.width),
 		i64::from(size.height),
 	);
+	let pointer = at_pointer
+		.then(|| conn.query_pointer(root).ok()?.reply().ok())
+		.flatten()
+		.map(|reply| (i64::from(reply.root_x), i64::from(reply.root_y)));
 	let resources = conn
 		.randr_get_screen_resources_current(root)
 		.ok()?
 		.reply()
 		.ok()?;
-	let mut best: Option<(i64, x11rb::protocol::randr::GetCrtcInfoReply)> = None;
-	for crtc in resources.crtcs {
-		let Some(info) = conn
-			.randr_get_crtc_info(crtc, resources.config_timestamp)
-			.ok()
-			.and_then(|cookie| cookie.reply().ok())
-		else {
-			continue;
-		};
-		if info.mode == 0 || info.outputs.is_empty() {
-			continue;
-		}
-		let overlap = overlap(
-			win,
+	let crtcs: Vec<_> = resources
+		.crtcs
+		.iter()
+		.filter_map(|&crtc| {
+			conn.randr_get_crtc_info(crtc, resources.config_timestamp)
+				.ok()
+				.and_then(|cookie| cookie.reply().ok())
+		})
+		.filter(|info| info.mode != 0 && !info.outputs.is_empty())
+		.collect();
+	let rects: Vec<_> = crtcs
+		.iter()
+		.map(|info| {
 			(
 				i64::from(info.x),
 				i64::from(info.y),
 				i64::from(info.width),
 				i64::from(info.height),
-			),
-		);
-		if best.as_ref().is_none_or(|(most, _)| overlap > *most) {
-			best = Some((overlap, info));
-		}
-	}
-	let (_, crtc) = best?;
+			)
+		})
+		.collect();
+	let crtc = &crtcs[monitor_under(win, pointer, &rects)?];
 	let mm = conn
 		.randr_get_output_info(crtc.outputs[0], resources.config_timestamp)
 		.ok()
 		.and_then(|cookie| cookie.reply().ok())
 		.map(|out| (out.mm_width, out.mm_height));
 	Some(((u32::from(crtc.width), u32::from(crtc.height)), mm))
+}
+
+// Which of the monitors a window is on: the one under the pointer when one
+// is given, else the one the window overlaps most, else the first.
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+fn monitor_under(
+	window: (i64, i64, i64, i64),
+	pointer: Option<(i64, i64)>,
+	monitors: &[(i64, i64, i64, i64)],
+) -> Option<usize> {
+	let probe = pointer.map_or(window, |(x, y)| (x, y, 1, 1));
+	let mut best: Option<(usize, i64)> = None;
+	for (index, &monitor) in monitors.iter().enumerate() {
+		let shared = overlap(probe, monitor);
+		if best.is_none_or(|(_, most)| shared > most) {
+			best = Some((index, shared));
+		}
+	}
+	best.map(|(index, _)| index)
 }
 
 // Shared area of two (x, y, width, height) rectangles.
@@ -411,6 +447,33 @@ mod tests {
 			50 * 50,
 			"partly off screen"
 		);
+	}
+
+	// Test ID: ErkYUyK
+	#[test]
+	fn a_window_not_shown_yet_opens_on_the_monitor_under_the_pointer() {
+		let monitors = [(0, 0, 1920, 1080), (1920, 0, 1280, 1024)];
+		// a hidden window sits at the origin whichever monitor it will open on
+		let hidden = (0, 0, 860, 578);
+		assert_eq!(monitor_under(hidden, Some((2500, 500)), &monitors), Some(1));
+		assert_eq!(monitor_under(hidden, Some((1919, 500)), &monitors), Some(0));
+		assert_eq!(monitor_under(hidden, Some((1920, 0)), &monitors), Some(1));
+		assert_eq!(
+			monitor_under(hidden, None, &monitors),
+			Some(0),
+			"no pointer"
+		);
+		assert_eq!(
+			monitor_under(hidden, Some((2500, 1050)), &monitors),
+			Some(0),
+			"pointer off every monitor"
+		);
+		assert_eq!(
+			monitor_under((1800, 100, 400, 300), None, &monitors),
+			Some(1),
+			"a shown window goes by overlap"
+		);
+		assert_eq!(monitor_under(hidden, Some((2500, 500)), &[]), None);
 	}
 
 	// Test ID: EreYcuP

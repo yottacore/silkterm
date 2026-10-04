@@ -741,7 +741,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Linux: the window opens at one size, then jumps to another
 	- ID: 2026100408214201
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
+	- Needs external testing: A look on the b23 desktop with one monitor and with two, and with Remember maximized on.
 	- Severity: High
 	- Opened: 20261004-082142
 	- Opened by: JC
@@ -753,8 +754,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The window shows at one size, then resizes itself.
 	- Expected behavior: The window is already at its final size when it first shows.
 	- Possible cause: This was fixed on 20260720 under Done, in "On open, when it becomes visible, it should already be at its final size". The per-monitor size work on 20261003 (2026100114435600) changed how the starting size is chosen, so it is the first suspect. Not checked.
+	- Reproduced: 20261004 on b23, under xfwm4, and with two monitors under sway. Opened from the second monitor, the window was sized for the first and changed size about a second after it showed. With Remember maximized on, or `--fullscreen`, it showed at its restored size and then grew.
+	- Actual cause:
+		- The launch chose the monitor by where the hidden window sat, which is always the top-left corner. The window manager then opened it under the pointer, and the check after a move gave it that monitor's size. From `permon`.
+		- Maximized (from `maxdlg`) and fullscreen were only asked for after the window was shown, and a window manager ignores the request before that. So the window showed at its restored size first.
 	- Notes:
 		- Before RC1.
+		- Note: 20261004, with one monitor and Remember maximized off, neither cause applies. A jump seen that way is a third cause.
+	- Actual fix:
+		- The launch takes the monitor under the pointer, where xfwm4 opens a window that asks for no position. A window manager that puts it elsewhere still gets the size change after it shows.
+		- On X11 the maximized and fullscreen states are written on the window just before it is shown, and the window manager reads them as it maps it.
+		- Not on Wayland, where a window learns its monitor only once shown.
+	- Swept: everything that sizes the window or sets its state before it shows. The launch size and the monitor lookup (the one taken after a move still goes by the window), maximize, and `--fullscreen`, which had the same fault. The Settings dialog sets no window state.
+	- Verified: with two monitors, the old build changed size after showing in 2 of 2 launches and the fix in 0 of 2. Maximized, the old build showed at the restored size first in 10 of 10 launches and the fix in 0 of 10. `--fullscreen`, 3 of 3 against 0 of 5. Unit tests and clippy pass.
+	- Branch: sizejump
+	- Test case: `a_window_not_shown_yet_opens_on_the_monitor_under_the_pointer` (ErkYUyK), seen to fail with the pointer ignored. `cicd/tests/startsize/run.bash` (Erkahb9): a remembered size, three maximized launches and `--fullscreen` must each show once, at one size. On the old code the fullscreen case fails every run and the maximized one in most. The two-monitor case is not in it, since its display has one monitor.
+	- Acceptance signoff: Self-closed: both causes reproduced, fixed, and pinned by tests that fail on the old code. The look on the real desktop is owed.
+	- Closed: 20261004-094713
 
 - macOS: the extra prompt info for PowerShell 7 does not work
 	- ID: 2026100408214204

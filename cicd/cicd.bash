@@ -729,6 +729,17 @@ if [[ -x "${root}/cicd/tests/config-convert/run.bash" ]]; then
 		*) fDie "config conversion test failed ($(fTestId cicd/tests/config-convert/run.bash))" ;;
 	esac
 fi
+## The window shows at the size it keeps, maximized and fullscreen too, with
+## no jump after. Exit 3 is a skip: no binary, display, window manager or python-xlib.
+if [[ -x "${root}/cicd/tests/startsize/run.bash" ]]; then
+	fEcho_Clean "window size at launch ..."
+	startRc=0; "${root}/cicd/tests/startsize/run.bash" >/dev/null || startRc=$?
+	case "${startRc}" in
+		0) fEcho "OK: window size at launch ($(fTestId cicd/tests/startsize/run.bash))" ;;
+		3) fEcho "WARNING: window size at launch skipped" ;;
+		*) fDie "window size at launch test failed ($(fTestId cicd/tests/startsize/run.bash))" ;;
+	esac
+fi
 if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
 	fEcho_Clean "pipeline steps ..."
 	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed ($(fTestId cicd/tests/engine/run.bash))"
