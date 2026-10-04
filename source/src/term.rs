@@ -1227,11 +1227,6 @@ fn usable_cwd(dir: Option<std::path::PathBuf>) -> Option<std::path::PathBuf> {
 	dir.filter(|dir| dir.is_absolute())
 }
 
-// wsl.exe launches the shell inside the distribution, which does not inherit
-// the Windows working directory. --cd is how it is told, and it takes a
-// Windows path or a posix one, so whichever spelling the source pane reported
-// can go straight through. Options have to come before the command, hence the
-// insert rather than a push. None where there is nothing to do.
 fn pane_options(command: Option<&[String]>, cwd: Option<std::path::PathBuf>) -> tty::Options {
 	// a CLI/menu-supplied command runs as argv[0] + args; else the default shell
 	let mut opts = tty::Options::default();
@@ -1256,6 +1251,11 @@ fn pane_options(command: Option<&[String]>, cwd: Option<std::path::PathBuf>) -> 
 	opts
 }
 
+// wsl.exe launches the shell inside the distribution, which does not inherit
+// the Windows working directory. --cd is how it is told, and it takes a
+// Windows path or a posix one, so whichever spelling the source pane reported
+// can go straight through. Options have to come before the command, hence the
+// insert rather than a push. None where there is nothing to do.
 fn wsl_cd(argv: &[String], dir: &std::path::Path) -> Option<Vec<String>> {
 	// split on both separators: a Windows path reaches this on any platform, and
 	// Path would hand back the whole string for one on unix

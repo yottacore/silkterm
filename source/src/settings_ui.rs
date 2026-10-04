@@ -85,10 +85,6 @@ const LIGHT_DLG: Dlg = Dlg {
 	text: [0x22, 0x24, 0x2c], dim: [0x70, 0x70, 0x76],
 	danger: [0xb8, 0x2c, 0x2c],
 };
-// The dialog color set for the active mode, with the panel background + text
-// overridden by the configured dialog colors (theme default or a colors
-// dialog_*/menu_* override). The remaining shades (border/track/handle/fields/
-// buttons) stay from the mode preset so contrast holds.
 // sRGB-space blend of two colors (selection highlight = field bg toward accent)
 fn mix3(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
 	let mut out = [0u8; 3];
@@ -122,6 +118,10 @@ pub fn hover_tips() -> usize {
 	HOVER_TIPS.with(std::cell::Cell::get)
 }
 
+// The dialog color set for the active mode, with the panel background + text
+// overridden by the configured dialog colors (theme default or a colors
+// dialog_*/menu_* override). The remaining shades (border/track/handle/fields/
+// buttons) stay from the mode preset so contrast holds.
 fn dlg() -> Dlg {
 	#[cfg(test)]
 	DLG_BUILDS.with(|n| n.set(n.get() + 1));
@@ -1138,8 +1138,6 @@ impl SettingsDialog {
 		lay().subgroup_gap
 	}
 
-	// Natural height of one tab's rows (gaps included). Static so `new` can size
-	// the window before Self exists; row_y must walk rows the same way.
 	// The tabs the dialog's height is taken from. The shell list's height moves
 	// with the data, and the hotkeys are a long fixed list; both scroll instead.
 	fn fixed_tabs(specs: &[Spec]) -> impl Iterator<Item = usize> + '_ {
@@ -1148,6 +1146,9 @@ impl SettingsDialog {
 				.any(|(_, spec)| matches!(spec.kind, Kind::ShellList | Kind::Hotkey(_)))
 		})
 	}
+
+	// Natural height of one tab's rows (gaps included). Static so `new` can size
+	// the window before Self exists; row_y must walk rows the same way.
 	fn tab_content_h(specs: &[Spec], tab: usize, line_h: f32, shells: usize) -> f32 {
 		let mut h = 0.0;
 		let mut prev: Option<&Spec> = None;
@@ -1808,7 +1809,7 @@ impl SettingsDialog {
 		}
 	}
 
-	// ---- dropdown popup (open list; commits on Enter / click) -----------------
+	// dropdown popup (open list; commits on Enter / click)
 
 	// A dropdown's option list. Every one but the theme picker is fixed in the
 	// declarations; that one is whatever themes exist right now, so the list has
@@ -1850,7 +1851,7 @@ impl SettingsDialog {
 		}
 	}
 
-	// ---- keyboard focus + control activation ----------------------------------
+	// keyboard focus + control activation
 
 	// Rows on the active tab with at least one focusable (enabled, non-header)
 	// sub-control, in visual order. (Used by the focus tests.)
@@ -2310,7 +2311,7 @@ impl SettingsDialog {
 	}
 
 	// Panel size (used to size a dedicated dialog window when the panel is laid
-	// out at the origin - `new(0.0, 0.0)`).
+	// out at the origin - `new(0.0, 0.0, ...)`).
 	// Window size in physical pixels.
 	pub fn size(&self) -> (f32, f32) {
 		(self.to_px(self.rect.w), self.to_px(self.rect.h))
@@ -2322,9 +2323,6 @@ impl SettingsDialog {
 	pub fn orig(&self) -> &Settings {
 		&self.orig
 	}
-	// After an Apply, make the applied values the new baseline so a later Apply
-	// compares against the live state, not the stale open-time snapshot (otherwise
-	// re-selecting the original value reads as "no change" and isn't applied).
 	// A scan arrived while this dialog was open. Both copies move, so a user who
 	// has changed nothing still has nothing changed - the same reasoning that
 	// keeps the list out of an ordinary Apply diff. Anything they have already
@@ -2335,6 +2333,9 @@ impl SettingsDialog {
 		self.edited.shells = crate::shells::merge(&self.edited.shells, found);
 	}
 
+	// After an Apply, make the applied values the new baseline so a later Apply
+	// compares against the live state, not the stale open-time snapshot (otherwise
+	// re-selecting the original value reads as "no change" and isn't applied).
 	pub fn commit_baseline(&mut self) {
 		self.orig = self.edited.clone();
 	}
@@ -2377,13 +2378,7 @@ impl SettingsDialog {
 			}
 		}
 	}
-	// ---- the shells grid ------------------------------------------------------
-	//
-	// The spec index of the grid, for the pseudo-row fields, which know which
-	// entry they belong to but not which row draws it.
-	fn shell_row(&self) -> Option<usize> {
-		(0..self.specs.len()).find(|&i| matches!(self.specs[i].kind, Kind::ShellList))
-	}
+	// the shells grid
 	//
 	// The grid spans the whole content width rather than starting at the control
 	// column: there is no label beside it, and the command it holds is the one
@@ -2391,6 +2386,12 @@ impl SettingsDialog {
 	// out from BOTH ends - the fixed ones from the right, the name from the left
 	// - and the command takes whatever is left between them, so a wider panel
 	// widens the column that needs it.
+
+	// The spec index of the grid, for the pseudo-row fields, which know which
+	// entry they belong to but not which row draws it.
+	fn shell_row(&self) -> Option<usize> {
+		(0..self.specs.len()).find(|&i| matches!(self.specs[i].kind, Kind::ShellList))
+	}
 
 	// Total width of everything except the command's own slack: what the panel
 	// must clear for the grid to be readable at all. Static, so `new` can size
@@ -2552,7 +2553,7 @@ impl SettingsDialog {
 		self.open_edit(shell_field_row(k, true), true);
 	}
 
-	// ---- hotkey rows -----------------------------------------------------------
+	// hotkey rows
 
 	fn hotkey_of(&self, i: usize) -> Option<Hotkey> {
 		match self.specs[i].kind {
@@ -3184,7 +3185,7 @@ impl SettingsDialog {
 		]
 	}
 
-	// ---- file types -----------------------------------------------------------
+	// file types
 
 	// A push-button on a row: the theme row's, or a file type's Register.
 	fn row_button(&mut self, i: usize, part: u16) {
@@ -3243,7 +3244,7 @@ impl SettingsDialog {
 		}
 	}
 
-	// ---- themes ---------------------------------------------------------------
+	// themes
 
 	// One of a Buttons row's push-buttons. They start at the control column, so
 	// they line up under whatever the row above them holds.
@@ -3502,7 +3503,7 @@ impl SettingsDialog {
 		}
 	}
 
-	// ---- the prompt box -------------------------------------------------------
+	// the prompt box
 
 	// Centered over the panel, sized to what it holds. Two buttons, right-aligned,
 	// the same way the dialog's own footer reads.
@@ -3600,7 +3601,7 @@ impl SettingsDialog {
 		}
 	}
 
-	// ---- the color picker box -------------------------------------------------
+	// the color picker box
 
 	// Every measurement the box is built from. The floors come from the
 	// declarations; what each one grows with is the interface line height, so a
@@ -6021,7 +6022,7 @@ impl SettingsDialog {
 			};
 			border(&mut fixed, r, if ring { 2.0 } else { 1.0 }, outline);
 			// Alt held: underline the accelerator (the label's first letter). The
-			// label is drawn left-aligned at r.x+14; the cap glyph is ~0.55*line_h
+			// label is drawn centered on the button; the cap glyph is ~0.55*line_h
 			// wide, and its baseline sits near the text bottom.
 			if self.alt && !label.is_empty() {
 				let tx = r.x + (r.w - measure(label)).max(0.0) / 2.0;
@@ -6032,9 +6033,6 @@ impl SettingsDialog {
 		(fixed, out)
 	}
 
-	// `line_h` is the rendered text line height (the app's cell_h); rows, hex
-	// fields, and buttons center their text vertically against it so alignment
-	// holds for any font/size rather than a baked-in guess.
 	// The grid's own quads: the two field boxes and the checkbox per entry, the
 	// five icon buttons, and the Add button. The arrows are shader-drawn (mode 3
 	// with a quarter-turn) for the same reason the tab close mark is - no
@@ -6175,6 +6173,9 @@ impl SettingsDialog {
 		}
 	}
 
+	// `line_h` is the rendered text line height (the app's cell_h); rows, hex
+	// fields, and buttons center their text vertically against it so alignment
+	// holds for any font/size rather than a baked-in guess.
 	fn texts_dip(&self, line_h: f32, mut measure: impl FnMut(&str) -> f32) -> Vec<TextItem> {
 		let colors = dlg();
 		let mut out = Vec::new();
@@ -6915,18 +6916,6 @@ impl SettingsDialog {
 	}
 }
 
-// Widest field label, button caption, and per-tab title widths at the current
-// UI font, so the dialog sizes to the real text (a wide serif or a big desktop
-// size never truncates).
-//
-// This measures against the text context, so it works in PHYSICAL pixels - which
-// is why every layout constant it reads converts through `config::dip` at its use
-// site, the way the main window's chrome does. Adding a raw DIP number to a
-// physical measurement here is a live bug: `SettingsDialog::new` divides the whole
-// sum by the scale factor, so the constant arrives shrunk by that factor. That is
-// what put a tab's title `tab_pad/2` from its left edge inside a box only
-// `tab_pad/scale` wider than the title - flush right at 2x, overflowing past it
-// above that.
 // A measured width plus the clear space that goes around it. The measurement is
 // physical and the clear space is DIP, so the constant converts before they meet.
 fn measured_plus(measured_px: f32, clear_dip: f32, scale: f32) -> f32 {
@@ -6943,6 +6932,18 @@ pub fn sane_scale(scale: f32) -> f32 {
 	}
 }
 
+// Widest field label, button caption, and per-tab title widths at the current
+// UI font, so the dialog sizes to the real text (a wide serif or a big desktop
+// size never truncates).
+//
+// This measures against the text context, so it works in PHYSICAL pixels - which
+// is why every layout constant it reads converts through `config::dip` at its use
+// site, the way the main window's chrome does. Adding a raw DIP number to a
+// physical measurement here is a live bug: `SettingsDialog::new` divides the whole
+// sum by the scale factor, so the constant arrives shrunk by that factor. That is
+// what put a tab's title `tab_pad/2` from its left edge inside a box only
+// `tab_pad/scale` wider than the title - flush right at 2x, overflowing past it
+// above that.
 pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> (f32, f32, f32, Vec<f32>) {
 	let attrs = crate::text::ui_attrs();
 	let dip = |v: f32| config::dip(v, scale);
@@ -8472,7 +8473,7 @@ mod tests {
 		}
 	}
 
-	// ---- the shells grid ------------------------------------------------------
+	// the shells grid
 
 	fn shell_entry(title: &str, command: &str) -> crate::shells::ShellEntry {
 		crate::shells::ShellEntry {
@@ -10218,7 +10219,7 @@ mod tests {
 		assert_eq!(e.caret_alpha(), 1.0);
 	}
 
-	// ---- themes ---------------------------------------------------------------
+	// themes
 
 	fn theme_row(d: &SettingsDialog) -> usize {
 		d.specs
@@ -10458,7 +10459,7 @@ mod tests {
 		}
 	}
 
-	// ---- the color picker -----------------------------------------------------
+	// the color picker
 
 	fn color_row(d: &SettingsDialog) -> usize {
 		d.specs

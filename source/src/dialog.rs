@@ -1691,8 +1691,6 @@ const ABOUT_BORDER: f32 = 1.0; // 1px rule around the Support button
 // The flyover box's own measurements are shared with the Settings dialog's, in
 // tip.rs - both windows draw the same box.
 
-// Build the About content laid out at the window origin; returns
-// (lines, clickable links, (width, height)) in physical px.
 // The size to ask the window for after a change of display scale: the pixels it
 // has now, held to what the screen can still hold. A screen holds fewer DIP at a
 // higher scale, so a window dragged from a wide monitor to a smaller one at a
@@ -1709,6 +1707,8 @@ fn size_within_caps(now: (u32, u32), caps: (f32, f32)) -> (u32, u32) {
 	(cap(now.0, caps.0), cap(now.1, caps.1))
 }
 
+// Build the About content laid out at the window origin; returns
+// (lines, clickable links, (width, height)) in physical px.
 fn layout_about(
 	text: &mut TextCtx,
 	info: &wgpu::AdapterInfo,

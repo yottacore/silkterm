@@ -888,9 +888,6 @@ pub fn slot_at_x(widths: &[f32], x: f32) -> Option<usize> {
 	None
 }
 
-/// How long a tab has been open, at the coarseness a person reads at a glance.
-/// Two units is the most that stays legible in a tip line, and the smaller of
-/// the two is zero-padded so the width does not jump as it ticks.
 // One value on a hover-tip line, quoted only where the eye needs the boundary:
 // a value carrying a space or a quote character. Which quote is picked follows
 // the config file's own habit - single ones around a value that already holds
@@ -931,6 +928,9 @@ pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 		.collect()
 }
 
+/// How long a tab has been open, at the coarseness a person reads at a glance.
+/// Two units is the most that stays legible in a tip line, and the smaller of
+/// the two is zero-padded so the width does not jump as it ticks.
 pub fn elapsed(secs: u64) -> String {
 	const MINUTE: u64 = 60;
 	const HOUR: u64 = 60 * MINUTE;

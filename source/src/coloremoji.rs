@@ -273,8 +273,6 @@ impl ColorGlyphs {
 	}
 }
 
-// Faces carrying a COLR table. fontdb memory-maps its sources, so this touches
-// little more than each file's table directory.
 // Families that can draw `ch` with no color in it, monospaced ones first.
 // cosmic-text picks a fallback face on its own and will take an emoji face for
 // a character Unicode presents as text, which then paints in the font's own
@@ -299,6 +297,8 @@ pub fn text_families(db: &fontdb::Database, ch: char) -> Vec<String> {
 	found.into_iter().map(|(_, name)| name).collect()
 }
 
+// Faces carrying a COLR table. fontdb memory-maps its sources, so this touches
+// little more than each file's table directory.
 fn color_faces(db: &fontdb::Database) -> Vec<fontdb::ID> {
 	db.faces()
 		.filter(|info| {

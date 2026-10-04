@@ -2001,16 +2001,16 @@ fn rating_step(bench: bool, scroll_anim: bool, pinned_fps: bool, focused: bool) 
 	}
 }
 
-// Where the rotation timer goes when a tick fires. It has to move off `now`
-// here rather than waiting for the worker's answer: the answer is dropped
-// unless it is still the newest request, and a timer left in the past fires
-// again on the very next pass, so each pass started another decode thread.
 // Whether rotation has anywhere to go: not held by a command-line wallpaper,
 // and the last scan found more than the one image showing.
 fn rotation_live(locked: bool, count: usize, folder: bool) -> bool {
 	!locked && count >= 2 && folder
 }
 
+// Where the rotation timer goes when a tick fires. It has to move off `now`
+// here rather than waiting for the worker's answer: the answer is dropped
+// unless it is still the newest request, and a timer left in the past fires
+// again on the very next pass, so each pass started another decode thread.
 fn rotation_next(now: Instant, live: bool, interval_s: f32) -> Option<Instant> {
 	(live && interval_s > 0.0).then(|| now + Duration::from_secs_f32(interval_s))
 }
@@ -5676,10 +5676,6 @@ impl State {
 		self.set_wallpaper(image);
 	}
 
-	// Rebuild the text context (cell metrics, chrome, pane buffers) for a new
-	// scale factor or font, then relayout. Shared by settings-driven font
-	// rebuilds and DPI scale-factor changes. The surface itself is reconfigured
-	// separately (a Resized event follows a scale change).
 	// Font zoom (hotkeys / View menu): step the zoom offset and rebuild the
 	// text context at the new effective size. Window-wide, and remembered with
 	// the window's size.
@@ -5722,6 +5718,10 @@ impl State {
 		self.scrim_sig = None;
 	}
 
+	// Rebuild the text context (cell metrics, chrome, pane buffers) for a new
+	// scale factor or font, then relayout. Shared by settings-driven font
+	// rebuilds and DPI scale-factor changes. The surface itself is reconfigured
+	// separately (a Resized event follows a scale change).
 	fn rebuild_text(&mut self, scale: f32) {
 		self.text = TextCtx::new_cpu(scale);
 		if let Some(gpu) = &self.gpu {
@@ -5872,11 +5872,6 @@ impl State {
 		self.apply_new_settings(&live, next, false);
 	}
 
-	// GPU texture contents were lost (VT switch / suspend; see the Sentinel note
-	// in gfx.rs). Re-upload everything that was uploaded once: fresh glyph
-	// atlases + chrome via rebuild_text, and the wallpaper. rebuild_text also drops
-	// the prepared/scrim signatures, so the next frame rebuilds the scrim source
-	// instead of reusing a texture that no longer holds anything.
 	// Everything on the device again, after a return to this console. The whole
 	// device when nothing else shares it, since a switch can spoil any texture
 	// and `recover_gpu` only knows the text and the wallpaper. An open dialog's
@@ -5893,6 +5888,11 @@ impl State {
 		self.rebuild_gpu();
 	}
 
+	// GPU texture contents were lost (VT switch / suspend; see the Sentinel note
+	// in gfx.rs). Re-upload everything that was uploaded once: fresh glyph
+	// atlases + chrome via rebuild_text, and the wallpaper. rebuild_text also drops
+	// the prepared/scrim signatures, so the next frame rebuilds the scrim source
+	// instead of reusing a texture that no longer holds anything.
 	fn recover_gpu(&mut self) {
 		if self.gpu.is_none() {
 			return; // nothing uploaded to lose; the rebuild starts from nothing anyway
@@ -5906,11 +5906,6 @@ impl State {
 		self.dirty = true;
 	}
 
-	// returns true while any pane is still animating (caller keeps frames coming).
-	// `force_rebuild` = the frame changed content/scroll/bell (not a pure cursor
-	// animation), so panes re-shape text; false lets them reuse the cached frame.
-	// A frame, on the device the window has. No device means nothing drawn and
-	// no animation to keep frames coming for.
 	fn reveal_window(&mut self) {
 		self.revealed = true;
 		// Maximized only now: X11 drops the request for a window not yet
@@ -5951,6 +5946,11 @@ impl State {
 		}
 	}
 
+	// returns true while any pane is still animating (caller keeps frames coming).
+	// `force_rebuild` = the frame changed content/scroll/bell (not a pure cursor
+	// animation), so panes re-shape text; false lets them reuse the cached frame.
+	// A frame, on the device the window has. No device means nothing drawn and
+	// no animation to keep frames coming for.
 	fn render(&mut self, force_rebuild: bool) -> bool {
 		let Some(mut gpu) = self.gpu.take() else {
 			return false;
@@ -8113,8 +8113,6 @@ fn open_url(url: &str) {
 	let _ = cmd.spawn();
 }
 
-// Decode the configured background image and upload it to a texture.
-
 // Hand a clicked link to the desktop. A failure is the opener's (no xdg-open, a
 // bad open_command) and is worth saying out loud once, not worth an alert.
 fn open_link(url: &str) {
@@ -9646,9 +9644,6 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 	}
 
-	// request_redraw isn't reliable under some compositors, so we drive frames
-	// here: render when something changed or an animation is in flight, and
-	// poll only while animating (otherwise sleep until the next event).
 	fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
 		// don't lose a resize done just before quitting
 		if let Some(state) = self.state.as_mut() {
@@ -9657,6 +9652,9 @@ impl ApplicationHandler<UserEvent> for App {
 		crate::perf::report();
 	}
 
+	// request_redraw isn't reliable under some compositors, so we drive frames
+	// here: render when something changed or an animation is in flight, and
+	// poll only while animating (otherwise sleep until the next event).
 	fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
 		crate::perf::bump(&crate::perf::PASSES);
 		let _t = crate::perf::Span::new(&crate::perf::PASS_NS);
