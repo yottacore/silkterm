@@ -99,6 +99,17 @@ else
 	echo "note: no signing key set (RELEASE_SIGN_KEY) - this release will be unsigned"
 fi
 
+## The notes link each download by name, so they are built from the same list
+## that gets uploaded, before the tag so a problem here costs nothing.
+assets=("${art_dir}/${EXE_NAME}-${ver}-"*)
+notes=""; slug=""
+if ((do_publish)); then
+	##  shellcheck source=cicd/utility/release-notes.bash
+	source "${here}/release-notes.bash"
+	slug="$(fReleaseNotes_RepoSlug "$(git remote get-url origin)")" || die "no GitHub owner/repo for the download links"
+	notes="$(fReleaseNotes "${slug}" "${tag}" "${EXE_NAME}" "${ver}" "${build_id}" "${assets[@]}")"
+fi
+
 echo ""
 echo "Release ${tag} from $(git rev-parse --short HEAD) on main${build_id:+, build ${build_id}}"
 echo "Artifacts:"; ls -1 "${art_dir}/${EXE_NAME}-${ver}-"* | sed 's/^/  /'
@@ -126,12 +137,8 @@ if [[ "$ver" == *-* ]]; then prerelease=(--prerelease); fi
 
 if ((do_publish)); then
 	command -v gh >/dev/null 2>&1 || die "gh CLI not found"
-	notes="See the README for details."
-	if [[ -n "$build_id" ]]; then
-		notes+=$'\n\n'"Build ${build_id}. Every download here is that build; \`silkterm --version\` says which one you are running."
-	fi
-	fRemoteGh release create "${tag}" --title "${APP_NAME} ${ver}" --notes "${notes}" \
-		"${prerelease[@]}" "${art_dir}/${EXE_NAME}-${ver}-"*
+	fRemoteGh release create "${tag}" --repo "${slug}" --title "${APP_NAME} ${ver}" --notes "${notes}" \
+		"${prerelease[@]}" "${assets[@]}"
 	echo "GitHub Release ${tag} created with artifacts${prerelease:+ (pre-release)}"
 elif ((do_push)); then
 	echo "next (optional): gh release create ${tag} ${prerelease[*]} ${art_dir}/${EXE_NAME}-${ver}-*"

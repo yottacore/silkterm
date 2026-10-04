@@ -771,7 +771,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Release page: group the downloads in a table
 	- ID: 2026100408214205
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Priority: High
 	- Opened: 20261004-082142
 	- Opened by: JC
@@ -784,6 +784,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Target OS in rows.
 	- Notes:
 		- 20261004: `cicd/utility/release.bash` writes the notes now. They say only "See the README for details." and the build number.
+	- Decisions:
+		- 20261004: best guess, reversible. No macOS row. The public release has no macOS download, and macOS is sold through an app store. A universal macOS binary is its own item, 2026100313404572.
+	- Progress log:
+		- 20261004: The notes now have a download table, x86_64 and ARM64 across, Linux and Windows down. Linux cells link the binary, .deb and .rpm, Windows cells the installer and the portable .exe.
+		- The table is built from the files being uploaded. A missing file gets no link, and a cell with none says "Not available". A file with no place in the table goes on an "Other downloads" line.
+		- Links use the name GitHub gives the file, since it turns odd characters into dots.
+		- The checksums file has its own line, with its signature beside it when there is one. The README line and the build line stay.
+		- The table uses the project style, leading pipe and no trailing pipe. GitHub renders it as a table.
+		- The release is now created with the owner and repo read from the origin remote, the same pair the links use.
+	- Verified: 20261004, the new test passes. It fails when a missing file is linked, when the GitHub rename is skipped, or when a row has a trailing pipe. The real beta3 file names give the expected table, and GitHub renders it as a table. The real beta3 download links follow the same pattern. No release was made.
+	- Branch: reltable
+	- Test case: Erl3R5g, `cicd/tests/release-notes/run.bash`, in the pipeline.
 
 - A unit test run rewrites the box's live config file
 	- ID: 2026100410244885
