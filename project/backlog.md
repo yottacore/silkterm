@@ -838,7 +838,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261004: The `task()` and `cwd()` throttles stay, since a frame still asks every tab. The `friendly` memo stays too, since a tab asks again each time its task or folder moves.
 	- Origin: 395620ed (2026-08-23) for the per-frame call, c20128ca and 9e45d8f1 (2026-08-21) for the tip. No earlier review item. Plausible, since the cost is not measured.
 	- Branch: tabcache
-	- Commit: abb625f
+	- Commit: abb625f, 47f9b76
 	- Test case: `idle_frames_build_no_tab_labels` (Erlb8mF), at most one build per tab over 240 idle frames. `a_tab_label_builds_again_when_what_it_shows_moves` (Erlb98Q), one input at a time. `the_tab_tip_is_measured_once_per_set_of_lines` (Erlb9TL). The hidden-bar probe has no unit test: asking a shell what it runs needs a live terminal, and no test can build one.
 	- Verified: 20261004. All three tests fail with the old always-build code put back and pass with the fix. The invalidation test also fails when the settings check or the text context check is taken out. The unit suite passes, 1101 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not run in a real window. The render and window title callers were read, not run.
 	- Swept: Every caller of `tab_label_forms`. The strip and the window title read the kept labels. Starting and committing a rename still build fresh, as before. The tip's lines are still built every half second, not per frame. The menu tip and the benchmark banner measure through the memoized interface font path. Left alone.
