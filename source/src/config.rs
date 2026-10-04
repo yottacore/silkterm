@@ -1272,17 +1272,36 @@ enum Unread {
 	Failed(std::io::Error),
 }
 
-// Whether a save that found no document wrote, as `write_doc` answers. A file
-// that is not there is left for the next launch to make, as before. One that
-// cannot be read says why on the terminal.
-fn unread_save(path: &std::path::Path, unread: Unread) -> bool {
-	match unread {
-		Unread::Missing => true,
-		Unread::Failed(e) => {
-			eprintln!("{APP_NAME}: could not read config {}: {e}", path.display());
-			false
-		}
+// The settings file as this process last read or wrote it.
+static LAST_SEEN: std::sync::Mutex<Option<(PathBuf, String)>> = std::sync::Mutex::new(None);
+
+fn note_seen(path: &std::path::Path, text: &str) {
+	if let Ok(mut held) = LAST_SEEN.lock() {
+		*held = Some((path.to_path_buf(), text.to_string()));
 	}
+}
+
+// What a save edits when the file was deleted while the program ran: a new
+// file from the template, as a first launch writes, with every setting the
+// file held when this process last saw it. The save's own change goes on top,
+// so the session's settings are still there at the next launch. The shell list
+// is diffed against the file (`shells_to_save`), so a file never seen here
+// gets the list the window loaded, or every entry would read as removed.
+fn regrown_doc(
+	path: &std::path::Path,
+	loaded_shells: &[crate::shells::ShellEntry],
+) -> shcl::Document {
+	let seen = LAST_SEEN.lock().ok().and_then(|held| {
+		held.as_ref()
+			.filter(|(at, _)| at == path)
+			.map(|(_, text)| text.clone())
+	});
+	let Some(text) = seen else {
+		let mut doc = parse_kept(default_config());
+		write_shells(&mut doc, &[], loaded_shells);
+		return doc;
+	};
+	parse_kept(&rebuilt_config_text(&loaded_text(&text), &[]).0)
 }
 
 // A parse whose save writes back every line no edit touched, as it was typed.
@@ -1449,6 +1468,7 @@ pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> Result<
 // conversion says nothing.
 fn write_config_keeping(path: &std::path::Path, text: &str) -> Result<Option<PathBuf>, String> {
 	let kept = publish_keeping(path, text, shcl::write_file_atomic)?;
+	note_seen(path, text);
 	for line in restated_launch_messages(path, text) {
 		eprintln!("{line}");
 	}
@@ -2023,7 +2043,16 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	}
 	let mut doc = match read_doc(&path) {
 		Ok(doc) => doc,
-		Err(unread) => return unread_save(&path, unread),
+		Err(Unread::Missing) => {
+			if let Some(dir) = path.parent() {
+				let _ = std::fs::create_dir_all(dir);
+			}
+			regrown_doc(&path, &orig.shells)
+		}
+		Err(Unread::Failed(e)) => {
+			eprintln!("{APP_NAME}: could not read config {}: {e}", path.display());
+			return false;
+		}
 	};
 	// Both sides diff as the user's own values. A live copy carries a profile's
 	// values over them, and those must never reach the file.
@@ -6292,7 +6321,9 @@ fn settings_text(body: &[u8]) -> String {
 }
 
 fn read_settings(path: &std::path::Path) -> std::io::Result<String> {
-	std::fs::read(path).map(|body| settings_text(&body))
+	let text = std::fs::read(path).map(|body| settings_text(&body))?;
+	note_seen(path, &text);
+	Ok(text)
 }
 
 fn read_settings_text(path: &std::path::Path) -> Option<String> {
@@ -11814,6 +11845,132 @@ mod tests {
 		let loss = take_conversion_loss().expect("a notice is owed");
 		let copy = loss.backup.expect("a copy was kept");
 		assert_eq!(std::fs::read(&copy).unwrap(), body);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A file with some of everything a save writes, loaded as a launch would.
+	fn settled_config(path: &std::path::Path) -> Settings {
+		std::fs::write(path, "").unwrap();
+		set_config_override(path.to_path_buf());
+		let base = reload_from_disk();
+		let mut own = base.clone();
+		own.font_size = 15.0;
+		own.theme_mode = "light".to_string();
+		own.scrollback = 5000;
+		own.remembered_columns = 101;
+		own.shells = vec![
+			shell_entry("ash", "/bin/ash"),
+			shell_entry("bsh", "/bin/bsh"),
+			shell_entry("csh", "/bin/csh"),
+		];
+		own.monitor_sizes.push(MonitorSize {
+			key: "1920x1080_100pct_527x296mm".to_string(),
+			columns: 90,
+			rows: 30,
+			font_zoom: 1,
+		});
+		own.keys = own
+			.keys
+			.with_own(crate::input::Hotkey::ClosePane, Some(Vec::new()));
+		let pal = crate::theme::resolve_in(&[], "SilkTerm", "dark", true);
+		own.user_themes.push(crate::theme::UserTheme {
+			slug: "mine".to_string(),
+			name: "Mine".to_string(),
+			dark: pal,
+			light: pal,
+		});
+		assert!(persist(&base, &own));
+		let loaded = reload_from_disk();
+		assert!(loaded.keys == own.keys && loaded.user_themes.len() == 1);
+		assert_eq!(loaded.monitor_sizes, own.monitor_sizes);
+		assert_eq!(
+			(loaded.font_size, loaded.theme_mode.as_str()),
+			(15.0, "light")
+		);
+		loaded
+	}
+
+	// A save on a file deleted while running wrote nothing and answered that it
+	// saved. Both a Settings OK and a window size save write it new from the
+	// template, with what the file held and the save's own change, and nothing
+	// that only lasts the session.
+	// Test ID: ErkRECv
+	#[test]
+	fn a_save_on_a_deleted_file_writes_it_new() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("deleted_save");
+		let path = dir.join("config.shcl");
+		let loaded = settled_config(&path);
+		// a rotated pick is in the live copy and never in the file
+		let mut live = loaded.clone();
+		live.wallpaper_raw = "/pics/rotated.png".to_string();
+		live.wallpaper = Some(PathBuf::from("/pics/rotated.png"));
+
+		std::fs::remove_file(&path).unwrap();
+		let mut edited = live.clone();
+		edited.scroll_smooth = !edited.scroll_smooth;
+		assert!(persist(&live, &edited), "the Settings save");
+		let text = std::fs::read_to_string(&path).expect("the save wrote the file");
+		assert_eq!(
+			text.lines().next(),
+			default_config().lines().next(),
+			"{text}"
+		);
+		let mut want = loaded.clone();
+		want.scroll_smooth = edited.scroll_smooth;
+		assert!(reload_from_disk() == want, "{text}");
+		assert!(!text.contains("rotated"), "{text}");
+
+		// the window size save, with the whole folder gone this time
+		std::fs::remove_dir_all(&dir).unwrap();
+		let mut sized = want.clone();
+		remember_window(&mut sized, None, Some((120, 40)), None);
+		assert!(persist(&want, &sized), "the window size save");
+		assert!(path.exists(), "the save made the folder and the file");
+		assert!(reload_from_disk() == sized);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The shell list save is three-way against the file (G117), and a deleted
+	// file must not read as another window having removed every entry.
+	// Test ID: ErkREXH
+	#[test]
+	fn a_save_on_a_deleted_file_keeps_the_shell_list() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("deleted_shells");
+		let path = dir.join("config.shcl");
+		let loaded = settled_config(&path);
+		let slugs =
+			|s: &Settings| -> Vec<String> { s.shells.iter().map(|e| e.slug.clone()).collect() };
+		assert_eq!(slugs(&loaded), ["ash", "bsh", "csh"]);
+
+		std::fs::remove_file(&path).unwrap();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 1;
+		assert!(persist(&loaded, &sized));
+		assert_eq!(slugs(&reload_from_disk()), ["ash", "bsh", "csh"]);
+
+		// a move and a new find, the same as on a file that is there
+		std::fs::remove_file(&path).unwrap();
+		let mut moved = sized.clone();
+		moved.shells.rotate_right(1);
+		moved.shells.push(shell_entry("dsh", "/bin/dsh"));
+		assert!(persist(&sized, &moved));
+		assert_eq!(slugs(&reload_from_disk()), ["csh", "ash", "bsh", "dsh"]);
+
+		// a file this process never read keeps the list the window loaded
+		let unseen = dir.join("unseen.shcl");
+		set_config_override(unseen.clone());
+		let mut edited = moved.clone();
+		edited.font_size += 1.0;
+		assert!(persist(&moved, &edited));
+		let doc = shcl::Document::parse(&std::fs::read_to_string(&unseen).unwrap());
+		let kept: Vec<String> = read_shells(&doc).into_iter().map(|e| e.slug).collect();
+		assert_eq!(kept, ["csh", "ash", "bsh", "dsh"]);
+		assert_eq!(
+			doc.get_float("font.size").ok(),
+			Some(f64::from(edited.font_size))
+		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
