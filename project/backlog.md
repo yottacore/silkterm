@@ -860,41 +860,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: A check in the docs gate that a public item outside the tests has a `///` line above it.
 	- Note: Code review 20261003 item 6.
 
-- Code style: comments sit on the wrong item, are stale, or are banner dividers
-	- ID: 2026100314050007
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Incorrect behavior: About 30 comments describe a function that a later insert pushed further down, so they now sit above something else. Two point at names that no longer exist. One paragraph in `pane.rs` is a leftover copy. Eleven `// ----` and four `// ••••` banner rules divide `settings_ui.rs`, `pane.rs` and `minimap.rs`.
-	- Expected behavior: Each comment sits on what it explains, and the style guide allows no banners.
-	- Sweep:
-		- config.rs: the `settings()` note above `is_dark`, the `persist` note above `cleared_keys`, a stale `setting_lines` note stacked on its replacement.
-		- app.rs: notes for `rebuild_text`, `recover_gpu`, `render`, `about_to_wait` and `rotation_next` each sit one function early. One at 7690 has no code under it.
-		- settings_ui.rs: `dlg`, `tab_content_h`, `commit_baseline`, `texts_dip`'s `line_h` and `chrome_widths` notes, a stale `new(0.0, 0.0)` note, and a footer note that says left-aligned for a centered label.
-		- pane.rs: `fnv_row`, `pair_inside`, the scrim field note split by `readable`, the duplicate de-bold paragraph, and `BarHit::Thumb` naming an `f32` it does not have.
-		- text.rs: `mono_bold_weight`, `shaped_ink`, and `vmetrics` called a 3-tuple. coloremoji.rs: `color_faces`. term.rs: `wsl_cd`. sysfont.rs: `resolve_sans_family`, now `resolve_ui_family`.
-		- tabtitle.rs: the `elapsed` doc on `tip_value`. dialog.rs: the About layout note on `size_within_caps`.
-	- Origin: mostly inserts between a comment and its function, for example dfaf7fa (2026-09-21) in text.rs and 3506af9 (2026-09-08) in pane.rs. Banners from 5456e2a (2026-07-09) and 76cd488 (2026-08-02). No earlier review item. Confirmed.
-	- Test case: None for placement. Banner rules: `cicd/tests/docs/run.py` (Er2UgYD) now fails on any comment line in a tracked `.rs` that opens on a run of four or more of one rule character. It failed on the 21 rule lines before the fix and passes after.
-	- Note: Code review 20261003 item 7.
-	- Actual fix: Each listed comment moved onto what it explains, or was corrected where it was stale. Comment text is unchanged except for the stale parts.
-		- The `#[must_use]` that had drifted onto `same_f32` is back on `persist`.
-		- The stale `setting_lines` note, the duplicate de-bold paragraph in `pane.rs`, and the app.rs note with no code under it are gone.
-		- Stale parts fixed: `BarHit::Thumb` no longer claims an `f32`, `vmetrics` is a pair, `new(0.0, 0.0, ...)`, the footer label is centered, and sysfont names `resolve_ui_family`.
-		- The `// ••••` rules are gone and their titles kept. The `// ---- name ----` rules are now plain `// name` lines.
-	- Swept:
-		- Every site on the Sweep row above. The app.rs note with no code under it was the wallpaper decode note, whose function moved to wallpaper.rs long ago.
-		- A scan of every `.rs` for a comment block with nothing under it found one more split note, the shells grid section in settings_ui.rs, now joined back up. The rest are section titles, file headers and commented-out tests.
-		- The docs gate finds no banner rules left.
-	- Verified: The unit suite passes, 1114 tests. fmt is clean, clippy is clean for Linux and Windows, the Windows build passes, and the test ID check passes.
-	- Branch: comment-fixes
-	- Commit: 3b7d744
-	- Acceptance signoff: Self-closed: mechanical. Comments moved or corrected, and the banner gate failed before and passes after.
-	- Closed: 20261004-152001
-
 - Code style: single letters name parameters, fields and long-lived values
 	- ID: 2026100314050009
 	- Type: Bug
@@ -2242,6 +2207,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Code style: comments sit on the wrong item, are stale, or are banner dividers
+	- ID: 2026100314050007
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: About 30 comments describe a function that a later insert pushed further down, so they now sit above something else. Two point at names that no longer exist. One paragraph in `pane.rs` is a leftover copy. Eleven `// ----` and four `// ••••` banner rules divide `settings_ui.rs`, `pane.rs` and `minimap.rs`.
+	- Expected behavior: Each comment sits on what it explains, and the style guide allows no banners.
+	- Sweep:
+		- config.rs: the `settings()` note above `is_dark`, the `persist` note above `cleared_keys`, a stale `setting_lines` note stacked on its replacement.
+		- app.rs: notes for `rebuild_text`, `recover_gpu`, `render`, `about_to_wait` and `rotation_next` each sit one function early. One at 7690 has no code under it.
+		- settings_ui.rs: `dlg`, `tab_content_h`, `commit_baseline`, `texts_dip`'s `line_h` and `chrome_widths` notes, a stale `new(0.0, 0.0)` note, and a footer note that says left-aligned for a centered label.
+		- pane.rs: `fnv_row`, `pair_inside`, the scrim field note split by `readable`, the duplicate de-bold paragraph, and `BarHit::Thumb` naming an `f32` it does not have.
+		- text.rs: `mono_bold_weight`, `shaped_ink`, and `vmetrics` called a 3-tuple. coloremoji.rs: `color_faces`. term.rs: `wsl_cd`. sysfont.rs: `resolve_sans_family`, now `resolve_ui_family`.
+		- tabtitle.rs: the `elapsed` doc on `tip_value`. dialog.rs: the About layout note on `size_within_caps`.
+	- Origin: mostly inserts between a comment and its function, for example dfaf7fa (2026-09-21) in text.rs and 3506af9 (2026-09-08) in pane.rs. Banners from 5456e2a (2026-07-09) and 76cd488 (2026-08-02). No earlier review item. Confirmed.
+	- Test case: None for placement. Banner rules: `cicd/tests/docs/run.py` (Er2UgYD) now fails on any comment line in a tracked `.rs` that opens on a run of four or more of one rule character. It failed on the 21 rule lines before the fix and passes after.
+	- Note: Code review 20261003 item 7.
+	- Actual fix: Each listed comment moved onto what it explains, or was corrected where it was stale. Comment text is unchanged except for the stale parts.
+		- The `#[must_use]` that had drifted onto `same_f32` is back on `persist`.
+		- The stale `setting_lines` note, the duplicate de-bold paragraph in `pane.rs`, and the app.rs note with no code under it are gone.
+		- Stale parts fixed: `BarHit::Thumb` no longer claims an `f32`, `vmetrics` is a pair, `new(0.0, 0.0, ...)`, the footer label is centered, and sysfont names `resolve_ui_family`.
+		- The `// ••••` rules are gone and their titles kept. The `// ---- name ----` rules are now plain `// name` lines.
+	- Swept:
+		- Every site on the Sweep row above. The app.rs note with no code under it was the wallpaper decode note, whose function moved to wallpaper.rs long ago.
+		- A scan of every `.rs` for a comment block with nothing under it found one more split note, the shells grid section in settings_ui.rs, now joined back up. The rest are section titles, file headers and commented-out tests.
+		- The docs gate finds no banner rules left.
+	- Verified: The unit suite passes, 1114 tests. fmt is clean, clippy is clean for Linux and Windows, the Windows build passes, and the test ID check passes.
+	- Branch: comment-fixes
+	- Commit: 3b7d744
+	- Acceptance signoff: Self-closed: mechanical. Comments moved or corrected, and the banner gate failed before and passes after.
+	- Closed: 20261004-152001
 
 - The pipeline starts a process per item in two loops
 	- ID: 2026100314050014
