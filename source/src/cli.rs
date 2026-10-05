@@ -214,13 +214,13 @@ pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
 // Where a value flag's value comes from: `--opt=v`, `--opt v`, or `-o v`.
 struct Args {
 	items: Vec<String>,
-	i: usize,
+	pos: usize,
 }
 impl Args {
 	fn next_token(&mut self) -> Option<String> {
-		let token = self.items.get(self.i).cloned();
+		let token = self.items.get(self.pos).cloned();
 		if token.is_some() {
-			self.i += 1;
+			self.pos += 1;
 		}
 		token
 	}
@@ -239,7 +239,7 @@ impl Args {
 		if inline.is_some() {
 			return inline.filter(|s| !s.is_empty());
 		}
-		match self.items.get(self.i) {
+		match self.items.get(self.pos) {
 			Some(token) if !token.starts_with("--") => self.next_token(),
 			_ => None,
 		}
@@ -249,9 +249,9 @@ impl Args {
 		if let Some(v) = inline {
 			return parse_bool(&v).ok_or_else(|| format!("{flag}: not a bool: {v}"));
 		}
-		if let Some(token) = self.items.get(self.i) {
+		if let Some(token) = self.items.get(self.pos) {
 			if let Some(b) = parse_bool(token) {
-				self.i += 1;
+				self.pos += 1;
 				return Ok(b);
 			}
 		}
@@ -312,16 +312,16 @@ fn parse_size(v: &str) -> Result<Size, String> {
 }
 
 pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
-	let mut a = Args {
+	let mut tokens = Args {
 		items: args.into_iter().collect(),
-		i: 0,
+		pos: 0,
 	};
 	let mut cli = Cli::default();
 	// current scope: which tab / pane subsequent options attach to. None -> window.
 	let mut cur_tab: Option<usize> = None;
 	let mut cur_pane: usize = 0;
 
-	while let Some(token) = a.next_token() {
+	while let Some(token) = tokens.next_token() {
 		if token == "-h" {
 			cli.help = true;
 			continue;
@@ -379,7 +379,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			}
 			"tab" => {
 				ensure_first_tab(&mut cli);
-				let id = a.value("--tab", inline)?;
+				let id = tokens.value("--tab", inline)?;
 				let idx = find_tab(&cli, &id).ok_or_else(|| format!("--tab: no such tab: {id}"))?;
 				cur_tab = Some(idx);
 				cur_pane = 0;
@@ -400,7 +400,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			"pane" => {
 				ensure_first_tab(&mut cli);
 				let tab_idx = cur_tab.unwrap_or(0);
-				let id = a.value("--pane", inline)?;
+				let id = tokens.value("--pane", inline)?;
 				let pane_idx = find_pane(&cli.tabs[tab_idx], &id)
 					.ok_or_else(|| format!("--pane: no such pane: {id}"))?;
 				cur_pane = pane_idx;
@@ -416,7 +416,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 		match name {
 			"wallpaper" => {
 				// value = new image path; bare flag = clear (mirrors --wallpaper-file)
-				cli.wallpaper = Some(a.optional_value(inline));
+				cli.wallpaper = Some(tokens.optional_value(inline));
 				continue;
 			}
 			"reload-settings" => {
@@ -447,37 +447,44 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			match name {
 				"columns" => {
 					cli.win.columns = Some(grid_cells(
-						a.value(name, inline)?
+						tokens
+							.value(name, inline)?
 							.parse()
 							.map_err(|_| "bad --columns")?,
 					));
 				}
 				"rows" => {
 					cli.win.rows = Some(grid_cells(
-						a.value(name, inline)?.parse().map_err(|_| "bad --rows")?,
+						tokens
+							.value(name, inline)?
+							.parse()
+							.map_err(|_| "bad --rows")?,
 					));
 				}
 				"pixel-width" => {
 					cli.win.pixel_width = Some(
-						a.value(name, inline)?
+						tokens
+							.value(name, inline)?
 							.parse()
 							.map_err(|_| "bad --pixel-width")?,
 					);
 				}
 				"pixel-height" => {
 					cli.win.pixel_height = Some(
-						a.value(name, inline)?
+						tokens
+							.value(name, inline)?
 							.parse()
 							.map_err(|_| "bad --pixel-height")?,
 					);
 				}
 				"background-opacity" => {
-					cli.win.opacity = Some(parse_f32_in(name, &a.value(name, inline)?, OPACITY)?);
+					cli.win.opacity =
+						Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
 				}
-				"hide-windowframe" => cli.win.hide_frame = Some(a.bool_value(name, inline)?),
-				"hide-menu" => cli.win.hide_menu = Some(a.bool_value(name, inline)?),
-				"fullscreen" => cli.win.fullscreen = Some(a.bool_value(name, inline)?),
-				"config" => cli.config = Some(PathBuf::from(a.value(name, inline)?)),
+				"hide-windowframe" => cli.win.hide_frame = Some(tokens.bool_value(name, inline)?),
+				"hide-menu" => cli.win.hide_menu = Some(tokens.bool_value(name, inline)?),
+				"fullscreen" => cli.win.fullscreen = Some(tokens.bool_value(name, inline)?),
+				"config" => cli.config = Some(PathBuf::from(tokens.value(name, inline)?)),
 				"reset-config" => cli.reset_config = true,
 				_ => unreachable!("name in the matches! set above"),
 			}
@@ -498,12 +505,12 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 				));
 			}
 			match name {
-				"splits" | "splits-pane" => pane.splits = Some(a.value(name, inline)?),
-				"down" => set_dir(pane, Dir4::Down, a.bool_value(name, inline)?, name)?,
-				"up" => set_dir(pane, Dir4::Up, a.bool_value(name, inline)?, name)?,
-				"left" => set_dir(pane, Dir4::Left, a.bool_value(name, inline)?, name)?,
-				"right" => set_dir(pane, Dir4::Right, a.bool_value(name, inline)?, name)?,
-				"size" => pane.size = Some(parse_size(&a.value(name, inline)?)?),
+				"splits" | "splits-pane" => pane.splits = Some(tokens.value(name, inline)?),
+				"down" => set_dir(pane, Dir4::Down, tokens.bool_value(name, inline)?, name)?,
+				"up" => set_dir(pane, Dir4::Up, tokens.bool_value(name, inline)?, name)?,
+				"left" => set_dir(pane, Dir4::Left, tokens.bool_value(name, inline)?, name)?,
+				"right" => set_dir(pane, Dir4::Right, tokens.bool_value(name, inline)?, name)?,
+				"size" => pane.size = Some(parse_size(&tokens.value(name, inline)?)?),
 				_ => unreachable!("name in the matches! set above"),
 			}
 			continue;
@@ -511,7 +518,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 
 		// title (window / tab / pane by scope)
 		if name == "title" {
-			let title = a.value(name, inline)?;
+			let title = tokens.value(name, inline)?;
 			match cur_tab {
 				None => cli.win.title = Some(title),
 				Some(tab_idx) => {
@@ -537,16 +544,16 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			}
 		};
 		match name {
-			"shell" => style.shell = Some(shell_split(&a.value(name, inline)?)?),
+			"shell" => style.shell = Some(shell_split(&tokens.value(name, inline)?)?),
 			// Kept unexpanded: `~` and the env-var spellings are resolved at spawn
 			// time by config::spawn_dir, the same way the config setting is.
-			"directory" | "dir" => style.directory = Some(a.value(name, inline)?),
-			"keep-open" => style.keep_open = Some(a.bool_value(name, inline)?),
+			"directory" | "dir" => style.directory = Some(tokens.value(name, inline)?),
+			"keep-open" => style.keep_open = Some(tokens.bool_value(name, inline)?),
 			// A file opened from Explorer. Everything after it is the file's own
 			// arguments, so it comes last, and it starts in the file's folder.
 			"open" => {
-				let file = a.value(name, inline)?;
-				let args: Vec<String> = a.items.drain(a.i..).collect();
+				let file = tokens.value(name, inline)?;
+				let args: Vec<String> = tokens.items.drain(tokens.pos..).collect();
 				style.shell = Some(crate::fileassoc::open_argv(
 					&file,
 					&args,
@@ -560,35 +567,39 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 						.map(|dir| dir.display().to_string());
 				}
 			}
-			"font-name" => style.font_name = Some(a.value(name, inline)?),
+			"font-name" => style.font_name = Some(tokens.value(name, inline)?),
 			"font-size" => {
 				style.font_size = Some(parse_f32_in(
 					name,
-					&a.value(name, inline)?,
+					&tokens.value(name, inline)?,
 					config::limits::FONT_SIZE,
 				)?);
 			}
-			"background-color" => style.bg_color = Some(parse_hex(name, &a.value(name, inline)?)?),
-			"foreground-color" => style.fg_color = Some(parse_hex(name, &a.value(name, inline)?)?),
+			"background-color" => {
+				style.bg_color = Some(parse_hex(name, &tokens.value(name, inline)?)?);
+			}
+			"foreground-color" => {
+				style.fg_color = Some(parse_hex(name, &tokens.value(name, inline)?)?);
+			}
 			// --background-image* are kept as aliases for the --wallpaper* names.
 			"wallpaper-file" | "background-image" => {
 				// value present -> that path; no value -> explicitly none. A bare
 				// flag followed by another option must not eat that option as a path.
-				style.wallpaper_img = Some(a.optional_value(inline));
+				style.wallpaper_img = Some(tokens.optional_value(inline));
 			}
 			"wallpaper-stretch" | "background-image-stretch" => {
-				if a.bool_value(name, inline)? {
+				if tokens.bool_value(name, inline)? {
 					style.wallpaper_default_fit = Some(Fit::Stretch);
 				}
 			}
 			"wallpaper-zoom" | "background-image-zoom" => {
-				if a.bool_value(name, inline)? {
+				if tokens.bool_value(name, inline)? {
 					style.wallpaper_default_fit = Some(Fit::Zoom);
 				}
 			}
 			"wallpaper-opacity" | "background-image-opacity" => {
 				style.wallpaper_opacity =
-					Some(parse_f32_in(name, &a.value(name, inline)?, OPACITY)?);
+					Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
 			}
 			_ => return Err(format!("unknown option: --{name}")),
 		}

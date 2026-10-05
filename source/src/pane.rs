@@ -1108,8 +1108,8 @@ enum Node {
 		// true once the user has dragged this divider: auto even-distribution stops
 		// for its same-direction run (successive splits there stay 50/50).
 		manual: bool,
-		a: Box<Node>,
-		b: Box<Node>,
+		first: Box<Node>, // left or top
+		second: Box<Node>,
 	},
 }
 
@@ -2143,8 +2143,8 @@ impl Pane {
 			}
 			let row = &grid[Line(grid_line)];
 			let y = y_of(screen_row);
-			for c in 0..cols {
-				let cell = &row[Column(c)];
+			for column in 0..cols {
+				let cell = &row[Column(column)];
 				let flags = cell.flags;
 				if flags.contains(Flags::WIDE_CHAR_SPACER) {
 					continue;
@@ -2164,8 +2164,8 @@ impl Pane {
 						fg[2] / 2 + fg[2] / 4,
 					];
 				}
-				let selected =
-					sel_range.is_some_and(|r| r.contains(Point::new(Line(grid_line), Column(c))));
+				let selected = sel_range
+					.is_some_and(|r| r.contains(Point::new(Line(grid_line), Column(column))));
 				// What is actually painted behind the glyph - the selection quad
 				// where there is one. The bell flash rides on top of the result, so
 				// a flash can brighten but never undoes the lift.
@@ -2196,7 +2196,7 @@ impl Pane {
 					}
 					if rect_bot > rect_top {
 						bg.push(RectInstance {
-							pos: [content_x + c as f32 * cell_w, rect_top],
+							pos: [content_x + column as f32 * cell_w, rect_top],
 							size: [cell_w, rect_bot - rect_top],
 							color: config::srgb_f32(col),
 							..Default::default()
@@ -2226,7 +2226,7 @@ impl Pane {
 					for _ in 0..w {
 						run.push(' ');
 					}
-					glyph_specs.push((cell.c, fg, bold, italic, c, screen_row, w));
+					glyph_specs.push((cell.c, fg, bold, italic, column, screen_row, w));
 				} else {
 					if (fg, bold, italic) != (run_color, run_bold, run_italic) {
 						flush_run!();
@@ -3789,12 +3789,12 @@ fn swap_leaves(node: &mut Node, a: PaneId, b: PaneId) {
 			}
 		}
 		Node::Split {
-			a: child_a,
-			b: child_b,
+			first: first_child,
+			second: second_child,
 			..
 		} => {
-			swap_leaves(child_a, a, b);
-			swap_leaves(child_b, a, b);
+			swap_leaves(first_child, a, b);
+			swap_leaves(second_child, a, b);
 		}
 	}
 }
@@ -4228,20 +4228,20 @@ fn insert_split_at(
 	match node {
 		Node::Leaf(i) if *i == id => {
 			let old = *i;
-			let (a, b) = if before { (new_id, old) } else { (old, new_id) };
+			let (first, second) = if before { (new_id, old) } else { (old, new_id) };
 			*node = Node::Split {
 				dir,
 				ratio: ratio_a,
 				manual: false,
-				a: Box::new(Node::Leaf(a)),
-				b: Box::new(Node::Leaf(b)),
+				first: Box::new(Node::Leaf(first)),
+				second: Box::new(Node::Leaf(second)),
 			};
 			true
 		}
 		Node::Leaf(_) => false,
-		Node::Split { a, b, .. } => {
-			insert_split_at(a, id, dir, new_id, before, ratio_a)
-				|| insert_split_at(b, id, dir, new_id, before, ratio_a)
+		Node::Split { first, second, .. } => {
+			insert_split_at(first, id, dir, new_id, before, ratio_a)
+				|| insert_split_at(second, id, dir, new_id, before, ratio_a)
 		}
 	}
 }
@@ -4259,8 +4259,8 @@ fn place_split(
 	new_ratio: Option<f32>,
 ) -> bool {
 	let share = new_ratio.unwrap_or(0.5);
-	// child-a's ratio: if the new pane is 'a' (before) it takes the share, else
-	// 'a' is the old pane and keeps the remainder
+	// the first child's ratio: if the new pane is first (before) it takes the share, else
+	// the first is the old pane and keeps the remainder
 	let ratio_a = if before { share } else { 1.0 - share };
 	if !insert_split_at(root, id, dir, new_id, before, ratio_a.clamp(0.05, 0.95)) {
 		return false;
@@ -4275,16 +4275,16 @@ fn place_split(
 	true
 }
 
-// Path (false = a-child, true = b-child) from `node` down to leaf `id`, if present.
+// Path (false = first child, true = second) from `node` down to leaf `id`, if present.
 fn path_to(node: &Node, id: PaneId) -> Option<Vec<bool>> {
 	match node {
 		Node::Leaf(i) => (*i == id).then(Vec::new),
-		Node::Split { a, b, .. } => {
-			if let Some(mut path) = path_to(a, id) {
+		Node::Split { first, second, .. } => {
+			if let Some(mut path) = path_to(first, id) {
 				path.insert(0, false);
 				return Some(path);
 			}
-			if let Some(mut path) = path_to(b, id) {
+			if let Some(mut path) = path_to(second, id) {
 				path.insert(0, true);
 				return Some(path);
 			}
@@ -4295,11 +4295,11 @@ fn path_to(node: &Node, id: PaneId) -> Option<Vec<bool>> {
 
 // Follow `path` from `node` (defensively stops at a leaf).
 fn node_at_mut<'a>(mut node: &'a mut Node, path: &[bool]) -> &'a mut Node {
-	for &take_b in path {
-		let Node::Split { a, b, .. } = node else {
+	for &take_second in path {
+		let Node::Split { first, second, .. } = node else {
 			break;
 		};
-		node = if take_b { b } else { a };
+		node = if take_second { second } else { first };
 	}
 	node
 }
@@ -4307,11 +4307,11 @@ fn node_at_mut<'a>(mut node: &'a mut Node, path: &[bool]) -> &'a mut Node {
 // Is the node at `path` a Split oriented along `dir`?
 fn is_dir_split(root: &Node, path: &[bool], dir: Dir) -> bool {
 	let mut node = root;
-	for &take_b in path {
-		let Node::Split { a, b, .. } = node else {
+	for &take_second in path {
+		let Node::Split { first, second, .. } = node else {
 			return false;
 		};
-		node = if take_b { b } else { a };
+		node = if take_second { second } else { first };
 	}
 	matches!(node, Node::Split { dir: node_dir, .. } if *node_dir == dir)
 }
@@ -4323,10 +4323,10 @@ fn group_leaf_count(node: &Node, dir: Dir) -> usize {
 	match node {
 		Node::Split {
 			dir: node_dir,
-			a,
-			b,
+			first,
+			second,
 			..
-		} if *node_dir == dir => group_leaf_count(a, dir) + group_leaf_count(b, dir),
+		} if *node_dir == dir => group_leaf_count(first, dir) + group_leaf_count(second, dir),
 		_ => 1,
 	}
 }
@@ -4337,31 +4337,31 @@ fn group_has_manual(node: &Node, dir: Dir) -> bool {
 		Node::Split {
 			dir: node_dir,
 			manual,
-			a,
-			b,
+			first,
+			second,
 			..
-		} if *node_dir == dir => *manual || group_has_manual(a, dir) || group_has_manual(b, dir),
+		} if *node_dir == dir => *manual || group_has_manual(first, dir) || group_has_manual(second, dir),
 		_ => false,
 	}
 }
 
 // Set every ratio in the same-direction run so all its member leaves are equal:
-// a split gives its a-child a share proportional to the leaves under it.
+// a split gives its first child a share proportional to the leaves under it.
 fn equalize(node: &mut Node, dir: Dir) {
 	if let Node::Split {
 		dir: node_dir,
 		ratio,
-		a,
-		b,
+		first,
+		second,
 		..
 	} = node
 	{
 		if *node_dir == dir {
-			let leaves_a = group_leaf_count(a, dir);
-			let leaves_b = group_leaf_count(b, dir);
+			let leaves_a = group_leaf_count(first, dir);
+			let leaves_b = group_leaf_count(second, dir);
 			*ratio = leaves_a as f32 / (leaves_a + leaves_b) as f32;
-			equalize(a, dir);
-			equalize(b, dir);
+			equalize(first, dir);
+			equalize(second, dir);
 		}
 	}
 }
@@ -4396,18 +4396,18 @@ fn prune(node: Node, id: PaneId) -> Option<Node> {
 			dir,
 			ratio,
 			manual,
-			a,
-			b,
+			first,
+			second,
 		} => {
-			let pruned_a = prune(*a, id);
-			let pruned_b = prune(*b, id);
+			let pruned_a = prune(*first, id);
+			let pruned_b = prune(*second, id);
 			match (pruned_a, pruned_b) {
-				(Some(a), Some(b)) => Some(Node::Split {
+				(Some(first), Some(second)) => Some(Node::Split {
 					dir,
 					ratio,
 					manual,
-					a: Box::new(a),
-					b: Box::new(b),
+					first: Box::new(first),
+					second: Box::new(second),
 				}),
 				(Some(survivor), None) | (None, Some(survivor)) => Some(survivor),
 				(None, None) => None,
@@ -4419,7 +4419,7 @@ fn prune(node: Node, id: PaneId) -> Option<Node> {
 fn first_leaf(node: &Node) -> PaneId {
 	match node {
 		Node::Leaf(id) => *id,
-		Node::Split { a, .. } => first_leaf(a),
+		Node::Split { first, .. } => first_leaf(first),
 	}
 }
 
@@ -4427,11 +4427,15 @@ fn layout(node: &Node, area: Rect, scale: f32, out: &mut Vec<(PaneId, Rect)>) {
 	match node {
 		Node::Leaf(id) => out.push((*id, area)),
 		Node::Split {
-			dir, ratio, a, b, ..
+			dir,
+			ratio,
+			first,
+			second,
+			..
 		} => {
 			let (a_area, b_area) = child_areas(area, *dir, *ratio, scale);
-			layout(a, a_area, scale, out);
-			layout(b, b_area, scale, out);
+			layout(first, a_area, scale, out);
+			layout(second, b_area, scale, out);
 		}
 	}
 }
@@ -4479,7 +4483,7 @@ fn child_areas(area: Rect, dir: Dir, ratio: f32, scale: f32) -> (Rect, Rect) {
 }
 
 // Find the split whose divider is under (x, y), within a grab tolerance.
-// Returns a path of child choices (false = a, true = b) from the root to that
+// Returns a path of child choices (false = first, true = second) from the root to that
 // split, plus its orientation (for the resize cursor).
 fn divider_at(
 	node: &Node,
@@ -4490,7 +4494,11 @@ fn divider_at(
 	path: &mut Vec<bool>,
 ) -> Option<Dir> {
 	let Node::Split {
-		dir, ratio, a, b, ..
+		dir,
+		ratio,
+		first,
+		second,
+		..
 	} = node
 	else {
 		return None;
@@ -4515,14 +4523,14 @@ fn divider_at(
 	}
 	if a_area.contains(x, y) {
 		path.push(false);
-		if let Some(found_dir) = divider_at(a, a_area, x, y, scale, path) {
+		if let Some(found_dir) = divider_at(first, a_area, x, y, scale, path) {
 			return Some(found_dir);
 		}
 		path.pop();
 	}
 	if b_area.contains(x, y) {
 		path.push(true);
-		if let Some(found_dir) = divider_at(b, b_area, x, y, scale, path) {
+		if let Some(found_dir) = divider_at(second, b_area, x, y, scale, path) {
 			return Some(found_dir);
 		}
 		path.pop();
@@ -4536,18 +4544,18 @@ fn set_ratio(node: &mut Node, area: Rect, path: &[bool], x: f32, y: f32, scale: 
 		dir,
 		ratio,
 		manual,
-		a,
-		b,
+		first,
+		second,
 	} = node
 	else {
 		return;
 	};
-	if let [first, rest @ ..] = path {
+	if let [take_second, rest @ ..] = path {
 		let (a_area, b_area) = child_areas(area, *dir, *ratio, scale);
-		if *first {
-			set_ratio(b, b_area, rest, x, y, scale);
+		if *take_second {
+			set_ratio(second, b_area, rest, x, y, scale);
 		} else {
-			set_ratio(a, a_area, rest, x, y, scale);
+			set_ratio(first, a_area, rest, x, y, scale);
 		}
 		return;
 	}
@@ -5288,13 +5296,13 @@ mod tests {
 	fn leaf(id: u64) -> Node {
 		Node::Leaf(id)
 	}
-	fn split(dir: Dir, ratio: f32, manual: bool, a: Node, b: Node) -> Node {
+	fn split(dir: Dir, ratio: f32, manual: bool, first: Node, second: Node) -> Node {
 		Node::Split {
 			dir,
 			ratio,
 			manual,
-			a: Box::new(a),
-			b: Box::new(b),
+			first: Box::new(first),
+			second: Box::new(second),
 		}
 	}
 	// A focus move goes to the pane beside the focused one, across the divider
@@ -6125,11 +6133,11 @@ mod tests {
 			split(Dir::Horizontal, 0.4, false, leaf(2), leaf(3)),
 		);
 		equalize_dir_run(&mut root, 1, Dir::Vertical);
-		let Node::Split { ratio, b, .. } = &root else {
+		let Node::Split { ratio, second, .. } = &root else {
 			panic!()
 		};
 		assert!((ratio - 0.5).abs() < 0.01, "two units -> half each");
-		let Node::Split { ratio: hr, .. } = b.as_ref() else {
+		let Node::Split { ratio: hr, .. } = second.as_ref() else {
 			panic!()
 		};
 		assert_eq!(*hr, 0.4, "nested other-direction split is untouched");
@@ -7956,10 +7964,10 @@ mod tests {
 		);
 		set_ratio(&mut root, area, &[true], usable * 0.75, 150.0, 1.0);
 		assert_eq!(ratio(&root), (0.5, false));
-		let Node::Split { b, .. } = &root else {
+		let Node::Split { second, .. } = &root else {
 			unreachable!()
 		};
-		assert_eq!(ratio(b), (0.75, true));
+		assert_eq!(ratio(second), (0.75, true));
 	}
 
 	// A drag-and-drop swap trades the two panes' places and keeps every split's
@@ -7971,14 +7979,14 @@ mod tests {
 			if let Node::Split {
 				ratio,
 				manual,
-				a,
-				b,
+				first,
+				second,
 				..
 			} = node
 			{
 				out.push((*ratio, *manual));
-				splits(a, out);
-				splits(b, out);
+				splits(first, out);
+				splits(second, out);
 			}
 		}
 		let order = |node: &Node| {

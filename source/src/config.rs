@@ -339,15 +339,15 @@ pub struct KeptWindow {
 // What to open at, or to take on arriving at another monitor, while
 // remember_size is on: the monitor's own when it has one, else the last the
 // window was given anywhere.
-pub fn remembered_window(s: &Settings, monitor: Option<&str>) -> KeptWindow {
+pub fn remembered_window(settings: &Settings, monitor: Option<&str>) -> KeptWindow {
 	let last = KeptWindow {
-		columns: s.remembered_columns,
-		rows: s.remembered_rows,
-		font_zoom: s.remembered_font_zoom,
+		columns: settings.remembered_columns,
+		rows: settings.remembered_rows,
+		font_zoom: settings.remembered_font_zoom,
 	};
 	monitor
-		.filter(|_| s.remember_per_monitor)
-		.and_then(|key| s.monitor_sizes.iter().find(|m| m.key == key))
+		.filter(|_| settings.remember_per_monitor)
+		.and_then(|key| settings.monitor_sizes.iter().find(|m| m.key == key))
 		.map_or(last, |m| KeptWindow {
 			columns: m.columns,
 			rows: m.rows,
@@ -359,33 +359,34 @@ pub fn remembered_window(s: &Settings, monitor: Option<&str>) -> KeptWindow {
 // anywhere, and the monitor's own when they are kept per monitor. A monitor
 // seen for the first time starts from what it would have opened at.
 pub fn remember_window(
-	s: &mut Settings,
+	settings: &mut Settings,
 	monitor: Option<&str>,
 	grid: Option<(usize, usize)>,
 	font_zoom: Option<i32>,
 ) {
 	if let Some((columns, rows)) = grid {
-		s.remembered_columns = columns;
-		s.remembered_rows = rows;
+		settings.remembered_columns = columns;
+		settings.remembered_rows = rows;
 	}
 	if let Some(zoom) = font_zoom {
-		s.remembered_font_zoom = zoom;
+		settings.remembered_font_zoom = zoom;
 	}
-	let Some(key) = monitor.filter(|_| s.remember_size && s.remember_per_monitor) else {
+	let Some(key) = monitor.filter(|_| settings.remember_size && settings.remember_per_monitor)
+	else {
 		return;
 	};
 	if grid.is_none() && font_zoom.is_none() {
 		return;
 	}
-	if !s.monitor_sizes.iter().any(|m| m.key == key) {
-		s.monitor_sizes.push(MonitorSize {
+	if !settings.monitor_sizes.iter().any(|m| m.key == key) {
+		settings.monitor_sizes.push(MonitorSize {
 			key: key.to_string(),
-			columns: s.remembered_columns,
-			rows: s.remembered_rows,
-			font_zoom: s.remembered_font_zoom,
+			columns: settings.remembered_columns,
+			rows: settings.remembered_rows,
+			font_zoom: settings.remembered_font_zoom,
 		});
 	}
-	let Some(entry) = s.monitor_sizes.iter_mut().find(|m| m.key == key) else {
+	let Some(entry) = settings.monitor_sizes.iter_mut().find(|m| m.key == key) else {
 		return;
 	};
 	if let Some((columns, rows)) = grid {
@@ -412,25 +413,28 @@ pub fn refresh_window_memory() {
 	update(live);
 }
 
-fn window_memory_from(text: &str, path: &std::path::Path, s: &mut Settings) {
-	let r = Reader {
+fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Settings) {
+	let reader = Reader {
 		doc: shcl::Document::parse(text),
 		path,
 		said: std::cell::RefCell::new(Vec::new()),
 	};
 	let d = Settings::default();
-	s.remembered_columns = numi(
-		r.u("window.remembered_columns"),
+	settings.remembered_columns = numi(
+		reader.read_usize("window.remembered_columns"),
 		d.remembered_columns,
 		limits::GRID,
 	);
-	s.remembered_rows = numi(
-		r.u("window.remembered_rows"),
+	settings.remembered_rows = numi(
+		reader.read_usize("window.remembered_rows"),
 		d.remembered_rows,
 		limits::GRID,
 	);
-	s.remembered_font_zoom = zoom(r.i("window.remembered_font_zoom"), d.remembered_font_zoom);
-	s.monitor_sizes = read_monitor_sizes(&r);
+	settings.remembered_font_zoom = zoom(
+		reader.read_i64("window.remembered_font_zoom"),
+		d.remembered_font_zoom,
+	);
+	settings.monitor_sizes = read_monitor_sizes(&reader);
 }
 
 // Resolved, validated settings used throughout the app. PartialEq is for the
@@ -1234,13 +1238,13 @@ pub fn keep_session(live: &Settings, reloaded: &mut Settings, wallpaper_locked: 
 // file with the wallpaper switched off does not swallow it. Both go through
 // `update` afterwards, so a performance profile that turns the wallpaper off
 // still wins for either one.
-pub fn name_wallpaper(s: &mut Settings, image: Option<PathBuf>) {
-	s.wallpaper_raw = image
+pub fn name_wallpaper(settings: &mut Settings, image: Option<PathBuf>) {
+	settings.wallpaper_raw = image
 		.as_ref()
 		.map(|path| path.to_string_lossy().into_owned())
 		.unwrap_or_default();
-	s.wallpaper_enabled |= image.is_some();
-	s.wallpaper = image;
+	settings.wallpaper_enabled |= image.is_some();
+	settings.wallpaper = image;
 }
 
 // A wallpaper given on the command line lasts the session (`wp_locked` in
@@ -1261,9 +1265,9 @@ pub fn keep_wallpaper_on_apply(
 	}
 }
 
-fn take_wallpaper(live: &Settings, s: &mut Settings) {
-	s.wallpaper_raw.clone_from(&live.wallpaper_raw);
-	s.wallpaper.clone_from(&live.wallpaper);
+fn take_wallpaper(live: &Settings, settings: &mut Settings) {
+	settings.wallpaper_raw.clone_from(&live.wallpaper_raw);
+	settings.wallpaper.clone_from(&live.wallpaper);
 }
 
 // The same for an Apply from the Settings dialog, whose copy is as old as the
@@ -2049,9 +2053,9 @@ fn unwritable(doc: &shcl::Document, path: &str, applied: bool) {
 // value to write - so without naming them here the old line stays in the file
 // and the setting comes back next launch. One long today; anything optional
 // added to the dialog belongs on it.
-fn cleared_keys(orig: &Settings, s: &Settings) -> Vec<&'static str> {
+fn cleared_keys(orig: &Settings, settings: &Settings) -> Vec<&'static str> {
 	let mut out = Vec::new();
-	if s.font_family.is_none() && orig.font_family.is_some() {
+	if settings.font_family.is_none() && orig.font_family.is_some() {
 		out.push("font.family");
 	}
 	out
@@ -2072,7 +2076,7 @@ fn same_f32(a: f32, b: f32) -> bool {
 // caller can hold off - e.g. the Settings dialog stays open instead of
 // clobbering an in-flight edit.
 #[must_use]
-pub fn persist(orig: &Settings, s: &Settings) -> bool {
+pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	let Some(path) = config_path() else {
 		return true;
 	};
@@ -2095,350 +2099,383 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	};
 	// Both sides diff as the user's own values. A live copy carries a profile's
 	// values over them, and those must never reach the file.
-	let mut own = (orig.clone(), s.clone());
+	let mut own = (orig.clone(), edited.clone());
 	crate::profile::unapply(&mut own.0);
 	crate::profile::unapply(&mut own.1);
 	crate::autotheme::unapply(&mut own.0);
 	crate::autotheme::unapply(&mut own.1);
-	let (orig, s) = (&own.0, &own.1);
+	let (orig, edited) = (&own.0, &own.1);
 	// round f32 -> a clean decimal so persisted floats aren't 0.2000000029...
-	let r = |v: f32| (v as f64 * 1000.0).round() / 1000.0;
+	let rounded = |v: f32| (v as f64 * 1000.0).round() / 1000.0;
 
-	if s.theme != orig.theme {
-		doc.put_string("theme", s.theme.as_str());
+	if edited.theme != orig.theme {
+		doc.put_string("theme", edited.theme.as_str());
 	}
-	if s.theme_mode != orig.theme_mode {
-		doc.put_string("theme_mode", s.theme_mode.as_str());
+	if edited.theme_mode != orig.theme_mode {
+		doc.put_string("theme_mode", edited.theme_mode.as_str());
 	}
-	if s.performance_automatic != orig.performance_automatic {
-		doc.put_bool("performance.automatic", s.performance_automatic);
+	if edited.performance_automatic != orig.performance_automatic {
+		doc.put_bool("performance.automatic", edited.performance_automatic);
 	}
-	if s.performance_profile != orig.performance_profile {
-		doc.put_string("performance.profile", s.performance_profile.as_str());
+	if edited.performance_profile != orig.performance_profile {
+		doc.put_string("performance.profile", edited.performance_profile.as_str());
 	}
-	if s.performance_check_hardware != orig.performance_check_hardware {
-		doc.put_bool("performance.check_hardware", s.performance_check_hardware);
+	if edited.performance_check_hardware != orig.performance_check_hardware {
+		doc.put_bool(
+			"performance.check_hardware",
+			edited.performance_check_hardware,
+		);
 	}
-	if s.performance_check_next_run != orig.performance_check_next_run {
-		doc.put_bool("performance.check_next_run", s.performance_check_next_run);
+	if edited.performance_check_next_run != orig.performance_check_next_run {
+		doc.put_bool(
+			"performance.check_next_run",
+			edited.performance_check_next_run,
+		);
 	}
-	if s.rated_hardware != orig.rated_hardware {
-		doc.put_string("performance.rated_hardware", s.rated_hardware.as_str());
+	if edited.rated_hardware != orig.rated_hardware {
+		doc.put_string("performance.rated_hardware", edited.rated_hardware.as_str());
 	}
-	write_user_themes(&mut doc, &orig.user_themes, &s.user_themes);
-	write_shells(&mut doc, &orig.shells, &s.shells);
+	write_user_themes(&mut doc, &orig.user_themes, &edited.user_themes);
+	write_shells(&mut doc, &orig.shells, &edited.shells);
 
-	if s.use_system_font != orig.use_system_font {
-		doc.put_bool("font.use_system_family", s.use_system_font);
+	if edited.use_system_font != orig.use_system_font {
+		doc.put_bool("font.use_system_family", edited.use_system_font);
 	}
-	if s.use_system_font_size != orig.use_system_font_size {
-		doc.put_bool("font.use_system_size", s.use_system_font_size);
+	if edited.use_system_font_size != orig.use_system_font_size {
+		doc.put_bool("font.use_system_size", edited.use_system_font_size);
 	}
-	if s.font_family != orig.font_family {
-		if let Some(f) = &s.font_family {
+	if edited.font_family != orig.font_family {
+		if let Some(f) = &edited.font_family {
 			doc.put_string("font.family", f);
 		}
 	}
-	if !same_f32(s.font_size, orig.font_size) {
-		doc.put_float("font.size", r(s.font_size));
+	if !same_f32(edited.font_size, orig.font_size) {
+		doc.put_float("font.size", rounded(edited.font_size));
 	}
-	if !same_f32(s.line_height_scale, orig.line_height_scale) {
-		doc.put_float("font.line_height_scale", r(s.line_height_scale));
+	if !same_f32(edited.line_height_scale, orig.line_height_scale) {
+		doc.put_float("font.line_height_scale", rounded(edited.line_height_scale));
 	}
-	if s.scrollback != orig.scrollback {
-		doc.put_int("scroll.scrollback", s.scrollback as i64);
+	if edited.scrollback != orig.scrollback {
+		doc.put_int("scroll.scrollback", edited.scrollback as i64);
 	}
-	if s.scroll_smooth != orig.scroll_smooth {
-		doc.put_bool("scroll.smooth", s.scroll_smooth);
+	if edited.scroll_smooth != orig.scroll_smooth {
+		doc.put_bool("scroll.smooth", edited.scroll_smooth);
 	}
-	if !same_f32(s.scroll_ease_in_ms, orig.scroll_ease_in_ms) {
-		doc.put_float("scroll.ease_in_ms", r(s.scroll_ease_in_ms));
+	if !same_f32(edited.scroll_ease_in_ms, orig.scroll_ease_in_ms) {
+		doc.put_float("scroll.ease_in_ms", rounded(edited.scroll_ease_in_ms));
 	}
-	if !same_f32(s.scroll_ramp_up_ms, orig.scroll_ramp_up_ms) {
-		doc.put_float("scroll.ramp_up_ms", r(s.scroll_ramp_up_ms));
+	if !same_f32(edited.scroll_ramp_up_ms, orig.scroll_ramp_up_ms) {
+		doc.put_float("scroll.ramp_up_ms", rounded(edited.scroll_ramp_up_ms));
 	}
 	if !same_f32(
-		s.scroll_single_screen_tau_ms,
+		edited.scroll_single_screen_tau_ms,
 		orig.scroll_single_screen_tau_ms,
 	) {
 		doc.put_float(
 			"scroll.single_screen_tau_ms",
-			r(s.scroll_single_screen_tau_ms),
+			rounded(edited.scroll_single_screen_tau_ms),
 		);
 	}
-	if !same_f32(s.scroll_ramp_down_ms, orig.scroll_ramp_down_ms) {
-		doc.put_float("scroll.ramp_down_ms", r(s.scroll_ramp_down_ms));
+	if !same_f32(edited.scroll_ramp_down_ms, orig.scroll_ramp_down_ms) {
+		doc.put_float("scroll.ramp_down_ms", rounded(edited.scroll_ramp_down_ms));
 	}
-	if !same_f32(s.scroll_ease_out_ms, orig.scroll_ease_out_ms) {
-		doc.put_float("scroll.ease_out_ms", r(s.scroll_ease_out_ms));
+	if !same_f32(edited.scroll_ease_out_ms, orig.scroll_ease_out_ms) {
+		doc.put_float("scroll.ease_out_ms", rounded(edited.scroll_ease_out_ms));
 	}
-	if !same_f32(s.wheel_lines, orig.wheel_lines) {
-		doc.put_float("scroll.wheel_lines", r(s.wheel_lines));
+	if !same_f32(edited.wheel_lines, orig.wheel_lines) {
+		doc.put_float("scroll.wheel_lines", rounded(edited.wheel_lines));
 	}
-	if !same_f32(s.alt_scroll_lines, orig.alt_scroll_lines) {
-		doc.put_float("scroll.alt_scroll_lines", r(s.alt_scroll_lines));
+	if !same_f32(edited.alt_scroll_lines, orig.alt_scroll_lines) {
+		doc.put_float("scroll.alt_scroll_lines", rounded(edited.alt_scroll_lines));
 	}
-	if !same_f32(s.output_ease_lines, orig.output_ease_lines) {
-		doc.put_float("scroll.output_ease_lines", r(s.output_ease_lines));
+	if !same_f32(edited.output_ease_lines, orig.output_ease_lines) {
+		doc.put_float(
+			"scroll.output_ease_lines",
+			rounded(edited.output_ease_lines),
+		);
 	}
-	if s.scrollbar != orig.scrollbar {
-		doc.put_bool("scroll.scrollbar.enabled", s.scrollbar);
+	if edited.scrollbar != orig.scrollbar {
+		doc.put_bool("scroll.scrollbar.enabled", edited.scrollbar);
 	}
-	if !same_f32(s.scrollbar_thickness, orig.scrollbar_thickness) {
-		doc.put_float("scroll.scrollbar.thickness", r(s.scrollbar_thickness));
+	if !same_f32(edited.scrollbar_thickness, orig.scrollbar_thickness) {
+		doc.put_float(
+			"scroll.scrollbar.thickness",
+			rounded(edited.scrollbar_thickness),
+		);
 	}
-	if s.scrollbar_auto_hide != orig.scrollbar_auto_hide {
-		doc.put_bool("scroll.scrollbar.auto_hide", s.scrollbar_auto_hide);
+	if edited.scrollbar_auto_hide != orig.scrollbar_auto_hide {
+		doc.put_bool("scroll.scrollbar.auto_hide", edited.scrollbar_auto_hide);
 	}
-	if s.minimap != orig.minimap {
-		doc.put_bool("scroll.minimap.enabled", s.minimap);
+	if edited.minimap != orig.minimap {
+		doc.put_bool("scroll.minimap.enabled", edited.minimap);
 	}
-	if !same_f32(s.minimap_width, orig.minimap_width) {
-		doc.put_float("scroll.minimap.width", r(s.minimap_width));
+	if !same_f32(edited.minimap_width, orig.minimap_width) {
+		doc.put_float("scroll.minimap.width", rounded(edited.minimap_width));
 	}
-	if s.minimap_tui_whitelist != orig.minimap_tui_whitelist {
+	if edited.minimap_tui_whitelist != orig.minimap_tui_whitelist {
 		doc.put_string(
 			"scroll.minimap.tui_process_whitelist",
-			&s.minimap_tui_whitelist,
+			&edited.minimap_tui_whitelist,
 		);
 	}
-	if !same_f32(s.margin, orig.margin) {
-		doc.put_float("window.margin", r(s.margin));
+	if !same_f32(edited.margin, orig.margin) {
+		doc.put_float("window.margin", rounded(edited.margin));
 	}
-	if !same_f32(s.opacity, orig.opacity) {
-		doc.put_float("transparency.opacity", r(s.opacity));
+	if !same_f32(edited.opacity, orig.opacity) {
+		doc.put_float("transparency.opacity", rounded(edited.opacity));
 	}
-	if s.transparent_background != orig.transparent_background {
-		doc.put_bool("transparency.enabled", s.transparent_background);
+	if edited.transparent_background != orig.transparent_background {
+		doc.put_bool("transparency.enabled", edited.transparent_background);
 	}
-	if s.transparent_background_blur != orig.transparent_background_blur {
-		doc.put_bool("transparency.blur_behind", s.transparent_background_blur);
+	if edited.transparent_background_blur != orig.transparent_background_blur {
+		doc.put_bool(
+			"transparency.blur_behind",
+			edited.transparent_background_blur,
+		);
 	}
-	if !same_f32(s.wallpaper_opacity, orig.wallpaper_opacity) {
-		doc.put_float("wallpaper.opacity", r(s.wallpaper_opacity));
+	if !same_f32(edited.wallpaper_opacity, orig.wallpaper_opacity) {
+		doc.put_float("wallpaper.opacity", rounded(edited.wallpaper_opacity));
 	}
-	if !same_f32(s.wallpaper_even, orig.wallpaper_even) {
-		doc.put_float("wallpaper.even_visibility", r(s.wallpaper_even));
+	if !same_f32(edited.wallpaper_even, orig.wallpaper_even) {
+		doc.put_float("wallpaper.even_visibility", rounded(edited.wallpaper_even));
 	}
-	if s.wallpaper_enabled != orig.wallpaper_enabled {
-		doc.put_bool("wallpaper.enabled", s.wallpaper_enabled);
+	if edited.wallpaper_enabled != orig.wallpaper_enabled {
+		doc.put_bool("wallpaper.enabled", edited.wallpaper_enabled);
 	}
-	if s.wallpaper_rotate_enabled != orig.wallpaper_rotate_enabled {
-		doc.put_bool("wallpaper.rotate.enabled", s.wallpaper_rotate_enabled);
+	if edited.wallpaper_rotate_enabled != orig.wallpaper_rotate_enabled {
+		doc.put_bool("wallpaper.rotate.enabled", edited.wallpaper_rotate_enabled);
 	}
-	if s.wallpaper_default_fit != orig.wallpaper_default_fit {
+	if edited.wallpaper_default_fit != orig.wallpaper_default_fit {
 		doc.put_string(
 			"wallpaper.default_fit",
-			match s.wallpaper_default_fit {
+			match edited.wallpaper_default_fit {
 				Fit::Zoom => "zoom",
 				Fit::Stretch => "stretch",
 			},
 		);
 	}
-	if s.wallpaper_honor_xmp != orig.wallpaper_honor_xmp {
-		doc.put_bool("wallpaper.honor_xmp", s.wallpaper_honor_xmp);
+	if edited.wallpaper_honor_xmp != orig.wallpaper_honor_xmp {
+		doc.put_bool("wallpaper.honor_xmp", edited.wallpaper_honor_xmp);
 	}
-	if s.wallpaper_honor_xmp_look != orig.wallpaper_honor_xmp_look {
-		doc.put_bool("wallpaper.honor_xmp_look", s.wallpaper_honor_xmp_look);
+	if edited.wallpaper_honor_xmp_look != orig.wallpaper_honor_xmp_look {
+		doc.put_bool("wallpaper.honor_xmp_look", edited.wallpaper_honor_xmp_look);
 	}
-	if !same_f32(s.wallpaper_blur, orig.wallpaper_blur) {
-		doc.put_float("wallpaper.blur", r(s.wallpaper_blur));
+	if !same_f32(edited.wallpaper_blur, orig.wallpaper_blur) {
+		doc.put_float("wallpaper.blur", rounded(edited.wallpaper_blur));
 	}
-	if s.wallpaper_contrast_mask != orig.wallpaper_contrast_mask {
-		doc.put_bool("wallpaper.contrast_mask.enabled", s.wallpaper_contrast_mask);
+	if edited.wallpaper_contrast_mask != orig.wallpaper_contrast_mask {
+		doc.put_bool(
+			"wallpaper.contrast_mask.enabled",
+			edited.wallpaper_contrast_mask,
+		);
 	}
 	if !same_f32(
-		s.wallpaper_contrast_mask_size,
+		edited.wallpaper_contrast_mask_size,
 		orig.wallpaper_contrast_mask_size,
 	) {
 		doc.put_float(
 			"wallpaper.contrast_mask.size",
-			r(s.wallpaper_contrast_mask_size),
+			rounded(edited.wallpaper_contrast_mask_size),
 		);
 	}
 	if !same_f32(
-		s.wallpaper_contrast_mask_strength,
+		edited.wallpaper_contrast_mask_strength,
 		orig.wallpaper_contrast_mask_strength,
 	) {
 		doc.put_float(
 			"wallpaper.contrast_mask.strength",
-			r(s.wallpaper_contrast_mask_strength),
+			rounded(edited.wallpaper_contrast_mask_strength),
 		);
 	}
 	if !same_f32(
-		s.wallpaper_contrast_mask_auto,
+		edited.wallpaper_contrast_mask_auto,
 		orig.wallpaper_contrast_mask_auto,
 	) {
 		doc.put_float(
 			"wallpaper.contrast_mask.auto",
-			r(s.wallpaper_contrast_mask_auto),
+			rounded(edited.wallpaper_contrast_mask_auto),
 		);
 	}
-	if s.text_scrim != orig.text_scrim {
-		doc.put_bool("text.scrim.enabled", s.text_scrim);
+	if edited.text_scrim != orig.text_scrim {
+		doc.put_bool("text.scrim.enabled", edited.text_scrim);
 	}
-	if !same_f32(s.text_scrim_radius, orig.text_scrim_radius) {
-		doc.put_float("text.scrim.radius", r(s.text_scrim_radius));
+	if !same_f32(edited.text_scrim_radius, orig.text_scrim_radius) {
+		doc.put_float("text.scrim.radius", rounded(edited.text_scrim_radius));
 	}
-	if !same_f32(s.text_scrim_softness, orig.text_scrim_softness) {
-		doc.put_float("text.scrim.softness", r(s.text_scrim_softness));
+	if !same_f32(edited.text_scrim_softness, orig.text_scrim_softness) {
+		doc.put_float("text.scrim.softness", rounded(edited.text_scrim_softness));
 	}
-	if !same_f32(s.text_scrim_strength, orig.text_scrim_strength) {
-		doc.put_float("text.scrim.strength", r(s.text_scrim_strength));
+	if !same_f32(edited.text_scrim_strength, orig.text_scrim_strength) {
+		doc.put_float("text.scrim.strength", rounded(edited.text_scrim_strength));
 	}
-	if !same_f32(s.text_outline, orig.text_outline) {
-		doc.put_float("text.outline", r(s.text_outline));
+	if !same_f32(edited.text_outline, orig.text_outline) {
+		doc.put_float("text.outline", rounded(edited.text_outline));
 	}
-	if !same_f32(s.text_dark_on_light, orig.text_dark_on_light) {
-		doc.put_float("text.dark_on_light", r(s.text_dark_on_light));
+	if !same_f32(edited.text_dark_on_light, orig.text_dark_on_light) {
+		doc.put_float("text.dark_on_light", rounded(edited.text_dark_on_light));
 	}
-	if s.text_scrim_ramp != orig.text_scrim_ramp {
-		doc.put_string("text.scrim.ramp", &s.text_scrim_ramp);
+	if edited.text_scrim_ramp != orig.text_scrim_ramp {
+		doc.put_string("text.scrim.ramp", &edited.text_scrim_ramp);
 	}
-	if s.text_scrim_function != orig.text_scrim_function {
-		doc.put_string("text.scrim.function", &s.text_scrim_function);
+	if edited.text_scrim_function != orig.text_scrim_function {
+		doc.put_string("text.scrim.function", &edited.text_scrim_function);
 	}
-	if s.text_scrim_regular_weight != orig.text_scrim_regular_weight {
-		doc.put_bool("text.scrim.regular_weight", s.text_scrim_regular_weight);
+	if edited.text_scrim_regular_weight != orig.text_scrim_regular_weight {
+		doc.put_bool(
+			"text.scrim.regular_weight",
+			edited.text_scrim_regular_weight,
+		);
 	}
-	if !same_f32(s.text_min_contrast, orig.text_min_contrast) {
-		doc.put_float("text.min_contrast", r(s.text_min_contrast));
+	if !same_f32(edited.text_min_contrast, orig.text_min_contrast) {
+		doc.put_float("text.min_contrast", rounded(edited.text_min_contrast));
 	}
-	if s.color_emoji != orig.color_emoji {
-		doc.put_bool("text.color_emoji", s.color_emoji);
+	if edited.color_emoji != orig.color_emoji {
+		doc.put_bool("text.color_emoji", edited.color_emoji);
 	}
-	if s.embolden_inverse != orig.embolden_inverse {
-		doc.put_bool("text.embolden_inverse", s.embolden_inverse);
+	if edited.embolden_inverse != orig.embolden_inverse {
+		doc.put_bool("text.embolden_inverse", edited.embolden_inverse);
 	}
-	if s.cursor_scrim != orig.cursor_scrim {
-		doc.put_bool("cursor.scrim", s.cursor_scrim);
+	if edited.cursor_scrim != orig.cursor_scrim {
+		doc.put_bool("cursor.scrim", edited.cursor_scrim);
 	}
-	if s.cursor_outline != orig.cursor_outline {
-		doc.put_bool("cursor.outline", s.cursor_outline);
+	if edited.cursor_outline != orig.cursor_outline {
+		doc.put_bool("cursor.outline", edited.cursor_outline);
 	}
-	if !same_f32(s.cursor_size_height, orig.cursor_size_height) {
-		doc.put_float("cursor.size.height", r(s.cursor_size_height));
+	if !same_f32(edited.cursor_size_height, orig.cursor_size_height) {
+		doc.put_float("cursor.size.height", rounded(edited.cursor_size_height));
 	}
-	if !same_f32(s.cursor_size_width, orig.cursor_size_width) {
-		doc.put_float("cursor.size.width", r(s.cursor_size_width));
+	if !same_f32(edited.cursor_size_width, orig.cursor_size_width) {
+		doc.put_float("cursor.size.width", rounded(edited.cursor_size_width));
 	}
-	if s.cursor_animation != orig.cursor_animation {
-		doc.put_string("cursor.animation", &s.cursor_animation);
+	if edited.cursor_animation != orig.cursor_animation {
+		doc.put_string("cursor.animation", &edited.cursor_animation);
 	}
-	if !same_f32(s.cursor_animation_resume_s, orig.cursor_animation_resume_s) {
-		doc.put_float("cursor.animation_resume_s", r(s.cursor_animation_resume_s));
+	if !same_f32(
+		edited.cursor_animation_resume_s,
+		orig.cursor_animation_resume_s,
+	) {
+		doc.put_float(
+			"cursor.animation_resume_s",
+			rounded(edited.cursor_animation_resume_s),
+		);
 	}
-	if !same_f32(s.cursor_blink_rate_ms, orig.cursor_blink_rate_ms) {
-		doc.put_float("cursor.blink_rate_ms", r(s.cursor_blink_rate_ms));
+	if !same_f32(edited.cursor_blink_rate_ms, orig.cursor_blink_rate_ms) {
+		doc.put_float("cursor.blink_rate_ms", rounded(edited.cursor_blink_rate_ms));
 	}
-	if s.columns != orig.columns {
-		doc.put_int("window.columns", s.columns as i64);
+	if edited.columns != orig.columns {
+		doc.put_int("window.columns", edited.columns as i64);
 	}
-	if s.rows != orig.rows {
-		doc.put_int("window.rows", s.rows as i64);
+	if edited.rows != orig.rows {
+		doc.put_int("window.rows", edited.rows as i64);
 	}
-	if s.remember_size != orig.remember_size {
-		doc.put_bool("window.remember_size", s.remember_size);
+	if edited.remember_size != orig.remember_size {
+		doc.put_bool("window.remember_size", edited.remember_size);
 	}
-	if s.remember_per_monitor != orig.remember_per_monitor {
-		doc.put_bool("window.remember_per_monitor", s.remember_per_monitor);
+	if edited.remember_per_monitor != orig.remember_per_monitor {
+		doc.put_bool("window.remember_per_monitor", edited.remember_per_monitor);
 	}
-	if s.remember_maximized != orig.remember_maximized {
-		doc.put_bool("window.remember_maximized", s.remember_maximized);
+	if edited.remember_maximized != orig.remember_maximized {
+		doc.put_bool("window.remember_maximized", edited.remember_maximized);
 	}
-	if s.hide_single_tab != orig.hide_single_tab {
-		doc.put_bool("window.hide_single_tab", s.hide_single_tab);
+	if edited.hide_single_tab != orig.hide_single_tab {
+		doc.put_bool("window.hide_single_tab", edited.hide_single_tab);
 	}
-	if s.tab_shows_shell != orig.tab_shows_shell {
-		doc.put_bool("window.tab_shows_shell", s.tab_shows_shell);
+	if edited.tab_shows_shell != orig.tab_shows_shell {
+		doc.put_bool("window.tab_shows_shell", edited.tab_shows_shell);
 	}
-	if s.tab_shows_program != orig.tab_shows_program {
-		doc.put_bool("window.tab_shows_program", s.tab_shows_program);
+	if edited.tab_shows_program != orig.tab_shows_program {
+		doc.put_bool("window.tab_shows_program", edited.tab_shows_program);
 	}
-	if s.tab_shows_title != orig.tab_shows_title {
-		doc.put_bool("window.tab_shows_title", s.tab_shows_title);
+	if edited.tab_shows_title != orig.tab_shows_title {
+		doc.put_bool("window.tab_shows_title", edited.tab_shows_title);
 	}
-	if s.tab_shows_directory != orig.tab_shows_directory {
-		doc.put_bool("window.tab_shows_directory", s.tab_shows_directory);
+	if edited.tab_shows_directory != orig.tab_shows_directory {
+		doc.put_bool("window.tab_shows_directory", edited.tab_shows_directory);
 	}
-	if s.title_shows_tab != orig.title_shows_tab {
-		doc.put_bool("window.title_shows_tab", s.title_shows_tab);
+	if edited.title_shows_tab != orig.title_shows_tab {
+		doc.put_bool("window.title_shows_tab", edited.title_shows_tab);
 	}
-	if s.idle_release != orig.idle_release {
-		doc.put_bool("window.idle_release", s.idle_release);
+	if edited.idle_release != orig.idle_release {
+		doc.put_bool("window.idle_release", edited.idle_release);
 	}
-	if s.idle_release_minimized_min != orig.idle_release_minimized_min {
+	if edited.idle_release_minimized_min != orig.idle_release_minimized_min {
 		doc.put_int(
 			"window.idle_release_minimized_min",
-			s.idle_release_minimized_min as i64,
+			edited.idle_release_minimized_min as i64,
 		);
 	}
-	if s.idle_release_hidden_min != orig.idle_release_hidden_min {
+	if edited.idle_release_hidden_min != orig.idle_release_hidden_min {
 		doc.put_int(
 			"window.idle_release_hidden_min",
-			s.idle_release_hidden_min as i64,
+			edited.idle_release_hidden_min as i64,
 		);
 	}
-	if s.idle_release_min != orig.idle_release_min {
-		doc.put_int("window.idle_release_min", s.idle_release_min as i64);
+	if edited.idle_release_min != orig.idle_release_min {
+		doc.put_int("window.idle_release_min", edited.idle_release_min as i64);
 	}
-	if s.software_rendering != orig.software_rendering {
-		doc.put_bool("window.software_rendering", s.software_rendering);
+	if edited.software_rendering != orig.software_rendering {
+		doc.put_bool("window.software_rendering", edited.software_rendering);
 	}
-	if !same_f32(s.tab_regular_pct, orig.tab_regular_pct) {
-		doc.put_float("window.tab_regular_width_pct", r(s.tab_regular_pct));
+	if !same_f32(edited.tab_regular_pct, orig.tab_regular_pct) {
+		doc.put_float(
+			"window.tab_regular_width_pct",
+			rounded(edited.tab_regular_pct),
+		);
 	}
-	if !same_f32(s.tab_max_pct, orig.tab_max_pct) {
-		doc.put_float("window.tab_max_width_pct", r(s.tab_max_pct));
+	if !same_f32(edited.tab_max_pct, orig.tab_max_pct) {
+		doc.put_float("window.tab_max_width_pct", rounded(edited.tab_max_pct));
 	}
-	if s.remembered_columns != orig.remembered_columns {
-		doc.put_int("window.remembered_columns", s.remembered_columns as i64);
+	if edited.remembered_columns != orig.remembered_columns {
+		doc.put_int(
+			"window.remembered_columns",
+			edited.remembered_columns as i64,
+		);
 	}
-	if s.remembered_rows != orig.remembered_rows {
-		doc.put_int("window.remembered_rows", s.remembered_rows as i64);
+	if edited.remembered_rows != orig.remembered_rows {
+		doc.put_int("window.remembered_rows", edited.remembered_rows as i64);
 	}
-	if s.remembered_maximized != orig.remembered_maximized {
-		doc.put_bool("window.remembered_maximized", s.remembered_maximized);
+	if edited.remembered_maximized != orig.remembered_maximized {
+		doc.put_bool("window.remembered_maximized", edited.remembered_maximized);
 	}
-	if s.remembered_font_zoom != orig.remembered_font_zoom {
+	if edited.remembered_font_zoom != orig.remembered_font_zoom {
 		doc.put_int(
 			"window.remembered_font_zoom",
-			i64::from(s.remembered_font_zoom),
+			i64::from(edited.remembered_font_zoom),
 		);
 	}
-	write_monitor_sizes(&mut doc, &orig.monitor_sizes, &s.monitor_sizes);
-	if s.word_separators != orig.word_separators {
-		doc.put_string("selection.word_separators", &s.word_separators);
+	write_monitor_sizes(&mut doc, &orig.monitor_sizes, &edited.monitor_sizes);
+	if edited.word_separators != orig.word_separators {
+		doc.put_string("selection.word_separators", &edited.word_separators);
 	}
-	if s.selection_pairs != orig.selection_pairs {
-		doc.put_string("selection.pairs", &s.selection_pairs);
+	if edited.selection_pairs != orig.selection_pairs {
+		doc.put_string("selection.pairs", &edited.selection_pairs);
 	}
-	if s.command_line != orig.command_line {
-		doc.put_string("shell.command_line", &s.command_line);
+	if edited.command_line != orig.command_line {
+		doc.put_string("shell.command_line", &edited.command_line);
 	}
-	if s.startup_directory != orig.startup_directory {
-		doc.put_string("shell.startup_directory", &s.startup_directory);
+	if edited.startup_directory != orig.startup_directory {
+		doc.put_string("shell.startup_directory", &edited.startup_directory);
 	}
-	if s.shell_integration != orig.shell_integration {
-		doc.put_bool("shell.integration", s.shell_integration);
+	if edited.shell_integration != orig.shell_integration {
+		doc.put_bool("shell.integration", edited.shell_integration);
 	}
-	if s.bash_prompt != orig.bash_prompt {
-		doc.put_bool("shell.bash_prompt", s.bash_prompt);
+	if edited.bash_prompt != orig.bash_prompt {
+		doc.put_bool("shell.bash_prompt", edited.bash_prompt);
 	}
-	if s.copy_on_select != orig.copy_on_select {
-		doc.put_bool("shell.copy_on_select", s.copy_on_select);
+	if edited.copy_on_select != orig.copy_on_select {
+		doc.put_bool("shell.copy_on_select", edited.copy_on_select);
 	}
-	if s.hyperlinks != orig.hyperlinks {
-		doc.put_bool("hyperlinks.enabled", s.hyperlinks);
+	if edited.hyperlinks != orig.hyperlinks {
+		doc.put_bool("hyperlinks.enabled", edited.hyperlinks);
 	}
-	if s.hyperlink_open_command != orig.hyperlink_open_command {
-		doc.put_string("hyperlinks.open_command", &s.hyperlink_open_command);
+	if edited.hyperlink_open_command != orig.hyperlink_open_command {
+		doc.put_string("hyperlinks.open_command", &edited.hyperlink_open_command);
 	}
-	if s.keys != orig.keys {
-		write_keys(&mut doc, &orig.keys, &s.keys);
+	if edited.keys != orig.keys {
+		write_keys(&mut doc, &orig.keys, &edited.keys);
 	}
-	if s.wallpaper_folder_raw != orig.wallpaper_folder_raw {
-		let folder = s.wallpaper_folder_raw.trim();
+	if edited.wallpaper_folder_raw != orig.wallpaper_folder_raw {
+		let folder = edited.wallpaper_folder_raw.trim();
 		doc.put_string(
 			"wallpaper.rotate.folder",
 			if folder.is_empty() {
@@ -2448,46 +2485,53 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 			},
 		);
 	}
-	if s.wallpaper != orig.wallpaper || s.wallpaper_raw != orig.wallpaper_raw {
+	if edited.wallpaper != orig.wallpaper || edited.wallpaper_raw != orig.wallpaper_raw {
 		// the file keeps whatever form the user wrote (bare/relative/absolute)
-		if s.wallpaper_raw.trim().is_empty() {
+		if edited.wallpaper_raw.trim().is_empty() {
 			doc.remove("wallpaper.image");
 		} else {
-			doc.put_string("wallpaper.image", s.wallpaper_raw.trim());
+			doc.put_string("wallpaper.image", edited.wallpaper_raw.trim());
 		}
 	}
-	if s.wallpaper_fallback_builtin != orig.wallpaper_fallback_builtin {
-		doc.put_bool("wallpaper.fallback_builtin", s.wallpaper_fallback_builtin);
+	if edited.wallpaper_fallback_builtin != orig.wallpaper_fallback_builtin {
+		doc.put_bool(
+			"wallpaper.fallback_builtin",
+			edited.wallpaper_fallback_builtin,
+		);
 	}
 
-	if s.colors_from_wallpaper != orig.colors_from_wallpaper {
-		doc.put_bool("colors.from_wallpaper", s.colors_from_wallpaper);
+	if edited.colors_from_wallpaper != orig.colors_from_wallpaper {
+		doc.put_bool("colors.from_wallpaper", edited.colors_from_wallpaper);
 	}
 	let mut set_color = |key: &str, color: [u8; 3], orig_color: [u8; 3]| {
 		if color != orig_color {
 			doc.put_string(&format!("colors.{key}"), &format_hex(color));
 		}
 	};
-	set_color("background", s.bg, orig.bg);
-	set_color("foreground", s.fg, orig.fg);
-	set_color("cursor", s.cursor, orig.cursor);
-	set_color("highlight", s.highlight, orig.highlight);
-	set_color("focus", s.focus, orig.focus);
-	set_color("gutter", s.gutter, orig.gutter);
-	set_color("menu_background", s.menu_bg, orig.menu_bg);
-	set_color("menu_foreground", s.menu_fg, orig.menu_fg);
-	set_color("dialog_background", s.dialog_bg, orig.dialog_bg);
-	set_color("dialog_foreground", s.dialog_fg, orig.dialog_fg);
+	set_color("background", edited.bg, orig.bg);
+	set_color("foreground", edited.fg, orig.fg);
+	set_color("cursor", edited.cursor, orig.cursor);
+	set_color("highlight", edited.highlight, orig.highlight);
+	set_color("focus", edited.focus, orig.focus);
+	set_color("gutter", edited.gutter, orig.gutter);
+	set_color("menu_background", edited.menu_bg, orig.menu_bg);
+	set_color("menu_foreground", edited.menu_fg, orig.menu_fg);
+	set_color("dialog_background", edited.dialog_bg, orig.dialog_bg);
+	set_color("dialog_foreground", edited.dialog_fg, orig.dialog_fg);
 	// the two scrollbar colors have had dialog rows since the bar shipped but
 	// were never written back, so an edit lasted only as long as the session
-	set_color("scrollbar_thumb", s.scrollbar_thumb, orig.scrollbar_thumb);
+	set_color(
+		"scrollbar_thumb",
+		edited.scrollbar_thumb,
+		orig.scrollbar_thumb,
+	);
 	set_color(
 		"scrollbar_trough",
-		s.scrollbar_trough,
+		edited.scrollbar_trough,
 		orig.scrollbar_trough,
 	);
 
-	let cleared = cleared_keys(orig, s);
+	let cleared = cleared_keys(orig, edited);
 	let wrote = write_doc(&path, &doc);
 	if wrote && !cleared.is_empty() {
 		// commented out rather than reverted: the box was cleared, and "not set"
@@ -2961,20 +3005,20 @@ impl Reader<'_> {
 			Err(_) => None,
 		}
 	}
-	fn b(&self, key: &str) -> Option<bool> {
+	fn read_bool(&self, key: &str) -> Option<bool> {
 		self.note(key, self.doc.get_bool(key))
 	}
-	fn f(&self, key: &str) -> Option<f32> {
+	fn read_f32(&self, key: &str) -> Option<f32> {
 		self.note(key, self.doc.get_float(key)).map(|v| v as f32)
 	}
-	fn i(&self, key: &str) -> Option<i64> {
+	fn read_i64(&self, key: &str) -> Option<i64> {
 		self.note(key, self.doc.get_int(key))
 	}
-	fn u(&self, key: &str) -> Option<usize> {
+	fn read_usize(&self, key: &str) -> Option<usize> {
 		self.note(key, self.doc.get_int(key))
 			.map(|v| v.max(0) as usize)
 	}
-	fn s(&self, key: &str) -> Option<String> {
+	fn read_string(&self, key: &str) -> Option<String> {
 		self.note(key, self.doc.get_string(key))
 	}
 }
@@ -3000,135 +3044,135 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 			)
 		})
 		.collect();
-	let r = Reader {
+	let reader = Reader {
 		doc,
 		path,
 		said: std::cell::RefCell::new(said),
 	};
 	let raw = RawConfig {
-		use_system_font: r.b("font.use_system_family"),
-		use_system_font_size: r.b("font.use_system_size"),
-		font_family: r.s("font.family"),
-		font_size: r.f("font.size"),
-		line_height_scale: r.f("font.line_height_scale"),
-		scrollback: r.u("scroll.scrollback"),
-		scroll_smooth: r.b("scroll.smooth"),
-		scroll_ease_in_ms: r.f("scroll.ease_in_ms"),
-		scroll_ramp_up_ms: r.f("scroll.ramp_up_ms"),
-		scroll_single_screen_tau_ms: r.f("scroll.single_screen_tau_ms"),
-		scroll_ramp_down_ms: r.f("scroll.ramp_down_ms"),
-		scroll_ease_out_ms: r.f("scroll.ease_out_ms"),
-		wheel_lines: r.f("scroll.wheel_lines"),
-		alt_scroll_lines: r.f("scroll.alt_scroll_lines"),
-		output_ease_lines: r.f("scroll.output_ease_lines"),
-		smooth_scroll_apps: r.b("scroll.smooth_apps"),
-		scrollbar: r.b("scroll.scrollbar.enabled"),
-		scrollbar_thickness: r.f("scroll.scrollbar.thickness"),
-		scrollbar_auto_hide: r.b("scroll.scrollbar.auto_hide"),
-		minimap: r.b("scroll.minimap.enabled"),
-		minimap_width: r.f("scroll.minimap.width"),
-		minimap_tui_whitelist: r.s("scroll.minimap.tui_process_whitelist"),
-		margin: r.f("window.margin"),
-		opacity: r.f("transparency.opacity"),
-		transparent_background: r.b("transparency.enabled"),
-		transparent_background_blur: r.b("transparency.blur_behind"),
-		wallpaper_enabled: r.b("wallpaper.enabled"),
-		wallpaper: r.s("wallpaper.image"),
-		wallpaper_fallback_builtin: r.b("wallpaper.fallback_builtin"),
-		wallpaper_rotate_enabled: r.b("wallpaper.rotate.enabled"),
-		wallpaper_folder: r.s("wallpaper.rotate.folder"),
-		wallpaper_rotate_random: r.b("wallpaper.rotate.random"),
-		wallpaper_rotate_interval_s: r.f("wallpaper.rotate.interval_s"),
-		wallpaper_opacity: r.f("wallpaper.opacity"),
-		wallpaper_even: r.f("wallpaper.even_visibility"),
-		wallpaper_default_fit: r.s("wallpaper.default_fit"),
-		wallpaper_honor_xmp: r.b("wallpaper.honor_xmp"),
-		wallpaper_honor_xmp_look: r.b("wallpaper.honor_xmp_look"),
-		wallpaper_blur: r.f("wallpaper.blur"),
-		wallpaper_contrast_mask: r.b("wallpaper.contrast_mask.enabled"),
-		wallpaper_contrast_mask_size: r.f("wallpaper.contrast_mask.size"),
-		wallpaper_contrast_mask_strength: r.f("wallpaper.contrast_mask.strength"),
-		wallpaper_contrast_mask_auto: r.f("wallpaper.contrast_mask.auto"),
-		theme: r.s("theme"),
-		theme_mode: r.s("theme_mode"),
-		performance_automatic: r.b("performance.automatic"),
-		performance_profile: r.s("performance.profile"),
-		performance_check_hardware: r.b("performance.check_hardware"),
-		performance_check_next_run: r.b("performance.check_next_run"),
-		rated_hardware: r.s("performance.rated_hardware"),
-		text_scrim: r.b("text.scrim.enabled"),
-		text_scrim_radius: r.f("text.scrim.radius"),
-		text_scrim_softness: r.f("text.scrim.softness"),
-		text_scrim_strength: r.f("text.scrim.strength"),
-		text_outline: r.f("text.outline"),
-		text_dark_on_light: r.f("text.dark_on_light"),
-		text_scrim_ramp: r.s("text.scrim.ramp"),
-		text_scrim_function: r.s("text.scrim.function"),
-		text_scrim_regular_weight: r.b("text.scrim.regular_weight"),
-		text_min_contrast: r.f("text.min_contrast"),
-		color_emoji: r.b("text.color_emoji"),
-		embolden_inverse: r.b("text.embolden_inverse"),
-		cursor_scrim: r.b("cursor.scrim"),
-		cursor_outline: r.b("cursor.outline"),
-		cursor_size_height: r.f("cursor.size.height"),
-		cursor_size_width: r.f("cursor.size.width"),
-		cursor_animation: r.s("cursor.animation"),
-		cursor_animation_resume_s: r.f("cursor.animation_resume_s"),
-		cursor_animation_idle_stop_s: r.f("cursor.animation_idle_stop_s"),
-		cursor_blink_rate_ms: r.f("cursor.blink_rate_ms"),
-		columns: r.u("window.columns"),
-		rows: r.u("window.rows"),
-		remember_size: r.b("window.remember_size"),
-		remember_per_monitor: r.b("window.remember_per_monitor"),
-		remember_maximized: r.b("window.remember_maximized"),
-		hide_single_tab: r.b("window.hide_single_tab"),
-		tab_shows_shell: r.b("window.tab_shows_shell"),
-		tab_shows_program: r.b("window.tab_shows_program"),
-		tab_shows_title: r.b("window.tab_shows_title"),
-		tab_shows_directory: r.b("window.tab_shows_directory"),
-		title_shows_tab: r.b("window.title_shows_tab"),
-		idle_release: r.b("window.idle_release"),
-		idle_release_minimized_min: r.u("window.idle_release_minimized_min"),
-		idle_release_hidden_min: r.u("window.idle_release_hidden_min"),
-		idle_release_min: r.u("window.idle_release_min"),
-		software_rendering: r.b("window.software_rendering"),
-		tab_regular_pct: r.f("window.tab_regular_width_pct"),
-		tab_max_pct: r.f("window.tab_max_width_pct"),
-		tab_tip_max_s: r.f("window.tab_tip_max_s"),
-		remembered_columns: r.u("window.remembered_columns"),
-		remembered_rows: r.u("window.remembered_rows"),
-		remembered_maximized: r.b("window.remembered_maximized"),
-		remembered_font_zoom: r.i("window.remembered_font_zoom"),
-		monitor_sizes: read_monitor_sizes(&r),
-		word_separators: r.s("selection.word_separators"),
-		selection_pairs: r.s("selection.pairs"),
-		command_line: r.s("shell.command_line"),
-		startup_directory: r.s("shell.startup_directory"),
-		copy_on_select: r.b("shell.copy_on_select"),
-		shell_integration: r.b("shell.integration"),
-		bash_prompt: r.b("shell.bash_prompt"),
-		hyperlinks: r.b("hyperlinks.enabled"),
-		hyperlink_open_command: r.s("hyperlinks.open_command"),
+		use_system_font: reader.read_bool("font.use_system_family"),
+		use_system_font_size: reader.read_bool("font.use_system_size"),
+		font_family: reader.read_string("font.family"),
+		font_size: reader.read_f32("font.size"),
+		line_height_scale: reader.read_f32("font.line_height_scale"),
+		scrollback: reader.read_usize("scroll.scrollback"),
+		scroll_smooth: reader.read_bool("scroll.smooth"),
+		scroll_ease_in_ms: reader.read_f32("scroll.ease_in_ms"),
+		scroll_ramp_up_ms: reader.read_f32("scroll.ramp_up_ms"),
+		scroll_single_screen_tau_ms: reader.read_f32("scroll.single_screen_tau_ms"),
+		scroll_ramp_down_ms: reader.read_f32("scroll.ramp_down_ms"),
+		scroll_ease_out_ms: reader.read_f32("scroll.ease_out_ms"),
+		wheel_lines: reader.read_f32("scroll.wheel_lines"),
+		alt_scroll_lines: reader.read_f32("scroll.alt_scroll_lines"),
+		output_ease_lines: reader.read_f32("scroll.output_ease_lines"),
+		smooth_scroll_apps: reader.read_bool("scroll.smooth_apps"),
+		scrollbar: reader.read_bool("scroll.scrollbar.enabled"),
+		scrollbar_thickness: reader.read_f32("scroll.scrollbar.thickness"),
+		scrollbar_auto_hide: reader.read_bool("scroll.scrollbar.auto_hide"),
+		minimap: reader.read_bool("scroll.minimap.enabled"),
+		minimap_width: reader.read_f32("scroll.minimap.width"),
+		minimap_tui_whitelist: reader.read_string("scroll.minimap.tui_process_whitelist"),
+		margin: reader.read_f32("window.margin"),
+		opacity: reader.read_f32("transparency.opacity"),
+		transparent_background: reader.read_bool("transparency.enabled"),
+		transparent_background_blur: reader.read_bool("transparency.blur_behind"),
+		wallpaper_enabled: reader.read_bool("wallpaper.enabled"),
+		wallpaper: reader.read_string("wallpaper.image"),
+		wallpaper_fallback_builtin: reader.read_bool("wallpaper.fallback_builtin"),
+		wallpaper_rotate_enabled: reader.read_bool("wallpaper.rotate.enabled"),
+		wallpaper_folder: reader.read_string("wallpaper.rotate.folder"),
+		wallpaper_rotate_random: reader.read_bool("wallpaper.rotate.random"),
+		wallpaper_rotate_interval_s: reader.read_f32("wallpaper.rotate.interval_s"),
+		wallpaper_opacity: reader.read_f32("wallpaper.opacity"),
+		wallpaper_even: reader.read_f32("wallpaper.even_visibility"),
+		wallpaper_default_fit: reader.read_string("wallpaper.default_fit"),
+		wallpaper_honor_xmp: reader.read_bool("wallpaper.honor_xmp"),
+		wallpaper_honor_xmp_look: reader.read_bool("wallpaper.honor_xmp_look"),
+		wallpaper_blur: reader.read_f32("wallpaper.blur"),
+		wallpaper_contrast_mask: reader.read_bool("wallpaper.contrast_mask.enabled"),
+		wallpaper_contrast_mask_size: reader.read_f32("wallpaper.contrast_mask.size"),
+		wallpaper_contrast_mask_strength: reader.read_f32("wallpaper.contrast_mask.strength"),
+		wallpaper_contrast_mask_auto: reader.read_f32("wallpaper.contrast_mask.auto"),
+		theme: reader.read_string("theme"),
+		theme_mode: reader.read_string("theme_mode"),
+		performance_automatic: reader.read_bool("performance.automatic"),
+		performance_profile: reader.read_string("performance.profile"),
+		performance_check_hardware: reader.read_bool("performance.check_hardware"),
+		performance_check_next_run: reader.read_bool("performance.check_next_run"),
+		rated_hardware: reader.read_string("performance.rated_hardware"),
+		text_scrim: reader.read_bool("text.scrim.enabled"),
+		text_scrim_radius: reader.read_f32("text.scrim.radius"),
+		text_scrim_softness: reader.read_f32("text.scrim.softness"),
+		text_scrim_strength: reader.read_f32("text.scrim.strength"),
+		text_outline: reader.read_f32("text.outline"),
+		text_dark_on_light: reader.read_f32("text.dark_on_light"),
+		text_scrim_ramp: reader.read_string("text.scrim.ramp"),
+		text_scrim_function: reader.read_string("text.scrim.function"),
+		text_scrim_regular_weight: reader.read_bool("text.scrim.regular_weight"),
+		text_min_contrast: reader.read_f32("text.min_contrast"),
+		color_emoji: reader.read_bool("text.color_emoji"),
+		embolden_inverse: reader.read_bool("text.embolden_inverse"),
+		cursor_scrim: reader.read_bool("cursor.scrim"),
+		cursor_outline: reader.read_bool("cursor.outline"),
+		cursor_size_height: reader.read_f32("cursor.size.height"),
+		cursor_size_width: reader.read_f32("cursor.size.width"),
+		cursor_animation: reader.read_string("cursor.animation"),
+		cursor_animation_resume_s: reader.read_f32("cursor.animation_resume_s"),
+		cursor_animation_idle_stop_s: reader.read_f32("cursor.animation_idle_stop_s"),
+		cursor_blink_rate_ms: reader.read_f32("cursor.blink_rate_ms"),
+		columns: reader.read_usize("window.columns"),
+		rows: reader.read_usize("window.rows"),
+		remember_size: reader.read_bool("window.remember_size"),
+		remember_per_monitor: reader.read_bool("window.remember_per_monitor"),
+		remember_maximized: reader.read_bool("window.remember_maximized"),
+		hide_single_tab: reader.read_bool("window.hide_single_tab"),
+		tab_shows_shell: reader.read_bool("window.tab_shows_shell"),
+		tab_shows_program: reader.read_bool("window.tab_shows_program"),
+		tab_shows_title: reader.read_bool("window.tab_shows_title"),
+		tab_shows_directory: reader.read_bool("window.tab_shows_directory"),
+		title_shows_tab: reader.read_bool("window.title_shows_tab"),
+		idle_release: reader.read_bool("window.idle_release"),
+		idle_release_minimized_min: reader.read_usize("window.idle_release_minimized_min"),
+		idle_release_hidden_min: reader.read_usize("window.idle_release_hidden_min"),
+		idle_release_min: reader.read_usize("window.idle_release_min"),
+		software_rendering: reader.read_bool("window.software_rendering"),
+		tab_regular_pct: reader.read_f32("window.tab_regular_width_pct"),
+		tab_max_pct: reader.read_f32("window.tab_max_width_pct"),
+		tab_tip_max_s: reader.read_f32("window.tab_tip_max_s"),
+		remembered_columns: reader.read_usize("window.remembered_columns"),
+		remembered_rows: reader.read_usize("window.remembered_rows"),
+		remembered_maximized: reader.read_bool("window.remembered_maximized"),
+		remembered_font_zoom: reader.read_i64("window.remembered_font_zoom"),
+		monitor_sizes: read_monitor_sizes(&reader),
+		word_separators: reader.read_string("selection.word_separators"),
+		selection_pairs: reader.read_string("selection.pairs"),
+		command_line: reader.read_string("shell.command_line"),
+		startup_directory: reader.read_string("shell.startup_directory"),
+		copy_on_select: reader.read_bool("shell.copy_on_select"),
+		shell_integration: reader.read_bool("shell.integration"),
+		bash_prompt: reader.read_bool("shell.bash_prompt"),
+		hyperlinks: reader.read_bool("hyperlinks.enabled"),
+		hyperlink_open_command: reader.read_string("hyperlinks.open_command"),
 		colors: RawColors {
-			background: r.s("colors.background"),
-			from_wallpaper: r.b("colors.from_wallpaper"),
-			foreground: r.s("colors.foreground"),
-			cursor: r.s("colors.cursor"),
-			highlight: r.s("colors.highlight"),
-			focus: r.s("colors.focus"),
-			menu_background: r.s("colors.menu_background"),
-			menu_foreground: r.s("colors.menu_foreground"),
-			dialog_background: r.s("colors.dialog_background"),
-			dialog_foreground: r.s("colors.dialog_foreground"),
-			gutter: r.s("colors.gutter"),
-			scrollbar_thumb: r.s("colors.scrollbar_thumb"),
-			scrollbar_trough: r.s("colors.scrollbar_trough"),
+			background: reader.read_string("colors.background"),
+			from_wallpaper: reader.read_bool("colors.from_wallpaper"),
+			foreground: reader.read_string("colors.foreground"),
+			cursor: reader.read_string("colors.cursor"),
+			highlight: reader.read_string("colors.highlight"),
+			focus: reader.read_string("colors.focus"),
+			menu_background: reader.read_string("colors.menu_background"),
+			menu_foreground: reader.read_string("colors.menu_foreground"),
+			dialog_background: reader.read_string("colors.dialog_background"),
+			dialog_foreground: reader.read_string("colors.dialog_foreground"),
+			gutter: reader.read_string("colors.gutter"),
+			scrollbar_thumb: reader.read_string("colors.scrollbar_thumb"),
+			scrollbar_trough: reader.read_string("colors.scrollbar_trough"),
 		},
-		user_themes: read_user_themes(&r.doc),
-		shells: read_shells(&r.doc),
-		keys: read_keys(&r),
+		user_themes: read_user_themes(&reader.doc),
+		shells: read_shells(&reader.doc),
+		keys: read_keys(&reader),
 	};
-	(raw, r.said.into_inner())
+	(raw, reader.said.into_inner())
 }
 
 // Saved themes, in file order. A slug with no readable colors at all is skipped;
@@ -3225,13 +3269,13 @@ fn is_monitor_size_path(path: &str) -> bool {
 
 // The sizes kept per monitor. An entry with nothing readable sets nothing,
 // and a number missing from one takes the default.
-fn read_monitor_sizes(r: &Reader) -> Vec<MonitorSize> {
+fn read_monitor_sizes(reader: &Reader) -> Vec<MonitorSize> {
 	let mut out = Vec::new();
-	for key in r.doc.children("window.monitors") {
+	for key in reader.doc.children("window.monitors") {
 		let at = format!("window.monitors.{key}");
-		let columns = r.u(&format!("{at}.columns"));
-		let rows = r.u(&format!("{at}.rows"));
-		let font_zoom = r.i(&format!("{at}.font_zoom"));
+		let columns = reader.read_usize(&format!("{at}.columns"));
+		let rows = reader.read_usize(&format!("{at}.rows"));
+		let font_zoom = reader.read_i64(&format!("{at}.font_zoom"));
 		if columns.is_none() && rows.is_none() && font_zoom.is_none() {
 			continue;
 		}
@@ -3798,10 +3842,10 @@ fn resolve(raw: RawConfig) -> Settings {
 // The hotkeys the file sets. A value that does not read is left out, so its
 // default stays: the reader reports one that is not text, and
 // `config_complaints` one that names no key.
-fn read_keys(r: &Reader) -> Vec<(crate::input::Hotkey, Vec<crate::keys::Chord>)> {
+fn read_keys(reader: &Reader) -> Vec<(crate::input::Hotkey, Vec<crate::keys::Chord>)> {
 	crate::keys::config_paths()
 		.filter_map(|(hotkey, path)| {
-			let text = r.s(&path)?;
+			let text = reader.read_string(&path)?;
 			if text.trim().is_empty() {
 				return None;
 			}
@@ -3863,11 +3907,11 @@ pub fn default_font_size() -> f32 {
 // with no readable font setting reports neither. Keying on what was detected
 // rather than on the platform keeps one rule everywhere - a toggle with nothing
 // to follow resolves from font_family / font_size as if off, and grays out.
-pub fn system_font_face_active(s: &Settings) -> bool {
-	s.use_system_font && crate::sysfont::monospace().family.is_some()
+pub fn system_font_face_active(settings: &Settings) -> bool {
+	settings.use_system_font && crate::sysfont::monospace().family.is_some()
 }
-pub fn system_font_size_active(s: &Settings) -> bool {
-	s.use_system_font_size && crate::sysfont::monospace().size_pt.is_some()
+pub fn system_font_size_active(settings: &Settings) -> bool {
+	settings.use_system_font_size && crate::sysfont::monospace().size_pt.is_some()
 }
 
 // Font zoom (Ctrl+-/+/= hotkeys), in logical px added to the effective size.
