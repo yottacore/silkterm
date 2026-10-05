@@ -795,6 +795,15 @@ rows:
 		setting: window.idle_release
 		help: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment the window is used again. Nothing running in the window is affected."
 
+	IdleMinimizedMin:
+		label: Minutes when minimized
+		kind: slider
+		range: 1, 1440
+		whole: true
+		indent: 1
+		setting: window.idle_release_minimized_min
+		help: "How long a minimized window waits. On Windows, taking the graphics card back on a restore can take about a second."
+
 	IdleHiddenMin:
 		label: Minutes when hidden
 		kind: slider
@@ -802,7 +811,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: window.idle_release_hidden_min
-		help: "How long a minimized or covered window waits."
+		help: "How long a window covered by other windows waits."
 
 	IdleMin:
 		label: Minutes otherwise
@@ -1160,6 +1169,7 @@ gates:
 
 	FontFamily: !SystemFont
 
+	IdleMinimizedMin: IdleRelease
 	IdleHiddenMin: IdleRelease
 	IdleMin: IdleRelease
 	FontSize: !SystemFontSize

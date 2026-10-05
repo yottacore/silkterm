@@ -520,7 +520,8 @@ pub struct Settings {
 	pub tab_shows_directory: bool,
 	pub title_shows_tab: bool, // let the window title fall back to what the tab says
 	pub idle_release: bool,    // let the GPU device go after a long idle (app.rs, release_gpu)
-	pub idle_release_hidden_min: usize, // ...after this long minimized or covered
+	pub idle_release_minimized_min: usize, // ...after this long minimized
+	pub idle_release_hidden_min: usize, // ...or this long covered
 	pub idle_release_min: usize, // ...or this long merely unfocused and quiet
 	pub tab_regular_pct: f32,  // a tab's ordinary width, as a % of the window's width
 	pub tab_max_pct: f32,      // widest a tab may be, as a % of the window's width
@@ -727,6 +728,7 @@ impl Default for Settings {
 			tab_shows_directory: true,
 			title_shows_tab: true,
 			idle_release: true,
+			idle_release_minimized_min: 1,
 			idle_release_hidden_min: 30,
 			idle_release_min: 240,
 			tab_regular_pct: 10.0,
@@ -2357,6 +2359,12 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	if s.idle_release != orig.idle_release {
 		doc.put_bool("window.idle_release", s.idle_release);
 	}
+	if s.idle_release_minimized_min != orig.idle_release_minimized_min {
+		doc.put_int(
+			"window.idle_release_minimized_min",
+			s.idle_release_minimized_min as i64,
+		);
+	}
 	if s.idle_release_hidden_min != orig.idle_release_hidden_min {
 		doc.put_int(
 			"window.idle_release_hidden_min",
@@ -2612,6 +2620,7 @@ struct RawConfig {
 	tab_shows_directory: Option<bool>,
 	title_shows_tab: Option<bool>,
 	idle_release: Option<bool>,
+	idle_release_minimized_min: Option<usize>,
 	idle_release_hidden_min: Option<usize>,
 	idle_release_min: Option<usize>,
 	tab_regular_pct: Option<f32>,
@@ -3067,6 +3076,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		tab_shows_directory: r.b("window.tab_shows_directory"),
 		title_shows_tab: r.b("window.title_shows_tab"),
 		idle_release: r.b("window.idle_release"),
+		idle_release_minimized_min: r.u("window.idle_release_minimized_min"),
 		idle_release_hidden_min: r.u("window.idle_release_hidden_min"),
 		idle_release_min: r.u("window.idle_release_min"),
 		tab_regular_pct: r.f("window.tab_regular_width_pct"),
@@ -3689,6 +3699,11 @@ fn resolve(raw: RawConfig) -> Settings {
 		tab_shows_directory: raw.tab_shows_directory.unwrap_or(d.tab_shows_directory),
 		title_shows_tab: raw.title_shows_tab.unwrap_or(d.title_shows_tab),
 		idle_release: raw.idle_release.unwrap_or(d.idle_release),
+		idle_release_minimized_min: numi(
+			raw.idle_release_minimized_min,
+			d.idle_release_minimized_min,
+			limits::IDLE_MIN,
+		),
 		idle_release_hidden_min: numi(
 			raw.idle_release_hidden_min,
 			d.idle_release_hidden_min,
@@ -7210,11 +7225,13 @@ window:
 	# title_shows_tab: true  ## Default
 
 	## Let the graphics card's memory go after the window has sat unused, and
-	## take it back the moment the window is used again. The first wait is for
-	## a window that is minimized or covered, the second for one that is only
-	## unfocused with nothing printing. On Windows with transparency on, a
-	## window still on screen is never let go, since it would turn black.
+	## take it back the moment the window is used again. The waits are in
+	## minutes: the first for a window that is minimized, the second for one
+	## that is covered, the third for one that is only unfocused with nothing
+	## printing. On Windows with transparency on, a window still on screen is
+	## never let go, since it would turn black.
 	# idle_release: true  ## Default
+	# idle_release_minimized_min: 1  ## Default
 	# idle_release_hidden_min: 30  ## Default
 	# idle_release_min: 240  ## Default
 
@@ -10503,6 +10520,7 @@ mod tests {
 			("window.rows", limits::GRID),
 			("window.remembered_columns", limits::GRID),
 			("window.remembered_rows", limits::GRID),
+			("window.idle_release_minimized_min", limits::IDLE_MIN),
 			("window.idle_release_hidden_min", limits::IDLE_MIN),
 			("window.idle_release_min", limits::IDLE_MIN),
 		] {
@@ -10512,6 +10530,7 @@ mod tests {
 				"window.rows" => s.rows,
 				"window.remembered_columns" => s.remembered_columns,
 				"window.remembered_rows" => s.remembered_rows,
+				"window.idle_release_minimized_min" => s.idle_release_minimized_min,
 				"window.idle_release_hidden_min" => s.idle_release_hidden_min,
 				"window.idle_release_min" => s.idle_release_min,
 				other => panic!("{other} is not in the reader"),
@@ -12518,6 +12537,44 @@ mod tests {
 			Some("\t# idle_release: true  ## Default")
 		);
 		assert!(!resolve(read_raw("window.idle_release: false\n", p).0).idle_release);
+	}
+
+	// The minimized wait came after the other two, so a file written before
+	// it has the idle paragraph without it. It goes in beside them, first of
+	// the waits, and the paragraph is not written twice.
+	// Test ID: ErmrbFB
+	#[test]
+	fn an_existing_config_learns_the_minimized_wait() {
+		let p = std::path::Path::new("test.shcl");
+		assert_eq!(resolve(read_raw("", p).0).idle_release_minimized_min, 1);
+		let set = "window.idle_release_minimized_min: 5\n";
+		assert_eq!(resolve(read_raw(set, p).0).idle_release_minimized_min, 5);
+
+		let path = crate::testdir::run_dir().join("silkterm_minimized_wait_test.shcl");
+		let before = "window:\n\
+			\t## Let the graphics card's memory go after the window has sat unused, and\n\
+			\t# idle_release: true  ## Default\n\
+			\t# idle_release_hidden_min: 30  ## Default\n\
+			\t# idle_release_min: 240  ## Default\n";
+		std::fs::write(&path, before).unwrap();
+		backfill_config(&path);
+		let out = std::fs::read_to_string(&path).unwrap();
+		let _ = std::fs::remove_file(&path);
+		let at = |line: &str| {
+			out.find(line)
+				.unwrap_or_else(|| panic!("no {line:?} in:\n{out}"))
+		};
+		let minimized = at("\n\t# idle_release_minimized_min: 1  ## Default\n");
+		assert!(
+			at("\t# idle_release: true") < minimized
+				&& minimized < at("\t# idle_release_hidden_min: 30"),
+			"out of order:\n{out}"
+		);
+		assert_eq!(
+			out.matches("Let the graphics card's memory go").count(),
+			1,
+			"{out}"
+		);
 	}
 
 	// Test ID: Em1S9yq

@@ -2355,7 +2355,7 @@ impl Conserve {
 // What the idle release reads of the window (see `release_deadline`).
 struct Idle {
 	focused: bool,
-	hidden: bool,        // minimized, or covered where the desktop says so
+	sight: Sight,
 	revealed: bool,      // shown at all yet
 	bench_busy: bool,    // a rating owed or running
 	since: Instant,      // the last sign of life
@@ -2364,31 +2364,51 @@ struct Idle {
 
 // When an idle window may let its device go, or None while something keeps
 // it: the switch off, the window not yet shown, a rating owed or running, or a
-// window on screen that has focus or would go blank without its device. Two
-// waits, because a hidden window is known to be out of sight while a merely
+// window on screen that has focus or would go blank without its device. A
+// minimized window waits least, since nobody is looking until it is restored.
+// A covered one may be uncovered by any click elsewhere, and a merely
 // unfocused one may be on a second monitor being read.
 fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
-	let (on, when_hidden, otherwise) = idle_rule(cfg);
-	let kept_on_screen = !idle.hidden && (idle.focused || !idle.keeps_picture);
-	if !on || !idle.revealed || idle.bench_busy || kept_on_screen {
+	let rule = idle_rule(cfg);
+	let kept_on_screen = idle.sight == Sight::Shown && (idle.focused || !idle.keeps_picture);
+	if !rule.on || !idle.revealed || idle.bench_busy || kept_on_screen {
 		return None;
 	}
-	Some(idle.since + if idle.hidden { when_hidden } else { otherwise })
+	let wait = match idle.sight {
+		Sight::Minimized => rule.minimized,
+		Sight::Covered => rule.hidden,
+		Sight::Shown => rule.otherwise,
+	};
+	Some(idle.since + wait)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct IdleRule {
+	on: bool,
+	minimized: Duration,
+	hidden: Duration, // covered
+	otherwise: Duration,
 }
 
 // The setting's answer, unless SILK_IDLE_SECS names one wait in seconds for
-// both cases - which is how the release is exercised without leaving a window
+// every case - which is how the release is exercised without leaving a window
 // alone for half an hour.
-fn idle_rule(cfg: &config::Settings) -> (bool, Duration, Duration) {
+fn idle_rule(cfg: &config::Settings) -> IdleRule {
 	if let Some(wait) = idle_secs() {
-		return (true, wait, wait);
+		return IdleRule {
+			on: true,
+			minimized: wait,
+			hidden: wait,
+			otherwise: wait,
+		};
 	}
 	let minutes = |m: usize| Duration::from_secs(m as u64 * 60);
-	(
-		cfg.idle_release,
-		minutes(cfg.idle_release_hidden_min),
-		minutes(cfg.idle_release_min),
-	)
+	IdleRule {
+		on: cfg.idle_release,
+		minimized: minutes(cfg.idle_release_minimized_min),
+		hidden: minutes(cfg.idle_release_hidden_min),
+		otherwise: minutes(cfg.idle_release_min),
+	}
 }
 
 // SILK_IDLE_SECS, read once, since every loop pass asks for the idle rule.
@@ -3083,10 +3103,10 @@ struct State {
 	// The window still shows its last frame once its device is gone (see
 	// `release_deadline`). A Windows window with no redirection bitmap does not.
 	keeps_picture: bool,
-	// last cycle's frozen state (occluded or minimized); the false edge is the
-	// unfreeze - one dirty catch-up frame, hard-cut. Read and written only by
-	// freeze_sync, which both render entry points go through.
-	was_hidden: bool,
+	// last cycle's sight; leaving a hidden one is the unfreeze - one dirty
+	// catch-up frame, hard-cut. Written only by freeze_sync, which both render
+	// entry points go through.
+	sight: Sight,
 	minimized: MinimizedProbe,
 	// Deadline of the next animation frame while SILK_MAX_FPS pins the rate; None
 	// otherwise, which is every ordinary run. See `max_fps`.
@@ -3148,17 +3168,41 @@ fn freeze_frame(was_hidden: bool, hidden: bool) -> Frame {
 	}
 }
 
-// Nothing of the window is on screen. A window with no area counts, since on
-// Windows a restore stops answering minimized a moment before its size comes
-// back, and a device rebuilt then took 1x1 as the window's size. The grid
-// shrank to two columns with it, and the console host's reflow lost the screen.
-fn window_hidden(
+// How much of the window is on screen. The freeze reads only shown or not;
+// the idle release gives a minimized window its own wait.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Sight {
+	Shown,
+	Covered,   // occluded where the desktop says so
+	Minimized, // or with no area, which is all Windows reports
+}
+
+impl Sight {
+	fn hidden(self) -> bool {
+		self != Sight::Shown
+	}
+}
+
+// A window with no area counts as minimized, since on Windows a restore stops
+// answering minimized a moment before its size comes back, and a device
+// rebuilt then took 1x1 as the window's size. The grid shrank to two columns
+// with it, and the console host's reflow lost the screen. Minimized is asked
+// before covered, because a desktop may report a minimized window as both.
+fn window_sight(
 	revealed: bool,
 	occluded: bool,
 	no_area: bool,
 	minimized: impl FnOnce() -> bool,
-) -> bool {
-	revealed && (occluded || no_area || minimized())
+) -> Sight {
+	if !revealed {
+		Sight::Shown
+	} else if no_area || minimized() {
+		Sight::Minimized
+	} else if occluded {
+		Sight::Covered
+	} else {
+		Sight::Shown
+	}
 }
 
 // How long a minimized answer stands. On X11 the answer is a property read
@@ -5237,14 +5281,14 @@ impl State {
 		self.dirty = true;
 	}
 
-	// Nothing of this window is on screen: minimized, or occluded where the WM
-	// says so. Both render entry points check it - a frame built here would bank
-	// the whole buffered backlog into the output ease, and the reveal would then
-	// play it back as if it had just arrived.
-	fn hidden(&mut self) -> bool {
+	// Whether any of this window is on screen. Both render entry points check
+	// it - a frame built while hidden would bank the whole buffered backlog
+	// into the output ease, and the reveal would then play it back as if it
+	// had just arrived.
+	fn window_sight(&mut self) -> Sight {
 		let window = &self.window;
 		let minimized = &mut self.minimized;
-		window_hidden(self.revealed, self.occluded, self.no_area, || {
+		window_sight(self.revealed, self.occluded, self.no_area, || {
 			FREEZE_MINIMIZED
 				&& minimized.get(Instant::now(), || window.is_minimized().unwrap_or(false))
 		})
@@ -5255,8 +5299,9 @@ impl State {
 	// whichever gets here first has to be the one that catches up - otherwise that
 	// frame banks the whole backlog into the ease before anything cuts it.
 	fn freeze_sync(&mut self) -> bool {
-		let hidden = self.hidden();
-		let frame = freeze_frame(self.was_hidden, hidden);
+		let sight = self.window_sight();
+		let hidden = sight.hidden();
+		let frame = freeze_frame(self.sight.hidden(), hidden);
 		if frame == Frame::CatchUp {
 			self.freeze_catchup();
 			// Being shown again is a sign of life. Windows sends no occlusion
@@ -5264,7 +5309,7 @@ impl State {
 			// does, while the window still counts as hidden.
 			self.note_active("shown");
 		}
-		self.was_hidden = hidden;
+		self.sight = sight;
 		frame == Frame::Skip
 	}
 
@@ -5306,7 +5351,7 @@ impl State {
 	// Output, which counts only while the window can be seen (IdleClock::output).
 	// The hidden flag is the one the last pass settled on.
 	fn note_output(&mut self) {
-		if self.idle.output(self.gpu.is_none(), self.was_hidden) {
+		if self.idle.output(self.gpu.is_none(), self.sight.hidden()) {
 			idledbg("wake: output");
 		}
 	}
@@ -5325,12 +5370,13 @@ impl State {
 			.map(|up| up + BENCH_BANNER_MIN)
 	}
 
-	fn release_deadline(&self, cfg: &config::Settings, hidden: bool) -> Option<Instant> {
+	// Reads the sight the pass's `freeze_sync` settled on.
+	fn release_deadline(&self, cfg: &config::Settings) -> Option<Instant> {
 		release_deadline(
 			cfg,
 			&Idle {
 				focused: self.focused,
-				hidden,
+				sight: self.sight,
 				revealed: self.revealed,
 				bench_busy: self.bench.is_some() || self.bench_at.is_some(),
 				since: self.idle.since,
@@ -8475,7 +8521,7 @@ impl ApplicationHandler<UserEvent> for App {
 			occluded: false,
 			no_area: false,
 			keeps_picture: !(cfg!(windows) && want_transparent),
-			was_hidden: false,
+			sight: Sight::Shown,
 			minimized: MinimizedProbe::default(),
 			next_frame: None,
 			wp_count: 0,
@@ -10013,7 +10059,7 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 		} else if !dialog_up
 			&& state
-				.release_deadline(&config::settings(), hidden)
+				.release_deadline(&config::settings())
 				.is_some_and(|due| Instant::now() >= due)
 		{
 			state.release_gpu();
@@ -10178,7 +10224,7 @@ impl ApplicationHandler<UserEvent> for App {
 		};
 		// wake to let the device go once the window has sat idle long enough
 		let idle_wake = (state.gpu.is_some() && !dialog_up)
-			.then(|| state.release_deadline(&config::settings(), hidden))
+			.then(|| state.release_deadline(&config::settings()))
 			.flatten();
 		let flow = match (flow, idle_wake) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
@@ -10278,14 +10324,14 @@ impl State {
 #[cfg(test)]
 mod tests {
 	use super::{
-		Caret, CloseScope, Conserve, ContextMenu, CopyMetrics, Entry, Idle, IdleClock, MenuAction,
-		PaneWakes, RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, Settle, TAB_CLOSE_M, TabEdit, VT_SETTLE,
-		ViewState, VtHeal, accel_at, accel_clash, close_scope, copybox_fit, copybox_place, fit_px,
-		focus_ring, is_copy_chord, key_is_typed, launch_maximized, menu_metrics, mia, msub, mta,
-		needs_folder_read, new_window_command, notice_due, pace_frame, pane_wake, rating_step,
-		release_deadline, remember_resize, reveal_due, rotation_live, rotation_next,
-		settings_after_reload, settle, tab_close_box, tab_command_line, tab_title_w, typed_title,
-		view_menu_items, window_hidden, window_px,
+		Caret, CloseScope, Conserve, ContextMenu, CopyMetrics, Entry, Idle, IdleClock, IdleRule,
+		MenuAction, PaneWakes, RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, Settle, Sight, TAB_CLOSE_M,
+		TabEdit, VT_SETTLE, ViewState, VtHeal, accel_at, accel_clash, close_scope, copybox_fit,
+		copybox_place, fit_px, focus_ring, is_copy_chord, key_is_typed, launch_maximized,
+		menu_metrics, mia, msub, mta, needs_folder_read, new_window_command, notice_due,
+		pace_frame, pane_wake, rating_step, release_deadline, remember_resize, reveal_due,
+		rotation_live, rotation_next, settings_after_reload, settle, tab_close_box,
+		tab_command_line, tab_title_w, typed_title, view_menu_items, window_px, window_sight,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -10375,13 +10421,19 @@ mod tests {
 		}
 		let cfg = config::Settings::default();
 		let five = Duration::from_secs(5);
-		assert_eq!(super::idle_rule(&cfg), (true, five, five));
+		let every_wait_five = IdleRule {
+			on: true,
+			minimized: five,
+			hidden: five,
+			otherwise: five,
+		};
+		assert_eq!(super::idle_rule(&cfg), every_wait_five);
 		// SAFETY: this child runs this one test, so no other thread is reading
 		// the environment.
 		unsafe { std::env::set_var("SILK_IDLE_SECS", "9") };
 		assert_eq!(
 			super::idle_rule(&cfg),
-			(true, five, five),
+			every_wait_five,
 			"read again after the first pass"
 		);
 		println!("idle wait checked");
@@ -10527,16 +10579,16 @@ mod tests {
 	}
 
 	// The idle release: off by default, never while the window has focus on
-	// screen, and a hidden window waits the shorter of the two times. Everything
+	// screen, and a covered window waits the shorter of the two times. Everything
 	// that vetoes it is a None, since a deadline that then had to be checked
 	// again elsewhere is how a veto gets forgotten.
 	// Test ID: Eq8b2Gu
 	#[test]
 	fn the_idle_release_waits_on_the_window_and_only_an_unwatched_one() {
 		let since = Instant::now();
-		let idle = |focused, hidden| Idle {
+		let idle = |focused, sight| Idle {
 			focused,
-			hidden,
+			sight,
 			revealed: true,
 			bench_busy: false,
 			since,
@@ -10546,7 +10598,7 @@ mod tests {
 		// which `idle_release_ships_on` pins now.
 		// let mut cfg = config::Settings::default();
 		// assert!(
-		// 	release_deadline(&cfg, &idle(false, true)).is_none(),
+		// 	release_deadline(&cfg, &idle(false, Sight::Covered)).is_none(),
 		// 	"off by default"
 		// );
 		let mut cfg = config::Settings {
@@ -10554,36 +10606,42 @@ mod tests {
 			..config::Settings::default()
 		};
 		assert!(
-			release_deadline(&cfg, &idle(false, true)).is_none(),
+			release_deadline(&cfg, &idle(false, Sight::Covered)).is_none(),
 			"switched off"
 		);
 		cfg.idle_release = true;
 		cfg.idle_release_hidden_min = 30;
 		cfg.idle_release_min = 240;
 		assert!(
-			release_deadline(&cfg, &idle(true, false)).is_none(),
+			release_deadline(&cfg, &idle(true, Sight::Shown)).is_none(),
 			"focused and on screen"
 		);
 		assert_eq!(
-			release_deadline(&cfg, &idle(false, false)),
+			release_deadline(&cfg, &idle(false, Sight::Shown)),
 			Some(since + Duration::from_hours(4))
 		);
 		assert_eq!(
-			release_deadline(&cfg, &idle(false, true)),
+			release_deadline(&cfg, &idle(false, Sight::Covered)),
 			Some(since + Duration::from_mins(30))
 		);
-		// minimized with focus still nominally on it: out of sight is what counts
+		// A minimized window took the hidden wait until 2026100418354006 gave it
+		// its own; `a_minimized_window_waits_its_own_time` pins that now.
+		// assert_eq!(
+		// 	release_deadline(&cfg, &idle(true, true)),
+		// 	Some(since + Duration::from_mins(30))
+		// );
+		// covered with focus still nominally on it: out of sight is what counts
 		assert_eq!(
-			release_deadline(&cfg, &idle(true, true)),
+			release_deadline(&cfg, &idle(true, Sight::Covered)),
 			Some(since + Duration::from_mins(30))
 		);
-		let mut owed = idle(false, true);
+		let mut owed = idle(false, Sight::Covered);
 		owed.bench_busy = true;
 		assert!(
 			release_deadline(&cfg, &owed).is_none(),
 			"a rating in flight"
 		);
-		let mut unshown = idle(false, true);
+		let mut unshown = idle(false, Sight::Covered);
 		unshown.revealed = false;
 		assert!(
 			release_deadline(&cfg, &unshown).is_none(),
@@ -10605,23 +10663,89 @@ mod tests {
 			idle_release_min: 240,
 			..config::Settings::default()
 		};
-		let blanks = |focused, hidden| Idle {
+		let blanks = |focused, sight| Idle {
 			focused,
-			hidden,
+			sight,
 			revealed: true,
 			bench_busy: false,
 			since,
 			keeps_picture: false,
 		};
 		assert!(
-			release_deadline(&cfg, &blanks(false, false)).is_none(),
+			release_deadline(&cfg, &blanks(false, Sight::Shown)).is_none(),
 			"unfocused in view"
 		);
-		assert!(release_deadline(&cfg, &blanks(true, false)).is_none());
+		assert!(release_deadline(&cfg, &blanks(true, Sight::Shown)).is_none());
 		assert_eq!(
-			release_deadline(&cfg, &blanks(false, true)),
+			release_deadline(&cfg, &blanks(false, Sight::Covered)),
 			Some(since + Duration::from_mins(30))
 		);
+	}
+
+	// A minimized window lets go after its own wait, a minute by default,
+	// rather than the half hour a covered one waits. Whatever else the desktop
+	// says of it, and on Windows a window with no area, is minimized.
+	// Test ID: ErmpLNm
+	#[test]
+	fn a_minimized_window_waits_its_own_time() {
+		let since = Instant::now();
+		let defaults = config::Settings::default();
+		assert_eq!(defaults.idle_release_minimized_min, 1);
+		assert_eq!(
+			defaults.idle_release_hidden_min, 30,
+			"covered keeps its wait"
+		);
+		let cfg = config::Settings {
+			idle_release: true,
+			idle_release_minimized_min: 3,
+			idle_release_hidden_min: 30,
+			idle_release_min: 240,
+			..defaults
+		};
+		let idle = |focused, sight, keeps_picture| Idle {
+			focused,
+			sight,
+			revealed: true,
+			bench_busy: false,
+			since,
+			keeps_picture,
+		};
+		for focused in [false, true] {
+			for keeps_picture in [false, true] {
+				assert_eq!(
+					release_deadline(&cfg, &idle(focused, Sight::Minimized, keeps_picture)),
+					Some(since + Duration::from_mins(3)),
+					"focused {focused}, keeps picture {keeps_picture}"
+				);
+			}
+		}
+		assert_eq!(
+			release_deadline(&cfg, &idle(false, Sight::Covered, true)),
+			Some(since + Duration::from_mins(30))
+		);
+		let mut owed = idle(false, Sight::Minimized, true);
+		owed.bench_busy = true;
+		assert!(
+			release_deadline(&cfg, &owed).is_none(),
+			"a rating in flight"
+		);
+		let off = config::Settings {
+			idle_release: false,
+			..cfg
+		};
+		assert!(release_deadline(&off, &idle(false, Sight::Minimized, true)).is_none());
+
+		// what the window reports, as (occluded, no area, minimized)
+		let sight =
+			|occluded, no_area, minimized| window_sight(true, occluded, no_area, || minimized);
+		assert_eq!(
+			sight(true, false, true),
+			Sight::Minimized,
+			"minimized and occluded"
+		);
+		assert_eq!(sight(false, true, false), Sight::Minimized, "no area");
+		assert_eq!(sight(true, false, false), Sight::Covered);
+		assert_eq!(sight(false, false, false), Sight::Shown);
 	}
 
 	// A Windows restore stops answering minimized a moment before the size
@@ -10631,11 +10755,14 @@ mod tests {
 	// Test ID: Erksiin
 	#[test]
 	fn a_window_with_no_area_is_hidden_whatever_the_minimized_answer() {
-		assert!(window_hidden(true, false, true, || false));
-		assert!(!window_hidden(true, false, false, || false));
-		assert!(window_hidden(true, false, false, || true));
-		assert!(window_hidden(true, true, false, || false));
-		assert!(!window_hidden(false, true, true, || true), "not shown yet");
+		let hidden = |revealed, occluded, no_area, minimized| {
+			window_sight(revealed, occluded, no_area, || minimized).hidden()
+		};
+		assert!(hidden(true, false, true, false));
+		assert!(!hidden(true, false, false, false));
+		assert!(hidden(true, false, false, true));
+		assert!(hidden(true, true, false, false));
+		assert!(!hidden(false, true, true, true), "not shown yet");
 	}
 
 	// A program printing in a minimized window held its device for good, since

@@ -64,6 +64,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 25e49e4
 	- Test case: Erl3R5g, `cicd/tests/release-notes/run.bash`, in the pipeline.
 
+- A minimized window lets go of the graphics card after its own short wait
+	- ID: 2026100418354006
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs external testing: vm925w, a minimized window let go after the minute and then restored, with Transparency on and off. Look at what the window shows during the second it takes the card back. The same on macOS on b26.
+	- Priority: High
+	- Opened: 20261004-183540
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225506
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A new wait for a minimized window, "Minutes when minimized", 1 by default, under "Free resources when idle".
+		- "Minutes when hidden" keeps covering a window that is covered, at 30.
+	- Notes:
+		- 20261004: Taking the card back costs about 25 ms on Linux and 0.8 to 1.2 s on Windows with an RTX 2060. Check what a restored window shows on Windows during that second. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-shorter-wait-for-a-minimized-window).
+	- Progress log:
+		- 20261004: "Minutes when minimized" is the first of the three waits under "Free resources when idle", 1 by default, with the same 1 to 1440 range as the other two. The config key is `window.idle_release_minimized_min`. An existing config gets its commented line beside the other two waits.
+		- The release now tells a minimized window from a covered one. A window with no area counts as minimized, since that is how Windows reports it. A window reported as both minimized and covered takes the minimized wait.
+		- The "Minutes when hidden" tip and the template comment now say that wait is for a covered window. Its name and its 30 stay.
+		- On X11 a shaded window also reads as minimized, since the desktop marks both the same way. Wayland reports neither, so nothing changes there.
+		- `SILK_IDLE_SECS` still sets every wait at once.
+	- Verified: on Linux, a minimized window let go about a minute after it lost focus and took the card back on restore, while an unfocused window beside it kept its device. The new row and its tip show on the Window tab. The unit suite, clippy and fmt pass.
+	- Note: one assertion in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one`, that a minimized window takes the hidden wait, is commented out, since the new wait replaces it. The rest of that test and `a_window_that_would_go_blank_is_never_let_go_in_view` now say covered where they said hidden. `a_window_with_no_area_is_hidden_whatever_the_minimized_answer` asks the same five cases through the new function.
+	- Swept: every `idle_release_hidden_min` site in config.rs (field, default, save, reader, limits test, template), settings_ui.rs (slider list, getter, setter, unit list), settings_ui.shcl (row and gray rule), and both `release_deadline` callers in app.rs. Every reader of the old hidden flag now reads the stored sight. The Windows GUI scripts set only `SILK_IDLE_SECS`.
+	- Branch: minidle
+	- Test case: ErmpLNm `a_minimized_window_waits_its_own_time` and ErmrbFB `an_existing_config_learns_the_minimized_wait`. The new row is also covered by `every_row_survives_a_save_and_a_relaunch`.
+	- Closed:
+
 - A Settings save on a config that was deleted while running says it saved and writes nothing
 	- ID: 2026100316135866
 	- Type: Bug
@@ -929,22 +959,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261004: It opens Settings in 86 ms rather than 310 ms. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-dialogs-kept-gpu-context).
 	- Closed:
 
-- A minimized window lets go of the graphics card after its own short wait
-	- ID: 2026100418354006
-	- Type: Enhancement
+- A passing unit test run keeps its test folder
+	- ID: 2026100418554244
+	- Type: Bug
 	- Status: Queued
-	- Priority: High
-	- Opened: 20261004-183540
-	- Opened by: JC
+	- Severity: Avg
+	- Opened: 20261004-185542
+	- Opened by: CC
 	- Assigned to: CC
-	- Related IDs: 2026100418225506
+	- Related IDs: 2026100220260484, 2026100314050010
 	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- A new wait for a minimized window, "Minutes when minimized", 1 by default, under "Free resources when idle".
-		- "Minutes when hidden" keeps covering a window that is covered, at 30.
-	- Notes:
-		- 20261004: Taking the card back costs about 25 ms on Linux and 0.8 to 1.2 s on Windows with an RTX 2060. Check what a restored window shows on Windows during that second. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-shorter-wait-for-a-minimized-window).
+	- Steps to reproduce:
+		- Run the whole unit test suite with every test passing.
+	- Incorrect behavior: The run ends with "test files kept in" and leaves its `test_silkterm_<stamp>` folder behind.
+	- Expected behavior: A run with no failed test removes its own folder.
+	- Reproduced: 20261004, twice on b23, each with all 1117 tests passing.
+	- Possible cause: any panic marks the run as failed, and `a_poisoned_lock_is_taken_as_it_stands` (Erm4AZ1) panics on purpose inside `catch_unwind`. Run alone it makes no folder, so the keep does not show then.
 	- Closed:
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
