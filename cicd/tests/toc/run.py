@@ -20,6 +20,7 @@ import argparse
 import difflib
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 BEGIN = "<!-- TOC -->"
@@ -29,13 +30,13 @@ IGNORE = "TOC ignore:true"
 ## Lowercase, keep letters, digits, spaces, hyphens and underscores, spaces to
 ## hyphens. The extension keeps underscores, which the written-down rule does not
 ## mention - see #api-alacritty_terminal in design.md.
-def anchor(text):
+def anchor(text: str) -> str:
 	kept = [c for c in text.lower() if c.isalnum() or c in " -_"]
 	return "".join(kept).replace(" ", "-")
 
 
-def headings(lines):
-	fence = None
+def headings(lines: list[str]) -> Iterator[tuple[int, str]]:
+	fence: str | None = None
 	prev_ignored = False
 	for line in lines:
 		stripped = line.strip()
@@ -61,7 +62,7 @@ def headings(lines):
 			prev_ignored = False
 
 
-def toc_block(lines):
+def toc_block(lines: list[str]) -> list[str]:
 	out = [BEGIN, ""]
 	for level, text in headings(lines):
 		out.append("\t" * (level - 2) + f"- [{text}](#{anchor(text)})")
@@ -71,14 +72,14 @@ def toc_block(lines):
 
 ## Two headings with the same text share an anchor, so one of the links goes to the
 ## wrong place. No markdown linter catches it.
-def clashes(lines):
-	seen = {}
+def clashes(lines: list[str]) -> dict[str, list[str]]:
+	seen: dict[str, list[str]] = {}
 	for _, text in headings(lines):
 		seen.setdefault(anchor(text), []).append(text)
 	return {a: t for a, t in seen.items() if len(t) > 1}
 
 
-def check(path, fix):
+def check(path: Path, fix: bool) -> bool:
 	lines = path.read_text(encoding="utf-8").split("\n")
 	try:
 		start = lines.index(BEGIN)
@@ -105,7 +106,7 @@ def check(path, fix):
 	return False
 
 
-def main():
+def main() -> int:
 	here = Path(__file__).resolve()
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--fix", action="store_true")

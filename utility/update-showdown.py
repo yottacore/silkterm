@@ -51,11 +51,13 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
+from typing import NoReturn
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-INCLUDE = os.path.join(HERE, "include")
-REPO = os.path.dirname(HERE)
-README = os.path.join(REPO, "README.md")
+HERE = Path(__file__).absolute().parent
+INCLUDE = HERE / "include"
+REPO = HERE.parent
+README = REPO / "README.md"
 
 #	key: README row name, then which rigs can drive it here. A terminal the size rig has
 #	no recipe for still gets its speed row; the size columns are left as they were.
@@ -93,7 +95,7 @@ SIZE_GRID = (100, 30)
 _last_blank = [False]
 
 
-def echo_clean(text=""):
+def echo_clean(text: str = "") -> None:
 	if text:
 		print(text)
 		_last_blank[0] = False
@@ -102,20 +104,20 @@ def echo_clean(text=""):
 		_last_blank[0] = True
 
 
-def echo(text=""):
-	echo_clean("[ %s ]" % text if text else "")
+def echo(text: str = "") -> None:
+	echo_clean(f"[ {text} ]" if text else "")
 
 
-def section(text):
+def section(text: str) -> None:
 	echo_clean()
 	echo_clean(LETTERBOX)
 	echo(text)
 
 
-def die(text):
+def die(text: str) -> NoReturn:
 	echo_clean()
 	sys.stdout.flush()                             ## or the reason appears above its own output
-	print("[ FAILED: %s ]" % text, file=sys.stderr)
+	print(f"[ FAILED: {text} ]", file=sys.stderr)
 	sys.exit(1)
 
 
@@ -123,7 +125,7 @@ def die(text):
 #	Running the parts
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-def run_plain(cmd):
+def run_plain(cmd: list[str]) -> bool:
 	"""Run a child on this terminal's own stdio, and say whether it worked.
 
 	The throughput tool stops its clock on the terminal's reply, so its stdout has to
@@ -132,11 +134,11 @@ def run_plain(cmd):
 	try:
 		return subprocess.call(cmd) == 0
 	except OSError as err:
-		echo("WARNING: could not run %s: %s" % (os.path.basename(cmd[0]), err))
+		echo(f"WARNING: could not run {Path(cmd[0]).name}: {err}")
 		return False
 
 
-def run_capturing(cmd):
+def run_capturing(cmd: list[str]) -> list[str]:
 	"""Run a child, echoing its output as it arrives, and return the lines.
 
 	The rig's own output is the record of what was measured, so it stays on screen; the
@@ -146,21 +148,25 @@ def run_capturing(cmd):
 		proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
 		                        text=True, bufsize=1)
 	except OSError as err:
-		echo("WARNING: could not run %s: %s" % (os.path.basename(cmd[0]), err))
+		echo(f"WARNING: could not run {Path(cmd[0]).name}: {err}")
 		return []
 	lines = []
-	for line in proc.stdout:
-		sys.stdout.write(line)
-		sys.stdout.flush()
-		lines.append(line.rstrip("\n"))
-	proc.wait()
+	#	Leaving the block closes the pipe and waits for the child.
+	with proc:
+		assert proc.stdout is not None
+		for line in proc.stdout:
+			sys.stdout.write(line)
+			sys.stdout.flush()
+			lines.append(line.rstrip("\n"))
 	_last_blank[0] = False
 	return lines
 
 
-def terminal_grid():
+def terminal_grid() -> tuple[int, int] | None:
 	"""(columns, rows) of this window, or None."""
 	for stream in (sys.__stdout__, sys.__stderr__, sys.__stdin__):
+		if stream is None:
+			continue
 		try:
 			size = os.get_terminal_size(stream.fileno())
 			return (size.columns, size.lines)
@@ -169,7 +175,7 @@ def terminal_grid():
 	return None
 
 
-def speed_grid_ok(any_size):
+def speed_grid_ok(any_size: bool) -> bool:
 	"""The throughput tool measures whatever window it is given, so check here.
 
 	The rig fits every terminal to the same grid before measuring; on this path there is no
@@ -179,19 +185,18 @@ def speed_grid_ok(any_size):
 	got = terminal_grid()
 	if got == SPEED_GRID:
 		return True
-	shown = "%dx%d" % got if got else "unknown"
-	msg = ("speed rows are measured at %dx%d and this window is %s"
-	       % (SPEED_GRID[0], SPEED_GRID[1], shown))
+	shown = f"{got[0]}x{got[1]}" if got else "unknown"
+	msg = f"speed rows are measured at {SPEED_GRID[0]}x{SPEED_GRID[1]} and this window is {shown}"
 	if any_size:
-		echo("WARNING: %s - the figure will not be comparable" % msg)
+		echo(f"WARNING: {msg} - the figure will not be comparable")
 		return True
-	echo("SKIPPED: %s - resize and run again" % msg)
+	echo(f"SKIPPED: {msg} - resize and run again")
 	return False
 
 
-def measure_here(reps, quick, label, write_readme, publish):
+def measure_here(reps: int, quick: bool, label: str, write_readme: bool, publish: bool) -> bool:
 	"""Measure the terminal this is running inside."""
-	cmd = [sys.executable, os.path.join(INCLUDE, "termbench.py")]
+	cmd = [sys.executable, str(INCLUDE / "termbench.py")]
 	if quick:
 		cmd.append("--quick")
 	else:
@@ -207,9 +212,9 @@ def measure_here(reps, quick, label, write_readme, publish):
 	return run_plain(cmd)
 
 
-def read_result(lines):
+def read_result(lines: list[str]) -> dict[str, float] | None:
 	"""The rig's RESULT line as a dict of floats, or None."""
-	line = next((l for l in lines if l.startswith("RESULT ")), "")
+	line = next((ln for ln in lines if ln.startswith("RESULT ")), "")
 	if not line:
 		return None
 	got = dict(re.findall(r"(\w+)=([0-9.]+)", line))
@@ -218,23 +223,23 @@ def read_result(lines):
 	return {k: float(v) for k, v in got.items()}
 
 
-def write_size_row(row, file_deps, mem):
-	wrote = run_plain([sys.executable, os.path.join(INCLUDE, "showdown-readme.py"),
-	                   "--readme", README, "--terminal", row,
-	                   "--file-deps", "%.1f" % file_deps, "--mem", "%.1f" % mem])
+def write_size_row(row: str, file_deps: float, mem: float) -> bool:
+	wrote = run_plain([sys.executable, str(INCLUDE / "showdown-readme.py"),
+	                   "--readme", str(README), "--terminal", row,
+	                   "--file-deps", f"{file_deps:.1f}", "--mem", f"{mem:.1f}"])
 	if not wrote:
-		echo("WARNING: could not write the %s row" % row)
+		echo(f"WARNING: could not write the {row} row")
 	return wrote
 
 
-def size_here(label, publish, any_size):
+def size_here(label: str, publish: bool, any_size: bool) -> bool:
 	"""Size and memory of the terminal this is running inside.
 
 	The row has to be named to be written. Guessing it from the executable would quietly
 	put a figure in the wrong row on the terminals that share a family name, and a wrong
 	row is worse than a missing one.
 	"""
-	cmd = [sys.executable, os.path.join(INCLUDE, "sizebench-classify.py"),
+	cmd = [sys.executable, str(INCLUDE / "sizebench-classify.py"),
 	       "--here", "--summary"]
 	if any_size:
 		cmd.append("--any-size")
@@ -250,21 +255,21 @@ def size_here(label, publish, any_size):
 	return write_size_row(label, got["filedeps"], got["mem"])
 
 
-def measure_speed(key, row, reps, write_readme):
-	cmd = [os.path.join(INCLUDE, "termbench-run.bash"),
+def measure_speed(key: str, row: str, reps: int, write_readme: bool) -> None:
+	cmd = [str(INCLUDE / "termbench-run.bash"),
 	       "--term", key, "--reps", str(reps), "--label", row]
 	if not write_readme:
 		cmd.append("--no-save")
 	if not run_plain(cmd):
-		echo("WARNING: speed run failed for %s" % key)
+		echo(f"WARNING: speed run failed for {key}")
 
 
-def measure_size(key, row, write_readme):
+def measure_size(key: str, row: str, write_readme: bool) -> tuple[float, float] | None:
 	"""File+deps and Mem in MiB, or None if the rig could not say."""
 	got = read_result(run_capturing(
-		[os.path.join(INCLUDE, "sizebench-run.bash"), "--term", key]))
+		[str(INCLUDE / "sizebench-run.bash"), "--term", key]))
 	if not got:
-		echo("WARNING: no usable result from the size rig for %s" % key)
+		echo(f"WARNING: no usable result from the size rig for {key}")
 		return None
 	if write_readme:
 		write_size_row(row, got["filedeps"], got["mem"])
@@ -275,14 +280,14 @@ def measure_size(key, row, write_readme):
 #	Entry
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-def header_text():
+def header_text() -> str:
 	"""The comment header, which is also the help text.
 
 	Read by prefix rather than searched for a first line: a pattern matching that line
 	also matches itself, which is how the shell version printed its own source twice.
 	"""
 	out = []
-	with open(os.path.abspath(__file__)) as fh:
+	with Path(__file__).open() as fh:
 		next(fh)                                   ## the interpreter line
 		for line in fh:
 			if line.startswith("##"):
@@ -292,13 +297,13 @@ def header_text():
 	return "\n".join(out).strip("\n")
 
 
-def show_list():
+def show_list() -> None:
 	echo_clean("  key          README row                rigs")
 	for key, row, rigs in TERMS:
-		echo_clean("  %-12s %-25s %s" % (key, row, rigs))
+		echo_clean(f"  {key:<12} {row:<25} {rigs}")
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
 	ap = argparse.ArgumentParser(add_help=False)
 	ap.add_argument("--term", action="append", default=[], metavar="KEY")
 	ap.add_argument("--all", action="store_true")
@@ -342,10 +347,9 @@ def main(argv):
 			elif got == SIZE_GRID:
 				do_speed = False
 			else:
-				die("this window is %s. Speed is measured at %dx%d and size and memory at "
-				    "%dx%d, so set it to one of those and run again"
-				    % ("%dx%d" % got if got else "not a terminal",
-				       SPEED_GRID[0], SPEED_GRID[1], SIZE_GRID[0], SIZE_GRID[1]))
+				shown = f"{got[0]}x{got[1]}" if got else "not a terminal"
+				die(f"this window is {shown}. Speed is measured at {SPEED_GRID[0]}x{SPEED_GRID[1]} and size and memory at "
+				    f"{SIZE_GRID[0]}x{SIZE_GRID[1]}, so set it to one of those and run again")
 
 		#	A quick run and an --any-size one are for looking, and the table only takes
 		#	figures measured the way the rows beside them were.
@@ -364,8 +368,7 @@ def main(argv):
 		if publish and ok:
 			echo("README updated - check the diff before committing")
 		elif write_readme and not publish:
-			echo("README not touched - a %s run is not comparable with the table"
-			     % ("quick" if args.quick else "--any-size"))
+			echo(f"README not touched - a {'quick' if args.quick else '--any-size'} run is not comparable with the table")
 		else:
 			echo("nothing written")
 		echo_clean()
@@ -378,25 +381,25 @@ def main(argv):
 	for key in keys:
 		if key not in known:
 			show_list()
-			die("unknown key '%s'" % key)
+			die(f"unknown key '{key}'")
 
-	measured = []
+	measured: list[tuple[str, float, float]] = []
 	for key in keys:
 		row, rigs = known[key]
 		if not args.size_only and rigs in ("both", "speed"):
-			section("Speed: %s" % row)
+			section(f"Speed: {row}")
 			measure_speed(key, row, args.reps, write_readme)
 		if not args.speed_only and rigs in ("both", "size"):
-			section("Size and memory: %s" % row)
-			got = measure_size(key, row, write_readme)
-			if got:
-				measured.append((row,) + got)
+			section(f"Size and memory: {row}")
+			sizes = measure_size(key, row, write_readme)
+			if sizes:
+				measured.append((row, *sizes))
 
 	if measured:
 		section("Size and memory measured")
-		echo_clean("  %-25s %10s %10s" % ("Terminal", "File+deps", "Mem"))
+		echo_clean(f"  {'Terminal':<25} {'File+deps':>10} {'Mem':>10}")
 		for row, file_deps, mem in measured:
-			echo_clean("  %-25s %10.1f %10.1f" % (row, file_deps, mem))
+			echo_clean(f"  {row:<25} {file_deps:10.1f} {mem:10.1f}")
 
 	echo_clean()
 	echo("README updated - check the diff before committing" if write_readme
@@ -414,3 +417,4 @@ if __name__ == "__main__":
 ##		         measure-this-terminal path, which had no wrapper before.
 ##		20260928 Both rigs for GNOME Terminal, WezTerm and Tabby; size for Hyper.
 ##		20260929 Both rigs for XTerm; its speed runs on a private X server.
+##		20261005 Type hints, pathlib, f-strings.

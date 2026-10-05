@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _testdir  # noqa: E402
@@ -36,7 +37,7 @@ UTILITY = REPO / "utility"
 INCLUDE = UTILITY / "include"
 
 failures = 0
-def check(what, ok, detail=""):
+def check(what: str, ok: object, detail: str = "") -> None:
 	global failures
 	if ok:
 		print(f"  ok   {what}")
@@ -44,8 +45,11 @@ def check(what, ok, detail=""):
 		print(f"  FAIL {what}{': ' + detail if detail else ''}")
 		failures += 1
 
-def load(name, path):
+## Loaded by path, so nothing in it has a static type.
+def load(name: str, path: Path) -> Any:
 	spec = importlib.util.spec_from_file_location(name, path)
+	if spec is None or spec.loader is None:
+		raise ImportError(f"cannot load {path}")
 	mod = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(mod)
 	return mod
@@ -62,13 +66,13 @@ block = readme.split(sr.BEGIN, 1)[1].split(sr.END, 1)[0]
 table = [mdtable.split_row(ln) for ln in block.splitlines() if ln.startswith("|")]
 header = table[0]
 
-def column(word):
+def column(word: str) -> int:
 	return next(i for i, cell in enumerate(header) if word in cell)
 
 name_col, speed_col = column("Terminal"), column("1-byte")
 size_cols = (column("File+"), column("Mem"))
 
-def measured(cell):
+def measured(cell: str) -> bool:
 	return re.fullmatch(r"[0-9.]+", cell.replace("*", "").strip()) is not None
 
 rigs_for = {sr.norm(row): rigs for _, row, rigs in us.TERMS}
@@ -86,7 +90,7 @@ for cells in table[2:]:
 speed_rig = (INCLUDE / "termbench-run.bash").read_text(encoding="utf-8")
 speed_arms = {key for arm in re.findall(r"^\t([a-z0-9|]+)\)$", speed_rig, re.M) for key in arm.split("|")}
 size_keys = subprocess.run([str(INCLUDE / "sizebench-run.bash"), "--list"],
-	capture_output=True, text=True, timeout=30).stdout.split()
+	capture_output=True, text=True, timeout=30, check=False).stdout.split()
 for key, row, rigs in us.TERMS:
 	if rigs in ("both", "speed"):
 		check(f"the speed rig has a recipe for {key}", key in speed_arms)
@@ -107,29 +111,29 @@ fake = scratch / "fake-term"
 shutil.copy2("/bin/bash", fake)
 home = scratch / "home"
 home.mkdir()
-spawned = []
+spawned: list[subprocess.Popen[str]] = []
 
-def start(cmd, **env):
+def start(cmd: str, **env: str) -> subprocess.Popen[str]:
 	proc = subprocess.Popen(["/bin/sh", "-c", cmd], env=dict(os.environ, FAKE=str(fake), **env),
 		stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, start_new_session=True)
 	spawned.append(proc)
 	return proc
 
-def owned_root(launched, home_dir):
+def owned_root(launched: int, home_dir: Path) -> str:
 	got = subprocess.run(["bash", "-c", 'source "$1" && fOwnedRoot "$2" "$3" "$4"', "bash",
 		str(INCLUDE / "bench-common.bash"), str(fake), str(home_dir), str(launched)],
-		capture_output=True, text=True, timeout=60)
+		capture_output=True, text=True, timeout=60, check=False)
 	return got.stdout.strip() if got.returncode == 0 else ""
 
-def child_of(pid, exe):
+def child_of(pid: int, exe: Path) -> str:
 	for _ in range(50):
-		for kid in subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True).stdout.split():
+		for kid in subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True, check=False).stdout.split():
 			try:
-				if os.path.realpath(f"/proc/{kid}/exe") == os.path.realpath(exe):
+				if Path(f"/proc/{kid}/exe").resolve() == exe.resolve():
 					return kid
 			except OSError:
 				pass
-		subprocess.run(["sleep", "0.1"])
+		subprocess.run(["sleep", "0.1"], check=False)
 	return ""
 
 try:
@@ -142,7 +146,7 @@ try:
 	## Started by a session bus that forks twice, so it is nobody's child, but it has the
 	## account's HOME. GNOME Terminal's server looks like this.
 	escaped = start('"$FAKE" -c "sleep 60; :" >/dev/null & echo $!', HOME=str(home))
-	escaped_pid = escaped.stdout.readline().strip()
+	escaped_pid = escaped.stdout.readline().strip() if escaped.stdout else ""
 	unrelated = start("sleep 60")
 
 	check("the topmost copy in the launched tree is the terminal",
@@ -170,15 +174,15 @@ for path, mib in ((term_exe, 3), (own_lib, 1), (borrowed_lib, 2)):
 
 class Collector:
 	name = "linux"
-	def mapped_files(self, pid): return {str(term_exe), str(own_lib), str(borrowed_lib)}
-	def is_library(self, path): return ".so" in os.path.basename(path)
-	def base_name(self, path): return os.path.basename(path)
-	def find_library(self, name): return None
-	def needed(self, path): return []
-	def is_gfx(self, path): return False
-	def is_base_os(self, path): return False
-	def regions(self, pid): return []
-	def norm(self, path): return path
+	def mapped_files(self, pid: int) -> set[str]: return {str(term_exe), str(own_lib), str(borrowed_lib)}
+	def is_library(self, path: str) -> bool: return ".so" in Path(path).name
+	def base_name(self, path: str) -> str: return Path(path).name
+	def find_library(self, name: str) -> str | None: return None
+	def needed(self, path: str) -> list[str]: return []
+	def is_gfx(self, path: str) -> bool: return False
+	def is_base_os(self, path: str) -> bool: return False
+	def regions(self, pid: int) -> list[tuple[str, int]]: return []
+	def norm(self, path: str) -> str: return path
 
 try:
 	bundled = classify.measure([1], [str(term_exe)], Collector(), payload=str(bundle))
@@ -189,11 +193,11 @@ packaged = classify.measure([1], [str(term_exe)], Collector())
 check("a packaged terminal still adds all of them", packaged["deps_mib"] == 3.0, str(packaged["deps_mib"]))
 
 got = subprocess.run(["bash", "-c", 'source "$1" && fAppDir "$2"', "bash",
-	str(INCLUDE / "sizebench-run.bash"), str(term_exe)], capture_output=True, text=True, timeout=30)
+	str(INCLUDE / "sizebench-run.bash"), str(term_exe)], capture_output=True, text=True, timeout=30, check=False)
 check("a binary outside an AppImage has no bundle root", got.returncode != 0 and got.stdout == "", got.stdout)
 (bundle / "AppRun").write_text("#!/bin/sh\n")
 got = subprocess.run(["bash", "-c", 'source "$1" && fAppDir "$2"', "bash",
-	str(INCLUDE / "sizebench-run.bash"), str(term_exe)], capture_output=True, text=True, timeout=30)
+	str(INCLUDE / "sizebench-run.bash"), str(term_exe)], capture_output=True, text=True, timeout=30, check=False)
 check("an extracted AppImage is billed from the folder holding AppRun", got.stdout == str(bundle), got.stdout)
 
 ## A terminal whose working binary has no version of its own takes one from the command

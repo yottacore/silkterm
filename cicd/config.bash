@@ -286,6 +286,7 @@ export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/scrimexp
 */target/rewrite-20260915.docs-backup
 */target/repro.*
+*/target/mypy
 */source/target
 */clipboard-race/target
 */wallpaper/source/010_origs

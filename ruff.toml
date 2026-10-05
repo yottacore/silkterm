@@ -1,17 +1,40 @@
 ##	Ruff settings for the repo's own Python scripts. The forks keep their own.
-##	cicd/utility/py-lint.py runs the check, and its indentation test, in the
-##	lint stage.
-extend-exclude = ["forks"]
+##	cicd/utility/py-lint.py runs the check, its indentation test and mypy, in
+##	the lint stage.
+extend-exclude = [
+	"forks",
+	##	A helper shared with other repos, kept as it is there.
+	"cicd/utility/n8output-random-unicode.py",
+]
 
 [lint]
-##	Ruff's default set, less what the scripts still break. Each one left out is
-##	a handful of lines, to come back in with the naming and idiom pass.
-ignore = [
-	"E401",  ## several imports on one line
-	"E702",  ## semicolon between statements
-	"E731",  ## a lambda assigned to a name
-	"E741",  ## `l` as a name
+##	Ruff's default set, plus the style guide's Python rules: type hints, PEP 8
+##	names, f-strings, pathlib, files closed by `with`, and a `check=` on every
+##	subprocess.run.
+extend-select = [
+	"ANN",      ## type hints on every signature
+	"N",        ## PEP 8 names
+	"UP031",    ## % formatting
+	"UP032",    ## .format()
+	"PTH",      ## os.path and friends
+	"SIM115",   ## open() outside a with
+	"PLW1510",  ## subprocess.run with no check=
+	"B006",     ## mutable default argument
 ]
+
+[lint.flake8-annotations]
+##	A wrapper that hands its keywords on to subprocess.run takes them as Any.
+allow-star-arg-any = true
+
+[lint.per-file-ignores]
+##	They load other scripts by path, which have no static type to name.
+"cicd/tests/demo/run.py" = ["ANN401"]
+"cicd/tests/showdown/run.py" = ["ANN401"]
+"cicd/tests/showdown/rigs.py" = ["ANN401"]
+##	Copied in from elsewhere, so it keeps its own names.
+"cicd/utility/flame-report.py" = ["N802", "N806"]
+##	ctypes structs, named as the Windows headers name them.
+"utility/include/sizebench-classify.py" = ["N801"]
 
 [format]
 ##	Tabs, like the rest of the repo. Not run in the pipeline: existing files

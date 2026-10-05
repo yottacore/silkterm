@@ -36,18 +36,18 @@ HEADING = re.compile(r"^#{1,6} ")
 BANNER = re.compile(r"^\s*//[/!]?\s*([-=*#~_+•])\1{3,}")
 
 
-def problems(lines):
+def problems(lines: list[str]) -> list[tuple[int, str]]:
 	##	(line, problem) pairs, 1-based. Fenced code and TOC blocks are passed over
 	##	whole, and a fence counts as text for the lines around it.
 	out = []
-	fence = None
+	fence: str | None = None
 	toc = False
-	inItem = False
+	in_item = False
 	for i, line in enumerate(lines):
 		stripped = line.strip()
 		if fence is None and not toc and stripped.startswith(("```", "~~~")):
 			fence = stripped[:3]
-			inItem = False
+			in_item = False
 			continue
 		if fence is not None:
 			if stripped.startswith(fence):
@@ -61,13 +61,13 @@ def problems(lines):
 			continue
 		prev = lines[i - 1] if i else ""
 		if BULLET.match(line):
-			if inItem and prev.strip():
+			if in_item and prev.strip():
 				out.append((i + 1, "top-level bullet with no blank line before it"))
-			inItem = True
+			in_item = True
 		elif not stripped:
-			inItem = False
+			in_item = False
 		elif not line[0].isspace():
-			inItem = False
+			in_item = False
 		if HEADING.match(line):
 			##	The TOC extension's marker sits on the line above its heading.
 			above = i - 1 if prev.strip() == TOC_IGNORE else i
@@ -78,11 +78,11 @@ def problems(lines):
 	return out
 
 
-def banners(lines):
+def banners(lines: list[str]) -> list[tuple[int, str]]:
 	return [(i + 1, "banner rule in a comment") for i, line in enumerate(lines) if BANNER.match(line)]
 
 
-def main():
+def main() -> int:
 	here = Path(__file__).resolve()
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--root", default=str(here.parents[3]))

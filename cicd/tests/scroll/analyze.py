@@ -85,7 +85,7 @@ def main() -> int:
 
     frames = frames[a.skip_frames:]
 
-    def out(tag, msg):
+    def out(tag: str, msg: str) -> None:
         print(f"[ {tag} {a.label}: {msg} ]")
 
     if a.mode == "pinned":

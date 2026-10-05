@@ -16,25 +16,24 @@ it belongs in the ordering, and the speed tool makes that call.
 """
 
 import argparse
-import os
 import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).absolute().parent))
 import mdtable  # noqa: E402
 
 BEGIN, END = "<!-- termbench:begin -->", "<!-- termbench:end -->"
 
 
-def norm(cell):
+def norm(cell: str) -> str:
 	"""Letters and digits only, so 'XFCE4 Terminal' matches 'xfce4-terminal'."""
 	cell = re.sub(r"<sup>.*?</sup>", "", cell)
 	cell = re.sub(r"\$\\textcolor\{[^}]*\}\{(?:\\textbf\{)?([^}]*)\}+\$", r"\1", cell)
 	return re.sub(r"[^a-z0-9]", "", cell.lower())
 
 
-def update(readme, terminal, file_deps, mem):
+def update(readme: Path, terminal: str, file_deps: float, mem: float) -> tuple[str | None, str | None]:
 	#	Spelled out, because the default is the locale codec: on Windows that is cp1252,
 	#	which cannot read the table's own characters and fails the run before it starts.
 	text = readme.read_text(encoding="utf-8")
@@ -45,20 +44,21 @@ def update(readme, terminal, file_deps, mem):
 	table, tail = rest.split(END, 1)
 	lines = table.split("\n")
 
-	rows = [i for i, l in enumerate(lines) if l.strip().startswith("|")]
+	rows = [i for i, line in enumerate(lines) if line.strip().startswith("|")]
 	if len(rows) < 2:
 		return None, "no table rows"
 
 	header = mdtable.split_row(lines[rows[0]])
-	want = {"filedeps": None, "mem": None}
+	deps_col: int | None = None
+	mem_col: int | None = None
 	for i, cell in enumerate(header):
 		key = norm(cell)
 		# Headers carry footnote markers and a '(MiB)' tail, so match on the stem.
 		if key.startswith("filedeps"):
-			want["filedeps"] = i
+			deps_col = i
 		elif key.startswith("mem"):
-			want["mem"] = i
-	if want["filedeps"] is None or want["mem"] is None:
+			mem_col = i
+	if deps_col is None or mem_col is None:
 		return None, f"could not find both columns in: {header}"
 
 	target = norm(terminal)
@@ -69,10 +69,10 @@ def update(readme, terminal, file_deps, mem):
 		# Column 1 is the terminal name; column 0 is the platform.
 		if norm(cells[1]) != target:
 			continue
-		bold = cells[want["filedeps"]].startswith("**")
+		bold = cells[deps_col].startswith("**")
 		wrap = (lambda v: f"**{v}**") if bold else (lambda v: v)
-		cells[want["filedeps"]] = wrap(f"{file_deps:.1f}")
-		cells[want["mem"]] = wrap(f"{mem:.1f}")
+		cells[deps_col] = wrap(f"{file_deps:.1f}")
+		cells[mem_col] = wrap(f"{mem:.1f}")
 		#	The whole table is laid out again, since one wider cell moves every
 		#	column after it.
 		grid = [mdtable.split_row(lines[i]) for i in rows]
@@ -83,8 +83,8 @@ def update(readme, terminal, file_deps, mem):
 	return None, f"no row named '{terminal}' in the table"
 
 
-def main():
-	ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+def main() -> int:
+	ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
 	ap.add_argument("--readme", default="README.md", type=Path)
 	ap.add_argument("--terminal", required=True, help="row name, as it appears in the table")
 	ap.add_argument("--file-deps", required=True, type=float)
@@ -93,7 +93,7 @@ def main():
 	args = ap.parse_args()
 
 	out, err = update(args.readme, args.terminal, args.file_deps, args.mem)
-	if err:
+	if out is None:
 		print(f"showdown-readme: {err}", file=sys.stderr)
 		return 1
 	if args.dry_run:

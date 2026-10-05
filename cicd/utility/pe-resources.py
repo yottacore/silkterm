@@ -13,6 +13,7 @@
 
 import struct
 import sys
+from pathlib import Path
 
 TYPES = {1: "cursor", 2: "bitmap", 3: "icon", 4: "menu", 5: "dialog", 6: "string",
          9: "accelerator", 10: "rcdata", 12: "group_cursor", 14: "group_icon",
@@ -20,7 +21,7 @@ TYPES = {1: "cursor", 2: "bitmap", 3: "icon", 4: "menu", 5: "dialog", 6: "string
 WANT = {"icon": 14, "version": 16}
 
 
-def sections(data):
+def sections(data: bytes) -> list[tuple[str, int, int, int, int]]:
 	pe = struct.unpack_from("<I", data, 0x3c)[0]
 	if data[:2] != b"MZ" or data[pe:pe + 4] != b"PE\0\0":
 		raise ValueError("not a PE file")
@@ -35,14 +36,14 @@ def sections(data):
 
 ##	Only the top level of the tree is read. What is being asked is whether a type
 ##	is there at all, and the leaves say nothing more about that.
-def resource_types(path):
-	data = open(path, "rb").read()
+def resource_types(path: str) -> set[int]:
+	data = Path(path).read_bytes()
 	rsrc = next((s for s in sections(data) if s[0] == ".rsrc"), None)
 	if rsrc is None:
 		return set()
 	_, vaddr, _, raddr, _ = rsrc
 	named, ided = struct.unpack_from("<HH", data, raddr + 12)
-	found = set()
+	found: set[int] = set()
 	for i in range(named + ided):
 		entry = raddr + 16 + i * 8
 		ident, _ = struct.unpack_from("<II", data, entry)
@@ -51,7 +52,7 @@ def resource_types(path):
 	return found
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
 	require = ["icon", "version"]
 	files = []
 	i = 0
