@@ -198,7 +198,7 @@ gfs_rotate(){
 		rest="${it#*$'\t'}"; canon="${rest%%$'\t'*}"; file="${rest#*$'\t'}"
 		r="${role[${it}]:-}"
 		if [[ -z "${r}" ]]; then
-			rm -f "${file}"; printf '  rotate: pruned %s\n' "${file##*/}"
+			rm -f -- "${file:?}"; printf '  rotate: pruned %s\n' "${file##*/}"
 		else
 			want="${dir}/${prefix}_${canon}_${r}.${ext}"
 			if [[ "${file}" != "${want}" ]]; then
@@ -223,3 +223,4 @@ declare -i isSourced_t6wq5=0; [[ "${BASH_SOURCE[0]}" == "${0}" ]] || isSourced_t
 ##		  date fork per file and field. Same names and output as before.
 ##		- 2026-10-04: Every expansion braced, and shellcheck enforces it. The loop
 ##		  variables in gfs_rotate have real names. No change in behavior.
+##		- 2026-10-04: The prune refuses an empty path, and ends options before it.
