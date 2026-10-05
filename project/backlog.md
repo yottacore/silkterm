@@ -859,7 +859,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: the benchmark scripts catch every exception
 	- ID: 2026100512570726
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261005-125707
 	- Opened by: CC
@@ -868,6 +868,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: `termbench.py` has 7 `except Exception:` blocks and `sizebench-classify.py` has 4, so a typo or a bad read is swallowed the same as the error each one expects.
 	- Expected behavior: Each catches the exceptions it means to, per the Python section of the style directives.
 	- Note: Found while working 2026100314050016, which did not cover it.
+	- Origin: The scripts as first written, termbench.py and sizebench-classify.py on 20260728 and 20260730. Confirmed: the new rule finds all 11.
+	- Actual fix:
+		- `ruff.toml` turns on BLE001, so an `except Exception` fails the lint stage. A catch-all meant as one takes `# noqa: BLE001` with a reason. None of the 11 needed it.
+		- Each catch names the errors its code can raise: `OSError`, `ValueError` for bad numbers and undecodable output, `IndexError`, `subprocess.SubprocessError` for a timeout, `OverflowError` for a bad timestamp, and `ctypes.ArgumentError` for a Windows call.
+		- termbench's raw mode turns `termios.error`, which is not an `OSError`, into one, since the caller cannot name it on Windows. Putting the tty back still ignores a tty that is gone.
+		- termbench still parses as Python 3.8. The style guide's Python section names the rule.
+	- Swept: `grep -rn "except Exception\|except:\|except BaseException"` over every tracked `.py` outside `forks/` finds nothing else, and the lint over the whole tree passes.
+	- Test case: `cicd/tests/pylint/run.bash` (Erm6IFE) has a case for BLE001, and one for a catch-all marked with noqa. The lint over the tree in stage 3 is the other half.
+	- Verified:
+		- The lint fails the old scripts with exactly the 11 findings, and passes now. The pylint test fails the new case against the old `ruff.toml` and passes against the new one.
+		- Same output, old against new, on Linux: every narrowed path driven into its expected errors (missing pid or program, timeout, undecodable output, bad timestamp, no objdump, no tty, a tty closed before exit), a real size reading of a process with 10 libraries, and the self-check within its usual drift. On b29w the Windows console, grid, memory counter and version probes match too.
+		- A full termbench run with stdin closed refuses before raw mode, the same message and exit code both ways.
+		- Passing: the showdown and rigs tests, the docs test.
+	- Branch: blindexc
+	- Commit: 0d83fa6
+	- Acceptance signoff: Self-closed: lint fix, the new rule failed the old code, and no output changed.
+	- Closed: 20261005-131409
 
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
