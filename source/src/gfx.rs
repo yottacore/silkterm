@@ -26,7 +26,9 @@ use winit::window::{Window, WindowAttributes};
 // does it into the non-sRGB fbo 0, so the offscreen MUST stay a non-sRGB,
 // high-precision format (Rgba16Float; an sRGB view would decode in the blit's
 // sample and cancel the encode, an 8-bit linear one bands dark gradients).
-// New render features must not add their own encode.
+// New render features must not add their own encode. The scrim's color map is
+// stored encoded, but only as storage: scrim.rs decodes it on read, so what it
+// draws is still linear.
 //
 // That one encode runs on premultiplied values, which is exact at alpha 1 and
 // wrong anywhere else: sRGB(a * c) is brighter than a * sRGB(c), and the

@@ -6175,9 +6175,11 @@ impl State {
 		// for either; only the blur is the halo's alone.
 		let halo_on = cfg.text_scrim && cfg.text_scrim_radius > 0.0;
 		let scrim_on = halo_on || cfg.text_outline > 0.0;
-		// With both off nothing here draws, and its five full-screen textures have
-		// no business being allocated. Turning either on grows them back.
-		if gpu.scrim.set_enabled(&gpu.gfx.device, scrim_on) {
+		// With both off nothing here draws, and its full-screen textures have no
+		// business being allocated, nor the blur's with the halo off. Turning
+		// either on grows them back.
+		let scrim_use = crate::scrim::Use::of(halo_on, cfg.text_outline > 0.0);
+		if gpu.scrim.set_use(&gpu.gfx.device, scrim_use) {
 			self.invalidate_prepared();
 		}
 		let mut scrim_cells: Vec<RectInstance> = Vec::new();
