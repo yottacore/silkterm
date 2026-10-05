@@ -34,30 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- macOS: closing the last window ends the program
-	- ID: 2026100514211601
-	- Type: Enhancement
-	- Status: Waiting for answers
-	- Priority: Avg
-	- Opened: 20261005-142116
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225509, 2026100418225510
-	- Target OS: macOS
-	- Requirements:
-		- Before RC1, maybe.
-		- On macOS only, the program keeps running after its last window closes, like Terminal and Finder.
-	- Notes:
-		- 20261005: Possibly not a bug. Most Mac apps stay running with no window open. Asked what it would take.
-		- 20261005: What it would take:
-			- Every window is its own process, so none of them knows if it is the last one. They would have to find each other first (2026100418225509, private backlog), or the Mac build moves to one process for all windows (2026100418225510).
-			- The process left running drops its GPU device, panes and wallpaper, and keeps the menu bar. New Window there has to open a window in that process, not start another.
-			- A Dock click with no window open should open one. winit has no event for it, so it needs a hook on the app delegate's reopen call, next to `macmenu.rs`.
-			- Command+Q and Quit still end it.
-		- 20261005: Small once one process runs every window. Large before that.
-		- Question: before RC1, after the one process work, or not at all?
-	- Estimated effort: High
-
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
@@ -1004,6 +980,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261005: The key needs everything that changes the stored pixels: the file and its mtime, the held size, blur, and the look tags.
 		- 20261005: A copy is 4 bytes a pixel, so about 14 MB at 2560x1440 unless it's stored compressed. Block compression (2026100418225507) cuts that to a quarter or less.
 		- 20261005: Time a release build's prepare first. If it is well under the resize wait, only launch and rotation gain.
+		- 20261005: Answers:
+			- Store the copies compressed.
+			- Waking from resource saving prepares from the file again too, so it gains as well. 2026100513581814 covers what shows in the meantime, and the two work together.
+		- 20261005: Question asked: can block compression do as well as JPEG, or a wavelet format, in size and quality on a blurred picture?
+			- Not in size. BC1 is a fixed 4 bits a pixel and BC7 is 8, so 1/8 and 1/4 of a plain copy. JPEG on a blurred picture is often 1/20 or less, since the blur takes out the fine detail it spends bits on.
+			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
+			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
+			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
 
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
