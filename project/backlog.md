@@ -872,6 +872,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
 	- Closed:
 
+- Code style: the benchmark scripts catch every exception
+	- ID: 2026100512570726
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261005-125707
+	- Opened by: CC
+	- Related IDs: 2026100314050016
+	- Target OS: All
+	- Incorrect behavior: `termbench.py` has 7 `except Exception:` blocks and `sizebench-classify.py` has 4, so a typo or a bad read is swallowed the same as the error each one expects.
+	- Expected behavior: Each catches the exceptions it means to, per the Python section of the style directives.
+	- Note: Found while working 2026100314050016, which did not cover it.
+
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
 	- Type: Bug
@@ -967,47 +980,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Origin: c09beb3 (2026-08-06) for install.ps1, 96da710 (2026-07-22) for cicd-win.ps1, 4050e29 (2026-09-08) for n8runterm.ps1. No earlier review item. Confirmed.
 	- Test case: The PowerShell lint, with the positional and alias rules added.
 	- Note: Code review 20261003 item 15.
-
-- Code style: the Python scripts miss most of the Python rules
-	- ID: 2026100314050016
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Incorrect behavior:
-		- 5 of 314 functions have type hints, all in `_testdir.py`.
-		- test-id.py and flame-report.py name functions in `fCamelCase`. Six files use camelCase locals.
-		- 74 `%` formats and 67 `os.path` calls.
-		- Seven files are opened without `with`. demo-video.py passes an `open()` to `Popen` as stdout and never closes it.
-		- 18 `subprocess.run` calls have no `check=`.
-	- Expected behavior: Type hints on every signature, PEP 8 names, f-strings, pathlib and context managers.
-	- Origin: aa3f36a (2026-07-09) for flame-report.py, 2511765 (2026-09-26) for test-id.py, 07c8506 (2026-09-17) for demo-video.py. No earlier review item. Confirmed.
-	- Decisions:
-		- 20261005: flame-report.py keeps its `fCamelCase` names, since the style rules name it as a script copied in from elsewhere. It got the other fixes.
-		- 20261005: n8output-random-unicode.py is shared with other repos, so it is left as it is and out of the lint.
-	- Actual fix:
-		- `ruff.toml` checks type hints, PEP 8 names, `%` and `.format()`, `os.path`, `open()` outside a `with`, `subprocess.run` with no `check=`, and mutable default arguments. The four rules item 17 turned off are back on.
-		- `py-lint.py` runs mypy in strict mode after ruff, from the new `mypy.ini`, so a missing hint or a wrong type fails the lint stage too.
-		- Every other script passes both. test-id.py, `_watch.py` and the docs test got PEP 8 names, with the same command lines.
-		- demo-video.py closes its own copy of the window manager, ffmpeg and app logs once each child has started. What it records is unchanged.
-		- Each `subprocess.run` that had no `check=` says `check=False`, which is what it did before.
-		- termbench.py still runs on Python 3.8, as its header says.
-		- The Python section of `style-guide.md` lists the new rules.
-	- Note: The pylint test's "a rule ruff.toml leaves out" case used `l` as a name, which is checked now, so it uses a long line instead. Its clean scripts got return types.
-	- Swept: Every tracked `.py` outside `forks/`, through the lint over the whole tree. Callers of the renamed functions: `testdir/run.bash` calls `script_tests`. The demo and showdown tests load demo-video.py, termbench.py, sizebench-classify.py, update-showdown.py and showdown-readme.py by path, and none of the names they use changed. No old name is left anywhere in the repo.
-	- Test case: `cicd/tests/pylint/run.bash` (Erm6IFE), with a case per rule, a type error only mypy sees, and two scripts with one file name. The lint over the tree in stage 3 is the other half.
-	- Verified:
-		- The new lint fails the tree before the fix with 1958 findings, among them 74 `%` formats, 18 `subprocess.run` with no `check=` and 7 files opened without `with`. It passes now.
-		- The pylint test fails 11 cases against the old lint and passes against the new one.
-		- Passing, each run by name: the docs, toc, tables, demo, showdown, rigs, testdir, startsize and pylint tests. test-id.py and flame-report.py print what they did before, `--check` included.
-		- Unchanged output, old against new: termbench's payloads, tables and reports, sizebench-classify's figures and import lists, update-showdown's help and refusals, demo-video's generated home, build script and filter chains, and analyze.py's verdicts.
-	- Branch: pyrules
-	- Commit: dbe0ac0
-	- Acceptance signoff: Self-closed: style fixes, the lint failed the old tree and passes now, and no script's output changed.
-	- Closed: 20261005-125700
-	- Note: Code review 20261003 item 16.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
@@ -2512,6 +2484,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Code style: the Python scripts miss most of the Python rules
+	- ID: 2026100314050016
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior:
+		- 5 of 314 functions have type hints, all in `_testdir.py`.
+		- test-id.py and flame-report.py name functions in `fCamelCase`. Six files use camelCase locals.
+		- 74 `%` formats and 67 `os.path` calls.
+		- Seven files are opened without `with`. demo-video.py passes an `open()` to `Popen` as stdout and never closes it.
+		- 18 `subprocess.run` calls have no `check=`.
+	- Expected behavior: Type hints on every signature, PEP 8 names, f-strings, pathlib and context managers.
+	- Origin: aa3f36a (2026-07-09) for flame-report.py, 2511765 (2026-09-26) for test-id.py, 07c8506 (2026-09-17) for demo-video.py. No earlier review item. Confirmed.
+	- Decisions:
+		- 20261005: flame-report.py keeps its `fCamelCase` names, since the style rules name it as a script copied in from elsewhere. It got the other fixes.
+		- 20261005: n8output-random-unicode.py is shared with other repos, so it is left as it is and out of the lint.
+	- Actual fix:
+		- `ruff.toml` checks type hints, PEP 8 names, `%` and `.format()`, `os.path`, `open()` outside a `with`, `subprocess.run` with no `check=`, and mutable default arguments. The four rules item 17 turned off are back on.
+		- `py-lint.py` runs mypy in strict mode after ruff, from the new `mypy.ini`, so a missing hint or a wrong type fails the lint stage too.
+		- Every other script passes both. test-id.py, `_watch.py` and the docs test got PEP 8 names, with the same command lines.
+		- demo-video.py closes its own copy of the window manager, ffmpeg and app logs once each child has started. What it records is unchanged.
+		- Each `subprocess.run` that had no `check=` says `check=False`, which is what it did before.
+		- termbench.py still runs on Python 3.8, as its header says.
+		- The Python section of `style-guide.md` lists the new rules.
+	- Note: The pylint test's "a rule ruff.toml leaves out" case used `l` as a name, which is checked now, so it uses a long line instead. Its clean scripts got return types.
+	- Swept: Every tracked `.py` outside `forks/`, through the lint over the whole tree. Callers of the renamed functions: `testdir/run.bash` calls `script_tests`. The demo and showdown tests load demo-video.py, termbench.py, sizebench-classify.py, update-showdown.py and showdown-readme.py by path, and none of the names they use changed. No old name is left anywhere in the repo.
+	- Test case: `cicd/tests/pylint/run.bash` (Erm6IFE), with a case per rule, a type error only mypy sees, and two scripts with one file name. The lint over the tree in stage 3 is the other half.
+	- Verified:
+		- The new lint fails the tree before the fix with 1958 findings, among them 74 `%` formats, 18 `subprocess.run` with no `check=` and 7 files opened without `with`. It passes now.
+		- The pylint test fails 11 cases against the old lint and passes against the new one.
+		- Passing, each run by name: the docs, toc, tables, demo, showdown, rigs, testdir, startsize and pylint tests. test-id.py and flame-report.py print what they did before, `--check` included.
+		- Unchanged output, old against new: termbench's payloads, tables and reports, sizebench-classify's figures and import lists, update-showdown's help and refusals, demo-video's generated home, build script and filter chains, and analyze.py's verdicts.
+	- Branch: pyrules
+	- Commit: dbe0ac0
+	- Acceptance signoff: Self-closed: style fixes, the lint failed the old tree and passes now, and no script's output changed.
+	- Closed: 20261005-125700
+	- Note: Code review 20261003 item 16.
 
 - A Settings save on a config that was deleted while running says it saved and writes nothing
 	- ID: 2026100316135866
