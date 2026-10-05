@@ -204,7 +204,11 @@ impl DialogWin {
 		let warmed = warm.and_then(|gpu| Gfx::with_dialog_gpu(window.clone(), gpu));
 		let mut gfx = match warmed {
 			Some(gfx) => gfx,
-			None => Gfx::with_backends(window.clone(), wgpu::Backends::PRIMARY)?,
+			None => Gfx::with_backends(
+				window.clone(),
+				wgpu::Backends::PRIMARY,
+				crate::gfx::wanted(),
+			)?,
 		};
 		// adopt the size winit actually gave us
 		let size = window.inner_size();

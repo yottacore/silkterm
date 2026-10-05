@@ -321,4 +321,6 @@ Things the built interface does differently from the rules above. Each is a smal
 
 - The Silk tab makes eight, one past the ceiling above. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
 
+- "Always use software rendering" is grayed on macOS with a flyover saying why, where the rule above would leave it out of that build. It was asked for that way.
+
 - The Keys tab makes nine. No other tab's subject takes in the hotkeys. The nine tabs are now the widest thing in the dialog, so they set the panel's width on every tab.
