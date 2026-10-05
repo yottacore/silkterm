@@ -801,6 +801,109 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
+- Light mode: the scrim is much too strong next to dark mode
+	- ID: 2026100513581811
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+	- Incorrect behavior: Over a wallpaper, the light-mode scrim reads much stronger than the dark-mode one at the same setting.
+	- Expected behavior: The two modes look about as strong as each other.
+	- Notes:
+		- 20261005: From the look at the old-format cursor plate item.
+
+- macOS: a window opened with Command+N is smaller, and its size is the one remembered
+	- ID: 2026100514211602
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261005-142116
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435600, 2026100408214201
+	- Target OS: macOS
+	- Test environment: b26
+	- Requirements:
+		- Before RC1.
+	- Steps to reproduce:
+		- Open a window with Command+N.
+		- Close the new window, then the one it was opened from.
+		- Launch SilkTerm again.
+	- Incorrect behavior:
+		- The new window opens smaller than the one it was opened from.
+		- The next launch opens at that smaller size.
+	- Expected behavior: A new window opens at the size a fresh launch would use. Closing windows doesn't shrink the remembered size unless one of them was resized.
+	- Reproduced: No. Seen on b26.
+	- Possible cause:
+		- Each window is its own process, and the new one reads the remembered size for the monitor it thinks it opens on (`MonitorId::of_new_window`). macOS may answer that differently for a window started from another one.
+		- A size is saved at close only if the window changed size (`flush_window_size`). If the new window's first size counts as a change, it saves the small size, and the first window, never resized, saves nothing.
+
+- Light mode: the text is still not dark enough in any light theme
+	- ID: 2026100513581810
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Darker text in each light-mode theme.
+		- Perhaps much more saturated too, so it still reads as a color.
+	- Notes:
+		- 20261005: From the look at the old-format cursor plate item, whose text was darkened on 20260929. That was not enough.
+
+- Tabs: a setting for new tabs to open next to the current one
+	- ID: 2026100513581812
+	- Type: Feature
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- "New tabs go next to current", on by default.
+		- Off puts a new tab at the end, as now.
+
+- Drop "Minutes when minimized", and make "Minutes when hidden" 1 by default
+	- ID: 2026100513581813
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418354006
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Take out the separate wait for a minimized window from 2026100418354006.
+		- "Minutes when hidden", under "Free resources when idle", defaults to 1.
+	- Notes:
+		- 20261005: 2026100418354006 is built and merged, so this takes it back out. Configs written since then have its commented line.
+
+- Keep the old picture on screen while a let-go window takes the card back
+	- ID: 2026100513581814
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418354006
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A window that has let go of the card still shows its background, somehow. When it takes the card back, leave that picture in place until the new wallpaper is ready to show.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -855,6 +958,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
 	- Closed:
+
+- Wallpaper: keep resized copies on disk, oldest pruned first
+	- ID: 2026100514211603
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261005-142116
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225503, 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When a window loads or is resized and the original wallpaper is resampled, keep that copy at that size.
+		- On a resize, use a kept copy within about 5% of the total pixel count. If there is none, resample the original again and keep that one too.
+		- Prune the oldest copies once the cache goes over its size limit.
+	- Notes:
+		- 20261005: Asked as a question, would this make sense?
+		- 20261005: It helps most at launch and when rotation comes back to an image, since both prepare from scratch now. A resize already waits 500 ms after the last change and prepares once.
+		- 20261005: The key needs everything that changes the stored pixels: the file and its mtime, the held size, blur, and the look tags.
+		- 20261005: A copy is 4 bytes a pixel, so about 14 MB at 2560x1440 unless it's stored compressed. Block compression (2026100418225507) cuts that to a quarter or less.
+		- 20261005: Time a release build's prepare first. If it is well under the resize wait, only launch and rotation gain.
+		- 20261005: Answers:
+			- Store the copies compressed.
+			- Waking from resource saving prepares from the file again too, so it gains as well. 2026100513581814 covers what shows in the meantime, and the two work together.
+		- 20261005: Question asked: can block compression do as well as JPEG, or a wavelet format, in size and quality on a blurred picture?
+			- Not in size. BC1 is a fixed 4 bits a pixel and BC7 is 8, so 1/8 and 1/4 of a plain copy. JPEG on a blurred picture is often 1/20 or less, since the blur takes out the fine detail it spends bits on.
+			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
+			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
+			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
 
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
@@ -1042,6 +1175,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: settings_ui.rs is about 6,900 lines before its tests, with shells, themes, the picker and the prompt in one file.
 	- Origin: c6eaa04 (2026-06-28), grown since. No earlier review item. Plausible.
 	- Test case: The existing tests. Behavior does not change.
+	- Decisions:
+		- 20261005: Do it last in a round, when there is time.
 	- Note: Code review 20261003 item 23.
 
 - macOS: the first launch hangs with no window, using more and more memory
@@ -1228,6 +1363,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261005: Verified on b23 against a control build at the same window size: a picture held whole changed 0 pixels, and one held smaller changed by at most 1 level on GL and 2 on Vulkan at the shipped settings, 3 along one sharp edge in light mode. A resized window matched one launched at that size within 1 level.
 		- 20261005: Verified on b23: the wallpaper's share of a 2560x1440 window with a large photo went from 72 to 32 MiB of graphics memory and from 93 to 42 MiB of regular memory. A pack image in a 1280x800 window went from 32 to 12 and from 45 to 16.
 		- 20261005: Verified: the new tests fail with each part of the change taken out (no margin, no busyness scale, sRGB shrink, no resize follow) and pass with it. The full unit suite (1133), fmt, and clippy for Linux and Windows pass.
+	- Decisions:
+		- 20261005: The blur-off look should be whatever is most natural and closest to the original. Averaging is the closer of the two, so it stays.
 	- Branch: wpsize
 	- Commit: 68b5360
 	- Test case: `a_wallpaper_is_held_at_the_size_it_is_drawn_at` (ErqyRJF), `a_held_wallpaper_looks_like_the_whole_one_drawn_at_its_size` (ErqyRUK), `a_resize_keeps_the_pictures_summary` (ErqyUlS), and `cicd/tests/wpresize/run.bash` (Err031q) in stage 3.
@@ -1298,6 +1435,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 3286d22
 	- Test case: ErmpLNm `a_minimized_window_waits_its_own_time` and ErmrbFB `an_existing_config_learns_the_minimized_wait`. The new row is also covered by `every_row_survives_a_save_and_a_relaunch`. `cicd/tests/wingui/idlemin.ps1` (ErqPAvG) runs the vm925w check. It is not in the pipeline, since it takes about 3 minutes.
 	- Acceptance signoff: Self-closed: checked on vm925w with both Transparency settings. The macOS look is owed, and its code is shared.
+	- Superseded by ID: 2026100513581813
 	- Closed: 20261005-094503
 
 - The dialogs' kept GPU context costs every process about 52 MiB
@@ -3227,7 +3365,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ### Features and enhancements
 
-- 🔬 Two more settings of the same class as the light mode calibration, neither fixed.
+- 🛠️ Two more settings of the same class as the light mode calibration, neither fixed.
 	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.
 	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already holds the text on it legible in both modes, so this is a question of how loud it looks rather than whether it works.
 	- Fixed: 20260928, window transparency. The cause was not the eye. The fill was encoded to sRGB after it was premultiplied, so a light fill at 80% came out as 91% of itself and covered most of the desktop. Black was not affected. A light fill now lets through exactly as much as a dark one.
@@ -3237,6 +3375,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: 20260929, the cursor plate. The shipped light themes have darker text, and over a light background the plate is drawn at 80% instead of 55%, as far as the text on it still clears the floor. Darker text alone was not enough, since at 55% even a black cursor could not take the plate much past 0.2 from a light background. Their plates now sit 0.25 to 0.28 from the background, where they were 0.12 to 0.20. Dark mode is unchanged. A saved theme keeps about the plate it had.
 	- Test: `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
 	- Note: 20260930, both halves are fixed now, the window transparency on 20260928 and the cursor plate on 20260929. The title is out of date. What is left is the look on screen.
+	- Note: 20261005, looked at. The light-mode text is still not dark enough, and the light-mode scrim is still much too strong next to dark mode. Filed as 2026100513581810 and 2026100513581811.
 	- Opened: 20260920-190859
 
 - **Stop here to work on releasing RC1**.
