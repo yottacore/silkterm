@@ -109,10 +109,12 @@ fWant(){
 }
 fHeld(){ grep '^memdbg wallpaper: ' "${said}" | tail -n 1 | awk '{print $3}'; }
 
-## SILK_MEMDBG looks every 2 s, and the resize wait is half a second.
+## SILK_MEMDBG looks every 2 s, and the resize wait is half a second. The
+## blur is unoptimized in a debug build, so the full size took 12 s at load 14.
 fHolds(){  ## fHolds <expected WxH> - waits for the newest line to say so
-	local _ want
-	for _ in {1..40}; do
+	local want
+	local -ri giveUp=$((SECONDS + 60))
+	while ((SECONDS < giveUp)); do
 		want="$(fWant || true)"
 		if [[ -n "${want}" && "$(fHeld)" == "${want}" && "${want}" == "${1}" ]]; then return 0; fi
 		sleep 0.25
@@ -141,3 +143,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261005 JC: Created.
+##		- 20261005 JC: Waits up to 60 s for each size, not 10.
