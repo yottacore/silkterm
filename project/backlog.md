@@ -865,7 +865,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - wgpu's allocator holds far more graphics memory than it uses
 	- ID: 2026100419463460
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: vm925w: the graphics memory a window and Settings take on DX12, against a build with the old hint, and that Settings opens.
 	- Priority: High
 	- Opened: 20261004-194634
 	- Opened by: CC
@@ -879,6 +880,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The X11 window draws through GL, where the hint does nothing, but its dialogs use Vulkan.
 	- Notes:
 		- 20261004: Figures in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#measure-first). Windows uses the same allocator through DX12 and was not measured.
+	- Progress log:
+		- 20261004: Every device now asks for the `MemoryUsage` hint: the window's on every backend, and the dialogs' kept context.
+		- Measured on b23 at 2560x1440 against a build with the old hint, in the same session. The X11 process went from 453 to 273 MiB, and the dialogs' context from 201 to 21. The Vulkan window plus the context went from 702 to 256. Regular memory did not change.
+		- Settings opened in 105 ms for each of the first three opens and a median of 66 after, against 108 and 62 with the old hint. Frame times on Vulkan under a scroll flood did not change. Figures in the design doc's [The memory hint](design_docs/20261004-182255_reduce-resources.md#the-memory-hint).
+		- New: `SILK_DLGDBG=1` prints how long Settings took to draw after it was asked for. The memory rig takes `--opens N` and `--flood SECS`, and prints anonymous memory.
+	- Verified: the new test fails with the old hint (192 MiB reserved) and passes with the new one. Native unit tests (1119 passed), native and Windows-target clippy.
+	- Swept: all three device requests in the program go through one function in gfx.rs (`grep -n request_device source/src`). The GPU stress rig keeps the old hint on purpose, since it is there to fill the card.
+	- Branch: memhint
+	- Commit: b1ddf3a, 157a2cc
+	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) builds the dialogs' device and fails above 32 MiB reserved. It skips where there is no device, or no allocator report (GL, Metal).
 	- Closed:
 
 - The scrim's textures are bigger than they need to be
@@ -944,7 +955,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The dialogs' kept GPU context costs every process about 52 MiB
 	- ID: 2026100418225505
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs external testing: Optional: the same figure on vm925w (DX12).
 	- Priority: High
 	- Opened: 20261004-182255
 	- Opened by: JC
@@ -957,6 +969,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Choose between dropping it when the dialog closes, sharing the main window's device, or keeping it.
 	- Notes:
 		- 20261004: It opens Settings in 86 ms rather than 310 ms. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-dialogs-kept-gpu-context).
+	- Progress log:
+		- 20261004: Measured on b23 with the memory hint from 2026100419463460: about 21 MiB of graphics memory and 8 MiB of regular memory per process. With the old hint it was 201 MiB.
+		- With the context kept, Settings opened in 105 ms for each of the first three opens and a median of 66 after. Without it, every open took about 230 ms.
+	- Decisions:
+		- 20261004, reversible: keep it. It costs about 21 MiB with the hint, and the idle release already lets its device go along with the window's. Dropped on close, every open would take about 230 ms. Sharing the main window's device cannot work on X11, where the window draws through GL, and would save about 20 MiB elsewhere. `WARM_DIALOG_GPU` in app.rs is the one-line way back.
+	- Branch: memhint
+	- Commit: b1ddf3a, 157a2cc
+	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) keeps the context's reserve under 32 MiB. Keeping or dropping the context has no test of its own.
 	- Closed:
 
 - A passing unit test run keeps its test folder
