@@ -58,7 +58,10 @@ catch {
 	$verdict = "fail"
 }
 finally {
-	& "$PSScriptRoot\_stop.ps1" -List $script:startedList
+	##	The far side waits on the result file and reads no file as a hang, so a
+	##	cleanup that throws may not take the verdict with it.
+	try { & "$PSScriptRoot\_stop.ps1" -List $script:startedList }
+	catch { $script:checks += "  note the cleanup threw: $($_.Exception.Message)" }
 	@("SCENARIO $Scenario", "VERDICT $verdict $reason") + $script:checks | Set-Content -Path $result -Encoding UTF8
 }
 

@@ -155,6 +155,29 @@ PS
 	fCheck "a silkterm the run did not start keeps running" kill -0 "${theirs}"
 	fNoNameKill(){ ! grep -qF -- '-Name silkterm' "${meDir}/_run.ps1" "${meDir}/run.bash" ;}
 	fCheck "neither cleanup stops processes by name" fNoNameKill
+
+	## A listed pid handed on to a process this user cannot read. Its start time
+	## comes back empty, and on vm925w the stop threw on it and the verdict was lost.
+	cat > "${work}/unreadable.ps1" <<PS
+function Get-Process { [CmdletBinding()] param([int] \$Id)
+	if (\$PSBoundParameters.ContainsKey('Id')) { [pscustomobject]@{ Id = \$Id; StartTime = \$null; Parent = \$null } } }
+\$ErrorActionPreference = "Stop"
+Set-Content -Path "${work}/unreadable.txt" -Value "4 638900000000000000"
+& "${meDir}/_stop.ps1" -List "${work}/unreadable.txt"
+"stopped"
+PS
+	fUnreadable(){ [[ "$(pwsh -NoProfile -File "${work}/unreadable.ps1" 2>&1)" == stopped ]] ;}
+	fCheck "a listed process whose start time cannot be read is passed over" fUnreadable
+
+	## And whatever the cleanup does, the verdict still gets written. The far
+	## side reads a missing one as a session that never answered.
+	mkdir -p "${work}/stopthrows"
+	cp "${meDir}/_run.ps1" "${work}/stopthrows/"
+	: > "${work}/stopthrows/_lib.ps1"
+	echo 'throw "cleanup broke"' > "${work}/stopthrows/_stop.ps1"
+	pwsh -NoProfile -File "${work}/stopthrows/_run.ps1" -Scenario none -Exe none \
+		-OutDir "${work}/stopthrows/out" -RunDir "${work}/stopthrows" >/dev/null 2>&1 || true
+	fCheck "a cleanup that throws still leaves a verdict" grep -q '^VERDICT ' "${work}/stopthrows/out/result.txt"
 else
 	echo "  skip the cleanup half: pwsh not found"
 fi

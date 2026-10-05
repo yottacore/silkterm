@@ -131,6 +131,10 @@ $pri  = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive
 ##	below would take it, print it, and unregister the task mid-run.
 $res  = Join-Path $out "result.txt"
 Remove-Item $res -Force -ErrorAction SilentlyContinue
+##	The last scenario's pids were stopped already. Left in, they get looked up
+##	again after Windows has handed them on to other processes.
+$startedList = Join-Path $out "started.txt"
+Remove-Item $startedList -Force -ErrorAction SilentlyContinue
 try {
 	Register-ScheduledTask -TaskName $name -Action $act -Principal $pri -Force | Out-Null
 	"running as $me in session $consoleId"
@@ -139,7 +143,8 @@ try {
 } finally {
 	Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue
 	##	Only what this run started. A SilkTerm already on the box is somebody's.
-	& (Join-Path $work "_stop.ps1") -List (Join-Path $out "started.txt")
+	try { & (Join-Path $work "_stop.ps1") -List $startedList }
+	catch { "  note the cleanup threw: $($_.Exception.Message)" }
 }
 if (-not (Test-Path $res)) { "VERDICT fail the session never answered"; exit 1 }
 $said = (Get-Content $res | Where-Object { $_ -like "SCENARIO *" }) -replace '^SCENARIO ', ''
