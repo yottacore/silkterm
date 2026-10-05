@@ -871,42 +871,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: A check in the docs gate that a public item outside the tests has a `///` line above it.
 	- Note: Code review 20261003 item 6.
 
-- Code style: single letters name parameters, fields and long-lived values
-	- ID: 2026100314050009
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Incorrect behavior: Most of the 1251 single-letter names are fine closure, color and geometry names. The ones that are not:
-		- config.rs: the `Reader` methods are `b`, `f`, `i`, `u` and `s`, called about 100 times. `s` is the edited settings through the 400-line `persist`, where `r` is a rounding closure, while `r` is the `Reader` everywhere else.
-		- `s: &Settings` as a parameter at 43 sites in 9 files.
-		- settings_ui.rs: `k` means a shell entry, a tab, a radio option, a menu item or a theme index. `p` means a part index or the color picker.
-		- app.rs: the menu builders `mi`, `mia`, `msub`, `mt` and `mta`. `h` is a hasher and a height in one function.
-		- pane.rs: `Node::Split { a, b }`. In the cell loop `c` is the column while `cell.c` is the character.
-		- cli.rs: `a` for the parser through all of `parse()`, and the field `Args.i`. pick.rs: `c: Hsv` on ten functions.
-		- demo-video.py: every `seg_*` takes `(r, t, m)` for recorder, typist and mouse.
-	- Expected behavior: Names are meaningful and searchable.
-	- Origin: c6eaa04 (2026-06-28) for most, 367c777e (2026-07-31) for `Reader`. No earlier review item. Confirmed.
-	- Actual fix: Renamed the listed sites.
-		- config.rs: the `Reader` methods are `read_bool`, `read_f32`, `read_i64`, `read_usize` and `read_string`, on a `reader`. In `persist` the edited settings are `edited` and the rounding closure is `rounded`.
-		- Every `s: &Settings` and `s: &mut Settings` function parameter is `settings`.
-		- settings_ui.rs: `k` is `shell_index`, `tab`, `choice`, `item` or `theme_index`, and `p` is `part` or `picker`.
-		- app.rs: the menu builders are `entry_item`, `entry_item_accel`, `entry_sub`, `entry_check` and `entry_check_accel`. The hasher is `hasher`.
-		- pane.rs: `Node::Split { first, second }`, and the cell loop's `column`.
-		- cli.rs: the parser is `tokens` and its field is `Args.pos`. pick.rs: `color: Hsv`.
-		- demo-video.py: the segments take `(rec, typist, mouse)`, and so does the call that runs them.
-	- Swept: Every `s: &Settings` parameter, from a grep on `\bs: &(mut )?...Settings`. Every `Node::Split` pattern, tests included. Tests that read source text (`include_str!` in pane.rs, app.rs, config.rs, settings_ui.rs) name none of the old identifiers, and nothing under `cicd/` does either.
-	- Note: Left alone on purpose: short closures over `Settings` (`|s: &Settings|`, mostly in tests), the RGB `c` in pick.rs, the focus ring's `p`/`k` match arms in settings_ui.rs, the edit menu's `|&k|` closures, and names built on the old letters such as `ratio_a` and `a_area` in pane.rs.
-	- Verified: 20261005. Build, full unit suite (1133 passed), clippy `-D warnings` for Linux, Windows and macOS targets, rustfmt check, the docs and test-ID gates, and `py-lint.py`.
-	- Test case: None. A rename is checked by the build, clippy on all three targets and the unit suite.
-	- Note: Code review 20261003 item 9.
-	- Branch: names
-	- Commit: 3c321e8
-	- Acceptance signoff: Self-closed: mechanical rename.
-	- Closed: 20261005-132803
-
 - Code style: fixed choices are kept as strings, float codes and flags that must agree
 	- ID: 2026100314050011
 	- Type: Bug
@@ -2500,6 +2464,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Code style: single letters name parameters, fields and long-lived values
+	- ID: 2026100314050009
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: Most of the 1251 single-letter names are fine closure, color and geometry names. The ones that are not:
+		- config.rs: the `Reader` methods are `b`, `f`, `i`, `u` and `s`, called about 100 times. `s` is the edited settings through the 400-line `persist`, where `r` is a rounding closure, while `r` is the `Reader` everywhere else.
+		- `s: &Settings` as a parameter at 43 sites in 9 files.
+		- settings_ui.rs: `k` means a shell entry, a tab, a radio option, a menu item or a theme index. `p` means a part index or the color picker.
+		- app.rs: the menu builders `mi`, `mia`, `msub`, `mt` and `mta`. `h` is a hasher and a height in one function.
+		- pane.rs: `Node::Split { a, b }`. In the cell loop `c` is the column while `cell.c` is the character.
+		- cli.rs: `a` for the parser through all of `parse()`, and the field `Args.i`. pick.rs: `c: Hsv` on ten functions.
+		- demo-video.py: every `seg_*` takes `(r, t, m)` for recorder, typist and mouse.
+	- Expected behavior: Names are meaningful and searchable.
+	- Origin: c6eaa04 (2026-06-28) for most, 367c777e (2026-07-31) for `Reader`. No earlier review item. Confirmed.
+	- Actual fix: Renamed the listed sites.
+		- config.rs: the `Reader` methods are `read_bool`, `read_f32`, `read_i64`, `read_usize` and `read_string`, on a `reader`. In `persist` the edited settings are `edited` and the rounding closure is `rounded`.
+		- Every `s: &Settings` and `s: &mut Settings` function parameter is `settings`.
+		- settings_ui.rs: `k` is `shell_index`, `tab`, `choice`, `item` or `theme_index`, and `p` is `part` or `picker`.
+		- app.rs: the menu builders are `entry_item`, `entry_item_accel`, `entry_sub`, `entry_check` and `entry_check_accel`. The hasher is `hasher`.
+		- pane.rs: `Node::Split { first, second }`, and the cell loop's `column`.
+		- cli.rs: the parser is `tokens` and its field is `Args.pos`. pick.rs: `color: Hsv`.
+		- demo-video.py: the segments take `(rec, typist, mouse)`, and so does the call that runs them.
+	- Swept: Every `s: &Settings` parameter, from a grep on `\bs: &(mut )?...Settings`. Every `Node::Split` pattern, tests included. Tests that read source text (`include_str!` in pane.rs, app.rs, config.rs, settings_ui.rs) name none of the old identifiers, and nothing under `cicd/` does either.
+	- Note: Left alone on purpose: short closures over `Settings` (`|s: &Settings|`, mostly in tests), the RGB `c` in pick.rs, the focus ring's `p`/`k` match arms in settings_ui.rs, the edit menu's `|&k|` closures, and names built on the old letters such as `ratio_a` and `a_area` in pane.rs.
+	- Verified: 20261005. Build, full unit suite (1133 passed), clippy `-D warnings` for Linux, Windows and macOS targets, rustfmt check, the docs and test-ID gates, and `py-lint.py`.
+	- Test case: None. A rename is checked by the build, clippy on all three targets and the unit suite.
+	- Note: Code review 20261003 item 9.
+	- Branch: names
+	- Commit: 3c321e8
+	- Acceptance signoff: Self-closed: mechanical rename.
+	- Closed: 20261005-132803
 
 - Code style: the benchmark scripts catch every exception
 	- ID: 2026100512570726
