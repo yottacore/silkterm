@@ -965,7 +965,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The scrim's textures are bigger than they need to be
 	- ID: 2026100418225502
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs external testing:
+		- vm925w: a window with the default scrim, dark and light, looks as before on DX12, and with Transparency on.
+		- b26: the same on Metal.
 	- Priority: High
 	- Opened: 20261004-182255
 	- Opened by: JC
@@ -980,6 +983,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- No visible change at the same settings. The scrim is what keeps text readable, so legibility is the bar.
 	- Notes:
 		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-smaller-scrim).
+		- 20261004: Built. Each layer keeps only what is read back, 13 bytes a pixel instead of 40, and the two blur layers are made only for the halo. Formats, numbers and the variants tried are in the design doc's "A smaller scrim" section.
+	- Progress log:
+		- 20261004: One channel for the cursor coverage, and one 16-bit channel for each blur layer. The text coverage keeps four 8-bit channels, since glyphon writes each glyph's color and one channel would need it to write white. The color map is 8-bit and stored encoded, which gives every cell color back exactly.
+		- 20261004: Tried and not kept: 8-bit blur layers, which band in the Gaussian halo by up to 6 levels, and half-size blur layers, which fill small glyph counters and make the halo heavier. Numbers are in the design doc.
+		- 20261004: Question: the requirement gives the lower profiles half size when the loss shows. The only lower profile with a halo is High, which is meant to look like the same halo as Max. It stays full size for now. Half size would save another 10.5 MiB a window at 2560x1440, on High only.
+		- 20261004: Verified on b23 at 2560x1440 against a control build in the same session: the X11 window process went from 273 MiB to 175, and 159 with the halo off. The Vulkan window went from 256 MiB to 202, and 138 with the halo off. Regular memory did not change.
+		- 20261004: Verified against the control build at the same settings, on GL and Vulkan on the card and on software rendering: at most 1 sRGB level on GL and 3 on Vulkan, at the antialiased edge of the light-mode outline. The soft dark halo changed by at most 1 on any path. Cases are listed in the design doc.
+		- 20261004: Verified: the two new tests fail with the old formats put back and pass after. The full unit suite (1126), fmt, and clippy for Linux and Windows pass.
+	- Branch: scrimsize
+	- Commit: b21cb7b
+	- Test case: `the_scrim_costs_at_most_13_bytes_a_pixel` (ErnU09H) reads the cost off the formats, and `the_color_map_keeps_every_byte_color_exactly` (ErnU0UJ). `nothing_drawing_costs_no_memory` (EpHXO9g) now also holds the blur layers to a pixel with the halo off; its old 200 MiB floor is commented out, since the full set at 4K is now about 100 MiB.
 	- Closed:
 
 - Hold the wallpaper at the size it is drawn at

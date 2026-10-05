@@ -112,6 +112,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 - What the numbers show:
 	- The scrim is the largest part of a window: 150 of 268 MiB at 2560x1440. Its textures exist whenever the halo or the outline is on. Turning only the halo off saves 30 MiB on X11 and nothing on Vulkan, where all five are made either way.
+		- Since 2026-10-04 it is 52 MiB, and 36 with the halo off. See [A smaller scrim](#a-smaller-scrim).
 	- The dialogs' kept context reserves a 128 MiB and a 64 MiB block from wgpu's allocator for less than 1 MiB of use. It also costs about 16 MiB of regular memory.
 	- On Vulkan, most of the bill is the allocator's unused space: 167 MiB in use against 512 reserved. The allocator takes big blocks because wgpu's default memory hint is `Performance`.
 	- With `MemoryHints::MemoryUsage` on both devices, the dialogs' context costs 18 MiB with no dialog open and 31 MiB with Settings open. The Vulkan window above came to 252 MiB instead of 702, context included. Settings still opened from it. Every device uses that hint now; see [The memory hint](#the-memory-hint).
@@ -181,6 +182,36 @@ What a window already gives back while unused is in the [Releasing resources](20
 - The text coverage is drawn by the text renderer, which writes color. A one-channel target needs the coverage pass to write white, and the shaders to read the red channel.
 
 - Proof is a capture diff at the same settings, in all four themes, dark and light, at a few radii. Legibility is the bar, not a pixel count.
+
+- Built 2026-10-04. Each layer keeps only what is read back from it, 13 bytes a pixel instead of 40:
+	- The text coverage has four 8-bit channels. Only alpha is read, but the text renderer writes each glyph's color too, so one channel would need it to write white instead.
+	- The cursor coverage has one 8-bit channel. The scrim draws its cursor quads white.
+	- The two blur layers have one 16-bit float each. Both kinds of halo write red now.
+	- The color map has four 8-bit channels, sRGB encoded by the scrim itself. Cell colors are opaque and come from sRGB bytes, so each one comes back exactly.
+	- An sRGB texture format would do that encode on Vulkan. The GL path never turns sRGB writes on, so there it stored linear values and still decoded them on read, and the halo inside a reverse video bar came out dark.
+	- With the halo off, the two blur layers are one pixel. All five already were with the outline off too.
+
+- Measured on b23 at 2560x1440 against a control build, in the same session, in MiB:
+
+	| Part                                  | Before | After
+	| :------------------------------------ | -----: | ----:
+	| X11 process                           |    273 |   175
+	| X11 process, halo off                 |    243 |   159
+	| X11 process, halo and outline off     |    123 |   123
+	| Vulkan window, driver's figure        |    256 |   202
+	| Vulkan window, halo off               |    256 |   138
+	| Vulkan window, scrim in the allocator |    150 |    49
+	| Vulkan window, all in use, allocator  |    159 |    58
+
+	- So the scrim's share of the X11 window went from 150 MiB to 52, and to 36 with the halo off.
+	- The Vulkan driver's figure moves less than the allocator's use, because the allocator reserves in blocks.
+	- Regular memory did not change.
+
+- Checked against the control build at the same settings, on NVIDIA through GL and Vulkan, and on lavapipe. The cases were all four themes in dark and light, each scrim function, radii of 5, 8 and 20, a soft halo on a smooth light gradient in both modes, the cursor in the halo, and the outline alone. Differences are in sRGB levels out of 255:
+	- GL: at most 1 on any pixel. Up to 1.6% of pixels changed in light mode and under 0.25% in dark.
+	- Vulkan: at most 3, on the antialiased edge of the outline in light mode. Up to 2.4% of pixels changed in light mode, nearly all by 1, and almost none in dark.
+	- lavapipe: at most 2.
+	- The soft dark halo changed by at most 1 on any path, so it bands no more than before.
 
 ### The wallpaper at window size
 
@@ -293,6 +324,13 @@ What a window already gives back while unused is in the [Releasing resources](20
 - An encoder with a C toolchain, such as `intel_tex_2`. A pure Rust one builds for every target with no extra setup.
 
 - Block compression for the scrim or swapchain. A GPU cannot render into a compressed format.
+
+- 8-bit blur layers, tried 2026-10-04. They would save 2 more bytes a pixel, 7 MiB at 2560x1440. Against the control on GL, the distance functions changed 3 to 10% of pixels by 1 or 2 levels. The Gaussian function changed 11% by up to 6, seen as steps in the halo's fade.
+
+- Half-size blur layers, tried 2026-10-04. They would save 3 more bytes a pixel, 10.5 MiB at 2560x1440, and three quarters of the blur's work. A half-size pixel counts as glyph when any of the four under it does, so the halo comes out heavier. At the shipped settings about a fifth of the pixels changed, mostly by 1 to 5 levels, and small counters in glyphs like @, # and $ filled solid, by up to 51. A soft halo changed by at most 3.
+	- The requirement gives the lower profiles half size when the loss shows. The only lower profile with a halo is High, which keeps the same share of the radius so it looks like the same halo, so it stays full size until that is decided.
+
+- One channel for the text coverage. glyphon writes each glyph's own color, so it would take a change to our glyphon branch to write white. It would save 3 more bytes a pixel. Not tried.
 
 ## Research findings
 
