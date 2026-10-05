@@ -13,6 +13,7 @@
 #  shellcheck disable=2178  ## 'Variable was used as an array but is now assigned a string.' False hits on associative arrays with e.g. 'local -n assocArray=$1'.
 #  shellcheck disable=2181  ## 'Check exit code directly, not indirectly with $?.'
 #  shellcheck disable=2317  ## 'Can't reach.' (I.e. an 'exit' is used for debugging - and makes an unusable visual mess.)
+#  shellcheck enable=require-variable-braces  ## Every expansion braced: "${var}", not "$var".
 ## shellcheck disable=2002  ## 'Useless use of cat.'
 ## shellcheck disable=2004  ## '$/${} is unnecessary on arithmetic variables.' Inappropriate complaining?
 ## shellcheck disable=2053  ## 'Quote the right-hand sid of = in [[ ]] to prevent glob matching.' Disable for Yoda Notation.
@@ -77,32 +78,32 @@ _gfs_epoch(){
 	local -n epoch_x5q="$1"; local -i wall e i; local s
 	_gfs_civil wall "$2" "$3"; e=wall; epoch_x5q=""
 	for i in 1 2 3; do
-		_gfs_fmt s '%Y%m%d%H%M%S' "$e"; _gfs_civil s "${s:0:8}" "${s:8:6}"
+		_gfs_fmt s '%Y%m%d%H%M%S' "${e}"; _gfs_civil s "${s:0:8}" "${s:8:6}"
 		e=$((e + wall - s))
-		_gfs_fmt s '%Y%m%d%H%M%S' "$e"
-		if [[ "$s" == "$2$3" ]]; then epoch_x5q="$e"; return 0; fi
+		_gfs_fmt s '%Y%m%d%H%M%S' "${e}"
+		if [[ "${s}" == "$2$3" ]]; then epoch_x5q="${e}"; return 0; fi
 	done
 	return 0
 }
 
 ## Set $2 to the epoch and $3 to <YYYYmmDD-HHMMSS> for file $1, from its name if
-## it carries a date, else from its mtime.
+## it has a date, else from its mtime.
 _gfs_ts(){
 	local -n tsEpoch_w2j="$2" tsCanon_w2j="$3"
 	local base="${1##*/}" d="" t="000000" epoch=""
-	if [[ "$base" =~ (19|20)([0-9]{2})([0-9]{2})([0-9]{2})[-_]?([0-9]{2})([0-9]{2})([0-9]{2}) ]]; then
+	if [[ "${base}" =~ (19|20)([0-9]{2})([0-9]{2})([0-9]{2})[-_]?([0-9]{2})([0-9]{2})([0-9]{2}) ]]; then
 		d="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}${BASH_REMATCH[4]}"
 		t="${BASH_REMATCH[5]}${BASH_REMATCH[6]}${BASH_REMATCH[7]}"
-	elif [[ "$base" =~ (19|20)([0-9]{2})([0-9]{2})([0-9]{2}) ]]; then
+	elif [[ "${base}" =~ (19|20)([0-9]{2})([0-9]{2})([0-9]{2}) ]]; then
 		d="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}${BASH_REMATCH[4]}"
 	fi
 	## An impossible date that still matches the pattern falls through to the mtime.
 	## Only a name with no date at all costs a fork here, and a kept file is renamed
 	## to one with a date.
-	[[ -z "$d" ]] || _gfs_epoch epoch "$d" "$t"
-	[[ -n "$epoch" ]] || epoch="$(stat -c %Y "$1" 2>/dev/null || true)"
-	[[ -n "$epoch" ]] || printf -v epoch '%(%s)T' -1
-	tsEpoch_w2j="$epoch"; _gfs_fmt tsCanon_w2j '%Y%m%d-%H%M%S' "$epoch"
+	[[ -z "${d}" ]] || _gfs_epoch epoch "${d}" "${t}"
+	[[ -n "${epoch}" ]] || epoch="$(stat -c %Y "$1" 2>/dev/null || true)"
+	[[ -n "${epoch}" ]] || printf -v epoch '%(%s)T' -1
+	tsEpoch_w2j="${epoch}"; _gfs_fmt tsCanon_w2j '%Y%m%d-%H%M%S' "${epoch}"
 }
 
 ## Set variable $1 to the count in environment variable $2, or to default $3.
@@ -110,33 +111,34 @@ _gfs_ts(){
 ## in an array subscript, so anything but plain digits gets the default.
 _gfs_count(){
 	local val="${!2:-}"
-	if [[ -z "$val" ]]; then
+	if [[ -z "${val}" ]]; then
 		val="$3"
-	elif [[ ! "$val" =~ ^(0|[1-9][0-9]{0,8})$ ]]; then
+	elif [[ ! "${val}" =~ ^(0|[1-9][0-9]{0,8})$ ]]; then
 		printf '  rotate: %s is not a count; using %s\n' "$2" "$3" >&2
 		val="$3"
 	fi
-	printf -v "$1" '%s' "$val"
+	printf -v "$1" '%s' "${val}"
 }
 
 gfs_rotate(){
 	local dir="$1" prefix="$2" ext="$3"
-	local now="${GFS_NOW:-}"; [[ -n "$now" ]] || printf -v now '%(%s)T' -1
+	local now="${GFS_NOW:-}"; [[ -n "${now}" ]] || printf -v now '%(%s)T' -1
 	local kFreq kHour kDay kWeek kMonth kYear
 	_gfs_count kFreq  GFS_KEEP_FREQUENT 10; _gfs_count kHour GFS_KEEP_HOURLY 4
 	_gfs_count kDay   GFS_KEEP_DAILY    5;  _gfs_count kWeek GFS_KEEP_WEEKLY 4
 	_gfs_count kMonth GFS_KEEP_MONTHLY  4;  _gfs_count kYear GFS_KEEP_YEARLY 2
 
 	## Glob with nullglob so no match yields an empty list; restore the caller's setting.
-	local _ng=0; shopt -q nullglob && _ng=1
-	shopt -s nullglob; local cands=("$dir/${prefix}"_*."$ext"); ((_ng)) || shopt -u nullglob
+	local hadNullglob=0; shopt -q nullglob && hadNullglob=1
+	shopt -s nullglob; local cands=("${dir}/${prefix}"_*."${ext}"); ((hadNullglob)) || shopt -u nullglob
 	((${#cands[@]})) || return 0
 
 	## "epoch<TAB>canon<TAB>path", oldest first.
-	local -a items=(); local f e ct
-	for f in "${cands[@]}"; do
-		_gfs_ts "$f" e ct
-		[[ -n "$e" ]] && items+=("${e}"$'\t'"${ct}"$'\t'"${f}")
+	## Not 'epoch': _gfs_ts has a local of that name, which its nameref would find first.
+	local -a items=(); local file fileEpoch canon
+	for file in "${cands[@]}"; do
+		_gfs_ts "${file}" fileEpoch canon
+		[[ -n "${fileEpoch}" ]] && items+=("${fileEpoch}"$'\t'"${canon}"$'\t'"${file}")
 	done
 	((${#items[@]})) || return 0
 	mapfile -t items < <(printf '%s\n' "${items[@]}" | sort -n)
@@ -145,19 +147,21 @@ gfs_rotate(){
 	##   so it can't be tagged yet - that is what makes the roles retrospective).
 	## One format per file, "YYYYmmDDHH GGGGVV", cut into the five period keys.
 	local cur curH curD curW curM curY
-	_gfs_fmt cur '%Y%m%d%H %G%V' "$now"
+	_gfs_fmt cur '%Y%m%d%H %G%V' "${now}"
 	curH="${cur:0:10}"; curD="${cur:0:8}"; curW="${cur:11}"; curM="${cur:0:6}"; curY="${cur:0:4}"
-	local -A pH pD pW pM pY; local it k kH kD kW kM kY
-	# shellcheck disable=SC2034  # pH..pY are populated here, read later through the namerefs
+	local -A perHour perDay perWeek perMonth perYear
+	local it periodKeys keyHour keyDay keyWeek keyMonth keyYear
+	# shellcheck disable=SC2034  # perHour..perYear are populated here, read later through the namerefs
 	for it in "${items[@]}"; do
-		e="${it%%$'\t'*}"
-		_gfs_fmt k '%Y%m%d%H %G%V' "$e"
-		kH="${k:0:10}"; kD="${k:0:8}"; kW="${k:11}"; kM="${k:0:6}"; kY="${k:0:4}"
-		[[ "$kH" != "$curH" ]] && pH["$kH"]="$it"
-		[[ "$kD" != "$curD" ]] && pD["$kD"]="$it"
-		[[ "$kW" != "$curW" ]] && pW["$kW"]="$it"
-		[[ "$kM" != "$curM" ]] && pM["$kM"]="$it"
-		[[ "$kY" != "$curY" ]] && pY["$kY"]="$it"
+		fileEpoch="${it%%$'\t'*}"
+		_gfs_fmt periodKeys '%Y%m%d%H %G%V' "${fileEpoch}"
+		keyHour="${periodKeys:0:10}"; keyDay="${periodKeys:0:8}"; keyWeek="${periodKeys:11}"
+		keyMonth="${periodKeys:0:6}"; keyYear="${periodKeys:0:4}"
+		[[ "${keyHour}"  != "${curH}" ]] && perHour["${keyHour}"]="${it}"
+		[[ "${keyDay}"   != "${curD}" ]] && perDay["${keyDay}"]="${it}"
+		[[ "${keyWeek}"  != "${curW}" ]] && perWeek["${keyWeek}"]="${it}"
+		[[ "${keyMonth}" != "${curM}" ]] && perMonth["${keyMonth}"]="${it}"
+		[[ "${keyYear}"  != "${curY}" ]] && perYear["${keyYear}"]="${it}"
 	done
 
 	## Assign the coarsest role to each kept file:
@@ -165,15 +169,15 @@ gfs_rotate(){
 	## First-set wins, so process coarsest first.
 	local -A role; role["${items[0]}"]="first"
 	local spec rn cnt nk i
-	for spec in "year pY $kYear" "month pM $kMonth" "week pW $kWeek" "day pD $kDay" "hour pH $kHour"; do
+	for spec in "year perYear ${kYear}" "month perMonth ${kMonth}" "week perWeek ${kWeek}" "day perDay ${kDay}" "hour perHour ${kHour}"; do
 		# shellcheck disable=SC2086
-		set -- $spec; rn="$1"; cnt="$3"; local -n arr="$2"
+		set -- ${spec}; rn="$1"; cnt="$3"; local -n arr="$2"
 		local -a keys=("${!arr[@]}")
 		if ((${#keys[@]})); then
 			mapfile -t keys < <(printf '%s\n' "${keys[@]}" | sort)
 			nk=${#keys[@]}
 			for ((i = nk>cnt ? nk-cnt : 0; i<nk; i++)); do
-				it="${arr[${keys[i]}]}"; [[ -z "${role[$it]:-}" ]] && role["$it"]="$rn"
+				it="${arr[${keys[i]}]}"; [[ -z "${role[${it}]:-}" ]] && role["${it}"]="${rn}"
 			done
 		fi
 		unset -n arr
@@ -182,24 +186,24 @@ gfs_rotate(){
 	## Frequent: most recent kFreq not already claimed by a coarser role. The
 	## single newest file is labeled "latest" instead - a stable, naturally-
 	## sorting pointer to the most recent file (no separate "<prefix>-latest" copy).
-	local ni=${#items[@]}
-	for ((i = ni>kFreq ? ni-kFreq : 0; i<ni; i++)); do
+	local nItems=${#items[@]}
+	for ((i = nItems>kFreq ? nItems-kFreq : 0; i<nItems; i++)); do
 		[[ -z "${role[${items[i]}]:-}" ]] && role["${items[i]}"]="frequent"
 	done
-	[[ "${role[${items[ni-1]}]:-}" == "first" ]] || role["${items[ni-1]}"]="latest"
+	[[ "${role[${items[nItems-1]}]:-}" == "first" ]] || role["${items[nItems-1]}"]="latest"
 
 	## Prune the unrole'd; rename the kept to canonical (no-op if already canonical).
 	local rest r want
 	for it in "${items[@]}"; do
-		rest="${it#*$'\t'}"; ct="${rest%%$'\t'*}"; f="${rest#*$'\t'}"
-		r="${role[$it]:-}"
-		if [[ -z "$r" ]]; then
-			rm -f "$f"; printf '  rotate: pruned %s\n' "${f##*/}"
+		rest="${it#*$'\t'}"; canon="${rest%%$'\t'*}"; file="${rest#*$'\t'}"
+		r="${role[${it}]:-}"
+		if [[ -z "${r}" ]]; then
+			rm -f "${file}"; printf '  rotate: pruned %s\n' "${file##*/}"
 		else
-			want="$dir/${prefix}_${ct}_${r}.${ext}"
-			if [[ "$f" != "$want" ]]; then
-				[[ -e "$want" ]] && continue   # never clobber a same-name collision
-				mv -f "$f" "$want"; printf '  rotate: %s -> %s\n' "${f##*/}" "${want##*/}"
+			want="${dir}/${prefix}_${canon}_${r}.${ext}"
+			if [[ "${file}" != "${want}" ]]; then
+				[[ -e "${want}" ]] && continue   # never clobber a same-name collision
+				mv -f "${file}" "${want}"; printf '  rotate: %s -> %s\n' "${file##*/}" "${want##*/}"
 			fi
 		fi
 	done
@@ -207,7 +211,7 @@ gfs_rotate(){
 
 ## Check if sourced
 declare -i isSourced_t6wq5=0; [[ "${BASH_SOURCE[0]}" == "${0}" ]] || isSourced_t6wq5=1
-((isSourced_t6wq5)) || { echo -e "\nError in $(basename "${BASH_SOURCE[0]}"): This script is meant to be 'sourced' from within another script.\n"; exit ${ERRNUM_MSG_ALREADY_SHOWN}; }
+((isSourced_t6wq5)) || { echo -e "\nError in $(basename "${BASH_SOURCE[0]}"): This script is meant to be 'sourced' from within another script.\n"; exit "${ERRNUM_MSG_ALREADY_SHOWN}"; }
 
 
 ##	History:
@@ -217,3 +221,5 @@ declare -i isSourced_t6wq5=0; [[ "${BASH_SOURCE[0]}" == "${0}" ]] || isSourced_t
 ##		  default. It reached arithmetic, which could run a command.
 ##		- 2026-10-04: Dates are read and written by printf and arithmetic, not a
 ##		  date fork per file and field. Same names and output as before.
+##		- 2026-10-04: Every expansion braced, and shellcheck enforces it. The loop
+##		  variables in gfs_rotate have real names. No change in behavior.
