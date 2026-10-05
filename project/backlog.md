@@ -1020,7 +1020,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A passing unit test run keeps its test folder
 	- ID: 2026100418554244
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261004-185542
 	- Opened by: CC
@@ -1033,7 +1033,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: A run with no failed test removes its own folder.
 	- Reproduced: 20261004, twice on b23, each with all 1117 tests passing.
 	- Possible cause: any panic marks the run as failed, and `a_poisoned_lock_is_taken_as_it_stands` (Erm4AZ1) panics on purpose inside `catch_unwind`. Run alone it makes no folder, so the keep does not show then.
-	- Closed:
+	- Origin: 2026100314050010 added Erm4AZ1 after 2026100220260484 made any panic keep the folder. Confirmed: a full passing run kept its folder, and Erm4AZ1 was the only panic in it.
+	- Cause: the panic hook runs before anything catches the panic, so it cannot tell a caught panic from a failed test.
+	- Fixed: a test that panics on purpose catches it through `testdir::catch_expected_panic`, and the hook leaves the folder alone for a panic raised inside it. Erm4AZ1 uses it. Any other panic still keeps the folder.
+	- Swept: `catch_unwind`, `should_panic` and `set_hook` across `source/`. Erm4AZ1 was the only deliberate panic. `fuzz.rs` catches only to name the seed and then fails the test, so it keeps the folder as it should. `ctl.rs` chains a hook in the app, not in tests. One test binary, no integration tests. A full run with output shown printed one panic before the fix and only the two deliberate ones after.
+	- Note: a test that fails before any test has asked for the folder is not counted, since the hook is put in by the first ask. Left as it was.
+	- Test case: `a_panic_a_test_expects_does_not_keep_the_folder` (Erneqjm), and `no_test_catches_a_panic_behind_the_run_folders_back` (Erner3A), which fails on a bare `catch_unwind` or `should_panic` outside `testdir.rs` and `fuzz.rs`. `cicd/tests/testdir/run.bash` step A2 now runs Erneqjm too. Both failed with the hook check and the Erm4AZ1 change taken out, and that run kept its folder. Both pass with them in.
+	- Verified: a full `cargo test` passed, 1128 tests, and left nothing in its temp dir; the same run before the fix kept its folder. `cicd/tests/testdir/run.bash` passed. Clippy, fmt and the test ID check are clean.
+	- Branch: testkeep
+	- Commit: 4618fab
+	- Acceptance signoff: Self-closed: intent clear, reproduced, tests fail before the fix and pass after.
+	- Closed: 20261004-221448
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
