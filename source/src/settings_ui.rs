@@ -296,6 +296,7 @@ macro_rules! keys_of {
 			| Key::TabShowsDirectory
 			| Key::TitleShowsTab
 			| Key::IdleRelease
+			| Key::SoftwareRendering
 			| Key::CopyOnSelect
 			| Key::ShellIntegration
 			| Key::BashPrompt
@@ -437,6 +438,15 @@ fn slider_of(s: &Settings, key: Key) -> f32 {
 		keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => 0.0,
 	}
 }
+// Why "Always use software rendering" is grayed, where it is.
+const fn software_tip(possible: bool) -> Option<&'static str> {
+	if possible {
+		None
+	} else {
+		Some("macOS has no software renderer to draw with.")
+	}
+}
+
 // A switch's state in `s`, for the shown value, the default and the revert.
 fn toggle_of(s: &Settings, key: Key) -> bool {
 	match key {
@@ -459,6 +469,7 @@ fn toggle_of(s: &Settings, key: Key) -> bool {
 		Key::TabShowsDirectory => s.tab_shows_directory,
 		Key::TitleShowsTab => s.title_shows_tab,
 		Key::IdleRelease => s.idle_release,
+		Key::SoftwareRendering => s.software_rendering,
 		Key::CopyOnSelect => s.copy_on_select,
 		Key::ShellIntegration => s.shell_integration,
 		Key::BashPrompt => s.bash_prompt,
@@ -2923,12 +2934,14 @@ impl SettingsDialog {
 		}
 	}
 	// Flyover text for a control the environment disables rather than another
-	// setting - explains why it is inert. Only the system-font toggles today,
-	// and only when the OS reports no such setting to follow: Windows has a
-	// system font size but no monospace family, a bare desktop may have neither.
+	// setting - explains why it is inert. The system-font toggles, only when the
+	// OS reports no such setting to follow: Windows has a system font size but
+	// no monospace family, a bare desktop may have neither. And software
+	// rendering where the platform has no software renderer.
 	fn disabled_tip(&self, key: Key) -> Option<&'static str> {
 		let os = &self.os_font;
 		match key {
+			Key::SoftwareRendering => software_tip(crate::gfx::SOFTWARE_POSSIBLE),
 			Key::SystemFont if os.family.is_none() => {
 				Some("The desktop reports no monospace font to follow.")
 			}
@@ -4040,6 +4053,7 @@ impl SettingsDialog {
 			Key::TabShowsDirectory => self.edited.tab_shows_directory = on,
 			Key::TitleShowsTab => self.edited.title_shows_tab = on,
 			Key::IdleRelease => self.edited.idle_release = on,
+			Key::SoftwareRendering => self.edited.software_rendering = on,
 			Key::CopyOnSelect => self.edited.copy_on_select = on,
 			Key::ShellIntegration => self.edited.shell_integration = on,
 			Key::BashPrompt => self.edited.bash_prompt = on,
@@ -4145,7 +4159,7 @@ impl SettingsDialog {
 	// columns/rows are inactive when "Remember last size" is on).
 	fn disabled(&self, key: Key) -> bool {
 		!ui().needs_of(key).iter().all(|need| self.gate_ok(need))
-			// nothing for a system-font toggle to follow (the tip says so)
+			// nothing for the platform to do with it (the tip says so)
 			|| self.disabled_tip(key).is_some()
 	}
 	// A row the chosen performance profile sets. It shows the profile's value
@@ -9213,6 +9227,43 @@ mod tests {
 		assert_eq!(d.edited.cursor_outline, d.defaults.cursor_outline);
 		assert!(d.row_is_default(i));
 		assert!(d.take_reverted().contains(&"cursor.scrim"));
+	}
+
+	// Software rendering is grayed, with its reason, only where the platform
+	// has no software renderer. Elsewhere it is an ordinary switch on the
+	// Window tab that a click flips.
+	// Test ID: ErnMaGS
+	#[test]
+	fn software_rendering_is_grayed_only_without_a_software_renderer() {
+		use super::Key;
+		assert_eq!(super::software_tip(true), None);
+		assert!(super::software_tip(false).is_some_and(|tip| tip.contains("macOS")));
+		let mut d = mk_dialog(2000.0);
+		let i = d
+			.specs
+			.iter()
+			.position(|s| matches!(s.key, Key::SoftwareRendering))
+			.unwrap();
+		assert_eq!(
+			d.specs[i].tab,
+			d.specs
+				.iter()
+				.find(|s| matches!(s.key, Key::IdleRelease))
+				.unwrap()
+				.tab
+		);
+		assert!(!d.defaults.software_rendering, "ships off");
+		d.tab = d.specs[i].tab;
+		assert_eq!(
+			d.disabled(Key::SoftwareRendering),
+			!crate::gfx::SOFTWARE_POSSIBLE
+		);
+		if crate::gfx::SOFTWARE_POSSIBLE {
+			let bx = d.checkbox(i);
+			let mut measure = |s: &str| s.len() as f32;
+			d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
+			assert!(d.edited.software_rendering);
+		}
 	}
 
 	// The "use system font" face toggle is inert wherever the OS reports no

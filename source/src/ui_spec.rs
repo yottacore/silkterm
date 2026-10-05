@@ -59,7 +59,7 @@ keys![
 	CursorBlink, CursorHeight, CursorWidth, CursorAnimation, CursorResume,
 	SystemFont, SystemFontSize, FontFamily, FontSize, LineHeight,
 	Columns, Rows, RememberSize, RememberPerMonitor, RememberMaximized, Margin, TabRegularWidth, TabMaxWidth,
-	IdleRelease, IdleMinimizedMin, IdleHiddenMin, IdleMin,
+	IdleRelease, IdleMinimizedMin, IdleHiddenMin, IdleMin, SoftwareRendering,
 	TabShowsTitle, TabShowsShell, TabShowsProgram, TabShowsDirectory, TitleShowsTab,
 	Shells, StartupDirectory, ShellIntegration, BashPrompt, CopyOnSelect, Hyperlinks, LinkOpenCommand,
 	SmoothScroll, ScrollEaseIn, ScrollRampUp, SingleScreenTau, ScrollRampDown,

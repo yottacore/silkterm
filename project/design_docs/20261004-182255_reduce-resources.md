@@ -264,6 +264,14 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- The title or Help > About says software rendering is in use, the same way it does now.
 	- This is also a way out for the blank window under GPU load, where `vkCreateDevice` was seen failing.
 
+- Built 2026-10-04, as `window.software_rendering`, on the Window tab under the idle rows for now.
+	- On X11 the software device is Vulkan's lavapipe, drawn on the same window glutin made. libGL keeps the driver it loaded first, so Mesa's GL cannot serve a fallback or a change made while running, and a second GL instance in the process panics. Steering libGL to Mesa at launch was not tried, since lavapipe covers both. lavapipe offers premultiplied alpha on that window, so Transparency still works and the row is not grayed for it.
+	- Every device asks the setting's choice first and the other kind once: the window's, the dialogs' kept context, and the one a dialog builds without it. With software asked for and none installed, the card draws and stderr says so once.
+	- A change takes effect once no dialog is open. The window lets its device go and builds it again, and the dialogs' context goes with it.
+	- A software device on a machine with a card is not new hardware. The card keeps its rating, and the session steps down to Low with nothing written, the way a remote screen takes Remote. Back on the card, that step comes off.
+	- A fallback prints the reason and the renderer on stderr. Help > About names the adapter of the device the window has now.
+	- `SILK_REFUSE_CARD=<file>` makes every card refuse a device while the file is there, as a full one does.
+
 ### The Resource use group
 
 - "Free resources when idle" and its waits move into a group named "Resource use", with "Always use software rendering" beside them.

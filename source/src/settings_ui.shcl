@@ -822,6 +822,12 @@ rows:
 		setting: window.idle_release_min
 		help: "How long a window that is only unfocused, with nothing printing, waits. Longer, since it may be on a second screen being read. On Windows with Transparency on, a window still on screen is never let go, since it would turn black."
 
+	SoftwareRendering:
+		label: Always use software rendering
+		kind: toggle
+		setting: window.software_rendering
+		help: "Draw on the processor rather than the graphics card. Slower, but uses none of the card's memory. A window whose card cannot give it what it needs falls back to this on its own."
+
 	TabText:
 		kind: heading
 		label: Tab text

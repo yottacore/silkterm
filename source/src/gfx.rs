@@ -58,9 +58,6 @@ enum Backend {
 	Gl {
 		ctx: PossiblyCurrentContext,
 		surface: GlWindowSurface<WindowSurface>,
-		// the framebuffer config the window was made with, which a later context
-		// on the same window has to match (see `Rebirth`)
-		config: glutin::config::Config,
 		fb: wgpu::Texture,
 		// views of fb/offscreen, rebuilt on resize only (both textures are
 		// persistent, so creating fresh views per frame was waste)
@@ -386,6 +383,11 @@ pub struct Gfx {
 	pub adapter_info: wgpu::AdapterInfo,
 	backend: Backend,
 	sentinel: Option<Sentinel>, // GL path only: VT-switch texture-content-loss probe
+	// set for a window glutin made, whichever device it has now
+	gl_route: Option<GlRoute>,
+	pub drawn: Drawn,
+	// what the device was asked for, so a change of setting can be told
+	pub want: Want,
 	_window: Arc<Window>,
 }
 
@@ -406,7 +408,90 @@ impl std::fmt::Debug for Gfx {
 // cold start on the others.
 pub enum Rebirth {
 	Native(wgpu::Instance),
-	Gl(wgpu::Instance, glutin::config::Config),
+	Gl(GlRoute),
+}
+
+// How a window glutin made gets a device: the GL instance and the framebuffer
+// config a context on the window has to match, and the instance a software
+// device on it comes from, once one was needed. Kept as a whole, so a window
+// drawing in software goes back to GL at its next build.
+#[derive(Clone)]
+pub struct GlRoute {
+	instance: wgpu::Instance,
+	config: glutin::config::Config,
+	software: Option<wgpu::Instance>,
+}
+
+impl std::fmt::Debug for GlRoute {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("GlRoute")
+			.field("software", &self.software.is_some())
+			.finish_non_exhaustive()
+	}
+}
+
+// Which kind of adapter a device is asked of first. The other is tried once
+// when the first cannot make a device.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Want {
+	Card,
+	Software,
+}
+
+impl Want {
+	// `force_fallback_adapter` for each try, in order. false lets wgpu pick
+	// any adapter, a card ahead of software; true takes software only.
+	pub const fn order(self) -> [bool; 2] {
+		match self {
+			Self::Card => [false, true],
+			Self::Software => [true, false],
+		}
+	}
+}
+
+// wgpu has a software adapter everywhere but macOS: lavapipe on Linux, WARP on
+// Windows.
+pub const SOFTWARE_POSSIBLE: bool = !cfg!(target_os = "macos");
+
+// What the next device is asked for.
+pub fn wanted() -> Want {
+	if SOFTWARE_POSSIBLE && crate::config::settings().software_rendering {
+		Want::Software
+	} else {
+		Want::Card
+	}
+}
+
+// How a device came to be on its adapter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Drawn {
+	Card,
+	// software, because the setting asked for it
+	Software,
+	// software, because the card could not make a device
+	Fallback,
+	// software, because no card was found
+	NoCard,
+}
+
+impl Drawn {
+	pub fn of(info: &wgpu::AdapterInfo, asked_software: bool, card_refused: bool) -> Self {
+		if info.device_type != wgpu::DeviceType::Cpu {
+			Self::Card
+		} else if card_refused {
+			Self::Fallback
+		} else if asked_software {
+			Self::Software
+		} else {
+			Self::NoCard
+		}
+	}
+
+	// Software on a machine that has a card. The card keeps its performance
+	// rating then, since this is not new hardware.
+	pub const fn instead_of_card(self) -> bool {
+		matches!(self, Self::Software | Self::Fallback)
+	}
 }
 
 impl std::fmt::Debug for Rebirth {
@@ -419,8 +504,8 @@ impl std::fmt::Debug for Rebirth {
 }
 
 impl Gfx {
-	pub fn new(window: Arc<Window>) -> anyhow::Result<Self> {
-		Self::with_backends(window, wgpu::Backends::all())
+	pub fn new(window: Arc<Window>, want: Want) -> anyhow::Result<Self> {
+		Self::with_backends(window, wgpu::Backends::all(), want)
 	}
 
 	// Let the device and everything on it go. Every other wgpu object made on
@@ -436,6 +521,7 @@ impl Gfx {
 			queue,
 			backend,
 			sentinel,
+			gl_route,
 			..
 		} = self;
 		drop(sentinel);
@@ -445,12 +531,10 @@ impl Gfx {
 				let _ = device.poll(wgpu::PollType::wait_indefinitely());
 				drop(queue);
 				drop(device);
-				Rebirth::Native(instance)
 			}
 			Backend::Gl {
 				ctx,
 				surface,
-				config,
 				fb,
 				fb_view,
 				offscreen,
@@ -468,21 +552,21 @@ impl Gfx {
 				let ctx = ctx.make_not_current();
 				drop(surface);
 				drop(ctx);
-				Rebirth::Gl(instance, config)
 			}
 		}
+		gl_route.map_or(Rebirth::Native(instance), Rebirth::Gl)
 	}
 
 	// The device again, on the window it was released from. A kept instance that
 	// can no longer serve the window (a driver that went away in the meantime)
 	// falls back to a cold start.
-	pub fn rebuild(rebirth: &Rebirth, window: &Arc<Window>) -> anyhow::Result<Self> {
+	pub fn rebuild(rebirth: &Rebirth, window: &Arc<Window>, want: Want) -> anyhow::Result<Self> {
 		match rebirth {
-			Rebirth::Native(instance) => Self::on(instance.clone(), window.clone(), false)
-				.or_else(|_| Self::new(window.clone())),
-			Rebirth::Gl(instance, config) => {
-				Self::gl_on(instance.clone(), window.clone(), config.clone(), false)
+			Rebirth::Native(instance) => {
+				Self::on(instance.clone(), window.clone(), false, &want.order(), None)
+					.or_else(|_| Self::new(window.clone(), want))
 			}
+			Rebirth::Gl(route) => Self::on_route(route.clone(), window, want, false),
 		}
 	}
 
@@ -493,7 +577,7 @@ impl Gfx {
 	// the only backend with that option, so it has to be the one picked. Falls
 	// back to the ordinary path (opaque) when DX12 cannot serve this window.
 	#[cfg(windows)]
-	pub fn new_composited(window: Arc<Window>) -> anyhow::Result<Self> {
+	pub fn new_composited(window: Arc<Window>, want: Want) -> anyhow::Result<Self> {
 		let dx12 = wgpu::Dx12BackendOptions {
 			presentation_system: wgpu::Dx12SwapchainKind::DxgiFromVisual,
 			..Default::default()
@@ -502,12 +586,12 @@ impl Gfx {
 			dx12,
 			..Default::default()
 		};
-		Self::build(window.clone(), wgpu::Backends::DX12, options).or_else(|e| {
+		Self::build(window.clone(), wgpu::Backends::DX12, options, want).or_else(|e| {
 			eprintln!(
 				"{}: composited DX12 surface unavailable ({e}); using native surface (no transparency)",
 				crate::config::APP_NAME
 			);
-			Self::new(window)
+			Self::new(window, want)
 		})
 	}
 
@@ -516,14 +600,19 @@ impl Gfx {
 	// backend while the main window holds a glutin GL/EGL context panics in
 	// wgpu-hal's EGL teardown (`unmake_current().unwrap()`), so dialogs must avoid
 	// touching EGL entirely.
-	pub fn with_backends(window: Arc<Window>, backends: wgpu::Backends) -> anyhow::Result<Self> {
-		Self::build(window, backends, wgpu::BackendOptions::default())
+	pub fn with_backends(
+		window: Arc<Window>,
+		backends: wgpu::Backends,
+		want: Want,
+	) -> anyhow::Result<Self> {
+		Self::build(window, backends, wgpu::BackendOptions::default(), want)
 	}
 
 	fn build(
 		window: Arc<Window>,
 		backends: wgpu::Backends,
 		backend_options: wgpu::BackendOptions,
+		want: Want,
 	) -> anyhow::Result<Self> {
 		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
 			backends,
@@ -532,47 +621,92 @@ impl Gfx {
 			backend_options,
 			display: None,
 		});
-		Self::on(instance, window, true)
+		Self::on(instance, window, true, &want.order(), None)
 	}
 
 	// Surface, adapter and device on an instance that already exists: the cold
 	// start above and a rebuild after a release (`log` is the difference, since
-	// the adapter was reported the first time).
-	fn on(instance: wgpu::Instance, window: Arc<Window>, log: bool) -> anyhow::Result<Self> {
+	// the adapter was reported the first time). `order` is as for
+	// `pick_device`, and `refused` says a card already refused a device.
+	fn on(
+		instance: wgpu::Instance,
+		window: Arc<Window>,
+		log: bool,
+		order: &[bool],
+		refused: Option<String>,
+	) -> anyhow::Result<Self> {
 		let surface = instance.create_surface(window.clone())?;
-
-		// Prefer a real GPU; if none can be acquired, retry forcing a software
-		// (CPU) adapter so the app still runs without hardware acceleration.
-		let pick = |fallback| {
-			pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-				power_preference: wgpu::PowerPreference::HighPerformance,
-				compatible_surface: Some(&surface),
-				force_fallback_adapter: fallback,
-			}))
-		};
-		let adapter = pick(false).or_else(|_| pick(true))?;
-		let adapter_info = adapter.get_info();
-
-		let (device, queue) = request_device(&adapter, "silkterm device")?;
-		let (config, format, transparent) = surface_config(&surface, &adapter, &window)
+		let picked = pick_device(&instance, Some(&surface), order, refused, "silkterm device")?;
+		let (config, format, transparent) = surface_config(&surface, &picked.adapter, &window)
 			.ok_or_else(|| anyhow::anyhow!("adapter cannot present to this window"))?;
-		if log {
-			log_renderer(&adapter_info, transparent);
+		if log || picked.drawn == Drawn::Fallback {
+			log_renderer(&picked.info, transparent);
 		}
-		surface.configure(&device, &config);
+		surface.configure(&picked.device, &config);
 
 		Ok(Self {
 			instance,
-			device,
-			queue,
+			device: picked.device,
+			queue: picked.queue,
 			config,
 			format,
 			transparent,
-			adapter_info,
+			adapter_info: picked.info,
 			backend: Backend::Native(surface),
 			sentinel: None,
+			gl_route: None,
+			drawn: picked.drawn,
+			want: if order.first() == Some(&true) {
+				Want::Software
+			} else {
+				Want::Card
+			},
 			_window: window,
 		})
+	}
+
+	// A device on a window glutin made: GL on the card, or software when the
+	// setting asks for it or the card cannot make a device. Software comes
+	// through a Vulkan instance of its own (lavapipe). libGL keeps the card's
+	// driver once loaded, and a second wgpu GL instance panics in EGL teardown
+	// (see `with_backends`).
+	fn on_route(
+		mut route: GlRoute,
+		window: &Arc<Window>,
+		want: Want,
+		log: bool,
+	) -> anyhow::Result<Self> {
+		let mut gfx = match want {
+			Want::Card => match Self::gl_on(&route, window.clone(), log) {
+				Ok(gfx) => gfx,
+				Err(e) => Self::software_on_route(&mut route, window, log, Some(e.to_string()))
+					.map_err(|_| e)?,
+			},
+			Want::Software => match Self::software_on_route(&mut route, window, log, None) {
+				Ok(gfx) => gfx,
+				Err(e) => {
+					note_no_software(&e);
+					Self::gl_on(&route, window.clone(), log)?
+				}
+			},
+		};
+		gfx.want = want;
+		Ok(gfx)
+	}
+
+	fn software_on_route(
+		route: &mut GlRoute,
+		window: &Arc<Window>,
+		log: bool,
+		refused: Option<String>,
+	) -> anyhow::Result<Self> {
+		let instance = route
+			.software
+			.get_or_insert_with(|| plain_instance(wgpu::Backends::PRIMARY))
+			.clone();
+		let mut gfx = Self::on(instance, window.clone(), log, &[true], refused)?;
+		gfx.gl_route = Some(route.clone());
+		Ok(gfx)
 	}
 
 	// Same native path, but on a context that was built ahead of time (see
@@ -602,6 +736,9 @@ impl Gfx {
 			adapter_info: gpu.adapter_info.clone(),
 			backend: Backend::Native(surface),
 			sentinel: None,
+			gl_route: None,
+			drawn: gpu.drawn,
+			want: gpu.want,
 			_window: window,
 		})
 	}
@@ -634,6 +771,7 @@ impl Gfx {
 	pub fn new_gl_transparent(
 		el: &ActiveEventLoop,
 		attrs: WindowAttributes,
+		want: Want,
 	) -> anyhow::Result<(Self, Arc<Window>)> {
 		#[cfg(target_os = "linux")]
 		quiet_glx_errors();
@@ -661,7 +799,12 @@ impl Gfx {
 			backend_options: wgpu::BackendOptions::default(),
 			display: None,
 		});
-		let gfx = Self::gl_on(instance, window.clone(), config, true)?;
+		let route = GlRoute {
+			instance,
+			config,
+			software: None,
+		};
+		let gfx = Self::on_route(route, &window, want, true)?;
 		Ok((gfx, window))
 	}
 
@@ -669,12 +812,8 @@ impl Gfx {
 	// glutin made. Shared by the cold start above and a rebuild after a release:
 	// the window and its ARGB visual outlive the context, so a new one is built
 	// from the same config.
-	fn gl_on(
-		instance: wgpu::Instance,
-		window: Arc<Window>,
-		config: glutin::config::Config,
-		log: bool,
-	) -> anyhow::Result<Self> {
+	fn gl_on(route: &GlRoute, window: Arc<Window>, log: bool) -> anyhow::Result<Self> {
+		let config = &route.config;
 		let raw = window.window_handle()?.as_raw();
 		let gl_display = config.display();
 
@@ -691,7 +830,7 @@ impl Gfx {
 					.build(Some(raw));
 				// SAFETY: `raw` is `window`'s handle, and `Gfx` keeps the window
 				// (`_window`, dropped last) for as long as the context.
-				if let Ok(ctx) = unsafe { gl_display.create_context(&config, &attrs) } {
+				if let Ok(ctx) = unsafe { gl_display.create_context(config, &attrs) } {
 					picked = Some(ctx);
 					break;
 				}
@@ -702,7 +841,7 @@ impl Gfx {
 		// SAFETY: as for the context above, the window outlives the surface.
 		let surface = unsafe {
 			gl_display.create_window_surface(
-				&config,
+				config,
 				&SurfaceAttributesBuilder::<WindowSurface>::new().build(
 					raw,
 					NonZeroU32::new(size.width).unwrap_or(NonZeroU32::MIN),
@@ -724,12 +863,29 @@ impl Gfx {
 		};
 		let _ = surface.set_swap_interval(&ctx, interval);
 
-		let adapter = gl_adapter(&instance, &gl_display)?;
-		let adapter_info = adapter.get_info();
-		if log {
-			log_renderer(&adapter_info, true);
-		}
-		let (device, queue) = request_device(&adapter, "silkterm gl device")?;
+		// A refusal from here on leaves the context current, and glutin destroys
+		// one without unbinding it, which spoils the window for the next GLX
+		// context on NVIDIA (see `release`). The software fallback and the
+		// retry after it both come back to this window, so unbind first.
+		let made = (|| {
+			let adapter = gl_adapter(&route.instance, &gl_display)?;
+			let adapter_info = adapter.get_info();
+			if log {
+				log_renderer(&adapter_info, true);
+			}
+			let (device, queue) = request_device(&adapter, "silkterm gl device")?;
+			anyhow::Ok((adapter_info, device, queue))
+		})();
+		let (adapter_info, device, queue) = match made {
+			Ok(made) => made,
+			Err(e) => {
+				let ctx = ctx.make_not_current();
+				drop(surface);
+				drop(ctx);
+				return Err(e);
+			}
+		};
+		let drawn = Drawn::of(&adapter_info, false, false);
 
 		// The GL offscreen is linear-light, so it must NOT be sRGB (an sRGB-declared
 		// offscreen makes the blit's textureSample DECODE, cancelling its lin2srgb).
@@ -756,7 +912,7 @@ impl Gfx {
 
 		let sentinel = Some(Sentinel::new(&device, &queue));
 		Ok(Self {
-			instance,
+			instance: route.instance.clone(),
 			device,
 			queue,
 			config: surface_cfg,
@@ -766,7 +922,6 @@ impl Gfx {
 			backend: Backend::Gl {
 				ctx,
 				surface,
-				config,
 				fb,
 				fb_view,
 				offscreen,
@@ -774,6 +929,9 @@ impl Gfx {
 				blit,
 			},
 			sentinel,
+			gl_route: Some(route.clone()),
+			drawn,
+			want: Want::Card,
 			_window: window,
 		})
 	}
@@ -879,7 +1037,6 @@ impl Gfx {
 				offscreen,
 				offscreen_view,
 				blit,
-				config: _,
 			} => {
 				surface.resize(ctx, nonzero_w, nonzero_h);
 				*fb = default_fb(&self.device, FB_FORMAT, w, h);
@@ -895,6 +1052,12 @@ impl Gfx {
 // VRAM-content probe (see the Sentinel comment above). All no-ops on the
 // native backend, where sentinel is None.
 impl Gfx {
+	// Made by glutin, with an ARGB visual and a VT watcher, whether it draws
+	// through GL right now or in software.
+	pub const fn on_glutin_window(&self) -> bool {
+		self.gl_route.is_some()
+	}
+
 	pub fn is_gl(&self) -> bool {
 		matches!(self.backend, Backend::Gl { .. })
 	}
@@ -1079,14 +1242,131 @@ fn f16_to_f32(bits: u16) -> f32 {
 fn request_device(
 	adapter: &wgpu::Adapter,
 	label: &str,
-) -> Result<(wgpu::Device, wgpu::Queue), wgpu::RequestDeviceError> {
-	pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-		label: Some(label),
-		required_features: wgpu::Features::empty(),
-		required_limits: adapter.limits(),
-		memory_hints: wgpu::MemoryHints::MemoryUsage,
-		..Default::default()
-	}))
+) -> anyhow::Result<(wgpu::Device, wgpu::Queue)> {
+	if adapter.get_info().device_type != wgpu::DeviceType::Cpu && card_refused_on_purpose() {
+		anyhow::bail!("refused, SILK_REFUSE_CARD");
+	}
+	Ok(pollster::block_on(adapter.request_device(
+		&wgpu::DeviceDescriptor {
+			label: Some(label),
+			required_features: wgpu::Features::empty(),
+			required_limits: adapter.limits(),
+			memory_hints: wgpu::MemoryHints::MemoryUsage,
+			..Default::default()
+		},
+	))?)
+}
+
+// SILK_REFUSE_CARD=<file>: while the file is there, a graphics card refuses
+// every device, as a full one does. Read on each ask, so a refusal can start
+// and stop while the program runs.
+fn card_refused_on_purpose() -> bool {
+	#[cfg(test)]
+	if REFUSE_CARD.with(std::cell::Cell::get) {
+		return true;
+	}
+	std::env::var_os("SILK_REFUSE_CARD").is_some_and(|path| std::path::Path::new(&path).exists())
+}
+
+// The same for one test thread, since the environment is the whole process's.
+#[cfg(test)]
+thread_local! {
+	static REFUSE_CARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+// An instance with no options beyond its backends.
+fn plain_instance(backends: wgpu::Backends) -> wgpu::Instance {
+	wgpu::Instance::new(wgpu::InstanceDescriptor {
+		backends,
+		flags: wgpu::InstanceFlags::default(),
+		memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+		backend_options: wgpu::BackendOptions::default(),
+		display: None,
+	})
+}
+
+struct Picked {
+	adapter: wgpu::Adapter,
+	device: wgpu::Device,
+	queue: wgpu::Queue,
+	info: wgpu::AdapterInfo,
+	drawn: Drawn,
+}
+
+// A device from the first adapter that will make one, trying `order` as
+// `Want::order` gives it. An adapter already tried is not asked twice, as
+// where software is all there is. A card that refuses is what makes the
+// software device after it a fallback, and `refused` carries one that
+// refused before this call (the GL path's).
+fn pick_device(
+	instance: &wgpu::Instance,
+	surface: Option<&wgpu::Surface<'_>>,
+	order: &[bool],
+	mut refused: Option<String>,
+	label: &str,
+) -> anyhow::Result<Picked> {
+	let mut tried: Vec<wgpu::AdapterInfo> = Vec::new();
+	let mut last: Option<anyhow::Error> = None;
+	for &software in order {
+		let adapter =
+			match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+				power_preference: wgpu::PowerPreference::HighPerformance,
+				compatible_surface: surface,
+				force_fallback_adapter: software,
+			})) {
+				Ok(adapter) => adapter,
+				Err(e) => {
+					last.get_or_insert(e.into());
+					continue;
+				}
+			};
+		let info = adapter.get_info();
+		if tried.contains(&info) {
+			continue;
+		}
+		match request_device(&adapter, label) {
+			Ok((device, queue)) => {
+				let drawn = Drawn::of(&info, order.first() == Some(&true), refused.is_some());
+				match (drawn, &refused) {
+					(Drawn::Fallback, Some(why)) => eprintln!(
+						"{}: the graphics card could not make a device ({why}); drawing in software",
+						crate::config::APP_NAME
+					),
+					(Drawn::Card, _) if order.first() == Some(&true) => {
+						note_no_software(&anyhow::anyhow!("none found"));
+					}
+					_ => {}
+				}
+				return Ok(Picked {
+					adapter,
+					device,
+					queue,
+					info,
+					drawn,
+				});
+			}
+			Err(e) => {
+				if info.device_type != wgpu::DeviceType::Cpu {
+					refused = Some(e.to_string());
+				}
+				last = Some(e);
+				tried.push(info);
+			}
+		}
+	}
+	Err(last.unwrap_or_else(|| anyhow::anyhow!("no graphics adapter")))
+}
+
+// Software was asked for and the card drew instead. Said once a process,
+// since every rebuild would say it again.
+fn note_no_software(why: &anyhow::Error) {
+	static SAID: std::sync::Once = std::sync::Once::new();
+	SAID.call_once(|| {
+		eprintln!(
+			"{}: software rendering is on, but no software renderer could draw ({why}); using the graphics card",
+			crate::config::APP_NAME
+		);
+	});
 }
 
 // Surface format + alpha mode + configuration, shared by the cold and prewarmed
@@ -1171,17 +1451,18 @@ pub struct DialogGpu {
 	device: wgpu::Device,
 	queue: wgpu::Queue,
 	adapter_info: wgpu::AdapterInfo,
+	drawn: Drawn,
+	want: Want,
 }
 
-// The instance and adapter of a `DialogGpu` whose device has been let go: what
-// a rebuild starts from, since the device is the memory and the instance is
-// the part a driver may not fully give back (file descriptors stayed open on
-// NVIDIA's after every instance destroyed).
+// The instance of a `DialogGpu` whose device has been let go: what a rebuild
+// starts from, since the device is the memory and the instance is the part a
+// driver may not fully give back (file descriptors stayed open on NVIDIA's
+// after every instance destroyed). The adapter is picked again, since the
+// software setting may have changed in between.
 #[derive(Clone, Debug)]
 pub struct DialogSeed {
 	instance: wgpu::Instance,
-	adapter: wgpu::Adapter,
-	adapter_info: wgpu::AdapterInfo,
 }
 
 impl DialogGpu {
@@ -1189,47 +1470,32 @@ impl DialogGpu {
 	// against - `Gfx::with_dialog_gpu` does that later against the real surface.
 	// Not logged: the terminal already reported the GPU, and this picks the same
 	// one on any single-adapter box.
-	pub fn build() -> anyhow::Result<Self> {
-		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-			backends: wgpu::Backends::PRIMARY,
-			flags: wgpu::InstanceFlags::default(),
-			memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-			backend_options: wgpu::BackendOptions::default(),
-			display: None,
-		});
-		let pick = |fallback| {
-			pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-				power_preference: wgpu::PowerPreference::HighPerformance,
-				compatible_surface: None,
-				force_fallback_adapter: fallback,
-			}))
-		};
-		let adapter = pick(false).or_else(|_| pick(true))?;
-		let adapter_info = adapter.get_info();
-		Self::on(DialogSeed {
-			instance,
-			adapter,
-			adapter_info,
-		})
+	pub fn build(want: Want) -> anyhow::Result<Self> {
+		Self::on(
+			DialogSeed {
+				instance: plain_instance(wgpu::Backends::PRIMARY),
+			},
+			want,
+		)
 	}
 
-	// A device on an instance and adapter that already exist.
-	fn on(seed: DialogSeed) -> anyhow::Result<Self> {
-		let (device, queue) = request_device(&seed.adapter, "silkterm device")?;
+	// A device on an instance that already exists.
+	fn on(seed: DialogSeed, want: Want) -> anyhow::Result<Self> {
+		let picked = pick_device(&seed.instance, None, &want.order(), None, "silkterm device")?;
 		Ok(Self {
 			instance: seed.instance,
-			adapter: seed.adapter,
-			device,
-			queue,
-			adapter_info: seed.adapter_info,
+			adapter: picked.adapter,
+			device: picked.device,
+			queue: picked.queue,
+			adapter_info: picked.info,
+			drawn: picked.drawn,
+			want,
 		})
 	}
 
 	fn seed(&self) -> DialogSeed {
 		DialogSeed {
 			instance: self.instance.clone(),
-			adapter: self.adapter.clone(),
-			adapter_info: self.adapter_info.clone(),
 		}
 	}
 }
@@ -1287,10 +1553,11 @@ impl GpuWarm {
 			return;
 		}
 		let seed = self.seed.take();
+		let want = wanted();
 		self.state = Warm::Building(std::thread::spawn(move || {
 			let built = match seed {
-				Some(seed) => DialogGpu::on(seed).or_else(|_| DialogGpu::build()),
-				None => DialogGpu::build(),
+				Some(seed) => DialogGpu::on(seed, want).or_else(|_| DialogGpu::build(want)),
+				None => DialogGpu::build(want),
 			};
 			match built {
 				Ok(gpu) => Some(gpu),
@@ -1376,22 +1643,16 @@ pub fn test_adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterI
 // so the two report the same GPU. None on a box with no usable adapter - the
 // rest of the About text is still worth printing.
 pub fn probe_adapter_info() -> Option<wgpu::AdapterInfo> {
-	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-		backends: wgpu::Backends::PRIMARY,
-		flags: wgpu::InstanceFlags::default(),
-		memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-		backend_options: wgpu::BackendOptions::default(),
-		display: None,
-	});
-	let pick = |fallback| {
+	let instance = plain_instance(wgpu::Backends::PRIMARY);
+	wanted().order().into_iter().find_map(|software| {
 		pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
 			power_preference: wgpu::PowerPreference::HighPerformance,
 			compatible_surface: None,
-			force_fallback_adapter: fallback,
+			force_fallback_adapter: software,
 		}))
-	};
-	let adapter = pick(false).or_else(|_| pick(true)).ok()?;
-	Some(adapter.get_info())
+		.ok()
+		.map(|adapter| adapter.get_info())
+	})
 }
 
 // `transparent` is whether the surface can carry alpha at all - the first thing
@@ -2094,6 +2355,70 @@ mod tests {
 		assert_eq!(SENTINEL_BYTES as u64 % wgpu::COPY_BUFFER_ALIGNMENT, 0);
 	}
 
+	// Test ID: ErnMa3y
+	#[test]
+	fn a_device_is_named_by_what_drew_it_and_why() {
+		let card = test_adapter("RTX", wgpu::DeviceType::DiscreteGpu);
+		let soft = test_adapter("llvmpipe", wgpu::DeviceType::Cpu);
+		assert_eq!(Drawn::of(&card, true, true), Drawn::Card);
+		assert_eq!(Drawn::of(&soft, false, true), Drawn::Fallback);
+		assert_eq!(Drawn::of(&soft, true, true), Drawn::Fallback);
+		assert_eq!(Drawn::of(&soft, true, false), Drawn::Software);
+		assert_eq!(Drawn::of(&soft, false, false), Drawn::NoCard);
+		assert!(Drawn::Software.instead_of_card() && Drawn::Fallback.instead_of_card());
+		assert!(!Drawn::Card.instead_of_card() && !Drawn::NoCard.instead_of_card());
+		assert_eq!(Want::Card.order(), [false, true]);
+		assert_eq!(Want::Software.order(), [true, false]);
+	}
+
+	// A card that refuses a device hands over to software once, rather than
+	// ending the launch, and software asked for comes first. Built the way the
+	// dialogs' warm-up builds, on this thread. Skips without a software adapter.
+	// Test ID: ErnMa8F
+	#[test]
+	fn a_card_that_refuses_a_device_falls_back_to_software() {
+		let instance = plain_instance(wgpu::Backends::PRIMARY);
+		let first = |software| {
+			pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+				power_preference: wgpu::PowerPreference::HighPerformance,
+				compatible_surface: None,
+				force_fallback_adapter: software,
+			}))
+			.ok()
+			.map(|adapter| adapter.get_info().device_type)
+		};
+		if first(true).is_none() {
+			eprintln!("skipped: no software adapter");
+			return;
+		}
+		let has_card = first(false).is_some_and(|kind| kind != wgpu::DeviceType::Cpu);
+
+		let asked = DialogGpu::build(Want::Software).unwrap();
+		assert_eq!(asked.drawn, Drawn::Software);
+		assert_eq!(asked.adapter_info.device_type, wgpu::DeviceType::Cpu);
+
+		REFUSE_CARD.with(|refuse| refuse.set(true));
+		let fell = DialogGpu::build(Want::Card);
+		let asked_anyway = DialogGpu::build(Want::Software);
+		REFUSE_CARD.with(|refuse| refuse.set(false));
+		let fell = fell.expect("a refused card left no device");
+		assert_eq!(fell.adapter_info.device_type, wgpu::DeviceType::Cpu);
+		assert_eq!(
+			fell.drawn,
+			if has_card {
+				Drawn::Fallback
+			} else {
+				Drawn::NoCard
+			}
+		);
+		assert_eq!(asked_anyway.unwrap().drawn, Drawn::Software);
+
+		if has_card {
+			let card = DialogGpu::build(Want::Card).unwrap();
+			assert_eq!(card.drawn, Drawn::Card);
+		}
+	}
+
 	// Test ID: Er2UJeQ
 	#[test]
 	fn every_gpu_is_hardware_and_only_the_cpu_is_software() {
@@ -2116,7 +2441,7 @@ mod tests {
 	// Test ID: Ern7Y1J
 	#[test]
 	fn a_new_device_reserves_little_graphics_memory() {
-		let gpu = match DialogGpu::build() {
+		let gpu = match DialogGpu::build(Want::Card) {
 			Ok(gpu) => gpu,
 			Err(e) => {
 				eprintln!("skipped: no device ({e})");

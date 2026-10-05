@@ -22,8 +22,8 @@ use crate::bgimage::{ImageRenderer, WpProbe};
 use crate::clipboard::Clipboard;
 use crate::config;
 use crate::gfx::{
-	FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, NoFrame, Rebirth, RectInstance, RectRenderer, Retry,
-	VramProbe,
+	Drawn, FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, NoFrame, Rebirth, RectInstance, RectRenderer,
+	Retry, VramProbe,
 };
 use crate::input::{self, ClickSelect, CopyFrom, Hotkey, WheelRoute, is_copy_chord};
 use crate::pane::{BarHit, CopyKind, Dir, Pane, PaneManager, Rect};
@@ -2145,6 +2145,29 @@ fn rating_due(live: &config::Settings, hardware: &str) -> bool {
 	live.performance_check_hardware || live.rated_hardware.is_empty()
 }
 
+// The session's stepped profile for a device drawn `drawn`, or None to leave
+// it. Software on a machine with a card is not new hardware, so the card keeps
+// its rating and the session steps down to Low, the way a remote screen takes
+// Remote. A step made here (`ours`) comes off when the card draws again, and
+// a deeper step the display watch took since stays.
+fn session_step(
+	live: &config::Settings,
+	drawn: Drawn,
+	ours: bool,
+) -> Option<Option<crate::profile::Profile>> {
+	use crate::profile::Profile;
+	if !live.performance_automatic {
+		return None;
+	}
+	if drawn.instead_of_card() {
+		let deeper = live
+			.stepped_profile
+			.is_some_and(|step| step.index() >= Profile::Low.index());
+		return (!deeper).then_some(Some(Profile::Low));
+	}
+	(ours && live.stepped_profile == Some(Profile::Low)).then_some(None)
+}
+
 // A measured answer into the settings file. Its own function so a test can run
 // the same write the banner's run does.
 fn keep_measured(pick: crate::profile::Profile, id: Option<&str>) -> config::Kept {
@@ -3191,6 +3214,9 @@ struct State {
 	surface_px: (u32, u32),
 	gl: bool, // born on the glutin GL path (X11): the one with a VT watcher and sentinels
 	adapter_info: wgpu::AdapterInfo, // for the About dialog, which may open before a rebuild
+	drawn: Drawn,
+	// the session's step to Low is this window's, for a software device
+	software_step: bool,
 	idle: IdleClock,
 	// a frame the surface refused, drawn again on this (see `Retry`)
 	frame_retry: Retry,
@@ -5465,7 +5491,7 @@ impl State {
 			return;
 		};
 		let start = Instant::now();
-		let gfx = match Gfx::rebuild(rebirth, &self.window) {
+		let gfx = match Gfx::rebuild(rebirth, &self.window, crate::gfx::wanted()) {
 			Ok(gfx) => gfx,
 			Err(e) => {
 				if self.idle.rebuild_failed(Instant::now()) {
@@ -5481,6 +5507,8 @@ impl State {
 		self.rebirth = None;
 		let (w, h) = (gfx.config.width, gfx.config.height);
 		self.surface_px = (w, h);
+		self.adapter_info = gfx.adapter_info.clone();
+		let drawn = gfx.drawn;
 		self.text.attach_gpu(&gfx.device, &gfx.queue, gfx.format);
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
 		let minimap = crate::minimap::MapRenderer::new(&gfx.device, gfx.format);
@@ -5503,9 +5531,26 @@ impl State {
 		// the grid moved while nothing drew: one hard-cut catch-up frame
 		self.freeze_catchup();
 		idledbg(&format!(
-			"device rebuilt in {:?} at {w}x{h}",
+			"device rebuilt in {:?} at {w}x{h}, {drawn:?}",
 			start.elapsed()
 		));
+		self.follow_renderer(drawn);
+	}
+
+	// The performance profile after a rebuild that changed what draws. Software
+	// on a machine with a card steps the session to Low, and a step this made
+	// comes off once the card draws again. Nothing is written either way.
+	fn follow_renderer(&mut self, drawn: Drawn) {
+		self.drawn = drawn;
+		let live = config::settings();
+		let Some(step) = session_step(&live, drawn, self.software_step) else {
+			return;
+		};
+		idledbg(&format!("profile step for {drawn:?}: {step:?}"));
+		self.software_step = step.is_some();
+		let mut next = (*live).clone();
+		next.stepped_profile = step;
+		self.apply_new_settings(&live, next, false);
 	}
 
 	// Every piece of chrome off at once, and back the way it was.
@@ -8327,8 +8372,9 @@ impl ApplicationHandler<UserEvent> for App {
 		// normal wgpu path is used (Wayland already supports premultiplied alpha).
 		// If the GL context can't be created, fall back to the native wgpu surface.
 		let want_gl = is_x11(event_loop);
+		let want = crate::gfx::wanted();
 		let (mut gfx, window) =
-			match want_gl.then(|| Gfx::new_gl_transparent(event_loop, attrs.clone())) {
+			match want_gl.then(|| Gfx::new_gl_transparent(event_loop, attrs.clone(), want)) {
 				Some(Ok(pair)) => pair,
 				other => {
 					if let Some(Err(e)) = other {
@@ -8343,12 +8389,12 @@ impl ApplicationHandler<UserEvent> for App {
 					}));
 					#[cfg(windows)]
 					let gfx = if want_transparent {
-						Gfx::new_composited(window.clone())
+						Gfx::new_composited(window.clone(), want)
 					} else {
-						Gfx::new(window.clone())
+						Gfx::new(window.clone(), want)
 					};
 					#[cfg(not(windows))]
-					let gfx = Gfx::new(window.clone());
+					let gfx = Gfx::new(window.clone(), want);
 					let gfx = gfx.unwrap_or_else(|e| {
 						eprintln!("{}: no usable GPU/renderer: {e}", config::APP_NAME);
 						std::process::exit(2);
@@ -8362,7 +8408,18 @@ impl ApplicationHandler<UserEvent> for App {
 		// New hardware starts the performance profile over, and answers with the id
 		// to write down if the pick is worth measuring rather than assuming.
 		remote_override_at_launch();
-		let bench_id = rate_hardware(&gfx.adapter_info);
+		let (bench_id, software_step) = if gfx.drawn.instead_of_card() {
+			let live = config::settings();
+			let step = session_step(&live, gfx.drawn, false);
+			if let Some(step) = step {
+				let mut next = (*live).clone();
+				next.stepped_profile = step;
+				config::update(next);
+			}
+			(None, step.is_some_and(|step| step.is_some()))
+		} else {
+			(rate_hardware(&gfx.adapter_info), false)
+		};
 		// Window-level CLI style (--font-name/-size, colors, bg image/fit/opacity)
 		// overrides the loaded settings before text + bg image are built. Applied
 		// after the theme/OS palette settles so it isn't clobbered. Per-pane style
@@ -8482,8 +8539,9 @@ impl ApplicationHandler<UserEvent> for App {
 		let list = build_layout(&self.cli, &mut text, &self.proxy, area);
 		let frame_budget = crate::profile::FrameBudget::new(Instant::now(), refresh_hz(&window));
 		let surface_px = (gfx.config.width, gfx.config.height);
-		let gl = gfx.is_gl();
+		let gl = gfx.on_glutin_window();
 		let adapter_info = gfx.adapter_info.clone();
+		let drawn = gfx.drawn;
 
 		self.state = Some(State {
 			window,
@@ -8588,6 +8646,8 @@ impl ApplicationHandler<UserEvent> for App {
 			surface_px,
 			gl,
 			adapter_info,
+			drawn,
+			software_step,
 			idle: IdleClock::new(),
 			frame_retry: Retry::default(),
 			conserve: Conserve::Off,
@@ -10122,6 +10182,20 @@ impl ApplicationHandler<UserEvent> for App {
 		// reveal. One left alone for long enough lets it go, unless a dialog is
 		// up (on X11 the dialog's context cannot outlive the terminal's).
 		let dialog_up = self.dialog.is_some() || self.notice.is_some();
+		// Software rendering turned on or off: the device goes and comes back
+		// on what the setting now asks, the dialogs' context with it. Not while
+		// a dialog is up, since it draws on that context.
+		if !dialog_up
+			&& state
+				.gpu
+				.as_ref()
+				.is_some_and(|gpu| gpu.gfx.want != crate::gfx::wanted())
+		{
+			idledbg("software rendering setting changed");
+			state.release_gpu();
+			self.gpu_warm.release();
+			state.idle.owe(true);
+		}
 		if state.gpu.is_none() {
 			if state.idle.rebuild_due(hidden, Instant::now()) {
 				state.rebuild_gpu();
@@ -11217,6 +11291,58 @@ mod tests {
 
 	// Which launches owe a rating. Pulled out of the launch path when every write
 	// in it changed, so the decision itself provably did not.
+	// Software on a machine with a card steps the session to Low and writes
+	// nothing; the card drawing again takes off only a step made that way.
+	// Test ID: ErnMaCH
+	#[test]
+	fn a_software_device_steps_the_session_and_the_card_takes_it_back() {
+		use super::session_step;
+		use crate::gfx::Drawn;
+		use crate::profile::Profile;
+		let live = |automatic: bool, stepped: Option<Profile>| config::Settings {
+			performance_automatic: automatic,
+			stepped_profile: stepped,
+			..config::Settings::default()
+		};
+		for drawn in [Drawn::Software, Drawn::Fallback] {
+			assert_eq!(
+				session_step(&live(true, None), drawn, false),
+				Some(Some(Profile::Low))
+			);
+			assert_eq!(
+				session_step(&live(true, Some(Profile::High)), drawn, false),
+				Some(Some(Profile::Low))
+			);
+			// the display watch already went deeper
+			assert_eq!(
+				session_step(&live(true, Some(Profile::Standard)), drawn, false),
+				None
+			);
+			assert_eq!(
+				session_step(&live(true, Some(Profile::Low)), drawn, true),
+				None
+			);
+			// a profile picked by hand is left alone
+			assert_eq!(session_step(&live(false, None), drawn, false), None);
+		}
+		for drawn in [Drawn::Card, Drawn::NoCard] {
+			assert_eq!(
+				session_step(&live(true, Some(Profile::Low)), drawn, true),
+				Some(None)
+			);
+			// the watch's own step, or a deeper one since, stays
+			assert_eq!(
+				session_step(&live(true, Some(Profile::Low)), drawn, false),
+				None
+			);
+			assert_eq!(
+				session_step(&live(true, Some(Profile::Standard)), drawn, true),
+				None
+			);
+			assert_eq!(session_step(&live(true, None), drawn, true), None);
+		}
+	}
+
 	// Test ID: EpXN9p2
 	#[test]
 	fn rating_due_matches_the_launch_rules() {

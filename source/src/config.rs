@@ -523,6 +523,7 @@ pub struct Settings {
 	pub idle_release_minimized_min: usize, // ...after this long minimized
 	pub idle_release_hidden_min: usize, // ...or this long covered
 	pub idle_release_min: usize, // ...or this long merely unfocused and quiet
+	pub software_rendering: bool, // draw on the CPU even with a graphics card (gfx::wanted)
 	pub tab_regular_pct: f32,  // a tab's ordinary width, as a % of the window's width
 	pub tab_max_pct: f32,      // widest a tab may be, as a % of the window's width
 	pub tab_tip_max_s: f32,    // longest a tab's tip stays up; 0 = until the pointer leaves
@@ -731,6 +732,7 @@ impl Default for Settings {
 			idle_release_minimized_min: 1,
 			idle_release_hidden_min: 30,
 			idle_release_min: 240,
+			software_rendering: false,
 			tab_regular_pct: 10.0,
 			tab_max_pct: 100.0,
 			tab_tip_max_s: 30.0,
@@ -2374,6 +2376,9 @@ pub fn persist(orig: &Settings, s: &Settings) -> bool {
 	if s.idle_release_min != orig.idle_release_min {
 		doc.put_int("window.idle_release_min", s.idle_release_min as i64);
 	}
+	if s.software_rendering != orig.software_rendering {
+		doc.put_bool("window.software_rendering", s.software_rendering);
+	}
 	if !same_f32(s.tab_regular_pct, orig.tab_regular_pct) {
 		doc.put_float("window.tab_regular_width_pct", r(s.tab_regular_pct));
 	}
@@ -2623,6 +2628,7 @@ struct RawConfig {
 	idle_release_minimized_min: Option<usize>,
 	idle_release_hidden_min: Option<usize>,
 	idle_release_min: Option<usize>,
+	software_rendering: Option<bool>,
 	tab_regular_pct: Option<f32>,
 	tab_max_pct: Option<f32>,
 	tab_tip_max_s: Option<f32>,
@@ -3079,6 +3085,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		idle_release_minimized_min: r.u("window.idle_release_minimized_min"),
 		idle_release_hidden_min: r.u("window.idle_release_hidden_min"),
 		idle_release_min: r.u("window.idle_release_min"),
+		software_rendering: r.b("window.software_rendering"),
 		tab_regular_pct: r.f("window.tab_regular_width_pct"),
 		tab_max_pct: r.f("window.tab_max_width_pct"),
 		tab_tip_max_s: r.f("window.tab_tip_max_s"),
@@ -3710,6 +3717,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			limits::IDLE_MIN,
 		),
 		idle_release_min: numi(raw.idle_release_min, d.idle_release_min, limits::IDLE_MIN),
+		software_rendering: raw.software_rendering.unwrap_or(d.software_rendering),
 		tab_regular_pct: raw
 			.tab_regular_pct
 			.unwrap_or(d.tab_regular_pct)
@@ -7234,6 +7242,11 @@ window:
 	# idle_release_minimized_min: 1  ## Default
 	# idle_release_hidden_min: 30  ## Default
 	# idle_release_min: 240  ## Default
+
+	## Draw on the processor rather than the graphics card. Slower, but uses
+	## none of the card's memory. Where the card cannot give a window what it
+	## needs, the window falls back to this on its own. Not on macOS.
+	# software_rendering: false  ## Default
 
 	## Tab width as a percent of the window width.
 	# tab_regular_width_pct: 10.0  ## Default
@@ -12537,6 +12550,25 @@ mod tests {
 			Some("\t# idle_release: true  ## Default")
 		);
 		assert!(!resolve(read_raw("window.idle_release: false\n", p).0).idle_release);
+	}
+
+	// Test ID: ErnMaKh
+	#[test]
+	fn software_rendering_ships_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(!Settings::default().software_rendering);
+		assert!(
+			!resolve(read_raw("", p).0).software_rendering,
+			"default off"
+		);
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "window.software_rendering").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# software_rendering: false  ## Default")
+		);
+		assert!(resolve(read_raw("window.software_rendering: true\n", p).0).software_rendering);
 	}
 
 	// The minimized wait came after the other two, so a file written before
