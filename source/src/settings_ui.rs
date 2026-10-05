@@ -270,6 +270,7 @@ macro_rules! keys_of {
 			| Key::MinimapWidth
 			| Key::Columns
 			| Key::Rows
+			| Key::IdleMinimizedMin
 			| Key::IdleHiddenMin
 			| Key::IdleMin
 		] $($rest)*)
@@ -430,6 +431,7 @@ fn slider_of(s: &Settings, key: Key) -> f32 {
 		Key::MinimapWidth => s.minimap_width,
 		Key::Columns => s.columns as f32,
 		Key::Rows => s.rows as f32,
+		Key::IdleMinimizedMin => s.idle_release_minimized_min as f32,
 		Key::IdleHiddenMin => s.idle_release_hidden_min as f32,
 		Key::IdleMin => s.idle_release_min as f32,
 		keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => 0.0,
@@ -3899,6 +3901,9 @@ impl SettingsDialog {
 			Key::MinimapWidth => settings.minimap_width = value,
 			Key::Columns => settings.columns = value.round().max(1.0) as usize,
 			Key::Rows => settings.rows = value.round().max(1.0) as usize,
+			Key::IdleMinimizedMin => {
+				settings.idle_release_minimized_min = value.round().max(1.0) as usize;
+			}
 			Key::IdleHiddenMin => {
 				settings.idle_release_hidden_min = value.round().max(1.0) as usize;
 			}
@@ -11885,6 +11890,7 @@ mod tests {
 			Key::WheelLines,
 			Key::Columns,
 			Key::Rows,
+			Key::IdleMinimizedMin,
 			Key::IdleHiddenMin,
 			Key::IdleMin,
 		];

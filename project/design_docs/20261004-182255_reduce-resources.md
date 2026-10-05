@@ -161,6 +161,8 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 - The release code knows only "hidden" today, which joins minimized, covered and a window with no size. Minimized has to be told apart.
 
+- Built 2026-10-04. A window with no size counts as minimized, and so does one reported as both minimized and covered. Wayland reports neither, so a window there still waits "Minutes otherwise".
+
 ### Software rendering
 
 - SilkTerm uses a software adapter only when no graphics card is found at launch. A card that is found but cannot make a device, as when its memory is full, ends the launch, and an idle rebuild retries the same card.
