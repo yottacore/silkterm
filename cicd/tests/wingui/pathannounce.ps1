@@ -29,11 +29,19 @@ $dir = Join-Path $env:TEMP ("silkpath-" + [guid]::NewGuid().ToString('N').Substr
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $marker = "SILKPATH_" + (Split-Path $dir -Leaf).Substring(9)
 
+##	This scenario has no window of its own to put in front. When the last one closes,
+##	the foreground can fall to an elevated window, such as Performance Monitor
+##	on vm925w, and Windows drops every key sent past it without a word. The
+##	taskbar is the shell's and never elevated.
+Add-Type -Namespace SilkPath -Name W -MemberDefinition '[DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowW(string c, string t);'
+$tray = [SilkPath.W]::FindWindowW("Shell_TrayWnd", $null)
+
 ##	Start a probe from the Run box, which is the shell's, and bring back what it saw.
 function fShellSees($n) {
 	$seen = Join-Path $dir "seen$n.txt"
 	$probe = Join-Path $dir "probe$n.cmd"
 	Set-Content -Path $probe -Value "@set $marker> `"$seen`" 2>&1" -Encoding ASCII
+	if (-not (fFocus $tray)) { fNote ("the taskbar would not come to the front: " + (fForeground)) }
 	fPress "win+r"; Start-Sleep -Milliseconds 1500
 	fSend $probe; fPress "enter"
 	for ($i = 0; $i -lt 40 -and -not (Test-Path $seen); $i++) { Start-Sleep -Milliseconds 250 }

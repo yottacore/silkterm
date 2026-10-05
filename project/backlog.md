@@ -1510,6 +1510,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- The Windows GUI run loses a scenario's verdict, and pathannounce cannot type
+	- ID: 2026100507525400
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261005-075254
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Steps to reproduce:
+		- Run the pipeline's Windows GUI stage on vm925w.
+	- Incorrect behavior: pathannounce failed with "the session never answered" after waiting 4 minutes. Rerun after perfladder, it failed with "the Run box started the probe".
+	- Expected behavior: Every scenario reports its own verdict, and pathannounce passes in any order.
+	- Reproduced: 20261005 on vm925w. The lost verdict once in the full run. The Run box failure 3 times out of 3 after perfladder, and alone once the foreground had moved.
+	- Cause: two faults.
+		- The list of started processes is shared by every scenario in a run, so pathannounce's cleanup looked up perfladder's old pids. One had gone to a process this user cannot read. Its start time read empty, the stop threw, and the throw skipped writing the result file. The scenario itself had finished in 30 seconds.
+		- pathannounce has no window to bring to the front. After perfladder's windows closed, the foreground fell to Performance Monitor, which runs elevated, and Windows drops keys sent past an elevated window.
+	- Fixed: the stop passes over a pid with no readable start time, and a stop that throws is noted rather than losing the verdict, in both places it runs. The started list is cleared before each scenario. pathannounce puts the taskbar in front before Win+R.
+	- Test case: two new checks in `cicd/tests/wingui/harness-test.bash` (EqH4isr), for a listed process whose start time reads empty, and for a verdict written when the cleanup throws. Both failed before the fix and pass after.
+	- Verified: the full scenario list passed on vm925w, with perfladder then pathannounce run twice. Not run on b29w, which was locked.
+	- Branch: stopnull
+	- Acceptance signoff: Self-closed: reproduced, tests fail before the fix and pass after.
+	- Closed: 20261005-075254
+
 - A passing unit test run keeps its test folder
 	- ID: 2026100418554244
 	- Type: Bug
