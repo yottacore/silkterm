@@ -13,6 +13,10 @@
 #		--fill             fill the scrollback (12000 lines) before sampling
 #		--no-minimap
 #		--settings         open Settings once and sample with it open and closed (gl only)
+#		--opens N          open and close Settings N times, printing how long each
+#		                   took to draw (gl only; implies --settings)
+#		--flood SECS       scroll output for SECS, then print the frame counts and
+#		                   render times (SILK_PERF) instead of sampling memory
 #		--settle N         seconds before the first sample (default 15)
 #
 # Prints the process's graphics memory as the driver bills it (nvidia-smi), its
@@ -38,7 +42,7 @@ fMain(){
 	local -r binary="${1:?binary}" mode="${2:?gl|vulkan}" size="${3:?WxH}"
 	shift 3
 	local scrim=true outline=1.0 wallpaper="" noWallpaper=false scene=idle minimap=true settings=false
-	local -i settle=15
+	local -i settle=15 opens=1 flood=0
 	while (($#)); do
 		case "$1" in
 			--no-halo)      scrim=false ;;
@@ -48,6 +52,8 @@ fMain(){
 			--fill)         scene=fill ;;
 			--no-minimap)   minimap=false ;;
 			--settings)     settings=true ;;
+			--opens)        settings=true; opens="${2:?count}"; shift ;;
+			--flood)        flood="${2:?seconds}"; scene=flood; shift ;;
 			--settle)       settle="${2:?seconds}"; shift ;;
 			*) echo "unknown option: $1" >&2; return 2 ;;
 		esac
@@ -63,18 +69,28 @@ fMain(){
 	local -r work="${SILKTERM_TEST_DIR}/mem-per-window"
 	mkdir -p "${work}/cfg/silkterm" "${work}/data"
 	fWriteConfig "${work}/cfg/silkterm/config.shcl" "${scrim}" "${outline}" "${noWallpaper}" "${wallpaper}" "${minimap}"
-	fWriteScene "${work}/scene.sh" "${scene}"
+	fWriteScene "${work}/scene.sh" "${scene}" "${flood}"
 	fStartSway "${work}" "$((width + 40))x$((height + 120))" || return 1
 
-	local -a env=(env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="${work}/cfg" XDG_DATA_HOME="${work}/data" XDG_RUNTIME_DIR="${swayRun}" SILK_MEMDBG=1)
+	local -a env=(env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="${work}/cfg" XDG_DATA_HOME="${work}/data" XDG_RUNTIME_DIR="${swayRun}" SILK_MEMDBG=1 SILK_DLGDBG=1)
+	((flood == 0)) || env+=(SILK_PERF=1)
 	if [[ "${mode}" == gl ]]; then env+=(DISPLAY="${xDisplay}"); else env+=(WAYLAND_DISPLAY=wayland-1); fi
 	"${env[@]}" "${binary}" --pixel-width "${width}" --pixel-height "${height}" --shell "/bin/dash ${work}/scene.sh" 2>"${work}/stderr.log" &
 	appPid=$!
+	if ((flood > 0)); then
+		# the scene exits after the flood, and the window with it
+		wait "${appPid}"
+		appPid=""
+		grep '^\[perf\]' "${work}/stderr.log"
+		return 0
+	fi
 	sleep "${settle}"
 	fSample "${work}" settled
 	if [[ "${settings}" == true ]]; then
 		[[ "${mode}" == gl ]] || { echo "--settings needs gl mode" >&2; return 2; }
-		fSettingsOnce "${work}"
+		local -i open
+		for ((open = 1; open <= opens; open++)); do fSettingsOnce "${work}" || return 1; done
+		grep '^\[dlg\] Settings drawn' "${work}/stderr.log"
 	fi
 }
 
@@ -104,8 +120,17 @@ fWriteConfig(){
 }
 
 fWriteScene(){
-	local -r file="$1" scene="$2"
-	if [[ "${scene}" == fill ]]; then
+	local -r file="$1" scene="$2" seconds="$3"
+	if [[ "${scene}" == flood ]]; then
+		cat >"${file}" <<EOF
+sleep 3
+end=\$((\$(date +%s) + ${seconds}))
+while [ \$(date +%s) -lt \$end ]; do
+	seq -f '%06g the quick brown fox jumps over the lazy dog 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ' 1 2000
+	sleep 0.05
+done
+EOF
+	elif [[ "${scene}" == fill ]]; then
 		cat >"${file}" <<'EOF'
 i=0
 while [ $i -lt 12000 ]; do
@@ -187,3 +212,4 @@ fMain "${@}"
 
 ##	History:
 ##		- 20261004 JC: Created.
+##		- 20261004 JC: --opens and --flood.

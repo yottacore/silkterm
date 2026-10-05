@@ -83,6 +83,8 @@ pub struct App {
 	// terminal is on screen (see gfx::DialogGpu for why they can't share the
 	// terminal's) and then kept, so no dialog open pays for it.
 	gpu_warm: crate::gfx::GpuWarm,
+	// SILK_DLGDBG: when the open Settings was asked for, until its first frame
+	settings_asked: Option<(Instant, bool)>,
 	// SILK_MEMDBG: what was last printed, and when to look again
 	memdbg: crate::memdbg::Printer,
 	memdbg_next: Instant,
@@ -119,6 +121,7 @@ impl App {
 			raise_next: Instant::now(),
 			vt_watch: false,
 			gpu_warm: crate::gfx::GpuWarm::idle(),
+			settings_asked: None,
 			memdbg: crate::memdbg::Printer::default(),
 			memdbg_next: Instant::now(),
 			#[cfg(feature = "profiling")]
@@ -3128,7 +3131,7 @@ struct State {
 	last_win_title: String, // last string set on the window (skip redundant set_title)
 	focused: bool, // window has keyboard focus (gates copy-output: never copy from a background window)
 	pending_about: bool, // request to open the About window (App acts on it; needs the event loop)
-	pending_settings: bool, // request to open the Settings window
+	pending_settings: Option<Instant>, // request to open the Settings window, and when
 	chrome: Option<ChromeCache>, // shaped menu/tab text, reused across frames
 	chrome_rev: u64, // bumped whenever a chrome buffer is (re)shaped
 	// Signature of everything feeding the prepared text set, from the last frame
@@ -5535,7 +5538,7 @@ impl State {
 
 	// Request the Settings window (App opens it; window creation needs the loop).
 	fn open_settings(&mut self) {
-		self.pending_settings = true;
+		self.pending_settings.get_or_insert_with(Instant::now);
 		self.menu = None;
 		self.bar_open = None;
 	}
@@ -8558,7 +8561,7 @@ impl ApplicationHandler<UserEvent> for App {
 			last_win_title: String::new(),
 			focused: true,
 			pending_about: false,
-			pending_settings: false,
+			pending_settings: None,
 			chrome: None,
 			chrome_rev: 0,
 			text_sig: None,
@@ -9826,9 +9829,13 @@ impl ApplicationHandler<UserEvent> for App {
 		});
 		// cloned (all wgpu handles, so refcount bumps) rather than borrowed: the
 		// open arms below also take `&mut self` to store the dialog
-		let warm = (open_about || self.state.as_ref().is_some_and(|s| s.pending_settings))
-			.then(|| self.gpu_warm.get())
-			.flatten();
+		let warm = (open_about
+			|| self
+				.state
+				.as_ref()
+				.is_some_and(|s| s.pending_settings.is_some()))
+		.then(|| self.gpu_warm.get())
+		.flatten();
 		if open_about {
 			if let Some(info) = self.state.as_ref().map(|state| state.adapter_info.clone()) {
 				match crate::dialog::DialogWin::new_about(event_loop, &info, parent, warm.as_ref())
@@ -9844,9 +9851,10 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 		}
 		let settings_base = self.state.as_mut().and_then(|state| {
-			std::mem::take(&mut state.pending_settings).then(|| state.settings_for_dialog())
+			let asked = state.pending_settings.take()?;
+			Some((asked, state.settings_for_dialog()))
 		});
-		if let Some(base) = settings_base {
+		if let Some((asked, base)) = settings_base {
 			// a view older than the resume window is dead either way, so take it
 			// unconditionally and discard it if it has expired
 			let resume = self
@@ -9868,6 +9876,7 @@ impl ApplicationHandler<UserEvent> for App {
 					self.center_dialog();
 					self.reveal_dialog();
 					self.dialog_dirty = true;
+					self.settings_asked = Some((asked, warm.is_some()));
 				}
 				Err(e) => eprintln!("{}: Settings window failed: {e}", config::APP_NAME),
 			}
@@ -9894,6 +9903,15 @@ impl ApplicationHandler<UserEvent> for App {
 				d.render();
 			}
 			self.dialog_dirty = false;
+			if let Some((asked, warm)) = self.settings_asked.take()
+				&& env_flag(EnvFlag::DlgDbg)
+			{
+				eprintln!(
+					"[dlg] Settings drawn {:.1} ms after it was asked for, on the {} context",
+					asked.elapsed().as_secs_f64() * 1e3,
+					if warm { "warm" } else { "cold" }
+				);
+			}
 		}
 		// A save that could not be written. Asked for from Settings, it was
 		// taken there already (apply_dialog_settings); anything here is one of
