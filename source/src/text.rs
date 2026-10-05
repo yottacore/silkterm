@@ -530,6 +530,22 @@ fn advance_cells(advance: f32, unit: f32) -> u8 {
 }
 
 impl TextCtx {
+	// SILK_MEMDBG: rasterized glyphs kept on the heap, and the font faces known.
+	pub fn memdbg_line(&self) -> String {
+		let images = &self.swash_cache.image_cache;
+		let bytes: usize = images
+			.values()
+			.flatten()
+			.map(|image| image.data.len())
+			.sum();
+		format!(
+			"glyphs: {} rasterized, {:.1} MiB; {} font faces",
+			images.len(),
+			crate::memdbg::mib(bytes),
+			self.font_system.db().len()
+		)
+	}
+
 	pub fn new(
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,

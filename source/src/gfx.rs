@@ -1316,6 +1316,17 @@ impl GpuWarm {
 		self.state = Warm::Idle;
 	}
 
+	// The warm device if it is built, without waiting for it.
+	pub fn ready_device(&mut self) -> Option<&wgpu::Device> {
+		if matches!(&self.state, Warm::Building(job) if job.is_finished()) {
+			self.state = std::mem::replace(&mut self.state, Warm::Failed).settled();
+		}
+		match &self.state {
+			Warm::Ready(gpu) => Some(&gpu.device),
+			_ => None,
+		}
+	}
+
 	// The warm context, waiting on the worker if it is still going. That wait can
 	// never cost more than building one here would have, since the work is
 	// already under way - and normally it finished seconds ago.

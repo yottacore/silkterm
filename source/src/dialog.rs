@@ -114,6 +114,10 @@ impl std::fmt::Debug for DialogWin {
 }
 
 impl DialogWin {
+	pub fn device(&self) -> &wgpu::Device {
+		&self.gfx.device
+	}
+
 	pub fn id(&self) -> WindowId {
 		self.window.id()
 	}

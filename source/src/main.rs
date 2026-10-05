@@ -32,6 +32,7 @@ mod links;
 mod locks;
 #[cfg(any(test, target_os = "macos"))]
 mod macmenu;
+mod memdbg;
 mod minimap;
 mod monitor;
 mod palette;

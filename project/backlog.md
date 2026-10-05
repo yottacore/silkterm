@@ -862,24 +862,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- Measure graphics and regular memory per window
-	- ID: 2026100418225501
-	- Type: Task
+- wgpu's allocator holds far more graphics memory than it uses
+	- ID: 2026100419463460
+	- Type: Enhancement
 	- Status: Queued
 	- Priority: High
-	- Opened: 20261004-182255
-	- Opened by: JC
+	- Opened: 20261004-194634
+	- Opened by: CC
 	- Assigned to: CC
-	- Related IDs: 2026100418225502, 2026100418225503, 2026100418225505, 2026100418225507
+	- Related IDs: 2026100418225501, 2026100418225505
 	- Target OS: All
 	- Requirements:
-		- Before RC1.
-		- One window was seen holding about 330 MB of graphics memory. Find where it goes before changing anything.
-		- Read a real window's use from the driver at a few window sizes. Scrim on and off, wallpaper on and off, and Settings opened once.
-		- Do the same for regular memory: scrollback, the minimap's store and the glyph caches.
-		- Put the numbers in the design doc, in place of the estimate.
+		- wgpu's default memory hint reserves blocks of 128 and 256 MiB. A 2560x1440 window on Vulkan used 167 MiB and was billed 506, and the dialogs' context uses under 1 MiB of its 192.
+		- Test the `MemoryUsage` hint on both devices. On b23 it took the Vulkan window plus the dialogs' context from 702 MiB to 252.
+		- Check that frame times and the Settings open time do not get worse.
+		- The X11 window draws through GL, where the hint does nothing, but its dialogs use Vulkan.
 	- Notes:
-		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md). The estimate there puts the scrim at about 150 MB of a 2560x1440 window.
+		- 20261004: Figures in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#measure-first). Windows uses the same allocator through DX12 and was not measured.
 	- Closed:
 
 - The scrim's textures are bigger than they need to be
@@ -1416,6 +1415,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- Measure graphics and regular memory per window
+	- ID: 2026100418225501
+	- Type: Task
+	- Status: Done
+	- Needs external testing: Optional: the same figures on Windows (vm925w, DX12) and macOS (b26).
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225502, 2026100418225503, 2026100418225505, 2026100418225507, 2026100419463460
+	- Target OS: All
+	- Test environment: b23, RTX 3060 Ti with 8 GB, NVIDIA driver 595.58.
+	- Requirements:
+		- Before RC1.
+		- One window was seen holding about 330 MB of graphics memory. Find where it goes before changing anything.
+		- Read a real window's use from the driver at a few window sizes. Scrim on and off, wallpaper on and off, and Settings opened once.
+		- Do the same for regular memory: scrollback, the minimap's store and the glyph caches.
+		- Put the numbers in the design doc, in place of the estimate.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md). The estimate there puts the scrim at about 150 MB of a 2560x1440 window.
+		- Note: 20261004, for 2026100418225502: each scrim texture is 8 bytes a pixel, 30 MiB at 2560x1440, and the five are 150 of the window's 268 MiB on X11. They exist whenever the halo or the outline is on, so turning off only the halo saves 30 MiB.
+		- Note: 20261004, for 2026100418225503: on X11 a 2560x1440 wallpaper costs 32 MiB of graphics memory for a 15 MiB texture, and 44 MiB of regular memory, 14 MiB of it a copy the size of the image that stays mapped. A 4096x2731 one costs 88 and 106 MiB.
+		- Note: 20261004, for 2026100418225505: the kept context costs about 200 MiB of graphics memory and 16 MiB of regular memory per process. With wgpu's `MemoryUsage` memory hint it is 18 MiB, and Settings still opens from it. The open time with the hint was not measured.
+	- Progress log:
+		- 20261004: Measured one window at three sizes on b23, with the scrim, the wallpaper and the dialogs' context each on and off, a full scrollback, the minimap off, and Settings opened once. The numbers are in the design doc's [Measure first](design_docs/20261004-182255_reduce-resources.md#measure-first) section, in place of the estimate.
+		- Graphics memory is the driver's figure for the process. Single textures are from wgpu's allocator report, on the Vulkan path. Regular memory is the unique resident footprint less the driver's libraries.
+		- The 330 MB was a window plus the dialogs' kept context, which is about 200 MiB, not 52. Most of it is two blocks wgpu's allocator reserves up front. Filed as 2026100419463460, since it also costs the main window on Wayland, and on Windows going by the code.
+		- New: `SILK_MEMDBG=1` prints the allocator report and the heap counts. `cicd/utility/mem-per-window/run.bash` measures one window again.
+	- Verified: repeat runs of the same window gave the same driver figure to the MiB (469 three times, 268 three times). At each size the parts add up to the measured total. The heap counts match the measured growth within a few percent.
+	- Branch: memmeasure
+	- Commit: 8d4782c
+	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
+	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
+	- Closed: 20261004-194634
 
 - A unit test run rewrites the box's live config file
 	- ID: 2026100410244885

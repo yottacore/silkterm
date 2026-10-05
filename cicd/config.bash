@@ -282,6 +282,7 @@ export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/lightold
 */target/mapopt
 */target/wpmix
+*/target/memdbg
 */target/rewrite-20260915.docs-backup
 */target/repro.*
 */source/target
