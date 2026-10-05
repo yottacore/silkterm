@@ -164,7 +164,7 @@ import importlib.util, sys
 spec = importlib.util.spec_from_file_location("test_id", sys.argv[1])
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
-for path in mod.fScriptTests():
+for path in mod.script_tests():
 	print(path.relative_to(mod.ROOT / "cicd" / "tests").as_posix())
 ' "${root}/cicd/utility/test-id.py")
 fCheck "the test ID check lists the script tests" test "${#scripts[@]}" -gt 10

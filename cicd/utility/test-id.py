@@ -20,10 +20,13 @@
 ##	SPDX-License-Identifier: MIT
 
 import argparse
+import io
 import re
 import sys
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
@@ -48,7 +51,7 @@ NOT_TESTS = {
 NOT_TEST_DIRS = {"fuzz-corpus", "scenes", "target", "__pycache__"}
 
 
-def fEncode(ms):
+def encode(ms: int) -> str:
 	out = ""
 	while True:
 		ms, r = divmod(ms, 62)
@@ -57,29 +60,29 @@ def fEncode(ms):
 			return out
 
 
-def fDecode(tid):
+def decode(tid: str) -> int:
 	ms = 0
 	for c in tid:
 		ms = ms * 62 + DIGITS.index(c)
 	return ms
 
 
-def fMs(when):
+def to_ms(when: datetime) -> int:
 	return int(round((when - EPOCH).total_seconds() * 1000))
 
 
-def fWhen(ms):
+def from_ms(ms: int) -> datetime:
 	return datetime.fromtimestamp(EPOCH.timestamp() + ms / 1000, timezone.utc).astimezone()
 
 
-def fRustFiles():
+def rust_files() -> Iterator[Path]:
 	for top in ("source", "cicd/tests"):
 		for path in sorted((ROOT / top).rglob("*.rs")):
 			if not NOT_TEST_DIRS & set(path.relative_to(ROOT).parts):
 				yield path
 
 
-def fScriptTests():
+def script_tests() -> Iterator[Path]:
 	tests = ROOT / "cicd" / "tests"
 	for path in sorted(tests.rglob("*")):
 		rel = path.relative_to(tests)
@@ -88,15 +91,15 @@ def fScriptTests():
 			yield path
 
 
-def fRustTests():
+def rust_tests() -> Iterator[tuple[str, str | None, str]]:
 	##	Every Rust test as (where, id or None, name as cargo prints it). A
 	##	test's ID sits above its whole attribute block, so a #[cfg] ahead of
 	##	#[test] does not hide it. The module path comes from the indent of each
 	##	"mod x {", which rustfmt keeps exact.
-	for path in fRustFiles():
+	for path in rust_files():
 		lines = path.read_text(encoding="utf-8").splitlines()
-		base = [] if path.stem == "main" else [path.stem]
-		mods = []
+		base: list[str] = [] if path.stem == "main" else [path.stem]
+		mods: list[tuple[str, str]] = []
 		for n, line in enumerate(lines):
 			m = MOD_RE.match(line)
 			if m:
@@ -116,22 +119,22 @@ def fRustTests():
 			yield f"{path.relative_to(ROOT)}:{n + 1}", m.group(1) if m else None, name
 
 
-def fFindIds():
+def find_ids() -> list[tuple[str, str | None]]:
 	##	Every test as (where, id or None).
-	found = [(where, tid) for where, tid, _ in fRustTests()]
-	for path in fScriptTests():
+	found = [(where, tid) for where, tid, _ in rust_tests()]
+	for path in script_tests():
 		head = path.read_text(encoding="utf-8").splitlines()[:60]
 		ids = [m.group(1) for m in map(ID_RE.match, head) if m]
 		found.append((str(path.relative_to(ROOT)), ids[0] if ids else None))
 	return found
 
 
-def fAnnotate():
+def annotate() -> int:
 	##	A filter on cargo test's stdout, so every other line goes through as is.
 	##	It reads to the end, so cargo never sees a closed pipe.
-	ids = {name: tid for _, tid, name in fRustTests()}
-	sys.stdin.reconfigure(errors="surrogateescape")
-	sys.stdout.reconfigure(errors="surrogateescape")
+	ids = {name: tid for _, tid, name in rust_tests()}
+	cast(io.TextIOWrapper, sys.stdin).reconfigure(errors="surrogateescape")
+	cast(io.TextIOWrapper, sys.stdout).reconfigure(errors="surrogateescape")
 	missing = 0
 	for line in sys.stdin:
 		m = RESULT_RE.match(line.rstrip("\n"))
@@ -148,14 +151,15 @@ def fAnnotate():
 	return 0
 
 
-def fCheck():
-	now = fMs(datetime.now(timezone.utc)) + 86_400_000
-	first = fMs(datetime(2026, 1, 1, tzinfo=timezone.utc))
-	seen, bad = {}, 0
-	for where, tid in fFindIds():
+def check() -> int:
+	now = to_ms(datetime.now(timezone.utc)) + 86_400_000
+	first = to_ms(datetime(2026, 1, 1, tzinfo=timezone.utc))
+	seen: dict[str, str] = {}
+	bad = 0
+	for where, tid in find_ids():
 		if tid is None:
 			print(f"no test ID: {where}")
-		elif not re.fullmatch(r"[0-9A-Za-z]+", tid) or not first <= fDecode(tid) <= now:
+		elif not re.fullmatch(r"[0-9A-Za-z]+", tid) or not first <= decode(tid) <= now:
 			print(f"test ID {tid} is not a plausible time: {where}")
 		elif tid in seen:
 			print(f"test ID {tid} is also at {seen[tid]}: {where}")
@@ -170,7 +174,7 @@ def fCheck():
 	return 0
 
 
-def main():
+def main() -> int:
 	ap = argparse.ArgumentParser(description="Make, read or check test IDs.")
 	ap.add_argument("count", nargs="?", type=int, default=1)
 	ap.add_argument("--at", metavar="WHEN")
@@ -180,13 +184,13 @@ def main():
 	args = ap.parse_args()
 
 	if args.check:
-		return fCheck()
+		return check()
 	if args.annotate:
-		return fAnnotate()
+		return annotate()
 	if args.decode:
 		if not re.fullmatch(r"[0-9A-Za-z]+", args.decode):
 			ap.error(f"not base 62: {args.decode}")
-		print(fWhen(fDecode(args.decode)).isoformat(timespec="milliseconds"))
+		print(from_ms(decode(args.decode)).isoformat(timespec="milliseconds"))
 		return 0
 
 	if args.at:
@@ -197,13 +201,13 @@ def main():
 	else:
 		when = datetime.now(timezone.utc)
 	##	Several tests made at once get one millisecond each, past any already taken.
-	taken = {tid for _, tid in fFindIds() if tid}
-	ms = fMs(when)
+	taken = {tid for _, tid in find_ids() if tid}
+	ms = to_ms(when)
 	for _ in range(args.count):
-		while fEncode(ms) in taken:
+		while encode(ms) in taken:
 			ms += 1
-		taken.add(fEncode(ms))
-		print(fEncode(ms))
+		taken.add(encode(ms))
+		print(encode(ms))
 	return 0
 
 
@@ -214,3 +218,4 @@ if __name__ == "__main__":
 ##	History:
 ##		- 20260926: Created.
 ##		- 20260927: --annotate, for the test lines cicd prints.
+##		- 20261005: PEP 8 names and type hints.

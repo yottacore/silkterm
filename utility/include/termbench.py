@@ -80,6 +80,9 @@
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+#	Annotations stay text, so the hints below run on 3.8 as the header says.
+from __future__ import annotations
+
 import argparse
 import array
 import hashlib
@@ -94,8 +97,10 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Literal
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).absolute().parent))
 import mdtable  # noqa: E402
 
 APP = "silkterm-bench"
@@ -169,14 +174,14 @@ SYMBOL_SPANS = [
 ]
 
 
-def _expand(spans):
-	out = []
+def _expand(spans: list[tuple[int, int]]) -> list[str]:
+	out: list[str] = []
 	for lo, hi in spans:
 		out.extend(chr(c) for c in range(lo, hi + 1))
 	return out
 
 
-def _alphabet(spans, sep, sep_share):
+def _alphabet(spans: list[tuple[int, int]], sep: str | None, sep_share: float) -> list[str]:
 	"""Characters plus a separator repeated until it is sep_share of the whole."""
 	base = _expand(spans)
 	if not sep:
@@ -200,7 +205,7 @@ CLASSES = {
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 class Scene:
-	def __init__(self, name, label, weight, megabytes):
+	def __init__(self, name: str, label: str, weight: int, megabytes: int) -> None:
 		self.name = name
 		self.label = label
 		self.weight = weight
@@ -237,11 +242,11 @@ SCENE_BY_NAME = {s.name: s for s in SCENES}
 #	payload builds in well under a second and none of it is inside the clock.
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-def _rand(seed, nbytes):
+def _rand(seed: str, nbytes: int) -> bytes:
 	return hashlib.shake_128(seed.encode("utf-8")).digest(nbytes)
 
 
-def _u16(seed, count):
+def _u16(seed: str, count: int) -> array.array[int]:
 	"""count deterministic 16-bit values, byte order normalized."""
 	a = array.array("H")
 	a.frombytes(_rand(seed, count * 2))
@@ -250,13 +255,13 @@ def _u16(seed, count):
 	return a
 
 
-def _palette(seed, alphabet, size):
+def _palette(seed: str, alphabet: list[str], size: int) -> str:
 	n = len(alphabet)
 	idx = _u16(seed + ":pal", size)
 	return "".join([alphabet[i % n] for i in idx])
 
 
-def _chars(seed, alphabet, count):
+def _chars(seed: str, alphabet: list[str], count: int) -> str:
 	"""A deterministic run of `count` characters drawn from `alphabet`."""
 	size = min(PALETTE_CHARS, max(count, 1024))
 	pal = _palette(seed, alphabet, size)
@@ -264,7 +269,8 @@ def _chars(seed, alphabet, count):
 		return pal[:count]
 	# Assemble from varying-length slices so no line ever repeats another.
 	cuts = _u16(seed + ":cut", (count // 200) + 64)
-	parts, have, k, span = [], 0, 0, len(pal)
+	parts: list[str] = []
+	have, k, span = 0, 0, len(pal)
 	while have < count:
 		take = 192 + (cuts[k % len(cuts)] % 128)
 		start = cuts[(k + 1) % len(cuts)] * 4 % max(1, span - take)
@@ -275,18 +281,18 @@ def _chars(seed, alphabet, count):
 	return "".join(parts)[:count]
 
 
-def _wrap(text, per_line):
+def _wrap(text: str, per_line: int) -> bytes:
 	"""Break into fixed-width lines. CRLF because raw mode gives no ONLCR."""
 	lines = [text[i:i + per_line] for i in range(0, len(text), per_line)]
 	return ("\r\n".join(lines) + "\r\n").encode("utf-8")
 
 
-def _build_uniform(cls, target_bytes, line_cells):
+def _build_uniform(cls: str, target_bytes: int, line_cells: int) -> tuple[bytes, int, int, int]:
 	alphabet, wbytes, wcells = CLASSES[cls]
 	per_line = max(1, line_cells // wcells)
 	nchars = max(per_line, target_bytes // wbytes)
 	nchars -= nchars % per_line
-	text = _chars("silkterm-bench-v%d-%s" % (PAYLOAD_VERSION, cls), alphabet, nchars)
+	text = _chars(f"silkterm-bench-v{PAYLOAD_VERSION}-{cls}", alphabet, nchars)
 	blob = _wrap(text, per_line)
 	nlines = nchars // per_line
 	return blob, nchars, nchars * wcells, nlines
@@ -312,31 +318,33 @@ MIXED_BUDGET = [
 ]
 
 
-def _build_mixed(target_bytes, line_cells):
+def _build_mixed(target_bytes: int, line_cells: int) -> tuple[bytes, int, int, int]:
 	"""
 	Every line: an SGR change, then a segment of each width class sized from the
 	budget above, in a rotating order, then a reset. Cells are accumulated as the
 	line is assembled because segment widths differ.
 	"""
-	pools = {}
+	pools: dict[str, str] = {}
 	for cls, _ in MIXED_BUDGET:
 		alphabet, _, _ = CLASSES[cls]
-		pools[cls] = _chars("silkterm-bench-v%d-mixed-%s" % (PAYLOAD_VERSION, cls),
+		pools[cls] = _chars(f"silkterm-bench-v{PAYLOAD_VERSION}-mixed-{cls}",
 		                    alphabet, PALETTE_CHARS)
 
 	# Leave room for the separators the segments are joined with.
 	budget = max(1, int(line_cells * 0.93))
-	plan = []
+	plan: list[tuple[str, int, int]] = []
 	for cls, share in MIXED_BUDGET:
 		_, _, wcells = CLASSES[cls]
 		take = max(1, int(round(budget * share)) // wcells)
 		plan.append((cls, take, wcells))
 
-	jitter = _u16("silkterm-bench-v%d-mixed-mix" % PAYLOAD_VERSION, 1 << 16)
-	out, cells, chars, nlines, total, j = [], 0, 0, 0, 0, 0
+	jitter = _u16(f"silkterm-bench-v{PAYLOAD_VERSION}-mixed-mix", 1 << 16)
+	out: list[bytes] = []
+	cells, chars, nlines, total, j = 0, 0, 0, 0, 0
 
 	while total < target_bytes:
-		line, used = [], 0
+		line: list[str] = []
+		used = 0
 		line.append(MIXED_SGR[jitter[j % len(jitter)] % len(MIXED_SGR)])
 		j += 1
 		spin = jitter[j % len(jitter)] % len(plan)
@@ -363,7 +371,7 @@ def _build_mixed(target_bytes, line_cells):
 	return b"".join(out), chars, cells, nlines
 
 
-def build_payload(scene, scale, line_cells):
+def build_payload(scene: Scene, scale: float, line_cells: int) -> tuple[bytes, int, int, int]:
 	target = int(scene.megabytes * MB * scale)
 	target = max(target, 256 * 1024)
 	if scene.name == "mixed":
@@ -378,12 +386,12 @@ def build_payload(scene, scale, line_cells):
 class Console:
 	"""Raw tty on POSIX, raw console on Windows, restored on the way out."""
 
-	def __init__(self):
+	def __init__(self) -> None:
 		self.ok = False
-		self._posix = None
-		self._win = None
+		self._posix: tuple[int, list[Any]] | None = None
+		self._win: tuple[int, int, int, int] | None = None
 
-	def __enter__(self):
+	def __enter__(self) -> Console:
 		try:
 			if os.name == "posix":
 				self._enter_posix()
@@ -394,13 +402,13 @@ class Console:
 			self.ok = False
 		return self
 
-	def __exit__(self, *exc):
+	def __exit__(self, *exc: object) -> Literal[False]:
 		try:
 			if self._posix:
 				import termios
 				fd, saved = self._posix
 				termios.tcsetattr(fd, termios.TCSADRAIN, saved)
-			elif self._win:
+			elif self._win and sys.platform == "win32":
 				import ctypes
 				k = ctypes.windll.kernel32
 				hin, hout, min_, mout = self._win
@@ -410,7 +418,7 @@ class Console:
 			pass
 		return False
 
-	def _enter_posix(self):
+	def _enter_posix(self) -> None:
 		import termios
 		import tty
 		fd = sys.stdin.fileno()
@@ -418,7 +426,9 @@ class Console:
 		self._posix = (fd, saved)
 		tty.setraw(fd, termios.TCSANOW)
 
-	def _enter_windows(self):
+	def _enter_windows(self) -> None:
+		if sys.platform != "win32":
+			raise OSError("not a Windows console")
 		import ctypes
 		import msvcrt
 		k = ctypes.windll.kernel32
@@ -437,7 +447,7 @@ class Console:
 	# -- output ---------------------------------------------------------------
 
 	@staticmethod
-	def write(blob):
+	def write(blob: bytes) -> None:
 		fd = sys.stdout.fileno()
 		mv = memoryview(blob)
 		off, n = 0, len(blob)
@@ -445,20 +455,20 @@ class Console:
 			off += os.write(fd, mv[off:off + WRITE_CHUNK])
 
 	@staticmethod
-	def emit(text):
+	def emit(text: str) -> None:
 		Console.write(text.encode("utf-8"))
 
 	# -- input ----------------------------------------------------------------
 
-	def drain(self):
+	def drain(self) -> None:
 		"""Throw away anything already pending so a stale reply can't fool us."""
 		deadline = time.monotonic() + 0.08
 		while time.monotonic() < deadline:
 			if not self._read(0.01):
 				break
 
-	def _read(self, timeout):
-		if os.name == "posix":
+	def _read(self, timeout: float) -> bytes:
+		if sys.platform != "win32":
 			import select
 			r, _, _ = select.select([sys.stdin.fileno()], [], [], timeout)
 			if not r:
@@ -479,7 +489,7 @@ class Console:
 			time.sleep(0.001)
 		return got
 
-	def query(self, request, terminator, timeout, drain=True):
+	def query(self, request: str, terminator: bytes, timeout: float, drain: bool = True) -> bytes:
 		"""Send a query, collect the reply up to `terminator`. b'' on timeout."""
 		if drain:
 			self.drain()
@@ -494,7 +504,7 @@ class Console:
 					return got
 		return b""
 
-	def sync(self, timeout=SYNC_TIMEOUT, drain=True):
+	def sync(self, timeout: float = SYNC_TIMEOUT, drain: bool = True) -> bool:
 		"""
 		Primary DA. The terminal cannot answer until it has parsed everything
 		queued ahead of it, which is what turns a write into a measurement.
@@ -504,7 +514,7 @@ class Console:
 		return bool(self.query("\x1b[c", b"c", timeout, drain))
 
 
-def terminal_size():
+def terminal_size() -> tuple[int, int]:
 	try:
 		size = shutil.get_terminal_size()
 		return size.columns, size.lines
@@ -526,26 +536,27 @@ VERSION_DATE_RE = re.compile(r"\b(20\d{6})-\d{6}-[0-9a-f]{6,}\b")
 STAMP_RE = re.compile(r"(\d{8}-\d{6})")
 
 
-def _exe_of(pid):
+def _exe_of(pid: int) -> str:
 	try:
 		if sys.platform.startswith("linux"):
-			return os.readlink("/proc/%d/exe" % pid)
+			#	Path.readlink needs 3.9.
+			return os.readlink(f"/proc/{pid}/exe")  # noqa: PTH115
 		out = subprocess.run(["ps", "-o", "comm=", "-p", str(pid)],
-		                     capture_output=True, text=True, timeout=3)
+		                     capture_output=True, text=True, timeout=3, check=False)
 		return out.stdout.strip()
 	except Exception:
 		return ""
 
 
-def _ppid_of(pid):
+def _ppid_of(pid: int) -> int:
 	try:
 		if sys.platform.startswith("linux"):
-			with open("/proc/%d/stat" % pid, "r") as fh:
+			with Path(f"/proc/{pid}/stat").open() as fh:
 				data = fh.read()
 			# comm can contain spaces and parens, so start after the last ')'.
 			return int(data[data.rfind(")") + 2:].split()[1])
 		out = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)],
-		                     capture_output=True, text=True, timeout=3)
+		                     capture_output=True, text=True, timeout=3, check=False)
 		return int(out.stdout.strip())
 	except Exception:
 		return 0
@@ -556,7 +567,7 @@ SHELLISH = {"bash", "sh", "dash", "zsh", "fish", "ksh", "csh", "tcsh", "python",
             "sudo", "env", "termbench.py", "screen", "script"}
 
 
-def _ancestor_terminal():
+def _ancestor_terminal() -> str:
 	"""Walk up the process tree until something that is not a shell shows up."""
 	pid = os.getpid()
 	for _ in range(12):
@@ -566,7 +577,7 @@ def _ancestor_terminal():
 		exe = _exe_of(pid)
 		if not exe:
 			continue
-		base = os.path.basename(exe).lower()
+		base = Path(exe).name.lower()
 		if base.endswith(".exe"):
 			base = base[:-4]
 		if base in SHELLISH:
@@ -575,24 +586,24 @@ def _ancestor_terminal():
 	return ""
 
 
-def _run_version(exe, flag):
+def _run_version(exe: str, flag: str) -> str:
 	try:
 		out = subprocess.run([exe, flag], capture_output=True, text=True,
-		                     timeout=5, stdin=subprocess.DEVNULL)
+		                     timeout=5, stdin=subprocess.DEVNULL, check=False)
 		line = (out.stdout or out.stderr).strip().splitlines()
 		return line[0].strip() if line else ""
 	except Exception:
 		return ""
 
 
-def _clean_name(text):
+def _clean_name(text: str) -> str:
 	"""Trim a version banner's leading words down to just the product name."""
 	name = text.strip().strip("#:-()\t ")
 	name = re.sub(r"[\s:(-]*\bversion\b[\s:(-]*$", "", name, flags=re.I)
 	return name.strip("#:-()\t ")[:40]
 
 
-def _probe_version(exe, base):
+def _probe_version(exe: str, base: str) -> tuple[str, str]:
 	"""
 	(name, version) from the program itself. Only output carrying a real version
 	token is believed: xterm answers --version with 'bad command line option' and
@@ -616,22 +627,22 @@ def _probe_version(exe, base):
 	return base, ""
 
 
-def _stamp_for(exe):
-	got = STAMP_RE.search(os.path.basename(exe))
+def _stamp_for(exe: str) -> str:
+	got = STAMP_RE.search(Path(exe).name)
 	if got:
 		return got.group(1)
 	try:
-		return datetime.fromtimestamp(os.path.getmtime(exe)).strftime("%Y%m%d-%H%M%S")
+		return datetime.fromtimestamp(Path(exe).stat().st_mtime).strftime("%Y%m%d-%H%M%S")
 	except Exception:
 		return ""
 
 
-def _is_system(exe):
+def _is_system(exe: str) -> bool:
 	low = exe.lower().replace("\\", "/")
 	return any(low.startswith(p.replace("\\", "/")) for p in SYSTEM_PREFIXES)
 
 
-def _silkterm_exe():
+def _silkterm_exe() -> str:
 	"""SilkTerm exports its control socket, and the socket carries its pid."""
 	sock = os.environ.get("SILKTERM_SOCKET", "")
 	got = re.search(r"silkterm-ctl-(\d+)\.sock", sock)
@@ -640,13 +651,13 @@ def _silkterm_exe():
 	return _exe_of(int(got.group(1)))
 
 
-def identify(console):
+def identify(console: Console) -> tuple[str, str, str]:
 	"""Best available (name, build, exe). Falls back rather than guessing wrong."""
 	exe = _silkterm_exe() or _ancestor_terminal()
 
 	name, version = "", ""
 	if exe:
-		base = os.path.basename(exe)
+		base = Path(exe).name
 		if base.endswith(".exe"):
 			base = base[:-4]
 		# "xfce4-terminal 1.2.0 (Xfce 4.20)" -> name from the leading words.
@@ -657,8 +668,8 @@ def identify(console):
 			if version or not base.endswith(suffix):
 				continue
 			launcher = base[:-len(suffix)]
-			beside = os.path.join(os.path.dirname(exe), launcher)
-			found = beside if os.path.isfile(beside) else shutil.which(launcher)
+			beside = Path(exe).parent / launcher
+			found = str(beside) if beside.is_file() else shutil.which(launcher)
 			if found:
 				name, version = _probe_version(found, launcher)
 
@@ -678,7 +689,7 @@ def identify(console):
 			if os.environ.get(key):
 				name = label or os.environ[key]
 				version = version or os.environ.get("TERM_PROGRAM_VERSION", "") \
-					or (os.environ.get(key) if label else "")
+					or (os.environ[key] if label else "")
 				break
 
 	if not name:
@@ -690,7 +701,7 @@ def identify(console):
 	if exe and not _is_system(exe):
 		stamp = _stamp_for(exe)
 		if stamp:
-			build = "%s+%s" % (build, stamp)
+			build = f"{build}+{stamp}"
 
 	return name.strip(), build.strip(), exe
 
@@ -699,31 +710,31 @@ def identify(console):
 #	Storage
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-def data_dir():
+def data_dir() -> str:
 	if os.name == "nt":
-		root = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+		root = os.environ.get("LOCALAPPDATA") or str(Path("~").expanduser())
 	elif sys.platform == "darwin":
-		root = os.path.expanduser("~/Library/Application Support")
+		root = str(Path("~/Library/Application Support").expanduser())
 	else:
-		root = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-	path = os.path.join(root, APP)
-	os.makedirs(path, exist_ok=True)
-	return path
+		root = os.environ.get("XDG_DATA_HOME") or str(Path("~/.local/share").expanduser())
+	path = Path(root) / APP
+	path.mkdir(parents=True, exist_ok=True)
+	return str(path)
 
 
-def save(records):
-	path = os.path.join(data_dir(), DATA_FILE)
-	with open(path, "a", encoding="utf-8") as fh:
+def save(records: list[dict[str, Any]]) -> str:
+	path = Path(data_dir()) / DATA_FILE
+	with path.open("a", encoding="utf-8") as fh:
 		for rec in records:
 			fh.write(json.dumps(rec, sort_keys=True) + "\n")
-	return path
+	return str(path)
 
 
-def load():
-	path = os.path.join(data_dir(), DATA_FILE)
+def load() -> list[dict[str, Any]]:
+	path = Path(data_dir()) / DATA_FILE
 	out = []
 	try:
-		with open(path, "r", encoding="utf-8") as fh:
+		with path.open(encoding="utf-8") as fh:
 			for line in fh:
 				line = line.strip()
 				if line:
@@ -740,10 +751,10 @@ def load():
 #	Measurement
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-def harness_ceiling(blob):
+def harness_ceiling(blob: bytes) -> float:
 	"""What the harness alone can push. If a terminal nears this, distrust it."""
 	best = 0.0
-	with open(os.devnull, "wb", buffering=0) as null:
+	with Path(os.devnull).open("wb", buffering=0) as null:
 		fd = null.fileno()
 		mv = memoryview(blob)
 		for _ in range(2):
@@ -757,8 +768,9 @@ def harness_ceiling(blob):
 	return best
 
 
-def run_scene(console, scene, blob, reps, quiet):
-	times, synced_all = [], True
+def run_scene(console: Console, scene: Scene, blob: bytes, reps: int, quiet: bool) -> tuple[list[float], bool]:
+	times: list[float] = []
+	synced_all = True
 
 	# One short warmup, not counted. The first sight of a glyph costs far more
 	# than the next thousand - an unwarmed emoji scene measured 0.82 MB/s then
@@ -784,7 +796,7 @@ def run_scene(console, scene, blob, reps, quiet):
 	return times, synced_all
 
 
-def summarize(times, nbytes, chars, cells):
+def summarize(times: list[float], nbytes: int, chars: int, cells: int) -> dict[str, float]:
 	mean = statistics.fmean(times)
 	sd = statistics.stdev(times) if len(times) > 1 else 0.0
 	return {
@@ -801,7 +813,7 @@ def summarize(times, nbytes, chars, cells):
 	}
 
 
-def score_of(per_scene):
+def score_of(per_scene: dict[str, dict[str, Any]]) -> float:
 	"""Weighted geometric mean of cells/sec: no one scene can dominate."""
 	num, den = 0.0, 0.0
 	for name, row in per_scene.items():
@@ -817,7 +829,7 @@ def score_of(per_scene):
 #	Reporting
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-def gfs_pick(items, keep=5, recent=3):
+def gfs_pick(items: list[Any], keep: int = 5, recent: int = 3) -> list[Any]:
 	"""
 	Newest few always, then spread the remaining slots back through history so
 	an old baseline stays visible instead of scrolling off.
@@ -832,9 +844,9 @@ def gfs_pick(items, keep=5, recent=3):
 	return head + [tail[i] for i in picks]
 
 
-def aggregate(records, mode, line_cells):
+def aggregate(records: list[dict[str, Any]], mode: str, line_cells: int) -> tuple[list[dict[str, Any]], int]:
 	"""Group comparable records into one row per terminal build."""
-	rows = {}
+	rows: dict[tuple[str, str], dict[str, Any]] = {}
 	skipped = 0
 	for rec in records:
 		if rec.get("payload_version") != PAYLOAD_VERSION or rec.get("mode") != mode \
@@ -852,7 +864,7 @@ def aggregate(records, mode, line_cells):
 
 	out = []
 	for row in rows.values():
-		per = {}
+		per: dict[str, dict[str, Any]] = {}
 		for name, recs in row["scenes"].items():
 			recs = sorted(recs, key=lambda r: r.get("when", ""))[-1:]  # newest wins
 			per[name] = recs[0]
@@ -865,20 +877,20 @@ def aggregate(records, mode, line_cells):
 	return out, skipped
 
 
-def unpublishable(mode, scale, grid, line_cells):
+def unpublishable(mode: str | None, scale: float, grid: str, line_cells: int | None) -> str:
 	"""Why a run at these settings may not reach the README, or "" if it may."""
 	if mode != "full":
-		return "a %s run" % mode
+		return f"a {mode} run"
 	if scale != 1.0:
-		return "scale %g" % scale
+		return f"scale {scale:g}"
 	if grid != TABLE_GRID:
-		return "grid %s, the table's is %s" % (grid or "unknown", TABLE_GRID)
+		return f"grid {grid or 'unknown'}, the table's is {TABLE_GRID}"
 	if line_cells != TABLE_LINE_CELLS:
-		return "%d-cell lines, the table's are %d" % (line_cells, TABLE_LINE_CELLS)
+		return f"{line_cells:d}-cell lines, the table's are {TABLE_LINE_CELLS}"
 	return ""
 
 
-def readme_rows(records):
+def readme_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 	"""aggregate() over only the records the table may show."""
 	fit = [r for r in records
 	       if not unpublishable(r.get("mode"), r.get("scale", 1.0), r.get("grid", ""),
@@ -886,14 +898,14 @@ def readme_rows(records):
 	return aggregate(fit, "full", TABLE_LINE_CELLS)[0]
 
 
-def history_table(rows):
-	by_term = {}
+def history_table(rows: list[dict[str, Any]]) -> str:
+	by_term: dict[str, list[dict[str, Any]]] = {}
 	for row in rows:
 		by_term.setdefault(row["terminal"], []).append(row)
 
 	lines = []
-	head = "%-22s %-30s %-9s" % ("terminal", "build", "grid")
-	head += "".join("%8s" % s.label for s in SCENES) + "%8s%6s" % ("score", "runs")
+	head = f"{'terminal':<22} {'build':<30} {'grid':<9}"
+	head += "".join(f"{s.label:>8}" for s in SCENES) + f"{'score':>8}{'runs':>6}"
 	lines.append(head)
 	lines.append("-" * len(head))
 
@@ -905,46 +917,44 @@ def history_table(rows):
 		keep = gfs_pick(group)
 		elided += len(group) - len(keep)
 		for row in keep:
-			line = "%-22.22s %-30.30s %-9.9s" % (row["terminal"], row["build"], row["grid"])
+			line = f"{row['terminal']!s:<22.22} {row['build']!s:<30.30} {row['grid']!s:<9.9}"
 			for scene in SCENES:
 				rec = row["per"].get(scene.name)
-				line += "%8.2f" % rec["mbs"] if rec else "%8s" % "-"
-			line += "%8.1f%6d" % (row["score"] / 1000.0, row["runs"])
+				line += f"{rec['mbs']:8.2f}" if rec else f"{'-':>8}"
+			line += f"{row['score'] / 1000.0:8.1f}{row['runs']:6d}"
 			lines.append(line)
 	if elided:
-		lines.append("(%d older build(s) not shown)" % elided)
+		lines.append(f"({elided} older build(s) not shown)")
 	return "\n".join(lines)
 
 
-def report(term, build, grid, mode, scale, per, synced, ceiling, elapsed):
+def report(term: str, build: str, grid: str, mode: str, scale: float, per: dict[str, dict[str, float]],
+           synced: bool, ceiling: float, elapsed: float) -> str:
 	out = []
-	out.append("SilkTerm terminal throughput benchmark    %s"
-	           % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+	out.append(f"SilkTerm terminal throughput benchmark    {datetime.now():%Y-%m-%d %H:%M:%S}")
 	out.append("")
-	out.append("terminal   %s %s" % (term, build))
-	out.append("grid       %s     mode %s (scale %.2f)     sync %s"
-	           % (grid, mode, scale, "DA1" if synced else "NONE - times are unreliable"))
+	out.append(f"terminal   {term} {build}")
+	out.append(f"grid       {grid}     mode {mode} (scale {scale:.2f})     sync "
+	           f"{'DA1' if synced else 'NONE - times are unreliable'}")
 	out.append("")
 
-	head = "%-8s %-7s%6s%12s%10s%10s%8s%16s" % (
-		"scene", "width", "runs", "MB/s", "Kchar/s", "Kcell/s", "CV%", "MB/s min-max")
+	head = (f"{'scene':<8} {'width':<7}{'runs':>6}{'MB/s':>12}{'Kchar/s':>10}{'Kcell/s':>10}"
+	        f"{'CV%':>8}{'MB/s min-max':>16}")
 	out.append(head)
 	out.append("-" * len(head))
 	for scene in SCENES:
 		row = per.get(scene.name)
 		if not row:
 			continue
-		out.append("%-8s %-7s%6d%8.2f+-%-4.2f%10.0f%10.0f%8.1f%8.2f -%7.2f" % (
-			scene.name, scene.label, row["runs"], row["mbs"], row["mbs_sd"],
-			row["kchars"], row["kcells"], row["cv"], row["mbs_min"], row["mbs_max"]))
+		out.append(f"{scene.name:<8} {scene.label:<7}{row['runs']:6d}{row['mbs']:8.2f}+-{row['mbs_sd']:<4.2f}"
+		           f"{row['kchars']:10.0f}{row['kcells']:10.0f}{row['cv']:8.1f}{row['mbs_min']:8.2f} -{row['mbs_max']:7.2f}")
 	out.append("-" * len(head))
-	out.append("score (weighted geometric mean, million cells/s)   %.1f"
-	           % (score_of(per) / 1000.0))
+	out.append(f"score (weighted geometric mean, million cells/s)   {score_of(per) / 1000.0:.1f}")
 	peak = max(r["mbs"] for r in per.values()) * 1e6
 	ratio = (ceiling / peak) if peak else 0.0
-	out.append("harness ceiling %.1f GB/s to a sink - %.0fx the terminal's best, "
-	           "so the tool is not what was measured" % (ceiling / 1e9, ratio))
-	out.append("total %.1fs" % elapsed)
+	out.append(f"harness ceiling {ceiling / 1e9:.1f} GB/s to a sink - {ratio:.0f}x the terminal's best, "
+	           "so the tool is not what was measured")
+	out.append(f"total {elapsed:.1f}s")
 	return "\n".join(out)
 
 
@@ -952,25 +962,21 @@ def report(term, build, grid, mode, scale, per, synced, ceiling, elapsed):
 #	README
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-def readme_path():
+def readme_path() -> str:
 	"""The checkout's README, if this is running from inside one.
 
 	Walks up rather than assuming a depth: the tool has lived at utility/ and now at
 	utility/include/, and a fixed one-level guess silently stops refreshing the table
 	the moment it moves - no error, just a column that quietly goes stale.
 	"""
-	here = os.path.dirname(os.path.abspath(__file__))
-	for _ in range(4):
-		here = os.path.dirname(here)
-		if not here:
-			break
-		guess = os.path.join(here, "README.md")
-		if os.path.isfile(guess):
-			return guess
+	for here in list(Path(__file__).absolute().parent.parents)[:4]:
+		guess = here / "README.md"
+		if guess.is_file():
+			return str(guess)
 	return ""
 
 
-def _plain(cell):
+def _plain(cell: str) -> str:
 	"""A table cell reduced to comparable text: no markup, no footnote marks."""
 	text = re.sub(r"<sup>.*?</sup>", "", cell)
 	# The highlighted row is colored through GitHub's math renderer, with or
@@ -980,7 +986,7 @@ def _plain(cell):
 	return text.replace("**", "").replace("\\", "").strip()
 
 
-def _key(name):
+def _key(name: str) -> str:
 	"""Terminal names differ between the tool and the table (xfce4-terminal vs
 	XFCE4 Terminal), so match on letters and digits alone."""
 	return re.sub(r"[^a-z0-9]", "", name.lower())
@@ -991,17 +997,17 @@ def _key(name):
 ROW_ALIASES = {"silkterm": "silktermcandy"}
 
 
-def _row_key(name):
+def _row_key(name: str) -> str:
 	key = _key(name)
 	return ROW_ALIASES.get(key, key)
 
 
-def _head_key(cell):
+def _head_key(cell: str) -> str:
 	"""A header reduced to its name alone: no markup, no footnote, no unit."""
 	return _plain(cell).split(" (")[0].strip().lower()
 
 
-def _short_version(build):
+def _short_version(build: str) -> str:
 	"""
 	The Ver column is narrow and shares its width with everything else, so it
 	drops the build stamp, which matters only when comparing one dev build
@@ -1011,7 +1017,7 @@ def _short_version(build):
 	return build.split("+", 1)[0] or "-"
 
 
-def _split_table(block):
+def _split_table(block: str) -> tuple[list[str], list[str], list[list[str]]] | None:
 	"""(header, alignment, data rows) of the first markdown table in the block."""
 	lines = [ln.strip() for ln in block.splitlines() if ln.strip().startswith("|")]
 	if len(lines) < 2:
@@ -1020,14 +1026,14 @@ def _split_table(block):
 	return grid[0], grid[1], grid[2:]
 
 
-def _score_of(cells, at):
+def _score_of(cells: list[str], at: int) -> float | None:
 	try:
 		return float(_plain(cells[at]))
 	except (ValueError, IndexError):
 		return None
 
 
-def readme_table(existing, rows):
+def readme_table(existing: str, rows: list[dict[str, Any]]) -> str:
 	"""
 	Refresh the speed columns of the table already in the README, leaving every
 	other column - platform, sizes, memory - exactly as written there. Newest
@@ -1041,7 +1047,7 @@ def readme_table(existing, rows):
 	if not parsed:
 		return ""
 	head, align, data = parsed
-	col = {}
+	col: dict[str, int] = {}
 	for i, cell in enumerate(head):
 		col[_head_key(cell)] = i
 
@@ -1056,13 +1062,13 @@ def readme_table(existing, rows):
 
 	# A terminal that never answered the barrier stays out of the table: its
 	# times are an upper bound, not the throughput every other row reports.
-	newest = {}
+	newest: dict[str, dict[str, Any]] = {}
 	for row in sorted(rows, key=lambda r: r["when"]):
 		if row.get("synced", True):
 			newest[_row_key(row["terminal"])] = row
 
 	seen = {_row_key(_plain(cells[name_at])): cells for cells in data}
-	fresh = []
+	fresh: list[list[str]] = []
 	for key, row in newest.items():
 		cells = seen.get(key)
 		if cells is None:
@@ -1073,8 +1079,8 @@ def readme_table(existing, rows):
 		cells[ver_at] = _short_version(row["build"])
 		for scene, place in scene_col.items():
 			rec = row["per"].get(scene)
-			cells[place] = "%.1f" % rec["mbs"] if rec else "-"
-		cells[at] = "**%.1f**" % (row["score"] / 1000.0)
+			cells[place] = f"{rec['mbs']:.1f}" if rec else "-"
+		cells[at] = f"**{row['score'] / 1000.0:.1f}**"
 
 	# A terminal measured for the first time joins the scored block rather than
 	# sitting under the unscored tail, where the ranking below could not reach it.
@@ -1083,7 +1089,7 @@ def readme_table(existing, rows):
 	data[cut:cut] = fresh
 
 	slots = [i for i, cells in enumerate(data) if _score_of(cells, at) is not None]
-	ranked = sorted((data[i] for i in slots), key=lambda c: _score_of(c, at), reverse=True)
+	ranked = sorted((data[i] for i in slots), key=lambda c: _score_of(c, at) or 0.0, reverse=True)
 	for i, cells in zip(slots, ranked):
 		data[i] = cells
 
@@ -1094,10 +1100,9 @@ def readme_table(existing, rows):
 	return "\n".join(out)
 
 
-def update_readme(path, rows):
+def update_readme(path: str, rows: list[dict[str, Any]]) -> str:
 	try:
-		with open(path, "r", encoding="utf-8") as fh:
-			text = fh.read()
+		text = Path(path).read_text(encoding="utf-8")
 	except OSError:
 		return ""
 	if README_BEGIN not in text or README_END not in text:
@@ -1107,8 +1112,7 @@ def update_readme(path, rows):
 	table = readme_table(existing, rows)
 	if not table:
 		return ""
-	with open(path, "w", encoding="utf-8") as fh:
-		fh.write(head + table + tail)
+	Path(path).write_text(head + table + tail, encoding="utf-8")
 	return path
 
 
@@ -1116,7 +1120,7 @@ def update_readme(path, rows):
 #	Entry point
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-def parse_args(argv):
+def parse_args(argv: list[str]) -> argparse.Namespace:
 	ap = argparse.ArgumentParser(
 		description="Measure terminal drawing throughput by UTF-8 width class.")
 	ap.add_argument("--quick", action="store_true",
@@ -1141,7 +1145,7 @@ def parse_args(argv):
 	return ap.parse_args(argv)
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
 	args = parse_args(argv)
 	mode = "quick" if args.quick else "full"
 	scale = args.scale
@@ -1149,8 +1153,7 @@ def main(argv):
 	if args.history:
 		rows, skipped = aggregate(load(), mode, args.line_cells)
 		if not rows:
-			print("no %s results recorded yet (%d other record(s) on file)"
-			      % (mode, skipped))
+			print(f"no {mode} results recorded yet ({skipped} other record(s) on file)")
 			return 0
 		print(history_table(rows))
 		readme = readme_path()
@@ -1168,14 +1171,15 @@ def main(argv):
 	scenes = [s for s in SCENES if not args.scene or s.name in args.scene]
 	cols, lines = terminal_size()
 	if cols and args.line_cells > cols:
-		print("note: lines are %d cells but the terminal is %d wide, so every line "
-		      "wraps. Results stay comparable only against runs at the same width."
-		      % (args.line_cells, cols), file=sys.stderr)
+		print(f"note: lines are {args.line_cells} cells but the terminal is {cols} wide, so every line "
+		      "wraps. Results stay comparable only against runs at the same width.", file=sys.stderr)
 		time.sleep(1.5)
 
 	when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 	started = time.perf_counter()
-	per, records, synced_all, ceiling = {}, [], True, 0.0
+	per: dict[str, dict[str, float]] = {}
+	records: list[dict[str, Any]] = []
+	synced_all, ceiling = True, 0.0
 
 	with Console() as console:
 		if args.label:
@@ -1190,13 +1194,13 @@ def main(argv):
 		else:
 			term, build, exe = identify(console)
 
-		grid = "%dx%d" % (cols, lines)
+		grid = f"{cols}x{lines}"
 
 		for scene in scenes:
 			reps = args.reps or scene.weight * (REPS_QUICK if args.quick else REPS_FULL)
 
 			console.emit("\x1b[0m\x1b[H\x1b[2J\x1b[3J")
-			console.emit("building %s payload...\r\n" % scene.name)
+			console.emit(f"building {scene.name} payload...\r\n")
 			blob, chars, cells, nlines = build_payload(scene, scale, args.line_cells)
 			ceiling = max(ceiling, harness_ceiling(blob))
 
@@ -1211,7 +1215,7 @@ def main(argv):
 				"line_cells": args.line_cells, "payload_version": PAYLOAD_VERSION,
 				"grid": grid, "bytes": len(blob), "chars": chars, "cells": cells,
 				"lines": nlines, "synced": synced, "times": times,
-				"os": "%s %s" % (platform.system(), platform.release()),
+				"os": f"{platform.system()} {platform.release()}",
 				"host": platform.node(), **row,
 			})
 			del blob
@@ -1222,21 +1226,21 @@ def main(argv):
 	out = [report(term, build, grid, mode, scale, per, synced_all, ceiling, elapsed)]
 
 	if not args.no_save:
-		out.append("\nrecorded to %s" % save(records))
+		out.append(f"\nrecorded to {save(records)}")
 
 	rows, skipped = aggregate(load(), mode, args.line_cells)
 	if rows:
 		out.append("")
 		out.append(history_table(rows))
 		if skipped:
-			out.append("(%d record(s) from another mode, width or payload version "
-			           "not comparable here)" % skipped)
+			out.append(f"({skipped} record(s) from another mode, width or payload version "
+			           "not comparable here)")
 
 	if not args.no_readme and not args.no_save:
 		why = unpublishable(mode, scale, grid, args.line_cells)
 		readme = readme_path()
 		if why:
-			out.append("\nREADME.md not touched: %s" % why)
+			out.append(f"\nREADME.md not touched: {why}")
 		elif readme and rows and update_readme(readme, readme_rows(load())):
 			out.append("\nREADME.md results table updated")
 
@@ -1252,12 +1256,12 @@ def main(argv):
 		print(json.dumps(records, indent=1, sort_keys=True))
 	if args.out:
 		try:
-			with open(args.out, "w", encoding="utf-8") as fh:
+			with Path(args.out).open("w", encoding="utf-8") as fh:
 				fh.write(text + "\n")
 				if args.json:
 					fh.write(json.dumps(records, indent=1, sort_keys=True) + "\n")
 		except OSError as err:
-			print("could not write %s: %s" % (args.out, err), file=sys.stderr)
+			print(f"could not write {args.out}: {err}", file=sys.stderr)
 	return 0
 
 
@@ -1272,3 +1276,4 @@ if __name__ == "__main__":
 ##		20260728 Initial.
 ##		20260730 Moved under utility/include/, behind update-showdown.py.
 ##		20260928 WezTerm's and GNOME Terminal's versions come from their launchers.
+##		20261005 Type hints, pathlib, f-strings.

@@ -12,8 +12,10 @@ column's alignment spelled out, so a plain dash row comes back as left. Shared b
 two tools that write the README's showdown table, so they cannot drift apart.
 """
 
+from collections.abc import Iterable, Sequence
 
-def split_row(line):
+
+def split_row(line: str) -> list[str]:
 	"""The cells of one table line, with or without the outer pipes."""
 	line = line.strip()
 	if line.startswith("|"):
@@ -23,14 +25,14 @@ def split_row(line):
 	return [c.strip() for c in line.split("|")]
 
 
-def _kind(align):
+def _kind(align: str) -> str:
 	"""left, right or center, from one cell of the alignment row."""
 	if len(align) > 1 and align.startswith(":") and align.endswith(":"):
 		return "center"
 	return "right" if align.endswith(":") else "left"
 
 
-def _rule(kind, width):
+def _rule(kind: str, width: int) -> str:
 	if kind == "center":
 		return ":" + "-" * (width - 2) + ":"
 	if kind == "right":
@@ -38,7 +40,7 @@ def _rule(kind, width):
 	return ":" + "-" * (width - 1)
 
 
-def render(head, align, data):
+def render(head: Sequence[str], align: Sequence[str], data: Iterable[Sequence[str]]) -> list[str]:
 	"""Lines of a table from its header, alignment row and data rows."""
 	cols = len(head)
 	rows = [list(head)] + [list(r) + [""] * (cols - len(r)) for r in data]

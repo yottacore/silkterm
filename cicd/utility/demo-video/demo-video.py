@@ -61,7 +61,6 @@
 import argparse
 import colorsys
 import getpass
-import glob
 import json
 import math
 import os
@@ -76,7 +75,9 @@ import sys
 import tempfile
 import time
 import wave
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, TypedDict
 
 import numpy as np
 from scipy import signal as spsig
@@ -141,40 +142,51 @@ DECO_TEXT     = "#eef3fb"                   # title text
 #
 # A gif stores each frame's delay in whole centiseconds, so its rate must be
 # 100/n: 50 is 2cs. The video has no such constraint.
+class Profile(TypedDict):
+	size: tuple[int, int]
+	cap_fps: int
+	out_fps: int
+	mono_pt: float
+	ui_pt: int
+	banner_fs: int
+	band: int
+	audio: bool
+	banner_min: float
+
 PROFILES = {
-	"video": dict(
+	"video": Profile(
 		size=(1920, 1080), cap_fps=60, out_fps=60, mono_pt=19.5, ui_pt=11,
 		banner_fs=38, band=112, audio=True, banner_min=4.0,
 	),
-	"gif": dict(
+	"gif": Profile(
 		size=(960, 540), cap_fps=50, out_fps=50, mono_pt=13, ui_pt=10,
 		banner_fs=24, band=60, audio=False, banner_min=3.0,
 	),
 }
 
-def log(msg):
+def log(msg: str) -> None:
 	print(f"[demo] {msg}", flush=True)
 
-def run(cmd, **kw):
+def run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[Any]:
 	return subprocess.run(cmd, check=True, **kw)
 
-def out_of(cmd):
+def out_of(cmd: list[str]) -> str:
 	return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
 
 
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Recorder: display/app/capture lifecycle + the event/banner logs
 
-def run_user():
+def run_user() -> str:
 	# gui-headless.bash names its run folder the same way; USER is unset under
 	# cron and in some ssh contexts
 	return os.environ.get("USER") or pwd.getpwuid(os.getuid()).pw_name
 
-def target_dir():
+def target_dir() -> Path:
 	# cargo is run from the repo, so a relative CARGO_TARGET_DIR hangs off it
 	return REPO / os.environ.get("CARGO_TARGET_DIR", "target")
 
-def gpu_prefix(e):
+def gpu_prefix(e: dict[str, str]) -> list[str]:
 	"""Command prefix that puts the app on a real GPU, editing env `e` as needed.
 
 	Without one, llvmpipe caps the app near 10fps on Xvfb and the scroll judders,
@@ -184,7 +196,7 @@ def gpu_prefix(e):
 	"""
 	if shutil.which("vglrun"):
 		return ["vglrun", "-d", "egl"]
-	if Path("/dev/dxg").exists() and glob.glob("/usr/lib/*/dri/d3d12_dri.so"):
+	if Path("/dev/dxg").exists() and any(Path("/usr/lib").glob("*/dri/d3d12_dri.so")):
 		e.update(MESA_LOADER_DRIVER_OVERRIDE="d3d12", GALLIUM_DRIVER="d3d12")
 		log("GPU: d3d12 (WSL)")
 		return []
@@ -194,7 +206,7 @@ def gpu_prefix(e):
 
 
 class Rec:
-	def __init__(self, args, profile):
+	def __init__(self, args: argparse.Namespace, profile: Profile) -> None:
 		self.p        = profile
 		self.size     = profile["size"]
 		self.band     = profile["band"]         # black narration strip above the window
@@ -208,16 +220,21 @@ class Rec:
 		self.home     = self.work / "home"
 		self.wmhome   = self.work / "wmhome"    # the WM's HOME: theme + its own xfconf
 		self.keep     = args.keep_work
-		self.events   = []      # (epoch, kind) kind: key:NAME / mouse:NAME
-		self.banners  = []      # (epoch_start, epoch_end, text)
-		self.cuts     = []      # (epoch_start, epoch_end) left out of the finished take
-		self.app      = None
-		self.ff       = None
+		self.events: list[tuple[float, str]] = []    # (epoch, kind) kind: key:NAME / mouse:NAME
+		self.banners: list[tuple[float, float, str]] = []    # (epoch_start, epoch_end, text)
+		self.cuts: list[tuple[float, float]] = []    # (epoch_start, epoch_end) left out of the finished take
+		self.app: subprocess.Popen[bytes] | None = None
+		self.ff: subprocess.Popen[bytes] | None = None
+		self.wm: subprocess.Popen[bytes] | None = None
+		self.win      = ""      # the app's X window id, once it is up
+		self.raw      = self.work / "raw.mkv"
+		self.launch_e = 0.0     # wall-clock epoch the app was started
 		self.flash_e  = 0.0     # wall-clock epoch of the white sync flash
+		self.flash_vt = 0.0     # video time of the sync flash, found at encode
 		self.t0_e     = 0.0     # wall-clock epoch where trimmed content starts
-		self.seg_marks = {}     # segment name -> wall-clock epoch it started
+		self.seg_marks: dict[str, float] = {}    # segment name -> wall-clock epoch it started
 
-	def env(self):
+	def env(self) -> dict[str, str]:
 		e = dict(os.environ)
 		e.update(DISPLAY=self.display, XAUTHORITY=self.auth, LIBGL_ALWAYS_SOFTWARE="1")
 		# Setting DISPLAY is not enough to move a winit app onto our private Xvfb:
@@ -228,12 +245,12 @@ class Rec:
 			e.pop(k, None)
 		return e
 
-	def cut_s(self):
+	def cut_s(self) -> float:
 		return sum(e - s for s, e in self.cuts)
 
 	# an epoch as it falls in the finished take, with every cut before it taken
 	# out. One inside a cut lands on the cut's start.
-	def net(self, epoch):
+	def net(self, epoch: float) -> float:
 		gone = 0.0
 		for s, e in self.cuts:
 			if epoch >= e:
@@ -242,26 +259,30 @@ class Rec:
 				gone += epoch - s
 		return epoch - gone
 
-	def xdo(self, *a):
+	def xdo(self, *a: str) -> None:
 		subprocess.run(["xdotool", *a], env=self.env(), check=False,
 			stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-	def _frame_extents(self, win):
+	def _frame_extents(self, win: str) -> tuple[int, int, int, int]:
 		# _NET_FRAME_EXTENTS = left, right, top, bottom (px). Falls back to the
 		# theme's known extents if the WM hasn't set the hint yet.
 		r = subprocess.run(["xprop", "-id", win, "_NET_FRAME_EXTENTS"],
-			env=self.env(), capture_output=True, text=True)
+			env=self.env(), capture_output=True, text=True, check=False)
 		m = re.search(r"=\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)", r.stdout)
-		return tuple(map(int, m.groups())) if m else (FRAME_L, FRAME_R, FRAME_T, FRAME_B)
+		if not m:
+			return FRAME_L, FRAME_R, FRAME_T, FRAME_B
+		return int(m[1]), int(m[2]), int(m[3]), int(m[4])
 
-	def _client_xy(self, win):
+	def _client_xy(self, win: str) -> tuple[int, int]:
 		r = subprocess.run(["xwininfo", "-id", win], env=self.env(),
-			capture_output=True, text=True).stdout
-		x = int(re.search(r"Absolute upper-left X:\s*(-?\d+)", r).group(1))
-		y = int(re.search(r"Absolute upper-left Y:\s*(-?\d+)", r).group(1))
-		return x, y
+			capture_output=True, text=True, check=False).stdout
+		x = re.search(r"Absolute upper-left X:\s*(-?\d+)", r)
+		y = re.search(r"Absolute upper-left Y:\s*(-?\d+)", r)
+		if not x or not y:
+			raise RuntimeError(f"xwininfo gave no position for window {win}")
+		return int(x[1]), int(y[1])
 
-	def place_window(self, win):
+	def place_window(self, win: str) -> None:
 		# nudge the window so its OUTER frame sits BORDER px inside the left edge
 		# and just under the narration band. xdotool's move semantics vs the
 		# reparenting frame are fuzzy, so measure the real frame-outer after each
@@ -271,14 +292,15 @@ class Rec:
 		for _ in range(4):
 			self.xdo("windowmove", win, str(target[0]), str(target[1]))
 			time.sleep(0.25)
-			l, _r, t, _b = self._frame_extents(win)
+			left, _right, top, _bottom = self._frame_extents(win)
 			cx, cy = self._client_xy(win)
-			dx, dy = BORDER - (cx - l), want_y - (cy - t)
+			dx, dy = BORDER - (cx - left), want_y - (cy - top)
 			if abs(dx) <= 1 and abs(dy) <= 1:
 				break
-			target[0] += dx; target[1] += dy
+			target[0] += dx
+			target[1] += dy
 
-	def make_theme(self):
+	def make_theme(self) -> str:
 		# Recolour the base theme into the demo's slate decoration, into the WM's
 		# own HOME. Every frame part is a flat <rect fill="..."> so the swap is a
 		# string replace; the button glyphs are separate files and keep their shape.
@@ -298,21 +320,21 @@ class Rec:
 			rf"\1={DECO_TEXT}", rc.read_text()))
 		return WM_THEME
 
-	def start_display(self):
+	def start_display(self) -> None:
 		# each profile records at its own resolution, so cycle the display; the WM
 		# is ours (not gui-headless --wm) so xfconf can point it at the generated
 		# theme - the window's real decoration is what frames the shot
 		gh = str(REPO / "cicd/utility/gui-headless.bash")
 		e = dict(os.environ, CICD_HEADLESS_DISPLAY=self.display,
 			CICD_HEADLESS_SIZE=f"{self.size[0]}x{self.size[1]}x24")
-		subprocess.run([gh, "stop"], env=e, capture_output=True)
+		subprocess.run([gh, "stop"], env=e, capture_output=True, check=False)
 		run([gh, "start"], env=e)
 		self.start_wm(self.make_theme())
 		time.sleep(2.0)
 		# pure black so the thin border framing the window reads as black, not a tint
 		subprocess.run(["xsetroot", "-solid", "#000000"], env=self.env(), check=False)
 
-	def wm_env(self):
+	def wm_env(self) -> dict[str, str]:
 		# xfconfd keeps its channels under XDG_CONFIG_HOME, not HOME, so with the
 		# desktop's own one inherited a recording wrote its theme, title font and
 		# buttons over the real desktop's. Every base folder goes inside wmhome.
@@ -326,20 +348,22 @@ class Rec:
 			e[var] = str(d)
 		return e
 
-	def start_wm(self, theme, wm="xfwm4 --compositor=off --vblank=off"):
-		# its own session, so stop_wm can end the bus and xfconfd with it
-		self.wm = subprocess.Popen(["dbus-run-session", "--", "sh", "-c",
-			f'xfconf-query -c xfwm4 -p /general/theme --create -t string -s "{theme}"; '
-			'xfconf-query -c xfwm4 -p /general/title_font --create -t string -s "Lato Bold 10"; '
-			'xfconf-query -c xfwm4 -p /general/button_layout --create -t string -s "O|HMC"; '
-			f"exec {wm}"],
-			env=self.wm_env(), stdout=open(self.work / "wm.log", "w"),
-			stderr=subprocess.STDOUT, start_new_session=True)
+	def start_wm(self, theme: str, wm: str = "xfwm4 --compositor=off --vblank=off") -> None:
+		# its own session, so stop_wm can end the bus and xfconfd with it. The
+		# child keeps its own copy of the log, so ours closes once it has started.
+		with (self.work / "wm.log").open("w") as wm_log:
+			self.wm = subprocess.Popen(["dbus-run-session", "--", "sh", "-c",
+				f'xfconf-query -c xfwm4 -p /general/theme --create -t string -s "{theme}"; '
+				'xfconf-query -c xfwm4 -p /general/title_font --create -t string -s "Lato Bold 10"; '
+				'xfconf-query -c xfwm4 -p /general/button_layout --create -t string -s "O|HMC"; '
+				f"exec {wm}"],
+				env=self.wm_env(), stdout=wm_log,
+				stderr=subprocess.STDOUT, start_new_session=True)
 
-	def stop_wm(self):
+	def stop_wm(self) -> None:
 		# dbus-run-session dies on SIGTERM and leaves its bus, xfconfd and the WM
 		# running under init. They all stay in its process group, so end that.
-		if not getattr(self, "wm", None):
+		if not self.wm:
 			return
 		for sig in (signal.SIGTERM, signal.SIGKILL):
 			try:
@@ -357,7 +381,9 @@ class Rec:
 			pass
 		self.wm = None
 
-	def wm_survivors(self):
+	def wm_survivors(self) -> bool:
+		if not self.wm:
+			return False
 		self.wm.poll()                         # reap the leader, or it counts as alive
 		try:
 			os.killpg(self.wm.pid, 0)
@@ -365,23 +391,23 @@ class Rec:
 		except ProcessLookupError:
 			return False
 
-	def stop_display(self):
+	def stop_display(self) -> None:
 		self.stop_wm()
 		gh = str(REPO / "cicd/utility/gui-headless.bash")
 		e = dict(os.environ, CICD_HEADLESS_DISPLAY=self.display)
-		subprocess.run([gh, "stop"], env=e, capture_output=True)
+		subprocess.run([gh, "stop"], env=e, capture_output=True, check=False)
 
-	def start_capture(self):
+	def start_capture(self) -> None:
 		self.raw = self.work / "raw.mkv"
-		self.ff = subprocess.Popen([
-			"ffmpeg", "-hide_banner", "-loglevel", "error",
-			"-progress", str(self.work / "ffprogress.txt"),
-			"-f", "x11grab", "-framerate", str(self.cap_fps),
-			"-video_size", f"{self.size[0]}x{self.size[1]}", "-i", self.display,
-			"-c:v", "libx264", "-preset", "ultrafast", "-qp", "0",
-			"-pix_fmt", "yuv444p", str(self.raw)],
-			env=self.env(), stdin=subprocess.DEVNULL,
-			stderr=open(self.work / "ffmpeg.log", "w"))
+		with (self.work / "ffmpeg.log").open("w") as ff_log:
+			self.ff = subprocess.Popen([
+				"ffmpeg", "-hide_banner", "-loglevel", "error",
+				"-progress", str(self.work / "ffprogress.txt"),
+				"-f", "x11grab", "-framerate", str(self.cap_fps),
+				"-video_size", f"{self.size[0]}x{self.size[1]}", "-i", self.display,
+				"-c:v", "libx264", "-preset", "ultrafast", "-qp", "0",
+				"-pix_fmt", "yuv444p", str(self.raw)],
+				env=self.env(), stdin=subprocess.DEVNULL, stderr=ff_log)
 		# flash only once frames are actually flowing - a slow-opening ffmpeg
 		# would otherwise miss the sync flash and break the whole AV anchor
 		prog = self.work / "ffprogress.txt"
@@ -400,7 +426,7 @@ class Rec:
 		self.mouse_park()       # X parks the pointer mid-screen; get it out of frame
 		time.sleep(0.4)
 
-	def stop_capture(self):
+	def stop_capture(self) -> None:
 		if self.ff:
 			self.ff.send_signal(signal.SIGINT)
 			try:
@@ -409,7 +435,7 @@ class Rec:
 				self.ff.kill()
 			self.ff = None
 
-	def app_env(self):
+	def app_env(self) -> dict[str, str]:
 		e = self.env()
 		e.pop("LIBGL_ALWAYS_SOFTWARE", None)      # the app runs on the GPU (see gpu_prefix)
 		# the pop-out dialogs (Settings/About) are static wgpu/Vulkan windows; pin
@@ -433,7 +459,7 @@ class Rec:
 			HISTFILE="/dev/null")
 		return e
 
-	def launch_app(self, shell_cmd):
+	def launch_app(self, shell_cmd: str) -> None:
 		e = self.app_env()
 		cmd = [self.bin, "--config", str(self.home / ".config/silkterm/config.shcl"),
 			"--shell", shell_cmd]
@@ -446,18 +472,19 @@ class Rec:
 		# height) and the window is never resized after - the VGL EGL present
 		# latches the surface size at creation, so a post-launch resize breaks the
 		# blit (moving is fine, which is how place_window nudges it into place).
-		W, H = self.size
-		cw = W - 2 * BORDER - FRAME_L - FRAME_R
-		ch = H - 2 * BORDER - self.band - FRAME_T - FRAME_B
+		width, height = self.size
+		cw = width - 2 * BORDER - FRAME_L - FRAME_R
+		ch = height - 2 * BORDER - self.band - FRAME_T - FRAME_B
 		cmd += ["--pixel-width", str(cw), "--pixel-height", str(ch)]
 		self.launch_e = time.time()
-		self.app = subprocess.Popen(cmd, env=e, cwd=str(self.home),
-			stdout=open(self.work / "silk.log", "w"), stderr=subprocess.STDOUT)
+		with (self.work / "silk.log").open("w") as silk_log:
+			self.app = subprocess.Popen(cmd, env=e, cwd=str(self.home),
+				stdout=silk_log, stderr=subprocess.STDOUT)
 		deadline = time.time() + 60
 		win = ""
 		while time.time() < deadline and not win:
 			r = subprocess.run(["xdotool", "search", "--class", "silkterm"],
-				env=self.env(), capture_output=True, text=True)
+				env=self.env(), capture_output=True, text=True, check=False)
 			win = r.stdout.split()[0] if r.stdout.strip() else ""
 			time.sleep(0.5)
 		if not win:
@@ -469,7 +496,7 @@ class Rec:
 		time.sleep(0.3)
 		self.mouse_park()
 
-	def kill_app(self):
+	def kill_app(self) -> None:
 		if self.app:
 			self.app.terminate()
 			try:
@@ -479,15 +506,15 @@ class Rec:
 			self.app = None
 
 	# --- event log -------------------------------------------------------------
-	def ev(self, kind):
+	def ev(self, kind: str) -> None:
 		self.events.append((time.time(), kind))
 
-	def mouse_park(self):
+	def mouse_park(self) -> None:
 		# the very bottom-right pixel: the arrow's hotspot is its tip, so the whole
 		# glyph draws past the screen edge and no pointer is left in frame
 		self.xdo("mousemove", str(self.size[0] - 1), str(self.size[1] - 1))
 
-	def cleanup(self):
+	def cleanup(self) -> None:
 		self.stop_capture()
 		self.kill_app()
 		self.stop_display()
@@ -518,29 +545,29 @@ KEY_CODES = {"SPACE": 57, "ENTER": 28, "BACKSPACE": 14, "TAB": 15,
 	"ESC": 1, "ESCAPE": 1, "UP": 57416, "DOWN": 57424, "LEFT": 57419,
 	"RIGHT": 57421, "PGUP": 3657, "PGDN": 3665}
 
-def key_sound(ch):
+def key_sound(ch: str) -> str:
 	c = _SHIFTED.get(ch, ch.lower())
 	return f"key:{_SCAN.get(c, 30)}"          # unknown falls back to 'a'
 
-def keysym_sound(keysym):
+def keysym_sound(keysym: str) -> str:
 	if len(keysym) == 1:
 		return key_sound(keysym)
 	return f"key:{KEY_CODES.get(keysym.upper(), 30)}"
 
 class Typist:
-	def __init__(self, rec, rng):
+	def __init__(self, rec: Rec, rng: random.Random) -> None:
 		self.rec = rec
 		self.rng = rng
 		self.wpm = rng.uniform(120, 160)
 
-	def _delay(self):
+	def _delay(self) -> float:
 		# per-char delay from current wpm, lognormal jitter; wpm drifts as it would
 		self.wpm += self.rng.uniform(-8, 8)
 		self.wpm = max(100.0, min(220.0, self.wpm))
 		d = 12.0 / self.wpm                      # 60 / (5 * wpm)
 		return d * self.rng.lognormvariate(0.0, 0.22)
 
-	def _emit(self, ch):
+	def _emit(self, ch: str) -> None:
 		# timestamp AFTER the send so the xdotool spawn latency never skews the
 		# foley; the event epoch is the moment X actually got the key
 		if ch == " ":
@@ -552,13 +579,13 @@ class Typist:
 				stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 			self.rec.ev(key_sound(ch))
 
-	def _backspace(self, n):
+	def _backspace(self, n: int) -> None:
 		for _ in range(n):
 			time.sleep(self.rng.uniform(0.09, 0.16))
 			self.rec.xdo("key", "--clearmodifiers", "BackSpace")
 			self.rec.ev("key:BACKSPACE")
 
-	def type(self, text, typos=0.006, wpm=None):
+	def type(self, text: str, typos: float = 0.006, wpm: float | None = None) -> None:
 		if wpm is not None:
 			self.wpm = wpm
 		# ensure the terminal has focus before the first keystroke: after a dialog
@@ -591,25 +618,25 @@ class Typist:
 			self._emit(ch)
 			i += 1
 
-	def enter(self):
+	def enter(self) -> None:
 		time.sleep(self.rng.uniform(0.15, 0.4))
 		self.rec.xdo("key", "--clearmodifiers", "Return")
 		self.rec.ev("key:ENTER")
 
-	def key(self, keysym, sound=None):
+	def key(self, keysym: str, sound: str | None = None) -> None:
 		self.rec.xdo("key", "--clearmodifiers", keysym)
 		if sound is None:
 			sound = keysym_sound(keysym)
 		if sound:
 			self.rec.ev(sound)
 
-	def keys(self, keysym, n, hz=8.0, sound=None):
+	def keys(self, keysym: str, n: int, hz: float = 8.0, sound: str | None = None) -> None:
 		# repeated taps (arrow scrolling); slight cadence wobble
 		for _ in range(n):
 			self.key(keysym, sound)
 			time.sleep(max(0.03, self.rng.uniform(0.8, 1.2) / hz))
 
-	def hold(self, keysym, count, hz=55.0, first_sound=None):
+	def hold(self, keysym: str, count: int, hz: float = 55.0, first_sound: str | None = None) -> None:
 		# a held key, faked as fast discrete repeats (Xvfb has no autorepeat, so a
 		# real keydown/keyup delivers just one press): one click on the first
 		# press, silence for the rest - reads as press-and-hold
@@ -620,7 +647,7 @@ class Typist:
 		self.rec.xdo("key", "--clearmodifiers", "--repeat", str(count),
 			"--delay", str(int(1000 / hz)), keysym)
 
-	def cmd(self, text, settle=1.0, typos=0.006, wpm=None):
+	def cmd(self, text: str, settle: float = 1.0, typos: float = 0.006, wpm: float | None = None) -> None:
 		self.type(text, typos, wpm)
 		self.enter()
 		time.sleep(settle)
@@ -630,12 +657,12 @@ class Typist:
 ##	Mouse
 
 class Mouse:
-	def __init__(self, rec, rng):
+	def __init__(self, rec: Rec, rng: random.Random) -> None:
 		self.rec = rec
 		self.rng = rng
 		self.pos = (rec.size[0] - 1, rec.size[1] - 1)
 
-	def move(self, x, y, dur=0.6):
+	def move(self, x: int, y: int, dur: float = 0.6) -> None:
 		x0, y0 = self.pos
 		steps = max(6, int(dur * 40))
 		for i in range(1, steps + 1):
@@ -645,17 +672,17 @@ class Mouse:
 			time.sleep(dur / steps)
 		self.pos = (x, y)
 
-	def click(self, quiet=False):
+	def click(self, quiet: bool = False) -> None:
 		self.rec.xdo("click", "1")
 		self.rec.ev("mouse:CLICK_Q" if quiet else "mouse:CLICK")
 
-	def double(self):
+	def double(self) -> None:
 		self.rec.ev("mouse:CLICK")
 		time.sleep(0.11)
 		self.rec.ev("mouse:CLICK")
 		self.rec.xdo("click", "--repeat", "2", "--delay", "110", "1")
 
-	def drag(self, x1, y1, x2, y2, dur=0.9):
+	def drag(self, x1: int, y1: int, x2: int, y2: int, dur: float = 0.9) -> None:
 		self.move(x1, y1, 0.5)
 		self.rec.ev("mouse:CLICK")
 		self.rec.xdo("mousedown", "1")
@@ -665,11 +692,11 @@ class Mouse:
 		self.rec.ev("mouse:CLICK_Q")
 		self.rec.xdo("mouseup", "1")
 
-	def park(self):
+	def park(self) -> None:
 		self.rec.mouse_park()
 		self.pos = (self.rec.size[0] - 1, self.rec.size[1] - 1)
 
-	def wheel(self, up, n, hz=7.0):
+	def wheel(self, up: bool, n: int, hz: float = 7.0) -> None:
 		for _ in range(n):
 			self.rec.ev("mouse:WHEEL")
 			self.rec.xdo("click", "4" if up else "5")
@@ -682,34 +709,34 @@ class Mouse:
 class Banner:
 	# every caption sits in the band above the window, so there is no position to
 	# choose any more - only the text and the span it covers
-	def __init__(self, rec, text):
+	def __init__(self, rec: Rec, text: str) -> None:
 		self.rec, self.text = rec, text
 
-	def __enter__(self):
+	def __enter__(self) -> "Banner":
 		self.start = time.time()
 		return self
 
-	def __exit__(self, *exc):
+	def __exit__(self, *exc: object) -> None:
 		self.rec.banners.append((self.start, time.time(), self.text))
 
 # housekeeping between scenes that the finished take leaves out: it is recorded
 # like anything else, then dropped at encode, sound included
 class Cut:
-	def __init__(self, rec):
+	def __init__(self, rec: Rec) -> None:
 		self.rec = rec
 
-	def __enter__(self):
+	def __enter__(self) -> "Cut":
 		self.start = time.time()
 		return self
 
-	def __exit__(self, *exc):
+	def __exit__(self, *exc: object) -> None:
 		self.rec.cuts.append((self.start, time.time()))
 
 
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Scene content: recording fonts, config, the synthetic desktop, home tree
 
-def write_dconf(home, profile):
+def write_dconf(home: Path, profile: Profile) -> None:
 	# the app reads both recording fonts through gsettings; with XDG_CONFIG_HOME
 	# on the fake home a compiled dconf db is all it takes. Chrome/dialogs get a
 	# clean modern sans; the terminal gets the defined mono at the profile's size.
@@ -723,7 +750,7 @@ def write_dconf(home, profile):
 	dst.mkdir(parents=True, exist_ok=True)
 	run(["dconf", "compile", str(dst / "user"), str(src)])
 
-def write_config(home, profile):
+def write_config(home: Path, profile: Profile) -> None:
 	# mirrors the real defined config. Both profiles start opaque on plain black,
 	# which needs wallpaper.fallback_builtin OFF - it defaults on, and while it is on there
 	# is no "no wallpaper" state to start from (an unset image IS what shows the
@@ -821,7 +848,7 @@ HOME_FILES = [("backup-2025.tar.gz", 1483477621), ("notes.md", 8412),
 	("resume.pdf", 188416), ("shopping.txt", 973), ("soundtrack.flac", 38119433),
 	("todo.md", 2101)]
 
-def write_tree(rec, rng):
+def write_tree(rec: Rec, rng: random.Random) -> None:
 	home = rec.home
 	proj = home / "projects" / "pulsar"
 	src = proj / "src"
@@ -879,14 +906,14 @@ def write_tree(rec, rng):
 	# through the bright middle, down to dark red - so it reads as a rainbow rather
 	# than the single-axis ramp it used to be. Computed here, not in dash: integer
 	# shell arithmetic cannot do a hue sweep, and the stops never vary anyway.
-	stops = []
+	stops: list[str] = []
 	for i in range(36):
-		f = i / 35
+		frac = i / 35
 		red, green, blue = colorsys.hsv_to_rgb(
-			285.0 * (1.0 - f) / 360.0,             # purple -> blue -> green -> red
+			285.0 * (1.0 - frac) / 360.0,          # purple -> blue -> green -> red
 			1.0,
-			0.35 + 0.65 * math.sin(math.pi * f))   # dark at both ends, bright between
-		stops.append("'%d;%d;%d'" % (round(red * 255), round(green * 255), round(blue * 255)))
+			0.35 + 0.65 * math.sin(math.pi * frac))   # dark at both ends, bright between
+		stops.append(f"'{round(red * 255)};{round(green * 255)};{round(blue * 255)}'")
 	show = bind / "showcase"
 	show.write_text(f'''#!/bin/dash
 for c in {" ".join(stops)}; do printf '\\033[48;2;%sm  ' "$c"; done
@@ -918,10 +945,11 @@ printf '  🤔 🍰 🎉 😀   ┌─┬─┐ ╔═╦═╗ ▁▂▃▄▅�
 		"glam", "cosmic-text", "swash", "skrifa", "zeno", "ttf-parser",
 		"rustybuzz", "glyphon", "pulsar-render",
 	]
-	ver = lambda: f"{rng.randint(0, 3)}.{rng.randint(1, 30)}.{rng.randint(0, 9)}"
+	def ver() -> str:
+		return f"{rng.randint(0, 3)}.{rng.randint(1, 30)}.{rng.randint(0, 9)}"
 	lines = ["#!/bin/dash", 'g="\\033[1;32m"; y="\\033[1;33m"; b="\\033[1;34m"; r="\\033[0m"']
-	comp = lambda c: lines.append(
-		f'printf "   ${{g}}Compiling${{r}} {c} v{ver()}\\n"')
+	def comp(c: str) -> None:
+		lines.append(f'printf "   ${{g}}Compiling${{r}} {c} v{ver()}\\n"')
 	lines.append('printf "   ${g}Compiling${r} pulsar workspace\\n"')
 	feed = iter(crates)
 
@@ -955,7 +983,7 @@ printf '  🤔 🍰 🎉 😀   ┌─┬─┐ ╔═╦═╗ ▁▂▃▄▅�
 	sh.write_text("\n".join(lines) + "\n")
 	sh.chmod(0o755)
 
-def prep_content(rec, rng):
+def prep_content(rec: Rec, rng: random.Random) -> None:
 	write_dconf(rec.home, rec.p)
 	write_config(rec.home, rec.p)
 	write_tree(rec, rng)
@@ -964,11 +992,13 @@ def prep_content(rec, rng):
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Talking to the running app (its control socket)
 
-def ctl_socket(rec):
+def ctl_socket(rec: Rec) -> Path | None:
 	# the socket a running instance listens on - the same channel `silkterm
 	# --reload-settings` uses from a shell inside the window. Named by pid; if the
 	# launcher put a wrapper in between, take the one that appeared with this run
 	# (an unrelated instance's socket is older).
+	if not rec.app:
+		return None
 	run_dir = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
 	exact = run_dir / f"silkterm-ctl-{rec.app.pid}.sock"
 	if exact.exists():
@@ -977,7 +1007,7 @@ def ctl_socket(rec):
 		if p.stat().st_mtime >= rec.launch_e - 2]
 	return fresh[0] if len(fresh) == 1 else None
 
-def ctl(rec, line):
+def ctl(rec: Rec, line: str) -> bool:
 	sock = ctl_socket(rec)
 	if not sock:
 		log("WARNING: control socket not found - live settings change skipped")
@@ -991,7 +1021,7 @@ def ctl(rec, line):
 		log(f"WARNING: control socket: {e}")
 		return False
 
-def set_cfg(rec, keys):
+def set_cfg(rec: Rec, keys: dict[str, object]) -> bool:
 	# a settings change, applied the way a settings change applies: rewrite the
 	# keys and reload. Live, and nothing has to be typed on camera. Strings are
 	# quoted so a value can never read as a comment or a bare word like none.
@@ -1008,7 +1038,8 @@ def set_cfg(rec, keys):
 	# will quietly not happen, so it stops the run instead.
 	cfg = rec.home / ".config/silkterm/config.shcl"
 	lines = cfg.read_text().split("\n")
-	stack, seen = [], set()
+	stack: list[tuple[int, str]] = []
+	seen: set[str] = set()
 	for i, raw in enumerate(lines):
 		body = raw.strip()
 		if not body or body.startswith("#"):
@@ -1040,7 +1071,7 @@ def set_cfg(rec, keys):
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Segments (each takes the recorder, typist, mouse)
 
-def wipe(r, t, settle=0.8):
+def wipe(r: Rec, t: Typist, settle: float = 0.8) -> None:
 	# clear the screen between scenes: typing over an empty screen changes far
 	# fewer pixels than typing over a full one, and that is most of what keeps the
 	# gif down. Skipped where the next command is meant to push the old output up.
@@ -1049,7 +1080,7 @@ def wipe(r, t, settle=0.8):
 	t.key("ctrl+l", sound=key_sound("l"))
 	time.sleep(settle)
 
-def seg_ls(r, t, m):
+def seg_ls(r: Rec, t: Typist, m: Mouse) -> None:
 	# opens straight on the listing: the ls flags are baked into the wrapper rather
 	# than aliased on camera, because watching someone set an alias sells nothing
 	with Banner(r, "Silky-smooth output scrolling"):
@@ -1057,7 +1088,7 @@ def seg_ls(r, t, m):
 		time.sleep(0.7)
 	# no wipe: the build output is meant to push this listing up
 
-def seg_build(r, t, m):
+def seg_build(r: Rec, t: Typist, m: Mouse) -> None:
 	with Banner(r, "Watch it adapt to any output speed"):
 		t.cmd("cd projects/pulsar", settle=0.6, typos=0.0)
 		# the script runs ~6.5s now (five paced movements, see write_tree) and the
@@ -1067,7 +1098,7 @@ def seg_build(r, t, m):
 		time.sleep(0.7)
 	# no wipe: the wheel scene scrolls back up through all of this
 
-def seg_wheel(r, t, m):
+def seg_wheel(r: Rec, t: Typist, m: Mouse) -> None:
 	# scrollback under the wheel - the same easing as the output scroll, driven
 	# by hand. xdotool sends two wheel events per click here (winit fires on the
 	# legacy button press AND release), so a few clicks cover a lot of lines. One
@@ -1081,7 +1112,7 @@ def seg_wheel(r, t, m):
 		m.park()
 	wipe(r, t)
 
-def seg_panes(r, t, m):
+def seg_panes(r: Rec, t: Typist, m: Mouse) -> None:
 	# still the cursor first, silently: three panes each pulsing their own cursor
 	# pull the eye off the split, and every pulse is motion the gif pays for.
 	# Two splits straight off the menu bar (Alt+P opens Panes, then the item's own
@@ -1115,7 +1146,7 @@ def seg_panes(r, t, m):
 		set_cfg(r, {"cursor.animation": "pulse_vertical"})
 		wipe(r, t, settle=1.8)
 
-def seg_cursor(r, t, m):
+def seg_cursor(r: Rec, t: Typist, m: Mouse) -> None:
 	# the cursor is a setting, so switch it the way a setting switches - live,
 	# through the control socket, with nothing typed on camera. An empty screen:
 	# the cursor is the only thing moving on it.
@@ -1130,7 +1161,7 @@ def seg_cursor(r, t, m):
 		set_cfg(r, {"cursor.size.width": 25, "cursor.animation": "phase"})
 		time.sleep(3.2)
 
-def seg_wallpaper(r, t, m):
+def seg_wallpaper(r: Rec, t: Typist, m: Mouse) -> None:
 	# the image compiled into the binary, switched on like any other setting, so
 	# this is exactly the out-of-the-box look with nothing typed. The reload
 	# takes about a second to reach the screen, hence the longer hold.
@@ -1144,7 +1175,7 @@ def seg_wallpaper(r, t, m):
 	# no wipe from here on: the closing scenes build up the frame that the demo
 	# ends on - wallpaper, color, then the sign-off
 
-def seg_showcase(r, t, m):
+def seg_showcase(r: Rec, t: Typist, m: Mouse) -> None:
 	# drop the flag the prompt watches for BEFORE this command runs, so the prompt
 	# it returns to is already the gray one and the outro can type straight into
 	# it - no bare Return just to draw a fresh prompt.
@@ -1153,7 +1184,7 @@ def seg_showcase(r, t, m):
 		t.cmd("showcase", settle=2.6)
 		time.sleep(0.8)
 
-def seg_outro(r, t, m):
+def seg_outro(r: Rec, t: Typist, m: Mouse) -> None:
 	# the prompt grays whatever is typed after it while the flag file exists, so
 	# the comment goes gray from the '#' on, as if ble.sh were installed - but with
 	# plain reliable bash typing.
@@ -1170,7 +1201,7 @@ def seg_outro(r, t, m):
 	# gif nothing - it stores a held frame as a no-change
 
 # one script, both profiles (video and gif differ only in size/fonts/audio)
-_SCRIPT = [
+_SCRIPT: list[tuple[str, Callable[[Rec, Typist, Mouse], None]]] = [
 	("ls",        seg_ls),
 	("build",     seg_build),
 	("wheel",     seg_wheel),
@@ -1199,7 +1230,7 @@ GAIN = {"key": 0.85, "mouse:CLICK": 0.5, "mouse:CLICK_Q": 0.36, "mouse:WHEEL": 0
 # per-key bank
 KEY_BODY = {57: 0.085, 28: 0.085, 14: 0.07}
 
-def shape_slice(s, code):
+def shape_slice(s: np.ndarray, code: int) -> np.ndarray:
 	rms = np.sqrt((s ** 2).mean()) + 1e-9
 	s = s * (KEY_BODY.get(code, 0.062) / rms)
 	n_in, n_out = int(SR * 0.001), int(SR * 0.006)
@@ -1210,7 +1241,7 @@ def shape_slice(s, code):
 		s *= 0.7 / peak
 	return s.astype(np.float32)
 
-def load_keypack(work, cache):
+def load_keypack(work: Path, cache: dict[str, np.ndarray]) -> None:
 	cfg = json.loads((KEYPACK / "config.json").read_text())
 	raw = work / "keypack.pcm"
 	run(["ffmpeg", "-v", "error", "-y", "-i", str(KEYPACK / cfg["sound"]),
@@ -1229,7 +1260,7 @@ def load_keypack(work, cache):
 		if f"key:{code}" in cache:
 			cache[f"key:{name}"] = cache[f"key:{code}"]
 
-def synth_wheel(sr):
+def synth_wheel(sr: int) -> np.ndarray:
 	# a soft scroll-wheel detent: a short muffled tick, much softer and darker
 	# than a mouse click - a hair of noise on a low damped thonk, low-passed
 	n = int(sr * 0.030)
@@ -1242,8 +1273,8 @@ def synth_wheel(sr):
 	mix /= np.abs(mix).max() + 1e-9
 	return np.stack([mix, mix], axis=1).astype(np.float32) * 0.28
 
-def load_samples(work):
-	cache = {}
+def load_samples(work: Path) -> dict[str, np.ndarray]:
+	cache: dict[str, np.ndarray] = {}
 	for kind, path in SOUND_FILES.items():
 		wav = work / (re.sub(r"[^A-Za-z0-9]", "_", kind) + ".wav")
 		run(["ffmpeg", "-v", "error", "-y", "-i", str(path),
@@ -1256,7 +1287,7 @@ def load_samples(work):
 	cache["mouse:WHEEL"] = synth_wheel(SR)
 	return cache
 
-def build_audio(rec, work, duration, rng):
+def build_audio(rec: Rec, work: Path, duration: float, rng: random.Random) -> Path:
 	cache = load_samples(work)
 	mix = np.zeros((int(duration * SR) + SR, 2), dtype=np.float32)
 	for epoch, kind in rec.events:
@@ -1289,7 +1320,7 @@ def build_audio(rec, work, duration, rng):
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Post: sync-flash location, motion-blur downsample, banners, encode
 
-def check_drift(rec, video_end_e):
+def check_drift(rec: Rec, video_end_e: float) -> None:
 	dur = float(out_of(["ffprobe", "-v", "error", "-show_entries", "format=duration",
 		"-of", "csv=p=0", str(rec.raw)]))
 	expect = (video_end_e - rec.flash_e) + rec.flash_vt
@@ -1297,7 +1328,7 @@ def check_drift(rec, video_end_e):
 		log(f"WARNING: capture drift - raw {dur:.1f}s vs expected {expect:.1f}s; "
 			"AV sync may be off (X server starved the grab loop?)")
 
-def find_flash(raw, work):
+def find_flash(raw: Path, work: Path) -> float:
 	stats = work / "stats.txt"
 	run(["ffmpeg", "-v", "error", "-t", "8", "-i", str(raw),
 		"-vf", f"signalstats,metadata=print:key=lavfi.signalstats.YAVG:file={stats}",
@@ -1314,20 +1345,20 @@ def find_flash(raw, work):
 		raise RuntimeError(f"sync flash not found (max YAVG {best_y})")
 	return best_t
 
-def esc_drawtext(work, i, text):
+def esc_drawtext(work: Path, i: int, text: str) -> Path:
 	f = work / f"banner{i}.txt"
 	f.write_text(text)
 	return f
 
 # caption placement: centered in the black band above the window, so it never
 # covers the terminal and needs no box behind it to stay readable
-def banner_xy(rec):
+def banner_xy(rec: Rec) -> tuple[str, str]:
 	return "(w-text_w)/2", f"({rec.band}-text_h)/2"
 
 # a quick damped-spring vertical bounce for the pop-in / pop-out (~0.6s each): the
 # caption springs in from just below its rest line, rings down, and springs back
 # out as it fades. `base` is the rest y (may be an expr like "h-118").
-def wobble_y(base, s, e, amp):
+def wobble_y(base: str, s: float, e: float, amp: int) -> str:
 	win = 0.6
 	ring = f"{amp}*exp(-6*T)*cos(2*PI*2.6*T)"
 	win_in  = ring.replace("T", f"(t-{s:.3f})")
@@ -1336,9 +1367,10 @@ def wobble_y(base, s, e, amp):
 		f"+if(between(t,{s:.3f},{s + win:.3f}),{win_in},0)"
 		f"+if(between(t,{e - win:.3f},{e:.3f}),{win_out},0)")
 
-def vf_chain(rec, work, trim, dur, tail=False):
+def vf_chain(rec: Rec, work: Path, trim: float, dur: float, tail: bool = False) -> str:
 	p = rec.p
-	to_vt = lambda epoch: rec.flash_vt + (epoch - rec.flash_e)
+	def to_vt(epoch: float) -> float:
+		return rec.flash_vt + (epoch - rec.flash_e)
 	# the GPU source is genuinely smooth, so just pin CFR at the delivery rate -
 	# no frame-averaging needed (and none to fake, the frames are real)
 	filters = [f"fps={rec.out_fps}"]
@@ -1351,15 +1383,16 @@ def vf_chain(rec, work, trim, dur, tail=False):
 	# resolve each banner's [s,e]; then clamp every end to the next banner's start
 	# minus a gap, so only ONE banner is ever on screen (consecutive banners were
 	# crossfading into an overlapping smear)
-	spans = []
+	spans: list[tuple[float, float, str]] = []
 	for s_e, e_e, text in rec.banners:
 		s = max(0.0, to_vt(rec.net(s_e)) - trim)
 		e = max(s + p["banner_min"], to_vt(rec.net(e_e)) - trim)
-		spans.append([s, e, text])
+		spans.append((s, e, text))
 	spans.sort(key=lambda b: b[0])
-	GAP = 0.4
+	gap = 0.4
 	for i in range(len(spans) - 1):
-		spans[i][1] = min(spans[i][1], spans[i + 1][0] - GAP)
+		s, e, text = spans[i]
+		spans[i] = (s, min(e, spans[i + 1][0] - gap), text)
 	amp = max(4, int(rec.band * 0.18))         # bounce stays inside the band
 	x, base_y = banner_xy(rec)
 	for i, (s, e, text) in enumerate(spans):
@@ -1384,7 +1417,7 @@ def vf_chain(rec, work, trim, dur, tail=False):
 		filters.append(f"tpad=stop_mode=add:color=black:stop_duration={TAIL_BLACK_S}")
 	return ",".join(filters)
 
-def encode_video(rec, work, out_mp4, video_end_e):
+def encode_video(rec: Rec, work: Path, out_mp4: Path, video_end_e: float) -> Path:
 	rec.flash_vt = find_flash(rec.raw, work)
 	log(f"sync flash at video t={rec.flash_vt:.3f}s")
 	check_drift(rec, video_end_e)
@@ -1409,7 +1442,7 @@ GIF_COLORS = 160        # one global palette; the wallpaper finale wants the hea
 # if a future scene list pushes the gif past what the README can carry.
 GIF_LOSSY  = 0
 
-def gif_pass(rec, work, out_gif, trim, dur, colors=GIF_COLORS, tail=False):
+def gif_pass(rec: Rec, work: Path, out_gif: Path, trim: float, dur: float, colors: int = GIF_COLORS, tail: bool = False) -> Path:
 	vf = vf_chain(rec, work, trim, dur, tail=tail)
 	pal = work / "pal.png"
 	cut = ["-ss", f"{trim:.3f}", "-t", f"{dur + (TAIL_EXTRA if tail else 0.0):.3f}"]
@@ -1424,7 +1457,7 @@ def gif_pass(rec, work, out_gif, trim, dur, colors=GIF_COLORS, tail=False):
 		str(out_gif)])
 	return out_gif
 
-def gif_optimize(gif):
+def gif_optimize(gif: Path) -> Path:
 	# gifsicle squeezes the encoder's output further: -O3 re-cuts every frame to
 	# the smallest changed rectangle, so the static band above the window and the
 	# held tail frames cost near nothing. Skipped, with a note, when absent.
@@ -1441,7 +1474,7 @@ def gif_optimize(gif):
 	log(f"gifsicle: {before:.1f} -> {after:.1f} MiB (lossy={GIF_LOSSY})")
 	return opt
 
-def encode_gif(rec, work, out_gif, video_end_e):
+def encode_gif(rec: Rec, work: Path, out_gif: Path, video_end_e: float) -> Path:
 	rec.flash_vt = find_flash(rec.raw, work)
 	log(f"sync flash at video t={rec.flash_vt:.3f}s")
 	check_drift(rec, video_end_e)
@@ -1464,14 +1497,14 @@ def encode_gif(rec, work, out_gif, video_end_e):
 # smoothness is the thing being demonstrated.
 GIF_ASSET_MAX_MB = 12
 
-def rotate(out_dir, prefix, ext, no_rotate):
+def rotate(out_dir: Path, prefix: str, ext: str, no_rotate: bool) -> None:
 	if no_rotate:
 		return
 	inc = REPO / "cicd/utility/include/gfs-rotate.bash"
 	subprocess.run(["bash", "-c",
 		f'source "{inc}" && gfs_rotate "{out_dir}" {prefix} {ext}'], check=False)
 
-def place_video(mp4, out_dir, no_rotate):
+def place_video(mp4: Path, out_dir: Path, no_rotate: bool) -> None:
 	out_dir.mkdir(parents=True, exist_ok=True)
 	stamp = time.strftime("%Y%m%d-%H%M%S")
 	dst = out_dir / f"silkterm-demo_{stamp}.mp4"
@@ -1480,7 +1513,7 @@ def place_video(mp4, out_dir, no_rotate):
 	rotate(out_dir, "silkterm-demo", "mp4", no_rotate)
 	log(f"video: {dst} ({mb:.1f} MiB)")
 
-def place_gif(gif, out_dir, no_rotate, no_asset=False):
+def place_gif(gif: Path, out_dir: Path, no_rotate: bool, no_asset: bool = False) -> None:
 	out_dir.mkdir(parents=True, exist_ok=True)
 	stamp = time.strftime("%Y%m%d-%H%M%S")
 	dst = out_dir / f"silkterm-demo_{stamp}.gif"
@@ -1502,7 +1535,7 @@ def place_gif(gif, out_dir, no_rotate, no_asset=False):
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Entry
 
-def record(args, name, seed):
+def record(args: argparse.Namespace, name: str, seed: int) -> None:
 	rng = random.Random(seed)
 	rec = Rec(args, PROFILES[name])
 	try:
@@ -1544,7 +1577,7 @@ def record(args, name, seed):
 	finally:
 		rec.cleanup()
 
-def main():
+def main() -> None:
 	ap = argparse.ArgumentParser(description="Record the SilkTerm demo video + gif.")
 	ap.add_argument("--display", default=os.environ.get("SILK_DEMO_DISPLAY", ":98"))
 	ap.add_argument("--profile", default="video,gif", help="comma list: video,gif")
@@ -1569,6 +1602,8 @@ if __name__ == "__main__":
 
 
 ##	Script history:
+##		- 20261005: type hints; the wm, ffmpeg and app logs are closed on our side
+##		  once each child has started. Nothing recorded changes.
 ##		- 20260928: the wallpaper arrives through the control socket with
 ##		  nothing typed, under a new caption. The build caption says it adapts
 ##		  to any output speed.

@@ -620,13 +620,13 @@ if command -v pwsh >/dev/null 2>&1; then
 else
 	fEcho "WARNING: pwsh not installed; PowerShell scripts not linted"
 fi
-## First-party Python scripts, with the rules in ruff.toml.
+## First-party Python scripts, with the rules in ruff.toml and mypy.ini.
 pyRc=0
 python3 "${root}/cicd/utility/py-lint.py" || pyRc=$?
 case "${pyRc}" in
 	0) fEcho "OK: Python scripts clean" ;;
 	2) fEcho "WARNING: ruff not installed; Python scripts not linted" ;;
-	*) fDie "ruff found problems" ;;
+	*) fDie "the Python lint found problems" ;;
 esac
 ## Private content scrub, when this machine has the private tree. A clone without
 ## it builds as before.

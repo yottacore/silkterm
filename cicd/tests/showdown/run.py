@@ -24,6 +24,7 @@ import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Literal
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _testdir  # noqa: E402
@@ -34,7 +35,7 @@ REPO = ME_DIR.parents[2]
 UTILITY = REPO / "utility"
 
 failures = 0
-def check(what, ok, detail=""):
+def check(what: str, ok: object, detail: str = "") -> None:
 	global failures
 	if ok:
 		print(f"  ok   {what}")
@@ -42,8 +43,11 @@ def check(what, ok, detail=""):
 		print(f"  FAIL {what}{': ' + detail if detail else ''}")
 		failures += 1
 
-def load(name, path):
+## Loaded by path, so nothing in it has a static type.
+def load(name: str, path: Path) -> Any:
 	spec = importlib.util.spec_from_file_location(name, path)
+	if spec is None or spec.loader is None:
+		raise ImportError(f"cannot load {path}")
 	mod = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(mod)
 	return mod
@@ -61,16 +65,16 @@ for scene in core.SCENES:
 	check(f"the {scene.name} payload is the same bytes every time",
 		first[0] and first == core.build_payload(scene, 0.01, 160))
 
-def score_with(name, kcells):
+def score_with(name: str, kcells: float) -> float:
 	per = {s.name: {"kcells": 1.0, "mbs": 1.0} for s in core.SCENES}
 	per[name]["kcells"] = kcells
-	return core.score_of(per)
+	return float(core.score_of(per))
 
 ## Weights 4, 2, 1, 1, 1 sum to 9, so e^9 in one scene lifts the score to e^weight.
 for name, weight in (("ascii", 4), ("latin", 2), ("cjk", 1), ("emoji", 1), ("mixed", 1)):
-	got = score_with(name, math.exp(9))
+	score = score_with(name, math.exp(9))
 	check(f"the {name} scene weighs {weight} in the score",
-		math.isclose(got, math.exp(weight)), f"{got} against {math.exp(weight)}")
+		math.isclose(score, math.exp(weight)), f"{score} against {math.exp(weight)}")
 row = core.summarize([2.0, 2.0], 8_000_000, 1_000_000, 2_000_000)
 check("a scene's rate is cells per second", math.isclose(row["kcells"], 1000.0), str(row["kcells"]))
 per = {s.name: {"kcells": 500.0, "mbs": 1.0 + i} for i, s in enumerate(core.SCENES)}
@@ -78,16 +82,16 @@ check("and the score reads cells, not bytes", math.isclose(core.score_of(per), 5
 
 ## termbench.py, with everything that touches a terminal replaced.
 tb = load("termbench", UTILITY / "include/termbench.py")
-saved = []
+saved: list[dict[str, Any]] = []
 
 class FakeConsole:
-	def __enter__(self): return self
-	def __exit__(self, *exc): return False
-	def emit(self, text): pass
+	def __enter__(self) -> "FakeConsole": return self
+	def __exit__(self, *exc: object) -> Literal[False]: return False
+	def emit(self, text: str) -> None: pass
 
 class Tty:
 	@staticmethod
-	def isatty(): return True
+	def isatty() -> bool: return True
 
 grid = [(160, 42)]
 tb.Console = FakeConsole
@@ -97,27 +101,30 @@ tb.terminal_size = lambda: grid[0]
 tb.build_payload = lambda scene, scale, cells: (b"x" * 1000, 1000, 1000, 10)
 tb.harness_ceiling = lambda blob: 0.0
 tb.run_scene = lambda console, scene, blob, reps, quiet: ([0.001, 0.001], True)
-tb.save = lambda records: saved.extend(records) or "memory"
+def fake_save(records: list[dict[str, Any]]) -> str:
+	saved.extend(records)
+	return "memory"
+tb.save = fake_save
 tb.load = lambda: list(saved)
 tb.readme_path = lambda: str(readme)
 
-def bench(*args):
+def bench(*args: str) -> str:
 	with redirect_stdout(io.StringIO()) as out:
 		tb.main(["--scene", "ascii", "--label", "XTerm/999-rc1+20260917", *args])
 	return out.getvalue()
 
 mdtable = load("mdtable", UTILITY / "include/mdtable.py")
 
-def xterm_cells():
+def xterm_cells() -> list[str]:
 	return next((c for c in map(mdtable.split_row, readme.read_text(encoding="utf-8").splitlines())
 	             if len(c) > 1 and c[1] == "XTerm"), [])
 
-def xterm_row():
+def xterm_row() -> str:
 	return " | ".join(xterm_cells())
 
 ## Every line of the table has a leading pipe and no trailing one, the columns
 ## line up, and each column's alignment is spelled out.
-def table_is_tidy():
+def table_is_tidy() -> bool:
 	text = readme.read_text(encoding="utf-8")
 	block = text.split(tb.README_BEGIN, 1)[1].split(tb.README_END, 1)[0]
 	lines = [ln for ln in block.splitlines() if ln.startswith("|")]
@@ -159,21 +166,27 @@ check("an unchanged table is rewritten byte for byte",
 
 ## update-showdown.py: a quick or --any-size run passes nothing on to be written.
 us = load("update_showdown", UTILITY / "update-showdown.py")
-calls = []
-us.run_plain = lambda cmd: calls.append(cmd) or True
-us.run_capturing = lambda cmd: calls.append(cmd) or ["RESULT filedeps=1.0 mem=2.0"]
+calls: list[list[str]] = []
+def fake_run_plain(cmd: list[str]) -> bool:
+	calls.append(cmd)
+	return True
+def fake_run_capturing(cmd: list[str]) -> list[str]:
+	calls.append(cmd)
+	return ["RESULT filedeps=1.0 mem=2.0"]
+us.run_plain = fake_run_plain
+us.run_capturing = fake_run_capturing
 us.terminal_grid = lambda: us.SPEED_GRID
 
-def showdown(*args):
+def showdown(*args: str) -> list[list[str]]:
 	calls.clear()
 	with redirect_stdout(io.StringIO()):
 		us.main(list(args))
 	return calls
 
-def termbench_cmd(cmds):
+def termbench_cmd(cmds: list[list[str]]) -> list[str]:
 	return next((c for c in cmds if c[1].endswith("termbench.py")), [])
 
-def wrote_size(cmds):
+def wrote_size(cmds: list[list[str]]) -> bool:
 	return any(c[1].endswith("showdown-readme.py") for c in cmds)
 
 cmd = termbench_cmd(showdown("--speed-only", "--quick", "--label", "XTerm"))
@@ -201,9 +214,9 @@ env = dict(os.environ, CARGO_TARGET_DIR=str(target), PATH=f"{stubs}:{os.environ[
 env.pop("DISPLAY", None)
 env.pop("WAYLAND_DISPLAY", None)
 
-def bash(script, *args):
+def bash(script: str, *args: str) -> subprocess.CompletedProcess[str]:
 	return subprocess.run(["bash", "-c", script, "bash", *args], env=env,
-		capture_output=True, text=True, timeout=60)
+		capture_output=True, text=True, timeout=60, check=False)
 
 size_rig = UTILITY / "include/sizebench-run.bash"
 got = bash('source "$1" && fMain --term silkterm --settle 0', str(size_rig))
@@ -284,7 +297,7 @@ for name in ("DISPLAY", "WAYLAND_DISPLAY", "XDG_DATA_HOME", "XDG_STATE_HOME", "X
 	env.pop(name, None)
 sentinel_was = sentinel.read_bytes()
 
-def launched():
+def launched() -> dict[str, str]:
 	got = {}
 	for line in record.read_text().splitlines():
 		if line.startswith("ARGS"):
@@ -294,7 +307,7 @@ def launched():
 			got[key] = value
 	return got
 
-def config_arg(got):
+def config_arg(got: dict[str, str]) -> str:
 	args = got.get("ARGS", "")
 	return args.split("[--config] [", 1)[1].split("]", 1)[0] if "[--config] [" in args else ""
 

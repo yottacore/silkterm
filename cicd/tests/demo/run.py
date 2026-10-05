@@ -21,8 +21,12 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, TypeVar
+
+T = TypeVar("T")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _testdir  # noqa: E402
@@ -32,7 +36,7 @@ ME_DIR = Path(__file__).resolve().parent
 RECORDER = ME_DIR.parents[1] / "utility/demo-video/demo-video.py"
 
 failures = 0
-def check(what, ok, detail=""):
+def check(what: str, ok: object, detail: str = "") -> None:
 	global failures
 	if ok:
 		print(f"  ok   {what}")
@@ -40,16 +44,19 @@ def check(what, ok, detail=""):
 		print(f"  FAIL {what}{': ' + detail if detail else ''}")
 		failures += 1
 
-def load():
+## Loaded by path, so nothing in it has a static type.
+def load() -> Any:
 	spec = importlib.util.spec_from_file_location("demo_video", RECORDER)
+	if spec is None or spec.loader is None:
+		raise ImportError(f"cannot load {RECORDER}")
 	mod = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(mod)
 	return mod
 
-def make_rec(mod):
+def make_rec(mod: Any) -> Any:
 	return mod.Rec(SimpleNamespace(display=":197", keep_work=False), mod.PROFILES["gif"])
 
-def with_env(changes, fn):
+def with_env(changes: Mapping[str, str | None], fn: Callable[[], T]) -> T:
 	saved = dict(os.environ)
 	try:
 		for k, v in changes.items():
@@ -64,12 +71,12 @@ def with_env(changes, fn):
 
 try:
 	demo = load()
-except ImportError as e:
-	print(f"  skip the recorder cannot load here ({e})")
+except ImportError as why:
+	print(f"  skip the recorder cannot load here ({why})")
 	_testdir.end(0)
 	sys.exit(0)
 
-def done(rec):
+def done(rec: Any) -> None:
 	shutil.rmtree(rec.work, ignore_errors=True)
 
 ## Run folder: the one gui-headless.bash uses, with USER set or not.
@@ -117,9 +124,9 @@ for name, profile in demo.PROFILES.items():
 	done(rec)
 
 ## gui-headless.bash and the profiler stage start windows on a private display too.
-def launch_env(script):
+def launch_env(script: str) -> dict[str, str]:
 	env = dict(os.environ, **wayland)
-	got = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30)
+	got = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30, check=False)
 	return dict(ln.split("=", 1) for ln in got.stdout.splitlines() if "=" in ln)
 
 headless = (RECORDER.parents[1] / "gui-headless.bash").read_text(encoding="utf-8")
@@ -155,9 +162,12 @@ rec = make_rec(demo)
 cfg = rec.home / ".config/silkterm/config.shcl"
 cfg.parent.mkdir(parents=True)
 cfg.write_text("cursor:\n\tsize:\n\t\twidth: 100\n\t\theight: 100\nwindow:\n\tsize:\n\t\twidth: 100\n")
-sent = []
+sent: list[str] = []
 real_ctl = demo.ctl
-demo.ctl = lambda r, line: sent.append(line) or True
+def fake_ctl(rec: Any, line: str) -> bool:
+	sent.append(line)
+	return True
+demo.ctl = fake_ctl
 try:
 	demo.set_cfg(rec, {"cursor.size.width": 3})
 	err = ""
@@ -197,7 +207,7 @@ else:
 	for d in xdg.values():
 		Path(d).mkdir()
 	rec = with_env(xdg, lambda: make_rec(demo))
-	def session():
+	def session() -> tuple[int, Path]:
 		rec.start_wm("SilkDemo", wm="sleep 67")
 		pgid = rec.wm.pid
 		deadline = time.time() + 10
@@ -210,7 +220,7 @@ else:
 	left = [str(p.relative_to(sentinel)) for p in sentinel.rglob("*") if p.is_file()]
 	check("the session writes nothing under the caller's XDG folders", not left, ", ".join(left))
 	check("its settings are in its own HOME", chan.exists(), str(chan))
-	ps = subprocess.run(["ps", "-eo", "pgid=,comm="], capture_output=True, text=True).stdout
+	ps = subprocess.run(["ps", "-eo", "pgid=,comm="], capture_output=True, text=True, check=False).stdout
 	alive = [line.split(None, 1)[1] for line in ps.splitlines() if line.split()[0] == str(pgid)]
 	check("nothing the session started is still running", not alive, ", ".join(alive))
 	done(rec)

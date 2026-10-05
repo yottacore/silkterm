@@ -21,6 +21,7 @@ import argparse
 import difflib
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
@@ -32,8 +33,8 @@ RULE = re.compile(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$")
 
 ## (first line, last line + 1) of each table outside a code fence. A table is a
 ## header line starting with a pipe, then a rule row, then its rows.
-def tables(lines):
-	fence = None
+def tables(lines: list[str]) -> Iterator[tuple[int, int]]:
+	fence: str | None = None
 	i = 0
 	while i < len(lines):
 		stripped = lines[i].strip()
@@ -53,7 +54,7 @@ def tables(lines):
 		i += 1
 
 
-def rebuild(block):
+def rebuild(block: list[str]) -> list[str]:
 	indent = block[0][:len(block[0]) - len(block[0].lstrip())]
 	grid = [mdtable.split_row(line) for line in block]
 	cols = max(len(r) for r in grid)
@@ -61,7 +62,7 @@ def rebuild(block):
 	return [indent + line for line in mdtable.render(head, grid[1], grid[2:])]
 
 
-def check(path, fix):
+def check(path: Path, fix: bool) -> bool:
 	lines = path.read_text(encoding="utf-8").split("\n")
 	out = list(lines)
 	ok = True
@@ -84,7 +85,7 @@ def check(path, fix):
 	return ok
 
 
-def main():
+def main() -> int:
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--fix", action="store_true")
 	ap.add_argument("--root", default=str(HERE.parents[3]))
