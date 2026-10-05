@@ -9252,7 +9252,7 @@ mod tests {
 				.unwrap()
 				.tab
 		);
-		assert!(!d.defaults.software_rendering, "ships off");
+		assert!(!d.defaults.software_rendering, "default off");
 		d.tab = d.specs[i].tab;
 		assert_eq!(
 			d.disabled(Key::SoftwareRendering),
