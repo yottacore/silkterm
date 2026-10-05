@@ -866,7 +866,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100419463460
 	- Type: Enhancement
 	- Status: Waiting for testing
-	- Needs external testing: vm925w: the graphics memory a window and Settings take on DX12, against a build with the old hint, and that Settings opens.
+	- Needs external testing: vm925w: the graphics memory a window and Settings take on DX12, against a build with the old hint, that Settings opens, and `a_new_device_reserves_little_graphics_memory` under `cargo test` there.
 	- Priority: High
 	- Opened: 20261004-194634
 	- Opened by: CC

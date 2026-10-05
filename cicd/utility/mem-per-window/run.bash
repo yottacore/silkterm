@@ -53,9 +53,9 @@ fMain(){
 			--fill)         scene=fill ;;
 			--no-minimap)   minimap=false ;;
 			--settings)     settings=true ;;
-			--opens)        settings=true; opens="${2:?count}"; shift ;;
-			--flood)        flood="${2:?seconds}"; scene=flood; shift ;;
-			--settle)       settle="${2:?seconds}"; shift ;;
+			--opens)        fCount "$1" "${2:-}" || return 2; settings=true; opens="$2"; shift ;;
+			--flood)        fCount "$1" "${2:-}" || return 2; flood="$2"; scene=flood; shift ;;
+			--settle)       fCount "$1" "${2:-}" || return 2; settle="$2"; shift ;;
 			*) echo "unknown option: $1" >&2; return 2 ;;
 		esac
 		shift
@@ -93,6 +93,11 @@ fMain(){
 		for ((open = 1; open <= opens; open++)); do fSettingsOnce "${work}" || return 1; done
 		grep '^\[dlg\] Settings drawn' "${work}/stderr.log"
 	fi
+}
+
+# Checked as text first, since a -i variable evaluates whatever it is given.
+fCount(){
+	[[ "$2" =~ ^[1-9][0-9]*$ ]] || { echo "$1 takes a whole number above 0" >&2; return 1; }
 }
 
 # Graphics memory is shared with the desktop and whatever else is running. A
