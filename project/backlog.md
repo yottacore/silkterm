@@ -91,6 +91,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: one assertion in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one`, that a minimized window takes the hidden wait, is commented out, since the new wait replaces it. The rest of that test and `a_window_that_would_go_blank_is_never_let_go_in_view` now say covered where they said hidden. `a_window_with_no_area_is_hidden_whatever_the_minimized_answer` asks the same five cases through the new function.
 	- Swept: every `idle_release_hidden_min` site in config.rs (field, default, save, reader, limits test, template), settings_ui.rs (slider list, getter, setter, unit list), settings_ui.shcl (row and gray rule), and both `release_deadline` callers in app.rs. Every reader of the old hidden flag now reads the stored sight. The Windows GUI scripts set only `SILK_IDLE_SECS`.
 	- Branch: minidle
+	- Commit: 3286d22
 	- Test case: ErmpLNm `a_minimized_window_waits_its_own_time` and ErmrbFB `an_existing_config_learns_the_minimized_wait`. The new row is also covered by `every_row_survives_a_save_and_a_relaunch`.
 	- Closed:
 
