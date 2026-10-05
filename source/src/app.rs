@@ -83,6 +83,9 @@ pub struct App {
 	// terminal is on screen (see gfx::DialogGpu for why they can't share the
 	// terminal's) and then kept, so no dialog open pays for it.
 	gpu_warm: crate::gfx::GpuWarm,
+	// SILK_MEMDBG: what was last printed, and when to look again
+	memdbg: crate::memdbg::Printer,
+	memdbg_next: Instant,
 	// cicd profiler stage: when SILK_PROFILE_OUT is set the app runs a workload
 	// (via --shell) for SILK_PROFILE_SECS then exits, so main can dump a flamegraph.
 	#[cfg(feature = "profiling")]
@@ -116,6 +119,8 @@ impl App {
 			raise_next: Instant::now(),
 			vt_watch: false,
 			gpu_warm: crate::gfx::GpuWarm::idle(),
+			memdbg: crate::memdbg::Printer::default(),
+			memdbg_next: Instant::now(),
 			#[cfg(feature = "profiling")]
 			profile_secs: std::env::var("SILK_PROFILE_SECS")
 				.ok()
@@ -124,6 +129,41 @@ impl App {
 			#[cfg(feature = "profiling")]
 			profile_deadline: None,
 		}
+	}
+
+	// SILK_MEMDBG: one line per device and per pane, printed when it changed.
+	// The dialog's device is the warm one whenever that was ready to lend.
+	fn memdbg_report(&mut self) {
+		if let Some(state) = self.state.as_ref() {
+			let size = state.window.inner_size();
+			let panes: usize = state.tabs.list.iter().map(|pm| pm.panes.len()).sum();
+			self.memdbg.say(
+				"window",
+				format!(
+					"window: {}x{} px, {} tabs, {panes} panes",
+					size.width,
+					size.height,
+					state.tabs.len()
+				),
+			);
+			let main = state.gpu.as_ref().map_or_else(
+				|| "main: device let go".to_string(),
+				|gpu| crate::memdbg::gpu_line("main", &gpu.gfx.device),
+			);
+			self.memdbg.say("main", main);
+			self.memdbg.say("glyphs", state.text.memdbg_line());
+			for pm in &state.tabs.list {
+				for (id, pane) in &pm.panes {
+					self.memdbg.say(&format!("pane {id}"), pane.memdbg_line());
+				}
+			}
+		}
+		let dialog = match (self.dialog.as_ref(), self.gpu_warm.ready_device()) {
+			(Some(d), _) => crate::memdbg::gpu_line("dialog", d.device()),
+			(None, Some(device)) => crate::memdbg::gpu_line("dialog", device),
+			(None, None) => "dialog: no device".to_string(),
+		};
+		self.memdbg.say("dialog", dialog);
 	}
 
 	// Events for the pop-out dialog window (its own surface/input).
@@ -1801,6 +1841,7 @@ const BENCH_MAX_WAIT: Duration = Duration::from_secs(10);
 // rung is over in under a second, which is not enough time to notice a box has
 // appeared, let alone read it.
 const BENCH_BANNER_MIN: Duration = Duration::from_secs(4);
+const MEMDBG_IVL: Duration = Duration::from_secs(2); // SILK_MEMDBG: how often to look for a change
 const VRAM_CHECK_IVL: Duration = Duration::from_secs(2); // GL sentinel probe tick (VT-switch texture loss)
 // After a return to this console, how long until the second heal (VtHeal).
 const VT_SETTLE: Duration = Duration::from_secs(3);
@@ -1854,14 +1895,16 @@ pub(crate) enum EnvFlag {
 	DlgDbg,
 	KeyDbg,
 	IdleDbg,
+	MemDbg,
 }
 impl EnvFlag {
 	#[cfg(test)]
-	const ALL: [EnvFlag; 4] = [
+	const ALL: [EnvFlag; 5] = [
 		EnvFlag::Dump,
 		EnvFlag::DlgDbg,
 		EnvFlag::KeyDbg,
 		EnvFlag::IdleDbg,
+		EnvFlag::MemDbg,
 	];
 	fn var(self) -> &'static str {
 		match self {
@@ -1869,6 +1912,7 @@ impl EnvFlag {
 			EnvFlag::DlgDbg => "SILK_DLGDBG",
 			EnvFlag::KeyDbg => "SILK_KEYDBG",
 			EnvFlag::IdleDbg => "SILK_IDLEDBG",
+			EnvFlag::MemDbg => "SILK_MEMDBG",
 		}
 	}
 }
@@ -1878,11 +1922,13 @@ pub(crate) fn env_flag(flag: EnvFlag) -> bool {
 	static DLGDBG: OnceLock<bool> = OnceLock::new();
 	static KEYDBG: OnceLock<bool> = OnceLock::new();
 	static IDLEDBG: OnceLock<bool> = OnceLock::new();
+	static MEMDBG: OnceLock<bool> = OnceLock::new();
 	let cell = match flag {
 		EnvFlag::Dump => &DUMP,
 		EnvFlag::DlgDbg => &DLGDBG,
 		EnvFlag::KeyDbg => &KEYDBG,
 		EnvFlag::IdleDbg => &IDLEDBG,
+		EnvFlag::MemDbg => &MEMDBG,
 	};
 	*cell.get_or_init(|| std::env::var_os(flag.var()).is_some())
 }
@@ -9739,6 +9785,11 @@ impl ApplicationHandler<UserEvent> for App {
 			self.gpu_warm.start();
 		}
 
+		if env_flag(EnvFlag::MemDbg) && Instant::now() >= self.memdbg_next {
+			self.memdbg_next = Instant::now() + MEMDBG_IVL;
+			self.memdbg_report();
+		}
+
 		// Look for installed shells, once, a little after the window is genuinely
 		// on screen. A PATH scan stats every directory the user has on it and the
 		// Windows side reads the registry, so it runs on its own thread and comes
@@ -10227,6 +10278,12 @@ impl ApplicationHandler<UserEvent> for App {
 			.then(|| state.release_deadline(&config::settings()))
 			.flatten();
 		let flow = match (flow, idle_wake) {
+			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
+			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
+			(other_flow, _) => other_flow,
+		};
+		let memdbg_wake = env_flag(EnvFlag::MemDbg).then_some(self.memdbg_next);
+		let flow = match (flow, memdbg_wake) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
 			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
 			(other_flow, _) => other_flow,

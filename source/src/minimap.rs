@@ -472,7 +472,38 @@ const POLL_MS: u64 = 8;
 // Replaced rows this close together are redone as one run.
 const RUN_GAP: usize = 64;
 
+impl Acc {
+	fn heap_bytes(&self) -> usize {
+		(self.rgb.capacity() + self.weight.capacity() + self.alpha.capacity()) * 4
+			+ (self.sum.capacity() + self.peak.capacity()) * 4
+	}
+}
+
+impl Store {
+	fn heap_bytes(&self) -> usize {
+		let row_head = std::mem::size_of::<Row>();
+		let rows: usize = self.rows.iter().chain(&self.spare).map(Vec::capacity).sum();
+		rows + (self.rows.capacity() + self.spare.capacity()) * row_head
+			+ self.img.capacity()
+			+ self.acc.heap_bytes()
+	}
+}
+
 impl Minimap {
+	// What the cache holds on the heap, for SILK_MEMDBG. A store that is away on
+	// a compose thread counts as empty until it comes back.
+	pub fn heap_bytes(&self) -> usize {
+		let row_head = std::mem::size_of::<Row>();
+		let spare: usize = self.spare.iter().map(Vec::capacity).sum();
+		self.store.heap_bytes()
+			+ spare + self.spare.capacity() * row_head
+			+ self.img.capacity()
+			+ self.acc.heap_bytes()
+			+ self.rough.capacity()
+			+ self.spans.capacity() * std::mem::size_of::<(usize, f32)>()
+			+ self.span_at.capacity() * std::mem::size_of::<usize>()
+	}
+
 	pub fn image(&self) -> (&[u8], usize, usize) {
 		(&self.img, self.img_w, self.img_h)
 	}
@@ -2968,5 +2999,20 @@ mod tests {
 			top.fract() + h < 1.0,
 			"band {top} + {h} should not fill a row"
 		);
+	}
+
+	// SILK_MEMDBG's minimap figure, which the reducing resources doc quotes,
+	// counts every stored row.
+	// Test ID: Ern2oTz
+	#[test]
+	fn the_memory_count_covers_every_stored_row() {
+		let width = 100;
+		let mut map = Minimap::default();
+		let empty = map.heap_bytes();
+		map.seed(
+			width,
+			(0..1000).map(|_| row(width, 4, [0, 200, 0])).collect(),
+		);
+		assert!(map.heap_bytes() >= empty + 1000 * width * 4);
 	}
 }

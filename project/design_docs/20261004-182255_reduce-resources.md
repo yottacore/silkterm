@@ -34,7 +34,7 @@
 
 ## Summary
 
-One SilkTerm window holds about 330 MB of graphics memory, and many windows add up fast. Most of it is a few full-window textures that are bigger than they need to be. This doc covers making them smaller, a way to run without the graphics card at all, and a clearer place in Settings for what a window gives back.
+One SilkTerm window holds about 330 MB of graphics memory, and many windows add up fast. Most of it is a few full-window textures that are bigger than they need to be. Measured, the two biggest parts are the scrim's textures and the dialogs' kept GPU context. This doc covers making them smaller, a way to run without the graphics card at all, and a clearer place in Settings for what a window gives back.
 
 What a window already gives back while unused is in the [Releasing resources](20260930-151334_releasing-resources.md) design doc. This doc is about what a window costs while it is in use.
 
@@ -70,21 +70,64 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 ### Measure first
 
-- The 330 MB figure is a reading, and the split below is an estimate from the texture code. Nothing gets changed until it is measured.
+- Measured on 2026-10-04 on b23: RTX 3060 Ti with 8 GB, NVIDIA driver 595.58, one window with one pane, the default font, a 2560x1440 wallpaper from the shipped pack, and an empty scrollback unless a row says otherwise.
+	- Graphics memory is what the driver bills the process for. Sizes of single textures are from wgpu's allocator report, which only the Vulkan and DX12 paths have.
+	- Regular memory is the unique resident footprint, with the graphics driver's libraries left out.
+	- `SILK_MEMDBG=1` prints the allocator report and the heap counts below to stderr whenever they change. `cicd/utility/mem-per-window/run.bash` measures one window again on b23.
 
-- Read one real window's use from the driver at a few sizes, with the scrim on and off, the wallpaper on and off, and Settings opened once.
+- The 330 MB reading was a window plus the dialogs' kept context. The context is about 200 MiB, not the 52 MiB the estimate had.
 
-- The estimate, for a 2560x1440 window:
+- Graphics memory on X11, which always draws through GL, in MiB:
 
-	| Part                             | Estimate
-	| :------------------------------- | :-----------------------------
-	| Scrim, five full-window textures | About 150 MB
-	| Swapchain                        | 30 to 45 MB
-	| Wallpaper, up to 4096 a side     | 15 to 64 MB
-	| Dialogs' kept context            | About 52 MiB, once per process
-	| Driver's own cost per process    | Often 50 to 100 MB on NVIDIA
+	| Part                                          | 1280x720 | 1920x1080 | 2560x1440
+	| :-------------------------------------------- | -------: | --------: | --------:
+	| Window buffers, glyph atlases and the context |       28 |        56 |        86
+	| Scrim, five full-window textures              |       40 |        90 |       150
+	| Wallpaper, 2560x1440                          |       32 |        32 |        32
+	| The window                                    |      100 |       178 |       268
+	| Dialogs' kept context, once per process       |      201 |       201 |       201
+	| The process                                   |      301 |       379 |       469
 
-- Regular memory gets the same look: scrollback, the minimap's store, the glyph caches.
+	- The window buffers grow by about 22 bytes a pixel. 8 of those are the full-window Rgba16Float texture the GL path draws into before the flip.
+	- A 6000x4000 image, cut to 4096x2731, costs 88 MiB rather than 32.
+	- Opening Settings adds 12 MiB, given back when it closes.
+
+- The same window on the Vulkan path, as on Wayland, at 2560x1440, from the allocator:
+
+	| Allocation                                    | MiB
+	| :-------------------------------------------- | ---:
+	| Each scrim texture, 8 bytes a pixel           | 30.0
+	| The same at 1920x1080                         | 16.9
+	| The same at 1280x720                          |  7.5
+	| Wallpaper, 2560x1440                          | 15.0
+	| Wallpaper, 4096x2731                          | 44.0
+	| Glyph atlases, four                           |  2.5
+	| Minimap texture                               |  0.6
+	| In use                                        |  167
+	| Reserved in blocks of 128+256+64+64           |  512
+	| Driver's figure, without the dialogs' context |  506
+	| Driver's figure, with it                      |  702
+
+- What the numbers show:
+	- The scrim is the largest part of a window: 150 of 268 MiB at 2560x1440. Its textures exist whenever the halo or the outline is on. Turning only the halo off saves 30 MiB on X11 and nothing on Vulkan, where all five are made either way.
+	- The dialogs' kept context reserves a 128 MiB and a 64 MiB block from wgpu's allocator for less than 1 MiB of use. It also costs about 16 MiB of regular memory.
+	- On Vulkan, most of the bill is the allocator's unused space: 167 MiB in use against 512 reserved. The allocator takes big blocks because wgpu's default memory hint is `Performance`.
+	- With `MemoryHints::MemoryUsage` on both devices, the dialogs' context costs 18 MiB with no dialog open and 31 MiB with Settings open. The Vulkan window above came to 252 MiB instead of 702, context included. Settings still opened from it. How long it took to open was not measured.
+	- The wallpaper costs about twice its texture on X11: 32 MiB for a 15 MiB texture, 88 for 44. In regular memory a 2560x1440 one costs 44 MiB: a 14 MiB copy the size of the decoded image stays mapped in the process, plus 27 MiB that the driver maps. The 4096x2731 one costs 106 MiB. Why the copy stays is not known yet.
+	- On Vulkan, the wallpaper's 20 KB readback buffer for the lost-texture check makes the allocator keep a 64 MiB block of regular memory.
+
+- Regular memory on X11, in MiB:
+
+	| Part                                             | 1280x720      | 2560x1440
+	| :----------------------------------------------- | ------------: | ------------:
+	| Window with no wallpaper and an empty scrollback |            44 |            53
+	| Wallpaper, 2560x1440                             |            45 |            44
+	| Scrollback full, 10,000 lines                    | 25 (110 cols) | 54 (231 cols)
+	| Minimap store at 10,000 lines                    |             6 |             6
+
+	- A scrollback cell is 24 bytes, for every column of every line, blank or not, per pane. The alt screen adds one more screen of cells.
+	- The minimap store is a row of preview pixels per line, so it grows with the lines and not with the window.
+	- Glyphs go straight into the GPU atlases, so there is no glyph cache in regular memory. The heap is 14 to 26 MiB, mostly the font list (1067 faces here) and shaped text.
 
 ### A smaller scrim
 
@@ -141,6 +184,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 ### The dialogs' kept GPU context
 
 - Settings and About draw through a GPU context built once and kept for the life of the process. It holds about 52 MiB to open Settings in 86 ms rather than 310 ms. See the [Settings dialog](20260930-145721_settings-dialog.md) design doc.
+	- Measured on b23, it holds about 200 MiB of graphics memory and 16 MiB of regular memory, almost all of it two blocks wgpu's allocator reserves up front. With the `MemoryUsage` hint it is 18 MiB. See [Measure first](#measure-first).
 
 - With many windows, that is 52 MiB each, all the time, for a dialog that is rarely open.
 

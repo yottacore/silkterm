@@ -136,6 +136,7 @@ So the switch is detected instead. A watcher notes the console the window starte
 - The minimap's cache is about 5 MB per pane at the default scrollback, and is freed while the map is off.
 
 - The dialogs' GPU context is kept for the life of the process, about 52 MiB, to open Settings in a quarter of the time. See the [Settings dialog](20260930-145721_settings-dialog.md) design doc.
+	- Measured on b23 on 2026-10-04, it is about 200 MiB of graphics memory and 16 MiB of regular memory. See [Measure first](20261004-182255_reduce-resources.md#measure-first) in the Reducing resources design doc.
 
 - When the glyph atlas fills during a long, varied session, the atlas is trimmed on the failure path too, so the next frame prepares again with room.
 

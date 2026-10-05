@@ -1386,6 +1386,26 @@ impl std::fmt::Debug for Pane {
 }
 
 impl Pane {
+	// SILK_MEMDBG: the grid's cells (screen plus scrollback, both screens) and
+	// the minimap's cache. The grid figure leaves out per-row headers and the
+	// rows the engine allocates ahead of use, up to a thousand.
+	pub fn memdbg_line(&self) -> String {
+		let (hist, screen, cols) = {
+			let term = self.term.term.lock();
+			let grid = term.grid();
+			(grid.history_size(), grid.screen_lines(), grid.columns())
+		};
+		let cell = std::mem::size_of::<Cell>();
+		let grid_bytes = (hist + 2 * screen) * cols * cell;
+		format!(
+			"pane {}: {hist} history lines x {cols} cols, cells {:.1} MiB at {cell} B; minimap {:.1} MiB; fallback glyphs {}",
+			self.id,
+			crate::memdbg::mib(grid_bytes),
+			crate::memdbg::mib(self.map.heap_bytes()),
+			self.glyph_cache.len()
+		)
+	}
+
 	// The program this pane was started with, so a title naming it can be known.
 	pub fn launched(&self) -> Option<&str> {
 		self.command.as_deref()?.first().map(String::as_str)
