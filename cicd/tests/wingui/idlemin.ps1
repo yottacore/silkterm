@@ -1,8 +1,8 @@
 ##	"Minutes when minimized" on a real Windows desktop, at its shipped 1 minute,
 ##	with the other two waits left at theirs. Each arm, Transparency on and then
 ##	off: a minimized window keeps its device for half a minute, lets it go
-##	before a minute and a half, and shows what it did once restored.
-##	Not in the pipeline: about three and a half minutes.
+##	within a minute and a quarter, and shows what it did once restored.
+##	Not in the pipeline: about three minutes, close to the harness limit.
 ##	Test ID: ErqPAvG
 
 ##	History: At bottom of file.
@@ -56,12 +56,12 @@ foreach ($arm in @("seethru", "opaque")) {
 	Start-Sleep -Seconds 30
 	[void](fCheck "$arm kept its device for half a minute" (-not (fReleased $err)))
 	$released = $false
-	for ($i = 0; $i -lt 60 -and -not $released; $i++) {
+	for ($i = 0; $i -lt 45 -and -not $released; $i++) {
 		Start-Sleep -Seconds 1
 		$released = fReleased $err
 	}
 	fNote "released about $(30 + $i) s after the minimize"
-	[void](fCheck "$arm let it go within a minute and a half" $released)
+	[void](fCheck "$arm let it go within a minute and a quarter" $released)
 
 	[void](fFocus $h)
 	$moved = 1.0
