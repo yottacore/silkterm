@@ -21,6 +21,7 @@
 	- [The wallpaper at window size](#the-wallpaper-at-window-size)
 	- [Block compression for the wallpaper](#block-compression-for-the-wallpaper)
 	- [The dialogs' kept GPU context](#the-dialogs-kept-gpu-context)
+	- [A shorter wait for a minimized window](#a-shorter-wait-for-a-minimized-window)
 	- [Software rendering](#software-rendering)
 	- [The Resource use group](#the-resource-use-group)
 - [Alternative ideas](#alternative-ideas)
@@ -42,6 +43,8 @@ What a window already gives back while unused is in the [Releasing resources](20
 - The scrim, the wallpaper and the dialogs' kept context each cost a fraction of what they do now, with no visible change at the same settings.
 
 - The wallpaper is held at the size it is drawn at, and is prepared again in the background after the window is resized.
+
+- A minimized window lets go of the graphics card after 1 minute by default, on its own setting.
 
 - "Always use software rendering" makes SilkTerm draw on the CPU. Off by default.
 
@@ -148,6 +151,16 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 - Moved here from the releasing resources doc's roadmap.
 
+### A shorter wait for a minimized window
+
+- Today a minimized window and a covered one share "Minutes when hidden", 30 by default.
+
+- A minimized window gets its own wait, "Minutes when minimized", 1 by default. A covered window keeps the 30.
+
+- The cost is the way back. Taking the card back is about 25 ms on Linux, but 0.8 to 1.2 s on Windows with an RTX 2060. What a restored window shows on Windows in that second needs a look.
+
+- The release code knows only "hidden" today, which joins minimized, covered and a window with no size. Minimized has to be told apart.
+
 ### Software rendering
 
 - SilkTerm uses a software adapter only when no graphics card is found at launch. A card that is found but cannot make a device, as when its memory is full, ends the launch, and an idle rebuild retries the same card.
@@ -165,7 +178,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 ### The Resource use group
 
-- "Free resources when idle" and its two waits move into a group named "Resource use", with "Always use software rendering" beside them.
+- "Free resources when idle" and its waits move into a group named "Resource use", with "Always use software rendering" beside them.
 
 - "Free resources when idle" gets a warning mark. Its tip says it matters most on a card with little memory, or next to GPU-heavy programs, with many windows open that are not all in view. Turn it off only if the graphics driver has trouble with it.
 
@@ -203,7 +216,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 1. Measure.
 
-2. Shrink the scrim and hold the wallpaper at window size. Settle the dialogs' context.
+2. Shrink the scrim and hold the wallpaper at window size. Settle the dialogs' context. Give a minimized window its own short wait.
 
 3. "Always use software rendering" and the fallback on device failure.
 
@@ -222,6 +235,8 @@ What a window already gives back while unused is in the [Releasing resources](20
 - "Always use software rendering, and fall back to it when the card cannot make a device" (ID 2026100418225504)
 
 - "The dialogs' kept GPU context costs every process about 52 MiB" (ID 2026100418225505)
+
+- "A minimized window lets go of the graphics card after its own short wait" (ID 2026100418354006)
 
 - "Settings: a Resource use group, with warning marks" (ID 2026100418225506)
 

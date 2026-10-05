@@ -929,6 +929,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261004: It opens Settings in 86 ms rather than 310 ms. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-dialogs-kept-gpu-context).
 	- Closed:
 
+- A minimized window lets go of the graphics card after its own short wait
+	- ID: 2026100418354006
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261004-183540
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225506
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A new wait for a minimized window, "Minutes when minimized", 1 by default, under "Free resources when idle".
+		- "Minutes when hidden" keeps covering a window that is covered, at 30.
+	- Notes:
+		- 20261004: Taking the card back costs about 25 ms on Linux and 0.8 to 1.2 s on Windows with an RTX 2060. Check what a restored window shows on Windows during that second. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-shorter-wait-for-a-minimized-window).
+	- Closed:
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -952,11 +970,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20261004-182255
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026100418225504
+	- Related IDs: 2026100418225504, 2026100418354006
 	- Target OS: All
 	- Requirements:
 		- Before RC1.
-		- "Free resources when idle", its two waits and "Always use software rendering" go in one group, "Resource use".
+		- "Free resources when idle", its waits and "Always use software rendering" go in one group, "Resource use".
 		- "Free resources when idle" gets a warning mark. Its tip says it matters most on a card with little memory or next to GPU-heavy programs, with many windows open that are not all in view. Turn it off only if the graphics driver has trouble with it.
 		- A setting that stops a window from giving memory back gets a warning mark that says so, only where it does. Today that is Transparency on Windows.
 		- A row that cannot work here is grayed with a tip that says why. Hidden only in a build that can never use it.
