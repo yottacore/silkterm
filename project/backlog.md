@@ -801,6 +801,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
+- The window size test skips whenever it has to start its own display
+	- ID: 2026100512560044
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261005-125600
+	- Opened by: CC
+	- Target OS: Linux
+	- Steps to reproduce:
+		- With nothing on `:98`, run `cicd/tests/startsize/run.bash`.
+	- Incorrect behavior: It starts the display and xfwm4, then says "no window manager on :98" and exits 3. The pipeline prints a warning and goes on, so the test only runs when `:98` is already up.
+	- Expected behavior: It waits for the window manager it started, then runs.
+	- Reproduced: 20261005 on b23, twice in a row. With the display started first and two seconds of wait, the same run passed.
+	- Possible cause: `gui-headless.bash start --wm` returns before xfwm4 sets `_NET_SUPPORTING_WM_CHECK`, and the test reads it at once.
+	- Note: Found while working 2026100314050016.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -955,7 +971,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: the Python scripts miss most of the Python rules
 	- ID: 2026100314050016
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -968,7 +984,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 18 `subprocess.run` calls have no `check=`.
 	- Expected behavior: Type hints on every signature, PEP 8 names, f-strings, pathlib and context managers.
 	- Origin: aa3f36a (2026-07-09) for flame-report.py, 2511765 (2026-09-26) for test-id.py, 07c8506 (2026-09-17) for demo-video.py. No earlier review item. Confirmed.
-	- Test case: A ruff and mypy pass in the lint stage, once item 17's config exists.
+	- Decisions:
+		- 20261005: flame-report.py keeps its `fCamelCase` names, since the style rules name it as a script copied in from elsewhere. It got the other fixes.
+		- 20261005: n8output-random-unicode.py is shared with other repos, so it is left as it is and out of the lint.
+	- Actual fix:
+		- `ruff.toml` checks type hints, PEP 8 names, `%` and `.format()`, `os.path`, `open()` outside a `with`, `subprocess.run` with no `check=`, and mutable default arguments. The four rules item 17 turned off are back on.
+		- `py-lint.py` runs mypy in strict mode after ruff, from the new `mypy.ini`, so a missing hint or a wrong type fails the lint stage too.
+		- Every other script passes both. test-id.py, `_watch.py` and the docs test got PEP 8 names, with the same command lines.
+		- demo-video.py closes its own copy of the window manager, ffmpeg and app logs once each child has started. What it records is unchanged.
+		- Each `subprocess.run` that had no `check=` says `check=False`, which is what it did before.
+		- termbench.py still runs on Python 3.8, as its header says.
+		- The Python section of `style-guide.md` lists the new rules.
+	- Note: The pylint test's "a rule ruff.toml leaves out" case used `l` as a name, which is checked now, so it uses a long line instead. Its clean scripts got return types.
+	- Swept: Every tracked `.py` outside `forks/`, through the lint over the whole tree. Callers of the renamed functions: `testdir/run.bash` calls `script_tests`. The demo and showdown tests load demo-video.py, termbench.py, sizebench-classify.py, update-showdown.py and showdown-readme.py by path, and none of the names they use changed. No old name is left anywhere in the repo.
+	- Test case: `cicd/tests/pylint/run.bash` (Erm6IFE), with a case per rule, a type error only mypy sees, and two scripts with one file name. The lint over the tree in stage 3 is the other half.
+	- Verified:
+		- The new lint fails the tree before the fix with 1958 findings, among them 74 `%` formats, 18 `subprocess.run` with no `check=` and 7 files opened without `with`. It passes now.
+		- The pylint test fails 11 cases against the old lint and passes against the new one.
+		- Passing, each run by name: the docs, toc, tables, demo, showdown, rigs, testdir, startsize and pylint tests. test-id.py and flame-report.py print what they did before, `--check` included.
+		- Unchanged output, old against new: termbench's payloads, tables and reports, sizebench-classify's figures and import lists, update-showdown's help and refusals, demo-video's generated home, build script and filter chains, and analyze.py's verdicts.
+	- Branch: pyrules
+	- Commit: dbe0ac0
+	- Acceptance signoff: Self-closed: style fixes, the lint failed the old tree and passes now, and no script's output changed.
+	- Closed: 20261005-125700
 	- Note: Code review 20261003 item 16.
 
 - Small repeated work on the frame and drag paths
