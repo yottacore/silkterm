@@ -856,34 +856,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
 	- Closed:
 
-- Debug builds on lavapipe report a Vulkan validation error for the minimap upload
-	- ID: 2026100421153746
-	- Type: Bug
-	- Status: Moot
-	- Severity: Low
-	- Opened: 20261004-211537
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100418225504
-	- Target OS: Linux
-	- Test environment: b23
-	- Steps to reproduce:
-		- Run a debug build on lavapipe, for example with software rendering on.
-	- Incorrect behavior: stderr gets `VUID-vkCmdCopyBufferToImage-pRegions-00173`, "Detected overlap between source and dest regions in memory", for the `minimap tex` image.
-	- Expected behavior: No validation errors.
-	- Reproduced: 20261004 on b23, on Wayland and X11, whether lavapipe was asked for or was the only adapter. Not seen on the NVIDIA card's Vulkan.
-	- Possible cause: Not known. It may be a false report from the validation layer on lavapipe, where every allocation is in host memory. Release builds do not validate.
-	- Actual cause: A false report from the validation layer. It guesses the image's size from the copy's row pitch. wgpu pads a minimap row to the copy pitch, so the guess runs past the image into the upload buffer that sits right after it in the same memory block. On the card the two are in different memory, so the layer never compares them.
-		- Upstream calls this check wrong ([KhronosGroup/Vulkan-ValidationLayers#9537](https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9537)) and removed it in layer release 1.4.321. b23 has Debian's 1.4.309, which still has it.
-	- Verified: 20261005 on b23, reproduced on dev with software rendering on. On lavapipe the upload reads back exact at 7 widths, and the real memory ranges never overlap. The report comes only at the widths where the padded guess reaches the next buffer.
-	- Actual fix: None. The upload is correct.
-	- Swept: The wallpaper and GL uploads (`bgimage.rs`, `gfx.rs`) could get the same false report. A run with the wallpaper on showed only the minimap.
-	- Test case: None. No code changed, and the check that reports it is gone from current layers.
-	- Branch: lvpval
-	- Commit: 98f2453
-	- Acceptance signoff: Self-closed: false report, fixed in the validation layer.
-	- Closed: 20261005-122352
-
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
 	- Type: Bug
@@ -3094,6 +3066,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff:
 	- Superseded by ID: 2026093009280571
 	- Closed: 20260930-092805
+
+- Debug builds on lavapipe report a Vulkan validation error for the minimap upload
+	- ID: 2026100421153746
+	- Type: Bug
+	- Status: Moot
+	- Severity: Low
+	- Opened: 20261004-211537
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100418225504
+	- Target OS: Linux
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run a debug build on lavapipe, for example with software rendering on.
+	- Incorrect behavior: stderr gets `VUID-vkCmdCopyBufferToImage-pRegions-00173`, "Detected overlap between source and dest regions in memory", for the `minimap tex` image.
+	- Expected behavior: No validation errors.
+	- Reproduced: 20261004 on b23, on Wayland and X11, whether lavapipe was asked for or was the only adapter. Not seen on the NVIDIA card's Vulkan.
+	- Possible cause: Not known. It may be a false report from the validation layer on lavapipe, where every allocation is in host memory. Release builds do not validate.
+	- Actual cause: A false report from the validation layer. It guesses the image's size from the copy's row pitch. wgpu pads a minimap row to the copy pitch, so the guess runs past the image into the upload buffer that sits right after it in the same memory block. On the card the two are in different memory, so the layer never compares them.
+		- Upstream calls this check wrong ([KhronosGroup/Vulkan-ValidationLayers#9537](https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9537)) and removed it in layer release 1.4.321. b23 has Debian's 1.4.309, which still has it.
+	- Verified: 20261005 on b23, reproduced on dev with software rendering on. On lavapipe the upload reads back exact at 7 widths, and the real memory ranges never overlap. The report comes only at the widths where the padded guess reaches the next buffer.
+	- Actual fix: None. The upload is correct.
+	- Swept: The wallpaper and GL uploads (`bgimage.rs`, `gfx.rs`) could get the same false report. A run with the wallpaper on showed only the minimap.
+	- Test case: None. No code changed, and the check that reports it is gone from current layers.
+	- Branch: lvpval
+	- Commit: 98f2453
+	- Acceptance signoff: Self-closed: false report, fixed in the validation layer.
+	- Closed: 20261005-122352
 
 - Renames judge a commented line by where a whole-file save would put it, though most saves keep lines now
 	- ID: 2026100115322367
