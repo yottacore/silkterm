@@ -41,7 +41,11 @@ pub struct ImageRenderer {
 	pipeline: wgpu::RenderPipeline,
 	bind_group: wgpu::BindGroup,
 	uniform: wgpu::Buffer,
+	// the picture's proportions, from its full size rather than the texture's,
+	// so a zoom crop falls where it did when the whole image was held
 	image_size: [f32; 2],
+	sizing: crate::wallpaper::Sizing,
+	held: (u32, u32),
 	opacity: f32,
 	fit: f32,
 	anchor: [f32; 2],
@@ -70,13 +74,10 @@ impl ImageRenderer {
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
 		format: wgpu::TextureFormat,
-		rgba: &[u8],
-		width: u32,
-		height: u32,
-		opacity: f32,
-		fit: Fit,
-		anchor: [f32; 2],
+		img: &crate::wallpaper::Prepared,
 	) -> Self {
+		let rgba: &[u8] = &img.rgba;
+		let (width, height) = img.rgba.dimensions();
 		let size = wgpu::Extent3d {
 			width,
 			height,
@@ -235,10 +236,12 @@ impl ImageRenderer {
 			pipeline,
 			bind_group,
 			uniform,
-			image_size: [width as f32, height as f32],
-			opacity,
-			fit: if fit == Fit::Zoom { 1.0 } else { 0.0 },
-			anchor: [anchor[0].clamp(0.0, 1.0), anchor[1].clamp(0.0, 1.0)],
+			image_size: [img.sizing.full.0 as f32, img.sizing.full.1 as f32],
+			sizing: img.sizing,
+			held: (width, height),
+			opacity: img.opacity,
+			fit: if img.fit == Fit::Zoom { 1.0 } else { 0.0 },
+			anchor: [img.anchor[0].clamp(0.0, 1.0), img.anchor[1].clamp(0.0, 1.0)],
 			texture,
 			probe_at,
 			probe_ref,
@@ -254,6 +257,22 @@ impl ImageRenderer {
 				[0.0; 4],
 			)),
 		}
+	}
+
+	// Whether a window this size would hold the picture at another size. Until
+	// it is prepared again, the one held now is drawn scaled.
+	pub fn needs_resize(&self, window: (u32, u32)) -> bool {
+		self.sizing.held(window) != self.held
+	}
+
+	// SILK_MEMDBG's line for the picture. The GL path has no allocator report to
+	// find it in.
+	pub fn memdbg_line(&self) -> String {
+		let ((w, h), (fw, fh)) = (self.held, self.sizing.full);
+		format!(
+			"wallpaper: {w}x{h} held of {fw}x{fh}, {:.1} MiB",
+			crate::memdbg::mib(w as usize * h as usize * 4)
+		)
 	}
 
 	// What the slider (or the image's own tag) asked for, which is not always what

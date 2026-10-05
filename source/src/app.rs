@@ -154,6 +154,12 @@ impl App {
 				|gpu| crate::memdbg::gpu_line("main", &gpu.gfx.device),
 			);
 			self.memdbg.say("main", main);
+			let wallpaper = state
+				.gpu
+				.as_ref()
+				.and_then(|gpu| gpu.wallpaper_img.as_ref())
+				.map_or_else(|| "wallpaper: none".to_string(), ImageRenderer::memdbg_line);
+			self.memdbg.say("wallpaper", wallpaper);
 			self.memdbg.say("glyphs", state.text.memdbg_line());
 			for pm in &state.tabs.list {
 				for (id, pane) in &pm.panes {
@@ -1846,6 +1852,9 @@ const BENCH_MAX_WAIT: Duration = Duration::from_secs(10);
 const BENCH_BANNER_MIN: Duration = Duration::from_secs(4);
 const MEMDBG_IVL: Duration = Duration::from_secs(2); // SILK_MEMDBG: how often to look for a change
 const VRAM_CHECK_IVL: Duration = Duration::from_secs(2); // GL sentinel probe tick (VT-switch texture loss)
+// How long a resize has to be still before the wallpaper is prepared again at
+// the new size. Until then the one held is drawn scaled.
+const WP_RESIZE_WAIT: Duration = Duration::from_millis(500);
 // After a return to this console, how long until the second heal (VtHeal).
 const VT_SETTLE: Duration = Duration::from_secs(3);
 const CAPTURE_SETTLE: Duration = Duration::from_millis(120); // copy-output: idle-at-prompt debounce marking a command done
@@ -3197,6 +3206,9 @@ struct State {
 	// stale, and a worker whose stamp is no longer the newest stops early.
 	wp_seq: Arc<std::sync::atomic::AtomicU64>,
 	wp_pacing: crate::wallpaper::Pacing, // holds a tick while a request is working
+	// When to prepare the wallpaper again for the window's new size. Pushed back
+	// by every resize, so it comes once the resizing stops.
+	wp_resize_at: Option<Instant>,
 	// A worker has answered - with an image, or with the news that there is none.
 	wp_answered: bool,
 	// ...and a frame has been drawn since, so whatever it said is ON SCREEN. This
@@ -5671,6 +5683,11 @@ impl State {
 	// folder, the image and its tags can all live on a share that answers slowly,
 	// which is precisely why none of it runs on this thread.
 	fn request_wallpaper(&mut self, scan: bool) {
+		self.post_wallpaper(scan, None);
+	}
+
+	// `summary` is set when this only re-sizes the picture showing now.
+	fn post_wallpaper(&mut self, scan: bool, summary: Option<crate::autotheme::Summary>) {
 		let settings = config::settings();
 		let scan = scan
 			|| needs_folder_read(
@@ -5678,6 +5695,9 @@ impl State {
 				self.wp_current.as_deref(),
 				settings.rotation_folder(),
 			);
+		// a scan can pick another picture, which needs its own summary
+		let summary = summary.filter(|_| !scan);
+		self.wp_resize_at = None;
 		// a lock that names nothing is a bare flag asking for no picture
 		let cleared = self.wp_locked && settings.wallpaper.is_none();
 		// retires anything already in flight - a result arriving after a newer
@@ -5697,8 +5717,38 @@ impl State {
 				scan,
 				current: self.wp_current.clone(),
 				cleared,
+				window: self.surface_px,
+				summary,
 			},
 		);
+	}
+
+	// The window changed size, or a picture arrived prepared for an older one.
+	// Each call pushes the wait back, so a drag prepares it once, at the end.
+	fn note_wallpaper_size(&mut self) {
+		let off_size = self
+			.gpu
+			.as_ref()
+			.and_then(|gpu| gpu.wallpaper_img.as_ref())
+			.is_some_and(|img| img.needs_resize(self.surface_px));
+		self.wp_resize_at = off_size.then(|| Instant::now() + WP_RESIZE_WAIT);
+	}
+
+	// The resize wait is up. A request still working is left to finish, and its
+	// arrival checks the size again.
+	fn resize_wallpaper(&mut self) {
+		self.wp_resize_at = None;
+		if self.wp_pacing.busy() {
+			return;
+		}
+		let held = self
+			.gpu
+			.as_ref()
+			.and_then(|gpu| gpu.wallpaper_img.as_ref())
+			.filter(|img| img.needs_resize(self.surface_px));
+		if held.is_some() {
+			self.post_wallpaper(false, config::settings().wallpaper_summary);
+		}
 	}
 
 	// Wallpaper rotation: unless a wallpaper came in on the command line (a
@@ -5786,20 +5836,11 @@ impl State {
 		// wallpaper again, and decoding it twice beats holding a copy of it.
 		if let Some(gpu) = self.gpu.as_mut() {
 			gpu.wallpaper_img = loaded.image.map(|img| {
-				let (w, h) = img.rgba.dimensions();
-				ImageRenderer::new(
-					&gpu.gfx.device,
-					&gpu.gfx.queue,
-					gpu.gfx.format,
-					&img.rgba,
-					w,
-					h,
-					img.opacity,
-					img.fit,
-					img.anchor,
-				)
+				ImageRenderer::new(&gpu.gfx.device, &gpu.gfx.queue, gpu.gfx.format, &img)
 			});
 		}
+		// prepared for the size the window had when it was asked for
+		self.note_wallpaper_size();
 		// Answered either way: an empty result is the news that there is no
 		// wallpaper to wait for, which settles the question just as well.
 		self.wp_answered = true;
@@ -8640,6 +8681,7 @@ impl ApplicationHandler<UserEvent> for App {
 			cli_style: self.cli.win.style.clone(),
 			wp_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
 			wp_pacing: crate::wallpaper::Pacing::default(),
+			wp_resize_at: None,
 			wp_answered: false,
 			wp_shown: false,
 			shell_scan_cap: None,
@@ -8868,6 +8910,7 @@ impl ApplicationHandler<UserEvent> for App {
 			WindowEvent::Resized(size) => {
 				state.no_area = size.width == 0 || size.height == 0;
 				state.resize_surface(size.width, size.height);
+				state.note_wallpaper_size();
 				state.relayout_all();
 				state.save_window_size(size.width, size.height);
 				state.invalidate_prepared(); // scrim textures were just recreated
@@ -10067,6 +10110,9 @@ impl ApplicationHandler<UserEvent> for App {
 		if state.wp_next.is_some_and(|next| Instant::now() >= next) && state.gpu.is_some() {
 			state.advance_wallpaper();
 		}
+		if state.wp_resize_at.is_some_and(|at| Instant::now() >= at) {
+			state.resize_wallpaper();
+		}
 		if state.vt_heal.due(Instant::now()) {
 			vramdbg("vt return, second pass -> heal_gpu");
 			state.heal_gpu(self.dialog.is_some() || self.notice.is_some());
@@ -10397,6 +10443,12 @@ impl ApplicationHandler<UserEvent> for App {
 		// wake to rotate the wallpaper when its interval is up, even when idle
 		// (not while the device is gone: the rebuild picks up where it left off)
 		let flow = match (flow, state.wp_next.filter(|_| state.gpu.is_some())) {
+			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
+			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
+			(other_flow, _) => other_flow,
+		};
+		// wake to prepare the wallpaper for a new size once resizing stops
+		let flow = match (flow, state.wp_resize_at) {
 			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
 			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
 			(other_flow, _) => other_flow,

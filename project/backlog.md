@@ -801,27 +801,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- Hold the wallpaper at the size it is drawn at
-	- ID: 2026100418225503
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Prereq IDs: 2026100418225501
-	- Related IDs: 2026100418225507
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- Prepare the wallpaper at the window's size, by its fit, rather than up to 4096 a side.
-		- After a resize, keep drawing the old one scaled. Once resizing stops for a short wait, prepare it again in the background and swap it in unseen.
-		- Keep today's look at the same window size, blur included.
-		- Test holding a blurred image smaller still, sized by the blur, and whether that makes compression unneeded.
-	- Notes:
-		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size).
-	- Closed:
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -1279,6 +1258,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- Hold the wallpaper at the size it is drawn at
+	- ID: 2026100418225503
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: Optional: a drag resize on Windows and macOS, where the event loop runs differently while the edge is held.
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225501
+	- Related IDs: 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Prepare the wallpaper at the window's size, by its fit, rather than up to 4096 a side.
+		- After a resize, keep drawing the old one scaled. Once resizing stops for a short wait, prepare it again in the background and swap it in unseen.
+		- Keep today's look at the same window size, blur included.
+		- Test holding a blurred image smaller still, sized by the blur, and whether that makes compression unneeded.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size).
+	- Progress log:
+		- 20261005: The picture is held at the size the window draws it at, by its fit, and never bigger than the image. Half a second after the last size change it is prepared again in the background and swapped in, and its summary is kept so the text colors stay put. Detail in the design doc's [The wallpaper at window size](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size).
+		- 20261005: The shrink runs in linear light before the blur, with the blur and the contrast mask scaled to match, and a margin past the edge so the edge rows come out as before. `SILK_MEMDBG=1` now prints the held size.
+		- 20261005: Holding a blurred picture smaller still was measured and not built. At the shipped blur it looks the same inside the picture and is smaller than BC1 at full size, so compression is not needed there. The edge needs a one pixel border first. Numbers in the design doc, for 2026100418225507.
+		- 20261005: With the blur off the look does change, by up to 23 levels at the shipped visibility. A large picture was drawn by skipping pixels, and now they are averaged.
+		- 20261005: Verified on b23 against a control build at the same window size: a picture held whole changed 0 pixels, and one held smaller changed by at most 1 level on GL and 2 on Vulkan at the shipped settings, 3 along one sharp edge in light mode. A resized window matched one launched at that size within 1 level.
+		- 20261005: Verified on b23: the wallpaper's share of a 2560x1440 window with a large photo went from 72 to 32 MiB of graphics memory and from 93 to 42 MiB of regular memory. A pack image in a 1280x800 window went from 32 to 12 and from 45 to 16.
+		- 20261005: Verified: the new tests fail with each part of the change taken out (no margin, no busyness scale, sRGB shrink, no resize follow) and pass with it. The full unit suite (1133), fmt, and clippy for Linux and Windows pass.
+	- Branch: wpsize
+	- Commit: 68b5360
+	- Test case: `a_wallpaper_is_held_at_the_size_it_is_drawn_at` (ErqyRJF), `a_held_wallpaper_looks_like_the_whole_one_drawn_at_its_size` (ErqyRUK), `a_resize_keeps_the_pictures_summary` (ErqyUlS), and `cicd/tests/wpresize/run.bash` (Err031q) in stage 3.
+	- Swept: every caller of `ImageRenderer::new`, `contrast::apply` and `wallpaper::Request`. The rebuild, recovery, settings and rotation requests all send the window's current size.
+	- Acceptance signoff: Self-closed: the same look at the same window size against a control build, and memory measured.
+	- Closed: 20261005-121258
 
 - Release page: group the downloads in a table
 	- ID: 2026100408214205
@@ -3105,10 +3119,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Note: 20260924, main also lacks the later installer fixes under Done: version order, API errors, the running-copy upgrade and the re-run repair.
 		- Opened: 20260924-115032
 
-- ✅ Check the display-scale fixes on two monitors at different scales.
-	- Covers the Settings dialog, maximized as well, and the About and notice boxes. The fixes are under Done.
-	- Opened: 20260919-153000
-
 ### Features and enhancements
 
 - 🔬 Two more settings of the same class as the light mode calibration, neither fixed.
@@ -3130,6 +3140,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 ### Done
 
 #### Done - Bugs
+
+- ✅ Check the display-scale fixes on two monitors at different scales.
+	- Covers the Settings dialog, maximized as well, and the About and notice boxes. The fixes are under Done.
+	- Opened: 20260919-153000
+	- Closed: 20261001-160353
 
 - ✅ A line the parse drops can make the whole settings file convert as the old flat layout.
 	- The line is tab-indented, steps back to a depth nothing uses, and is named like an old flat setting such as `margin`. SilkTerm's own reader takes it as a top-level setting, so the file is moved aside to `.bak` and written fresh.

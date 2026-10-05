@@ -49,8 +49,10 @@ fn size_to_radius(size: f32, max_dim: u32) -> u32 {
 }
 
 // Mean |luma gradient| over the image, mapped to a saturating 0..1 busyness.
-// Flat image -> 0; lots of high-frequency detail -> toward 1.
-fn busyness(px: &[[f32; 3]], w: usize, h: usize) -> f32 {
+// Flat image -> 0; lots of high-frequency detail -> toward 1. `scale` is the
+// image's size against the one BUSY_K was tuned on: a pixel of an image held
+// smaller spans more of the picture, so its steps are bigger.
+fn busyness(px: &[[f32; 3]], w: usize, h: usize, scale: f32) -> f32 {
 	if w < 2 || h < 2 {
 		return 0.0;
 	}
@@ -73,7 +75,7 @@ fn busyness(px: &[[f32; 3]], w: usize, h: usize) -> f32 {
 	if n == 0 {
 		return 0.0;
 	}
-	let g = (sum / n as f64) as f32;
+	let g = (sum / n as f64) as f32 * scale;
 	1.0 - (-BUSY_K * g).exp()
 }
 
@@ -127,7 +129,9 @@ fn box_mean(src: &[[f32; 3]], w: usize, h: usize, r: usize) -> Vec<[f32; 3]> {
 
 // Flatten the image's contrast in place. `img` is linear-light RGBA f32; alpha
 // is left untouched. No-op when the effective strength or size comes out at zero.
-pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32) {
+// `scale` is what the wallpaper is held at against its full size, so a smaller
+// copy of the same picture reads as busy as the whole one.
+pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32, scale: f32) {
 	let (w, h) = (img.width() as usize, img.height() as usize);
 	if w == 0 || h == 0 {
 		return;
@@ -135,7 +139,7 @@ pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32) {
 	let mut rgb: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
 
 	let (eff_size, eff_strength) = if auto > 0.0 {
-		let (a_size, a_strength) = auto_params(busyness(&rgb, w, h));
+		let (a_size, a_strength) = auto_params(busyness(&rgb, w, h, scale));
 		(blend(size, a_size, auto), blend(strength, a_strength, auto))
 	} else {
 		(size.clamp(0.0, 1.0), strength.clamp(0.0, 1.0))
@@ -223,8 +227,8 @@ mod tests {
 	#[test]
 	fn flat_image_has_zero_busyness_checkerboard_high() {
 		let flat = vec![[0.5, 0.5, 0.5]; 64];
-		assert_eq!(busyness(&flat, 8, 8), 0.0);
-		assert!(busyness(&checker8(), 8, 8) > 0.5);
+		assert_eq!(busyness(&flat, 8, 8, 1.0), 0.0);
+		assert!(busyness(&checker8(), 8, 8, 1.0) > 0.5);
 	}
 
 	// Test ID: Ek1QlWd
@@ -261,7 +265,7 @@ mod tests {
 		let checker = checker8();
 		let before = variance(&checker);
 		let mut img = buf(&checker, 8, 8);
-		apply(&mut img, 1.0, 1.0, 0.0); // manual only, full flatten
+		apply(&mut img, 1.0, 1.0, 0.0, 1.0); // manual only, full flatten
 		let after_px: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
 		assert!(variance(&after_px) < before * 0.05);
 	}
@@ -276,7 +280,7 @@ mod tests {
 			[0.2, 0.1, 0.0],
 		];
 		let mut img = buf(&src, 2, 2);
-		apply(&mut img, 1.0, 0.0, 0.0);
+		apply(&mut img, 1.0, 0.0, 0.0, 1.0);
 		let out: Vec<[f32; 3]> = img.pixels().map(|p| [p[0], p[1], p[2]]).collect();
 		assert_eq!(out, src);
 	}

@@ -130,6 +130,7 @@ So the switch is detected instead. A watcher notes the console the window starte
 - glibc lets its mmap threshold rise with each large buffer freed. After that, a wallpaper's decode is carved out of the worker thread's arena and stays resident there once freed, and `malloc_trim` never shrinks an arena that is not the main one. Every window kept the first decode's 50 MB for life, and each rebuild kept 40 MB more. The threshold is pinned at 4 MB at startup, so an image buffer comes from the OS and goes back to it. Launch memory dropped by about 60 MB with a wallpaper. `MALLOC_ARENA_MAX=1` is the way to check a suspected arena leak.
 
 - A wallpaper is cut down to 4096 pixels a side before the RGBA copy, and its decode is capped at 512 MiB. See the [Wallpaper](20260930-150052_wallpaper.md) design doc.
+	- Since 2026-10-05 it is then held at the size the window draws it at. See the [Reducing resources](20261004-182255_reduce-resources.md#the-wallpaper-at-window-size) design doc.
 
 - The scrim's full-screen textures are made only when needed.
 
