@@ -804,7 +804,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The window size test skips whenever it has to start its own display
 	- ID: 2026100512560044
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261005-125600
 	- Opened by: CC
@@ -816,6 +816,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: 20261005 on b23, twice in a row. With the display started first and two seconds of wait, the same run passed.
 	- Possible cause: `gui-headless.bash start --wm` returns before xfwm4 sets `_NET_SUPPORTING_WM_CHECK`, and the test reads it at once.
 	- Note: Found while working 2026100314050016.
+	- Actual cause:
+		- `gui-headless.bash start --wm` returned as soon as xfwm4 was forked, so the test asked for the window manager before it was up.
+		- Waiting for it showed 2 more faults. xfwm4 joined the desktop's own session through `SESSION_MANAGER`, so each one stopped here was restarted by the desktop onto `:98`, where it took the next run's screen. And the pid kept for `stop` was a subshell's, so `stop` left xfwm4 and any launched app running.
+	- Actual fix:
+		- `start --wm` waits until the window manager answers, up to 10 seconds (`CICD_HEADLESS_WM_WAIT`). If it does not, it stops the window manager, and the display too when this call started it, and fails with a message.
+		- Programs on the private display leave the desktop's session. That covers the demo recorder too.
+		- Background launches record the program's own pid, and `stop` waits for each one to exit.
+	- Swept: `grep -rn gui-headless` over the repo. `start --wm` callers: the window size test and the scroll test. Only the window size test reads the window manager itself. The scroll test, the delete-config test, the wallpaper resize test, config-convert and the profiler stage use `start`, and none of them reads the window manager. The demo recorder starts its own xfwm4 with a fixed wait, and got the session fix only.
+	- Verified: from a cold `:98`, the window size test skipped 2 of 2 on the old code and passed 3 of 3 after. 40 stop and start cycles with no failure, where 3 in 30 had failed before the session fix. A window manager that hangs or exits makes `start --wm` fail and leaves no display behind. The scroll test's tmux scene, the demo test and the install test pass.
+	- Branch: wmwait
+	- Commit: e907cdc
+	- Test case: `cicd/tests/startsize/run.bash` (Erkahb9), from a cold display. `cicd/tests/demo/run.py` (EqBe4cC) checks the session and pid parts, and failed on the old scripts.
+	- Acceptance signoff: Self-closed: reproduced, and the test skipped before and passes after.
+	- Closed: 20261005-130636
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
