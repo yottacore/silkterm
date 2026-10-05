@@ -880,6 +880,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: The wallpaper and GL uploads (`bgimage.rs`, `gfx.rs`) could get the same false report. A run with the wallpaper on showed only the minimap.
 	- Test case: None. No code changed, and the check that reports it is gone from current layers.
 	- Branch: lvpval
+	- Commit: 98f2453
 	- Acceptance signoff: Self-closed: false report, fixed in the validation layer.
 	- Closed: 20261005-122352
 
