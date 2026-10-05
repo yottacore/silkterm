@@ -62,15 +62,15 @@ const MIN_HALO_GAIN: f32 = 0.25;
 
 // Does this settings copy resolve to the dark variant? `Settings` rather than
 // the live store, so everything here stays a function of what it is handed.
-fn dark(s: &Settings) -> bool {
-	crate::theme::is_dark_mode(&s.theme_mode, config::os_dark())
+fn dark(settings: &Settings) -> bool {
+	crate::theme::is_dark_mode(&settings.theme_mode, config::os_dark())
 }
 
 // The theme's own dark background - what "as prominent as dark mode" is measured
 // against. An overridden `bg` in light mode is still compared with the theme the
 // user picked, since that is the dark mode they would see.
-fn paired_dark_luma(s: &Settings) -> f32 {
-	config::luma(crate::theme::resolve_in(&s.user_themes, &s.theme, "dark", true).bg)
+fn paired_dark_luma(settings: &Settings) -> f32 {
+	config::luma(crate::theme::resolve_in(&settings.user_themes, &settings.theme, "dark", true).bg)
 }
 
 // How far a linear-light mix of `from` toward `to` travels in sRGB-encoded luma.
@@ -182,20 +182,20 @@ impl Mix {
 // How the wallpaper is drawn, for a slider reading `slider`. `picture` is how
 // bright it is - its overall level and its bright end - and None leaves the
 // ramp out, for a caller with no picture summarized yet.
-pub fn wallpaper_mix(s: &Settings, slider: f32, picture: Option<(f32, f32)>) -> Mix {
-	let bg = config::luma(s.bg);
+pub fn wallpaper_mix(settings: &Settings, slider: f32, picture: Option<(f32, f32)>) -> Mix {
+	let bg = config::luma(settings.bg);
 	let even = |amount: f32| match picture {
-		Some(p) => evened(amount, slider, p, bg, s.wallpaper_even),
+		Some(p) => evened(amount, slider, p, bg, settings.wallpaper_even),
 		None => amount,
 	};
-	if dark(s) {
+	if dark(settings) {
 		return Mix {
 			amount: even(slider),
 			perceptual: false,
 		};
 	}
 	Mix {
-		amount: even(encoded_scale(slider, paired_dark_luma(s)).clamp(0.0, 1.0)),
+		amount: even(encoded_scale(slider, paired_dark_luma(settings)).clamp(0.0, 1.0)),
 		perceptual: true,
 	}
 }
@@ -203,11 +203,15 @@ pub fn wallpaper_mix(s: &Settings, slider: f32, picture: Option<(f32, f32)>) -> 
 // How much of the asked-for halo alpha is actually drawn, for a wallpaper whose
 // slider reads `slider`. 0 means no picture, which leaves the halo alone - it is
 // then sitting on the background color it is made of, and invisible either way.
-pub fn halo_gain(s: &Settings, slider: f32) -> f32 {
-	if dark(s) || slider <= 0.0 {
+pub fn halo_gain(settings: &Settings, slider: f32) -> f32 {
+	if dark(settings) || slider <= 0.0 {
 		return 1.0;
 	}
-	gain_for(slider, config::luma(s.bg), paired_dark_luma(s))
+	gain_for(
+		slider,
+		config::luma(settings.bg),
+		paired_dark_luma(settings),
+	)
 }
 
 // Light mode's share of the halo alpha, given the two backgrounds. Both modes

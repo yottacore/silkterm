@@ -315,10 +315,10 @@ pub struct Derived {
 
 // Text and cursor for this image under these settings. Pure, so the same
 // wallpaper gives the same answer on any box and a test needs no pixels.
-pub fn derive(sum: &Summary, s: &Settings) -> Derived {
-	let floor = s.text_min_contrast.clamp(0.0, 1.0);
-	let (bg, fg, cursor) = (s.bg, s.fg, s.cursor);
-	let mix = crate::visibility::wallpaper_mix(s, sum.opacity, Some(sum.picture()));
+pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
+	let floor = settings.text_min_contrast.clamp(0.0, 1.0);
+	let (bg, fg, cursor) = (settings.bg, settings.fg, settings.cursor);
+	let mix = crate::visibility::wallpaper_mix(settings, sum.opacity, Some(sum.picture()));
 	let hi = gray_lightness(field_luma(sum, sum.luma_hi, bg, mix));
 	let lo = gray_lightness(field_luma(sum, sum.luma_lo, bg, mix));
 
@@ -388,10 +388,10 @@ pub struct Shadow {
 }
 
 // Put the user's own colors back. Safe on settings carrying no derived pair.
-pub fn unapply(s: &mut Settings) {
-	if let Some(shadow) = s.wallpaper_colors.take() {
-		s.fg = shadow.fg;
-		s.cursor = shadow.cursor;
+pub fn unapply(settings: &mut Settings) {
+	if let Some(shadow) = settings.wallpaper_colors.take() {
+		settings.fg = shadow.fg;
+		settings.cursor = shadow.cursor;
 	}
 }
 
@@ -399,21 +399,21 @@ pub fn unapply(s: &mut Settings) {
 // shadow. Idempotent, so a live copy that already carries a derived pair is
 // unwound first and the new one is derived from the user's values rather than
 // from the last answer.
-pub fn apply(s: &mut Settings) {
-	unapply(s);
-	if !s.colors_from_wallpaper || !s.wallpaper_enabled {
+pub fn apply(settings: &mut Settings) {
+	unapply(settings);
+	if !settings.colors_from_wallpaper || !settings.wallpaper_enabled {
 		return;
 	}
-	let Some(sum) = s.wallpaper_summary else {
+	let Some(sum) = settings.wallpaper_summary else {
 		return; // no picture yet, or none at all
 	};
-	let out = derive(&sum, s);
-	s.wallpaper_colors = Some(Shadow {
-		fg: s.fg,
-		cursor: s.cursor,
+	let out = derive(&sum, settings);
+	settings.wallpaper_colors = Some(Shadow {
+		fg: settings.fg,
+		cursor: settings.cursor,
 	});
-	s.fg = out.fg;
-	s.cursor = out.cursor;
+	settings.fg = out.fg;
+	settings.cursor = out.cursor;
 }
 
 #[cfg(test)]
@@ -645,8 +645,8 @@ mod tests {
 
 	// What `derive` will place its colors against, so the test models the field the
 	// code really uses rather than one of its own.
-	fn mix(s: &Settings, sum: &Summary) -> crate::visibility::Mix {
-		crate::visibility::wallpaper_mix(s, sum.opacity, Some(sum.picture()))
+	fn mix(settings: &Settings, sum: &Summary) -> crate::visibility::Mix {
+		crate::visibility::wallpaper_mix(settings, sum.opacity, Some(sum.picture()))
 	}
 
 	// The plate the block cursor draws, over a field taken as a neutral at

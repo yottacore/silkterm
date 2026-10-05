@@ -31,9 +31,9 @@ pub fn hue_rgb(h: f32) -> [f32; 3] {
 	]
 }
 
-pub fn to_rgb(c: Hsv) -> [u8; 3] {
-	let hue = hue_rgb(c.h);
-	let (s, v) = (c.s.clamp(0.0, 1.0), c.v.clamp(0.0, 1.0));
+pub fn to_rgb(color: Hsv) -> [u8; 3] {
+	let hue = hue_rgb(color.h);
+	let (s, v) = (color.s.clamp(0.0, 1.0), color.v.clamp(0.0, 1.0));
 	let chan = |x: f32| ((1.0 - s + s * x) * v * 255.0).round().clamp(0.0, 255.0) as u8;
 	[chan(hue[0]), chan(hue[1]), chan(hue[2])]
 }
@@ -100,12 +100,12 @@ impl Field {
 		}
 	}
 	// What the box shows while nobody is typing in it.
-	pub fn text(self, c: Hsv) -> String {
-		let rgb = to_rgb(c);
+	pub fn text(self, color: Hsv) -> String {
+		let rgb = to_rgb(color);
 		match self {
 			Field::Hex => crate::config::format_hex(rgb),
-			Field::Brightness => whole(c.v * 100.0),
-			Field::Saturation => whole(c.s * 100.0),
+			Field::Brightness => whole(color.v * 100.0),
+			Field::Saturation => whole(color.s * 100.0),
 			Field::Red | Field::Green | Field::Blue => {
 				whole(f32::from(rgb[self.channel().unwrap_or(0)]) / 255.0 * 100.0)
 			}
@@ -113,39 +113,41 @@ impl Field {
 	}
 	// A typed buffer read back into the model. None where it says nothing yet -
 	// a half-typed hex, or an empty box.
-	pub fn apply(self, c: Hsv, buf: &str) -> Option<Hsv> {
+	pub fn apply(self, color: Hsv, buf: &str) -> Option<Hsv> {
 		match self {
-			Field::Hex => crate::config::parse_hex(buf).map(|rgb| from_rgb(rgb, c)),
-			Field::Brightness => pct(buf).map(|p| Hsv { v: p, ..c }),
-			Field::Saturation => pct(buf).map(|p| Hsv { s: p, ..c }),
+			Field::Hex => crate::config::parse_hex(buf).map(|rgb| from_rgb(rgb, color)),
+			Field::Brightness => pct(buf).map(|p| Hsv { v: p, ..color }),
+			Field::Saturation => pct(buf).map(|p| Hsv { s: p, ..color }),
 			Field::Red | Field::Green | Field::Blue => {
 				let p = pct(buf)?;
-				let mut rgb = to_rgb(c);
+				let mut rgb = to_rgb(color);
 				rgb[self.channel()?] = (p * 255.0).round().clamp(0.0, 255.0) as u8;
-				Some(from_rgb(rgb, c))
+				Some(from_rgb(rgb, color))
 			}
 		}
 	}
 	// One arrow press, the same hundredth-of-range step every number box in the
 	// dialog takes (a tenth with Shift).
-	pub fn step(self, c: Hsv, dir: i32, shift: bool) -> Hsv {
+	pub fn step(self, color: Hsv, dir: i32, shift: bool) -> Hsv {
 		let by = if shift { 0.1 } else { 0.01 } * dir as f32;
 		match self {
 			Field::Brightness => Hsv {
-				v: (c.v + by).clamp(0.0, 1.0),
-				..c
+				v: (color.v + by).clamp(0.0, 1.0),
+				..color
 			},
 			Field::Saturation => Hsv {
-				s: (c.s + by).clamp(0.0, 1.0),
-				..c
+				s: (color.s + by).clamp(0.0, 1.0),
+				..color
 			},
-			Field::Hex => c,
+			Field::Hex => color,
 			Field::Red | Field::Green | Field::Blue => {
-				let Some(ch) = self.channel() else { return c };
-				let mut rgb = to_rgb(c);
+				let Some(ch) = self.channel() else {
+					return color;
+				};
+				let mut rgb = to_rgb(color);
 				let now = f32::from(rgb[ch]) / 255.0;
 				rgb[ch] = ((now + by).clamp(0.0, 1.0) * 255.0).round() as u8;
-				from_rgb(rgb, c)
+				from_rgb(rgb, color)
 			}
 		}
 	}
@@ -308,26 +310,26 @@ impl Geom {
 		self.fields[Field::ALL.iter().position(|&a| a == f).unwrap_or(0)]
 	}
 	// Where the marker sits in the square, and where a press in it lands.
-	pub fn marker(&self, c: Hsv) -> (f32, f32) {
+	pub fn marker(&self, color: Hsv) -> (f32, f32) {
 		(
-			self.square.x + c.s.clamp(0.0, 1.0) * self.square.w,
-			self.square.y + (1.0 - c.v.clamp(0.0, 1.0)) * self.square.h,
+			self.square.x + color.s.clamp(0.0, 1.0) * self.square.w,
+			self.square.y + (1.0 - color.v.clamp(0.0, 1.0)) * self.square.h,
 		)
 	}
-	pub fn pick_square(&self, x: f32, y: f32, c: Hsv) -> Hsv {
+	pub fn pick_square(&self, x: f32, y: f32, color: Hsv) -> Hsv {
 		Hsv {
 			s: ((x - self.square.x) / self.square.w.max(1.0)).clamp(0.0, 1.0),
 			v: (1.0 - (y - self.square.y) / self.square.h.max(1.0)).clamp(0.0, 1.0),
-			..c
+			..color
 		}
 	}
-	pub fn hue_y(&self, c: Hsv) -> f32 {
-		self.strip.y + c.h.rem_euclid(1.0) * self.strip.h
+	pub fn hue_y(&self, color: Hsv) -> f32 {
+		self.strip.y + color.h.rem_euclid(1.0) * self.strip.h
 	}
-	pub fn pick_hue(&self, y: f32, c: Hsv) -> Hsv {
+	pub fn pick_hue(&self, y: f32, color: Hsv) -> Hsv {
 		Hsv {
 			h: ((y - self.strip.y) / self.strip.h.max(1.0)).clamp(0.0, 1.0),
-			..c
+			..color
 		}
 	}
 }

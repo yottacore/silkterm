@@ -813,7 +813,7 @@ fn accel_at(label: &str, ch: char) -> Option<usize> {
 		.or_else(|| label.to_ascii_lowercase().find(ch.to_ascii_lowercase()))
 }
 
-fn mi(label: &str, action: MenuAction) -> Entry {
+fn entry_item(label: &str, action: MenuAction) -> Entry {
 	Entry::Item {
 		label: label.into(),
 		action,
@@ -821,7 +821,7 @@ fn mi(label: &str, action: MenuAction) -> Entry {
 		accel: None,
 	}
 }
-fn mia(ch: char, label: &str, action: MenuAction) -> Entry {
+fn entry_item_accel(ch: char, label: &str, action: MenuAction) -> Entry {
 	Entry::Item {
 		label: label.into(),
 		action,
@@ -831,14 +831,14 @@ fn mia(ch: char, label: &str, action: MenuAction) -> Entry {
 }
 // `ch` is optional because accelerators have to be unique WITHIN a menu, and a
 // row that appears in two of them cannot always spell it the same way.
-fn msub(ch: Option<char>, label: &str, items: Vec<Entry>) -> Entry {
+fn entry_sub(ch: Option<char>, label: &str, items: Vec<Entry>) -> Entry {
 	Entry::Sub {
 		label: label.into(),
 		accel: ch.and_then(|ch| accel_at(label, ch)),
 		items,
 	}
 }
-fn mt(on: bool, label: &str, action: MenuAction) -> Entry {
+fn entry_check(on: bool, label: &str, action: MenuAction) -> Entry {
 	Entry::Item {
 		label: label.into(),
 		action,
@@ -846,7 +846,7 @@ fn mt(on: bool, label: &str, action: MenuAction) -> Entry {
 		accel: None,
 	}
 }
-fn mta(ch: char, on: bool, label: &str, action: MenuAction) -> Entry {
+fn entry_check_accel(ch: char, on: bool, label: &str, action: MenuAction) -> Entry {
 	Entry::Item {
 		label: label.into(),
 		action,
@@ -870,12 +870,12 @@ fn shell_submenu(
 		.iter()
 		.enumerate()
 		.filter(|(_, shell)| shell.active)
-		.map(|(i, shell)| mi(&shell.title, action(i)))
+		.map(|(i, shell)| entry_item(&shell.title, action(i)))
 		.collect();
 	if items.is_empty() {
 		Vec::new()
 	} else {
-		vec![msub(accel, label, items)]
+		vec![entry_sub(accel, label, items)]
 	}
 }
 
@@ -900,13 +900,13 @@ struct ViewState {
 // order and the accelerators can be held to the style guide by test.
 fn view_menu_items(on: ViewState) -> Vec<Entry> {
 	let mut items = vec![
-		mia('I', "Increase font size", MenuAction::FontBigger),
-		mia('D', "Decrease font size", MenuAction::FontSmaller),
-		mia('e', "Reset font size", MenuAction::FontReset),
+		entry_item_accel('I', "Increase font size", MenuAction::FontBigger),
+		entry_item_accel('D', "Decrease font size", MenuAction::FontSmaller),
+		entry_item_accel('e', "Reset font size", MenuAction::FontReset),
 		Entry::Sep,
-		mta('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
+		entry_check_accel('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
 		Entry::Sep,
-		mta(
+		entry_check_accel(
 			'F',
 			on.fullscreen,
 			"Fullscreen",
@@ -914,20 +914,20 @@ fn view_menu_items(on: ViewState) -> Vec<Entry> {
 		),
 		// every toggle below names the thing itself and is checked while it is
 		// showing, so the checkmarks all read one way down the column
-		mta(
+		entry_check_accel(
 			'W',
 			on.window_frame,
 			"Window frame",
 			MenuAction::ToggleFrame,
 		),
-		mta('M', on.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
-		mta('T', on.tab_strip, "Tab strip", MenuAction::ToggleSingleTab),
+		entry_check_accel('M', on.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
+		entry_check_accel('T', on.tab_strip, "Tab strip", MenuAction::ToggleSingleTab),
 		// 'M' and 'i' are both spoken for on this menu (Menu bar, Increase font
 		// size), so the accelerator falls to the n
-		mta('n', on.minimap, "Minimap", MenuAction::ToggleMinimap),
-		mta('B', on.bare, "Bare window", MenuAction::ToggleBare),
+		entry_check_accel('n', on.minimap, "Minimap", MenuAction::ToggleMinimap),
+		entry_check_accel('B', on.bare, "Bare window", MenuAction::ToggleBare),
 		Entry::Sep,
-		mta(
+		entry_check_accel(
 			'p',
 			on.remote,
 			"Temporary remote display mode",
@@ -943,7 +943,7 @@ fn view_menu_items(on: ViewState) -> Vec<Entry> {
 // 'N' is New tab on the right-click menu and the n in Minimap on View, so both
 // menus take the x
 fn next_wallpaper_row() -> Entry {
-	mia('x', "Next wallpaper", MenuAction::NextWallpaper)
+	entry_item_accel('x', "Next wallpaper", MenuAction::NextWallpaper)
 }
 
 // The three shell rows: a new tab, and a split either way.
@@ -970,43 +970,49 @@ fn split_shells(shells: &[ShellEntry]) -> Vec<Entry> {
 // No tab or pane action goes on File; each has a menu of its own.
 fn file_menu_items() -> Vec<Entry> {
 	vec![
-		mia('R', "Reload config", MenuAction::ReloadConfig),
-		mia('S', "Settings\u{2026}", MenuAction::Settings),
+		entry_item_accel('R', "Reload config", MenuAction::ReloadConfig),
+		entry_item_accel('S', "Settings\u{2026}", MenuAction::Settings),
 		Entry::Sep,
-		mia('Q', "Quit", MenuAction::Quit),
+		entry_item_accel('Q', "Quit", MenuAction::Quit),
 	]
 }
 
 fn edit_menu_items(copy_select: bool, copy_output: bool) -> Vec<Entry> {
 	vec![
-		mia('C', "Copy", MenuAction::Copy),
-		mia('P', "Paste", MenuAction::Paste),
-		mia('S', "Paste Selection", MenuAction::PasteSelection),
+		entry_item_accel('C', "Copy", MenuAction::Copy),
+		entry_item_accel('P', "Paste", MenuAction::Paste),
+		entry_item_accel('S', "Paste Selection", MenuAction::PasteSelection),
 		Entry::Sep,
-		mt(copy_select, "Copy on select", MenuAction::ToggleCopySelect),
-		mt(copy_output, "Copy on output", MenuAction::ToggleCopyOutput),
+		entry_check(copy_select, "Copy on select", MenuAction::ToggleCopySelect),
+		entry_check(copy_output, "Copy on output", MenuAction::ToggleCopyOutput),
 	]
 }
 
 fn tabs_menu_items(shells: &[ShellEntry]) -> Vec<Entry> {
-	let mut items = vec![mia('N', "New tab", MenuAction::NewTab)];
+	let mut items = vec![entry_item_accel('N', "New tab", MenuAction::NewTab)];
 	items.extend(new_tab_shells(shells, Some('S')));
-	items.extend([Entry::Sep, mia('C', "Close tab", MenuAction::CloseTab)]);
+	items.extend([
+		Entry::Sep,
+		entry_item_accel('C', "Close tab", MenuAction::CloseTab),
+	]);
 	items
 }
 
 fn panes_menu_items(shells: &[ShellEntry]) -> Vec<Entry> {
 	let mut items = vec![
-		mia('V', "Split vertical", MenuAction::SplitVertical),
-		mia('H', "Split horizontal", MenuAction::SplitHorizontal),
+		entry_item_accel('V', "Split vertical", MenuAction::SplitVertical),
+		entry_item_accel('H', "Split horizontal", MenuAction::SplitHorizontal),
 	];
 	items.extend(split_shells(shells));
-	items.extend([Entry::Sep, mia('C', "Close pane", MenuAction::Close)]);
+	items.extend([
+		Entry::Sep,
+		entry_item_accel('C', "Close pane", MenuAction::Close),
+	]);
 	items
 }
 
 fn help_menu_items() -> Vec<Entry> {
-	vec![mia('A', "About\u{2026}", MenuAction::About)]
+	vec![entry_item_accel('A', "About\u{2026}", MenuAction::About)]
 }
 
 // Menu-bar dropdown `idx`, in MENU_BAR order.
@@ -1234,8 +1240,8 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	// they'd be dead weight on every other right-click.
 	if on.link {
 		entries.extend([
-			mia('O', "Open link", MenuAction::OpenLink),
-			mia('L', "Copy link", MenuAction::CopyLink),
+			entry_item_accel('O', "Open link", MenuAction::OpenLink),
+			entry_item_accel('L', "Copy link", MenuAction::CopyLink),
 			Entry::Sep,
 		]);
 	}
@@ -1244,46 +1250,46 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	// horizontal", 'N' on "New tab" - and a duplicate would make the older
 	// item unreachable, since the first match wins
 	entries.extend([
-		mia('C', "Copy", MenuAction::Copy),
-		mia('P', "Paste", MenuAction::Paste),
-		mia('S', "Paste Selection", MenuAction::PasteSelection),
+		entry_item_accel('C', "Copy", MenuAction::Copy),
+		entry_item_accel('P', "Paste", MenuAction::Paste),
+		entry_item_accel('S', "Paste Selection", MenuAction::PasteSelection),
 		Entry::Sep,
-		mt(
+		entry_check(
 			on.copy_select,
 			"Copy on select",
 			MenuAction::ToggleCopySelect,
 		),
-		mt(
+		entry_check(
 			on.copy_output,
 			"Copy on output",
 			MenuAction::ToggleCopyOutput,
 		),
-		mta('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
+		entry_check_accel('R', on.read_only, "Read-only", MenuAction::ToggleReadOnly),
 		Entry::Sep,
-		mia('N', "New tab", MenuAction::NewTab),
+		entry_item_accel('N', "New tab", MenuAction::NewTab),
 	]);
 	entries.extend(new_tab_shells(shells, None));
 	entries.extend([
 		Entry::Sep,
-		mia('V', "Split vertical", MenuAction::SplitVertical),
-		mia('H', "Split horizontal", MenuAction::SplitHorizontal),
+		entry_item_accel('V', "Split vertical", MenuAction::SplitVertical),
+		entry_item_accel('H', "Split horizontal", MenuAction::SplitHorizontal),
 	]);
 	entries.extend(split_shells(shells));
 	entries.extend([
 		Entry::Sep,
-		mi("Close pane", MenuAction::Close),
+		entry_item("Close pane", MenuAction::Close),
 		// The one window-chrome row worth repeating here: with the bar hidden
 		// this menu is the only way back to it. The rest live on View.
 		Entry::Sep,
-		mta('M', on.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
+		entry_check_accel('M', on.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
 	]);
 	if on.next_wallpaper {
 		entries.push(next_wallpaper_row());
 	}
 	entries.extend([
 		Entry::Sep,
-		mi("Reload config", MenuAction::ReloadConfig),
-		mi("Settings\u{2026}", MenuAction::Settings),
+		entry_item("Reload config", MenuAction::ReloadConfig),
+		entry_item("Settings\u{2026}", MenuAction::Settings),
 	]);
 	entries
 }
@@ -2982,18 +2988,30 @@ fn tab_edit_menu_items(selected: bool, has_text: bool, can_paste: bool) -> Vec<E
 	let mut entries = Vec::new();
 	if selected {
 		entries.extend([
-			mia('t', "Cut", MenuAction::Edit(EditCmd::Cut)),
-			mia('C', "Copy", MenuAction::Edit(EditCmd::Copy)),
+			entry_item_accel('t', "Cut", MenuAction::Edit(EditCmd::Cut)),
+			entry_item_accel('C', "Copy", MenuAction::Edit(EditCmd::Copy)),
 		]);
 	}
 	if can_paste {
-		entries.push(mia('P', "Paste", MenuAction::Edit(EditCmd::Paste)));
+		entries.push(entry_item_accel(
+			'P',
+			"Paste",
+			MenuAction::Edit(EditCmd::Paste),
+		));
 	}
 	if selected {
-		entries.push(mia('D', "Delete", MenuAction::Edit(EditCmd::Delete)));
+		entries.push(entry_item_accel(
+			'D',
+			"Delete",
+			MenuAction::Edit(EditCmd::Delete),
+		));
 	}
 	if has_text {
-		entries.push(mia('a', "Select all", MenuAction::Edit(EditCmd::SelectAll)));
+		entries.push(entry_item_accel(
+			'a',
+			"Select all",
+			MenuAction::Edit(EditCmd::SelectAll),
+		));
 	}
 	entries
 }
@@ -6841,35 +6859,35 @@ impl State {
 		// toward including a value rather than reasoning that it can't change.
 		let text_sig = {
 			use std::hash::{Hash, Hasher};
-			let mut h = std::collections::hash_map::DefaultHasher::new();
-			self.chrome_rev.hash(&mut h);
-			gpu.gfx.config.width.hash(&mut h);
-			gpu.gfx.config.height.hash(&mut h);
-			margin.to_bits().hash(&mut h);
+			let mut hasher = std::collections::hash_map::DefaultHasher::new();
+			self.chrome_rev.hash(&mut hasher);
+			gpu.gfx.config.width.hash(&mut hasher);
+			gpu.gfx.config.height.hash(&mut hasher);
+			margin.to_bits().hash(&mut hasher);
 			for w in &tab_widths {
-				w.to_bits().hash(&mut h);
+				w.to_bits().hash(&mut hasher);
 			}
-			self.menu_bar.hash(&mut h);
-			self.tab_bar_visible().hash(&mut h);
-			self.tabs.active.hash(&mut h);
-			self.tab_edit.as_ref().map(|e| e.tab).hash(&mut h); // moves the label into its box
-			self.focused.hash(&mut h); // dims the copy-mode labels
-			scrim_on.hash(&mut h);
+			self.menu_bar.hash(&mut hasher);
+			self.tab_bar_visible().hash(&mut hasher);
+			self.tabs.active.hash(&mut hasher);
+			self.tab_edit.as_ref().map(|e| e.tab).hash(&mut hasher); // moves the label into its box
+			self.focused.hash(&mut hasher); // dims the copy-mode labels
+			scrim_on.hash(&mut hasher);
 			// one pointer covers every setting: a change swaps the whole snapshot
-			(std::sync::Arc::as_ptr(&cfg) as usize).hash(&mut h);
+			(std::sync::Arc::as_ptr(&cfg) as usize).hash(&mut hasher);
 			for (id, p) in &self.tabs.cur().panes {
-				id.hash(&mut h);
-				p.shape_rev.hash(&mut h); // bumped by every full re-shape
-				tops[id].to_bits().hash(&mut h);
+				id.hash(&mut hasher);
+				p.shape_rev.hash(&mut hasher); // bumped by every full re-shape
+				tops[id].to_bits().hash(&mut hasher);
 				for v in [p.rect.x, p.rect.y, p.rect.w, p.rect.h] {
-					v.to_bits().hash(&mut h);
+					v.to_bits().hash(&mut hasher);
 				}
 				match &slides[id] {
-					None => 0u8.hash(&mut h),
+					None => 0u8.hash(&mut hasher),
 					Some(s) => {
-						1u8.hash(&mut h);
-						s.has_band.hash(&mut h);
-						s.has_top_band.hash(&mut h);
+						1u8.hash(&mut hasher);
+						s.has_band.hash(&mut hasher);
+						s.has_top_band.hash(&mut hasher);
 						for v in [
 							s.band_top,
 							s.split_y,
@@ -6877,12 +6895,12 @@ impl State {
 							s.region_clip_t,
 							s.region_clip_b,
 						] {
-							v.to_bits().hash(&mut h);
+							v.to_bits().hash(&mut hasher);
 						}
 					}
 				}
 			}
-			h.finish()
+			hasher.finish()
 		};
 		let prep = crate::perf::mark();
 		let text_same = self.text_sig == Some(text_sig);
@@ -7128,36 +7146,36 @@ impl State {
 		{
 			let overlay_sig = {
 				use std::hash::{Hash, Hasher};
-				let mut h = std::collections::hash_map::DefaultHasher::new();
-				gpu.gfx.config.width.hash(&mut h);
-				gpu.gfx.config.height.hash(&mut h);
-				self.chrome_rev.hash(&mut h); // covers a menu color change
+				let mut hasher = std::collections::hash_map::DefaultHasher::new();
+				gpu.gfx.config.width.hash(&mut hasher);
+				gpu.gfx.config.height.hash(&mut hasher);
+				self.chrome_rev.hash(&mut hasher); // covers a menu color change
 				for (_, placed) in tip_layout
 					.iter()
 					.chain(menu_tip.iter())
 					.chain(bench_banner.iter())
 				{
 					for (left, top, line) in placed {
-						left.to_bits().hash(&mut h);
-						top.to_bits().hash(&mut h);
-						line.hash(&mut h);
+						left.to_bits().hash(&mut hasher);
+						top.to_bits().hash(&mut hasher);
+						line.hash(&mut hasher);
 					}
 				}
 				for menu in self.menu.iter().flat_map(ContextMenu::chain) {
-					menu.x.to_bits().hash(&mut h);
-					menu.y.to_bits().hash(&mut h);
-					menu.w.to_bits().hash(&mut h);
-					menu.item_h.to_bits().hash(&mut h);
+					menu.x.to_bits().hash(&mut hasher);
+					menu.y.to_bits().hash(&mut hasher);
+					menu.w.to_bits().hash(&mut hasher);
+					menu.item_h.to_bits().hash(&mut hasher);
 					for entry in &menu.entries {
 						if let Some(label) = entry_label(entry) {
-							label.hash(&mut h);
+							label.hash(&mut hasher);
 						}
 						if let Entry::Item { check, .. } = entry {
-							check.hash(&mut h);
+							check.hash(&mut hasher);
 						}
 					}
 				}
-				h.finish()
+				hasher.finish()
 			};
 			if text_same && self.overlay_sig == Some(overlay_sig) {
 				// prepared overlay from the last frame still matches
@@ -7948,9 +7966,9 @@ fn fit_px(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
 
 // Open maximized? Only when the last window was left that way and the
 // setting is on. A size or fullscreen asked for on the command line wins.
-fn launch_maximized(s: &config::Settings, cli: &crate::cli::WindowOpts) -> bool {
-	s.remember_maximized
-		&& s.remembered_maximized
+fn launch_maximized(settings: &config::Settings, cli: &crate::cli::WindowOpts) -> bool {
+	settings.remember_maximized
+		&& settings.remembered_maximized
 		&& cli.columns.is_none()
 		&& cli.rows.is_none()
 		&& cli.pixel_width.is_none()
@@ -10530,11 +10548,12 @@ mod tests {
 		Caret, CloseScope, Conserve, ContextMenu, CopyMetrics, Entry, Idle, IdleClock, IdleRule,
 		MenuAction, PaneWakes, RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, Settle, Sight, TAB_CLOSE_M,
 		TabEdit, VT_SETTLE, ViewState, VtHeal, accel_at, accel_clash, close_scope, copybox_fit,
-		copybox_place, fit_px, focus_ring, is_copy_chord, key_is_typed, launch_maximized,
-		menu_metrics, mia, msub, mta, needs_folder_read, new_window_command, notice_due,
-		pace_frame, pane_wake, rating_step, release_deadline, remember_resize, reveal_due,
-		rotation_live, rotation_next, settings_after_reload, settle, tab_close_box,
-		tab_command_line, tab_title_w, typed_title, view_menu_items, window_px, window_sight,
+		copybox_place, entry_check_accel, entry_item_accel, entry_sub, fit_px, focus_ring,
+		is_copy_chord, key_is_typed, launch_maximized, menu_metrics, needs_folder_read,
+		new_window_command, notice_due, pace_frame, pane_wake, rating_step, release_deadline,
+		remember_resize, reveal_due, rotation_live, rotation_next, settings_after_reload, settle,
+		tab_close_box, tab_command_line, tab_title_w, typed_title, view_menu_items, window_px,
+		window_sight,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -12239,15 +12258,15 @@ mod tests {
 	#[test]
 	fn one_menu_never_spends_an_accelerator_twice() {
 		let rows = vec![
-			mia('C', "Copy", MenuAction::Copy),
-			msub(Some('S'), "New tab with shell", vec![]),
-			mta('W', false, "Window frame", MenuAction::ToggleFrame),
+			entry_item_accel('C', "Copy", MenuAction::Copy),
+			entry_sub(Some('S'), "New tab with shell", vec![]),
+			entry_check_accel('W', false, "Window frame", MenuAction::ToggleFrame),
 		];
 		assert_eq!(accel_clash(&rows), None);
 		// 'w' again, which is what the View menu would have done had the submenu
 		// row spelled its accelerator the way the Tabs menu's does
 		let mut clashing = rows;
-		clashing.insert(1, msub(Some('w'), "New tab with shell", vec![]));
+		clashing.insert(1, entry_sub(Some('w'), "New tab with shell", vec![]));
 		assert_eq!(accel_clash(&clashing), Some('w'));
 	}
 
@@ -12263,7 +12282,7 @@ mod tests {
 			200.0,
 			vec![
 				test_item("One"),
-				msub(Some('w'), "With Shell", vec![test_item("Bash")]),
+				entry_sub(Some('w'), "With Shell", vec![test_item("Bash")]),
 				Entry::Sep,
 				test_item("Two"),
 			],
@@ -12308,7 +12327,7 @@ mod tests {
 	// Test ID: EnM97jG
 	#[test]
 	fn a_click_in_the_submenu_still_counts_as_a_click_on_the_menu() {
-		let mut parent = test_menu(0.0, 200.0, vec![msub(Some('w'), "With Shell", vec![])]);
+		let mut parent = test_menu(0.0, 200.0, vec![entry_sub(Some('w'), "With Shell", vec![])]);
 		let sub = test_menu(200.0, 120.0, vec![test_item("Bash")]);
 		let (x, y) = (sub.x + 10.0, sub.row_top(0) + 2.0);
 		assert!(!parent.hit(x, y));

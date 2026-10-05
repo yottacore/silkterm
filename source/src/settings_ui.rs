@@ -397,44 +397,48 @@ macro_rules! keys_of {
 	};
 }
 
-// A slider's value in the dialog's own units, read from `s`. One list for the
+// A slider's value in the dialog's own units, read from `settings`. One list for the
 // shown value and the default, so the two cannot disagree on a transform.
-fn slider_of(s: &Settings, key: Key) -> f32 {
+fn slider_of(settings: &Settings, key: Key) -> f32 {
 	match key {
-		Key::Opacity => to_percent(s.opacity),
-		Key::BgOpacity => to_percent(s.wallpaper_opacity),
-		Key::BgBlur => s.wallpaper_blur,
-		Key::BgContrastSize => to_percent(s.wallpaper_contrast_mask_size),
-		Key::BgContrastStrength => to_percent(s.wallpaper_contrast_mask_strength),
-		Key::BgContrastAuto => to_percent(s.wallpaper_contrast_mask_auto),
-		Key::ScrimRadius => s.text_scrim_radius,
-		Key::ScrimSoftness => to_percent(s.text_scrim_softness),
-		Key::ScrimStrength => s.text_scrim_strength,
-		Key::Outline => s.text_outline,
-		Key::MinContrast => to_percent(s.text_min_contrast),
-		Key::CursorBlink => s.cursor_blink_rate_ms,
-		Key::CursorHeight => s.cursor_size_height,
-		Key::CursorWidth => s.cursor_size_width,
-		Key::CursorResume => s.cursor_animation_resume_s,
-		Key::FontSize => s.font_size,
-		Key::LineHeight => s.line_height_scale,
-		Key::Margin => s.margin,
-		Key::TabRegularWidth => s.tab_regular_pct,
-		Key::TabMaxWidth => s.tab_max_pct,
+		Key::Opacity => to_percent(settings.opacity),
+		Key::BgOpacity => to_percent(settings.wallpaper_opacity),
+		Key::BgBlur => settings.wallpaper_blur,
+		Key::BgContrastSize => to_percent(settings.wallpaper_contrast_mask_size),
+		Key::BgContrastStrength => to_percent(settings.wallpaper_contrast_mask_strength),
+		Key::BgContrastAuto => to_percent(settings.wallpaper_contrast_mask_auto),
+		Key::ScrimRadius => settings.text_scrim_radius,
+		Key::ScrimSoftness => to_percent(settings.text_scrim_softness),
+		Key::ScrimStrength => settings.text_scrim_strength,
+		Key::Outline => settings.text_outline,
+		Key::MinContrast => to_percent(settings.text_min_contrast),
+		Key::CursorBlink => settings.cursor_blink_rate_ms,
+		Key::CursorHeight => settings.cursor_size_height,
+		Key::CursorWidth => settings.cursor_size_width,
+		Key::CursorResume => settings.cursor_animation_resume_s,
+		Key::FontSize => settings.font_size,
+		Key::LineHeight => settings.line_height_scale,
+		Key::Margin => settings.margin,
+		Key::TabRegularWidth => settings.tab_regular_pct,
+		Key::TabMaxWidth => settings.tab_max_pct,
 		// shown as an intuitive 1..100 speed (higher = faster); stored as tau
-		Key::ScrollEaseIn => falling_slider(s.scroll_ease_in_ms, EASE_IN_MIN, EASE_IN_MAX),
-		Key::ScrollRampUp => falling_slider(s.scroll_ramp_up_ms, RAMP_UP_MIN, RAMP_UP_MAX),
-		Key::SingleScreenTau => tau_to_speed(s.scroll_single_screen_tau_ms),
-		Key::ScrollRampDown => falling_slider(s.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX),
-		Key::ScrollEaseOut => falling_slider(s.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX),
-		Key::WheelLines => s.wheel_lines,
-		Key::ScrollbarThickness => s.scrollbar_thickness,
-		Key::MinimapWidth => s.minimap_width,
-		Key::Columns => s.columns as f32,
-		Key::Rows => s.rows as f32,
-		Key::IdleMinimizedMin => s.idle_release_minimized_min as f32,
-		Key::IdleHiddenMin => s.idle_release_hidden_min as f32,
-		Key::IdleMin => s.idle_release_min as f32,
+		Key::ScrollEaseIn => falling_slider(settings.scroll_ease_in_ms, EASE_IN_MIN, EASE_IN_MAX),
+		Key::ScrollRampUp => falling_slider(settings.scroll_ramp_up_ms, RAMP_UP_MIN, RAMP_UP_MAX),
+		Key::SingleScreenTau => tau_to_speed(settings.scroll_single_screen_tau_ms),
+		Key::ScrollRampDown => {
+			falling_slider(settings.scroll_ramp_down_ms, RAMP_DOWN_MIN, RAMP_DOWN_MAX)
+		}
+		Key::ScrollEaseOut => {
+			falling_slider(settings.scroll_ease_out_ms, EASE_OUT_MIN, EASE_OUT_MAX)
+		}
+		Key::WheelLines => settings.wheel_lines,
+		Key::ScrollbarThickness => settings.scrollbar_thickness,
+		Key::MinimapWidth => settings.minimap_width,
+		Key::Columns => settings.columns as f32,
+		Key::Rows => settings.rows as f32,
+		Key::IdleMinimizedMin => settings.idle_release_minimized_min as f32,
+		Key::IdleHiddenMin => settings.idle_release_hidden_min as f32,
+		Key::IdleMin => settings.idle_release_min as f32,
 		keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => 0.0,
 	}
 }
@@ -447,82 +451,82 @@ const fn software_tip(possible: bool) -> Option<&'static str> {
 	}
 }
 
-// A switch's state in `s`, for the shown value, the default and the revert.
-fn toggle_of(s: &Settings, key: Key) -> bool {
+// A switch's state in `settings`, for the shown value, the default and the revert.
+fn toggle_of(settings: &Settings, key: Key) -> bool {
 	match key {
-		Key::PerfAuto => s.performance_automatic,
-		Key::PerfCheckHardware => s.performance_check_hardware,
-		Key::PerfCheckNext => s.performance_check_next_run,
-		Key::SystemFont => s.use_system_font,
-		Key::SystemFontSize => s.use_system_font_size,
-		Key::Transparency => s.transparent_background,
-		Key::BackdropBlur => s.transparent_background_blur,
-		Key::TextScrim => s.text_scrim,
-		Key::CursorScrim => s.cursor_scrim,
-		Key::CursorOutline => s.cursor_outline,
-		Key::RememberSize => s.remember_size,
-		Key::RememberPerMonitor => s.remember_per_monitor,
-		Key::RememberMaximized => s.remember_maximized,
-		Key::TabShowsTitle => s.tab_shows_title,
-		Key::TabShowsShell => s.tab_shows_shell,
-		Key::TabShowsProgram => s.tab_shows_program,
-		Key::TabShowsDirectory => s.tab_shows_directory,
-		Key::TitleShowsTab => s.title_shows_tab,
-		Key::IdleRelease => s.idle_release,
-		Key::SoftwareRendering => s.software_rendering,
-		Key::CopyOnSelect => s.copy_on_select,
-		Key::ShellIntegration => s.shell_integration,
-		Key::BashPrompt => s.bash_prompt,
-		Key::Hyperlinks => s.hyperlinks,
-		Key::BgContrastMask => s.wallpaper_contrast_mask,
-		Key::BgEnabled => s.wallpaper_enabled,
-		Key::BgRotate => s.wallpaper_rotate_enabled,
-		Key::BgHonorXmp => s.wallpaper_honor_xmp,
-		Key::BgHonorXmpLook => s.wallpaper_honor_xmp_look,
-		Key::ColFromWallpaper => s.colors_from_wallpaper,
-		Key::SmoothScroll => s.scroll_smooth,
-		Key::Scrollbar => s.scrollbar,
-		Key::ScrollbarAutoHide => s.scrollbar_auto_hide,
-		Key::Minimap => s.minimap,
+		Key::PerfAuto => settings.performance_automatic,
+		Key::PerfCheckHardware => settings.performance_check_hardware,
+		Key::PerfCheckNext => settings.performance_check_next_run,
+		Key::SystemFont => settings.use_system_font,
+		Key::SystemFontSize => settings.use_system_font_size,
+		Key::Transparency => settings.transparent_background,
+		Key::BackdropBlur => settings.transparent_background_blur,
+		Key::TextScrim => settings.text_scrim,
+		Key::CursorScrim => settings.cursor_scrim,
+		Key::CursorOutline => settings.cursor_outline,
+		Key::RememberSize => settings.remember_size,
+		Key::RememberPerMonitor => settings.remember_per_monitor,
+		Key::RememberMaximized => settings.remember_maximized,
+		Key::TabShowsTitle => settings.tab_shows_title,
+		Key::TabShowsShell => settings.tab_shows_shell,
+		Key::TabShowsProgram => settings.tab_shows_program,
+		Key::TabShowsDirectory => settings.tab_shows_directory,
+		Key::TitleShowsTab => settings.title_shows_tab,
+		Key::IdleRelease => settings.idle_release,
+		Key::SoftwareRendering => settings.software_rendering,
+		Key::CopyOnSelect => settings.copy_on_select,
+		Key::ShellIntegration => settings.shell_integration,
+		Key::BashPrompt => settings.bash_prompt,
+		Key::Hyperlinks => settings.hyperlinks,
+		Key::BgContrastMask => settings.wallpaper_contrast_mask,
+		Key::BgEnabled => settings.wallpaper_enabled,
+		Key::BgRotate => settings.wallpaper_rotate_enabled,
+		Key::BgHonorXmp => settings.wallpaper_honor_xmp,
+		Key::BgHonorXmpLook => settings.wallpaper_honor_xmp_look,
+		Key::ColFromWallpaper => settings.colors_from_wallpaper,
+		Key::SmoothScroll => settings.scroll_smooth,
+		Key::Scrollbar => settings.scrollbar,
+		Key::ScrollbarAutoHide => settings.scrollbar_auto_hide,
+		Key::Minimap => settings.minimap,
 		keys_of!(slider | radio | color | text | hotkey | valueless | assoc) => false,
 	}
 }
 
-// The option a radio or dropdown row has chosen, read from `s`.
-fn radio_of(s: &Settings, key: Key) -> usize {
+// The option a radio or dropdown row has chosen, read from `settings`.
+fn radio_of(settings: &Settings, key: Key) -> usize {
 	match key {
-		Key::PerfProfile => crate::profile::current(s).index(),
-		Key::BgFit => match s.wallpaper_default_fit {
+		Key::PerfProfile => crate::profile::current(settings).index(),
+		Key::BgFit => match settings.wallpaper_default_fit {
 			config::Fit::Zoom => 1,
 			config::Fit::Stretch => 0,
 		},
 		// display order: SDF, DT, Dilate, Gaussian
-		Key::ScrimFunction => match s.text_scrim_function.as_str() {
+		Key::ScrimFunction => match settings.text_scrim_function.as_str() {
 			"dt" => 1,
 			"dilate" => 2,
 			"gaussian" => 3,
 			_ => 0, // sdf
 		},
 		// display order: Exponential, Half-normal, Log, Sigmoid, Linear
-		Key::ScrimRamp => match s.text_scrim_ramp.as_str() {
+		Key::ScrimRamp => match settings.text_scrim_ramp.as_str() {
 			"half_normal" => 1,
 			"log" => 2,
 			"sigmoid" => 3,
 			"linear" => 4,
 			_ => 0, // exp
 		},
-		Key::CursorAnimation => match s.cursor_animation.as_str() {
+		Key::CursorAnimation => match settings.cursor_animation.as_str() {
 			"phase" => 1,
 			"pulse_horizontal" => 3,
 			"pulse_both" => 4,
 			"none" => 0,
 			_ => 2, // pulse_vertical
 		},
-		Key::Theme => crate::theme::all_names(&s.user_themes)
+		Key::Theme => crate::theme::all_names(&settings.user_themes)
 			.iter()
-			.position(|n| n.eq_ignore_ascii_case(s.theme.trim()))
+			.position(|n| n.eq_ignore_ascii_case(settings.theme.trim()))
 			.unwrap_or(0),
-		Key::ThemeMode => match s.theme_mode.as_str() {
+		Key::ThemeMode => match settings.theme_mode.as_str() {
 			"light" => 1,
 			"system" => 2,
 			_ => 0, // dark
@@ -832,8 +836,8 @@ fn shell_field_of(row: usize) -> Option<(usize, bool)> {
 	if row < PSEUDO_ROW || row == PROMPT_ROW || pick_field_of(row).is_some() {
 		return None;
 	}
-	let k = SHELL_ROW_BASE - row;
-	Some((k / 2, k % 2 == 1))
+	let field = SHELL_ROW_BASE - row;
+	Some((field / 2, field % 2 == 1))
 }
 fn shell_field_row(entry: usize, command: bool) -> usize {
 	SHELL_ROW_BASE - (entry * 2 + usize::from(command))
@@ -862,8 +866,8 @@ impl ShellPart {
 		ShellPart::Remove,
 		ShellPart::Active,
 	];
-	fn of(k: u16) -> ShellPart {
-		ShellPart::ALL[(k % ShellPart::COUNT) as usize]
+	fn of(stop: u16) -> ShellPart {
+		ShellPart::ALL[(stop % ShellPart::COUNT) as usize]
 	}
 }
 
@@ -1573,15 +1577,15 @@ impl SettingsDialog {
 			+ lay().pad;
 		(right - self.rect.w).clamp(0.0, over)
 	}
-	fn tab_rect(&self, k: usize) -> Rect {
+	fn tab_rect(&self, tab: usize) -> Rect {
 		let x = self.rect.x - self.tab_scroll()
 			+ lay().pad
-			+ self.tab_ws[..k].iter().sum::<f32>()
-			+ lay().tab_gap * k as f32;
+			+ self.tab_ws[..tab].iter().sum::<f32>()
+			+ lay().tab_gap * tab as f32;
 		Rect {
 			x,
 			y: self.tab_bar_y(),
-			w: self.tab_ws[k],
+			w: self.tab_ws[tab],
 			h: self.tab_h(),
 		}
 	}
@@ -1732,8 +1736,8 @@ impl SettingsDialog {
 		self.drag_hthumb = None;
 		self.edit_drag = None;
 		self.shell_drag = None;
-		if let Some(p) = self.pick.as_mut() {
-			p.drag = None;
+		if let Some(picker) = self.pick.as_mut() {
+			picker.drag = None;
 		}
 		self.dismiss_menu();
 	}
@@ -1889,9 +1893,9 @@ impl SettingsDialog {
 			if self.specs[i].tab != self.tab || Self::header_is_tab_title(&self.specs[i]) {
 				continue;
 			}
-			for p in 0..self.parts_of(i) {
-				if !self.part_disabled(i, p) {
-					ring.push(Focus::Row(i, p));
+			for part in 0..self.parts_of(i) {
+				if !self.part_disabled(i, part) {
+					ring.push(Focus::Row(i, part));
 				}
 			}
 		}
@@ -1959,11 +1963,11 @@ impl SettingsDialog {
 			Kind::Color if part == 0 => {}
 			Kind::Text | Kind::Color | Kind::Slider { .. } => self.open_edit(i, true),
 			Kind::ShellList => match shell_stop(part, self.edited.shells.len()) {
-				ShellStop::Entry(k, ShellPart::Name) => {
-					self.open_edit(shell_field_row(k, false), true);
+				ShellStop::Entry(shell_index, ShellPart::Name) => {
+					self.open_edit(shell_field_row(shell_index, false), true);
 				}
-				ShellStop::Entry(k, ShellPart::Command) => {
-					self.open_edit(shell_field_row(k, true), true);
+				ShellStop::Entry(shell_index, ShellPart::Command) => {
+					self.open_edit(shell_field_row(shell_index, true), true);
 				}
 				_ => {}
 			},
@@ -2141,8 +2145,8 @@ impl SettingsDialog {
 		self.dismiss_menu();
 		// in the picker, a value box owns Left/Right (caret) and everything else
 		// takes them as adjustment or a focus move
-		if let Some(p) = self.pick.as_ref() {
-			if matches!(p.focus, pick::Focus::Field(_)) && self.edit.is_some() {
+		if let Some(picker) = self.pick.as_ref() {
+			if matches!(picker.focus, pick::Focus::Field(_)) && self.edit.is_some() {
 				if dir < 0 {
 					self.cursor_left();
 				} else {
@@ -2222,7 +2226,7 @@ impl SettingsDialog {
 		}
 		let (i, part) = match self.focus {
 			Some(Focus::Button(b)) => return self.buttons()[b].0,
-			Some(Focus::Row(i, p)) => (i, p),
+			Some(Focus::Row(i, part)) => (i, part),
 			None => return Action::None,
 		};
 		let key = self.part_key(i, part);
@@ -2251,23 +2255,27 @@ impl SettingsDialog {
 	fn shell_activate(&mut self, i: usize, part: u16) {
 		match shell_stop(part, self.edited.shells.len()) {
 			ShellStop::Add => self.shell_add(i),
-			ShellStop::Entry(k, ShellPart::Name) => self.open_edit(shell_field_row(k, false), true),
-			ShellStop::Entry(k, ShellPart::Command) => {
-				self.open_edit(shell_field_row(k, true), true);
+			ShellStop::Entry(shell_index, ShellPart::Name) => {
+				self.open_edit(shell_field_row(shell_index, false), true);
 			}
-			ShellStop::Entry(k, ShellPart::Active) => {
-				if let Some(entry) = self.edited.shells.get_mut(k) {
+			ShellStop::Entry(shell_index, ShellPart::Command) => {
+				self.open_edit(shell_field_row(shell_index, true), true);
+			}
+			ShellStop::Entry(shell_index, ShellPart::Active) => {
+				if let Some(entry) = self.edited.shells.get_mut(shell_index) {
 					entry.active = !entry.active;
 				}
 			}
-			ShellStop::Entry(k, ShellPart::Remove) => self.shell_confirm_remove(k),
+			ShellStop::Entry(shell_index, ShellPart::Remove) => {
+				self.shell_confirm_remove(shell_index);
+			}
 		}
 	}
 
 	// Dropping an entry is the one grid action that cannot be undone by doing the
 	// opposite, so it asks - the same box the theme delete uses.
-	fn shell_confirm_remove(&mut self, k: usize) {
-		let Some(entry) = self.edited.shells.get(k) else {
+	fn shell_confirm_remove(&mut self, shell_index: usize) {
+		let Some(entry) = self.edited.shells.get(shell_index) else {
 			return;
 		};
 		let name = if entry.title.trim().is_empty() {
@@ -2277,7 +2285,7 @@ impl SettingsDialog {
 		};
 		self.commit_edit();
 		self.prompt = Some(Prompt {
-			job: PromptJob::DropShell(k),
+			job: PromptJob::DropShell(shell_index),
 			title: format!("Really remove \"{name}\" from the list?"),
 			focus: PromptFocus::Ok,
 			warn: None,
@@ -2295,14 +2303,18 @@ impl SettingsDialog {
 				.as_ref()
 				.map_or_else(String::new, |p| f.text(p.hsv));
 		}
-		if let Some((k, command)) = shell_field_of(i) {
-			return self.edited.shells.get(k).map_or_else(String::new, |entry| {
-				if command {
-					entry.command.clone()
-				} else {
-					entry.title.clone()
-				}
-			});
+		if let Some((shell_index, command)) = shell_field_of(i) {
+			return self
+				.edited
+				.shells
+				.get(shell_index)
+				.map_or_else(String::new, |entry| {
+					if command {
+						entry.command.clone()
+					} else {
+						entry.title.clone()
+					}
+				});
 		}
 		match self.specs[i].kind {
 			Kind::Text => self.get_text(self.specs[i].key),
@@ -2450,39 +2462,47 @@ impl SettingsDialog {
 			active,
 		}
 	}
-	// Top of the grid's column titles, and of entry `k`'s own line.
+	// Top of the grid's column titles, and of entry `shell_index`'s own line.
 	fn shell_head_y(&self, i: usize) -> f32 {
 		self.row_y(i)
 	}
-	fn shell_line_y(&self, i: usize, k: usize) -> f32 {
-		self.shell_head_y(i) + self.line_h + lay().shell_head_gap + k as f32 * self.shell_line_h()
+	fn shell_line_y(&self, i: usize, shell_index: usize) -> f32 {
+		self.shell_head_y(i)
+			+ self.line_h
+			+ lay().shell_head_gap
+			+ shell_index as f32 * self.shell_line_h()
 	}
-	// A boxed control centered in entry `k`'s line, at `x` and `w` wide.
-	fn shell_box(&self, i: usize, k: usize, x: f32, w: f32) -> Rect {
+	// A boxed control centered in entry `shell_index`'s line, at `x` and `w` wide.
+	fn shell_box(&self, i: usize, shell_index: usize, x: f32, w: f32) -> Rect {
 		let line = self.shell_line_h();
 		let h = self.field_h();
 		Rect {
 			x,
-			y: self.shell_line_y(i, k) + (line - h) / 2.0,
+			y: self.shell_line_y(i, shell_index) + (line - h) / 2.0,
 			w,
 			h,
 		}
 	}
-	fn shell_name_box(&self, i: usize, k: usize) -> Rect {
-		self.shell_box(i, k, self.shell_cols().name, lay().shell_name_width)
+	fn shell_name_box(&self, i: usize, shell_index: usize) -> Rect {
+		self.shell_box(
+			i,
+			shell_index,
+			self.shell_cols().name,
+			lay().shell_name_width,
+		)
 	}
-	fn shell_cmd_box(&self, i: usize, k: usize) -> Rect {
+	fn shell_cmd_box(&self, i: usize, shell_index: usize) -> Rect {
 		let cols = self.shell_cols();
-		self.shell_box(i, k, cols.command, cols.command_w)
+		self.shell_box(i, shell_index, cols.command, cols.command_w)
 	}
 	// The Active checkbox, centered under its own column title. Square like
 	// every other checkbox, not field-tall like the boxes beside it.
-	fn shell_active_box(&self, i: usize, k: usize) -> Rect {
+	fn shell_active_box(&self, i: usize, shell_index: usize) -> Rect {
 		let size = lay().swatch;
 		let line = self.shell_line_h();
 		Rect {
 			x: self.shell_cols().active + (lay().shell_active_width - size) / 2.0,
-			y: self.shell_line_y(i, k) + (line - size) / 2.0,
+			y: self.shell_line_y(i, shell_index) + (line - size) / 2.0,
 			w: size,
 			h: size,
 		}
@@ -2490,15 +2510,15 @@ impl SettingsDialog {
 	// The drag handle. As tall as the fields beside it rather than square,
 	// because it is grabbed rather than aimed at - the taller box is the whole
 	// difference between a reorder that feels direct and one that keeps missing.
-	fn shell_grip_box(&self, i: usize, k: usize) -> Rect {
-		self.shell_box(i, k, self.shell_cols().grip, self.shell_grip_w())
+	fn shell_grip_box(&self, i: usize, shell_index: usize) -> Rect {
+		self.shell_box(i, shell_index, self.shell_cols().grip, self.shell_grip_w())
 	}
-	fn shell_remove_box(&self, i: usize, k: usize) -> Rect {
+	fn shell_remove_box(&self, i: usize, shell_index: usize) -> Rect {
 		let size = self.shell_button_w();
 		let line = self.shell_line_h();
 		Rect {
 			x: self.shell_cols().remove,
-			y: self.shell_line_y(i, k) + (line - size) / 2.0,
+			y: self.shell_line_y(i, shell_index) + (line - size) / 2.0,
 			w: size,
 			h: size,
 		}
@@ -2516,10 +2536,14 @@ impl SettingsDialog {
 	fn shell_stop_rect(&self, i: usize, part: u16) -> Rect {
 		match shell_stop(part, self.edited.shells.len()) {
 			ShellStop::Add => self.shell_add_box(i),
-			ShellStop::Entry(k, ShellPart::Name) => self.shell_name_box(i, k),
-			ShellStop::Entry(k, ShellPart::Command) => self.shell_cmd_box(i, k),
-			ShellStop::Entry(k, ShellPart::Active) => self.shell_active_box(i, k),
-			ShellStop::Entry(k, ShellPart::Remove) => self.shell_remove_box(i, k),
+			ShellStop::Entry(shell_index, ShellPart::Name) => self.shell_name_box(i, shell_index),
+			ShellStop::Entry(shell_index, ShellPart::Command) => self.shell_cmd_box(i, shell_index),
+			ShellStop::Entry(shell_index, ShellPart::Active) => {
+				self.shell_active_box(i, shell_index)
+			}
+			ShellStop::Entry(shell_index, ShellPart::Remove) => {
+				self.shell_remove_box(i, shell_index)
+			}
 		}
 	}
 	// Move one entry to another place in the list - the whole point of the grip.
@@ -2548,9 +2572,9 @@ impl SettingsDialog {
 		let offset = (y - grab_dy - self.shell_line_y(i, 0)) / line;
 		(offset.round() as usize).min(last)
 	}
-	fn shell_remove(&mut self, k: usize) {
-		if k < self.edited.shells.len() {
-			self.edited.shells.remove(k);
+	fn shell_remove(&mut self, shell_index: usize) {
+		if shell_index < self.edited.shells.len() {
+			self.edited.shells.remove(shell_index);
 		}
 		self.commit_edit();
 		self.focus = None;
@@ -2561,9 +2585,12 @@ impl SettingsDialog {
 		self.commit_edit();
 		let entry = crate::shells::adopted("", &self.edited.shells);
 		self.edited.shells.push(entry);
-		let k = self.edited.shells.len() - 1;
-		self.focus = Some(Focus::Row(i, shell_part_index(k, ShellPart::Command)));
-		self.open_edit(shell_field_row(k, true), true);
+		let shell_index = self.edited.shells.len() - 1;
+		self.focus = Some(Focus::Row(
+			i,
+			shell_part_index(shell_index, ShellPart::Command),
+		));
+		self.open_edit(shell_field_row(shell_index, true), true);
 	}
 
 	// hotkey rows
@@ -2818,10 +2845,10 @@ impl SettingsDialog {
 	fn dual_pitch(&self) -> f32 {
 		lay().dual_pitch * self.ui_scale()
 	}
-	// checkbox `p` (0/1) on a Dual row; its label sits just to the right
-	fn dual_box(&self, i: usize, p: u16) -> Rect {
+	// checkbox `part` (0/1) on a Dual row; its label sits just to the right
+	fn dual_box(&self, i: usize, part: u16) -> Rect {
 		Rect {
-			x: self.control_x(i) + p as f32 * self.dual_pitch(),
+			x: self.control_x(i) + part as f32 * self.dual_pitch(),
 			y: self.centered_in_row(i, lay().swatch),
 			w: lay().swatch,
 			h: lay().swatch,
@@ -2838,11 +2865,11 @@ impl SettingsDialog {
 	fn radio_box_sz(&self) -> f32 {
 		lay().radio_box * self.ui_scale()
 	}
-	// indicator box for radio option `k` in row `i`
-	fn radio_box(&self, i: usize, k: usize) -> Rect {
+	// indicator box for radio option `choice` in row `i`
+	fn radio_box(&self, i: usize, choice: usize) -> Rect {
 		let size = self.radio_box_sz();
 		Rect {
-			x: self.control_x(i) + k as f32 * self.radio_pitch(),
+			x: self.control_x(i) + choice as f32 * self.radio_pitch(),
 			y: self.centered_in_row(i, size),
 			w: size,
 			h: size,
@@ -2890,11 +2917,11 @@ impl SettingsDialog {
 			h,
 		}
 	}
-	fn dd_item_rect(&self, i: usize, n: usize, k: usize) -> Rect {
+	fn dd_item_rect(&self, i: usize, n: usize, choice: usize) -> Rect {
 		let popup = self.dd_popup(i, n);
 		Rect {
 			x: popup.x,
-			y: popup.y + k as f32 * self.dd_item_h(),
+			y: popup.y + choice as f32 * self.dd_item_h(),
 			w: popup.w,
 			h: self.dd_item_h(),
 		}
@@ -2912,25 +2939,25 @@ impl SettingsDialog {
 			_ => 1,
 		}
 	}
-	// The config Key that governs part `p` of row `i` (Dual parts differ; every
+	// The config Key that governs `part` of row `i` (Dual parts differ; every
 	// other kind uses the row's single key for both the value and its graying).
-	fn part_key(&self, i: usize, p: u16) -> Key {
+	fn part_key(&self, i: usize, part: u16) -> Key {
 		match self.specs[i].kind {
-			Kind::Dual { keys, .. } => keys[p as usize],
+			Kind::Dual { keys, .. } => keys[part as usize],
 			_ => self.specs[i].key,
 		}
 	}
 	// A push-button decides for itself (there is nothing to gate on); everything
 	// else asks the setting behind it.
-	fn part_disabled(&self, i: usize, p: u16) -> bool {
+	fn part_disabled(&self, i: usize, part: u16) -> bool {
 		match self.specs[i].kind {
 			Kind::Buttons(_) => {
-				assoc_of(self.specs[i].key).is_none() && !self.theme_btn_enabled(ThemeBtn::of(p))
+				assoc_of(self.specs[i].key).is_none() && !self.theme_btn_enabled(ThemeBtn::of(part))
 			}
 			// Nothing in the grid is ever grayed: every stop is a value the user
 			// can always edit, and reordering left the keyboard with the arrows.
 			Kind::ShellList => false,
-			_ => self.disabled(self.part_key(i, p)),
+			_ => self.disabled(self.part_key(i, part)),
 		}
 	}
 	// Flyover text for a control the environment disables rather than another
@@ -3063,10 +3090,10 @@ impl SettingsDialog {
 	}
 	// Tight box around one focused sub-control (the keyboard-focus ring hugs this,
 	// a couple px out, instead of spanning the whole row).
-	fn focus_ctl_rect(&self, i: usize, p: u16) -> Rect {
+	fn focus_ctl_rect(&self, i: usize, part: u16) -> Rect {
 		match self.specs[i].kind {
 			Kind::Slider { .. } => {
-				if p == 0 {
+				if part == 0 {
 					// the handle overhangs the track by half its width at either end
 					let t = self.track(i);
 					Rect {
@@ -3080,7 +3107,7 @@ impl SettingsDialog {
 				}
 			}
 			Kind::Dual { .. } => {
-				let bx = self.dual_box(i, p);
+				let bx = self.dual_box(i, part);
 				Rect {
 					x: bx.x,
 					y: bx.y,
@@ -3090,7 +3117,7 @@ impl SettingsDialog {
 			}
 			Kind::Toggle => self.checkbox(i),
 			Kind::Text | Kind::Hotkey(_) => self.textbox(i),
-			Kind::Color if p == 0 => self.swatch(i),
+			Kind::Color if part == 0 => self.swatch(i),
 			Kind::Color => self.hexbox(i),
 			Kind::Radio(opts) => {
 				let first = self.radio_box(i, 0);
@@ -3102,8 +3129,8 @@ impl SettingsDialog {
 				}
 			}
 			Kind::Dropdown(_) => self.dd_box(i),
-			Kind::Buttons(_) => self.row_btn_rect(i, p),
-			Kind::ShellList => self.shell_stop_rect(i, p),
+			Kind::Buttons(_) => self.row_btn_rect(i, part),
+			Kind::ShellList => self.shell_stop_rect(i, part),
 			Kind::Header(_) => self.track(i), // unreachable (headers aren't focusable)
 		}
 	}
@@ -3365,7 +3392,7 @@ impl SettingsDialog {
 			.iter()
 			.position(|t| t.name.eq_ignore_ascii_case(&name));
 		let slug = match existing {
-			Some(k) => self.edited.user_themes[k].slug.clone(),
+			Some(theme_index) => self.edited.user_themes[theme_index].slug.clone(),
 			None => self.free_slug(&name),
 		};
 		let theme = crate::theme::UserTheme {
@@ -3667,9 +3694,9 @@ impl SettingsDialog {
 	// else to undo: the box writes through, so the row is the only place the
 	// change ever reached.
 	fn pick_cancel(&mut self) {
-		if let Some(p) = self.pick.take() {
-			let key = self.specs[p.row].key;
-			self.set_col(key, p.start);
+		if let Some(picker) = self.pick.take() {
+			let key = self.specs[picker.row].key;
+			self.set_col(key, picker.start);
 		}
 		self.pick_drop_edit();
 	}
@@ -3691,9 +3718,11 @@ impl SettingsDialog {
 	// value box is refreshed and reselected the way a slider's number field is -
 	// so stepping it with the arrows keeps working and a commit sees the number.
 	fn pick_set(&mut self, hsv: pick::Hsv) {
-		let Some(p) = self.pick.as_mut() else { return };
-		p.hsv = hsv;
-		let (row, rgb) = (p.row, pick::to_rgb(hsv));
+		let Some(picker) = self.pick.as_mut() else {
+			return;
+		};
+		picker.hsv = hsv;
+		let (row, rgb) = (picker.row, pick::to_rgb(hsv));
 		let key = self.specs[row].key;
 		self.set_col(key, rgb);
 	}
@@ -3716,9 +3745,11 @@ impl SettingsDialog {
 	fn pick_focus_to(&mut self, to: pick::Focus) {
 		self.commit_edit();
 		self.pick_drop_edit();
-		let Some(p) = self.pick.as_mut() else { return };
-		p.focus = to;
-		let hsv = p.hsv;
+		let Some(picker) = self.pick.as_mut() else {
+			return;
+		};
+		picker.focus = to;
+		let hsv = picker.hsv;
 		if let pick::Focus::Field(f) = to {
 			let mut edit = EditState::new(pick_field_row(f), f.text(hsv));
 			edit.sel = (edit.cur > 0).then_some(0);
@@ -3726,9 +3757,11 @@ impl SettingsDialog {
 		}
 	}
 	fn pick_focus_move(&mut self, forward: bool) {
-		let Some(p) = self.pick.as_ref() else { return };
+		let Some(picker) = self.pick.as_ref() else {
+			return;
+		};
 		let stops = Picker::stops();
-		let at = stops.iter().position(|&s| s == p.focus).unwrap_or(0);
+		let at = stops.iter().position(|&s| s == picker.focus).unwrap_or(0);
 		let step = if forward { 1 } else { stops.len() - 1 };
 		self.pick_focus_to(stops[(at + step) % stops.len()]);
 	}
@@ -3736,8 +3769,10 @@ impl SettingsDialog {
 	// value box steps its number, and the two buttons pass them on as focus moves.
 	// dir is +1 for Right/Down.
 	fn pick_arrow(&mut self, dir: i32, vertical: bool) {
-		let Some(p) = self.pick.as_ref() else { return };
-		let (focus, hsv) = (p.focus, p.hsv);
+		let Some(picker) = self.pick.as_ref() else {
+			return;
+		};
+		let (focus, hsv) = (picker.focus, picker.hsv);
 		let by = if self.shift { 0.1 } else { 0.01 } * dir as f32;
 		match focus {
 			pick::Focus::Square if vertical => self.pick_set(pick::Hsv {
@@ -3763,8 +3798,10 @@ impl SettingsDialog {
 	// Space or Enter on whatever the keyboard is on. The square and the strip
 	// have nothing to activate, so they stay where they are.
 	fn pick_activate(&mut self) {
-		let Some(p) = self.pick.as_ref() else { return };
-		match p.focus {
+		let Some(picker) = self.pick.as_ref() else {
+			return;
+		};
+		match picker.focus {
 			pick::Focus::Cancel => self.pick_cancel(),
 			pick::Focus::Ok => self.pick_accept(),
 			pick::Focus::Field(_) => self.char_input(' '),
@@ -3797,14 +3834,14 @@ impl SettingsDialog {
 		let Some(hsv) = hsv else { return };
 		if g.square.contains(x, y) {
 			self.pick_focus_to(pick::Focus::Square);
-			if let Some(p) = self.pick.as_mut() {
-				p.drag = Some(pick::Grab::Square);
+			if let Some(picker) = self.pick.as_mut() {
+				picker.drag = Some(pick::Grab::Square);
 			}
 			self.pick_set(g.pick_square(x, y, hsv));
 		} else if g.strip.contains(x, y) {
 			self.pick_focus_to(pick::Focus::Hue);
-			if let Some(p) = self.pick.as_mut() {
-				p.drag = Some(pick::Grab::Hue);
+			if let Some(picker) = self.pick.as_mut() {
+				picker.drag = Some(pick::Grab::Hue);
 			}
 			self.pick_set(g.pick_hue(y, hsv));
 		}
@@ -3812,8 +3849,10 @@ impl SettingsDialog {
 	// A drag that strays off the square or the strip keeps adjusting, clamped to
 	// the edge - the same rule a slider drag follows.
 	fn pick_drag_to(&mut self, x: f32, y: f32) {
-		let Some(p) = self.pick.as_ref() else { return };
-		let (Some(grab), hsv) = (p.drag, p.hsv) else {
+		let Some(picker) = self.pick.as_ref() else {
+			return;
+		};
+		let (Some(grab), hsv) = (picker.drag, picker.hsv) else {
 			return;
 		};
 		let g = self.pick_geom();
@@ -3825,8 +3864,8 @@ impl SettingsDialog {
 	}
 	fn rename_theme(&mut self, name: &str) {
 		let name = name.trim().to_string();
-		if let Some(k) = self.user_theme_index() {
-			self.edited.user_themes[k].name.clone_from(&name);
+		if let Some(theme_index) = self.user_theme_index() {
+			self.edited.user_themes[theme_index].name.clone_from(&name);
 			self.edited.theme = name;
 		}
 	}
@@ -3834,11 +3873,11 @@ impl SettingsDialog {
 	// Drop the saved theme. A built-in of the same name comes back out from behind
 	// it; otherwise the selection falls to the first theme left.
 	fn delete_theme(&mut self) {
-		let Some(k) = self.user_theme_index() else {
+		let Some(theme_index) = self.user_theme_index() else {
 			return;
 		};
-		let name = self.edited.user_themes[k].name.clone();
-		self.edited.user_themes.remove(k);
+		let name = self.edited.user_themes[theme_index].name.clone();
+		self.edited.user_themes.remove(theme_index);
 		if !crate::theme::is_builtin(&name) {
 			self.edited.theme = crate::theme::all_names(&self.edited.user_themes)
 				.first()
@@ -4460,9 +4499,9 @@ impl SettingsDialog {
 		// else -> just close (a click-away dismiss, consumed either way)
 		if let Some(oi) = self.open.take() {
 			let n = self.dd_options(oi).len();
-			for k in 0..n {
-				if self.dd_item_rect(oi, n, k).contains(x, y) {
-					self.set_radio(self.specs[oi].key, k);
+			for choice in 0..n {
+				if self.dd_item_rect(oi, n, choice).contains(x, y) {
+					self.set_radio(self.specs[oi].key, choice);
 					break;
 				}
 			}
@@ -4490,10 +4529,10 @@ impl SettingsDialog {
 			self.commit_edit();
 		}
 		// tab bar
-		for k in 0..self.tab_ws.len() {
-			if self.tab_rect(k).contains(x, y) {
-				if k != self.tab {
-					self.tab = k;
+		for tab in 0..self.tab_ws.len() {
+			if self.tab_rect(tab).contains(x, y) {
+				if tab != self.tab {
+					self.tab = tab;
 					self.scroll = 0.0;
 					self.hscroll = 0.0;
 					self.drag = None;
@@ -4622,25 +4661,25 @@ impl SettingsDialog {
 				}
 				Kind::Dual { keys, .. } => {
 					// hit either checkbox (or its label span, out to the next pitch)
-					for p in 0u16..2 {
-						let bx = self.dual_box(i, p);
+					for part in 0u16..2 {
+						let bx = self.dual_box(i, part);
 						if x >= bx.x
 							&& x <= bx.x + self.dual_pitch() - 8.0
 							&& (y - (bx.y + bx.h / 2.0)).abs() <= bx.h / 2.0 + 4.0
 						{
-							if self.disabled(keys[p as usize]) {
+							if self.disabled(keys[part as usize]) {
 								continue; // grayed checkbox ignores clicks
 							}
-							let key = keys[p as usize];
-							self.focus = Some(Focus::Row(i, p));
+							let key = keys[part as usize];
+							self.focus = Some(Focus::Row(i, part));
 							self.set_toggle(key, !self.get_toggle(key));
 							return Action::None;
 						}
 					}
 				}
 				Kind::Radio(options) => {
-					for k in 0..options.len() {
-						let radio_rect = self.radio_box(i, k);
+					for choice in 0..options.len() {
+						let radio_rect = self.radio_box(i, choice);
 						// click the box or its label
 						if x >= radio_rect.x
 							&& x <= radio_rect.x + self.radio_pitch() - 8.0
@@ -4648,7 +4687,7 @@ impl SettingsDialog {
 								<= radio_rect.h / 2.0 + 4.0
 						{
 							self.focus = Some(Focus::Row(i, 0));
-							self.set_radio(self.specs[i].key, k);
+							self.set_radio(self.specs[i].key, choice);
 							return Action::None;
 						}
 					}
@@ -4662,13 +4701,13 @@ impl SettingsDialog {
 				// same press-arm / release-fire as the footer buttons, so a
 				// press-drag-off cancels and the press is visible
 				Kind::Buttons(captions) => {
-					for p in 0..captions.len() as u16 {
-						if self.row_btn_rect(i, p).contains(x, y) {
-							if self.part_disabled(i, p) {
+					for part in 0..captions.len() as u16 {
+						if self.row_btn_rect(i, part).contains(x, y) {
+							if self.part_disabled(i, part) {
 								continue;
 							}
-							self.focus = Some(Focus::Row(i, p));
-							self.pressed_row = Some((i, p));
+							self.focus = Some(Focus::Row(i, part));
+							self.pressed_row = Some((i, part));
 							return Action::None;
 						}
 					}
@@ -4696,12 +4735,12 @@ impl SettingsDialog {
 	) -> bool {
 		// The grip first, and outside the part walk: it is not a keyboard stop,
 		// so there is no part index that names it.
-		for k in 0..self.edited.shells.len() {
-			if self.shell_grip_box(i, k).contains(x, y) {
+		for shell_index in 0..self.edited.shells.len() {
+			if self.shell_grip_box(i, shell_index).contains(x, y) {
 				self.commit_edit();
 				self.shell_drag = Some(ShellDrag {
-					at: k,
-					grab_dy: y - self.shell_line_y(i, k),
+					at: shell_index,
+					grab_dy: y - self.shell_line_y(i, shell_index),
 				});
 				return true;
 			}
@@ -4711,19 +4750,19 @@ impl SettingsDialog {
 				continue;
 			}
 			match shell_stop(part, self.edited.shells.len()) {
-				ShellStop::Entry(k, ShellPart::Name) => {
-					let field = self.shell_name_box(i, k);
-					let row = shell_field_row(k, false);
+				ShellStop::Entry(shell_index, ShellPart::Name) => {
+					let field = self.shell_name_box(i, shell_index);
+					let row = shell_field_row(shell_index, false);
 					self.field_click(row, Some((i, part)), field, x, measure);
 				}
-				ShellStop::Entry(k, ShellPart::Command) => {
-					let field = self.shell_cmd_box(i, k);
-					let row = shell_field_row(k, true);
+				ShellStop::Entry(shell_index, ShellPart::Command) => {
+					let field = self.shell_cmd_box(i, shell_index);
+					let row = shell_field_row(shell_index, true);
 					self.field_click(row, Some((i, part)), field, x, measure);
 				}
-				ShellStop::Entry(k, ShellPart::Active) => {
+				ShellStop::Entry(shell_index, ShellPart::Active) => {
 					self.focus = Some(Focus::Row(i, part));
-					if let Some(entry) = self.edited.shells.get_mut(k) {
+					if let Some(entry) = self.edited.shells.get_mut(shell_index) {
 						entry.active = !entry.active;
 					}
 				}
@@ -4748,12 +4787,12 @@ impl SettingsDialog {
 		if let Some(f) = pick_field_of(i) {
 			return self.pick.as_ref().map(|_| self.pick_geom().field(f));
 		}
-		if let Some((k, command)) = shell_field_of(i) {
+		if let Some((shell_index, command)) = shell_field_of(i) {
 			let grid = self.shell_row()?;
 			return Some(if command {
-				self.shell_cmd_box(grid, k)
+				self.shell_cmd_box(grid, shell_index)
 			} else {
-				self.shell_name_box(grid, k)
+				self.shell_name_box(grid, shell_index)
 			});
 		}
 		match self.specs[i].kind {
@@ -4787,8 +4826,8 @@ impl SettingsDialog {
 		}
 		self.select_all_on_up = false;
 		let (shift, streak) = (self.shift, self.click_streak);
-		if let Some((r, p)) = focus {
-			self.focus = Some(Focus::Row(r, p));
+		if let Some((r, part)) = focus {
+			self.focus = Some(Focus::Row(r, part));
 		}
 		let Some(edit) = &mut self.edit else { return };
 		let cur = caret_from_click(
@@ -4851,18 +4890,18 @@ impl SettingsDialog {
 		};
 		Rect { x, y, w, h }
 	}
-	fn em_item_rect(&self, k: usize) -> Rect {
+	fn em_item_rect(&self, item: usize) -> Rect {
 		let r = self.em_rect();
 		Rect {
 			x: r.x,
-			y: r.y + k as f32 * self.em_item_h(),
+			y: r.y + item as f32 * self.em_item_h(),
 			w: r.w,
 			h: self.em_item_h(),
 		}
 	}
-	fn em_enabled(&self, k: usize) -> bool {
+	fn em_enabled(&self, item: usize) -> bool {
 		let edit = self.edit.as_ref();
-		match EDIT_MENU[k].1 {
+		match EDIT_MENU[item].1 {
 			EditCmd::Cut | EditCmd::Copy | EditCmd::Delete => {
 				edit.is_some_and(|e| e.sel_range().is_some())
 			}
@@ -4957,12 +4996,16 @@ impl SettingsDialog {
 				continue;
 			}
 			return match shell_stop(part, self.edited.shells.len()) {
-				ShellStop::Entry(k, ShellPart::Name) => {
-					Some((shell_field_row(k, false), self.shell_name_box(i, k), part))
-				}
-				ShellStop::Entry(k, ShellPart::Command) => {
-					Some((shell_field_row(k, true), self.shell_cmd_box(i, k), part))
-				}
+				ShellStop::Entry(shell_index, ShellPart::Name) => Some((
+					shell_field_row(shell_index, false),
+					self.shell_name_box(i, shell_index),
+					part,
+				)),
+				ShellStop::Entry(shell_index, ShellPart::Command) => Some((
+					shell_field_row(shell_index, true),
+					self.shell_cmd_box(i, shell_index),
+					part,
+				)),
 				_ => None,
 			};
 		}
@@ -5149,9 +5192,9 @@ impl SettingsDialog {
 		if let Some(oi) = self.open {
 			let was = self.pending;
 			let n = self.dd_options(oi).len();
-			for k in 0..n {
-				if self.dd_item_rect(oi, n, k).contains(x, y) {
-					self.pending = k;
+			for choice in 0..n {
+				if self.dd_item_rect(oi, n, choice).contains(x, y) {
+					self.pending = choice;
 					break;
 				}
 			}
@@ -5189,8 +5232,8 @@ impl SettingsDialog {
 		if self.shell_drag.take().is_some() {
 			return Action::None;
 		}
-		if let Some(p) = self.pick.as_mut() {
-			p.drag = None;
+		if let Some(picker) = self.pick.as_mut() {
+			picker.drag = None;
 		}
 		self.drag = None;
 		self.drag_thumb = None;
@@ -5218,13 +5261,13 @@ impl SettingsDialog {
 				return action;
 			}
 		}
-		if let Some((i, p)) = self.pressed_row.take() {
+		if let Some((i, part)) = self.pressed_row.take() {
 			if matches!(self.specs[i].kind, Kind::ShellList) {
-				if self.shell_stop_rect(i, p).contains(x, y) {
-					self.shell_activate(i, p);
+				if self.shell_stop_rect(i, part).contains(x, y) {
+					self.shell_activate(i, part);
 				}
-			} else if self.row_btn_rect(i, p).contains(x, y) {
-				self.row_button(i, p);
+			} else if self.row_btn_rect(i, part).contains(x, y) {
+				self.row_button(i, part);
 			}
 		}
 		Action::None
@@ -5485,8 +5528,8 @@ impl SettingsDialog {
 			self.pick_set(hsv);
 			return;
 		}
-		if let Some((k, command)) = shell_field_of(i) {
-			let Some(entry) = self.edited.shells.get_mut(k) else {
+		if let Some((shell_index, command)) = shell_field_of(i) {
+			let Some(entry) = self.edited.shells.get_mut(shell_index) else {
 				return;
 			};
 			if command {
@@ -5560,8 +5603,8 @@ impl SettingsDialog {
 			return cmd.map_or(Action::None, Action::Edit);
 		}
 		// Enter in the picker is its OK, unless Cancel is the focused button
-		if let Some(p) = self.pick.as_ref() {
-			if p.focus == pick::Focus::Cancel {
+		if let Some(picker) = self.pick.as_ref() {
+			if picker.focus == pick::Focus::Cancel {
 				self.pick_cancel();
 			} else {
 				self.pick_accept();
@@ -5589,19 +5632,19 @@ impl SettingsDialog {
 			Action::Ok
 		} else if let Some(Focus::Button(b)) = self.focus {
 			self.buttons()[b].0 // a focused footer button
-		} else if let Some(Focus::Row(i, p)) = self.focus {
+		} else if let Some(Focus::Row(i, part)) = self.focus {
 			// a focused push-button is what Enter presses, not the dialog's OK -
 			// and every stop in the shells grid is one of those or a field
 			match self.specs[i].kind {
 				Kind::Buttons(_) => {
-					self.row_button(i, p);
+					self.row_button(i, part);
 					Action::None
 				}
 				Kind::ShellList => {
-					self.shell_activate(i, p);
+					self.shell_activate(i, part);
 					Action::None
 				}
-				Kind::Color if p == 0 => {
+				Kind::Color if part == 0 => {
 					self.pick_open(i);
 					Action::None
 				}
@@ -5717,12 +5760,12 @@ impl SettingsDialog {
 		fixed.push(q(gut.x, gut.y, gut.w, gut.h, colors.gutter));
 		fixed.push(q(gut.x, gut.y + gut.h, gut.w, 1.0, colors.panel_border));
 		let strip = self.tab_strip();
-		for k in 0..self.tab_ws.len() {
-			let r = clip_rect(self.tab_rect(k), strip);
+		for tab in 0..self.tab_ws.len() {
+			let r = clip_rect(self.tab_rect(tab), strip);
 			if r.w <= 0.0 {
 				continue; // scrolled right out of the strip
 			}
-			let active = k == self.tab;
+			let active = tab == self.tab;
 			fixed.push(q(
 				r.x,
 				r.y,
@@ -5909,12 +5952,12 @@ impl SettingsDialog {
 					}
 				}
 				Kind::Dual { keys, .. } => {
-					for p in 0u16..2 {
-						let off = self.disabled(keys[p as usize]);
-						let bx = self.dual_box(i, p);
+					for part in 0u16..2 {
+						let off = self.disabled(keys[part as usize]);
+						let bx = self.dual_box(i, part);
 						out.push(q(bx.x, bx.y, bx.w, bx.h, colors.field_bg));
 						border(&mut out, bx, 1.0, colors.panel_border);
-						if self.get_toggle(keys[p as usize]) {
+						if self.get_toggle(keys[part as usize]) {
 							out.push(q(
 								bx.x + 4.0,
 								bx.y + 4.0,
@@ -5931,8 +5974,8 @@ impl SettingsDialog {
 				}
 				Kind::Radio(options) => {
 					let sel = self.get_radio(self.specs[i].key);
-					for k in 0..options.len() {
-						let radio_rect = self.radio_box(i, k);
+					for choice in 0..options.len() {
+						let radio_rect = self.radio_box(i, choice);
 						out.push(q(
 							radio_rect.x,
 							radio_rect.y,
@@ -5941,7 +5984,7 @@ impl SettingsDialog {
 							colors.field_bg,
 						));
 						border(&mut out, radio_rect, 1.0, colors.panel_border);
-						if k == sel {
+						if choice == sel {
 							out.push(q(
 								radio_rect.x + 4.0,
 								radio_rect.y + 4.0,
@@ -5974,15 +6017,15 @@ impl SettingsDialog {
 				// the footer gives. Its outline is left to the focus ring below,
 				// which sits exactly on this box rather than outside it.
 				Kind::Buttons(captions) => {
-					for p in 0..captions.len() as u16 {
-						let r = self.row_btn_rect(i, p);
-						let fill = if self.pressed_row == Some((i, p)) {
+					for part in 0..captions.len() as u16 {
+						let r = self.row_btn_rect(i, part);
+						let fill = if self.pressed_row == Some((i, part)) {
 							colors.btn_hl
 						} else {
 							colors.btn_bg
 						};
 						out.push(q(r.x, r.y, r.w, r.h, fill));
-						if !self.ring_on(i, p) {
+						if !self.ring_on(i, part) {
 							border(&mut out, r, 1.0, colors.panel_border);
 						}
 					}
@@ -6088,26 +6131,31 @@ impl SettingsDialog {
 				self.caret_quad(colors, out, r, measure);
 			}
 		};
-		for k in 0..self.edited.shells.len() {
-			let name = self.shell_name_box(i, k);
+		for shell_index in 0..self.edited.shells.len() {
+			let name = self.shell_name_box(i, shell_index);
 			field(
 				out,
 				name,
-				shell_field_row(k, false),
-				shell_part_index(k, ShellPart::Name),
+				shell_field_row(shell_index, false),
+				shell_part_index(shell_index, ShellPart::Name),
 			);
-			let cmd = self.shell_cmd_box(i, k);
+			let cmd = self.shell_cmd_box(i, shell_index);
 			field(
 				out,
 				cmd,
-				shell_field_row(k, true),
-				shell_part_index(k, ShellPart::Command),
+				shell_field_row(shell_index, true),
+				shell_part_index(shell_index, ShellPart::Command),
 			);
 			// Active checkbox, drawn the way every other checkbox in the dialog is
-			let box_r = self.shell_active_box(i, k);
+			let box_r = self.shell_active_box(i, shell_index);
 			out.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 			border(out, box_r, 1.0, colors.panel_border);
-			if self.edited.shells.get(k).is_some_and(|e| e.active) {
+			if self
+				.edited
+				.shells
+				.get(shell_index)
+				.is_some_and(|e| e.active)
+			{
 				let inset = (box_r.w * 0.25).max(3.0);
 				out.push(q(
 					box_r.x + inset,
@@ -6121,8 +6169,11 @@ impl SettingsDialog {
 			// No box and no border around it - it is a texture to grab, not a
 			// button to press, and drawing it as one would invite a click that
 			// does nothing. Plain quads, so it costs no shader mode at all.
-			let grip = self.shell_grip_box(i, k);
-			let held = self.shell_drag.as_ref().is_some_and(|d| d.at == k);
+			let grip = self.shell_grip_box(i, shell_index);
+			let held = self
+				.shell_drag
+				.as_ref()
+				.is_some_and(|d| d.at == shell_index);
 			let bar_h = (1.0 * scale).max(1.0);
 			let bar_w = (grip.w * 0.56).max(4.0);
 			let bar_x = grip.x + (grip.w - bar_w) / 2.0;
@@ -6140,9 +6191,9 @@ impl SettingsDialog {
 			}
 			// Remove, between the command and the date. Red, because it is the
 			// one control in the whole dialog that destroys something.
-			let r = self.shell_remove_box(i, k);
+			let r = self.shell_remove_box(i, shell_index);
 			out.push(q(r.x, r.y, r.w, r.h, colors.btn_bg));
-			if !self.ring_on(i, shell_part_index(k, ShellPart::Remove)) {
+			if !self.ring_on(i, shell_part_index(shell_index, ShellPart::Remove)) {
 				border(out, r, 1.0, colors.panel_border);
 			}
 			out.push(RectInstance {
@@ -6212,10 +6263,10 @@ impl SettingsDialog {
 		let row_text_y = |y: f32, h: f32| y + (h - line_h) / 2.0;
 		// tab titles - the current one reads at full strength, the rest step back
 		let strip = self.tab_strip();
-		for (k, title) in tab_titles().iter().enumerate() {
-			let r = self.tab_rect(k);
+		for (tab, title) in tab_titles().iter().enumerate() {
+			let r = self.tab_rect(tab);
 			out.push(TextItem {
-				color: if k == self.tab {
+				color: if tab == self.tab {
 					colors.text
 				} else {
 					colors.dim
@@ -6376,22 +6427,22 @@ impl SettingsDialog {
 					}
 				}
 				Kind::Dual { keys, labels } => {
-					for p in 0u16..2 {
-						let off = self.disabled(keys[p as usize]);
+					for part in 0u16..2 {
+						let off = self.disabled(keys[part as usize]);
 						let color = if off { colors.dim } else { colors.text };
-						let bx = self.dual_box(i, p);
+						let bx = self.dual_box(i, part);
 						out.push(TextItem {
 							color,
 							clip: Some(vp),
-							..mk(labels[p as usize].into(), bx.x + bx.w + 6.0, ty)
+							..mk(labels[part as usize].into(), bx.x + bx.w + 6.0, ty)
 						});
 					}
 				}
 				Kind::Radio(options) => {
 					let off = self.disabled(self.specs[i].key);
 					let color = if off { colors.dim } else { colors.text };
-					for (k, opt) in options.iter().enumerate() {
-						let radio_rect = self.radio_box(i, k);
+					for (choice, opt) in options.iter().enumerate() {
+						let radio_rect = self.radio_box(i, choice);
 						out.push(TextItem {
 							color,
 							clip: Some(vp),
@@ -6420,9 +6471,9 @@ impl SettingsDialog {
 					});
 				}
 				Kind::Buttons(captions) => {
-					for (p, caption) in captions.iter().enumerate() {
-						let r = self.row_btn_rect(i, p as u16);
-						let color = if self.part_disabled(i, p as u16) {
+					for (part, caption) in captions.iter().enumerate() {
+						let r = self.row_btn_rect(i, part as u16);
+						let color = if self.part_disabled(i, part as u16) {
 							colors.dim
 						} else {
 							colors.text
@@ -6453,12 +6504,12 @@ impl SettingsDialog {
 							..mk((*title).to_string(), tx, head_y)
 						});
 					}
-					for k in 0..self.edited.shells.len() {
-						let name_box = self.shell_name_box(i, k);
-						let cmd_box = self.shell_cmd_box(i, k);
-						let name_row = shell_field_row(k, false);
-						let cmd_row = shell_field_row(k, true);
-						let entry = &self.edited.shells[k];
+					for shell_index in 0..self.edited.shells.len() {
+						let name_box = self.shell_name_box(i, shell_index);
+						let cmd_box = self.shell_cmd_box(i, shell_index);
+						let name_row = shell_field_row(shell_index, false);
+						let cmd_row = shell_field_row(shell_index, true);
+						let entry = &self.edited.shells[shell_index];
 						// an inactive shell is still listed, but reads as parked
 						let color = if entry.active {
 							colors.text
@@ -6507,7 +6558,7 @@ impl SettingsDialog {
 							..mk(
 								seen_text,
 								cols.seen,
-								row_text_y(self.shell_line_y(i, k), self.shell_line_h()),
+								row_text_y(self.shell_line_y(i, shell_index), self.shell_line_h()),
 							)
 						});
 					}
@@ -6585,13 +6636,13 @@ impl SettingsDialog {
 			bold: false,
 			scale: 1.0,
 		};
-		for (k, opt) in options.iter().enumerate() {
-			let r = self.dd_item_rect(i, n, k);
-			if k == self.pending {
+		for (choice, opt) in options.iter().enumerate() {
+			let r = self.dd_item_rect(i, n, choice);
+			if choice == self.pending {
 				rects.push(q(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
 			}
 			let ty = r.y + (r.h - self.line_h) / 2.0;
-			if k == sel {
+			if choice == sel {
 				texts.push(mk(ui().icons.dropdown_check.into(), r.x + r.w - 18.0, ty));
 			}
 			texts.push(mk(opt.clone(), r.x + 10.0, ty));
@@ -6711,7 +6762,7 @@ impl SettingsDialog {
 	) -> (Vec<RectInstance>, Vec<TextItem>) {
 		let mut rects = Vec::new();
 		let mut texts = Vec::new();
-		let Some(p) = &self.pick else {
+		let Some(picker) = &self.pick else {
 			return (rects, texts);
 		};
 		let q = |x: f32, y: f32, w: f32, h: f32, color: [u8; 3]| RectInstance {
@@ -6760,12 +6811,16 @@ impl SettingsDialog {
 		border(&mut rects, g.outer, 1.0, colors.panel_border);
 		texts.push(TextItem {
 			clip: Some(g.title),
-			..mk(self.specs[p.row].label.to_string(), g.title.x, g.title.y)
+			..mk(
+				self.specs[picker.row].label.to_string(),
+				g.title.x,
+				g.title.y,
+			)
 		});
 
 		// The square mixes toward the hue in sRGB, so its `color` is the hue in
 		// sRGB rather than the linear every other quad carries (see RectInstance).
-		let hue = pick::hue_rgb(p.hsv.h);
+		let hue = pick::hue_rgb(picker.hsv.h);
 		rects.push(RectInstance {
 			pos: [g.square.x, g.square.y],
 			size: [g.square.w, g.square.h],
@@ -6779,8 +6834,8 @@ impl SettingsDialog {
 			params: [5.0, 0.0],
 		});
 		for (r, on) in [
-			(g.square, p.focus == pick::Focus::Square),
-			(g.strip, p.focus == pick::Focus::Hue),
+			(g.square, picker.focus == pick::Focus::Square),
+			(g.strip, picker.focus == pick::Focus::Hue),
 		] {
 			if on {
 				border(&mut rects, r, 2.0, colors.focus_out);
@@ -6788,15 +6843,15 @@ impl SettingsDialog {
 				border(&mut rects, r, 1.0, colors.panel_border);
 			}
 		}
-		let rgb = p.rgb();
+		let rgb = picker.rgb();
 		let ink = pick::ink_on(rgb);
-		let (mx, my) = g.marker(p.hsv);
+		let (mx, my) = g.marker(picker.hsv);
 		let d = lay().pick_marker;
 		rects.push(disc(mx, my, d, ink));
 		rects.push(disc(mx, my, d - 4.0, rgb));
 		// The strip is full-chroma at every point, so its marker is plain black
 		// and white rather than a theme color that could land on its own hue.
-		let hy = g.hue_y(p.hsv);
+		let hy = g.hue_y(picker.hsv);
 		rects.push(q(
 			g.strip.x - 2.0,
 			hy - 2.5,
@@ -6827,7 +6882,7 @@ impl SettingsDialog {
 				)
 			});
 			rects.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
-			let open = p.focus == pick::Focus::Field(f);
+			let open = picker.focus == pick::Focus::Field(f);
 			border(
 				&mut rects,
 				box_r,
@@ -6840,7 +6895,7 @@ impl SettingsDialog {
 			);
 			let (txt, view) = match &self.edit {
 				Some(edit) if pick_field_of(edit.row) == Some(f) => (edit.buf.clone(), edit.view),
-				_ => (f.text(p.hsv), 0.0),
+				_ => (f.text(picker.hsv), 0.0),
 			};
 			if open {
 				self.caret_quad(colors, &mut rects, box_r, measure);
@@ -6860,7 +6915,7 @@ impl SettingsDialog {
 			(pick::Focus::Ok, g.ok, "OK"),
 		] {
 			rects.push(q(r.x, r.y, r.w, r.h, colors.btn_bg));
-			let ring = p.focus == part;
+			let ring = picker.focus == part;
 			let outline = if ring {
 				colors.focus_out
 			} else if part == pick::Focus::Ok {
@@ -6917,10 +6972,10 @@ impl SettingsDialog {
 		));
 		rects.push(q(menu.x, menu.y, menu.w, menu.h, colors.field_bg));
 		let hover = self.emenu.as_ref().and_then(|m| m.hover);
-		for (k, (label, _)) in EDIT_MENU.iter().enumerate() {
-			let r = self.em_item_rect(k);
-			let enabled = self.em_enabled(k);
-			if enabled && hover == Some(k) {
+		for (item, (label, _)) in EDIT_MENU.iter().enumerate() {
+			let r = self.em_item_rect(item);
+			let enabled = self.em_enabled(item);
+			if enabled && hover == Some(item) {
 				rects.push(q(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
 			}
 			texts.push(TextItem {

@@ -1072,57 +1072,57 @@ def set_cfg(rec: Rec, keys: dict[str, object]) -> bool:
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ##	Segments (each takes the recorder, typist, mouse)
 
-def wipe(r: Rec, t: Typist, settle: float = 0.8) -> None:
+def wipe(rec: Rec, typist: Typist, settle: float = 0.8) -> None:
 	# clear the screen between scenes: typing over an empty screen changes far
 	# fewer pixels than typing over a full one, and that is most of what keeps the
 	# gif down. Skipped where the next command is meant to push the old output up.
-	r.xdo("windowactivate", r.win)
+	rec.xdo("windowactivate", rec.win)
 	time.sleep(0.25)
-	t.key("ctrl+l", sound=key_sound("l"))
+	typist.key("ctrl+l", sound=key_sound("l"))
 	time.sleep(settle)
 
-def seg_ls(r: Rec, t: Typist, m: Mouse) -> None:
+def seg_ls(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# opens straight on the listing: the ls flags are baked into the wrapper rather
 	# than aliased on camera, because watching someone set an alias sells nothing
-	with Banner(r, "Silky-smooth output scrolling"):
-		t.cmd("ls ~/", settle=3.0)
+	with Banner(rec, "Silky-smooth output scrolling"):
+		typist.cmd("ls ~/", settle=3.0)
 		time.sleep(0.7)
 	# no wipe: the build output is meant to push this listing up
 
-def seg_build(r: Rec, t: Typist, m: Mouse) -> None:
-	with Banner(r, "Watch it adapt to any output speed"):
-		t.cmd("cd projects/pulsar", settle=0.6, typos=0.0)
+def seg_build(rec: Rec, typist: Typist, mouse: Mouse) -> None:
+	with Banner(rec, "Watch it adapt to any output speed"):
+		typist.cmd("cd projects/pulsar", settle=0.6, typos=0.0)
 		# the script runs ~6.5s now (five paced movements, see write_tree) and the
 		# settle has to outlast it, or the scene cuts away mid wind-down - which is
 		# the half worth watching
-		t.cmd("./build.sh", settle=7.0)
+		typist.cmd("./build.sh", settle=7.0)
 		time.sleep(0.7)
 	# no wipe: the wheel scene scrolls back up through all of this
 
-def seg_wheel(r: Rec, t: Typist, m: Mouse) -> None:
+def seg_wheel(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# scrollback under the wheel - the same easing as the output scroll, driven
 	# by hand. xdotool sends two wheel events per click here (winit fires on the
 	# legacy button press AND release), so a few clicks cover a lot of lines. One
 	# direction only: coming back down says nothing going up has not already said,
 	# and a full-width listing in motion is the costliest thing in the gif. The
 	# screen is then just cleared, with no remark - the scene is over at the top.
-	with Banner(r, "Scroll back just as smoothly. Minimap at the right."):
-		m.move(r.size[0] // 2, r.band + (r.size[1] - r.band) // 2, dur=0.5)
-		m.wheel(True, 3, hz=3.2)
+	with Banner(rec, "Scroll back just as smoothly. Minimap at the right."):
+		mouse.move(rec.size[0] // 2, rec.band + (rec.size[1] - rec.band) // 2, dur=0.5)
+		mouse.wheel(True, 3, hz=3.2)
 		time.sleep(0.9)
-		m.park()
-	wipe(r, t)
+		mouse.park()
+	wipe(rec, typist)
 
-def seg_panes(r: Rec, t: Typist, m: Mouse) -> None:
+def seg_panes(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# still the cursor first, silently: three panes each pulsing their own cursor
 	# pull the eye off the split, and every pulse is motion the gif pays for.
 	# Two splits straight off the menu bar (Alt+P opens Panes, then the item's own
 	# accelerator letter - V for vertical), all keyboard, no menu coordinates to
 	# guess at. Splitting twice is what shows the auto-sizing. Closing them again
 	# shows nothing new and took seconds, so that happens in a cut.
-	set_cfg(r, {"cursor.animation": "none"})
-	with Banner(r, "Split panes, sized for you"):
-		r.xdo("windowactivate", r.win)
+	set_cfg(rec, {"cursor.animation": "none"})
+	with Banner(rec, "Split panes, sized for you"):
+		rec.xdo("windowactivate", rec.win)
 		time.sleep(0.3)
 		# vertical then HORIZONTAL, not vertical twice. Two vertical splits leave
 		# three columns, and at a third of the width the prompt very nearly fills
@@ -1133,21 +1133,21 @@ def seg_panes(r: Rec, t: Typist, m: Mouse) -> None:
 		# At half width the prompt has room and no pane reprints. Splitting both
 		# ways also shows the tree does both, which one direction twice does not.
 		for accel in ("v", "h"):
-			t.key("alt+p", sound=key_sound("p"))
+			typist.key("alt+p", sound=key_sound("p"))
 			time.sleep(0.55)
-			t.key(accel, sound=key_sound(accel))
+			typist.key(accel, sound=key_sound(accel))
 			time.sleep(1.1)
 		time.sleep(0.6)
 	# each pane is a shell like any other, so `exit` is what leaves it. The pulse
 	# comes back in here too: the reload takes ~1.2s to reach the screen, which
 	# was most of the cursor scene's opening dwell when it happened on camera.
-	with Cut(r):
-		t.cmd("exit", settle=0.8, typos=0.0)
-		t.cmd("exit", settle=0.8, typos=0.0)
-		set_cfg(r, {"cursor.animation": "pulse_vertical"})
-		wipe(r, t, settle=1.8)
+	with Cut(rec):
+		typist.cmd("exit", settle=0.8, typos=0.0)
+		typist.cmd("exit", settle=0.8, typos=0.0)
+		set_cfg(rec, {"cursor.animation": "pulse_vertical"})
+		wipe(rec, typist, settle=1.8)
 
-def seg_cursor(r: Rec, t: Typist, m: Mouse) -> None:
+def seg_cursor(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# the cursor is a setting, so switch it the way a setting switches - live,
 	# through the control socket, with nothing typed on camera. An empty screen:
 	# the cursor is the only thing moving on it.
@@ -1156,47 +1156,47 @@ def seg_cursor(r: Rec, t: Typist, m: Mouse) -> None:
 	# cut. Then shape and animation change together, block and pulse to a thin bar
 	# that fades. The new animation waits out cursor.animation_resume_s before it
 	# starts, so the second hold is the longer one.
-	with Banner(r, "Cursor shape and animation, your pick"):
-		r.xdo("windowactivate", r.win)
+	with Banner(rec, "Cursor shape and animation, your pick"):
+		rec.xdo("windowactivate", rec.win)
 		time.sleep(1.6)
-		set_cfg(r, {"cursor.size.width": 25, "cursor.animation": "phase"})
+		set_cfg(rec, {"cursor.size.width": 25, "cursor.animation": "phase"})
 		time.sleep(3.2)
 
-def seg_wallpaper(r: Rec, t: Typist, m: Mouse) -> None:
+def seg_wallpaper(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# the image compiled into the binary, switched on like any other setting, so
 	# this is exactly the out-of-the-box look with nothing typed. The reload
 	# takes about a second to reach the screen, hence the longer hold.
-	with Banner(r, "Advanced wallpaper support, with a default in the executable"):
-		r.xdo("windowactivate", r.win)
+	with Banner(rec, "Advanced wallpaper support, with a default in the executable"):
+		rec.xdo("windowactivate", rec.win)
 		time.sleep(0.4)
-		set_cfg(r, {"wallpaper.fallback_builtin": True})
+		set_cfg(rec, {"wallpaper.fallback_builtin": True})
 		time.sleep(4.4)
-	with Banner(r, "Text stays legible over any of it"):
+	with Banner(rec, "Text stays legible over any of it"):
 		time.sleep(2.8)
 	# no wipe from here on: the closing scenes build up the frame that the demo
 	# ends on - wallpaper, color, then the sign-off
 
-def seg_showcase(r: Rec, t: Typist, m: Mouse) -> None:
+def seg_showcase(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# drop the flag the prompt watches for BEFORE this command runs, so the prompt
 	# it returns to is already the gray one and the outro can type straight into
 	# it - no bare Return just to draw a fresh prompt.
-	(r.home / ".silk-gray").touch()
-	with Banner(r, "24-bit color. Unicode. Over anything."):
-		t.cmd("showcase", settle=2.6)
+	(rec.home / ".silk-gray").touch()
+	with Banner(rec, "24-bit color. Unicode. Over anything."):
+		typist.cmd("showcase", settle=2.6)
 		time.sleep(0.8)
 
-def seg_outro(r: Rec, t: Typist, m: Mouse) -> None:
+def seg_outro(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# the prompt grays whatever is typed after it while the flag file exists, so
 	# the comment goes gray from the '#' on, as if ble.sh were installed - but with
 	# plain reliable bash typing.
-	with Banner(r, "github.com/yottacore/silkterm"):
-		r.xdo("windowactivate", r.win)
+	with Banner(rec, "github.com/yottacore/silkterm"):
+		rec.xdo("windowactivate", rec.win)
 		time.sleep(0.5)
 		# a bare prompt above the sign-off and another below it (the one the Return
 		# at the end of the comment leaves), so it sits on its own
-		t.enter()
+		typist.enter()
 		time.sleep(0.6)
-		t.cmd("# Smooth. Silky. ...SilkTerm.", settle=0.5, typos=0.0)
+		typist.cmd("# Smooth. Silky. ...SilkTerm.", settle=0.5, typos=0.0)
 		time.sleep(3.0)
 	# the rest of the linger is the encoder's freeze (TAIL_HOLD_S), which costs a
 	# gif nothing - it stores a held frame as a no-change
@@ -1550,15 +1550,15 @@ def record(args: argparse.Namespace, name: str, seed: int) -> None:
 		time.sleep(2.5)
 		rec.t0_e = time.time() - LEAD_S
 
-		t = Typist(rec, rng)
-		m = Mouse(rec, rng)
+		typist = Typist(rec, rng)
+		mouse = Mouse(rec, rng)
 		want = [s.strip() for s in args.segments.split(",") if s.strip()]
 		for seg, fn in SEGMENTS[name]:
 			if want and seg not in want:
 				continue
 			log(f"[{name}] segment: {seg}")
 			rec.seg_marks[seg] = time.time()
-			fn(rec, t, m)
+			fn(rec, typist, mouse)
 		time.sleep(0.3)                       # brief settle; the 3s hold is added at encode (tpad)
 		video_end_e = time.time()
 

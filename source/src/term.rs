@@ -152,10 +152,10 @@ fn engine_config() -> Config {
 	engine_config_for(&crate::config::settings())
 }
 
-fn engine_config_for(s: &crate::config::Settings) -> Config {
+fn engine_config_for(settings: &crate::config::Settings) -> Config {
 	Config {
-		scrolling_history: s.scrollback,
-		semantic_escape_chars: s.word_separators.clone(),
+		scrolling_history: settings.scrollback,
+		semantic_escape_chars: settings.word_separators.clone(),
 		// stores only: a read would answer the program with somebody else's text
 		osc52: Osc52::OnlyCopy,
 		..Config::default()

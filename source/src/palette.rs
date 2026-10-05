@@ -11,24 +11,24 @@ use crate::config::Settings;
 // their per-frame Settings snapshot: this runs ~2x per cell per rebuilt frame,
 // and settings() is an RwLock read + Arc clone - too hot to take per color.
 
-pub fn resolve(c: Color, colors: &Colors, s: &Settings) -> [u8; 3] {
+pub fn resolve(c: Color, colors: &Colors, settings: &Settings) -> [u8; 3] {
 	match c {
 		Color::Spec(rgb) => [rgb.r, rgb.g, rgb.b],
-		Color::Indexed(i) => indexed(i, colors, s),
-		Color::Named(n) => named(n, colors, s),
+		Color::Indexed(i) => indexed(i, colors, settings),
+		Color::Named(n) => named(n, colors, settings),
 	}
 }
 
-fn indexed(i: u8, colors: &Colors, s: &Settings) -> [u8; 3] {
+fn indexed(i: u8, colors: &Colors, settings: &Settings) -> [u8; 3] {
 	if let Some(rgb) = colors[i as usize] {
 		return [rgb.r, rgb.g, rgb.b];
 	}
-	default_indexed(i, s)
+	default_indexed(i, settings)
 }
 
-pub fn default_indexed(i: u8, s: &Settings) -> [u8; 3] {
+pub fn default_indexed(i: u8, settings: &Settings) -> [u8; 3] {
 	match i {
-		0..=15 => s.ansi[i as usize],
+		0..=15 => settings.ansi[i as usize],
 		16..=231 => {
 			// 6x6x6 cube
 			let cube = i - 16;
@@ -46,31 +46,31 @@ pub fn default_indexed(i: u8, s: &Settings) -> [u8; 3] {
 	}
 }
 
-fn named(n: NamedColor, colors: &Colors, s: &Settings) -> [u8; 3] {
+fn named(n: NamedColor, colors: &Colors, settings: &Settings) -> [u8; 3] {
 	use NamedColor::*;
 	if let Some(rgb) = colors[n] {
 		return [rgb.r, rgb.g, rgb.b];
 	}
 	match n {
-		Foreground | DimForeground | BrightForeground => s.fg,
-		Background => s.bg,
-		Cursor => s.cursor,
-		Black | DimBlack => s.ansi[0],
-		Red | DimRed => s.ansi[1],
-		Green | DimGreen => s.ansi[2],
-		Yellow | DimYellow => s.ansi[3],
-		Blue | DimBlue => s.ansi[4],
-		Magenta | DimMagenta => s.ansi[5],
-		Cyan | DimCyan => s.ansi[6],
-		White | DimWhite => s.ansi[7],
-		BrightBlack => s.ansi[8],
-		BrightRed => s.ansi[9],
-		BrightGreen => s.ansi[10],
-		BrightYellow => s.ansi[11],
-		BrightBlue => s.ansi[12],
-		BrightMagenta => s.ansi[13],
-		BrightCyan => s.ansi[14],
-		BrightWhite => s.ansi[15],
+		Foreground | DimForeground | BrightForeground => settings.fg,
+		Background => settings.bg,
+		Cursor => settings.cursor,
+		Black | DimBlack => settings.ansi[0],
+		Red | DimRed => settings.ansi[1],
+		Green | DimGreen => settings.ansi[2],
+		Yellow | DimYellow => settings.ansi[3],
+		Blue | DimBlue => settings.ansi[4],
+		Magenta | DimMagenta => settings.ansi[5],
+		Cyan | DimCyan => settings.ansi[6],
+		White | DimWhite => settings.ansi[7],
+		BrightBlack => settings.ansi[8],
+		BrightRed => settings.ansi[9],
+		BrightGreen => settings.ansi[10],
+		BrightYellow => settings.ansi[11],
+		BrightBlue => settings.ansi[12],
+		BrightMagenta => settings.ansi[13],
+		BrightCyan => settings.ansi[14],
+		BrightWhite => settings.ansi[15],
 	}
 }
 

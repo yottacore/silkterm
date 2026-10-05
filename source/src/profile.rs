@@ -128,68 +128,70 @@ pub struct Shadow {
 }
 
 impl Shadow {
-	fn of(s: &Settings) -> Shadow {
+	fn of(settings: &Settings) -> Shadow {
 		Shadow {
-			scroll_smooth: s.scroll_smooth,
-			scroll_ease_in_ms: s.scroll_ease_in_ms,
-			scroll_ramp_up_ms: s.scroll_ramp_up_ms,
-			scroll_single_screen_tau_ms: s.scroll_single_screen_tau_ms,
-			scroll_ramp_down_ms: s.scroll_ramp_down_ms,
-			scroll_ease_out_ms: s.scroll_ease_out_ms,
-			smooth_scroll_apps: s.smooth_scroll_apps,
-			cursor_animation: s.cursor_animation.clone(),
-			text_scrim: s.text_scrim,
-			text_scrim_radius: s.text_scrim_radius,
-			text_scrim_strength: s.text_scrim_strength,
-			text_scrim_softness: s.text_scrim_softness,
-			text_scrim_function: s.text_scrim_function.clone(),
-			text_outline: s.text_outline,
-			wallpaper_enabled: s.wallpaper_enabled,
-			wallpaper_blur: s.wallpaper_blur,
-			wallpaper_contrast_mask: s.wallpaper_contrast_mask,
+			scroll_smooth: settings.scroll_smooth,
+			scroll_ease_in_ms: settings.scroll_ease_in_ms,
+			scroll_ramp_up_ms: settings.scroll_ramp_up_ms,
+			scroll_single_screen_tau_ms: settings.scroll_single_screen_tau_ms,
+			scroll_ramp_down_ms: settings.scroll_ramp_down_ms,
+			scroll_ease_out_ms: settings.scroll_ease_out_ms,
+			smooth_scroll_apps: settings.smooth_scroll_apps,
+			cursor_animation: settings.cursor_animation.clone(),
+			text_scrim: settings.text_scrim,
+			text_scrim_radius: settings.text_scrim_radius,
+			text_scrim_strength: settings.text_scrim_strength,
+			text_scrim_softness: settings.text_scrim_softness,
+			text_scrim_function: settings.text_scrim_function.clone(),
+			text_outline: settings.text_outline,
+			wallpaper_enabled: settings.wallpaper_enabled,
+			wallpaper_blur: settings.wallpaper_blur,
+			wallpaper_contrast_mask: settings.wallpaper_contrast_mask,
 		}
 	}
 
-	fn put(&self, s: &mut Settings) {
-		s.scroll_smooth = self.scroll_smooth;
-		s.scroll_ease_in_ms = self.scroll_ease_in_ms;
-		s.scroll_ramp_up_ms = self.scroll_ramp_up_ms;
-		s.scroll_single_screen_tau_ms = self.scroll_single_screen_tau_ms;
-		s.scroll_ramp_down_ms = self.scroll_ramp_down_ms;
-		s.scroll_ease_out_ms = self.scroll_ease_out_ms;
-		s.smooth_scroll_apps = self.smooth_scroll_apps;
-		s.cursor_animation.clone_from(&self.cursor_animation);
-		s.text_scrim = self.text_scrim;
-		s.text_scrim_radius = self.text_scrim_radius;
-		s.text_scrim_strength = self.text_scrim_strength;
-		s.text_scrim_softness = self.text_scrim_softness;
-		s.text_scrim_function.clone_from(&self.text_scrim_function);
-		s.text_outline = self.text_outline;
-		s.wallpaper_enabled = self.wallpaper_enabled;
-		s.wallpaper_blur = self.wallpaper_blur;
-		s.wallpaper_contrast_mask = self.wallpaper_contrast_mask;
+	fn put(&self, settings: &mut Settings) {
+		settings.scroll_smooth = self.scroll_smooth;
+		settings.scroll_ease_in_ms = self.scroll_ease_in_ms;
+		settings.scroll_ramp_up_ms = self.scroll_ramp_up_ms;
+		settings.scroll_single_screen_tau_ms = self.scroll_single_screen_tau_ms;
+		settings.scroll_ramp_down_ms = self.scroll_ramp_down_ms;
+		settings.scroll_ease_out_ms = self.scroll_ease_out_ms;
+		settings.smooth_scroll_apps = self.smooth_scroll_apps;
+		settings.cursor_animation.clone_from(&self.cursor_animation);
+		settings.text_scrim = self.text_scrim;
+		settings.text_scrim_radius = self.text_scrim_radius;
+		settings.text_scrim_strength = self.text_scrim_strength;
+		settings.text_scrim_softness = self.text_scrim_softness;
+		settings
+			.text_scrim_function
+			.clone_from(&self.text_scrim_function);
+		settings.text_outline = self.text_outline;
+		settings.wallpaper_enabled = self.wallpaper_enabled;
+		settings.wallpaper_blur = self.wallpaper_blur;
+		settings.wallpaper_contrast_mask = self.wallpaper_contrast_mask;
 	}
 }
 
 // Put the user's own values back. Safe on settings that carry no profile.
-pub fn unapply(s: &mut Settings) {
-	if let Some(shadow) = s.profile_shadow.take() {
-		shadow.put(s);
+pub fn unapply(settings: &mut Settings) {
+	if let Some(shadow) = settings.profile_shadow.take() {
+		shadow.put(settings);
 	}
 }
 
 // Overwrite the governed fields with the profile's, keeping the user's values
 // in the shadow. Idempotent: a live copy that already carries a profile is
 // unwound first, so a changed profile field is honored rather than stacked.
-pub fn apply(s: &mut Settings) {
-	unapply(s);
-	let profile = current(s);
+pub fn apply(settings: &mut Settings) {
+	unapply(settings);
+	let profile = current(settings);
 	if profile == Profile::Custom {
 		return;
 	}
-	let shadow = Shadow::of(s);
-	values(profile, s);
-	s.profile_shadow = Some(Box::new(shadow));
+	let shadow = Shadow::of(settings);
+	values(profile, settings);
+	settings.profile_shadow = Some(Box::new(shadow));
 }
 
 // Keep what a profile is showing and make it the user's own, then drop to
@@ -197,33 +199,33 @@ pub fn apply(s: &mut Settings) {
 // the values on screen, not from whatever the file held before the profile went
 // on. Also switches the automatic choice off, since a machine still picking for
 // itself would overwrite the edit at the next launch.
-pub fn adopt(s: &mut Settings) {
-	let profile = current(s);
-	if profile == Profile::Custom && !s.performance_automatic {
+pub fn adopt(settings: &mut Settings) {
+	let profile = current(settings);
+	if profile == Profile::Custom && !settings.performance_automatic {
 		return;
 	}
 	if profile != Profile::Custom {
-		unapply(s);
-		values(profile, s);
+		unapply(settings);
+		values(profile, settings);
 	}
-	s.remote_override = false;
-	s.stepped_profile = None;
-	s.performance_profile = Profile::Custom.key().to_string();
-	s.performance_automatic = false;
+	settings.remote_override = false;
+	settings.stepped_profile = None;
+	settings.performance_profile = Profile::Custom.key().to_string();
+	settings.performance_automatic = false;
 }
 
 // The profile in force: the remote override while it is on, then a step the
 // display watch took this session, then the stored one. A step only ever makes
 // a ladder rung cheaper, and only while automatic is on - it is the automatic
 // choice's own correction, so a hand pick or Custom is never overridden by it.
-pub fn current(s: &Settings) -> Profile {
-	if s.remote_override {
+pub fn current(settings: &Settings) -> Profile {
+	if settings.remote_override {
 		return Profile::Remote;
 	}
-	let stored = Profile::parse(&s.performance_profile);
-	match s.stepped_profile {
+	let stored = Profile::parse(&settings.performance_profile);
+	match settings.stepped_profile {
 		Some(step)
-			if s.performance_automatic
+			if settings.performance_automatic
 				&& matches!(stored, Profile::Max | Profile::High | Profile::Low)
 				&& matches!(step, Profile::High | Profile::Low | Profile::Standard)
 				&& step.index() > stored.index() =>
@@ -237,29 +239,29 @@ pub fn current(s: &Settings) -> Profile {
 // What each profile sets. Every profile starts from the shipped defaults, so
 // Max is exactly "the defaults for everything" and the others name only what
 // they change.
-fn values(profile: Profile, s: &mut Settings) {
+fn values(profile: Profile, settings: &mut Settings) {
 	let defaults = Settings::default();
-	Shadow::of(&defaults).put(s);
+	Shadow::of(&defaults).put(settings);
 	match profile {
 		Profile::Custom | Profile::Max => {}
-		Profile::High => quicker(s),
+		Profile::High => quicker(settings),
 		// the wallpaper is decoded once and costs nothing per frame, so Low keeps
 		// it and drops the halo, which is paid on every frame
 		Profile::Low => {
-			quicker(s);
-			s.cursor_animation = "none".to_string();
-			s.text_scrim = false;
-			s.text_outline = 1.0;
+			quicker(settings);
+			settings.cursor_animation = "none".to_string();
+			settings.text_scrim = false;
+			settings.text_outline = 1.0;
 		}
 		Profile::Standard | Profile::Remote => {
-			s.scroll_smooth = false;
-			s.smooth_scroll_apps = false;
-			s.cursor_animation = "none".to_string();
-			s.text_scrim = false;
-			s.text_outline = 0.0;
-			s.wallpaper_enabled = false;
-			s.wallpaper_blur = 0.0;
-			s.wallpaper_contrast_mask = false;
+			settings.scroll_smooth = false;
+			settings.smooth_scroll_apps = false;
+			settings.cursor_animation = "none".to_string();
+			settings.text_scrim = false;
+			settings.text_outline = 0.0;
+			settings.wallpaper_enabled = false;
+			settings.wallpaper_blur = 0.0;
+			settings.wallpaper_contrast_mask = false;
 		}
 	}
 }
@@ -285,14 +287,14 @@ pub fn values_of(profile: Profile) -> &'static Settings {
 
 // Shorter eases on the three stretches a slow display shows most, and a halo
 // that costs fewer taps: the square metric with a smaller reach.
-fn quicker(s: &mut Settings) {
-	s.scroll_ease_in_ms /= 2.0;
-	s.scroll_ease_out_ms /= 2.0;
-	s.scroll_single_screen_tau_ms /= 2.0;
-	s.text_scrim_function = "dilate".to_string();
+fn quicker(settings: &mut Settings) {
+	settings.scroll_ease_in_ms /= 2.0;
+	settings.scroll_ease_out_ms /= 2.0;
+	settings.scroll_single_screen_tau_ms /= 2.0;
+	settings.text_scrim_function = "dilate".to_string();
 	// the same share of the shipped radius it has always been, so a cheaper
 	// profile still looks like the same halo
-	s.text_scrim_radius = 5.0;
+	settings.text_scrim_radius = 5.0;
 }
 
 // Names the adapter closely enough that a new card or a switch to software
