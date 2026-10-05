@@ -1310,7 +1310,13 @@ enum Unread {
 // The settings file as this process last read or wrote it.
 static LAST_SEEN: std::sync::Mutex<Option<(PathBuf, String)>> = std::sync::Mutex::new(None);
 
+// Shell profiles go through the same writer. The one written at launch was
+// the last file seen, so a save after the settings file was deleted started
+// from the bare template.
 fn note_seen(path: &std::path::Path, text: &str) {
+	if config_path().as_deref() != Some(path) {
+		return;
+	}
 	*crate::locks::lock(&LAST_SEEN) = Some((path.to_path_buf(), text.to_string()));
 }
 
@@ -12128,6 +12134,26 @@ mod tests {
 		assert!(persist(&want, &sized), "the window size save");
 		assert!(path.exists(), "the save made the folder and the file");
 		assert!(reload_from_disk() == sized);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A launch writes a shell profile through the settings file's writer, after
+	// it has read the settings file.
+	// Test ID: ErqPAI7
+	#[test]
+	fn a_save_on_a_deleted_file_keeps_it_after_a_profile_write() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("deleted_after_profile");
+		let path = dir.join("config.shcl");
+		let loaded = settled_config(&path);
+		write_config_atomic(&dir.join("profile.ps1"), "# a profile\n").unwrap();
+
+		std::fs::remove_file(&path).unwrap();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 1;
+		assert!(persist(&loaded, &sized));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(reload_from_disk() == sized, "{text}");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
