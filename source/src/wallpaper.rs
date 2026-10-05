@@ -53,6 +53,13 @@ pub struct Request {
 	// none. Without this the built-in stood in, or a rotation folder left the
 	// window bare, so one flag meant two things depending on a folder.
 	pub cleared: bool,
+	// The window's size in pixels, which the image is held at (`Sizing::held`).
+	// 0x0 when unknown, which keeps it whole.
+	pub window: (u32, u32),
+	// Set when this only sizes the picture already showing for a new window
+	// size. Its summary is kept, so the derived text colors don't move by a
+	// rounding error each time the window is resized.
+	pub summary: Option<crate::autotheme::Summary>,
 }
 
 impl Request {
@@ -80,6 +87,10 @@ impl Pacing {
 		self.inflight = Some(seq);
 	}
 
+	pub fn busy(&self) -> bool {
+		self.inflight.is_some()
+	}
+
 	// A tick: whether to send a rotation request now.
 	pub fn tick(&mut self) -> bool {
 		if self.inflight.is_some() {
@@ -105,6 +116,7 @@ impl Pacing {
 #[derive(Debug, Clone)]
 pub struct Prepared {
 	pub rgba: image::RgbaImage,
+	pub sizing: Sizing,
 	pub opacity: f32,
 	pub fit: Fit,
 	pub anchor: [f32; 2],
@@ -180,7 +192,11 @@ fn run(request: &Request) -> Loaded {
 	};
 	let image = (settings.wallpaper_enabled && !request.cleared)
 		.then(|| {
-			prepare(settings, path.as_deref(), folder_active, &|| {
+			let hold = Hold {
+				window: request.window,
+				summary: request.summary,
+			};
+			prepare(settings, path.as_deref(), folder_active, hold, &|| {
 				request.stale()
 			})
 		})
@@ -259,26 +275,66 @@ fn fit_within(w: u32, h: u32, max: u32) -> Option<(u32, u32)> {
 	))
 }
 
+// How big a prepared wallpaper is, so the window can tell when a new size wants
+// it prepared again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sizing {
+	// The image after the MAX_EDGE cut. The blur's sigma is in these pixels, and
+	// the shader takes the picture's proportions from it.
+	pub full: (u32, u32),
+}
+
+impl Sizing {
+	// The size held for a window: what the fit draws the picture at, so the GPU
+	// never keeps pixels it only scales away. Never bigger than `full`. Stretch
+	// takes the larger of the two axis scales, the same as zoom, so the picture
+	// keeps its proportions and the blur stays round, as it was when the whole
+	// image was held.
+	pub fn held(self, window: (u32, u32)) -> (u32, u32) {
+		let ((fw, fh), (ww, wh)) = (self.full, window);
+		if fw == 0 || fh == 0 || ww == 0 || wh == 0 {
+			return self.full;
+		}
+		let scale = (f64::from(ww) / f64::from(fw)).max(f64::from(wh) / f64::from(fh));
+		if scale >= 1.0 {
+			return self.full;
+		}
+		(
+			((f64::from(fw) * scale).round() as u32).clamp(1, fw),
+			((f64::from(fh) * scale).round() as u32).clamp(1, fh),
+		)
+	}
+}
+
+// What a request asks of `prepare` beyond the picture itself.
+#[derive(Debug, Clone, Copy)]
+struct Hold {
+	window: (u32, u32),
+	summary: Option<crate::autotheme::Summary>,
+}
+
 // Decode the wallpaper and apply everything that is fixed at load time (blur,
-// contrast mask, the image's own layout tags). `folder_active` suppresses the
-// built-in stand-in where no path was given at all, since rotation is about to
-// supply one; a path that fails to open still falls back to it. `stale` is asked
-// before each stage, and answers None once the request has been superseded.
+// contrast mask, the image's own layout tags), at the size the window draws it.
+// `folder_active` suppresses the built-in stand-in where no path was given at
+// all, since rotation is about to supply one; a path that fails to open still
+// falls back to it. `stale` is asked before each stage, and answers None once
+// the request has been superseded.
 fn prepare(
 	settings: &Settings,
 	path: Option<&Path>,
 	folder_active: bool,
+	hold: Hold,
 	stale: &dyn Fn() -> bool,
 ) -> Option<Prepared> {
 	if stale() {
 		return None;
 	}
 	let mut source = None;
-	let mut img = match path {
+	let decoded = match path {
 		Some(path) => match image::open(path) {
 			Ok(loaded) => {
 				source = Some(path);
-				cut_to_rgba(loaded)
+				loaded
 			}
 			Err(e) => {
 				eprintln!(
@@ -300,6 +356,14 @@ fn prepare(
 	let tags = source
 		.filter(|_| settings.wallpaper_honor_xmp || settings.wallpaper_honor_xmp_look)
 		.map_or_else(crate::xmp::Tags::default, crate::xmp::read);
+	let sizing = Sizing {
+		full: fit_within(decoded.width(), decoded.height(), MAX_EDGE)
+			.unwrap_or((decoded.width(), decoded.height())),
+	};
+	let held = sizing.held(hold.window);
+	let mut img = cut_to_rgba(decoded, sizing.full);
+	// The look settings are in pixels of the full image.
+	let scale = held.0 as f32 / sizing.full.0.max(1) as f32;
 	let (mut opacity, mut blur) = (settings.wallpaper_opacity, settings.wallpaper_blur);
 	if settings.wallpaper_honor_xmp_look {
 		opacity = tags.opacity.unwrap_or(opacity);
@@ -312,16 +376,16 @@ fn prepare(
 	// dither).
 	// The blur asserts on a sigma that is not a normal float, and a panic here
 	// takes every shell down with it. 1e-40 is inside the config's range.
+	let blur = blur * scale;
 	let blur = if blur.is_normal() { blur } else { 0.0 };
-	if blur > 0.0 || settings.wallpaper_contrast_mask {
+	if blur > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full {
 		// The float copy is sixteen bytes a pixel and the blur is the slow part,
 		// so this is where a superseded request costs the most to carry on.
 		if stale() {
 			return None;
 		}
 		let (w, h) = img.dimensions();
-		let mut linear: image::ImageBuffer<image::Rgba<f32>, Vec<f32>> =
-			image::ImageBuffer::new(w, h);
+		let mut linear = Linear::new(w, h);
 		for (dst, src) in linear.pixels_mut().zip(img.pixels()) {
 			*dst = image::Rgba([
 				config::to_linear(src[0]),
@@ -330,8 +394,28 @@ fn prepare(
 				f32::from(src[3]) / 255.0,
 			]);
 		}
-		if blur > 0.0 {
-			linear = image::imageops::blur(&linear, blur);
+		if held == sizing.full {
+			if blur > 0.0 {
+				linear = image::imageops::blur(&linear, blur);
+			}
+		} else {
+			// The blur reads past the edge as the edge pixel. Shrunk first, that
+			// would be a held pixel standing for several rows of the image, so
+			// the margin it reads is shrunk from the image's own edge instead,
+			// and cut off after.
+			let margin = if blur > 0.0 {
+				(blur * 3.0).ceil() as u32 + 1
+			} else {
+				0
+			};
+			linear = shrink(&linear, held, margin);
+			if blur > 0.0 {
+				linear = image::imageops::blur(&linear, blur);
+			}
+			if margin > 0 {
+				linear =
+					image::imageops::crop_imm(&linear, margin, margin, held.0, held.1).to_image();
+			}
 		}
 		if stale() {
 			return None;
@@ -342,8 +426,10 @@ fn prepare(
 				settings.wallpaper_contrast_mask_size,
 				settings.wallpaper_contrast_mask_strength,
 				settings.wallpaper_contrast_mask_auto,
+				scale,
 			);
 		}
+		img = image::RgbaImage::new(held.0, held.1);
 		for (dst, src) in img.pixels_mut().zip(linear.pixels()) {
 			*dst = image::Rgba([
 				config::from_linear_u8(src[0]),
@@ -367,9 +453,12 @@ fn prepare(
 			anchor = tagged;
 		}
 	}
-	let summary = crate::autotheme::summarize(&img, opacity);
+	let summary = hold
+		.summary
+		.unwrap_or_else(|| crate::autotheme::summarize(&img, opacity));
 	Some(Prepared {
 		rgba: img,
+		sizing,
 		opacity,
 		fit,
 		anchor,
@@ -377,12 +466,74 @@ fn prepare(
 	})
 }
 
-fn builtin(settings: &Settings) -> Option<image::RgbaImage> {
+type Linear = image::ImageBuffer<image::Rgba<f32>, Vec<f32>>;
+
+// Shrink in linear light, for the same reason the blur works there. A triangle
+// filter as wide as the step, reading past the edge as the edge pixel, the
+// way the blur and the GPU's sampler both do. The image crate has neither:
+// `thumbnail` rounds as if for integers, which lifts a float by half, and
+// `resize` drops the taps past the edge, which pulls the edge rows inward.
+// `margin` adds that many pixels on every side, shrunk from past the edge.
+fn shrink(src: &Linear, (w, h): (u32, u32), margin: u32) -> Linear {
+	// (first source index, weights) for each output pixel along one axis
+	fn taps(from: u32, to: u32, margin: u32) -> Vec<(i64, Vec<f32>)> {
+		let step = f64::from(from) / f64::from(to);
+		let reach = step.max(1.0);
+		(0..to + 2 * margin)
+			.map(|i| {
+				let center = (f64::from(i) - f64::from(margin) + 0.5) * step - 0.5;
+				let first = (center - reach).floor() as i64 + 1;
+				let last = (center + reach).ceil() as i64 - 1;
+				let mut weights: Vec<f32> = (first..=last)
+					.map(|at| (1.0 - (at as f64 - center).abs() / reach).max(0.0) as f32)
+					.collect();
+				let sum: f32 = weights.iter().sum();
+				for weight in &mut weights {
+					*weight /= sum;
+				}
+				(first, weights)
+			})
+			.collect()
+	}
+	let (fw, fh) = src.dimensions();
+	let last = |at: i64, len: u32| at.clamp(0, i64::from(len) - 1) as u32;
+	let (ow, oh) = (w + 2 * margin, h + 2 * margin);
+	let mut across = Linear::new(ow, fh);
+	let columns = taps(fw, w, margin);
+	for y in 0..fh {
+		for (x, (first, weights)) in columns.iter().enumerate() {
+			let mut sum = [0.0f32; 4];
+			for (k, weight) in weights.iter().enumerate() {
+				let px = src.get_pixel(last(first + k as i64, fw), y);
+				for c in 0..4 {
+					sum[c] += px[c] * weight;
+				}
+			}
+			across.put_pixel(x as u32, y, image::Rgba(sum));
+		}
+	}
+	let mut out = Linear::new(ow, oh);
+	let rows = taps(fh, h, margin);
+	for (y, (first, weights)) in rows.iter().enumerate() {
+		for x in 0..ow {
+			let mut sum = [0.0f32; 4];
+			for (k, weight) in weights.iter().enumerate() {
+				let px = across.get_pixel(x, last(first + k as i64, fh));
+				for c in 0..4 {
+					sum[c] += px[c] * weight;
+				}
+			}
+			out.put_pixel(x, y as u32, image::Rgba(sum));
+		}
+	}
+	out
+}
+
+fn builtin(settings: &Settings) -> Option<image::DynamicImage> {
 	settings
 		.wallpaper_fallback_builtin
 		.then(|| image::load_from_memory(DEFAULT_BACKGROUND).ok())
 		.flatten()
-		.map(cut_to_rgba)
 }
 
 // A wallpaper is only ever drawn at window size, and the linear intermediate in
@@ -390,13 +541,12 @@ fn builtin(settings: &Settings) -> Option<image::RgbaImage> {
 // gigabytes, and an image wider than the GPU's texture limit aborted the upload.
 // The cut comes before the RGBA copy and uses no float buffer, so a small file
 // with huge dimensions costs its decode (512 MiB at most, the image crate's own
-// limit) and nothing at full size after that. Blurring gets cheaper too, and its
-// radius is relative to what is on screen.
-fn cut_to_rgba(img: image::DynamicImage) -> image::RgbaImage {
-	match fit_within(img.width(), img.height(), MAX_EDGE) {
-		Some((w, h)) => img.thumbnail_exact(w, h).into_rgba8(),
-		None => img.into_rgba8(),
+// limit) and nothing at full size after that. Blurring gets cheaper too.
+fn cut_to_rgba(img: image::DynamicImage, (w, h): (u32, u32)) -> image::RgbaImage {
+	if (w, h) == (img.width(), img.height()) {
+		return img.into_rgba8();
 	}
+	img.thumbnail_exact(w, h).into_rgba8()
 }
 
 // Every image in a rotation folder, in filename order.
@@ -474,12 +624,18 @@ fn shuffle_pick(len: usize, recent: &[usize], entropy: u64) -> usize {
 #[cfg(test)]
 mod tests {
 	use super::{
-		Pacing, Prepared, Request, WP_AVOID_MAX, list_folder_images, next_wallpaper_index, prepare,
-		run, shuffle_pick,
+		Hold, Pacing, Prepared, Request, WP_AVOID_MAX, list_folder_images, next_wallpaper_index,
+		prepare, run, shuffle_pick,
 	};
 	use crate::config::{Fit, Settings};
 	use std::sync::Arc;
 	use std::sync::atomic::AtomicU64;
+
+	// Held whole, as before the window's size was known.
+	const WHOLE: Hold = Hold {
+		window: (0, 0),
+		summary: None,
+	};
 
 	// The blur and the contrast mask are the slow half and neither is under test
 	// here; skipping them keeps these fast.
@@ -517,6 +673,115 @@ mod tests {
 		assert_eq!(fit_within(3840, 2160, MAX_EDGE), None);
 		assert_eq!(fit_within(MAX_EDGE, MAX_EDGE, MAX_EDGE), None);
 		assert_eq!(fit_within(0, 0, MAX_EDGE), None);
+	}
+
+	// The whole image, up to 4096 a side, used to be held and blurred, and the
+	// GPU scaled it to the window every frame.
+	// Test ID: ErqyRJF
+	#[test]
+	fn a_wallpaper_is_held_at_the_size_it_is_drawn_at() {
+		use super::Sizing;
+		let held = |full, window| Sizing { full }.held(window);
+		assert_eq!(held((2560, 1440), (1280, 720)), (1280, 720));
+		// zoom covers the window, and stretch keeps the larger scale the same way,
+		// so proportions and a round blur are kept
+		assert_eq!(held((2560, 1600), (1280, 720)), (1280, 800));
+		assert_eq!(held((1920, 993), (1280, 800)), (1547, 800));
+		// never bigger than the image itself, and whole when the size is unknown
+		assert_eq!(held((1920, 1080), (2560, 1440)), (1920, 1080));
+		assert_eq!(held((1920, 1080), (1920, 1080)), (1920, 1080));
+		assert_eq!(held((1920, 1080), (0, 0)), (1920, 1080));
+		// a 6000x4000 photo, after the 4096 cut, in a 2560x1440 window
+		let (w, h) = held((4096, 2731), (2560, 1440));
+		assert_eq!((w, h), (2560, 1707));
+		assert!(w * h * 4 < 18 << 20, "{} MiB", (w * h * 4) >> 20);
+
+		// and the worker hands over that size
+		let s = flat_settings();
+		let hold = Hold {
+			window: (960, 540),
+			summary: None,
+		};
+		let prepared = prepare(&s, None, false, hold, &|| false).expect("prepared");
+		assert_eq!(prepared.sizing.full, (1920, 993), "the built-in");
+		assert_eq!(prepared.rgba.dimensions(), prepared.sizing.held((960, 540)));
+		assert_eq!(prepared.rgba.dimensions(), (1044, 540));
+	}
+
+	// Held at window size, the picture is shrunk before the blur instead of
+	// after it, so the blur and the contrast mask are scaled to match. Drawn at
+	// the same size, it should look the same as the whole image did.
+	// Test ID: ErqyRUK
+	#[test]
+	fn a_held_wallpaper_looks_like_the_whole_one_drawn_at_its_size() {
+		use crate::config::{from_linear_u8, to_linear};
+		let s = Settings {
+			wallpaper_blur: 10.0,
+			wallpaper_contrast_mask: true,
+			..flat_settings()
+		};
+		let whole = prepare(&s, None, false, WHOLE, &|| false).expect("whole");
+		let hold = Hold {
+			window: (640, 360),
+			summary: None,
+		};
+		let held = prepare(&s, None, false, hold, &|| false).expect("held");
+		let (fw, fh) = whole.rgba.dimensions();
+		let (hw, hh) = held.rgba.dimensions();
+		assert!(hw < fw / 2, "{hw}x{hh} of {fw}x{fh}");
+		// what the GPU draws off of the whole image at a held pixel's center: a
+		// bilinear sample, filtered in linear light as an sRGB texture is
+		let texel = |x: i64, y: i64, c: usize| {
+			let x = x.clamp(0, i64::from(fw) - 1) as u32;
+			let y = y.clamp(0, i64::from(fh) - 1) as u32;
+			to_linear(whole.rgba.get_pixel(x, y)[c])
+		};
+		let (mut worst, mut total, mut count) = (0u8, 0u64, 0u64);
+		for (x, y, px) in held.rgba.enumerate_pixels() {
+			let u = (f64::from(x) + 0.5) * f64::from(fw) / f64::from(hw) - 0.5;
+			let v = (f64::from(y) + 0.5) * f64::from(fh) / f64::from(hh) - 0.5;
+			let (x0, y0) = (u.floor() as i64, v.floor() as i64);
+			let (fx, fy) = ((u - u.floor()) as f32, (v - v.floor()) as f32);
+			for c in 0..3 {
+				let top = texel(x0, y0, c) * (1.0 - fx) + texel(x0 + 1, y0, c) * fx;
+				let bottom = texel(x0, y0 + 1, c) * (1.0 - fx) + texel(x0 + 1, y0 + 1, c) * fx;
+				let drawn = from_linear_u8(top * (1.0 - fy) + bottom * fy);
+				let off = drawn.abs_diff(px[c]);
+				worst = worst.max(off);
+				total += u64::from(off);
+				count += 1;
+			}
+		}
+		let mean = total as f64 / count as f64;
+		eprintln!("held {hw}x{hh} of {fw}x{fh}: {worst} levels at most, {mean:.3} on average");
+		// the edge rows too, which the blur reads past
+		assert!(worst <= 2, "{worst} levels");
+		assert!(mean < 0.2, "{mean:.3} levels on average");
+	}
+
+	// A resize prepares the same picture again, and the colors derived from it
+	// stay where they were.
+	// Test ID: ErqyUlS
+	#[test]
+	fn a_resize_keeps_the_pictures_summary() {
+		let request = |window, summary| Request {
+			seq: 1,
+			newest: Arc::new(AtomicU64::new(1)),
+			settings: Arc::new(flat_settings()),
+			scan: false,
+			current: None,
+			cleared: false,
+			window,
+			summary,
+		};
+		let first = run(&request((1280, 800), None)).image.expect("first");
+		let again = run(&request((700, 400), None)).image.expect("again");
+		assert_ne!(again.rgba.dimensions(), first.rgba.dimensions());
+		let kept = run(&request((700, 400), Some(first.summary)))
+			.image
+			.expect("kept");
+		assert_eq!(kept.rgba.dimensions(), again.rgba.dimensions());
+		assert_eq!(kept.summary, first.summary);
 	}
 
 	// Test ID: EjwZbJA
@@ -607,12 +872,12 @@ mod tests {
 		let mut s = flat_settings();
 		let missing = crate::testdir::run_dir().join("silkterm_no_such_wallpaper.png");
 		let _ = std::fs::remove_file(&missing);
-		assert!(prepare(&s, Some(&missing), false, &|| false).is_some());
+		assert!(prepare(&s, Some(&missing), false, WHOLE, &|| false).is_some());
 		// a rotation folder doesn't change that: the picked file supplies nothing
-		assert!(prepare(&s, Some(&missing), true, &|| false).is_some());
+		assert!(prepare(&s, Some(&missing), true, WHOLE, &|| false).is_some());
 		// ... unless the user opted out
 		s.wallpaper_fallback_builtin = false;
-		assert!(prepare(&s, Some(&missing), false, &|| false).is_none());
+		assert!(prepare(&s, Some(&missing), false, WHOLE, &|| false).is_none());
 	}
 
 	// The blur asserts on a sigma that is not a normal float, and a subnormal one
@@ -623,7 +888,7 @@ mod tests {
 	fn a_subnormal_blur_is_no_blur() {
 		let mut s = flat_settings();
 		s.wallpaper_blur = 1e-40;
-		assert!(prepare(&s, None, false, &|| false).is_some());
+		assert!(prepare(&s, None, false, WHOLE, &|| false).is_some());
 
 		// the same value from an image's own tag
 		let packet = "<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=''>\
@@ -634,7 +899,7 @@ mod tests {
 		s.wallpaper_blur = 0.0;
 		s.wallpaper_honor_xmp_look = true;
 		assert_eq!(crate::xmp::read(&path).blur, Some(0.0));
-		let prepared = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		let prepared = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		assert_eq!(
 			prepared.rgba.dimensions(),
 			(8, 8),
@@ -741,6 +1006,7 @@ mod tests {
 			&flat_settings(),
 			Some(std::path::Path::new(&path)),
 			false,
+			WHOLE,
 			&|| false,
 		);
 		assert_eq!(prepared.expect("prepared").rgba.dimensions(), (4096, 4096));
@@ -761,7 +1027,7 @@ mod tests {
 			..flat_settings()
 		};
 		let asked = Cell::new(0);
-		let live = prepare(&s, None, false, &|| {
+		let live = prepare(&s, None, false, WHOLE, &|| {
 			asked.set(asked.get() + 1);
 			false
 		});
@@ -773,7 +1039,7 @@ mod tests {
 		);
 		for stale_from in 0..stages {
 			asked.set(0);
-			let gone = prepare(&s, None, false, &|| {
+			let gone = prepare(&s, None, false, WHOLE, &|| {
 				let n = asked.get();
 				asked.set(n + 1);
 				n >= stale_from
@@ -794,6 +1060,8 @@ mod tests {
 			scan: false,
 			current: None,
 			cleared: false,
+			window: (0, 0),
+			summary: None,
 		};
 		assert!(run(&request).image.is_none());
 	}
@@ -875,7 +1143,7 @@ mod tests {
 		s.wallpaper_folder = Some(dir.clone());
 		s.wallpaper_folder_auto = true; // auto-detected: nothing to report
 		assert!(super::rotate(&s, None).is_none());
-		assert!(prepare(&s, None, false, &|| false).is_some());
+		assert!(prepare(&s, None, false, WHOLE, &|| false).is_some());
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -889,7 +1157,7 @@ mod tests {
 			wallpaper_default_fit: Fit::Zoom,
 			..flat_settings()
 		};
-		let Some(Prepared { fit, anchor, .. }) = prepare(&s, None, false, &|| false) else {
+		let Some(Prepared { fit, anchor, .. }) = prepare(&s, None, false, WHOLE, &|| false) else {
 			panic!("built-in wallpaper failed to decode");
 		};
 		assert_eq!(fit, Fit::Zoom);
@@ -909,6 +1177,8 @@ mod tests {
 			scan: false,
 			current: None,
 			cleared: false,
+			window: (0, 0),
+			summary: None,
 		};
 		assert!(run(&request(false)).image.is_none());
 		// the control: switched on, the same request shows the built-in
@@ -970,11 +1240,11 @@ mod tests {
 			wallpaper_honor_xmp: true,
 			..flat_settings()
 		};
-		let honored = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		let honored = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		assert_eq!(honored.fit, Fit::Zoom);
 		assert_eq!(honored.anchor, [0.25, 0.8]);
 		s.wallpaper_honor_xmp = false;
-		let ignored = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		let ignored = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		assert_eq!(ignored.fit, Fit::Stretch);
 		assert_eq!(ignored.anchor, [0.5, 0.5]);
 		let _ = std::fs::remove_file(&path);
@@ -989,10 +1259,10 @@ mod tests {
 			wallpaper_honor_xmp_look: true,
 			..flat_settings()
 		};
-		let honored = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		let honored = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		assert!((honored.opacity - 0.4).abs() < 1e-6, "{}", honored.opacity);
 		s.wallpaper_honor_xmp_look = false;
-		let ignored = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		let ignored = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		assert!((ignored.opacity - 0.1).abs() < 1e-6, "{}", ignored.opacity);
 		let _ = std::fs::remove_file(&path);
 	}
@@ -1014,7 +1284,7 @@ mod tests {
 			wallpaper_blur: 2.0,
 			..flat_settings()
 		};
-		let out = prepare(&s, Some(&path), false, &|| false).expect("prepared");
+		let out = prepare(&s, Some(&path), false, WHOLE, &|| false).expect("prepared");
 		let _ = std::fs::remove_file(&path);
 		// the two pixels either side of the edge straddle half the light
 		let pair = f32::from(out.rgba.get_pixel(7, 0)[0]) + f32::from(out.rgba.get_pixel(8, 0)[0]);
@@ -1046,6 +1316,8 @@ mod tests {
 				scan: false,
 				current: None,
 				cleared,
+				window: (0, 0),
+				summary: None,
 			};
 			assert!(run(&request(true)).image.is_none(), "folder {folder:?}");
 			if folder.is_none() {

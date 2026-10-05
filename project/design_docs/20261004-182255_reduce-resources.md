@@ -75,6 +75,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- Graphics memory is what the driver bills the process for. Sizes of single textures are from wgpu's allocator report, which only the Vulkan and DX12 paths have.
 	- Regular memory is the unique resident footprint, with the graphics driver's libraries left out.
 	- `SILK_MEMDBG=1` prints the allocator report and the heap counts below to stderr whenever they change. `cicd/utility/mem-per-window/run.bash` measures one window again on b23.
+		- Since 2026-10-05 it also prints the size the wallpaper is held at, which the GL path has no allocator report for.
 
 - The 330 MB reading was a window plus the dialogs' kept context. The context is about 200 MiB, not the 52 MiB the estimate had.
 
@@ -227,6 +228,39 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- At the shipped blur, that may cut it by four or more with no encoder at all.
 	- A cap keeps a small blur from shrinking it too far.
 
+- Built 2026-10-05, without the smaller still part. The image is still cut to 4096 first, and the blur's sigma is still in pixels of that cut.
+	- The held size is the larger of the two scales from the cut to the window, for stretch as for zoom. So the picture keeps its proportions and the blur stays round. It is never bigger than the cut, so a picture smaller than the window is held whole, as before.
+	- The shrink runs in linear light on the float copy, with a triangle filter that reads past the edge as the edge pixel. The blur is scaled with it, and so is the contrast mask's measure of how busy the picture is.
+	- The blur reads past the edge as well. So a margin 3 sigma wide is shrunk from the image's own edge, blurred with the rest, and cut off after. Without it the outer rows came out up to 8 levels off.
+	- The shader takes the picture's proportions from the cut, not from the texture, so a zoom crop falls where it did.
+	- A resize is followed half a second after the last size change. A request still working is left to finish, and its result is checked against the window's size when it comes in. A resize keeps the picture's summary, so the derived text colors stay put.
+
+- Measured on b23 against a control build, in the same session, in MiB. Each figure is the window less the same window with no wallpaper, so it is the wallpaper's share. Regular memory is the unique footprint less the driver's libraries.
+
+	| Picture, window                                 | GL before | GL after | Regular before | Regular after
+	| :---------------------------------------------- | --------: | -------: | -------------: | ------------:
+	| 9433x5306 photo, cut to 4096x2304, at 2560x1440 |        72 |       32 |             93 |            42
+	| 2560x1440 pack image at 1280x800                |        32 |       12 |             45 |            16
+
+	- A pack image at 2560x1440 is held whole, the same as before.
+	- On Vulkan the photo's texture went from 36.0 to 15.0 MiB. The allocator kept the same 128 MiB of blocks, so the driver's figure stayed at 198.
+	- Preparing the photo took 3.8 s whole, 1.5 s held for 2560x1440 and 1.0 s for 1280x800, on a busy machine. The blur is the slow part, and it runs on fewer pixels.
+
+- Checked against the control build at the same window size, on GL and Vulkan, in dark and light, stretch and zoom, at 1280x800 and 2560x1440. The pictures were the built-in, a pack image and two large photos. Differences are in sRGB levels out of 255:
+	- A picture held whole: 0 changed pixels.
+	- A picture held smaller, at the shipped settings: at most 1 on GL, on 2 to 23% of pixels. One light mode zoom had 639 pixels at 2 or 3, along a sharp edge in the photo. Vulkan was at most 2.
+	- The photo at 100% visibility with no scrim: at most 2, on 14% of pixels.
+	- A window resized and settled against one launched at that size: 1 level on under 0.3% of pixels, from the kept summary. The scaled picture shown before the swap was within 1 level of the one swapped in.
+	- With the blur off, the look does change: up to 23 levels on 56% of pixels. The GPU used to draw a large picture by skipping pixels, and now they are averaged.
+	- Shrinking the sRGB bytes before the float copy, the first try, came out up to 4 off at the shipped settings and 5 at 100% visibility.
+
+- Holding a blurred picture smaller still was tried 2026-10-05 and not built. The picture was held where the blur's sigma came to D held pixels, so the GPU scaled it up by sigma over D.
+	- Inside the picture, at the shipped settings: at most 1 level at D of 4 or 3, and at most 2 at D of 2 or 1.5. Up to half the pixels changed by 1 in light mode.
+	- Near the edge it was worse: up to 6 levels at D of 4 and 8 at D of 2, with a pack image at 2560x1440. The GPU's clamp flattens the outer half pixel of a held pixel several screen pixels wide. A one pixel border around the held picture should fix that.
+	- At 100% visibility: up to 4 inside and 15 at the edge.
+	- A pack image at 2560x1440 costs 32 MiB on GL at window size, 8 at D of 4, and about 0 at D of 2. As plain RGBA that is 2.3 MiB at D of 4 against BC1's 1.8 at full size, and 0.6 MiB at D of 2.
+	- So at the shipped blur, holding it smaller makes compression unneeded. Compression only pays where the blur is small or off. That choice is left to [Block compression for the wallpaper](#block-compression-for-the-wallpaper), which already picks by blur.
+
 ### Block compression for the wallpaper
 
 - GPUs read block-compressed formats directly. BC1 is half a byte a pixel and BC7 one byte, against four for plain RGBA.
@@ -234,6 +268,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 - They work only for textures that do not change. A GPU cannot draw into one, so this is for the wallpaper only.
 
 - The image to compress is the one already prepared at window size and blur.
+	- Since 2026-10-05 the window size part is built. Holding a blurred picture smaller still was measured then, and at the shipped blur it beats BC1 at full size with no encoder. See [The wallpaper at window size](#the-wallpaper-at-window-size).
 
 - Pick by blur and size:
 	- A heavy blur: hold it smaller and skip compression. A quarter-size image in plain RGBA is already smaller than BC1 at full size.

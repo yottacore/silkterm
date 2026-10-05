@@ -770,6 +770,17 @@ if [[ -x "${root}/cicd/tests/delcfg/run.bash" ]]; then
 		*) fDie "save after the config was deleted test failed ($(fTestId cicd/tests/delcfg/run.bash))" ;;
 	esac
 fi
+## The wallpaper is held at the size it is drawn at, and again after a resize.
+## Exit 3 is a skip: no binary, display or xdotool.
+if [[ -x "${root}/cicd/tests/wpresize/run.bash" ]]; then
+	fEcho_Clean "wallpaper held at window size ..."
+	wpRc=0; "${root}/cicd/tests/wpresize/run.bash" >/dev/null || wpRc=$?
+	case "${wpRc}" in
+		0) fEcho "OK: wallpaper held at window size ($(fTestId cicd/tests/wpresize/run.bash))" ;;
+		3) fEcho "WARNING: wallpaper held at window size skipped" ;;
+		*) fDie "wallpaper held at window size test failed ($(fTestId cicd/tests/wpresize/run.bash))" ;;
+	esac
+fi
 if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
 	fEcho_Clean "pipeline steps ..."
 	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed ($(fTestId cicd/tests/engine/run.bash))"
