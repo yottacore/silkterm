@@ -8,6 +8,7 @@
 // A folder this process made is removed when the run passes, and kept when a
 // test panicked. One named by SILKTERM_TEST_DIR is never removed.
 
+use std::cell::Cell;
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -17,6 +18,10 @@ use std::time::Duration;
 const OWNER_FILE: &str = ".test_silkterm_owner";
 static PANICKED: AtomicBool = AtomicBool::new(false);
 static OWNED: OnceLock<Owned> = OnceLock::new();
+
+thread_local! {
+	static EXPECTING_PANIC: Cell<bool> = const { Cell::new(false) };
+}
 
 #[derive(Debug)]
 struct Owned {
@@ -55,10 +60,13 @@ pub fn run_dir() -> &'static Path {
 			token,
 		});
 		// A failing test stops before its own cleanup, so its files are the
-		// record of what it wrote. Any panic keeps the folder.
+		// record of what it wrote. Any panic keeps the folder, bar one a test
+		// caught on purpose through catch_expected_panic.
 		let previous = std::panic::take_hook();
 		std::panic::set_hook(Box::new(move |info| {
-			PANICKED.store(true, Ordering::Relaxed);
+			if !EXPECTING_PANIC.try_with(Cell::get).unwrap_or(false) {
+				PANICKED.store(true, Ordering::Relaxed);
+			}
 			previous(info);
 		}));
 		// The test harness has no end-of-run hook. A pass returns from main and
@@ -68,6 +76,18 @@ pub fn run_dir() -> &'static Path {
 		let _ = unsafe { atexit(remove_at_exit) };
 		dir
 	})
+}
+
+/// `catch_unwind` for a test that panics on purpose. The panic hook runs
+/// before anything catches, so it cannot tell a caught panic from a failed
+/// test, and a bare `catch_unwind` in a test keeps a passing run's folder.
+pub fn catch_expected_panic<R>(
+	body: impl FnOnce() -> R + std::panic::UnwindSafe,
+) -> std::thread::Result<R> {
+	let outer = EXPECTING_PANIC.replace(true);
+	let caught = std::panic::catch_unwind(body);
+	EXPECTING_PANIC.set(outer);
+	caught
 }
 
 fn mark_owned(dir: &Path) -> io::Result<String> {
@@ -445,5 +465,68 @@ mod tests {
 		}
 		std::fs::write(run_dir().join("kept"), "kept").unwrap();
 		panic!("failed on purpose");
+	}
+
+	// A real panic elsewhere at the same moment fails this too, but that run
+	// has failed anyway.
+	// Test ID: Erneqjm
+	#[test]
+	fn a_panic_a_test_expects_does_not_keep_the_folder() {
+		run_dir();
+		if PANICKED.load(Ordering::Relaxed) {
+			return;
+		}
+		let caught = catch_expected_panic(|| panic!("expected"));
+		assert!(caught.is_err());
+		assert!(
+			!PANICKED.load(Ordering::Relaxed),
+			"a caught panic marked the run as failed"
+		);
+		assert!(!EXPECTING_PANIC.get());
+	}
+
+	// Every panic a passing test makes on purpose goes through
+	// catch_expected_panic. fuzz.rs catches only to name the seed, then fails.
+	// Test ID: Erner3A
+	#[test]
+	fn no_test_catches_a_panic_behind_the_run_folders_back() {
+		let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+		let mut offenders = Vec::new();
+		let mut scanned = 0;
+		let mut folders = vec![src.clone()];
+		while let Some(folder) = folders.pop() {
+			for entry in std::fs::read_dir(&folder).unwrap() {
+				let path = entry.unwrap().path();
+				if path.is_dir() {
+					folders.push(path);
+					continue;
+				}
+				let shown = path.strip_prefix(&src).unwrap().display().to_string();
+				if path.extension().is_none_or(|ext| ext != "rs")
+					|| shown == "testdir.rs"
+					|| shown == "fuzz.rs"
+				{
+					continue;
+				}
+				let text = std::fs::read_to_string(&path).unwrap();
+				scanned += 1;
+				for (at, line) in text.lines().enumerate() {
+					if line.contains("catch_unwind") || line.contains("should_panic") {
+						offenders.push(format!("{shown}:{}: {}", at + 1, line.trim()));
+					}
+				}
+			}
+		}
+		// A walk that found nothing would pass.
+		assert!(
+			scanned > 10,
+			"only {scanned} source files under {}",
+			src.display()
+		);
+		assert!(
+			offenders.is_empty(),
+			"use testdir::catch_expected_panic:\n{}",
+			offenders.join("\n")
+		);
 	}
 }
