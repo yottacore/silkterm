@@ -34,201 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Release page: group the downloads in a table
-	- ID: 2026100408214205
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: High
-	- Opened: 20261004-082142
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- When creating a release, the notes group the downloads in a table.
-			- CPU architecture in columns.
-			- Target OS in rows.
-	- Notes:
-		- 20261004: `cicd/utility/release.bash` writes the notes now. They say only "See the README for details." and the build number.
-	- Decisions:
-		- 20261004: best guess, reversible. No macOS row. The public release has no macOS download, and macOS is sold through an app store. A universal macOS binary is its own item, 2026100313404572.
-	- Progress log:
-		- 20261004: The notes now have a download table, x86_64 and ARM64 across, Linux and Windows down. Linux cells link the binary, .deb and .rpm, Windows cells the installer and the portable .exe.
-		- The table is built from the files being uploaded. A missing file gets no link, and a cell with none says "Not available". A file with no place in the table goes on an "Other downloads" line.
-		- Links use the name GitHub gives the file, since it turns odd characters into dots.
-		- The checksums file has its own line, with its signature beside it when there is one. The README line and the build line stay.
-		- The table uses the project style, leading pipe and no trailing pipe. GitHub renders it as a table.
-		- The release is now created with the owner and repo read from the origin remote, the same pair the links use.
-	- Verified: 20261004, the new test passes. It fails when a missing file is linked, when the GitHub rename is skipped, or when a row has a trailing pipe. The real beta3 file names give the expected table, and GitHub renders it as a table. The real beta3 download links follow the same pattern. No release was made.
-	- Branch: reltable
-	- Commit: 25e49e4
-	- Test case: Erl3R5g, `cicd/tests/release-notes/run.bash`, in the pipeline.
-
-- A minimized window lets go of the graphics card after its own short wait
-	- ID: 2026100418354006
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing: vm925w, a minimized window let go after the minute and then restored, with Transparency on and off. Look at what the window shows during the second it takes the card back. The same on macOS on b26.
-	- Priority: High
-	- Opened: 20261004-183540
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225506
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- A new wait for a minimized window, "Minutes when minimized", 1 by default, under "Free resources when idle".
-		- "Minutes when hidden" keeps covering a window that is covered, at 30.
-	- Notes:
-		- 20261004: Taking the card back costs about 25 ms on Linux and 0.8 to 1.2 s on Windows with an RTX 2060. Check what a restored window shows on Windows during that second. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-shorter-wait-for-a-minimized-window).
-	- Progress log:
-		- 20261004: "Minutes when minimized" is the first of the three waits under "Free resources when idle", 1 by default, with the same 1 to 1440 range as the other two. The config key is `window.idle_release_minimized_min`. An existing config gets its commented line beside the other two waits.
-		- The release now tells a minimized window from a covered one. A window with no area counts as minimized, since that is how Windows reports it. A window reported as both minimized and covered takes the minimized wait.
-		- The "Minutes when hidden" tip and the template comment now say that wait is for a covered window. Its name and its 30 stay.
-		- On X11 a shaded window also reads as minimized, since the desktop marks both the same way. Wayland reports neither, so nothing changes there.
-		- `SILK_IDLE_SECS` still sets every wait at once.
-	- Verified: on Linux, a minimized window let go about a minute after it lost focus and took the card back on restore, while an unfocused window beside it kept its device. The new row and its tip show on the Window tab. The unit suite, clippy and fmt pass.
-	- Note: one assertion in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one`, that a minimized window takes the hidden wait, is commented out, since the new wait replaces it. The rest of that test and `a_window_that_would_go_blank_is_never_let_go_in_view` now say covered where they said hidden. `a_window_with_no_area_is_hidden_whatever_the_minimized_answer` asks the same five cases through the new function.
-	- Swept: every `idle_release_hidden_min` site in config.rs (field, default, save, reader, limits test, template), settings_ui.rs (slider list, getter, setter, unit list), settings_ui.shcl (row and gray rule), and both `release_deadline` callers in app.rs. Every reader of the old hidden flag now reads the stored sight. The Windows GUI scripts set only `SILK_IDLE_SECS`.
-	- Branch: minidle
-	- Commit: 3286d22
-	- Test case: ErmpLNm `a_minimized_window_waits_its_own_time` and ErmrbFB `an_existing_config_learns_the_minimized_wait`. The new row is also covered by `every_row_survives_a_save_and_a_relaunch`.
-	- Closed:
-
-- The dialogs' kept GPU context costs every process about 52 MiB
-	- ID: 2026100418225505
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing: Optional: the same figure on vm925w (DX12).
-	- Priority: High
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Prereq IDs: 2026100418225501
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- Measure what it really costs per process.
-		- Choose between dropping it when the dialog closes, sharing the main window's device, or keeping it.
-	- Notes:
-		- 20261004: It opens Settings in 86 ms rather than 310 ms. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-dialogs-kept-gpu-context).
-	- Progress log:
-		- 20261004: Measured on b23 with the memory hint from 2026100419463460: about 21 MiB of graphics memory and 8 MiB of regular memory per process. With the old hint it was 201 MiB.
-		- With the context kept, Settings opened in 105 ms for each of the first three opens and a median of 66 after. Without it, every open took about 230 ms.
-	- Decisions:
-		- 20261004, reversible: keep it. It costs about 21 MiB with the hint, and the idle release already lets its device go along with the window's. Dropped on close, every open would take about 230 ms. Sharing the main window's device cannot work on X11, where the window draws through GL, and would save about 20 MiB elsewhere. `WARM_DIALOG_GPU` in app.rs is the one-line way back.
-	- Branch: memhint
-	- Commit: b1ddf3a, 157a2cc
-	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) keeps the context's reserve under 32 MiB. Keeping or dropping the context has no test of its own.
-	- Closed:
-
-- Always use software rendering, and fall back to it when the card cannot make a device
-	- ID: 2026100418225504
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing:
-		- vm925w: turn on Settings > Window > Always use software rendering, with Transparency off and then on. The window and Settings should keep drawing, and Help > About should say Software (CPU). Then launch with `SILK_REFUSE_CARD` set to a file that exists. The window should open in software rather than fail.
-		- b26: the row is grayed, with its macOS tip.
-	- Priority: High
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100312470535, 2026100418225506, 2026100421153746
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- A setting, "Always use software rendering", off by default.
-		- Grayed with a tip where it cannot work, such as macOS.
-		- When the card cannot make a device, at launch or at a rebuild, try software rendering once before giving up.
-	- Notes:
-		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#software-rendering). Today a found card that cannot make a device ends the launch.
-		- 20261004: Built as `window.software_rendering`, on the Window tab under "Free resources when idle" and its waits, until the Resource use group (2026100418225506). What was built is in the design doc's Software rendering section.
-	- Progress log:
-		- 20261004: Calls made, open to change at signoff:
-			- A software device on a machine with a card is not new hardware. The card keeps its performance rating, and the session steps down to Low with nothing written. Back on the card, the step comes off.
-			- On X11 the software device is lavapipe on the same window. It keeps Transparency working, so the row is not grayed under Transparency.
-			- A change takes effect once Settings is closed, not at Apply while it stays open.
-			- With software asked for and no software renderer installed, the card draws and stderr says so once.
-			- The window title does not change. Help > About names the adapter in use, and a fallback prints the reason on stderr.
-		- 20261004: Verified: the five new tests pass. The fallback test fails with the fallback taken out and passes with it. The full unit suite (1124), fmt, and clippy for Linux, Windows and macOS pass.
-		- 20261004: Verified on b23 (RTX 3060 Ti), with the card made to refuse every device (`SILK_REFUSE_CARD`):
-			- X11, which draws through GL: at launch, the window and Settings drew in software. An idle rebuild while the card refused drew new output in software. The next rebuild was back on the card's GL and drew.
-			- Wayland, which draws through Vulkan: at launch, the window drew in software. A rebuild while the card refused fell back, and the next one was back on the card.
-			- The dialogs' kept context fell back the same way.
-		- 20261004: Verified on b23: with the setting on at launch, the window drew in software and the card's rating was left alone. Turned on and off through Settings and through a settings reload, on both X11 and Wayland, the window changed device each time and drew. The session profile went to Low and back, and the profile in the file did not change. With no software renderer to be found, the card drew and stderr said so.
-		- 20261004: Only compiled: Windows, where the software adapter is WARP, for the ordinary window and the DX12 one used with Transparency on. The macOS gray is checked by a unit test, not seen on a Mac. A Wayland rebuild after an idle release was not run; rebuilds there came from a setting change.
-		- 20261004: Seen along the way and filed as 2026100421153746: debug builds on lavapipe report a Vulkan validation error for the minimap upload. It shows on the plain no-card path too, so it is older than this item.
-	- Against: the UI style guide leaves a row that can never work on a platform out of that build, rather than graying it. The requirement asks for gray with a tip on macOS. Listed under the guide's Known deviations.
-	- Swept: every device and adapter request. The window's native path, the X11 GL path at launch and at a rebuild, the Windows composited path, the dialogs' kept context and the one a dialog builds without it, and the adapter `--about` reports. `grep -rn 'request_adapter\|request_device(' source/src` finds only `gl_on`, `pick_device`, `probe_adapter_info` and a test.
-	- Branch: softrender
-	- Commit: 4fec2af
-	- Test case: `a_card_that_refuses_a_device_falls_back_to_software` (ErnMa8F), `a_device_is_named_by_what_drew_it_and_why` (ErnMa3y), `a_software_device_steps_the_session_and_the_card_takes_it_back` (ErnMaCH), `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS), `software_rendering_ships_off` (ErnMaKh).
-	- Closed:
-
-- The scrim's textures are bigger than they need to be
-	- ID: 2026100418225502
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing:
-		- vm925w: a window with the default scrim, dark and light, looks as before on DX12, and with Transparency on.
-		- b26: the same on Metal.
-	- Priority: High
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Prereq IDs: 2026100418225501
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- Test one channel for the text and cursor coverage layers, instead of four 16-bit floats.
-		- Test one channel for the two blur layers, and whether eight bits bands in a dark, soft halo.
-		- Test the blur passes at half size. If the loss shows, Max silk keeps full size and the lower profiles use half size.
-		- No visible change at the same settings. The scrim is what keeps text readable, so legibility is the bar.
-	- Notes:
-		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-smaller-scrim).
-		- 20261004: Built. Each layer keeps only what is read back, 13 bytes a pixel instead of 40, and the two blur layers are made only for the halo. Formats, numbers and the variants tried are in the design doc's "A smaller scrim" section.
-	- Progress log:
-		- 20261004: One channel for the cursor coverage, and one 16-bit channel for each blur layer. The text coverage keeps four 8-bit channels, since glyphon writes each glyph's color and one channel would need it to write white. The color map is 8-bit and stored encoded, which gives every cell color back exactly.
-		- 20261004: Tried and not kept: 8-bit blur layers, which band in the Gaussian halo by up to 6 levels, and half-size blur layers, which fill small glyph counters and make the halo heavier. Numbers are in the design doc.
-		- 20261004: Question: the requirement gives the lower profiles half size when the loss shows. The only lower profile with a halo is High, which is meant to look like the same halo as Max. It stays full size for now. Half size would save another 10.5 MiB a window at 2560x1440, on High only.
-		- 20261004: Verified on b23 at 2560x1440 against a control build in the same session: the X11 window process went from 273 MiB to 175, and 159 with the halo off. The Vulkan window went from 256 MiB to 202, and 138 with the halo off. Regular memory did not change.
-		- 20261004: Verified against the control build at the same settings, on GL and Vulkan on the card and on software rendering: at most 1 sRGB level on GL and 3 on Vulkan, at the antialiased edge of the light-mode outline. The soft dark halo changed by at most 1 on any path. Cases are listed in the design doc.
-		- 20261004: Verified: the two new tests fail with the old formats put back and pass after. The full unit suite (1126), fmt, and clippy for Linux and Windows pass.
-	- Branch: scrimsize
-	- Commit: b21cb7b
-	- Test case: `the_scrim_costs_at_most_13_bytes_a_pixel` (ErnU09H) reads the cost off the formats, and `the_color_map_keeps_every_byte_color_exactly` (ErnU0UJ). `nothing_drawing_costs_no_memory` (EpHXO9g) now also holds the blur layers to a pixel with the halo off; its old 200 MiB floor is commented out, since the full set at 4K is now about 100 MiB.
-	- Closed:
-
-- A Settings save on a config that was deleted while running says it saved and writes nothing
-	- ID: 2026100316135866
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261003-161358
-	- Opened by: CC
-	- Related IDs: 2026100315581313
-	- Target OS: All
-	- Steps to reproduce:
-		- Launch, then delete the config file.
-		- Change a setting in Settings and press OK, or resize the window.
-	- Incorrect behavior: The dialog closes as if it saved. Nothing is written, and the next launch starts from the defaults.
-	- Expected behavior: The save writes the file, or says it did not.
-	- Reproduced: No. Found by reading `persist` while working 2026100315581313.
-		- 20261004 on b23: a unit test deleted the file and saved through `persist`, once with a Settings edit and once with a window size change. Both answered that they saved and wrote nothing.
-	- Actual cause: `persist` took a missing file as nothing to do and answered that it saved.
-	- Decisions:
-		- 20261004: best guess, reversible. The save writes a full new config file from the template with the current settings, the same as a first launch would, and goes through quietly with no notice.
-	- Actual fix:
-		- A save that finds the file gone makes its folder and starts from the template. It carries every setting the file held when the program last read or wrote it, then puts the save's own change on top. The carry is the one a fresh file from `upgrade` uses.
-		- Values that last only the session stay out of the new file, such as a rotated wallpaper or a font given on the command line. The save still writes only what changed against what the window loaded.
-		- The shell list is still three-way against the file. The carried file has the list, so no entry reads as removed. A file the program never saw gets the list the window loaded.
-		- Like any fresh file from the template, the new one does not keep the old file's comments or layout, or a line the template has no place for.
-	- Swept: Every caller of `persist`: Settings OK, window size, font zoom and per-monitor sizes, the copy, minimap and single tab toggles, and shells found at launch. The revert arrow's write and the cleared font's write run after `persist`, so they find the new file. The rating write still says it could not read a missing file, so it does not claim to have saved; left alone. The launch steps run after a launch lays the template down.
-	- Test case: `a_save_on_a_deleted_file_writes_it_new` (ErkRECv) and `a_save_on_a_deleted_file_keeps_the_shell_list` (ErkREXH). Both fail with the old answer put back and pass now. The first also fails when the save starts from the bare template without the carry.
-	- Verified: The unit suite passes, 1085 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not checked in a real window; the two app-side callers were read, not run.
-	- Branch: delcfg
-	- Commit: 312f355
-
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
@@ -1475,6 +1280,178 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
 
+- Release page: group the downloads in a table
+	- ID: 2026100408214205
+	- Type: Enhancement
+	- Status: Done
+	- Priority: High
+	- Opened: 20261004-082142
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When creating a release, the notes group the downloads in a table.
+			- CPU architecture in columns.
+			- Target OS in rows.
+	- Notes:
+		- 20261004: `cicd/utility/release.bash` writes the notes now. They say only "See the README for details." and the build number.
+	- Decisions:
+		- 20261004: best guess, reversible. No macOS row. The public release has no macOS download, and macOS is sold through an app store. A universal macOS binary is its own item, 2026100313404572.
+	- Progress log:
+		- 20261004: The notes now have a download table, x86_64 and ARM64 across, Linux and Windows down. Linux cells link the binary, .deb and .rpm, Windows cells the installer and the portable .exe.
+		- The table is built from the files being uploaded. A missing file gets no link, and a cell with none says "Not available". A file with no place in the table goes on an "Other downloads" line.
+		- Links use the name GitHub gives the file, since it turns odd characters into dots.
+		- The checksums file has its own line, with its signature beside it when there is one. The README line and the build line stay.
+		- The table uses the project style, leading pipe and no trailing pipe. GitHub renders it as a table.
+		- The release is now created with the owner and repo read from the origin remote, the same pair the links use.
+	- Verified: 20261004, the new test passes. It fails when a missing file is linked, when the GitHub rename is skipped, or when a row has a trailing pipe. The real beta3 file names give the expected table, and GitHub renders it as a table. The real beta3 download links follow the same pattern. No release was made.
+	- Branch: reltable
+	- Commit: 25e49e4
+	- Test case: Erl3R5g, `cicd/tests/release-notes/run.bash`, in the pipeline.
+	- Acceptance signoff: Self-closed: the release notes test covers the table, and checking it by hand needs a real release.
+	- Closed: 20261005-094503
+
+- A minimized window lets go of the graphics card after its own short wait
+	- ID: 2026100418354006
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: b26, a minimized window let go after the minute and then restored. Look at what the window shows while it takes the card back.
+	- Priority: High
+	- Opened: 20261004-183540
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225506
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A new wait for a minimized window, "Minutes when minimized", 1 by default, under "Free resources when idle".
+		- "Minutes when hidden" keeps covering a window that is covered, at 30.
+	- Notes:
+		- 20261004: Taking the card back costs about 25 ms on Linux and 0.8 to 1.2 s on Windows with an RTX 2060. Check what a restored window shows on Windows during that second. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-shorter-wait-for-a-minimized-window).
+	- Progress log:
+		- 20261004: "Minutes when minimized" is the first of the three waits under "Free resources when idle", 1 by default, with the same 1 to 1440 range as the other two. The config key is `window.idle_release_minimized_min`. An existing config gets its commented line beside the other two waits.
+		- The release now tells a minimized window from a covered one. A window with no area counts as minimized, since that is how Windows reports it. A window reported as both minimized and covered takes the minimized wait.
+		- The "Minutes when hidden" tip and the template comment now say that wait is for a covered window. Its name and its 30 stay.
+		- On X11 a shaded window also reads as minimized, since the desktop marks both the same way. Wayland reports neither, so nothing changes there.
+		- `SILK_IDLE_SECS` still sets every wait at once.
+	- Verified: on Linux, a minimized window let go about a minute after it lost focus and took the card back on restore, while an unfocused window beside it kept its device. The new row and its tip show on the Window tab. The unit suite, clippy and fmt pass.
+	- Verified: 20261005 on vm925w, with Transparency on and off: a minimized window kept its device at 30 s, let it go at about 60 s, and showed what it had once restored. The older `idlewake` scenario passed again on the same build.
+	- Note: one assertion in `the_idle_release_waits_on_the_window_and_only_an_unwatched_one`, that a minimized window takes the hidden wait, is commented out, since the new wait replaces it. The rest of that test and `a_window_that_would_go_blank_is_never_let_go_in_view` now say covered where they said hidden. `a_window_with_no_area_is_hidden_whatever_the_minimized_answer` asks the same five cases through the new function.
+	- Swept: every `idle_release_hidden_min` site in config.rs (field, default, save, reader, limits test, template), settings_ui.rs (slider list, getter, setter, unit list), settings_ui.shcl (row and gray rule), and both `release_deadline` callers in app.rs. Every reader of the old hidden flag now reads the stored sight. The Windows GUI scripts set only `SILK_IDLE_SECS`.
+	- Branch: minidle
+	- Commit: 3286d22
+	- Test case: ErmpLNm `a_minimized_window_waits_its_own_time` and ErmrbFB `an_existing_config_learns_the_minimized_wait`. The new row is also covered by `every_row_survives_a_save_and_a_relaunch`. `cicd/tests/wingui/idlemin.ps1` (ErqPAvG) runs the vm925w check. It is not in the pipeline, since it takes about 3 minutes.
+	- Acceptance signoff: Self-closed: checked on vm925w with both Transparency settings. The macOS look is owed, and its code is shared.
+	- Closed: 20261005-094503
+
+- The dialogs' kept GPU context costs every process about 52 MiB
+	- ID: 2026100418225505
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: Optional: the same figure on vm925w (DX12).
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225501
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Measure what it really costs per process.
+		- Choose between dropping it when the dialog closes, sharing the main window's device, or keeping it.
+	- Notes:
+		- 20261004: It opens Settings in 86 ms rather than 310 ms. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-dialogs-kept-gpu-context).
+	- Progress log:
+		- 20261004: Measured on b23 with the memory hint from 2026100419463460: about 21 MiB of graphics memory and 8 MiB of regular memory per process. With the old hint it was 201 MiB.
+		- With the context kept, Settings opened in 105 ms for each of the first three opens and a median of 66 after. Without it, every open took about 230 ms.
+	- Decisions:
+		- 20261004, reversible: keep it. It costs about 21 MiB with the hint, and the idle release already lets its device go along with the window's. Dropped on close, every open would take about 230 ms. Sharing the main window's device cannot work on X11, where the window draws through GL, and would save about 20 MiB elsewhere. `WARM_DIALOG_GPU` in app.rs is the one-line way back.
+	- Branch: memhint
+	- Commit: b1ddf3a, 157a2cc
+	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) keeps the context's reserve under 32 MiB. Keeping or dropping the context has no test of its own. `every_dialog_open_takes_the_kept_context` (ErqRBp6): two dialog opens get the same device, and the idle release lets it go. It fails when every open builds its own.
+	- Acceptance signoff: Self-closed: measured on b23, and the new test holds the call. Going back is one line.
+	- Closed: 20261005-094503
+
+- Always use software rendering, and fall back to it when the card cannot make a device
+	- ID: 2026100418225504
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing:
+		- b26: the row is grayed, with its macOS tip.
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470535, 2026100418225506, 2026100421153746
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A setting, "Always use software rendering", off by default.
+		- Grayed with a tip where it cannot work, such as macOS.
+		- When the card cannot make a device, at launch or at a rebuild, try software rendering once before giving up.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#software-rendering). Today a found card that cannot make a device ends the launch.
+		- 20261004: Built as `window.software_rendering`, on the Window tab under "Free resources when idle" and its waits, until the Resource use group (2026100418225506). What was built is in the design doc's Software rendering section.
+	- Progress log:
+		- 20261004: Calls made, open to change at signoff:
+			- A software device on a machine with a card is not new hardware. The card keeps its performance rating, and the session steps down to Low with nothing written. Back on the card, the step comes off.
+			- On X11 the software device is lavapipe on the same window. It keeps Transparency working, so the row is not grayed under Transparency.
+			- A change takes effect once Settings is closed, not at Apply while it stays open.
+			- With software asked for and no software renderer installed, the card draws and stderr says so once.
+			- The window title does not change. Help > About names the adapter in use, and a fallback prints the reason on stderr.
+		- 20261004: Verified: the five new tests pass. The fallback test fails with the fallback taken out and passes with it. The full unit suite (1124), fmt, and clippy for Linux, Windows and macOS pass.
+		- 20261004: Verified on b23 (RTX 3060 Ti), with the card made to refuse every device (`SILK_REFUSE_CARD`):
+			- X11, which draws through GL: at launch, the window and Settings drew in software. An idle rebuild while the card refused drew new output in software. The next rebuild was back on the card's GL and drew.
+			- Wayland, which draws through Vulkan: at launch, the window drew in software. A rebuild while the card refused fell back, and the next one was back on the card.
+			- The dialogs' kept context fell back the same way.
+		- 20261004: Verified on b23: with the setting on at launch, the window drew in software and the card's rating was left alone. Turned on and off through Settings and through a settings reload, on both X11 and Wayland, the window changed device each time and drew. The session profile went to Low and back, and the profile in the file did not change. With no software renderer to be found, the card drew and stderr said so.
+		- 20261004: Only compiled: Windows, where the software adapter is WARP, for the ordinary window and the DX12 one used with Transparency on. The macOS gray is checked by a unit test, not seen on a Mac. A Wayland rebuild after an idle release was not run; rebuilds there came from a setting change.
+		- 20261004: Seen along the way and filed as 2026100421153746: debug builds on lavapipe report a Vulkan validation error for the minimap upload. It shows on the plain no-card path too, so it is older than this item.
+		- 20261005: Verified on vm925w, with Transparency off and on: with the setting on, and with the card refused through `SILK_REFUSE_CARD`. Each window drew on WARP (Dx12 / Cpu) and took typing, and the refused ones said they fell back. Settings and About were not opened there.
+	- Against: the UI style guide leaves a row that can never work on a platform out of that build, rather than graying it. The requirement asks for gray with a tip on macOS. Listed under the guide's Known deviations.
+	- Swept: every device and adapter request. The window's native path, the X11 GL path at launch and at a rebuild, the Windows composited path, the dialogs' kept context and the one a dialog builds without it, and the adapter `--about` reports. `grep -rn 'request_adapter\|request_device(' source/src` finds only `gl_on`, `pick_device`, `probe_adapter_info` and a test.
+	- Branch: softrender
+	- Commit: 4fec2af
+	- Test case: `a_card_that_refuses_a_device_falls_back_to_software` (ErnMa8F), `a_device_is_named_by_what_drew_it_and_why` (ErnMa3y), `a_software_device_steps_the_session_and_the_card_takes_it_back` (ErnMaCH), `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS), `software_rendering_ships_off` (ErnMaKh). `cicd/tests/wingui/softrender.ps1` (ErqPAbe) runs the vm925w check, in the pipeline.
+	- Acceptance signoff: Self-closed: the Windows path that was only compiled now runs in the pipeline. The macOS gray is held by a unit test.
+	- Closed: 20261005-094503
+
+- The scrim's textures are bigger than they need to be
+	- ID: 2026100418225502
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing:
+		- b26: the same on Metal.
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225501
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Test one channel for the text and cursor coverage layers, instead of four 16-bit floats.
+		- Test one channel for the two blur layers, and whether eight bits bands in a dark, soft halo.
+		- Test the blur passes at half size. If the loss shows, Max silk keeps full size and the lower profiles use half size.
+		- No visible change at the same settings. The scrim is what keeps text readable, so legibility is the bar.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-smaller-scrim).
+		- 20261004: Built. Each layer keeps only what is read back, 13 bytes a pixel instead of 40, and the two blur layers are made only for the halo. Formats, numbers and the variants tried are in the design doc's "A smaller scrim" section.
+	- Progress log:
+		- 20261004: One channel for the cursor coverage, and one 16-bit channel for each blur layer. The text coverage keeps four 8-bit channels, since glyphon writes each glyph's color and one channel would need it to write white. The color map is 8-bit and stored encoded, which gives every cell color back exactly.
+		- 20261004: Tried and not kept: 8-bit blur layers, which band in the Gaussian halo by up to 6 levels, and half-size blur layers, which fill small glyph counters and make the halo heavier. Numbers are in the design doc.
+		- 20261004: Question: the requirement gives the lower profiles half size when the loss shows. The only lower profile with a halo is High, which is meant to look like the same halo as Max. It stays full size for now. Half size would save another 10.5 MiB a window at 2560x1440, on High only.
+		- 20261004: Verified on b23 at 2560x1440 against a control build in the same session: the X11 window process went from 273 MiB to 175, and 159 with the halo off. The Vulkan window went from 256 MiB to 202, and 138 with the halo off. Regular memory did not change.
+		- 20261004: Verified against the control build at the same settings, on GL and Vulkan on the card and on software rendering: at most 1 sRGB level on GL and 3 on Vulkan, at the antialiased edge of the light-mode outline. The soft dark halo changed by at most 1 on any path. Cases are listed in the design doc.
+		- 20261004: Verified: the two new tests fail with the old formats put back and pass after. The full unit suite (1126), fmt, and clippy for Linux and Windows pass.
+		- 20261005: on vm925w the halo draws on DX12, on the card and on WARP, with Transparency on and off. Seen in the Windows scenario shots, not compared against a control build.
+	- Branch: scrimsize
+	- Commit: b21cb7b
+	- Test case: `the_scrim_costs_at_most_13_bytes_a_pixel` (ErnU09H) reads the cost off the formats, and `the_color_map_keeps_every_byte_color_exactly` (ErnU0UJ). `nothing_drawing_costs_no_memory` (EpHXO9g) now also holds the blur layers to a pixel with the halo off; its old 200 MiB floor is commented out, since the full set at 4K is now about 100 MiB.
+	- Acceptance signoff: Self-closed: compared against a control build on b23 on GL, Vulkan and software. The new formats are plain WebGPU ones every backend has. Metal on b26 is owed.
+	- Closed: 20261005-094503
+
 - Measure graphics and regular memory per window
 	- ID: 2026100418225501
 	- Type: Task
@@ -2502,6 +2479,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- A Settings save on a config that was deleted while running says it saved and writes nothing
+	- ID: 2026100316135866
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261003-161358
+	- Opened by: CC
+	- Related IDs: 2026100315581313
+	- Target OS: All
+	- Steps to reproduce:
+		- Launch, then delete the config file.
+		- Change a setting in Settings and press OK, or resize the window.
+	- Incorrect behavior: The dialog closes as if it saved. Nothing is written, and the next launch starts from the defaults.
+	- Expected behavior: The save writes the file, or says it did not.
+	- Reproduced: No. Found by reading `persist` while working 2026100315581313.
+		- 20261004 on b23: a unit test deleted the file and saved through `persist`, once with a Settings edit and once with a window size change. Both answered that they saved and wrote nothing.
+	- Actual cause: `persist` took a missing file as nothing to do and answered that it saved.
+	- Decisions:
+		- 20261004: best guess, reversible. The save writes a full new config file from the template with the current settings, the same as a first launch would, and goes through quietly with no notice.
+	- Actual fix:
+		- A save that finds the file gone makes its folder and starts from the template. It carries every setting the file held when the program last read or wrote it, then puts the save's own change on top. The carry is the one a fresh file from `upgrade` uses.
+		- Values that last only the session stay out of the new file, such as a rotated wallpaper or a font given on the command line. The save still writes only what changed against what the window loaded.
+		- The shell list is still three-way against the file. The carried file has the list, so no entry reads as removed. A file the program never saw gets the list the window loaded.
+		- Like any fresh file from the template, the new one does not keep the old file's comments or layout, or a line the template has no place for.
+		- Only the settings file counts as the file last seen. A shell profile goes through the same writer, and the one written at launch used to take its place, so the save started from the bare template.
+	- Swept: Every caller of `persist`: Settings OK, window size, font zoom and per-monitor sizes, the copy, minimap and single tab toggles, and shells found at launch. The revert arrow's write and the cleared font's write run after `persist`, so they find the new file. The rating write still says it could not read a missing file, so it does not claim to have saved; left alone. The launch steps run after a launch lays the template down.
+	- Test case: `a_save_on_a_deleted_file_writes_it_new` (ErkRECv) and `a_save_on_a_deleted_file_keeps_the_shell_list` (ErkREXH). Both fail with the old answer put back and pass now. The first also fails when the save starts from the bare template without the carry. `cicd/tests/delcfg/run.bash` (ErqP9yG), in the pipeline, and `a_save_on_a_deleted_file_keeps_it_after_a_profile_write` (ErqPAI7). Both fail on the old code.
+	- Verified: The unit suite passes, 1085 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not checked in a real window; the two app-side callers were read, not run.
+	- Verified: 20261005 on b23, in a real window: after the delete, a resize and Ctrl+Plus each wrote a new file with the old file's settings and the new value. Before the profile fix it kept none of them.
+	- Branch: delcfg, signoff
+	- Commit: 312f355, 9319ff2
+	- Acceptance signoff: Self-closed: reproduced in a real window, fixed, and held by a pipeline test.
+	- Closed: 20261005-094503
 
 - No linter config for Python or PowerShell indentation, and the style guide covers Rust only
 	- ID: 2026100314050017

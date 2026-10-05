@@ -759,6 +759,17 @@ if [[ -x "${root}/cicd/tests/startsize/run.bash" ]]; then
 		*) fDie "window size at launch test failed ($(fTestId cicd/tests/startsize/run.bash))" ;;
 	esac
 fi
+## A save after the config was deleted writes it again, keeping what it had.
+## Exit 3 is a skip: no binary, display or xdotool.
+if [[ -x "${root}/cicd/tests/delcfg/run.bash" ]]; then
+	fEcho_Clean "save after the config was deleted ..."
+	delRc=0; "${root}/cicd/tests/delcfg/run.bash" >/dev/null || delRc=$?
+	case "${delRc}" in
+		0) fEcho "OK: save after the config was deleted ($(fTestId cicd/tests/delcfg/run.bash))" ;;
+		3) fEcho "WARNING: save after the config was deleted skipped" ;;
+		*) fDie "save after the config was deleted test failed ($(fTestId cicd/tests/delcfg/run.bash))" ;;
+	esac
+fi
 if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
 	fEcho_Clean "pipeline steps ..."
 	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed ($(fTestId cicd/tests/engine/run.bash))"

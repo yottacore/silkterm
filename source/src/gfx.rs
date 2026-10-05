@@ -2471,4 +2471,36 @@ mod tests {
 			gpu.adapter_info.name
 		);
 	}
+
+	// Every dialog open takes the one kept context. Building one per open cost
+	// about 230 ms each time on b23, against about 21 MiB to keep it.
+	// Test ID: ErqRBp6
+	#[test]
+	fn every_dialog_open_takes_the_kept_context() {
+		let mut warm = GpuWarm::idle();
+		warm.start();
+		let Some(first) = warm.get() else {
+			eprintln!("skipped: no device");
+			return;
+		};
+		let second = warm.get().expect("the context is still kept");
+		// wgpu numbers devices per instance, so == cannot tell two builds apart.
+		// An error on the second reaches a handler only the first was given.
+		let heard = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+		let flag = heard.clone();
+		first
+			.device
+			.on_uncaptured_error(std::sync::Arc::new(move |_: wgpu::Error| {
+				flag.store(true, std::sync::atomic::Ordering::SeqCst);
+			}));
+		let _bad = second.device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("both map directions"),
+			size: 4,
+			usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE,
+			mapped_at_creation: false,
+		});
+		assert!(heard.load(std::sync::atomic::Ordering::SeqCst));
+		warm.release();
+		assert!(warm.ready_device().is_none(), "the idle release lets it go");
+	}
 }
