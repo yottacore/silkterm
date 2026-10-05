@@ -21,8 +21,9 @@
 #
 # Prints the process's graphics memory as the driver bills it (nvidia-smi), its
 # unique resident footprint less the driver's libraries (sizebench-classify.py),
-# and the window's own SILK_MEMDBG lines. Use an optimized binary. Test files
-# go in the run's test_silkterm_<stamp> folder (cicd/tests/_testdir.bash).
+# its anonymous resident memory, and the window's own SILK_MEMDBG lines. Use an
+# optimized binary. Test files go in the run's test_silkterm_<stamp> folder
+# (cicd/tests/_testdir.bash).
 
 ##	History: At bottom of file.
 
@@ -176,6 +177,8 @@ fSample(){
 	nvidia-smi -q -d PIDS | awk -v p="${appPid}" '/Process ID/ {on = ($4 == p)} on && /Used GPU Memory/ {print "graphics memory (nvidia-smi):", $5, $6}'
 	python3 "${repoDir}/utility/include/sizebench-classify.py" --summary "${appPid}" 2>/dev/null \
 		| awk '/^RESULT/ {for (i = 2; i <= NF; i++) if ($i ~ /^mem=/) print "unique footprint less driver libraries:", substr($i, 5), "MiB"}'
+	# file pages come and go with the page cache, so this one is steadier between runs
+	awk '/^RssAnon:/ {printf "anonymous resident: %.1f MiB\n", $2 / 1024}' "/proc/${appPid}/status"
 	# the newest line per source
 	grep '^memdbg ' "${work}/stderr.log" | awk '{key = ($2 == "pane") ? $2 $3 : $2; line[key] = $0; if (!(key in seen)) {seen[key] = 1; order[++n] = key}} END {for (i = 1; i <= n; i++) print line[order[i]]}'
 }
