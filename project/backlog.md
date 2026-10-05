@@ -122,6 +122,49 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) keeps the context's reserve under 32 MiB. Keeping or dropping the context has no test of its own.
 	- Closed:
 
+- Always use software rendering, and fall back to it when the card cannot make a device
+	- ID: 2026100418225504
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs external testing:
+		- vm925w: turn on Settings > Window > Always use software rendering, with Transparency off and then on. The window and Settings should keep drawing, and Help > About should say Software (CPU). Then launch with `SILK_REFUSE_CARD` set to a file that exists. The window should open in software rather than fail.
+		- b26: the row is grayed, with its macOS tip.
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470535, 2026100418225506, 2026100421153746
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A setting, "Always use software rendering", off by default.
+		- Grayed with a tip where it cannot work, such as macOS.
+		- When the card cannot make a device, at launch or at a rebuild, try software rendering once before giving up.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#software-rendering). Today a found card that cannot make a device ends the launch.
+		- 20261004: Built as `window.software_rendering`, on the Window tab under "Free resources when idle" and its waits, until the Resource use group (2026100418225506). What was built is in the design doc's Software rendering section.
+	- Progress log:
+		- 20261004: Calls made, open to change at signoff:
+			- A software device on a machine with a card is not new hardware. The card keeps its performance rating, and the session steps down to Low with nothing written. Back on the card, the step comes off.
+			- On X11 the software device is lavapipe on the same window. It keeps Transparency working, so the row is not grayed under Transparency.
+			- A change takes effect once Settings is closed, not at Apply while it stays open.
+			- With software asked for and no software renderer installed, the card draws and stderr says so once.
+			- The window title does not change. Help > About names the adapter in use, and a fallback prints the reason on stderr.
+		- 20261004: Verified: the five new tests pass. The fallback test fails with the fallback taken out and passes with it. The full unit suite (1124), fmt, and clippy for Linux, Windows and macOS pass.
+		- 20261004: Verified on b23 (RTX 3060 Ti), with the card made to refuse every device (`SILK_REFUSE_CARD`):
+			- X11, which draws through GL: at launch, the window and Settings drew in software. An idle rebuild while the card refused drew new output in software. The next rebuild was back on the card's GL and drew.
+			- Wayland, which draws through Vulkan: at launch, the window drew in software. A rebuild while the card refused fell back, and the next one was back on the card.
+			- The dialogs' kept context fell back the same way.
+		- 20261004: Verified on b23: with the setting on at launch, the window drew in software and the card's rating was left alone. Turned on and off through Settings and through a settings reload, on both X11 and Wayland, the window changed device each time and drew. The session profile went to Low and back, and the profile in the file did not change. With no software renderer to be found, the card drew and stderr said so.
+		- 20261004: Only compiled: Windows, where the software adapter is WARP, for the ordinary window and the DX12 one used with Transparency on. The macOS gray is checked by a unit test, not seen on a Mac. A Wayland rebuild after an idle release was not run; rebuilds there came from a setting change.
+		- 20261004: Seen along the way and filed as 2026100421153746: debug builds on lavapipe report a Vulkan validation error for the minimap upload. It shows on the plain no-card path too, so it is older than this item.
+	- Against: the UI style guide leaves a row that can never work on a platform out of that build, rather than graying it. The requirement asks for gray with a tip on macOS. Listed under the guide's Known deviations.
+	- Swept: every device and adapter request. The window's native path, the X11 GL path at launch and at a rebuild, the Windows composited path, the dialogs' kept context and the one a dialog builds without it, and the adapter `--about` reports. `grep -rn 'request_adapter\|request_device(' source/src` finds only `gl_on`, `pick_device`, `probe_adapter_info` and a test.
+	- Branch: softrender
+	- Commit: 4fec2af
+	- Test case: `a_card_that_refuses_a_device_falls_back_to_software` (ErnMa8F), `a_device_is_named_by_what_drew_it_and_why` (ErnMa3y), `a_software_device_steps_the_session_and_the_card_takes_it_back` (ErnMaCH), `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS), `software_rendering_ships_off` (ErnMaKh).
+	- Closed:
+
 - A Settings save on a config that was deleted while running says it saved and writes nothing
 	- ID: 2026100316135866
 	- Type: Bug
@@ -960,68 +1003,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size).
 	- Closed:
 
-- Always use software rendering, and fall back to it when the card cannot make a device
-	- ID: 2026100418225504
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing:
-		- vm925w: turn on Settings > Window > Always use software rendering, with Transparency off and then on. The window and Settings should keep drawing, and Help > About should say Software (CPU). Then launch with `SILK_REFUSE_CARD` set to a file that exists. The window should open in software rather than fail.
-		- b26: the row is grayed, with its macOS tip.
-	- Priority: High
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100312470535, 2026100418225506, 2026100421153746
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- A setting, "Always use software rendering", off by default.
-		- Grayed with a tip where it cannot work, such as macOS.
-		- When the card cannot make a device, at launch or at a rebuild, try software rendering once before giving up.
-	- Notes:
-		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#software-rendering). Today a found card that cannot make a device ends the launch.
-		- 20261004: Built as `window.software_rendering`, on the Window tab under "Free resources when idle" and its waits, until the Resource use group (2026100418225506). What was built is in the design doc's Software rendering section.
-	- Progress log:
-		- 20261004: Calls made, open to change at signoff:
-			- A software device on a machine with a card is not new hardware. The card keeps its performance rating, and the session steps down to Low with nothing written. Back on the card, the step comes off.
-			- On X11 the software device is lavapipe on the same window. It keeps Transparency working, so the row is not grayed under Transparency.
-			- A change takes effect once Settings is closed, not at Apply while it stays open.
-			- With software asked for and no software renderer installed, the card draws and stderr says so once.
-			- The window title does not change. Help > About names the adapter in use, and a fallback prints the reason on stderr.
-		- 20261004: Verified: the five new tests pass. The fallback test fails with the fallback taken out and passes with it. The full unit suite (1124), fmt, and clippy for Linux, Windows and macOS pass.
-		- 20261004: Verified on b23 (RTX 3060 Ti), with the card made to refuse every device (`SILK_REFUSE_CARD`):
-			- X11, which draws through GL: at launch, the window and Settings drew in software. An idle rebuild while the card refused drew new output in software. The next rebuild was back on the card's GL and drew.
-			- Wayland, which draws through Vulkan: at launch, the window drew in software. A rebuild while the card refused fell back, and the next one was back on the card.
-			- The dialogs' kept context fell back the same way.
-		- 20261004: Verified on b23: with the setting on at launch, the window drew in software and the card's rating was left alone. Turned on and off through Settings and through a settings reload, on both X11 and Wayland, the window changed device each time and drew. The session profile went to Low and back, and the profile in the file did not change. With no software renderer to be found, the card drew and stderr said so.
-		- 20261004: Only compiled: Windows, where the software adapter is WARP, for the ordinary window and the DX12 one used with Transparency on. The macOS gray is checked by a unit test, not seen on a Mac. A Wayland rebuild after an idle release was not run; rebuilds there came from a setting change.
-		- 20261004: Seen along the way and filed as 2026100421153746: debug builds on lavapipe report a Vulkan validation error for the minimap upload. It shows on the plain no-card path too, so it is older than this item.
-	- Against: the UI style guide leaves a row that can never work on a platform out of that build, rather than graying it. The requirement asks for gray with a tip on macOS. Listed under the guide's Known deviations.
-	- Swept: every device and adapter request. The window's native path, the X11 GL path at launch and at a rebuild, the Windows composited path, the dialogs' kept context and the one a dialog builds without it, and the adapter `--about` reports. `grep -rn 'request_adapter\|request_device(' source/src` finds only `gl_on`, `pick_device`, `probe_adapter_info` and a test.
-	- Branch: softrender
-	- Commit: 4fec2af
-	- Test case: `a_card_that_refuses_a_device_falls_back_to_software` (ErnMa8F), `a_device_is_named_by_what_drew_it_and_why` (ErnMa3y), `a_software_device_steps_the_session_and_the_card_takes_it_back` (ErnMaCH), `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS), `software_rendering_ships_off` (ErnMaKh).
-	- Closed:
-
-- Debug builds on lavapipe report a Vulkan validation error for the minimap upload
-	- ID: 2026100421153746
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261004-211537
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100418225504
-	- Target OS: Linux
-	- Test environment: b23
-	- Steps to reproduce:
-		- Run a debug build on lavapipe, for example with software rendering on.
-	- Incorrect behavior: stderr gets `VUID-vkCmdCopyBufferToImage-pRegions-00173`, "Detected overlap between source and dest regions in memory", for the `minimap tex` image.
-	- Expected behavior: No validation errors.
-	- Reproduced: 20261004 on b23, on Wayland and X11, whether lavapipe was asked for or was the only adapter. Not seen on the NVIDIA card's Vulkan.
-	- Possible cause: Not known. It may be a false report from the validation layer on lavapipe, where every allocation is in host memory. Release builds do not validate.
-	- Closed:
-
 - A passing unit test run keeps its test folder
 	- ID: 2026100418554244
 	- Type: Bug
@@ -1093,6 +1074,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Keep a plain fallback for an adapter without BC support.
 	- Notes:
 		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
+	- Closed:
+
+- Debug builds on lavapipe report a Vulkan validation error for the minimap upload
+	- ID: 2026100421153746
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261004-211537
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100418225504
+	- Target OS: Linux
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run a debug build on lavapipe, for example with software rendering on.
+	- Incorrect behavior: stderr gets `VUID-vkCmdCopyBufferToImage-pRegions-00173`, "Detected overlap between source and dest regions in memory", for the `minimap tex` image.
+	- Expected behavior: No validation errors.
+	- Reproduced: 20261004 on b23, on Wayland and X11, whether lavapipe was asked for or was the only adapter. Not seen on the NVIDIA card's Vulkan.
+	- Possible cause: Not known. It may be a false report from the validation layer on lavapipe, where every allocation is in host memory. Release builds do not validate.
 	- Closed:
 
 - Code style: public items are commented with `//`, not `///`
