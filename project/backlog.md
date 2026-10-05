@@ -34,6 +34,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- macOS: closing the last window ends the program
+	- ID: 2026100514211601
+	- Type: Enhancement
+	- Status: Waiting for answers
+	- Priority: Avg
+	- Opened: 20261005-142116
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225509, 2026100418225510
+	- Target OS: macOS
+	- Requirements:
+		- Before RC1, maybe.
+		- On macOS only, the program keeps running after its last window closes, like Terminal and Finder.
+	- Notes:
+		- 20261005: Possibly not a bug. Most Mac apps stay running with no window open. Asked what it would take.
+		- 20261005: What it would take:
+			- Every window is its own process, so none of them knows if it is the last one. They would have to find each other first (2026100418225509, private backlog), or the Mac build moves to one process for all windows (2026100418225510).
+			- The process left running drops its GPU device, panes and wallpaper, and keeps the menu bar. New Window there has to open a window in that process, not start another.
+			- A Dock click with no window open should open one. winit has no event for it, so it needs a hook on the app delegate's reopen call, next to `macmenu.rs`.
+			- Command+Q and Quit still end it.
+		- 20261005: Small once one process runs every window. Large before that.
+		- Question: before RC1, after the one process work, or not at all?
+	- Estimated effort: High
+
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
@@ -817,6 +841,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261005: From the look at the old-format cursor plate item.
 
+- macOS: a window opened with Command+N is smaller, and its size is the one remembered
+	- ID: 2026100514211602
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261005-142116
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435600, 2026100408214201
+	- Target OS: macOS
+	- Test environment: b26
+	- Requirements:
+		- Before RC1.
+	- Steps to reproduce:
+		- Open a window with Command+N.
+		- Close the new window, then the one it was opened from.
+		- Launch SilkTerm again.
+	- Incorrect behavior:
+		- The new window opens smaller than the one it was opened from.
+		- The next launch opens at that smaller size.
+	- Expected behavior: A new window opens at the size a fresh launch would use. Closing windows doesn't shrink the remembered size unless one of them was resized.
+	- Reproduced: No. Seen on b26.
+	- Possible cause:
+		- Each window is its own process, and the new one reads the remembered size for the monitor it thinks it opens on (`MonitorId::of_new_window`). macOS may answer that differently for a window started from another one.
+		- A size is saved at close only if the window changed size (`flush_window_size`). If the new window's first size counts as a change, it saves the small size, and the first window, never resized, saves nothing.
+
 - Light mode: the text is still not dark enough in any light theme
 	- ID: 2026100513581810
 	- Type: Enhancement
@@ -932,6 +982,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
 	- Closed:
+
+- Wallpaper: keep resized copies on disk, oldest pruned first
+	- ID: 2026100514211603
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261005-142116
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225503, 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When a window loads or is resized and the original wallpaper is resampled, keep that copy at that size.
+		- On a resize, use a kept copy within about 5% of the total pixel count. If there is none, resample the original again and keep that one too.
+		- Prune the oldest copies once the cache goes over its size limit.
+	- Notes:
+		- 20261005: Asked as a question, would this make sense?
+		- 20261005: It helps most at launch and when rotation comes back to an image, since both prepare from scratch now. A resize already waits 500 ms after the last change and prepares once.
+		- 20261005: The key needs everything that changes the stored pixels: the file and its mtime, the held size, blur, and the look tags.
+		- 20261005: A copy is 4 bytes a pixel, so about 14 MB at 2560x1440 unless it's stored compressed. Block compression (2026100418225507) cuts that to a quarter or less.
+		- 20261005: Time a release build's prepare first. If it is well under the resize wait, only launch and rotation gain.
 
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
