@@ -62,7 +62,8 @@ fCheck "the Rust suite passes with the temp dir read-only" test "${rc}" -eq 0
 ((rc == 0)) || grep -E 'FAILED|panicked' "${work}/a.log" | head -n 20 | sed 's/^/      /'
 fCheck "and writes nothing beside the run folder" fOnlyRun "${baseA}"
 
-##	A2: a lone run, with nothing handed down, removes its folder when it passes.
+##	A2: a lone run, with nothing handed down, removes its folder when it passes,
+##	even though one of the run folder's own tests panics on purpose.
 fEmpty(){ [[ -d "${1}" && -z "$(ls -A "${1}")" ]]; }
 mkdir "${work}/a2"
 rc=0; ( cd "${root}" && env -u SILKTERM_TEST_DIR TMPDIR="${work}/a2" cargo test testdir:: ) >"${work}/a2.log" 2>&1 || rc=$?

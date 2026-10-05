@@ -36,7 +36,7 @@ mod tests {
 	fn a_poisoned_lock_is_taken_as_it_stands() {
 		let mutex = Mutex::new(1);
 		let rw = RwLock::new(1);
-		let _ = std::panic::catch_unwind(|| {
+		let _ = crate::testdir::catch_expected_panic(|| {
 			*lock(&mutex) = 2;
 			*write(&rw) = 2;
 			let _held = (lock(&mutex), write(&rw));
