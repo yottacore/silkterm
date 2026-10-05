@@ -830,7 +830,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261005: Verified on b23: the wallpaper's share of a 2560x1440 window with a large photo went from 72 to 32 MiB of graphics memory and from 93 to 42 MiB of regular memory. A pack image in a 1280x800 window went from 32 to 12 and from 45 to 16.
 		- 20261005: Verified: the new tests fail with each part of the change taken out (no margin, no busyness scale, sRGB shrink, no resize follow) and pass with it. The full unit suite (1133), fmt, and clippy for Linux and Windows pass.
 	- Branch: wpsize
-	- Commit:
+	- Commit: 68b5360
 	- Test case: `a_wallpaper_is_held_at_the_size_it_is_drawn_at` (ErqyRJF), `a_held_wallpaper_looks_like_the_whole_one_drawn_at_its_size` (ErqyRUK), `a_resize_keeps_the_pictures_summary` (ErqyUlS), and `cicd/tests/wpresize/run.bash` (Err031q) in stage 3.
 	- Swept: every caller of `ImageRenderer::new`, `contrast::apply` and `wallpaper::Request`. The rebuild, recovery, settings and rotation requests all send the window's current size.
 	- Acceptance signoff: Self-closed: the same look at the same window size against a control build, and memory measured.
