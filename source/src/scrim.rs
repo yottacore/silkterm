@@ -8,21 +8,34 @@
 //! `bgcolor` map so a glyph's halo takes ITS cell's bg color (a glyph on a
 //! one-off colored cell isn't smeared with the global bg color).
 //!
-//! Two passes build the halo in `tex_a` (`tex_t` stays crisp for the border). Gaussian
+//! Two passes build the halo in `halo_a` (the text layer stays crisp for the border). Gaussian
 //! (legacy, corners recede) is a separable sum-blur; the distance functions (dilate
 //! / sdf / dt) are a separable, bounded Euclidean/Chebyshev distance transform so
 //! corners stay full - pass a = per-column 1D distance, pass b = row combine. The
 //! composite maps the blurred coverage OR the distance (through a falloff curve) to
 //! the per-pixel bg color, plus a thin dilated outline of the crisp coverage.
 //!
-//! `tex_t` <- crisp TEXT coverage; `tex_cur` <- crisp CURSOR coverage (kept apart so
+//! `text` <- crisp TEXT coverage; `cursor` <- crisp CURSOR coverage (kept apart so
 //! the cursor can join the halo and the outline independently, each by its own
-//! flag; the first pass folds `tex_cur` in when `cursor_scrim`, the composite samples
-//! `tex_t` / `tex_cur` to add the border when `cursor_outline`).
+//! flag; the first pass folds the cursor in when `cursor_scrim`, the composite samples
+//! both to add the border when `cursor_outline`).
 
 use crate::gfx::{RectInstance, RectRenderer};
 
-pub const FMT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+// Each layer stores only what is read back from it. Only alpha of the text
+// coverage is read, but glyphon writes the glyph's color too, so the text keeps
+// four 8-bit channels, the precision the glyph atlas has anyway. The cursor
+// quads are ours and draw white, so their coverage ends up in one red channel. The
+// blur layers hold blurred coverage or a distance in px, which bands in 8 bits
+// (see the reducing resources design doc). The color map holds opaque cell
+// colors that came from sRGB bytes, so it stores them sRGB encoded and gives
+// them back exactly. The encode is done here rather than by an sRGB format,
+// because the GL path never turns sRGB writes on: an sRGB target there stores
+// the linear value as is and still decodes it on read.
+pub const TEXT_FMT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+const CURSOR_FMT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
+const HALO_FMT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+const BG_FMT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -34,7 +47,9 @@ struct BlurU {
 	cursor: f32, // 1 = fold the cursor coverage into the halo, 0 = leave it out
 	radius: f32, // distance path: halo extent in px (also bounds the tap loop)
 	metric: f32, // distance path: 0 = euclidean, 1 = chebyshev (square)
-	_pad: [f32; 3],
+	// 1 = the source is the text coverage (read .a), 0 = a blur layer (read .r)
+	source: f32,
+	_pad: [f32; 2],
 }
 
 #[repr(C)]
@@ -53,23 +68,72 @@ struct CompU {
 	halo: f32,
 }
 
-pub struct Scrim {
-	tex_t: wgpu::Texture, // crisp text coverage (kept for the border pass)
-	tex_a: wgpu::Texture,
-	tex_b: wgpu::Texture,
-	view_t: wgpu::TextureView,
-	view_a: wgpu::TextureView,
-	view_b: wgpu::TextureView,
+// The view keeps its texture alive.
+struct Layer {
+	view: wgpu::TextureView,
+}
+
+impl Layer {
+	fn new(
+		device: &wgpu::Device,
+		label: &str,
+		format: wgpu::TextureFormat,
+		(w, h): (u32, u32),
+	) -> Self {
+		let tex = device.create_texture(&wgpu::TextureDescriptor {
+			label: Some(label),
+			size: wgpu::Extent3d {
+				width: w.max(1),
+				height: h.max(1),
+				depth_or_array_layers: 1,
+			},
+			mip_level_count: 1,
+			sample_count: 1,
+			dimension: wgpu::TextureDimension::D2,
+			format,
+			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+			view_formats: &[],
+		});
+		Self {
+			view: tex.create_view(&Default::default()),
+		}
+	}
+}
+
+// The layers sized together: the crisp ones by whether anything draws, the two
+// blur layers by whether the halo does.
+struct Layers {
+	text: Layer,   // crisp text coverage (kept for the border pass)
+	halo_a: Layer, // the finished halo
+	halo_b: Layer, // the first pass's output
 	// crisp cursor coverage, separate from the text so cursor_scrim (halo) and
 	// cursor_outline (border) are independent toggles - folded into the halo by
 	// the blur and into the border by the composite, each gated by its own flag.
-	tex_cur: wgpu::Texture,
-	view_cur: wgpu::TextureView,
+	cursor: Layer,
+	// per-pixel scrim color: cleared to the global bg, with per-cell bg rects drawn
+	// over it, so a glyph's halo takes ITS cell's bg color (not always the global).
+	bgcolor: Layer,
+}
+
+impl Layers {
+	fn new(device: &wgpu::Device, crisp: (u32, u32), halo: (u32, u32)) -> Self {
+		Self {
+			text: Layer::new(device, "scrim text", TEXT_FMT, crisp),
+			halo_a: Layer::new(device, "scrim halo a", HALO_FMT, halo),
+			halo_b: Layer::new(device, "scrim halo b", HALO_FMT, halo),
+			cursor: Layer::new(device, "scrim cursor", CURSOR_FMT, crisp),
+			bgcolor: Layer::new(device, "scrim bgcolor", BG_FMT, crisp),
+		}
+	}
+}
+
+pub struct Scrim {
+	layers: Layers,
 	sampler: wgpu::Sampler,
 	blur_pipe: wgpu::RenderPipeline,
 	// distance-field paths (dilate/sdf/dt) reuse the blur bind groups + textures:
-	// pass a = per-column 1D distance (tex_t->tex_b), pass b = row combine into the
-	// final distance (tex_b->tex_a), metric per the selected function.
+	// pass a = per-column 1D distance (text->halo_b), pass b = row combine into the
+	// final distance (halo_b->halo_a), metric per the selected function.
 	dist_a_pipe: wgpu::RenderPipeline,
 	dist_b_pipe: wgpu::RenderPipeline,
 	blur_bgl: wgpu::BindGroupLayout,
@@ -78,37 +142,54 @@ pub struct Scrim {
 	// the last-written dir (-> vertical blur twice, no horizontal). Two buffers fix it.
 	blur_u_h: wgpu::Buffer,
 	blur_u_v: wgpu::Buffer,
-	blur_t2b: wgpu::BindGroup, // sample tex_t (uses blur_u_h), write tex_b
-	blur_b2a: wgpu::BindGroup, // sample tex_b (uses blur_u_v), write tex_a
+	blur_t2b: wgpu::BindGroup, // sample text (uses blur_u_h), write halo_b
+	blur_b2a: wgpu::BindGroup, // sample halo_b (uses blur_u_v), write halo_a
 	comp_pipe: wgpu::RenderPipeline,
 	comp_bgl: wgpu::BindGroupLayout,
 	comp_u: wgpu::Buffer,
-	comp_bind: wgpu::BindGroup, // sample tex_a (scrim alpha) + bgcolor (rgb) + tex_t (border)
-	// per-pixel scrim color: cleared to the global bg, with per-cell bg rects drawn
-	// over it, so a glyph's halo takes ITS cell's bg color (not always the global).
-	bgcolor: wgpu::Texture,
-	bgcolor_view: wgpu::TextureView,
+	comp_bind: wgpu::BindGroup, // sample halo_a + bgcolor (rgb) + text (border)
 	bg_rects: RectRenderer,
-	// cursor quads drawn into tex_cur (its own coverage texture). Separate renderer:
-	// bg_rects' instance buffer is uploaded for the bgcolor map in the SAME encoder,
-	// and a second upload would clobber the first (queue writes all arrive before the
+	// cursor quads drawn into the cursor layer. Separate renderer: bg_rects'
+	// instance buffer is uploaded for the bgcolor map in the SAME encoder, and a
+	// second upload would clobber the first (queue writes all arrive before the
 	// command buffer runs - same rule as the blur uniforms above).
 	cursor_rects: RectRenderer,
 	cursor_count: u32,
+	white_cursors: Vec<RectInstance>,
+	encoded_cells: Vec<RectInstance>,
 	// what is allocated, and what the surface actually is. With the scrim and the
-	// outline both off nothing here draws, so the five full-screen textures are
-	// allocated at one pixel instead - around 330 MB of VRAM at 3840x2160, and it
-	// falls hardest on the machines the Low and Standard profiles exist for.
+	// outline both off nothing here draws, so the layers are allocated at one
+	// pixel instead - and it falls hardest on the machines the Low and Standard
+	// profiles exist for. With the halo off, the two blur layers are too.
 	w: u32,
 	h: u32,
+	halo_size: (u32, u32),
 	surf_w: u32,
 	surf_h: u32,
-	enabled: bool,
+	use_: Use,
 }
 
 impl std::fmt::Debug for Scrim {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("Scrim").finish_non_exhaustive()
+	}
+}
+
+// What draws this frame, which decides what is worth allocating.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Use {
+	Nothing,
+	OutlineOnly,
+	Halo,
+}
+
+impl Use {
+	pub fn of(halo: bool, outline: bool) -> Self {
+		match (halo, outline) {
+			(true, _) => Self::Halo,
+			(false, true) => Self::OutlineOnly,
+			(false, false) => Self::Nothing,
+		}
 	}
 }
 
@@ -122,11 +203,14 @@ pub fn clamp_ext(ext: f32) -> f32 {
 	ext.clamp(0.0, EXT_MAX)
 }
 
-// How big the texture set should be. One pixel when neither the scrim nor the
-// outline draws: at full screen this is three Rgba16Float textures plus two
-// more, which is hundreds of megabytes of VRAM for a feature doing nothing.
-fn alloc_size(enabled: bool, surface: (u32, u32)) -> (u32, u32) {
-	if enabled { surface } else { (1, 1) }
+// How big the crisp layers and the blur layers should be. One pixel for what
+// does not draw: at full screen each layer is many megabytes of VRAM.
+fn alloc_size(what: Use, surface: (u32, u32)) -> ((u32, u32), (u32, u32)) {
+	match what {
+		Use::Nothing => ((1, 1), (1, 1)),
+		Use::OutlineOnly => (surface, (1, 1)),
+		Use::Halo => (surface, surface),
+	}
 }
 
 impl Scrim {
@@ -166,9 +250,30 @@ impl Scrim {
 		};
 		let blur_u_h = make_uniform_buf("scrim blur u h");
 		let blur_u_v = make_uniform_buf("scrim blur u v");
-		let blur_pipe = pipeline(device, &shader, "fs_blur", FMT, &blur_bgl, "scrim blur");
-		let dist_a_pipe = pipeline(device, &shader, "fs_dist_a", FMT, &blur_bgl, "scrim dist a");
-		let dist_b_pipe = pipeline(device, &shader, "fs_dist_b", FMT, &blur_bgl, "scrim dist b");
+		let blur_pipe = pipeline(
+			device,
+			&shader,
+			"fs_blur",
+			HALO_FMT,
+			&blur_bgl,
+			"scrim blur",
+		);
+		let dist_a_pipe = pipeline(
+			device,
+			&shader,
+			"fs_dist_a",
+			HALO_FMT,
+			&blur_bgl,
+			"scrim dist a",
+		);
+		let dist_b_pipe = pipeline(
+			device,
+			&shader,
+			"fs_dist_b",
+			HALO_FMT,
+			&blur_bgl,
+			"scrim dist b",
+		);
 
 		let comp_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 			label: Some("scrim comp bgl"),
@@ -189,37 +294,16 @@ impl Scrim {
 		});
 		let comp_pipe = pipeline_blend(device, &shader, "fs_comp", target, &comp_bgl, "scrim comp");
 
-		// nothing is drawn until something asks for it (see `set_enabled`)
-		let (tex_t, tex_a, tex_b, view_t, view_a, view_b) = make_textures(device, 1, 1);
-		let (tex_cur, view_cur) = cover_tex(device, 1, 1);
-		let bgcolor = bgcolor_tex(device, 1, 1);
-		let bgcolor_view = bgcolor.create_view(&Default::default());
-		let bg_rects = RectRenderer::new(device, FMT);
-		let cursor_rects = RectRenderer::new(device, FMT);
+		// nothing is drawn until something asks for it (see `set_use`)
+		let layers = Layers::new(device, (1, 1), (1, 1));
+		let bg_rects = RectRenderer::new(device, BG_FMT);
+		let cursor_rects = RectRenderer::new(device, CURSOR_FMT);
 		let (blur_t2b, blur_b2a, comp_bind) = binds(
-			device,
-			&blur_bgl,
-			&comp_bgl,
-			&blur_u_h,
-			&blur_u_v,
-			&comp_u,
-			&sampler,
-			&view_t,
-			&view_a,
-			&view_b,
-			&bgcolor_view,
-			&view_cur,
+			device, &blur_bgl, &comp_bgl, &blur_u_h, &blur_u_v, &comp_u, &sampler, &layers,
 		);
 
 		Self {
-			tex_t,
-			tex_a,
-			tex_b,
-			view_t,
-			view_a,
-			view_b,
-			tex_cur,
-			view_cur,
+			layers,
 			sampler,
 			blur_pipe,
 			dist_a_pipe,
@@ -233,35 +317,36 @@ impl Scrim {
 			comp_bgl,
 			comp_u,
 			comp_bind,
-			bgcolor,
-			bgcolor_view,
 			bg_rects,
 			cursor_rects,
 			cursor_count: 0,
+			white_cursors: Vec::new(),
+			encoded_cells: Vec::new(),
 			w: 1,
 			h: 1,
+			halo_size: (1, 1),
 			surf_w: w,
 			surf_h: h,
-			enabled: false,
+			use_: Use::Nothing,
 		}
 	}
 
 	// Answers whether anything was reallocated, which is the caller's cue that
 	// this frame's prepared set is stale.
-	pub fn set_enabled(&mut self, device: &wgpu::Device, on: bool) -> bool {
-		if on == self.enabled {
+	pub fn set_use(&mut self, device: &wgpu::Device, what: Use) -> bool {
+		if what == self.use_ {
 			return false;
 		}
-		self.enabled = on;
+		self.use_ = what;
 		self.reallocate(device)
 	}
 
 	fn reallocate(&mut self, device: &wgpu::Device) -> bool {
-		let (w, h) = alloc_size(self.enabled, (self.surf_w, self.surf_h));
-		if w == 0 || h == 0 || (w == self.w && h == self.h) {
+		let (crisp, halo) = alloc_size(self.use_, (self.surf_w, self.surf_h));
+		if crisp.0 == 0 || crisp.1 == 0 || (crisp == (self.w, self.h) && halo == self.halo_size) {
 			return false;
 		}
-		self.rebuild(device, w, h);
+		self.rebuild(device, crisp, halo);
 		true
 	}
 
@@ -274,19 +359,8 @@ impl Scrim {
 		self.reallocate(device);
 	}
 
-	fn rebuild(&mut self, device: &wgpu::Device, w: u32, h: u32) {
-		let (tex_t, tex_a, tex_b, view_t, view_a, view_b) = make_textures(device, w, h);
-		self.tex_t = tex_t;
-		self.tex_a = tex_a;
-		self.tex_b = tex_b;
-		self.view_t = view_t;
-		self.view_a = view_a;
-		self.view_b = view_b;
-		let (tex_cur, view_cur) = cover_tex(device, w, h);
-		self.tex_cur = tex_cur;
-		self.view_cur = view_cur;
-		self.bgcolor = bgcolor_tex(device, w, h);
-		self.bgcolor_view = self.bgcolor.create_view(&Default::default());
+	fn rebuild(&mut self, device: &wgpu::Device, crisp: (u32, u32), halo: (u32, u32)) {
+		self.layers = Layers::new(device, crisp, halo);
 		let (blur_t2b, blur_b2a, comp_bind) = binds(
 			device,
 			&self.blur_bgl,
@@ -295,17 +369,13 @@ impl Scrim {
 			&self.blur_u_v,
 			&self.comp_u,
 			&self.sampler,
-			&self.view_t,
-			&self.view_a,
-			&self.view_b,
-			&self.bgcolor_view,
-			&self.view_cur,
+			&self.layers,
 		);
 		self.blur_t2b = blur_t2b;
 		self.blur_b2a = blur_b2a;
 		self.comp_bind = comp_bind;
-		self.w = w;
-		self.h = h;
+		(self.w, self.h) = crisp;
+		self.halo_size = halo;
 	}
 
 	// Build the per-pixel scrim-color map: clear to the global bg color, then draw
@@ -323,20 +393,32 @@ impl Scrim {
 		cells: &[RectInstance],
 		global_bg: [f32; 4],
 	) {
+		// Cell rects are opaque (alpha 1), so writing the encoded color is exact.
+		let encode = |c: [f32; 4]| {
+			let e = crate::config::from_linear;
+			[e(c[0]), e(c[1]), e(c[2]), c[3]]
+		};
+		self.encoded_cells.clear();
+		self.encoded_cells
+			.extend(cells.iter().map(|cell| RectInstance {
+				color: encode(cell.color),
+				..*cell
+			}));
+		let clear = encode(global_bg);
 		self.bg_rects
 			.set_resolution(queue, self.w as f32, self.h as f32);
-		self.bg_rects.upload(device, queue, cells);
+		self.bg_rects.upload(device, queue, &self.encoded_cells);
 		let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 			label: Some("scrim bgcolor"),
 			color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-				view: &self.bgcolor_view,
+				view: &self.layers.bgcolor.view,
 				resolve_target: None,
 				depth_slice: None,
 				ops: wgpu::Operations {
 					load: wgpu::LoadOp::Clear(wgpu::Color {
-						r: global_bg[0] as f64,
-						g: global_bg[1] as f64,
-						b: global_bg[2] as f64,
+						r: clear[0] as f64,
+						g: clear[1] as f64,
+						b: clear[2] as f64,
 						a: 0.0, // own-bg mask: 0 here, the cell rects write 1 (see fs_blur)
 					}),
 					store: wgpu::StoreOp::Store,
@@ -350,48 +432,57 @@ impl Scrim {
 		self.bg_rects.draw(&mut pass, 0..cells.len() as u32);
 	}
 
-	// The render target for the scene's text (tex_t). Clear it transparent and
-	// render the prepared text into it before calling `blur`.
+	// The render target for the scene's text. Clear it transparent and render the
+	// prepared text into it before calling `blur`.
 	pub fn text_view(&self) -> &wgpu::TextureView {
-		&self.view_t
+		&self.layers.text.view
 	}
 
-	// The render target for the cursor coverage (tex_cur), separate from the text.
-	// Clear it transparent and draw the cursor quads (`draw_cursors`) into it before
+	// The render target for the cursor coverage, separate from the text. Clear it
+	// transparent and draw the cursor quads (`draw_cursors`) into it before
 	// calling `blur`; the flags in `blur`/`composite` decide where it contributes.
 	pub fn cursor_view(&self) -> &wgpu::TextureView {
-		&self.view_cur
+		&self.layers.cursor.view
 	}
 
-	// Upload the cursor quads destined for tex_cur. Call before the cursor pass;
-	// draw with `draw_cursors`.
+	// Upload the cursor quads destined for the cursor layer. Call before the
+	// cursor pass; draw with `draw_cursors`.
 	pub fn upload_cursors(
 		&mut self,
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
 		quads: &[RectInstance],
 	) {
+		// The layer is one red channel, and a quad writes its color times its
+		// coverage. White makes that the coverage alone, fades included.
+		self.white_cursors.clear();
+		self.white_cursors
+			.extend(quads.iter().map(|quad| RectInstance {
+				color: [1.0, 1.0, 1.0, quad.color[3]],
+				..*quad
+			}));
 		self.cursor_rects
 			.set_resolution(queue, self.w as f32, self.h as f32);
-		self.cursor_rects.upload(device, queue, quads);
+		self.cursor_rects.upload(device, queue, &self.white_cursors);
 		self.cursor_count = quads.len() as u32;
 	}
 
-	// Draw the uploaded cursor quads into the current (tex_cur) pass.
+	// Draw the uploaded cursor quads into the current (cursor layer) pass.
 	pub fn draw_cursors(&self, pass: &mut wgpu::RenderPass<'_>) {
 		if self.cursor_count > 0 {
 			self.cursor_rects.draw(pass, 0..self.cursor_count);
 		}
 	}
 
-	// Two separable passes producing the scrim in tex_a; tex_t keeps the crisp
-	// coverage for the border pass. `function` picks the path: gaussian (3) runs the
-	// legacy sum-blur (H tex_t->tex_b, V tex_b->tex_a) shaped by `ramp`; the distance
-	// paths (dilate 0 / sdf 1 / dt 2) run a separable Euclidean/Chebyshev distance
-	// transform (pass a = per-column 1D distance, pass b = row combine) into tex_a,
-	// bounded to `radius`. `sigma` = gaussian blur sigma; `radius` = distance extent.
-	// `cursor` (0/1) folds the cursor coverage in - only in the first pass (the second
-	// reads tex_b, which already carries it, so its flag stays 0).
+	// Two separable passes producing the scrim in halo_a; the text layer keeps
+	// the crisp coverage for the border pass. `function` picks the path: gaussian
+	// (3) runs the legacy sum-blur (H text->halo_b, V halo_b->halo_a) shaped by
+	// `ramp`; the distance paths (dilate 0 / sdf 1 / dt 2) run a separable
+	// Euclidean/Chebyshev distance transform (pass a = per-column 1D distance,
+	// pass b = row combine) into halo_a, bounded to `radius`. `sigma` = gaussian
+	// blur sigma; `radius` = distance extent. `cursor` (0/1) folds the cursor
+	// coverage in - only in the first pass (the second reads halo_b, which
+	// already carries it, so its flag stays 0).
 	pub fn blur(
 		&self,
 		queue: &wgpu::Queue,
@@ -402,7 +493,7 @@ impl Scrim {
 		cursor: f32,
 		function: f32,
 	) {
-		let res = [self.w as f32, self.h as f32];
+		let res = [self.halo_size.0 as f32, self.halo_size.1 as f32];
 		let gaussian = function >= 2.5;
 		let metric = if function < 0.5 { 1.0 } else { 0.0 }; // dilate = chebyshev, else euclid
 		// write both uniforms up front (they target different buffers, so neither
@@ -418,7 +509,8 @@ impl Scrim {
 				cursor,
 				radius,
 				metric,
-				_pad: [0.0; 3],
+				source: 1.0,
+				_pad: [0.0; 2],
 			}),
 		);
 		queue.write_buffer(
@@ -432,7 +524,8 @@ impl Scrim {
 				cursor: 0.0,
 				radius,
 				metric,
-				_pad: [0.0; 3],
+				source: 0.0,
+				_pad: [0.0; 2],
 			}),
 		);
 		let (pipe_a, pipe_b) = if gaussian {
@@ -441,8 +534,8 @@ impl Scrim {
 			(&self.dist_a_pipe, &self.dist_b_pipe)
 		};
 		for (pipe, src_bind, dst) in [
-			(pipe_a, &self.blur_t2b, &self.view_b),
-			(pipe_b, &self.blur_b2a, &self.view_a),
+			(pipe_a, &self.blur_t2b, &self.layers.halo_b.view),
+			(pipe_b, &self.blur_b2a, &self.layers.halo_a.view),
 		] {
 			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				label: Some("scrim blur pass"),
@@ -498,88 +591,15 @@ impl Scrim {
 		);
 	}
 
-	// Draw the scrim into the current pass, under the text: blurred coverage from
-	// tex_a, colored per-pixel by the bgcolor map, plus a `border_px` dilated
-	// outline of the crisp coverage (tex_t, + tex_cur when `cursor` is 1).
+	// Draw the scrim into the current pass, under the text: the halo from halo_a,
+	// colored per-pixel by the bgcolor map, plus a `border_px` dilated outline of
+	// the crisp coverage (text, + cursor when `cursor` is 1).
 	// write_comp_uniform must have run this frame.
 	pub fn composite(&self, pass: &mut wgpu::RenderPass<'_>) {
 		pass.set_pipeline(&self.comp_pipe);
 		pass.set_bind_group(0, &self.comp_bind, &[]);
 		pass.draw(0..3, 0..1);
 	}
-}
-
-#[allow(clippy::type_complexity)]
-fn make_textures(
-	device: &wgpu::Device,
-	w: u32,
-	h: u32,
-) -> (
-	wgpu::Texture,
-	wgpu::Texture,
-	wgpu::Texture,
-	wgpu::TextureView,
-	wgpu::TextureView,
-	wgpu::TextureView,
-) {
-	let desc = |label| wgpu::TextureDescriptor {
-		label: Some(label),
-		size: wgpu::Extent3d {
-			width: w.max(1),
-			height: h.max(1),
-			depth_or_array_layers: 1,
-		},
-		mip_level_count: 1,
-		sample_count: 1,
-		dimension: wgpu::TextureDimension::D2,
-		format: FMT,
-		usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-		view_formats: &[],
-	};
-	let tex_t = device.create_texture(&desc("scrim tex t"));
-	let tex_a = device.create_texture(&desc("scrim tex a"));
-	let tex_b = device.create_texture(&desc("scrim tex b"));
-	let view_t = tex_t.create_view(&Default::default());
-	let view_a = tex_a.create_view(&Default::default());
-	let view_b = tex_b.create_view(&Default::default());
-	(tex_t, tex_a, tex_b, view_t, view_a, view_b)
-}
-
-// A single FMT coverage texture + its view (the cursor's crisp coverage).
-fn cover_tex(device: &wgpu::Device, w: u32, h: u32) -> (wgpu::Texture, wgpu::TextureView) {
-	let tex = device.create_texture(&wgpu::TextureDescriptor {
-		label: Some("scrim tex cur"),
-		size: wgpu::Extent3d {
-			width: w.max(1),
-			height: h.max(1),
-			depth_or_array_layers: 1,
-		},
-		mip_level_count: 1,
-		sample_count: 1,
-		dimension: wgpu::TextureDimension::D2,
-		format: FMT,
-		usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-		view_formats: &[],
-	});
-	let view = tex.create_view(&Default::default());
-	(tex, view)
-}
-
-fn bgcolor_tex(device: &wgpu::Device, w: u32, h: u32) -> wgpu::Texture {
-	device.create_texture(&wgpu::TextureDescriptor {
-		label: Some("scrim bgcolor"),
-		size: wgpu::Extent3d {
-			width: w.max(1),
-			height: h.max(1),
-			depth_or_array_layers: 1,
-		},
-		mip_level_count: 1,
-		sample_count: 1,
-		dimension: wgpu::TextureDimension::D2,
-		format: FMT,
-		usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-		view_formats: &[],
-	})
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -591,12 +611,10 @@ fn binds(
 	blur_u_v: &wgpu::Buffer,
 	comp_u: &wgpu::Buffer,
 	sampler: &wgpu::Sampler,
-	view_t: &wgpu::TextureView,
-	view_a: &wgpu::TextureView,
-	view_b: &wgpu::TextureView,
-	bgcolor_view: &wgpu::TextureView,
-	view_cur: &wgpu::TextureView,
+	layers: &Layers,
 ) -> (wgpu::BindGroup, wgpu::BindGroup, wgpu::BindGroup) {
+	let bgcolor_view = &layers.bgcolor.view;
+	let view_cur = &layers.cursor.view;
 	let mk_blur = |ubuf: &wgpu::Buffer, view| {
 		device.create_bind_group(&wgpu::BindGroupDescriptor {
 			label: Some("scrim blur bind"),
@@ -635,7 +653,7 @@ fn binds(
 			},
 			wgpu::BindGroupEntry {
 				binding: 1,
-				resource: wgpu::BindingResource::TextureView(view_a),
+				resource: wgpu::BindingResource::TextureView(&layers.halo_a.view),
 			},
 			wgpu::BindGroupEntry {
 				binding: 2,
@@ -647,7 +665,7 @@ fn binds(
 			},
 			wgpu::BindGroupEntry {
 				binding: 4,
-				resource: wgpu::BindingResource::TextureView(view_t),
+				resource: wgpu::BindingResource::TextureView(&layers.text.view),
 			},
 			wgpu::BindGroupEntry {
 				binding: 5,
@@ -655,8 +673,12 @@ fn binds(
 			},
 		],
 	});
-	// t2b: H pass samples tex_t (horizontal uniform); b2a: V pass samples tex_b.
-	(mk_blur(blur_u_h, view_t), mk_blur(blur_u_v, view_b), comp)
+	// t2b: H pass samples the text (horizontal uniform); b2a: V pass samples halo_b.
+	(
+		mk_blur(blur_u_h, &layers.text.view),
+		mk_blur(blur_u_v, &layers.halo_b.view),
+		comp,
+	)
 }
 
 fn ubuf_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
@@ -777,12 +799,12 @@ fn vs(@builtin(vertex_index) i: u32) -> VsOut {
 
 // scalar pads (NOT vec3, which would force 16-byte alignment and mismatch the
 // 48-byte Rust struct)
-struct BlurU { resolution: vec2<f32>, dir: vec2<f32>, sigma: f32, ramp: f32, cursor: f32, radius: f32, metric: f32, _p0: f32, _p1: f32, _p2: f32 };
+struct BlurU { resolution: vec2<f32>, dir: vec2<f32>, sigma: f32, ramp: f32, cursor: f32, radius: f32, metric: f32, source: f32, _p1: f32, _p2: f32 };
 @group(0) @binding(0) var<uniform> bu: BlurU;
 @group(0) @binding(1) var tex: texture_2d<f32>;
 @group(0) @binding(2) var samp: sampler;
 @group(0) @binding(3) var bmask: texture_2d<f32>; // bgcolor map; .a = own-bg mask
-@group(0) @binding(4) var bcur: texture_2d<f32>;  // crisp cursor coverage
+@group(0) @binding(4) var bcur: texture_2d<f32>;  // crisp cursor coverage (.r)
 
 const DIST_MAX: i32 = 40; // hard cap on the distance-transform tap window
 
@@ -824,19 +846,21 @@ fn fs_blur(in: VsOut) -> @location(0) vec4<f32> {
     let s = max(bu.sigma, 0.0001);
     let spacing = max(1.0, s * 3.0 / 12.0);
     let ext = s * 3.0; // kernel extent; the falloff hits (near) zero here
-    var sum = vec4<f32>(0.0);
+    var sum = 0.0;
     var wsum = 0.0;
     for (var i = -12; i <= 12; i = i + 1) {
         let off = f32(i) * spacing;
         let w = falloff(abs(off) / ext, bu.ramp);
         let uv = in.uv + bu.dir * (off * texel);
         let keep = 1.0 - textureSample(bmask, samp, uv).a;
+        // the H pass reads the text's alpha, the V pass the blur layer's red
+        let src = textureSample(tex, samp, uv);
         // fold the cursor coverage into the H pass (bu.cursor is 0 in the V pass)
-        let cov = textureSample(tex, samp, uv) + bu.cursor * textureSample(bcur, samp, uv);
+        let cov = mix(src.r, src.a, bu.source) + bu.cursor * textureSample(bcur, samp, uv).r;
         sum += cov * (w * keep);
         wsum += w;
     }
-    return sum / wsum;
+    return vec4<f32>(sum / wsum, 0.0, 0.0, 1.0);
 }
 
 // Distance transform, pass a: per-column 1D distance to the nearest coverage seed
@@ -852,7 +876,7 @@ fn fs_dist_a(in: VsOut) -> @location(0) vec4<f32> {
     for (var k = -RI; k <= RI; k = k + 1) {
         let uv = in.uv + vec2<f32>(0.0, f32(k)) * texel;
         let keep = 1.0 - textureSample(bmask, samp, uv).a;
-        let cov = textureSample(tex, samp, uv).a + bu.cursor * textureSample(bcur, samp, uv).a;
+        let cov = textureSample(tex, samp, uv).a + bu.cursor * textureSample(bcur, samp, uv).r;
         let seed = step(0.5, cov * keep);
         best = min(best, mix(R, f32(abs(k)), seed));
     }
@@ -883,11 +907,15 @@ fn fs_dist_b(in: VsOut) -> @location(0) vec4<f32> {
 
 struct CompU { resolution: vec2<f32>, intensity: f32, border_px: f32, cursor: f32, function: f32, ramp: f32, radius: f32, strength: f32, halo: f32 };
 @group(0) @binding(0) var<uniform> cu: CompU;
-@group(0) @binding(1) var gtex: texture_2d<f32>;   // scrim: blurred coverage (.a) or distance (.r)
+@group(0) @binding(1) var gtex: texture_2d<f32>;   // scrim: blurred coverage or distance (.r)
 @group(0) @binding(2) var gsamp: sampler;
-@group(0) @binding(3) var bgtex: texture_2d<f32>;  // per-pixel scrim color
+@group(0) @binding(3) var bgtex: texture_2d<f32>;  // per-pixel scrim color, sRGB encoded
 @group(0) @binding(4) var ttex: texture_2d<f32>;   // crisp glyph coverage
-@group(0) @binding(5) var ccur: texture_2d<f32>;   // crisp cursor coverage
+@group(0) @binding(5) var ccur: texture_2d<f32>;   // crisp cursor coverage (.r)
+
+fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
+    return select(pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
+}
 
 // color the scrim coverage per-pixel by the local bg color; premultiplied.
 // border: dilate the crisp coverage by border_px (8 taps; linear sampling keeps
@@ -901,7 +929,7 @@ fn border_tap(uv: vec2<f32>) -> f32 {
     // the cursor's own coverage is only wanted when the cursor outline is on
     var cov = textureSample(ttex, gsamp, uv).a;
     if (cu.cursor > 0.5) {
-        cov = max(cov, textureSample(ccur, gsamp, uv).a);
+        cov = max(cov, textureSample(ccur, gsamp, uv).r);
     }
     return cov * (1.0 - textureSample(bgtex, gsamp, uv).a);
 }
@@ -910,7 +938,7 @@ fn fs_comp(in: VsOut) -> @location(0) vec4<f32> {
     var ga = 0.0;
     if (cu.function >= 2.5) {
         // gaussian [ugly]: blurred coverage alpha, boosted by intensity
-        ga = clamp(textureSample(gtex, gsamp, in.uv).a * cu.intensity, 0.0, 1.0);
+        ga = clamp(textureSample(gtex, gsamp, in.uv).r * cu.intensity, 0.0, 1.0);
     } else {
         // distance paths: gtex.r is the distance to the nearest coverage; run it
         // through the falloff curve. intensity/10 is the peak alpha (softness).
@@ -927,7 +955,7 @@ fn fs_comp(in: VsOut) -> @location(0) vec4<f32> {
     // outward along the falloff, so the plate thickens instead of the edge moving.
     // (No double quotes anywhere in here - the whole shader is one raw literal.)
     ga = clamp(ga * exp2(cu.strength), 0.0, 1.0) * cu.halo;
-    let rgb = textureSample(bgtex, gsamp, in.uv).rgb;
+    let rgb = srgb_decode(textureSample(bgtex, gsamp, in.uv).rgb);
     let texel = 1.0 / cu.resolution;
     // Eight taps, three samples each. They were run on every pixel of every frame
     // and multiplied by zero at the end; cu.border_px is uniform, so skipping
@@ -954,7 +982,9 @@ fn fs_comp(in: VsOut) -> @location(0) vec4<f32> {
 
 #[cfg(test)]
 mod tests {
-	use super::{EXT_MAX, WGSL, alloc_size, clamp_ext};
+	use super::{
+		BG_FMT, CURSOR_FMT, EXT_MAX, HALO_FMT, TEXT_FMT, Use, WGSL, alloc_size, clamp_ext,
+	};
 
 	// The exponential arm's exponent, mirrored so the curve can be checked
 	// without a GPU. The shader owns the number and the test below holds the
@@ -967,10 +997,19 @@ mod tests {
 		(((-EXP_K * t).exp()) - e) / (1.0 - e)
 	}
 
-	// Bytes the set costs: three Rgba16Float (8 per pixel), the coverage texture
-	// and the bgcolor map (4 each).
-	fn bytes((w, h): (u32, u32)) -> u64 {
-		u64::from(w) * u64::from(h) * (8 * 3 + 4 * 2)
+	fn texel(format: wgpu::TextureFormat) -> u64 {
+		u64::from(format.block_copy_size(None).expect("a plain color format"))
+	}
+
+	fn pixels((w, h): (u32, u32)) -> u64 {
+		u64::from(w) * u64::from(h)
+	}
+
+	// Bytes the set costs, read off the formats themselves.
+	fn bytes(what: Use, surface: (u32, u32)) -> u64 {
+		let (crisp, halo) = alloc_size(what, surface);
+		pixels(crisp) * (texel(TEXT_FMT) + texel(CURSOR_FMT) + texel(BG_FMT))
+			+ pixels(halo) * 2 * texel(HALO_FMT)
 	}
 
 	// The scrim used to build its five full-screen textures whether or not it drew
@@ -1049,11 +1088,56 @@ mod tests {
 	#[test]
 	fn nothing_drawing_costs_no_memory() {
 		let uhd = (3840, 2160);
-		assert_eq!(alloc_size(true, uhd), uhd);
-		assert!(bytes(alloc_size(true, uhd)) > 200 << 20, "the real cost");
+		assert_eq!(alloc_size(Use::Halo, uhd), (uhd, uhd));
+		// was: assert!(bytes(..) > 200 << 20, "the real cost") - the layers were
+		// made smaller (2026100418225502), so the full set at 4K is about 100 MiB
+		assert!(bytes(Use::Halo, uhd) > 100 << 20, "the real cost");
 		assert!(
-			bytes(alloc_size(false, uhd)) < 1 << 10,
+			bytes(Use::Nothing, uhd) < 1 << 10,
 			"switched off it should cost nothing"
+		);
+		// the outline alone never runs the blur, so its two layers stay a pixel
+		assert_eq!(alloc_size(Use::OutlineOnly, uhd), (uhd, (1, 1)));
+	}
+
+	// Five Rgba16Float layers were 40 bytes a pixel, 150 MiB of a 268 MiB window
+	// at 2560x1440. Each layer keeps only the channels and precision read back.
+	// Test ID: ErnU09H
+	#[test]
+	fn the_scrim_costs_at_most_13_bytes_a_pixel() {
+		let qhd = (2560, 1440);
+		let per_pixel = |what| bytes(what, qhd) as f64 / pixels(qhd) as f64;
+		assert!(
+			per_pixel(Use::Halo) <= 13.0,
+			"{} bytes a pixel",
+			per_pixel(Use::Halo)
+		);
+		assert!(
+			per_pixel(Use::OutlineOnly) <= 9.01,
+			"{} bytes a pixel with only the outline",
+			per_pixel(Use::OutlineOnly)
+		);
+	}
+
+	// The color map is drawn from cell colors that started as sRGB bytes, and
+	// it stores them encoded in 8 bits, so it hands back every one of them
+	// exactly. Stored linear in 8 bits, the dark end would collapse.
+	// Test ID: ErnU0UJ
+	#[test]
+	fn the_color_map_keeps_every_byte_color_exactly() {
+		assert_eq!(texel(BG_FMT), 4);
+		assert!(
+			!BG_FMT.is_srgb(),
+			"the GL path writes an sRGB target unencoded"
+		);
+		for byte in 0..=255u8 {
+			let stored =
+				(crate::config::from_linear(crate::config::to_linear(byte)) * 255.0).round();
+			assert_eq!(stored as u8, byte);
+		}
+		assert!(
+			WGSL.contains("srgb_decode(textureSample(bgtex"),
+			"the composite reads it back encoded"
 		);
 	}
 }

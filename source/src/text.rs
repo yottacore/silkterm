@@ -452,7 +452,7 @@ impl std::fmt::Debug for TextCtx {
 // Everything of a TextCtx that is made on a wgpu device.
 struct TextGpu {
 	atlas: TextAtlas,
-	// The scrim renders into an Rgba16Float coverage texture, a different format
+	// The scrim renders into its own coverage texture, a different format
 	// than the surface, so its glyphon renderer needs its own same-format atlas.
 	scrim_atlas: TextAtlas,
 	viewport: Viewport,
@@ -488,14 +488,12 @@ impl TextGpu {
 	fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
 		let cache = Cache::new(device);
 		let mut atlas = TextAtlas::new(device, queue, &cache, format);
-		// The scrim text pass renders into a separate Rgba16Float coverage texture
-		// (crate::scrim::FMT), so its glyphon renderer must target THAT format. On the
-		// X11 GL path gfx.format is already Rgba16Float and a shared atlas happened to
-		// match; on the native path (Windows, Wayland) gfx.format is an sRGB surface
-		// format, so a shared atlas targets the wrong format - wgpu rejects it as
+		// The scrim text pass renders into its own coverage texture
+		// (crate::scrim::TEXT_FMT), so its glyphon renderer must target THAT format.
+		// A shared atlas targets the window's format, and wgpu rejects it as
 		// "incompatible color attachments" on the first scrim frame. One Cache backs
 		// both atlases (it's built to serve multiple target formats).
-		let mut scrim_atlas = TextAtlas::new(device, queue, &cache, crate::scrim::FMT);
+		let mut scrim_atlas = TextAtlas::new(device, queue, &cache, crate::scrim::TEXT_FMT);
 		let viewport = Viewport::new(device, &cache);
 		let renderer =
 			TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
