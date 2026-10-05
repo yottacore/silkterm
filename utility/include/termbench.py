@@ -398,33 +398,38 @@ class Console:
 			elif os.name == "nt":
 				self._enter_windows()
 			self.ok = True
-		except Exception:
+		except (OSError, ValueError):
+			#	Not a terminal, or no console: run anyway, minus the queries that need raw input.
 			self.ok = False
 		return self
 
 	def __exit__(self, *exc: object) -> Literal[False]:
-		try:
-			if self._posix:
-				import termios
-				fd, saved = self._posix
+		if self._posix:
+			import termios
+			fd, saved = self._posix
+			try:
 				termios.tcsetattr(fd, termios.TCSADRAIN, saved)
-			elif self._win and sys.platform == "win32":
-				import ctypes
-				k = ctypes.windll.kernel32
-				hin, hout, min_, mout = self._win
-				k.SetConsoleMode(hin, min_)
-				k.SetConsoleMode(hout, mout)
-		except Exception:
-			pass
+			except termios.error:
+				pass  # the tty went away under us, so there is nothing to put back
+		elif self._win and sys.platform == "win32":
+			import ctypes
+			k = ctypes.windll.kernel32
+			hin, hout, min_, mout = self._win
+			k.SetConsoleMode(hin, min_)
+			k.SetConsoleMode(hout, mout)
 		return False
 
 	def _enter_posix(self) -> None:
 		import termios
 		import tty
 		fd = sys.stdin.fileno()
-		saved = termios.tcgetattr(fd)
-		self._posix = (fd, saved)
-		tty.setraw(fd, termios.TCSANOW)
+		#	termios.error is not an OSError, and the caller cannot name it on Windows.
+		try:
+			saved = termios.tcgetattr(fd)
+			self._posix = (fd, saved)
+			tty.setraw(fd, termios.TCSANOW)
+		except termios.error as err:
+			raise OSError(*err.args) from err
 
 	def _enter_windows(self) -> None:
 		if sys.platform != "win32":
@@ -518,7 +523,7 @@ def terminal_size() -> tuple[int, int]:
 	try:
 		size = shutil.get_terminal_size()
 		return size.columns, size.lines
-	except Exception:
+	except (OSError, ValueError):
 		return 0, 0
 
 
@@ -544,7 +549,7 @@ def _exe_of(pid: int) -> str:
 		out = subprocess.run(["ps", "-o", "comm=", "-p", str(pid)],
 		                     capture_output=True, text=True, timeout=3, check=False)
 		return out.stdout.strip()
-	except Exception:
+	except (OSError, ValueError, subprocess.SubprocessError):
 		return ""
 
 
@@ -558,7 +563,7 @@ def _ppid_of(pid: int) -> int:
 		out = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)],
 		                     capture_output=True, text=True, timeout=3, check=False)
 		return int(out.stdout.strip())
-	except Exception:
+	except (OSError, ValueError, IndexError, subprocess.SubprocessError):
 		return 0
 
 
@@ -592,7 +597,7 @@ def _run_version(exe: str, flag: str) -> str:
 		                     timeout=5, stdin=subprocess.DEVNULL, check=False)
 		line = (out.stdout or out.stderr).strip().splitlines()
 		return line[0].strip() if line else ""
-	except Exception:
+	except (OSError, ValueError, subprocess.SubprocessError):
 		return ""
 
 
@@ -633,7 +638,7 @@ def _stamp_for(exe: str) -> str:
 		return got.group(1)
 	try:
 		return datetime.fromtimestamp(Path(exe).stat().st_mtime).strftime("%Y%m%d-%H%M%S")
-	except Exception:
+	except (OSError, ValueError, OverflowError):
 		return ""
 
 
@@ -1277,3 +1282,4 @@ if __name__ == "__main__":
 ##		20260730 Moved under utility/include/, behind update-showdown.py.
 ##		20260928 WezTerm's and GNOME Terminal's versions come from their launchers.
 ##		20261005 Type hints, pathlib, f-strings.
+##		20261005 Each except names what it expects.

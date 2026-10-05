@@ -146,6 +146,8 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - A file a script opens is closed by a `with` block, and every `subprocess.run` says `check=` one way or the other.
 
+- An `except` names the errors it expects. Where catching everything is the point, the line says so with `# noqa: BLE001` and a short reason.
+
 - Indent with tabs, like the rest of the repo, not PEP 8's four spaces. Spaces may follow the tabs to line up a continuation. One older script uses spaces and is left as it is.
 
 - Scripts must pass ruff with the rules in `ruff.toml`, and mypy with `mypy.ini`.

@@ -20,6 +20,7 @@ extend-select = [
 	"SIM115",   ## open() outside a with
 	"PLW1510",  ## subprocess.run with no check=
 	"B006",     ## mutable default argument
+	"BLE001",   ## except Exception, which catches the typos too
 ]
 
 [lint.flake8-annotations]
