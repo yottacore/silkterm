@@ -106,12 +106,15 @@ done(rec)
 ## Everything launched belongs on the private X display. winit prefers Wayland
 ## whenever it sees one, so DISPLAY alone left the window on the real desktop.
 wayland = {"WAYLAND_DISPLAY": "wayland-0", "XDG_SESSION_TYPE": "wayland"}
-rec = with_env(wayland, lambda: make_rec(demo))
+## The desktop's session manager restarted a WM stopped here, onto the private display.
+desktop = dict(wayland, SESSION_MANAGER="local/box:@/tmp/.ICE-unix/1")
+rec = with_env(desktop, lambda: make_rec(demo))
 for what, env_of in (("what the recorder runs", rec.env), ("the app", rec.app_env)):
-	e = with_env(wayland, env_of)
+	e = with_env(desktop, env_of)
 	check(f"{what} has no Wayland session",
 		"WAYLAND_DISPLAY" not in e and "XDG_SESSION_TYPE" not in e,
 		f"{e.get('WAYLAND_DISPLAY')} {e.get('XDG_SESSION_TYPE')}")
+	check(f"{what} is out of the desktop's session", "SESSION_MANAGER" not in e, str(e.get("SESSION_MANAGER")))
 	check(f"{what} is on the private display", e.get("DISPLAY") == ":197", str(e.get("DISPLAY")))
 done(rec)
 
@@ -125,7 +128,7 @@ for name, profile in demo.PROFILES.items():
 
 ## gui-headless.bash and the profiler stage start windows on a private display too.
 def launch_env(script: str) -> dict[str, str]:
-	env = dict(os.environ, **wayland)
+	env = dict(os.environ, **desktop)
 	got = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30, check=False)
 	return dict(ln.split("=", 1) for ln in got.stdout.splitlines() if "=" in ln)
 
@@ -135,6 +138,11 @@ e = launch_env(f'display=:197\n{on_x}\nonX env') if on_x else {}
 check("gui-headless.bash's onX drops the Wayland session",
 	e and "WAYLAND_DISPLAY" not in e and "XDG_SESSION_TYPE" not in e and e.get("DISPLAY") == ":197",
 	on_x or "no onX line")
+check("gui-headless.bash's onX leaves the desktop's session", e and "SESSION_MANAGER" not in e, on_x or "no onX line")
+## In the background it execs, so the pid recorded for stop is the program's.
+got = launch_env(f'display=:197\n{on_x}\nonX --bg sh -c \'echo PID=$$\' &\necho BG=$!\nwait') if on_x else {}
+check("gui-headless.bash records the program's own pid, not a subshell's",
+	bool(got.get("PID")) and got.get("PID") == got.get("BG"), f"{got.get('PID')} against {got.get('BG')}")
 
 ## The profiler's launch is one command continued over several lines; run it with
 ## a stand-in app that prints what it was handed.
@@ -235,3 +243,4 @@ print("all passed")
 ##	History:
 ##		- 20260917 JC: Created.
 ##		- 20260926 JC: Wayland session, frame rate pin, settings changes.
+##		- 20261005 JC: Desktop session manager; background pid.
