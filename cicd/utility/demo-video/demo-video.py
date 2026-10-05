@@ -241,7 +241,8 @@ class Rec:
 		# it prefers Wayland whenever WAYLAND_DISPLAY is set, so on any Wayland
 		# session (WSLg included) the window opens on the real desktop instead and
 		# nothing here can find it. Everything we launch belongs on the X display.
-		for k in ("WAYLAND_DISPLAY", "XDG_SESSION_TYPE"):
+		# Out of the desktop's session too, or it restarts a stopped WM onto ours.
+		for k in ("WAYLAND_DISPLAY", "XDG_SESSION_TYPE", "SESSION_MANAGER"):
 			e.pop(k, None)
 		return e
 

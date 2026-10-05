@@ -33,6 +33,7 @@
 ##	Notes:
 ##		Display/size is overridable via CICD_HEADLESS_DISPLAY / CICD_HEADLESS_SIZE
 ##		(legacy RPD_* names still honored as fallbacks).
+##		start --wm waits up to CICD_HEADLESS_WM_WAIT seconds (10) for the WM.
 ##		A server belongs to the process that ran `start` (the calling script).
 ##		While that process lives, only it may stop the server, and another run's
 ##		`start` on the same number is refused rather than shared. Once it has
@@ -67,8 +68,12 @@ chmod 700 "$run_dir"
 ## Run something on our private display. Clearing the Wayland vars matters as much
 ## as setting DISPLAY: winit and GTK both prefer Wayland when they see it, so on a
 ## Wayland session (WSLg included) the window opens on the real desktop instead and
-## nothing here can find it.
-onX(){ env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE DISPLAY="$display" "$@"; }
+## nothing here can find it. SESSION_MANAGER goes too: xfwm4 joined the desktop's
+## session through it, and the desktop restarted each one we stopped, onto this
+## display, where it took the next run's screen.
+## --bg is for a background job: it execs, so $! is the program itself. Without
+## it $! was a subshell, and stop killed that and left the program running.
+onX(){ local how=""; [[ "${1:-}" == "--bg" ]] && { how="exec"; shift; }; ${how} env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE -u SESSION_MANAGER DISPLAY="$display" "$@"; }
 
 xvfb_pid="$run_dir/xvfb-${num}.pid"
 wm_pid="$run_dir/wm-${num}.pid"
@@ -86,12 +91,22 @@ record() { echo "$1 $(started_at "$1")"; }
 same() { local p t; read -r p t <<<"$1"; [[ -n "$t" && "$(started_at "$p" || true)" == "$t" ]]; }
 alive() { [[ -f "$1" ]] && same "$(cat "$1")"; }
 pid_of() { local p _; read -r p _ <"$1"; echo "$p"; }
+## Kill a recorded process and wait for it to go. A server still shutting down
+## holds the lock, and a start right after a stop found the number taken.
+end_it() {
+	local i
+	same "$1" || return 0
+	kill "${1%% *}" 2>/dev/null || true
+	for ((i = 0; i < 50; i++)); do same "$1" || return 0; sleep 0.1; done
+	kill -9 "${1%% *}" 2>/dev/null || true
+}
 
 ## Who is asking: the script that ran this one.
 me="$(record "$PPID")"
 owned_by_other() { [[ -f "$owner_file" ]] && [[ "$(cat "$owner_file")" != "$me" ]] && same "$(cat "$owner_file")"; }
 
 start() {
+	local fresh=""
 	if alive "$xvfb_pid"; then
 		if owned_by_other; then
 			echo "Xvfb on $display belongs to another run (pid $(pid_of "$owner_file")); not sharing it" >&2
@@ -128,19 +143,61 @@ start() {
 			echo "Xvfb did not come up on $display; see $run_dir/xvfb-${num}.log" >&2
 			exit 1
 		fi
+		fresh=1
 		echo "Started Xvfb on $display (pid $pid, $size)"
 	fi
-	if [[ "${1:-}" == "--wm" ]] && ! alive "$wm_pid"; then
-		onX xfwm4 --compositor=off >"$run_dir/wm-${num}.log" 2>&1 &
-		record $! > "$wm_pid"
-		echo "Started xfwm4 on $display (pid $(pid_of "$wm_pid"))"
+	if [[ "${1:-}" == "--wm" ]]; then
+		if ! alive "$wm_pid"; then
+			onX --bg xfwm4 --compositor=off >"$run_dir/wm-${num}.log" 2>&1 &
+			record $! > "$wm_pid"
+			echo "Started xfwm4 on $display (pid $(pid_of "$wm_pid"))"
+		fi
+		## xfwm4 is still setting up when the fork returns, and a caller that
+		## asks for the WM right away finds none (2026100512560044).
+		wm_wait || {
+			local why="did not come up within ${wm_wait_secs}s"
+			alive "$wm_pid" || why="exited"
+			echo "xfwm4 ${why} on $display; see $run_dir/wm-${num}.log" >&2
+			[[ -f "$wm_pid" ]] && end_it "$(cat "$wm_pid")"
+			rm -f "$wm_pid"
+			## A display started just now would be left behind by a caller that
+			## only stops what it saw start.
+			if [[ -n "${fresh}" ]]; then
+				end_it "$(cat "$xvfb_pid")"
+				rm -f "$xvfb_pid" "$owner_file"
+			fi
+			exit 1
+		}
 	fi
+}
+
+## Digits only: the value goes into arithmetic, which would run a $( ) in it.
+wm_wait_secs="${CICD_HEADLESS_WM_WAIT:-10}"
+[[ "$wm_wait_secs" =~ ^[0-9]+$ ]] || wm_wait_secs=10
+## Up per EWMH: the root names a check window, and that window names itself.
+## A WM that died leaves the root property behind, so the first half alone lies.
+wm_up() {
+	local id self
+	id="$(onX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
+	[[ "$id" == *"window id # "* ]] || return 1
+	id="${id##* }"
+	self="$(onX xprop -id "$id" _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
+	[[ "${self##* }" == "$id" ]]
+}
+wm_wait() {
+	local i
+	for ((i = 0; i < wm_wait_secs * 10; i++)); do
+		alive "$wm_pid" || return 1
+		wm_up && return 0
+		sleep 0.1
+	done
+	return 1
 }
 
 launch() {
 	[[ $# -gt 0 ]] || { echo "usage: launch <cmd...>" >&2; exit 2; }
 	alive "$xvfb_pid" || start
-	onX "$@" >"$run_dir/app-${num}.log" 2>&1 &
+	onX --bg "$@" >"$run_dir/app-${num}.log" 2>&1 &
 	record $! >> "$apps_pids"
 	echo "Launched on $display (pid $!); log: $run_dir/app-${num}.log"
 }
@@ -160,12 +217,12 @@ stop() {
 	fi
 	local line
 	if [[ -f "$apps_pids" ]]; then
-		while read -r line; do same "$line" && kill "${line%% *}" 2>/dev/null || true; done < "$apps_pids"
+		while read -r line; do end_it "$line"; done < "$apps_pids"
 		rm -f "$apps_pids"
 	fi
 	for f in "$wm_pid" "$xvfb_pid"; do
 		[[ -f "$f" ]] || continue
-		alive "$f" && { kill "$(pid_of "$f")" 2>/dev/null || true; }
+		end_it "$(cat "$f")"
 		rm -f "$f"
 	done
 	rm -f "$owner_file"
@@ -187,3 +244,6 @@ esac
 ##		- 20260917: A pid file carries the start time, so a reused pid is not
 ##		  ours; start refuses a number another server holds and reports success
 ##		  only for its own; a server belongs to the run that started it.
+##		- 20261005: start --wm waits for the WM to answer, and fails if it
+##		  does not. Background pids are the programs, not a subshell, and
+##		  stop waits for them to exit.
