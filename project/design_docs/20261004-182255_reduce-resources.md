@@ -17,6 +17,7 @@
 	- [Non-goals](#non-goals)
 - [Design](#design)
 	- [Measure first](#measure-first)
+	- [The memory hint](#the-memory-hint)
 	- [A smaller scrim](#a-smaller-scrim)
 	- [The wallpaper at window size](#the-wallpaper-at-window-size)
 	- [Block compression for the wallpaper](#block-compression-for-the-wallpaper)
@@ -34,7 +35,7 @@
 
 ## Summary
 
-One SilkTerm window holds about 330 MB of graphics memory, and many windows add up fast. Most of it is a few full-window textures that are bigger than they need to be. Measured, the two biggest parts are the scrim's textures and the dialogs' kept GPU context. This doc covers making them smaller, a way to run without the graphics card at all, and a clearer place in Settings for what a window gives back.
+One SilkTerm window holds about 330 MB of graphics memory, and many windows add up fast. Most of it is a few full-window textures that are bigger than they need to be. Measured, the two biggest parts are the scrim's textures and the dialogs' kept GPU context. A memory hint has since cut the context from about 200 MiB to 21. This doc covers making them smaller, a way to run without the graphics card at all, and a clearer place in Settings for what a window gives back.
 
 What a window already gives back while unused is in the [Releasing resources](20260930-151334_releasing-resources.md) design doc. This doc is about what a window costs while it is in use.
 
@@ -88,6 +89,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 	| Dialogs' kept context, once per process       |      201 |       201 |       201
 	| The process                                   |      301 |       379 |       469
 
+	- These are with wgpu's default memory hint. With the hint every device uses now, the context is 21 MiB. See [The memory hint](#the-memory-hint).
 	- The window buffers grow by about 22 bytes a pixel. 8 of those are the full-window Rgba16Float texture the GL path draws into before the flip.
 	- A 6000x4000 image, cut to 4096x2731, costs 88 MiB rather than 32.
 	- Opening Settings adds 12 MiB, given back when it closes.
@@ -112,7 +114,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- The scrim is the largest part of a window: 150 of 268 MiB at 2560x1440. Its textures exist whenever the halo or the outline is on. Turning only the halo off saves 30 MiB on X11 and nothing on Vulkan, where all five are made either way.
 	- The dialogs' kept context reserves a 128 MiB and a 64 MiB block from wgpu's allocator for less than 1 MiB of use. It also costs about 16 MiB of regular memory.
 	- On Vulkan, most of the bill is the allocator's unused space: 167 MiB in use against 512 reserved. The allocator takes big blocks because wgpu's default memory hint is `Performance`.
-	- With `MemoryHints::MemoryUsage` on both devices, the dialogs' context costs 18 MiB with no dialog open and 31 MiB with Settings open. The Vulkan window above came to 252 MiB instead of 702, context included. Settings still opened from it. How long it took to open was not measured.
+	- With `MemoryHints::MemoryUsage` on both devices, the dialogs' context costs 18 MiB with no dialog open and 31 MiB with Settings open. The Vulkan window above came to 252 MiB instead of 702, context included. Settings still opened from it. Every device uses that hint now; see [The memory hint](#the-memory-hint).
 	- The wallpaper costs about twice its texture on X11: 32 MiB for a 15 MiB texture, 88 for 44. In regular memory a 2560x1440 one costs 44 MiB: a 14 MiB copy the size of the decoded image stays mapped in the process, plus 27 MiB that the driver maps. The 4096x2731 one costs 106 MiB. Why the copy stays is not known yet.
 	- On Vulkan, the wallpaper's 20 KB readback buffer for the lost-texture check makes the allocator keep a 64 MiB block of regular memory.
 
@@ -128,6 +130,38 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- A scrollback cell is 24 bytes, for every column of every line, blank or not, per pane. The alt screen adds one more screen of cells.
 	- The minimap store is a row of preview pixels per line, so it grows with the lines and not with the window.
 	- Glyphs go straight into the GPU atlases, so there is no glyph cache in regular memory. The heap is 14 to 26 MiB, mostly the font list (1067 faces here) and shaped text.
+
+### The memory hint
+
+- wgpu's default hint, `Performance`, has the Vulkan and DX12 allocator take blocks of 128 to 256 MiB of graphics memory and 64 to 128 MiB of host memory. `MemoryUsage` starts at 8 and 4 MiB and grows to 64 and 32. GL and Metal ignore the hint.
+
+- Every device asks for `MemoryUsage` since 2026-10-04: the window's on every backend, and the dialogs' kept context.
+
+- Measured on b23 at 2560x1440 against a control with the default hint, in the same session, in MiB:
+
+	| Part                                | Default | MemoryUsage
+	| :---------------------------------- | ------: | ----------:
+	| X11 process, Settings closed        |     453 |         273
+	| X11 process, Settings open          |     465 |         285
+	| Dialogs' kept context               |     201 |          21
+	| Its allocator, reserved             |     192 |          12
+	| Vulkan window plus the context      |     702 |         256
+	| Vulkan window's allocator, reserved |     512 |         186
+
+	- The X11 process with no kept context at all is 252 MiB with either hint, since the GL window ignores it. The context's figure is the difference. After a first Settings open the difference is 16 MiB.
+	- The Vulkan window had 159 MiB in use in both runs.
+	- The control read 453 where the table in [Measure first](#measure-first) has 469 for the same window. Each comparison here is within one session.
+
+- Regular memory does not change with the hint. The kept context costs about 8 MiB of anonymous memory either way, 58.7 against 51.0 with no context. The 16 MiB in Measure first was the unique footprint, which moves with the page cache.
+
+- Settings open time, from the key to the dialog's first frame (`SILK_DLGDBG=1`), eight opens a run, three runs each:
+	- Kept context, default hint: 108 ms for each of the first three opens, then a median of 62.
+	- Kept context, `MemoryUsage`: 105 ms, then 66.
+	- No kept context: about 230 ms every time.
+
+- Frame times on the Vulkan path, under a 20 second scroll flood, two runs each: about 22 ms of render time and 1.9 ms of text preparation a frame with either hint, at the same frame rate. A control run with the card clocked up by another program read 18 ms, which is the spread between runs.
+
+- Windows uses the same allocator through DX12 and was not measured.
 
 ### A smaller scrim
 
@@ -185,6 +219,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 - Settings and About draw through a GPU context built once and kept for the life of the process. It holds about 52 MiB to open Settings in 86 ms rather than 310 ms. See the [Settings dialog](20260930-145721_settings-dialog.md) design doc.
 	- Measured on b23, it holds about 200 MiB of graphics memory and 16 MiB of regular memory, almost all of it two blocks wgpu's allocator reserves up front. With the `MemoryUsage` hint it is 18 MiB. See [Measure first](#measure-first).
+	- With the hint every device uses since 2026-10-04, it is about 21 MiB of graphics memory and 8 MiB of anonymous memory. See [The memory hint](#the-memory-hint).
 
 - With many windows, that is 52 MiB each, all the time, for a dialog that is rarely open.
 
@@ -192,6 +227,13 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- Drop it when the dialog closes, and keep it only while a dialog is open.
 	- Share the main window's device instead of a second one, where the backend allows. That also saves a second driver context. On X11 the dialog's GL context cannot outlive the window's, so this needs care there.
 	- Keep it, and say so.
+
+- Decided 2026-10-04, open to reversal: keep it.
+	- With the hint it costs about 21 MiB of graphics memory and 8 MiB of regular memory per process.
+	- The idle release already lets its device go along with the window's.
+	- Dropped on close, every open would take about 230 ms, against 66 to 105 ms kept.
+	- Sharing the main window's device cannot work on X11, where the window draws through GL. Elsewhere it would save about 20 MiB.
+	- `WARM_DIALOG_GPU` in app.rs is still the one-line way back to building the context on each open.
 
 - Moved here from the releasing resources doc's roadmap.
 

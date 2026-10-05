@@ -13,12 +13,17 @@
 #		--fill             fill the scrollback (12000 lines) before sampling
 #		--no-minimap
 #		--settings         open Settings once and sample with it open and closed (gl only)
+#		--opens N          open and close Settings N times, printing how long each
+#		                   took to draw (gl only; implies --settings)
+#		--flood SECS       scroll output for SECS, then print the frame counts and
+#		                   render times (SILK_PERF) instead of sampling memory
 #		--settle N         seconds before the first sample (default 15)
 #
 # Prints the process's graphics memory as the driver bills it (nvidia-smi), its
 # unique resident footprint less the driver's libraries (sizebench-classify.py),
-# and the window's own SILK_MEMDBG lines. Use an optimized binary. Test files
-# go in the run's test_silkterm_<stamp> folder (cicd/tests/_testdir.bash).
+# its anonymous resident memory, and the window's own SILK_MEMDBG lines. Use an
+# optimized binary. Test files go in the run's test_silkterm_<stamp> folder
+# (cicd/tests/_testdir.bash).
 
 ##	History: At bottom of file.
 
@@ -38,7 +43,7 @@ fMain(){
 	local -r binary="${1:?binary}" mode="${2:?gl|vulkan}" size="${3:?WxH}"
 	shift 3
 	local scrim=true outline=1.0 wallpaper="" noWallpaper=false scene=idle minimap=true settings=false
-	local -i settle=15
+	local -i settle=15 opens=1 flood=0
 	while (($#)); do
 		case "$1" in
 			--no-halo)      scrim=false ;;
@@ -48,7 +53,9 @@ fMain(){
 			--fill)         scene=fill ;;
 			--no-minimap)   minimap=false ;;
 			--settings)     settings=true ;;
-			--settle)       settle="${2:?seconds}"; shift ;;
+			--opens)        fCount "$1" "${2:-}" || return 2; settings=true; opens="$2"; shift ;;
+			--flood)        fCount "$1" "${2:-}" || return 2; flood="$2"; scene=flood; shift ;;
+			--settle)       fCount "$1" "${2:-}" || return 2; settle="$2"; shift ;;
 			*) echo "unknown option: $1" >&2; return 2 ;;
 		esac
 		shift
@@ -63,19 +70,34 @@ fMain(){
 	local -r work="${SILKTERM_TEST_DIR}/mem-per-window"
 	mkdir -p "${work}/cfg/silkterm" "${work}/data"
 	fWriteConfig "${work}/cfg/silkterm/config.shcl" "${scrim}" "${outline}" "${noWallpaper}" "${wallpaper}" "${minimap}"
-	fWriteScene "${work}/scene.sh" "${scene}"
+	fWriteScene "${work}/scene.sh" "${scene}" "${flood}"
 	fStartSway "${work}" "$((width + 40))x$((height + 120))" || return 1
 
-	local -a env=(env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="${work}/cfg" XDG_DATA_HOME="${work}/data" XDG_RUNTIME_DIR="${swayRun}" SILK_MEMDBG=1)
+	local -a env=(env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="${work}/cfg" XDG_DATA_HOME="${work}/data" XDG_RUNTIME_DIR="${swayRun}" SILK_MEMDBG=1 SILK_DLGDBG=1)
+	((flood == 0)) || env+=(SILK_PERF=1)
 	if [[ "${mode}" == gl ]]; then env+=(DISPLAY="${xDisplay}"); else env+=(WAYLAND_DISPLAY=wayland-1); fi
 	"${env[@]}" "${binary}" --pixel-width "${width}" --pixel-height "${height}" --shell "/bin/dash ${work}/scene.sh" 2>"${work}/stderr.log" &
 	appPid=$!
+	if ((flood > 0)); then
+		# the scene exits after the flood, and the window with it
+		wait "${appPid}"
+		appPid=""
+		grep '^\[perf\]' "${work}/stderr.log"
+		return 0
+	fi
 	sleep "${settle}"
 	fSample "${work}" settled
 	if [[ "${settings}" == true ]]; then
 		[[ "${mode}" == gl ]] || { echo "--settings needs gl mode" >&2; return 2; }
-		fSettingsOnce "${work}"
+		local -i open
+		for ((open = 1; open <= opens; open++)); do fSettingsOnce "${work}" || return 1; done
+		grep '^\[dlg\] Settings drawn' "${work}/stderr.log"
 	fi
+}
+
+# Checked as text first, since a -i variable evaluates whatever it is given.
+fCount(){
+	[[ "$2" =~ ^[1-9][0-9]*$ ]] || { echo "$1 takes a whole number above 0" >&2; return 1; }
 }
 
 # Graphics memory is shared with the desktop and whatever else is running. A
@@ -104,8 +126,17 @@ fWriteConfig(){
 }
 
 fWriteScene(){
-	local -r file="$1" scene="$2"
-	if [[ "${scene}" == fill ]]; then
+	local -r file="$1" scene="$2" seconds="$3"
+	if [[ "${scene}" == flood ]]; then
+		cat >"${file}" <<EOF
+sleep 3
+end=\$((\$(date +%s) + ${seconds}))
+while [ \$(date +%s) -lt \$end ]; do
+	seq -f '%06g the quick brown fox jumps over the lazy dog 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ' 1 2000
+	sleep 0.05
+done
+EOF
+	elif [[ "${scene}" == fill ]]; then
 		cat >"${file}" <<'EOF'
 i=0
 while [ $i -lt 12000 ]; do
@@ -151,6 +182,8 @@ fSample(){
 	nvidia-smi -q -d PIDS | awk -v p="${appPid}" '/Process ID/ {on = ($4 == p)} on && /Used GPU Memory/ {print "graphics memory (nvidia-smi):", $5, $6}'
 	python3 "${repoDir}/utility/include/sizebench-classify.py" --summary "${appPid}" 2>/dev/null \
 		| awk '/^RESULT/ {for (i = 2; i <= NF; i++) if ($i ~ /^mem=/) print "unique footprint less driver libraries:", substr($i, 5), "MiB"}'
+	# file pages come and go with the page cache, so this one is steadier between runs
+	awk '/^RssAnon:/ {printf "anonymous resident: %.1f MiB\n", $2 / 1024}' "/proc/${appPid}/status"
 	# the newest line per source
 	grep '^memdbg ' "${work}/stderr.log" | awk '{key = ($2 == "pane") ? $2 $3 : $2; line[key] = $0; if (!(key in seen)) {seen[key] = 1; order[++n] = key}} END {for (i = 1; i <= n; i++) print line[order[i]]}'
 }
@@ -187,3 +220,4 @@ fMain "${@}"
 
 ##	History:
 ##		- 20261004 JC: Created.
+##		- 20261004 JC: --opens and --flood.

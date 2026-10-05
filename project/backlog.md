@@ -95,6 +95,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: ErmpLNm `a_minimized_window_waits_its_own_time` and ErmrbFB `an_existing_config_learns_the_minimized_wait`. The new row is also covered by `every_row_survives_a_save_and_a_relaunch`.
 	- Closed:
 
+- The dialogs' kept GPU context costs every process about 52 MiB
+	- ID: 2026100418225505
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs external testing: Optional: the same figure on vm925w (DX12).
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225501
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Measure what it really costs per process.
+		- Choose between dropping it when the dialog closes, sharing the main window's device, or keeping it.
+	- Notes:
+		- 20261004: It opens Settings in 86 ms rather than 310 ms. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-dialogs-kept-gpu-context).
+	- Progress log:
+		- 20261004: Measured on b23 with the memory hint from 2026100419463460: about 21 MiB of graphics memory and 8 MiB of regular memory per process. With the old hint it was 201 MiB.
+		- With the context kept, Settings opened in 105 ms for each of the first three opens and a median of 66 after. Without it, every open took about 230 ms.
+	- Decisions:
+		- 20261004, reversible: keep it. It costs about 21 MiB with the hint, and the idle release already lets its device go along with the window's. Dropped on close, every open would take about 230 ms. Sharing the main window's device cannot work on X11, where the window draws through GL, and would save about 20 MiB elsewhere. `WARM_DIALOG_GPU` in app.rs is the one-line way back.
+	- Branch: memhint
+	- Commit: b1ddf3a, 157a2cc
+	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) keeps the context's reserve under 32 MiB. Keeping or dropping the context has no test of its own.
+	- Closed:
+
 - A Settings save on a config that was deleted while running says it saved and writes nothing
 	- ID: 2026100316135866
 	- Type: Bug
@@ -279,6 +306,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 		- Note: 20261004, the cause is inferred, not seen in a real pane. It holds if the PowerShell pane was a tab or split opened from a bash or zsh pane in the project. The `/proc` fault is real on macOS either way. Related: 2026100410053273.
+
+- wgpu's allocator holds far more graphics memory than it uses
+	- ID: 2026100419463460
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs external testing: vm925w: the graphics memory a window and Settings take on DX12, against a build with the old hint, that Settings opens, and `a_new_device_reserves_little_graphics_memory` under `cargo test` there.
+	- Priority: High
+	- Opened: 20261004-194634
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100418225501, 2026100418225505
+	- Target OS: All
+	- Requirements:
+		- wgpu's default memory hint reserves blocks of 128 and 256 MiB. A 2560x1440 window on Vulkan used 167 MiB and was billed 506, and the dialogs' context uses under 1 MiB of its 192.
+		- Test the `MemoryUsage` hint on both devices. On b23 it took the Vulkan window plus the dialogs' context from 702 MiB to 252.
+		- Check that frame times and the Settings open time do not get worse.
+		- The X11 window draws through GL, where the hint does nothing, but its dialogs use Vulkan.
+	- Notes:
+		- 20261004: Figures in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#measure-first). Windows uses the same allocator through DX12 and was not measured.
+	- Progress log:
+		- 20261004: Every device now asks for the `MemoryUsage` hint: the window's on every backend, and the dialogs' kept context.
+		- Measured on b23 at 2560x1440 against a build with the old hint, in the same session. The X11 process went from 453 to 273 MiB, and the dialogs' context from 201 to 21. The Vulkan window plus the context went from 702 to 256. Regular memory did not change.
+		- Settings opened in 105 ms for each of the first three opens and a median of 66 after, against 108 and 62 with the old hint. Frame times on Vulkan under a scroll flood did not change. Figures in the design doc's [The memory hint](design_docs/20261004-182255_reduce-resources.md#the-memory-hint).
+		- New: `SILK_DLGDBG=1` prints how long Settings took to draw after it was asked for. The memory rig takes `--opens N` and `--flood SECS`, and prints anonymous memory.
+	- Verified: the new test fails with the old hint (192 MiB reserved) and passes with the new one. Native unit tests (1119 passed), native and Windows-target clippy.
+	- Swept: all three device requests in the program go through one function in gfx.rs (`grep -n request_device source/src`). The GPU stress rig keeps the old hint on purpose, since it is there to fill the card.
+	- Branch: memhint
+	- Commit: b1ddf3a, 157a2cc
+	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) builds the dialogs' device and fails above 32 MiB reserved. It skips where there is no device, or no allocator report (GL, Metal).
+	- Closed:
 
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
@@ -862,25 +919,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- wgpu's allocator holds far more graphics memory than it uses
-	- ID: 2026100419463460
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261004-194634
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100418225501, 2026100418225505
-	- Target OS: All
-	- Requirements:
-		- wgpu's default memory hint reserves blocks of 128 and 256 MiB. A 2560x1440 window on Vulkan used 167 MiB and was billed 506, and the dialogs' context uses under 1 MiB of its 192.
-		- Test the `MemoryUsage` hint on both devices. On b23 it took the Vulkan window plus the dialogs' context from 702 MiB to 252.
-		- Check that frame times and the Settings open time do not get worse.
-		- The X11 window draws through GL, where the hint does nothing, but its dialogs use Vulkan.
-	- Notes:
-		- 20261004: Figures in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#measure-first). Windows uses the same allocator through DX12 and was not measured.
-	- Closed:
-
 - The scrim's textures are bigger than they need to be
 	- ID: 2026100418225502
 	- Type: Enhancement
@@ -939,24 +977,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When the card cannot make a device, at launch or at a rebuild, try software rendering once before giving up.
 	- Notes:
 		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#software-rendering). Today a found card that cannot make a device ends the launch.
-	- Closed:
-
-- The dialogs' kept GPU context costs every process about 52 MiB
-	- ID: 2026100418225505
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Prereq IDs: 2026100418225501
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- Measure what it really costs per process.
-		- Choose between dropping it when the dialog closes, sharing the main window's device, or keeping it.
-	- Notes:
-		- 20261004: It opens Settings in 86 ms rather than 310 ms. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-dialogs-kept-gpu-context).
 	- Closed:
 
 - A passing unit test run keeps its test folder

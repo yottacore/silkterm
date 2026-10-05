@@ -553,7 +553,7 @@ impl Gfx {
 		let adapter = pick(false).or_else(|_| pick(true))?;
 		let adapter_info = adapter.get_info();
 
-		let (device, queue) = pollster::block_on(request_device(&adapter))?;
+		let (device, queue) = request_device(&adapter, "silkterm device")?;
 		let (config, format, transparent) = surface_config(&surface, &adapter, &window)
 			.ok_or_else(|| anyhow::anyhow!("adapter cannot present to this window"))?;
 		if log {
@@ -729,13 +729,7 @@ impl Gfx {
 		if log {
 			log_renderer(&adapter_info, true);
 		}
-		let (device, queue) =
-			pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-				label: Some("silkterm gl device"),
-				required_features: wgpu::Features::empty(),
-				required_limits: adapter.limits(),
-				..Default::default()
-			}))?;
+		let (device, queue) = request_device(&adapter, "silkterm gl device")?;
 
 		// The GL offscreen is linear-light, so it must NOT be sRGB (an sRGB-declared
 		// offscreen makes the blit's textureSample DECODE, cancelling its lin2srgb).
@@ -1076,16 +1070,23 @@ fn f16_to_f32(bits: u16) -> f32 {
 	if sign == 1 { -magnitude } else { magnitude }
 }
 
+// Every device the program makes comes from here. wgpu's default hint,
+// Performance, has the Vulkan and DX12 allocator reserve 128 to 256 MiB blocks
+// of graphics memory and 64 MiB of host memory up front; the dialogs' context
+// was billed about 200 MiB for under 1 MiB of use. MemoryUsage starts at 8 and
+// 4 MiB blocks. GL and Metal ignore the hint. Figures are in the reducing
+// resources design doc.
 fn request_device(
 	adapter: &wgpu::Adapter,
-) -> impl std::future::Future<Output = Result<(wgpu::Device, wgpu::Queue), wgpu::RequestDeviceError>>
-{
-	adapter.request_device(&wgpu::DeviceDescriptor {
-		label: Some("silkterm device"),
+	label: &str,
+) -> Result<(wgpu::Device, wgpu::Queue), wgpu::RequestDeviceError> {
+	pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+		label: Some(label),
 		required_features: wgpu::Features::empty(),
 		required_limits: adapter.limits(),
+		memory_hints: wgpu::MemoryHints::MemoryUsage,
 		..Default::default()
-	})
+	}))
 }
 
 // Surface format + alpha mode + configuration, shared by the cold and prewarmed
@@ -1214,7 +1215,7 @@ impl DialogGpu {
 
 	// A device on an instance and adapter that already exist.
 	fn on(seed: DialogSeed) -> anyhow::Result<Self> {
-		let (device, queue) = pollster::block_on(request_device(&seed.adapter))?;
+		let (device, queue) = request_device(&seed.adapter, "silkterm device")?;
 		Ok(Self {
 			instance: seed.instance,
 			adapter: seed.adapter,
@@ -2106,5 +2107,41 @@ mod tests {
 			assert_eq!(acceleration(kind), said);
 		}
 		assert!(!acceleration(DeviceType::Other).starts_with("Hardware"));
+	}
+
+	// The dialogs' context reserved 128 + 64 MiB for under 1 MiB of use under
+	// wgpu's default memory hint, in every process. Built the way the warm-up
+	// builds it. Skips where there is no adapter, or no allocator report (GL,
+	// Metal).
+	// Test ID: Ern7Y1J
+	#[test]
+	fn a_new_device_reserves_little_graphics_memory() {
+		let gpu = match DialogGpu::build() {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		let _buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("probe"),
+			size: 64 * 1024,
+			usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+			mapped_at_creation: false,
+		});
+		let Some(report) = gpu.device.generate_allocator_report() else {
+			eprintln!(
+				"skipped: {:?} has no allocator report",
+				gpu.adapter_info.backend
+			);
+			return;
+		};
+		let reserved_mib = report.total_reserved_bytes / (1024 * 1024);
+		assert!(
+			reserved_mib <= 32,
+			"{reserved_mib} MiB reserved for {} bytes in use on {}",
+			report.total_allocated_bytes,
+			gpu.adapter_info.name
+		);
 	}
 }
