@@ -133,7 +133,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20261003-124705
 	- Opened by: JC
 	- Assigned to: CC
-	- Related IDs: 2026100312470540
+	- Related IDs: 2026100312470540, 2026100418225504
 	- Target OS: All
 	- Test environment: b23
 	- Steps to reproduce:
@@ -155,6 +155,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Settings and the notice window had the same gap, and get the same retry.
 		- 20261003: For 2026100312470540: a rebuild refused after the idle release now tries again by itself while the window shows, with a wait that grows to a few seconds.
 		- 20261003: Not covered. A GL error that arrives after the swap has returned is not seen. A GPU out of memory while getting a surface on the native path ends the program rather than blanking it, from wgpu's default error handler. wgpu wants a lost surface made again, and the code only reconfigures it, so a lost surface would keep being refused. While the GPU keeps timing out, each try can hold the window up for about a second inside wgpu.
+		- 20261004: Falling back to software rendering when the card cannot make a device is filed as 2026100418225504.
 	- Actual fix: A refused frame is drawn again after a short wait that doubles up to a couple of seconds, and starts over once a frame gets through. A refused rebuild stays owed and is tried again the same way, with longer waits, while the window shows. A refused frame no longer keeps animation frames coming, so the wait is the only pace while the GPU says no.
 	- Progress log:
 		- 20261003: Verified: both new tests fail with the retry taken out and pass with it. The full unit suite, clippy for Linux and Windows, and fmt pass.
@@ -830,6 +831,104 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
+- Measure graphics and regular memory per window
+	- ID: 2026100418225501
+	- Type: Task
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225502, 2026100418225503, 2026100418225505, 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- One window was seen holding about 330 MB of graphics memory. Find where it goes before changing anything.
+		- Read a real window's use from the driver at a few window sizes. Scrim on and off, wallpaper on and off, and Settings opened once.
+		- Do the same for regular memory: scrollback, the minimap's store and the glyph caches.
+		- Put the numbers in the design doc, in place of the estimate.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md). The estimate there puts the scrim at about 150 MB of a 2560x1440 window.
+	- Closed:
+
+- The scrim's textures are bigger than they need to be
+	- ID: 2026100418225502
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225501
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Test one channel for the text and cursor coverage layers, instead of four 16-bit floats.
+		- Test one channel for the two blur layers, and whether eight bits bands in a dark, soft halo.
+		- Test the blur passes at half size. If the loss shows, Max silk keeps full size and the lower profiles use half size.
+		- No visible change at the same settings. The scrim is what keeps text readable, so legibility is the bar.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#a-smaller-scrim).
+	- Closed:
+
+- Hold the wallpaper at the size it is drawn at
+	- ID: 2026100418225503
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225501
+	- Related IDs: 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Prepare the wallpaper at the window's size, by its fit, rather than up to 4096 a side.
+		- After a resize, keep drawing the old one scaled. Once resizing stops for a short wait, prepare it again in the background and swap it in unseen.
+		- Keep today's look at the same window size, blur included.
+		- Test holding a blurred image smaller still, sized by the blur, and whether that makes compression unneeded.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size).
+	- Closed:
+
+- Always use software rendering, and fall back to it when the card cannot make a device
+	- ID: 2026100418225504
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100312470535, 2026100418225506
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A setting, "Always use software rendering", off by default.
+		- Grayed with a tip where it cannot work, such as macOS.
+		- When the card cannot make a device, at launch or at a rebuild, try software rendering once before giving up.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#software-rendering). Today a found card that cannot make a device ends the launch.
+	- Closed:
+
+- The dialogs' kept GPU context costs every process about 52 MiB
+	- ID: 2026100418225505
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225501
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Measure what it really costs per process.
+		- Choose between dropping it when the dialog closes, sharing the main window's device, or keeping it.
+	- Notes:
+		- 20261004: It opens Settings in 86 ms rather than 310 ms. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-dialogs-kept-gpu-context).
+	- Closed:
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -843,6 +942,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When changing the cursor size and animation, change to 50% width.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
+	- Closed:
+
+- Settings: a Resource use group, with warning marks
+	- ID: 2026100418225506
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225504
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- "Free resources when idle", its two waits and "Always use software rendering" go in one group, "Resource use".
+		- "Free resources when idle" gets a warning mark. Its tip says it matters most on a card with little memory or next to GPU-heavy programs, with many windows open that are not all in view. Turn it off only if the graphics driver has trouble with it.
+		- A setting that stops a window from giving memory back gets a warning mark that says so, only where it does. Today that is Transparency on Windows.
+		- A row that cannot work here is grayed with a tip that says why. Hidden only in a build that can never use it.
+		- Tips stay short.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-resource-use-group).
+	- Closed:
+
+- Block compression for the wallpaper
+	- ID: 2026100418225507
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225503
+	- Target OS: All
+	- Requirements:
+		- Compress the wallpaper once it is prepared at window size and blur.
+		- Pick by blur and size: smaller and plain for a heavy blur, BC1 for little or none, BC7 only where BC1 bands.
+		- A pure Rust encoder. Weigh its cost in executable size.
+		- Keep a plain fallback for an adapter without BC support.
+	- Notes:
+		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
 	- Closed:
 
 - Code style: public items are commented with `//`, not `///`
@@ -5430,6 +5569,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Rows on the Window tab: "Free resources when idle", "Minutes when hidden" (30), "Minutes otherwise" (240). Config keys `window.idle_release`, `window.idle_release_hidden_min`, `window.idle_release_min`.
 	- Pinned by: `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` and `output_into_a_hidden_window_does_not_hold_its_device`.
 	- Note: 20260930, the planning bullets above were answered by the Done bullets: nothing is disabled under transparency, and the label is "Free resources when idle". The design is in the [releasing resources design doc](design_docs/20260930-151334_releasing-resources.md).
+	- Note: 20261004, the open point "figure out a way to reduce CPU and memory usage" moved to the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md).
 	- Note: 20261003, on by default now, per 2026100312470540.
 	- Opened: 20260905-181131
 	- Closed: 20260917-070723

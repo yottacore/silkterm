@@ -32,6 +32,8 @@
 
 A terminal is often left open for days, many at a time. SilkTerm is built so that a window nobody is looking at costs nothing: it draws no frames, its cursor stops, and, if asked, it gives its GPU device back until it is used again. Memory it no longer needs goes back to the system, and nothing a program sends can make it grow without limit.
 
+What a window costs while in use is in the [Reducing resources](20261004-182255_reduce-resources.md) design doc.
+
 ## Specification
 
 - A window with focus and on screen draws only when something changes. With the cursor parked it costs a fraction of a percent of a core.
@@ -181,7 +183,7 @@ So the switch is detected instead. A watcher notes the console the window starte
 
 - The GPU release has not been measured under the NVIDIA driver on Linux, on Wayland or on macOS. What a released window shows on Wayland and macOS is not known.
 
-- The warm dialog context's 52 MiB could be dropped when the dialog closes. Not settled.
+- The warm dialog context's 52 MiB moved to the [Reducing resources](20261004-182255_reduce-resources.md) design doc.
 
 - `~/silk_vramdbg.txt` is at its cap, and has to be moved aside before the next console switch can be logged.
 
