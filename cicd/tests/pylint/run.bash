@@ -45,6 +45,9 @@ printf 'import os\n\n\ndef main(name: str) -> str:\n\treturn os.path.join("a", n
 printf 'def main(name: str) -> str:\n\tstream = open(name)\n\treturn stream.read()\n' >"${work}/unclosed.py"
 printf 'import subprocess\n\n\ndef main() -> None:\n\tsubprocess.run(["true"])\n' >"${work}/nocheck.py"
 printf 'def main(seen: list[int] = []) -> list[int]:\n\treturn seen\n' >"${work}/mutable.py"
+printf 'def main() -> None:\n\ttry:\n\t\tprint(1)\n\texcept Exception:\n\t\tpass\n' >"${work}/blind.py"
+## The same catch, marked as meant.
+printf 'def main() -> None:\n\ttry:\n\t\tprint(1)\n\texcept Exception:  # noqa: BLE001\n\t\tpass\n' >"${work}/blindok.py"
 ## Clean to ruff, wrong to mypy.
 printf 'def main() -> int:\n\treturn "one"\n' >"${work}/typeerror.py"
 ## mypy names a script by its file, so two run.py files in one run would clash.
@@ -78,10 +81,12 @@ fLint "${work}/aligned.py"
 fCheck "spaces after tabs, and docstring text, pass" test "${rc}" -eq 0 -a -z "${out}"
 fLint "${root}/cicd/tests/scroll/analyze.py"
 fCheck "the one script in spaces passes" test "${rc}" -eq 0 -a -z "${out}"
-for pair in untyped.py:ANN001 camel.py:N802 percent.py:UP031 ospath.py:PTH118 unclosed.py:SIM115 nocheck.py:PLW1510 mutable.py:B006; do
+for pair in untyped.py:ANN001 camel.py:N802 percent.py:UP031 ospath.py:PTH118 unclosed.py:SIM115 nocheck.py:PLW1510 mutable.py:B006 blind.py:BLE001; do
 	fLint "${work}/${pair%%:*}"
 	fCheck "${pair%%:*} fails with ${pair#*:}" grep -qF " ${pair#*:} " <<<"${out}"
 done
+fLint "${work}/blindok.py"
+fCheck "a catch-all marked with noqa passes" test "${rc}" -eq 0 -a -z "${out}"
 fLint "${root}/cicd/utility/n8output-random-unicode.py"
 fCheck "the shared helper ruff.toml leaves out passes" test "${rc}" -eq 0 -a -z "${out}"
 if ((haveMypy)); then
@@ -104,3 +109,4 @@ echo "all passed"
 ##	History:
 ##		- 20261004 JC: Created.
 ##		- 20261005 JC: The style guide's Python rules, and mypy.
+##		- 20261005 JC: except Exception.

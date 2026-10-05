@@ -289,7 +289,7 @@ class LinuxBackend:
 				["objdump", "-p", path], capture_output=True, text=True, timeout=30, check=False
 			).stdout
 			out = re.findall(r"^\s*NEEDED\s+(\S+)", raw, re.M)
-		except Exception:
+		except (OSError, ValueError, subprocess.SubprocessError):
 			pass
 		self._needed[path] = out
 		return out
@@ -771,7 +771,7 @@ class WindowsBackend:
 			pid = wt.DWORD(0)
 			user32.GetWindowThreadProcessId(hwnd, ct.byref(pid))
 			return int(pid.value)
-		except Exception:
+		except (OSError, ct.ArgumentError):
 			return 0
 
 
@@ -1062,9 +1062,11 @@ def terminal_grid() -> tuple[int, int] | None:
 	asking only stdout would then report no terminal at all and refuse every run.
 	"""
 	if os.name == "nt":
+		import ctypes
+
 		try:
 			got = console_grid()
-		except Exception:
+		except (OSError, ctypes.ArgumentError):
 			got = None
 		if got:
 			return got
@@ -1147,10 +1149,10 @@ def reference_resident(be: Backend, pid: int) -> float | None:
 			return None
 	if not isinstance(be, WindowsBackend):
 		return None
-	try:
-		import ctypes
-		from ctypes import wintypes
+	import ctypes
+	from ctypes import wintypes
 
+	try:
 		class COUNTERS(ctypes.Structure):
 			_fields_ = [("cb", wintypes.DWORD),
 			            ("PageFaultCount", wintypes.DWORD),
@@ -1170,7 +1172,7 @@ def reference_resident(be: Backend, pid: int) -> float | None:
 		if not handle or not psapi.GetProcessMemoryInfo(handle, ctypes.byref(info), info.cb):
 			return None
 		return float(info.WorkingSetSize) / MIB
-	except Exception:
+	except (OSError, ctypes.ArgumentError):
 		return None
 
 
@@ -1290,3 +1292,4 @@ if __name__ == "__main__":
 ##	History:
 ##		- 20260730 JC: Created.
 ##		- 20261005: Type hints, pathlib, f-strings.
+##		- 20261005: Each except names what it expects.
