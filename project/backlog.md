@@ -831,6 +831,51 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 621d931
 	- Test case: `a_size_the_window_took_without_saying_is_drawn_at` (ErwgxDd), failing on the old code. The resize event half has no unit test, since it needs a real window.
 
+- Code style: the PowerShell scripts follow bash conventions
+	- ID: 2026100314050015
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: The Windows GUI scenarios on vm925w, since they run under StrictMode now: the pipeline list, idlewake and idlemin, and gpuload-on and gpuload-off with gpu-stress sent along. On b29w only consolemsg and _selftest ran. The rest skipped, since the console session there was locked.
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: Windows
+	- Incorrect behavior:
+		- All 164 functions are `fCamelCase`. None is Verb-Noun, so the approved-verb lint can never fire.
+		- No script has comment-based help. Three use `[CmdletBinding()]`. `install.ps1` has two untyped parameters.
+		- Nine scripts set `Set-StrictMode -Version 2.0`, not Latest, with no reason given.
+		- 29 calls pass three or more positional arguments, and five use the `-EA` alias.
+		- Eight loops grow an array with `+=`.
+	- Expected behavior: The PowerShell section of the directives.
+	- Progress log:
+		- 20261003: The naming half needs a call first: rename to Verb-Noun, or record `fCamelCase` as a house allowance with its reason, the way Write-Host is.
+		- 20261003: `PSUseApprovedVerbs` is now in the lint's excluded rules, with the reason beside it.
+		- 20261006: Every script has comment-based help under its copyright lines, except the profile snippet. Small helper functions keep their one-line comments rather than a help block each.
+		- 20261006: StrictMode is Latest where it was 2.0, and in the scripts that had none: the job scripts, and the GUI harness, which covers its scenarios. A dot-sourced library leaves it to its caller. `shell_integration.ps1` runs in the user's own shell, so it has no help block and sets nothing.
+		- 20261006: `[CmdletBinding()]` on every script with a param block, and every script and function parameter typed. Script block parameters were left alone.
+		- 20261006: prerequisites.md and design.md say the dogfood launcher needs PowerShell 7, and it does not run on 5.1 today. Its changes keep to 5.1 syntax, but it was not made to run there.
+		- 20261006: Also fixed: install.ps1 failed at once when the shell running it had StrictMode on, which the `irm | iex` one-liner meets in a user's own session. It read a Path property that a script block does not have. Its `mv` is now called by path, which the lint on Windows flagged as Move-Item's alias.
+		- 20261006: Three shell scan unit tests fail on Windows, apart from this item. Filed as 2026100612422856.
+	- Decisions:
+		- 20261003: `fCamelCase` function names stay. They are an exception for this project only. The rest of the item stands.
+	- Actual fix:
+		- `ps-lint.ps1` checks two more things: a PowerShell command given three or more arguments by position, and a common parameter by its alias, such as `-EA`. A command counts as PowerShell's when a linted script defines it, or when it is Verb-Noun and no program has that name.
+		- The 42 findings are fixed: arguments named, `-EA` written out.
+		- Arrays grown in loops are lists or the loop's own output, in cicd-win.ps1, install.ps1, n8runterm.ps1 and the GUI harness. The harness keeps its check lines in a list too, since a scenario can add 250 of them one call at a time.
+		- What StrictMode would trip on was fixed first: a process that has gone, a filter that kept nothing, a reference picture read before it was set.
+		- `cicd-win.ps1 -Help` prints its help block.
+		- The style guide's PowerShell section has the new rules.
+	- Origin: c09beb3 (2026-08-06) for install.ps1, 96da710 (2026-07-22) for cicd-win.ps1, 4050e29 (2026-09-08) for n8runterm.ps1. No earlier review item. Confirmed.
+	- Swept: `ps-lint.ps1` over every tracked script reports nothing, on Linux and on Windows. A parse of every script finds no `+=` in a loop but counters and strings. Every script's help reads back through the parser.
+	- Verified:
+		- The lint test fails on its new cases without the new checks, and passes with them.
+		- Linux: the install, release, cicd-win, pins, packaging, test folder, launcher and GUI harness tests, the docs test and the script header test.
+		- b29w: `cicd-win.ps1 -Quick` with its three unrelated failing tests skipped, including the installer tests under PowerShell 7 and 5.1. The test folder test under 5.1. The info and cliflags jobs. The console job ran too, and said there was no test session to move.
+	- Branch: psstyle
+	- Commit: e96dfbd, 1bc067a, 86f2ac3, 767f176, 63ff9f7, 353939c, cfc3f2d, 84241a8
+	- Test case: The PowerShell lint test, `cicd/tests/pslint/run.bash` (Er2UgYC), with planted positional and alias cases. The installer fault is pinned by the install test, whose PowerShell cases now run from a shell with StrictMode on. 7 of them failed before the fix.
+	- Note: Code review 20261003 item 15.
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -981,51 +1026,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Origin: db4d40b (2026-08-01) for cicd.bash, c09beb3 (2026-08-06) for install.bash, c7678e6 (2026-09-17) for gui-headless.bash. No earlier review item. Confirmed.
 	- Test case: The install test and the hooks test cover the two most-used files.
 	- Note: Code review 20261003 item 13.
-
-- Code style: the PowerShell scripts follow bash conventions
-	- ID: 2026100314050015
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs external testing: The Windows GUI scenarios on vm925w, since they run under StrictMode now: the pipeline list, idlewake and idlemin, and gpuload-on and gpuload-off with gpu-stress sent along. On b29w only consolemsg and _selftest ran. The rest skipped, since the console session there was locked.
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: Windows
-	- Incorrect behavior:
-		- All 164 functions are `fCamelCase`. None is Verb-Noun, so the approved-verb lint can never fire.
-		- No script has comment-based help. Three use `[CmdletBinding()]`. `install.ps1` has two untyped parameters.
-		- Nine scripts set `Set-StrictMode -Version 2.0`, not Latest, with no reason given.
-		- 29 calls pass three or more positional arguments, and five use the `-EA` alias.
-		- Eight loops grow an array with `+=`.
-	- Expected behavior: The PowerShell section of the directives.
-	- Progress log:
-		- 20261003: The naming half needs a call first: rename to Verb-Noun, or record `fCamelCase` as a house allowance with its reason, the way Write-Host is.
-		- 20261003: `PSUseApprovedVerbs` is now in the lint's excluded rules, with the reason beside it.
-		- 20261006: Every script has comment-based help under its copyright lines, except the profile snippet. Small helper functions keep their one-line comments rather than a help block each.
-		- 20261006: StrictMode is Latest where it was 2.0, and in the scripts that had none: the job scripts, and the GUI harness, which covers its scenarios. A dot-sourced library leaves it to its caller. `shell_integration.ps1` runs in the user's own shell, so it has no help block and sets nothing.
-		- 20261006: `[CmdletBinding()]` on every script with a param block, and every script and function parameter typed. Script block parameters were left alone.
-		- 20261006: prerequisites.md and design.md say the dogfood launcher needs PowerShell 7, and it does not run on 5.1 today. Its changes keep to 5.1 syntax, but it was not made to run there.
-		- 20261006: Also fixed: install.ps1 failed at once when the shell running it had StrictMode on, which the `irm | iex` one-liner meets in a user's own session. It read a Path property that a script block does not have. Its `mv` is now called by path, which the lint on Windows flagged as Move-Item's alias.
-		- 20261006: Three shell scan unit tests fail on Windows, apart from this item. Filed as 2026100612422856.
-	- Decisions:
-		- 20261003: `fCamelCase` function names stay. They are an exception for this project only. The rest of the item stands.
-	- Actual fix:
-		- `ps-lint.ps1` checks two more things: a PowerShell command given three or more arguments by position, and a common parameter by its alias, such as `-EA`. A command counts as PowerShell's when a linted script defines it, or when it is Verb-Noun and no program has that name.
-		- The 42 findings are fixed: arguments named, `-EA` written out.
-		- Arrays grown in loops are lists or the loop's own output, in cicd-win.ps1, install.ps1, n8runterm.ps1 and the GUI harness. The harness keeps its check lines in a list too, since a scenario can add 250 of them one call at a time.
-		- What StrictMode would trip on was fixed first: a process that has gone, a filter that kept nothing, a reference picture read before it was set.
-		- `cicd-win.ps1 -Help` prints its help block.
-		- The style guide's PowerShell section has the new rules.
-	- Origin: c09beb3 (2026-08-06) for install.ps1, 96da710 (2026-07-22) for cicd-win.ps1, 4050e29 (2026-09-08) for n8runterm.ps1. No earlier review item. Confirmed.
-	- Swept: `ps-lint.ps1` over every tracked script reports nothing, on Linux and on Windows. A parse of every script finds no `+=` in a loop but counters and strings. Every script's help reads back through the parser.
-	- Verified:
-		- The lint test fails on its new cases without the new checks, and passes with them.
-		- Linux: the install, release, cicd-win, pins, packaging, test folder, launcher and GUI harness tests, the docs test and the script header test.
-		- b29w: `cicd-win.ps1 -Quick` with its three unrelated failing tests skipped, including the installer tests under PowerShell 7 and 5.1. The test folder test under 5.1. The info and cliflags jobs. The console job ran too, and said there was no test session to move.
-	- Branch: psstyle
-	- Commit: e96dfbd, 1bc067a, 86f2ac3, 767f176, 63ff9f7, 353939c, cfc3f2d, 84241a8
-	- Test case: The PowerShell lint test, `cicd/tests/pslint/run.bash` (Er2UgYC), with planted positional and alias cases. The installer fault is pinned by the install test, whose PowerShell cases now run from a shell with StrictMode on. 7 of them failed before the fix.
-	- Note: Code review 20261003 item 15.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
