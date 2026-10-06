@@ -69,7 +69,7 @@ pub const SPREAD: usize = 16;
 /// settings can hold it and re-derive on a theme change without decoding anything.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Summary {
-	/// Per-cell linear luma at the bright and dark ends, alpha premultiplied.
+	// Per-cell linear luma at the bright and dark ends, alpha premultiplied.
 	pub luma_hi: f32,
 	pub luma_lo: f32,
 	/// And the mean of the same grid. Only the visibility ramp reads it, which
@@ -84,8 +84,9 @@ pub struct Summary {
 	/// Mean alpha, so the share of a cell the image does not cover can be given
 	/// back to the background color. 1.0 for every ordinary photo.
 	pub alpha: f32,
-	/// Chroma-weighted dominant hue, degrees in Oklab's a/b plane, and the mean
-	/// per-cell chroma behind it.
+
+	// Chroma-weighted dominant hue, degrees in Oklab's a/b plane, and the mean
+	// per-cell chroma behind it.
 	pub hue: f32,
 	pub chroma: f32,
 	/// The visibility this image is drawn at, its own tag folded in already. Baked

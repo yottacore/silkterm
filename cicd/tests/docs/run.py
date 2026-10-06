@@ -10,6 +10,9 @@
 ##		The style guide allows none, and fifteen had divided three files.
 ##		And a comment on anything declared `pub` outside the tests is a `///`
 ##		doc, and a file's opening comment is `//!`. Most were plain `//`.
+##		Except a label over a group: a `//` on an item whose next line is
+##		another pub item with no comment of its own, since a `///` would
+##		belong to the first item only.
 ##	Syntax:
 ##		run.py [--root DIR] [FILE ...]
 ##		  --root DIR  repository root (default: three levels above this script)
@@ -149,11 +152,13 @@ def plain_docs(lines: list[str], name: str) -> list[tuple[int, str]]:
 			continue
 		if not PUB.match(line) or MOD_DECL.match(line):
 			continue
+		nxt = lines[n + 1] if n + 1 < len(lines) else ""
+		group = line.rstrip().endswith((",", ";")) and bool(PUB.match(nxt)) and not MOD_DECL.match(nxt)
 		k = n - 1
 		while k >= 0:
 			above = lines[k].strip()
 			if above.startswith("//"):
-				if not above.startswith("///"):
+				if not above.startswith("///") and not group:
 					out.append((k + 1, "comment on a pub item is not ///"))
 				k -= 1
 				continue
@@ -224,3 +229,4 @@ if __name__ == "__main__":
 ##		- 20260926: Created.
 ##		- 20261004: Banner rules in .rs files.
 ##		- 20261005: Doc comments on pub items and file openings.
+##		- 20261006: A plain `//` may label a group of pub items.

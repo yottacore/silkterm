@@ -1242,15 +1242,17 @@ pub struct Pane {
 	// Recycles the per-row Strings the build's attr-run assembler fills each
 	// rebuilt frame (set_text copies out of them, so fresh ones were pure churn).
 	rows_scratch: Vec<(String, AttrsList)>,
-	/// `rect` is the text area; `full` is everything the layout gave this pane,
-	/// which is wider by the minimap column when one is showing.
+
+	// `rect` is the text area; `full` is everything the layout gave this pane,
+	// which is wider by the minimap column when one is showing.
 	pub rect: Rect,
 	pub full: Rect,
 	pub title: String,
 	pub read_only: bool, // accept no PTY input/paste; selection + copy still work
-	/// --keep-open: hold this pane after its shell exits instead of closing it.
-	/// `held` is that pane once the shell has gone - it shows the exit line and
-	/// waits for a key.
+
+	// --keep-open: hold this pane after its shell exits instead of closing it.
+	// `held` is that pane once the shell has gone - it shows the exit line and
+	// waits for a key.
 	pub keep_open: bool,
 	pub held: bool,
 	// launch argv (None = default shell); a split inherits this so a new pane
@@ -1378,16 +1380,17 @@ pub struct Pane {
 	/// re-shaping to panes that changed: one busy pane no longer forces its
 	/// idle siblings through `set_rich_text` every frame.
 	pub content_dirty: bool,
-	/// Auto-copy triggers, independent and session-only (never persisted). A new
-	/// pane inherits both from the pane it split off (see `split_at`); a new tab or
-	/// window starts with both off. Only the focused pane of the active tab in the
-	/// focused window actually copies - the flags stay set otherwise (see the copy
-	/// gating in app.rs), so leaving them on across background tabs/windows is fine.
-	/// `copy_output` drives the command-output capture (see `arm_capture` / `poll_capture`):
-	/// on Enter at the shell prompt we arm and record `cmd_start` (the line after the
-	/// prompt); when the terminal settles back at the prompt, the lines since are
-	/// copied. `last_output` is refreshed on every Wakeup so the settle timer measures
-	/// true idle. This catches both instant (ls) and long commands.
+
+	// Auto-copy triggers, independent and session-only (never persisted). A new
+	// pane inherits both from the pane it split off (see `split_at`); a new tab or
+	// window starts with both off. Only the focused pane of the active tab in the
+	// focused window actually copies - the flags stay set otherwise (see the copy
+	// gating in app.rs), so leaving them on across background tabs/windows is fine.
+	// `copy_output` drives the command-output capture (see `arm_capture` / `poll_capture`):
+	// on Enter at the shell prompt we arm and record `cmd_start` (the line after the
+	// prompt); when the terminal settles back at the prompt, the lines since are
+	// copied. `last_output` is refreshed on every Wakeup so the settle timer measures
+	// true idle. This catches both instant (ls) and long commands.
 	pub copy_select: bool,
 	pub copy_output: bool,
 	capture_armed: bool,

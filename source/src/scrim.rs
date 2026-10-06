@@ -233,10 +233,16 @@ impl Choice for Ramp {
 	// what a smoothstep is), and the falloff's "gaussian" to "half_normal" so
 	// it stops reading like the gaussian BLUR the function list also offers.
 	fn parse(text: &str) -> Option<Self> {
-		match text {
-			"s" => Some(Self::Sigmoid),
-			"gaussian" => Some(Self::HalfNormal),
-			_ => Self::ALL.iter().copied().find(|ramp| ramp.key() == text),
+		let text = text.trim();
+		if text.eq_ignore_ascii_case("s") {
+			Some(Self::Sigmoid)
+		} else if text.eq_ignore_ascii_case("gaussian") {
+			Some(Self::HalfNormal)
+		} else {
+			Self::ALL
+				.iter()
+				.copied()
+				.find(|ramp| ramp.key().eq_ignore_ascii_case(text))
 		}
 	}
 }

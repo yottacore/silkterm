@@ -14,8 +14,8 @@ pub const APP_NAME: &str = "SilkTerm";
 /// a single link baked into the binary. HEAD resolves to the repo default branch.
 pub const DONATE_URL: &str = "https://github.com/yottacore/silkterm/blob/HEAD/DONATE.md";
 
-/// The addresses worth handing straight to someone who has already decided.
-/// DONATE.md carries the rest; --donate prints all three.
+// The addresses worth handing straight to someone who has already decided.
+// DONATE.md carries the rest; --donate prints all three.
 pub const SPONSOR_URL: &str = "https://github.com/sponsors/jim-collier";
 pub const KOFI_URL: &str = "https://ko-fi.com/jimcollier";
 
@@ -173,7 +173,7 @@ pub fn dip(v: f32, scale: f32) -> f32 {
 	}
 }
 
-/// internal, not user-tunable (yet); DIP, see `dip`
+// internal, not user-tunable (yet); DIP, see `dip`
 pub const PANE_GAP_PX: f32 = 1.0;
 pub const DIVIDER_GRAB_PX: f32 = 5.0; // mouse tolerance for grabbing a pane divider
 pub const FOCUS_RING_PX: f32 = 2.0;
@@ -191,19 +191,20 @@ pub const SELECTION_BG: [u8; 3] = [0x33, 0x44, 0x66];
 /// drag-and-drop pane reorder: drop-target tint
 pub const DROP_TARGET: [u8; 3] = [0x55, 0x80, 0xc8];
 
-/// Scrollbar. Neutral mid-gray in every theme rather than a palette color: desktop
-/// scrollbars read as chrome, not as part of the terminal's own color scheme. There
-/// is no portable way to ask the OS for its actual value (GTK only names a theme),
-/// so this is the shade those themes converge on. colors.scrollbar_* overrides.
+// Scrollbar. Neutral mid-gray in every theme rather than a palette color: desktop
+// scrollbars read as chrome, not as part of the terminal's own color scheme. There
+// is no portable way to ask the OS for its actual value (GTK only names a theme),
+// so this is the shade those themes converge on. colors.scrollbar_* overrides.
 pub const SCROLLBAR_THUMB_DEF: [u8; 3] = [0x8a, 0x8a, 0x92];
 pub const SCROLLBAR_TROUGH_DEF: [u8; 3] = [0x2e, 0x2e, 0x36];
-/// Opacity the bar settles at, and what it rises to while hovered or dragged.
+
+// Opacity the bar settles at, and what it rises to while hovered or dragged.
 pub const SCROLLBAR_IDLE_A: f32 = 0.55;
 pub const SCROLLBAR_ACTIVE_A: f32 = 0.95;
 /// The trough is a faint backing strip, well under the thumb.
 pub const SCROLLBAR_TROUGH_A: f32 = 0.34;
 
-/// tab bar
+// tab bar
 pub const TAB_BAR_BG: [u8; 3] = [0x2c, 0x2c, 0x31];
 pub const TAB_ACTIVE: [u8; 3] = [0x47, 0x47, 0x4f];
 pub const TAB_INACTIVE: [u8; 3] = [0x36, 0x36, 0x3b];
@@ -302,9 +303,10 @@ fn shade(color: [u8; 3], magnitude: i16) -> [u8; 3] {
 	let adjust = |channel: u8| (channel as i16 + delta).clamp(0, 255) as u8;
 	[adjust(color[0]), adjust(color[1]), adjust(color[2])]
 }
-/// Dropdown/context-menu geometry, DIP (see `dip`). The pop-out dialogs lay out
-/// in DIP throughout and use these raw; the main window's menus convert at each
-/// use site.
+
+// Dropdown/context-menu geometry, DIP (see `dip`). The pop-out dialogs lay out
+// in DIP throughout and use these raw; the main window's menus convert at each
+// use site.
 pub const MENU_PAD_X: f32 = 12.0;
 pub const MENU_ITEM_PAD_Y: f32 = 6.0;
 pub const MENU_SEP_H: f32 = 9.0; // height of a separator row (line + spacing)
@@ -320,12 +322,13 @@ pub trait Choice: Copy + PartialEq + std::fmt::Debug + 'static {
 	fn key(self) -> &'static str;
 
 	/// None for a word the type does not know. The loader reads that as the
-	/// shipped default, as it always has.
+	/// shipped default, as it always has. Case doesn't count, since these are
+	/// our own words.
 	fn parse(text: &str) -> Option<Self> {
 		Self::ALL
 			.iter()
 			.copied()
-			.find(|choice| choice.key() == text)
+			.find(|choice| choice.key().eq_ignore_ascii_case(text.trim()))
 	}
 
 	fn index(self) -> usize {
@@ -581,19 +584,22 @@ pub struct Settings {
 	/// is on those two hold the derived colors and the user's own sit in
 	/// `wallpaper_colors`, the same arrangement `profile_shadow` uses.
 	pub colors_from_wallpaper: bool,
-	/// Two attention colors (see theme.rs): `highlight` marks several things at
-	/// once, `focus` marks only what the keyboard is on.
+
+	// Two attention colors (see theme.rs): `highlight` marks several things at
+	// once, `focus` marks only what the keyboard is on.
 	pub highlight: [u8; 3],
 	pub focus: [u8; 3],
-	/// chrome colors (menu bar / dropdowns, and pop-out dialogs), from the theme
-	/// palette; colors.menu_*/colors.dialog_* keys override
+
+	// chrome colors (menu bar / dropdowns, and pop-out dialogs), from the theme
+	// palette; colors.menu_*/colors.dialog_* keys override
 	pub menu_bg: [u8; 3],
 	pub menu_fg: [u8; 3],
 	pub dialog_bg: [u8; 3],
 	pub dialog_fg: [u8; 3],
 	pub gutter: [u8; 3], // chrome areas holding no control (the dialog's tab strip)
-	/// scrollbar, neutral in every theme (see `SCROLLBAR_THUMB_DEF`); the
-	/// colors.scrollbar_* keys override
+
+	// scrollbar, neutral in every theme (see `SCROLLBAR_THUMB_DEF`); the
+	// colors.scrollbar_* keys override
 	pub scrollbar_thumb: [u8; 3],
 	pub scrollbar_trough: [u8; 3],
 	pub ansi: [[u8; 3]; 16], // 16-color ANSI palette, resolved from the active theme
@@ -616,9 +622,10 @@ pub struct Settings {
 	/// Never written: one stall used to become every later launch's profile, with
 	/// no way back while automatic was on. Cleared by a hand pick or a measured one.
 	pub stepped_profile: Option<crate::profile::Profile>,
-	/// What the wallpaper on screen is worth to the derivation, and the user's own
-	/// text and cursor while the derived pair is live. Neither is ever written:
-	/// the summary comes from whatever picture arrived, and a rotation replaces it.
+
+	// What the wallpaper on screen is worth to the derivation, and the user's own
+	// text and cursor while the derived pair is live. Neither is ever written:
+	// the summary comes from whatever picture arrived, and a rotation replaces it.
 	pub wallpaper_summary: Option<crate::autotheme::Summary>,
 	pub wallpaper_colors: Option<crate::autotheme::Shadow>,
 	/// Themes saved from the Settings dialog, whole, in file order. They resolve
@@ -1450,6 +1457,9 @@ fn walk_settings(text: &str) -> Vec<WalkLine> {
 			out.push(WalkLine::Other(index));
 			continue;
 		};
+		// shcl reads names without case, so `Window:` is `window:`
+		let key = key.to_ascii_lowercase();
+		let key = key.as_str();
 		let trimmed = line.trim_start();
 		let active = !trimmed.starts_with('#');
 		let indent = line.len() - trimmed.len();
@@ -3752,7 +3762,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			limits::BLINK_MS,
 		),
 		wallpaper_default_fit: match raw.wallpaper_default_fit.as_deref() {
-			Some("zoom") => Fit::Zoom,
+			Some(word) if word.trim().eq_ignore_ascii_case("zoom") => Fit::Zoom,
 			_ => Fit::Stretch,
 		},
 		wallpaper_honor_xmp: raw.wallpaper_honor_xmp.unwrap_or(d.wallpaper_honor_xmp),
@@ -4232,8 +4242,7 @@ fn setting_groups(text: &str) -> Vec<(String, Vec<String>, bool)> {
 fn line_setting_key(line: &str) -> Option<&str> {
 	let trimmed = line.trim_start();
 	let trimmed = trimmed.strip_prefix('#').map_or(trimmed, str::trim_start);
-	let end = trimmed
-		.find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.'))?;
+	let end = trimmed.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'))?;
 	let key = &trimmed[..end];
 	if key.is_empty() {
 		return None;
@@ -4519,8 +4528,9 @@ fn activate_line(lines: &mut [String], path: &str, value: &str) -> bool {
 
 // A column-0 `wallpaper:` line holding a value. No shipped setting reads one.
 fn valued_wallpaper_line(line: &str) -> bool {
-	line.starts_with("wallpaper")
-		&& line_setting_key(line) == Some("wallpaper")
+	line.get(..9)
+		.is_some_and(|head| head.eq_ignore_ascii_case("wallpaper"))
+		&& line_setting_key(line).is_some_and(|key| key.eq_ignore_ascii_case("wallpaper"))
 		&& line_setting_value(line).is_some_and(|v| !strip_trailing_comment(v).trim().is_empty())
 }
 
@@ -4562,7 +4572,10 @@ fn wallpaper_heading_repaired(text: &str) -> Option<String> {
 	if indent.is_empty() {
 		return None;
 	}
-	let child_path = format!("wallpaper.{}", line_setting_key(child)?);
+	let child_path = format!(
+		"wallpaper.{}",
+		line_setting_key(child)?.to_ascii_lowercase()
+	);
 	let in_template = walk_settings(default_config())
 		.iter()
 		.any(|w| matches!(w, WalkLine::Setting { path, .. } if *path == child_path));
@@ -5040,7 +5053,11 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 				let old_leaf = path.rsplit('.').next().unwrap_or(path);
 				let new_leaf = new.rsplit('.').next().unwrap_or(new);
 				let key = line_setting_key(line).unwrap_or(old_leaf);
-				let target = if key == *path { new } else { new_leaf };
+				let target = if key.eq_ignore_ascii_case(path) {
+					new
+				} else {
+					new_leaf
+				};
 				line.replacen(key, target, 1)
 			}
 			None => (*line).to_string(),
@@ -5605,9 +5622,10 @@ fn unbury(text: &str, lines: &mut [String], origin: &[Option<usize>]) -> Result<
 		else {
 			continue;
 		};
-		let key = line_setting_key(source[*index]).unwrap_or(path);
+		let key =
+			line_setting_key(source[*index]).map_or_else(|| path.clone(), str::to_ascii_lowercase);
 		let block = path
-			.strip_suffix(key)
+			.strip_suffix(key.as_str())
 			.map_or("", |rest| rest.trim_end_matches('.'));
 		let indent = if block.is_empty() {
 			String::new()
@@ -10076,6 +10094,20 @@ mod tests {
 		assert!(out.contains("\nfont:\n"), "another block is still added");
 	}
 
+	// shcl reads `Window:` as `window:`, so a launch must too. Backfill added a
+	// second `window:` block under one typed with a capital.
+	// Test ID: ErwTlu9
+	#[test]
+	fn a_name_typed_in_capitals_is_the_same_setting() {
+		let text = default_config()
+			.replacen("\nwindow:\n", "\nWindow:\n", 1)
+			.replacen("\tcolumns:", "\tColumns:", 1)
+			.replacen("\nfont:\n", "\nFONT:\n", 1);
+		assert_ne!(text, default_config());
+		assert_eq!(next_launch_text(&text), text);
+		assert_eq!(backfilled_text(&text), Ok(None));
+	}
+
 	// Test ID: EpZCS12
 	#[test]
 	fn backfill_keeps_a_setting_that_is_indented_too_deep() {
@@ -12458,12 +12490,13 @@ mod tests {
 			("light", M::Light),
 			("system", M::System),
 		]);
-		// the ramp's older spellings, exact as they always were
+		// the ramp's older spellings still read, and no word cares about case
 		assert_eq!(R::parse("s"), Some(R::Sigmoid));
-		assert_eq!(R::parse("gaussian"), Some(R::HalfNormal));
-		assert_eq!(R::parse("EXP"), None);
-		assert_eq!(C::parse("Phase"), None);
-		// the mode, as loosely as the palette always took it
+		assert_eq!(R::parse("Gaussian"), Some(R::HalfNormal));
+		assert_eq!(R::parse("EXP"), Some(R::Exp));
+		assert_eq!(C::parse("Phase"), Some(C::Phase));
+		assert_eq!(F::parse(" SDF"), Some(F::Sdf));
+		assert_eq!(C::parse("phases"), None);
 		assert_eq!(M::parse(" Light "), Some(M::Light));
 		assert_eq!(M::parse("SYSTEM"), Some(M::System));
 		assert!(M::Dark.is_dark(false) && !M::Light.is_dark(true));
@@ -12515,15 +12548,15 @@ mod tests {
 			"half_normal",
 			"log",
 			"sigmoid",
-			"linear",
+			"Linear",
 			"s",
 			"gaussian",
 			"bogus",
 		];
-		let functions = ["sdf", "dt", "dilate", "gaussian", "bogus"];
+		let functions = ["sdf", "dt", "dilate", "gaussian", "Dilate", "bogus"];
 		let animations = [
 			"none",
-			"phase",
+			"Phase",
 			"pulse_vertical",
 			"pulse_horizontal",
 			"pulse_both",

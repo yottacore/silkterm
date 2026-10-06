@@ -20,9 +20,9 @@ use crate::pane::Rect;
 /// would read as a different kind of thing.
 pub const DELAY: Duration = Duration::from_millis(600);
 
-/// The box itself, DIP (see `config::dip`). One set for every tip the two dialogs
-/// draw: a box that sat closer to its control in one window than in the other
-/// would read as a different kind of thing, the same argument as the delay.
+// The box itself, DIP (see `config::dip`). One set for every tip the two dialogs
+// draw: a box that sat closer to its control in one window than in the other
+// would read as a different kind of thing, the same argument as the delay.
 pub const PAD_X: f32 = 8.0;
 pub const PAD_Y: f32 = 4.0;
 pub const DROP: f32 = 8.0; // offset below the control it describes
