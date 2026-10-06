@@ -2146,6 +2146,7 @@ mod tests {
 	// Every path in `paths` is installed, and a bare name is looked up in that
 	// order, the way PATH would be. None of them exist on any test box, so no
 	// two can turn out to be one file.
+	#[cfg(unix)]
 	fn on_path(paths: &'static [&'static str]) -> impl Fn(&str) -> Option<PathBuf> {
 		move |prog: &str| {
 			if prog.contains('/') {
@@ -2158,6 +2159,7 @@ mod tests {
 		}
 	}
 
+	#[cfg(unix)]
 	fn mac_shells() -> Vec<Found> {
 		["/silk-test/bin/bash", "/silk-test/bin/zsh"]
 			.into_iter()
@@ -2176,7 +2178,10 @@ mod tests {
 	// The Mac case: Apple's bash in /bin and a newer one from Homebrew, found
 	// once on PATH and once in /etc/shells. Two versions, so each name says
 	// which, and only the two that share a name are asked.
+	// Unix only: it finds the newer bash on PATH, and the Windows table does not
+	// look for bash there. ErxsizA runs the same merge on Windows.
 	// Test ID: ErkT4QH
+	#[cfg(unix)]
 	#[test]
 	fn two_versions_of_one_shell_each_show_their_version() {
 		let which = on_path(&[
@@ -2217,7 +2222,10 @@ mod tests {
 	// One version installed twice is one shell, offered at the shorter path. It
 	// keeps the place of the one found first, here the login shell's, so the
 	// default shell does not move, and its twin follows the path.
+	// Unix only, as is the next one: the login shell leads and gets its twin
+	// there, and Windows has no login shell (see `login_groups`).
 	// Test ID: ErkT4Tm
+	#[cfg(unix)]
 	#[test]
 	fn one_version_installed_twice_is_offered_once_at_the_shorter_path() {
 		let which = on_path(&["/silk-test/opt/homebrew/bin/bash", "/silk-test/bin/bash"]);
@@ -2240,6 +2248,7 @@ mod tests {
 	// what version it is. The twin reads as its shell does, and the silent one
 	// keeps its name rather than being guessed at or dropped.
 	// Test ID: ErkT4Xv
+	#[cfg(unix)]
 	#[test]
 	fn a_shell_that_will_not_say_its_version_keeps_its_name() {
 		let which = on_path(&["/silk-test/usr/local/bin/bash", "/silk-test/bin/bash"]);
@@ -2267,6 +2276,53 @@ mod tests {
 			titled(&found, "Bash"),
 			["/silk-test/usr/local/bin/bash", "/silk-test/bin/bash"]
 		);
+	}
+
+	fn msys_bashes() -> Vec<Found> {
+		[
+			"/silk-test/msys64/usr/bin/bash.exe",
+			"/silk-test/old/msys32/usr/bin/bash.exe",
+		]
+		.into_iter()
+		.map(|path| {
+			Found::new("Bash (MSYS2's full)", path.to_string(), "").in_group(Group::PosixEnv, 0)
+		})
+		.collect()
+	}
+
+	// The Windows case: two MSYS2 installs, both found under one name. No login
+	// shell and nothing found by bare name, so it runs the same on every box.
+	// Test ID: ErxsizA
+	#[test]
+	fn two_bashes_of_one_environment_are_told_apart_or_merged() {
+		let which = |prog: &str| prog.contains('/').then(|| PathBuf::from(prog));
+		let new = "/silk-test/msys64/usr/bin/bash.exe";
+		let old = "/silk-test/old/msys32/usr/bin/bash.exe";
+
+		let asked = std::cell::RefCell::new(Vec::new());
+		let version = |program: &Path| {
+			asked.borrow_mut().push(program.to_path_buf());
+			let said = if program == Path::new(new) {
+				"5.2.21"
+			} else {
+				"3.1.23"
+			};
+			Some(said.to_string())
+		};
+		let found = detect_with(None, &which, msys_bashes, &version);
+		assert_eq!(titled(&found, "Bash (MSYS2's full)"), Vec::<&str>::new());
+		assert_eq!(titled(&found, "Bash 5.2.21 (MSYS2's full)"), [new]);
+		assert_eq!(titled(&found, "Bash 3.1.23 (MSYS2's full)"), [old]);
+		assert_eq!(asked.into_inner().len(), 2);
+
+		let same = |_: &Path| Some("5.2.21".to_string());
+		let found = detect_with(None, &which, msys_bashes, &same);
+		assert_eq!(found.len(), 1);
+		assert_eq!(titled(&found, "Bash (MSYS2's full)"), [new]);
+
+		let quiet = |_: &Path| None;
+		let found = detect_with(None, &which, msys_bashes, &quiet);
+		assert_eq!(titled(&found, "Bash (MSYS2's full)"), [new, old]);
 	}
 
 	// A link and the file it points at are one shell, offered under the shorter
