@@ -1,19 +1,25 @@
-##	Put a user's session on the console, so graphical scenarios run against the
-##	real adapter rather than a remote one. Takes the account name; defaults to the
-##	unprivileged test account.
-##
-##	This does NOT unlock anything. A session that locked itself has to be
-##	authenticated again, and the way to do that from elsewhere is to connect to it
-##	once over RDP - reconnecting is a logon, and a logon unlocks. Moving it back
-##	here afterwards is what drops the remote flag the app reads.
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	Put a user's session on the console, so graphical scenarios run against the
+	real adapter rather than a remote one.
+.DESCRIPTION
+	This does NOT unlock anything. A session that locked itself has to be
+	authenticated again, and the way to do that from elsewhere is to connect to it
+	once over RDP - reconnecting is a logon, and a logon unlocks. Moving it back
+	here afterwards is what drops the remote flag the app reads.
+.PARAMETER User
+	The account whose session moves. Default: the unprivileged test account.
+.NOTES
+	History: At bottom of file.
+#>
+
+[CmdletBinding()]
 param([string] $User = "wintest")
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"
 $dir = "C:\ProgramData\silkrig"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -71,3 +77,4 @@ if ([Con.Wts]::WTSQuerySessionInformationW([IntPtr]::Zero, $want.Id, 25, [ref]$b
 
 ##	History:
 ##		- 20260908 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.
