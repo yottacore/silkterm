@@ -5034,6 +5034,10 @@ impl State {
 		if Instant::now() < self.watch.ignore_resize_until {
 			return;
 		}
+		let now = self.window.inner_size();
+		if !resize_is_current((w, h), (now.width, now.height)) {
+			return;
+		}
 		self.watch.size_pinned = false;
 		self.note_grid(w, h);
 	}
@@ -8038,6 +8042,16 @@ fn remember_resize(size_tracked: bool, fullscreen: bool, maximized: bool) -> boo
 	size_tracked && !fullscreen && !maximized
 }
 
+// Is a resize the size the window has now? On macOS winit hands over the
+// resize from the window's creation after the first frame, and taking it
+// saved the default window's grid on every launch (2026100514211602). Every
+// backend's event carries what `inner_size` answers at that moment, so one
+// that disagrees is stale. A minimized window on Windows has no area, which
+// is no size to open at.
+fn resize_is_current(event: (u32, u32), now: (u32, u32)) -> bool {
+	event == now && event.0 > 0 && event.1 > 0
+}
+
 // The window/taskbar icon, decoded from the bundled logo (downscaled so the
 // _NET_WM_ICON payload stays small). The logo is wider than it is tall and every
 // place an icon is shown reserves a square, so it is stretched to fill one
@@ -10561,9 +10575,9 @@ mod tests {
 		copybox_place, entry_check_accel, entry_item_accel, entry_sub, fit_px, focus_ring,
 		is_copy_chord, key_is_typed, launch_maximized, menu_metrics, needs_folder_read,
 		new_window_command, notice_due, pace_frame, pane_wake, rating_step, release_deadline,
-		remember_resize, reveal_due, rotation_live, rotation_next, settings_after_reload, settle,
-		tab_close_box, tab_command_line, tab_title_w, typed_title, view_menu_items, window_px,
-		window_sight,
+		remember_resize, resize_is_current, reveal_due, rotation_live, rotation_next,
+		settings_after_reload, settle, tab_close_box, tab_command_line, tab_title_w, typed_title,
+		view_menu_items, window_px, window_sight,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -11160,6 +11174,20 @@ mod tests {
 		assert!(!remember_resize(true, false, true));
 		// nothing before the first frame, as before
 		assert!(!remember_resize(false, false, false));
+	}
+
+	// The order a Mac launch delivered: the creation size's resize after the
+	// first frame, with the window already at its launch size, then the launch
+	// size inside the scale change's grace. Only the window's own size counts.
+	// Test ID: ErsO6GB
+	#[test]
+	fn a_resize_the_window_has_moved_past_is_not_saved() {
+		let created = (2000, 1280);
+		let launched = (2394, 828);
+		assert!(!resize_is_current(created, launched));
+		assert!(resize_is_current(launched, launched));
+		assert!(!resize_is_current((0, 0), (0, 0)), "minimized");
+		assert!(!resize_is_current((2394, 0), (2394, 0)));
 	}
 
 	// A settled move to another monitor takes that monitor's size, unless the

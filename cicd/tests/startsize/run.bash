@@ -9,7 +9,8 @@
 ##			  show maximized, not at its restored size and then maximized.
 ##			- --fullscreen, which must show fullscreen the same way.
 ##		Each window is watched for a while after it shows, past the wait for a
-##		move to another monitor to settle.
+##		move to another monitor to settle. A launch nobody resized must save no
+##		size either: a stale resize event once saved the default window's grid.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
 ##	  window manager or python-xlib).
@@ -109,6 +110,15 @@ fWatch(){  ## fWatch <case> [option]...
 	sed 's/^/    /' "${dir}/seen.txt"
 }
 
+## The remembered sizes in the file are still the ones the fixture wrote. The
+## launch writes the template's own columns and rows one tab in.
+fSavedNoSize(){  ## fSavedNoSize <case> <expected sizes>
+	local -r tab=$'\t'
+	local got
+	got="$(grep -oE "^(${tab}remembered_(columns|rows)|${tab}${tab}${tab}(columns|rows)): [0-9]+" "${work}/${1}/config.shcl" | tr -d '\t' | paste -sd ' ' || true)"
+	[[ "${got}" == "${2}" ]] || { echo "    sizes now: ${got}"; return 1; }
+}
+
 ## The state the window first showed in, and every one after it, must match.
 fShownOnce(){  ## fShownOnce <case>
 	local -r seen="${work}/${1}/seen.txt"
@@ -125,6 +135,7 @@ echo "remembered size, kept for this monitor (${screen})"
 fFixture kept 'window:' $'\tremembered_columns: 100' $'\tremembered_rows: 30' $'\tmonitors:' $'\t\t'"${screen}_100pct:" $'\t\t\tcolumns: 90' $'\t\t\trows: 28' $'\t\t\tfont_zoom: 0'
 fWatch kept
 fCheck "kept: shows once, at one size" fShownOnce kept
+fCheck "kept: and saves no size" fSavedNoSize kept "remembered_columns: 100 remembered_rows: 30 columns: 90 rows: 28"
 
 ## Three launches: a request that misses the map can still win the race to
 ## the window manager now and then, and one lucky launch would pass.
@@ -147,3 +158,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261004 JC: Created.
+##		- 20261005 JC: A launch saves no size (2026100514211602).
