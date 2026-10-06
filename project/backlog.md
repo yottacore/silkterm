@@ -510,7 +510,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261002: Command+Shift+[ and ] switch tabs, and the menu bar gets a Window menu.
 	- Done:
 		- Command+Shift+[ and ] are in the Command chord table, so they work as keys and show on the Window menu's Show previous tab and Show next tab rows. A Mac reports Shift+[ as "{" on a US layout, so both spellings count, and the menu row is handed "{" with Command, the form macOS matches.
-		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are carried out by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
+		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are done by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
 		- The system's own window tabs are turned off. They would add a Show Tab Bar row to View, and tab rows to Window that take Ctrl+Tab from the shell, beside SilkTerm's own tabs.
 		- With Settings open, the tab rows change the dialog's tab, as they reach it before the dialog sees the keys.
 	- Note: Each window is its own process, so the window list and Bring all to front reach only that window and its dialogs.
@@ -1573,8 +1573,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- An existing config loses the old line, commented or set. A set value is not moved to "Minutes when hidden", since it was a different wait. A commented "Minutes when hidden" line at the old 30 becomes 1. A set one stays as set.
 		- A config written from the template since 2026100418354006 keeps that template's comment paragraph about three waits, since nothing rewrites comments. No dogfood build wrote that template.
 		- The release tells only hidden from shown again, so the minimized check is no longer asked while the desktop says the window is covered.
-	- Verified: unit suite, fmt, test IDs, the docs and table gates, and clippy on the Linux, Windows and macOS targets. On Linux at the shipped settings, a minimized window let go of the card between 50 and 75 s after the minimize and took it back on restore, while an unfocused window beside it kept its device. A config written from scratch lists only the two waits.
-	- Note: `a_minimized_window_waits_its_own_time` (ErmpLNm) and `an_existing_config_learns_the_minimized_wait` (ErmrbFB) are commented out, since the wait they pinned is gone. `cicd/tests/wingui/idlemin.ps1` (ErqPAvG) still makes sense, since it relies on the shipped 1 minute and sets no wait, so only its header changed. It was not rerun on vm925w.
+	- Verified: unit suite, fmt, test IDs, the docs and table gates, and clippy on the Linux, Windows and macOS targets. On Linux at the default settings, a minimized window let go of the card between 50 and 75 s after the minimize and took it back on restore, while an unfocused window beside it kept its device. A config written from scratch lists only the two waits.
+	- Note: `a_minimized_window_waits_its_own_time` (ErmpLNm) and `an_existing_config_learns_the_minimized_wait` (ErmrbFB) are commented out, since the wait they pinned is gone. `cicd/tests/wingui/idlemin.ps1` (ErqPAvG) still makes sense, since it relies on the default 1 minute and sets no wait, so only its header changed. It was not rerun on vm925w.
 	- Swept: every `idle_release_minimized_min` and `IdleMinimizedMin` site in config.rs, settings_ui.rs, settings_ui.shcl and ui_spec.rs, every use of the minimized-or-covered split in app.rs, both resource design docs, and the README, whose idle text needed nothing. `minimized_min` is now found only in the retired-key list, the commented tests and the backlog.
 	- Branch: tabnext
 	- Commit: 75ebca3
@@ -1634,9 +1634,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261005: The picture is held at the size the window draws it at, by its fit, and never bigger than the image. Half a second after the last size change it is prepared again in the background and swapped in, and its summary is kept so the text colors stay put. Detail in the design doc's [The wallpaper at window size](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size).
 		- 20261005: The shrink runs in linear light before the blur, with the blur and the contrast mask scaled to match, and a margin past the edge so the edge rows come out as before. `SILK_MEMDBG=1` now prints the held size.
-		- 20261005: Holding a blurred picture smaller still was measured and not built. At the shipped blur it looks the same inside the picture and is smaller than BC1 at full size, so compression is not needed there. The edge needs a one pixel border first. Numbers in the design doc, for 2026100418225507.
-		- 20261005: With the blur off the look does change, by up to 23 levels at the shipped visibility. A large picture was drawn by skipping pixels, and now they are averaged.
-		- 20261005: Verified on b23 against the old build at the same window size: a picture held whole was unchanged, and one held smaller changed by at most 1 level on GL and 2 on Vulkan at the shipped settings, 3 along one sharp edge in light mode. A resized window matched one launched at that size within 1 level.
+		- 20261005: Holding a blurred picture smaller still was measured and not built. At the default blur it looks the same inside the picture and is smaller than BC1 at full size, so compression is not needed there. The edge needs a one pixel border first. Numbers in the design doc, for 2026100418225507.
+		- 20261005: With the blur off the look does change, by up to 23 levels at the default visibility. A large picture was drawn by skipping pixels, and now they are averaged.
+		- 20261005: Verified on b23 against the old build at the same window size: a picture held whole was unchanged, and one held smaller changed by at most 1 level on GL and 2 on Vulkan at the default settings, 3 along one sharp edge in light mode. A resized window matched one launched at that size within 1 level.
 		- 20261005: Verified on b23: the wallpaper's share of a 2560x1440 window with a large photo went from 72 to 32 MiB of graphics memory and from 93 to 42 MiB of regular memory. A pack image in a 1280x800 window went from 32 to 12 and from 45 to 16.
 		- 20261005: Verified: the new tests fail with each part of the change taken out (no margin, no busyness scale, sRGB shrink, no resize follow) and pass with it. The full unit suite (1133), fmt, and clippy for Linux and Windows pass.
 	- Decisions:
@@ -2087,8 +2087,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Against: 2026100312470546 left a current file that is not UTF-8 alone. This item's first decision replaces that.
 	- Actual fix:
 		- At launch, such a file is copied to `config_backup_<time>_format-v3.shcl` the way an old-format file is, then written again without the lines that do not decode. It keeps its own layout as long as every other line reads the same without them.
-		- A block heading that does not decode would move its lines into the block above. That file, and one where nothing is left that sets anything, is written new from the template with every setting that still reads. With nothing to carry that is the defaults.
-		- A line of the SHCL footer that does not decode is put back as shipped, since an editor saving in Latin-1 always garbles its copyright sign.
+		- A block heading that does not decode would move its lines into the block above. That file, and one where nothing is left that sets anything, is written new from the template with every setting that still reads. With nothing to keep, that is the defaults.
+		- A line of the SHCL footer that does not decode is put back as it came, since an editor saving in Latin-1 always garbles its copyright sign.
 		- The terminal names the lines and the copy. A "Settings file rewritten" notice says the same once the window is up. The "Settings not saved" refusal for this case is gone.
 		- A launch that finds the file busy leaves it, and the next save or rating write does the same rewrite and says it the same way.
 		- `upgrade` in config.rs makes the choice for this case too, and the copy is made by the same writer.
@@ -2144,7 +2144,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Steps to reproduce:
 		- Start from a fresh config. In Settings, untick Choose automatically on the Silk tab and Apply. Click its revert arrow and press OK. Relaunch.
 	- Incorrect behavior: Choose automatically is still off. The same goes for any hotkey set on the Keys tab.
-	- Expected behavior: it is back on, and the file is as it shipped.
+	- Expected behavior: it is back on, and the file is as it was installed.
 	- Reproduced: 20261003 on b23, by test, for `performance.automatic` and `keys.close_pane`. `scroll.smooth` went back, but left a second copy of its commented line.
 	- Actual cause: a save adds a set value as a new line, sometimes above the template's commented line. The revert took the last line for the path, which was the comment, and left the value alone.
 	- Actual fix: the revert edits the setting's active line. Where the template's commented line is already in the file, the value line goes, rather than becoming a second copy of it.
@@ -2378,7 +2378,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261004: The macOS build already made the release app universal, not only the dogfood copy. Both halves target macOS 11 and up, and the build stops if either half is missing. It now prints the sizes above on every run.
 	- Verified: 20261004 on b26, from a fresh build of dev. The app in both the zip and the disk image has x86_64 and arm64, each half asks for macOS 11.0, the signature verifies, and the x86_64 half runs. The missing-half check fails on a one-arch binary.
 	- Decisions:
-		- 20261003: Ship universal at any size, as most Mac apps do. Report the size on the item.
+		- 20261003: Release a universal binary at any size, as most Mac apps do. Report the size on the item.
 	- Branch: macuni
 	- Commit: None needed for the program. The build was already universal.
 	- Test case: The build's own check that both halves are in the app, which stops the build otherwise. No separate test, since the binary is only made on a Mac.
@@ -2433,12 +2433,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: shcl b10c2009, and its dev branch at e9e4a6c, have `migrate`, `migrate_unstamped` and `format_version`, and nothing that converts a whole file or keeps a copy. The CLI's `migrate --write` keeps `config_old_v2.shcl`, but the library has no such call, so nothing here can race it today.
 		- 20261003: A file shcl cannot migrate is one its stamped `migrate` gives no Format line, as for a raw block that never closes. `migrate_unstamped`, the call for a program that writes its own footer, cannot say so, so the stamped call is asked too. Filed as shcl friction, 2026100315553545.
 		- 20261003: A file shcl cannot read is one that is not UTF-8. Before, such a file loaded as all defaults with no message, and a Settings save said it saved and wrote nothing. In an older format it is now written new, and a line that does not decode is left out. A current-format file that is not UTF-8 is no upgrade and is left as it was.
-		- 20261003: The new file is the template with every setting that still reads carried to it, as the pre-nesting conversion carries values. Themes, per-monitor sizes and the shell list carry too. Each line shcl cannot read, and each setting with nowhere to go, counts as lost.
-		- 20261003: Lost settings are said by the same writer, terminal line and notice as a conversion in place. The text says the file could not be converted in place, so a new one was written, and how many settings could not be carried over. The notice title stays "Settings not converted".
+		- 20261003: The new file is the template with every setting that still reads copied into it, as the pre-nesting conversion does. Themes, per-monitor sizes and the shell list are copied too. Each line shcl cannot read, and each setting with nowhere to go, counts as lost.
+		- 20261003: Lost settings are said by the same writer, terminal line and notice as a conversion in place. The text says the file could not be converted in place, so a new one was written, and how many settings could not be kept. The notice title stays "Settings not converted".
 		- 20261003: Before this, a 2.x file with a raw block that never closed was converted in place with no copy kept, since the new footer ended up inside the block and the file never read as a newer format. It now gets a copy and a new file.
 		- 20261003: The choice is made in one place, `upgrade` in config.rs, so a later shcl that converts whole files can take it over there.
 		- 20261003: README and design.md say what happens to such a file.
-	- Verified: The unit suite passes, 1074 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID check passes. With the old behavior put back, the three rewrite tests failed, and the pipeline test failed its can't-migrate, can't-read and notice checks. The new fuzz target ran 36754 cases clean in 60 seconds, and failed on seed 68 with unreadable lines carried over.
+	- Verified: The unit suite passes, 1074 tests. fmt is clean, and clippy is clean for Linux, Windows and macOS. The test ID check passes. With the old behavior put back, the three rewrite tests failed, and the pipeline test failed its can't-migrate, can't-read and notice checks. The new fuzz target ran 36754 cases clean in 60 seconds, and failed on seed 68 with unreadable lines kept.
 	- Swept: Every reader that parses the settings file goes through `read_settings_text`: the launch, `read_doc` for Settings saves and the shell adoption, and the window size refresh. The other launch steps run after the conversion and read what it wrote. Revert, clear and the rating write still write the text as read and never convert, as before.
 	- Branch: fmtfresh
 	- Commit: 8553a33
@@ -3076,13 +3076,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261004: The save writes a full new config file from the template with the current settings, the same as a first launch would, and goes through quietly with no notice.
 	- Actual fix:
-		- A save that finds the file gone makes its folder and starts from the template. It carries every setting the file had when the program last read or wrote it, then puts the save's own change on top. The carry is the one a fresh file from `upgrade` uses.
+		- A save that finds the file gone makes its folder and starts from the template. It keeps every setting the file had when the program last read or wrote it, then puts the save's own change on top. The copy is done the same way as for a fresh file from `upgrade`.
 		- Values that last only the session stay out of the new file, such as a rotated wallpaper or a font given on the command line. The save still writes only what changed against what the window loaded.
-		- The shell list is still three-way against the file. The carried file has the list, so no entry reads as removed. A file the program never saw gets the list the window loaded.
+		- The shell list is still three-way against the file. The new file has the list, so no entry reads as removed. A file the program never saw gets the list the window loaded.
 		- Like any fresh file from the template, the new one does not keep the old file's comments or layout, or a line the template has no place for.
 		- Only the settings file counts as the file last seen. A shell profile goes through the same writer, and the one written at launch used to take its place, so the save started from the bare template.
 	- Swept: Every caller of `persist`: Settings OK, window size, font zoom and per-monitor sizes, the copy, minimap and single tab toggles, and shells found at launch. The revert arrow's write and the cleared font's write run after `persist`, so they find the new file. The rating write still says it could not read a missing file, so it does not claim to have saved; left alone. The launch steps run after a launch lays the template down.
-	- Test case: `a_save_on_a_deleted_file_writes_it_new` (ErkRECv) and `a_save_on_a_deleted_file_keeps_the_shell_list` (ErkREXH). Both fail with the old answer put back and pass now. The first also fails when the save starts from the bare template without the carry. `cicd/tests/delcfg/run.bash` (ErqP9yG), in the pipeline, and `a_save_on_a_deleted_file_keeps_it_after_a_profile_write` (ErqPAI7). Both fail on the old code.
+	- Test case: `a_save_on_a_deleted_file_writes_it_new` (ErkRECv) and `a_save_on_a_deleted_file_keeps_the_shell_list` (ErkREXH). Both fail with the old answer put back and pass now. The first also fails when the save starts from the bare template without the old settings. `cicd/tests/delcfg/run.bash` (ErqP9yG), in the pipeline, and `a_save_on_a_deleted_file_keeps_it_after_a_profile_write` (ErqPAI7). Both fail on the old code.
 	- Verified: The unit suite passes, 1085 tests. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not checked in a real window; the two app-side callers were read, not run.
 	- Verified: 20261005 on b23, in a real window: after the delete, a resize and Ctrl+Plus each wrote a new file with the old file's settings and the new value. Before the profile fix it kept none of them.
 	- Branch: delcfg, signoff
@@ -3496,7 +3496,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
 	- Closed: 20260929-170546
 
-- The shipped prompts no longer name real machines
+- The bundled prompts no longer name real machines
 	- ID: 2026100314195000
 	- Type: Enhancement
 	- Status: Done
@@ -3513,7 +3513,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: The bash prompt's host color case has one commented example and the default arm. This copy now differs from x9ps1-git in that one table, and the comment over `BASH_PROMPT` says so.
 		- 20261003: shell-integration.md shows the new block.
 	- Decisions:
-		- 20261003: Remove the machine names from both shipped prompts and leave an example.
+		- 20261003: Remove the machine names from both bundled prompts and leave an example.
 	- Note: The bash prompt file is rewritten from the binary at each launch, so a host color added to it does not last. On the machines that were in the table, the bash prompt's host is now white.
 	- Test case: `the_shipped_prompts_color_no_named_machine` (Erftpx4). It failed on each old script and passes on both new ones.
 	- Branch: hostnames
@@ -3529,7 +3529,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened by: CC
 	- Assigned to: CC
 	- Target OS: Linux
-	- Related IDs: split from the done old-format item "Let the showdown tools measure again every row the README table carries".
+	- Related IDs: split from the done old-format item "Let the showdown tools measure again every row in the README table".
 	- Requirements:
 		- The published XTerm speed figure was taken on X11. The speed rig runs under sway, and through its Xwayland xterm read 18.4 MB/s against 28.3 published, in one noisy run.
 		- Either give the rig an X11 path for xterm, or show the Xwayland figure is real and say so.
@@ -3621,7 +3621,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- A handed-off window skips the launcher, so it won't be elevated.
 					- 20260930: An elevated console program doesn't hand off at all, and stays in conhost. Windows Terminal has the same limit, by design (microsoft/terminal#10276).
 				- 20260930: COM adds ` -Embedding` to the command line on its own, so no flag of ours is needed. The program it starts has 60 seconds to register the class.
-			- Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminal that the built-in conhost doesn't. Not verified. The ConPTY redistributable already being tried here ships its own console host, which may or may not be usable for this.
+			- Find out what `DelegationConsole` has to be. The belief is that Windows Terminal's OpenConsole, `{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}`, is what passes a session on to a third-party terminal that the built-in conhost doesn't. Not verified. The ConPTY redistributable already being tried here includes its own console host, which may or may not be usable for this.
 				- 20260930: Verified. It has to be Windows Terminal's OpenConsole, with that ID. Conhost's own ID turns handoff off, and conhost can't reach a terminal by itself. So Windows Terminal has to be installed. It also has the parts that pass the call between processes. The redistributable's OpenConsole has the same ID built in, so it can't stand in as a second console host.
 			- Add a way to switch it on and off, either in Settings or as a command-line option. Turning it off means setting both values back to all zeros, which is "Let Windows decide".
 				- 20260930: A missing value means the same. The account on vm925w has Windows Terminal set by name, though, so off may be better as putting back whatever was there. See the open points below.
@@ -4228,7 +4228,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: `command_argv` expanded every word of a command, not only the program.
 	- Decision: the program name is expanded, because nothing else would. SilkTerm starts it directly. Every argument after it reaches the program as written, on either platform.
 	- Fixed: `command_argv` expands the first word and leaves the rest alone.
-	- Note: this also undoes the narrowing it was split from the same day. A setting that names a path reads all three spellings on both platforms again, which is what a config file carried between machines needs. See the Done feature "Pre-interpret the most common bash environment variables".
+	- Note: this also undoes the narrowing it was split from the same day. A setting that names a path reads all three spellings on both platforms again, which is what a config file moved between machines needs. See the Done feature "Pre-interpret the most common bash environment variables".
 	- Pinned by: `a_config_command_expands_the_program_and_nothing_after_it`.
 	- Opened: 20260916-082057
 	- Closed: 20260916-104128
@@ -4362,7 +4362,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260910-071431
 	- Closed: 20260910-214107
 
-- ✅ The ARM64 Windows binary carries no icon and no version information, and says nothing about it.
+- ✅ The ARM64 Windows binary has no icon and no version information, and says nothing about it.
 	- Measured in the built executable: the x86_64 one had the whole version block and the copyright marker intact, and the ARM64 one had no version resource at all, neither the strings nor the icon. So on that architecture Explorer showed a generic icon, the Properties tab was blank, and the installer picked up the same generic icon.
 	- The missing warning was the worse half. The step is non-fatal on purpose when nothing can compile a resource for the architecture, and it is meant to say so, but neither build printed anything.
 	- Cause: two things. The resource compiler was chosen by the build machine instead of the target, so for ARM64 nothing was found. And "found nothing" was reported as "not attempted", which the caller read as success.
@@ -4426,9 +4426,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Code review 20260914 item 5 (F37, should-fix): A `$` or `%` in a shell's arguments is expanded as a variable, so `cmd /k prompt $P$G` loses its prompt.
 		- Decision: expand the program name only, and go on reading every spelling in a setting. A command's arguments belong to the program being started.
 		- Fixed: `command_argv` splits the command first, expands the first word, and hands every argument to the program as written.
-		- Fixed: `shell.startup_directory` defaults to the home variable in the platform's own spelling. Either spelling is read on either platform, so a config carried between machines still finds home.
+		- Fixed: `shell.startup_directory` defaults to the home variable in the platform's own spelling. Either spelling is read on either platform, so a config moved between machines still finds home.
 		- Pinned by: `a_config_command_expands_the_program_and_nothing_after_it`.
-		- Note: reading only the local platform's spelling was tried first and dropped the same day. It fixed the cross-platform cases, left the same-platform ones, and cost a config that could be carried.
+		- Note: reading only the local platform's spelling was tried first and dropped the same day. It fixed the cross-platform cases, left the same-platform ones, and broke a config moved between machines.
 	- ✅ Code review 20260914 item 6 (F38, should-fix): A color override in the settings file is dropped for the session when the system switches between dark and light.
 		- A color that is not the theme's own stays when the system switches. That covers one from the command line or from Settings too, not only the file.
 		- Pinned by: `a_color_override_survives_the_system_switching_modes`.
@@ -4679,7 +4679,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The grid fitter takes a size only when two reports agree, and takes the middle of two near misses. A new account's default font made it hop either side of 160x42 forever.
 		- Pinned by `cicd/tests/showdown/run.py`, with a stand-in terminal that rewrites whatever settings file it is given. It fails on the old benchmarks.
 	- ✅ Code review 20260914 item 93 (F125, should-fix): The size benchmark measures the "SilkTerm +candy" row with its effects turned down.
-		- Both benchmarks start the +candy row on the shipped settings with the automatic profile pinned off, print the profile that was in force, and refuse the run if it moved.
+		- Both benchmarks start the +candy row on the default settings with the automatic profile pinned off, print the profile that was in force, and refuse the run if it moved.
 		- The size benchmark now reads 125.6 MiB for that row, against 167.7 published. The drop is from the memory work since, not from this change, and the published row is left alone.
 		- Pinned by: `cicd/tests/showdown/run.py`.
 	- ✅ Code review 20260914 item 94 (F126, should-fix): The benchmarks and the wine launcher look for SilkTerm under `target/` even when `CARGO_TARGET_DIR` puts the build elsewhere.
@@ -4750,7 +4750,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pinned by: `nothing_drawing_costs_no_memory`.
 	- ✅ 24. Past a scrim radius of 20 the halo stopped falling off and flattened every pane to a plate of background color. The slider could not reach it; the config file could.
 		- Pinned by: `a_halo_wider_than_the_taps_is_held_to_them`.
-	- ✅ 25. The Windows link opener passed the URL through a shell whose parser expands percent variables before any escaping, so a URL printed by a remote host could carry a second command in. Nothing goes through a shell now.
+	- ✅ 25. The Windows link opener passed the URL through a shell whose parser expands percent variables before any escaping, so a URL printed by a remote host could sneak a second command in. Nothing goes through a shell now.
 		- Pinned by: `a_url_reaches_the_opener_exactly_as_it_was_printed`.
 	- Not defects, recorded so they are not re-found: the fork's `scroll_down_relative` clamps correctly and only `scroll_up_relative` can record a count past its region; the pedantic clippy set's 818 warnings are almost entirely `mul_add`, float comparison in tests, and `const fn`.
 	- Note: the launcher fix reaches the copies outside the repo only when they are redeployed.
@@ -4853,7 +4853,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260903-014500
 
 - ✅ Double-clicking a Windows path leaves off the drive letter.
-	- Does not reproduce on Linux. The shipped word separators already keep `:`, and a double-click on `C:\Users\jim\notes.txt` selects it whole.
+	- Does not reproduce on Linux. The default word separators already keep `:`, and a double-click on `C:\Users\jim\notes.txt` selects it whole.
 	- Probable cause: a config that still has the older separator list, which the "start over" item would also clear.
 	- Note: re-check on Windows against a fresh config. The rest of the double-click work is done, under Done - Bugs.
 	- Pinned by: `default_word_separators_keep_drive_colon` and `a_drive_path_keeps_its_drive_letter`.
@@ -4923,7 +4923,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260827-073521
 
 - ✅ Bug: Alt-screen enter/exit animated like a scroll (`smooth_scroll_apps`). Two symptoms: (a) opening nano "jiggles"/jelly-bounces or scrolls in from a few lines down; (b) exiting nano scrolls the previous screen contents back in from the bottom, where a normal terminal just cuts.
-	- Cause: an alt-screen enter/exit is an instant full-screen swap, but the scroll probes diffed frame-to-frame across it. On enter the app-scroll probe matched blank rows between the old and new screens -> bogus slide (jiggle). On exit `history_size` jumps (the alt grid carries no scrollback) -> the output-ease read it as new output and scrolled the restored screen in.
+	- Cause: an alt-screen enter/exit is an instant full-screen swap, but the scroll probes diffed frame-to-frame across it. On enter the app-scroll probe matched blank rows between the old and new screens -> bogus slide (jiggle). On exit `history_size` jumps (the alt grid has no scrollback) -> the output-ease read it as new output and scrolled the restored screen in.
 	- Fixed: track the previous frame's alt-screen state; on a transition hard-cut it - cancel any in-flight slide, skip both probes, suppress the output nudge, and rebaseline the row fingerprints to the new screen.
 	- Both symptoms are fixed. Residual: a very slight one-line smooth scroll-up still happens on enter and exit - livable, deferred (see the deferred item below).
 	- Mostly fixed. Entering and exiting still result in a one-line smooth scroll. Tolerable, but worth fixing someday.
@@ -5007,8 +5007,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Nothing on our side of the pipe moves it. Microsoft's own newer console host, every pseudoconsole mode flag including passthrough, and pipe buffers from the default up to 16 MB all sit inside the run-to-run noise; the newer host is slightly slower.
 	- So there is nothing to fix in the terminal engine, and the idea of forking it for this is dropped. The freeze fix stays pinned for its own reasons.
 	- Fell out of it: the benchmark's barrier is answered by the console host on Windows, not by the terminal, so a Windows figure times the whole chain and can never be read as one terminal's speed. Both the tool and the benchmark notes say so now, and the earlier claim to the contrary is corrected in the spreadsheet.
-	- Reopened and re-measured on 2026-08-18 once a barrier-free instrument put the real end-to-end gap at about 2x rather than 10x. Four consumers of the same 32 MiB of output, on the same box: bytes read and thrown away 1.45s, one thread reading and parsing 1.94s, the shipped engine plumbing with no window at all 2.45s, the terminal itself the same 2.5s plus its scroll ease settling. Windows Terminal is around 1.3s, which is the console host's own ceiling. It runs at that ceiling, and SilkTerm runs at about 60% of it.
-	- What is left to gain is therefore about a second per 32 MiB, and none of it is in the drawing: parsing is half a second of that, and the rest is the engine's Windows pipe plumbing, which delivers about 17 MB/s where a plain blocking read of the same pipe gets 22. Two obvious levers were tried and neither moved it - folding the engine's internal notifications, and waiting for the pipe to accumulate before reading it. Reading and parsing on one thread beats the shipped two-thread arrangement by half a second, which is the direction to try if this is ever picked up again, and it would mean a real fork.
+	- Reopened and re-measured on 2026-08-18 once a barrier-free instrument put the real end-to-end gap at about 2x rather than 10x. Four consumers of the same 32 MiB of output, on the same box: bytes read and thrown away 1.45s, one thread reading and parsing 1.94s, the stock engine plumbing with no window at all 2.45s, the terminal itself the same 2.5s plus its scroll ease settling. Windows Terminal is around 1.3s, which is the console host's own ceiling. It runs at that ceiling, and SilkTerm runs at about 60% of it.
+	- What is left to gain is therefore about a second per 32 MiB, and none of it is in the drawing: parsing is half a second of that, and the rest is the engine's Windows pipe plumbing, which delivers about 17 MB/s where a plain blocking read of the same pipe gets 22. Two obvious levers were tried and neither moved it - folding the engine's internal notifications, and waiting for the pipe to accumulate before reading it. Reading and parsing on one thread beats the stock two-thread arrangement by half a second, which is the direction to try if this is ever picked up again, and it would mean a real fork.
 	- Also settled: the console host's delivery ceiling is fixed. Pipe buffers from the default to 16 MB, read sizes from 64 KB to 1 MB, and Microsoft's redistributable host beside the executable all sit within noise.
 	- No test: a measurement. Nothing changed.
 	- Note: 20260930, the first four sub-bullets were the first answer. The reopen below corrects them: the gap is about 2x, not 10x, and a single-thread read and parse is still a direction if this is picked up again.
@@ -5094,7 +5094,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The cursor is now the cool third of the same triad, dropped to the brightness where it reads as well against the text as it does against the background - a deep violet. The same character now stands at close to 6:1, and nothing outside the one cell changes.
 	- The focus ring stays warm. It marks which pane is live rather than where the caret is, so it wants an identity of its own rather than an echo of the cursor.
 	- New defaults alongside it: text scrim strength 15 (was 20) and text outline 1 (was 2), so slightly more of the background shows through around each character.
-	- All three reach an existing config only where its line is still the shipped one. A value already changed, or a line annotated by hand, is left alone.
+	- All three reach an existing config only where its line is still the default one. A value already changed, or a line annotated by hand, is left alone.
 	- Pinned by: `text_on_the_cursor_plate_clears_the_floor` and `migrate_refreshes_a_superseded_commented_default`.
 	- Opened: n/a
 	- Closed: 20260804-214514
@@ -5654,7 +5654,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Type "exit" in the last tab, it closes the program.
 			- With four tabs open, and type "exit" from the third, closes the first two tabs (and not the third).
 			- Pinned by: `pane_ids_come_from_one_counter_for_the_whole_program`.
-		- ✅ Actual cause (20260630): pane numbers collided across tabs. Each tab counted its own panes from one, so a shell-exit event, which carries only the number, resolved to the wrong tab - the first one holding that number - and closed it. Dropping that tab's terminal fired another exit, and the cascade closed all but one tab and sometimes hung, exactly as reported.
+		- ✅ Actual cause (20260630): pane numbers collided across tabs. Each tab counted its own panes from one, so a shell-exit event, which has only the number, resolved to the wrong tab - the first one holding that number - and closed it. Dropping that tab's terminal fired another exit, and the cascade closed all but one tab and sometimes hung, exactly as reported.
 			- The earlier fix, finding the owning tab and cascading, was right, but the lookup itself was ambiguous.
 			- Fixed: one counter for the whole program, so every pane number is unique everywhere.
 			- Pinned by: `pane_ids_come_from_one_counter_for_the_whole_program`.
@@ -5856,9 +5856,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already keeps the text on it legible in both modes, so what is left is how loud it looks.
 	- Fixed: 20260928, window transparency. The fill was encoded to sRGB after it was premultiplied, so a light fill at 80% came out as 91% of itself and covered most of the desktop. Black was not affected. A light fill now lets through exactly as much as a dark one.
 	- Test: `a_light_fill_is_as_see_through_as_a_dark_one`, which fails on the old code.
-	- Note: 20260928, the cursor plate is placed by the contrast floor, not by its alpha. Every shipped theme's plate already sits right at the floor from the text, in both modes. Light text is at Oklab 0.32 to 0.37 and the background at 0.94 to 0.97, so the plate can only get 0.12 to 0.20 away from the background. Dark mode gets 0.20 to 0.42. A stronger alpha would push the plate into the text, so the theme cursor colors would have to get lighter to compensate, and the plate would end up where it is now. Only darker light-mode text makes more room.
-	- Note: 20260928, the shipped light-mode text gets darker, so the plate has room to be louder.
-	- Fixed: 20260929, the cursor plate. The shipped light themes have darker text, and over a light background the plate is drawn at 80% instead of 55%, as far as the text on it still clears the floor. Darker text alone was not enough, since at 55% even a black cursor could not take the plate much past 0.2 from a light background. Their plates now sit 0.25 to 0.28 from the background, where they were 0.12 to 0.20. Dark mode is unchanged. A saved theme keeps about the plate it had.
+	- Note: 20260928, the cursor plate is placed by the contrast floor, not by its alpha. Every built-in theme's plate already sits right at the floor from the text, in both modes. Light text is at Oklab 0.32 to 0.37 and the background at 0.94 to 0.97, so the plate can only get 0.12 to 0.20 away from the background. Dark mode gets 0.20 to 0.42. A stronger alpha would push the plate into the text, so the theme cursor colors would have to get lighter to compensate, and the plate would end up where it is now. Only darker light-mode text makes more room.
+	- Note: 20260928, the built-in light-mode text gets darker, so the plate has room to be louder.
+	- Fixed: 20260929, the cursor plate. The built-in light themes have darker text, and over a light background the plate is drawn at 80% instead of 55%, as far as the text on it still clears the floor. Darker text alone was not enough, since at 55% even a black cursor could not take the plate much past 0.2 from a light background. Their plates now sit 0.25 to 0.28 from the background, where they were 0.12 to 0.20. Dark mode is unchanged. A saved theme keeps about the plate it had.
 	- Test: `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
 	- Note: 20260930, both halves are fixed now, the window transparency on 20260928 and the cursor plate on 20260929. The title is out of date. What is left is the look on screen.
 	- Note: 20261005, looked at. The light-mode text is still not dark enough, and the light-mode scrim is still much too strong next to dark mode. Filed as 2026100513581810 and 2026100513581811.
@@ -6064,7 +6064,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Cause:` the slider was handed straight to a linear-light alpha blend. Over a black background that blend is a pure scale of the encoded picture, so it cannot touch contrast - which is why dark mode never needed anything. Over a light background it is a veil, and no choice of number gets the contrast back.
 	- `Fixed:` light mode mixes the background and the picture in a power curve instead of blending, at the amount dark mode's blend would have delivered. Both halves are closed form. `PRESENCE`, the two solvers and the bisection are gone, and `lightmode.rs` is `visibility.rs` now, since the module answers how much of a thing gets drawn rather than what light mode does differently.
 	- `Why a pure power and not sRGB:` over black the power curve makes the mix exactly the blend it replaces, so the two modes are one rule. sRGB's `- 0.055` term does not cancel and would have lifted dark mode's black by eight levels.
-	- `Measured:` the picture's own contrast on screen, at the shipped 10%: dark 6.4 sRGB levels of spread, light 0.6 before and 6.4 after. At half visibility, 12.5 against 12.5.
+	- `Measured:` the picture's own contrast on screen, at the default 10%: dark 6.4 sRGB levels of spread, light 0.6 before and 6.4 after. At half visibility, 12.5 against 12.5.
 	- `Dark mode:` unchanged, at two visibilities and with a split.
 	- `Cost:` a mix needs the background color, which a hardware blend cannot supply, so the pass writes the pane fill itself and is clipped to the pane. The divider slits between panes keep their own color rather than taking a faint tint from the picture. Six `pow` per pixel on one full-screen quad, against two bisections a frame on the processor that are now gone. Not measured on a real GPU; dark mode cannot have moved, since its path is the same instructions.
 	- `Pinned by:` nine tests in visibility.rs and one in autotheme.rs, each watched red against its own mutation.
@@ -6085,7 +6085,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- ✅ Need a config file name and a default value for the resulting strength of this calculation.
 			- Pinned by: `the_strength_setting_turns_the_ramp_off`.
 	- Opened: 20260703-100322
-	- `Fixed:` `wallpaper.even_visibility`, 0 to 1, shipped at 1. A picture further from the background color than the shipped pack's median is drawn at less than the slider says, and one closer at more, so the setting means the same thing whatever rotates in next.
+	- `Fixed:` `wallpaper.even_visibility`, 0 to 1, default 1. A picture further from the background color than the bundled pack's median is drawn at less than the slider says, and one closer at more, so the setting means the same thing whatever rotates in next.
 	- `How bright a picture reads:` its overall level and its bright end together, half each, taken in the mix's own curve. The bright end is half the answer because glare comes from there - a night sky with a sun in it is not a dark picture to look at. `Summary` has both, measured on the same grid the derived text colors use.
 	- `At 100% the picture is drawn as it is`, as the entry asked. The correction fades out with the slider and is gone at the top, so the one reading a ramp must not disturb is safe by construction.
 	- `And the inverse for light mode:` the rule measures distance from the background, so over a light background it is the dark picture that stands out and gets held back. Nothing says "light" anywhere in it.
@@ -6100,8 +6100,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- When wallpaper is more visible (and thus often provining a dark background), text scrim is WAY too overpowering in light mode.
 	- `Cause:` both settings are linear-light alphas, and sRGB's curve is steep near black and flat near white. The same alpha covers a lot of visible ground over a dark background and almost none over a light one, so the wallpaper vanishes and the pale halo shouts.
 	- `Fixed:` a new module, `lightmode.rs`, that converts each of the two into what light mode needs for it to read the way dark mode's does. It returns the value it was handed in dark mode, so nothing there can move.
-	- `Decision:` "as much picture" has two readings and they disagree. Matching how far the composite sits from the background asks for 30% behind a 10% slider and leaves the picture flat. Matching how much of its own texture survives asks for 70% and turns the background mid-gray. The shipped value is halfway, 50%, which is where a side-by-side against dark mode stops reading as a different feature. `PRESENCE` in lightmode.rs moves it.
-	- `Measured:` at the shipped 10%, light mode's background went from 10 sRGB levels away from the theme's own to 58, against dark mode's 19, and the picture's own texture from 0.6 to 3.2 against dark mode's 6.4. The halo moved 43% of the pixels around a screenful of text by an average of 10 levels, and the text still read clearly.
+	- `Decision:` "as much picture" has two readings and they disagree. Matching how far the composite sits from the background asks for 30% behind a 10% slider and leaves the picture flat. Matching how much of its own texture survives asks for 70% and turns the background mid-gray. The default is halfway, 50%, which is where a side-by-side against dark mode stops reading as a different feature. `PRESENCE` in lightmode.rs moves it.
+	- `Measured:` at the default 10%, light mode's background went from 10 sRGB levels away from the theme's own to 58, against dark mode's 19, and the picture's own texture from 0.6 to 3.2 against dark mode's 6.4. The halo moved 43% of the pixels around a screenful of text by an average of 10 levels, and the text still read clearly.
 	- `Dark mode:` unchanged. The same scene with the whole module disabled matches exactly.
 	- `Pinned by:` eight tests in lightmode.rs and one in autotheme.rs, each watched red against its own mutation. The renderer and the scrim uniform cannot be reached by a test, since nothing in the tree builds a window.
 	- `Filed, not fixed:` two more of the same class, at the end of the features - window transparency, and the block cursor's plate.
@@ -6126,7 +6126,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260920-174824
 	- Closed: 20260920-175632
 
-- ✅ Settings dialog: a color picker. The colored boxes on the Colors tab should be clickable, and open a picker of the familiar sort: a square carrying saturation and brightness, a narrow rainbow strip beside it with a vertical slider for hue, text boxes to the right for Red %, Green %, Blue %, Brightness %, Saturation % and a hex value, and "Cancel|OK" at the bottom right with OK the default.
+- ✅ Settings dialog: a color picker. The colored boxes on the Colors tab should be clickable, and open a picker of the familiar sort: a square showing saturation and brightness, a narrow rainbow strip beside it with a vertical slider for hue, text boxes to the right for Red %, Green %, Blue %, Brightness %, Saturation % and a hex value, and "Cancel|OK" at the bottom right with OK the default.
 	- `Fixed:` all of it, as a box over the panel that takes every click and key while it is up, the way the theme name box does. The box is titled with the row's own label.
 	- `Decision:` the box holds the color as hue, saturation and brightness rather than as three bytes. Black says nothing about hue and a gray says nothing about saturation, so a model read back off the bytes sends both markers home the moment a drag reaches an edge.
 	- `Decision:` changes go straight to the row behind the box, and Cancel puts back what the row held when it opened. The chip and the window under the dialog are then the preview, and there is no second copy of the value to get out of step.
@@ -6156,12 +6156,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Option: Dynamic text theme based on wallpaper.
 	- `Fixed:` a "Text colors from wallpaper" switch on the Themes tab, off by default. The text and cursor come from the picture behind them; the Foreground and Cursor rows gray out and keep showing the colors that come back when it goes off. Nothing derived is written to the file, since it follows whatever picture is up.
-	- `Decision:` the hue comes from the picture, not from the theme. A lightness-only version was the safer option and measured as a no-op on most of the pack at the shipped visibility, because the shipped foregrounds already clear the floor there. Leaning the theme's own hue partway was worse than either: at Matrix's saturation a 40 degree lean reads as flat yellow.
+	- `Decision:` the hue comes from the picture, not from the theme. A lightness-only version was the safer option and measured as a no-op on most of the pack at the default visibility, because the built-in foregrounds already clear the floor there. Leaning the theme's own hue partway was worse than either: at Matrix's saturation a 40 degree lean reads as flat yellow.
 	- `Decision:` lightness and hue are settled separately. A complement at the same lightness as its ground is the least readable pairing there is, so the two cannot come from one number.
-	- `Measured:` the starting-point idea in this entry, averaging the image to one color, is wrong twice over. For lightness, a photo varies cell to cell and text readable over a dark sky vanishes into a cloud, so the bright end is what counts. For hue, opposite colors cancel: 17 of the 104 shipped wallpapers average to a near-gray whose hue is noise, one of them 174 degrees from the hue that is all over it.
-	- `Measured:` one foreground clears the 45% floor on the whole shipped pack at 10% visibility, on about two thirds at 35%, and on a fifth at 100%. Past that no color exists and the scrim covers it. design.md says so rather than the feature pretending otherwise.
+	- `Measured:` the starting-point idea in this entry, averaging the image to one color, is wrong twice over. For lightness, a photo varies cell to cell and text readable over a dark sky vanishes into a cloud, so the bright end is what counts. For hue, opposite colors cancel: 17 of the 104 bundled wallpapers average to a near-gray whose hue is noise, one of them 174 degrees from the hue that is all over it.
+	- `Measured:` one foreground clears the 45% floor on the whole bundled pack at 10% visibility, on about two thirds at 35%, and on a fifth at 100%. Past that no color exists and the scrim covers it. design.md says so rather than the feature pretending otherwise.
 	- `Pinned by:` twenty tests in `autotheme.rs` plus three for the wiring, eight of them mutation-checked - the dialog baseline, the two gates, the gamut clip, the persist path, the hue weight, the bright-end percentile, the theme floor and the chroma cutoff.
-	- `Measured:` seen against the shipped pack, and in the app with the switch on and off. The row's label costs the dialog 10 px of width; the first wording cost 69 and was cut.
+	- `Measured:` seen against the bundled pack, and in the app with the switch on and off. The row's label costs the dialog 10 px of width; the first wording cost 69 and was cut.
 	- Note: 20260930, it is on by default now, not off. See the [wallpaper design doc](design_docs/20260930-150052_wallpaper.md).
 	- Opened: 20260804-134813
 	- Closed: 20260920-143625
@@ -6189,12 +6189,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260920-132052
 
 - ✅ Retune the scrim defaults for the steeper exponential falloff, and cap the outline at one pixel in every profile.
-	- `Fixed:` the shipped radius is 8 px and the shipped strength 20%. Both went up because the falloff now drops away twice as fast, so the halo has to start further out and heavier to finish in about the same place.
-	- `Fixed:` the cheaper profiles keep the same share of the radius they always had, 5 px against the shipped 8, so they still look like the same halo built with fewer taps. Standard terminal and Remote have no halo at all and are left alone.
-	- `Fixed:` Low drew a two-pixel outline. It draws one now, which is the shipped value, so no built-in profile is above it.
+	- `Fixed:` the default radius is 8 px and the default strength 20%. Both went up because the falloff now drops away twice as fast, so the halo has to start further out and heavier to finish in about the same place.
+	- `Fixed:` the cheaper profiles keep the same share of the radius they always had, 5 px against the default 8, so they still look like the same halo built with fewer taps. Standard terminal and Remote have no halo at all and are left alone.
+	- `Fixed:` Low drew a two-pixel outline. It draws one now, which is the default, so no built-in profile is above it.
 	- `Note:` the two outgoing defaults are in `SUPERSEDED_DEFAULTS`, so an existing config's commented lines are refreshed and a hand-set value is left alone. 20% comes off that list, since it is current again.
 	- `Pinned by:` `changed_defaults` for the two values, and a new loop in the profile ladder test that walks every profile and refuses an outline over a pixel.
-	- `Measured:` seen over the shipped wallpaper - text readable at the new values.
+	- `Measured:` seen over the built-in wallpaper - text readable at the new values.
 	- Opened: 20260920-132052
 	- Closed: 20260920-132052
 
@@ -6211,7 +6211,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- `Fixed:` two halves. The path ladder in `tabtitle::path_forms` now lets an ellipsis eat the middle a directory at a time before anything drops to an initial, so what is left keeps its real names. And `tabtitle::widths` takes the active slot: that tab takes what the row can spare before any other grows past its ordinary width, and the maximum does not apply to it.
 	- `Decision:` nemo's "the tabs behind take the same step as each other" was left out. Its ladders are all path forms, so one rung number means the same thing on every tab; a SilkTerm label is shell plus task plus path, and rung 3 on one tab is nothing like rung 3 on the next. Each tab drops to whatever rung of its own ladder fits instead.
 	- `Note:` a deep path never reaches the initials rung any more - the ellipsis has already beaten it. Initials still win on a one-directory path, where the ellipsis costs more than the name it covers.
-	- `Note:` with the shipped 10% regular width, a tab in front with a long path can leave the others saying only their shell's name. That is the formula working; raising `window.tab_regular_width_pct` is what buys them a path back.
+	- `Note:` with the default 10% regular width, a tab in front with a long path can leave the others saying only their shell's name. That is the formula working; raising `window.tab_regular_width_pct` is what buys them a path back.
 	- `Pinned by:` `a_path_loses_its_middle_before_its_names`, `the_tab_in_front_takes_what_the_row_can_spare`, `the_tab_in_front_asks_for_no_more_than_its_label_wants`. Three mutations red.
 	- `Measured:` release build, four tabs in the repo directory at a 1071 px window. The tab in front drew the whole path at about 750 px and the other three sat at 107 px saying "Dash"; clicking the first tab moved it, and the strip redrew the other way round.
 	- Opened: 20260920-122444
@@ -6232,7 +6232,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260920-123828
 
 - ✅ New default for text outline: 1px
-	- `Note:` no code. The shipped default has been 1.0 since 2026-08-04 and the template's commented line says so.
+	- `Note:` no code. The default has been 1.0 since 2026-08-04 and the template's commented line says so.
 	- `Cause:` the config on b23 has an explicit `outline: 2.0` from before that. Only a commented default line is refreshed at launch; a written value is kept, since there is no way to tell one typed on purpose from one left over. Commenting it out or deleting it lets the new default take over.
 	- `Left alone:` refreshing a written value that happens to equal an old default. It would overwrite a deliberate setting for everyone who had chosen the same number.
 	- Pinned by: `changed_defaults`.
@@ -6265,8 +6265,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260920. Closed: 20260920
 
 - ✅ Tab flyover help text: Make a different color than the tabs. Maybe slightly lighter background and sublty different, complimentary shade, and a different font color. Maybe flyover help needs its own theme colors.
-	- Cause: the shipped menu background is the inactive tab's own bytes, and the tip filled with it. Hanging under the strip, it drew as a tab that had grown downward. A menu row's tip had the same fault against the popup beside it.
-	- Fixed: both main-window tips now fill with the menu background lifted by the step the strip puts between an inactive and an active tab, then warmed, since every tab color leans faintly blue. The border and the text come off the same two colors. Shipped, that is a box at `0x605855` with a `0x827a77` edge and `0xf5f0ed` text.
+	- Cause: the default menu background is the inactive tab's own bytes, and the tip filled with it. Hanging under the strip, it drew as a tab that had grown downward. A menu row's tip had the same fault against the popup beside it.
+	- Fixed: both main-window tips now fill with the menu background lifted by the step the strip puts between an inactive and an active tab, then warmed, since every tab color leans faintly blue. The border and the text come off the same two colors. By default that is a box at `0x605855` with a `0x827a77` edge and `0xf5f0ed` text.
 	- Decision: derived shades, not two more colors on the Themes tab. Twelve colors are editable and each has one job, and the chrome already answers this with shades - hover, border and separator are all taken off the menu color, so a custom menu color stays coherent. The reasoning is in design.md.
 	- Left alone: the Settings and About tips, which already stand off their panel. The benchmark banner, which draws in the same pass but is a modal notice rather than flyover help.
 	- Pinned by: `a_tip_sits_off_every_tab_color`, `a_tip_is_not_painted_in_the_menu_colors`, `a_tip_follows_a_custom_menu_color_either_way` and `tip_text_clears_the_floor_on_its_own_box`. Each watched failing with its own rule taken out.
@@ -6513,7 +6513,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260907-224500
 	- Closed: 20260908-001500
 
-- ✅ The config file carries the SHCL format footer.
+- ✅ The config file has the SHCL format footer.
 	- Done. It sits at the bottom, naming the format and pointing at the spec and its license, in the file's own '##' comment style. A config written before it existed gets it on the next launch, and it is moved back to the bottom if a new section is added under it. A footer that has been reworded is left as it stands.
 	- Pinned by: `the_banner_is_retrofitted_and_kept_last`, `an_edited_banner_is_left_alone` and `the_template_ends_with_the_banner`.
 	- Opened: 20260906-100000
@@ -6849,7 +6849,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 					- "Outline px" (formerly "Text outline"; existing range and values)
 					- Function
 					- Falloff
-			- ✅ Done as specified, with Strength first under the switch, since the others depend on it. The shipped font stack already read exactly as listed, so nothing changed there.
+			- ✅ Done as specified, with Strength first under the switch, since the others depend on it. The default font stack already read exactly as listed, so nothing changed there.
 				- Pinned by: `each_tab_holds_its_designed_sub_groups`.
 		- ✅ Tab: "Cursor"
 			- "Blink rate" slider
@@ -6956,7 +6956,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260719-085918
 	- Closed: 20260830-164632
 
-- ✅ Ship `x9ps1-git` for bash, with a setting on by default that optionally injects it into any running bash shell.
+- ✅ Bundle `x9ps1-git` for bash, with a setting on by default that optionally injects it into any running bash shell.
 	- Baked into the executable, and handed to a bash pane as `PROMPT_COMMAND` in its environment. Nothing is written into anyone's `.bashrc`, and there is nothing to uninstall.
 	- Because rc files run after that, a prompt of your own always wins. So this reaches people who have not set one, and is invisible to everybody else.
 	- Only bash panes, and only ones SilkTerm started. `X9PS1_STANDARD=1` puts the plain prompt back for a session.
@@ -7256,7 +7256,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: n/a
 	- Closed: 20260829-082748
 
-- ✅ Pick up the newer SHCL, which carries some fixes needed. Take it from github source.
+- ✅ Pick up the newer SHCL, which has some fixes needed. Take it from github source.
 	- Now on shcl 2.0.0, which is what the repository's main branch has. Nothing in the config code needed changing for it; every test passed on the bump as it stood.
 	- Two of its additions are in use. A save goes through a temp file and a rename, so a crash mid-save cannot leave a truncated config, and it is refused when the load had to drop a line the save would delete. A setting the writer cannot place is now reported rather than silently skipped.
 	- ✅ Reorganize the config file into a more logical order while in there.
@@ -7309,7 +7309,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Add "Split vertical with shell ->" and "Split horizontal with shell ->".
 		- Done: both sit under the two plain splits in the Panes menu and the right-click menu, and list the same shells the tab row does. The new pane starts where the source pane's shell is.
 		- Pinned by: `both_split_shell_rows_offer_the_same_shells_by_their_place_in_the_list`.
-	- ✅ Sentence case for every item, except where a letter carries an Alt accelerator.
+	- ✅ Sentence case for every item, except where a letter is an Alt accelerator.
 		- Done. The one label that kept its capital is "Paste Selection": lowercased, the S accelerator would have found the s in "Paste" first. Every other accelerator still finds its letter, so the underline marks it.
 		- Pinned by: `every_menu_row_is_in_sentence_case`.
 	- ✅ Context menu: a visible separator between the tab operations and the pane operations.
@@ -7381,7 +7381,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260827-071421
 
 - ✅ Demo gif: the jumping, and showing the speed curve off properly.
-	- ✅ The gif was sampled at 50fps from a source that paints 60, so one source frame in six was dropped and every fifth stored frame had two frames of travel. Measured on the shipped gif that is an exact doubling, on a strict period, at every speed and in both directions. It is a regular hitch that scroll tuning could not remove, and it is worst right after a clear, where a command dumps its output fastest.
+	- ✅ The gif was sampled at 50fps from a source that paints 60, so one source frame in six was dropped and every fifth stored frame had two frames of travel. Measured on the old gif that is an exact doubling, on a strict period, at every speed and in both directions. It is a regular hitch that scroll tuning could not remove, and it is worst right after a clear, where a command dumps its output fastest.
 		- No test: a diagnosis. The fix below is pinned.
 	- ✅ Fixed at the source rather than by slowing the gif down: the app's own frame rate is now pinned to the rate the recording samples at, so the two cannot disagree. The 60 was the recording machine's refresh rate arriving through vblank, which also means the same script on a differently-timed display would have beaten against both the gif and the video, with nothing to show for it in the script. The gif stays at 50fps, which is the smoothest a gif can be.
 		- Pinned by: `cicd/tests/demo/run.py`.
@@ -7402,7 +7402,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20260813-091542
 	- Closed: 20260824-120050
 
-- ✅ The shipped config file says the same things in far fewer words.
+- ✅ The default config file says the same things in far fewer words.
 	- The comments were doing too much explaining. A fresh config.shcl is about a third shorter, with the key name left to do the work its own title line was repeating and each range folded into the sentence beside it.
 	- No test: comment text.
 	- Opened: n/a
@@ -7577,7 +7577,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Config language moved to SHCL 1.2.
 	- The last layout quirk the config writer worked around is fixed at the source, so the repair pass is gone entirely - what the language writes is now what goes on disk, comments, blank lines, indentation and order included.
-	- The shipped template, a real config, a config with settings turned on, and a deliberately awkward one each come back exactly as they went in, where before they came back with 14 to 178 lines re-laid out. Saving a change still touches only the lines that changed, and a setting turned on for the first time goes inside its section at the right depth.
+	- The default template, a real config, a config with settings turned on, and a deliberately awkward one each come back exactly as they went in, where before they came back with 14 to 178 lines re-laid out. Saving a change still touches only the lines that changed, and a setting turned on for the first time goes inside its section at the right depth.
 	- A setting written twice is now reported instead of quietly doing nothing. The language will not guess which one was meant, so the built-in default is what takes effect; the message names both lines.
 	- 🔘 UAT
 	- Pinned by: `default_config_survives_a_save_unchanged`, `a_save_writes_only_the_lines_it_changed` and `a_setting_written_twice_falls_back_and_is_reported`.
@@ -7589,7 +7589,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- One is left, and it is narrower than it was: under a section whose settings are all commented-out defaults - which is most of this file - a comment run comes back at the section's own indentation rather than its settings'. The writer still puts that back, so nothing changes on disk.
 	- A section written as single dotted lines still becomes a real nested section when saved, but it now stays where it is instead of moving to the top of the file and dragging the file's header comments in with it.
 	- A complaint about a setting whose value can't be used now names the line it is on.
-	- A save leaves everything except the changed value exactly as it was, in an existing config file and in the shipped template alike.
+	- A save leaves everything except the changed value exactly as it was, in an existing config file and in the default template alike.
 	- Pinned by: `a_save_keeps_nested_comment_layout`, `a_save_writes_only_the_lines_it_changed` and `a_config_says_what_is_wrong_with_it`.
 	- Opened: n/a
 	- Closed: 20260804-134813
@@ -7609,8 +7609,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Scrim strength defaults to 20 rather than 30.
 	- One doubling of the halo's opacity instead of one and a half - a lighter backing, still clearly there.
-	- Reaches an existing config file only where its line is still the shipped commented one, and a file with either of the two earlier values moves to this one.
-	- A fresh file writes 20, a file that still has the old shipped line is brought forward, and a value written or annotated there is left as it stands.
+	- Reaches an existing config file only where its line is still the default commented one, and a file with either of the two earlier values moves to this one.
+	- A fresh file writes 20, a file that still has the old default line is brought forward, and a value written or annotated there is left as it stands.
 	- Pinned by: `changed_defaults` and `migrate_refreshes_a_superseded_commented_default`.
 	- Opened: n/a
 	- Closed: 20260804-103003
@@ -7620,7 +7620,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The scale is halved: the top of the slider is what 50 used to be, so each 20% is a doubling and 100% is five of them. The extreme end was never usable, and the whole slider is now spent on the part that is.
 	- Default 30, which on the new scale is exactly what 15 was on the old one - a visible backing hugging each glyph rather than a halo that has to be found and switched on. Superseded by the entry above: it defaults to 20 now.
 	- Default falloff curve is now Exponential, replacing Half-normal.
-	- Both changed defaults reach an existing config file only where its line is still the shipped commented one; a value written or edited there is left alone. A file that has been through both curve changes ends on the current one either way.
+	- Both changed defaults reach an existing config file only where its line is still the default commented one; a value written or edited there is left alone. A file that has been through both curve changes ends on the current one either way.
 	- Pinned by: `changed_defaults` and `the_docs_quote_the_scrim_strength_scale_the_code_uses`.
 	- Opened: n/a
 	- Closed: 20260804-100117
@@ -7790,7 +7790,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Each setting has a title line, a description, and a range line where one applies. A commented default line is marked as the default, and sections are divided the usual way.
 	- An old flat-style config converts in one launch: the file moves aside to config.shcl.bak and a fresh nested file is written with every active value moved to its new place, so settings survive. A setting can also still be written as a single dotted line ('wallpaper.opacity: 0.1') and reads the same.
 	- Saving keeps the nested layout intact: comments keep their indentation and the blank-line grouping survives a settings save.
-	- A fresh file matches the shipped template byte for byte, and a relaunch never rewrites it.
+	- A fresh file matches the default template byte for byte, and a relaunch never rewrites it.
 	- Pinned by: `legacy_config_converts_with_values_carried`, `walker_resolves_nested_paths`, `a_save_keeps_nested_comment_layout` and `default_config_survives_a_save_unchanged`.
 	- Opened: 20260802-002500
 	- Closed: 20260802-014027
@@ -8128,7 +8128,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Config file setting names and comments
 	- Program arguments
 	- (Defer settings dialog, that's in a separate enhancement.)
-	- Done: the image-specific `background_*` settings are `wallpaper_*` now, with the bare `background_image` becoming `wallpaper`. The dialog fields, the config reader and writer, and the shipped template and its comments all follow.
+	- Done: the image-specific `background_*` settings are `wallpaper_*` now, with the bare `background_image` becoming `wallpaper`. The dialog fields, the config reader and writer, and the default template and its comments all follow.
 		- An existing config is migrated in place, keeping its values, its comments, and whether each line was commented out.
 		- Left the non-image ones alone: `transparent_background`/`_blur` (window see-through) and the `[colors]` `background`/`menu_background`/`dialog_background`.
 		- Internal image helpers renamed too (`load_wallpaper`, `resolve_wallpaper`, `resolve_wallpaper_folder`, `wallpaper_changed`; the decoded-pixels local stays distinct as `wallpaper_img`).
@@ -8308,7 +8308,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: `rust-toolchain.toml` pins 1.96.0 + clippy/rustfmt + the three cross targets; helper pins live in `TOOL_PINS` in cicd/config.bash (non-gating drift warning).
 		- No test: pin files are settings, and the drift check does not fail the run.
 	- ✅ README badges
-		- Only the ones that carry signal without hosted CI: latest release tag, license, minimum Rust version. Static shields, one line at the top, matching the existing README style.
+		- Only the ones that mean something without hosted CI: latest release tag, license, minimum Rust version. Static shields, one line at the top, matching the existing README style.
 		- No CI badge - there is no hosted workflow to point it at, and a self-reported badge is noise.
 		- Done: Release + minimum-Rust badges added to the existing badge block (license badge was already there). The release badge is static; release.bash refuses to tag until it matches Cargo.toml.
 		- Pinned by: `cicd/tests/hooks/run.bash`.
@@ -8819,7 +8819,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260629-214404
 
 - ✅ Config file: Separate different grouped setting comments and settings (which are good to keep together), by an empty newline. Keep individual settings and comments together though. (20260625)
-	- Done: the shipped template is grouped consistently, each setting with its own comment, and settings that had been riding another group's comment are split into their own.
+	- Done: the default template is grouped consistently, each setting with its own comment, and settings that had been riding another group's comment are split into their own.
 		- Backfill knows about the groups now. A key put back takes its comment block with it, different groups stay separated by a blank line, and keys that belong together, such as columns and rows, stay together.
 		- Note: this only reaches freshly written or newly backfilled keys. Bare keys already in a file are not reformatted; regenerating the file is what gets the clean layout.
 	- Pinned by: `a_straggler_lands_beside_its_siblings_not_with_a_second_paragraph` and `backfill_puts_each_group_in_its_own_section`.
@@ -8901,7 +8901,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260629-214404
 
 - ✅ Config file: When reading a value from the config file, if the entry doesn't exist, insert the setting into the file using hard-coded defaults, in an approprite section. (While not overwriting other existing values, comments, space formatting, etc.) Make this a reusable feature.
-	- Done: on load, any setting the shipped template defines and the file lacks is inserted using the template's own line. A key meant to follow the system stays commented out, and an active key gets its default value.
+	- Done: on load, any setting the default template defines and the file lacks is inserted using the template's own line. A key meant to follow the system stays commented out, and an active key gets its default value.
 		- Keys go in the right section, and nothing already in the file is touched - values, comments and formatting all survive, since this only ever inserts.
 	- Pinned by: `backfill_puts_each_group_in_its_own_section` and `backfill_changes_nothing_that_loaded`.
 	- Opened: 20260628-083740
@@ -9126,7 +9126,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260629-214404
 
 - ✅ Change default columns = 160. Default margin = 8.
-	- Done: the defaults and the shipped template both have the new values. An existing config keeps its own, since a default only ever seeds a fresh file.
+	- Done: the defaults and the default template both have the new values. An existing config keeps its own, since a default only ever seeds a fresh file.
 	- Pinned by: `changed_defaults`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -9319,7 +9319,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Side-by-side panes are not affected.
 	- Split from the smooth scrolling seams item. It shows on builds from before the scroll ledger too.
 	- The fix: a ledger per region in the engine fork, and one slide per region. That is design work across the fork, the pane and the renderer, so it is deferred until it can be worked on by itself.
-	- Since 20260917 the ledger carries on across a region that shares rows with the one in flight (the nano fix), so only regions sharing none still start it over. Stacked panes are that case: they still need a ledger entry and a slide per region, as section 5 says.
+	- Since 20260917 the ledger keeps going across a region that shares rows with the one in flight (the nano fix), so only regions sharing none still start it over. Stacked panes are that case: they still need a ledger entry and a slide per region, as section 5 says.
 	- Opened: 20260911-113647
 
 - ✋ Terminal throughput benchmark: the Windows speed rows.
