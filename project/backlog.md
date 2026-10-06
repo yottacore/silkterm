@@ -34,73 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Light mode: text looks thinner than in dark mode
-	- ID: 2026100607293301
-	- Type: Enhancement
-	- Status: Done
-	- Priority: High
-	- Opened: 20261006-072933
-	- Closed: 20261006-134629
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100513581810
-	- Target OS: All
-	- Requirements:
-		- Dark text on a light background looks thinner than light text on dark. Make light mode's text look as heavy as dark mode's.
-		- Raise the contrast floor a little in light mode.
-		- Then see if the light palettes from 2026100513581810 can be less dark.
-	- Notes:
-		- 20261006: Follows from a look at 2026100513581810's darker palettes. Thicker text may cut the need for darker colors.
-	- Note: the same complaint has come back several times: thin light text on 20260920 and 20260921, darker light colors on 20260929 and 20261005, and now this. Each fixed a different part of it.
-	- Progress log:
-		- Measured: with the sRGB match alone, a screen of light-mode text put down about 80% of the ink its dark-mode twin did, in every built-in theme. Pushing `text.dark_on_light` to 2.0 reached the same ink only by turning more than twice as many pixels solid.
-		- Done: light-mode text lifts its partly covered pixels before the sRGB match, with the enhanced contrast curve DirectWrite uses, at 2.2. The ends stay put, so letters keep their shapes. Light text now puts down 100% to 104% of dark mode's ink, and about as many solid pixels.
-		- Done: a glyph lighter than the gray halfway between the text and its background is left alone. The menu and tab labels in a light theme now draw exactly as they do in dark mode. Before, they got the correction too, in the wrong direction.
-		- Done: the contrast floor is a tenth higher in a light theme, 45% becoming about 50% at the default. Among the built-in colors it only moves SilkTerm's and Pastel's gray (ANSI 8) a little darker, and lightens the Matrix and Retro Amber cursor plates slightly.
-		- Left alone: the light palettes from 2026100513581810. The lift adds ink only at the edges of strokes. The solid part of a letter, which is what that item darkened, has the same color as before, so nothing measured says the colors can come back up. Whether they can is to be judged by eye.
-		- Still needed: a look in a real window, the Settings dialog in a light theme included.
-		- 20261006: The light ANSI colors were eased about a third of the way back toward their old ones, each kept just past the light contrast floor so the floor never moves it. They average 0.52 to 0.54 Oklab L under the paper, from 0.57. The text color stayed where it was, since the cursor needs that depth.
-	- Decisions:
-		- 20261006: thicken light-mode text with a coverage boost, a contrast curve on glyph alpha in light mode only, the way desktop text renderers darken dark-on-light text. Same font, same shapes, no layout change. Not synthetic emboldening, not a heavier font weight.
-		- 20261006: the light palettes can ease back toward lighter now that the text is heavier, but not too light.
-	- Against: the themes design doc accepted that the menu and tab labels got the light-mode correction in the wrong direction. With the stronger lift that would show, so each glyph now says which side of the pair it is on.
-	- Verified: dark mode draws exactly the pixels it drew before, in all four themes, with and without a wallpaper, on Vulkan and GL. Light mode's halo moves the picture as far as before. Full unit suite, clippy and the glyphon fork's tests pass.
-	- Swept: every caller of the contrast floor goes through `Settings::min_contrast` (pane cells, link underline, cursor plate, minimap, wallpaper-derived text). The Settings dialog and the scrim's text pass share the lift through the same correction. Chrome tips are never repainted, so they keep the plain floor.
-	- Branch: lightweight
-	- Commit: 531f6c7
-	- Test case: `light_text_puts_down_the_ink_dark_text_does` (ErwcyUJ) and `a_light_theme_keeps_text_a_little_further_off` (ErwdARW), both seen failing with the lift or the stretch taken out. In the glyphon fork, `the_contrast_boost_adds_ink_between_the_ends` and the shader text check, both seen failing on a broken mirror.
-
-- macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
-	- ID: 2026100114435547
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26, open Settings with the terminal at the top, the middle and the bottom of the screen. The whole dialog stays below the menu bar and above the Dock, buttons in view, centered over the terminal where it fits. Again with the Dock on the side and hidden. About opens over the terminal too.
-	- Severity: High
-	- Opened: 20261001-144356
-	- Opened by: JC
-	- Closed: 20261006-140904
-	- Assigned to: CC
-	- Target OS: macOS
-	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
-	- Steps to reproduce:
-		- Open Settings.
-	- Incorrect behavior: The dialog is nearly the height of the screen, and it is placed so the buttons sit below the bottom edge.
-	- Expected behavior: The dialog is a sensible size and fits on the screen, buttons included.
-	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
-	- Actual cause:
-		- macOS had no work-area read, so the height cap was the whole display less a title bar, and nothing placed the dialog.
-		- macOS centers a new window at its first, smaller size, and a window that grows keeps its bottom edge. A dialog that tall was then pushed down from under the menu bar, and its buttons went off the bottom.
-		- Text a third too big made the natural height taller still (2026100114435561).
-	- Actual fix:
-		- The cap comes off the screen's visible frame, which leaves out the menu bar and the Dock.
-		- The dialog is centered over the terminal and moved onto that area, the same as on Windows. The placement is shared, so on Windows a dialog over a terminal on a monitor left of or above the primary now stays there instead of moving to the primary.
-	- Swept: Both callers of the work area, the size caps and the placement. About takes the same placement.
-	- Test case: `a_mac_dialog_fits_between_the_menu_bar_and_the_dock` (ErUj5Ic) and `a_dialog_stays_on_a_monitor_left_of_the_primary` (ErUj5MS). The first fails with the old cap, the second with the old clamp.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: macsize
-	- Commit: 747356f
-	- Closed:
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -149,215 +82,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
 
-- A shell is listed twice by name, with a different command each time
-	- ID: 2026100408214203
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26, a scan into a new throwaway config (`--config`). The Tabs menu and the Shell tab should show "Bash 3.2.57" and "Bash 5.x" with their own commands, and no plain "Bash" twice. Nothing should flash on screen while the versions are asked. The live config's list should not change.
-	- Severity: High
-	- Opened: 20261004-082142
-	- Closed: 20261006-140839
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100408214202
-	- Target OS: All
-	- Test environment: b26
-	- Steps to reproduce:
-		- On macOS, have Bash installed at both /usr/local/bin/bash and /bin/bash.
-		- Let the shell scan run.
-	- Incorrect behavior: "Bash" shows up twice, once for /usr/local/bin/bash, and again lower down for /bin/bash.
-	- Expected behavior:
-		- Fix it in general, not just for macOS.
-		- If a shell is listed twice by Name but with a different Command:
-			- If one is a symlink of the other, list the shortest path, whether it is the symlink or the real file.
-			- If the shell version is the same, only list the one with the shortest path.
-			- If the shell version is different, add the version to the Name, without extra build info.
-				- E.g. "Bash 3.2.1", "Bash 5.1.0", etc.
-	- Notes:
-		- Before RC1.
-		- 20261004: On a Mac, /bin/bash is Apple's old 3.2, and /usr/local/bin/bash is usually a newer one from Homebrew, so this case likely gets the version names.
-		- 20261004: A change to the scan does not change a list already saved.
-		- 20261004: Duplicates already in a saved list are left alone, and the fix applies to new finds only. A scan only adds shells and switches off missing ones, so a detection fix does not reach an existing list.
-	- Decisions:
-		- 20261004: Leave duplicates already in a saved list alone. The fix applies to new finds only.
-	- Reproduced: 20261004, b23, with the Mac's two bashes stood in. The scan offered "Bash" twice. Tests ErkT4QH, ErkT4Tm, ErkT4Xv and ErkT4bY failed before the fix.
-	- Actual cause:
-		- The scan keeps two different files as two shells, which is right, but names both after the program. On a Mac, PATH finds Homebrew's bash and /etc/shells lists Apple's /bin/bash.
-		- Where one file was reached two ways, the scan kept the first spelling it met, not the shortest.
-	- Actual fix:
-		- One file reached two ways is offered at the shorter path.
-		- Two finds with one name that are different files are asked their version. Same version: one entry, at the shorter path, in the place of the first found, so a login shell keeps the top. Different versions: each name gets its version.
-		- The version is the first dotted number the shell prints for `--version`, with no build info. Only a shared name is asked. Each ask is stopped after 2 seconds, and a shell that does not answer keeps its plain name.
-		- The login shell's "(no rc)" twin follows its shell's path and name, such as "Bash 5.2.37 (no rc)".
-		- A number already at the end of a name grows rather than doubling: "Python 3" becomes "Python 3.12.1".
-	- Swept: the scan is the one place shells are found. `merge` and the saved list are unchanged.
-	- Verified: unit tests, and clippy for Linux, macOS and Windows. No real Mac scan yet.
-	- Branch: shname
-	- Commit: 07ad847
-	- Test case: ErkT4QH `two_versions_of_one_shell_each_show_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path`, ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`, ErkT4bY `a_shell_and_its_link_are_offered_at_the_shorter_path`, ErkT4gH `a_version_goes_into_a_name_the_way_a_person_would_write_it`, ErkT4k5 `the_version_probe_gives_up_on_a_program_that_never_answers`. The first four failed before the fix.
-
-- macOS: the extra prompt info for PowerShell 7 does not work
-	- ID: 2026100408214204
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: A look in a real SilkTerm pane on b26: a PowerShell 7 tab or split opened from a bash pane inside a git project starts there and shows the git part of the prompt.
-	- Severity: High
-	- Opened: 20261004-082142
-	- Closed: 20261006-140822
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: macOS
-	- Test environment: b26
-	- Steps to reproduce:
-		- With "Update PowerShell profiles" on, open a PowerShell 7 pane, inside a git project.
-	- Incorrect behavior: The git-aware prompt does not show.
-	- Expected behavior: The same prompt as on Windows and Linux.
-	- Reproduced: 20261004 on b26, in part. Neither suspect was the cause. The block is in the profile there, the policy answer is Unrestricted, and the stock prompt has the help link. Started inside a git project, PowerShell 7.6 shows the full prompt with the git part, with the same bare environment a Dock launch gives. Started anywhere else, it has no git part to show.
-	- Possible cause: Not known. The block in `shell_integration.ps1` only replaces the prompt PowerShell comes with, which it knows by a help link inside it. It also goes only into profiles the shell would accept. Either could differ on macOS.
-	- Actual cause:
-		- The PowerShell tab or split did not start in the project. A new pane takes the directory of the pane it came from, and the OS answer for that read `/proc`, which macOS does not have. bash and zsh there never report their directory, so a pane opened from one got no directory and started where SilkTerm was started.
-	- Actual fix:
-		- On macOS the shell's directory is read with `proc_pidinfo`. Linux still reads `/proc`.
-	- Swept: every `/proc` read in the source. Config busy check, wallpaper memory test and profiler CPU name are Linux only on purpose. The twin left open is the tab's running-program name (`proc_comm`), which also reads `/proc`, so a macOS tab never names the program running in it.
-	- Verified: the new test fails on b26 with the old lookup (no directory for a live shell) and passes with the fix; all 23 terminal tests pass there. The terminal tests on Linux, and clippy for Linux and macOS, pass.
-	- Branch: macps
-	- Commit: 40f045f
-	- Test case: `a_unix_shell_reports_where_it_is_now_not_where_it_started` (ErkhGGP). A shell that stays put and one that moves must each read back where they are now.
-	- Decision: 20261004, the PowerShell 7 pane was a new tab, so the fix covers it. Still needs the look on b26.
-	- Notes:
-		- Before RC1.
-		- Note: 20261004, the cause is inferred, not seen in a real pane. It holds if the PowerShell pane was a tab or split opened from a bash or zsh pane in the project. The `/proc` fault is real on macOS either way. Related: 2026100410053273.
-
-- wgpu's allocator reserves far more graphics memory than it uses
-	- ID: 2026100419463460
-	- Type: Enhancement
-	- Status: Done
-	- Needs external testing: vm925w: the graphics memory a window and Settings take on DX12, against a build with the old hint, that Settings opens, and `a_new_device_reserves_little_graphics_memory` under `cargo test` there.
-	- Priority: High
-	- Opened: 20261004-194634
-	- Closed: 20261006-140800
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100418225501, 2026100418225505
-	- Target OS: All
-	- Requirements:
-		- wgpu's default memory hint reserves blocks of 128 and 256 MiB. A 2560x1440 window on Vulkan used 167 MiB and was billed 506, and the dialogs' context uses under 1 MiB of its 192.
-		- Test the `MemoryUsage` hint on both devices. On b23 it took the Vulkan window plus the dialogs' context from 702 MiB to 252.
-		- Check that frame times and the Settings open time do not get worse.
-		- The X11 window draws through GL, where the hint does nothing, but its dialogs use Vulkan.
-	- Notes:
-		- 20261004: Figures in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#measure-first). Windows uses the same allocator through DX12 and was not measured.
-	- Progress log:
-		- 20261004: Every device now asks for the `MemoryUsage` hint: the window's on every backend, and the dialogs' kept context.
-		- Measured on b23 at 2560x1440 against a build with the old hint. The X11 process went from 453 to 273 MiB, and the dialogs' context from 201 to 21. The Vulkan window plus the context went from 702 to 256. Regular memory did not change.
-		- Settings opened in 105 ms for each of the first three opens and a median of 66 after, against 108 and 62 with the old hint. Frame times on Vulkan under a scroll flood did not change. Figures in the design doc's [The memory hint](design_docs/20261004-182255_reduce-resources.md#the-memory-hint).
-		- New: `SILK_DLGDBG=1` prints how long Settings took to draw after it was asked for. `cicd/utility/mem-per-window/run.bash` takes `--opens N` and `--flood SECS`, and prints anonymous memory.
-	- Verified: the new test fails with the old hint (192 MiB reserved) and passes with the new one. Native unit tests (1119 passed), native and Windows-target clippy.
-	- Swept: all three device requests in the program go through one function in gfx.rs (`grep -n request_device source/src`). `cicd/utility/gpu-stress/` keeps the old hint on purpose, since it is there to fill the card.
-	- Branch: memhint
-	- Commit: b1ddf3a, 157a2cc
-	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) builds the dialogs' device and fails above 32 MiB reserved. It skips where there is no device, or no allocator report (GL, Metal).
-	- Closed:
-
-- macOS: the interface and terminal fonts are too big
-	- ID: 2026100114435561
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26, terminal text at the size `defaults read -g NSFixedPitchFontSize` gives, or about 11 pt when that is unset, and the menus, tabs and Settings at the size of other apps' interface text. A config with the system size switched off keeps its own size.
-	- Severity: Avg
-	- Opened: 20261001-144356
-	- Closed: 20261006-140739
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435547
-	- Target OS: macOS
-	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
-	- Incorrect behavior: Both the interface fonts and the terminal font are too big. Neither seems to follow the system font size.
-	- Expected behavior: Both start from the size macOS uses.
-	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
-	- Actual cause:
-		- Sizes macOS reports in points were converted at 96 per inch, as on Windows and Linux. A Mac point already is a logical pixel, so everything came out a third too big. The interface's 13 pt became 17.3.
-		- The terminal size was read only from the `NSFixedPitchFontSize` default. Where nobody set it, there was no size to follow and the 17 pixel fallback was used.
-	- Actual fix:
-		- A Mac point is taken as a logical pixel.
-		- The fixed-width size comes from AppKit, which answers with its default when nobody has set one. The interface size is AppKit's system size, still 13 pt.
-		- The family still comes only from a font somebody picked, so the font list is not dropped for Menlo.
-	- Swept: Both point conversions, the terminal size and the interface size.
-	- Test case: `a_mac_point_is_already_a_logical_pixel` (ErUj5E3). It fails with the old conversion.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: macsize
-	- Commit: 747356f
-	- Closed:
-
-- macOS: window transparency does not work
-	- ID: 2026100114435574
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26, turn on Transparency. The desktop shows through the terminal background at the opacity set, while text, menus, tabs and Settings stay solid. A light theme lets through as much as a dark one. Turning it off makes the window solid again, with no relaunch.
-	- Severity: Avg
-	- Opened: 20261001-144356
-	- Closed: 20261006-140959
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: macOS
-	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
-	- Steps to reproduce:
-		- Turn on transparency.
-	- Incorrect behavior: The window stays opaque.
-	- Expected behavior: The desktop shows through, as on Linux and Windows.
-	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
-	- Actual cause: The window was already built transparent. The drawing surface was not. Metal offers only Opaque and PostMultiplied, never PreMultiplied, and the pick fell back to the first one offered, Opaque. That marks the layer opaque, and the transparency gate saw an opaque surface too.
-	- Actual fix: On Metal the surface takes PostMultiplied, which only marks the layer not opaque. macOS still reads it as premultiplied, which is what the app draws, so the light-mode premultiply fix from 20260928 still applies unchanged. Linux and Windows pick what they did before.
-	- Swept: The one place a surface's alpha mode is picked, shared by the main window, the Windows composited path and the dialogs. The X11 GL path sets its own and is not used on macOS.
-	- Test case: `each_platform_picks_a_see_through_alpha_mode_where_it_has_one` (ErUlBTl). It fails with the old pick and passes with the new one.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Progress log:
-		- 20261002: Reported again: the transparency settings do nothing on macOS. Not known yet whether that build had this fix.
-	- Branch: macglass
-	- Commit: c79e3aa
-	- Closed:
-
-- macOS: the menu is inside the window, not in the macOS menu bar
-	- ID: 2026100114435587
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26, the macOS menu bar shows the SilkTerm menu (About SilkTerm, Settings, Services, Hide SilkTerm, Hide others, Show all, Quit SilkTerm), then File, Edit, View, Tabs and Panes, and no menu bar shows inside the window. Each row does what the same row does in the window. The check marks follow the focused pane and the View toggles, and the shell submenus list the active shells. Command+Q quits and the window size is remembered. Command+H hides. With Settings or About open, a menu pick brings that dialog forward instead.
-		- 20261002: No in-window bar comes up with `--hide-menu=false`, and neither View nor the right-click menu has a Menu bar row. File starts with New window, which opens one. Edit's Copy on select and Copy on output check marks follow the focused pane, also when changed from the right-click menu. Full screen covers the macOS menu bar. View has one fullscreen row, with no second Enter Full Screen added by macOS beside it.
-	- Severity: Avg
-	- Opened: 20261001-144356
-	- Closed: 20261006-141012
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435613
-	- Target OS: macOS
-	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
-	- Incorrect behavior: The menu is drawn in the application window.
-	- Expected behavior: The menu is in the macOS menu bar at the top of the screen.
-	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and the fix pinned by tests.
-	- Actual cause: The menus were only ever drawn inside the window. The macOS menu bar had only the small default app menu that winit puts up.
-	- Progress log:
-		- 20261002: View > Menu bar meant the in-window bar, which on a Mac could be read as the system one. There is no in-window bar on macOS at all now, so the wording does not come up. See Decisions.
-		- 20261002: The rows named their Ctrl shortcuts in the label, such as "New tab (Ctrl+Shift+T)", since those were the chords that worked. Mac versions with Command (Command+T, Command+C and so on) were first left out, since they add bindings. They are now added as menu keys and as key bindings. See Decisions.
-	- Decisions:
-		- The in-window bar is hidden by default on macOS, not removed. The system menu bar has every row it has, but not its always-visible copy-mode boxes.
-			- Superseded by the first 20261002 decision.
-		- 20261002: macOS has no in-window menu bar at all. Full screen should cover the macOS menu bar, and if it does not, it is still not SilkTerm's place to break the macOS menu contract. No View > Menu bar row, no right-click Menu bar row, and `--hide-menu` does nothing there. The right-click menu stays.
-		- 20261002: Menu rows on macOS take Apple's standard Command chords, and the same chords work as key bindings. Command never reaches the shell on macOS, and no Ctrl chord is taken from the terminal. Labels on macOS show the Command chord, not the Ctrl one. Other platforms do not change.
-			- The Ctrl half is superseded 20261002: on macOS the program's own chords move from Ctrl to Command (2026100219054469).
-	- Actual fix:
-		- On macOS the system menu bar is built from the same lists the in-window menus use. The SilkTerm menu comes first with About, Settings (Command+,), Services, Hide, Hide others, Show all and Quit. Then File, Edit, View, Tabs and Panes, minus those rows. Help is left off, since About was its only row.
-		- A pick runs the same action as the in-window menu. While a dialog or notice is up it only brings that forward, as a click in the window does. The bar is rebuilt when a check mark or the shell list changes. Rows with a tip in the window show it as a tooltip.
-		- Quit goes through the app's own exit, not winit's default menu.
-		- 20261002: There is no in-window bar on macOS. `--hide-menu` is accepted and ignored there, and its help text says so. There is no config setting for the bar. The Menu bar rows are gone from View and from the right-click menu, and the toggle does nothing there if reached anyway. Linux and Windows are unchanged.
-		- 20261002: The copy-mode boxes on the in-window bar show and flip the focused pane's Copy on select and Copy on output. On macOS those are the two check rows already in Edit, which follow the focused pane. What is lost is seeing their state without opening a menu, and the dimming that marks them inactive while the window is in the background. The UI style guide lists that as a known deviation.
-		- 20261002: File gains New window on macOS, for Command+N. Rows show their Command chords beside a plain label (2026100114435613).
-	- Swept: Every row of the in-window menus but Menu bar is on the system menu bar, checked by test. Every place the in-window bar could come back on macOS: the launch default, `--hide-menu`, the View row, the right-click row, the toggle itself, and Bare window, which only restores what was on. There is no config key. The `--hide-menu` help text and the UI style guide say what macOS does.
-	- Test case: `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8), `there_is_no_in_window_menu_bar_on_macos` (ErZrS8g) and `the_mac_menu_bar_reaches_every_window_row_but_its_toggle` (ErZrT4e). The last two fail with the in-window bar back on macOS. The old `the_mac_menu_bar_reaches_every_row_of_the_window_menus` (ErUnDUL) and `the_in_window_menu_bar_starts_hidden_on_macos_only` (ErUnxsD) are commented out, since the 20261002 decision changed what they pin.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS. Each new test was seen failing with its part of the change undone.
-	- Branch: macmenu, macmenu2
-	- Commit: 02482bb, bb66e6e
-	- Closed:
-
 - macOS: the program's own shortcuts still use Ctrl in places, where a Mac uses Command
 	- ID: 2026100219054469
 	- Type: Bug
@@ -392,129 +116,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `command_comma_is_the_only_settings_chord_on_macos` (ErbGP9B), `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5), `the_shortcut_key_is_command_on_macos_and_ctrl_elsewhere` (ErbGPK5) and `a_mac_text_box_takes_the_mac_keys` (ErbGPQa). Each fails with its part of the change undone.
 		- The old `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm) are commented out, since they pinned the Ctrl chords working on a Mac.
 		- The Linux key tests now ask for the Linux answer by name, so they also hold when run on a Mac. `only_a_held_ctrl_shift_c_is_the_copy_chord` (EpyCuGe) passes the platform in.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: maccmd
-	- Commit: 7179fa9
-
-- Tab rename: Paste from the menu bar goes into the shell, and the box has only basic editing
-	- ID: 2026100219054483
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26, while a tab is being renamed: Edit > Copy and Paste on the menu bar, and Command+C and V, act on the name and nothing reaches the shell. Command+X and A cut and select all. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. A click, a drag, a double-click and a triple-click in the name place the caret, select, take a word and take it all. Right-click opens Cut, Copy, Paste, Delete and Select all. Any other menu pick, such as Command+T, keeps the name first.
-	- Severity: Avg
-	- Opened: 20261002-190545
-	- Closed: 20261006-141118
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100219054469, 2026100114435613
-	- Target OS: All
-	- Incorrect behavior: While a tab is being renamed, Paste from the macOS menu bar, which Command+V reaches, pastes into the shell, not the name. The box takes typing, the arrows, Home, End, Backspace, Delete, Ctrl+A and Ctrl+V, and nothing else.
-	- Expected behavior: A paste goes into the name being typed, from a key or from a menu. The box does full text editing.
-	- Reproduced: No. Read from the code on 20261002.
-	- Decisions:
-		- 20261002: Paste into the tab. Full text editing in the tab.
-	- Actual cause: The rename took only a few keys, and anything from a menu or the mouse went to the terminal. A click on the menu bar ended the rename, so Edit > Paste then went to the shell. On a Mac the menu bar takes Command+C and V before the window sees them, so they went to the shell with the rename still up.
-	- Actual fix:
-		- The rename edits as a Settings text box does, through one shared set of caret rules (`textedit.rs`) and the same per-platform keys: copy, cut, paste and select all, Shift+Delete, Shift+Insert and Ctrl+Insert, moving and erasing by words, Shift to select, and the Mac's Command and Option keys. A paste is one line.
-		- The mouse: a click places the caret, Shift+click extends, a drag selects, a double-click takes a word and a third click the whole name. A middle-click pastes the primary selection where it was clicked.
-		- Right-click, the Menu key or Shift+F10 opens Cut, Copy, Paste, Delete and Select all, less the rows with nothing to act on.
-		- A press on the menu bar or an open menu leaves the rename up. Copy, Paste and Paste Selection from any menu, the macOS menu bar included, act on the name. Any other pick keeps the name first, as a click elsewhere does.
-		- The tab's hover tip no longer comes back over the rename box when the pointer has not moved since the double-click.
-	- Note: The Settings boxes have no undo, so neither does the rename. Selecting in the name does not set the primary selection, as in the Settings boxes.
-	- Swept: Every way a key, a paste or a copy reaches the shell while a rename is up: the key handler (the rename takes every key first), the in-window menu bar and its submenus, the right-click menu, the macOS menu bar, the middle button, and the keyboard copy and paste chords. There is no file drop or input method handling. The Settings boxes' caret code now uses the same shared rules.
-	- Test case: `a_tab_rename_takes_the_text_box_keys` (ErbKd5c), `a_tab_rename_edits_like_a_text_box` (ErbKd9K), `menus_reach_a_tab_rename` (ErbKdDM) and `each_reach_stops_where_its_keys_say` (ErbKd1H). The first three fail with their part of the change undone. `renaming_a_tab_stays_on_character_boundaries` (EoSiOoS) takes the new calls. `caret_from_click_picks_nearest` (EitjFLH) and `word_motion_and_word_at` (EkI1Txg) moved with the code to `textedit.rs`. The tip fix has no test, since it lives in window state no test builds.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS. On Linux in the program: typing, Ctrl+V, Ctrl+C and X, Ctrl+Left and Ctrl+Backspace, a drag, a double-click, Select all and Paste from the right-click menu, a middle-click, and Edit > Copy and Paste from the menu bar all acted on the name, and nothing reached the shell.
-	- Branch: tabedit
-	- Commit: 2034f15
-
-- macOS: Ctrl+click should open the right-click menu
-	- ID: 2026100220260471
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26. In a pane at a shell prompt, Ctrl+click opens the right-click menu at the pointer, and letting go does not pick a row. On a URL the menu starts with Open link and Copy link. In vim with `:set mouse=a`, Ctrl+click opens the menu and the vim cursor does not move.
-		- Double-click a tab to rename it. Ctrl+click on the name opens Cut, Copy, Paste, Delete and Select all. Ctrl+click on a pane ends the rename and opens the pane menu.
-		- Ctrl+Shift+click and Ctrl+Command+click open the menu too. A plain click still selects, Command+click still opens a link, and a two-finger click still opens the menu.
-		- In Settings, Ctrl+click in a text box opens its Cut, Copy, Paste, Delete and Select all menu.
-	- Severity: Avg
-	- Opened: 20261002-202604
-	- Closed: 20261006-141214
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100219054469
-	- Target OS: macOS
-	- Test environment: b26
-	- Incorrect behavior: Since Command took the place of Ctrl on macOS, Ctrl+click is a plain click. Before that it opened links.
-	- Expected behavior: Ctrl+click opens the right-click menu, as it does in other Mac apps.
-	- Reproduced: No. Read from the code on 20261002.
-	- Decisions:
-		- 20261002: Ctrl+click opens the right-click menu on a Mac.
-	- Actual cause: Once Command took over links and block selection on a Mac, nothing read Ctrl at a mouse press, so a Ctrl+click went through as a left click.
-	- Actual fix: On a Mac a left press with Ctrl held acts as a right press, in the terminal window and in the Settings and About window. Other keys held with it do not change that. Linux and Windows are unchanged.
-		- A Ctrl+click on a tab in the tab bar now does nothing, as a right-click there does. In the About box a Ctrl+click on a link does nothing too, since that box has no right-click menu.
-	- Branch: ctrlclick
-	- Commit: b2223d0, 0de1dac
-	- Test case: `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg). It fails with the change undone, and with it applied on every platform. The two press handlers have no test, since they need a live window; the b26 check above covers them.
-
-- macOS: a plain click in a reopened Settings can act as a Ctrl+click
-	- ID: 2026100220463754
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26. Open Settings, hold Ctrl and press Esc, then let go of Ctrl. Open Settings again and click a checkbox with no keys held: it changes. Do the same with Enter in place of Esc.
-		- After closing Settings that way, open About and click its link: the link opens.
-		- Ctrl+click in a Settings text box still opens its Cut, Copy, Paste menu, and a plain click after letting go of Ctrl is a plain click again.
-	- Severity: Avg
-	- Opened: 20261002-204637
-	- Closed: 20261006-141403
-	- Opened by: CC
-	- Related IDs: 2026100220260471
-	- Target OS: macOS
-	- Test environment: b26
-	- Steps to reproduce:
-		- Open Settings. Hold Ctrl and press Esc, so Settings closes with Ctrl still down. Let go of Ctrl.
-		- Open Settings again and click a checkbox with no keys held.
-	- Incorrect behavior: The click acts as a right-click. A checkbox does not change, and a text box opens its Cut, Copy, Paste menu. It stays that way until a modifier key is pressed and let go inside Settings.
-	- Expected behavior: A plain click is a left click.
-	- Reproduced: No. Read from the code on 20261002.
-		- 20261003: Not run, since it needs a Mac. winit 0.30.13's macOS code backs the reading. A closing window drops its delegate before it gives up the focus, so it never reports Ctrl let go. A window that gains the focus reports only that, with no held keys.
-	- Origin: 2026100220260471, branch ctrlclick, b2223d0. Plausible.
-	- Actual cause: The held keys a press in a dialog reads were kept for the program, not for the dialog window, and only that window's reports changed them. A dialog closed with Ctrl down left Ctrl recorded, and the next dialog started out with it.
-	- Actual fix: Each dialog window keeps its own held keys, starting with none. They go when the window goes, whether it closed or another dialog took its place.
-	- Swept: Every place held keys are kept for a window. The Settings text boxes' keys already belonged to the dialog. The notice window keeps none. The terminal window's keys are cleared when it loses the focus, on X11, Wayland, Windows and macOS alike, so they never stick down. Both places that open a dialog replace it without the close path, and both are covered now.
-	- Note: On a Mac, a window that gains the focus while Ctrl is already down does not know it until a key changes, so a Ctrl+click right then is a plain click. The terminal window has the same gap. Left alone, since it never sticks and the next key change corrects it.
-	- Test case: None. A press reads its keys from a live dialog window, which the unit tests cannot make, and the fault needs a Mac's focus rules. The b26 check above covers it. `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg) still pins what a press does with the keys it is given.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: heldkeys
-	- Commit: 669c2d9
-
-- macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
-	- ID: 2026100219054497
-	- Type: Feature
-	- Status: Reopened
-		- Command+Shift+[ and ] doesn't work reliably, seems to be tied in to system screenshots.
-		- Command+{ and } works.
-	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
-		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
-		- With Settings open, the two tab rows and their chords change the dialog's tab.
-		- Neither View nor Window has Show Tab Bar, Merge All Windows or a second pair of tab rows, since the system's own window tabs are off.
-	- Priority: Avg
-	- Opened: 20261002-190545
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435587, 2026100114435613
-	- Target OS: macOS
-	- Test environment: b26
-	- Requirements:
-		- Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, as in other Mac apps.
-		- The macOS menu bar has a Window menu, with Minimize (Command+M) and the other rows Mac apps have there.
-	- Decisions:
-		- 20261002: Command+Shift+[ and ] switch tabs, and the menu bar gets a Window menu.
-	- Done:
-		- Command+Shift+[ and ] are in the Command chord table, so they work as keys and show on the Window menu's Show previous tab and Show next tab rows. A Mac reports Shift+[ as "{" on a US layout, so both spellings count, and the menu row is handed "{" with Command, the form macOS matches.
-		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are done by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
-		- The system's own window tabs are turned off. They would add a Show Tab Bar row to View, and tab rows to Window that take Ctrl+Tab from the shell, beside SilkTerm's own tabs.
-		- With Settings open, the tab rows change the dialog's tab, as they reach it before the dialog sees the keys.
-	- Note: Each window is its own process, so the window list and Bring all to front reach only that window and its dialogs.
-	- Test case: `command_shift_brackets_walk_the_tabs_on_macos` (ErbGPGY) and `the_mac_window_menu_minimizes_zooms_and_walks_the_tabs` (ErbGPNM), which fail with the chords or the Window menu taken out. `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8) and `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) now list the Window menu and its chords.
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
 	- Branch: maccmd
 	- Commit: 7179fa9
@@ -576,102 +177,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 684d3a0, 754c9cb, 8624cc2
 	- Closed:
 
-- Settings: a Keys tab to see and change hotkeys
-	- ID: 2026100307252506
-	- Type: Feature
-	- Status: Done
-	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
-	- Needs external testing:
-		- vm925w: the Keys tab in a real Settings window, which is a child window there. Ctrl, Alt and Alt+Shift chords set by pressing them, a chord held with the Windows key, AltGr, Escape and Backspace, and the new chord working in the terminal after OK.
-		- b26: Command chords set while Settings has focus, including ones the menu bar owns such as Command+W, Command+Q and Command+,. The menu bar may act on those before the dialog sees them, and Command+Q could quit. Option plus a letter may read as the character it types.
-	- Priority: Avg
-	- Opened: 20261003-072525
-	- Closed: 20261006-141937
-	- Opened by: JC
-	- Assigned to: CC
-	- Prereq IDs: 2026100220292607
-	- Related IDs: 2026100309455678
-	- Target OS: All
-	- Requirements:
-		- Before the RC1 cut.
-		- A Keys tab in Settings that lists every hotkey and lets each one be changed or turned off.
-		- It saves to the same config block that the hotkey item adds.
-	- Decisions:
-		- 20261003: One chord per press is enough. A second chord for one hotkey goes in the config file. Nine tabs are fine.
-	- Progress log:
-		- 20261003: A Keys tab, last of nine, with a row for every hotkey under the File, Edit, View, Tabs and Panes headings, named as the menu rows are. Each row is a box with the chords it answers to, "Off" for none, and a revert arrow.
-		- 20261003: Enter, Space or a click on the box waits for the next chord, and every key goes to it until one comes. Escape leaves the row as it was. Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused in the box, with what it needs held. Walking onto a row with Tab does not start it.
-		- 20261003: A chord another hotkey has by default is taken from it the way the file takes it, and both rows say so in dim text after the chords. A chord another hotkey was set to moves to the latest press, and the row it left says where it went.
-		- 20261003: A save writes only the value set for each hotkey, never what another was left with, so the file reads as a hand edit would. The revert arrow puts the template's line back. shcl adds a set value at the top of the `keys:` block rather than in place of its commented line, as it does for every setting (2026100219054510).
-		- 20261003: On a Mac the rows show the Command chords in Apple's order, and Command held at a press is the chord's Command. The platform is passed in, so the Mac rows are tested here.
-		- 20261003: The tab is left out of the dialog's height, as the Shell tab is, and scrolls. The nine tabs are now the widest thing in the dialog, so every tab is a little wider. The style guide lists the tab count as a known deviation.
-		- 20261003: Changed along the way. The dialog's snap to its natural size rounded down, which left a window a part pixel too narrow, with a sideways scrollbar, once the tab strip set the width. It rounds up now. A revert that missed a value saved above its commented default is its own item, 2026100309455678.
-		- 20261003: Known limit: a value is merged with what another window saved per hotkey, not per chord. Two windows that set the same chord for two hotkeys leave both set, and the launch note says which one answers.
-		- 20261003: Still open: one press sets one chord, so a second chord, such as Ctrl+F4 beside Ctrl+Shift+W, can only be added in the file. The labels, the "Off" wording and the prompt text in the box are a first pass.
-	- Note: 20261003: `every_commented_default_line_loads_as_the_default` compares hotkeys by the chords they answer to. An uncommented `keys:` line is now set in the file, which the Keys tab shows with a lit revert arrow, though what it answers to is the same.
-	- Verified:
-		- The unit suite passes, 1054 tests. fmt, and clippy for Linux, Windows and macOS, are clean. The test ID, markdown, TOC and table checks pass.
-		- Each new check failed with its part taken out: the tab left out of the height, the chord moving off another set hotkey, the save writing only set values, Escape ending the wait, and the snap rounding up.
-		- In a real window on Linux, at scale 1 and 2: the tab, the wait prompt, a refused bare letter, Ctrl+Shift+N taken from New window for New tab with both notes, OK writing `new_tab:` only, the new chord opening a tab, the Tabs menu showing it, the revert arrow taking the line back out, and Escape ending the wait before a second one closed Settings.
-	- Swept: every match on the row kinds is exhaustive or was checked by hand (the draw, the hit tests, the focus ring, Space, Enter and the tip). The two generic row tests drive every hotkey row through a save, a revert and a relaunch. The other window size requests in `dialog.rs` already round up.
-	- Branch: keystab
-	- Commit: e217029
-	- Test case: `a_hotkey_row_takes_the_next_chord_pressed` (Erejamb), `a_chord_another_hotkey_had_is_said_on_both_rows` (Erejaq5), `the_keys_tab_shows_the_mac_chords_on_a_mac` (Erejatf), `a_hotkey_row_draws_its_chords_and_its_note_in_the_box` (ErejaxH), `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` (Erejb15), `a_pressed_chord_is_the_one_the_press_matches` (ErejaW7), `the_files_own_values_are_kept_apart_from_the_result` (Erejaj5), `every_hotkey_has_one_row_on_the_keys_tab` (ErektRs), `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (extended), `a_resize_settles_on_the_natural_size_and_lets_go_past_the_snap` (extended), and the generic `every_row_survives_a_save_and_a_relaunch` and `a_row_changed_after_its_revert_keeps_the_change`.
-	- Closed:
-
-- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
-	- ID: 2026100220292607
-	- Type: Feature
-	- Status: Done
-		- Tested b23 [20261006-142134]
-	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
-	- Needs external testing:
-		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
-		- b26: Option+Command+W closes the pane and Command+W still closes the tab. The Panes row on the menu bar, the right-click menu and the Keys tab show Option+Command+W.
-		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
-	- Priority: Avg
-	- Opened: 20261002-202926
-	- Closed: 20261006-144614
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Before v1.
-		- Figure out hotkeys for splitting panes and changing panes.
-		- Then implement hotkey management.
-		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
-	- Notes:
-		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` pins that and will need to change.
-		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
-	- Decisions:
-		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
-		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
-		- 20261003: On macOS, Option+Command+W closes the pane. Command+W stays close tab.
-	- Progress log:
-		- 20261003: One table of hotkeys, defaults plus the config file's `keys:` values, is what the key handler, the in-window menus and the macOS menu bar all read. A menu row shows the first chord its hotkey answers to, so a change in the file shows there too.
-		- 20261003: Windows Terminal's defaults checked: Alt+Shift+Plus duplicates the pane to the right, Alt+Shift+Minus down, and Alt+arrows move focus. It closes a pane with Ctrl+Shift+W, which is close tab here, so Alt+Shift+W per the decision.
-		- 20261003: A bad value keeps its default and is reported at launch with its line. A chord set for one hotkey is taken from any hotkey that has it by default, with a launch note. "none" turns a hotkey off, and quotes are optional.
-		- 20261003: A focus move goes to the nearest pane that way. On a tie, the pane the last move came from wins, then the top or left one, so a move and its opposite go back and forth.
-		- 20261003: Lost to the shell on Linux and Windows: fish's Alt+arrows, tmux's prefix plus Alt+arrows, nano's Alt+Up and Alt+Down, emacs' Meta+Left, Meta+Right and Meta+Shift+W, and readline's Meta+_ (Meta+. still does it). Readline's Alt+b and Alt+f stay free. The split-panes design doc has the list. Nothing is lost on macOS.
-		- 20261003: Changed along the way: F11, the Menu key and Ctrl+F4 now need exactly their keys held, where extra modifiers used to count. Ctrl+Alt+Shift+T, which is how Windows sees AltGr+Shift+T, no longer opens a tab.
-		- 20261003: `no_chord_splits_closes_or_cycles_panes` is commented out, since it pinned the menu-only decision this item reverses. Its Ctrl and Ctrl+Shift checks still hold and moved to `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
-		- 20261003: macOS had no close-pane chord by default. iTerm2 uses Command+W, which is close tab here.
-		- 20261003: Option+Command+W is now the Mac default for Close pane, per Decisions, so the menu bar's Panes row, the right-click menu, the Keys tab and the template's `keys:` line all show it. A Mac config whose commented line still says "none" is brought up to it. Nothing else on a Mac uses that chord; Hide others is Option+Command+H.
-		- 20261003: Two checks that pinned no Mac chord for Close pane are commented out and replaced, in `a_menu_row_shows_the_chord_its_hotkey_answers_to` and `the_keys_tab_shows_the_mac_chords_on_a_mac`. The Mac exception in `every_default_chord_reads_and_none_is_shared` is gone. The Mac half of `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` presses Shift+Command+W now, since the old chord is the default.
-		- 20261003: Off a Mac, Alt+Super+W opens the menu title W, as Alt plus any letter does with Super held. That is older than this change; `the_command_chords_are_the_only_program_chords_on_macos` now allows it.
-			- Note: 20261003, fixed under 2026100311020484, and the test is strict again.
-	- Verified:
-		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
-		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
-		- 20261003, Option+Command+W: the unit suite passes, 1057 tests, and fmt plus clippy for Linux, macOS and Windows are clean. With the Mac default put back to "none", five tests fail: the menu bar list, the Panes row label, the Keys tab row, the default check and the macOS chord test. The refresh of an old "none" line passed for a Linux template; the macOS-only entry itself is unrun. None of it ran on a Mac.
-		- In a real window on Linux, the four Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
-	- Swept: for Option+Command+W, every Mac chord in `keys.rs`, the app menu and Window menu rows in `macmenu.rs`, the template, the Keys tab, the UI style guide and the split-panes design doc.
-	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` writes out a chord by hand any more.
-	- Branch: panekeys, mackeys
-	- Commit: 4cafdde, f4bd3f7
-	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_goes_to_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
-	- Closed:
-
 - The event loop does blocking work on every pass
 	- ID: 2026100314050005
 	- Type: Enhancement
@@ -703,242 +208,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 2e1e8e5
 	- Test case: `the_idle_wait_switch_is_read_once` (fails on the old code, passes now), `the_minimized_state_is_asked_at_most_once_per_recheck` (at most four asks in a second of 60 passes, and the restore events), `the_bindings_in_force_give_every_hotkey`.
 	- Note: Code review 20261003 item 5.
-
-- Settings: every label is shaped again on each pointer move
-	- ID: 2026100314050003
-	- Type: Enhancement
-	- Status: Done
-	- Needs local test suite run?: No
-	- Needs external testing: A real-window look on b23. The caret blinks, a field edit eases, and a tip comes up on time, now that the dialog draws only when told to.
-	- Priority: Avg
-	- Opened: 20261003-140500
-	- Closed: 20261006-142420
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Keep shaped text between dialog frames and shape again only what changed.
-		- A pointer move that changes no hover state does not redraw.
-		- Work out the hover tip once per render.
-	- Progress log:
-		- 20261003: Each `CursorMoved` over a dialog sets it dirty. `dialog.rs` `render` then builds a new glyphon buffer and shapes it for every text item, and rebuilds the rects and texts. A tab with 40 rows shapes 60 to 100 buffers per mouse event.
-		- 20261003: `hover_tip` runs twice per render with the same pointer, once for `over` and once for `found`.
-	- Origin: ec82922 (2026-07-06) for the reshape, c0a7f19 (2026-10-03) for the second `hover_tip`. No earlier review item. Plausible, cost not measured.
-	- Reproduced: 20261004. With the old behavior put back, a frame of the first tab with nothing changed shaped 64 buffers, and every frame looked up the tip twice. Every pointer move drew a frame, and so did every loop pass while a tip was waiting.
-	- Actual fix:
-		- Shaped text is kept from one frame to the next, found by its text, font, weight, color and line box. A frame shapes only text the last one did not have. A move, a new clip or a new width reuses the shape. A new text context, which a font, size or scale change makes, starts over.
-		- A pointer move draws a frame only when it changed something drawn: a drag, the item lit in a dropdown or menu, a lit About button, or a tip going away.
-		- A frame looks up the tip once. A tip coming due, or a field edit's animation step, gets its frame when it is due, not on every pass of the loop.
-	- Swept: every place `render` shaped text (About lines and tip, Settings rows, overlay and tip); both `set_cursor` callers (Settings or About, and the notice); both reads of the dialog's wake in the loop; every branch of the pointer move in `settings_ui.rs`.
-	- Note: Left alone: `measure_ui_text` already keeps its widths. The notice window still reads no wake of its own, as before.
-	- Verified: 20261004, the unit suite passes, 1112 tests, and the sister item's tests pass unchanged. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not looked at in a real window.
-	- Branch: dlgshape
-	- Commit: e894516
-	- Test case: `a_dialog_frame_shapes_nothing_the_last_one_did` (ErlkwlW), `a_dialog_frame_shapes_only_text_that_changed` (Erlkwox), `a_kept_buffer_is_shaped_again_when_what_shaping_reads_changes` (ErlkwsK), `a_dialog_frame_looks_up_the_tip_once` (Erlkwvi) and `a_pointer_move_that_changes_nothing_drawn_needs_no_frame` (Erlkwz5), each seen failing with the old behavior put back. `a_pointer_move_says_whether_it_changed_anything` (Erlkwhi) pins what a move reports.
-	- Note: Code review 20261003 item 3.
-
-- macOS: Command+, should open Settings
-	- ID: 2026100114435613
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26, Command+, opens Settings from the terminal, and the menu bar shows it beside Settings. With Settings already open it brings that one forward. Ctrl+, still opens Settings too.
-		- 20261002: The menu rows show Command+N, T, W, C, V, Plus, Minus, 0, Control+Command+F, and the app menu's Command+, H, Option+H and Q, with no Ctrl chord in any label. Each chord works from the keyboard, Command+= as well as Command+Plus. Command+K or any other unbound Command chord types nothing at the shell. Ctrl+Shift+T, Ctrl+Shift+C and the other Ctrl chords still work, and plain Ctrl+T, Ctrl+W and Ctrl+V still reach the shell. The right-click menu reads "Copy (Command+C)" and so on.
-		- 20261002: The Ctrl lines above are replaced by 2026100219054469's test row. On macOS the Ctrl chords now all go to the shell.
-	- Severity: Low
-	- Opened: 20261001-144356
-	- Closed: 20261006-142459
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435587
-	- Target OS: macOS
-	- Incorrect behavior: Command+, does not open Settings.
-	- Expected behavior: Command+, opens Settings, on macOS only.
-	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by tests.
-	- Actual cause: Only Ctrl+, was a Settings chord, and no menu on macOS had Settings with Command+,.
-	- Actual fix:
-		- Settings in the macOS menu bar's SilkTerm menu takes Command+,. It is part of 2026100114435587.
-		- The key handling also takes Command+, as Settings on macOS, for a press the menu bar does not take. Command+, with Shift or Option is not the chord. Other platforms are unchanged.
-		- 20261002: Command+, is now one of a table of Apple standard chords on macOS: Command+N new window, Command+T new tab, Command+W close tab, Command+C copy, Command+V paste, Command+Plus, Minus and 0 for the font size, Control+Command+F fullscreen and Command+Q quit. The menu bar rows and the key bindings both read that one table. There is no Find yet, so no Command+F.
-		- 20261002: On macOS a press with Command held never reaches the shell. Before, an unbound one such as Command+K typed the letter. Every Ctrl chord means what it did before.
-		- 20261002: On macOS the right-click menu writes its shortcuts as Command chords, and the menu bar labels have none, since the menu bar draws the chord itself.
-	- Note: 20261002: Not covered here. The Settings dialog's text boxes take Ctrl+C, X, V and A only, so on macOS Command+C and Command+V there now go to the menu bar, which only brings the dialog forward. While a tab name is being edited, Command+V from the menu bar pastes into the shell, not the name. Both were read from the code, not seen.
-		- 20261002: Command chords take the place of Ctrl ones everywhere on macOS, the terminal included (2026100219054469). A tab rename gets paste and full text editing (2026100219054483).
-	- Swept: The one key binding function and the one menu bar builder. Every chord in the table is on a menu row and every menu row's chord is in the table, checked by test. Every Ctrl chord is checked to mean the same with the Mac chords on. The right-click menu is the only other menu that shows shortcuts.
-	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY), `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm), `command_never_reaches_the_shell_on_macos` (ErZrRpZ), `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) and `the_mac_right_click_menu_shows_command_chords` (ErZrSS3). The four new ones fail with their part of the change undone. The old `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE) is commented out, since the bar now binds more than the app menu's keys.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: macmenu, macmenu2
-	- Commit: 02482bb, bb66e6e
-	- Closed:
-
-- macOS: Option plus a letter types nothing into a Settings text box
-	- ID: 2026100219240881
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On b26, Option+O types "ø" into a Settings text box and into a tab rename, and Option held underlines nothing on the Settings buttons. With a German layout, if one is set up there, Option+8 types "{".
-	- Severity: Low
-	- Opened: 20261002-192408
-	- Closed: 20261006-143006
-	- Opened by: CC
-	- Related IDs: 2026100219054469, 2026100219054483
-	- Target OS: macOS
-	- Incorrect behavior: On a Mac, Option plus a letter types a character such as "ø". In a Settings text box Option is read as Alt, so the press is taken as a footer button accelerator and nothing is typed. A tab rename also drops a character typed with Option.
-	- Expected behavior: The character is typed. A Mac has no Alt accelerators on buttons.
-	- Reproduced: No. Read from the code on 20261002, while working on 2026100219054469. Plausible.
-	- Actual cause: On a Mac the text boxes read Option as Alt. In Settings an Alt press went to the footer button accelerators, and the tab rename dropped any character typed with Alt held. A Mac reports the character Option makes, and it was lost.
-	- Actual fix: On a Mac, Option is never the accelerator key, so a character typed with it goes into the box. It still moves and erases by words with the arrows and Backspace. Linux and Windows are unchanged.
-	- Swept: Every reader of the held Alt key in the text boxes: the Settings key handling, its button underlines, the dropdown opener on Alt+Down, and the tab rename. The terminal reads Option on its own and is unchanged.
-	- Test case: `option_types_on_a_mac_and_alt_is_an_accelerator_elsewhere` (ErbKdHM), `option_types_into_a_mac_text_box` (ErbKdLR), and the Option lines in `a_tab_rename_takes_the_text_box_keys` (ErbKd5c). Each fails with the change undone.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: tabedit
-	- Commit: 2034f15
-
-- macOS: a Ctrl+click right after a window gets the focus acts as a plain click
-	- ID: 2026100310321918
-	- Type: Bug
-	- Status: Done
-	- Needs external testing:
-		- b26: hold Ctrl and click into a SilkTerm window that doesn't have the focus. That first click opens the right-click menu. The same on a Settings dialog that doesn't have the focus.
-		- b26: bring a window forward with Ctrl held, from the Dock or its title bar, then Ctrl+click in it before pressing anything else. The menu opens.
-	- Severity: Low
-	- Opened: 20261003-103219
-	- Closed: 20261006-142958
-	- Opened by: CC
-	- Related IDs: 2026100220463754, 2026100220260471
-	- Target OS: macOS
-	- Test environment: b26
-	- Steps to reproduce:
-		- Hold Ctrl, then click into a SilkTerm window or Settings that doesn't have the focus, or bring it forward with Ctrl still held and then click.
-	- Incorrect behavior: The click is a plain left click. The window doesn't know Ctrl is down until a modifier key changes.
-	- Expected behavior: A Ctrl+click opens the right-click menu, as it does once the window knows Ctrl is held.
-	- Reproduced: No. Read from winit 0.30.13's macOS code on 20261003. A window that gains the focus reports only that, with no held keys.
-	- Possible cause: none found. winit 0.30.13 on macOS reads the held keys from each click, key press and mouse move, from that event's own flags, and reports a change just before the event. The click that brings a window forward reaches the window, since SilkTerm leaves winit's first-click setting on. So a Ctrl+click on a window that just got the focus should already arrive with Ctrl held. Read only, not seen on a Mac.
-	- Progress log:
-		- 20261003: No code changed. Seeding the held keys from the system when the focus arrives was weighed and left out. winit reports a change only against its own last value, which it clears when the window loses the focus. A Ctrl seeded that way and let go before any other event would never be reported, so it would stick, as in 2026100220463754.
-		- 20261003: If b26 shows the bug anyway, the cause is elsewhere. `SILK_KEYDBG=1` prints each held-key and focus change for the terminal window, which is the next thing to look at.
-	- Decisions:
-		- 20261003: It should work as expected, where that is reasonably possible.
-	- Actual fix: none, see the progress log.
-	- Branch: mackeys
-	- Test case: none. The gap would be in winit's macOS event code, which no test here can drive. The app's half, a left press with Ctrl held acting as a right press, is `ctrl_click_is_the_right_click_on_macos_only`.
-
-- macOS: the first frames after a window shows are drawn at the default size
-	- ID: 2026100517535929
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: The `newwin` Windows scenario on vm925w, since every resize event now reads the window's size. A window resize and Settings on Wayland.
-	- Severity: Low
-	- Opened: 20261005-175359
-	- Closed: 20261006-143038
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100514211602, 2026100114274893
-	- Target OS: macOS
-	- Test environment: b26
-	- Incorrect behavior: For about 80 ms after a new window shows, its frames are drawn at 1000x640 points, while the window is already at its launch size.
-	- Expected behavior: The first frame on screen is drawn at the window's size.
-	- Reproduced: No. Seen 20261005 on b26 in what the window reported about its size, not looked at on screen.
-	- Possible cause: winit's `request_inner_size` answers nothing on macOS, though the window takes the size at once, so the surface waits for the resize event. A hidden window's frame is refused as occluded and the window is shown at once (2026100114274893), before that event comes.
-	- Reproduced: Partly, 20261006 on b26. For about 85 ms after launch the surface was at the creation size, 2000x1280 pixels, while the window was already 2394x828, and the late resize from creation set it back to 2000x1280 once more. But no frame was drawn at that size in 6 launches. macOS refuses every frame until the window is on screen, about 110 ms in, and the real size has arrived by then. The Settings dialog was the same at its first size, 560x800.
-	- Actual cause:
-		- winit on macOS answers nothing when asked for a size, though the window takes it at once. So the surface stayed at the creation size until a resize event came.
-		- The resize event from the window's creation comes after the real size is in place, and it moved the surface back to the creation size until the next one.
-	- Actual fix:
-		- A size request that winit answers with nothing still counts when the window already has a new size. The surface is made at the window's size before the first frame. Every size request goes through this, the dialogs' too.
-		- A resize event sizes the surface at the window's own size, not the event's, so a stale one changes nothing. Same for the dialogs.
-		- 20261006: kept as a guard against the race, though no wrong frame was seen.
-	- Swept: every `request_inner_size` call, 2 in app.rs and 6 in dialog.rs, and the 3 resize event handlers (window, dialog, notice).
-	- Verified:
-		- b26: 6 launches with the fix and 6 without, and Settings opened once each. With the fix the surface had the window's size from the start, and the late creation resize left it alone. Without it, as under Reproduced.
-		- Linux X11: `cicd/tests/startsize/run.bash` and `cicd/tests/wpresize/run.bash` pass, the unit tests pass, and Settings opened and resized under xfwm4 drew at its size.
-	- Note: Windows and Wayland already answer a size request at once, and their resize events report the window's size, so nothing should change there. Not run on either.
-	- Branch: macfirst
-	- Commit: 621d931
-	- Test case: `a_size_the_window_took_without_saying_is_drawn_at` (ErwgxDd), failing on the old code. The resize event half has no unit test, since it needs a real window.
-
-- Code style: bash scripts drift from the house conventions
-	- ID: 2026100314050013
-	- Type: Bug
-	- Status: Done
-	- Needs local test suite run?: Yes. A full `cicd/cicd.bash` run, since the profiler, dogfood and publish stages only run there.
-	- Needs external testing: install.bash under the macOS bash 3.2 on b26.
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Closed: 20261006-143052
-	- Opened by: CC
-	- Target OS: Linux
-	- Incorrect behavior:
-		- 45 functions and about 80 variables are snake_case, mostly in cicd.bash, gui-headless.bash, termbench-run.bash and the scroll test. release.bash has its own `die` and plain `echo`.
-		- install.bash uses `[ ]` on 60 lines. Bash 3.2 has `[[ ]]`, and the same file already uses it.
-		- 755 expansions are not braced, most in gui-headless.bash and both git hooks.
-	- Expected behavior: `fCamelCase` functions, camelCase variables, `[[ ]]`, and `"${var}"`.
-	- Note: `retry_build` is named in the project notes, and the gfs helpers are shared with other projects, so those renames go with their references.
-	- Origin: db4d40b (2026-08-01) for cicd.bash, c09beb3 (2026-08-06) for install.bash, c7678e6 (2026-09-17) for gui-headless.bash. No earlier review item. Confirmed.
-	- Actual fix [Bug]:
-		- Functions are fCamelCase and variables camelCase, with every caller, test and note that names them. `retry_build` is now `fRetryBuild`.
-		- The output helpers moved out of cicd.bash into `cicd/utility/include/echo.bash`. release.bash sources it, so it prints through fEcho_Clean and fails through fDie.
-		- install.bash and its test use `[[ ]]` throughout. Version fields there compare as base 10, since `-gt` inside `[[ ]]` would read a leading zero as octal.
-		- Every expansion is braced, `$1` and `$@` too. `$?`, `$#`, `$$` and `$!` stay as they are.
-		- New gate `cicd/utility/bash-style.bash`, run in stage 3 after shellcheck. It checks the braces, `[[ ]]` in Bash, and fCamelCase function names.
-	- Note: Left alone on purpose:
-		- The copies shared with other projects: gfs-rotate.bash with its `gfs_rotate`, x9ps1-git.bash, n8git_backup-and-publish and runterm.
-		- UPPER_SNAKE_CASE settings and environment names, which are an interface.
-		- `[ ]` in the two git hooks and the scene scripts, which run under sh or dash.
-		- Other tools' setting names (`enable_wayland`, `initial_window_width`), the engine test's `uname` stand-in, and code inside single-quoted `bash -c` strings and awk programs.
-	- Swept: every tracked `.bash` and `.sh` file plus both hooks, by function definitions, assignments and expansions. The gate now runs over the same list.
-	- Verified: 20261006.
-		- shellcheck is clean, and the new gate passes on the branch. On the dev copies of cicd.bash, install.bash, gui-headless.bash, pre-push and the engine test it fails: 230 unbraced expansions, 77 `[ ]` tests, 26 names.
-		- These script tests pass: engine, packaging, publish, release, release notes, sync, gates, hooks, install, rename, pins, pslint, pylint, win-remote, wingui harness, wine, cicd-win, rotate, testdir, scroll verdict, demo and showdown.
-		- The scroll harness passed all 11 scenes on X11, plus the Wayland arm and the real-app smoke. gui-headless.bash start, launch, shot, status and stop work. release.bash stops with the fDie line off main.
-	- Branch: bashstyle
-	- Commit: 7657f19, a8fe9f7, c5eae4f, ca6ee0c, ed813ba, 2314eb1, 8f5a67b
-	- Test case: `cicd/utility/bash-style.bash`, the stage 3 gate. The install, hooks, engine, packaging and publish tests cover what the renames touched.
-	- Note: Code review 20261003 item 13.
-
-- Code style: the PowerShell scripts follow bash conventions
-	- ID: 2026100314050015
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: The Windows GUI scenarios on vm925w, since they run under StrictMode now: the pipeline list, idlewake and idlemin, and gpuload-on and gpuload-off with gpu-stress sent along. On b29w only consolemsg and _selftest ran. The rest skipped, since the console session there was locked.
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Closed: 20261006-143134
-	- Opened by: CC
-	- Target OS: Windows
-	- Incorrect behavior:
-		- All 164 functions are `fCamelCase`. None is Verb-Noun, so the approved-verb lint can never fire.
-		- No script has comment-based help. Three use `[CmdletBinding()]`. `install.ps1` has two untyped parameters.
-		- Nine scripts set `Set-StrictMode -Version 2.0`, not Latest, with no reason given.
-		- 29 calls pass three or more positional arguments, and five use the `-EA` alias.
-		- Eight loops grow an array with `+=`.
-	- Expected behavior: The PowerShell section of the directives.
-	- Progress log:
-		- 20261003: The naming half was open at first: rename to Verb-Noun, or record `fCamelCase` as a house allowance with its reason, the way Write-Host is.
-		- 20261003: `PSUseApprovedVerbs` is now in the lint's excluded rules, with the reason beside it.
-		- 20261006: Every script has comment-based help under its copyright lines, except the profile snippet. Small helper functions keep their one-line comments rather than a help block each.
-		- 20261006: StrictMode is Latest where it was 2.0, and in the scripts that had none: the job scripts, and the GUI harness, which covers its scenarios. A dot-sourced library leaves it to its caller. `shell_integration.ps1` runs in the user's own shell, so it has no help block and sets nothing.
-		- 20261006: `[CmdletBinding()]` on every script with a param block, and every script and function parameter typed. Script block parameters were left alone.
-		- 20261006: prerequisites.md and design.md say the dogfood launcher needs PowerShell 7, and it does not run on 5.1 today. Its changes keep to 5.1 syntax, but it was not made to run there.
-		- 20261006: Also fixed: install.ps1 failed at once when the shell running it had StrictMode on, which the `irm | iex` one-liner meets in a user's own session. It read a Path property that a script block does not have. Its `mv` is now called by path, which the lint on Windows flagged as Move-Item's alias.
-		- 20261006: Three shell scan unit tests fail on Windows, apart from this item. Filed as 2026100612422856.
-	- Decisions:
-		- 20261003: `fCamelCase` function names stay. They are an exception for this project only. The rest of the item stands.
-		- 20261006: every PowerShell file is ASCII only, the way shcl's are. The copyright line is `Copyright (C) <year> Jim Collier` with no ID, rules are `=`, and cicd-win.ps1 lost its byte-order mark. ps-lint fails on any byte above 127.
-	- Actual fix:
-		- `ps-lint.ps1` checks two more things: a PowerShell command given three or more arguments by position, and a common parameter by its alias, such as `-EA`. A command counts as PowerShell's when a linted script defines it, or when it is Verb-Noun and no program has that name.
-		- The 42 findings are fixed: arguments named, `-EA` written out.
-		- Arrays grown in loops are lists or the loop's own output, in cicd-win.ps1, install.ps1, n8runterm.ps1 and the GUI harness. The harness keeps its check lines in a list too, since a scenario can add 250 of them one call at a time.
-		- What StrictMode would trip on was fixed first: a process that has gone, a filter that kept nothing, a reference picture read before it was set.
-		- `cicd-win.ps1 -Help` prints its help block.
-		- The style guide's PowerShell section has the new rules.
-	- Origin: c09beb3 (2026-08-06) for install.ps1, 96da710 (2026-07-22) for cicd-win.ps1, 4050e29 (2026-09-08) for n8runterm.ps1. No earlier review item. Confirmed.
-	- Swept: `ps-lint.ps1` over every tracked script reports nothing, on Linux and on Windows. A parse of every script finds no `+=` in a loop but counters and strings. Every script's help reads back through the parser.
-	- Verified:
-		- The lint test fails on its new cases without the new checks, and passes with them.
-		- Linux: the install, release, cicd-win, pins, packaging, test folder, launcher and GUI harness tests, the docs test and the script header test.
-		- b29w: `cicd-win.ps1 -Quick` with its three unrelated failing tests skipped, including the installer tests under PowerShell 7 and 5.1. The test folder test under 5.1. The info and cliflags jobs. The console job ran too, and said there was no test session to move.
-	- Branch: psstyle
-	- Commit: e96dfbd, 1bc067a, 86f2ac3, 767f176, 63ff9f7, 353939c, cfc3f2d, 84241a8
-	- Test case: The PowerShell lint test, `cicd/tests/pslint/run.bash` (Er2UgYC), with planted positional and alias cases. The installer fault is pinned by the install test, whose PowerShell cases now run from a shell with StrictMode on. 7 of them failed before the fix.
-	- Note: Code review 20261003 item 15.
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
@@ -975,38 +244,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- Windows: three shell scan unit tests fail
-	- ID: 2026100612422856
-	- Type: Bug
-	- Status: Done
-	- Severity: High
-	- Opened: 20261006-124228
-	- Closed: 20261006-161306
-	- Opened by: CC
-	- Related IDs: 2026100408214203
-	- Target OS: Windows
-	- Incorrect behavior: `cargo test` on Windows fails ErkT4QH `two_versions_of_one_shell_each_show_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path` and ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`. So `cicd-win.ps1` stops at its test stage. The other 1130 pass.
-	- Expected behavior: They pass on Windows, or say why they are Unix only.
-	- Reproduced: 20261006 on b29w, at dev c4dc098's source.
-		- 20261006: again on b29w at d12bb18, with the same 3 failures.
-	- Actual cause:
-		- A test fault. All 3 tests stand in for a Mac and lean on two Unix-only rules.
-		- ErkT4QH finds the newer bash by its bare name on PATH. The Windows table does not look for bash by name, so there was only one Bash and nothing to tell apart.
-		- ErkT4Tm and ErkT4Xv expect the login shell first, with its "(no rc)" twin right under it. Windows has no login shell, so ComSpec takes its normal place in the order.
-		- The merge itself worked on Windows. ErkT4Xv got the right names there, only in another order.
-	- Actual fix:
-		- The 3 tests and their two helpers are Unix only now, with the reason beside them.
-		- A new test runs the same merge on every box with the Windows case: two MSYS2 bashes under one name. Different versions get their versions in their names, the same version is one entry at the shorter path, and a silent one keeps its name.
-	- Swept: every test of `detect_with` in shells.rs. The others pass on Windows, or were already Unix only, such as ErkT4bY, which makes real symlinks.
-	- Verified:
-		- b29w: the 3 tests failed at d12bb18. At the branch they are left out, the new test passes, and so do all 33 shells tests.
-		- The new test fails with the version merge turned off, and passes with it.
-		- Linux: the 40 shells tests pass. clippy for Linux and Windows, rustfmt and the test ID check are clean.
-		- The full Windows suite and `cicd-win.ps1` were not rerun.
-	- Branch: winshtest
-	- Commit: 47c3a53
-	- Test case: ErxsizA `two_bashes_of_one_environment_are_told_apart_or_merged`. On Windows the 3 tests failed before and are left out after, with the reason in a comment.
-	- Acceptance signoff: Self-closed: test fault, reproduced on b29w, and checked there after the fix.
+- macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
+	- ID: 2026100219054497
+	- Type: Feature
+	- Status: Reopened
+		- Command+Shift+[ and ] doesn't work reliably, seems to be tied in to system screenshots.
+		- Command+{ and } works.
+	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
+		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
+		- With Settings open, the two tab rows and their chords change the dialog's tab.
+		- Neither View nor Window has Show Tab Bar, Merge All Windows or a second pair of tab rows, since the system's own window tabs are off.
+	- Priority: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435587, 2026100114435613
+	- Target OS: macOS
+	- Test environment: b26
+	- Requirements:
+		- Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, as in other Mac apps.
+		- The macOS menu bar has a Window menu, with Minimize (Command+M) and the other rows Mac apps have there.
+	- Decisions:
+		- 20261002: Command+Shift+[ and ] switch tabs, and the menu bar gets a Window menu.
+	- Done:
+		- Command+Shift+[ and ] are in the Command chord table, so they work as keys and show on the Window menu's Show previous tab and Show next tab rows. A Mac reports Shift+[ as "{" on a US layout, so both spellings count, and the menu row is handed "{" with Command, the form macOS matches.
+		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are done by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
+		- The system's own window tabs are turned off. They would add a Show Tab Bar row to View, and tab rows to Window that take Ctrl+Tab from the shell, beside SilkTerm's own tabs.
+		- With Settings open, the tab rows change the dialog's tab, as they reach it before the dialog sees the keys.
+	- Note: Each window is its own process, so the window list and Bring all to front reach only that window and its dialogs.
+	- Test case: `command_shift_brackets_walk_the_tabs_on_macos` (ErbGPGY) and `the_mac_window_menu_minimizes_zooms_and_walks_the_tabs` (ErbGPNM), which fail with the chords or the Window menu taken out. `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8) and `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) now list the Window menu and its chords.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: maccmd
+	- Commit: 7179fa9
 
 - Software rendering crashes on b23 with an X11 BadDrawable error
 	- ID: 2026100614510979
@@ -1284,6 +553,149 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
 
+- macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
+	- ID: 2026100114435547
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, open Settings with the terminal at the top, the middle and the bottom of the screen. The whole dialog stays below the menu bar and above the Dock, buttons in view, centered over the terminal where it fits. Again with the Dock on the side and hidden. About opens over the terminal too.
+	- Severity: High
+	- Opened: 20261001-144356
+	- Opened by: JC
+	- Closed: 20261006-140904
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Steps to reproduce:
+		- Open Settings.
+	- Incorrect behavior: The dialog is nearly the height of the screen, and it is placed so the buttons sit below the bottom edge.
+	- Expected behavior: The dialog is a sensible size and fits on the screen, buttons included.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
+	- Actual cause:
+		- macOS had no work-area read, so the height cap was the whole display less a title bar, and nothing placed the dialog.
+		- macOS centers a new window at its first, smaller size, and a window that grows keeps its bottom edge. A dialog that tall was then pushed down from under the menu bar, and its buttons went off the bottom.
+		- Text a third too big made the natural height taller still (2026100114435561).
+	- Actual fix:
+		- The cap comes off the screen's visible frame, which leaves out the menu bar and the Dock.
+		- The dialog is centered over the terminal and moved onto that area, the same as on Windows. The placement is shared, so on Windows a dialog over a terminal on a monitor left of or above the primary now stays there instead of moving to the primary.
+	- Swept: Both callers of the work area, the size caps and the placement. About takes the same placement.
+	- Test case: `a_mac_dialog_fits_between_the_menu_bar_and_the_dock` (ErUj5Ic) and `a_dialog_stays_on_a_monitor_left_of_the_primary` (ErUj5MS). The first fails with the old cap, the second with the old clamp.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macsize
+	- Commit: 747356f
+	- Closed:
+
+- A shell is listed twice by name, with a different command each time
+	- ID: 2026100408214203
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, a scan into a new throwaway config (`--config`). The Tabs menu and the Shell tab should show "Bash 3.2.57" and "Bash 5.x" with their own commands, and no plain "Bash" twice. Nothing should flash on screen while the versions are asked. The live config's list should not change.
+	- Severity: High
+	- Opened: 20261004-082142
+	- Closed: 20261006-140839
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100408214202
+	- Target OS: All
+	- Test environment: b26
+	- Steps to reproduce:
+		- On macOS, have Bash installed at both /usr/local/bin/bash and /bin/bash.
+		- Let the shell scan run.
+	- Incorrect behavior: "Bash" shows up twice, once for /usr/local/bin/bash, and again lower down for /bin/bash.
+	- Expected behavior:
+		- Fix it in general, not just for macOS.
+		- If a shell is listed twice by Name but with a different Command:
+			- If one is a symlink of the other, list the shortest path, whether it is the symlink or the real file.
+			- If the shell version is the same, only list the one with the shortest path.
+			- If the shell version is different, add the version to the Name, without extra build info.
+				- E.g. "Bash 3.2.1", "Bash 5.1.0", etc.
+	- Notes:
+		- Before RC1.
+		- 20261004: On a Mac, /bin/bash is Apple's old 3.2, and /usr/local/bin/bash is usually a newer one from Homebrew, so this case likely gets the version names.
+		- 20261004: A change to the scan does not change a list already saved.
+		- 20261004: Duplicates already in a saved list are left alone, and the fix applies to new finds only. A scan only adds shells and switches off missing ones, so a detection fix does not reach an existing list.
+	- Decisions:
+		- 20261004: Leave duplicates already in a saved list alone. The fix applies to new finds only.
+	- Reproduced: 20261004, b23, with the Mac's two bashes stood in. The scan offered "Bash" twice. Tests ErkT4QH, ErkT4Tm, ErkT4Xv and ErkT4bY failed before the fix.
+	- Actual cause:
+		- The scan keeps two different files as two shells, which is right, but names both after the program. On a Mac, PATH finds Homebrew's bash and /etc/shells lists Apple's /bin/bash.
+		- Where one file was reached two ways, the scan kept the first spelling it met, not the shortest.
+	- Actual fix:
+		- One file reached two ways is offered at the shorter path.
+		- Two finds with one name that are different files are asked their version. Same version: one entry, at the shorter path, in the place of the first found, so a login shell keeps the top. Different versions: each name gets its version.
+		- The version is the first dotted number the shell prints for `--version`, with no build info. Only a shared name is asked. Each ask is stopped after 2 seconds, and a shell that does not answer keeps its plain name.
+		- The login shell's "(no rc)" twin follows its shell's path and name, such as "Bash 5.2.37 (no rc)".
+		- A number already at the end of a name grows rather than doubling: "Python 3" becomes "Python 3.12.1".
+	- Swept: the scan is the one place shells are found. `merge` and the saved list are unchanged.
+	- Verified: unit tests, and clippy for Linux, macOS and Windows. No real Mac scan yet.
+	- Branch: shname
+	- Commit: 07ad847
+	- Test case: ErkT4QH `two_versions_of_one_shell_each_show_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path`, ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`, ErkT4bY `a_shell_and_its_link_are_offered_at_the_shorter_path`, ErkT4gH `a_version_goes_into_a_name_the_way_a_person_would_write_it`, ErkT4k5 `the_version_probe_gives_up_on_a_program_that_never_answers`. The first four failed before the fix.
+
+- macOS: the extra prompt info for PowerShell 7 does not work
+	- ID: 2026100408214204
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: A look in a real SilkTerm pane on b26: a PowerShell 7 tab or split opened from a bash pane inside a git project starts there and shows the git part of the prompt.
+	- Severity: High
+	- Opened: 20261004-082142
+	- Closed: 20261006-140822
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- With "Update PowerShell profiles" on, open a PowerShell 7 pane, inside a git project.
+	- Incorrect behavior: The git-aware prompt does not show.
+	- Expected behavior: The same prompt as on Windows and Linux.
+	- Reproduced: 20261004 on b26, in part. Neither suspect was the cause. The block is in the profile there, the policy answer is Unrestricted, and the stock prompt has the help link. Started inside a git project, PowerShell 7.6 shows the full prompt with the git part, with the same bare environment a Dock launch gives. Started anywhere else, it has no git part to show.
+	- Possible cause: Not known. The block in `shell_integration.ps1` only replaces the prompt PowerShell comes with, which it knows by a help link inside it. It also goes only into profiles the shell would accept. Either could differ on macOS.
+	- Actual cause:
+		- The PowerShell tab or split did not start in the project. A new pane takes the directory of the pane it came from, and the OS answer for that read `/proc`, which macOS does not have. bash and zsh there never report their directory, so a pane opened from one got no directory and started where SilkTerm was started.
+	- Actual fix:
+		- On macOS the shell's directory is read with `proc_pidinfo`. Linux still reads `/proc`.
+	- Swept: every `/proc` read in the source. Config busy check, wallpaper memory test and profiler CPU name are Linux only on purpose. The twin left open is the tab's running-program name (`proc_comm`), which also reads `/proc`, so a macOS tab never names the program running in it.
+	- Verified: the new test fails on b26 with the old lookup (no directory for a live shell) and passes with the fix; all 23 terminal tests pass there. The terminal tests on Linux, and clippy for Linux and macOS, pass.
+	- Branch: macps
+	- Commit: 40f045f
+	- Test case: `a_unix_shell_reports_where_it_is_now_not_where_it_started` (ErkhGGP). A shell that stays put and one that moves must each read back where they are now.
+	- Decision: 20261004, the PowerShell 7 pane was a new tab, so the fix covers it. Still needs the look on b26.
+	- Notes:
+		- Before RC1.
+		- Note: 20261004, the cause is inferred, not seen in a real pane. It holds if the PowerShell pane was a tab or split opened from a bash or zsh pane in the project. The `/proc` fault is real on macOS either way. Related: 2026100410053273.
+
+- Windows: three shell scan unit tests fail
+	- ID: 2026100612422856
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261006-124228
+	- Closed: 20261006-161306
+	- Opened by: CC
+	- Related IDs: 2026100408214203
+	- Target OS: Windows
+	- Incorrect behavior: `cargo test` on Windows fails ErkT4QH `two_versions_of_one_shell_each_show_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path` and ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`. So `cicd-win.ps1` stops at its test stage. The other 1130 pass.
+	- Expected behavior: They pass on Windows, or say why they are Unix only.
+	- Reproduced: 20261006 on b29w, at dev c4dc098's source.
+		- 20261006: again on b29w at d12bb18, with the same 3 failures.
+	- Actual cause:
+		- A test fault. All 3 tests stand in for a Mac and lean on two Unix-only rules.
+		- ErkT4QH finds the newer bash by its bare name on PATH. The Windows table does not look for bash by name, so there was only one Bash and nothing to tell apart.
+		- ErkT4Tm and ErkT4Xv expect the login shell first, with its "(no rc)" twin right under it. Windows has no login shell, so ComSpec takes its normal place in the order.
+		- The merge itself worked on Windows. ErkT4Xv got the right names there, only in another order.
+	- Actual fix:
+		- The 3 tests and their two helpers are Unix only now, with the reason beside them.
+		- A new test runs the same merge on every box with the Windows case: two MSYS2 bashes under one name. Different versions get their versions in their names, the same version is one entry at the shorter path, and a silent one keeps its name.
+	- Swept: every test of `detect_with` in shells.rs. The others pass on Windows, or were already Unix only, such as ErkT4bY, which makes real symlinks.
+	- Verified:
+		- b29w: the 3 tests failed at d12bb18. At the branch they are left out, the new test passes, and so do all 33 shells tests.
+		- The new test fails with the version merge turned off, and passes with it.
+		- Linux: the 40 shells tests pass. clippy for Linux and Windows, rustfmt and the test ID check are clean.
+		- The full Windows suite and `cicd-win.ps1` were not rerun.
+	- Branch: winshtest
+	- Commit: 47c3a53
+	- Test case: ErxsizA `two_bashes_of_one_environment_are_told_apart_or_merged`. On Windows the 3 tests failed before and are left out after, with the reason in a comment.
+	- Acceptance signoff: Self-closed: test fault, reproduced on b29w, and checked there after the fix.
+
 - macOS: a window opened with Command+N is smaller, and its size is the one remembered
 	- ID: 2026100514211602
 	- Type: Bug
@@ -1513,6 +925,73 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- Light mode: text looks thinner than in dark mode
+	- ID: 2026100607293301
+	- Type: Enhancement
+	- Status: Done
+	- Priority: High
+	- Opened: 20261006-072933
+	- Closed: 20261006-134629
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100513581810
+	- Target OS: All
+	- Requirements:
+		- Dark text on a light background looks thinner than light text on dark. Make light mode's text look as heavy as dark mode's.
+		- Raise the contrast floor a little in light mode.
+		- Then see if the light palettes from 2026100513581810 can be less dark.
+	- Notes:
+		- 20261006: Follows from a look at 2026100513581810's darker palettes. Thicker text may cut the need for darker colors.
+	- Note: the same complaint has come back several times: thin light text on 20260920 and 20260921, darker light colors on 20260929 and 20261005, and now this. Each fixed a different part of it.
+	- Progress log:
+		- Measured: with the sRGB match alone, a screen of light-mode text put down about 80% of the ink its dark-mode twin did, in every built-in theme. Pushing `text.dark_on_light` to 2.0 reached the same ink only by turning more than twice as many pixels solid.
+		- Done: light-mode text lifts its partly covered pixels before the sRGB match, with the enhanced contrast curve DirectWrite uses, at 2.2. The ends stay put, so letters keep their shapes. Light text now puts down 100% to 104% of dark mode's ink, and about as many solid pixels.
+		- Done: a glyph lighter than the gray halfway between the text and its background is left alone. The menu and tab labels in a light theme now draw exactly as they do in dark mode. Before, they got the correction too, in the wrong direction.
+		- Done: the contrast floor is a tenth higher in a light theme, 45% becoming about 50% at the default. Among the built-in colors it only moves SilkTerm's and Pastel's gray (ANSI 8) a little darker, and lightens the Matrix and Retro Amber cursor plates slightly.
+		- Left alone: the light palettes from 2026100513581810. The lift adds ink only at the edges of strokes. The solid part of a letter, which is what that item darkened, has the same color as before, so nothing measured says the colors can come back up. Whether they can is to be judged by eye.
+		- Still needed: a look in a real window, the Settings dialog in a light theme included.
+		- 20261006: The light ANSI colors were eased about a third of the way back toward their old ones, each kept just past the light contrast floor so the floor never moves it. They average 0.52 to 0.54 Oklab L under the paper, from 0.57. The text color stayed where it was, since the cursor needs that depth.
+	- Decisions:
+		- 20261006: thicken light-mode text with a coverage boost, a contrast curve on glyph alpha in light mode only, the way desktop text renderers darken dark-on-light text. Same font, same shapes, no layout change. Not synthetic emboldening, not a heavier font weight.
+		- 20261006: the light palettes can ease back toward lighter now that the text is heavier, but not too light.
+	- Against: the themes design doc accepted that the menu and tab labels got the light-mode correction in the wrong direction. With the stronger lift that would show, so each glyph now says which side of the pair it is on.
+	- Verified: dark mode draws exactly the pixels it drew before, in all four themes, with and without a wallpaper, on Vulkan and GL. Light mode's halo moves the picture as far as before. Full unit suite, clippy and the glyphon fork's tests pass.
+	- Swept: every caller of the contrast floor goes through `Settings::min_contrast` (pane cells, link underline, cursor plate, minimap, wallpaper-derived text). The Settings dialog and the scrim's text pass share the lift through the same correction. Chrome tips are never repainted, so they keep the plain floor.
+	- Branch: lightweight
+	- Commit: 531f6c7
+	- Test case: `light_text_puts_down_the_ink_dark_text_does` (ErwcyUJ) and `a_light_theme_keeps_text_a_little_further_off` (ErwdARW), both seen failing with the lift or the stretch taken out. In the glyphon fork, `the_contrast_boost_adds_ink_between_the_ends` and the shader text check, both seen failing on a broken mirror.
+
+- wgpu's allocator reserves far more graphics memory than it uses
+	- ID: 2026100419463460
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: vm925w: the graphics memory a window and Settings take on DX12, against a build with the old hint, that Settings opens, and `a_new_device_reserves_little_graphics_memory` under `cargo test` there.
+	- Priority: High
+	- Opened: 20261004-194634
+	- Closed: 20261006-140800
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100418225501, 2026100418225505
+	- Target OS: All
+	- Requirements:
+		- wgpu's default memory hint reserves blocks of 128 and 256 MiB. A 2560x1440 window on Vulkan used 167 MiB and was billed 506, and the dialogs' context uses under 1 MiB of its 192.
+		- Test the `MemoryUsage` hint on both devices. On b23 it took the Vulkan window plus the dialogs' context from 702 MiB to 252.
+		- Check that frame times and the Settings open time do not get worse.
+		- The X11 window draws through GL, where the hint does nothing, but its dialogs use Vulkan.
+	- Notes:
+		- 20261004: Figures in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#measure-first). Windows uses the same allocator through DX12 and was not measured.
+	- Progress log:
+		- 20261004: Every device now asks for the `MemoryUsage` hint: the window's on every backend, and the dialogs' kept context.
+		- Measured on b23 at 2560x1440 against a build with the old hint. The X11 process went from 453 to 273 MiB, and the dialogs' context from 201 to 21. The Vulkan window plus the context went from 702 to 256. Regular memory did not change.
+		- Settings opened in 105 ms for each of the first three opens and a median of 66 after, against 108 and 62 with the old hint. Frame times on Vulkan under a scroll flood did not change. Figures in the design doc's [The memory hint](design_docs/20261004-182255_reduce-resources.md#the-memory-hint).
+		- New: `SILK_DLGDBG=1` prints how long Settings took to draw after it was asked for. `cicd/utility/mem-per-window/run.bash` takes `--opens N` and `--flood SECS`, and prints anonymous memory.
+	- Verified: the new test fails with the old hint (192 MiB reserved) and passes with the new one. Native unit tests (1119 passed), native and Windows-target clippy.
+	- Swept: all three device requests in the program go through one function in gfx.rs (`grep -n request_device source/src`). `cicd/utility/gpu-stress/` keeps the old hint on purpose, since it is there to fill the card.
+	- Branch: memhint
+	- Commit: b1ddf3a, 157a2cc
+	- Test case: `a_new_device_reserves_little_graphics_memory` (Ern7Y1J) builds the dialogs' device and fails above 32 MiB reserved. It skips where there is no device, or no allocator report (GL, Metal).
+	- Closed:
 
 - Tabs: a setting for new tabs to open next to the current one
 	- ID: 2026100513581812
@@ -1875,6 +1354,195 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- macOS: the interface and terminal fonts are too big
+	- ID: 2026100114435561
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, terminal text at the size `defaults read -g NSFixedPitchFontSize` gives, or about 11 pt when that is unset, and the menus, tabs and Settings at the size of other apps' interface text. A config with the system size switched off keeps its own size.
+	- Severity: Avg
+	- Opened: 20261001-144356
+	- Closed: 20261006-140739
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435547
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Incorrect behavior: Both the interface fonts and the terminal font are too big. Neither seems to follow the system font size.
+	- Expected behavior: Both start from the size macOS uses.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
+	- Actual cause:
+		- Sizes macOS reports in points were converted at 96 per inch, as on Windows and Linux. A Mac point already is a logical pixel, so everything came out a third too big. The interface's 13 pt became 17.3.
+		- The terminal size was read only from the `NSFixedPitchFontSize` default. Where nobody set it, there was no size to follow and the 17 pixel fallback was used.
+	- Actual fix:
+		- A Mac point is taken as a logical pixel.
+		- The fixed-width size comes from AppKit, which answers with its default when nobody has set one. The interface size is AppKit's system size, still 13 pt.
+		- The family still comes only from a font somebody picked, so the font list is not dropped for Menlo.
+	- Swept: Both point conversions, the terminal size and the interface size.
+	- Test case: `a_mac_point_is_already_a_logical_pixel` (ErUj5E3). It fails with the old conversion.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macsize
+	- Commit: 747356f
+	- Closed:
+
+- macOS: window transparency does not work
+	- ID: 2026100114435574
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, turn on Transparency. The desktop shows through the terminal background at the opacity set, while text, menus, tabs and Settings stay solid. A light theme lets through as much as a dark one. Turning it off makes the window solid again, with no relaunch.
+	- Severity: Avg
+	- Opened: 20261001-144356
+	- Closed: 20261006-140959
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Steps to reproduce:
+		- Turn on transparency.
+	- Incorrect behavior: The window stays opaque.
+	- Expected behavior: The desktop shows through, as on Linux and Windows.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by a test.
+	- Actual cause: The window was already built transparent. The drawing surface was not. Metal offers only Opaque and PostMultiplied, never PreMultiplied, and the pick fell back to the first one offered, Opaque. That marks the layer opaque, and the transparency gate saw an opaque surface too.
+	- Actual fix: On Metal the surface takes PostMultiplied, which only marks the layer not opaque. macOS still reads it as premultiplied, which is what the app draws, so the light-mode premultiply fix from 20260928 still applies unchanged. Linux and Windows pick what they did before.
+	- Swept: The one place a surface's alpha mode is picked, shared by the main window, the Windows composited path and the dialogs. The X11 GL path sets its own and is not used on macOS.
+	- Test case: `each_platform_picks_a_see_through_alpha_mode_where_it_has_one` (ErUlBTl). It fails with the old pick and passes with the new one.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Progress log:
+		- 20261002: Reported again: the transparency settings do nothing on macOS. Not known yet whether that build had this fix.
+	- Branch: macglass
+	- Commit: c79e3aa
+	- Closed:
+
+- macOS: the menu is inside the window, not in the macOS menu bar
+	- ID: 2026100114435587
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, the macOS menu bar shows the SilkTerm menu (About SilkTerm, Settings, Services, Hide SilkTerm, Hide others, Show all, Quit SilkTerm), then File, Edit, View, Tabs and Panes, and no menu bar shows inside the window. Each row does what the same row does in the window. The check marks follow the focused pane and the View toggles, and the shell submenus list the active shells. Command+Q quits and the window size is remembered. Command+H hides. With Settings or About open, a menu pick brings that dialog forward instead.
+		- 20261002: No in-window bar comes up with `--hide-menu=false`, and neither View nor the right-click menu has a Menu bar row. File starts with New window, which opens one. Edit's Copy on select and Copy on output check marks follow the focused pane, also when changed from the right-click menu. Full screen covers the macOS menu bar. View has one fullscreen row, with no second Enter Full Screen added by macOS beside it.
+	- Severity: Avg
+	- Opened: 20261001-144356
+	- Closed: 20261006-141012
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435613
+	- Target OS: macOS
+	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
+	- Incorrect behavior: The menu is drawn in the application window.
+	- Expected behavior: The menu is in the macOS menu bar at the top of the screen.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and the fix pinned by tests.
+	- Actual cause: The menus were only ever drawn inside the window. The macOS menu bar had only the small default app menu that winit puts up.
+	- Progress log:
+		- 20261002: View > Menu bar meant the in-window bar, which on a Mac could be read as the system one. There is no in-window bar on macOS at all now, so the wording does not come up. See Decisions.
+		- 20261002: The rows named their Ctrl shortcuts in the label, such as "New tab (Ctrl+Shift+T)", since those were the chords that worked. Mac versions with Command (Command+T, Command+C and so on) were first left out, since they add bindings. They are now added as menu keys and as key bindings. See Decisions.
+	- Decisions:
+		- The in-window bar is hidden by default on macOS, not removed. The system menu bar has every row it has, but not its always-visible copy-mode boxes.
+			- Superseded by the first 20261002 decision.
+		- 20261002: macOS has no in-window menu bar at all. Full screen should cover the macOS menu bar, and if it does not, it is still not SilkTerm's place to break the macOS menu contract. No View > Menu bar row, no right-click Menu bar row, and `--hide-menu` does nothing there. The right-click menu stays.
+		- 20261002: Menu rows on macOS take Apple's standard Command chords, and the same chords work as key bindings. Command never reaches the shell on macOS, and no Ctrl chord is taken from the terminal. Labels on macOS show the Command chord, not the Ctrl one. Other platforms do not change.
+			- The Ctrl half is superseded 20261002: on macOS the program's own chords move from Ctrl to Command (2026100219054469).
+	- Actual fix:
+		- On macOS the system menu bar is built from the same lists the in-window menus use. The SilkTerm menu comes first with About, Settings (Command+,), Services, Hide, Hide others, Show all and Quit. Then File, Edit, View, Tabs and Panes, minus those rows. Help is left off, since About was its only row.
+		- A pick runs the same action as the in-window menu. While a dialog or notice is up it only brings that forward, as a click in the window does. The bar is rebuilt when a check mark or the shell list changes. Rows with a tip in the window show it as a tooltip.
+		- Quit goes through the app's own exit, not winit's default menu.
+		- 20261002: There is no in-window bar on macOS. `--hide-menu` is accepted and ignored there, and its help text says so. There is no config setting for the bar. The Menu bar rows are gone from View and from the right-click menu, and the toggle does nothing there if reached anyway. Linux and Windows are unchanged.
+		- 20261002: The copy-mode boxes on the in-window bar show and flip the focused pane's Copy on select and Copy on output. On macOS those are the two check rows already in Edit, which follow the focused pane. What is lost is seeing their state without opening a menu, and the dimming that marks them inactive while the window is in the background. The UI style guide lists that as a known deviation.
+		- 20261002: File gains New window on macOS, for Command+N. Rows show their Command chords beside a plain label (2026100114435613).
+	- Swept: Every row of the in-window menus but Menu bar is on the system menu bar, checked by test. Every place the in-window bar could come back on macOS: the launch default, `--hide-menu`, the View row, the right-click row, the toggle itself, and Bare window, which only restores what was on. There is no config key. The `--hide-menu` help text and the UI style guide say what macOS does.
+	- Test case: `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8), `there_is_no_in_window_menu_bar_on_macos` (ErZrS8g) and `the_mac_menu_bar_reaches_every_window_row_but_its_toggle` (ErZrT4e). The last two fail with the in-window bar back on macOS. The old `the_mac_menu_bar_reaches_every_row_of_the_window_menus` (ErUnDUL) and `the_in_window_menu_bar_starts_hidden_on_macos_only` (ErUnxsD) are commented out, since the 20261002 decision changed what they pin.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS. Each new test was seen failing with its part of the change undone.
+	- Branch: macmenu, macmenu2
+	- Commit: 02482bb, bb66e6e
+	- Closed:
+
+- Tab rename: Paste from the menu bar goes into the shell, and the box has only basic editing
+	- ID: 2026100219054483
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, while a tab is being renamed: Edit > Copy and Paste on the menu bar, and Command+C and V, act on the name and nothing reaches the shell. Command+X and A cut and select all. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. A click, a drag, a double-click and a triple-click in the name place the caret, select, take a word and take it all. Right-click opens Cut, Copy, Paste, Delete and Select all. Any other menu pick, such as Command+T, keeps the name first.
+	- Severity: Avg
+	- Opened: 20261002-190545
+	- Closed: 20261006-141118
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100219054469, 2026100114435613
+	- Target OS: All
+	- Incorrect behavior: While a tab is being renamed, Paste from the macOS menu bar, which Command+V reaches, pastes into the shell, not the name. The box takes typing, the arrows, Home, End, Backspace, Delete, Ctrl+A and Ctrl+V, and nothing else.
+	- Expected behavior: A paste goes into the name being typed, from a key or from a menu. The box does full text editing.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Paste into the tab. Full text editing in the tab.
+	- Actual cause: The rename took only a few keys, and anything from a menu or the mouse went to the terminal. A click on the menu bar ended the rename, so Edit > Paste then went to the shell. On a Mac the menu bar takes Command+C and V before the window sees them, so they went to the shell with the rename still up.
+	- Actual fix:
+		- The rename edits as a Settings text box does, through one shared set of caret rules (`textedit.rs`) and the same per-platform keys: copy, cut, paste and select all, Shift+Delete, Shift+Insert and Ctrl+Insert, moving and erasing by words, Shift to select, and the Mac's Command and Option keys. A paste is one line.
+		- The mouse: a click places the caret, Shift+click extends, a drag selects, a double-click takes a word and a third click the whole name. A middle-click pastes the primary selection where it was clicked.
+		- Right-click, the Menu key or Shift+F10 opens Cut, Copy, Paste, Delete and Select all, less the rows with nothing to act on.
+		- A press on the menu bar or an open menu leaves the rename up. Copy, Paste and Paste Selection from any menu, the macOS menu bar included, act on the name. Any other pick keeps the name first, as a click elsewhere does.
+		- The tab's hover tip no longer comes back over the rename box when the pointer has not moved since the double-click.
+	- Note: The Settings boxes have no undo, so neither does the rename. Selecting in the name does not set the primary selection, as in the Settings boxes.
+	- Swept: Every way a key, a paste or a copy reaches the shell while a rename is up: the key handler (the rename takes every key first), the in-window menu bar and its submenus, the right-click menu, the macOS menu bar, the middle button, and the keyboard copy and paste chords. There is no file drop or input method handling. The Settings boxes' caret code now uses the same shared rules.
+	- Test case: `a_tab_rename_takes_the_text_box_keys` (ErbKd5c), `a_tab_rename_edits_like_a_text_box` (ErbKd9K), `menus_reach_a_tab_rename` (ErbKdDM) and `each_reach_stops_where_its_keys_say` (ErbKd1H). The first three fail with their part of the change undone. `renaming_a_tab_stays_on_character_boundaries` (EoSiOoS) takes the new calls. `caret_from_click_picks_nearest` (EitjFLH) and `word_motion_and_word_at` (EkI1Txg) moved with the code to `textedit.rs`. The tip fix has no test, since it lives in window state no test builds.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS. On Linux in the program: typing, Ctrl+V, Ctrl+C and X, Ctrl+Left and Ctrl+Backspace, a drag, a double-click, Select all and Paste from the right-click menu, a middle-click, and Edit > Copy and Paste from the menu bar all acted on the name, and nothing reached the shell.
+	- Branch: tabedit
+	- Commit: 2034f15
+
+- macOS: Ctrl+click should open the right-click menu
+	- ID: 2026100220260471
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26. In a pane at a shell prompt, Ctrl+click opens the right-click menu at the pointer, and letting go does not pick a row. On a URL the menu starts with Open link and Copy link. In vim with `:set mouse=a`, Ctrl+click opens the menu and the vim cursor does not move.
+		- Double-click a tab to rename it. Ctrl+click on the name opens Cut, Copy, Paste, Delete and Select all. Ctrl+click on a pane ends the rename and opens the pane menu.
+		- Ctrl+Shift+click and Ctrl+Command+click open the menu too. A plain click still selects, Command+click still opens a link, and a two-finger click still opens the menu.
+		- In Settings, Ctrl+click in a text box opens its Cut, Copy, Paste, Delete and Select all menu.
+	- Severity: Avg
+	- Opened: 20261002-202604
+	- Closed: 20261006-141214
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100219054469
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: Since Command took the place of Ctrl on macOS, Ctrl+click is a plain click. Before that it opened links.
+	- Expected behavior: Ctrl+click opens the right-click menu, as it does in other Mac apps.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Ctrl+click opens the right-click menu on a Mac.
+	- Actual cause: Once Command took over links and block selection on a Mac, nothing read Ctrl at a mouse press, so a Ctrl+click went through as a left click.
+	- Actual fix: On a Mac a left press with Ctrl held acts as a right press, in the terminal window and in the Settings and About window. Other keys held with it do not change that. Linux and Windows are unchanged.
+		- A Ctrl+click on a tab in the tab bar now does nothing, as a right-click there does. In the About box a Ctrl+click on a link does nothing too, since that box has no right-click menu.
+	- Branch: ctrlclick
+	- Commit: b2223d0, 0de1dac
+	- Test case: `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg). It fails with the change undone, and with it applied on every platform. The two press handlers have no test, since they need a live window; the b26 check above covers them.
+
+- macOS: a plain click in a reopened Settings can act as a Ctrl+click
+	- ID: 2026100220463754
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26. Open Settings, hold Ctrl and press Esc, then let go of Ctrl. Open Settings again and click a checkbox with no keys held: it changes. Do the same with Enter in place of Esc.
+		- After closing Settings that way, open About and click its link: the link opens.
+		- Ctrl+click in a Settings text box still opens its Cut, Copy, Paste menu, and a plain click after letting go of Ctrl is a plain click again.
+	- Severity: Avg
+	- Opened: 20261002-204637
+	- Closed: 20261006-141403
+	- Opened by: CC
+	- Related IDs: 2026100220260471
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- Open Settings. Hold Ctrl and press Esc, so Settings closes with Ctrl still down. Let go of Ctrl.
+		- Open Settings again and click a checkbox with no keys held.
+	- Incorrect behavior: The click acts as a right-click. A checkbox does not change, and a text box opens its Cut, Copy, Paste menu. It stays that way until a modifier key is pressed and let go inside Settings.
+	- Expected behavior: A plain click is a left click.
+	- Reproduced: No. Read from the code on 20261002.
+		- 20261003: Not run, since it needs a Mac. winit 0.30.13's macOS code backs the reading. A closing window drops its delegate before it gives up the focus, so it never reports Ctrl let go. A window that gains the focus reports only that, with no held keys.
+	- Origin: 2026100220260471, branch ctrlclick, b2223d0. Plausible.
+	- Actual cause: The held keys a press in a dialog reads were kept for the program, not for the dialog window, and only that window's reports changed them. A dialog closed with Ctrl down left Ctrl recorded, and the next dialog started out with it.
+	- Actual fix: Each dialog window keeps its own held keys, starting with none. They go when the window goes, whether it closed or another dialog took its place.
+	- Swept: Every place held keys are kept for a window. The Settings text boxes' keys already belonged to the dialog. The notice window keeps none. The terminal window's keys are cleared when it loses the focus, on X11, Wayland, Windows and macOS alike, so they never stick down. Both places that open a dialog replace it without the close path, and both are covered now.
+	- Note: On a Mac, a window that gains the focus while Ctrl is already down does not know it until a key changes, so a Ctrl+click right then is a plain click. The terminal window has the same gap. Left alone, since it never sticks and the next key change corrects it.
+	- Test case: None. A press reads its keys from a live dialog window, which the unit tests cannot make, and the fault needs a Mac's focus rules. The b26 check above covers it. `ctrl_click_is_the_right_click_on_macos_only` (ErbblFg) still pins what a press does with the keys it is given.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: heldkeys
+	- Commit: 669c2d9
 
 - The window size test skips whenever it has to start its own display
 	- ID: 2026100512560044
@@ -2309,6 +1977,134 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Settings: a Keys tab to see and change hotkeys
+	- ID: 2026100307252506
+	- Type: Feature
+	- Status: Done
+	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
+	- Needs external testing:
+		- vm925w: the Keys tab in a real Settings window, which is a child window there. Ctrl, Alt and Alt+Shift chords set by pressing them, a chord held with the Windows key, AltGr, Escape and Backspace, and the new chord working in the terminal after OK.
+		- b26: Command chords set while Settings has focus, including ones the menu bar owns such as Command+W, Command+Q and Command+,. The menu bar may act on those before the dialog sees them, and Command+Q could quit. Option plus a letter may read as the character it types.
+	- Priority: Avg
+	- Opened: 20261003-072525
+	- Closed: 20261006-141937
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100220292607
+	- Related IDs: 2026100309455678
+	- Target OS: All
+	- Requirements:
+		- Before the RC1 cut.
+		- A Keys tab in Settings that lists every hotkey and lets each one be changed or turned off.
+		- It saves to the same config block that the hotkey item adds.
+	- Decisions:
+		- 20261003: One chord per press is enough. A second chord for one hotkey goes in the config file. Nine tabs are fine.
+	- Progress log:
+		- 20261003: A Keys tab, last of nine, with a row for every hotkey under the File, Edit, View, Tabs and Panes headings, named as the menu rows are. Each row is a box with the chords it answers to, "Off" for none, and a revert arrow.
+		- 20261003: Enter, Space or a click on the box waits for the next chord, and every key goes to it until one comes. Escape leaves the row as it was. Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused in the box, with what it needs held. Walking onto a row with Tab does not start it.
+		- 20261003: A chord another hotkey has by default is taken from it the way the file takes it, and both rows say so in dim text after the chords. A chord another hotkey was set to moves to the latest press, and the row it left says where it went.
+		- 20261003: A save writes only the value set for each hotkey, never what another was left with, so the file reads as a hand edit would. The revert arrow puts the template's line back. shcl adds a set value at the top of the `keys:` block rather than in place of its commented line, as it does for every setting (2026100219054510).
+		- 20261003: On a Mac the rows show the Command chords in Apple's order, and Command held at a press is the chord's Command. The platform is passed in, so the Mac rows are tested here.
+		- 20261003: The tab is left out of the dialog's height, as the Shell tab is, and scrolls. The nine tabs are now the widest thing in the dialog, so every tab is a little wider. The style guide lists the tab count as a known deviation.
+		- 20261003: Changed along the way. The dialog's snap to its natural size rounded down, which left a window a part pixel too narrow, with a sideways scrollbar, once the tab strip set the width. It rounds up now. A revert that missed a value saved above its commented default is its own item, 2026100309455678.
+		- 20261003: Known limit: a value is merged with what another window saved per hotkey, not per chord. Two windows that set the same chord for two hotkeys leave both set, and the launch note says which one answers.
+		- 20261003: Still open: one press sets one chord, so a second chord, such as Ctrl+F4 beside Ctrl+Shift+W, can only be added in the file. The labels, the "Off" wording and the prompt text in the box are a first pass.
+	- Note: 20261003: `every_commented_default_line_loads_as_the_default` compares hotkeys by the chords they answer to. An uncommented `keys:` line is now set in the file, which the Keys tab shows with a lit revert arrow, though what it answers to is the same.
+	- Verified:
+		- The unit suite passes, 1054 tests. fmt, and clippy for Linux, Windows and macOS, are clean. The test ID, markdown, TOC and table checks pass.
+		- Each new check failed with its part taken out: the tab left out of the height, the chord moving off another set hotkey, the save writing only set values, Escape ending the wait, and the snap rounding up.
+		- In a real window on Linux, at scale 1 and 2: the tab, the wait prompt, a refused bare letter, Ctrl+Shift+N taken from New window for New tab with both notes, OK writing `new_tab:` only, the new chord opening a tab, the Tabs menu showing it, the revert arrow taking the line back out, and Escape ending the wait before a second one closed Settings.
+	- Swept: every match on the row kinds is exhaustive or was checked by hand (the draw, the hit tests, the focus ring, Space, Enter and the tip). The two generic row tests drive every hotkey row through a save, a revert and a relaunch. The other window size requests in `dialog.rs` already round up.
+	- Branch: keystab
+	- Commit: e217029
+	- Test case: `a_hotkey_row_takes_the_next_chord_pressed` (Erejamb), `a_chord_another_hotkey_had_is_said_on_both_rows` (Erejaq5), `the_keys_tab_shows_the_mac_chords_on_a_mac` (Erejatf), `a_hotkey_row_draws_its_chords_and_its_note_in_the_box` (ErejaxH), `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` (Erejb15), `a_pressed_chord_is_the_one_the_press_matches` (ErejaW7), `the_files_own_values_are_kept_apart_from_the_result` (Erejaj5), `every_hotkey_has_one_row_on_the_keys_tab` (ErektRs), `the_dialog_is_as_tall_as_its_tallest_fixed_tab` (extended), `a_resize_settles_on_the_natural_size_and_lets_go_past_the_snap` (extended), and the generic `every_row_survives_a_save_and_a_relaunch` and `a_row_changed_after_its_revert_keeps_the_change`.
+	- Closed:
+
+- Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
+	- ID: 2026100220292607
+	- Type: Feature
+	- Status: Done
+		- Tested b23 [20261006-142134]
+	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
+	- Needs external testing:
+		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
+		- b26: Option+Command+W closes the pane and Command+W still closes the tab. The Panes row on the menu bar, the right-click menu and the Keys tab show Option+Command+W.
+		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
+	- Priority: Avg
+	- Opened: 20261002-202926
+	- Closed: 20261006-144614
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before v1.
+		- Figure out hotkeys for splitting panes and changing panes.
+		- Then implement hotkey management.
+		- A menu item that does exactly what a registered hotkey does shows that hotkey next to it.
+	- Notes:
+		- Pane split, close and focus cycling are menu-only today, on purpose, so chords that shells bind stay free. The test `no_chord_splits_closes_or_cycles_panes` pins that and will need to change.
+		- Menus already show a shortcut where a row shares one with a key binding. On macOS the Command chords come from one table.
+	- Decisions:
+		- 20261003: Alt+Shift chords, as in Windows Terminal. Alt+Shift+Plus and Minus split, Alt+Shift+W closes the pane, Alt+arrows move between panes. On macOS, Command+D and Command+Shift+D split and Command+Option+arrows move, as in iTerm2.
+		- 20261003: Hotkey management means rebinding or turning off any hotkey from the config file. A Settings tab for it is its own item, 2026100307252506.
+		- 20261003: On macOS, Option+Command+W closes the pane. Command+W stays close tab.
+	- Progress log:
+		- 20261003: One table of hotkeys, defaults plus the config file's `keys:` values, is what the key handler, the in-window menus and the macOS menu bar all read. A menu row shows the first chord its hotkey answers to, so a change in the file shows there too.
+		- 20261003: Windows Terminal's defaults checked: Alt+Shift+Plus duplicates the pane to the right, Alt+Shift+Minus down, and Alt+arrows move focus. It closes a pane with Ctrl+Shift+W, which is close tab here, so Alt+Shift+W per the decision.
+		- 20261003: A bad value keeps its default and is reported at launch with its line. A chord set for one hotkey is taken from any hotkey that has it by default, with a launch note. "none" turns a hotkey off, and quotes are optional.
+		- 20261003: A focus move goes to the nearest pane that way. On a tie, the pane the last move came from wins, then the top or left one, so a move and its opposite go back and forth.
+		- 20261003: Lost to the shell on Linux and Windows: fish's Alt+arrows, tmux's prefix plus Alt+arrows, nano's Alt+Up and Alt+Down, emacs' Meta+Left, Meta+Right and Meta+Shift+W, and readline's Meta+_ (Meta+. still does it). Readline's Alt+b and Alt+f stay free. The split-panes design doc has the list. Nothing is lost on macOS.
+		- 20261003: Changed along the way: F11, the Menu key and Ctrl+F4 now need exactly their keys held, where extra modifiers used to count. Ctrl+Alt+Shift+T, which is how Windows sees AltGr+Shift+T, no longer opens a tab.
+		- 20261003: `no_chord_splits_closes_or_cycles_panes` is commented out, since it pinned the menu-only decision this item reverses. Its Ctrl and Ctrl+Shift checks still hold and moved to `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`.
+		- 20261003: macOS had no close-pane chord by default. iTerm2 uses Command+W, which is close tab here.
+		- 20261003: Option+Command+W is now the Mac default for Close pane, per Decisions, so the menu bar's Panes row, the right-click menu, the Keys tab and the template's `keys:` line all show it. A Mac config whose commented line still says "none" is brought up to it. Nothing else on a Mac uses that chord; Hide others is Option+Command+H.
+		- 20261003: Two checks that pinned no Mac chord for Close pane are commented out and replaced, in `a_menu_row_shows_the_chord_its_hotkey_answers_to` and `the_keys_tab_shows_the_mac_chords_on_a_mac`. The Mac exception in `every_default_chord_reads_and_none_is_shared` is gone. The Mac half of `a_hotkey_set_in_settings_saves_as_a_hand_edit_would` presses Shift+Command+W now, since the old chord is the default.
+		- 20261003: Off a Mac, Alt+Super+W opens the menu title W, as Alt plus any letter does with Super held. That is older than this change; `the_command_chords_are_the_only_program_chords_on_macos` now allows it.
+			- Note: 20261003, fixed under 2026100311020484, and the test is strict again.
+	- Verified:
+		- The unit suite passes, 1035 tests. fmt, and clippy for Linux, macOS and Windows, are clean. The test ID, markdown and table checks pass.
+		- Each new test failed with its part taken out: the launch complaint, the Close pane row's hotkey, the tie order, and the "_" rule.
+		- 20261003, Option+Command+W: the unit suite passes, 1057 tests, and fmt plus clippy for Linux, macOS and Windows are clean. With the Mac default put back to "none", five tests fail: the menu bar list, the Panes row label, the Keys tab row, the default check and the macOS chord test. The refresh of an old "none" line passed for a Linux template; the macOS-only entry itself is unrun. None of it ran on a Mac.
+		- In a real window on Linux, the four Alt chords split, closed and moved as listed, both ways and back, and the Panes and Tabs menus showed the chords. With `keys:` set in a config file, a moved chord worked, the old one went to the shell, a misspelled value kept its default, and both launch notes printed.
+	- Swept: for Option+Command+W, every Mac chord in `keys.rs`, the app menu and Window menu rows in `macmenu.rs`, the template, the Keys tab, the UI style guide and the split-panes design doc.
+	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` writes out a chord by hand any more.
+	- Branch: panekeys, mackeys
+	- Commit: 4cafdde, f4bd3f7
+	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_goes_to_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
+	- Closed:
+
+- Settings: every label is shaped again on each pointer move
+	- ID: 2026100314050003
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No
+	- Needs external testing: A real-window look on b23. The caret blinks, a field edit eases, and a tip comes up on time, now that the dialog draws only when told to.
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Closed: 20261006-142420
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Keep shaped text between dialog frames and shape again only what changed.
+		- A pointer move that changes no hover state does not redraw.
+		- Work out the hover tip once per render.
+	- Progress log:
+		- 20261003: Each `CursorMoved` over a dialog sets it dirty. `dialog.rs` `render` then builds a new glyphon buffer and shapes it for every text item, and rebuilds the rects and texts. A tab with 40 rows shapes 60 to 100 buffers per mouse event.
+		- 20261003: `hover_tip` runs twice per render with the same pointer, once for `over` and once for `found`.
+	- Origin: ec82922 (2026-07-06) for the reshape, c0a7f19 (2026-10-03) for the second `hover_tip`. No earlier review item. Plausible, cost not measured.
+	- Reproduced: 20261004. With the old behavior put back, a frame of the first tab with nothing changed shaped 64 buffers, and every frame looked up the tip twice. Every pointer move drew a frame, and so did every loop pass while a tip was waiting.
+	- Actual fix:
+		- Shaped text is kept from one frame to the next, found by its text, font, weight, color and line box. A frame shapes only text the last one did not have. A move, a new clip or a new width reuses the shape. A new text context, which a font, size or scale change makes, starts over.
+		- A pointer move draws a frame only when it changed something drawn: a drag, the item lit in a dropdown or menu, a lit About button, or a tip going away.
+		- A frame looks up the tip once. A tip coming due, or a field edit's animation step, gets its frame when it is due, not on every pass of the loop.
+	- Swept: every place `render` shaped text (About lines and tip, Settings rows, overlay and tip); both `set_cursor` callers (Settings or About, and the notice); both reads of the dialog's wake in the loop; every branch of the pointer move in `settings_ui.rs`.
+	- Note: Left alone: `measure_ui_text` already keeps its widths. The notice window still reads no wake of its own, as before.
+	- Verified: 20261004, the unit suite passes, 1112 tests, and the sister item's tests pass unchanged. fmt is clean, clippy is clean for Linux and Windows, and the test ID check passes. Not looked at in a real window.
+	- Branch: dlgshape
+	- Commit: e894516
+	- Test case: `a_dialog_frame_shapes_nothing_the_last_one_did` (ErlkwlW), `a_dialog_frame_shapes_only_text_that_changed` (Erlkwox), `a_kept_buffer_is_shaped_again_when_what_shaping_reads_changes` (ErlkwsK), `a_dialog_frame_looks_up_the_tip_once` (Erlkwvi) and `a_pointer_move_that_changes_nothing_drawn_needs_no_frame` (Erlkwz5), each seen failing with the old behavior put back. `a_pointer_move_says_whether_it_changed_anything` (Erlkwhi) pins what a move reports.
+	- Note: Code review 20261003 item 3.
 
 - Settings: the dialog repeats whole-table work for each row on every frame
 	- ID: 2026100314050004
@@ -2898,6 +2694,210 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- macOS: Command+, should open Settings
+	- ID: 2026100114435613
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, Command+, opens Settings from the terminal, and the menu bar shows it beside Settings. With Settings already open it brings that one forward. Ctrl+, still opens Settings too.
+		- 20261002: The menu rows show Command+N, T, W, C, V, Plus, Minus, 0, Control+Command+F, and the app menu's Command+, H, Option+H and Q, with no Ctrl chord in any label. Each chord works from the keyboard, Command+= as well as Command+Plus. Command+K or any other unbound Command chord types nothing at the shell. Ctrl+Shift+T, Ctrl+Shift+C and the other Ctrl chords still work, and plain Ctrl+T, Ctrl+W and Ctrl+V still reach the shell. The right-click menu reads "Copy (Command+C)" and so on.
+		- 20261002: The Ctrl lines above are replaced by 2026100219054469's test row. On macOS the Ctrl chords now all go to the shell.
+	- Severity: Low
+	- Opened: 20261001-144356
+	- Closed: 20261006-142459
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435587
+	- Target OS: macOS
+	- Incorrect behavior: Command+, does not open Settings.
+	- Expected behavior: Command+, opens Settings, on macOS only.
+	- Reproduced: No. The Mac was busy, so the cause was found by reading the code and pinned by tests.
+	- Actual cause: Only Ctrl+, was a Settings chord, and no menu on macOS had Settings with Command+,.
+	- Actual fix:
+		- Settings in the macOS menu bar's SilkTerm menu takes Command+,. It is part of 2026100114435587.
+		- The key handling also takes Command+, as Settings on macOS, for a press the menu bar does not take. Command+, with Shift or Option is not the chord. Other platforms are unchanged.
+		- 20261002: Command+, is now one of a table of Apple standard chords on macOS: Command+N new window, Command+T new tab, Command+W close tab, Command+C copy, Command+V paste, Command+Plus, Minus and 0 for the font size, Control+Command+F fullscreen and Command+Q quit. The menu bar rows and the key bindings both read that one table. There is no Find yet, so no Command+F.
+		- 20261002: On macOS a press with Command held never reaches the shell. Before, an unbound one such as Command+K typed the letter. Every Ctrl chord means what it did before.
+		- 20261002: On macOS the right-click menu writes its shortcuts as Command chords, and the menu bar labels have none, since the menu bar draws the chord itself.
+	- Note: 20261002: Not covered here. The Settings dialog's text boxes take Ctrl+C, X, V and A only, so on macOS Command+C and Command+V there now go to the menu bar, which only brings the dialog forward. While a tab name is being edited, Command+V from the menu bar pastes into the shell, not the name. Both were read from the code, not seen.
+		- 20261002: Command chords take the place of Ctrl ones everywhere on macOS, the terminal included (2026100219054469). A tab rename gets paste and full text editing (2026100219054483).
+	- Swept: The one key binding function and the one menu bar builder. Every chord in the table is on a menu row and every menu row's chord is in the table, checked by test. Every Ctrl chord is checked to mean the same with the Mac chords on. The right-click menu is the only other menu that shows shortcuts.
+	- Test case: `command_comma_opens_settings_on_macos_only` (ErUnDJY), `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm), `command_never_reaches_the_shell_on_macos` (ErZrRpZ), `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) and `the_mac_right_click_menu_shows_command_chords` (ErZrSS3). The four new ones fail with their part of the change undone. The old `command_comma_is_settings_and_the_bar_binds_nothing_else` (ErUnDRE) is commented out, since the bar now binds more than the app menu's keys.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: macmenu, macmenu2
+	- Commit: 02482bb, bb66e6e
+	- Closed:
+
+- macOS: Option plus a letter types nothing into a Settings text box
+	- ID: 2026100219240881
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, Option+O types "ø" into a Settings text box and into a tab rename, and Option held underlines nothing on the Settings buttons. With a German layout, if one is set up there, Option+8 types "{".
+	- Severity: Low
+	- Opened: 20261002-192408
+	- Closed: 20261006-143006
+	- Opened by: CC
+	- Related IDs: 2026100219054469, 2026100219054483
+	- Target OS: macOS
+	- Incorrect behavior: On a Mac, Option plus a letter types a character such as "ø". In a Settings text box Option is read as Alt, so the press is taken as a footer button accelerator and nothing is typed. A tab rename also drops a character typed with Option.
+	- Expected behavior: The character is typed. A Mac has no Alt accelerators on buttons.
+	- Reproduced: No. Read from the code on 20261002, while working on 2026100219054469. Plausible.
+	- Actual cause: On a Mac the text boxes read Option as Alt. In Settings an Alt press went to the footer button accelerators, and the tab rename dropped any character typed with Alt held. A Mac reports the character Option makes, and it was lost.
+	- Actual fix: On a Mac, Option is never the accelerator key, so a character typed with it goes into the box. It still moves and erases by words with the arrows and Backspace. Linux and Windows are unchanged.
+	- Swept: Every reader of the held Alt key in the text boxes: the Settings key handling, its button underlines, the dropdown opener on Alt+Down, and the tab rename. The terminal reads Option on its own and is unchanged.
+	- Test case: `option_types_on_a_mac_and_alt_is_an_accelerator_elsewhere` (ErbKdHM), `option_types_into_a_mac_text_box` (ErbKdLR), and the Option lines in `a_tab_rename_takes_the_text_box_keys` (ErbKd5c). Each fails with the change undone.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: tabedit
+	- Commit: 2034f15
+
+- macOS: a Ctrl+click right after a window gets the focus acts as a plain click
+	- ID: 2026100310321918
+	- Type: Bug
+	- Status: Done
+	- Needs external testing:
+		- b26: hold Ctrl and click into a SilkTerm window that doesn't have the focus. That first click opens the right-click menu. The same on a Settings dialog that doesn't have the focus.
+		- b26: bring a window forward with Ctrl held, from the Dock or its title bar, then Ctrl+click in it before pressing anything else. The menu opens.
+	- Severity: Low
+	- Opened: 20261003-103219
+	- Closed: 20261006-142958
+	- Opened by: CC
+	- Related IDs: 2026100220463754, 2026100220260471
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- Hold Ctrl, then click into a SilkTerm window or Settings that doesn't have the focus, or bring it forward with Ctrl still held and then click.
+	- Incorrect behavior: The click is a plain left click. The window doesn't know Ctrl is down until a modifier key changes.
+	- Expected behavior: A Ctrl+click opens the right-click menu, as it does once the window knows Ctrl is held.
+	- Reproduced: No. Read from winit 0.30.13's macOS code on 20261003. A window that gains the focus reports only that, with no held keys.
+	- Possible cause: none found. winit 0.30.13 on macOS reads the held keys from each click, key press and mouse move, from that event's own flags, and reports a change just before the event. The click that brings a window forward reaches the window, since SilkTerm leaves winit's first-click setting on. So a Ctrl+click on a window that just got the focus should already arrive with Ctrl held. Read only, not seen on a Mac.
+	- Progress log:
+		- 20261003: No code changed. Seeding the held keys from the system when the focus arrives was weighed and left out. winit reports a change only against its own last value, which it clears when the window loses the focus. A Ctrl seeded that way and let go before any other event would never be reported, so it would stick, as in 2026100220463754.
+		- 20261003: If b26 shows the bug anyway, the cause is elsewhere. `SILK_KEYDBG=1` prints each held-key and focus change for the terminal window, which is the next thing to look at.
+	- Decisions:
+		- 20261003: It should work as expected, where that is reasonably possible.
+	- Actual fix: none, see the progress log.
+	- Branch: mackeys
+	- Test case: none. The gap would be in winit's macOS event code, which no test here can drive. The app's half, a left press with Ctrl held acting as a right press, is `ctrl_click_is_the_right_click_on_macos_only`.
+
+- macOS: the first frames after a window shows are drawn at the default size
+	- ID: 2026100517535929
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: The `newwin` Windows scenario on vm925w, since every resize event now reads the window's size. A window resize and Settings on Wayland.
+	- Severity: Low
+	- Opened: 20261005-175359
+	- Closed: 20261006-143038
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100514211602, 2026100114274893
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: For about 80 ms after a new window shows, its frames are drawn at 1000x640 points, while the window is already at its launch size.
+	- Expected behavior: The first frame on screen is drawn at the window's size.
+	- Reproduced: No. Seen 20261005 on b26 in what the window reported about its size, not looked at on screen.
+	- Possible cause: winit's `request_inner_size` answers nothing on macOS, though the window takes the size at once, so the surface waits for the resize event. A hidden window's frame is refused as occluded and the window is shown at once (2026100114274893), before that event comes.
+	- Reproduced: Partly, 20261006 on b26. For about 85 ms after launch the surface was at the creation size, 2000x1280 pixels, while the window was already 2394x828, and the late resize from creation set it back to 2000x1280 once more. But no frame was drawn at that size in 6 launches. macOS refuses every frame until the window is on screen, about 110 ms in, and the real size has arrived by then. The Settings dialog was the same at its first size, 560x800.
+	- Actual cause:
+		- winit on macOS answers nothing when asked for a size, though the window takes it at once. So the surface stayed at the creation size until a resize event came.
+		- The resize event from the window's creation comes after the real size is in place, and it moved the surface back to the creation size until the next one.
+	- Actual fix:
+		- A size request that winit answers with nothing still counts when the window already has a new size. The surface is made at the window's size before the first frame. Every size request goes through this, the dialogs' too.
+		- A resize event sizes the surface at the window's own size, not the event's, so a stale one changes nothing. Same for the dialogs.
+		- 20261006: kept as a guard against the race, though no wrong frame was seen.
+	- Swept: every `request_inner_size` call, 2 in app.rs and 6 in dialog.rs, and the 3 resize event handlers (window, dialog, notice).
+	- Verified:
+		- b26: 6 launches with the fix and 6 without, and Settings opened once each. With the fix the surface had the window's size from the start, and the late creation resize left it alone. Without it, as under Reproduced.
+		- Linux X11: `cicd/tests/startsize/run.bash` and `cicd/tests/wpresize/run.bash` pass, the unit tests pass, and Settings opened and resized under xfwm4 drew at its size.
+	- Note: Windows and Wayland already answer a size request at once, and their resize events report the window's size, so nothing should change there. Not run on either.
+	- Branch: macfirst
+	- Commit: 621d931
+	- Test case: `a_size_the_window_took_without_saying_is_drawn_at` (ErwgxDd), failing on the old code. The resize event half has no unit test, since it needs a real window.
+
+- Code style: bash scripts drift from the house conventions
+	- ID: 2026100314050013
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: Yes. A full `cicd/cicd.bash` run, since the profiler, dogfood and publish stages only run there.
+	- Needs external testing: install.bash under the macOS bash 3.2 on b26.
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Closed: 20261006-143052
+	- Opened by: CC
+	- Target OS: Linux
+	- Incorrect behavior:
+		- 45 functions and about 80 variables are snake_case, mostly in cicd.bash, gui-headless.bash, termbench-run.bash and the scroll test. release.bash has its own `die` and plain `echo`.
+		- install.bash uses `[ ]` on 60 lines. Bash 3.2 has `[[ ]]`, and the same file already uses it.
+		- 755 expansions are not braced, most in gui-headless.bash and both git hooks.
+	- Expected behavior: `fCamelCase` functions, camelCase variables, `[[ ]]`, and `"${var}"`.
+	- Note: `retry_build` is named in the project notes, and the gfs helpers are shared with other projects, so those renames go with their references.
+	- Origin: db4d40b (2026-08-01) for cicd.bash, c09beb3 (2026-08-06) for install.bash, c7678e6 (2026-09-17) for gui-headless.bash. No earlier review item. Confirmed.
+	- Actual fix [Bug]:
+		- Functions are fCamelCase and variables camelCase, with every caller, test and note that names them. `retry_build` is now `fRetryBuild`.
+		- The output helpers moved out of cicd.bash into `cicd/utility/include/echo.bash`. release.bash sources it, so it prints through fEcho_Clean and fails through fDie.
+		- install.bash and its test use `[[ ]]` throughout. Version fields there compare as base 10, since `-gt` inside `[[ ]]` would read a leading zero as octal.
+		- Every expansion is braced, `$1` and `$@` too. `$?`, `$#`, `$$` and `$!` stay as they are.
+		- New gate `cicd/utility/bash-style.bash`, run in stage 3 after shellcheck. It checks the braces, `[[ ]]` in Bash, and fCamelCase function names.
+	- Note: Left alone on purpose:
+		- The copies shared with other projects: gfs-rotate.bash with its `gfs_rotate`, x9ps1-git.bash, n8git_backup-and-publish and runterm.
+		- UPPER_SNAKE_CASE settings and environment names, which are an interface.
+		- `[ ]` in the two git hooks and the scene scripts, which run under sh or dash.
+		- Other tools' setting names (`enable_wayland`, `initial_window_width`), the engine test's `uname` stand-in, and code inside single-quoted `bash -c` strings and awk programs.
+	- Swept: every tracked `.bash` and `.sh` file plus both hooks, by function definitions, assignments and expansions. The gate now runs over the same list.
+	- Verified: 20261006.
+		- shellcheck is clean, and the new gate passes on the branch. On the dev copies of cicd.bash, install.bash, gui-headless.bash, pre-push and the engine test it fails: 230 unbraced expansions, 77 `[ ]` tests, 26 names.
+		- These script tests pass: engine, packaging, publish, release, release notes, sync, gates, hooks, install, rename, pins, pslint, pylint, win-remote, wingui harness, wine, cicd-win, rotate, testdir, scroll verdict, demo and showdown.
+		- The scroll harness passed all 11 scenes on X11, plus the Wayland arm and the real-app smoke. gui-headless.bash start, launch, shot, status and stop work. release.bash stops with the fDie line off main.
+	- Branch: bashstyle
+	- Commit: 7657f19, a8fe9f7, c5eae4f, ca6ee0c, ed813ba, 2314eb1, 8f5a67b
+	- Test case: `cicd/utility/bash-style.bash`, the stage 3 gate. The install, hooks, engine, packaging and publish tests cover what the renames touched.
+	- Note: Code review 20261003 item 13.
+
+- Code style: the PowerShell scripts follow bash conventions
+	- ID: 2026100314050015
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: The Windows GUI scenarios on vm925w, since they run under StrictMode now: the pipeline list, idlewake and idlemin, and gpuload-on and gpuload-off with gpu-stress sent along. On b29w only consolemsg and _selftest ran. The rest skipped, since the console session there was locked.
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Closed: 20261006-143134
+	- Opened by: CC
+	- Target OS: Windows
+	- Incorrect behavior:
+		- All 164 functions are `fCamelCase`. None is Verb-Noun, so the approved-verb lint can never fire.
+		- No script has comment-based help. Three use `[CmdletBinding()]`. `install.ps1` has two untyped parameters.
+		- Nine scripts set `Set-StrictMode -Version 2.0`, not Latest, with no reason given.
+		- 29 calls pass three or more positional arguments, and five use the `-EA` alias.
+		- Eight loops grow an array with `+=`.
+	- Expected behavior: The PowerShell section of the directives.
+	- Progress log:
+		- 20261003: The naming half was open at first: rename to Verb-Noun, or record `fCamelCase` as a house allowance with its reason, the way Write-Host is.
+		- 20261003: `PSUseApprovedVerbs` is now in the lint's excluded rules, with the reason beside it.
+		- 20261006: Every script has comment-based help under its copyright lines, except the profile snippet. Small helper functions keep their one-line comments rather than a help block each.
+		- 20261006: StrictMode is Latest where it was 2.0, and in the scripts that had none: the job scripts, and the GUI harness, which covers its scenarios. A dot-sourced library leaves it to its caller. `shell_integration.ps1` runs in the user's own shell, so it has no help block and sets nothing.
+		- 20261006: `[CmdletBinding()]` on every script with a param block, and every script and function parameter typed. Script block parameters were left alone.
+		- 20261006: prerequisites.md and design.md say the dogfood launcher needs PowerShell 7, and it does not run on 5.1 today. Its changes keep to 5.1 syntax, but it was not made to run there.
+		- 20261006: Also fixed: install.ps1 failed at once when the shell running it had StrictMode on, which the `irm | iex` one-liner meets in a user's own session. It read a Path property that a script block does not have. Its `mv` is now called by path, which the lint on Windows flagged as Move-Item's alias.
+		- 20261006: Three shell scan unit tests fail on Windows, apart from this item. Filed as 2026100612422856.
+	- Decisions:
+		- 20261003: `fCamelCase` function names stay. They are an exception for this project only. The rest of the item stands.
+		- 20261006: every PowerShell file is ASCII only, the way shcl's are. The copyright line is `Copyright (C) <year> Jim Collier` with no ID, rules are `=`, and cicd-win.ps1 lost its byte-order mark. ps-lint fails on any byte above 127.
+	- Actual fix:
+		- `ps-lint.ps1` checks two more things: a PowerShell command given three or more arguments by position, and a common parameter by its alias, such as `-EA`. A command counts as PowerShell's when a linted script defines it, or when it is Verb-Noun and no program has that name.
+		- The 42 findings are fixed: arguments named, `-EA` written out.
+		- Arrays grown in loops are lists or the loop's own output, in cicd-win.ps1, install.ps1, n8runterm.ps1 and the GUI harness. The harness keeps its check lines in a list too, since a scenario can add 250 of them one call at a time.
+		- What StrictMode would trip on was fixed first: a process that has gone, a filter that kept nothing, a reference picture read before it was set.
+		- `cicd-win.ps1 -Help` prints its help block.
+		- The style guide's PowerShell section has the new rules.
+	- Origin: c09beb3 (2026-08-06) for install.ps1, 96da710 (2026-07-22) for cicd-win.ps1, 4050e29 (2026-09-08) for n8runterm.ps1. No earlier review item. Confirmed.
+	- Swept: `ps-lint.ps1` over every tracked script reports nothing, on Linux and on Windows. A parse of every script finds no `+=` in a loop but counters and strings. Every script's help reads back through the parser.
+	- Verified:
+		- The lint test fails on its new cases without the new checks, and passes with them.
+		- Linux: the install, release, cicd-win, pins, packaging, test folder, launcher and GUI harness tests, the docs test and the script header test.
+		- b29w: `cicd-win.ps1 -Quick` with its three unrelated failing tests skipped, including the installer tests under PowerShell 7 and 5.1. The test folder test under 5.1. The info and cliflags jobs. The console job ran too, and said there was no test session to move.
+	- Branch: psstyle
+	- Commit: e96dfbd, 1bc067a, 86f2ac3, 767f176, 63ff9f7, 353939c, cfc3f2d, 84241a8
+	- Test case: The PowerShell lint test, `cicd/tests/pslint/run.bash` (Er2UgYC), with planted positional and alias cases. The installer fault is pinned by the install test, whose PowerShell cases now run from a shell with StrictMode on. 7 of them failed before the fix.
+	- Note: Code review 20261003 item 15.
 
 - Code style: fixed choices are kept as strings, float codes and flags that must agree
 	- ID: 2026100314050011
