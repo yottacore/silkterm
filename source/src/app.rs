@@ -227,9 +227,11 @@ impl App {
 				self.raise_reassert = RAISE_REASSERTS;
 				self.raise_next = Instant::now() + RAISE_REASSERT_IVL;
 			}
-			WindowEvent::Resized(size) => {
+			// the window's own size, since a late creation-size event is stale
+			WindowEvent::Resized(_) => {
 				if let Some(d) = &mut self.dialog {
-					d.resize(size.width, size.height);
+					let now = d.window.inner_size();
+					d.resize(now.width, now.height);
 				}
 				self.dialog_dirty = true;
 			}
@@ -460,8 +462,9 @@ impl App {
 		let mut close = false;
 		match event {
 			WindowEvent::CloseRequested => close = true,
-			WindowEvent::Resized(size) => {
-				n.resize(size.width, size.height);
+			WindowEvent::Resized(_) => {
+				let now = n.window.inner_size();
+				n.resize(now.width, now.height);
 				self.notice_dirty = true;
 			}
 			WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -5214,7 +5217,7 @@ impl State {
 		// A size the window can honor straight away answers here and sends no
 		// `Resized`, so this is the only chance to move everything the window
 		// event moves - the scrim included, which was left at the old size.
-		if let Some(applied) = self.window.request_inner_size(want) {
+		if let Some(applied) = request_size(&self.window, want) {
 			self.resize_surface(applied.width, applied.height);
 			self.relayout_all();
 			self.invalidate_prepared();
@@ -8086,6 +8089,26 @@ fn resize_is_current(event: (u32, u32), now: (u32, u32)) -> bool {
 	event == now && event.0 > 0 && event.1 > 0
 }
 
+/// Asks for a size and answers the one the window took, if it took one now.
+/// winit on macOS answers nothing though the window resizes at once, and its
+/// `Resized` comes later, behind a stale one from creation (2026100517535929).
+pub(crate) fn request_size(
+	window: &Window,
+	want: winit::dpi::PhysicalSize<u32>,
+) -> Option<winit::dpi::PhysicalSize<u32>> {
+	let before = window.inner_size();
+	let answered = window.request_inner_size(want);
+	size_taken(answered, before, window.inner_size())
+}
+
+fn size_taken(
+	answered: Option<winit::dpi::PhysicalSize<u32>>,
+	before: winit::dpi::PhysicalSize<u32>,
+	after: winit::dpi::PhysicalSize<u32>,
+) -> Option<winit::dpi::PhysicalSize<u32>> {
+	answered.or_else(|| (after != before && after.width > 0 && after.height > 0).then_some(after))
+}
+
 /// The window/taskbar icon, decoded from the bundled logo (downscaled so the
 /// _`NET_WM_ICON` payload stays small). The logo is wider than it is tall and every
 /// place an icon is shown reserves a square, so it is stretched to fill one
@@ -8637,11 +8660,11 @@ impl ApplicationHandler<UserEvent> for App {
 		let want = winit::dpi::PhysicalSize::new(want_w, want_h);
 		let maximize_on_reveal = launch_maximized(&settings, cli_win);
 		let mut scrim = scrim;
-		// If the resize applies synchronously (Windows), the first frame is already at
+		// If the resize applies synchronously (Windows, macOS), the first frame is already at
 		// the final size - reveal on it. Otherwise (async X11/Wayland) wait for the
 		// surface to reach `want` before revealing, so the window never maps at the
 		// default size first.
-		let reveal_want = if let Some(applied) = window.request_inner_size(want) {
+		let reveal_want = if let Some(applied) = request_size(&window, want) {
 			gfx.resize(applied.width, applied.height);
 			scrim.resize(&gfx.device, applied.width, applied.height);
 			None
@@ -8990,8 +9013,11 @@ impl ApplicationHandler<UserEvent> for App {
 			WindowEvent::CloseRequested => event_loop.exit(),
 
 			WindowEvent::Resized(size) => {
-				state.no_area = size.width == 0 || size.height == 0;
-				state.resize_surface(size.width, size.height);
+				// The surface follows the window, not the event. macOS sends the
+				// creation size after the real one is in place (2026100517535929).
+				let now = state.window.inner_size();
+				state.no_area = now.width == 0 || now.height == 0;
+				state.resize_surface(now.width, now.height);
 				state.note_wallpaper_size();
 				state.relayout_all();
 				state.save_window_size(size.width, size.height);
@@ -10616,8 +10642,8 @@ mod tests {
 		is_copy_chord, key_is_typed, launch_maximized, menu_metrics, needs_folder_read,
 		new_window_command, notice_due, pace_frame, pane_wake, rating_step, release_deadline,
 		remember_resize, resize_is_current, reveal_due, rotation_live, rotation_next,
-		settings_after_reload, settle, tab_close_box, tab_command_line, tab_title_w, typed_title,
-		view_menu_items, window_hidden, window_px,
+		settings_after_reload, settle, size_taken, tab_close_box, tab_command_line, tab_title_w,
+		typed_title, view_menu_items, window_hidden, window_px,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -11257,6 +11283,30 @@ mod tests {
 		assert!(resize_is_current(launched, launched));
 		assert!(!resize_is_current((0, 0), (0, 0)), "minimized");
 		assert!(!resize_is_current((2394, 0), (2394, 0)));
+	}
+
+	// A request winit answers with nothing still counts when the window already
+	// has a new size, so the first frame is drawn at it. The numbers are a b26
+	// launch: created at 2000x1280, asked for 1988x1269, took 1988x1270.
+	// Test ID: ErwgxDd
+	#[test]
+	fn a_size_the_window_took_without_saying_is_drawn_at() {
+		let px = winit::dpi::PhysicalSize::new;
+		assert_eq!(
+			size_taken(None, px(2000, 1280), px(1988, 1270)),
+			Some(px(1988, 1270)),
+			"macOS"
+		);
+		assert_eq!(
+			size_taken(None, px(2000, 1000), px(2000, 1000)),
+			None,
+			"still on its way"
+		);
+		assert_eq!(
+			size_taken(Some(px(900, 600)), px(2000, 1000), px(900, 600)),
+			Some(px(900, 600))
+		);
+		assert_eq!(size_taken(None, px(2000, 1000), px(0, 0)), None);
 	}
 
 	// A settled move to another monitor takes that monitor's size, unless the
