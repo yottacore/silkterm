@@ -1753,6 +1753,57 @@ impl GlxCodes {
 	}
 }
 
+#[cfg(target_os = "linux")]
+const WSI_DEBUG: &str = "MESA_VK_WSI_DEBUG";
+
+/// Software rendering on an X server that cannot make shared pixmaps, NVIDIA's
+/// for one. Mesa's software Vulkan presents through MIT-SHM pixmaps whenever the
+/// server has DRI3, without asking. Each pixmap is refused unseen, the fence
+/// made on it fails `BadDrawable`, and winit panics at its next checked call.
+/// Mesa's `noshm` makes it use `PutImage` instead. Every Vulkan instance reads
+/// the variable, the dialogs' worker too, so that way it is set once from main
+/// while the process is still single-threaded. Shells started from here
+/// inherit it, which keeps a software Vulkan program run in one off the same
+/// fault.
+#[cfg(target_os = "linux")]
+pub fn keep_software_off_shared_pixmaps(on_x11: bool) {
+	if !on_x11 {
+		return;
+	}
+	let Some(shared) = x11_shared_pixmaps() else {
+		return;
+	};
+	let now = std::env::var(WSI_DEBUG).ok();
+	if let Some(value) = wsi_debug_for(now.as_deref(), shared) {
+		// SAFETY: called from main before any other thread exists.
+		unsafe { std::env::set_var(WSI_DEBUG, value) };
+	}
+}
+
+// None when the server has no MIT-SHM, which Mesa takes as no SHM at all.
+#[cfg(target_os = "linux")]
+fn x11_shared_pixmaps() -> Option<bool> {
+	use x11rb::protocol::shm::ConnectionExt as _;
+	let (conn, _) = x11rb::connect(None).ok()?;
+	let reply = conn.shm_query_version().ok()?.reply().ok()?;
+	Some(reply.shared_pixmaps)
+}
+
+// What MESA_VK_WSI_DEBUG has to become, or None to leave it. Mesa splits the
+// value on commas and spaces.
+#[cfg(any(target_os = "linux", test))]
+fn wsi_debug_for(now: Option<&str>, shared_pixmaps: bool) -> Option<String> {
+	let now = now.unwrap_or("").trim();
+	if shared_pixmaps || now.split([',', ' ']).any(|flag| flag == "noshm") {
+		return None;
+	}
+	Some(if now.is_empty() {
+		"noshm".to_string()
+	} else {
+		format!("{now},noshm")
+	})
+}
+
 // Offscreen scene target for the GL path: rendered top-left like the native
 // surface, then flip-blitted into the default framebuffer.
 fn offscreen_tex(
@@ -2593,5 +2644,22 @@ mod tests {
 		assert!(heard.load(std::sync::atomic::Ordering::SeqCst));
 		warm.release();
 		assert!(warm.ready_device().is_none(), "the idle release lets it go");
+	}
+
+	// A server with no shared pixmaps gets Mesa's noshm, added to whatever the
+	// variable already says. One that has them is left alone.
+	// Test ID: ErxxHvN
+	#[test]
+	fn no_shared_pixmaps_turns_mesa_shm_off() {
+		assert_eq!(wsi_debug_for(None, false).as_deref(), Some("noshm"));
+		assert_eq!(wsi_debug_for(Some(" "), false).as_deref(), Some("noshm"));
+		assert_eq!(
+			wsi_debug_for(Some("sw"), false).as_deref(),
+			Some("sw,noshm")
+		);
+		assert_eq!(wsi_debug_for(Some("sw noshm"), false), None);
+		assert_eq!(wsi_debug_for(Some("noshm,sw"), false), None);
+		assert_eq!(wsi_debug_for(None, true), None);
+		assert_eq!(wsi_debug_for(Some("sw"), true), None);
 	}
 }

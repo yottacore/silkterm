@@ -167,9 +167,6 @@ fn main() -> anyhow::Result<()> {
 		}
 		return Ok(());
 	}
-	// Read what the machine is on a worker: the profile needs it, nothing before
-	// the first frame does, and a /proc read has no business on that path.
-	profile::probe_machine();
 	if let Some(path) = &cli.config {
 		config::set_config_override(path.clone());
 	}
@@ -200,9 +197,18 @@ fn main() -> anyhow::Result<()> {
 	}
 	let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
 	event_loop.set_control_flow(ControlFlow::Wait);
+	// An environment write, so before the first thread (see gfx.rs).
+	#[cfg(target_os = "linux")]
+	gfx::keep_software_off_shared_pixmaps(winit::platform::x11::EventLoopExtX11::is_x11(
+		&event_loop,
+	));
 	let proxy = event_loop.create_proxy();
 	// control socket up before any PTY spawns, so shells inherit SILKTERM_SOCKET
 	let _ctl = ctl::serve(proxy.clone());
+	// Read what the machine is on a worker: the profile needs it, nothing before
+	// the first frame does, and a /proc read has no business on that path. After
+	// the environment writes above.
+	profile::probe_machine();
 	let mut app = App::new(proxy, cli);
 	// cicd profiler stage: SILK_PROFILE_OUT set -> sample this run and write a
 	// flamegraph SVG when the app exits (App exits itself after SILK_PROFILE_SECS).

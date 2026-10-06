@@ -785,6 +785,18 @@ if [[ -x "${root}/cicd/tests/wakepic/run.bash" ]]; then
 		*) fDie "wallpaper kept through an idle wake test failed ($(fTestId cicd/tests/wakepic/run.bash))" ;;
 	esac
 fi
+## Software rendering on an X server with no shared pixmaps, at launch and
+## switched on later. Exit 3 is a skip: no binary, sway, Xwayland with DRI3,
+## render node or tools.
+if [[ -x "${root}/cicd/tests/swnoshm/run.bash" ]]; then
+	fEcho_Clean "software rendering without shared pixmaps ..."
+	noshmRc=0; "${root}/cicd/tests/swnoshm/run.bash" >/dev/null || noshmRc=$?
+	case "${noshmRc}" in
+		0) fEcho "OK: software rendering without shared pixmaps ($(fTestId cicd/tests/swnoshm/run.bash))" ;;
+		3) fEcho "WARNING: software rendering without shared pixmaps skipped" ;;
+		*) fDie "software rendering without shared pixmaps test failed ($(fTestId cicd/tests/swnoshm/run.bash))" ;;
+	esac
+fi
 if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
 	fEcho_Clean "pipeline steps ..."
 	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed ($(fTestId cicd/tests/engine/run.bash))"
