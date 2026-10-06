@@ -522,7 +522,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
-	- Status: Waiting for testing
+	- Status: Waiting for testing [started]
 		- Works on Linux [20261006-141835]
 	- Needs external testing:
 		- Two real monitors that differ, on X11, Windows and macOS. The window opens at each monitor's own size and font zoom, and takes the other's once dropped there, never while still held. A resize right after the drop is kept, and the window does not swap sizes when it straddles the two.
@@ -622,7 +622,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
 	- ID: 2026100220292607
 	- Type: Feature
-	- Status: Waiting for testing
+	- Status: Done
 		- Tested b23 [20261006-142134]
 	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
 	- Needs external testing:
@@ -631,6 +631,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
 	- Priority: Avg
 	- Opened: 20261002-202926
+	- Closed: 20261006-144614
 	- Opened by: JC
 	- Assigned to: CC
 	- Target OS: All
