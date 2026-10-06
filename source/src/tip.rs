@@ -15,14 +15,14 @@ use std::time::{Duration, Instant};
 use crate::config;
 use crate::pane::Rect;
 
-// How long the pointer rests on something before its tip comes up. One value
-// for every tip in the program - a menu that answered faster than the tab strip
-// would read as a different kind of thing.
+/// How long the pointer rests on something before its tip comes up. One value
+/// for every tip in the program - a menu that answered faster than the tab strip
+/// would read as a different kind of thing.
 pub const DELAY: Duration = Duration::from_millis(600);
 
-// The box itself, DIP (see config::dip). One set for every tip the two dialogs
-// draw: a box that sat closer to its control in one window than in the other
-// would read as a different kind of thing, the same argument as the delay.
+/// The box itself, DIP (see `config::dip`). One set for every tip the two dialogs
+/// draw: a box that sat closer to its control in one window than in the other
+/// would read as a different kind of thing, the same argument as the delay.
 pub const PAD_X: f32 = 8.0;
 pub const PAD_Y: f32 = 4.0;
 pub const DROP: f32 = 8.0; // offset below the control it describes
@@ -31,9 +31,9 @@ pub const BORDER: f32 = 1.0;
 const WRAP_MARGIN: f32 = 8.0; // window width kept clear of a wrapped tip
 const MIN_WRAP: f32 = 40.0; // a wrap budget never narrower than this
 
-// Greedy word wrap, measured in whatever font the caller draws in. A single
-// word wider than the budget still gets its own line rather than being split -
-// breaking mid-word would be worse than a tip that overhangs by one long word.
+/// Greedy word wrap, measured in whatever font the caller draws in. A single
+/// word wider than the budget still gets its own line rather than being split -
+/// breaking mid-word would be worse than a tip that overhangs by one long word.
 pub fn wrap(text: &str, max_w: f32, mut measure: impl FnMut(&str) -> f32) -> Vec<String> {
 	let mut lines: Vec<String> = Vec::new();
 	let mut line = String::new();
@@ -59,10 +59,10 @@ pub fn wrap(text: &str, max_w: f32, mut measure: impl FnMut(&str) -> f32) -> Vec
 	lines
 }
 
-// Where a tip box goes: centered under what it describes, or above it when
-// there is no room below, and never off an edge. Clamping into the bottom edge
-// instead of flipping would sit a footer button's own tip on the buttons it is
-// describing, which is the case that made the flip necessary.
+/// Where a tip box goes: centered under what it describes, or above it when
+/// there is no room below, and never off an edge. Clamping into the bottom edge
+/// instead of flipping would sit a footer button's own tip on the buttons it is
+/// describing, which is the case that made the flip necessary.
 pub fn place(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f32) -> (f32, f32) {
 	let (box_w, box_h) = size;
 	let (win_w, win_h) = win;
@@ -76,9 +76,9 @@ pub fn place(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f3
 	(x, y)
 }
 
-// Everything a caller needs to draw one tip, in physical pixels: the rule round
-// the box, the box itself, and where its first line of text starts. Lines after
-// the first step down by the caller's own line height.
+/// Everything a caller needs to draw one tip, in physical pixels: the rule round
+/// the box, the box itself, and where its first line of text starts. Lines after
+/// the first step down by the caller's own line height.
 #[derive(Debug)]
 pub struct Placed {
 	pub border: Rect,
@@ -87,10 +87,10 @@ pub struct Placed {
 	pub text_y: f32,
 }
 
-// Lay a tip out. `text_w` is the widest line and `line_h` the line height, both
-// already measured in the font the caller draws in, so both arrive physical.
-// Every number the box brings itself is a DIP converted once here, which is what
-// makes a tip at twice the scale the 1x tip doubled.
+/// Lay a tip out. `text_w` is the widest line and `line_h` the line height, both
+/// already measured in the font the caller draws in, so both arrive physical.
+/// Every number the box brings itself is a DIP converted once here, which is what
+/// makes a tip at twice the scale the 1x tip doubled.
 pub fn lay_out(
 	anchor: Rect,
 	lines: usize,
@@ -129,19 +129,19 @@ pub fn lay_out(
 	}
 }
 
-// How wide a tip's text may run before it wraps: the window, less a margin and
-// the box's own padding. A tip wraps rather than being clamped to the window
-// edge, so neither a longer sentence nor a larger interface font runs off it.
+/// How wide a tip's text may run before it wraps: the window, less a margin and
+/// the box's own padding. A tip wraps rather than being clamped to the window
+/// edge, so neither a longer sentence nor a larger interface font runs off it.
 pub fn wrap_budget(win_w: f32, scale: f32) -> f32 {
 	(win_w - config::dip(WRAP_MARGIN, scale) - config::dip(PAD_X, scale) * 2.0)
 		.max(config::dip(MIN_WRAP, scale))
 }
 
-// Where a tip goes when it must not cover what it describes: clear of the
-// anchor's right edge, flipped to its left when there is no room there, and top
-// aligned with it. A menu tip needs this - a box centered under the row would
-// sit on the rows below it, which are exactly what the reader is choosing
-// between.
+/// Where a tip goes when it must not cover what it describes: clear of the
+/// anchor's right edge, flipped to its left when there is no room there, and top
+/// aligned with it. A menu tip needs this - a box centered under the row would
+/// sit on the rows below it, which are exactly what the reader is choosing
+/// between.
 pub fn beside(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f32) -> (f32, f32) {
 	let (box_w, box_h) = size;
 	let (win_w, win_h) = win;
@@ -155,9 +155,9 @@ pub fn beside(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f
 	(x, y)
 }
 
-// What the pointer is resting on, and since when. `T` names the thing in
-// whatever terms the caller thinks in - a tab index, a menu row - so the timing
-// rule is written once and the identity stays the caller's business.
+/// What the pointer is resting on, and since when. `T` names the thing in
+/// whatever terms the caller thinks in - a tab index, a menu row - so the timing
+/// rule is written once and the identity stays the caller's business.
 #[derive(Debug)]
 pub struct Dwell<T> {
 	over: Option<(T, Instant)>,
@@ -172,9 +172,9 @@ impl<T> Default for Dwell<T> {
 }
 
 impl<T: Copy + PartialEq> Dwell<T> {
-	// Point at something, or at nothing. The clock runs on while the target is
-	// unchanged, and restarts when it is not. True means the caller has to
-	// redraw: a tip that was up is now pointing somewhere else, or at nothing.
+	/// Point at something, or at nothing. The clock runs on while the target is
+	/// unchanged, and restarts when it is not. True means the caller has to
+	/// redraw: a tip that was up is now pointing somewhere else, or at nothing.
 	pub fn point_at(&mut self, target: Option<T>) -> bool {
 		match (target, &self.over) {
 			(Some(want), Some((have, _))) if *have == want => false,
@@ -192,15 +192,15 @@ impl<T: Copy + PartialEq> Dwell<T> {
 		}
 	}
 
-	// What the pointer has rested on long enough to deserve a tip, if anything.
+	/// What the pointer has rested on long enough to deserve a tip, if anything.
 	pub fn ripe(&self) -> Option<T> {
 		let (target, since) = self.over.as_ref()?;
 		(Instant::now().duration_since(*since) >= DELAY).then_some(*target)
 	}
 
-	// `ripe`, for a tip that should not stay up forever. After `limit` it goes
-	// down, and stays down until the pointer leaves and comes back, since only
-	// a new target restarts the clock. A zero limit never takes it down.
+	/// `ripe`, for a tip that should not stay up forever. After `limit` it goes
+	/// down, and stays down until the pointer leaves and comes back, since only
+	/// a new target restarts the clock. A zero limit never takes it down.
 	pub fn ripe_for(&self, limit: Duration) -> Option<T> {
 		self.ripe_at(Instant::now(), limit)
 	}
@@ -211,8 +211,8 @@ impl<T: Copy + PartialEq> Dwell<T> {
 		(limit.is_zero() || up < limit).then_some(*target)
 	}
 
-	// When the loop next has to wake to raise a tip. None while nothing is being
-	// pointed at, and while one is already up.
+	/// When the loop next has to wake to raise a tip. None while nothing is being
+	/// pointed at, and while one is already up.
 	pub fn wake(&self) -> Option<Instant> {
 		let (_, since) = self.over.as_ref()?;
 		let due = *since + DELAY;

@@ -115,33 +115,33 @@ pub struct Spec {
 	pub key: Key,
 	pub kind: Kind,
 	pub tab: usize,
-	// Flyover text for a control whose purpose is not obvious from its label.
-	// Empty means the row explains itself and gets no tip.
+	/// Flyover text for a control whose purpose is not obvious from its label.
+	/// Empty means the row explains itself and gets no tip.
 	pub help: &'static str,
-	// Sub-group depth. Only the LABEL moves; the controls stay in their column,
-	// so a run of indented labels reads as belonging to the row above it. A
-	// sub-group is therefore not declared anywhere - it is the leader's own
-	// depth plus everything deeper that follows.
+	/// Sub-group depth. Only the LABEL moves; the controls stay in their column,
+	/// so a run of indented labels reads as belonging to the row above it. A
+	/// sub-group is therefore not declared anywhere - it is the leader's own
+	/// depth plus everything deeper that follows.
 	pub indent: u8,
-	// Drawn on the same line as the row above rather than under it. The pair
-	// splits the control column in half; the row above keeps the label column and
-	// its label has to name both halves. This row's own label, if it has one,
-	// follows its control the way a checkbox's does.
+	/// Drawn on the same line as the row above rather than under it. The pair
+	/// splits the control column in half; the row above keeps the label column and
+	/// its label has to name both halves. This row's own label, if it has one,
+	/// follows its control the way a checkbox's does.
 	pub beside: bool,
-	// Flyover for the revert arrow, where it does something other than put the
-	// shipped default back.
+	/// Flyover for the revert arrow, where it does something other than put the
+	/// shipped default back.
 	pub revert_help: &'static str,
-	// Only in the Windows build. Test builds keep it everywhere, so its layout
-	// and behavior are tested on every platform.
+	/// Only in the Windows build. Test builds keep it everywhere, so its layout
+	/// and behavior are tested on every platform.
 	pub windows: bool,
-	// Flyover for a warning mark after the label: a row that may not work
-	// everywhere. Empty means no mark.
+	/// Flyover for a warning mark after the label: a row that may not work
+	/// everywhere. Empty means no mark.
 	pub warning: &'static str,
 }
 
-// One setting a control has to wait on, resolved from the file's gate lines.
-// `numeric` is decided here rather than at every check: a slider is satisfied
-// while it sits above zero, everything else while it is switched on.
+/// One setting a control has to wait on, resolved from the file's gate lines.
+/// `numeric` is decided here rather than at every check: a slider is satisfied
+/// while it sits above zero, everything else while it is switched on.
 #[derive(Debug)]
 pub struct Need {
 	pub key: Key,
@@ -212,8 +212,8 @@ pub struct Layout {
 	pub pick_marker: f32,
 }
 
-// Flyover text for the footer buttons, which are chrome rather than settings and
-// so have no row of their own to carry it.
+/// Flyover text for the footer buttons, which are chrome rather than settings and
+/// so have no row of their own to carry it.
 #[derive(Debug)]
 pub struct Help {
 	pub cancel: &'static str,
@@ -241,8 +241,8 @@ pub struct Ui {
 }
 
 impl Ui {
-	// Config path(s) behind a setting, for revert's comment-out. Empty for a
-	// heading, or for a row that carries no setting of its own.
+	/// Config path(s) behind a setting, for revert's comment-out. Empty for a
+	/// heading, or for a row that carries no setting of its own.
 	pub fn settings_of(&self, key: Key) -> &'static [&'static str] {
 		self.settings
 			.iter()

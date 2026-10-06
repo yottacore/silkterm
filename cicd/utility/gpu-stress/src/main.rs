@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// Keeps a GPU busy, full, or both, so a window can be watched under load.
-//
-//	gpu-stress [--vram-mb N | --vram-pct P] [--chunk-mb N] [--touch]
-//	           [--busy F] [--slice-ms N] [--secs N] [--stop-file PATH]
-//	           [--backend all|vulkan|dx12|gl]
-//
-// --vram-mb takes that much in chunks until the driver refuses one. --vram-pct
-// asks wgpu to refuse past that percent of the budget the driver reports, and
-// takes chunks until it does. --busy is the share of time a compute shader
-// keeps the GPU working, 0 to 1. Ends after --secs, or once the stop file
-// exists, and prints what it holds every two seconds.
+//! Keeps a GPU busy, full, or both, so a window can be watched under load.
+//!
+//!	gpu-stress [--vram-mb N | --vram-pct P] [--chunk-mb N] [--touch]
+//!	           [--busy F] [--slice-ms N] [--secs N] [--stop-file PATH]
+//!	           [--backend all|vulkan|dx12|gl]
+//!
+//! --vram-mb takes that much in chunks until the driver refuses one. --vram-pct
+//! asks wgpu to refuse past that percent of the budget the driver reports, and
+//! takes chunks until it does. --busy is the share of time a compute shader
+//! keeps the GPU working, 0 to 1. Ends after --secs, or once the stop file
+//! exists, and prints what it holds every two seconds.
 
 use std::io::Write;
 use std::path::PathBuf;

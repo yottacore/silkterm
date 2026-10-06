@@ -25,7 +25,7 @@ struct Uniform {
 	_pad: [f32; 2],
 }
 
-// Wallpaper VRAM-content probe verdict (see `vram_check_poll`).
+/// Wallpaper VRAM-content probe verdict (see `vram_check_poll`).
 #[derive(Debug)]
 pub enum WpProbe {
 	Intact,
@@ -262,22 +262,22 @@ impl ImageRenderer {
 		}
 	}
 
-	// Built from `Prepared::standin` while the real picture is prepared again.
-	// Drawn many times its size, so the shader smooths it, and its size is no
-	// reason to prepare anything: the real one is already on its way.
+	/// Built from `Prepared::standin` while the real picture is prepared again.
+	/// Drawn many times its size, so the shader smooths it, and its size is no
+	/// reason to prepare anything: the real one is already on its way.
 	pub fn standing_in(mut self) -> Self {
 		self.standin = true;
 		self
 	}
 
-	// Whether a window this size would hold the picture at another size. Until
-	// it is prepared again, the one held now is drawn scaled.
+	/// Whether a window this size would hold the picture at another size. Until
+	/// it is prepared again, the one held now is drawn scaled.
 	pub fn needs_resize(&self, window: (u32, u32)) -> bool {
 		!self.standin && self.sizing.held(window) != self.held
 	}
 
-	// SILK_MEMDBG's line for the picture. The GL path has no allocator report to
-	// find it in.
+	/// `SILK_MEMDBG`'s line for the picture. The GL path has no allocator report to
+	/// find it in.
 	pub fn memdbg_line(&self) -> String {
 		let ((w, h), (fw, fh)) = (self.held, self.sizing.full);
 		format!(
@@ -287,14 +287,14 @@ impl ImageRenderer {
 		)
 	}
 
-	// What the slider (or the image's own tag) asked for, which is not always what
-	// gets drawn - see `set_look`.
+	/// What the slider (or the image's own tag) asked for, which is not always what
+	/// gets drawn - see `set_look`.
 	pub fn opacity(&self) -> f32 {
 		self.opacity
 	}
 
-	// Called per frame. fit/anchor are fixed at construction, so the uniform only
-	// changes on a resize, or when the mode or the visibility moves.
+	/// Called per frame. fit/anchor are fixed at construction, so the uniform only
+	/// changes on a resize, or when the mode or the visibility moves.
 	pub fn set_look(
 		&self,
 		queue: &wgpu::Queue,
@@ -328,8 +328,8 @@ impl ImageRenderer {
 		pass.draw(0..4, 0..1);
 	}
 
-	// Start an async readback of the probe block. False when the probe is
-	// disabled (tiny image) or one is already in flight.
+	/// Start an async readback of the probe block. False when the probe is
+	/// disabled (tiny image) or one is already in flight.
 	pub fn vram_check_start(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
 		let Some((bx, by)) = self.probe_at else {
 			return false;
@@ -371,8 +371,8 @@ impl ImageRenderer {
 		true
 	}
 
-	// Poll an in-flight probe. Lost is not reseeded here - on loss the caller
-	// reloads the wallpaper wholesale (recover_gpu), replacing this instance.
+	/// Poll an in-flight probe. Lost is not reseeded here - on loss the caller
+	/// reloads the wallpaper wholesale (`recover_gpu`), replacing this instance.
 	pub fn vram_check_poll(&mut self, device: &wgpu::Device) -> Option<WpProbe> {
 		let flag = self.probe_inflight.as_ref()?.clone();
 		if flag.load(Ordering::Acquire) == 0 {
@@ -401,7 +401,7 @@ impl ImageRenderer {
 		}
 	}
 
-	// Diagnostic (SILK_VRAMLOSS): zero the probe block to fake a content loss.
+	/// Diagnostic (`SILK_VRAMLOSS`): zero the probe block to fake a content loss.
 	pub fn vram_clobber(&self, queue: &wgpu::Queue) {
 		let Some((bx, by)) = self.probe_at else {
 			return;

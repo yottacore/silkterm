@@ -43,8 +43,8 @@ const MAX_RASTERS: usize = 4096;
 // is a panic inside glyphon - so the sweep only ever drops older stamps.
 const RASTER_PIN_FRAMES: u64 = 2;
 
-// A color glyph resolved for one char: which face holds it, and the design box
-// the raster covers (font units) so the caller can fit it to a cell.
+/// A color glyph resolved for one char: which face holds it, and the design box
+/// the raster covers (font units) so the caller can fit it to a cell.
 #[derive(Debug, Clone, Copy)]
 pub struct ColorMetrics {
 	pub id: u16,
@@ -90,14 +90,14 @@ impl std::fmt::Debug for ColorGlyphs {
 	}
 }
 
-// Should this char be PAINTED, or set in the terminal font? An emoji face
-// covers far more than it ought to be used for - the heavy check mark and the
-// copyright sign are both in Noto Color Emoji - and painting one loses the
-// ANSI color it was set in, which is how a green check in a git prompt came
-// out purple. Unicode answers with Emoji_Presentation, and the answer is No
-// for nearly everything below U+1F000, so the exceptions are listed. Above
-// that it is Yes for nearly everything, and the handful of No's up there are
-// pictures rather than text, so they are left to the font.
+/// Should this char be PAINTED, or set in the terminal font? An emoji face
+/// covers far more than it ought to be used for - the heavy check mark and the
+/// copyright sign are both in Noto Color Emoji - and painting one loses the
+/// ANSI color it was set in, which is how a green check in a git prompt came
+/// out purple. Unicode answers with `Emoji_Presentation`, and the answer is No
+/// for nearly everything below U+1F000, so the exceptions are listed. Above
+/// that it is Yes for nearly everything, and the handful of No's up there are
+/// pictures rather than text, so they are left to the font.
 pub fn wants_color(ch: char) -> bool {
 	#[rustfmt::skip]
 	const PAINTED: &[(u32, u32)] = &[
@@ -126,8 +126,8 @@ impl ColorGlyphs {
 		}
 	}
 
-	// Does `ch` have a color glyph, and how big is it in design units? None for
-	// the overwhelming majority of chars, so the miss is cached too.
+	/// Does `ch` have a color glyph, and how big is it in design units? None for
+	/// the overwhelming majority of chars, so the miss is cached too.
 	pub fn metrics(&mut self, db: &fontdb::Database, ch: char) -> Option<ColorMetrics> {
 		if !wants_color(ch) {
 			return None;
@@ -202,14 +202,14 @@ impl ColorGlyphs {
 		None
 	}
 
-	// Start of a frame's warming. Rasters warmed from here on are pinned against
-	// the overflow sweep until they are RASTER_PIN_FRAMES old.
+	/// Start of a frame's warming. Rasters warmed from here on are pinned against
+	/// the overflow sweep until they are `RASTER_PIN_FRAMES` old.
 	pub fn begin_frame(&mut self) {
 		self.frame = self.frame.wrapping_add(1);
 	}
 
-	// Build the raster for `id` at exactly `w`x`h` px if it isn't cached. Called
-	// from the frame build, so `prepare`'s callback only ever does a lookup.
+	/// Build the raster for `id` at exactly `w`x`h` px if it isn't cached. Called
+	/// from the frame build, so `prepare`'s callback only ever does a lookup.
 	pub fn warm(&mut self, db: &fontdb::Database, id: u16, w: u16, h: u16) {
 		if w == 0 || h == 0 {
 			return;
@@ -248,13 +248,13 @@ impl ColorGlyphs {
 		self.rasters.retain(|_, (stamp, _)| *stamp > cutoff);
 	}
 
-	// glyphon's rasterize callback: a pure lookup (see `warm`).
-	//
-	// A miss answers with transparent pixels rather than None. glyphon
-	// re-rasterizes every entry it holds when its atlas grows, and a glyph that
-	// stops answering aborts it - the same crash a wholesale clear caused. The
-	// sweep can still drop a key glyphon is holding, so the answer has to be
-	// pixels; the glyph simply is not drawn.
+	/// glyphon's rasterize callback: a pure lookup (see `warm`).
+	///
+	/// A miss answers with transparent pixels rather than None. glyphon
+	/// re-rasterizes every entry it holds when its atlas grows, and a glyph that
+	/// stops answering aborts it - the same crash a wholesale clear caused. The
+	/// sweep can still drop a key glyphon is holding, so the answer has to be
+	/// pixels; the glyph simply is not drawn.
 	pub fn raster(&self, req: RasterizeCustomGlyphRequest) -> Option<RasterizedCustomGlyph> {
 		if req.width == 0 || req.height == 0 {
 			return None;
@@ -273,10 +273,10 @@ impl ColorGlyphs {
 	}
 }
 
-// Families that can draw `ch` with no color in it, monospaced ones first.
-// cosmic-text picks a fallback face on its own and will take an emoji face for
-// a character Unicode presents as text, which then paints in the font's own
-// colors and ignores the color the cell was set in.
+/// Families that can draw `ch` with no color in it, monospaced ones first.
+/// cosmic-text picks a fallback face on its own and will take an emoji face for
+/// a character Unicode presents as text, which then paints in the font's own
+/// colors and ignores the color the cell was set in.
 pub fn text_families(db: &fontdb::Database, ch: char) -> Vec<String> {
 	let mut found: Vec<(bool, String)> = db
 		.faces()

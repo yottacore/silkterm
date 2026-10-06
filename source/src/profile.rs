@@ -34,7 +34,7 @@ pub enum Profile {
 }
 
 impl Profile {
-	// dialog order, which is also the order they cost in
+	/// dialog order, which is also the order they cost in
 	pub const ALL: [Profile; 6] = [
 		Profile::Custom,
 		Profile::Max,
@@ -44,7 +44,7 @@ impl Profile {
 		Profile::Remote,
 	];
 
-	// the spelling the config file uses
+	/// the spelling the config file uses
 	pub fn key(self) -> &'static str {
 		match self {
 			Profile::Custom => "custom",
@@ -67,8 +67,8 @@ impl Profile {
 		}
 	}
 
-	// An unknown spelling reads as the shipped default, the way every other
-	// named option in the config does.
+	/// An unknown spelling reads as the shipped default, the way every other
+	/// named option in the config does.
 	pub fn parse(text: &str) -> Profile {
 		Profile::ALL
 			.into_iter()
@@ -84,8 +84,8 @@ impl Profile {
 		Profile::ALL.get(index).copied().unwrap_or(Profile::Max)
 	}
 
-	// The next cheaper profile, or None at the bottom. Custom has no neighbor:
-	// the user's own values are not on the ladder.
+	/// The next cheaper profile, or None at the bottom. Custom has no neighbor:
+	/// the user's own values are not on the ladder.
 	pub fn lower(self) -> Option<Profile> {
 		match self {
 			Profile::Max => Some(Profile::High),
@@ -95,17 +95,17 @@ impl Profile {
 		}
 	}
 
-	// Where the display watch may step to. It stops at Low: Low keeps the
-	// wallpaper, which costs nothing per frame, and Standard turns off the eased
-	// frames the watch measures, so a step there could never be checked again.
+	/// Where the display watch may step to. It stops at Low: Low keeps the
+	/// wallpaper, which costs nothing per frame, and Standard turns off the eased
+	/// frames the watch measures, so a step there could never be checked again.
 	pub fn watched_lower(self) -> Option<Profile> {
 		self.lower().filter(|next| *next != Profile::Standard)
 	}
 }
 
-// The user's own values of every field a profile governs, kept beside the
-// live settings while a profile is in force. `put` is the whole of "choose
-// Custom and everything comes back".
+/// The user's own values of every field a profile governs, kept beside the
+/// live settings while a profile is in force. `put` is the whole of "choose
+/// Custom and everything comes back".
 #[derive(Clone, PartialEq, Debug)]
 pub struct Shadow {
 	scroll_smooth: bool,
@@ -173,16 +173,16 @@ impl Shadow {
 	}
 }
 
-// Put the user's own values back. Safe on settings that carry no profile.
+/// Put the user's own values back. Safe on settings that carry no profile.
 pub fn unapply(settings: &mut Settings) {
 	if let Some(shadow) = settings.profile_shadow.take() {
 		shadow.put(settings);
 	}
 }
 
-// Overwrite the governed fields with the profile's, keeping the user's values
-// in the shadow. Idempotent: a live copy that already carries a profile is
-// unwound first, so a changed profile field is honored rather than stacked.
+/// Overwrite the governed fields with the profile's, keeping the user's values
+/// in the shadow. Idempotent: a live copy that already carries a profile is
+/// unwound first, so a changed profile field is honored rather than stacked.
 pub fn apply(settings: &mut Settings) {
 	unapply(settings);
 	let profile = current(settings);
@@ -194,11 +194,11 @@ pub fn apply(settings: &mut Settings) {
 	settings.profile_shadow = Some(Box::new(shadow));
 }
 
-// Keep what a profile is showing and make it the user's own, then drop to
-// Custom. This is what editing a governed setting means: the change starts from
-// the values on screen, not from whatever the file held before the profile went
-// on. Also switches the automatic choice off, since a machine still picking for
-// itself would overwrite the edit at the next launch.
+/// Keep what a profile is showing and make it the user's own, then drop to
+/// Custom. This is what editing a governed setting means: the change starts from
+/// the values on screen, not from whatever the file held before the profile went
+/// on. Also switches the automatic choice off, since a machine still picking for
+/// itself would overwrite the edit at the next launch.
 pub fn adopt(settings: &mut Settings) {
 	let profile = current(settings);
 	if profile == Profile::Custom && !settings.performance_automatic {
@@ -214,10 +214,10 @@ pub fn adopt(settings: &mut Settings) {
 	settings.performance_automatic = false;
 }
 
-// The profile in force: the remote override while it is on, then a step the
-// display watch took this session, then the stored one. A step only ever makes
-// a ladder rung cheaper, and only while automatic is on - it is the automatic
-// choice's own correction, so a hand pick or Custom is never overridden by it.
+/// The profile in force: the remote override while it is on, then a step the
+/// display watch took this session, then the stored one. A step only ever makes
+/// a ladder rung cheaper, and only while automatic is on - it is the automatic
+/// choice's own correction, so a hand pick or Custom is never overridden by it.
 pub fn current(settings: &Settings) -> Profile {
 	if settings.remote_override {
 		return Profile::Remote;
@@ -266,10 +266,10 @@ fn values(profile: Profile, settings: &mut Settings) {
 	}
 }
 
-// The governed fields as `profile` sets them, over the shipped defaults. Only
-// those fields mean anything here. They depend on the profile alone, so each
-// is built once, and a reader that wants a profile's value of one field needs
-// no copy of the user's whole settings to lay the profile over.
+/// The governed fields as `profile` sets them, over the shipped defaults. Only
+/// those fields mean anything here. They depend on the profile alone, so each
+/// is built once, and a reader that wants a profile's value of one field needs
+/// no copy of the user's whole settings to lay the profile over.
 pub fn values_of(profile: Profile) -> &'static Settings {
 	static VALUES: std::sync::OnceLock<Vec<Settings>> = std::sync::OnceLock::new();
 	let all = VALUES.get_or_init(|| {
@@ -297,8 +297,8 @@ fn quicker(settings: &mut Settings) {
 	settings.text_scrim_radius = 5.0;
 }
 
-// Names the adapter closely enough that a new card or a switch to software
-// rendering reads as new hardware, and a driver update does not.
+/// Names the adapter closely enough that a new card or a switch to software
+/// rendering reads as new hardware, and a driver update does not.
 pub fn fingerprint(info: &wgpu::AdapterInfo) -> String {
 	format!(
 		"{} ({:?}, {:?})",
@@ -321,7 +321,7 @@ const SOFTWARE_ADAPTERS: &[&str] = &[
 	"microsoft remote",
 ];
 
-// Is there a real graphics processor behind this adapter?
+/// Is there a real graphics processor behind this adapter?
 pub fn software_adapter(info: &wgpu::AdapterInfo) -> bool {
 	if info.device_type == wgpu::DeviceType::Cpu {
 		return true;
@@ -330,11 +330,11 @@ pub fn software_adapter(info: &wgpu::AdapterInfo) -> bool {
 	SOFTWARE_ADAPTERS.iter().any(|s| name.contains(s))
 }
 
-// Is the screen this window draws to somewhere else? Every frame is then encoded
-// and shipped over a network, so what the graphics card can do says nothing about
-// what the person sees, and timing it would only ever flatter the machine. A
-// remote session takes the Remote profile for as long as it lasts and writes
-// nothing down, so the console keeps the rating it had.
+/// Is the screen this window draws to somewhere else? Every frame is then encoded
+/// and shipped over a network, so what the graphics card can do says nothing about
+/// what the person sees, and timing it would only ever flatter the machine. A
+/// remote session takes the Remote profile for as long as it lasts and writes
+/// nothing down, so the console keeps the rating it had.
 pub fn remote_session() -> bool {
 	#[cfg(windows)]
 	{
@@ -376,6 +376,7 @@ fn forwarded_display(display: &str) -> bool {
 // the first frame never waits on a file read. Started from main.
 static MACHINE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+/// Starts the read on a worker thread and returns at once.
 pub fn probe_machine() {
 	std::thread::spawn(|| {
 		let _ = MACHINE.set(machine_parts());
@@ -391,10 +392,10 @@ fn machine_parts() -> String {
 // written by one before could not be told apart from a measured answer.
 const RATING_VERSION: u32 = 2;
 
-// Everything the pick depends on, as one short id: the processor, the graphics
-// adapter and how much memory there is. Change any of them and the machine has
-// to be rated again. Hashed rather than spelled out, so the config carries no
-// description of the box it is on.
+/// Everything the pick depends on, as one short id: the processor, the graphics
+/// adapter and how much memory there is. Change any of them and the machine has
+/// to be rated again. Hashed rather than spelled out, so the config carries no
+/// description of the box it is on.
 pub fn hardware_id(info: &wgpu::AdapterInfo) -> String {
 	// the worker starts with the process and answers in microseconds; reading it
 	// here rather than waiting is the cheaper way to handle "not yet"
@@ -458,9 +459,9 @@ fn memory_gib() -> u64 {
 	}
 }
 
-// Where a machine starts before anything is measured, and where it stays when
-// there is nothing worth measuring: an adapter with no card behind it is not
-// going to hold any rung above Low.
+/// Where a machine starts before anything is measured, and where it stays when
+/// there is nothing worth measuring: an adapter with no card behind it is not
+/// going to hold any rung above Low.
 pub fn first_pick(info: &wgpu::AdapterInfo) -> Profile {
 	if software_adapter(info) {
 		Profile::Low
@@ -469,9 +470,9 @@ pub fn first_pick(info: &wgpu::AdapterInfo) -> Profile {
 	}
 }
 
-// Is there anything to time here, or is the first pick already the answer?
-// SILK_BENCH=1 forces a run: the banner and the ladder walk are otherwise only
-// reachable by putting a different graphics card in the machine.
+/// Is there anything to time here, or is the first pick already the answer?
+/// `SILK_BENCH=1` forces a run: the banner and the ladder walk are otherwise only
+/// reachable by putting a different graphics card in the machine.
 pub fn worth_measuring(info: &wgpu::AdapterInfo) -> bool {
 	std::env::var_os("SILK_BENCH").is_some() || !software_adapter(info)
 }
@@ -486,23 +487,23 @@ const BENCH_WARMUP: usize = 3; // frames discarded while a rung's settings settl
 const BENCH_FRAMES: usize = 40; // frames measured per rung...
 const BENCH_RUNG_MS: f32 = 800.0; // ...or this long, whichever comes first
 const BENCH_MIN_FRAMES: usize = 5; // never judge a rung on fewer than this
-// How far past the budget a frame has to run before the profile cannot be what
-// is pacing it. The profiles change the per-pixel work by around half, so a
-// period several times over says something else is holding the display, and no
-// step down would rescue it. One constant for both users on purpose: the bench
-// stops timing the ladder there (the case that would take longest to measure,
-// for a foregone answer), and the watch refuses to count such a frame at all -
-// a monitor asleep under the NVIDIA driver paces a GL client at 1 fps.
-//
-// The bench used to answer Standard there and save it, which left a machine
-// rated with its monitor asleep on Standard from then on. Not saving on a stall
-// would test a truly slow machine at every launch. So a stall is settled by
-// timing Standard, which has no effects to pay for: a slow machine draws that
-// well enough and gets Standard, and a display that still stalls is what is
-// pacing the frames, so nothing is learned and nothing is saved.
+/// How far past the budget a frame has to run before the profile cannot be what
+/// is pacing it. The profiles change the per-pixel work by around half, so a
+/// period several times over says something else is holding the display, and no
+/// step down would rescue it. One constant for both users on purpose: the bench
+/// stops timing the ladder there (the case that would take longest to measure,
+/// for a foregone answer), and the watch refuses to count such a frame at all -
+/// a monitor asleep under the NVIDIA driver paces a GL client at 1 fps.
+///
+/// The bench used to answer Standard there and save it, which left a machine
+/// rated with its monitor asleep on Standard from then on. Not saving on a stall
+/// would test a truly slow machine at every launch. So a stall is settled by
+/// timing Standard, which has no effects to pay for: a slow machine draws that
+/// well enough and gets Standard, and a display that still stalls is what is
+/// pacing the frames, so nothing is learned and nothing is saved.
 pub const STALL_FACTOR: f32 = 4.0;
 
-// What the caller does with the frame it just measured.
+/// What the caller does with the frame it just measured.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Step {
 	Measuring,
@@ -537,7 +538,7 @@ impl Bench {
 		}
 	}
 
-	// The profile whose settings must be live while this rung is measured.
+	/// The profile whose settings must be live while this rung is measured.
 	pub fn profile(&self) -> Profile {
 		if self.floor {
 			return Profile::Standard;
@@ -548,7 +549,7 @@ impl Bench {
 			.unwrap_or(Profile::Standard)
 	}
 
-	// A frame went out; answer what to do next.
+	/// A frame went out; answer what to do next.
 	pub fn note(&mut self, now: Instant, budget_ms: f32) -> Step {
 		self.seen += 1;
 		if self.seen <= BENCH_WARMUP {
@@ -596,21 +597,21 @@ impl Bench {
 	}
 }
 
-// Frames an ease has to pace before its median says anything.
+/// Frames an ease has to pace before its median says anything.
 pub const WINDOW: usize = 48;
 
-// How far past the refresh period a frame may run before it counts as a miss:
-// half again, so the occasional stretched frame of a busy desktop passes and
-// a display dropping every third frame does not.
+/// How far past the refresh period a frame may run before it counts as a miss:
+/// half again, so the occasional stretched frame of a busy desktop passes and
+/// a display dropping every third frame does not.
 pub fn budget_ms(refresh_hz: f32) -> f32 {
 	1000.0 / refresh_hz.max(1.0) * 1.5
 }
 
-// The budget of the monitor the window is on now. A window can be dragged to a
-// monitor with another rate, and a budget kept from launch then reads every
-// frame on a slower one as a miss. Asked again four times a second rather than
-// every frame, since on Windows the answer comes from enumerating display
-// modes. That is too few frames at the old budget to fill half a window.
+/// The budget of the monitor the window is on now. A window can be dragged to a
+/// monitor with another rate, and a budget kept from launch then reads every
+/// frame on a slower one as a miss. Asked again four times a second rather than
+/// every frame, since on Windows the answer comes from enumerating display
+/// modes. That is too few frames at the old budget to fill half a window.
 #[derive(Debug)]
 pub struct FrameBudget {
 	ms: f32,
@@ -660,10 +661,10 @@ impl Rating {
 		}
 	}
 
-	// A frame just went out while an ease was running. Only the gap to the
-	// previous such frame is a period; the first after a pause is a start. A gap
-	// past the stall ceiling is not a slow frame, and the frames either side of
-	// it were paced under the same condition, so the window goes with it.
+	/// A frame just went out while an ease was running. Only the gap to the
+	/// previous such frame is a period; the first after a pause is a start. A gap
+	/// past the stall ceiling is not a slow frame, and the frames either side of
+	/// it were paced under the same condition, so the window goes with it.
 	pub fn note(&mut self, now: Instant, budget_ms: f32) {
 		if self
 			.noted
@@ -690,21 +691,21 @@ impl Rating {
 		self.noted = Some(now);
 	}
 
-	// The ease stopped, so the next frame's gap means nothing.
+	/// The ease stopped, so the next frame's gap means nothing.
 	pub fn pause(&mut self) {
 		self.last = None;
 	}
 
-	// Start over, with nothing measured - the profile changed, so what was
-	// measured was measured under another workload.
+	/// Start over, with nothing measured - the profile changed, so what was
+	/// measured was measured under another workload.
 	pub fn reset(&mut self) {
 		self.periods.clear();
 		self.last = None;
 		self.noted = None;
 	}
 
-	// Once a window is full: did the display miss its budget? Empties the
-	// window either way, so a verdict is one window's worth of evidence.
+	/// Once a window is full: did the display miss its budget? Empties the
+	/// window either way, so a verdict is one window's worth of evidence.
 	pub fn verdict(&mut self, budget_ms: f32) -> Option<bool> {
 		if self.periods.len() < WINDOW {
 			return None;

@@ -58,13 +58,13 @@ use std::path::{Path, PathBuf};
 use crate::config;
 use crate::shells::Found;
 
-// The block, and the marker that says it is already there. Compiled in so the
-// binary is the one source of it - `shell-integration.md` documents the same
-// text for anyone adding it by hand, and a test holds the two together.
-//
-// It is written out as plain UTF-8 with no byte-order mark, and Windows
-// PowerShell 5.1 reads such a file as ANSI - so the block itself has to stay
-// ASCII, and the glyphs its prompt draws are spelled as code points.
+/// The block, and the marker that says it is already there. Compiled in so the
+/// binary is the one source of it - `shell-integration.md` documents the same
+/// text for anyone adding it by hand, and a test holds the two together.
+///
+/// It is written out as plain UTF-8 with no byte-order mark, and Windows
+/// PowerShell 5.1 reads such a file as ANSI - so the block itself has to stay
+/// ASCII, and the glyphs its prompt draws are spelled as code points.
 pub const SNIPPET: &str = include_str!("shell_integration.ps1");
 // Named rather than spelled at each use: this module compares and rewrites
 // line endings constantly, and an escape is easy to get subtly wrong.
@@ -75,14 +75,14 @@ const NL: char = '\n';
 pub const MARKER: &str = "# >>> SilkTerm shell integration >>>";
 pub const END_MARKER: &str = "# <<< SilkTerm shell integration <<<";
 
-// A file that already carries either sequence is reporting - by our block or by
-// somebody else's setup - and is not ours to edit.
+/// A file that already carries either sequence is reporting - by our block or by
+/// somebody else's setup - and is not ours to edit.
 pub fn already_reports(profile: &str) -> bool {
 	profile.contains(MARKER) || profile.contains("]9;9;") || profile.contains("]7;file:")
 }
 
-// The profile with the block on the end, separated by a blank line and starting
-// on one of its own. Existing content is never rewritten, only followed.
+/// The profile with the block on the end, separated by a blank line and starting
+/// on one of its own. Existing content is never rewritten, only followed.
 pub fn with_block(profile: &str, newline: &str) -> String {
 	let block = SNIPPET.replace("\r\n", "\n").replace('\n', newline);
 	if profile.trim().is_empty() {
@@ -97,9 +97,9 @@ pub fn with_block(profile: &str, newline: &str) -> String {
 	out
 }
 
-// The PowerShell programs among a scan's findings, one per program. A shell is
-// named by its argv, so the program is the first word of it; the no-startup-file
-// twins collapse into the same program, and their profile is the same file.
+/// The PowerShell programs among a scan's findings, one per program. A shell is
+/// named by its argv, so the program is the first word of it; the no-startup-file
+/// twins collapse into the same program, and their profile is the same file.
 pub fn powershells(found: &[Found]) -> Vec<String> {
 	let mut out: Vec<String> = Vec::new();
 	for entry in found {
@@ -145,9 +145,9 @@ fn is_powershell(program: &str) -> bool {
 	base == "powershell" || base == "pwsh" || base.starts_with("pwsh-")
 }
 
-// Put the block in every PowerShell profile that reports nothing. Called on the
-// shell-scan thread; every failure is a diagnostic, never a stop - a profile we
-// cannot read or write is somebody else's business.
+/// Put the block in every PowerShell profile that reports nothing. Called on the
+/// shell-scan thread; every failure is a diagnostic, never a stop - a profile we
+/// cannot read or write is somebody else's business.
 pub fn install(found: &[Found]) {
 	if !config::settings().shell_integration {
 		return;
@@ -250,12 +250,12 @@ fn policy_runs_scripts(policy: &str) -> bool {
 	)
 }
 
-// The profile with our block brought up to date, or None when there is nothing
-// to do - no block of ours in the file, or the one there is already current.
-// Only the text BETWEEN the two markers is touched; whatever the user wrote
-// above or below it is carried through untouched. An opening marker with no
-// closing one is not a block we finished writing, so it is not a region we may
-// replace either.
+/// The profile with our block brought up to date, or None when there is nothing
+/// to do - no block of ours in the file, or the one there is already current.
+/// Only the text BETWEEN the two markers is touched; whatever the user wrote
+/// above or below it is carried through untouched. An opening marker with no
+/// closing one is not a block we finished writing, so it is not a region we may
+/// replace either.
 pub fn refreshed_block(profile: &str, newline: &str) -> Option<String> {
 	let start = profile.find(MARKER)?;
 	let end_marker = profile[start..].find(END_MARKER)? + start;
@@ -522,9 +522,9 @@ fn bash_prompt_path() -> Option<&'static Path> {
 	.as_deref()
 }
 
-// The environment a pane about to run `command` should start with, on top of
-// what it inherits. Empty for anything that is not bash, and for a bash pane
-// when the setting is off.
+/// The environment a pane about to run `command` should start with, on top of
+/// what it inherits. Empty for anything that is not bash, and for a bash pane
+/// when the setting is off.
 pub fn pane_env(command: Option<&[String]>) -> Vec<(String, String)> {
 	if !config::settings().bash_prompt {
 		return Vec::new();

@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// Windows file associations: what opens a .bat, .cmd, .ps1 or .vbs from
-// Explorer, and the folder menu's "Open in SilkTerm" entry. Per user only.
-//
-// Windows' own default terminal setting was ruled out: it hands over a console
-// session that is already running, through COM, and needs Windows Terminal
-// installed to do it. An association just starts SilkTerm with the file.
-//
-// Registering overrides one value per file type in HKCU, over the system's
-// entry in HKLM. Windows reads the two as one tree, and a value HKCU does not
-// have still comes from HKLM, so only the open command changes. What each
-// value held before is saved under `Software\SilkTerm\Associations`, which is
-// how "put back" can restore it exactly. A value somebody else changed after
-// us is theirs, and put back leaves it alone.
-//
-// Everything goes through `Store`, so the rules are tested here against a map.
+//! Windows file associations: what opens a .bat, .cmd, .ps1 or .vbs from
+//! Explorer, and the folder menu's "Open in SilkTerm" entry. Per user only.
+//!
+//! Windows' own default terminal setting was ruled out: it hands over a console
+//! session that is already running, through COM, and needs Windows Terminal
+//! installed to do it. An association just starts SilkTerm with the file.
+//!
+//! Registering overrides one value per file type in HKCU, over the system's
+//! entry in HKLM. Windows reads the two as one tree, and a value HKCU does not
+//! have still comes from HKLM, so only the open command changes. What each
+//! value held before is saved under `Software\SilkTerm\Associations`, which is
+//! how "put back" can restore it exactly. A value somebody else changed after
+//! us is theirs, and put back leaves it alone.
+//!
+//! Everything goes through `Store`, so the rules are tested here against a map.
 
 use std::path::{Path, PathBuf};
 
@@ -74,7 +74,7 @@ impl Value {
 	}
 }
 
-// Paths start with the hive, `HKCU\` or `HKCR\`. Only HKCU is ever written.
+/// Paths start with the hive, `HKCU\` or `HKCR\`. Only HKCU is ever written.
 pub trait Store {
 	fn get(&self, key: &str, name: &str) -> Option<Value>;
 	fn set(&mut self, key: &str, name: &str, value: &Value) -> Result<(), String>;
@@ -183,9 +183,9 @@ pub fn registered(assoc: Assoc, store: &dyn Store) -> bool {
 	store.exists(&state_key(assoc))
 }
 
-// The file types whose double-click will still go elsewhere after registering,
-// because the user picked an app for them under Open with. Windows keeps that
-// choice where no program may write it, so all that can be done is say so.
+/// The file types whose double-click will still go elsewhere after registering,
+/// because the user picked an app for them under Open with. Windows keeps that
+/// choice where no program may write it, so all that can be done is say so.
 pub fn overridden(assoc: Assoc, store: &dyn Store) -> Vec<&'static str> {
 	assoc
 		.types()
@@ -204,8 +204,8 @@ pub fn overridden(assoc: Assoc, store: &dyn Store) -> Vec<&'static str> {
 		.collect()
 }
 
-// Register, or register again: a second call puts back what the first saved
-// and saves it over, so the path follows the build that was last asked.
+/// Register, or register again: a second call puts back what the first saved
+/// and saves it over, so the path follows the build that was last asked.
 pub fn register(assoc: Assoc, exe: &Path, store: &mut dyn Store) -> Result<(), String> {
 	if registered(assoc, store) {
 		unregister(assoc, store)?;
@@ -230,8 +230,8 @@ pub fn register(assoc: Assoc, exe: &Path, store: &mut dyn Store) -> Result<(), S
 	store.set(&state, "count", &Value::sz(todo.len().to_string()))
 }
 
-// Put back what registering replaced, newest first so a key made for a value
-// is empty by the time its turn comes.
+/// Put back what registering replaced, newest first so a key made for a value
+/// is empty by the time its turn comes.
 pub fn unregister(assoc: Assoc, store: &mut dyn Store) -> Result<(), String> {
 	let state = state_key(assoc);
 	let text = |store: &dyn Store, name: String| store.get(&state, &name).map(|v| v.text);
@@ -294,10 +294,10 @@ fn first_missing(key: &str, store: &dyn Store) -> Option<String> {
 	missing
 }
 
-// The program an association names. A dogfood build runs from a versions
-// folder whose copies are renamed as they age, and the launcher keeps a link
-// beside that folder pointed at the newest. Naming the link is what keeps the
-// association working after the next build.
+/// The program an association names. A dogfood build runs from a versions
+/// folder whose copies are renamed as they age, and the launcher keeps a link
+/// beside that folder pointed at the newest. Naming the link is what keeps the
+/// association working after the next build.
 pub fn exe_to_register(current: &Path, exists: &dyn Fn(&Path) -> bool) -> PathBuf {
 	let versions = current.parent();
 	if let Some(dir) = versions.filter(|d| d.file_name().is_some_and(|n| n == "silkterm_versions"))
@@ -311,10 +311,10 @@ pub fn exe_to_register(current: &Path, exists: &dyn Fn(&Path) -> bool) -> PathBu
 	current.to_path_buf()
 }
 
-// The argv `--open` runs a file with. A batch file is started as itself:
-// CreateProcess hands a .bat or .cmd to cmd.exe with the quoting cmd wants,
-// which is what Explorer does too. Anything else runs directly.
-// `pwsh` is asked only for a .ps1, since it searches PATH.
+/// The argv `--open` runs a file with. A batch file is started as itself:
+/// `CreateProcess` hands a .bat or .cmd to cmd.exe with the quoting cmd wants,
+/// which is what Explorer does too. Anything else runs directly.
+/// `pwsh` is asked only for a .ps1, since it searches PATH.
 pub fn open_argv(
 	file: &str,
 	args: &[String],
@@ -354,6 +354,7 @@ pub fn open_argv(
 	argv
 }
 
+/// Tells Explorer to read the associations again. Does nothing off Windows.
 pub fn changed() {
 	#[cfg(windows)]
 	{
@@ -575,7 +576,7 @@ mod registry {
 	}
 }
 
-// A registry in a map, for the tests and for any platform with no registry.
+/// A registry in a map, for the tests and for any platform with no registry.
 #[cfg(any(test, not(windows)))]
 #[derive(Default, Clone, Debug)]
 pub struct Memory {
@@ -637,7 +638,7 @@ impl Store for Memory {
 	}
 }
 
-// The store the Settings dialog writes through.
+/// The store the Settings dialog writes through.
 pub fn system() -> Box<dyn Store + Send> {
 	#[cfg(windows)]
 	{

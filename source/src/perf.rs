@@ -59,21 +59,22 @@ pub fn bump(counter: &AtomicU64) {
 	add(counter, 1);
 }
 
-// Start of a stretch that can't be a scope (an early return in the middle, or a
-// span that ends in another block). None when the counters are off, so a normal
-// run doesn't even read the clock.
+/// Start of a stretch that can't be a scope (an early return in the middle, or a
+/// span that ends in another block). None when the counters are off, so a normal
+/// run doesn't even read the clock.
 pub fn mark() -> Option<Instant> {
 	on().then(Instant::now)
 }
 
+/// Adds the time since `mark` to the counter. A `None` mark adds nothing.
 pub fn since(counter: &AtomicU64, mark: Option<Instant>) {
 	if let Some(start) = mark {
 		counter.fetch_add(start.elapsed().as_nanos() as u64, Relaxed);
 	}
 }
 
-// Time a block into a counter. Cheap enough to leave in the hot path: without
-// the flag it is a load and a branch, no clock read at all.
+/// Time a block into a counter. Cheap enough to leave in the hot path: without
+/// the flag it is a load and a branch, no clock read at all.
 pub fn timed<T>(counter: &AtomicU64, body: impl FnOnce() -> T) -> T {
 	if !on() {
 		return body();
@@ -127,8 +128,8 @@ fn cpu_seconds() -> Option<(f64, f64)> {
 	None
 }
 
-// Scope timer for a whole function, where wrapping the body in a closure would
-// fight the borrow checker.
+/// Scope timer for a whole function, where wrapping the body in a closure would
+/// fight the borrow checker.
 #[derive(Debug)]
 pub struct Span<'a> {
 	counter: &'a AtomicU64,
@@ -187,16 +188,16 @@ pub fn report() {
 	}
 }
 
-// Keypress to pixel (`SILK_LATENCY=1`), timed over three legs rather than as
-// one number: getting the key to the pty, the shell echoing it back, and us
-// putting that on screen. Only the last leg is ours, and a single total cannot
-// say which of the three is the slow one.
-//
-// Two things it cannot do. Nothing after `present` returns is visible from in
-// here, so the compositor and the display are missing and a figure is a floor,
-// not the whole wait. And it cannot tell a shell's echo from output nobody
-// typed for, so it belongs at a settled prompt; anything still unanswered after
-// LATENCY_WINDOW is dropped rather than reported as a very slow keystroke.
+/// Keypress to pixel (`SILK_LATENCY=1`), timed over three legs rather than as
+/// one number: getting the key to the pty, the shell echoing it back, and us
+/// putting that on screen. Only the last leg is ours, and a single total cannot
+/// say which of the three is the slow one.
+///
+/// Two things it cannot do. Nothing after `present` returns is visible from in
+/// here, so the compositor and the display are missing and a figure is a floor,
+/// not the whole wait. And it cannot tell a shell's echo from output nobody
+/// typed for, so it belongs at a settled prompt; anything still unanswered after
+/// `LATENCY_WINDOW` is dropped rather than reported as a very slow keystroke.
 pub fn latency_on() -> bool {
 	static ON: OnceLock<bool> = OnceLock::new();
 	*ON.get_or_init(|| std::env::var_os("SILK_LATENCY").is_some())
@@ -214,16 +215,16 @@ struct Pending {
 static PENDING: Mutex<Option<Pending>> = Mutex::new(None);
 static SAMPLES: Mutex<Vec<(u32, u32, u32)>> = Mutex::new(Vec::new());
 
-// When a key event arrived. Taken at the top of the handler, before any of the
-// hotkey and menu work, so what the key spends in this program is inside the
-// figure rather than beside it.
+/// When a key event arrived. Taken at the top of the handler, before any of the
+/// hotkey and menu work, so what the key spends in this program is inside the
+/// figure rather than beside it.
 pub fn key_mark() -> Option<Instant> {
 	latency_on().then(Instant::now)
 }
 
-// The key's bytes are on their way to the shell. A key pressed while one is
-// still in flight replaces it: the echo that follows belongs to the last thing
-// typed, and timing from the first would read the whole burst as one keystroke.
+/// The key's bytes are on their way to the shell. A key pressed while one is
+/// still in flight replaces it: the echo that follows belongs to the last thing
+/// typed, and timing from the first would read the whole burst as one keystroke.
 pub fn typed(key: Option<Instant>, pane: u64) {
 	let Some(key) = key else {
 		return;
@@ -236,8 +237,8 @@ pub fn typed(key: Option<Instant>, pane: u64) {
 	});
 }
 
-// Output arrived from the pane that was typed at. Only the first notice counts:
-// a shell that answers in several reads is still one echo.
+/// Output arrived from the pane that was typed at. Only the first notice counts:
+/// a shell that answers in several reads is still one echo.
 pub fn echoed(pane: u64) {
 	if !latency_on() {
 		return;
@@ -256,9 +257,9 @@ pub fn echoed(pane: u64) {
 	pending.out.get_or_insert_with(Instant::now);
 }
 
-// A frame just went out, so the echo is on screen. Says its own line as it goes
-// - the point is to watch this while typing, and printing after the frame costs
-// the frame nothing.
+/// A frame just went out, so the echo is on screen. Says its own line as it goes -
+/// the point is to watch this while typing, and printing after the frame costs
+/// the frame nothing.
 pub fn painted() {
 	if !latency_on() {
 		return;

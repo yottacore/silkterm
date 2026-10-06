@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// The hotkeys: the name each one has in the config file, its default chords on
-// each platform, and the bindings in force once the config has had its say.
-// The key handler, the in-window menus and the macOS menu bar all read one
-// `Bindings`, so a rebinding shows up in every one of them.
+//! The hotkeys: the name each one has in the config file, its default chords on
+//! each platform, and the bindings in force once the config has had its say.
+//! The key handler, the in-window menus and the macOS menu bar all read one
+//! `Bindings`, so a rebinding shows up in every one of them.
 
 use std::fmt::Write as _;
 

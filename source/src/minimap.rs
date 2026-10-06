@@ -96,20 +96,20 @@ fn tent_over(x0: f32, x1: f32, at: f32) -> f32 {
 	upto(x1) - upto(x0)
 }
 
-// The column's pieces for one pane, in absolute window px. `handle` is the
-// viewport marker; None on the alt screen, where there is nothing to scroll.
+/// The column's pieces for one pane, in absolute window px. `handle` is the
+/// viewport marker; None on the alt screen, where there is nothing to scroll.
 #[derive(Clone, Copy, Debug)]
 pub struct Geom {
 	pub preview: Rect,
 	pub handle: Option<Rect>,
 }
 
-// Should this pane show the column at all? A full-screen program draws on the
-// alt screen, which has no scroll buffer behind it, so the map would be a
-// rectangle at the top and the room is better spent on text. Some programs do
-// their own scrolling in a way the map can still follow, and the setting names
-// those. A program with nothing to compare against (Windows cannot always say
-// what is running) is treated as not listed.
+/// Should this pane show the column at all? A full-screen program draws on the
+/// alt screen, which has no scroll buffer behind it, so the map would be a
+/// rectangle at the top and the room is better spent on text. Some programs do
+/// their own scrolling in a way the map can still follow, and the setting names
+/// those. A program with nothing to compare against (Windows cannot always say
+/// what is running) is treated as not listed.
 pub fn wanted(cfg: &config::Settings, alt_screen: bool, program: Option<&str>) -> bool {
 	if !alt_screen {
 		return true;
@@ -132,8 +132,8 @@ fn trim_exe(name: &str) -> &str {
 		.unwrap_or(base)
 }
 
-// Width of the column, 0 when the minimap is off, the pane is too narrow to
-// give up the room, or a full-screen program has it.
+/// Width of the column, 0 when the minimap is off, the pane is too narrow to
+/// give up the room, or a full-screen program has it.
 pub fn column_w(cfg: &config::Settings, pane_w: f32, scale: f32, wanted: bool) -> f32 {
 	if !cfg.minimap || !wanted {
 		return 0.0;
@@ -146,7 +146,7 @@ pub fn column_w(cfg: &config::Settings, pane_w: f32, scale: f32, wanted: bool) -
 	}
 }
 
-// The part of a pane's area the terminal text gets.
+/// The part of a pane's area the terminal text gets.
 pub fn text_rect(full: Rect, cfg: &config::Settings, scale: f32, wanted: bool) -> Rect {
 	Rect {
 		w: (full.w - column_w(cfg, full.w, scale, wanted)).max(0.0),
@@ -199,9 +199,9 @@ fn lines_per_px(track_h: f32, shown: usize, scale: f32) -> f32 {
 	if pitch > 0.0 { 1.0 / pitch } else { 0.0 }
 }
 
-// The column's geometry for a pane. `pos` rides the eased scroll position;
-// `alt` drops the marker, and `on` is whether the pane is showing the column
-// at all (see `wanted`).
+/// The column's geometry for a pane. `pos` rides the eased scroll position;
+/// `alt` drops the marker, and `on` is whether the pane is showing the column
+/// at all (see `wanted`).
 pub fn geom(
 	full: Rect,
 	margin: f32,
@@ -237,14 +237,14 @@ pub fn geom(
 	Some(Geom { preview, handle })
 }
 
-// Where a press in the column fell.
+/// Where a press in the column fell.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Hit {
 	Handle,
 	Track,
 }
 
-// Where a press at (x, y) fell, if it hit the column at all.
+/// Where a press at (x, y) fell, if it hit the column at all.
 pub fn hit(g: &Geom, x: f32, y: f32) -> Option<Hit> {
 	if !g.preview.contains(x, y) {
 		return None;
@@ -257,11 +257,11 @@ pub fn hit(g: &Geom, x: f32, y: f32) -> Option<Hit> {
 	})
 }
 
-// The scroll position a click at `y` should center the viewport on. The bottom
-// of the map stands for the newest output as well as the last line it drew, so
-// a click there means the bottom of the buffer rather than the line the trim
-// stopped on. That is also what makes both ends of the track reachable where
-// the marker is shorter than the viewport it stands for.
+/// The scroll position a click at `y` should center the viewport on. The bottom
+/// of the map stands for the newest output as well as the last line it drew, so
+/// a click there means the bottom of the buffer rather than the line the trim
+/// stopped on. That is also what makes both ends of the track reachable where
+/// the marker is shorter than the viewport it stands for.
 pub fn center_on(g: &Geom, total: usize, shown: usize, rows: usize, y: f32, scale: f32) -> f32 {
 	let per_px = lines_per_px(g.preview.h, shown, scale);
 	if per_px <= 0.0 {
@@ -277,12 +277,12 @@ pub fn center_on(g: &Geom, total: usize, shown: usize, rows: usize, y: f32, scal
 	}
 }
 
-// Drag: the pointer has moved from where it grabbed the marker, so the view
-// moves the matching number of lines from where it sat then. `grab` is that
-// pointer y and that position. Reading the marker's drawn top back instead
-// cannot work, because the height floor makes the marker taller than the lines
-// it covers on a deep buffer, so its top is a rounded reading of the position
-// rather than the position itself.
+/// Drag: the pointer has moved from where it grabbed the marker, so the view
+/// moves the matching number of lines from where it sat then. `grab` is that
+/// pointer y and that position. Reading the marker's drawn top back instead
+/// cannot work, because the height floor makes the marker taller than the lines
+/// it covers on a deep buffer, so its top is a rounded reading of the position
+/// rather than the position itself.
 pub fn drag_to(
 	g: &Geom,
 	total: usize,
@@ -299,15 +299,15 @@ pub fn drag_to(
 
 // Per-pane cache
 
-// A pane's rasterized buffer plus the image composed from it. History lines
-// never change, so each one rasterizes once, at the first compose after it
-// scrolls off; the live screen rows are redone at each compose.
-//
-// Rasterizing reads the grid, so it runs here under the term lock, and the
-// budget bounds it. The rows and the pixel work live in `store`, and a whole
-// compose over a deep scrollback takes the store to a thread of its own,
-// since at a million lines it is most of a second. While the store is away
-// the builds only count, and what they owe it goes along with the next one.
+/// A pane's rasterized buffer plus the image composed from it. History lines
+/// never change, so each one rasterizes once, at the first compose after it
+/// scrolls off; the live screen rows are redone at each compose.
+///
+/// Rasterizing reads the grid, so it runs here under the term lock, and the
+/// budget bounds it. The rows and the pixel work live in `store`, and a whole
+/// compose over a deep scrollback takes the store to a thread of its own,
+/// since at a million lines it is most of a second. While the store is away
+/// the builds only count, and what they owe it goes along with the next one.
 #[derive(Default)]
 pub struct Minimap {
 	store: Store,
@@ -490,8 +490,8 @@ impl Store {
 }
 
 impl Minimap {
-	// What the cache holds on the heap, for SILK_MEMDBG. A store that is away on
-	// a compose thread counts as empty until it comes back.
+	/// What the cache holds on the heap, for `SILK_MEMDBG`. A store that is away on
+	/// a compose thread counts as empty until it comes back.
 	pub fn heap_bytes(&self) -> usize {
 		let row_head = std::mem::size_of::<Row>();
 		let spare: usize = self.spare.iter().map(Vec::capacity).sum();
@@ -508,11 +508,11 @@ impl Minimap {
 		(&self.img, self.img_w, self.img_h)
 	}
 
-	// How many buffer lines the column maps, for the callers that place the
-	// marker and turn a click back into a scroll position. It is what the last
-	// compose drew, not what the ease is doing right now, or the marker would
-	// be measured against a picture nobody composed. Before the first compose
-	// there is nothing to ask, so it is the whole buffer.
+	/// How many buffer lines the column maps, for the callers that place the
+	/// marker and turn a click back into a scroll position. It is what the last
+	/// compose drew, not what the ease is doing right now, or the marker would
+	/// be measured against a picture nobody composed. Before the first compose
+	/// there is nothing to ask, so it is the whole buffer.
 	pub fn shown_lines(&self, hist: usize, lines: usize) -> usize {
 		if self.shown == 0 {
 			hist + lines
@@ -521,18 +521,18 @@ impl Minimap {
 		}
 	}
 
-	// Free everything. Called when the column goes away. A compose still on
-	// its thread finishes there and is dropped.
+	/// Free everything. Called when the column goes away. A compose still on
+	/// its thread finishes there and is dropped.
 	pub fn clear(&mut self) {
 		*self = Self::default();
 	}
 
-	// Fold this build's grid into the cache and recompose if it is time.
-	// `advanced` is the count of lines that entered history since the last
-	// build - the same number the output ease rides. `lag` is how far behind
-	// the newest output the eased view still sits, in whole lines, which is
-	// where the map has to stop, and `draining` is whether that lag is still
-	// falling.
+	/// Fold this build's grid into the cache and recompose if it is time.
+	/// `advanced` is the count of lines that entered history since the last
+	/// build - the same number the output ease rides. `lag` is how far behind
+	/// the newest output the eased view still sits, in whole lines, which is
+	/// where the map has to stop, and `draining` is whether that lag is still
+	/// falling.
 	#[allow(clippy::too_many_arguments)]
 	pub fn update(
 		&mut self,
@@ -654,16 +654,16 @@ impl Minimap {
 			(draining && self.shown < self.hist + self.lines) || self.rough_n > 0 || self.moved;
 	}
 
-	// A compose is owed. The build gate reads this so the next pass pays it,
-	// rather than leaving the map a step behind once output stops.
+	/// A compose is owed. The build gate reads this so the next pass pays it,
+	/// rather than leaving the map a step behind once output stops.
 	pub fn pending(&self) -> bool {
 		self.pending
 	}
 
-	// When that compose comes due. A timed wake rather than an animation flag:
-	// marking the window animating would bring it straight back, find the
-	// throttle still closed, and spin at the frame rate. The same goes for a
-	// compose on its own thread, which is looked for when it should be done.
+	/// When that compose comes due. A timed wake rather than an animation flag:
+	/// marking the window animating would bring it straight back, find the
+	/// throttle still closed, and spin at the frame rate. The same goes for a
+	/// compose on its own thread, which is looked for when it should be done.
 	pub fn wake(&self) -> Option<Instant> {
 		if self.job.is_some() {
 			return self.poll_at;
@@ -1313,8 +1313,8 @@ struct PaneTex {
 	used: bool,
 }
 
-// One textured quad per pane. Each pane owns its texture and uniform, so the
-// column can be drawn with one draw call each inside the main pass.
+/// One textured quad per pane. Each pane owns its texture and uniform, so the
+/// column can be drawn with one draw call each inside the main pass.
 pub struct MapRenderer {
 	pipeline: wgpu::RenderPipeline,
 	layout: wgpu::BindGroupLayout,
@@ -1420,8 +1420,8 @@ impl MapRenderer {
 		}
 	}
 
-	// Upload a pane's column image and place its quad. Must run before the pass
-	// that draws it.
+	/// Upload a pane's column image and place its quad. Must run before the pass
+	/// that draws it.
 	#[allow(clippy::too_many_arguments)]
 	pub fn prepare(
 		&mut self,
@@ -1490,8 +1490,8 @@ impl MapRenderer {
 		pass.draw(0..4, 0..1);
 	}
 
-	// Release the textures of panes that drew nothing this frame (closed, or
-	// the column switched off).
+	/// Release the textures of panes that drew nothing this frame (closed, or
+	/// the column switched off).
 	pub fn end_frame(&mut self) {
 		self.panes.retain(|_, p| p.used);
 	}

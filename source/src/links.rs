@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// Hyperlinks in terminal output: find URLs in a row of grid text, and hand one
-// to the desktop's handler.
-//
-// Detection is allowlisted BY SCHEME and that is load-bearing twice over: it
-// keeps the false-positive rate near zero (a bare word with a slash in it is not
-// a link), and it is what stops `javascript:` / `data:` from ever reaching the
-// opener. A scheme absent from SCHEMES is not a link, so it cannot be opened.
+//! Hyperlinks in terminal output: find URLs in a row of grid text, and hand one
+//! to the desktop's handler.
+//!
+//! Detection is allowlisted BY SCHEME and that is load-bearing twice over: it
+//! keeps the false-positive rate near zero (a bare word with a slash in it is not
+//! a link), and it is what stops `javascript:` / `data:` from ever reaching the
+//! opener. A scheme absent from SCHEMES is not a link, so it cannot be opened.
 
 use std::io;
 use std::process::{Command, Stdio};
@@ -109,8 +109,8 @@ fn link_from(text: &[char], start: usize) -> Option<(usize, usize)> {
 	})
 }
 
-// The link covering char `hit`, as (start, end, url). `text` is one logical
-// line's chars; the caller maps the range back to grid cells.
+/// The link covering char `hit`, as (start, end, url). `text` is one logical
+/// line's chars; the caller maps the range back to grid cells.
 pub fn find_at(text: &[char], hit: usize) -> Option<(usize, usize, String)> {
 	if hit >= text.len() {
 		return None;
@@ -130,9 +130,9 @@ pub fn find_at(text: &[char], hit: usize) -> Option<(usize, usize, String)> {
 	None
 }
 
-// Hand `url` to the desktop. `open_command` (config) overrides the platform
-// default: argv-split, the URL appended as the last argument. Runs detached -
-// the child is reaped on its own thread so a browser launch can't zombie.
+/// Hand `url` to the desktop. `open_command` (config) overrides the platform
+/// default: argv-split, the URL appended as the last argument. Runs detached -
+/// the child is reaped on its own thread so a browser launch can't zombie.
 pub fn open(url: &str, open_command: &str) -> io::Result<()> {
 	let mut cmd = if open_command.trim().is_empty() {
 		default_command(url)

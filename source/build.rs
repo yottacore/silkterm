@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// Embed the app icon + version info into the Windows PE, so Explorer, taskbar
-// pins and the installer show the real icon, and Properties > Details shows the
-// version/product strings. The .rc is generated from assets/silkterm.rc.in with
-// the version + description filled in from Cargo metadata (so they never drift
-// from Cargo.toml), then compiled by embed-resource - which finds the resource
-// compiler via the cc crate (rc.exe for msvc, windres for gnu/gnullvm), the same
-// way rustc finds the linker, so it works natively and cross from Linux. It
-// no-ops on non-windows targets. Non-fatal: if no resource compiler can be found
-// for the target, warn and build on iconless.
+//! Embed the app icon + version info into the Windows PE, so Explorer, taskbar
+//! pins and the installer show the real icon, and Properties > Details shows the
+//! version/product strings. The .rc is generated from assets/silkterm.rc.in with
+//! the version + description filled in from Cargo metadata (so they never drift
+//! from Cargo.toml), then compiled by embed-resource - which finds the resource
+//! compiler via the cc crate (rc.exe for msvc, windres for gnu/gnullvm), the same
+//! way rustc finds the linker, so it works natively and cross from Linux. It
+//! no-ops on non-windows targets. Non-fatal: if no resource compiler can be found
+//! for the target, warn and build on iconless.
 use std::{env, fs, path::Path};
 
 // The build number generator, shared with the crate so the number baked in here

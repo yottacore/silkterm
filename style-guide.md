@@ -112,7 +112,11 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 ### Documentation
 
-- Document public items with `///`.
+- Document public items with `///`. A comment on anything declared `pub` is a `///` doc, never a plain `//`. A name that already says all there is to say needs no doc, since one would only repeat it.
+
+- A file that opens with a comment about itself uses `//!` for it.
+
+- A lint reason goes in the attribute's `reason = "..."`, not in a comment above it.
 
 - Name things fully; no cryptic abbreviations.
 

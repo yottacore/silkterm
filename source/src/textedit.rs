@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// Caret arithmetic for the program's one-line text boxes: the Settings fields
-// and a tab being renamed. Offsets are bytes, always on a character boundary.
+//! Caret arithmetic for the program's one-line text boxes: the Settings fields
+//! and a tab being renamed. Offsets are bytes, always on a character boundary.
 
 pub fn prev_boundary(s: &str, i: usize) -> usize {
 	let mut j = i.min(s.len());
@@ -58,7 +58,7 @@ pub fn word_right(s: &str, i: usize) -> usize {
 	}
 	j
 }
-// Byte range of the word (or separator run) under byte index `i` (double-click).
+/// Byte range of the word (or separator run) under byte index `i` (double-click).
 pub fn word_at(s: &str, i: usize) -> (usize, usize) {
 	if s.is_empty() {
 		return (0, 0);
@@ -83,9 +83,9 @@ pub fn word_at(s: &str, i: usize) -> (usize, usize) {
 	}
 	(a, b)
 }
-// Byte index of the caret nearest a click at `rel_x` px into the text (0 = the
-// field's left text edge). Walks char boundaries, picking the one whose measured
-// prefix width is closest to the click.
+/// Byte index of the caret nearest a click at `rel_x` px into the text (0 = the
+/// field's left text edge). Walks char boundaries, picking the one whose measured
+/// prefix width is closest to the click.
 pub fn caret_from_click(text: &str, rel_x: f32, measure: &mut impl FnMut(&str) -> f32) -> usize {
 	if rel_x <= 0.0 {
 		return 0;

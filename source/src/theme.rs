@@ -18,30 +18,30 @@ pub struct Palette {
 	pub bg: [u8; 3],
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],
-	// Two attention colors, deliberately separate. `highlight` marks several
-	// things at once - the live pane's ring, slider handles, revert icons, the
-	// default button - so it stays calm. `focus` marks the ONE element the
-	// keyboard is on, so it is the more vivid of the pair and sits well away
-	// from `highlight` in hue.
+	/// Two attention colors, deliberately separate. `highlight` marks several
+	/// things at once - the live pane's ring, slider handles, revert icons, the
+	/// default button - so it stays calm. `focus` marks the ONE element the
+	/// keyboard is on, so it is the more vivid of the pair and sits well away
+	/// from `highlight` in hue.
 	pub highlight: [u8; 3],
 	pub focus: [u8; 3],
-	// Chrome: menu bar / dropdowns (menu_*) and pop-out dialogs (dialog_*). Every
-	// built-in theme uses the SAME neutral defaults below (menu identical in both
-	// modes, dialog lighter in Light mode) - a theme MAY override, and the
-	// colors.menu_*/dialog_* keys tweak them per-user.
+	/// Chrome: menu bar / dropdowns (menu_*) and pop-out dialogs (dialog_*). Every
+	/// built-in theme uses the SAME neutral defaults below (menu identical in both
+	/// modes, dialog lighter in Light mode) - a theme MAY override, and the
+	/// colors.menu_*/dialog_* keys tweak them per-user.
 	pub menu_bg: [u8; 3],
 	pub menu_fg: [u8; 3],
 	pub dialog_bg: [u8; 3],
 	pub dialog_fg: [u8; 3],
-	// Chrome areas that hold no interactive element - the strip the dialog's tabs
-	// sit on. Recessed against the panel in both modes.
+	/// Chrome areas that hold no interactive element - the strip the dialog's tabs
+	/// sit on. Recessed against the panel in both modes.
 	pub gutter: [u8; 3],
 	pub ansi: [[u8; 3]; 16],
 }
 
-// The ten palette colors a user can edit, spelled as `colors.*` spells them.
-// One order, used by the dialog's rows, by a saved theme's config block, and by
-// the index accessors below - so none of the three can drift from the others.
+/// The ten palette colors a user can edit, spelled as `colors.*` spells them.
+/// One order, used by the dialog's rows, by a saved theme's config block, and by
+/// the index accessors below - so none of the three can drift from the others.
 pub const PALETTE_KEYS: [&str; 10] = [
 	"background",
 	"foreground",
@@ -86,11 +86,11 @@ impl Palette {
 	}
 }
 
-// A theme the user saved. It carries both variants in full rather than a base plus
-// the differences: saving, renaming and deleting are then all the same operation
-// on one config subtree, and a saved theme is self-contained enough to hand to
-// someone else. `slug` is its config path segment and never changes, so a rename
-// only rewrites `name` - and `name` is what the `theme` setting stores.
+/// A theme the user saved. It carries both variants in full rather than a base plus
+/// the differences: saving, renaming and deleting are then all the same operation
+/// on one config subtree, and a saved theme is self-contained enough to hand to
+/// someone else. `slug` is its config path segment and never changes, so a rename
+/// only rewrites `name` - and `name` is what the `theme` setting stores.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct UserTheme {
 	pub slug: String,
@@ -99,8 +99,8 @@ pub struct UserTheme {
 	pub light: Palette,
 }
 
-// Shared chrome defaults (same for every theme). The menu keeps one neutral gray
-// in both modes (unchanged look); the dialog panel is dark-gray / light-gray by mode.
+/// Shared chrome defaults (same for every theme). The menu keeps one neutral gray
+/// in both modes (unchanged look); the dialog panel is dark-gray / light-gray by mode.
 pub const MENU_BG_DEF: [u8; 3] = [0x36, 0x36, 0x3b];
 pub const MENU_FG_DEF: [u8; 3] = [0xf0, 0xf0, 0xf2];
 const DLG_BG_DARK: [u8; 3] = [0x20, 0x20, 0x2a];
@@ -314,8 +314,8 @@ pub fn is_builtin(name: &str) -> bool {
 	names().any(|n| n.eq_ignore_ascii_case(name.trim()))
 }
 
-// Every selectable theme name, saved ones first so a saved theme that took a
-// built-in's name appears once, as itself.
+/// Every selectable theme name, saved ones first so a saved theme that took a
+/// built-in's name appears once, as itself.
 pub fn all_names(user: &[UserTheme]) -> Vec<String> {
 	let mut out: Vec<String> = user.iter().map(|t| t.name.clone()).collect();
 	for name in names() {
@@ -331,7 +331,7 @@ pub fn find_user<'a>(user: &'a [UserTheme], name: &str) -> Option<&'a UserTheme>
 		.find(|t| t.name.eq_ignore_ascii_case(name.trim()))
 }
 
-// Does this mode resolve to the dark variant? "system" follows the OS.
+/// Does this mode resolve to the dark variant? "system" follows the OS.
 pub fn is_dark_mode(mode: &str, system_dark: bool) -> bool {
 	match mode.trim().to_ascii_lowercase().as_str() {
 		"light" => false,
@@ -340,8 +340,8 @@ pub fn is_dark_mode(mode: &str, system_dark: bool) -> bool {
 	}
 }
 
-// Resolve the active palette from a theme name + mode. A saved theme wins over a
-// built-in of the same name; an unknown name falls back to the first built-in.
+/// Resolve the active palette from a theme name + mode. A saved theme wins over a
+/// built-in of the same name; an unknown name falls back to the first built-in.
 pub fn resolve_in(user: &[UserTheme], name: &str, mode: &str, system_dark: bool) -> Palette {
 	let dark = is_dark_mode(mode, system_dark);
 	if let Some(t) = find_user(user, name) {
@@ -354,7 +354,7 @@ pub fn resolve_in(user: &[UserTheme], name: &str, mode: &str, system_dark: bool)
 	if dark { theme.dark } else { theme.light }
 }
 
-// Built-ins only - for paths that have no user themes to hand (and the tests).
+/// Built-ins only - for paths that have no user themes to hand (and the tests).
 pub fn resolve(name: &str, mode: &str, system_dark: bool) -> Palette {
 	resolve_in(&[], name, mode, system_dark)
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// The macOS menu bar. Its layout is plain data built from the same entry lists
-// the in-window menus draw, so it is checked on every platform; only `native`
-// talks to AppKit.
+//! The macOS menu bar. Its layout is plain data built from the same entry lists
+//! the in-window menus draw, so it is checked on every platform; only `native`
+//! talks to `AppKit`.
 
 use winit::keyboard::NamedKey;
 
@@ -62,7 +62,7 @@ fn in_app_menu(action: MenuAction) -> bool {
 	)
 }
 
-// Command plus a key, for the rows `AppKit` carries out itself.
+/// Command plus a key, for the rows `AppKit` carries out itself.
 pub fn command(key: char) -> Chord {
 	Chord {
 		key: KeyName::Char(key),

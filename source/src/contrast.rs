@@ -127,10 +127,10 @@ fn box_mean(src: &[[f32; 3]], w: usize, h: usize, r: usize) -> Vec<[f32; 3]> {
 	out
 }
 
-// Flatten the image's contrast in place. `img` is linear-light RGBA f32; alpha
-// is left untouched. No-op when the effective strength or size comes out at zero.
-// `scale` is what the wallpaper is held at against its full size, so a smaller
-// copy of the same picture reads as busy as the whole one.
+/// Flatten the image's contrast in place. `img` is linear-light RGBA f32; alpha
+/// is left untouched. No-op when the effective strength or size comes out at zero.
+/// `scale` is what the wallpaper is held at against its full size, so a smaller
+/// copy of the same picture reads as busy as the whole one.
 pub fn apply(img: &mut Linear, size: f32, strength: f32, auto: f32, scale: f32) {
 	let (w, h) = (img.width() as usize, img.height() as usize);
 	if w == 0 || h == 0 {

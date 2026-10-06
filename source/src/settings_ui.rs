@@ -148,7 +148,7 @@ fn dlg() -> Dlg {
 	}
 }
 
-// Mode-adaptive dialog colors for the pop-out window (clear + About text).
+/// Mode-adaptive dialog colors for the pop-out window (clear + About text).
 pub fn dialog_bg() -> [u8; 3] {
 	dlg().panel_bg
 }
@@ -605,9 +605,9 @@ enum Focus {
 	Button(usize),
 }
 
-// Where the user was looking when the dialog closed, so reopening it shortly
-// after opens on the same tab and scroll position instead of the top of
-// Appearance. Only the view - edits are discarded on close as before.
+/// Where the user was looking when the dialog closed, so reopening it shortly
+/// after opens on the same tab and scroll position instead of the top of
+/// Appearance. Only the view - edits are discarded on close as before.
 #[derive(Debug, Clone, Copy)]
 pub struct View {
 	tab: usize,
@@ -705,7 +705,7 @@ pub enum Action {
 	Edit(EditCmd),
 }
 
-// Field context-menu commands (right-click / Menu key in an editable field).
+/// Field context-menu commands (right-click / Menu key in an editable field).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EditCmd {
 	Cut,
@@ -1186,13 +1186,13 @@ impl SettingsDialog {
 		}
 	}
 
-	// `line_h` is the chrome (UI font) line height; `label_w`/`btn_w`/`tab_ws`
-	// are the measured widths in that font (see chrome_widths) so nothing
-	// truncates. `max_w`/`max_h` cap the window to what the screen can show; a
-	// tab that doesn't fit scrolls instead of clipping the buttons.
-	// `scale` is the window's DIP -> physical factor; every other argument arrives
-	// in physical pixels and is converted on the way in (see the module note on
-	// the DIP boundary).
+	/// `line_h` is the chrome (UI font) line height; `label_w`/`btn_w`/`tab_ws`
+	/// are the measured widths in that font (see `chrome_widths`) so nothing
+	/// truncates. `max_w`/`max_h` cap the window to what the screen can show; a
+	/// tab that doesn't fit scrolls instead of clipping the buttons.
+	/// `scale` is the window's DIP -> physical factor; every other argument arrives
+	/// in physical pixels and is converted on the way in (see the module note on
+	/// the DIP boundary).
 	pub fn new(
 		screen_w: f32,
 		screen_h: f32,
@@ -1375,12 +1375,12 @@ impl SettingsDialog {
 		(w, natural_h)
 	}
 
-	// A scale-factor change: the window moved to a monitor at another scale, or
-	// the desktop's own scale moved under it. Everything below the boundary is
-	// DIP and stays as it is, so only the factor and the chrome measured in
-	// physical pixels at the old one are refreshed. Values, edits, focus and
-	// scroll are deliberately untouched - a rebuild would lose every unapplied
-	// edit the moment the window crossed a monitor edge.
+	/// A scale-factor change: the window moved to a monitor at another scale, or
+	/// the desktop's own scale moved under it. Everything below the boundary is
+	/// DIP and stays as it is, so only the factor and the chrome measured in
+	/// physical pixels at the old one are refreshed. Values, edits, focus and
+	/// scroll are deliberately untouched - a rebuild would lose every unapplied
+	/// edit the moment the window crossed a monitor edge.
 	pub fn rescale(
 		&mut self,
 		line_h: f32,
@@ -1453,9 +1453,9 @@ impl SettingsDialog {
 		}
 	}
 
-	// The pointer/measurement boundary. Pointer positions arrive in physical
-	// pixels and the caller's text measurement answers in them too, so both are
-	// divided down before any of the layout below sees them.
+	/// The pointer/measurement boundary. Pointer positions arrive in physical
+	/// pixels and the caller's text measurement answers in them too, so both are
+	/// divided down before any of the layout below sees them.
 	pub fn mouse_down(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) -> Action {
 		let s = self.scale;
 		self.mouse_down_dip(x / s, y / s, &mut |t| measure(t) / s)
@@ -1499,8 +1499,8 @@ impl SettingsDialog {
 			.map(|(tip, anchor)| (tip, self.rect_px(anchor)))
 	}
 
-	// The drawing boundary: the layout is solved in DIP, then everything handed
-	// to the renderer is multiplied out to physical pixels.
+	/// The drawing boundary: the layout is solved in DIP, then everything handed
+	/// to the renderer is multiplied out to physical pixels.
 	pub fn rects(
 		&self,
 		line_h: f32,
@@ -1602,7 +1602,7 @@ impl SettingsDialog {
 		let g = self.gutter_rect();
 		g.y + g.h + 1.0 + lay().tabs_gap
 	}
-	// The scroll viewport in physical pixels (the render pass scissors to it).
+	/// The scroll viewport in physical pixels (the render pass scissors to it).
 	pub fn viewport_px(&self) -> Rect {
 		self.rect_px(self.viewport())
 	}
@@ -1712,8 +1712,8 @@ impl SettingsDialog {
 		self.hscroll = (self.hscroll - dx).clamp(0.0, self.max_hscroll());
 	}
 
-	// The size the content wants, and the smallest the window may be, both in
-	// physical pixels - the window's own limits and the resize snap read them.
+	/// The size the content wants, and the smallest the window may be, both in
+	/// physical pixels - the window's own limits and the resize snap read them.
 	pub fn natural_size(&self) -> (f32, f32) {
 		(self.to_px(self.natural.0), self.to_px(self.natural.1))
 	}
@@ -1721,9 +1721,9 @@ impl SettingsDialog {
 		let (w, h) = Self::min_size_dip(self.line_h, self.btn_w);
 		(self.to_px(w), self.to_px(h))
 	}
-	// The window was resized. Everything is laid out from `rect`, so this is all
-	// of it - except that a smaller window can leave either scroll offset past
-	// its new limit, and a popup placed against the old edges is stale.
+	/// The window was resized. Everything is laid out from `rect`, so this is all
+	/// of it - except that a smaller window can leave either scroll offset past
+	/// its new limit, and a popup placed against the old edges is stale.
 	pub fn set_size(&mut self, w_px: f32, h_px: f32) {
 		self.rect.w = self.to_dip(w_px).max(1.0);
 		self.rect.h = self.to_dip(h_px).max(1.0);
@@ -1747,17 +1747,17 @@ impl SettingsDialog {
 			scroll: self.scroll,
 		}
 	}
-	// Open on these values instead of the live copy. The app hands in the file
-	// as it is now, since another window may have saved since this one loaded.
+	/// Open on these values instead of the live copy. The app hands in the file
+	/// as it is now, since another window may have saved since this one loaded.
 	pub fn start_from(&mut self, settings: Settings) {
 		let settings = users_own(settings);
 		self.orig = settings.clone();
 		self.edited = settings;
 	}
 
-	// A restored view comes from a dialog that no longer exists, so nothing about
-	// its geometry can be assumed: the UI font, screen height or field set may all
-	// have changed since. Clamp rather than trust.
+	/// A restored view comes from a dialog that no longer exists, so nothing about
+	/// its geometry can be assumed: the UI font, screen height or field set may all
+	/// have changed since. Clamp rather than trust.
 	pub fn restore(&mut self, view: View) {
 		if view.tab >= tab_titles().len() {
 			return;
@@ -1794,7 +1794,7 @@ impl SettingsDialog {
 			types: !ctrl,
 		});
 	}
-	// The held keys as the platform reads them (`input::edit_keys`).
+	/// The held keys as the platform reads them (`input::edit_keys`).
 	pub fn set_keys(&mut self, keys: crate::input::EditKeys) {
 		self.alt = keys.alt;
 		self.shift = keys.shift;
@@ -1812,8 +1812,8 @@ impl SettingsDialog {
 	pub fn shift(&self) -> bool {
 		self.shift
 	}
-	// Takes &self so the prompt can swallow it: the footer accelerators would
-	// otherwise apply and close the dialog out from under an open theme box.
+	/// Takes &self so the prompt can swallow it: the footer accelerators would
+	/// otherwise apply and close the dialog out from under an open theme box.
 	pub fn alt_key(&self, c: char) -> Action {
 		if self.modal() {
 			return Action::None;
@@ -2028,7 +2028,7 @@ impl SettingsDialog {
 		self.focus = self.first_focus();
 		self.open_focused_field();
 	}
-	// The Tab key: Ctrl switches tabs, otherwise walk control focus (Shift = back).
+	/// The Tab key: Ctrl switches tabs, otherwise walk control focus (Shift = back).
 	pub fn key_tab(&mut self) {
 		self.dismiss_menu();
 		if self.pick.is_some() {
@@ -2045,21 +2045,21 @@ impl SettingsDialog {
 			self.focus_move(!self.shift);
 		}
 	}
-	// Ctrl+PageUp / Ctrl+PageDown cycle the active tab (PageDown = next).
+	/// Ctrl+PageUp / Ctrl+PageDown cycle the active tab (PageDown = next).
 	pub fn key_page(&mut self, forward: bool) {
 		if self.ctrl {
 			self.switch_tab(forward);
 		}
 	}
-	// The next or previous tab, unless a box is up over the dialog.
+	/// The next or previous tab, unless a box is up over the dialog.
 	pub fn switch_tab(&mut self, forward: bool) {
 		if !self.modal() {
 			self.tab_switch(forward);
 		}
 	}
-	// Up / Down arrows: navigate an open popup, else Alt+Down opens a focused
-	// dropdown, else step a focused numeric slider (spinbox feel), else walk control
-	// focus (a peer of Tab).
+	/// Up / Down arrows: navigate an open popup, else Alt+Down opens a focused
+	/// dropdown, else step a focused numeric slider (spinbox feel), else walk control
+	/// focus (a peer of Tab).
 	pub fn key_vertical(&mut self, forward: bool) {
 		if self.pick.is_some() && self.emenu.is_none() {
 			self.pick_arrow(if forward { 1 } else { -1 }, true);
@@ -2139,8 +2139,8 @@ impl SettingsDialog {
 			}
 		}
 	}
-	// Left / Right: caret motion while a field is being edited, otherwise adjust
-	// the focused slider (by one step) or move a focused radio's selection.
+	/// Left / Right: caret motion while a field is being edited, otherwise adjust
+	/// the focused slider (by one step) or move a focused radio's selection.
 	pub fn key_horizontal(&mut self, dir: i32) {
 		self.dismiss_menu();
 		// in the picker, a value box owns Left/Right (caret) and everything else
@@ -2201,8 +2201,8 @@ impl SettingsDialog {
 			_ => {}
 		}
 	}
-	// Space: type into an active edit, activate a focused button, else activate the
-	// focused control - flip a toggle or open a text/color field for editing.
+	/// Space: type into an active edit, activate a focused button, else activate the
+	/// focused control - flip a toggle or open a text/color field for editing.
 	pub fn key_space(&mut self) -> Action {
 		if self.pick.is_some() {
 			self.pick_activate();
@@ -2335,9 +2335,9 @@ impl SettingsDialog {
 		self.edit = Some(edit);
 	}
 
-	// Panel size (used to size a dedicated dialog window when the panel is laid
-	// out at the origin - `new(0.0, 0.0, ...)`).
-	// Window size in physical pixels.
+	/// Panel size (used to size a dedicated dialog window when the panel is laid
+	/// out at the origin - `new(0.0, 0.0, ...)`).
+	/// Window size in physical pixels.
 	pub fn size(&self) -> (f32, f32) {
 		(self.to_px(self.rect.w), self.to_px(self.rect.h))
 	}
@@ -2348,19 +2348,19 @@ impl SettingsDialog {
 	pub fn orig(&self) -> &Settings {
 		&self.orig
 	}
-	// A scan arrived while this dialog was open. Both copies move, so a user who
-	// has changed nothing still has nothing changed - the same reasoning that
-	// keeps the list out of an ordinary Apply diff. Anything they have already
-	// done to the list (a rename, a reorder, a removal) is what the merge folds
-	// INTO, so none of it is undone; a scan only ever appends and switches off.
+	/// A scan arrived while this dialog was open. Both copies move, so a user who
+	/// has changed nothing still has nothing changed - the same reasoning that
+	/// keeps the list out of an ordinary Apply diff. Anything they have already
+	/// done to the list (a rename, a reorder, a removal) is what the merge folds
+	/// INTO, so none of it is undone; a scan only ever appends and switches off.
 	pub fn fold_shells(&mut self, found: &[crate::shells::Found]) {
 		self.orig.shells = crate::shells::merge(&self.orig.shells, found);
 		self.edited.shells = crate::shells::merge(&self.edited.shells, found);
 	}
 
-	// After an Apply, make the applied values the new baseline so a later Apply
-	// compares against the live state, not the stale open-time snapshot (otherwise
-	// re-selecting the original value reads as "no change" and isn't applied).
+	/// After an Apply, make the applied values the new baseline so a later Apply
+	/// compares against the live state, not the stale open-time snapshot (otherwise
+	/// re-selecting the original value reads as "no change" and isn't applied).
 	pub fn commit_baseline(&mut self) {
 		self.orig = self.edited.clone();
 	}
@@ -2680,9 +2680,9 @@ impl SettingsDialog {
 		self.capture = None;
 		self.capture_refused = None;
 	}
-	// A key press while a hotkey row waits. Escape on its own leaves the row as
-	// it was, and Backspace or Delete on its own turns the hotkey off. Answers
-	// whether the press was taken, so the caller sends it nowhere else.
+	/// A key press while a hotkey row waits. Escape on its own leaves the row as
+	/// it was, and Backspace or Delete on its own turns the hotkey off. Answers
+	/// whether the press was taken, so the caller sends it nowhere else.
 	pub fn capture_key(&mut self, key: &winit::keyboard::Key, mods: ModifiersState) -> bool {
 		use winit::keyboard::{Key as Pressed, NamedKey};
 		let Some(i) = self.capture else {
@@ -4415,9 +4415,9 @@ impl SettingsDialog {
 			}
 		}
 	}
-	// Config keys reverted since the last Apply (cleared by taking them). A row set
-	// away from its default again after the revert keeps the new value, so only
-	// the rows still at their default go back to the template's line.
+	/// Config keys reverted since the last Apply (cleared by taking them). A row set
+	/// away from its default again after the revert keeps the new value, so only
+	/// the rows still at their default go back to the template's line.
 	pub fn take_reverted(&mut self) -> Vec<&'static str> {
 		let mut reverted = std::mem::take(&mut self.reverted);
 		let keys: Vec<Key> = self
@@ -5375,8 +5375,8 @@ impl SettingsDialog {
 		edit.cur += c.len_utf8();
 		true
 	}
-	// Paste: run the text through the same per-field validation, one char at a
-	// time (invalid chars are dropped, length caps hold).
+	/// Paste: run the text through the same per-field validation, one char at a
+	/// time (invalid chars are dropped, length caps hold).
 	pub fn insert_str(&mut self, text: &str) {
 		let mut changed = false;
 		for c in text.chars() {
@@ -5569,12 +5569,12 @@ impl SettingsDialog {
 		self.emenu = None;
 	}
 
-	// Esc cancels the dialog. A menu, a popup or the prompt box eats it first.
-	//
-	// An open field does not. Closing the field was all it used to do, and since
-	// a typed value applies as it is typed there was nothing to take back - so
-	// the press bought a lost caret and a second Esc. Now that walking onto a
-	// field opens it, that would have been every field on the way past.
+	/// Esc cancels the dialog. A menu, a popup or the prompt box eats it first.
+	///
+	/// An open field does not. Closing the field was all it used to do, and since
+	/// a typed value applies as it is typed there was nothing to take back - so
+	/// the press bought a lost caret and a second Esc. Now that walking onto a
+	/// field opens it, that would have been every field on the way past.
 	pub fn key_escape(&mut self) -> Action {
 		if self.emenu.take().is_some() || self.open.take().is_some() {
 			Action::None
@@ -6927,7 +6927,7 @@ impl SettingsDialog {
 		}
 		(rects, texts)
 	}
-	// True when anything needs the second (on-top) render pass.
+	/// True when anything needs the second (on-top) render pass.
 	pub fn overlay_open(&self) -> bool {
 		self.open.is_some() || self.emenu.is_some() || self.modal()
 	}
@@ -6996,8 +6996,8 @@ fn measured_plus(measured_px: f32, clear_dip: f32, scale: f32) -> f32 {
 	measured_px + config::dip(clear_dip, scale)
 }
 
-// A scale factor the boundary can divide by. A monitor that reports nothing
-// useful must not take the layout to zero or NaN.
+/// A scale factor the boundary can divide by. A monitor that reports nothing
+/// useful must not take the layout to zero or NaN.
 pub fn sane_scale(scale: f32) -> f32 {
 	if scale.is_finite() && scale > 0.0 {
 		scale
@@ -7006,18 +7006,18 @@ pub fn sane_scale(scale: f32) -> f32 {
 	}
 }
 
-// Widest field label, button caption, and per-tab title widths at the current
-// UI font, so the dialog sizes to the real text (a wide serif or a big desktop
-// size never truncates).
-//
-// This measures against the text context, so it works in PHYSICAL pixels - which
-// is why every layout constant it reads converts through `config::dip` at its use
-// site, the way the main window's chrome does. Adding a raw DIP number to a
-// physical measurement here is a live bug: `SettingsDialog::new` divides the whole
-// sum by the scale factor, so the constant arrives shrunk by that factor. That is
-// what put a tab's title `tab_pad/2` from its left edge inside a box only
-// `tab_pad/scale` wider than the title - flush right at 2x, overflowing past it
-// above that.
+/// Widest field label, button caption, and per-tab title widths at the current
+/// UI font, so the dialog sizes to the real text (a wide serif or a big desktop
+/// size never truncates).
+///
+/// This measures against the text context, so it works in PHYSICAL pixels - which
+/// is why every layout constant it reads converts through `config::dip` at its use
+/// site, the way the main window's chrome does. Adding a raw DIP number to a
+/// physical measurement here is a live bug: `SettingsDialog::new` divides the whole
+/// sum by the scale factor, so the constant arrives shrunk by that factor. That is
+/// what put a tab's title `tab_pad/2` from its left edge inside a box only
+/// `tab_pad/scale` wider than the title - flush right at 2x, overflowing past it
+/// above that.
 pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> (f32, f32, f32, Vec<f32>) {
 	let attrs = crate::text::ui_attrs();
 	let dip = |v: f32| config::dip(v, scale);
@@ -7065,8 +7065,8 @@ pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> (f32, f32, 
 	(label_w, btn_w, row_btn_w, tab_ws)
 }
 
-// Returns true if `old` and `new` differ in any field that needs a text-context
-// rebuild (cell metrics change) rather than just a re-render.
+/// Returns true if `old` and `new` differ in any field that needs a text-context
+/// rebuild (cell metrics change) rather than just a re-render.
 pub fn needs_text_rebuild(old: &Settings, new: &Settings) -> bool {
 	old.font_size != new.font_size
 		|| old.line_height_scale != new.line_height_scale
@@ -7078,7 +7078,7 @@ pub fn needs_text_rebuild(old: &Settings, new: &Settings) -> bool {
 		|| old.margin != new.margin
 }
 
-// Returns true if a background-image-affecting setting changed.
+/// Returns true if a background-image-affecting setting changed.
 pub fn wallpaper_changed(old: &Settings, new: &Settings) -> bool {
 	old.wallpaper_enabled != new.wallpaper_enabled
 		|| old.wallpaper_rotate_enabled != new.wallpaper_rotate_enabled

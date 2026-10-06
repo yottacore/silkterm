@@ -17,8 +17,8 @@ use crate::term::UserEvent;
 #[cfg_attr(not(unix), allow(dead_code))] // ctl is Unix-only (AF_UNIX)
 pub const ENV_SOCK: &str = "SILKTERM_SOCKET";
 
-// Holds the socket path so the file goes away with the process. The drop only
-// covers a clean return from main, so `remove_on_any_exit` covers the rest.
+/// Holds the socket path so the file goes away with the process. The drop only
+/// covers a clean return from main, so `remove_on_any_exit` covers the rest.
 #[cfg(unix)]
 #[derive(Debug)]
 pub struct CtlServer {
@@ -36,9 +36,9 @@ impl Drop for CtlServer {
 #[derive(Debug)]
 pub struct CtlServer;
 
-// Bind the socket, export SILKTERM_SOCKET, and serve commands on a background
-// thread. Call before any PTY spawns so shells inherit the variable. Failure is
-// non-fatal (the app just isn't remotely controllable).
+/// Bind the socket, export `SILKTERM_SOCKET`, and serve commands on a background
+/// thread. Call before any PTY spawns so shells inherit the variable. Failure is
+/// non-fatal (the app just isn't remotely controllable).
 #[cfg(unix)]
 pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 	use std::io::{BufRead, BufReader, Write};
@@ -157,7 +157,7 @@ fn parse(line: &str) -> Result<UserEvent, String> {
 	}
 }
 
-// Client side: deliver one command to the window this shell runs inside.
+/// Client side: deliver one command to the window this shell runs inside.
 #[cfg(unix)]
 pub fn send(cmd: &str) -> Result<(), String> {
 	use std::io::{Read, Write};

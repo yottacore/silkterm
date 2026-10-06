@@ -687,9 +687,9 @@ pub(crate) enum MenuAction {
 }
 
 impl MenuAction {
-	// The flyover for a row that needs one. Most do not: "Copy" and "New tab"
-	// say what they do, and a tip on every row would be noise the reader has to
-	// learn to ignore. Empty means no tip.
+	/// The flyover for a row that needs one. Most do not: "Copy" and "New tab"
+	/// say what they do, and a tip on every row would be noise the reader has to
+	/// learn to ignore. Empty means no tip.
 	pub(crate) fn help(self) -> &'static str {
 		match self {
 			MenuAction::PasteSelection => {
@@ -738,12 +738,12 @@ impl MenuAction {
 	}
 }
 
-// One row of a menu: an action item (optionally a checkmark toggle) or a group
-// separator. Separators render as a faint horizontal line, never hover/click.
-// `accel` is the byte offset of the item's accelerator letter in the label
-// (underlined; typing it picks the item); None = no accelerator - accelerators
-// must be unique per menu, so low-priority items (and ones that already have a
-// hotkey) go without.
+/// One row of a menu: an action item (optionally a checkmark toggle) or a group
+/// separator. Separators render as a faint horizontal line, never hover/click.
+/// `accel` is the byte offset of the item's accelerator letter in the label
+/// (underlined; typing it picks the item); None = no accelerator - accelerators
+/// must be unique per menu, so low-priority items (and ones that already have a
+/// hotkey) go without.
 #[derive(Debug, Clone)]
 pub(crate) enum Entry {
 	Item {
@@ -1068,9 +1068,9 @@ fn menu_bar_at_launch(hide_menu: Option<bool>, mac: bool) -> bool {
 	!mac && !hide_menu.unwrap_or(false)
 }
 
-// Each row that does what a hotkey does shows the chord that hotkey answers to
-// first, from the bindings in force, so a rebinding shows up here too. The
-// menus are built without them, and every place one opens comes through here.
+/// Each row that does what a hotkey does shows the chord that hotkey answers to
+/// first, from the bindings in force, so a rebinding shows up here too. The
+/// menus are built without them, and every place one opens comes through here.
 pub(crate) fn with_shortcuts(
 	entries: Vec<Entry>,
 	keys: &crate::keys::Bindings,
@@ -1110,7 +1110,7 @@ pub(crate) fn with_shortcuts(
 		.collect()
 }
 
-// The hotkey a menu row does the same thing as, if there is one.
+/// The hotkey a menu row does the same thing as, if there is one.
 pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 	match action {
 		MenuAction::Copy => Some(Hotkey::Copy),
@@ -1150,8 +1150,8 @@ pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 	}
 }
 
-// A menu less the rows `drop` picks, inside submenus too, with no separator
-// left at either end or doubled up where a row went.
+/// A menu less the rows `drop` picks, inside submenus too, with no separator
+/// left at either end or doubled up where a row went.
 #[cfg(any(test, target_os = "macos"))]
 pub(crate) fn without_rows(entries: Vec<Entry>, drop: fn(MenuAction) -> bool) -> Vec<Entry> {
 	let mut out: Vec<Entry> = Vec::with_capacity(entries.len());
@@ -1177,8 +1177,8 @@ pub(crate) fn without_rows(entries: Vec<Entry>, drop: fn(MenuAction) -> bool) ->
 	out
 }
 
-// A menu as a Mac shows it: no Menu bar row, since the system menu bar is the
-// only one there.
+/// A menu as a Mac shows it: no Menu bar row, since the system menu bar is the
+/// only one there.
 #[cfg(any(test, target_os = "macos"))]
 pub(crate) fn mac_entries(entries: Vec<Entry>) -> Vec<Entry> {
 	without_rows(entries, |action| action == MenuAction::ToggleMenuBar)
@@ -1938,9 +1938,9 @@ fn key_is_typed(state: ElementState, is_synthetic: bool) -> bool {
 	state == ElementState::Pressed && !is_synthetic
 }
 
-// Debug switches consulted per frame or per event. Each reads the environment
-// once, since var_os takes the env lock and scans environ every call. Same
-// pattern as pane.rs scroll_dbg.
+/// Debug switches consulted per frame or per event. Each reads the environment
+/// once, since `var_os` takes the env lock and scans environ every call. Same
+/// pattern as pane.rs `scroll_dbg`.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum EnvFlag {
 	Dump,
@@ -2567,19 +2567,19 @@ fn trim_heap() {
 #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
 fn trim_heap() {}
 
-// A big buffer comes straight from the OS and goes straight back. glibc's
-// mmap threshold starts at 128 KB but moves: freeing a mapped buffer raises it
-// to that buffer's size, after which a wallpaper's decode (several buffers of
-// megabytes each) is carved out of the thread's own arena and stays resident
-// there once freed, because `malloc_trim` never shrinks an arena that is not
-// the main one. Measured on a 1920x993 wallpaper: about 40 MB kept per decode,
-// one per rebuild after an idle release, and the first decode's 50 MB kept for
-// the life of every window. Setting the threshold pins it. 4 MB keeps a
-// frame's own vectors in the arena on any grid and puts only the image buffers
-// on the mapping path. Pinning it also stops the trim threshold moving, so
-// that is set too, high enough that the main heap's top is not given back and
-// asked for again around every frame. Called before the first thread exists,
-// like the environment fixes.
+/// A big buffer comes straight from the OS and goes straight back. glibc's
+/// mmap threshold starts at 128 KB but moves: freeing a mapped buffer raises it
+/// to that buffer's size, after which a wallpaper's decode (several buffers of
+/// megabytes each) is carved out of the thread's own arena and stays resident
+/// there once freed, because `malloc_trim` never shrinks an arena that is not
+/// the main one. Measured on a 1920x993 wallpaper: about 40 MB kept per decode,
+/// one per rebuild after an idle release, and the first decode's 50 MB kept for
+/// the life of every window. Setting the threshold pins it. 4 MB keeps a
+/// frame's own vectors in the arena on any grid and puts only the image buffers
+/// on the mapping path. Pinning it also stops the trim threshold moving, so
+/// that is set too, high enough that the main heap's top is not given back and
+/// asked for again around every frame. Called before the first thread exists,
+/// like the environment fixes.
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 pub(crate) fn tune_heap() {
 	// SAFETY: plain allocator parameters, set before any other thread runs.
@@ -8101,10 +8101,10 @@ fn resize_is_current(event: (u32, u32), now: (u32, u32)) -> bool {
 	event == now && event.0 > 0 && event.1 > 0
 }
 
-// The window/taskbar icon, decoded from the bundled logo (downscaled so the
-// _NET_WM_ICON payload stays small). The logo is wider than it is tall and every
-// place an icon is shown reserves a square, so it is stretched to fill one
-// rather than left floating in a band of nothing. None if it can't be decoded.
+/// The window/taskbar icon, decoded from the bundled logo (downscaled so the
+/// _`NET_WM_ICON` payload stays small). The logo is wider than it is tall and every
+/// place an icon is shown reserves a square, so it is stretched to fill one
+/// rather than left floating in a band of nothing. None if it can't be decoded.
 pub fn load_icon() -> Option<winit::window::Icon> {
 	let img = image::load_from_memory(include_bytes!("../assets/logo.png")).ok()?;
 	let img = img

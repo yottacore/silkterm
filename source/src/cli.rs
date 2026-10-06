@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use crate::config::{self, Fit};
 
-// Direction a new pane goes relative to the pane it splits.
+/// Direction a new pane goes relative to the pane it splits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dir4 {
 	Down,
@@ -22,15 +22,15 @@ pub enum Dir4 {
 	Right,
 }
 
-// New-pane size within the split, in the split direction.
+/// New-pane size within the split, in the split direction.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Size {
 	Cells(u32),
 	Percent(f32),
 }
 
-// Cascading look/behavior options; each level fills what it sets, the rest
-// inherit. `wallpaper_img: Some(None)` means "explicitly no image".
+/// Cascading look/behavior options; each level fills what it sets, the rest
+/// inherit. `wallpaper_img: Some(None)` means "explicitly no image".
 #[derive(Debug, Default, Clone)]
 pub struct Style {
 	pub shell: Option<Vec<String>>, // argv (already shell-word-split)
@@ -45,7 +45,7 @@ pub struct Style {
 	pub wallpaper_opacity: Option<f32>,
 }
 
-// Options that apply to the whole window (only valid before any tab/pane marker).
+/// Options that apply to the whole window (only valid before any tab/pane marker).
 #[derive(Debug, Default, Clone)]
 pub struct WindowOpts {
 	pub columns: Option<usize>,
@@ -91,8 +91,8 @@ pub struct TabSpec {
 	pub title: Option<String>,
 	pub style: Style,
 	pub panes: Vec<PaneSpec>,
-	// the tab that was current when this one was made, as an index into
-	// `Cli::tabs`, which stays in the order they were made (see `tab_order`)
+	/// the tab that was current when this one was made, as an index into
+	/// `Cli::tabs`, which stays in the order they were made (see `tab_order`)
 	pub opened_from: usize,
 }
 
@@ -111,7 +111,7 @@ impl TabSpec {
 
 #[derive(Debug, Default)]
 pub struct Cli {
-	// CLI-only flags: print something and exit, never open a window.
+	/// CLI-only flags: print something and exit, never open a window.
 	pub help: bool,
 	pub version: bool,
 	pub syntax: bool,
@@ -119,8 +119,8 @@ pub struct Cli {
 	pub donate: bool,
 	pub config: Option<PathBuf>,
 	pub reset_config: bool,
-	// control commands for an already-running window (talk, then exit):
-	// `Some(None)` clears the wallpaper, `Some(Some(p))` sets it.
+	/// control commands for an already-running window (talk, then exit):
+	/// `Some(None)` clears the wallpaper, `Some(Some(p))` sets it.
 	pub wallpaper: Option<Option<String>>,
 	pub reload: bool,
 	pub win: WindowOpts,
@@ -141,10 +141,10 @@ fn parse_bool(s: &str) -> Option<bool> {
 	}
 }
 
-// Minimal POSIX-ish word split honouring single/double quotes and backslash, so
-// `git log --oneline`, `bash --norc`, and `sh -c "a | b"` all argv-split right.
-// Outside quotes a backslash only escapes whitespace and quotes, so Windows paths
-// can be written plainly; inside double quotes the usual POSIX escapes apply.
+/// Minimal POSIX-ish word split honouring single/double quotes and backslash, so
+/// `git log --oneline`, `bash --norc`, and `sh -c "a | b"` all argv-split right.
+/// Outside quotes a backslash only escapes whitespace and quotes, so Windows paths
+/// can be written plainly; inside double quotes the usual POSIX escapes apply.
 pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
 	let mut out = Vec::new();
 	let mut word = String::new();
@@ -629,9 +629,9 @@ fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> Result<(), S
 	Ok(())
 }
 
-// Fold window-level CLI style options into `settings` (pure). Window-scoped only:
-// per-pane visual style is deferred (it needs a per-pane renderer the single
-// shared TextCtx doesn't have). `--shell` is handled separately (build_layout).
+/// Fold window-level CLI style options into `settings` (pure). Window-scoped only:
+/// per-pane visual style is deferred (it needs a per-pane renderer the single
+/// shared `TextCtx` doesn't have). `--shell` is handled separately (`build_layout`).
 pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
 	if let Some(font) = &style.font_name {
 		settings.font_family = Some(font.clone());
@@ -657,8 +657,8 @@ pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
 }
 
 impl WindowOpts {
-	// Apply this window's CLI style to the live settings at startup (no-op if none
-	// set). Call after the theme/OS palette settles so colors aren't clobbered.
+	/// Apply this window's CLI style to the live settings at startup (no-op if none
+	/// set). Call after the theme/OS palette settles so colors aren't clobbered.
 	pub fn apply_style(&self) {
 		let style = &self.style;
 		let any = style.font_name.is_some()
@@ -677,9 +677,9 @@ impl WindowOpts {
 	}
 }
 
-// True when the arguments amount to "no layout given": empty, or only --config
-// (which picks WHICH config file, not a layout) - the config's own command_line
-// should still apply in that case.
+/// True when the arguments amount to "no layout given": empty, or only --config
+/// (which picks WHICH config file, not a layout) - the config's own `command_line`
+/// should still apply in that case.
 pub fn only_config_args<I: IntoIterator<Item = String>>(args: I) -> bool {
 	let mut it = args.into_iter();
 	while let Some(arg) = it.next() {
@@ -693,9 +693,9 @@ pub fn only_config_args<I: IntoIterator<Item = String>>(args: I) -> bool {
 }
 
 impl Cli {
-	// The strip, as indexes into `tabs`. A `--new-tab` goes where a new tab
-	// made in the window would: just right of the current tab with `beside`,
-	// else at the end. They differ only after a `--tab=` picked an earlier one.
+	/// The strip, as indexes into `tabs`. A `--new-tab` goes where a new tab
+	/// made in the window would: just right of the current tab with `beside`,
+	/// else at the end. They differ only after a `--tab=` picked an earlier one.
 	pub fn tab_order(&self, beside: bool) -> Vec<usize> {
 		let mut order: Vec<usize> = Vec::with_capacity(self.tabs.len());
 		for (index, tab) in self.tabs.iter().enumerate() {
@@ -734,9 +734,9 @@ fn find_pane(tab: &TabSpec, id: &str) -> Option<usize> {
 		.position(|pane| pane.id.as_deref() == Some(id))
 }
 
-// Program name, version and build, as --version prints it, and nothing else.
-// The build number is last so a script reading the second field still gets the
-// version.
+/// Program name, version and build, as --version prints it, and nothing else.
+/// The build number is last so a script reading the second field still gets the
+/// version.
 pub fn version_line() -> String {
 	format!(
 		"{} v{} build {}",
@@ -746,17 +746,17 @@ pub fn version_line() -> String {
 	)
 }
 
-// A CLI-only flag's output with a blank line above and below, so the block sits
-// clear of the shell prompts either side of it. Print with `print!` - the
-// trailing blank line is part of the string. --version is deliberately NOT run
-// through this: it exists to be captured by a script.
+/// A CLI-only flag's output with a blank line above and below, so the block sits
+/// clear of the shell prompts either side of it. Print with `print!` - the
+/// trailing blank line is part of the string. --version is deliberately NOT run
+/// through this: it exists to be captured by a script.
 pub fn padded(body: &str) -> String {
 	format!("\n{}\n\n", body.trim_end_matches('\n'))
 }
 
-// What --about prints: enough to identify a build in a bug report. `info` is
-// None when no GPU adapter could be probed - the version and build still are
-// worth having, so that reads as three missing lines rather than a failure.
+/// What --about prints: enough to identify a build in a bug report. `info` is
+/// None when no GPU adapter could be probed - the version and build still are
+/// worth having, so that reads as three missing lines rather than a failure.
 pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
 	let mut lines = vec![
 		format!("About {}", config::APP_NAME),
@@ -780,8 +780,8 @@ pub fn about(info: Option<&wgpu::AdapterInfo>) -> String {
 	lines.join("\n")
 }
 
-// What --donate prints. The short version of DONATE.md - someone who reached
-// for this from a shell wants the address, not the essay.
+/// What --donate prints. The short version of DONATE.md - someone who reached
+/// for this from a shell wants the address, not the essay.
 pub fn donate() -> String {
 	format!(
 		"\
@@ -804,7 +804,7 @@ other terminal nerds it exists.",
 	)
 }
 
-// One-line-per-option usage text (shared by --help and --syntax).
+/// One-line-per-option usage text (shared by --help and --syntax).
 pub fn usage() -> &'static str {
 	"\
 Usage: silkterm [WINDOW OPTIONS] [--new-tab|--tab=ID [TAB OPTIONS]] [--new-pane|--pane=ID [PANE OPTIONS]] ...
