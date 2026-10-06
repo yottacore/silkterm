@@ -460,7 +460,11 @@ mod tests {
 			// A light background means light mode, which draws the picture at a
 			// higher alpha than the slider reads (visibility.rs). Without this the
 			// light cases here are placed against a field nobody will ever see.
-			theme_mode: if lightness(bg) > 0.5 { "light" } else { "dark" }.to_string(),
+			theme_mode: if lightness(bg) > 0.5 {
+				crate::theme::Mode::Light
+			} else {
+				crate::theme::Mode::Dark
+			},
 			..Settings::default()
 		}
 	}
@@ -655,9 +659,9 @@ mod tests {
 		let dark_text = [0x30u8, 0x32, 0x38];
 		let sum = summarize(&plain([10, 10, 12], 32, 32), 0.50);
 		let mut s = settings(light_bg, dark_text, SILK_CURSOR);
-		assert_eq!(s.theme_mode, "light");
+		assert_eq!(s.theme_mode, crate::theme::Mode::Light);
 		let lit = derive(&sum, &s);
-		s.theme_mode = "dark".to_string();
+		s.theme_mode = crate::theme::Mode::Dark;
 		let unlit = derive(&sum, &s);
 		assert!(
 			lightness(lit.fg) < lightness(unlit.fg) - 0.01,

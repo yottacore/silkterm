@@ -109,14 +109,20 @@ impl TabSpec {
 	}
 }
 
+/// A CLI-only flag: print something and exit, never open a window. Given more
+/// than one, the earliest here wins.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Info {
+	Help,
+	Syntax,
+	About,
+	Donate,
+	Version,
+}
+
 #[derive(Debug, Default)]
 pub struct Cli {
-	/// CLI-only flags: print something and exit, never open a window.
-	pub help: bool,
-	pub version: bool,
-	pub syntax: bool,
-	pub about: bool,
-	pub donate: bool,
+	pub info: Option<Info>,
 	pub config: Option<PathBuf>,
 	pub reset_config: bool,
 	/// control commands for an already-running window (talk, then exit):
@@ -125,7 +131,6 @@ pub struct Cli {
 	pub reload: bool,
 	pub win: WindowOpts,
 	pub tabs: Vec<TabSpec>, // empty -> no hierarchical options given (use defaults)
-	pub hierarchical: bool, // any tab/pane/structure flag was seen
 }
 
 // An id refers to the implicit first tab/pane.
@@ -327,11 +332,11 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 
 	while let Some(token) = tokens.next_token() {
 		if token == "-h" {
-			cli.help = true;
+			cli.ask(Info::Help);
 			continue;
 		}
 		if token == "-v" {
-			cli.version = true;
+			cli.ask(Info::Version);
 			continue;
 		}
 		let Some(body) = token.strip_prefix("--") else {
@@ -345,28 +350,17 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 		// CLI-only flags: main.rs prints and exits on these, so no window and no
 		// layout is ever built. Taken in ANY position on purpose - asking for the
 		// help should never be answered with a complaint about where it was put.
-		match name {
-			"help" => {
-				cli.help = true;
-				continue;
-			}
-			"syntax" => {
-				cli.syntax = true;
-				continue;
-			}
-			"about" => {
-				cli.about = true;
-				continue;
-			}
-			"donate" => {
-				cli.donate = true;
-				continue;
-			}
-			"version" | "ver" => {
-				cli.version = true;
-				continue;
-			}
-			_ => {}
+		let info = match name {
+			"help" => Some(Info::Help),
+			"syntax" => Some(Info::Syntax),
+			"about" => Some(Info::About),
+			"donate" => Some(Info::Donate),
+			"version" | "ver" => Some(Info::Version),
+			_ => None,
+		};
+		if let Some(info) = info {
+			cli.ask(info);
+			continue;
 		}
 
 		// markers (enter/select a scope)
@@ -380,7 +374,6 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 				cli.tabs.push(tab);
 				cur_tab = Some(cli.tabs.len() - 1);
 				cur_pane = 0;
-				cli.hierarchical = true;
 				continue;
 			}
 			"tab" => {
@@ -389,7 +382,6 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 				let idx = find_tab(&cli, &id).ok_or_else(|| format!("--tab: no such tab: {id}"))?;
 				cur_tab = Some(idx);
 				cur_pane = 0;
-				cli.hierarchical = true;
 				continue;
 			}
 			"new-pane" => {
@@ -400,7 +392,6 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 				cli.tabs[tab_idx].panes.push(PaneSpec::new(id, false));
 				cur_pane = cli.tabs[tab_idx].panes.len() - 1;
 				cur_tab = Some(tab_idx);
-				cli.hierarchical = true;
 				continue;
 			}
 			"pane" => {
@@ -411,7 +402,6 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 					.ok_or_else(|| format!("--pane: no such pane: {id}"))?;
 				cur_pane = pane_idx;
 				cur_tab = Some(tab_idx);
-				cli.hierarchical = true;
 				continue;
 			}
 			_ => {}
@@ -693,6 +683,16 @@ pub fn only_config_args<I: IntoIterator<Item = String>>(args: I) -> bool {
 }
 
 impl Cli {
+	fn ask(&mut self, info: Info) {
+		self.info = Some(self.info.map_or(info, |had| had.min(info)));
+	}
+
+	/// Any tab, pane or structure flag was seen. The first one makes the
+	/// implicit first tab, so there is always one then.
+	pub fn hierarchical(&self) -> bool {
+		!self.tabs.is_empty()
+	}
+
 	/// The strip, as indexes into `tabs`. A `--new-tab` goes where a new tab
 	/// made in the window would: just right of the current tab with `beside`,
 	/// else at the end. They differ only after a `--tab=` picked an earlier one.
@@ -874,7 +874,7 @@ mod tests {
 		assert_eq!(c.win.rows, Some(40));
 		assert_eq!(c.win.fullscreen, Some(true));
 		assert_eq!(c.win.hide_menu, Some(false));
-		assert!(!c.hierarchical);
+		assert!(!c.hierarchical());
 	}
 
 	// Test ID: EoSKhlo
@@ -892,23 +892,56 @@ mod tests {
 	fn cli_only_flags_are_taken_anywhere() {
 		// They print and exit, so where they sit can't matter - and answering
 		// "--new-tab --help" with a placement complaint would be absurd.
-		assert!(p("--help").help);
-		assert!(p("-h").help);
-		assert!(p("--new-tab --new-pane --help").help);
-		assert!(p("--about").about);
-		assert!(p("--new-tab --about").about);
-		assert!(p("--donate").donate);
-		assert!(p("--syntax").syntax);
-		assert!(p("--new-pane --donate").donate);
+		assert_eq!(p("--help").info, Some(Info::Help));
+		assert_eq!(p("-h").info, Some(Info::Help));
+		assert_eq!(p("--new-tab --new-pane --help").info, Some(Info::Help));
+		assert_eq!(p("--about").info, Some(Info::About));
+		assert_eq!(p("--new-tab --about").info, Some(Info::About));
+		assert_eq!(p("--donate").info, Some(Info::Donate));
+		assert_eq!(p("--syntax").info, Some(Info::Syntax));
+		assert_eq!(p("--new-pane --donate").info, Some(Info::Donate));
+	}
+
+	// Several print-and-exit flags are one answer: the first of help, syntax,
+	// about, donate and version, whatever order they came in.
+	// Test ID: Erstb6Z
+	#[test]
+	fn print_and_exit_flags_are_one_choice_and_help_wins() {
+		assert_eq!(p("--version --help").info, Some(Info::Help));
+		assert_eq!(p("--donate --about").info, Some(Info::About));
+		assert_eq!(p("-v --syntax --donate").info, Some(Info::Syntax));
+		assert_eq!(p("--version --donate").info, Some(Info::Donate));
+		assert_eq!(p("-v --ver").info, Some(Info::Version));
+	}
+
+	// The first tab or pane flag makes the implicit first tab, so the tab list
+	// is the whole answer.
+	// Test ID: ErstbB0
+	#[test]
+	fn a_launch_is_hierarchical_exactly_when_a_flag_made_a_tab() {
+		for (line, want) in [
+			("", false),
+			("--columns 80 --title T --shell sh", false),
+			("--help", false),
+			("--new-tab", true),
+			("--tab=main", true),
+			("--new-pane", true),
+			("--pane=main", true),
+			("--new-tab --about", true),
+		] {
+			let c = p(line);
+			assert_eq!(c.hierarchical(), want, "{line:?}");
+			assert_eq!(c.tabs.is_empty(), !want, "{line:?}");
+		}
 	}
 
 	// Test ID: EmrsJ5N
 	#[test]
 	fn the_three_version_spellings_are_one_flag() {
-		assert!(p("--version").version);
-		assert!(p("--ver").version);
-		assert!(p("-v").version);
-		assert!(!p("--columns 80").version);
+		assert_eq!(p("--version").info, Some(Info::Version));
+		assert_eq!(p("--ver").info, Some(Info::Version));
+		assert_eq!(p("-v").info, Some(Info::Version));
+		assert_eq!(p("--columns 80").info, None);
 	}
 
 	// Test ID: EmrsJ5O
@@ -1351,7 +1384,7 @@ mod tests {
 		assert_eq!(c.tabs[1].panes.len(), 2);
 		assert_eq!(c.tabs[2].panes.len(), 1);
 		// "0" is the first tab too, and selecting is a hierarchical launch
-		assert!(p("--tab=0").hierarchical);
+		assert!(p("--tab=0").hierarchical());
 		assert!(bad("--tab"));
 		assert!(bad("--new-tab=a --tab=b"));
 	}

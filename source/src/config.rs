@@ -311,6 +311,35 @@ pub const MENU_SEP_H: f32 = 9.0; // height of a separator row (line + spacing)
 pub const MENU_GUTTER: f32 = 20.0; // left checkmark gutter; item text starts after it
 pub const MENU_SUB_ARROW: f32 = 14.0; // right column a submenu row draws its arrow in
 
+/// A setting that takes one word from a fixed list. `key` is the word the file
+/// uses and the one match per type; `ALL` is the dialog's order, so a dropdown
+/// row's index is a position in it.
+pub trait Choice: Copy + PartialEq + std::fmt::Debug + 'static {
+	const ALL: &'static [Self];
+
+	fn key(self) -> &'static str;
+
+	/// None for a word the type does not know. The loader reads that as the
+	/// shipped default, as it always has.
+	fn parse(text: &str) -> Option<Self> {
+		Self::ALL
+			.iter()
+			.copied()
+			.find(|choice| choice.key() == text)
+	}
+
+	fn index(self) -> usize {
+		Self::ALL
+			.iter()
+			.position(|choice| *choice == self)
+			.unwrap_or(0)
+	}
+
+	fn from_index(index: usize) -> Option<Self> {
+		Self::ALL.get(index).copied()
+	}
+}
+
 /// How a background image fills the window.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Fit {
@@ -498,8 +527,8 @@ pub struct Settings {
 	pub text_scrim_strength: f32, // 0..100% -> 0..5 doublings of the halo alpha (0 = as built)
 	pub text_outline: f32, // antialiased outline around glyphs, px (0 = none; scrim color rules)
 	pub text_dark_on_light: f32, // how much of the sRGB-blend correction dark-on-light text gets, 0..2 (0 = off, 1 = the blend)
-	pub text_scrim_ramp: String, // halo falloff curve: "sigmoid" | "half_normal" | "linear" | "log" | "exp"
-	pub text_scrim_function: String, // halo build: "dilate" | "sdf" | "dt" | "gaussian" (legacy blur)
+	pub text_scrim_ramp: crate::scrim::Ramp, // halo falloff curve
+	pub text_scrim_function: crate::scrim::Function, // how the halo is built from the glyphs
 	pub text_scrim_regular_weight: bool, // blur bold text at regular weight (uniform halo; crisp text keeps its weight)
 	pub text_min_contrast: f32, // smallest Oklab lightness gap text may have from its own background, 0..1 (0 = leave every color alone)
 	pub color_emoji: bool, // paint COLRv1 color glyphs (emoji) instead of falling back to a monochrome face
@@ -508,7 +537,7 @@ pub struct Settings {
 	pub cursor_outline: bool,   // cursor joins the text outline (default on)
 	pub cursor_size_height: f32, // cursor height, 1..100% of the cell (from the bottom)
 	pub cursor_size_width: f32, // cursor width, 1..100% of the cell (from the left)
-	pub cursor_animation: String, // "none" | "phase" | "pulse_vertical" | "pulse_horizontal" | "pulse_both"
+	pub cursor_animation: crate::pane::CursorAnimation,
 	pub cursor_animation_resume_s: f32, // idle seconds after typing before the animation resumes (output does not wait this out)
 	pub cursor_animation_idle_stop_s: f32, // idle seconds until the animation stops (parked at full); 0 = never
 	pub cursor_blink_rate_ms: f32,         // one animation cycle (ms)
@@ -569,15 +598,15 @@ pub struct Settings {
 	pub scrollbar_trough: [u8; 3],
 	pub ansi: [[u8; 3]; 16], // 16-color ANSI palette, resolved from the active theme
 	pub theme: String,       // active theme name (see theme.rs)
-	pub theme_mode: String,  // "dark" | "light" | "system"
+	pub theme_mode: crate::theme::Mode,
 	/// The performance profile (profile.rs): what the look may cost. While one
 	/// is live the fields it governs hold ITS values and the user's own sit in
 	/// `profile_shadow`, which is how Custom puts them back.
 	pub performance_automatic: bool, // pick the profile for this machine, and step it down when the display cannot keep up
-	pub performance_profile: String, // "custom" | "max" | "high" | "low" | "standard"
+	pub performance_profile: crate::profile::Profile,
 	pub performance_check_hardware: bool, // re-rate when the machine underneath changes
 	pub performance_check_next_run: bool, // re-rate once at the next launch, then clear
-	pub rated_hardware: String,      // hardware id the profile was last picked for ("" = never)
+	pub rated_hardware: String,           // hardware id the profile was last picked for ("" = never)
 	pub profile_shadow: Option<Box<crate::profile::Shadow>>,
 	/// The Remote profile in force, over whatever `performance_profile` says. Never
 	/// written: it is set for a remote screen (or by hand from the View menu) and
@@ -707,8 +736,8 @@ impl Default for Settings {
 			text_scrim_strength: 20.0,
 			text_outline: 1.0,
 			text_dark_on_light: 1.0,
-			text_scrim_ramp: "exp".to_string(),
-			text_scrim_function: "sdf".to_string(),
+			text_scrim_ramp: crate::scrim::Ramp::Exp,
+			text_scrim_function: crate::scrim::Function::Sdf,
 			text_scrim_regular_weight: true,
 			text_min_contrast: 0.45,
 			color_emoji: true,
@@ -717,7 +746,7 @@ impl Default for Settings {
 			cursor_outline: true,
 			cursor_size_height: 100.0, // full height
 			cursor_size_width: 100.0,  // full width - a block
-			cursor_animation: "pulse_vertical".to_string(),
+			cursor_animation: crate::pane::CursorAnimation::PulseVertical,
 			cursor_animation_resume_s: 1.0,
 			cursor_animation_idle_stop_s: 60.0,
 			cursor_blink_rate_ms: 500.0,
@@ -773,11 +802,11 @@ impl Default for Settings {
 			gutter: [0x16, 0x16, 0x1e],
 			scrollbar_thumb: SCROLLBAR_THUMB_DEF,
 			scrollbar_trough: SCROLLBAR_TROUGH_DEF,
-			ansi: crate::theme::resolve("SilkTerm", "dark", true).ansi,
+			ansi: crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true).ansi,
 			theme: "SilkTerm".to_string(),
-			theme_mode: "dark".to_string(),
+			theme_mode: crate::theme::Mode::Dark,
 			performance_automatic: true,
-			performance_profile: "max".to_string(),
+			performance_profile: crate::profile::Profile::Max,
 			performance_check_hardware: true,
 			performance_check_next_run: false,
 			rated_hardware: String::new(),
@@ -810,11 +839,9 @@ static OS_DARK: AtomicBool = AtomicBool::new(true);
 
 /// The effective dark/light for the active mode (chrome + dialogs follow this).
 pub fn is_dark() -> bool {
-	match settings().theme_mode.as_str() {
-		"light" => false,
-		"system" => OS_DARK.load(Ordering::Relaxed),
-		_ => true,
-	}
+	settings()
+		.theme_mode
+		.is_dark(OS_DARK.load(Ordering::Relaxed))
 }
 
 /// The OS bit on its own, for the callers that answer from a settings copy rather
@@ -828,14 +855,14 @@ pub fn os_dark() -> bool {
 pub fn reapply_for_os(dark: bool) -> bool {
 	let prev = OS_DARK.swap(dark, Ordering::Relaxed);
 	let current = settings();
-	if prev == dark || current.theme_mode != "system" {
+	if prev == dark || current.theme_mode != crate::theme::Mode::System {
 		return false;
 	}
 	let palette = |dark| {
 		crate::theme::resolve_in(
 			&current.user_themes,
 			&current.theme,
-			&current.theme_mode,
+			current.theme_mode,
 			dark,
 		)
 	};
@@ -2114,13 +2141,13 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 		doc.put_string("theme", edited.theme.as_str());
 	}
 	if edited.theme_mode != orig.theme_mode {
-		doc.put_string("theme_mode", edited.theme_mode.as_str());
+		doc.put_string("theme_mode", edited.theme_mode.key());
 	}
 	if edited.performance_automatic != orig.performance_automatic {
 		doc.put_bool("performance.automatic", edited.performance_automatic);
 	}
 	if edited.performance_profile != orig.performance_profile {
-		doc.put_string("performance.profile", edited.performance_profile.as_str());
+		doc.put_string("performance.profile", edited.performance_profile.key());
 	}
 	if edited.performance_check_hardware != orig.performance_check_hardware {
 		doc.put_bool(
@@ -2317,10 +2344,10 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 		doc.put_float("text.dark_on_light", rounded(edited.text_dark_on_light));
 	}
 	if edited.text_scrim_ramp != orig.text_scrim_ramp {
-		doc.put_string("text.scrim.ramp", &edited.text_scrim_ramp);
+		doc.put_string("text.scrim.ramp", edited.text_scrim_ramp.key());
 	}
 	if edited.text_scrim_function != orig.text_scrim_function {
-		doc.put_string("text.scrim.function", &edited.text_scrim_function);
+		doc.put_string("text.scrim.function", edited.text_scrim_function.key());
 	}
 	if edited.text_scrim_regular_weight != orig.text_scrim_regular_weight {
 		doc.put_bool(
@@ -2350,7 +2377,7 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 		doc.put_float("cursor.size.width", rounded(edited.cursor_size_width));
 	}
 	if edited.cursor_animation != orig.cursor_animation {
-		doc.put_string("cursor.animation", &edited.cursor_animation);
+		doc.put_string("cursor.animation", edited.cursor_animation.key());
 	}
 	if !same_f32(
 		edited.cursor_animation_resume_s,
@@ -3508,15 +3535,20 @@ fn zoom(raw: Option<i64>, default: i32) -> i32 {
 	raw.map_or(default, |v| v.clamp(i64::from(lo), i64::from(hi)) as i32)
 }
 
+// A missing or unknown word reads as the shipped default.
+fn choice_or<T: Choice>(word: Option<&str>, default: T) -> T {
+	word.and_then(T::parse).unwrap_or(default)
+}
+
 fn resolve(raw: RawConfig) -> Settings {
 	let d = Settings::default();
 	let theme_name = raw.theme.unwrap_or_else(|| d.theme.clone());
-	let theme_mode = raw.theme_mode.unwrap_or_else(|| d.theme_mode.clone());
+	let theme_mode = choice_or(raw.theme_mode.as_deref(), d.theme_mode);
 	// system-mode OS dark/light detection is wired later; default to dark for now
 	let pal = crate::theme::resolve_in(
 		&raw.user_themes,
 		&theme_name,
-		&theme_mode,
+		theme_mode,
 		OS_DARK.load(Ordering::Relaxed),
 	);
 	let color = |raw: Option<String>, fallback: [u8; 3]| {
@@ -3684,24 +3716,8 @@ fn resolve(raw: RawConfig) -> Settings {
 			.text_dark_on_light
 			.unwrap_or(d.text_dark_on_light)
 			.clamp(0.0, MAX_DARK_ON_LIGHT),
-		// the older spellings still parse: "s" was renamed to "sigmoid" (which is
-		// what a smoothstep is), and the falloff's "gaussian" to "half_normal" so
-		// it stops reading like the gaussian BLUR the function list also offers.
-		text_scrim_ramp: match raw.text_scrim_ramp.as_deref() {
-			Some("linear") => "linear".to_string(),
-			Some("half_normal" | "gaussian") => "half_normal".to_string(),
-			Some("sigmoid" | "s") => "sigmoid".to_string(),
-			Some("log") => "log".to_string(),
-			Some("exp") => "exp".to_string(),
-			_ => d.text_scrim_ramp.clone(), // missing/unknown -> default (exponential)
-		},
-		text_scrim_function: match raw.text_scrim_function.as_deref() {
-			Some("dilate") => "dilate".to_string(),
-			Some("sdf") => "sdf".to_string(),
-			Some("dt") => "dt".to_string(),
-			Some("gaussian") => "gaussian".to_string(),
-			_ => d.text_scrim_function.clone(), // missing/unknown -> default (SDF)
-		},
+		text_scrim_ramp: choice_or(raw.text_scrim_ramp.as_deref(), d.text_scrim_ramp),
+		text_scrim_function: choice_or(raw.text_scrim_function.as_deref(), d.text_scrim_function),
 		text_scrim_regular_weight: raw
 			.text_scrim_regular_weight
 			.unwrap_or(d.text_scrim_regular_weight),
@@ -3721,7 +3737,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			.cursor_size_width
 			.unwrap_or(d.cursor_size_width)
 			.clamp(1.0, 100.0),
-		cursor_animation: raw.cursor_animation.unwrap_or(d.cursor_animation),
+		cursor_animation: choice_or(raw.cursor_animation.as_deref(), d.cursor_animation),
 		cursor_animation_resume_s: raw
 			.cursor_animation_resume_s
 			.unwrap_or(d.cursor_animation_resume_s)
@@ -3809,13 +3825,10 @@ fn resolve(raw: RawConfig) -> Settings {
 		theme: theme_name,
 		theme_mode,
 		performance_automatic: raw.performance_automatic.unwrap_or(d.performance_automatic),
-		performance_profile: crate::profile::Profile::parse(
-			raw.performance_profile
-				.as_deref()
-				.unwrap_or(&d.performance_profile),
-		)
-		.key()
-		.to_string(),
+		performance_profile: raw
+			.performance_profile
+			.as_deref()
+			.map_or(d.performance_profile, crate::profile::Profile::parse),
 		performance_check_hardware: raw
 			.performance_check_hardware
 			.unwrap_or(d.performance_check_hardware),
@@ -8121,7 +8134,7 @@ mod tests {
 		set_config_override(path.clone());
 
 		let stored = load();
-		assert_eq!(stored.performance_profile, "low");
+		assert_eq!(stored.performance_profile, crate::profile::Profile::Low);
 		assert_eq!(
 			stored.scroll_ease_in_ms, 300.0,
 			"the file is read as written"
@@ -8159,7 +8172,7 @@ mod tests {
 
 		let mut stored = load();
 		assert!(stored.colors_from_wallpaper, "the file is read as written");
-		stored.performance_profile = "custom".to_string();
+		stored.performance_profile = crate::profile::Profile::Custom;
 		stored.performance_automatic = false;
 		stored.wallpaper_enabled = true;
 		stored.fg = mine.0;
@@ -8249,7 +8262,7 @@ mod tests {
 		);
 		let back = load();
 		assert_eq!(back.minimap, changed.minimap);
-		assert_eq!(back.performance_profile, "max");
+		assert_eq!(back.performance_profile, crate::profile::Profile::Max);
 		assert!(back.stepped_profile.is_none());
 		assert!(back.wallpaper_enabled && back.text_scrim);
 		let _ = std::fs::remove_dir_all(&dir);
@@ -8288,7 +8301,7 @@ mod tests {
 		};
 		let base = Settings {
 			performance_automatic: true,
-			performance_profile: "max".to_string(),
+			performance_profile: crate::profile::Profile::Max,
 			..Settings::default()
 		};
 		let stepped = Settings {
@@ -8304,7 +8317,7 @@ mod tests {
 			..base.clone()
 		};
 		let picked = Settings {
-			performance_profile: "high".to_string(),
+			performance_profile: crate::profile::Profile::High,
 			..base.clone()
 		};
 		let manual = Settings {
@@ -8347,7 +8360,7 @@ mod tests {
 	fn naming_a_wallpaper_turns_it_on_unless_the_profile_says_off() {
 		let off = Settings {
 			wallpaper_enabled: false,
-			performance_profile: "custom".into(),
+			performance_profile: crate::profile::Profile::Custom,
 			..Settings::default()
 		};
 		let mut named = off.clone();
@@ -9160,9 +9173,9 @@ mod tests {
 		set_config_override(path.clone());
 
 		let orig = load();
-		assert_eq!(orig.text_scrim_ramp, "sigmoid"); // the file's older spelling
+		assert_eq!(orig.text_scrim_ramp, crate::scrim::Ramp::Sigmoid); // the file's older spelling
 		let mut edited = orig.clone();
-		edited.text_scrim_ramp = "log".to_string();
+		edited.text_scrim_ramp = crate::scrim::Ramp::Log;
 		assert!(
 			persist(&orig, &edited),
 			"persist should write to our temp file"
@@ -9170,7 +9183,7 @@ mod tests {
 
 		assert_eq!(
 			load().text_scrim_ramp,
-			"log",
+			crate::scrim::Ramp::Log,
 			"dialog change lost after relaunch"
 		);
 		// and the value is still spelled the way the user wrote it
@@ -9531,7 +9544,11 @@ mod tests {
 			assert_eq!(keep_rating(&lines), Kept::Written, "{what}");
 			let reloaded = reload_from_disk();
 			assert_eq!(reloaded.rated_hardware, ID, "{what}");
-			assert_eq!(reloaded.performance_profile, "high", "{what}");
+			assert_eq!(
+				reloaded.performance_profile,
+				crate::profile::Profile::High,
+				"{what}"
+			);
 		}
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -9674,7 +9691,7 @@ mod tests {
 		};
 		let holds = || {
 			let s = reload_from_disk();
-			s.rated_hardware == ID && s.performance_profile == "high"
+			s.rated_hardware == ID && s.performance_profile == crate::profile::Profile::High
 		};
 		let mut files = vec![("the template", default_config().to_string())];
 		files.extend(clean_rating_shapes());
@@ -9683,7 +9700,7 @@ mod tests {
 			let orig = reload_from_disk();
 			let mut new = orig.clone();
 			new.rated_hardware = ID.to_string();
-			new.performance_profile = "high".to_string();
+			new.performance_profile = crate::profile::Profile::High;
 			let saved = persist(&orig, &new) && holds();
 
 			std::fs::write(&path, &text).unwrap();
@@ -9899,7 +9916,11 @@ mod tests {
 			assert_eq!(keep_rating(&lines), Kept::Written, "{what}");
 			let reloaded = reload_from_disk();
 			assert_eq!(reloaded.rated_hardware, ID, "{what}");
-			assert_eq!(reloaded.performance_profile, "high", "{what}");
+			assert_eq!(
+				reloaded.performance_profile,
+				crate::profile::Profile::High,
+				"{what}"
+			);
 			assert_eq!(
 				other(&reloaded),
 				loaded,
@@ -10240,7 +10261,7 @@ mod tests {
 		);
 		let reloaded = reload_from_disk();
 		assert_eq!(reloaded.rated_hardware, ID);
-		assert_eq!(reloaded.performance_profile, "high");
+		assert_eq!(reloaded.performance_profile, crate::profile::Profile::High);
 
 		let mut next = reloaded.clone();
 		next.rated_hardware = "fedcba9876543210".to_string();
@@ -10687,7 +10708,7 @@ mod tests {
 	// Test ID: Epz2LOS
 	#[test]
 	fn a_saved_theme_is_not_taken_for_a_typo() {
-		let pal = crate::theme::resolve_in(&[], "SilkTerm", "dark", true);
+		let pal = crate::theme::resolve_in(&[], "SilkTerm", crate::theme::Mode::Dark, true);
 		let theme = crate::theme::UserTheme {
 			slug: "mine".to_string(),
 			name: "Mine".to_string(),
@@ -10735,7 +10756,12 @@ mod tests {
 		for dark in [false, true, false] {
 			assert!(reapply_for_os(dark));
 			let live = settings();
-			let pal = crate::theme::resolve_in(&live.user_themes, &live.theme, "system", dark);
+			let pal = crate::theme::resolve_in(
+				&live.user_themes,
+				&live.theme,
+				crate::theme::Mode::System,
+				dark,
+			);
 			assert_eq!(live.bg, [0x12, 0x34, 0x56], "dark {dark}");
 			assert_eq!(live.fg, [1, 2, 3], "dark {dark}");
 			assert_eq!(live.dialog_bg, pal.dialog_bg, "dark {dark}");
@@ -12108,7 +12134,7 @@ mod tests {
 		let base = reload_from_disk();
 		let mut own = base.clone();
 		own.font_size = 15.0;
-		own.theme_mode = "light".to_string();
+		own.theme_mode = crate::theme::Mode::Light;
 		own.scrollback = 5000;
 		own.remembered_columns = 101;
 		own.shells = vec![
@@ -12125,7 +12151,7 @@ mod tests {
 		own.keys = own
 			.keys
 			.with_own(crate::input::Hotkey::ClosePane, Some(Vec::new()));
-		let pal = crate::theme::resolve_in(&[], "SilkTerm", "dark", true);
+		let pal = crate::theme::resolve_in(&[], "SilkTerm", crate::theme::Mode::Dark, true);
 		own.user_themes.push(crate::theme::UserTheme {
 			slug: "mine".to_string(),
 			name: "Mine".to_string(),
@@ -12137,8 +12163,8 @@ mod tests {
 		assert!(loaded.keys == own.keys && loaded.user_themes.len() == 1);
 		assert_eq!(loaded.monitor_sizes, own.monitor_sizes);
 		assert_eq!(
-			(loaded.font_size, loaded.theme_mode.as_str()),
-			(15.0, "light")
+			(loaded.font_size, loaded.theme_mode),
+			(15.0, crate::theme::Mode::Light)
 		);
 		loaded
 	}
@@ -12322,8 +12348,8 @@ mod tests {
 		// 20% on the 20%-per-doubling scale, so exactly one doubling
 		assert_eq!(d.text_scrim_strength, 20.0);
 		assert_eq!(d.text_outline, 1.0);
-		assert_eq!(d.text_scrim_ramp, "exp");
-		assert_eq!(d.text_scrim_function, "sdf");
+		assert_eq!(d.text_scrim_ramp, crate::scrim::Ramp::Exp);
+		assert_eq!(d.text_scrim_function, crate::scrim::Function::Sdf);
 		assert!(d.text_scrim_regular_weight);
 		assert!(!d.cursor_scrim, "cursor scrim halo defaults off");
 		assert!(d.cursor_outline, "cursor outline defaults on");
@@ -12336,7 +12362,10 @@ mod tests {
 		assert!(d.wallpaper_rotate_random, "rotation defaults to shuffled");
 		assert_eq!(d.cursor_animation_resume_s, 1.0);
 		assert!(d.minimap, "the minimap defaults on");
-		assert_eq!(d.cursor_animation, "pulse_vertical");
+		assert_eq!(
+			d.cursor_animation,
+			crate::pane::CursorAnimation::PulseVertical
+		);
 		// fills the window, ignoring aspect; a file that names no fit gets it too
 		assert_eq!(d.wallpaper_default_fit, Fit::Stretch);
 		let p = std::path::Path::new("test.shcl");
@@ -12359,20 +12388,219 @@ mod tests {
 		let p = std::path::Path::new("test.shcl");
 		for f in ["dilate", "sdf", "dt", "gaussian"] {
 			let s = resolve(read_raw(&format!("text.scrim.function: \"{f}\"\n"), p).0);
-			assert_eq!(s.text_scrim_function, f);
+			assert_eq!(s.text_scrim_function.key(), f);
 		}
 		for r in ["sigmoid", "half_normal", "linear", "log", "exp"] {
 			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{r}\"\n"), p).0);
-			assert_eq!(s.text_scrim_ramp, r);
+			assert_eq!(s.text_scrim_ramp.key(), r);
 		}
 		for (old, new) in [("s", "sigmoid"), ("gaussian", "half_normal")] {
 			let s = resolve(read_raw(&format!("text.scrim.ramp: \"{old}\"\n"), p).0);
-			assert_eq!(s.text_scrim_ramp, new, "{old} should still parse");
+			assert_eq!(s.text_scrim_ramp.key(), new, "{old} should still parse");
 		}
 		let s = resolve(read_raw("text.scrim.function: \"bogus\"\n", p).0);
-		assert_eq!(s.text_scrim_function, "sdf", "unknown -> default");
+		assert_eq!(
+			s.text_scrim_function,
+			crate::scrim::Function::Sdf,
+			"unknown -> default"
+		);
 		let s = resolve(read_raw("text.scrim.ramp: \"bogus\"\n", p).0);
-		assert_eq!(s.text_scrim_ramp, "exp", "unknown -> default");
+		assert_eq!(
+			s.text_scrim_ramp,
+			crate::scrim::Ramp::Exp,
+			"unknown -> default"
+		);
+	}
+
+	// The words the file uses, written out here rather than read back from
+	// `key`, so a changed spelling, or a type whose dialog order moved, fails
+	// here and not in somebody's config.
+	// Test ID: ErstaMt
+	#[test]
+	fn every_fixed_choice_reads_and_writes_its_own_word() {
+		use crate::pane::CursorAnimation as C;
+		use crate::scrim::{Function as F, Ramp as R};
+		use crate::theme::Mode as M;
+		fn check<T: Choice>(words: &[(&str, T)]) {
+			assert_eq!(words.len(), T::ALL.len(), "{:?}", T::ALL);
+			for (index, &(word, choice)) in words.iter().enumerate() {
+				assert_eq!(T::ALL[index], choice, "dialog order");
+				assert_eq!(choice.key(), word);
+				assert_eq!(T::parse(word), Some(choice), "{word}");
+				assert_eq!(choice.index(), index);
+				assert_eq!(T::from_index(index), Some(choice));
+			}
+			assert_eq!(T::parse("bogus"), None);
+			assert_eq!(T::from_index(T::ALL.len()), None);
+		}
+		check(&[
+			("exp", R::Exp),
+			("half_normal", R::HalfNormal),
+			("log", R::Log),
+			("sigmoid", R::Sigmoid),
+			("linear", R::Linear),
+		]);
+		check(&[
+			("sdf", F::Sdf),
+			("dt", F::Dt),
+			("dilate", F::Dilate),
+			("gaussian", F::Gaussian),
+		]);
+		check(&[
+			("none", C::Off),
+			("phase", C::Phase),
+			("pulse_vertical", C::PulseVertical),
+			("pulse_horizontal", C::PulseHorizontal),
+			("pulse_both", C::PulseBoth),
+		]);
+		check(&[
+			("dark", M::Dark),
+			("light", M::Light),
+			("system", M::System),
+		]);
+		// the ramp's older spellings, exact as they always were
+		assert_eq!(R::parse("s"), Some(R::Sigmoid));
+		assert_eq!(R::parse("gaussian"), Some(R::HalfNormal));
+		assert_eq!(R::parse("EXP"), None);
+		assert_eq!(C::parse("Phase"), None);
+		// the mode, as loosely as the palette always took it
+		assert_eq!(M::parse(" Light "), Some(M::Light));
+		assert_eq!(M::parse("SYSTEM"), Some(M::System));
+		assert!(M::Dark.is_dark(false) && !M::Light.is_dark(true));
+		assert!(M::System.is_dark(true) && !M::System.is_dark(false));
+	}
+
+	// A word the file holds is never respelled by a save that did not change it,
+	// a word it does not know is kept as written and read as the default, and a
+	// save that does change one writes the word above.
+	// Test ID: Erstagk
+	#[test]
+	fn a_config_with_each_fixed_choice_loads_and_saves_byte_identical() {
+		use crate::pane::CursorAnimation;
+		use crate::profile::Profile;
+		use crate::scrim::{Function, Ramp};
+		use crate::theme::Mode;
+		fn writes<T: Choice>(
+			path: &std::path::Path,
+			leaf: &str,
+			field: fn(&mut Settings) -> &mut T,
+		) {
+			for (k, &choice) in T::ALL.iter().enumerate() {
+				// a save writes only what changed, so it starts from another value
+				let mut orig = load();
+				*field(&mut orig) = T::ALL[(k + 1) % T::ALL.len()];
+				let mut edited = orig.clone();
+				*field(&mut edited) = choice;
+				assert!(persist(&orig, &edited));
+				let text = std::fs::read_to_string(path).unwrap();
+				let want = format!("{leaf}: {}\n", choice.key());
+				assert!(text.contains(&want), "{want:?} in {text}");
+				assert_eq!(*field(&mut load()), choice);
+			}
+		}
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_choices_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		set_config_override(path.clone());
+		let modes = ["dark", "light", "system", "Light", "bogus"];
+		let profiles = [
+			"custom", "max", "high", "low", "standard", "remote", "HIGH", "bogus",
+		];
+		let ramps = [
+			"exp",
+			"half_normal",
+			"log",
+			"sigmoid",
+			"linear",
+			"s",
+			"gaussian",
+			"bogus",
+		];
+		let functions = ["sdf", "dt", "dilate", "gaussian", "bogus"];
+		let animations = [
+			"none",
+			"phase",
+			"pulse_vertical",
+			"pulse_horizontal",
+			"pulse_both",
+			"bogus",
+		];
+		let d = Settings::default();
+		for row in 0..8 {
+			let pick = |words: &[&'static str]| words[row % words.len()];
+			let (mode, profile, ramp, function, animation) = (
+				pick(&modes),
+				pick(&profiles),
+				pick(&ramps),
+				pick(&functions),
+				pick(&animations),
+			);
+			let lines = [
+				format!("theme_mode: {mode}\n"),
+				format!("\tprofile: {profile}\n"),
+				format!("\t\tramp: {ramp}\n"),
+				format!("\t\tfunction: {function}\n"),
+				format!("\tanimation: {animation}\n"),
+			];
+			let file = format!(
+				"{}performance:\n{}font:\n\tsize: 12.5\ntext:\n\tscrim:\n{}{}cursor:\n{}",
+				lines[0], lines[1], lines[2], lines[3], lines[4]
+			);
+			std::fs::write(&path, &file).unwrap();
+			let orig = load();
+			let launched = std::fs::read_to_string(&path).unwrap();
+			for line in &lines {
+				assert!(launched.contains(line.as_str()), "{line:?} in {launched}");
+			}
+			assert_eq!(orig.theme_mode, Mode::parse(mode).unwrap_or(d.theme_mode));
+			assert_eq!(orig.performance_profile, Profile::parse(profile));
+			assert_eq!(
+				orig.text_scrim_ramp,
+				Ramp::parse(ramp).unwrap_or(d.text_scrim_ramp)
+			);
+			assert_eq!(
+				orig.text_scrim_function,
+				Function::parse(function).unwrap_or(d.text_scrim_function)
+			);
+			assert_eq!(
+				orig.cursor_animation,
+				CursorAnimation::parse(animation).unwrap_or(d.cursor_animation)
+			);
+
+			let mut edited = orig.clone();
+			edited.font_size = 13.5;
+			assert!(persist(&orig, &edited));
+			assert_eq!(
+				std::fs::read_to_string(&path).unwrap(),
+				launched.replacen("size: 12.5", "size: 13.5", 1),
+				"row {row}: a save of another setting changed a word"
+			);
+		}
+
+		// every value a save writes is the word the table above pins, and reads
+		// back as itself
+		writes(&path, "theme_mode", |s| &mut s.theme_mode);
+		writes(&path, "ramp", |s| &mut s.text_scrim_ramp);
+		writes(&path, "function", |s| &mut s.text_scrim_function);
+		writes(&path, "animation", |s| &mut s.cursor_animation);
+		for (k, profile) in Profile::ALL.into_iter().enumerate() {
+			let mut orig = load();
+			orig.performance_profile = Profile::ALL[(k + 1) % Profile::ALL.len()];
+			let mut edited = orig.clone();
+			edited.performance_profile = profile;
+			assert!(persist(&orig, &edited));
+			let text = std::fs::read_to_string(&path).unwrap();
+			assert!(
+				text.contains(&format!("profile: {}\n", profile.key())),
+				"{text}"
+			);
+			assert_eq!(load().performance_profile, profile);
+		}
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	// Each zoom step is a pixel on the configured size. Stepping past the floor
@@ -12922,7 +13150,7 @@ mod tests {
 		assert_eq!(s.text_scrim_softness, 0.3, "{out}");
 		assert!(s.cursor_scrim, "{out}");
 		assert_eq!(s.text_outline, 2.5, "{out}");
-		assert_eq!(s.text_scrim_ramp, "sigmoid", "{out}");
+		assert_eq!(s.text_scrim_ramp, crate::scrim::Ramp::Sigmoid, "{out}");
 	}
 
 	// shcl drops a line that steps back to a depth nothing uses, so it sets

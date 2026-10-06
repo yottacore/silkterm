@@ -22,8 +22,8 @@ use crate::bgimage::{ImageRenderer, WpProbe};
 use crate::clipboard::Clipboard;
 use crate::config;
 use crate::gfx::{
-	Drawn, FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, NoFrame, Rebirth, RectInstance, RectRenderer,
-	Retry, VramProbe,
+	Drawn, FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, NoFrame, QuadMode, Rebirth, RectInstance,
+	RectRenderer, Retry, VramProbe,
 };
 use crate::input::{self, ClickSelect, CopyFrom, Hotkey, WheelRoute, is_copy_chord};
 use crate::pane::{BarHit, CopyKind, Dir, Pane, PaneManager, Rect};
@@ -2166,7 +2166,7 @@ fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	note_rating_not_kept(&kept);
 	let mut new = (*live).clone();
 	new.rated_hardware = hardware;
-	new.performance_profile = pick.key().to_string();
+	new.performance_profile = pick;
 	config::update(new);
 	None
 }
@@ -2292,7 +2292,7 @@ fn with_measured_profile(
 ) -> config::Settings {
 	let mut next = live.clone();
 	crate::profile::unapply(&mut next);
-	next.performance_profile = profile.key().to_string();
+	next.performance_profile = profile;
 	next.stepped_profile = None;
 	next
 }
@@ -7394,14 +7394,6 @@ impl State {
 		// text to the scrim texture, blur it, then composite under the crisp text.
 		// "Softness" 0..1 -> coverage boost: 0 = hard/solid (x10), 1 = soft/faint (x1)
 		let scrim_intensity = 10.0 - cfg.text_scrim_softness.clamp(0.0, 1.0) * 9.0;
-		// falloff curve index: 0 sigmoid, 1 half-normal, 2 linear, 3 log, 4 exp
-		let scrim_ramp = match cfg.text_scrim_ramp.as_str() {
-			"half_normal" => 1.0,
-			"linear" => 2.0,
-			"log" => 3.0,
-			"exp" => 4.0,
-			_ => 0.0, // "sigmoid"
-		};
 		// "Strength" 0..100% -> doublings of the finished halo alpha (0 = as built),
 		// so the top of the slider is x32.
 		let scrim_strength = cfg.text_scrim_strength.clamp(0.0, 100.0) / SCRIM_PCT_PER_DOUBLING;
@@ -7419,13 +7411,6 @@ impl State {
 					.map_or(&[][..], |s| &s.spread[..]),
 			)
 		});
-		// build function index: 0 dilate, 1 sdf, 2 dt, 3 gaussian (legacy blur)
-		let scrim_function = match cfg.text_scrim_function.as_str() {
-			"dilate" => 0.0,
-			"dt" => 2.0,
-			"gaussian" => 3.0,
-			_ => 1.0, // "sdf"
-		};
 		// distance paths measure the halo extent in px; keep it a touch wider than
 		// the (sigma-based) gaussian look so switching functions doesn't shrink it.
 		let scrim_ext = crate::scrim::clamp_ext(cfg.text_scrim_radius * 2.0);
@@ -7498,9 +7483,9 @@ impl State {
 					&mut encoder,
 					cfg.text_scrim_radius,
 					scrim_ext,
-					scrim_ramp,
+					cfg.text_scrim_ramp,
 					if cfg.cursor_scrim { 1.0 } else { 0.0 },
-					scrim_function,
+					cfg.text_scrim_function,
 				);
 			}
 			self.scrim_sig = Some(text_sig);
@@ -7602,8 +7587,8 @@ impl State {
 					scrim_intensity,
 					cfg.text_outline,
 					if cfg.cursor_outline { 1.0 } else { 0.0 },
-					scrim_function,
-					scrim_ramp,
+					cfg.text_scrim_function,
+					cfg.text_scrim_ramp,
 					scrim_ext,
 					scrim_strength,
 					if halo_on { 1.0 } else { 0.0 },
@@ -7776,7 +7761,7 @@ fn close_x_inst(cb: Rect, color: [u8; 3]) -> RectInstance {
 		pos: [cb.x, cb.y],
 		size: [cb.w, cb.h],
 		color: config::srgb_f32(color),
-		params: [1.0, (cb.w * 0.14).max(1.4)],
+		params: [QuadMode::CloseMark.code(), (cb.w * 0.14).max(1.4)],
 	}
 }
 
@@ -7787,7 +7772,7 @@ fn sub_arrow_inst(at: Rect, color: [u8; 3]) -> RectInstance {
 		pos: [at.x, at.y],
 		size: [at.w, at.h],
 		color: config::srgb_f32(color),
-		params: [3.0, 0.0],
+		params: [QuadMode::Triangle.code(), 0.0],
 	}
 }
 
@@ -7800,7 +7785,7 @@ fn bar_inst(r: Rect, color: [u8; 3], alpha: f32) -> RectInstance {
 		pos: [r.x, r.y],
 		size: [r.w, r.h],
 		color: c,
-		params: [2.0, r.w.min(r.h) * 0.5],
+		params: [QuadMode::Rounded.code(), r.w.min(r.h) * 0.5],
 	}
 }
 
@@ -8171,7 +8156,7 @@ fn build_layout(
 			p.keep_open = keep;
 		}
 	};
-	if !cli.hierarchical {
+	if !cli.hierarchical() {
 		let shell = pane_shell(
 			None,
 			None,
@@ -8624,7 +8609,7 @@ impl ApplicationHandler<UserEvent> for App {
 		} else {
 			0.0
 		};
-		let n_tabs = if self.cli.hierarchical {
+		let n_tabs = if self.cli.hierarchical() {
 			self.cli.tabs.len().max(1)
 		} else {
 			1
@@ -11387,7 +11372,7 @@ mod tests {
 	fn a_measured_profile_replaces_a_session_step() {
 		use crate::profile::Profile;
 		let mut live = config::Settings {
-			performance_profile: "max".to_string(),
+			performance_profile: crate::profile::Profile::Max,
 			stepped_profile: Some(Profile::Low),
 			..config::Settings::default()
 		};
@@ -11395,7 +11380,7 @@ mod tests {
 		assert_eq!(crate::profile::current(&live), Profile::Low);
 		let next = super::with_measured_profile(&live, Profile::High);
 		assert_eq!(next.stepped_profile, None);
-		assert_eq!(next.performance_profile, "high");
+		assert_eq!(next.performance_profile, crate::profile::Profile::High);
 		assert!(next.profile_shadow.is_none(), "the user's own values");
 		assert_eq!(crate::profile::current(&next), Profile::High);
 	}
@@ -11445,7 +11430,11 @@ mod tests {
 			let Some(next) = next else {
 				continue;
 			};
-			assert_eq!(next.performance_profile, stored, "the stored profile stays");
+			assert_eq!(
+				next.performance_profile.key(),
+				stored,
+				"the stored profile stays"
+			);
 			assert_eq!(Some(crate::profile::current(&next)), want);
 			assert!(config::persist(&live, &next));
 			assert_eq!(
@@ -11671,7 +11660,11 @@ mod tests {
 			}
 			install();
 			let stored = config::reload_from_disk();
-			assert_eq!(stored.performance_profile, "low", "{name}");
+			assert_eq!(
+				stored.performance_profile,
+				crate::profile::Profile::Low,
+				"{name}"
+			);
 			assert_eq!(
 				stored.rated_hardware,
 				crate::profile::hardware_id(&soft),

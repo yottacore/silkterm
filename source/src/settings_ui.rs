@@ -22,9 +22,9 @@
 //! rather than shrinking as the scale factor grows, and there is exactly one
 //! set of numbers to reason about. At scale 1 nothing changes.
 
-use crate::config::{self, Settings};
+use crate::config::{self, Choice, Settings};
 use crate::fileassoc::Assoc;
-use crate::gfx::RectInstance;
+use crate::gfx::{QuadMode, RectInstance};
 use crate::input::Hotkey;
 use crate::keys::Chord;
 use crate::pane::Rect;
@@ -500,37 +500,15 @@ fn radio_of(settings: &Settings, key: Key) -> usize {
 			config::Fit::Zoom => 1,
 			config::Fit::Stretch => 0,
 		},
-		// display order: SDF, DT, Dilate, Gaussian
-		Key::ScrimFunction => match settings.text_scrim_function.as_str() {
-			"dt" => 1,
-			"dilate" => 2,
-			"gaussian" => 3,
-			_ => 0, // sdf
-		},
-		// display order: Exponential, Half-normal, Log, Sigmoid, Linear
-		Key::ScrimRamp => match settings.text_scrim_ramp.as_str() {
-			"half_normal" => 1,
-			"log" => 2,
-			"sigmoid" => 3,
-			"linear" => 4,
-			_ => 0, // exp
-		},
-		Key::CursorAnimation => match settings.cursor_animation.as_str() {
-			"phase" => 1,
-			"pulse_horizontal" => 3,
-			"pulse_both" => 4,
-			"none" => 0,
-			_ => 2, // pulse_vertical
-		},
+		// each type's `ALL` is in the order settings_ui.shcl lists the options
+		Key::ScrimFunction => settings.text_scrim_function.index(),
+		Key::ScrimRamp => settings.text_scrim_ramp.index(),
+		Key::CursorAnimation => settings.cursor_animation.index(),
 		Key::Theme => crate::theme::all_names(&settings.user_themes)
 			.iter()
 			.position(|n| n.eq_ignore_ascii_case(settings.theme.trim()))
 			.unwrap_or(0),
-		Key::ThemeMode => match settings.theme_mode.as_str() {
-			"light" => 1,
-			"system" => 2,
-			_ => 0, // dark
-		},
+		Key::ThemeMode => settings.theme_mode.index(),
 		keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => 0,
 	}
 }
@@ -1440,8 +1418,13 @@ impl SettingsDialog {
 		for quad in quads {
 			quad.pos = [self.to_px(quad.pos[0]), self.to_px(quad.pos[1])];
 			quad.size = [self.to_px(quad.size[0]), self.to_px(quad.size[1])];
-			if (quad.params[0] - 3.0).abs() > 0.5 {
-				quad.params[1] = self.to_px(quad.params[1]);
+			match quad.mode() {
+				QuadMode::Triangle => {}
+				QuadMode::Solid
+				| QuadMode::CloseMark
+				| QuadMode::Rounded
+				| QuadMode::PickSquare
+				| QuadMode::HueStrip => quad.params[1] = self.to_px(quad.params[1]),
 			}
 		}
 	}
@@ -3369,11 +3352,15 @@ impl SettingsDialog {
 	// from whatever `name` resolves to today, so a theme is always complete.
 	fn save_theme_as(&mut self, name: &str) {
 		let name = name.trim().to_string();
-		let dark_now = crate::theme::is_dark_mode(&self.edited.theme_mode, config::is_dark());
+		let dark_now = self.edited.theme_mode.is_dark(config::is_dark());
 		let other = crate::theme::resolve_in(
 			&self.edited.user_themes,
 			&self.edited.theme,
-			if dark_now { "light" } else { "dark" },
+			if dark_now {
+				crate::theme::Mode::Light
+			} else {
+				crate::theme::Mode::Dark
+			},
 			config::is_dark(),
 		);
 		let mut shown = other; // start from a full palette, then overwrite with the edits
@@ -4129,7 +4116,7 @@ impl SettingsDialog {
 					Profile::Remote => self.edited.remote_override = true,
 					profile => {
 						self.edited.remote_override = false;
-						self.edited.performance_profile = profile.key().to_string();
+						self.edited.performance_profile = profile;
 						self.edited.performance_automatic = false;
 					}
 				}
@@ -4142,33 +4129,19 @@ impl SettingsDialog {
 				};
 			}
 			Key::ScrimFunction => {
-				self.edited.text_scrim_function = match idx {
-					1 => "dt",
-					2 => "dilate",
-					3 => "gaussian",
-					_ => "sdf",
+				if let Some(function) = Choice::from_index(idx) {
+					self.edited.text_scrim_function = function;
 				}
-				.to_string();
 			}
 			Key::ScrimRamp => {
-				self.edited.text_scrim_ramp = match idx {
-					1 => "half_normal",
-					2 => "log",
-					3 => "sigmoid",
-					4 => "linear",
-					_ => "exp",
+				if let Some(ramp) = Choice::from_index(idx) {
+					self.edited.text_scrim_ramp = ramp;
 				}
-				.to_string();
 			}
 			Key::CursorAnimation => {
-				self.edited.cursor_animation = match idx {
-					0 => "none",
-					1 => "phase",
-					3 => "pulse_horizontal",
-					4 => "pulse_both",
-					_ => "pulse_vertical",
+				if let Some(animation) = Choice::from_index(idx) {
+					self.edited.cursor_animation = animation;
 				}
-				.to_string();
 			}
 			// picking a theme or a mode re-reads the whole palette, so the color
 			// rows below follow the selection instead of describing the last one
@@ -4180,12 +4153,9 @@ impl SettingsDialog {
 				}
 			}
 			Key::ThemeMode => {
-				self.edited.theme_mode = match idx {
-					1 => "light",
-					2 => "system",
-					_ => "dark",
+				if let Some(mode) = Choice::from_index(idx) {
+					self.edited.theme_mode = mode;
 				}
-				.to_string();
 				self.adopt_theme();
 			}
 			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => {}
@@ -4269,7 +4239,7 @@ impl SettingsDialog {
 		crate::theme::resolve_in(
 			&self.edited.user_themes,
 			&self.edited.theme,
-			&self.edited.theme_mode,
+			self.edited.theme_mode,
 			config::is_dark(),
 		)
 	}
@@ -4350,15 +4320,13 @@ impl SettingsDialog {
 		match key {
 			keys_of!(toggle) => self.set_toggle(key, toggle_of(&self.defaults, key)),
 			Key::BgFit => self.edited.wallpaper_default_fit = self.defaults.wallpaper_default_fit,
-			Key::ScrimRamp => self.edited.text_scrim_ramp = self.defaults.text_scrim_ramp.clone(),
+			Key::ScrimRamp => self.edited.text_scrim_ramp = self.defaults.text_scrim_ramp,
 			Key::ScrimFunction => {
-				self.edited.text_scrim_function = self.defaults.text_scrim_function.clone();
+				self.edited.text_scrim_function = self.defaults.text_scrim_function;
 			}
-			Key::CursorAnimation => {
-				self.edited.cursor_animation = self.defaults.cursor_animation.clone();
-			}
+			Key::CursorAnimation => self.edited.cursor_animation = self.defaults.cursor_animation,
 			Key::PerfProfile => {
-				self.edited.performance_profile = self.defaults.performance_profile.clone();
+				self.edited.performance_profile = self.defaults.performance_profile;
 				self.edited.remote_override = false;
 				self.edited.stepped_profile = None;
 			}
@@ -4378,7 +4346,7 @@ impl SettingsDialog {
 				self.adopt_theme();
 			}
 			Key::ThemeMode => {
-				self.edited.theme_mode = self.defaults.theme_mode.clone();
+				self.edited.theme_mode = self.defaults.theme_mode;
 				self.adopt_theme();
 			}
 			Key::FontFamily => self.edited.font_family = self.defaults.font_family.clone(),
@@ -6198,7 +6166,7 @@ impl SettingsDialog {
 				pos: [r.x, r.y],
 				size: [r.w, r.h],
 				color: config::srgb_f32(colors.danger),
-				params: [1.0, (r.w * 0.12).max(1.2)],
+				params: [QuadMode::CloseMark.code(), (r.w * 0.12).max(1.2)],
 			});
 		}
 		let add = self.shell_add_box(i);
@@ -6228,7 +6196,7 @@ impl SettingsDialog {
 			pos: [r.x, r.y],
 			size: [r.w, r.h],
 			color: config::srgb_f32(color),
-			params: [3.0, 3.0],
+			params: [QuadMode::Triangle.code(), 3.0],
 		});
 		let stroke = (r.w * 0.13).max(1.5);
 		let x = r.x + (r.w - stroke) / 2.0;
@@ -6790,7 +6758,7 @@ impl SettingsDialog {
 			pos: [x - d / 2.0, y - d / 2.0],
 			size: [d, d],
 			color: config::srgb_f32(color),
-			params: [2.0, d / 2.0],
+			params: [QuadMode::Rounded.code(), d / 2.0],
 		};
 		rects.push(RectInstance {
 			pos: [self.rect.x, self.rect.y],
@@ -6823,13 +6791,13 @@ impl SettingsDialog {
 			pos: [g.square.x, g.square.y],
 			size: [g.square.w, g.square.h],
 			color: [hue[0], hue[1], hue[2], 1.0],
-			params: [4.0, 0.0],
+			params: [QuadMode::PickSquare.code(), 0.0],
 		});
 		rects.push(RectInstance {
 			pos: [g.strip.x, g.strip.y],
 			size: [g.strip.w, g.strip.h],
 			color: [0.0, 0.0, 0.0, 1.0],
-			params: [5.0, 0.0],
+			params: [QuadMode::HueStrip.code(), 0.0],
 		});
 		for (r, on) in [
 			(g.square, picker.focus == pick::Focus::Square),
@@ -7102,6 +7070,7 @@ mod tests {
 		lay, speed_to_tau, tab_titles, tau_to_speed,
 	};
 	use crate::config;
+	use crate::gfx::QuadMode;
 	use crate::pick;
 
 	// A stand-in for the UI font: every character the same width.
@@ -7129,8 +7098,8 @@ mod tests {
 		);
 		// the rows a profile governs answer with its values while one is chosen;
 		// the tests below drive the rows themselves, so they start from Custom
-		d.orig.performance_profile = "custom".to_string();
-		d.edited.performance_profile = "custom".to_string();
+		d.orig.performance_profile = crate::profile::Profile::Custom;
+		d.edited.performance_profile = crate::profile::Profile::Custom;
 		d
 	}
 
@@ -7831,7 +7800,7 @@ mod tests {
 	fn every_revert_arrow_puts_its_row_back_to_the_default() {
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
-		d.edited.performance_profile = "custom".to_string();
+		d.edited.performance_profile = crate::profile::Profile::Custom;
 		d.adopt_theme();
 		let base = d.edited.clone();
 		let spec_of = |d: &SettingsDialog, key: Key| {
@@ -8205,7 +8174,7 @@ mod tests {
 	fn a_dialog_frame_copies_the_settings_at_most_once() {
 		for profile in super::Profile::ALL {
 			let mut d = mk_dialog(4000.0);
-			d.edited.performance_profile = profile.key().to_string();
+			d.edited.performance_profile = profile;
 			d.edited.remote_override = profile == super::Profile::Remote;
 			for tab in 0..tab_titles().len() {
 				d.tab = tab;
@@ -8340,7 +8309,7 @@ mod tests {
 				for stepped in [None, Some(Profile::Low), Some(Profile::Standard)] {
 					let mut d = mk_dialog(4000.0);
 					d.edited = start.clone();
-					d.edited.performance_profile = profile.key().to_string();
+					d.edited.performance_profile = profile;
 					d.edited.remote_override = profile == Profile::Remote;
 					d.edited.performance_automatic = stepped.is_some();
 					d.edited.stepped_profile = stepped;
@@ -8423,13 +8392,16 @@ mod tests {
 	#[test]
 	fn changing_a_governed_row_under_remote_drops_the_override() {
 		let mut d = mk_dialog(900.0);
-		d.edited.performance_profile = "high".to_string();
+		d.edited.performance_profile = crate::profile::Profile::High;
 		d.set_radio(Key::PerfProfile, super::Profile::Remote.index());
 		assert!(d.edited.remote_override);
 
 		d.set_f32(Key::Outline, 3.0);
 		assert!(!d.edited.remote_override, "the override has to go");
-		assert_eq!(d.edited.performance_profile, "custom");
+		assert_eq!(
+			d.edited.performance_profile,
+			crate::profile::Profile::Custom
+		);
 		assert_eq!(d.get_f32(Key::Outline), 3.0);
 	}
 
@@ -8447,7 +8419,7 @@ mod tests {
 			!d.get_toggle(Key::PerfAuto),
 			"a named profile leaves the machine still choosing"
 		);
-		assert_eq!(d.edited.performance_profile, "high");
+		assert_eq!(d.edited.performance_profile, crate::profile::Profile::High);
 
 		d.set_toggle(Key::PerfAuto, true);
 		d.set_radio(Key::PerfProfile, super::Profile::Remote.index());
@@ -9023,7 +8995,7 @@ mod tests {
 		// the X: one per line, in the danger colour, inside the remove box
 		let marks: Vec<_> = rows
 			.iter()
-			.filter(|r| (r.params[0] - 1.0).abs() < f32::EPSILON)
+			.filter(|r| r.mode() == QuadMode::CloseMark)
 			.collect();
 		assert_eq!(marks.len(), 2, "one remove mark per line");
 		for (k, mark) in marks.iter().enumerate() {
@@ -9070,9 +9042,7 @@ mod tests {
 
 		// and nothing in the grid still draws a triangle
 		assert!(
-			!rows
-				.iter()
-				.any(|r| (r.params[0] - 3.0).abs() < f32::EPSILON),
+			!rows.iter().any(|r| r.mode() == QuadMode::Triangle),
 			"an arrow is still being drawn in the shells grid"
 		);
 	}
@@ -9466,7 +9436,7 @@ mod tests {
 			.position(|s| s.key == Key::ScrimFunction)
 			.unwrap();
 		assert!(matches!(d.specs[i].kind, Kind::Dropdown(_)));
-		d.edited.text_scrim_function = "sdf".into(); // option index 0
+		d.edited.text_scrim_function = crate::scrim::Function::Sdf; // option index 0
 		d.focus = Some(Focus::Row(i, 0));
 		// Space opens with the current value highlighted
 		d.key_space();
@@ -9476,19 +9446,99 @@ mod tests {
 		d.key_vertical(true);
 		assert_eq!(d.pending, 1);
 		assert_eq!(
-			d.edited.text_scrim_function, "sdf",
+			d.edited.text_scrim_function,
+			crate::scrim::Function::Sdf,
 			"not committed until Enter"
 		);
 		// Enter commits + closes
 		assert!(matches!(d.key_enter(), Action::None));
 		assert_eq!(d.open, None);
-		assert_eq!(d.edited.text_scrim_function, "dt"); // index 1
+		assert_eq!(d.edited.text_scrim_function, crate::scrim::Function::Dt); // index 1
 		// reopen, move, Esc -> closes and discards the highlight
 		d.key_space();
 		d.key_vertical(true);
 		assert_eq!(d.key_escape(), Action::None);
 		assert_eq!(d.open, None);
-		assert_eq!(d.edited.text_scrim_function, "dt");
+		assert_eq!(d.edited.text_scrim_function, crate::scrim::Function::Dt);
+	}
+
+	// Each option a choice row lists stands for one value, both ways round: the
+	// row shows it for that value, and picking it stores that value.
+	// Test ID: ErstamD
+	#[test]
+	fn each_choice_row_shows_and_sets_the_option_it_names() {
+		use super::Key;
+		use crate::config::Settings;
+		use crate::pane::CursorAnimation as C;
+		use crate::scrim::{Function as F, Ramp as R};
+		use crate::theme::Mode as M;
+		fn row<T: Copy + PartialEq + std::fmt::Debug>(
+			d: &mut super::SettingsDialog,
+			key: Key,
+			field: fn(&mut Settings) -> &mut T,
+			cases: &[(T, &str)],
+		) {
+			let i = d.specs.iter().position(|s| s.key == key).unwrap();
+			let options = d.dd_options(i);
+			assert_eq!(options.len(), cases.len(), "{key:?}");
+			for (k, &(value, name)) in cases.iter().enumerate() {
+				*field(&mut d.edited) = value;
+				assert_eq!(options[d.get_radio(key)], name, "{key:?} {value:?}");
+				*field(&mut d.edited) = cases[(k + 1) % cases.len()].0;
+				let at = options.iter().position(|o| o == name).unwrap();
+				d.set_radio(key, at);
+				assert_eq!(*field(&mut d.edited), value, "{key:?} {name}");
+			}
+		}
+		let mut d = mk_dialog(2000.0);
+		// governed rows show the profile's values unless the profile is Custom
+		d.edited.performance_profile = crate::profile::Profile::Custom;
+		d.edited.performance_automatic = false;
+		row(
+			&mut d,
+			Key::ScrimFunction,
+			|s| &mut s.text_scrim_function,
+			&[
+				(F::Sdf, "Distance field"),
+				(F::Dt, "Distance transform"),
+				(F::Dilate, "Dilate + feather"),
+				(F::Gaussian, "Gaussian [ugly]"),
+			],
+		);
+		row(
+			&mut d,
+			Key::ScrimRamp,
+			|s| &mut s.text_scrim_ramp,
+			&[
+				(R::Exp, "Exponential"),
+				(R::HalfNormal, "Half-normal"),
+				(R::Log, "Logarithmic"),
+				(R::Sigmoid, "Sigmoid"),
+				(R::Linear, "Linear"),
+			],
+		);
+		row(
+			&mut d,
+			Key::CursorAnimation,
+			|s| &mut s.cursor_animation,
+			&[
+				(C::Off, "None"),
+				(C::Phase, "Phase"),
+				(C::PulseVertical, "Pulse vertical"),
+				(C::PulseHorizontal, "Pulse horizontal"),
+				(C::PulseBoth, "Pulse both"),
+			],
+		);
+		row(
+			&mut d,
+			Key::ThemeMode,
+			|s| &mut s.theme_mode,
+			&[
+				(M::Dark, "Dark"),
+				(M::Light, "Light"),
+				(M::System, "System"),
+			],
+		);
 	}
 
 	// Test ID: EjYm8dl
@@ -9513,7 +9563,7 @@ mod tests {
 		let r = d.dd_item_rect(i, n, 2);
 		d.mouse_down(r.x + 4.0, r.y + r.h / 2.0, &mut m);
 		assert_eq!(d.open, None);
-		assert_eq!(d.edited.text_scrim_ramp, "log");
+		assert_eq!(d.edited.text_scrim_ramp, crate::scrim::Ramp::Log);
 	}
 
 	// Test ID: ElpQBin
@@ -10385,12 +10435,12 @@ mod tests {
 		// the mode the dialog was NOT showing still comes out complete
 		assert_eq!(
 			saved.light.fg,
-			crate::theme::resolve("Matrix", "light", true).fg
+			crate::theme::resolve("Matrix", crate::theme::Mode::Light, true).fg
 		);
 		// and the ANSI set came along, so the theme stands on its own
 		assert_eq!(
 			saved.dark.ansi,
-			crate::theme::resolve("Matrix", "dark", true).ansi
+			crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true).ansi
 		);
 
 		assert!(!d.theme_dirty(), "the edit is the theme's own color now");
@@ -10500,7 +10550,7 @@ mod tests {
 		assert_eq!(d.edited.theme, "Matrix");
 		assert_eq!(
 			d.get_col(Key::ColFg),
-			crate::theme::resolve("Matrix", "dark", true).fg
+			crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true).fg
 		);
 		assert!(!d.theme_dirty(), "a fresh theme starts unmodified");
 	}
@@ -10879,12 +10929,18 @@ mod tests {
 		assert!(d.overlay_open(), "the box needs the second pass");
 		// the square and the strip are the two quads only this box draws
 		assert_eq!(
-			quads.iter().filter(|q| q.params[0] == 4.0).count(),
+			quads
+				.iter()
+				.filter(|q| q.mode() == QuadMode::PickSquare)
+				.count(),
 			1,
 			"one saturation/brightness square"
 		);
 		assert_eq!(
-			quads.iter().filter(|q| q.params[0] == 5.0).count(),
+			quads
+				.iter()
+				.filter(|q| q.mode() == QuadMode::HueStrip)
+				.count(),
 			1,
 			"one hue strip"
 		);
@@ -11135,7 +11191,7 @@ mod tests {
 		);
 		assert_eq!(
 			saved.dark.ansi,
-			crate::theme::resolve("Matrix", "dark", true).ansi
+			crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true).ansi
 		);
 		assert_eq!(back.theme, "Saved One");
 		assert_eq!(
@@ -11209,10 +11265,10 @@ mod tests {
 	#[test]
 	fn picking_remote_never_reaches_the_stored_profile() {
 		let mut d = mk_dialog(4000.0);
-		d.edited.performance_profile = "high".to_string();
+		d.edited.performance_profile = crate::profile::Profile::High;
 		d.set_radio(Key::PerfProfile, super::Profile::Remote.index());
 		assert!(d.edited.remote_override);
-		assert_eq!(d.edited.performance_profile, "high");
+		assert_eq!(d.edited.performance_profile, crate::profile::Profile::High);
 		assert_eq!(
 			d.get_radio(Key::PerfProfile),
 			super::Profile::Remote.index()
@@ -11225,7 +11281,7 @@ mod tests {
 		);
 		d.set_radio(Key::PerfProfile, super::Profile::Low.index());
 		assert!(!d.edited.remote_override);
-		assert_eq!(d.edited.performance_profile, "low");
+		assert_eq!(d.edited.performance_profile, crate::profile::Profile::Low);
 		// the revert arrow drops the override too
 		d.set_radio(Key::PerfProfile, super::Profile::Remote.index());
 		let row = d
@@ -11511,7 +11567,7 @@ mod tests {
 		crate::profile::unapply(&mut live);
 		crate::autotheme::unapply(&mut live);
 		// Custom, so nothing about the wallpaper is governed out from under this
-		live.performance_profile = "custom".to_string();
+		live.performance_profile = crate::profile::Profile::Custom;
 		live.performance_automatic = false;
 		live.wallpaper_enabled = true;
 		live.colors_from_wallpaper = true;
@@ -11583,8 +11639,8 @@ mod tests {
 			4000.0,
 			1.0,
 		);
-		d.orig.performance_profile = "custom".to_string();
-		d.edited.performance_profile = "custom".to_string();
+		d.orig.performance_profile = crate::profile::Profile::Custom;
+		d.edited.performance_profile = crate::profile::Profile::Custom;
 		d
 	}
 
@@ -12267,7 +12323,7 @@ mod tests {
 		let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
 		let triangles: Vec<_> = rows
 			.iter()
-			.filter(|r| (r.params[0] - 3.0).abs() < f32::EPSILON)
+			.filter(|r| r.mode() == QuadMode::Triangle)
 			.collect();
 		assert_eq!(triangles.len(), 1, "one mark on the tab");
 		assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
@@ -12292,9 +12348,7 @@ mod tests {
 			d.tab = tab;
 			let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
 			assert!(
-				!rows
-					.iter()
-					.any(|r| (r.params[0] - 3.0).abs() < f32::EPSILON),
+				!rows.iter().any(|r| r.mode() == QuadMode::Triangle),
 				"a triangle on tab {tab}"
 			);
 		}
@@ -12316,7 +12370,7 @@ mod tests {
 			let (_, rows) = d.rects(18.0 * scale, |s| chars7(s) * scale);
 			let turns: Vec<f32> = rows
 				.iter()
-				.filter(|r| (r.params[0] - 3.0).abs() < f32::EPSILON)
+				.filter(|r| r.mode() == QuadMode::Triangle)
 				.map(|r| r.params[1])
 				.collect();
 			assert_eq!(turns, [3.0], "at {scale}x");

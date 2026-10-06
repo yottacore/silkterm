@@ -115,12 +115,12 @@ pub struct Shadow {
 	scroll_ramp_down_ms: f32,
 	scroll_ease_out_ms: f32,
 	smooth_scroll_apps: bool,
-	cursor_animation: String,
+	cursor_animation: crate::pane::CursorAnimation,
 	text_scrim: bool,
 	text_scrim_radius: f32,
 	text_scrim_strength: f32,
 	text_scrim_softness: f32,
-	text_scrim_function: String,
+	text_scrim_function: crate::scrim::Function,
 	text_outline: f32,
 	wallpaper_enabled: bool,
 	wallpaper_blur: f32,
@@ -137,12 +137,12 @@ impl Shadow {
 			scroll_ramp_down_ms: settings.scroll_ramp_down_ms,
 			scroll_ease_out_ms: settings.scroll_ease_out_ms,
 			smooth_scroll_apps: settings.smooth_scroll_apps,
-			cursor_animation: settings.cursor_animation.clone(),
+			cursor_animation: settings.cursor_animation,
 			text_scrim: settings.text_scrim,
 			text_scrim_radius: settings.text_scrim_radius,
 			text_scrim_strength: settings.text_scrim_strength,
 			text_scrim_softness: settings.text_scrim_softness,
-			text_scrim_function: settings.text_scrim_function.clone(),
+			text_scrim_function: settings.text_scrim_function,
 			text_outline: settings.text_outline,
 			wallpaper_enabled: settings.wallpaper_enabled,
 			wallpaper_blur: settings.wallpaper_blur,
@@ -158,14 +158,12 @@ impl Shadow {
 		settings.scroll_ramp_down_ms = self.scroll_ramp_down_ms;
 		settings.scroll_ease_out_ms = self.scroll_ease_out_ms;
 		settings.smooth_scroll_apps = self.smooth_scroll_apps;
-		settings.cursor_animation.clone_from(&self.cursor_animation);
+		settings.cursor_animation = self.cursor_animation;
 		settings.text_scrim = self.text_scrim;
 		settings.text_scrim_radius = self.text_scrim_radius;
 		settings.text_scrim_strength = self.text_scrim_strength;
 		settings.text_scrim_softness = self.text_scrim_softness;
-		settings
-			.text_scrim_function
-			.clone_from(&self.text_scrim_function);
+		settings.text_scrim_function = self.text_scrim_function;
 		settings.text_outline = self.text_outline;
 		settings.wallpaper_enabled = self.wallpaper_enabled;
 		settings.wallpaper_blur = self.wallpaper_blur;
@@ -210,7 +208,7 @@ pub fn adopt(settings: &mut Settings) {
 	}
 	settings.remote_override = false;
 	settings.stepped_profile = None;
-	settings.performance_profile = Profile::Custom.key().to_string();
+	settings.performance_profile = Profile::Custom;
 	settings.performance_automatic = false;
 }
 
@@ -222,7 +220,7 @@ pub fn current(settings: &Settings) -> Profile {
 	if settings.remote_override {
 		return Profile::Remote;
 	}
-	let stored = Profile::parse(&settings.performance_profile);
+	let stored = settings.performance_profile;
 	match settings.stepped_profile {
 		Some(step)
 			if settings.performance_automatic
@@ -249,14 +247,14 @@ fn values(profile: Profile, settings: &mut Settings) {
 		// it and drops the halo, which is paid on every frame
 		Profile::Low => {
 			quicker(settings);
-			settings.cursor_animation = "none".to_string();
+			settings.cursor_animation = crate::pane::CursorAnimation::Off;
 			settings.text_scrim = false;
 			settings.text_outline = 1.0;
 		}
 		Profile::Standard | Profile::Remote => {
 			settings.scroll_smooth = false;
 			settings.smooth_scroll_apps = false;
-			settings.cursor_animation = "none".to_string();
+			settings.cursor_animation = crate::pane::CursorAnimation::Off;
 			settings.text_scrim = false;
 			settings.text_outline = 0.0;
 			settings.wallpaper_enabled = false;
@@ -291,7 +289,7 @@ fn quicker(settings: &mut Settings) {
 	settings.scroll_ease_in_ms /= 2.0;
 	settings.scroll_ease_out_ms /= 2.0;
 	settings.scroll_single_screen_tau_ms /= 2.0;
-	settings.text_scrim_function = "dilate".to_string();
+	settings.text_scrim_function = crate::scrim::Function::Dilate;
 	// the same share of the shipped radius it has always been, so a cheaper
 	// profile still looks like the same halo
 	settings.text_scrim_radius = 5.0;
@@ -896,7 +894,7 @@ mod tests {
 		Settings {
 			scroll_ease_in_ms: 300.0,
 			scroll_smooth: false,
-			cursor_animation: "phase".to_string(),
+			cursor_animation: crate::pane::CursorAnimation::Phase,
 			text_scrim_radius: 9.0,
 			wallpaper_enabled: false,
 			..Settings::default()
@@ -907,18 +905,21 @@ mod tests {
 	#[test]
 	fn a_profile_masks_the_stored_values_and_custom_puts_them_back() {
 		let mut s = tuned();
-		s.performance_profile = "max".to_string();
+		s.performance_profile = Profile::Max;
 		apply(&mut s);
 		assert!(s.scroll_smooth, "Max is the shipped default");
 		assert_eq!(s.scroll_ease_in_ms, Settings::default().scroll_ease_in_ms);
-		assert_eq!(s.cursor_animation, "pulse_vertical");
+		assert_eq!(
+			s.cursor_animation,
+			crate::pane::CursorAnimation::PulseVertical
+		);
 		assert!(s.wallpaper_enabled);
 
-		s.performance_profile = "custom".to_string();
+		s.performance_profile = Profile::Custom;
 		apply(&mut s);
 		assert!(!s.scroll_smooth);
 		assert_eq!(s.scroll_ease_in_ms, 300.0);
-		assert_eq!(s.cursor_animation, "phase");
+		assert_eq!(s.cursor_animation, crate::pane::CursorAnimation::Phase);
 		assert_eq!(s.text_scrim_radius, 9.0);
 		assert!(!s.wallpaper_enabled);
 		assert!(s.profile_shadow.is_none());
@@ -928,9 +929,9 @@ mod tests {
 	#[test]
 	fn applying_twice_does_not_stack() {
 		let mut s = tuned();
-		s.performance_profile = "low".to_string();
+		s.performance_profile = Profile::Low;
 		apply(&mut s);
-		s.performance_profile = "high".to_string();
+		s.performance_profile = Profile::High;
 		apply(&mut s);
 		assert!(s.wallpaper_enabled, "High keeps the wallpaper");
 		unapply(&mut s);
@@ -944,31 +945,31 @@ mod tests {
 		let mut s = Settings::default();
 		let mut radius = f32::MAX;
 		for profile in [Profile::Max, Profile::High] {
-			s.performance_profile = profile.key().to_string();
+			s.performance_profile = profile;
 			apply(&mut s);
 			assert!(s.scroll_smooth);
 			assert!(s.text_scrim);
 			assert!(s.text_scrim_radius <= radius);
 			radius = s.text_scrim_radius;
 		}
-		s.performance_profile = "low".to_string();
+		s.performance_profile = Profile::Low;
 		apply(&mut s);
 		assert!(s.scroll_smooth);
-		assert_eq!(s.cursor_animation, "none");
+		assert_eq!(s.cursor_animation, crate::pane::CursorAnimation::Off);
 		assert!(s.wallpaper_enabled, "Low keeps the wallpaper");
 		assert!(!s.text_scrim, "Low drops the halo");
 		// was: assert_eq!(s.text_outline, 2.0, ...) - no built-in profile draws an
 		// outline over a pixel wide any more, so Low leans on the shipped one
 		assert_eq!(s.text_outline, 1.0, "and leans on the outline");
 		for name in ["max", "high", "low", "standard", "remote"] {
-			s.performance_profile = name.to_string();
+			s.performance_profile = Profile::parse(name);
 			apply(&mut s);
 			assert!(s.text_outline <= 1.0, "{name} draws a fat outline");
 		}
-		s.performance_profile = "low".to_string();
+		s.performance_profile = Profile::Low;
 		apply(&mut s);
 		for flat in ["standard", "remote"] {
-			s.performance_profile = flat.to_string();
+			s.performance_profile = Profile::parse(flat);
 			apply(&mut s);
 			assert!(!s.scroll_smooth);
 			assert!(!s.smooth_scroll_apps);
@@ -983,13 +984,14 @@ mod tests {
 	#[test]
 	fn the_remote_override_sits_over_the_stored_profile() {
 		let mut s = tuned();
-		s.performance_profile = "max".to_string();
+		s.performance_profile = Profile::Max;
 		s.remote_override = true;
 		apply(&mut s);
 		assert_eq!(super::current(&s), Profile::Remote);
 		assert!(!s.scroll_smooth);
 		assert_eq!(
-			s.performance_profile, "max",
+			s.performance_profile,
+			Profile::Max,
 			"the stored profile is untouched"
 		);
 		s.remote_override = false;
@@ -1005,7 +1007,7 @@ mod tests {
 	fn a_session_step_sits_over_the_stored_profile() {
 		let at = |stored: &str, step: Profile| {
 			let mut s = tuned();
-			s.performance_profile = stored.to_string();
+			s.performance_profile = Profile::parse(stored);
 			s.stepped_profile = Some(step);
 			s
 		};
@@ -1014,7 +1016,8 @@ mod tests {
 		apply(&mut s);
 		assert!(s.wallpaper_enabled, "Low keeps the wallpaper");
 		assert_eq!(
-			s.performance_profile, "max",
+			s.performance_profile,
+			Profile::Max,
 			"the stored profile is untouched"
 		);
 		assert_eq!(
