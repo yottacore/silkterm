@@ -138,6 +138,12 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Scripts must pass PSScriptAnalyzer at warning level with those settings.
 
+- A command that takes three or more arguments gets them by name, and common parameters use their full names, `-ErrorAction` and not `-EA`. `cicd/utility/ps-lint.ps1` checks both, since PSScriptAnalyzer has no rule for either at warning level.
+
+- Each script has comment-based help under its copyright lines, and sets `Set-StrictMode -Version Latest`. A file that is dot-sourced leaves StrictMode to the script that loads it. `source/src/shell_integration.ps1` has neither, since it is written into the user's own profile.
+
+- A list built in a loop is a `List[T]` or the loop's own output, not an array grown with `+=`.
+
 - Indent with tabs. Spaces may follow the tabs to line up a continuation.
 
 ## Python
