@@ -595,6 +595,8 @@ if command -v shellcheck >/dev/null 2>&1; then
 	mapfile -t shellFiles < <(git -C "${root}" ls-files '*.bash' '*.sh' cicd/utility/n8git_backup-and-publish utility/git-hooks/pre-commit utility/git-hooks/pre-push utility/runterm)
 	(cd "${root}" && shellcheck -S warning "${shellFiles[@]}") || fDie "shellcheck found problems"
 	fEcho "OK: shell scripts clean"
+	styleOut="$("${root}/cicd/utility/bash-style.bash" 2>&1)" || { fEcho_Clean "${styleOut}"; fDie "shell scripts drift from the house style (cicd/utility/bash-style.bash)"; }
+	fEcho "OK: shell scripts in house style"
 else
 	fEcho "WARNING: shellcheck not installed; shell scripts not linted"
 fi
