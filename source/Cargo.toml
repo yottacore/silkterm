@@ -107,9 +107,10 @@ workspace = true
 
 # X11: set _KDE_NET_WM_BLUR_BEHIND_REGION so a KWin/picom compositor blurs the
 # desktop behind the translucent window (transparent_background_blur), and read
-# a monitor's size in mm through RandR (monitor.rs). winit already turns randr on.
+# a monitor's size in mm through RandR (monitor.rs), and ask MIT-SHM whether the
+# server makes shared pixmaps (gfx.rs). winit already turns randr on.
 [target.'cfg(target_os = "linux")'.dependencies]
-x11rb = { version = "0.13", features = ["randr"] }
+x11rb = { version = "0.13", features = ["randr", "shm"] }
 # XErrorEvent, for the GLX error hook in gfx.rs. Already in the tree through winit.
 x11-dl = "2.21"
 
