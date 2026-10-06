@@ -55,7 +55,7 @@ rawBase="https://raw.githubusercontent.com/${ownerRepo}/main"
 function fFail() {
 	local first="$1"; shift
 	echo "Error: ${first}" >&2
-	while [ "$#" -gt 0 ]; do echo "  ${1}" >&2; shift; done
+	while [[ "$#" -gt 0 ]]; do echo "  ${1}" >&2; shift; done
 	echo >&2
 	exit 1
 }
@@ -96,7 +96,7 @@ function fLower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 ##	transport error rather than writing a "404: not found" page to the file.
 function fGet() {
 	local url="$1" out="$2"
-	if [ "${dlTool}" = "curl" ]; then
+	if [[ "${dlTool}" = "curl" ]]; then
 		curl -fsSL "${httpsOnly_curl[@]}" -o "${out}" "${url}"
 	else
 		wget -qO "${out}" "${httpsOnly_wget[@]}" "${url}"
@@ -120,13 +120,13 @@ httpsOnly_wget=(--https-only)
 authDir=""
 authFile=""
 function fAuthInit() {
-	[ -n "${apiToken}" ] || return 0
+	[[ -n "${apiToken}" ]] || return 0
 	authDir="$(mktemp -d 2>/dev/null)" || return 1
 	chmod 700 "${authDir}" 2>/dev/null
 	authFile="${authDir}/auth"
 	##	The two tools read their own config format, and only curl's takes
 	##	quotes - wget's rc keeps everything after the '=' verbatim.
-	if [ "${dlTool}" = "curl" ]; then
+	if [[ "${dlTool}" = "curl" ]]; then
 		( umask 077; printf 'header = "Authorization: Bearer %s"\n' "${apiToken}" >"${authFile}" )
 	else
 		( umask 077; printf 'header = Authorization: Bearer %s\n' "${apiToken}" >"${authFile}" )
@@ -135,20 +135,20 @@ function fAuthInit() {
 
 function fApi() {
 	local url="$1" out="$2" code="" rc=0
-	if [ "${dlTool}" = "curl" ]; then
-		if [ -n "${authFile}" ]; then
+	if [[ "${dlTool}" = "curl" ]]; then
+		if [[ -n "${authFile}" ]]; then
 			code="$(curl -sSL "${httpsOnly_curl[@]}" --config "${authFile}" -o "${out}" -w '%{http_code}' "${url}" 2>"${out}.err")" || rc=$?
 		else
 			code="$(curl -sSL "${httpsOnly_curl[@]}" -o "${out}" -w '%{http_code}' "${url}" 2>"${out}.err")" || rc=$?
 		fi
-		[ "${rc}" = "0" ] || return 1
+		[[ "${rc}" = "0" ]] || return 1
 		case "${code}" in 2??) return 0 ;; esac
 		echo "HTTP ${code}" >>"${out}.err"
 		return 1
 	fi
 	##	wget takes no header file, but it reads one out of a config file. -nv is
 	##	quiet on success and still names a failure.
-	if [ -n "${authFile}" ]; then
+	if [[ -n "${authFile}" ]]; then
 		WGETRC="${authFile}" wget -nv --content-on-error -O "${out}" "${httpsOnly_wget[@]}" "${url}" 2>"${out}.err"
 	else
 		wget -nv --content-on-error -O "${out}" "${httpsOnly_wget[@]}" "${url}" 2>"${out}.err"
@@ -158,7 +158,7 @@ function fApi() {
 ##	Same, but shows progress - the release binary is the only big download.
 function fGetShown() {
 	local url="$1" out="$2"
-	if [ "${dlTool}" = "curl" ]; then
+	if [[ "${dlTool}" = "curl" ]]; then
 		curl -fSL "${httpsOnly_curl[@]}" --progress-bar -o "${out}" "${url}"
 	else
 		wget -q "${httpsOnly_wget[@]}" --show-progress -O "${out}" "${url}"
@@ -177,7 +177,7 @@ releaseSignNamespace="silkterm-release"
 ##	by the checksums, so this one signature covers the whole release.
 function fVerifySignature() {
 	local dir="$1" sums="$2" tag="$3"
-	if [ -z "${releaseSignPubkey}" ]; then
+	if [[ -z "${releaseSignPubkey}" ]]; then
 		echo "Note: this release is not signed; the download is checked against its checksums only."
 		return 0
 	fi
@@ -198,7 +198,7 @@ function fVerifySignature() {
 }
 
 function fSha256() {
-	if [ -n "${shaTool}" ]; then
+	if [[ -n "${shaTool}" ]]; then
 		case "${shaTool}" in
 			sha256sum) sha256sum "$1" | awk '{print $1}' ;;
 			shasum)    shasum -a 256 "$1" | awk '{print $1}' ;;
@@ -230,7 +230,7 @@ function fReleaseRows() {
 function fFieldCmp() {
 	local a="$1" b="$2" num='^[0-9]+$' word='^([^0-9]*)([0-9]+)$'
 	if [[ $a =~ $num ]] && [[ $b =~ $num ]]; then
-		if [ "$a" -gt "$b" ]; then echo 1; elif [ "$a" -lt "$b" ]; then echo -1; else echo 0; fi
+		if ((10#${a} > 10#${b})); then echo 1; elif ((10#${a} < 10#${b})); then echo -1; else echo 0; fi
 		return 0
 	fi
 	if [[ $a =~ $num ]]; then echo -1; return 0; fi
@@ -238,7 +238,7 @@ function fFieldCmp() {
 	local aStem="" aNum="" bStem="" bNum=""
 	if [[ $a =~ $word ]]; then aStem="${BASH_REMATCH[1]}"; aNum="${BASH_REMATCH[2]}"; fi
 	if [[ $b =~ $word ]]; then bStem="${BASH_REMATCH[1]}"; bNum="${BASH_REMATCH[2]}"; fi
-	if [ -n "${aNum}" ] && [ -n "${bNum}" ] && [ "${aStem}" = "${bStem}" ]; then
+	if [[ -n "${aNum}" ]] && [[ -n "${bNum}" ]] && [[ "${aStem}" = "${bStem}" ]]; then
 		fFieldCmp "${aNum}" "${bNum}"
 		return 0
 	fi
@@ -250,15 +250,15 @@ function fFieldCmp() {
 ##	fields sort lower, or 0 for the core, where 1.0 is 1.0.0.
 function fListCmp() {
 	local a="$1" b="$2" missing="$3" c=""
-	while [ -n "${a}" ] || [ -n "${b}" ]; do
-		if [ -z "${a}" ]; then
-			if [ "${missing}" = "0" ]; then a="0"; else echo -1; return 0; fi
+	while [[ -n "${a}" ]] || [[ -n "${b}" ]]; do
+		if [[ -z "${a}" ]]; then
+			if [[ "${missing}" = "0" ]]; then a="0"; else echo -1; return 0; fi
 		fi
-		if [ -z "${b}" ]; then
-			if [ "${missing}" = "0" ]; then b="0"; else echo 1; return 0; fi
+		if [[ -z "${b}" ]]; then
+			if [[ "${missing}" = "0" ]]; then b="0"; else echo 1; return 0; fi
 		fi
 		c="$(fFieldCmp "${a%%.*}" "${b%%.*}")"
-		[ "${c}" = "0" ] || { echo "${c}"; return 0; }
+		[[ "${c}" = "0" ]] || { echo "${c}"; return 0; }
 		case "${a}" in *.*) a="${a#*.}" ;; *) a="" ;; esac
 		case "${b}" in *.*) b="${b#*.}" ;; *) b="" ;; esac
 	done
@@ -273,11 +273,11 @@ function fNewer() {
 	case "${a}" in *-*) aPre="${a#*-}"; a="${a%%-*}" ;; esac
 	case "${b}" in *-*) bPre="${b#*-}"; b="${b%%-*}" ;; esac
 	c="$(fListCmp "${a}" "${b}" 0)"
-	[ "${c}" = "0" ] || { [ "${c}" = "1" ]; return; }
+	[[ "${c}" = "0" ]] || { [[ "${c}" = "1" ]]; return; }
 	##	Same core: a release is above any of its pre-releases.
-	[ -n "${aPre}" ] || { [ -n "${bPre}" ]; return; }
-	[ -n "${bPre}" ] || return 1
-	[ "$(fListCmp "${aPre}" "${bPre}" -1)" = "1" ]
+	[[ -n "${aPre}" ]] || { [[ -n "${bPre}" ]]; return; }
+	[[ -n "${bPre}" ]] || return 1
+	[[ "$(fListCmp "${aPre}" "${bPre}" -1)" = "1" ]]
 }
 
 ##	fPickTag <stable|dev> - the highest version in the release rows on stdin,
@@ -285,20 +285,20 @@ function fNewer() {
 function fPickTag() {
 	local want="$1" tag draft pre best=""
 	while read -r tag draft pre; do
-		[ "${draft}" = "-" ] || continue
-		[ "${want}" = "dev" ] || [ "${pre}" = "full" ] || continue
-		if [ -z "${best}" ] || fNewer "${tag}" "${best}"; then best="${tag}"; fi
+		[[ "${draft}" = "-" ]] || continue
+		[[ "${want}" = "dev" ]] || [[ "${pre}" = "full" ]] || continue
+		if [[ -z "${best}" ]] || fNewer "${tag}" "${best}"; then best="${tag}"; fi
 	done
-	[ -z "${best}" ] || echo "${best}"
+	[[ -z "${best}" ]] || echo "${best}"
 }
 
 ##	True when the deepest existing parent of $1 is writable by us.
 function fCanWrite() {
 	local dir="$1"
-	while [ -n "${dir}" ] && [ "${dir}" != "/" ] && [ ! -e "${dir}" ]; do
+	while [[ -n "${dir}" ]] && [[ "${dir}" != "/" ]] && [[ ! -e "${dir}" ]]; do
 		dir="$(dirname "${dir}")"
 	done
-	[ -w "${dir}" ]
+	[[ -w "${dir}" ]]
 }
 
 ##	Exec= is read twice: the desktop-entry string rules first, then the Exec
@@ -323,8 +323,8 @@ function fPathNote() {
 ##	into a failed exit status on an otherwise perfect install).
 tmpDir=""
 function fCleanup() {
-	[ -z "${tmpDir}" ]  || rm -rf "${tmpDir}"
-	[ -z "${authDir}" ] || rm -rf "${authDir}"
+	[[ -z "${tmpDir}" ]]  || rm -rf "${tmpDir}"
+	[[ -z "${authDir}" ]] || rm -rf "${authDir}"
 }
 
 ##	0 = yes, 1 = no, 2 = could not ask at all.
@@ -371,10 +371,10 @@ function fMain() {
 
 	##	Parse arguments
 	local release="stable" target="user" assumeYes=0
-	while [ "$#" -gt 0 ]; do case "$1" in
-		--release)   [ "$#" -ge 2 ] || fFail "--release needs a value: stable or dev"; release="$2"; shift 2 ;;
+	while [[ "$#" -gt 0 ]]; do case "$1" in
+		--release)   [[ "$#" -ge 2 ]] || fFail "--release needs a value: stable or dev"; release="$2"; shift 2 ;;
 		--release=*) release="${1#*=}"; shift ;;
-		--target)    [ "$#" -ge 2 ] || fFail "--target needs a value: user or system"; target="$2"; shift 2 ;;
+		--target)    [[ "$#" -ge 2 ]] || fFail "--target needs a value: user or system"; target="$2"; shift 2 ;;
 		--target=*)  target="${1#*=}"; shift ;;
 		--yes|-y)    assumeYes=1; shift ;;
 		--version)   echo "${appName} installer ${installerVersion}"; echo; exit 0 ;;
@@ -384,10 +384,10 @@ function fMain() {
 	case "${release}" in stable|dev) : ;; *) fFail "--release must be stable or dev (got '${release}')" ;; esac
 	case "${target}" in user|system) : ;; *) fFail "--target must be user or system (got '${target}')" ;; esac
 
-	[ -z "${osProblem}" ] || fFail "${osProblem}" \
+	[[ -z "${osProblem}" ]] || fFail "${osProblem}" \
 		"No ${appName} build is published for this platform." \
 		"Building from source: https://github.com/${ownerRepo}#build-it-yourself"
-	if [ "${osToken}" = "windows" ]; then
+	if [[ "${osToken}" = "windows" ]]; then
 		fFail "this is the Windows shell environment (${osName})" \
 			"Use the PowerShell installer instead - it also sets up the Start Menu entry and PATH:" \
 			"  irm ${rawBase}/install.ps1 | iex"
@@ -433,14 +433,14 @@ function fMain() {
 			"Detail: $(paste -sd ' ' - 2>/dev/null <"${listFile}.err")"
 	fi
 	tag="$(fReleaseRows <"${listFile}" | fPickTag "${release}")"
-	if [ -z "${tag}" ] && [ "${release}" = "stable" ]; then
+	if [[ -z "${tag}" ]] && [[ "${release}" = "stable" ]]; then
 		tag="$(fReleaseRows <"${listFile}" | fPickTag dev)"
-		if [ -n "${tag}" ]; then
+		if [[ -n "${tag}" ]]; then
 			echo "No full release published yet; using the newest pre-release instead."
 			release="dev"
 		fi
 	fi
-	[ -n "${tag}" ] || fFail "github.com/${ownerRepo} has no release published yet" \
+	[[ -n "${tag}" ]] || fFail "github.com/${ownerRepo} has no release published yet" \
 		"Building from source: https://github.com/${ownerRepo}#build-it-yourself"
 	local version="${tag#v}"
 
@@ -464,7 +464,7 @@ function fMain() {
 
 	local wantSha
 	wantSha="$(awk -v want="${asset}" '{ name = $2; sub(/^\*/, "", name); if (name == want) { print $1; exit } }' "${tmpDir}/${sums}")"
-	if [ -z "${wantSha}" ]; then
+	if [[ -z "${wantSha}" ]]; then
 		echo >&2
 		echo "Error: release ${tag} has no build for ${osToken}-${archToken}." >&2
 		echo "  Expected asset: ${asset}" >&2
@@ -477,31 +477,31 @@ function fMain() {
 
 	##	Destination
 	local destDir destFile appDir="" sudoCmd=""
-	if [ "${target}" = "user" ]; then
+	if [[ "${target}" = "user" ]]; then
 		destDir="${HOME}/.local/bin"
 		appDir="${HOME}/.local/share/applications"
 	else
 		destDir="/usr/local/bin"
 		appDir="/usr/local/share/applications"
-		if [ "$(id -u)" != "0" ]; then
+		if [[ "$(id -u)" != "0" ]]; then
 			command -v sudo >/dev/null 2>&1 \
 				|| fFail "a system install needs root, and sudo is not installed" \
 					"Re-run as root, or use --target user to install under \$HOME instead."
 			sudoCmd="sudo"
 		fi
 	fi
-	[ "${osToken}" = "linux" ] && [ "${menuEntry}" = "1" ] || appDir=""
+	[[ "${osToken}" = "linux" ]] && [[ "${menuEntry}" = "1" ]] || appDir=""
 	destFile="${destDir}/${exeName}"
 
 	##	Already current? Then only a missing launcher is left to do, and with
 	##	nothing missing, say so and stop - no prompt, no download. An existing
 	##	launcher is left as it is, since it may have been edited by hand.
 	local needBinary=1 needLauncher=0
-	if [ -f "${destFile}" ] && [ "$(fSha256 "${destFile}")" = "${wantSha}" ]; then needBinary=0; fi
-	if [ -n "${appDir}" ] && { [ "${needBinary}" = "1" ] || [ ! -e "${appDir}/${exeName}.desktop" ]; }; then
+	if [[ -f "${destFile}" ]] && [[ "$(fSha256 "${destFile}")" = "${wantSha}" ]]; then needBinary=0; fi
+	if [[ -n "${appDir}" ]] && { [[ "${needBinary}" = "1" ]] || [[ ! -e "${appDir}/${exeName}.desktop" ]]; }; then
 		needLauncher=1
 	fi
-	if [ "${needBinary}" = "0" ] && [ "${needLauncher}" = "0" ]; then
+	if [[ "${needBinary}" = "0" ]] && [[ "${needLauncher}" = "0" ]]; then
 		echo
 		echo "Already up to date: ${destFile} is ${tag}. Nothing to do."
 		fPathNote "${destDir}" "${destFile}"
@@ -510,8 +510,8 @@ function fMain() {
 	fi
 
 	##	Catch a permission problem now, rather than after a 10MB download.
-	if [ "${needBinary}" = "1" ] && [ -z "${sudoCmd}" ] && ! fCanWrite "${destDir}"; then
-		if [ "${target}" = "user" ]; then
+	if [[ "${needBinary}" = "1" ]] && [[ -z "${sudoCmd}" ]] && ! fCanWrite "${destDir}"; then
+		if [[ "${target}" = "user" ]]; then
 			fFail "no permission to write to ${destDir}" \
 				"Check who owns it: ls -ld ${destDir}"
 		else
@@ -523,7 +523,7 @@ function fMain() {
 	##	The plan
 	echo
 	echo "Plan:"
-	if [ "${needBinary}" = "1" ]; then
+	if [[ "${needBinary}" = "1" ]]; then
 		echo "  Program:  ${appName} ${tag} (${release})"
 		echo "  Platform: ${osToken}-${archToken}"
 		echo "  Download: ${dlBase}/${tag}/${asset}"
@@ -532,23 +532,23 @@ function fMain() {
 	else
 		echo "  Program:  ${destFile} is already ${tag}"
 	fi
-	[ "${needLauncher}" = "0" ] || echo "  Launcher: ${appDir}/${exeName}.desktop"
-	[ -z "${sudoCmd}" ] || echo "  Elevation: the install steps run under sudo"
+	[[ "${needLauncher}" = "0" ]] || echo "  Launcher: ${appDir}/${exeName}.desktop"
+	[[ -z "${sudoCmd}" ]] || echo "  Elevation: the install steps run under sudo"
 	echo
-	if [ "${assumeYes}" != "1" ]; then
+	if [[ "${assumeYes}" != "1" ]]; then
 		local answered=0
 		fConfirm "Proceed?" || answered=$?
-		if [ "${answered}" = "2" ]; then
+		if [[ "${answered}" = "2" ]]; then
 			fFail "there is no terminal here to ask for confirmation" \
 				"Re-run with --yes to install without being asked."
 		fi
-		if [ "${answered}" != "0" ]; then
+		if [[ "${answered}" != "0" ]]; then
 			echo "Aborted - nothing was touched."; echo; exit 0
 		fi
 		echo
 	fi
 
-	if [ "${needBinary}" = "1" ]; then
+	if [[ "${needBinary}" = "1" ]]; then
 		##	Download + verify
 		echo "Downloading ${asset} ..."
 		fGetShown "${dlBase}/${tag}/${asset}" "${tmpDir}/${asset}" \
@@ -556,7 +556,7 @@ function fMain() {
 				"The release lists this asset, so this is most likely a network problem." \
 				"URL: ${dlBase}/${tag}/${asset}"
 		local haveSha; haveSha="$(fSha256 "${tmpDir}/${asset}")"
-		if [ "${haveSha}" != "${wantSha}" ]; then
+		if [[ "${haveSha}" != "${wantSha}" ]]; then
 			fFail "checksum mismatch - NOT installing" \
 				"expected ${wantSha}" \
 				"got      ${haveSha}" \
@@ -580,7 +580,7 @@ function fMain() {
 	fi
 
 	##	Desktop launcher
-	if [ "${needLauncher}" = "1" ]; then
+	if [[ "${needLauncher}" = "1" ]]; then
 		{
 			echo "[Desktop Entry]"
 			echo "Type=Application"
@@ -602,7 +602,7 @@ function fMain() {
 		fi
 	fi
 
-	if [ "${needBinary}" = "1" ]; then
+	if [[ "${needBinary}" = "1" ]]; then
 		echo "Installed ${appName} ${tag} to ${destFile}"
 	else
 		echo "Put back what was missing for ${appName} ${tag}"
@@ -615,10 +615,10 @@ function fMain() {
 ##	Script entry point
 set -u -e -E -o pipefail
 shopt -s inherit_errexit 2>/dev/null || true
-if [ "${BASH_SOURCE[0]:-}" = "${0}" ] || [ -z "${BASH_SOURCE[0]:-}" ]; then
+if [[ "${BASH_SOURCE[0]:-}" = "${0}" ]] || [[ -z "${BASH_SOURCE[0]:-}" ]]; then
 	##	"$@" with no arguments is an unbound-variable error under `set -u` on
 	##	bash 3.2 (the macOS system bash), so only pass it when there is one.
-	if [ "$#" -gt 0 ]; then fMain "$@"; else fMain; fi
+	if [[ "$#" -gt 0 ]]; then fMain "$@"; else fMain; fi
 fi
 
 ##	History:
@@ -631,3 +631,4 @@ fi
 ##		- 20260925 JC: Picks the highest version from the release list and skips
 ##		  drafts; an API error no longer reads as "no full release";
 ##		  a re-run puts back a missing launcher.
+##		- 20261006 JC: [[ ]] for every test, and version fields compare as base 10.

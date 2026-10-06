@@ -78,7 +78,7 @@ mkdir -p "${stubDir}"
 cat > "${stubDir}/curl" <<'STUB'
 #!/usr/bin/env bash
 out=""; url=""; fmt=""
-while [ "$#" -gt 0 ]; do
+while [[ "$#" -gt 0 ]]; do
 	case "$1" in
 		-o)        out="$2"; shift 2 ;;
 		-w)        fmt="$2"; shift 2 ;;
@@ -94,8 +94,8 @@ fServe() {
 		*) cat "${STUB_DIR}/${url##*/}" ;;
 	esac
 }
-if [ -n "${out}" ]; then fServe >"${out}"; else fServe; fi
-[ -z "${fmt}" ] || printf '%s' "${code}"
+if [[ -n "${out}" ]]; then fServe >"${out}"; else fServe; fi
+[[ -z "${fmt}" ]] || printf '%s' "${code}"
 STUB
 chmod +x "${stubDir}/curl"
 
@@ -109,7 +109,7 @@ fInstall() {
 	local home="$1" rc=0; shift
 	local -a args=() run=()
 	read -r -a args <<<"${INSTALL_ARGS:-}"
-	if [ "${INSTALLER:-bash}" = "ps1" ]; then
+	if [[ "${INSTALLER:-bash}" = "ps1" ]]; then
 		run=(pwsh -NoProfile -NonInteractive -File "${meDir}/stubrun.ps1" -Installer "${root}/install.ps1")
 	else
 		run=(bash "${root}/install.bash" --yes)
@@ -119,7 +119,7 @@ fInstall() {
 		STUB_DIR="${STUB_DIR:-${relDir}}" STUB_API_CODE="${STUB_API_CODE:-200}" \
 		STUB_LOG="${home}/.tmp/calls.log" "$@" \
 		"${run[@]}" "${args[@]}" >"${home}/out.log" 2>&1 || rc=$?
-	if [ "${rc}" = "0" ] && grep -q '^Error:' "${home}/out.log"; then rc=1; fi
+	if [[ "${rc}" = "0" ]] && grep -q '^Error:' "${home}/out.log"; then rc=1; fi
 	return "${rc}"
 }
 fInstalled(){ grep -aqFx "#ver ${2}" "${1}/.local/bin/silkterm" 2>/dev/null; }
@@ -141,7 +141,7 @@ fCheck "and the token was still passed in a file, not on a command line" \
 ## drift from it, against the shared case list.
 bad=0
 lifted="$(sed -n '/^function fDesktopExec()/,/^}/p' "${root}/install.bash")"
-if [ -z "${lifted}" ]; then
+if [[ -z "${lifted}" ]]; then
 	echo "    install.bash has no fDesktopExec"
 	bad=1
 else
@@ -149,7 +149,7 @@ else
 	while IFS=$'\t' read -r path want; do
 		case "${path}" in '' | '#'*) continue ;; esac
 		got="$(fDesktopExec "${path}")"
-		if [ "${got}" != "${want}" ]; then
+		if [[ "${got}" != "${want}" ]]; then
 			echo "    ${path}: wanted ${want}, got ${got}"
 			bad=$((bad + 1))
 		fi
@@ -171,7 +171,7 @@ fi
 if command -v gio >/dev/null 2>&1; then
 	env -u DISPLAY HOME="${spacedHome}" gio launch "${entry}" >/dev/null 2>&1 || true
 	## gio returns before the program has written anything.
-	for _ in 1 2 3 4 5 6 7 8 9 10; do [ -e "${spacedHome}/ran.txt" ] && break; sleep 0.2; done
+	for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -e "${spacedHome}/ran.txt" ]] && break; sleep 0.2; done
 	fCheck "and it starts the installed program" test -e "${spacedHome}/ran.txt"
 else
 	echo "  skip gio launch (not installed)"
@@ -196,7 +196,7 @@ fCases() {
 	fCheck "${kind}: dev puts 1.0.0 above 1.0.0-alpha.2" fInstalled "${h}" 9.9.9
 	## Windows PowerShell 5.1 hands the API's list over as one object. Read as a
 	## list of one, every tag came at once and nothing could be picked.
-	if [ "${kind}" = "ps1" ]; then
+	if [[ "${kind}" = "ps1" ]]; then
 		h="${work}/${kind}-order-one-object"
 		STUB_DIR="${caseDir}" fInstall "${h}" STUB_ONE_OBJECT=1 || true
 		fCheck "${kind}: a release list handed over as one object still picks the highest" fInstalled "${h}" 9.9.9
@@ -279,7 +279,7 @@ done
 if command -v pwsh >/dev/null 2>&1; then
 	fAsked(){
 		fSaid "${1}" "Error: there is no terminal here to ask for confirmation" &&
-			fSaid "${1}" "Re-run with -Yes" && [ ! -e "${1}/.local/bin/silkterm" ]
+			fSaid "${1}" "Re-run with -Yes" && [[ ! -e "${1}/.local/bin/silkterm" ]]
 	}
 	h="${work}/ps1-no-yes-devnull"
 	rc=0; INSTALLER=ps1 fInstall "${h}" STUB_NO_YES=1 </dev/null || rc=$?
