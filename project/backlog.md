@@ -804,7 +804,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Light mode: the scrim is much too strong next to dark mode
 	- ID: 2026100513581811
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: High
 	- Opened: 20261005-135818
 	- Opened by: JC
@@ -816,6 +816,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The two modes look about as strong as each other.
 	- Notes:
 		- 20261005: From the look at the old-format cursor plate item.
+	- Reproduced: 20261005 on b23. Measured as how far the halo and outline move pixels from the same scene drawn without them, mean sRGB levels per pixel over a screenful of text, dark against light. Built-in wallpaper 6.6 against 20.1, a dark photo 3.8 against 13.0, a near-black photo 2.2 against 13.8. So light mode was 3 to 6 times as strong. In Oklab lightness the two looked about even, but sRGB levels are what the visibility work matched and what the eye agreed with.
+	- Actual cause:
+		- Light mode scaled the halo by one gain, matched at half the halo over an average picture. sRGB's curve makes dark mode's halo build slowly and light mode's fast, so the faint tail showed far more in light mode.
+		- Light mode draws a picture, dark parts most of all, much further from the paper than dark mode draws it from black. A gain matched to an average picture could not follow that.
+		- The 1 px outline was never scaled at all, so in light mode it moved pixels by up to 119 levels.
+	- Actual fix: Light mode redraws every halo alpha, the outline included, off a curve solved per picture. The curve makes the halo move the picture toward the background as far, in sRGB levels a channel at a time and on average over the picture, as dark mode's halo moves dark mode's. The wallpaper summary now keeps 16 quantiles of each channel for this. Dark mode, and light mode with no wallpaper up, are drawn as before. After: built-in 9.5, dark photo 4.9, near-black photo 2.6, against dark mode's 6.6, 3.8 and 2.2 (1.2 to 1.4 times). The rest is the picture under the text not being the picture's average, which the composite cannot see.
+	- Decisions:
+		- The old floor of a quarter of the asked alpha is gone. It held the tail, which is where the excess was. The text's own contrast is what keeps it readable, and light-mode text is darker now (2026100513581810).
+		- Matched in sRGB levels, not Oklab, as the wallpaper visibility work was.
+	- Verified: dark mode draws exactly the pixels it drew before, in all four themes and with no wallpaper. Full unit suite passes.
+	- Swept: the composite has one output, the union of halo and outline, and the match runs there, so the cursor's halo and outline go through it too. `halo_gain` had one caller. The cursor plate has its own light-mode alpha and is not part of the scrim.
+	- Branch: lightink
+	- Commit: b36853d
+	- Test case: `the_halo_covers_the_same_ground_in_both_modes` (EqT4HIg), now at every alpha and over gray and strongly colored pictures, and `the_halo_follows_the_picture_it_sits_on` (Ers4sAg), both failing on the old single gain. `only_a_matched_halo_is_redrawn` (Ers4tCw) holds dark mode out of the match, `the_scrim_shader_compiles` (Ers4srl) validates the shader with no GPU, `the_matched_halo_only_ever_grows_with_what_was_asked` (Ers4sWJ) and `the_memo_never_hands_back_a_stale_halo` (Ers4ttU).
+	- Acceptance signoff: Self-closed: measured before and after in both modes, dark mode pixel-identical, tests pass.
+	- Closed: 20261005-171619
 
 - macOS: a window opened with Command+N is smaller, and its size is the one remembered
 	- ID: 2026100514211602
@@ -846,7 +862,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Light mode: the text is still not dark enough in any light theme
 	- ID: 2026100513581810
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261005-135818
 	- Opened by: JC
@@ -858,6 +874,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Perhaps much more saturated too, so it still reads as a color.
 	- Notes:
 		- 20261005: From the look at the old-format cursor plate item, whose text was darkened on 20260929. That was not enough.
+		- Measured: 20261005. In Oklab lightness under the paper, the light themes' colored ANSI text averaged 0.36 to 0.47, below the 0.45 contrast floor for most colors, against 0.60 to 0.77 over black in the dark themes. The foreground sat 0.70 to 0.73 under the paper.
+	- Progress log:
+		- Done: every light theme's foreground is darker, 0.74 to 0.80 under the paper, and SilkTerm's is a deep ink blue rather than a gray. The ANSI colors average 0.57 under the paper, the normal row deeper than the bright one, with chroma kept or raised so they read as more saturated. Matrix and Retro Amber moved their whole set down, keeping the spread that tells their colors apart. Measured on screen over flat paper, the core of body text went from Oklab 0.24 to 0.17.
+		- Not as deep as dark mode's colors on purpose: much past this a yellow or a cyan has no color left.
+		- A cost: the same colors as a cell background, a tmux status bar say, are now dark, so the contrast floor turns their text light.
+		- Saved themes are untouched, since they are stored whole. Dark palettes did not change.
+	- Verified: dark mode draws exactly the pixels it drew before, in all four themes. The cursor plate tests still pass unchanged. Full unit suite passes.
+	- Branch: lightink
+	- Commit: 726a70a
+	- Test case: `light_text_is_dark_and_still_a_color` (Ers4tYC), failing on the old light palettes.
+	- Acceptance signoff: Self-closed: darker and more saturated in every light theme as asked, tests pass, dark mode pixel-identical. The exact depth is taste and easy to move.
+	- Closed: 20261005-171619
 
 - Tabs: a setting for new tabs to open next to the current one
 	- ID: 2026100513581812
@@ -3365,7 +3393,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ### Features and enhancements
 
-- 🛠️ Two more settings of the same class as the light mode calibration, neither fixed.
+- ✅ Two more settings of the same class as the light mode calibration, neither fixed.
 	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.
 	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already holds the text on it legible in both modes, so this is a question of how loud it looks rather than whether it works.
 	- Fixed: 20260928, window transparency. The cause was not the eye. The fill was encoded to sRGB after it was premultiplied, so a light fill at 80% came out as 91% of itself and covered most of the desktop. Black was not affected. A light fill now lets through exactly as much as a dark one.
@@ -3376,7 +3404,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test: `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
 	- Note: 20260930, both halves are fixed now, the window transparency on 20260928 and the cursor plate on 20260929. The title is out of date. What is left is the look on screen.
 	- Note: 20261005, looked at. The light-mode text is still not dark enough, and the light-mode scrim is still much too strong next to dark mode. Filed as 2026100513581810 and 2026100513581811.
+	- Note: 20261005, both are done: darker, more saturated light text (2026100513581810) and a light scrim matched to dark mode's (2026100513581811).
 	- Opened: 20260920-190859
+	- Closed: 20261005-171619
 
 - **Stop here to work on releasing RC1**.
 
