@@ -831,6 +831,44 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 621d931
 	- Test case: `a_size_the_window_took_without_saying_is_drawn_at` (ErwgxDd), failing on the old code. The resize event half has no unit test, since it needs a real window.
 
+- Code style: bash scripts drift from the house conventions
+	- ID: 2026100314050013
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs local test suite run?: Yes. A full `cicd/cicd.bash` run, since the profiler, dogfood and publish stages only run there.
+	- Needs external testing: install.bash under the macOS bash 3.2 on b26.
+	- Severity: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: Linux
+	- Incorrect behavior:
+		- 45 functions and about 80 variables are snake_case, mostly in cicd.bash, gui-headless.bash, termbench-run.bash and the scroll test. release.bash has its own `die` and plain `echo`.
+		- install.bash uses `[ ]` on 60 lines. Bash 3.2 has `[[ ]]`, and the same file already uses it.
+		- 755 expansions are not braced, most in gui-headless.bash and both git hooks.
+	- Expected behavior: `fCamelCase` functions, camelCase variables, `[[ ]]`, and `"${var}"`.
+	- Note: `retry_build` is named in the project notes, and the gfs helpers are shared with other projects, so those renames go with their references.
+	- Origin: db4d40b (2026-08-01) for cicd.bash, c09beb3 (2026-08-06) for install.bash, c7678e6 (2026-09-17) for gui-headless.bash. No earlier review item. Confirmed.
+	- Actual fix [Bug]:
+		- Functions are fCamelCase and variables camelCase, with every caller, test and note that names them. `retry_build` is now `fRetryBuild`.
+		- The output helpers moved out of cicd.bash into `cicd/utility/include/echo.bash`. release.bash sources it, so it prints through fEcho_Clean and fails through fDie.
+		- install.bash and its test use `[[ ]]` throughout. Version fields there compare as base 10, since `-gt` inside `[[ ]]` would read a leading zero as octal.
+		- Every expansion is braced, `$1` and `$@` too. `$?`, `$#`, `$$` and `$!` stay as they are.
+		- New gate `cicd/utility/bash-style.bash`, run in stage 3 after shellcheck. It checks the braces, `[[ ]]` in Bash, and fCamelCase function names.
+	- Note: Left alone on purpose:
+		- The copies shared with other projects: gfs-rotate.bash with its `gfs_rotate`, x9ps1-git.bash, n8git_backup-and-publish and runterm.
+		- UPPER_SNAKE_CASE settings and environment names, which are an interface.
+		- `[ ]` in the two git hooks and the scene scripts, which run under sh or dash.
+		- Other tools' setting names (`enable_wayland`, `initial_window_width`), the engine test's `uname` stand-in, and code inside single-quoted `bash -c` strings and awk programs.
+	- Swept: every tracked `.bash` and `.sh` file plus both hooks, by function definitions, assignments and expansions. The gate now runs over the same list.
+	- Verified: 20261006.
+		- shellcheck is clean, and the new gate passes on the branch. On the dev copies of cicd.bash, install.bash, gui-headless.bash, pre-push and the engine test it fails: 230 unbraced expansions, 77 `[ ]` tests, 26 names.
+		- These script tests pass: engine, packaging, publish, release, release notes, sync, gates, hooks, install, rename, pins, pslint, pylint, win-remote, wingui harness, wine, cicd-win, rotate, testdir, scroll verdict, demo and showdown.
+		- The scroll harness passed all 11 scenes on X11, plus the Wayland arm and the real-app smoke. gui-headless.bash start, launch, shot, status and stop work. release.bash stops with the fDie line off main.
+	- Branch: bashstyle
+	- Commit: 7657f19, a8fe9f7, c5eae4f, ca6ee0c, ed813ba, 2314eb1, 8f5a67b
+	- Test case: `cicd/utility/bash-style.bash`, the stage 3 gate. The install, hooks, engine, packaging and publish tests cover what the renames touched.
+	- Note: Code review 20261003 item 13.
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -950,44 +988,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
 			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
 			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
-
-- Code style: bash scripts drift from the house conventions
-	- ID: 2026100314050013
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs local test suite run?: Yes. A full `cicd/cicd.bash` run, since the profiler, dogfood and publish stages only run there.
-	- Needs external testing: install.bash under the macOS bash 3.2 on b26.
-	- Severity: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: Linux
-	- Incorrect behavior:
-		- 45 functions and about 80 variables are snake_case, mostly in cicd.bash, gui-headless.bash, termbench-run.bash and the scroll test. release.bash has its own `die` and plain `echo`.
-		- install.bash uses `[ ]` on 60 lines. Bash 3.2 has `[[ ]]`, and the same file already uses it.
-		- 755 expansions are not braced, most in gui-headless.bash and both git hooks.
-	- Expected behavior: `fCamelCase` functions, camelCase variables, `[[ ]]`, and `"${var}"`.
-	- Note: `retry_build` is named in the project notes, and the gfs helpers are shared with other projects, so those renames go with their references.
-	- Origin: db4d40b (2026-08-01) for cicd.bash, c09beb3 (2026-08-06) for install.bash, c7678e6 (2026-09-17) for gui-headless.bash. No earlier review item. Confirmed.
-	- Actual fix [Bug]:
-		- Functions are fCamelCase and variables camelCase, with every caller, test and note that names them. `retry_build` is now `fRetryBuild`.
-		- The output helpers moved out of cicd.bash into `cicd/utility/include/echo.bash`. release.bash sources it, so it prints through fEcho_Clean and fails through fDie.
-		- install.bash and its test use `[[ ]]` throughout. Version fields there compare as base 10, since `-gt` inside `[[ ]]` would read a leading zero as octal.
-		- Every expansion is braced, `$1` and `$@` too. `$?`, `$#`, `$$` and `$!` stay as they are.
-		- New gate `cicd/utility/bash-style.bash`, run in stage 3 after shellcheck. It checks the braces, `[[ ]]` in Bash, and fCamelCase function names.
-	- Note: Left alone on purpose:
-		- The copies shared with other projects: gfs-rotate.bash with its `gfs_rotate`, x9ps1-git.bash, n8git_backup-and-publish and runterm.
-		- UPPER_SNAKE_CASE settings and environment names, which are an interface.
-		- `[ ]` in the two git hooks and the scene scripts, which run under sh or dash.
-		- Other tools' setting names (`enable_wayland`, `initial_window_width`), the engine test's `uname` stand-in, and code inside single-quoted `bash -c` strings and awk programs.
-	- Swept: every tracked `.bash` and `.sh` file plus both hooks, by function definitions, assignments and expansions. The gate now runs over the same list.
-	- Verified: 20261006.
-		- shellcheck is clean, and the new gate passes on the branch. On the dev copies of cicd.bash, install.bash, gui-headless.bash, pre-push and the engine test it fails: 230 unbraced expansions, 77 `[ ]` tests, 26 names.
-		- These script tests pass: engine, packaging, publish, release, release notes, sync, gates, hooks, install, rename, pins, pslint, pylint, win-remote, wingui harness, wine, cicd-win, rotate, testdir, scroll verdict, demo and showdown.
-		- The scroll harness passed all 11 scenes on X11, plus the Wayland arm and the real-app smoke. gui-headless.bash start, launch, shot, status and stop work. release.bash stops with the fDie line off main.
-	- Branch: bashstyle
-	- Commit: 7657f19, a8fe9f7, c5eae4f, ca6ee0c, ed813ba, 2314eb1, 8f5a67b
-	- Test case: `cicd/utility/bash-style.bash`, the stage 3 gate. The install, hooks, engine, packaging and publish tests cover what the renames touched.
-	- Note: Code review 20261003 item 13.
 
 - Code style: the PowerShell scripts follow bash conventions
 	- ID: 2026100314050015
