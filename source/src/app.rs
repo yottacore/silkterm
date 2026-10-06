@@ -1797,6 +1797,32 @@ fn tab_step(i: usize, n: usize, forward: bool) -> usize {
 	}
 }
 
+// The active tab once the one at `index` has gone and `len` are left. The same
+// tab where it can be, else the one that took its place, else the last. A tab
+// opened beside the one it came from goes back to that one (`opener`, where it
+// sits now), since that is where its maker was.
+fn active_after_close(active: usize, index: usize, len: usize, opener: Option<usize>) -> usize {
+	if active == index
+		&& let Some(back) = opener
+	{
+		return back;
+	}
+	let active = if active > index { active - 1 } else { active };
+	active.min(len.saturating_sub(1))
+}
+
+// Put a new tab just right of the active one, or at the end, and answer where
+// it went. It becomes the active tab either way.
+fn insert_tab<T>(list: &mut Vec<T>, active: usize, tab: T, beside: bool) -> usize {
+	let at = if beside {
+		(active + 1).min(list.len())
+	} else {
+		list.len()
+	};
+	list.insert(at, tab);
+	at
+}
+
 // Swap the tab at `i` with its neighbour and answer where it went, so the
 // active tab follows. Past either end it trades places with the far one.
 fn move_tab<T>(list: &mut [T], i: usize, forward: bool) -> usize {
@@ -2442,7 +2468,7 @@ impl Conserve {
 // What the idle release reads of the window (see `release_deadline`).
 struct Idle {
 	focused: bool,
-	sight: Sight,
+	hidden: bool,        // minimized, or covered where the desktop says so
 	revealed: bool,      // shown at all yet
 	bench_busy: bool,    // a rating owed or running
 	since: Instant,      // the last sign of life
@@ -2451,20 +2477,19 @@ struct Idle {
 
 // When an idle window may let its device go, or None while something keeps
 // it: the switch off, the window not yet shown, a rating owed or running, or a
-// window on screen that has focus or would go blank without its device. A
-// minimized window waits least, since nobody is looking until it is restored.
-// A covered one may be uncovered by any click elsewhere, and a merely
+// window on screen that has focus or would go blank without its device. Two
+// waits, because a hidden window is known to be out of sight while a merely
 // unfocused one may be on a second monitor being read.
 fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 	let rule = idle_rule(cfg);
-	let kept_on_screen = idle.sight == Sight::Shown && (idle.focused || !idle.keeps_picture);
+	let kept_on_screen = !idle.hidden && (idle.focused || !idle.keeps_picture);
 	if !rule.on || !idle.revealed || idle.bench_busy || kept_on_screen {
 		return None;
 	}
-	let wait = match idle.sight {
-		Sight::Minimized => rule.minimized,
-		Sight::Covered => rule.hidden,
-		Sight::Shown => rule.otherwise,
+	let wait = if idle.hidden {
+		rule.hidden
+	} else {
+		rule.otherwise
 	};
 	Some(idle.since + wait)
 }
@@ -2472,8 +2497,7 @@ fn release_deadline(cfg: &config::Settings, idle: &Idle) -> Option<Instant> {
 #[derive(Debug, PartialEq, Eq)]
 struct IdleRule {
 	on: bool,
-	minimized: Duration,
-	hidden: Duration, // covered
+	hidden: Duration,
 	otherwise: Duration,
 }
 
@@ -2484,7 +2508,6 @@ fn idle_rule(cfg: &config::Settings) -> IdleRule {
 	if let Some(wait) = idle_secs() {
 		return IdleRule {
 			on: true,
-			minimized: wait,
 			hidden: wait,
 			otherwise: wait,
 		};
@@ -2492,7 +2515,6 @@ fn idle_rule(cfg: &config::Settings) -> IdleRule {
 	let minutes = |m: usize| Duration::from_secs(m as u64 * 60);
 	IdleRule {
 		on: cfg.idle_release,
-		minimized: minutes(cfg.idle_release_minimized_min),
 		hidden: minutes(cfg.idle_release_hidden_min),
 		otherwise: minutes(cfg.idle_release_min),
 	}
@@ -3163,6 +3185,9 @@ struct State {
 	// rather than by an event, so "has it changed" has to be asked against what
 	// was last drawn, not against what the timer said a moment ago.
 	menu_tip_up: Option<(usize, usize)>,
+	// The tab last opened beside the active one, and that tab, each by a pane
+	// it held then. Closing the new one goes back (see `active_after_close`).
+	tab_opener: Option<(PaneId, PaneId)>,
 	tab_first: usize,                  // tab the strip is paged to (clamped on read)
 	tab_followed: usize,               // active tab the page last followed (see rebuild_tab_layout)
 	tab_layout: TabLayout,             // the strip as measured (see rebuild_tab_layout)
@@ -3204,10 +3229,10 @@ struct State {
 	// The window still shows its last frame once its device is gone (see
 	// `release_deadline`). A Windows window with no redirection bitmap does not.
 	keeps_picture: bool,
-	// last cycle's sight; leaving a hidden one is the unfreeze - one dirty
+	// last cycle's hidden answer; its false edge is the unfreeze - one dirty
 	// catch-up frame, hard-cut. Written only by freeze_sync, which both render
 	// entry points go through.
-	sight: Sight,
+	was_hidden: bool,
 	minimized: MinimizedProbe,
 	// Deadline of the next animation frame while SILK_MAX_FPS pins the rate; None
 	// otherwise, which is every ordinary run. See `max_fps`.
@@ -3275,41 +3300,17 @@ fn freeze_frame(was_hidden: bool, hidden: bool) -> Frame {
 	}
 }
 
-// How much of the window is on screen. The freeze reads only shown or not;
-// the idle release gives a minimized window its own wait.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Sight {
-	Shown,
-	Covered,   // occluded where the desktop says so
-	Minimized, // or with no area, which is all Windows reports
-}
-
-impl Sight {
-	fn hidden(self) -> bool {
-		self != Sight::Shown
-	}
-}
-
-// A window with no area counts as minimized, since on Windows a restore stops
-// answering minimized a moment before its size comes back, and a device
-// rebuilt then took 1x1 as the window's size. The grid shrank to two columns
-// with it, and the console host's reflow lost the screen. Minimized is asked
-// before covered, because a desktop may report a minimized window as both.
-fn window_sight(
+// Nothing of the window is on screen. A window with no area counts, since on
+// Windows a restore stops answering minimized a moment before its size comes
+// back, and a device rebuilt then took 1x1 as the window's size. The grid
+// shrank to two columns with it, and the console host's reflow lost the screen.
+fn window_hidden(
 	revealed: bool,
 	occluded: bool,
 	no_area: bool,
 	minimized: impl FnOnce() -> bool,
-) -> Sight {
-	if !revealed {
-		Sight::Shown
-	} else if no_area || minimized() {
-		Sight::Minimized
-	} else if occluded {
-		Sight::Covered
-	} else {
-		Sight::Shown
-	}
+) -> bool {
+	revealed && (occluded || no_area || minimized())
 }
 
 // How long a minimized answer stands. On X11 the answer is a property read
@@ -5237,12 +5238,32 @@ impl State {
 			.map_or((None, None), PaneManager::inherit_spawn);
 		let cmd = shell.or(cmd).or_else(config::default_shell_argv);
 		if let Ok(pm) = PaneManager::new(&mut self.text, proxy, area, cmd, cwd) {
-			self.tabs.list.push(pm);
-			self.tabs.active = self.tabs.list.len() - 1;
+			let beside = config::settings().new_tab_beside;
+			let made = pm.focused;
+			self.tab_opener = self
+				.tabs
+				.list
+				.get(self.tabs.active)
+				.filter(|_| beside)
+				.map(|from| (made, from.focused));
+			self.tabs.active = insert_tab(&mut self.tabs.list, self.tabs.active, pm, beside);
+			if self.tabs.active + 1 < self.tabs.len() {
+				self.forget_tab_pointer();
+			}
 			self.relayout_all(); // existing tab(s) shrink for the now-shown bar
 			self.update_title();
 			self.dirty = true;
 		}
+	}
+
+	// What the pointer was doing to a tab is keyed by its position, and the tabs
+	// right of a new one have each moved along one. A held close button would
+	// close the wrong tab on release.
+	fn forget_tab_pointer(&mut self) {
+		self.tab_close_arm = None;
+		self.tab_dbl = None;
+		self.tab_hover.point_at(None);
+		self.tab_tip = None;
 	}
 
 	// New window = a fresh process (each window is its own process), started in
@@ -5377,13 +5398,21 @@ impl State {
 			return;
 		}
 		let showed = idx == self.tabs.active;
+		let opener = match self.tab_opener {
+			Some((made, from)) if self.tabs.list[idx].panes.contains_key(&made) => {
+				self.tab_opener = None;
+				Some(from)
+			}
+			_ => None,
+		};
 		self.tabs.list.remove(idx);
-		if self.tabs.active > idx {
-			self.tabs.active -= 1; // a tab before the active one went away
-		}
-		if self.tabs.active >= self.tabs.list.len() {
-			self.tabs.active = self.tabs.list.len() - 1;
-		}
+		let opener = opener.and_then(|from| {
+			self.tabs
+				.list
+				.iter()
+				.position(|pm| pm.panes.contains_key(&from))
+		});
+		self.tabs.active = active_after_close(self.tabs.active, idx, self.tabs.len(), opener);
 		if showed {
 			self.freeze_catchup(); // closing the shown tab reveals a frozen one
 		}
@@ -5396,10 +5425,10 @@ impl State {
 	// it - a frame built while hidden would bank the whole buffered backlog
 	// into the output ease, and the reveal would then play it back as if it
 	// had just arrived.
-	fn window_sight(&mut self) -> Sight {
+	fn window_hidden(&mut self) -> bool {
 		let window = &self.window;
 		let minimized = &mut self.minimized;
-		window_sight(self.revealed, self.occluded, self.no_area, || {
+		window_hidden(self.revealed, self.occluded, self.no_area, || {
 			FREEZE_MINIMIZED
 				&& minimized.get(Instant::now(), || window.is_minimized().unwrap_or(false))
 		})
@@ -5410,9 +5439,8 @@ impl State {
 	// whichever gets here first has to be the one that catches up - otherwise that
 	// frame banks the whole backlog into the ease before anything cuts it.
 	fn freeze_sync(&mut self) -> bool {
-		let sight = self.window_sight();
-		let hidden = sight.hidden();
-		let frame = freeze_frame(self.sight.hidden(), hidden);
+		let hidden = self.window_hidden();
+		let frame = freeze_frame(self.was_hidden, hidden);
 		if frame == Frame::CatchUp {
 			self.freeze_catchup();
 			// Being shown again is a sign of life. Windows sends no occlusion
@@ -5420,7 +5448,7 @@ impl State {
 			// does, while the window still counts as hidden.
 			self.note_active("shown");
 		}
-		self.sight = sight;
+		self.was_hidden = hidden;
 		frame == Frame::Skip
 	}
 
@@ -5462,7 +5490,7 @@ impl State {
 	// Output, which counts only while the window can be seen (IdleClock::output).
 	// The hidden flag is the one the last pass settled on.
 	fn note_output(&mut self) {
-		if self.idle.output(self.gpu.is_none(), self.sight.hidden()) {
+		if self.idle.output(self.gpu.is_none(), self.was_hidden) {
 			idledbg("wake: output");
 		}
 	}
@@ -5481,13 +5509,13 @@ impl State {
 			.map(|up| up + BENCH_BANNER_MIN)
 	}
 
-	// Reads the sight the pass's `freeze_sync` settled on.
+	// Reads the hidden answer the pass's `freeze_sync` settled on.
 	fn release_deadline(&self, cfg: &config::Settings) -> Option<Instant> {
 		release_deadline(
 			cfg,
 			&Idle {
 				focused: self.focused,
-				sight: self.sight,
+				hidden: self.was_hidden,
 				revealed: self.revealed,
 				bench_busy: self.bench.is_some() || self.bench_at.is_some(),
 				since: self.idle.since,
@@ -8136,7 +8164,11 @@ fn build_layout(
 		return vec![pm];
 	}
 	let mut out = Vec::new();
-	for tab in &cli.tabs {
+	for tab in cli
+		.tab_order(config::settings().new_tab_beside)
+		.into_iter()
+		.map(|index| &cli.tabs[index])
+	{
 		// main pane's shell cascades pane -> tab -> window
 		let main_shell = pane_shell(
 			tab.panes[0].style.shell.as_ref(),
@@ -8684,6 +8716,7 @@ impl ApplicationHandler<UserEvent> for App {
 			tab_close_arm: None,
 			tab_edit: None,
 			tab_dbl: None,
+			tab_opener: None,
 			tab_hover: crate::tip::Dwell::default(),
 			menu_tip: crate::tip::Dwell::default(),
 			menu_tip_up: None,
@@ -8713,7 +8746,7 @@ impl ApplicationHandler<UserEvent> for App {
 			occluded: false,
 			no_area: false,
 			keeps_picture: !(cfg!(windows) && want_transparent),
-			sight: Sight::Shown,
+			was_hidden: false,
 			minimized: MinimizedProbe::default(),
 			next_frame: None,
 			wp_count: 0,
@@ -10570,14 +10603,14 @@ impl State {
 mod tests {
 	use super::{
 		Caret, CloseScope, Conserve, ContextMenu, CopyMetrics, Entry, Idle, IdleClock, IdleRule,
-		MenuAction, PaneWakes, RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, Settle, Sight, TAB_CLOSE_M,
+		MenuAction, PaneWakes, RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, Settle, TAB_CLOSE_M,
 		TabEdit, VT_SETTLE, ViewState, VtHeal, accel_at, accel_clash, close_scope, copybox_fit,
 		copybox_place, entry_check_accel, entry_item_accel, entry_sub, fit_px, focus_ring,
 		is_copy_chord, key_is_typed, launch_maximized, menu_metrics, needs_folder_read,
 		new_window_command, notice_due, pace_frame, pane_wake, rating_step, release_deadline,
 		remember_resize, resize_is_current, reveal_due, rotation_live, rotation_next,
 		settings_after_reload, settle, tab_close_box, tab_command_line, tab_title_w, typed_title,
-		view_menu_items, window_px, window_sight,
+		view_menu_items, window_hidden, window_px,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -10669,7 +10702,6 @@ mod tests {
 		let five = Duration::from_secs(5);
 		let every_wait_five = IdleRule {
 			on: true,
-			minimized: five,
 			hidden: five,
 			otherwise: five,
 		};
@@ -10832,9 +10864,9 @@ mod tests {
 	#[test]
 	fn the_idle_release_waits_on_the_window_and_only_an_unwatched_one() {
 		let since = Instant::now();
-		let idle = |focused, sight| Idle {
+		let idle = |focused, hidden| Idle {
 			focused,
-			sight,
+			hidden,
 			revealed: true,
 			bench_busy: false,
 			since,
@@ -10844,7 +10876,7 @@ mod tests {
 		// which `idle_release_ships_on` pins now.
 		// let mut cfg = config::Settings::default();
 		// assert!(
-		// 	release_deadline(&cfg, &idle(false, Sight::Covered)).is_none(),
+		// 	release_deadline(&cfg, &idle(false, true)).is_none(),
 		// 	"off by default"
 		// );
 		let mut cfg = config::Settings {
@@ -10852,42 +10884,37 @@ mod tests {
 			..config::Settings::default()
 		};
 		assert!(
-			release_deadline(&cfg, &idle(false, Sight::Covered)).is_none(),
+			release_deadline(&cfg, &idle(false, true)).is_none(),
 			"switched off"
 		);
 		cfg.idle_release = true;
 		cfg.idle_release_hidden_min = 30;
 		cfg.idle_release_min = 240;
 		assert!(
-			release_deadline(&cfg, &idle(true, Sight::Shown)).is_none(),
+			release_deadline(&cfg, &idle(true, false)).is_none(),
 			"focused and on screen"
 		);
 		assert_eq!(
-			release_deadline(&cfg, &idle(false, Sight::Shown)),
+			release_deadline(&cfg, &idle(false, false)),
 			Some(since + Duration::from_hours(4))
 		);
 		assert_eq!(
-			release_deadline(&cfg, &idle(false, Sight::Covered)),
+			release_deadline(&cfg, &idle(false, true)),
 			Some(since + Duration::from_mins(30))
 		);
-		// A minimized window took the hidden wait until 2026100418354006 gave it
-		// its own; `a_minimized_window_waits_its_own_time` pins that now.
-		// assert_eq!(
-		// 	release_deadline(&cfg, &idle(true, true)),
-		// 	Some(since + Duration::from_mins(30))
-		// );
-		// covered with focus still nominally on it: out of sight is what counts
+		// minimized or covered with focus still nominally on it: out of sight is
+		// what counts
 		assert_eq!(
-			release_deadline(&cfg, &idle(true, Sight::Covered)),
+			release_deadline(&cfg, &idle(true, true)),
 			Some(since + Duration::from_mins(30))
 		);
-		let mut owed = idle(false, Sight::Covered);
+		let mut owed = idle(false, true);
 		owed.bench_busy = true;
 		assert!(
 			release_deadline(&cfg, &owed).is_none(),
 			"a rating in flight"
 		);
-		let mut unshown = idle(false, Sight::Covered);
+		let mut unshown = idle(false, true);
 		unshown.revealed = false;
 		assert!(
 			release_deadline(&cfg, &unshown).is_none(),
@@ -10909,89 +10936,127 @@ mod tests {
 			idle_release_min: 240,
 			..config::Settings::default()
 		};
-		let blanks = |focused, sight| Idle {
+		let blanks = |focused, hidden| Idle {
 			focused,
-			sight,
+			hidden,
 			revealed: true,
 			bench_busy: false,
 			since,
 			keeps_picture: false,
 		};
 		assert!(
-			release_deadline(&cfg, &blanks(false, Sight::Shown)).is_none(),
+			release_deadline(&cfg, &blanks(false, false)).is_none(),
 			"unfocused in view"
 		);
-		assert!(release_deadline(&cfg, &blanks(true, Sight::Shown)).is_none());
+		assert!(release_deadline(&cfg, &blanks(true, false)).is_none());
 		assert_eq!(
-			release_deadline(&cfg, &blanks(false, Sight::Covered)),
+			release_deadline(&cfg, &blanks(false, true)),
 			Some(since + Duration::from_mins(30))
 		);
 	}
 
-	// A minimized window lets go after its own wait, a minute by default,
-	// rather than the half hour a covered one waits. Whatever else the desktop
-	// says of it, and on Windows a window with no area, is minimized.
-	// Test ID: ErmpLNm
+	// Off since the minimized wait was taken out again (2026100513581813): a
+	// minimized window takes the hidden wait, now a minute by default.
+	// `a_minimized_window_takes_the_hidden_wait` covers it.
+	// // A minimized window lets go after its own wait, a minute by default,
+	// // rather than the half hour a covered one waits. Whatever else the desktop
+	// // says of it, and on Windows a window with no area, is minimized.
+	// // Test ID: ErmpLNm
+	// #[test]
+	// fn a_minimized_window_waits_its_own_time() {
+	// 	let since = Instant::now();
+	// 	let defaults = config::Settings::default();
+	// 	assert_eq!(defaults.idle_release_minimized_min, 1);
+	// 	assert_eq!(
+	// 		defaults.idle_release_hidden_min, 30,
+	// 		"covered keeps its wait"
+	// 	);
+	// 	let cfg = config::Settings {
+	// 		idle_release: true,
+	// 		idle_release_minimized_min: 3,
+	// 		idle_release_hidden_min: 30,
+	// 		idle_release_min: 240,
+	// 		..defaults
+	// 	};
+	// 	let idle = |focused, sight, keeps_picture| Idle {
+	// 		focused,
+	// 		sight,
+	// 		revealed: true,
+	// 		bench_busy: false,
+	// 		since,
+	// 		keeps_picture,
+	// 	};
+	// 	for focused in [false, true] {
+	// 		for keeps_picture in [false, true] {
+	// 			assert_eq!(
+	// 				release_deadline(&cfg, &idle(focused, Sight::Minimized, keeps_picture)),
+	// 				Some(since + Duration::from_mins(3)),
+	// 				"focused {focused}, keeps picture {keeps_picture}"
+	// 			);
+	// 		}
+	// 	}
+	// 	assert_eq!(
+	// 		release_deadline(&cfg, &idle(false, Sight::Covered, true)),
+	// 		Some(since + Duration::from_mins(30))
+	// 	);
+	// 	let mut owed = idle(false, Sight::Minimized, true);
+	// 	owed.bench_busy = true;
+	// 	assert!(
+	// 		release_deadline(&cfg, &owed).is_none(),
+	// 		"a rating in flight"
+	// 	);
+	// 	let off = config::Settings {
+	// 		idle_release: false,
+	// 		..cfg
+	// 	};
+	// 	assert!(release_deadline(&off, &idle(false, Sight::Minimized, true)).is_none());
+	//
+	// 	// what the window reports, as (occluded, no area, minimized)
+	// 	let sight =
+	// 		|occluded, no_area, minimized| window_sight(true, occluded, no_area, || minimized);
+	// 	assert_eq!(
+	// 		sight(true, false, true),
+	// 		Sight::Minimized,
+	// 		"minimized and occluded"
+	// 	);
+	// 	assert_eq!(sight(false, true, false), Sight::Minimized, "no area");
+	// 	assert_eq!(sight(true, false, false), Sight::Covered);
+	// 	assert_eq!(sight(false, false, false), Sight::Shown);
+	// }
+
+	// A minimized window is out of sight like a covered one and takes the same
+	// wait, a minute by default, whatever else holds the window. Whether the
+	// desktop calls it covered as well makes no difference.
+	// Test ID: ErsV4Jy
 	#[test]
-	fn a_minimized_window_waits_its_own_time() {
+	fn a_minimized_window_takes_the_hidden_wait() {
 		let since = Instant::now();
-		let defaults = config::Settings::default();
-		assert_eq!(defaults.idle_release_minimized_min, 1);
-		assert_eq!(
-			defaults.idle_release_hidden_min, 30,
-			"covered keeps its wait"
-		);
 		let cfg = config::Settings {
 			idle_release: true,
-			idle_release_minimized_min: 3,
-			idle_release_hidden_min: 30,
-			idle_release_min: 240,
-			..defaults
+			..config::Settings::default()
 		};
-		let idle = |focused, sight, keeps_picture| Idle {
-			focused,
-			sight,
-			revealed: true,
-			bench_busy: false,
-			since,
-			keeps_picture,
-		};
-		for focused in [false, true] {
-			for keeps_picture in [false, true] {
-				assert_eq!(
-					release_deadline(&cfg, &idle(focused, Sight::Minimized, keeps_picture)),
-					Some(since + Duration::from_mins(3)),
-					"focused {focused}, keeps picture {keeps_picture}"
-				);
+		assert_eq!(cfg.idle_release_hidden_min, 1);
+		for occluded in [false, true] {
+			let hidden = window_hidden(true, occluded, false, || true);
+			assert!(hidden, "minimized, occluded {occluded}");
+			for focused in [false, true] {
+				for keeps_picture in [false, true] {
+					let idle = Idle {
+						focused,
+						hidden,
+						revealed: true,
+						bench_busy: false,
+						since,
+						keeps_picture,
+					};
+					assert_eq!(
+						release_deadline(&cfg, &idle),
+						Some(since + Duration::from_mins(1)),
+						"focused {focused}, keeps picture {keeps_picture}"
+					);
+				}
 			}
 		}
-		assert_eq!(
-			release_deadline(&cfg, &idle(false, Sight::Covered, true)),
-			Some(since + Duration::from_mins(30))
-		);
-		let mut owed = idle(false, Sight::Minimized, true);
-		owed.bench_busy = true;
-		assert!(
-			release_deadline(&cfg, &owed).is_none(),
-			"a rating in flight"
-		);
-		let off = config::Settings {
-			idle_release: false,
-			..cfg
-		};
-		assert!(release_deadline(&off, &idle(false, Sight::Minimized, true)).is_none());
-
-		// what the window reports, as (occluded, no area, minimized)
-		let sight =
-			|occluded, no_area, minimized| window_sight(true, occluded, no_area, || minimized);
-		assert_eq!(
-			sight(true, false, true),
-			Sight::Minimized,
-			"minimized and occluded"
-		);
-		assert_eq!(sight(false, true, false), Sight::Minimized, "no area");
-		assert_eq!(sight(true, false, false), Sight::Covered);
-		assert_eq!(sight(false, false, false), Sight::Shown);
 	}
 
 	// A Windows restore stops answering minimized a moment before the size
@@ -11001,14 +11066,11 @@ mod tests {
 	// Test ID: Erksiin
 	#[test]
 	fn a_window_with_no_area_is_hidden_whatever_the_minimized_answer() {
-		let hidden = |revealed, occluded, no_area, minimized| {
-			window_sight(revealed, occluded, no_area, || minimized).hidden()
-		};
-		assert!(hidden(true, false, true, false));
-		assert!(!hidden(true, false, false, false));
-		assert!(hidden(true, false, false, true));
-		assert!(hidden(true, true, false, false));
-		assert!(!hidden(false, true, true, true), "not shown yet");
+		assert!(window_hidden(true, false, true, || false));
+		assert!(!window_hidden(true, false, false, || false));
+		assert!(window_hidden(true, false, false, || true));
+		assert!(window_hidden(true, true, false, || false));
+		assert!(!window_hidden(false, true, true, || true), "not shown yet");
 	}
 
 	// A program printing in a minimized window held its device for good, since
@@ -11850,6 +11912,53 @@ mod tests {
 		let mut zoomed = TextCtx::new_cpu(1.5);
 		assert_eq!(label_frame(&mut labels, &tabs, &renamed, &mut zoomed), 3);
 		assert_eq!(label_frame(&mut labels, &tabs, &renamed, &mut zoomed), 0);
+	}
+
+	// A new tab goes just right of the active one and becomes active, or at
+	// the end with the setting off. Every tab past it moves along one, so a
+	// label kept by position has to follow its tab, not stay in the slot.
+	// Test ID: ErsV4PO
+	#[test]
+	fn a_new_tab_goes_next_to_the_current_one() {
+		use super::{active_after_close, insert_tab};
+		let mut list = vec![0, 1, 2, 3];
+		assert_eq!(insert_tab(&mut list, 1, 9, true), 2);
+		assert_eq!(list, [0, 1, 9, 2, 3]);
+		assert_eq!(insert_tab(&mut list, 4, 8, true), 5, "from the last tab");
+		assert_eq!(list, [0, 1, 9, 2, 3, 8]);
+		assert_eq!(insert_tab(&mut list, 0, 7, false), 6, "setting off");
+		assert_eq!(list, [0, 1, 9, 2, 3, 8, 7]);
+		let mut one = vec![0];
+		assert_eq!(insert_tab(&mut one, 0, 1, true), 1);
+
+		// closing: of four left, as (active, closed, opener)
+		assert_eq!(active_after_close(2, 0, 4, None), 1, "an earlier tab");
+		assert_eq!(active_after_close(2, 3, 4, None), 2, "a later tab");
+		assert_eq!(active_after_close(2, 2, 4, None), 2, "the one in its place");
+		assert_eq!(active_after_close(4, 4, 4, None), 3, "the last");
+		assert_eq!(active_after_close(2, 2, 4, Some(1)), 1, "back to its maker");
+		assert_eq!(active_after_close(3, 2, 4, Some(1)), 2, "not the shown one");
+
+		let mut text = TextCtx::new_cpu(1.0);
+		let settings = label_settings("Work shell");
+		let mut tabs: Vec<_> = (0..4).map(label_tab).collect();
+		let mut labels = super::TabLabels::default();
+		label_frame(&mut labels, &tabs, &settings, &mut text);
+		let revision = labels.revision;
+		assert_eq!(insert_tab(&mut tabs, 1, label_tab(9), true), 2);
+		assert_eq!(
+			label_frame(&mut labels, &tabs, &settings, &mut text),
+			3,
+			"the new tab and the two it moved along"
+		);
+		assert_ne!(labels.revision, revision);
+		for (index, tab) in tabs.iter().enumerate() {
+			assert_eq!(
+				labels.forms(index),
+				super::label_forms_from(tab, &settings),
+				"tab {index}"
+			);
+		}
 	}
 
 	// The tip's lines are a table in the terminal font, measured line by line.

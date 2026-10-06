@@ -91,6 +91,9 @@ pub struct TabSpec {
 	pub title: Option<String>,
 	pub style: Style,
 	pub panes: Vec<PaneSpec>,
+	// the tab that was current when this one was made, as an index into
+	// `Cli::tabs`, which stays in the order they were made (see `tab_order`)
+	pub opened_from: usize,
 }
 
 impl TabSpec {
@@ -101,6 +104,7 @@ impl TabSpec {
 			title: None,
 			style: Style::default(),
 			panes: vec![PaneSpec::new(None, true)],
+			opened_from: 0,
 		}
 	}
 }
@@ -371,7 +375,9 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 				// optional handle comes only from `=value` (never eats the next flag)
 				ensure_first_tab(&mut cli); // implicit first tab always exists
 				let id = inline.filter(|s| !s.is_empty());
-				cli.tabs.push(TabSpec::new(id));
+				let mut tab = TabSpec::new(id);
+				tab.opened_from = cur_tab.unwrap_or(0);
+				cli.tabs.push(tab);
 				cur_tab = Some(cli.tabs.len() - 1);
 				cur_pane = 0;
 				cli.hierarchical = true;
@@ -684,6 +690,24 @@ pub fn only_config_args<I: IntoIterator<Item = String>>(args: I) -> bool {
 		}
 	}
 	true
+}
+
+impl Cli {
+	// The strip, as indexes into `tabs`. A `--new-tab` goes where a new tab
+	// made in the window would: just right of the current tab with `beside`,
+	// else at the end. They differ only after a `--tab=` picked an earlier one.
+	pub fn tab_order(&self, beside: bool) -> Vec<usize> {
+		let mut order: Vec<usize> = Vec::with_capacity(self.tabs.len());
+		for (index, tab) in self.tabs.iter().enumerate() {
+			let at = order
+				.iter()
+				.position(|&made| made == tab.opened_from)
+				.filter(|_| beside && index > 0)
+				.map_or(order.len(), |from| from + 1);
+			order.insert(at, index);
+		}
+		order
+	}
 }
 
 fn ensure_first_tab(cli: &mut Cli) {
@@ -1330,6 +1354,25 @@ mod tests {
 		assert!(p("--tab=0").hierarchical);
 		assert!(bad("--tab"));
 		assert!(bad("--new-tab=a --tab=b"));
+	}
+
+	// Test ID: ErsWrcn
+	#[test]
+	fn a_new_tab_after_a_tab_selection_goes_next_to_it() {
+		let c = p("--new-tab=a --new-tab=b --tab=main --new-tab=c --tab=a --new-tab=d");
+		let ids = |order: Vec<usize>| -> Vec<String> {
+			order
+				.into_iter()
+				.map(|i| c.tabs[i].id.clone().unwrap_or_else(|| "main".into()))
+				.collect()
+		};
+		assert_eq!(ids(c.tab_order(true)), ["main", "c", "a", "d", "b"]);
+		assert_eq!(ids(c.tab_order(false)), ["main", "a", "b", "c", "d"]);
+		// one after another is the same order either way
+		let c = p("--new-tab=a --new-tab=b --new-tab=c");
+		assert_eq!(c.tab_order(true), c.tab_order(false));
+		assert_eq!(p("--title T").tab_order(true), Vec::<usize>::new());
+		assert_eq!(p("--tab=main").tab_order(true), [0]);
 	}
 
 	// Test ID: Er2UJeW

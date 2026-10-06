@@ -270,7 +270,6 @@ macro_rules! keys_of {
 			| Key::MinimapWidth
 			| Key::Columns
 			| Key::Rows
-			| Key::IdleMinimizedMin
 			| Key::IdleHiddenMin
 			| Key::IdleMin
 		] $($rest)*)
@@ -290,6 +289,7 @@ macro_rules! keys_of {
 			| Key::RememberSize
 			| Key::RememberPerMonitor
 			| Key::RememberMaximized
+			| Key::NewTabNextToCurrent
 			| Key::TabShowsTitle
 			| Key::TabShowsShell
 			| Key::TabShowsProgram
@@ -436,7 +436,6 @@ fn slider_of(settings: &Settings, key: Key) -> f32 {
 		Key::MinimapWidth => settings.minimap_width,
 		Key::Columns => settings.columns as f32,
 		Key::Rows => settings.rows as f32,
-		Key::IdleMinimizedMin => settings.idle_release_minimized_min as f32,
 		Key::IdleHiddenMin => settings.idle_release_hidden_min as f32,
 		Key::IdleMin => settings.idle_release_min as f32,
 		keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => 0.0,
@@ -467,6 +466,7 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::RememberSize => settings.remember_size,
 		Key::RememberPerMonitor => settings.remember_per_monitor,
 		Key::RememberMaximized => settings.remember_maximized,
+		Key::NewTabNextToCurrent => settings.new_tab_beside,
 		Key::TabShowsTitle => settings.tab_shows_title,
 		Key::TabShowsShell => settings.tab_shows_shell,
 		Key::TabShowsProgram => settings.tab_shows_program,
@@ -3953,9 +3953,6 @@ impl SettingsDialog {
 			Key::MinimapWidth => settings.minimap_width = value,
 			Key::Columns => settings.columns = value.round().max(1.0) as usize,
 			Key::Rows => settings.rows = value.round().max(1.0) as usize,
-			Key::IdleMinimizedMin => {
-				settings.idle_release_minimized_min = value.round().max(1.0) as usize;
-			}
 			Key::IdleHiddenMin => {
 				settings.idle_release_hidden_min = value.round().max(1.0) as usize;
 			}
@@ -4086,6 +4083,7 @@ impl SettingsDialog {
 			Key::RememberSize => self.edited.remember_size = on,
 			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,
+			Key::NewTabNextToCurrent => self.edited.new_tab_beside = on,
 			Key::TabShowsTitle => self.edited.tab_shows_title = on,
 			Key::TabShowsShell => self.edited.tab_shows_shell = on,
 			Key::TabShowsProgram => self.edited.tab_shows_program = on,
@@ -11997,7 +11995,6 @@ mod tests {
 			Key::WheelLines,
 			Key::Columns,
 			Key::Rows,
-			Key::IdleMinimizedMin,
 			Key::IdleHiddenMin,
 			Key::IdleMin,
 		];

@@ -44,7 +44,7 @@ What a window costs while in use is in the [Reducing resources](20261004-182255_
 
 - "Free resources when idle" on the Window tab, on by default, lets an unused window give its GPU device back.
 	- A window counts as unused with no input, no focus change and no output from any pane while it can be seen.
-	- It lets go after "Minutes when minimized", 1 by default, if minimized, after "Minutes when hidden", 30 by default, if covered, and after "Minutes otherwise", 240 by default, if only unfocused.
+	- It lets go after "Minutes when hidden", 1 by default, if minimized or covered, and after "Minutes otherwise", 240 by default, if only unfocused.
 	- On Windows with Transparency on, a window in view never lets go, since nothing would be left on screen without its device. It waits until it is minimized.
 	- It takes the device back on any sign of life: a key, a click, the pointer entering, focus, being shown, a shell printing while it can be seen, or the desktop asking for a repaint.
 	- It never lets go while a dialog is open or a hardware rating is due or running.

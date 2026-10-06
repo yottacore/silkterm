@@ -518,14 +518,14 @@ pub struct Settings {
 	pub remember_per_monitor: bool, // ...and keep one for each monitor (monitor_sizes)
 	pub remember_maximized: bool, // launch maximized if the last window closed that way
 	pub hide_single_tab: bool, // hide the tab bar while only one tab is open
+	pub new_tab_beside: bool, // a new tab opens right of the active one, else at the end
 	pub tab_shows_title: bool, // let a program's own title name the tab (tabtitle::Parts)
 	pub tab_shows_shell: bool, // parts a tab's own text is made of
 	pub tab_shows_program: bool,
 	pub tab_shows_directory: bool,
 	pub title_shows_tab: bool, // let the window title fall back to what the tab says
 	pub idle_release: bool,    // let the GPU device go after a long idle (app.rs, release_gpu)
-	pub idle_release_minimized_min: usize, // ...after this long minimized
-	pub idle_release_hidden_min: usize, // ...or this long covered
+	pub idle_release_hidden_min: usize, // ...after this long minimized or covered
 	pub idle_release_min: usize, // ...or this long merely unfocused and quiet
 	pub software_rendering: bool, // draw on the CPU even with a graphics card (gfx::wanted)
 	pub tab_regular_pct: f32,  // a tab's ordinary width, as a % of the window's width
@@ -727,14 +727,14 @@ impl Default for Settings {
 			remember_per_monitor: true,
 			remember_maximized: false,
 			hide_single_tab: false,
+			new_tab_beside: true,
 			tab_shows_shell: true,
 			tab_shows_program: true,
 			tab_shows_title: true,
 			tab_shows_directory: true,
 			title_shows_tab: true,
 			idle_release: true,
-			idle_release_minimized_min: 1,
-			idle_release_hidden_min: 30,
+			idle_release_hidden_min: 1,
 			idle_release_min: 240,
 			software_rendering: false,
 			tab_regular_pct: 10.0,
@@ -2380,6 +2380,9 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	if edited.hide_single_tab != orig.hide_single_tab {
 		doc.put_bool("window.hide_single_tab", edited.hide_single_tab);
 	}
+	if edited.new_tab_beside != orig.new_tab_beside {
+		doc.put_bool("window.new_tab_next_to_current", edited.new_tab_beside);
+	}
 	if edited.tab_shows_shell != orig.tab_shows_shell {
 		doc.put_bool("window.tab_shows_shell", edited.tab_shows_shell);
 	}
@@ -2397,12 +2400,6 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	}
 	if edited.idle_release != orig.idle_release {
 		doc.put_bool("window.idle_release", edited.idle_release);
-	}
-	if edited.idle_release_minimized_min != orig.idle_release_minimized_min {
-		doc.put_int(
-			"window.idle_release_minimized_min",
-			edited.idle_release_minimized_min as i64,
-		);
 	}
 	if edited.idle_release_hidden_min != orig.idle_release_hidden_min {
 		doc.put_int(
@@ -2669,13 +2666,13 @@ struct RawConfig {
 	remember_per_monitor: Option<bool>,
 	remember_maximized: Option<bool>,
 	hide_single_tab: Option<bool>,
+	new_tab_beside: Option<bool>,
 	tab_shows_shell: Option<bool>,
 	tab_shows_program: Option<bool>,
 	tab_shows_title: Option<bool>,
 	tab_shows_directory: Option<bool>,
 	title_shows_tab: Option<bool>,
 	idle_release: Option<bool>,
-	idle_release_minimized_min: Option<usize>,
 	idle_release_hidden_min: Option<usize>,
 	idle_release_min: Option<usize>,
 	software_rendering: Option<bool>,
@@ -3126,13 +3123,13 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		remember_per_monitor: reader.read_bool("window.remember_per_monitor"),
 		remember_maximized: reader.read_bool("window.remember_maximized"),
 		hide_single_tab: reader.read_bool("window.hide_single_tab"),
+		new_tab_beside: reader.read_bool("window.new_tab_next_to_current"),
 		tab_shows_shell: reader.read_bool("window.tab_shows_shell"),
 		tab_shows_program: reader.read_bool("window.tab_shows_program"),
 		tab_shows_title: reader.read_bool("window.tab_shows_title"),
 		tab_shows_directory: reader.read_bool("window.tab_shows_directory"),
 		title_shows_tab: reader.read_bool("window.title_shows_tab"),
 		idle_release: reader.read_bool("window.idle_release"),
-		idle_release_minimized_min: reader.read_usize("window.idle_release_minimized_min"),
 		idle_release_hidden_min: reader.read_usize("window.idle_release_hidden_min"),
 		idle_release_min: reader.read_usize("window.idle_release_min"),
 		software_rendering: reader.read_bool("window.software_rendering"),
@@ -3750,17 +3747,13 @@ fn resolve(raw: RawConfig) -> Settings {
 		remember_per_monitor: raw.remember_per_monitor.unwrap_or(d.remember_per_monitor),
 		remember_maximized: raw.remember_maximized.unwrap_or(d.remember_maximized),
 		hide_single_tab: raw.hide_single_tab.unwrap_or(d.hide_single_tab),
+		new_tab_beside: raw.new_tab_beside.unwrap_or(d.new_tab_beside),
 		tab_shows_shell: raw.tab_shows_shell.unwrap_or(d.tab_shows_shell),
 		tab_shows_program: raw.tab_shows_program.unwrap_or(d.tab_shows_program),
 		tab_shows_title: raw.tab_shows_title.unwrap_or(d.tab_shows_title),
 		tab_shows_directory: raw.tab_shows_directory.unwrap_or(d.tab_shows_directory),
 		title_shows_tab: raw.title_shows_tab.unwrap_or(d.title_shows_tab),
 		idle_release: raw.idle_release.unwrap_or(d.idle_release),
-		idle_release_minimized_min: numi(
-			raw.idle_release_minimized_min,
-			d.idle_release_minimized_min,
-			limits::IDLE_MIN,
-		),
 		idle_release_hidden_min: numi(
 			raw.idle_release_hidden_min,
 			d.idle_release_hidden_min,
@@ -4266,11 +4259,15 @@ const CONFIG_RENAMES: &[(&str, &str)] = &[
 // `shell.default` is here because the list itself now names the default (its
 // top active entry). Adoption runs BEFORE this drops the line - see
 // `adopt_default_shell` - so the value is moved into the list, not discarded.
+// window.idle_release_minimized_min was a wait of its own for a minimized
+// window for about a day. A minimized window takes the hidden wait again, and
+// a value set for the one would be a surprise in the other, so it goes.
 const CONFIG_REMOVED: &[&str] = &[
 	"scroll.tau_ms",
 	"scroll.ease_in",
 	"shell.default",
 	"text.dark_on_light_gamma",
+	"window.idle_release_minimized_min",
 ];
 
 // Defaults that changed, as (path, the value that used to be the default). An
@@ -4327,6 +4324,8 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("shell.copy_on_select", "false  ## Default"),
 	// so did letting an idle window's GPU device go
 	("window.idle_release", "false  ## Default"),
+	// a minimized or covered window waited half an hour
+	("window.idle_release_hidden_min", "30  ## Default"),
 	// Seven lines named an example rather than the default they were marked
 	// with, so uncommenting one changed what loaded. The values below are the
 	// examples they used to carry.
@@ -7269,6 +7268,9 @@ window:
 
 	# hide_single_tab: false  ## Default
 
+	## Open a new tab just right of the one in front. Off puts it at the end.
+	# new_tab_next_to_current: true  ## Default
+
 	## What a tab says, and whether the window title falls back to it. The
 	## first line lets a title the running program asked for name the tab,
 	## outranked only by a name typed on the tab itself. The three after it
@@ -7284,13 +7286,12 @@ window:
 
 	## Let the graphics card's memory go after the window has sat unused, and
 	## take it back the moment the window is used again. The waits are in
-	## minutes: the first for a window that is minimized, the second for one
-	## that is covered, the third for one that is only unfocused with nothing
-	## printing. On Windows with transparency on, a window still on screen is
-	## never let go, since it would turn black.
+	## minutes: the first for a window that is minimized or covered, the
+	## second for one that is only unfocused with nothing printing. On Windows
+	## with transparency on, a window still on screen is never let go, since
+	## it would turn black.
 	# idle_release: true  ## Default
-	# idle_release_minimized_min: 1  ## Default
-	# idle_release_hidden_min: 30  ## Default
+	# idle_release_hidden_min: 1  ## Default
 	# idle_release_min: 240  ## Default
 
 	## Draw on the processor rather than the graphics card. Slower, but uses
@@ -10584,7 +10585,6 @@ mod tests {
 			("window.rows", limits::GRID),
 			("window.remembered_columns", limits::GRID),
 			("window.remembered_rows", limits::GRID),
-			("window.idle_release_minimized_min", limits::IDLE_MIN),
 			("window.idle_release_hidden_min", limits::IDLE_MIN),
 			("window.idle_release_min", limits::IDLE_MIN),
 		] {
@@ -10594,7 +10594,6 @@ mod tests {
 				"window.rows" => s.rows,
 				"window.remembered_columns" => s.remembered_columns,
 				"window.remembered_rows" => s.remembered_rows,
-				"window.idle_release_minimized_min" => s.idle_release_minimized_min,
 				"window.idle_release_hidden_min" => s.idle_release_hidden_min,
 				"window.idle_release_min" => s.idle_release_min,
 				other => panic!("{other} is not in the reader"),
@@ -12642,42 +12641,103 @@ mod tests {
 		assert!(resolve(read_raw("window.software_rendering: true\n", p).0).software_rendering);
 	}
 
-	// The minimized wait came after the other two, so a file written before
-	// it has the idle paragraph without it. It goes in beside them, first of
-	// the waits, and the paragraph is not written twice.
-	// Test ID: ErmrbFB
-	#[test]
-	fn an_existing_config_learns_the_minimized_wait() {
-		let p = std::path::Path::new("test.shcl");
-		assert_eq!(resolve(read_raw("", p).0).idle_release_minimized_min, 1);
-		let set = "window.idle_release_minimized_min: 5\n";
-		assert_eq!(resolve(read_raw(set, p).0).idle_release_minimized_min, 5);
+	// Off since the minimized wait was taken out again (2026100513581813).
+	// `an_existing_config_loses_the_minimized_wait` covers the line now.
+	// // The minimized wait came after the other two, so a file written before
+	// // it has the idle paragraph without it. It goes in beside them, first of
+	// // the waits, and the paragraph is not written twice.
+	// // Test ID: ErmrbFB
+	// #[test]
+	// fn an_existing_config_learns_the_minimized_wait() {
+	// 	let p = std::path::Path::new("test.shcl");
+	// 	assert_eq!(resolve(read_raw("", p).0).idle_release_minimized_min, 1);
+	// 	let set = "window.idle_release_minimized_min: 5\n";
+	// 	assert_eq!(resolve(read_raw(set, p).0).idle_release_minimized_min, 5);
+	//
+	// 	let path = crate::testdir::run_dir().join("silkterm_minimized_wait_test.shcl");
+	// 	let before = "window:\n\
+	// 		\t## Let the graphics card's memory go after the window has sat unused, and\n\
+	// 		\t# idle_release: true  ## Default\n\
+	// 		\t# idle_release_hidden_min: 30  ## Default\n\
+	// 		\t# idle_release_min: 240  ## Default\n";
+	// 	std::fs::write(&path, before).unwrap();
+	// 	backfill_config(&path);
+	// 	let out = std::fs::read_to_string(&path).unwrap();
+	// 	let _ = std::fs::remove_file(&path);
+	// 	let at = |line: &str| {
+	// 		out.find(line)
+	// 			.unwrap_or_else(|| panic!("no {line:?} in:\n{out}"))
+	// 	};
+	// 	let minimized = at("\n\t# idle_release_minimized_min: 1  ## Default\n");
+	// 	assert!(
+	// 		at("\t# idle_release: true") < minimized
+	// 			&& minimized < at("\t# idle_release_hidden_min: 30"),
+	// 		"out of order:\n{out}"
+	// 	);
+	// 	assert_eq!(
+	// 		out.matches("Let the graphics card's memory go").count(),
+	// 		1,
+	// 		"{out}"
+	// 	);
+	// }
 
-		let path = crate::testdir::run_dir().join("silkterm_minimized_wait_test.shcl");
-		let before = "window:\n\
-			\t## Let the graphics card's memory go after the window has sat unused, and\n\
+	// The minimized wait had its own line for about a day. It leaves a file
+	// whether set or not, and the hidden wait's old commented 30 becomes the
+	// new 1. A hidden wait the user set stays as set.
+	// Test ID: ErsV4Ak
+	#[test]
+	fn an_existing_config_loses_the_minimized_wait() {
+		let p = std::path::Path::new("test.shcl");
+		let d = resolve(read_raw("", p).0);
+		assert_eq!(d.idle_release_hidden_min, 1);
+		assert_eq!(Settings::default().idle_release_hidden_min, 1);
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "window.idle_release_hidden_min").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# idle_release_hidden_min: 1  ## Default")
+		);
+		assert!(!default_config().contains("minimized_min"));
+
+		let since_minidle = "window:\n\
 			\t# idle_release: true  ## Default\n\
+			\t# idle_release_minimized_min: 1  ## Default\n\
 			\t# idle_release_hidden_min: 30  ## Default\n\
 			\t# idle_release_min: 240  ## Default\n";
-		std::fs::write(&path, before).unwrap();
-		backfill_config(&path);
-		let out = std::fs::read_to_string(&path).unwrap();
-		let _ = std::fs::remove_file(&path);
-		let at = |line: &str| {
-			out.find(line)
-				.unwrap_or_else(|| panic!("no {line:?} in:\n{out}"))
-		};
-		let minimized = at("\n\t# idle_release_minimized_min: 1  ## Default\n");
+		let out = migrate_config_text(since_minidle).expect("the retired line should go");
+		assert!(!out.contains("minimized_min"), "{out}");
 		assert!(
-			at("\t# idle_release: true") < minimized
-				&& minimized < at("\t# idle_release_hidden_min: 30"),
-			"out of order:\n{out}"
-		);
-		assert_eq!(
-			out.matches("Let the graphics card's memory go").count(),
-			1,
+			out.contains("\t# idle_release_hidden_min: 1  ## Default\n"),
 			"{out}"
 		);
+		assert!(
+			out.contains("\t# idle_release_min: 240  ## Default\n"),
+			"{out}"
+		);
+
+		let set = "window:\n\
+			\tidle_release_minimized_min: 5\n\
+			\tidle_release_hidden_min: 30\n";
+		let out = migrate_config_text(set).expect("the retired line should go");
+		assert_eq!(out, "window:\n\tidle_release_hidden_min: 30\n");
+		assert_eq!(resolve(read_raw(&out, p).0).idle_release_hidden_min, 30);
+	}
+
+	// Test ID: ErsV4Fc
+	#[test]
+	fn new_tabs_go_next_to_current_unless_turned_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(resolve(read_raw("", p).0).new_tab_beside, "on by default");
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "window.new_tab_next_to_current").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# new_tab_next_to_current: true  ## Default")
+		);
+		let off = "window:\n\tnew_tab_next_to_current: false\n";
+		assert!(!resolve(read_raw(off, p).0).new_tab_beside);
 	}
 
 	// Test ID: Em1S9yq
