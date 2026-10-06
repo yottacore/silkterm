@@ -34,31 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Tabs: a setting for new tabs to open next to the current one
-	- ID: 2026100513581812
-	- Type: Feature
-	- Status: Waiting on signoff
-	- Priority: High
-	- Opened: 20261005-135818
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- "New tabs go next to current", on by default.
-		- Off puts a new tab at the end, as now.
-	- Progress log:
-		- 20261005: "New tabs go next to current" is on the Window tab, under the two tab widths. The config key is `window.new_tab_next_to_current`, on by default. Off puts a new tab at the end as before.
-		- New tab and the shells under it, in the menus, and the New tab hotkey all make a tab the same way, macOS menus included. Each window is its own process, so nothing else adds a tab to a running window.
-		- A command-line layout follows the same rule. `--new-tab` after `--tab=` picked an earlier tab goes right of that one. One `--new-tab` after another comes out the same either way. `--open` runs in whichever tab the layout makes.
-		- A name typed on a tab moves with its tab, and so do the kept labels. A held close button, the double-click and the tab's flyover are dropped when a new tab moves the others along, since they are kept by position.
-		- Closing a tab made next to the current one goes back to the tab it was made from, not the one on its right. Only with the setting on. Without that, a new tab closed right away would leave a different tab in front than before. Question: keep it?
-	- Verified: unit suite, fmt, and clippy on the Linux, Windows and macOS targets. In a real window on Linux: a layout with `--tab=main --new-tab` put the new tab second. Ctrl+Shift+T put the new tab right of the current one with the setting on, and at the end with it off. A renamed tab kept its name across an insert. Closing the new tab went back to the tab it came from.
-	- Swept: every place a tab is added (`new_tab_with`, `build_layout`), and every state kept by tab position: the rename, the close button, the double-click, the hover and its flyover, the kept labels, the shaped title cache, and the strip's paging.
-	- Branch: tabnext
-	- Commit: 75ebca3
-	- Test case: ErsV4PO `a_new_tab_goes_next_to_the_current_one` (placement, the kept labels, and the tab shown after a close), ErsWrcn `a_new_tab_after_a_tab_selection_goes_next_to_it` (the command line), ErsV4Fc `new_tabs_go_next_to_current_unless_turned_off`. The row is covered by `every_row_survives_a_save_and_a_relaunch`. The first two were seen failing with the setting ignored, and the first with the way back to the maker taken out.
-
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
@@ -826,6 +801,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
+- Light mode: text looks thinner than in dark mode
+	- ID: 2026100607293301
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: High
+	- Opened: 20261006-072933
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100513581810
+	- Target OS: All
+	- Requirements:
+		- Dark text on a light background looks thinner than light text on dark. Make light mode's text look as heavy as dark mode's.
+		- Raise the contrast floor a little in light mode.
+		- Then see if the light palettes from 2026100513581810 can be less dark.
+	- Notes:
+		- 20261006: From the answer on 2026100513581810's darker palettes. Thicker text may cut the need for darker colors.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -1342,6 +1334,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
 
+- Tabs: a setting for new tabs to open next to the current one
+	- ID: 2026100513581812
+	- Type: Feature
+	- Status: Done
+	- Priority: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- "New tabs go next to current", on by default.
+		- Off puts a new tab at the end, as now.
+	- Progress log:
+		- 20261005: "New tabs go next to current" is on the Window tab, under the two tab widths. The config key is `window.new_tab_next_to_current`, on by default. Off puts a new tab at the end as before.
+		- New tab and the shells under it, in the menus, and the New tab hotkey all make a tab the same way, macOS menus included. Each window is its own process, so nothing else adds a tab to a running window.
+		- A command-line layout follows the same rule. `--new-tab` after `--tab=` picked an earlier tab goes right of that one. One `--new-tab` after another comes out the same either way. `--open` runs in whichever tab the layout makes.
+		- A name typed on a tab moves with its tab, and so do the kept labels. A held close button, the double-click and the tab's flyover are dropped when a new tab moves the others along, since they are kept by position.
+		- Closing a tab made next to the current one goes back to the tab it was made from, not the one on its right. Only with the setting on. Without that, a new tab closed right away would leave a different tab in front than before. Question: keep it?
+	- Decisions:
+		- 20261006: Yes, closing goes back to the tab it was made from.
+	- Verified: unit suite, fmt, and clippy on the Linux, Windows and macOS targets. In a real window on Linux: a layout with `--tab=main --new-tab` put the new tab second. Ctrl+Shift+T put the new tab right of the current one with the setting on, and at the end with it off. A renamed tab kept its name across an insert. Closing the new tab went back to the tab it came from.
+	- Swept: every place a tab is added (`new_tab_with`, `build_layout`), and every state kept by tab position: the rename, the close button, the double-click, the hover and its flyover, the kept labels, the shaped title cache, and the strip's paging.
+	- Branch: tabnext
+	- Commit: 75ebca3
+	- Test case: ErsV4PO `a_new_tab_goes_next_to_the_current_one` (placement, the kept labels, and the tab shown after a close), ErsWrcn `a_new_tab_after_a_tab_selection_goes_next_to_it` (the command line), ErsV4Fc `new_tabs_go_next_to_current_unless_turned_off`. The row is covered by `every_row_survives_a_save_and_a_relaunch`. The first two were seen failing with the setting ignored, and the first with the way back to the maker taken out.
+	- Acceptance signoff: JC, 20261006.
+	- Closed: 20261006-072933
+
 - Keep the old picture on screen while a let-go window takes the card back
 	- ID: 2026100513581814
 	- Type: Enhancement
@@ -1368,6 +1389,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 26f6ce3
 	- Test case: Ersij5t (`cicd/tests/wakepic/run.bash`, fails on the old build), Ersiipp, ErsiiuM, ErsiiyG, Ersij2D.
 	- Acceptance signoff: Self-closed: tested on Wayland, X11 and Windows. The copy's size and look are a reversible guess.
+	- Note: 20261006, the copy's size and smoothing get judged at UAT.
 	- Closed: 20261005-190956
 
 - Drop "Minutes when minimized", and make "Minutes when hidden" 1 by default
@@ -1427,6 +1449,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `light_text_is_dark_and_still_a_color` (Ers4tYC), failing on the old light palettes.
 	- Acceptance signoff: Self-closed: darker and more saturated in every light theme as asked, tests pass, dark mode pixel-identical. The exact depth is taste and easy to move.
 	- Closed: 20261005-171619
+	- Note: 20261006, the darker colors stay for now. Part of why light text looks weak is that it looks thinner than dark mode's. Thicker text and a slightly higher contrast floor are filed as 2026100607293301, and may let these come back up some.
 
 - Hold the wallpaper at the size it is drawn at
 	- ID: 2026100418225503
@@ -2651,6 +2674,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The scrim's ramp and function and the quad shader's six modes (`gfx::QuadMode`) are enums on the Rust side, with one place each that turns them into the number the shader reads. The dialog's quad scaling is an exhaustive match on the mode.
 		- `Cli::hierarchical()` reads the tab list. The five print-and-exit flags are one `Cli.info`, and help, syntax, about, donate, version is still the order that wins. A notice is known by its source.
 	- Note: Two hand-typed words now read one way everywhere. A theme mode in another case, such as `Light`, gave a light palette but dark dialogs and a Dark dialog row; it is light throughout now. An unknown cursor animation drew a still cursor that kept asking for frames, while the dialog showed Pulse vertical; it is Pulse vertical now, the default.
+	- Decisions:
+		- 20261006: An unknown cursor animation reading as the default is OK. The `Light` case was explained again and is open.
 	- Swept: every string match and compare of the five fields (config.rs, settings_ui.rs, app.rs, pane.rs, profile.rs, theme.rs, visibility.rs, autotheme.rs), every `params: [N, ...]` and `params[0]` test (app.rs, settings_ui.rs), the `function >= 2.5` and `< 0.5` tests in the scrim's `blur`, and every caller of `hierarchical`, the info flags and `notice` (app.rs, main.rs, dialog.rs). No script or doc names any of them. The other `String` settings are names, paths or free text. `Profile` keeps its own `parse`, case-insensitive with Max as the fallback, as before.
 	- Verified: 20261005. The full unit suite passes, and each new test fails with its mapping or rule broken. Clippy is clean for Linux, Windows, macOS and the profiling build. A 60 s soak of every fuzz target is clean. The window draws the same pixels as dev in all three modes, every scrim function and ramp, three profiles and two tabs.
 	- Branch: choices
