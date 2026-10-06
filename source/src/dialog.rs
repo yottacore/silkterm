@@ -247,7 +247,7 @@ impl DialogWin {
 		let (lines, links, size) = layout_about(&mut text, adapter);
 		let requested_size =
 			winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
-		if let Some(applied) = window.request_inner_size(requested_size) {
+		if let Some(applied) = crate::app::request_size(&window, requested_size) {
 			gfx.resize(applied.width, applied.height);
 		}
 		// mapped last, at the final size, with the transient hints already in place
@@ -292,7 +292,7 @@ impl DialogWin {
 		let (lines, links, size) = layout_notice(&mut text, paras);
 		let requested_size =
 			winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
-		if let Some(applied) = window.request_inner_size(requested_size) {
+		if let Some(applied) = crate::app::request_size(&window, requested_size) {
 			gfx.resize(applied.width, applied.height);
 		}
 		#[cfg(target_os = "linux")]
@@ -380,7 +380,7 @@ impl DialogWin {
 		};
 		dialog.set_size(w, h);
 		let requested_size = winit::dpi::PhysicalSize::new(w.ceil() as u32, h.ceil() as u32);
-		if let Some(applied) = window.request_inner_size(requested_size) {
+		if let Some(applied) = crate::app::request_size(&window, requested_size) {
 			gfx.resize(applied.width, applied.height);
 			dialog.set_size(applied.width as f32, applied.height as f32);
 		}
@@ -796,7 +796,7 @@ impl DialogWin {
 			*old_links = links;
 		}
 		let want = winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
-		if let Some(applied) = self.window.request_inner_size(want) {
+		if let Some(applied) = crate::app::request_size(&self.window, want) {
 			self.gfx.resize(applied.width, applied.height);
 		}
 	}
@@ -835,7 +835,7 @@ impl DialogWin {
 		self.snapped = false;
 		if want != now {
 			// a platform that resizes synchronously answers here and sends no Resized
-			if let Some(applied) = self.window.request_inner_size(want) {
+			if let Some(applied) = crate::app::request_size(&self.window, want) {
 				self.resize(applied.width, applied.height);
 			}
 		}
@@ -877,7 +877,7 @@ impl DialogWin {
 		let size = winit::dpi::PhysicalSize::new(want_w as u32, want_h as u32);
 		// A platform that resizes synchronously answers here and sends no Resized,
 		// so the surface and the layout have to be told from this side.
-		if let Some(applied) = self.window.request_inner_size(size) {
+		if let Some(applied) = crate::app::request_size(&self.window, size) {
 			self.gfx.resize(applied.width, applied.height);
 			if let Content::Settings(dialog) = &mut self.content {
 				dialog.set_size(applied.width as f32, applied.height as f32);
