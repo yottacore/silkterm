@@ -940,6 +940,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: clippy clean for Linux, `--features profiling`, Windows and macOS targets, `cargo doc` with private items, rustfmt, the full unit suite (1147 passed), test ID check, Python lint.
 	- Swept: every tracked `.rs`, by the gate. That includes build.rs, the diagnostics example and the two crates under cicd.
 	- Branch: pubdocs
+	- Commit: d6f5d91
 	- Acceptance signoff: Self-closed: mechanical. Comment form only, with the gate failing before and passing after.
 	- Closed: 20261005-192554
 
