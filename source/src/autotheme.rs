@@ -62,7 +62,7 @@ const MIN_CHROMA: f32 = 0.02;
 // what SilkTerm's and Pastel's cursors already are.
 const CURSOR_ROTATE: f32 = 120.0;
 
-// How many evenly spaced quantiles of the grid's luma a summary keeps.
+// How many evenly spaced quantiles of each channel a summary keeps.
 pub const SPREAD: usize = 16;
 
 // What one image is worth to the derivation. A handful of numbers, so the live
