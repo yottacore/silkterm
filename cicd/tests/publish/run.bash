@@ -138,10 +138,10 @@ fCheck "a bare -v still only shows the version" test "$(fLastMsg ver)" = "first"
 # shellcheck disable=SC2034  ## read by the sourced function
 APP_NAME=Silk stamp=20260101-000000
 # shellcheck disable=SC1090
-source <(sed -n '/^auto_msg=/,/^}/p' "${root}/cicd.bash")
-fCheck "the plan names the automatic message" grep -qF '(will prompt for message; blank = \"${auto_msg}\")' "${root}/cicd.bash"
-fCheck "the prompt does too" grep -qF 'Publish commit message (blank = \"${auto_msg}\"' "${root}/cicd.bash"
-fCheck "and its answer goes through the same choice" grep -qF 'publish_msg="$(fPublishMessage "" "" "$m")"' "${root}/cicd.bash"
+source <(sed -n '/^autoMsg=/,/^}/p' "${root}/cicd.bash")
+fCheck "the plan names the automatic message" grep -qF '(will prompt for message; blank = \"${autoMsg}\")' "${root}/cicd.bash"
+fCheck "the prompt does too" grep -qF 'Publish commit message (blank = \"${autoMsg}\"' "${root}/cicd.bash"
+fCheck "and its answer goes through the same choice" grep -qF 'publishMsg="$(fPublishMessage "" "" "$m")"' "${root}/cicd.bash"
 fCheck "a blank answer takes the automatic message" test "$(fPublishMessage "" "" "")" = "Silk CI/CD 20260101-000000"
 fCheck "a typed answer is used as typed" test "$(fPublishMessage "" "" "typed")" = "typed"
 fCheck "--message still wins" test "$(fPublishMessage "cli" "cfg" "")" = "cli"
@@ -152,11 +152,11 @@ fCheck "and that is the message committed" test "$(fLastMsg blank)" = "Silk CI/C
 
 ## The commit message is the one question. A second "Proceed? [y/N]" after it
 ## was removed; its answer would be read as the next thing on stdin.
-prompt="$(sed -n '/^if ((! assume_yes)); then$/,/^fi$/p' "${root}/cicd.bash")"
+prompt="$(sed -n '/^if ((! assumeYes)); then$/,/^fi$/p' "${root}/cicd.bash")"
 fAsk(){  ## fAsk <stdin>: the prompt block, then whatever it left unread
 	# shellcheck disable=SC2034  ## read by the lifted block
-	(assume_yes=0; publish_msg=""; GIT_PUBLISH=(x); fEcho_ResetBlankCounter(){ :; }
-		eval "${prompt}"; echo "msg=${publish_msg}"; read -r rest || true; echo "rest=${rest:-}") <<<"${1}"
+	(assumeYes=0; publishMsg=""; GIT_PUBLISH=(x); fEcho_ResetBlankCounter(){ :; }
+		eval "${prompt}"; echo "msg=${publishMsg}"; read -r rest || true; echo "rest=${rest:-}") <<<"${1}"
 }
 fCheck "the prompt block is found in cicd.bash" test -n "${prompt}"
 fCheck "a typed message is the only line read" test "$(fAsk $'typed\nn')" = $'msg=typed\nrest=n'
