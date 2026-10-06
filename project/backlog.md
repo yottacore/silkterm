@@ -804,7 +804,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Light mode: text looks thinner than in dark mode
 	- ID: 2026100607293301
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Priority: High
 	- Opened: 20261006-072933
 	- Opened by: JC
@@ -817,6 +817,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Then see if the light palettes from 2026100513581810 can be less dark.
 	- Notes:
 		- 20261006: From the answer on 2026100513581810's darker palettes. Thicker text may cut the need for darker colors.
+	- Note: the same complaint has come back several times: thin light text on 20260920 and 20260921, darker light colors on 20260929 and 20261005, and now this. Each fixed a different part of it.
+	- Progress log:
+		- Measured: with the sRGB match alone, a screen of light-mode text put down about 80% of the ink its dark-mode twin did, in every built-in theme. Pushing `text.dark_on_light` to 2.0 reached the same ink only by turning more than twice as many pixels solid.
+		- Done: light-mode text lifts its partly covered pixels before the sRGB match, with the enhanced contrast curve DirectWrite uses, at 2.2. The ends stay put, so letters keep their shapes. Light text now puts down 100% to 104% of dark mode's ink, and about as many solid pixels.
+		- Done: a glyph lighter than the gray halfway between the text and its background is left alone. The menu and tab labels in a light theme now draw exactly as they do in dark mode. Before, they got the correction too, in the wrong direction.
+		- Done: the contrast floor is a tenth higher in a light theme, 45% becoming about 50% at the default. Among the built-in colors it only moves SilkTerm's and Pastel's gray (ANSI 8) a little darker, and lightens the Matrix and Retro Amber cursor plates slightly.
+		- Left alone: the light palettes from 2026100513581810. The lift adds ink only at the edges of strokes. The solid part of a letter, which is what that item darkened, has the same color as before, so nothing measured says the colors can come back up. Whether they can is a call to make by eye.
+		- Owed: a look in a real window, the Settings dialog in a light theme included.
+	- Decisions:
+		- 20261006: thicken light-mode text with a coverage boost, a contrast curve on glyph alpha in light mode only, the way desktop text renderers darken dark-on-light text. Same font, same shapes, no layout change. Not synthetic emboldening, not a heavier font weight.
+	- Against: the themes design doc accepted that the menu and tab labels got the light-mode correction in the wrong direction. With the stronger lift that would show, so each glyph now says which side of the pair it is on.
+	- Verified: dark mode draws exactly the pixels it drew before, in all four themes, with and without a wallpaper, on Vulkan and GL. Light mode's halo moves the picture as far as before. Full unit suite, clippy and the glyphon fork's tests pass.
+	- Swept: every caller of the contrast floor goes through `Settings::min_contrast` (pane cells, link underline, cursor plate, minimap, wallpaper-derived text). The Settings dialog and the scrim's text pass share the lift through the same correction. Chrome tips are never repainted, so they keep the plain floor.
+	- Branch: lightweight
+	- Commit: 531f6c7
+	- Test case: `light_text_carries_the_ink_dark_text_does` (ErwcyUJ) and `a_light_theme_holds_text_a_little_further_off` (ErwdARW), both seen failing with the lift or the stretch taken out. In the glyphon fork, `the_contrast_boost_adds_ink_between_the_ends` and the shader text check, both seen failing on a broken mirror.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
