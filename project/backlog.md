@@ -978,15 +978,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Windows: three shell scan unit tests fail
 	- ID: 2026100612422856
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: High
 	- Opened: 20261006-124228
+	- Closed: 20261006-161306
 	- Opened by: CC
 	- Related IDs: 2026100408214203
 	- Target OS: Windows
 	- Incorrect behavior: `cargo test` on Windows fails ErkT4QH `two_versions_of_one_shell_each_show_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path` and ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`. So `cicd-win.ps1` stops at its test stage. The other 1130 pass.
 	- Expected behavior: They pass on Windows, or say why they are Unix only.
 	- Reproduced: 20261006 on b29w, at dev c4dc098's source.
+		- 20261006: again on b29w at d12bb18, with the same 3 failures.
+	- Actual cause:
+		- A test fault. All 3 tests stand in for a Mac and lean on two Unix-only rules.
+		- ErkT4QH finds the newer bash by its bare name on PATH. The Windows table does not look for bash by name, so there was only one Bash and nothing to tell apart.
+		- ErkT4Tm and ErkT4Xv expect the login shell first, with its "(no rc)" twin right under it. Windows has no login shell, so ComSpec takes its normal place in the order.
+		- The merge itself worked on Windows. ErkT4Xv got the right names there, only in another order.
+	- Actual fix:
+		- The 3 tests and their two helpers are Unix only now, with the reason beside them.
+		- A new test runs the same merge on every box with the Windows case: two MSYS2 bashes under one name. Different versions get their versions in their names, the same version is one entry at the shorter path, and a silent one keeps its name.
+	- Swept: every test of `detect_with` in shells.rs. The others pass on Windows, or were already Unix only, such as ErkT4bY, which makes real symlinks.
+	- Verified:
+		- b29w: the 3 tests failed at d12bb18. At the branch they are left out, the new test passes, and so do all 33 shells tests.
+		- The new test fails with the version merge turned off, and passes with it.
+		- Linux: the 40 shells tests pass. clippy for Linux and Windows, rustfmt and the test ID check are clean.
+		- The full Windows suite and `cicd-win.ps1` were not rerun.
+	- Branch: winshtest
+	- Commit: 47c3a53
+	- Test case: ErxsizA `two_bashes_of_one_environment_are_told_apart_or_merged`. On Windows the 3 tests failed before and are left out after, with the reason in a comment.
+	- Acceptance signoff: Self-closed: test fault, reproduced on b29w, and checked there after the fix.
 
 - Software rendering crashes on b23 with an X11 BadDrawable error
 	- ID: 2026100614510979
