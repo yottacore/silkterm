@@ -990,6 +990,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: They pass on Windows, or say why they are Unix only.
 	- Reproduced: 20261006 on b29w, at dev c4dc098's source.
 
+- Software rendering crashes on b23 with an X11 BadDrawable error
+	- ID: 2026100614510979
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261006-145109
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225504
+	- Target OS: Linux
+	- Test environment: b23, X11
+	- Steps to reproduce:
+		- Run with software rendering on b23. Exact steps not known yet.
+	- Incorrect behavior: The program panics. Output on the command line:
+		~~~text
+		SilkTerm: renderer = llvmpipe (LLVM 19.1.7, 256 bits) [Vulkan / Cpu] alpha = premultiplied
+		[2026-10-06T20:35:24Z ERROR winit::platform_impl::linux] X11 error: XError {
+		        description: "BadDrawable (invalid Pixmap or Window parameter)",
+		        error_code: 9,
+		        request_code: 149,
+		        minor_code: 4,
+		    }
+		(the same error twice more)
+		thread 'main' (313787) panicked at /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.13/src/platform_impl/linux/x11/window.rs:1276:37:
+		Failed to call XResizeWindow: XError { description: "BadDrawable (invalid Pixmap or Window parameter)", error_code: 9, request_code: 149, minor_code: 4 }
+		~~~
+	- Expected behavior: Software rendering runs like the card does, only slower.
+	- Reproduced: No.
+	- Possible cause: Request 149 is DRI3 on b23's X server, and minor 4 is FenceFromFD, which lavapipe's X11 present path sends. So lavapipe presented to a window the server no longer knew. winit only reports a queued X error at its next checked call, so XResizeWindow got the blame. A window swapped or rebuilt under a live surface would fit.
+	- Notes:
+		- Before RC1.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -1074,6 +1106,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
 			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
 			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
+
+- Settings: the four tab text toggles on one line, with one revert arrow
+	- ID: 2026100614510984
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261006-145109
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Under Tab text on the Window tab, put the toggles on one line: Program title [ ]  Shell [ ]  Program [ ]  Directory [ ]
+		- One revert arrow for all of them.
+	- Notes:
+		- 20261006: Each of the four has its own tip now, and every row today holds one setting.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
