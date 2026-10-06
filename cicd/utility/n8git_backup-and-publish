@@ -100,8 +100,8 @@ fSyntax(){  { ((doQuietly)) || ((wasShown_Syntax)); } && return; wasShown_Syntax
 fMain(){
 
 	## Settings. Symlinks are deliberately followed (no '-ol'): '../private' is itself
-	## a link in most projects, and its contents are the point of the backup. Big
-	## linked-in trees are dropped by name below instead.
+	## a link in most projects, and its contents are the point of the backup. Dir
+	## links inside the repo, and links back into the project, are dropped below.
 	local -a baseCmdArgs=(a -r0 -ep1 -rr -m3)
 	## The cicd engines export their core cap; honor it the way every other stage does.
 	[[ "${CPU_CAP:-}" =~ ^[0-9]+$ ]] && baseCmdArgs+=("-mt${CPU_CAP}")
@@ -138,6 +138,9 @@ fMain(){
 	local -r dirName_Top="$(basename "$(readlink -f "${dirPath_Top}")")"
 	local -r dirPath_Rar="${dirPath_Top}/versions"
 	local -r filePath_Rar="${dirPath_Rar}/${dirName_Top}_${serialDT}.rar"
+
+	## Validate. Before the excludes, which walk '..' for links.
+	[[ -f "${dirPath_GitProj}/.git/HEAD" ]]  ||  { fSyntax; fThrowError "Not in git project base directory."; }
 
 	## Backup excludes. Keep what would hurt to lose, drop what a command
 	## regenerates. Release builds, installers, packages, source, project docs, and
@@ -225,11 +228,13 @@ fMain(){
 	local -r filePath_Excludes="${dirPath_GitProj}/cicd/rar-excludes.conf"
 	if [[ -r "${filePath_Excludes}" ]]; then fAddRarExcludes < "${filePath_Excludes}" || return 1; fi
 	if [[ -n "${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES:-}" ]]; then fAddRarExcludes <<< "${GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES}" || return 1; fi
+	## A dir link inside the repo brings in outside data, such as asset packs
+	## linked into a game's Content, which git doesn't hold either. A link back
+	## into the project would archive the same files twice. Links beside the repo
+	## that point out of the project, like '../private', are still followed.
+	fAddLinkExcludes "${dirPath_Top}" "${dirName_GitProj}" || return 1
 	local -a cmd_Rar=(rar "${baseCmdArgs[@]}" "${filePath_Rar}" "../.")
 	local -r cmd_Rar_display="rar ${baseCmdArgs[*]}  '${filePath_Rar}'  '../.'"
-
-	## Validate
-	[[ -f "${dirPath_GitProj}/.git/HEAD" ]]  ||  { fSyntax; fThrowError "Not in git project base directory."; }
 
 	## Prompt to continue
 	if ((! doQuietly)); then
@@ -331,7 +336,7 @@ fMain(){
 		## instead of auto-merging behind the publish. A failed pull puts the
 		## stash back first: left there, the next run finds a clean tree and
 		## publishes without the work.
-		if ! git pull --ff-only; then
+		if ! fGitRemote pull --ff-only; then
 			if ((didStash)) && ! git stash pop; then
 				fThrowError "git pull --ff-only failed, and putting the stashed work back conflicted. Resolve it, then 'git stash drop'. Nothing was committed or pushed."
 				return 1
@@ -378,10 +383,10 @@ fMain(){
 	# Push only if we're ahead of the remote
 	if ! git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; then
 		fEcho; fEcho "git push -u origin HEAD ..."
-		git push -u origin HEAD
+		fGitRemote push -u origin HEAD
 	elif [[ -n "$(git log @{u}.. 2>/dev/null)" ]]; then
 		fEcho; fEcho "git push origin ..."
-		git push origin
+		fGitRemote push origin
 	fi
 
 	## Done
@@ -410,9 +415,33 @@ fAddRarExcludes(){
 	done
 :;}
 
+## Adds an exact rar exclude for each dir link under the archive root ($1) that
+## sits inside the repo (named $2) or resolves back into the root. rar matches a
+## pattern with no wildcard from the top of the archive, so 'github/a/b' leaves
+## out that one link and nothing else of the same name.
+fAddLinkExcludes(){
+	local -r dirPath_Root="$1"
+	local -r dirName_Repo="$2"
+	local rootReal=""; rootReal="$(readlink -f "${dirPath_Root}")" || { fThrowError "Can't resolve ${dirPath_Root}"; return 1; }
+	local -a linkPaths=() targetPaths=()
+	mapfile -d '' linkPaths < <(find "${dirPath_Root}/" \( -name .git -o -name versions \) -prune -o -type l -xtype d -print0)
+	((${#linkPaths[@]})) || return 0
+	mapfile -d '' targetPaths < <(realpath -z -- "${linkPaths[@]}")
+	((${#targetPaths[@]} == ${#linkPaths[@]})) || { fThrowError "Can't resolve the dir links under ${dirPath_Root}"; return 1; }
+	local -i i=0; local relPath=""
+	for ((i = 0; i < ${#linkPaths[@]}; i++)); do
+		relPath="${linkPaths[i]#"${dirPath_Root}/"}"
+		if [[ "${relPath}" == "${dirName_Repo}/"* || "${targetPaths[i]}/" == "${rootReal}/"* ]]; then baseCmdArgs+=("-x${relPath}"); fi
+	done
+:;}
+
 ## The message an unattended commit lands under. A sibling git-auto-msg.bash that
 ## knows '--suggest' writes it, so the pipeline and this script can't drift apart.
 ## Older copies of that helper don't, so they get the fallback in $1.
+## Git that talks to the remote goes through gitsby where it is installed, so the
+## pull and push use the key and account the repo belongs to. Plain git without it.
+fGitRemote(){ if command -v gitsby >/dev/null 2>&1; then gitsby raw git "$@"; else git "$@"; fi; }
+
 fAutoMessage(){
 	local -r helper="${meDir}/git-auto-msg.bash"
 	if [[ -x "${helper}" ]] && grep -qF -- '--suggest' "${helper}"; then bash "${helper}" --suggest
@@ -738,3 +767,7 @@ fMain  "${@}"
 ##		- 20260923: Backup excludes: dropped the Panoplia scratch and private tree
 ##		  rules, so both are archived again. Added '*_dupes', '*_no-backup' (files
 ##		  and dirs) and '*/versions/*.rar'.
+##		- 20260925: Pull and push go through 'gitsby raw git' when gitsby is
+##		  installed.
+##		- 20261004: Dir links inside the repo, and links back into the project, are
+##		  left out of the backup. Linked asset packs had grown one to 72 GB.
