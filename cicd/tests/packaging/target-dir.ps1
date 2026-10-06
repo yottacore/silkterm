@@ -1,23 +1,31 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose:
-##		cicd-win.ps1 looks for each release binary under the target directory.
-##		It used to spell that '$Root\target', which is wrong wherever
-##		CARGO_TARGET_DIR is set, and stops the Windows pipeline outright.
-##		fTargetDir is lifted out of the file rather than retyped.
-##	- Syntax: target-dir.ps1 [-Pipeline <path to cicd-win.ps1>]
-##	- Exit: 0 when every check passed, 1 otherwise.
-##	- Test ID: EqAwQqA
-##	- History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	Check where cicd-win.ps1 looks for each release binary.
+.DESCRIPTION
+	cicd-win.ps1 looks for each release binary under the target directory. It
+	used to spell that '$Root\target', which is wrong wherever CARGO_TARGET_DIR
+	is set, and stops the Windows pipeline outright. fTargetDir is lifted out of
+	the file rather than retyped.
+.PARAMETER Pipeline
+	Path to cicd-win.ps1. Default: the one in this repo.
+.NOTES
+	Exit: 0 when every check passed, 1 otherwise.
+	History: At bottom of file.
+#>
+
+##	Test ID: EqAwQqA
+
+[CmdletBinding()]
 param(
 	[string]$Pipeline = (Join-Path $PSScriptRoot '../../cicd-win.ps1')
 )
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $text = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Pipeline).Path)
@@ -51,3 +59,4 @@ exit 0
 
 ##	History:
 ##		- 20260917 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

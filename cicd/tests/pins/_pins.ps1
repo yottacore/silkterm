@@ -1,21 +1,29 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose:
-##		The tool pins cicd-win.ps1 reads, one "name|version" line each. Its own
-##		fCheckToolPins is lifted out of the file and run with nothing on PATH, so
-##		every pin it reads is reported as a missing tool.
-##	- Syntax: _pins.ps1 -Pins <tool-pins.txt> [-Pipeline <path to cicd-win.ps1>]
-##	- History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	The tool pins cicd-win.ps1 reads, one "name|version" line each.
+.DESCRIPTION
+	Its own fCheckToolPins is lifted out of the file and run with nothing on
+	PATH, so every pin it reads is reported as a missing tool.
+.PARAMETER Pins
+	The tool-pins.txt to read.
+.PARAMETER Pipeline
+	Path to cicd-win.ps1. Default: the one in this repo.
+.NOTES
+	History: At bottom of file.
+#>
+
+[CmdletBinding()]
 param(
 	[Parameter(Mandatory)][string]$Pins,
 	[string]$Pipeline = (Join-Path $PSScriptRoot '../../cicd-win.ps1')
 )
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
@@ -46,3 +54,4 @@ foreach ($w in $script:warnings) {
 
 ##	History:
 ##		- 20260926 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

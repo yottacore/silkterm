@@ -1,5 +1,8 @@
 #!/usr/bin/env pwsh
 
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 <#
 .SYNOPSIS
 	Check install.ps1's own signature check against a throwaway key.
@@ -18,9 +21,6 @@
 #>
 
 ##	Test ID: Eq9wAnY
-
-##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
-##	SPDX-License-Identifier: GPL-2.0-or-later
 
 [CmdletBinding()]
 param(

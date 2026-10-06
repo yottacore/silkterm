@@ -1,5 +1,8 @@
 #!/usr/bin/env pwsh
 
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 <#
 .SYNOPSIS
 	Check the freedesktop launcher install.ps1 writes on Linux.
@@ -16,9 +19,6 @@
 #>
 
 ##	Test ID: EqAwQq8
-
-##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
-##	SPDX-License-Identifier: GPL-2.0-or-later
 
 [CmdletBinding()]
 param(

@@ -1,5 +1,10 @@
 #!/usr/bin/env pwsh
 
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	Licensed under The MIT License (MIT). Full text at:
+##		https://mit-license.org/
+##	SPDX-License-Identifier: MIT
+
 <#
 .SYNOPSIS
 	One-liner installer for a single-binary GitHub release.
@@ -35,11 +40,6 @@
 .NOTES
 	History: At bottom of file.
 #>
-
-##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
-##	Licensed under The MIT License (MIT). Full text at:
-##		https://mit-license.org/
-##	SPDX-License-Identifier: MIT
 
 [CmdletBinding()]
 param(

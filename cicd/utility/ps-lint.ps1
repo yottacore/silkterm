@@ -1,5 +1,8 @@
 #!/usr/bin/env pwsh
 
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 <#
 .SYNOPSIS
 	Lint the repo's PowerShell scripts.
@@ -18,9 +21,6 @@
 	Exit: 0 clean, 1 findings, 2 PSScriptAnalyzer is not installed.
 	History: At bottom of file.
 #>
-
-##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
-##	SPDX-License-Identifier: GPL-2.0-or-later
 
 [CmdletBinding()]
 param([Parameter(ValueFromRemainingArguments)][string[]]$Paths)

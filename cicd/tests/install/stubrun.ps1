@@ -1,5 +1,8 @@
 #!/usr/bin/env pwsh
 
+##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	SPDX-License-Identifier: GPL-2.0-or-later
+
 <#
 .SYNOPSIS
 	Run install.ps1 for real against a stand-in release.
@@ -18,9 +21,6 @@
 .NOTES
 	History: At bottom of file.
 #>
-
-##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
-##	SPDX-License-Identifier: GPL-2.0-or-later
 
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidOverwritingBuiltInCmdlets', '', Justification = 'the stand-ins replace them on purpose')]
 [CmdletBinding()]

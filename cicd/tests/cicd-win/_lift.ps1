@@ -1,25 +1,34 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose:
-##		Run pieces of cicd-win.ps1 here, lifted out of the file rather than
-##		retyped: the run log rotation, the path map it hands the release builds,
-##		the check for a local path left in a built file, and the installer tests,
-##		which must leave the pipeline's temp folder as they found it.
-##	- Syntax: _lift.ps1 -Work <scratch dir> [-Pipeline <path to cicd-win.ps1>]
-##		Prints one ok or FAIL line per check, and the path map's file and the
-##		values it should hold as JSON on the last line, for a TOML reader to check.
-##	- Exit: 0 when every check passed, 1 otherwise.
-##	- History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	Run pieces of cicd-win.ps1 here, lifted out of the file rather than retyped.
+.DESCRIPTION
+	The pieces: the run log rotation, the path map it hands the release builds,
+	the check for a local path left in a built file, and the installer tests,
+	which must leave the pipeline's temp folder as they found it.
+
+	Prints one ok or FAIL line per check, and the path map's file and the values
+	it should hold as JSON on the last line, for a TOML reader to check.
+.PARAMETER Work
+	Scratch folder.
+.PARAMETER Pipeline
+	Path to cicd-win.ps1. Default: the one in this repo.
+.NOTES
+	Exit: 0 when every check passed, 1 otherwise.
+	History: At bottom of file.
+#>
+
+[CmdletBinding()]
 param(
 	[Parameter(Mandatory)][string]$Work,
 	[string]$Pipeline = (Join-Path $PSScriptRoot '../../cicd-win.ps1')
 )
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
@@ -130,3 +139,4 @@ exit 0
 ##		- 20260926 JC: Created.
 ##		- 20260930 JC: The installer tests leave the temp folder alone.
 ##		- 20261002 JC: Only the pipeline removes its run folder.
+##		- 20261006 JC: Help block, StrictMode Latest.
