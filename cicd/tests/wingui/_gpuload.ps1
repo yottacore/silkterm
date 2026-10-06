@@ -1,16 +1,22 @@
-##	Body of the gpuload scenarios. A window is watched while another program
-##	keeps the GPU busy and nearly full: typed into, minimized and restored,
-##	moved off to another virtual desktop and back, and with $idleRelease let
-##	go idle so its device is dropped, then woken. Then the load ends and the
-##	window is left alone, to see whether it paints with no input.
-##	Needs gpu-stress.exe in the run's folder (run.bash WINGUI_EXTRA), and a
-##	build-tag.txt there naming the build, which goes into every shot's name.
-##	The checks only prove the steps ran. Whether it painted is read off the shots.
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	Body of the gpuload scenarios.
+.DESCRIPTION
+	A window is watched while another program keeps the GPU busy and nearly
+	full: typed into, minimized and restored, moved off to another virtual
+	desktop and back, and with $idleRelease let go idle so its device is
+	dropped, then woken. Then the load ends and the window is left alone, to see
+	whether it paints with no input. Needs gpu-stress.exe in the run's folder
+	(run.bash WINGUI_EXTRA), and a build-tag.txt there naming the build, which
+	goes into every shot's name. The checks only prove the steps ran. Whether it
+	painted is read off the shots.
+.NOTES
+	History: At bottom of file.
+#>
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
@@ -30,10 +36,10 @@ Add-Type -Namespace SilkGpu -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
 [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
 '@
-function fCloaked($h) { $v = 0; [void][SilkGpu.Win]::DwmGetWindowAttribute($h, 14, [ref]$v, 4); $v -ne 0 }
+function fCloaked([IntPtr]$H) { $v = 0; [void][SilkGpu.Win]::DwmGetWindowAttribute($h, 14, [ref]$v, 4); $v -ne 0 }
 ##	Restored without focus, and raised over the scenario's own console window,
 ##	which would otherwise cover it in the shots.
-function fShowNoFocus($h) {
+function fShowNoFocus([IntPtr]$H) {
 	[void][Silk.Win]::ShowWindow($h, 4)   ## SW_SHOWNOACTIVATE
 	$flags = 0x0001 -bor 0x0002 -bor 0x0010   ## no size, no move, no activate
 	[void][SilkGpu.Win]::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, $flags)
@@ -42,7 +48,7 @@ function fShowNoFocus($h) {
 
 $script:t0 = Get-Date
 function fElapsed { "{0,6:N1}s" -f ((Get-Date) - $script:t0).TotalSeconds }
-function fStep($text) { fNote "$(fElapsed) $text" }
+function fStep([string]$Text) { fNote "$(fElapsed) $text" }
 
 function fSmi {
 	$smi = "C:\Windows\System32\nvidia-smi.exe"
@@ -53,7 +59,8 @@ function fSmi {
 ##	A shot of the window's place on screen, with how much of it moved since the
 ##	one before and since the last painted reference.
 $script:prev = $null
-function fGrab($name) {
+$script:ref = $null
+function fGrab([string]$Name) {
 	$bmp = fShot $h "gl-$arm-$name"
 	$moved = fDiff $script:prev $bmp
 	$vsRef = fDiff $script:ref $bmp
@@ -66,7 +73,7 @@ function fGrab($name) {
 ##	lot and a blank one not at all. The shell writes a file as well, which says
 ##	the keys got through whatever the picture shows.
 $script:typed = 0
-function fType($label) {
+function fType([string]$Label) {
 	$script:typed++
 	$proof = Join-Path $OutDir "typed-$arm-$($script:typed).txt"
 	[void](fFocus $h)
@@ -199,3 +206,4 @@ foreach ($line in (Get-Content $err -ErrorAction SilentlyContinue | Select-Objec
 
 ##	History:
 ##		- 20261003 JC: Created.
+##		- 20261006 JC: Help block, typed parameters; the painted reference starts empty.

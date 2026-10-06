@@ -1,13 +1,20 @@
-##	Software rendering on a real Windows desktop, where the software adapter is
-##	WARP. Each arm, Transparency off and then on: the setting turned on, and a
-##	card made to refuse every device (SILK_REFUSE_CARD) with the setting off.
-##	The window has to come up on a CPU adapter, draw, and take typing.
-##	Test ID: ErqPAbe
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	Software rendering on a real Windows desktop, where the software adapter is
+	WARP.
+.DESCRIPTION
+	Each arm, Transparency off and then on: the setting turned on, and a card
+	made to refuse every device (SILK_REFUSE_CARD) with the setting off. The
+	window has to come up on a CPU adapter, draw, and take typing.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: ErqPAbe
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
@@ -52,7 +59,7 @@ foreach ($arm in $arms) {
 	$said = @(Get-Content $err -ErrorAction SilentlyContinue)
 	foreach ($line in $said) { fNote "said $line" }
 	$renderer = @($said | Where-Object { $_ -match 'renderer = ' })
-	[void](fCheck "$name drew on a CPU adapter" ($renderer.Count -gt 0 -and ($renderer | Where-Object { $_ -notmatch '/ Cpu\]' }).Count -eq 0))
+	[void](fCheck "$name drew on a CPU adapter" ($renderer.Count -gt 0 -and @($renderer | Where-Object { $_ -notmatch '/ Cpu\]' }).Count -eq 0))
 	if ($arm.refused) {
 		[void](fCheck "$name said it fell back" (($said -match 'drawing in software').Count -gt 0))
 	}
@@ -60,3 +67,4 @@ foreach ($arm in $arms) {
 
 ##	History:
 ##		- 20261005 JC: Created.
+##		- 20261006 JC: Help block; counts what a filter left as a list.

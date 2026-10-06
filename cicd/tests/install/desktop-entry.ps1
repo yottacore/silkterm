@@ -1,24 +1,31 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose:
-##		install.ps1 writes a freedesktop launcher on Linux. Exec= is read twice -
-##		the desktop-entry string rules, then the Exec quoting rules - so a path
-##		holding a space, a quote, a '$' or a '%' needs escaping, not just quotes.
-##		The entry block is lifted out of install.ps1 rather than retyped, so a
-##		change to the line it writes is a change to what is checked.
-##	- Syntax: desktop-entry.ps1 [-Installer <path to install.ps1>]
-##	- Exit: 0 when every check passed, 1 otherwise.
-##	- Test ID: EqAwQq8
-##	- History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	Check the freedesktop launcher install.ps1 writes on Linux.
+.DESCRIPTION
+	Exec= is read twice - the desktop-entry string rules, then the Exec quoting
+	rules - so a path holding a space, a quote, a '$' or a '%' needs escaping,
+	not just quotes. The entry block is lifted out of install.ps1 rather than
+	retyped, so a change to the line it writes is a change to what is checked.
+.PARAMETER Installer
+	Path to install.ps1. Default: the one in this repo.
+.NOTES
+	Exit: 0 when every check passed, 1 otherwise.
+	History: At bottom of file.
+#>
+
+##	Test ID: EqAwQq8
+
+[CmdletBinding()]
 param(
 	[string]$Installer = (Join-Path $PSScriptRoot '../../../install.ps1')
 )
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
@@ -91,3 +98,4 @@ exit 0
 
 ##	History:
 ##		- 20260917 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

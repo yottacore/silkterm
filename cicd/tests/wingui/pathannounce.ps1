@@ -1,18 +1,25 @@
-##	The installer's PATH change has to reach a console opened from the Start menu.
-##	What the shell starts gets the shell's own copy of the environment, and a
-##	registry write on its own left that copy as it was until the next sign-in.
-##
-##	The check reads a marker variable rather than PATH. Windows leaves the user
-##	PATH out of every new environment once the machine one is long enough, and
-##	on b29w it is, so PATH could not show the difference there. The marker is
-##	written straight to the registry the way the PATH is, so it shows whether
-##	the shell rebuilt its copy after the install.
-##	Test ID: EqH4iss
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	The installer's PATH change has to reach a console opened from the Start
+	menu.
+.DESCRIPTION
+	What the shell starts gets the shell's own copy of the environment, and a
+	registry write on its own left that copy as it was until the next sign-in.
+
+	The check reads a marker variable rather than PATH. Windows leaves the user
+	PATH out of every new environment once the machine one is long enough, and
+	on b29w it is, so PATH could not show the difference there. The marker is
+	written straight to the registry the way the PATH is, so it shows whether
+	the shell rebuilt its copy after the install.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: EqH4iss
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the Run box cannot be typed into" }
 
@@ -37,7 +44,7 @@ Add-Type -Namespace SilkPath -Name W -MemberDefinition '[DllImport("user32.dll",
 $tray = [SilkPath.W]::FindWindowW("Shell_TrayWnd", $null)
 
 ##	Start a probe from the Run box, which is the shell's, and bring back what it saw.
-function fShellSees($n) {
+function fShellSees([int]$N) {
 	$seen = Join-Path $dir "seen$n.txt"
 	$probe = Join-Path $dir "probe$n.cmd"
 	Set-Content -Path $probe -Value "@set $marker> `"$seen`" 2>&1" -Encoding ASCII
@@ -76,3 +83,4 @@ try {
 
 ##	History:
 ##		- 20260918 JC: Created.
+##		- 20261006 JC: Help block.

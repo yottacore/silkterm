@@ -1,20 +1,25 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose:
-##		A run removes the test run folder it made when it passes, and keeps it
-##		when it fails. A folder it was handed, one without its mark, one swapped
-##		for a link, and one not named like a run folder are left alone. A link
-##		inside is removed as a link, and a read-only file inside goes too. Each
-##		case runs the helper in a child shell with a temp folder of its own.
-##	- Syntax: remove.ps1
-##	- Exit: 0 when every check passed, 1 otherwise.
-##	- Test ID: ErbiCgJ
-##	- History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
-Set-StrictMode -Version 2.0
+<#
+.SYNOPSIS
+	Check what the PowerShell test folder helper removes and what it keeps.
+.DESCRIPTION
+	A run removes the test run folder it made when it passes, and keeps it when
+	it fails. A folder it was handed, one without its mark, one swapped for a
+	link, and one not named like a run folder are left alone. A link inside is
+	removed as a link, and a read-only file inside goes too. Each case runs the
+	helper in a child shell with a temp folder of its own.
+.NOTES
+	Exit: 0 when every check passed, 1 otherwise.
+	History: At bottom of file.
+#>
+
+##	Test ID: ErbiCgJ
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 $failures = 0
@@ -59,8 +64,8 @@ function fCase([string]$Name, [string]$Body, [string]$Given = '') {
 	}
 	[pscustomobject]@{ Base = $base; Out = $out; Code = $code; Left = @(Get-ChildItem -LiteralPath $base -Force) }
 }
-function fOneStamped($Case) { $Case.Left.Count -eq 1 -and $Case.Left[0].Name -match $stampRe -and $Case.Left[0].PSIsContainer }
-function fShow($Case) { if ($Case.Out) { $Case.Out.TrimEnd() -split "`n" | ForEach-Object { "      $_" } } }
+function fOneStamped([psobject]$Case) { $Case.Left.Count -eq 1 -and $Case.Left[0].Name -match $stampRe -and $Case.Left[0].PSIsContainer }
+function fShow([psobject]$Case) { if ($Case.Out) { $Case.Out.TrimEnd() -split "`n" | ForEach-Object { "      $_" } } }
 
 $case = fCase 'pass' "Set-Content -LiteralPath (Join-Path `$dir 'file') -Value x`nfTestDir_End 0`nexit 0"
 fCheck 'a run that passes removes its folder' ($case.Code -eq 0 -and $case.Left.Count -eq 0)
@@ -75,7 +80,7 @@ fCheck 'fTestDir_End called from a function in the script removes it too' ($case
 if ($case.Left.Count) { fShow $case }
 
 $given = Join-Path $work 'handed'
-$case = fCase 'given' "Set-Content -LiteralPath (Join-Path `$dir 'file') -Value x`nfTestDir_End 0`nexit 0" $given
+$case = fCase -Name 'given' -Body "Set-Content -LiteralPath (Join-Path `$dir 'file') -Value x`nfTestDir_End 0`nexit 0" -Given $given
 fCheck 'a folder it was handed is never removed' ((Test-Path -LiteralPath (Join-Path $given 'file')) -and $case.Left.Count -eq 0)
 
 $case = fCase 'marker' "Set-Content -LiteralPath (Join-Path `$dir '.test_silkterm_owner') -Value 'another run'`nfTestDir_End 0`nexit 0"
@@ -114,3 +119,4 @@ exit 0
 
 ##	History:
 ##		- 20261002 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest, typed parameters.

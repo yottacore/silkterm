@@ -1,26 +1,36 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose:
-##		install.ps1 on Windows, run for real against a stand-in release through
-##		stubrun.ps1: an upgrade over a running copy, and a re-run that puts back a
-##		missing Start Menu shortcut and PATH entry. It installs into a scratch
-##		folder, with LOCALAPPDATA and APPDATA pointed there. The user PATH in the
-##		registry is the one real thing it changes, and it is put back as it was.
-##	- Syntax: windows.ps1 [-Shell pwsh|powershell] [-Installer <path to install.ps1>]
-##		powershell runs the installer under Windows PowerShell 5.1.
-##	- Exit: 0 when every check passed, 1 otherwise.
-##	- Test ID: Eqq4nMu
-##	- History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	Run install.ps1 on Windows for real, against a stand-in release.
+.DESCRIPTION
+	Goes through stubrun.ps1: an upgrade over a running copy, and a re-run that
+	puts back a missing Start Menu shortcut and PATH entry. It installs into a
+	scratch folder, with LOCALAPPDATA and APPDATA pointed there. The user PATH
+	in the registry is the one real thing it changes, and it is put back as it
+	was.
+.PARAMETER Shell
+	pwsh (default), or powershell to run the installer under Windows PowerShell
+	5.1.
+.PARAMETER Installer
+	Path to install.ps1. Default: the one in this repo.
+.NOTES
+	Exit: 0 when every check passed, 1 otherwise.
+	History: At bottom of file.
+#>
+
+##	Test ID: Eqq4nMu
+
+[CmdletBinding()]
 param(
 	[ValidateSet('pwsh', 'powershell')][string]$Shell = 'pwsh',
 	[string]$Installer = (Join-Path $PSScriptRoot '../../../install.ps1')
 )
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
@@ -139,3 +149,4 @@ exit 0
 
 ##	History:
 ##		- 20260925 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

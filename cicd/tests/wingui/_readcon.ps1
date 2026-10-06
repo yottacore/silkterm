@@ -1,14 +1,25 @@
-##	Prints what is on another process's console. Run as its own process: it has
-##	to let go of its own console to join that one. A pipe or a redirect would
-##	give the program a handle to write to, which is the case that always worked.
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	Prints what is on another process's console.
+.DESCRIPTION
+	Run as its own process: it has to let go of its own console to join that
+	one. A pipe or a redirect would give the program a handle to write to, which
+	is the case that always worked.
+.PARAMETER Of
+	The process whose console is read.
+.PARAMETER Out
+	The file the text goes to.
+.NOTES
+	History: At bottom of file.
+#>
+
+[CmdletBinding()]
 param([Parameter(Mandatory)] [int] $Of, [Parameter(Mandatory)] [string] $Out)
 
+Set-StrictMode -Version Latest
 Add-Type -Namespace SilkCon -Name Read -MemberDefinition @'
 [StructLayout(LayoutKind.Sequential)] public struct COORD { public short X; public short Y; }
 [StructLayout(LayoutKind.Sequential)] public struct INFO {
@@ -37,3 +48,4 @@ public static string Text(uint pid) {
 
 ##	History:
 ##		- 20260918 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

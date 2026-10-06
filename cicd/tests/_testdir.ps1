@@ -1,16 +1,26 @@
-##	- Purpose:
-##		The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, for the
-##		PowerShell tests and cicd-win.ps1. Dot-sourced; it defines fTestDir_Make,
-##		fTestDir_Use, fTestDir_Keep, fTestDir_End and fTestDir_Remove and runs
-##		nothing. Same contract as _testdir.bash: SILKTERM_TEST_DIR set and not empty
-##		is the folder, made if missing, and never removed; otherwise a fresh one is
-##		made, 0700 off Windows, and exported, so every test the caller starts
-##		shares it. A script that made one calls fTestDir_End <exit code> before
-##		every exit, which removes the folder on 0 and keeps it otherwise.
-##	- History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, for the
+	PowerShell tests and cicd-win.ps1.
+.DESCRIPTION
+	Dot-sourced; it defines fTestDir_Make, fTestDir_Use, fTestDir_Keep,
+	fTestDir_End and fTestDir_Remove and runs nothing. Same contract as
+	_testdir.bash: SILKTERM_TEST_DIR set and not empty is the folder, made if
+	missing, and never removed; otherwise a fresh one is made, 0700 off Windows,
+	and exported, so every test the caller starts shares it. A script that made
+	one calls fTestDir_End <exit code> before every exit, which removes the
+	folder on 0 and keeps it otherwise.
+
+	Sets no StrictMode, since dot-sourcing would set it for the caller. Every
+	caller sets Latest itself.
+.EXAMPLE
+	. (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
+.NOTES
+	History: At bottom of file.
+#>
 
 ##	Windows PowerShell 5.1 has no $IsWindows, and only runs on Windows.
 function fTestDir_OnWindows { if (Test-Path variable:IsWindows) { $IsWindows } else { $true } }

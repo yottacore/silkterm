@@ -1,19 +1,26 @@
-##	A character can reach a window handed over whole instead of typed, and that is
-##	how the touch keyboard sends what its layout has no key for. Text expanders and
-##	some accessibility tools do the same. It used to reach nothing at all here.
-##	Test ID: EpPhAdU
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	A character can reach a window handed over whole instead of typed, and that
+	is how the touch keyboard sends what its layout has no key for.
+.DESCRIPTION
+	Text expanders and some accessibility tools do the same. It used to reach
+	nothing at all here.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: EpPhAdU
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed" }
 
 $cfg = Join-Path $OutDir "inj-config.shcl"
 fFreshConfig $cfg
 
-$p = fStartSilk $Exe @("--config=$cfg", "--columns", "100", "--rows", "30") @{}
+$p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg", "--columns", "100", "--rows", "30") -EnvVars @{}
 $h = fWaitWindow $p 40
 if (-not (fCheck "a window came up" ($h -ne [IntPtr]::Zero))) { fStop $p; return }
 
@@ -58,3 +65,4 @@ fStop $p
 
 ##	History:
 ##		- 20260909 JC: Created.
+##		- 20261006 JC: Help block, named arguments.

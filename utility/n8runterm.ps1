@@ -1,40 +1,54 @@
 #!/usr/bin/env pwsh
 
-##	Purpose:
-##		- Launch the newest SilkTerm dogfood build, passing through any arguments.
-##		  One implementation for Linux, Windows and macOS; the 'runterm' wrappers
-##		  beside it just call this with pwsh.
-##		- One source per platform: the synced app dir that cicd installs into. A
-##		  build made on any box arrives there over Dropbox, so there is no network
-##		  path to wait on and nothing to probe.
-##		- Copies go in a versions folder next to a '<program>' symlink pointing at
-##		  the newest, so a plain 'silkterm' on PATH (and a .desktop Icon=) always
-##		  reaches the current build without being rewritten.
-##		- Copies are named '<prefix>_<YYYYMMDD-HHMMSS>_<tag>_<role>', where the stamp
-##		  is the build's own mtime and the tag says what the binary is. Copies of one
-##		  build do not agree on mtime (cicd dates its copy and Dropbox restamps what
-##		  it syncs), so what keeps a build to one copy is the byte comparison, not
-##		  the stamp.
-##		- The folder is GFS-rotated every run: newest and oldest always, then the
-##		  last few, then a widening time spread (day, week, month, year). It keeps
-##		  at most 10 and at least 5, and stops at 1 GB in between. A copy that is
-##		  running is never deleted.
-##		- Windows runs the whole launcher elevated (self-elevates via UAC), so the
-##		  copy, the symlink and the launched terminal all get admin rights - a
-##		  filtered token has no SeCreateSymbolicLinkPrivilege and cannot make the
-##		  symlink at all. '--no-admin' opts out.
-##		- Reports a failure in a dialog when launched from a shortcut (or with
-##		  '--gui'), since a click's console just flashes shut. '--admin',
-##		  '--no-admin' and '--gui' are consumed here; everything else forwards.
-##		- With no build held and no source reachable, falls back to the first
-##		  installed terminal from a per-platform list.
-##		- Edit fMain() to launch a different terminal instead.
-##	History: At bottom of script.
-
 ##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
+
+<#
+.SYNOPSIS
+	Launch the newest SilkTerm dogfood build, passing through any arguments.
+.DESCRIPTION
+	One implementation for Linux, Windows and macOS; the 'runterm' wrappers
+	beside it just call this with pwsh.
+
+	One source per platform: the synced app dir that cicd installs into. A
+	build made on any box arrives there over Dropbox, so there is no network
+	path to wait on and nothing to probe.
+
+	Copies go in a versions folder next to a '<program>' symlink pointing at
+	the newest, so a plain 'silkterm' on PATH (and a .desktop Icon=) always
+	reaches the current build without being rewritten.
+
+	Copies are named '<prefix>_<YYYYMMDD-HHMMSS>_<tag>_<role>', where the stamp
+	is the build's own mtime and the tag says what the binary is. Copies of one
+	build do not agree on mtime (cicd dates its copy and Dropbox restamps what
+	it syncs), so what keeps a build to one copy is the byte comparison, not
+	the stamp.
+
+	The folder is GFS-rotated every run: newest and oldest always, then the
+	last few, then a widening time spread (day, week, month, year). It keeps
+	at most 10 and at least 5, and stops at 1 GB in between. A copy that is
+	running is never deleted.
+
+	Windows runs the whole launcher elevated (self-elevates via UAC), so the
+	copy, the symlink and the launched terminal all get admin rights - a
+	filtered token has no SeCreateSymbolicLinkPrivilege and cannot make the
+	symlink at all. '--no-admin' opts out.
+
+	Reports a failure in a dialog when launched from a shortcut (or with
+	'--gui'), since a click's console just flashes shut. '--admin',
+	'--no-admin' and '--gui' are consumed here; everything else forwards.
+
+	With no build held and no source reachable, falls back to the first
+	installed terminal from a per-platform list.
+
+	Edit fMain() to launch a different terminal instead.
+.EXAMPLE
+	pwsh n8runterm.ps1 [--no-admin] [--gui] [--install-only] [terminal options]
+.NOTES
+	History: At bottom of script.
+#>
 
 
 #••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -385,10 +399,10 @@ function fRotate {
 	}
 
 	## Selection order, best claim first. Duplicates are dropped as it goes.
-	$order  = @()
-	$order += $all[0]
-	$order += $all[-1]
-	$order += @($all | Select-Object -Skip 1 -First $KeepRecent)
+	$order = New-Object System.Collections.Generic.List[object]
+	$order.Add($all[0])
+	$order.Add($all[-1])
+	$order.AddRange(@($all | Select-Object -Skip 1 -First $KeepRecent))
 	foreach ($unit in $units) {
 		$nowKey = fPeriodKey -When $now -Unit $unit
 		$taken  = 0
@@ -396,12 +410,12 @@ function fRotate {
 			if ($taken -ge $PeriodKeep[$unit]) { break }
 			$key = fPeriodKey -When $version.Stamp -Unit $unit
 			if ($key -eq $nowKey) { continue }
-			if ($periodTop[$unit][$key] -eq $version.Name) { $order += $version; $taken++ }
+			if ($periodTop[$unit][$key] -eq $version.Name) { $order.Add($version); $taken++ }
 		}
 	}
-	$order += $all
+	$order.AddRange($all)
 
-	$keep  = @()
+	$keep  = New-Object System.Collections.Generic.List[object]
 	$seen  = @{}
 	$bytes = 0L
 	foreach ($version in $order) {
@@ -410,7 +424,7 @@ function fRotate {
 		if ($keep.Count -ge $KeepMin -and ($bytes + $version.File.Length) -gt $KeepBytes) { break }
 		$seen[$version.Name] = $true
 		$bytes += $version.File.Length
-		$keep  += $version
+		$keep.Add($version)
 	}
 
 	## Anything not selected goes, unless it is running - a window open on a build
@@ -421,7 +435,7 @@ function fRotate {
 		if ($running -contains $version.File.FullName) {
 			fNote "kept (running): $($version.Name)"
 			$seen[$version.Name] = $true
-			$keep += $version
+			$keep.Add($version)
 			continue
 		}
 		try {
@@ -430,7 +444,7 @@ function fRotate {
 		} catch {
 			fNote "kept (locked): $($version.Name)"
 			$seen[$version.Name] = $true
-			$keep += $version
+			$keep.Add($version)
 		}
 	}
 	if ($deleted) { fNote "rotation deleted $deleted copy/copies (holding $($keep.Count))" }
@@ -506,7 +520,7 @@ function fRunningExePaths {
 ## Is this file one of ours? A copy the symlink fallback made is byte-identical
 ## to a build in the pool; anything else got here another way.
 function fIsPoolCopy {
-	param([Parameter(Mandatory)]$Item)
+	param([Parameter(Mandatory)][System.IO.FileSystemInfo]$Item)
 
 	$same = @(Get-ChildItem -LiteralPath $VersionsDir -File -ErrorAction SilentlyContinue |
 		Where-Object { $_.Length -eq $Item.Length })
@@ -612,7 +626,7 @@ function fWriteMacApp {
 	## Started from the Finder, it gets launchd's bare PATH, which has neither
 	## Homebrew nor ~/.local/bin, so the wrapper would not find pwsh. With no build
 	## held, the wrapper runs as usual and falls back to another terminal.
-	$q = { param($s) "'" + ($s -replace "'", "'\''") + "'" }
+	$q = { param([string]$s) "'" + ($s -replace "'", "'\''") + "'" }
 	$wantScript = @'
 #!/bin/bash
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
@@ -729,7 +743,7 @@ function fWriteStartMenuLink {
 		foreach ($root in (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu"),
 		                  (Join-Path $env:ProgramData "Microsoft\Windows\Start Menu")) {
 			if (-not (Test-Path -LiteralPath $root)) { continue }
-			$hit = Get-ChildItem -LiteralPath $root -Recurse -Force -Filter *.lnk -EA SilentlyContinue |
+			$hit = Get-ChildItem -LiteralPath $root -Recurse -Force -Filter *.lnk -ErrorAction SilentlyContinue |
 				Where-Object { $shell.CreateShortcut($_.FullName).TargetPath -eq $Wrapper } |
 				Select-Object -First 1
 			if ($hit) { $path = $hit.FullName; break }
@@ -984,14 +998,14 @@ $script:RunWarnings = @()
 $wantAdmin   = $true
 $forceGui    = $false
 $installOnly = $false
-$passArgs    = @()
+$passArgs    = New-Object System.Collections.Generic.List[string]
 foreach ($arg in $args) {
 	switch -Regex ($arg) {
 		'^--admin$'        { $wantAdmin   = $true;  continue }
 		'^--no-admin$'     { $wantAdmin   = $false; continue }
 		'^--gui$'          { $forceGui    = $true;  continue }
 		'^--install-only$' { $installOnly = $true;  continue }
-		default        { $passArgs += $arg }
+		default        { $passArgs.Add($arg) }
 	}
 }
 
@@ -1030,6 +1044,7 @@ if ($script:GuiFeedback -and $script:RunWarnings.Count) {
 
 
 ##	History:
+##		- 2026-10-06: Help block; no array growth in loops.
 ##		- 2026-10-01: An app in ~/Applications is the menu entry on a Mac. It runs
 ##		  the build in its own process, so the Dock sees one program.
 ##		- 2026-09-08: Refresh a menu entry that already points at the wrapper

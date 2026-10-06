@@ -1,26 +1,31 @@
-##	A file opened the way Explorer opens one runs in SilkTerm once the per-user
-##	association names it. A batch file sits in a folder with a space in its
-##	name and gets an argument, and has to start beside itself. A VBScript has to
-##	go through the console host. A folder's menu entry has to hand the folder
-##	over as %V.
-##
-##	The keys are written here the way Register writes them, plus a config of
-##	its own, and removed again whatever happens. Only keys this account did not
-##	already have are touched.
-##	Test ID: ErNJ7tr
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	A file opened the way Explorer opens one runs in SilkTerm once the per-user
+	association names it.
+.DESCRIPTION
+	A batch file sits in a folder with a space in its name and gets an argument,
+	and has to start beside itself. A VBScript has to go through the console
+	host. A folder's menu entry has to hand the folder over as %V.
+
+	The keys are written here the way Register writes them, plus a config of its
+	own, and removed again whatever happens. Only keys this account did not
+	already have are touched.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: ErNJ7tr
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing opened would be seen" }
 
 $classes = "HKCU:\Software\Classes"
-$made = @()
-foreach ($k in @("batfile", "VBSFile", "Directory", "Directory\shell", "Directory\shell\SilkTerm")) {
-	if (-not (Test-Path "$classes\$k")) { $made += $k }
-}
+$made = @(foreach ($k in @("batfile", "VBSFile", "Directory", "Directory\shell", "Directory\shell\SilkTerm")) {
+	if (-not (Test-Path "$classes\$k")) { $k }
+})
 if ($made -notcontains "batfile" -or $made -notcontains "VBSFile" -or $made -notcontains "Directory\shell\SilkTerm") {
 	fSkip "this account has per-user entries of its own for these types"
 }
@@ -46,7 +51,7 @@ Set-Content -Path $vbs -Encoding ASCII -Value @(
 $proofs = @{ bat = (Join-Path $dir "bat.txt"); vbs = (Join-Path $dir "vbs.txt"); folder = (Join-Path $dir "dir.txt") }
 foreach ($p in $proofs.Values) { Remove-Item $p -ErrorAction SilentlyContinue }
 
-function fSetDefault($key, $value) {
+function fSetDefault([string]$Key, [string]$Value) {
 	New-Item -Path "$classes\$key" -Force | Out-Null
 	Set-ItemProperty -Path "$classes\$key" -Name "(default)" -Value $value
 }
@@ -76,7 +81,7 @@ try {
 		if ($p) { fTrack $p }
 		fNote "ran: $($c.CommandLine)"
 	}
-	$read = { param($f) if (Test-Path $f) { (Get-Content $f -Raw).Trim() } else { "" } }
+	$read = { param([string]$f) if (Test-Path $f) { (Get-Content $f -Raw).Trim() } else { "" } }
 	$said = & $read $proofs.bat
 	fNote "bat: $($said -replace "`r?`n", ' | ')"
 	[void](fCheck "a batch file opened from the shell ran in SilkTerm" (@($ours | Where-Object { $_.CommandLine -like "*go.bat*" }).Count -eq 1))
@@ -98,3 +103,4 @@ finally {
 
 ##	History:
 ##		- 20260930 JC: Created.
+##		- 20261006 JC: Help block, typed parameters.

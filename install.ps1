@@ -1,25 +1,45 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose: One-liner installer for a single-binary GitHub release. Detects the
-##	  OS and CPU, works out which release asset that is, verifies its sha256
-##	  against the release's checksums file, and installs it. Idempotent: states
-##	  its plan, asks before touching anything, and does nothing when the
-##	  installed binary is already current.
-##	- Reusable: everything project-specific lives in the settings block below.
-##	- Runs on Windows PowerShell 5.1 and on PowerShell 7+ (pwsh) on any platform
-##	  it supports - Windows, Linux and macOS.
-##	- Syntax:
-##	  irm https://raw.githubusercontent.com/yottacore/silkterm/main/install.ps1 | iex
-##	  or, to pass options:
-##	  & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/yottacore/silkterm/main/install.ps1'))) -Release dev
-##	- Options: -Release stable|dev, -Target user|system, -Yes, -Version, -Help.
-##	  The OS, the CPU architecture and the asset name are all detected.
-##	- History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
+
+<#
+.SYNOPSIS
+	One-liner installer for a single-binary GitHub release.
+.DESCRIPTION
+	Detects the OS and CPU, works out which release asset that is, verifies its
+	sha256 against the release's checksums file, and installs it. Idempotent:
+	states its plan, asks before touching anything, and does nothing when the
+	installed binary is already current.
+
+	Reusable: everything project-specific lives in the settings block below.
+
+	Runs on Windows PowerShell 5.1 and on PowerShell 7+ (pwsh) on any platform
+	it supports - Windows, Linux and macOS. The OS, the CPU architecture and the
+	asset name are all detected.
+.PARAMETER Release
+	stable (default): newest full release. dev: newest release, pre-releases
+	included.
+.PARAMETER Target
+	user (default): just for you, no elevation needed. system: for everyone
+	(needs admin / root).
+.PARAMETER Yes
+	Skip the confirmation prompt.
+.PARAMETER Help
+	Print the usage text.
+.PARAMETER Version
+	Print this installer's version and exit.
+.EXAMPLE
+	irm https://raw.githubusercontent.com/yottacore/silkterm/main/install.ps1 | iex
+.EXAMPLE
+	& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/yottacore/silkterm/main/install.ps1'))) -Release dev
+
+	To pass options.
+.NOTES
+	History: At bottom of file.
+#>
 
 [CmdletBinding()]
 param(
@@ -63,7 +83,9 @@ $rawBase = "https://raw.githubusercontent.com/$ownerRepo/main"
 ##	one-liner runs the downloaded text inside the USER'S shell, where an `exit`
 ##	closes their window instead of ending the install - so failures travel as an
 ##	exception and only a genuine script file turns that into an exit code.
-$runningAsScriptFile = -not [string]::IsNullOrEmpty($MyInvocation.MyCommand.Path)
+##	Asked by type: a script block's ScriptInfo has no Path at all, and reading
+##	one fails when the caller's shell has StrictMode on.
+$runningAsScriptFile = $MyInvocation.MyCommand -is [System.Management.Automation.ExternalScriptInfo]
 
 ##	5.0 and older lack Get-FileHash, so there is no verifying a download there.
 if ($PSVersionTable.PSVersion.Major -lt 5) {
@@ -123,7 +145,7 @@ function fHelp {
 ##	The message buried in an exception chain is the one worth showing; the outer
 ##	one is usually just "Exception calling ...".
 function fInnerMessage {
-	param($ErrorRecord)
+	param([System.Management.Automation.ErrorRecord]$ErrorRecord)
 	$ex = $ErrorRecord.Exception
 	while ($ex.InnerException) { $ex = $ex.InnerException }
 	return $ex.Message
@@ -132,7 +154,7 @@ function fInnerMessage {
 ##	Turn a filesystem failure into something actionable. Access-denied and
 ##	file-in-use are the two that actually happen, and they need opposite advice.
 function fFileError {
-	param($ErrorRecord, [string]$What, [string]$Path)
+	param([System.Management.Automation.ErrorRecord]$ErrorRecord, [string]$What, [string]$Path)
 	$ex = $ErrorRecord.Exception
 	while ($ex.InnerException) { $ex = $ex.InnerException }
 	$msg = $ex.Message
@@ -314,18 +336,18 @@ function fNewer {
 	param([string]$A, [string]$B)
 	$aCore, $aPre = (($A -replace '^v', '') -replace '\+.*$', '') -split '-', 2
 	$bCore, $bPre = (($B -replace '^v', '') -replace '\+.*$', '') -split '-', 2
-	$c = fListCmp $aCore $bCore 0
+	$c = fListCmp -A $aCore -B $bCore -Missing 0
 	if ($c -ne 0) { return ($c -gt 0) }
 	##	Same core: a release is above any of its pre-releases.
 	if (-not $aPre) { return [bool]$bPre }
 	if (-not $bPre) { return $false }
-	return ((fListCmp $aPre $bPre -1) -gt 0)
+	return ((fListCmp -A $aPre -B $bPre -Missing -1) -gt 0)
 }
 
 ##	fPickTag <releases> <stable|dev> - the highest version in an API release
 ##	list, skipping drafts, and pre-releases too for stable. $null if none.
 function fPickTag {
-	param($Releases, [string]$Want)
+	param([object[]]$Releases, [string]$Want)
 	$best = $null
 	foreach ($rel in @($Releases)) {
 		if ($rel.draft) { continue }
@@ -463,12 +485,12 @@ function fMain {
 		fVerifySignature -Dir $tmpDir -Sums $sums -Tag $tag
 
 		$wantSha = $null
-		$published = @()
+		$published = New-Object System.Collections.Generic.List[string]
 		foreach ($line in (Get-Content -LiteralPath $sumsPath)) {
 			$parts = $line -split '\s+', 2
 			if ($parts.Count -ne 2) { continue }
 			$name = $parts[1].Trim().TrimStart('*')
-			$published += $name
+			$published.Add($name)
 			if ($name -eq $asset) { $wantSha = $parts[0].ToLower() }
 		}
 		if (-not $wantSha) {
@@ -619,10 +641,10 @@ function fMain {
 			Write-Host ''
 			Write-Host 'Installing ...'
 			try { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
-			catch { fFileError $_ "could not create $destDir" $destDir }
+			catch { fFileError -ErrorRecord $_ -What "could not create $destDir" -Path $destDir }
 			$staged = Join-Path $destDir (".$exeName-new-" + [System.IO.Path]::GetRandomFileName())
 			try { Copy-Item -LiteralPath $assetPath -Destination $staged }
-			catch { fFileError $_ "could not write to $destDir" $staged }
+			catch { fFileError -ErrorRecord $_ -What "could not write to $destDir" -Path $staged }
 			try {
 				if ($onWindows) {
 					Get-ChildItem -LiteralPath $destDir -Filter "$exeName.exe.old-*" -Force -ErrorAction SilentlyContinue |
@@ -634,12 +656,14 @@ function fMain {
 					[System.IO.File]::Move($staged, $destFile)
 				} else {
 					& chmod 0755 $staged
-					& mv -f $staged $destFile
+					##	By path: on Windows 'mv' is Move-Item's alias, and the lint there says so.
+					$mvExe = (Get-Command -Name mv -CommandType Application -TotalCount 1).Source
+					& $mvExe -f $staged $destFile
 					if ($LASTEXITCODE -ne 0) { throw "mv exited $LASTEXITCODE" }
 				}
 			} catch {
 				Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
-				fFileError $_ "could not replace $destFile" $destFile
+				fFileError -ErrorRecord $_ -What "could not replace $destFile" -Path $destFile
 			}
 		}
 
@@ -777,7 +801,7 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wP
 ##	anything in here cannot turn the answer into an array.
 $state = @{ failed = $false }
 & {
-	Set-StrictMode -Version 2.0
+	Set-StrictMode -Version Latest
 	$ErrorActionPreference = 'Stop'
 	##	On 5.1 the progress bar makes Invoke-WebRequest an order of magnitude
 	##	slower. Both of these lapse with the block, so nothing needs restoring.
@@ -818,3 +842,7 @@ if ($state.failed -and $runningAsScriptFile) { exit 1 }
 ##		  drafts; an API error no longer reads as "no full release";
 ##		  upgrades over a running copy; a re-run puts back a missing
 ##		  shortcut, launcher or PATH entry.
+##		- 20261006 JC: Help block; StrictMode Latest; named arguments where there
+##		  were three by position. Runs from a shell that has StrictMode on.
+##		  mv is called by path.
+

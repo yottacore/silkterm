@@ -1,22 +1,31 @@
 #!/usr/bin/env pwsh
 
-##	Purpose:
-##		- Drive n8runterm.ps1 in a sandboxed HOME and check what it does to files
-##		  it did not create. install.bash puts a release build at the same path
-##		  the launcher wants for its symlink, and the launcher used to delete it.
-##		- Also: that every argument reaches the terminal exactly as given, and
-##		  that a build already held is recognised without reading it again.
-##		- And the pool: what is copied in and what is declined, what the rotation
-##		  keeps, the leftover of a cut-off copy, the Dropbox spelling of the
-##		  source, the window title, and the fallback when there is no build.
-##		- Nothing here touches the real home directory or the real pool.
-##	Test ID: EpHRcSG
-##	History: At bottom of script.
-
 ##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
+
+<#
+.SYNOPSIS
+	Drive n8runterm.ps1 in a sandboxed HOME and check what it does to files it
+	did not create.
+.DESCRIPTION
+	install.bash puts a release build at the same path the launcher wants for
+	its symlink, and the launcher used to delete it.
+
+	Also: that every argument reaches the terminal exactly as given, and that a
+	build already held is recognised without reading it again.
+
+	And the pool: what is copied in and what is declined, what the rotation
+	keeps, the leftover of a cut-off copy, the Dropbox spelling of the source,
+	the window title, and the fallback when there is no build.
+
+	Nothing here touches the real home directory or the real pool.
+.NOTES
+	History: At bottom of script.
+#>
+
+##	Test ID: EpHRcSG
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -369,6 +378,7 @@ Write-Host "all passed"
 fTestDir_End 0
 
 ##	History:
+##		- 2026-10-06: Help block.
 ##		- 2026-09-28: LOCALAPPDATA and APPDATA are sandboxed too.
 ##		- 2026-09-26: Pool cases: copy and decline, rotation, the byte cap, the
 ##		  swept leftover, the Dropbox spelling, the title and the fallback.

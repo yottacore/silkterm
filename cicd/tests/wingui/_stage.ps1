@@ -1,14 +1,20 @@
-##	Makes the run's folder on the box and prints it, as RUNFOR, RUNDIR and
-##	RUNTOKEN lines. run.bash removes the folder with the token once the run is
-##	over, so this never calls fTestDir_End.
-##	Sent over ssh by run.bash with _testdir.ps1 ahead of it. The scenario runs
-##	as whoever holds the console, and a temp folder is private to its account,
-##	so the folder goes in that user's temp folder, not the ssh account's.
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	Makes the run's folder on the box and prints it, as RUNFOR, RUNDIR and
+	RUNTOKEN lines.
+.DESCRIPTION
+	run.bash removes the folder with the token once the run is over, so this
+	never calls fTestDir_End. Sent over ssh by run.bash with _testdir.ps1 ahead
+	of it. The scenario runs as whoever holds the console, and a temp folder is
+	private to its account, so the folder goes in that user's temp folder, not
+	the ssh account's.
+.NOTES
+	History: At bottom of file.
+#>
+
 
 ##	The registry keeps TEMP unexpanded, and %USERPROFILE% here would be the ssh
 ##	account's own.
@@ -52,7 +58,9 @@ function fStage {
 	"RUNTOKEN $script:TestDirToken"
 }
 
+Set-StrictMode -Version Latest
 fStage
 
 ##	History:
 ##		- 20261002 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

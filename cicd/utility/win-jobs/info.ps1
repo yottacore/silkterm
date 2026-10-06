@@ -1,8 +1,17 @@
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	What a Windows box has: host, account, GPUs, tools and sessions.
+.DESCRIPTION
+	Read-only. The sandbox line needs admin to say more than unknown.
+.NOTES
+	Run by win-remote.bash job, which writes _env.ps1 beside it.
+	History: At bottom of file.
+#>
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"
 . "$PSScriptRoot\_env.ps1"
 
@@ -15,8 +24,8 @@ $c = Get-CimInstance Win32_ComputerSystem
 foreach ($g in Get-CimInstance Win32_VideoController) {
 	"gpu         = $($g.Name) [$($g.Status)] drv $($g.DriverVersion)"
 }
-$sb = (Get-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -EA SilentlyContinue).State
-"sandbox     = " + $(if ($sb) { $sb } else { "unknown (needs admin)" })
+$sb = Get-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -ErrorAction SilentlyContinue
+"sandbox     = " + $(if ($sb) { $sb.State } else { "unknown (needs admin)" })
 foreach ($t in "git","cargo","rustc","pwsh","makensis") {
 	$cmd = Get-Command $t -ErrorAction SilentlyContinue
 	if ($cmd) { "tool $t".PadRight(12) + "= " + $cmd.Source } else { "tool $t".PadRight(12) + "= absent" }
@@ -27,3 +36,4 @@ foreach ($t in "git","cargo","rustc","pwsh","makensis") {
 
 ##	History:
 ##		- 20260908 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

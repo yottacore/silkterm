@@ -41,6 +41,12 @@ printf 'function Frob-Thing { param([string]$Name) $Name }\nFrob-Thing -Name x\n
 printf 'if ($true) {\n    Get-Date\n}\n' >"${work}/spaces.ps1"
 ## Tabs, then spaces to line up a continuation, and a here-string whose text starts with spaces.
 printf 'if ($true) {\n\t$x = (1 -eq 1) -and\n\t     (2 -eq 2)\n\t$x\n}\n$t = @"\n    text\n"@\n$t\n' >"${work}/aligned.ps1"
+## Three arguments by position, to a cmdlet and to a function of our own.
+printf "Join-Path 'a' 'b' 'c'\nfunction fThree { param([string]\$One, [string]\$Two, [string]\$Three) \$One + \$Two + \$Three }\nfThree 'a' 'b' 'c'\n" >"${work}/positional.ps1"
+## Two by position is fine, and a program's arguments are its own.
+printf "Join-Path 'a' 'b'\nfunction fThree { param([string]\$One, [string]\$Two, [string]\$Three) \$One + \$Two + \$Three }\nfThree 'a' 'b' -Three 'c'\ngit -C 'a' log -n 1\n" >"${work}/twopos.ps1"
+## Common parameters by their aliases.
+printf "Get-Item -Path 'a' -EA SilentlyContinue\nGet-Item -Path 'b' -ea:Stop\n" >"${work}/alias.ps1"
 
 fLint(){ rc=0; out="$(pwsh -NoProfile -NonInteractive -File "${lint}" "${@}" 2>&1)" || rc=$?; }
 
@@ -64,6 +70,15 @@ fCheck "a block indented with spaces fails" test "${rc}" -eq 1
 fCheck "and is named with its line" grep -qF "spaces.ps1:2: Indentation:" <<<"${out}"
 fLint "${work}/aligned.ps1"
 fCheck "spaces after tabs, and here-string text, pass" test "${rc}" -eq 0 -a -z "${out}"
+fLint "${work}/positional.ps1"
+fCheck "three positional arguments fail" test "${rc}" -eq 1
+fCheck "to a cmdlet" grep -qF "positional.ps1:1: Positional:" <<<"${out}"
+fCheck "and to a function of our own" grep -qF "positional.ps1:3: Positional:" <<<"${out}"
+fLint "${work}/twopos.ps1"
+fCheck "two positional, or a program's arguments, pass" test "${rc}" -eq 0 -a -z "${out}"
+fLint "${work}/alias.ps1"
+fCheck "a parameter alias fails" test "${rc}" -eq 1
+fCheck "spaced or with a colon" test "$(grep -cF ": ParameterAlias:" <<<"${out}")" -eq 2
 
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
@@ -71,3 +86,4 @@ echo "all passed"
 ##	History:
 ##		- 20260926 JC: Created.
 ##		- 20261004 JC: Tab indentation cases; the finding no longer an unapproved verb.
+##		- 20261006 JC: Positional argument and parameter alias cases.
