@@ -417,7 +417,7 @@ function fBuildTarget {
 }
 
 ## Copy the built binaries into the artifact dir under versioned names and write a
-## sha256sums file over them (parallels cicd.bash's write_sums).
+## sha256sums file over them (parallels cicd.bash's fWriteSums).
 function fCollectArtifacts {
 	param([Parameter(Mandatory)][array]$Built, [Parameter(Mandatory)][string]$Ver)
 	if (Test-Path -LiteralPath $ReleaseArtifactDir) { Remove-Item -LiteralPath $ReleaseArtifactDir -Recurse -Force }

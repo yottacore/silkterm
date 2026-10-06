@@ -33,115 +33,115 @@ shape="${1:-less}"
 settle="${SILK_SCENE_SETTLE:-13}"   ## seconds to idle past the GL pipeline warmup
 step="${SILK_SCENE_STEP:-0.15}"     ## seconds between repaints (one line/step)
 
-if [ "$shape" = chrome ]; then
+if [ "${shape}" = chrome ]; then
 	i=0
-	while [ "$i" -lt 80 ]; do
-		printf '  history %04d\n' "$i"
+	while [ "${i}" -lt 80 ]; do
+		printf '  history %04d\n' "${i}"
 		i=$((i + 1))
 	done
 	printf '+------------------+\n| working 0        |\n+------------------+\n'
-	sleep "$settle"
+	sleep "${settle}"
 	n=0
 	while :; do
-		printf '\033[3A\r\033[J  transcript %06d the quick brown fox\n+------------------+\n| working %-8d |\n+------------------+\n' "$n" "$n"
+		printf '\033[3A\r\033[J  transcript %06d the quick brown fox\n+------------------+\n| working %-8d |\n+------------------+\n' "${n}" "${n}"
 		n=$((n + 1))
-		sleep "$step"
+		sleep "${step}"
 	done
 fi
 
-if [ "$shape" = aptbar ]; then
+if [ "${shape}" = aptbar ]; then
 	## Past the scrollback's depth, so it is full before the loop starts and its
 	## depth no longer moves with each line.
 	seq -f '  history %06.0f' 1 10200
 	## the window has its final size only once it has settled
-	sleep "$settle"
+	sleep "${settle}"
 	sz=$(stty size 2>/dev/null) || sz=""
 	rows=${sz% *}
-	case "$rows" in ''|*[!0-9]*) rows=30 ;; esac
-	[ "$rows" -ge 10 ] || rows=30
-	printf '\033[%d;1H\033[7m  progress 0  \033[0m\033[K' "$rows"
+	case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
+	[ "${rows}" -ge 10 ] || rows=30
+	printf '\033[%d;1H\033[7m  progress 0  \033[0m\033[K' "${rows}"
 	printf '\033[1;%dr\033[%d;1H' "$((rows - 1))" "$((rows - 1))"
 	trap 'printf "\033[r"' EXIT INT TERM
 	n=0
 	while :; do
-		printf '\n  unpacking %06d the quick brown fox\0337\033[%d;1H\033[7m  progress %-6d\033[0m\033[K\0338' "$n" "$rows" "$n"
+		printf '\n  unpacking %06d the quick brown fox\0337\033[%d;1H\033[7m  progress %-6d\033[0m\033[K\0338' "${n}" "${rows}" "${n}"
 		n=$((n + 1))
-		sleep "$step"
+		sleep "${step}"
 	done
 fi
 
-if [ "$shape" = paste ] || [ "$shape" = pasteil ]; then
+if [ "${shape}" = paste ] || [ "${shape}" = pasteil ]; then
 	printf '\033[2J\033[H  transcript one\n  transcript two\n  transcript three\n'
-	sleep "$settle"
+	sleep "${settle}"
 	sz=$(stty size 2>/dev/null) || sz=""
 	rows=${sz% *}
-	case "$rows" in ''|*[!0-9]*) rows=30 ;; esac
-	[ "$rows" -ge 16 ] || rows=30
+	case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
+	[ "${rows}" -ge 16 ] || rows=30
 	## transcript 1-3, border 4, input 5.., border, two footer rows, and at
 	## least two blank rows left under it
 	hmax=$((rows - 9))
 	h=0
 	grow=1
 	while :; do
-		if [ "$grow" = 1 ] && [ "$h" -ge "$hmax" ]; then grow=0; fi
-		if [ "$grow" = 0 ] && [ "$h" -le 1 ]; then grow=1; fi
-		if [ "$shape" = pasteil ] && [ "$h" -gt 0 ]; then
-			if [ "$grow" = 1 ]; then
+		if [ "${grow}" = 1 ] && [ "${h}" -ge "${hmax}" ]; then grow=0; fi
+		if [ "${grow}" = 0 ] && [ "${h}" -le 1 ]; then grow=1; fi
+		if [ "${shape}" = pasteil ] && [ "${h}" -gt 0 ]; then
+			if [ "${grow}" = 1 ]; then
 				## push the border and the footer down a row, then write the new line
 				h=$((h + 1))
-				printf '\033[%d;1H\033[L| > pasted line %-6d |\033[K' "$((4 + h))" "$h"
+				printf '\033[%d;1H\033[L| > pasted line %-6d |\033[K' "$((4 + h))" "${h}"
 			else
 				printf '\033[%d;1H\033[M' "$((4 + h))"
 				h=$((h - 1))
 			fi
 		else
-			if [ "$grow" = 1 ]; then h=$((h + 1)); else h=$((h - 1)); fi
+			if [ "${grow}" = 1 ]; then h=$((h + 1)); else h=$((h - 1)); fi
 			printf '\033[4;1H+----------------------+\033[K'
 			r=1
-			while [ "$r" -le "$h" ]; do
-				printf '\033[%d;1H| > pasted line %-6d |\033[K' "$((4 + r))" "$r"
+			while [ "${r}" -le "${h}" ]; do
+				printf '\033[%d;1H| > pasted line %-6d |\033[K' "$((4 + r))" "${r}"
 				r=$((r + 1))
 			done
 			printf '\033[%d;1H+----------------------+\033[K' "$((5 + h))"
 			printf '\033[%d;1H  ? for shortcuts\033[K' "$((6 + h))"
 			printf '\033[%d;1H  footer status line\033[K\033[J' "$((7 + h))"
 		fi
-		sleep "$step"
+		sleep "${step}"
 	done
 fi
 
 printf '\033[?1049h\033[2J'                       ## enter alt screen, clear
 trap 'printf "\033[?1049l"' EXIT INT TERM         ## restore on the way out
-sleep "$settle"
+sleep "${settle}"
 
-if [ "$shape" = tmux ]; then
+if [ "${shape}" = tmux ]; then
 	sz=$(stty size 2>/dev/null) || sz=""
 	rows=${sz% *}
-	case "$rows" in ''|*[!0-9]*) rows=30 ;; esac
-	[ "$rows" -ge 10 ] || rows=30
-	printf '\033[%d;1H\033[7m  status line (static)  \033[0m\033[K' "$rows"
+	case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
+	[ "${rows}" -ge 10 ] || rows=30
+	printf '\033[%d;1H\033[7m  status line (static)  \033[0m\033[K' "${rows}"
 	printf '\033[1;%dr\033[%d;1H' "$((rows - 1))" "$((rows - 1))"
 	n=0
 	while :; do
-		printf '  line %06d  the quick brown fox jumps\n' "$n"
+		printf '  line %06d  the quick brown fox jumps\n' "${n}"
 		n=$((n + 1))
-		sleep "$step"
+		sleep "${step}"
 	done
 fi
 
-if [ "$shape" = pill ]; then
+if [ "${shape}" = pill ]; then
 	sz=$(stty size 2>/dev/null) || sz=""
 	rows=${sz% *}
-	case "$rows" in ''|*[!0-9]*) rows=30 ;; esac
-	[ "$rows" -ge 10 ] || rows=30
+	case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
+	[ "${rows}" -ge 10 ] || rows=30
 	last=$((rows - 2))
 	printf '\033[1;1H\033[7m  header one  \033[0m\033[K\033[2;1H\033[7m  header two  \033[0m\033[K'
 	r=3
-	while [ "$r" -le "$last" ]; do
-		printf '\033[%d;1H  line %06d  the quick brown fox jumps\033[K' "$r" "$((1000 + r))"
+	while [ "${r}" -le "${last}" ]; do
+		printf '\033[%d;1H  line %06d  the quick brown fox jumps\033[K' "${r}" "$((1000 + r))"
 		r=$((r + 1))
 	done
-	printf '\033[%d;1H> input line\033[K' "$rows"
+	printf '\033[%d;1H> input line\033[K' "${rows}"
 	## a real screen has settled before the first wheel notch; with nothing to
 	## compare the first step against, no edge is held
 	sleep 1
@@ -150,12 +150,12 @@ if [ "$shape" = pill ]; then
 		n=$((n - 1))
 		## one write per step, so a build cannot fall between the scroll and the pill
 		printf '\033[3;%dr\033[3;1H\033[T\033[r\033[3;1H  line %06d  the quick brown fox jumps\033[K\033[%d;1H  line %06d  the quick\033[7m 1 new message \033[0m\033[K\033[%d;3H' \
-			"$last" "$n" "$last" "$((n + last - 3))" "$rows"
-		sleep "$step"
+			"${last}" "${n}" "${last}" "$((n + last - 3))" "${rows}"
+		sleep "${step}"
 	done
 fi
 
-case "$shape" in
+case "${shape}" in
 	nano)   top=1; bot=2 ;;
 	muffer) top=2; bot=1 ;;
 	vim)    top=0; bot=2 ;;
@@ -166,13 +166,13 @@ n=0
 while :; do
 	sz=$(stty size 2>/dev/null) || sz=""
 	rows=${sz% *}
-	case "$rows" in ''|*[!0-9]*) rows=30 ;; esac
-	[ "$rows" -ge 10 ] || rows=30
+	case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
+	[ "${rows}" -ge 10 ] || rows=30
 
 	## static top band (title bar / header): constant across frames
 	r=1
-	while [ "$r" -le "$top" ]; do
-		printf '\033[%d;1H\033[7m  header line %d (static)  \033[0m\033[K' "$r" "$r"
+	while [ "${r}" -le "${top}" ]; do
+		printf '\033[%d;1H\033[7m  header line %d (static)  \033[0m\033[K' "${r}" "${r}"
 		r=$((r + 1))
 	done
 
@@ -180,21 +180,21 @@ while :; do
 	## the content moves up one line per step (a clean forward translate).
 	r=$((top + 1))
 	midbot=$((rows - bot))
-	while [ "$r" -le "$midbot" ]; do
-		printf '\033[%d;1H  line %06d  the quick brown fox jumps\033[K' "$r" "$((n + r))"
+	while [ "${r}" -le "${midbot}" ]; do
+		printf '\033[%d;1H  line %06d  the quick brown fox jumps\033[K' "${r}" "$((n + r))"
 		r=$((r + 1))
 	done
 
 	## static bottom band (status / help): constant across frames
 	r=$((rows - bot + 1))
-	while [ "$r" -le "$rows" ]; do
-		printf '\033[%d;1H\033[7m  status/help line (static)  \033[0m\033[K' "$r"
+	while [ "${r}" -le "${rows}" ]; do
+		printf '\033[%d;1H\033[7m  status/help line (static)  \033[0m\033[K' "${r}"
 		r=$((r + 1))
 	done
 
-	printf '\033[%d;1H' "$rows"   ## park the cursor (harmless)
+	printf '\033[%d;1H' "${rows}"   ## park the cursor (harmless)
 	n=$((n + 1))
-	sleep "$step"
+	sleep "${step}"
 done
 
 ##	History:

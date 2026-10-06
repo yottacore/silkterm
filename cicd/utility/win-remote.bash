@@ -62,7 +62,7 @@
 
 
 set -Eeuo pipefail
-origArgs=("$@")
+origArgs=("${@}")
 
 meDir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 jobsDir="${meDir}/win-jobs"
@@ -79,8 +79,8 @@ scpJobs="${scpBase}/private/winrig"
 
 sshOpts=(-o BatchMode=yes -o ConnectTimeout=6 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR)
 
-fWarn() { echo "win-remote: $*" >&2; }
-fFail() { echo "win-remote: $1" >&2; exit "${2:-1}"; }
+fWarn() { echo "win-remote: ${*}" >&2; }
+fFail() { echo "win-remote: ${1}" >&2; exit "${2:-1}"; }
 
 declare -a hostNames=() hostAddrs=()
 lockCmd=""
@@ -88,17 +88,17 @@ lockCmd=""
 fLoadConf() {
 	##	The config lives outside the repo, so having none is the ordinary state on
 	##	any box but the one it was written on - a cicd caller skips rather than dies.
-	if [[ ! -r "$conf" ]]; then
+	if [[ ! -r "${conf}" ]]; then
 		((optional)) && { fWarn "no host config at ${conf}, skipped"; exit 0; }
 		fFail "no host config at ${conf}
   Create it with one line per box:  <name> <addr>[,<addr>...]" 2
 	fi
 	local name addrs
 	while read -r name addrs _; do
-		[[ -z "$name" || "${name:0:1}" == "#" ]] && continue
-		[[ "$name" == "@lock" ]] && { lockCmd="${addrs}"; continue; }
-		hostNames+=("$name"); hostAddrs+=("${addrs:-$name}")
-	done < "$conf"
+		[[ -z "${name}" || "${name:0:1}" == "#" ]] && continue
+		[[ "${name}" == "@lock" ]] && { lockCmd="${addrs}"; continue; }
+		hostNames+=("${name}"); hostAddrs+=("${addrs:-${name}}")
+	done < "${conf}"
 	if ((! ${#hostNames[@]})); then
 		((optional)) && { fWarn "no hosts listed in ${conf}, skipped"; exit 0; }
 		fFail "no hosts listed in ${conf}" 2
@@ -109,7 +109,7 @@ fLoadConf() {
 fLiveAddr() {
 	local addr
 	for addr in ${1//,/ }; do
-		ssh "${sshOpts[@]}" "${sshUser}@${addr}" exit 0 2>/dev/null && { echo "$addr"; return 0; }
+		ssh "${sshOpts[@]}" "${sshUser}@${addr}" exit 0 2>/dev/null && { echo "${addr}"; return 0; }
 	done
 	return 1
 }
@@ -117,32 +117,32 @@ fLiveAddr() {
 fSelected() {
 	local i
 	for i in "${!hostNames[@]}"; do
-		[[ -n "$only" && "${hostNames[$i]}" != "$only" ]] && continue
-		echo "$i"
+		[[ -n "${only}" && "${hostNames[${i}]}" != "${only}" ]] && continue
+		echo "${i}"
 	done
 }
 
 ##	Paths the job scripts dot-source, so no job has to repeat them.
 fPushEnv() {
-	local addr="$1" tmp
+	local addr="${1}" tmp
 	tmp="$(mktemp)"
 	{
 		echo "\$RepoDir    = '${winRepo}'"
 		echo "\$PrivateDir = '${winPriv}'"
 		echo "\$JobsDir    = '${winJobs}'"
-	} > "$tmp"
+	} > "${tmp}"
 	ssh "${sshOpts[@]}" "${sshUser}@${addr}" "if not exist \"${winJobs}\" mkdir \"${winJobs}\"" >/dev/null 2>&1 || true
-	scp -q "${sshOpts[@]}" "$tmp" "${sshUser}@${addr}:${scpJobs}/_env.ps1"
-	rm -f "$tmp"
+	scp -q "${sshOpts[@]}" "${tmp}" "${sshUser}@${addr}:${scpJobs}/_env.ps1"
+	rm -f "${tmp}"
 }
 
 fRunScript() {
-	local addr="$1" script="$2"; shift 2
-	local base; base="$(basename "$script")"
-	fPushEnv "$addr"
-	scp -q "${sshOpts[@]}" "$script" "${sshUser}@${addr}:${scpJobs}/${base}"
+	local addr="${1}" script="${2}"; shift 2
+	local base; base="$(basename "${script}")"
+	fPushEnv "${addr}"
+	scp -q "${sshOpts[@]}" "${script}" "${sshUser}@${addr}:${scpJobs}/${base}"
 	local -a quoted=(); local a
-	for a in "$@"; do quoted+=("\"${a}\""); done
+	for a in "${@}"; do quoted+=("\"${a}\""); done
 	ssh "${sshOpts[@]}" "${sshUser}@${addr}" "pwsh -NoProfile -ExecutionPolicy Bypass -File \"${winJobs}\\${base}\" ${quoted[*]}"
 }
 
@@ -150,7 +150,7 @@ fRunScript() {
 ##	is a scratch checkout, and a half-merged tree there is worse than a discarded
 ##	edit.
 fSync() {
-	local addr="$1" tmp
+	local addr="${1}" tmp
 	tmp="$(mktemp --suffix=.ps1)"
 	{
 		printf '$ref = "%s"\n' "${syncRef}"
@@ -166,25 +166,25 @@ git -C $RepoDir reset --hard "origin/$ref" 2>&1 | Out-Null
 git -C $RepoDir clean -fdx -e target 2>&1 | Out-Null
 "at " + (git -C $RepoDir rev-parse --short HEAD) + " " + (git -C $RepoDir log -1 --format=%s)
 PS
-	} > "$tmp"
-	fRunScript "$addr" "$tmp"
-	rm -f "$tmp"
+	} > "${tmp}"
+	fRunScript "${addr}" "${tmp}"
+	rm -f "${tmp}"
 }
 
 ##	Walk the selected hosts, skipping whatever is down. A skipped host is a warning;
 ##	only a job that actually ran and failed, or nothing reachable at all, is an error.
 fOverHosts() {
-	local fn="$1"
+	local fn="${1}"
 	local -i up=0 bad=0
 	local i addr
 	for i in $(fSelected); do
-		if ! addr="$(fLiveAddr "${hostAddrs[$i]}")"; then
-			fWarn "${hostNames[$i]}: unreachable, skipped"
+		if ! addr="$(fLiveAddr "${hostAddrs[${i}]}")"; then
+			fWarn "${hostNames[${i}]}: unreachable, skipped"
 			continue
 		fi
 		up=$((up + 1))
-		echo "== ${hostNames[$i]} (${addr})"
-		if ! "$fn" "$addr"; then bad=$((bad + 1)); fWarn "${hostNames[$i]}: failed"; fi
+		echo "== ${hostNames[${i}]} (${addr})"
+		if ! "${fn}" "${addr}"; then bad=$((bad + 1)); fWarn "${hostNames[${i}]}: failed"; fi
 	done
 	if ((! up)); then
 		((optional)) || fFail "no host reachable"
@@ -199,24 +199,24 @@ fOverHosts() {
 ##	the boxes beside it, so anywhere else this goes ahead without it.
 fHoldBoxes() {
 	local lock="${lockCmd}" known i rc=0
-	[[ -n "$lock" ]] && command -v "$lock" >/dev/null || return 0
-	known=" $("$lock" hosts 2>/dev/null || true) "
+	[[ -n "${lock}" ]] && command -v "${lock}" >/dev/null || return 0
+	known=" $("${lock}" hosts 2>/dev/null || true) "
 	local -a names=()
 	for i in $(fSelected); do
-		[[ "${known}" == *" ${hostNames[$i]} "* ]] && names+=("${hostNames[$i]}")
+		[[ "${known}" == *" ${hostNames[${i}]} "* ]] && names+=("${hostNames[${i}]}")
 	done
 	((${#names[@]})) || return 0
-	"$lock" check "${names[@]}" >/dev/null 2>&1 || rc=$?
-	case "$rc" in
+	"${lock}" check "${names[@]}" >/dev/null 2>&1 || rc=$?
+	case "${rc}" in
 		0) if [[ -n "${WINRIG_STARTED:-}" ]]; then : > "${WINRIG_STARTED}"; fi; return 0 ;;
 		1) ;;
 		*) fWarn "host lock unusable here (exit ${rc}), going ahead without it"; return 0 ;;
 	esac
 	##	Already re-run under wrap for these boxes and still not held. Stop rather than loop.
 	[[ "${WINRIG_LOCKED:-}" != "${names[*]}" ]] || fFail "the host lock does not show ${names[*]} as held, even under wrap" 2
-	((optional)) && fHoldEachOrSkip "$lock" "${names[@]}"
+	((optional)) && fHoldEachOrSkip "${lock}" "${names[@]}"
 	export WINRIG_LOCKED="${names[*]}"
-	exec "$lock" wrap "${names[@]}" --why "silkterm win-remote ${cmd}" ${WINRIG_LOCK_WAIT:+--wait "${WINRIG_LOCK_WAIT}"} -- "$0" "${origArgs[@]}"
+	exec "${lock}" wrap "${names[@]}" --why "silkterm win-remote ${cmd}" ${WINRIG_LOCK_WAIT:+--wait "${WINRIG_LOCK_WAIT}"} -- "${0}" "${origArgs[@]}"
 }
 
 ##	For --optional, a box another session holds is stepped over like one that is
@@ -225,14 +225,14 @@ fHoldBoxes() {
 ##	Only a wait that ran out before the command started is a skip; the command's
 ##	own exit is passed on.
 fHoldEachOrSkip() {
-	local lock="$1"; shift
+	local lock="${1}"; shift
 	local name started rc worst=0
 	started="$(mktemp)"
-	for name in "$@"; do
+	for name in "${@}"; do
 		rm -f "${started}"
 		rc=0
 		WINRIG_ONLY="${name}" WINRIG_LOCKED="${name}" WINRIG_STARTED="${started}" \
-			"$lock" wrap "${name}" --why "silkterm win-remote ${cmd}" --wait "${WINRIG_LOCK_WAIT:-100}" -- "$0" "${origArgs[@]}" || rc=$?
+			"${lock}" wrap "${name}" --why "silkterm win-remote ${cmd}" --wait "${WINRIG_LOCK_WAIT:-100}" -- "${0}" "${origArgs[@]}" || rc=$?
 		if ((rc == 3)) && [[ ! -e "${started}" ]]; then
 			fWarn "${name}: held by another session, skipped"
 		elif ((rc > worst)); then
@@ -245,7 +245,7 @@ fHoldEachOrSkip() {
 
 runScript=""
 declare -a runArgs=()
-fDoRun() { fRunScript "$1" "$runScript" "${runArgs[@]}"; }
+fDoRun() { fRunScript "${1}" "${runScript}" "${runArgs[@]}"; }
 
 ##	--ref only reaches the clone through sync. A job silently running against
 ##	whatever was there last is how a fix looks verified when it was never built.
@@ -254,46 +254,46 @@ fNoRef() { [[ -z "${refGiven}" ]] || fFail "--ref belongs to sync - sync with it
 ##	Options are only read before the command, so 'sync --ref <branch>' parsed the
 ##	ref as nothing and synced dev - the same trap fNoRef exists for. A command
 ##	that takes no arguments says so rather than dropping them.
-fNoArgs() { local what="$1"; shift; (($# == 0)) || fFail "${what} takes no arguments, and options go before the command (got: $*)" 2 ;}
+fNoArgs() { local what="${1}"; shift; (($# == 0)) || fFail "${what} takes no arguments, and options go before the command (got: ${*})" 2 ;}
 
 ##	WINRIG_ONLY narrows every call made under a one-box hold, as --host would.
 only="${WINRIG_ONLY:-}"; optional=0; syncRef="dev"; refGiven=""
-while (($#)); do case "$1" in
+while (($#)); do case "${1}" in
 	--host)    only="${2:-}"; shift 2 ;;
 	--as)      sshUser="${2:-}"; shift 2 ;;
 	--ref)     syncRef="${2:-}"; refGiven=1; shift 2 ;;
 	--optional) optional=1; shift ;;
-	-h|--help) grep -E '^##' "$0" | sed 's/^##\t\?//'; exit 0 ;;
+	-h|--help) grep -E '^##' "${0}" | sed 's/^##\t\?//'; exit 0 ;;
 	*) break ;;
 esac; done
 
 cmd="${1:-}"; shift || true
 fLoadConf
-[[ -n "$only" ]] && { printf '%s\n' "${hostNames[@]}" | grep -qx "$only" || fFail "unknown host: ${only}" 2; }
+[[ -n "${only}" ]] && { printf '%s\n' "${hostNames[@]}" | grep -qx "${only}" || fFail "unknown host: ${only}" 2; }
 
-case "$cmd" in
+case "${cmd}" in
 	hosts)
 		fNoRef
-		fNoArgs "hosts" "$@"
+		fNoArgs "hosts" "${@}"
 		for i in $(fSelected); do
-			if addr="$(fLiveAddr "${hostAddrs[$i]}")"
-				then printf '%-8s up    %s\n' "${hostNames[$i]}" "${addr}"
-				else printf '%-8s down  %s\n' "${hostNames[$i]}" "${hostAddrs[$i]}"
+			if addr="$(fLiveAddr "${hostAddrs[${i}]}")"
+				then printf '%-8s up    %s\n' "${hostNames[${i}]}" "${addr}"
+				else printf '%-8s down  %s\n' "${hostNames[${i}]}" "${hostAddrs[${i}]}"
 			fi
 		done
 		;;
 	sync)
-		fNoArgs "sync" "$@"
+		fNoArgs "sync" "${@}"
 		fHoldBoxes
 		fOverHosts fSync || exit 1
 		;;
 	job)
 		fNoRef
 		name="${1:-}"; shift || true
-		[[ -n "$name" ]] || fFail "job needs a name" 2
+		[[ -n "${name}" ]] || fFail "job needs a name" 2
 		runScript="${jobsDir}/${name}.ps1"
-		[[ -r "$runScript" ]] || fFail "no such job: ${name} (looked in ${jobsDir})" 2
-		runArgs=("$@")
+		[[ -r "${runScript}" ]] || fFail "no such job: ${name} (looked in ${jobsDir})" 2
+		runArgs=("${@}")
 		fHoldBoxes
 		fOverHosts fDoRun || exit 1
 		;;
@@ -301,15 +301,15 @@ case "$cmd" in
 		fNoRef
 		runScript="${1:-}"; shift || true
 		[[ -r "${runScript:-}" ]] || fFail "no such script: ${runScript:-<none>}" 2
-		runArgs=("$@")
+		runArgs=("${@}")
 		fHoldBoxes
 		fOverHosts fDoRun || exit 1
 		;;
 	fetch)
 		fNoRef
 		rel="${1:-}"; dest="${2:-}"
-		[[ -n "$rel" && -n "$dest" ]] || fFail "fetch needs <remote-rel-path> <local-dir>" 2
-		mkdir -p "$dest"
+		[[ -n "${rel}" && -n "${dest}" ]] || fFail "fetch needs <remote-rel-path> <local-dir>" 2
+		mkdir -p "${dest}"
 		fGet() { scp -q "${sshOpts[@]}" "${sshUser}@${1}:${scpBase}/${rel}" "${dest}/"; }
 		fHoldBoxes
 		fOverHosts fGet || exit 1
@@ -319,8 +319,8 @@ case "$cmd" in
 		##	Anything by absolute path, for output a job wrote outside the clone.
 		##	scp wants forward slashes even when the far side is Windows.
 		abs="${1:-}"; dest="${2:-}"
-		[[ -n "$abs" && -n "$dest" ]] || fFail "pull needs <remote-abs-path> <local-dir>" 2
-		mkdir -p "$dest"
+		[[ -n "${abs}" && -n "${dest}" ]] || fFail "pull needs <remote-abs-path> <local-dir>" 2
+		mkdir -p "${dest}"
 		fPull() { scp -qr "${sshOpts[@]}" "${sshUser}@${1}:${abs//\\//}" "${dest}/"; }
 		fHoldBoxes
 		fOverHosts fPull || exit 1
@@ -330,11 +330,11 @@ case "$cmd" in
 		##	One file to an absolute path, its folder made first. For a build made
 		##	here, which the clone on the box would not have.
 		src="${1:-}"; abs="${2:-}"
-		[[ -f "$src" && -n "$abs" ]] || fFail "push needs <local-file> <remote-abs-path>" 2
+		[[ -f "${src}" && -n "${abs}" ]] || fFail "push needs <local-file> <remote-abs-path>" 2
 		parent="${abs%\\*}"
 		fPush() {
 			ssh "${sshOpts[@]}" "${sshUser}@${1}" "if not exist \"${parent}\" mkdir \"${parent}\"" >/dev/null 2>&1 || true
-			scp -q "${sshOpts[@]}" "$src" "${sshUser}@${1}:${abs//\\//}"
+			scp -q "${sshOpts[@]}" "${src}" "${sshUser}@${1}:${abs//\\//}"
 		}
 		fHoldBoxes
 		fOverHosts fPush || exit 1
@@ -344,7 +344,7 @@ case "$cmd" in
 		(($#)) || fFail "hold needs a command" 2
 		fHoldBoxes
 		export WINRIG_HELD=1
-		exec "$@"
+		exec "${@}"
 		;;
 	*)
 		echo "usage: win-remote.bash [--host <name>] [--as <user>] [--ref <ref>] [--optional] {hosts|sync|job <name> [args]|run <file.ps1> [args]|fetch <rel> <dir>|pull <abs> <dir>|push <file> <abs>|hold <command> [args]}" >&2

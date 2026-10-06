@@ -104,7 +104,7 @@ fCheck "a whole set is accepted" fYes
 
 ## The release notes name the build, read out of the binary's --version by
 ## release.bash's own pattern, lifted here so the two cannot drift apart.
-pattern="$(sed -n "s/^[[:space:]]*build_id=.*sed -n '\\(.*\\)' || true)\"$/\\1/p" "${root}/utility/release.bash")"
+pattern="$(sed -n "s/^[[:space:]]*buildId=.*sed -n '\\(.*\\)' || true)\"$/\\1/p" "${root}/utility/release.bash")"
 built="$(ls -t "${root}/../target/debug/silkterm" "${root}/../target/release/silkterm" 2>/dev/null | head -1 || true)"
 if [[ -z "${pattern}" ]]; then
 	echo "  FAIL release.bash's build number pattern was not found"; failures=$((failures + 1))

@@ -132,6 +132,8 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 - Indent with tabs. There is no formatter, but scripts must pass `shellcheck` at warning level.
 
+- `cicd/utility/bash-style.bash` checks the braces, the brackets and the function names. Scripts shared with other projects are left out of it. A script run by sh or dash keeps `[ ]`, since it has no `[[ ]]`.
+
 ## PowerShell
 
 - Functions are fCamelCase, the same as in Bash, rather than PowerShell's Verb-Noun. This is a choice for this project only. `PSUseApprovedVerbs` is off in `cicd/PSScriptAnalyzerSettings.psd1` for that reason, and each other rule turned off there says why.

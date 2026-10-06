@@ -75,6 +75,8 @@ export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"       ## rustup tool
 source "${here}/config.bash"
 source "${here}/utility/include/gfs-rotate.bash"                  ## gfs_rotate() for the profiler artifacts
 source "${here}/utility/include/remote-git.bash"                  ## fRemoteGit / fRemoteGh, as the folder's own account
+##  shellcheck source=cicd/utility/include/echo.bash
+source "${here}/utility/include/echo.bash"                        ## fEcho, fEcho_Clean, fSection, fDie
 ##  shellcheck source=cicd/utility/built-from.bash
 source "${here}/utility/built-from.bash"                          ## the artifacts' provenance note
 declare -p FMT_CMD &>/dev/null || FMT_CMD=()                      ## tolerate a config without the fmt stage
@@ -94,15 +96,15 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assume_yes=0; quiet=0; quick=0; gate=0; no_arm=0; no_windows=0; sync=1; cli_message=""
-while (($#)); do case "$1" in
-	-y|--yes)                 assume_yes=1; shift ;;
-	-q|--quiet)               quiet=1; assume_yes=1; shift ;;   ## quiet + unattended; publish runs quiet too
+assumeYes=0; quiet=0; quick=0; gate=0; noArm=0; noWindows=0; sync=1; cliMessage=""
+while (($#)); do case "${1}" in
+	-y|--yes)                 assumeYes=1; shift ;;
+	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
 	--gate)                   gate=1; shift ;;                  ## merge gate only, then exit
 	--no-fmt)                 FMT_CMD=(); shift ;;
 	--no-cross)               BUILD_CROSS=0; shift ;;
-	--no-arm)                 no_arm=1; shift ;;                ## drop ARM64 builds + packages
-	--no-windows)             no_windows=1; shift ;;            ## drop the Windows cross targets
+	--no-arm)                 noArm=1; shift ;;                ## drop ARM64 builds + packages
+	--no-windows)             noWindows=1; shift ;;            ## drop the Windows cross targets
 	--no-package)             PACKAGE_ENABLE=0; shift ;;
 	--no-private)             PRIVATE_RUNNER=""; shift ;;
 	--no-profile)             PROFILE_ENABLE=0; shift ;;
@@ -112,26 +114,26 @@ while (($#)); do case "$1" in
 	--demo)                   DEMO_ENABLE=1; shift ;;
 	--quick)                  quick=1; BUILD_CROSS=0; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; shift ;;   ## skip the slow stages
 	--no-fuzz)                FUZZ_SECS=0; shift ;;
-	--message=*|--msg=*|-m=*) cli_message="${1#*=}"; shift ;;
-	-m|--message|--msg)       cli_message="${2-}"; shift; (($#)) && shift ;;
+	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
+	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
-	*) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
+	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
-if ((no_arm)) && declare -p CROSS_TARGETS &>/dev/null; then
+if ((noArm)) && declare -p CROSS_TARGETS &>/dev/null; then
 	kept=()
-	for t in "${CROSS_TARGETS[@]}"; do case "$t" in *arm64*|*aarch64*) ;; *) kept+=("$t") ;; esac; done
+	for t in "${CROSS_TARGETS[@]}"; do case "${t}" in *arm64*|*aarch64*) ;; *) kept+=("${t}") ;; esac; done
 	CROSS_TARGETS=("${kept[@]}")
 fi
 
 ## --no-windows: drop the Windows cross targets. For a Windows box driving this
 ## through WSL, which has already built its own Windows binaries natively - and
 ## natively is the only way to get the msvc one at all.
-if ((no_windows)) && declare -p CROSS_TARGETS &>/dev/null; then
+if ((noWindows)) && declare -p CROSS_TARGETS &>/dev/null; then
 	kept=()
-	for t in "${CROSS_TARGETS[@]}"; do case "$t" in *windows*) ;; *) kept+=("$t") ;; esac; done
+	for t in "${CROSS_TARGETS[@]}"; do case "${t}" in *windows*) ;; *) kept+=("${t}") ;; esac; done
 	CROSS_TARGETS=("${kept[@]}")
 fi
 declare -p PACKAGE_ENABLE &>/dev/null || PACKAGE_ENABLE=0   ## tolerate a config predating the packages stage
@@ -140,41 +142,29 @@ declare -p PACKAGE_ENABLE &>/dev/null || PACKAGE_ENABLE=0   ## tolerate a config
 ## prompt below. A blank answer, or --yes, takes the automatic one. The publisher
 ## runs quiet and never opens an editor, so the plan and the prompt name the
 ## message a blank answer commits. They used to promise an editor.
-auto_msg="${APP_NAME} CI/CD ${stamp}"
+autoMsg="${APP_NAME} CI/CD ${stamp}"
 ## fPublishMessage <cli> <config> <answer>
 fPublishMessage(){
 	if   [[ -n "${1}" ]]; then echo "${1}"
 	elif [[ -n "${2}" ]]; then echo "${2}"
 	elif [[ -n "${3}" ]]; then echo "${3}"
-	else echo "${auto_msg}"
+	else echo "${autoMsg}"
 	fi
 }
-publish_msg=""
-if [[ -n "$cli_message" || -n "${PUBLISH_AUTO_MESSAGE:-}" ]] || ((assume_yes)); then
-	publish_msg="$(fPublishMessage "$cli_message" "${PUBLISH_AUTO_MESSAGE:-}" "")"
+publishMsg=""
+if [[ -n "${cliMessage}" || -n "${PUBLISH_AUTO_MESSAGE:-}" ]] || ((assumeYes)); then
+	publishMsg="$(fPublishMessage "${cliMessage}" "${PUBLISH_AUTO_MESSAGE:-}" "")"
 fi
 
-## Output helpers: fEcho / fEcho_Clean, blank-collapsing.
-## fEcho "msg" -> "[ msg ]" status line; fEcho_Clean "msg" -> plain line, and a
-## bare call collapses repeated blanks. fSection draws the leading-blank + rule
-## letterbox before a major stage header; fDie prints a fatal line and exits.
-declare -i _wasLastEchoBlank=0
-fEcho_ResetBlankCounter(){ _wasLastEchoBlank=0; }
-fEcho_Clean(){ if [[ -n "${1:-}" ]]; then echo -e "$*"; _wasLastEchoBlank=0; elif [[ $_wasLastEchoBlank -eq 0 ]] && echo; then _wasLastEchoBlank=1; fi; }
-fEcho(){       if [[ -n "$*"     ]]; then fEcho_Clean "[ $* ]"; else fEcho_Clean ""; fi; }
-fEcho_Force(){ fEcho_ResetBlankCounter; fEcho "$*"; }
-_letterbox="••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
-fSection(){ fEcho_Clean; fEcho_Clean "${_letterbox}"; fEcho "$*"; }
-fDie(){ { fEcho_Force "FAILED: $*"; echo; } >&2; exit 1; }
 ## A test script's ID, from the "Test ID:" line in its header.
-fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/$1" 2>/dev/null || true; }
+fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/${1}" 2>/dev/null || true; }
 ## Runs cargo test with each result line as status, test ID and name. Every other
 ## line goes through untouched, and the command's own exit status is kept.
 fTestLines(){
 	if [[ -x "${root}/cicd/utility/test-id.py" ]] && command -v python3 >/dev/null 2>&1; then
-		"$@" | "${root}/cicd/utility/test-id.py" --annotate
+		"${@}" | "${root}/cicd/utility/test-id.py" --annotate
 	else
-		"$@"
+		"${@}"
 	fi
 }
 ## True when a process here is running the file at $1. Reads /proc, since fuser is
@@ -182,16 +172,16 @@ fTestLines(){
 ## -ef is a builtin stat, so only a process running that very file costs a fork.
 ## The readlink after it keeps a hard link elsewhere, or a process in another
 ## mount namespace, from counting.
-fInUse(){ local want exe; want="$(readlink -f "$1" 2>/dev/null)" || return 1; [[ -n "$want" ]] || return 1
+fInUse(){ local want exe; want="$(readlink -f "${1}" 2>/dev/null)" || return 1; [[ -n "${want}" ]] || return 1
 	for exe in /proc/[0-9]*/exe; do
-		if [[ "$exe" -ef "$want" && "$(readlink "$exe" 2>/dev/null)" == "$want" ]]; then return 0; fi
+		if [[ "${exe}" -ef "${want}" && "$(readlink "${exe}" 2>/dev/null)" == "${want}" ]]; then return 0; fi
 	done; return 1
 }
 ## Tag for a build copy: '<toolchain: gnu|msvc><built on: l|m|b|w><target: l|m|b|w><arch: i|a>'.
 ## Built-on is this host; the target and arch come from the os-arch label the build
 ## was made under, so a cross-build is tagged for where it will RUN. Prints nothing
 ## for anything unrecognised - no tag beats a wrong one.
-build_tag(){
+fBuildTag(){
 	local -r osarch="${1:-}"
 	local here target arch
 	case "$(uname -s)" in
@@ -212,18 +202,18 @@ build_tag(){
 		arm64)   arch=a ;;
 		*)       return 0 ;;
 	esac
-	printf 'gnu%s%s%s' "$here" "$target" "$arch"
+	printf 'gnu%s%s%s' "${here}" "${target}" "${arch}"
 }
 ## First writable dir out of a '|'-separated candidate list, or nothing. Reports
 ## only - the preflight calls it too, and a plan that is never confirmed must not
 ## have left directories behind.
-dogfood_dest(){
+fDogfoodDest(){
 	local dir
 	local -a dirs=()
 	IFS='|' read -r -a dirs <<< "${1:-}"
 	for dir in "${dirs[@]}"; do
-		if [[ -d "$dir" && -w "$dir" ]]; then
-			printf '%s' "$dir"
+		if [[ -d "${dir}" && -w "${dir}" ]]; then
+			printf '%s' "${dir}"
 			return 0
 		fi
 	done
@@ -232,28 +222,28 @@ dogfood_dest(){
 ## Where this run is happening, for the plan header: the skips differ per host, so
 ## say which one it is up front. WSL is told from its kernel string; the Windows
 ## pipeline sets CICD_LINUX_HALF when it hands the Linux stages over.
-host_line(){
+fHostLine(){
 	local kernel="" os=""
 	[[ -r /proc/version ]] && kernel="$(</proc/version)"
 	[[ -r /etc/os-release ]] && os="$(. /etc/os-release 2>/dev/null; printf '%s' "${PRETTY_NAME:-${NAME:-}}")"
-	host_describe "$(uname -s)" "$(uname -m)" "${kernel}" "${os}"
+	fHostDescribe "$(uname -s)" "$(uname -m)" "${kernel}" "${os}"
 }
-## host_describe <uname -s> <uname -m> <kernel version string> <distribution>
-host_describe(){
-	local -r sys="$1" arch="$2" kernel="$3" os="$4" distro="${WSL_DISTRO_NAME:-}"
+## fHostDescribe <uname -s> <uname -m> <kernel version string> <distribution>
+fHostDescribe(){
+	local -r sys="${1}" arch="${2}" kernel="${3}" os="${4}" distro="${WSL_DISTRO_NAME:-}"
 	case "${sys}" in
 		MINGW*|MSYS*|CYGWIN*)
 			printf 'Windows (MSYS bash) - cicd-win.ps1 is the pipeline for this box' ;;
 		Linux)
 			if [[ "${kernel,,}" == *microsoft* ]]; then
-				local gen="WSL"; [[ "$kernel" == *WSL2* ]] && gen="WSL2"
+				local gen="WSL"; [[ "${kernel}" == *WSL2* ]] && gen="WSL2"
 				if [[ -n "${CICD_LINUX_HALF:-}" ]]; then
-					printf '%s%s on Windows, the Linux half of a cicd-win.ps1 run' "$gen" "${distro:+ ($distro)}"
+					printf '%s%s on Windows, the Linux half of a cicd-win.ps1 run' "${gen}" "${distro:+ (${distro})}"
 				else
-					printf '%s%s on Windows, run on its own' "$gen" "${distro:+ ($distro)}"
+					printf '%s%s on Windows, run on its own' "${gen}" "${distro:+ (${distro})}"
 				fi
 			else
-				printf 'Linux%s, %s' "${os:+ ($os)}" "${arch}"
+				printf 'Linux%s, %s' "${os:+ (${os})}" "${arch}"
 			fi ;;
 		*) printf '%s, %s' "${sys}" "${arch}" ;;
 	esac
@@ -265,15 +255,15 @@ host_describe(){
 ## try. It has crashed twice in a row, so one retry is not enough. Stage 2 has
 ## already compiled everything bar the feature-gated profiler hooks, so a genuine
 ## error surfaces in seconds here and the extra tries cost nothing on that path.
-retry_build(){
-	local -r what="$1"; shift
+fRetryBuild(){
+	local -r what="${1}"; shift
 	local -i tries="${BUILD_ATTEMPTS:-3}"
 	((tries >= 1)) || tries=1
 	local -i n=0 rc=0
 	while ((n < tries)); do
 		n+=1
 		rc=0
-		"$@" || rc=$?
+		"${@}" || rc=$?
 		((rc)) || return 0
 		if ((n < tries)); then
 			fEcho "WARNING: ${what} build failed (attempt ${n} of ${tries}) - retrying, since a compiler crash here has been a toolchain flake"
@@ -285,7 +275,7 @@ retry_build(){
 ## actually did. --quick, --no-cross and friends leave part of the set behind and a
 ## package step that cannot find its tool only warns, so the note has to say what a
 ## whole set looks like rather than list what happened to be there.
-release_expects(){
+fReleaseExpects(){
 	local -a want=("${EXE_NAME}-${ver}-${RELEASE_NATIVE_OSARCH}")
 	local -a osarchs=("${RELEASE_NATIVE_OSARCH}")
 	local t rest osarch art
@@ -313,16 +303,16 @@ release_expects(){
 
 ## (Re)write the sha256sums file over every artifact in the release dir except the
 ## sums file itself. Run after stage 5 (binaries) and again after stage 6 (packages),
-## so the checksums cover the packages too. Uses the script-scope art_dir/ver/sums.
-write_sums(){
-	[[ -n "${art_dir:-}" && -d "${art_dir:-/nonexist}" ]] || return 0
-	( cd "${art_dir}"
+## so the checksums cover the packages too. Uses the script-scope artDir/ver/sums.
+fWriteSums(){
+	[[ -n "${artDir:-}" && -d "${artDir:-/nonexist}" ]] || return 0
+	( cd "${artDir}"
 	  ## the signature covers the sums file, so it can never be inside it
-	  files=(); for x in "${EXE_NAME}-${ver}-"*; do [[ "$x" == "$sums" || "$x" == *.sig || ! -f "$x" ]] && continue; files+=("$x"); done
+	  files=(); for x in "${EXE_NAME}-${ver}-"*; do [[ "${x}" == "${sums}" || "${x}" == *.sig || ! -f "${x}" ]] && continue; files+=("${x}"); done
 	  ((${#files[@]})) && sha256sum "${files[@]}" > "${sums}" )
 	local -a expects=()
-	mapfile -t expects < <(release_expects)
-	fWriteBuiltFrom "${art_dir}" "${built_from_state:-}" "${expects[@]}"
+	mapfile -t expects < <(fReleaseExpects)
+	fWriteBuiltFrom "${artDir}" "${builtFromState:-}" "${expects[@]}"
 }
 trap 'rc=$?; printf "\n[ CICD ABORTED (exit %s) at line %s: %s ]\n\n" "$rc" "$LINENO" "$BASH_COMMAND" >&2; exit $rc' ERR
 
@@ -364,24 +354,24 @@ fi
 ## box update can't silently change pipeline results.
 if declare -p TOOL_PINS &>/dev/null; then
 	for pin in "${TOOL_PINS[@]}"; do
-		pin_name="${pin%%|*}"; pin_rest="${pin#*|}"; pin_ver="${pin_rest%%|*}"; pin_cmd="${pin_rest#*|}"
-		have="$(${pin_cmd} 2>/dev/null | head -1 | sed 's/[^0-9.]*\([0-9][0-9.]*\).*/\1/')" || have=""
-		if [[ -z "$have" ]]; then
-			fEcho "WARNING: ${pin_name} not found (pinned ${pin_ver})"
-		elif [[ "$have" != "$pin_ver" ]]; then
-			fEcho "WARNING: ${pin_name} is ${have}, pinned ${pin_ver} (cargo install ${pin_name} --version ${pin_ver} --locked, or update the pin)"
+		pinName="${pin%%|*}"; pinRest="${pin#*|}"; pinVer="${pinRest%%|*}"; pinCmd="${pinRest#*|}"
+		have="$(${pinCmd} 2>/dev/null | head -1 | sed 's/[^0-9.]*\([0-9][0-9.]*\).*/\1/')" || have=""
+		if [[ -z "${have}" ]]; then
+			fEcho "WARNING: ${pinName} not found (pinned ${pinVer})"
+		elif [[ "${have}" != "${pinVer}" ]]; then
+			fEcho "WARNING: ${pinName} is ${have}, pinned ${pinVer} (cargo install ${pinName} --version ${pinVer} --locked, or update the pin)"
 		fi
 	done
 fi
 
 ## Preflight: show the plan with resolved paths, then confirm.
-abs_script="${root}/${PROFILE_WORKLOAD_SCRIPT}"
-profile_dir="$(cd "${root}" && mkdir -p "${PROFILE_OUT_DIR}" 2>/dev/null; cd "${PROFILE_OUT_DIR}" 2>/dev/null && pwd || echo "${root}/${PROFILE_OUT_DIR}")"
+absScript="${root}/${PROFILE_WORKLOAD_SCRIPT}"
+profileDir="$(cd "${root}" && mkdir -p "${PROFILE_OUT_DIR}" 2>/dev/null; cd "${PROFILE_OUT_DIR}" 2>/dev/null && pwd || echo "${root}/${PROFILE_OUT_DIR}")"
 
 fEcho_Clean
 fEcho_Clean "${APP_NAME} local CI/CD"
 fEcho_Clean
-fEcho_Clean "Host ................: $(host_line)"
+fEcho_Clean "Host ................: $(fHostLine)"
 fEcho_Clean "Repo root ...........: ${root}"
 fEcho_Clean "Remote sync .........: $( ((sync)) && echo 'fetch + fast-forward check' || echo '(skipped)')"
 fEcho_Clean "Format ..............: ${FMT_CMD[*]:-(skipped)}"
@@ -394,14 +384,14 @@ else
 fi
 if ((PROFILE_ENABLE)); then
 	fEcho_Clean "Profiler ............: ${PROFILE_SECS}s run -> flamegraph SVG (on headless ${RPD_HEADLESS_DISPLAY:-:98})"
-	fEcho_Clean "  output dir ........: ${profile_dir}"
+	fEcho_Clean "  output dir ........: ${profileDir}"
 	fEcho_Clean "  workload ..........: python3 ${PROFILE_WORKLOAD_SCRIPT} ${PROFILE_WORKLOAD_ARGS}"
 else
 	fEcho_Clean "Profiler ............: (disabled)"
 fi
 fEcho_Clean "Release (native) ....: ${RELEASE_NATIVE_CMD[*]} -> ${RELEASE_NATIVE_BIN}"
 if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
-	fEcho_Clean "Release (cross) .....:$( ((no_arm)) && echo ' (x86_64 only, --no-arm)')$( ((no_windows)) && echo ' (Linux only, --no-windows)')"
+	fEcho_Clean "Release (cross) .....:$( ((noArm)) && echo ' (x86_64 only, --no-arm)')$( ((noWindows)) && echo ' (Linux only, --no-windows)')"
 	for t in "${CROSS_TARGETS[@]}"; do fEcho_Clean "    - ${t%%|*}"; done
 else
 	fEcho_Clean "Release (cross) .....: (skipped)"
@@ -409,11 +399,11 @@ fi
 if ((PACKAGE_ENABLE)) && ((! quick)); then
 	## Name only what stage 5 will actually leave behind. The installer wraps a
 	## Windows binary, so under --no-windows (or --no-cross) there is none to wrap.
-	pkg_kinds=".deb/.rpm (Linux)"
+	pkgKinds=".deb/.rpm (Linux)"
 	if ((BUILD_CROSS)) && [[ " ${CROSS_TARGETS[*]:-} " == *windows* ]]; then
-		pkg_kinds="${pkg_kinds} + NSIS installer .exe (Windows)"
+		pkgKinds="${pkgKinds} + NSIS installer .exe (Windows)"
 	fi
-	fEcho_Clean "Packages ............: ${pkg_kinds}, per built arch"
+	fEcho_Clean "Packages ............: ${pkgKinds}, per built arch"
 	fEcho_Clean "  deferred ..........: BSD - no cross toolchain on this box"
 else
 	fEcho_Clean "Packages ............: $( ((quick)) && echo '(skipped --quick)' || echo '(disabled)')"
@@ -429,8 +419,8 @@ if ((${#DOGFOOD_DESTS[@]})); then
 	fEcho_Clean "Dogfood .............: install to the synced app dir per target"
 	for xd in "${DOGFOOD_DESTS[@]}"; do
 		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"
-		xdest="$(dogfood_dest "${xrest#*|}")"
-		if [[ -n "$xdest" ]]; then fEcho_Clean "    - ${xosarch} -> ${xdest}/${xname}"
+		xdest="$(fDogfoodDest "${xrest#*|}")"
+		if [[ -n "${xdest}" ]]; then fEcho_Clean "    - ${xosarch} -> ${xdest}/${xname}"
 		else fEcho_Clean "    - ${xosarch} -> <none of: ${xrest#*|} writable - will skip>"; fi
 	done
 else
@@ -438,23 +428,23 @@ else
 fi
 if ((${#GIT_PUBLISH[@]} == 0)); then
 	fEcho_Clean "Publish (last) ......: (disabled)"
-elif [[ -n "$publish_msg" ]]; then
-	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (hands-off: \"${publish_msg}\")"
+elif [[ -n "${publishMsg}" ]]; then
+	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (hands-off: \"${publishMsg}\")"
 else
-	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (will prompt for message; blank = \"${auto_msg}\")"
+	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (will prompt for message; blank = \"${autoMsg}\")"
 fi
 fEcho_Clean
 fEcho_Clean "Fail-fast: any error aborts before the next stage."
 fEcho_Clean
 
-if ((! assume_yes)); then
+if ((! assumeYes)); then
 	## Capture the commit message up front so the run can finish unattended. This
 	## is the natural place to bail on the common (publish) path - Ctrl+C here
 	## aborts; there is no separate "Proceed? [y/N]" (removed to cut friction).
-	if ((${#GIT_PUBLISH[@]})) && [[ -z "$publish_msg" ]]; then
-		read -r -p "Publish commit message (blank = \"${auto_msg}\"; Ctrl+C aborts): " m
+	if ((${#GIT_PUBLISH[@]})) && [[ -z "${publishMsg}" ]]; then
+		read -r -p "Publish commit message (blank = \"${autoMsg}\"; Ctrl+C aborts): " m
 		fEcho_ResetBlankCounter
-		publish_msg="$(fPublishMessage "" "" "$m")"
+		publishMsg="$(fPublishMessage "" "" "${m}")"
 	fi
 fi
 
@@ -473,14 +463,14 @@ fi
 ## background process a stage left behind can hold the pipe open.
 fFinishLog(){
 	exec 1>&3 2>&4
-	local i; for i in {1..50}; do kill -0 "${lint_tee}" 2>/dev/null || break; sleep 0.1; done
-	mv -f "${lint_log}.part" "${lint_log}" 2>/dev/null || true
+	local i; for i in {1..50}; do kill -0 "${lintTee}" 2>/dev/null || break; sleep 0.1; done
+	mv -f "${lintLog}.part" "${lintLog}" 2>/dev/null || true
 }
 if [[ -n "${LINT_LOG_DIR:-}" ]] && mkdir -p "${root}/${LINT_LOG_DIR}" 2>/dev/null; then
 	gfs_rotate "${root}/${LINT_LOG_DIR}" run log >/dev/null 2>&1 || true
-	lint_log="${root}/${LINT_LOG_DIR}/run_${stamp}.log"
+	lintLog="${root}/${LINT_LOG_DIR}/run_${stamp}.log"
 	exec 3>&1 4>&2
-	exec > >(awk -v rule="${_letterbox}" '
+	exec > >(awk -v rule="${_letterbox:?}" '
 		$0 == "" { blanks++; next }
 		{
 			if (index($0, rule) == 1) { if (NR > 1) print "" }
@@ -488,8 +478,8 @@ if [[ -n "${LINT_LOG_DIR:-}" ]] && mkdir -p "${root}/${LINT_LOG_DIR}" 2>/dev/nul
 			blanks = 0; print; fflush()
 		}
 		END { for (; blanks > 0; blanks--) print "" }
-	' | tee "${lint_log}.part") 2>&1
-	lint_tee=$!
+	' | tee "${lintLog}.part") 2>&1
+	lintTee=$!
 	## fTestDir_End before fFinishLog, so its line reaches the log.
 	trap 'rc=$?; fTestDir_End "${rc}"; fFinishLog; exit $rc' EXIT
 fi
@@ -544,7 +534,7 @@ fi
 ## tree during a build used to leave the note naming the new commit, clean, with the
 ## native binary holding the source from before it and the cross binaries the source
 ## after. Stage 0 is past, so its fast-forward is not mistaken for that.
-built_from_state="$(fSourceState)"
+builtFromState="$(fSourceState)"
 
 ## Pin the build number for the whole run. build.rs would otherwise read the clock
 ## per target, so the four cross builds of one release would report four different
@@ -605,6 +595,8 @@ if command -v shellcheck >/dev/null 2>&1; then
 	mapfile -t shellFiles < <(git -C "${root}" ls-files '*.bash' '*.sh' cicd/utility/n8git_backup-and-publish utility/git-hooks/pre-commit utility/git-hooks/pre-push utility/runterm)
 	(cd "${root}" && shellcheck -S warning "${shellFiles[@]}") || fDie "shellcheck found problems"
 	fEcho "OK: shell scripts clean"
+	styleOut="$("${root}/cicd/utility/bash-style.bash" 2>&1)" || { fEcho_Clean "${styleOut}"; fDie "shell scripts drift from the house style (cicd/utility/bash-style.bash)"; }
+	fEcho "OK: shell scripts in house style"
 else
 	fEcho "WARNING: shellcheck not installed; shell scripts not linted"
 fi
@@ -942,7 +934,7 @@ fi
 fEcho "OK: tests passed"
 
 ## Stage 4: profiler (non-gating artifact; failures classified below).
-run_profiler(){
+fRunProfiler(){
 	((PROFILE_ENABLE)) || { fEcho_Clean "profiler disabled"; return 0; }
 
 	## Mundane/environmental reasons -> skip with a warning (not the app's fault),
@@ -951,17 +943,17 @@ run_profiler(){
 	## Xvfb + python3 + the workload.
 	local skip=""
 	command -v python3 >/dev/null 2>&1 || skip="python3 not found"
-	[[ -z "$skip" ]] && [[ ! -f "$abs_script" ]] && skip="workload missing: ${abs_script}"
-	[[ -z "$skip" ]] && ! command -v Xvfb >/dev/null 2>&1 && skip="Xvfb not found (headless display unavailable)"
-	if [[ -n "$skip" ]]; then
+	[[ -z "${skip}" ]] && [[ ! -f "${absScript}" ]] && skip="workload missing: ${absScript}"
+	[[ -z "${skip}" ]] && ! command -v Xvfb >/dev/null 2>&1 && skip="Xvfb not found (headless display unavailable)"
+	if [[ -n "${skip}" ]]; then
 		((PROFILE_STRICT)) && fDie "profiler: ${skip}"
 		fEcho "WARNING: profiler skipped: ${skip}"; return 0
 	fi
 
-	## From here a failure is the app's fault and aborts, bar the retry retry_build owns.
+	## From here a failure is the app's fault and aborts, bar the retry fRetryBuild owns.
 	fEcho_Clean "building ${PROFILE_BIN} (cargo --profile ${PROFILE_PROFILE} --features ${PROFILE_FEATURE})"
-	retry_build profiler cargo build --profile "${PROFILE_PROFILE}" --features "${PROFILE_FEATURE}"
-	mkdir -p "${profile_dir}"
+	fRetryBuild profiler cargo build --profile "${PROFILE_PROFILE}" --features "${PROFILE_FEATURE}"
+	mkdir -p "${profileDir}"
 
 	## Bring up a private in-memory display so the profiler window never touches the
 	## user's visible session (renders via software GL / llvmpipe on Xvfb).
@@ -977,7 +969,7 @@ run_profiler(){
 	## Born canonical (role "frequent"); the rotation retags the newest as "latest".
 	## The app writes the graph as it exits, so it goes under a .part name the
 	## startup gate skips, and is renamed once whole.
-	local out="${profile_dir}/flame_${stamp}_frequent.svg"
+	local out="${profileDir}/flame_${stamp}_frequent.svg"
 	local part="${out}.part"
 	fEcho_Clean "running app ${PROFILE_SECS}s under sampler on headless ${hdisp} ..."
 	local prc=0
@@ -986,28 +978,28 @@ run_profiler(){
 	## real desktop and the profiler samples nothing.
 	env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE \
 	SILK_PROFILE_OUT="${part}" SILK_PROFILE_SECS="${PROFILE_SECS}" DISPLAY="${hdisp}" \
-		"${PROFILE_BIN}" --shell "python3 ${abs_script} ${PROFILE_WORKLOAD_ARGS}" || prc=$?
+		"${PROFILE_BIN}" --shell "python3 ${absScript} ${PROFILE_WORKLOAD_ARGS}" || prc=$?
 	"${headless}" stop >/dev/null 2>&1 || true
 	((prc == 0)) || { rm -f "${part}"; fDie "profiler run failed (non-zero exit - app problem)"; }
-	[[ -s "$part" ]] || { rm -f "${part}"; fDie "profiler produced no SVG (app problem): ${out}"; }
+	[[ -s "${part}" ]] || { rm -f "${part}"; fDie "profiler produced no SVG (app problem): ${out}"; }
 	mv -f "${part}" "${out}"
-	gfs_rotate "${profile_dir}" flame svg
+	gfs_rotate "${profileDir}" flame svg
 	## Rotation renamed this run's file (newest) to the "latest" role.
-	local latest="${profile_dir}/flame_${stamp}_latest.svg"
-	[[ -e "$latest" ]] || latest="$out"
+	local latest="${profileDir}/flame_${stamp}_latest.svg"
+	[[ -e "${latest}" ]] || latest="${out}"
 	fEcho "OK: flamegraph: ${latest}"
 	fEcho_Clean "open: ${latest}  (in a browser)"
 
 	## Hot-spot summary into the log (non-fatal, no marker - the marker is for the
 	## per-session --check gate, not the pipeline).
 	local report="${here}/utility/flame-report.py"
-	if [[ -f "$report" ]]; then
+	if [[ -f "${report}" ]]; then
 		fEcho_Clean ""
-		python3 "$report" --dir "${profile_dir}" 2>/dev/null || fEcho_Clean "hot spots: (report unavailable)"
+		python3 "${report}" --dir "${profileDir}" 2>/dev/null || fEcho_Clean "hot spots: (report unavailable)"
 	fi
 }
 fSection "4/8  Profiler"
-run_profiler
+fRunProfiler
 
 ## Stage 5: release builds.
 fSection "5/8  Release build (native)"
@@ -1022,40 +1014,40 @@ remapTarget="$(cd "${TARGET_DIR}" && pwd)"
 printf "[target.'cfg(all())']\nrustflags = ['--remap-path-prefix=%s=/cargo', '--remap-path-prefix=%s=/silkterm', '--remap-path-prefix=%s=/target']\n" \
 	"${CARGO_HOME:-${HOME}/.cargo}" "${root}" "${remapTarget}" > "${remapCfg}"
 ## True when a built file still names this box's home or checkout.
-fHasLocalPaths(){ grep -a -q -F -e "${HOME}/" -e "${root}/" "$1"; }
-retry_build "native release" "${RELEASE_NATIVE_CMD[@]}" --config "${remapCfg}"
+fHasLocalPaths(){ grep -a -q -F -e "${HOME}/" -e "${root}/" "${1}"; }
+fRetryBuild "native release" "${RELEASE_NATIVE_CMD[@]}" --config "${remapCfg}"
 [[ -f "${RELEASE_NATIVE_BIN}" ]] || fDie "native release binary missing: ${RELEASE_NATIVE_BIN}"
 fEcho "OK: native release: ${RELEASE_NATIVE_BIN} ($(du -h "${RELEASE_NATIVE_BIN}" | cut -f1))"
-built_arts=("${RELEASE_NATIVE_OSARCH:-native}|${RELEASE_NATIVE_BIN}")
+builtArts=("${RELEASE_NATIVE_OSARCH:-native}|${RELEASE_NATIVE_BIN}")
 if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
 	for t in "${CROSS_TARGETS[@]}"; do
-		local_label="${t%%|*}"; rest="${t#*|}"; osarch="${rest%%|*}"; rest="${rest#*|}"; art="${rest%%|*}"; cmd="${rest#*|}"
-		fSection "5/8  Release build: ${local_label}"
-		retry_build "${local_label}" eval "${cmd} --config $(printf '%q' "${remapCfg}")"
-		[[ -f "${art}" ]] || fDie "missing artifact for ${local_label}: ${art}"
-		fEcho "OK: ${local_label}: ${art} ($(du -h "${art}" | cut -f1))"
-		built_arts+=("${osarch}|${art}")
+		localLabel="${t%%|*}"; rest="${t#*|}"; osarch="${rest%%|*}"; rest="${rest#*|}"; art="${rest%%|*}"; cmd="${rest#*|}"
+		fSection "5/8  Release build: ${localLabel}"
+		fRetryBuild "${localLabel}" eval "${cmd} --config $(printf '%q' "${remapCfg}")"
+		[[ -f "${art}" ]] || fDie "missing artifact for ${localLabel}: ${art}"
+		fEcho "OK: ${localLabel}: ${art} ($(du -h "${art}" | cut -f1))"
+		builtArts+=("${osarch}|${art}")
 	done
 fi
 
-for pair in "${built_arts[@]}"; do
+for pair in "${builtArts[@]}"; do
 	if fHasLocalPaths "${pair#*|}"; then fDie "${pair#*|} still holds a local path (${HOME} or ${root})"; fi
 done
-fEcho "OK: no local paths in ${#built_arts[@]} binary(s)"
+fEcho "OK: no local paths in ${#builtArts[@]} binary(s)"
 
 ## A Windows binary with no icon and no version block links fine and reports
 ## nothing, so it has to be looked for. The aarch64 exe shipped that way for a
 ## while: embed-resource found no compiler for the arch and answered "not
 ## attempted", which reads as success.
-res_check="${here}/utility/pe-resources.py"
-if [[ -f "${res_check}" ]]; then
-	win_arts=()
-	for pair in "${built_arts[@]}"; do
-		[[ "${pair#*|}" == *.exe ]] && win_arts+=("${pair#*|}")
+resCheck="${here}/utility/pe-resources.py"
+if [[ -f "${resCheck}" ]]; then
+	winArts=()
+	for pair in "${builtArts[@]}"; do
+		[[ "${pair#*|}" == *.exe ]] && winArts+=("${pair#*|}")
 	done
-	if ((${#win_arts[@]})); then
-		python3 "${res_check}" "${win_arts[@]}" || fDie "a windows binary is missing its icon or version info"
-		fEcho "OK: windows resources present in ${#win_arts[@]} binary(s)"
+	if ((${#winArts[@]})); then
+		python3 "${resCheck}" "${winArts[@]}" || fDie "a windows binary is missing its icon or version info"
+		fEcho "OK: windows resources present in ${#winArts[@]} binary(s)"
 	fi
 fi
 
@@ -1063,17 +1055,17 @@ fi
 ## ready to attach to a release as plain uploads. Version = Cargo.toml alone.
 if [[ -n "${RELEASE_ARTIFACT_DIR:-}" ]]; then
 	ver="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "${root}/${VERSION_MANIFEST}" | head -1)"
-	[[ -n "$ver" ]] || fDie "no version found in ${VERSION_MANIFEST}"
-	art_dir="${root}/${RELEASE_ARTIFACT_DIR}"
-	rm -rf "${art_dir}"; mkdir -p "${art_dir}"
+	[[ -n "${ver}" ]] || fDie "no version found in ${VERSION_MANIFEST}"
+	artDir="${root}/${RELEASE_ARTIFACT_DIR}"
+	rm -rf "${artDir}"; mkdir -p "${artDir}"
 	sums="${EXE_NAME}-${ver}-sha256sums.txt"
-	for pair in "${built_arts[@]}"; do
+	for pair in "${builtArts[@]}"; do
 		osarch="${pair%%|*}"; src="${pair#*|}"
-		ext=""; [[ "$src" == *.exe ]] && ext=".exe"
-		cp -f "${src}" "${art_dir}/${EXE_NAME}-${ver}-${osarch}${ext}"
+		ext=""; [[ "${src}" == *.exe ]] && ext=".exe"
+		cp -f "${src}" "${artDir}/${EXE_NAME}-${ver}-${osarch}${ext}"
 	done
-	write_sums
-	fEcho "OK: ${#built_arts[@]} release artifact(s) + ${sums} -> ${RELEASE_ARTIFACT_DIR}/"
+	fWriteSums
+	fEcho "OK: ${#builtArts[@]} release artifact(s) + ${sums} -> ${RELEASE_ARTIFACT_DIR}/"
 	((BUILD_CROSS)) || fEcho_Clean "note: cross targets skipped - artifact set is partial (native only)"
 fi
 
@@ -1082,14 +1074,14 @@ fi
 ## source/Cargo.toml); Windows -> one self-contained NSIS installer .exe per arch
 ## (upgrades in place). macOS comes from the private runner; BSD is deferred.
 ## Skipped under --quick; a missing tool warns (non-gating) rather than aborting.
-build_packages(){
+fBuildPackages(){
 	((PACKAGE_ENABLE)) || { fEcho_Clean "packages disabled"; return 0; }
-	[[ -n "${art_dir:-}" ]] || { fEcho "WARNING: packages skipped (no RELEASE_ARTIFACT_DIR)"; return 0; }
+	[[ -n "${artDir:-}" ]] || { fEcho "WARNING: packages skipped (no RELEASE_ARTIFACT_DIR)"; return 0; }
 	local pair osarch bin srcexe triple out nsi rc made=0
 	local rpmver="${ver//-/\~}"   ## RPM versions forbid '-' (it splits version-release); 1.0.0-beta1 -> 1.0.0~beta1
-	for pair in "${built_arts[@]}"; do
+	for pair in "${builtArts[@]}"; do
 		osarch="${pair%%|*}"; bin="${pair#*|}"
-		case "$osarch" in
+		case "${osarch}" in
 			linux-x86_64) triple="" ;;
 			linux-arm64)  triple="aarch64-unknown-linux-gnu" ;;
 			windows-*)    triple="" ;;   ## handled below
@@ -1097,11 +1089,11 @@ build_packages(){
 		esac
 
 		## Linux: .deb then .rpm. Both package the existing binary (no rebuild).
-		if [[ "$osarch" == linux-* ]]; then
+		if [[ "${osarch}" == linux-* ]]; then
 			if command -v cargo-deb >/dev/null 2>&1; then
 				local -a da=(deb --no-build --no-strip --manifest-path source/Cargo.toml
-					--output "${art_dir}/${EXE_NAME}-${ver}-${osarch}.deb")
-				[[ -n "$triple" ]] && da+=(--target "$triple")
+					--output "${artDir}/${EXE_NAME}-${ver}-${osarch}.deb")
+				[[ -n "${triple}" ]] && da+=(--target "${triple}")
 				if cargo "${da[@]}" >/dev/null; then fEcho "OK: .deb (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: .deb build failed (${osarch})"; fi
 			else fEcho "WARNING: cargo-deb missing; .deb skipped (${osarch})"; fi
@@ -1110,22 +1102,22 @@ build_packages(){
 				## -p is the crate DIR (source/), assets resolve from CWD (repo root),
 				## so target/release/silkterm is found; -s overrides the RPM-illegal version.
 				local -a ra=(generate-rpm -p source -s "version = \"${rpmver}\""
-					--output "${art_dir}/${EXE_NAME}-${ver}-${osarch}.rpm")
-				[[ -n "$triple" ]] && ra+=(--target "$triple" --arch aarch64)
+					--output "${artDir}/${EXE_NAME}-${ver}-${osarch}.rpm")
+				[[ -n "${triple}" ]] && ra+=(--target "${triple}" --arch aarch64)
 				if cargo "${ra[@]}" >/dev/null; then fEcho "OK: .rpm (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: .rpm build failed (${osarch})"; fi
 			else fEcho "WARNING: cargo-generate-rpm missing; .rpm skipped (${osarch})"; fi
 		fi
 
 		## Windows: one self-contained NSIS installer .exe per arch.
-		if [[ "$osarch" == windows-* ]]; then
+		if [[ "${osarch}" == windows-* ]]; then
 			if command -v makensis >/dev/null 2>&1 && [[ -f "${root}/${NSIS_TEMPLATE}" ]]; then
-				out="${art_dir}/${EXE_NAME}-${ver}-${osarch}-setup.exe"
+				out="${artDir}/${EXE_NAME}-${ver}-${osarch}-setup.exe"
 				nsi="$(mktemp --suffix=.nsi)"
 				## An absolute CARGO_TARGET_DIR already gives an absolute path, and
 				## prefixing the repo root then names a file that was never there.
 				srcexe="${bin}"
-				[[ "$srcexe" = /* ]] || srcexe="${root}/${srcexe}"
+				[[ "${srcexe}" = /* ]] || srcexe="${root}/${srcexe}"
 				## Four numbers for the version block: the release, less any pre-release tag.
 				vernum="${ver%%[-+]*}.0"
 				sed -e "s|@VERSION@|${ver}|g" -e "s|@ARCH@|${osarch}|g" \
@@ -1134,19 +1126,19 @@ build_packages(){
 					"${root}/${NSIS_TEMPLATE}" > "${nsi}"
 				rc=0; makensis -INPUTCHARSET UTF8 -V2 "${nsi}" >/dev/null || rc=$?
 				rm -f "${nsi}"
-				if ((rc == 0)) && [[ -f "$out" ]]; then fEcho "OK: installer (${osarch})"; made=$((made+1))
+				if ((rc == 0)) && [[ -f "${out}" ]]; then fEcho "OK: installer (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: NSIS installer failed (${osarch})"; fi
 			else fEcho "WARNING: makensis/template missing; installer skipped (${osarch})"; fi
 		fi
 	done
-	write_sums
+	fWriteSums
 	fEcho "OK: ${made} package(s) -> ${RELEASE_ARTIFACT_DIR}/ (macOS/BSD deferred)"
 }
 fSection "6/8  Packages"
 if ((quick)); then
 	fEcho_Clean "packages skipped (--quick)"
 else
-	build_packages
+	fBuildPackages
 fi
 ## The private runner builds on boxes that are often off or busy, so it skips
 ## those itself and says so. Only a job that ran and failed stops the run.
@@ -1160,7 +1152,7 @@ elif [[ -n "${PRIVATE_RUNNER:-}" && -x "${PRIVATE_RUNNER}" ]]; then
 	## The Mac build joins this run's set only if the runner made it just now. One
 	## left from an earlier run of the same version must not be dogfooded again.
 	macBin="${PRIVATE_RUNNER%/cicd/*}/dist/${ver}/macos/${EXE_NAME}-${ver}-macos-universal"
-	if [[ -f "${macBin}" && "${macBin}" -nt "${privStart}" ]]; then built_arts+=("macos-universal|${macBin}"); fi
+	if [[ -f "${macBin}" && "${macBin}" -nt "${privStart}" ]]; then builtArts+=("macos-universal|${macBin}"); fi
 	rm -f "${privStart}"
 else
 	fEcho_Clean "private runner not checked out; skipped"
@@ -1170,28 +1162,28 @@ fi
 ## for the platform it targets; the 'runterm' launcher on each box takes it from
 ## there and keeps its own rotated versions folder.
 fSection "7/8  Dogfood (install release builds to the synced app dirs)"
-df_did=0
+dfDid=0
 
 for xd in "${DOGFOOD_DESTS[@]:-}"; do
 	xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"; xdirs="${xrest#*|}"
 
 	xsrc=""
-	for pair in "${built_arts[@]}"; do
-		[[ "${pair%%|*}" == "$xosarch" ]] && { xsrc="${pair#*|}"; break; }
+	for pair in "${builtArts[@]}"; do
+		[[ "${pair%%|*}" == "${xosarch}" ]] && { xsrc="${pair#*|}"; break; }
 	done
-	if [[ -z "$xsrc" ]]; then
+	if [[ -z "${xsrc}" ]]; then
 		fEcho_Clean "no ${xosarch} build this run; dogfood skipped"
 		continue
 	fi
 
 	## Make the first candidate when none is there yet, so a fresh box needs no
 	## setup step of its own.
-	xdest="$(dogfood_dest "$xdirs")"
-	if [[ -z "$xdest" ]]; then
+	xdest="$(fDogfoodDest "${xdirs}")"
+	if [[ -z "${xdest}" ]]; then
 		mkdir -p "${xdirs%%|*}" 2>/dev/null || true
-		xdest="$(dogfood_dest "$xdirs")"
+		xdest="$(fDogfoodDest "${xdirs}")"
 	fi
-	if [[ -z "$xdest" ]]; then
+	if [[ -z "${xdest}" ]]; then
 		fEcho "WARNING: no dogfood dest writable for ${xosarch} (${xdirs//|/, }); skipping"
 		continue
 	fi
@@ -1202,13 +1194,13 @@ for xd in "${DOGFOOD_DESTS[@]:-}"; do
 	fi
 
 	## -p: the launcher dates a build by its mtime, so the copy has to keep it.
-	cp -pf "$xsrc" "${xdest}/${xname}"
+	cp -pf "${xsrc}" "${xdest}/${xname}"
 	chmod +x "${xdest}/${xname}"
 
 	## A cross-build says nothing about the box that later reads it, so the tag
 	## rides along in a sidecar rather than being guessed at the far end.
-	xtag="${DOGFOOD_TAG-$(build_tag "$xosarch")}"
-	if [[ -n "$xtag" ]]; then printf '%s\n' "$xtag" > "${xdest}/${xname}.tag"
+	xtag="${DOGFOOD_TAG-$(fBuildTag "${xosarch}")}"
+	if [[ -n "${xtag}" ]]; then printf '%s\n' "${xtag}" > "${xdest}/${xname}.tag"
 	else rm -f "${xdest}/${xname}.tag"; fi
 
 	if [[ -n "${DOGFOOD_ICON:-}" && -f "${root}/${DOGFOOD_ICON}" ]]; then
@@ -1216,26 +1208,26 @@ for xd in "${DOGFOOD_DESTS[@]:-}"; do
 	fi
 
 	fEcho "OK: installed (${xosarch}${xtag:+, ${xtag}}) -> ${xdest}/${xname}"
-	df_did=1
+	dfDid=1
 done
 
-if ((! df_did)); then fEcho_Clean "dogfood disabled"; fi
+if ((! dfDid)); then fEcho_Clean "dogfood disabled"; fi
 
 ## Re-record the demo video (off by default, skipped under --quick, never
 ## aborts). The video GFS-rotates into
 ## ../private/demo-video/; the README highlight gif goes in assets/demo.gif.
-demo_hook="${root}/cicd/utility/demo-video/demo-video.py"
+demoHook="${root}/cicd/utility/demo-video/demo-video.py"
 if ((! ${DEMO_ENABLE:-0})); then
 	fEcho_Clean "demo video disabled"
 elif ((quick)); then
 	fEcho_Clean "demo video skipped (--quick)"
-elif [[ -f "$demo_hook" ]]; then
+elif [[ -f "${demoHook}" ]]; then
 	fEcho_Clean "recording demo video ..."
 	## Absolute: the recorder runs the app from a scratch home of its own, so a
 	## relative path would resolve against the wrong directory.
-	silk_bin="${RELEASE_NATIVE_BIN}"
-	[[ "$silk_bin" = /* ]] || silk_bin="${root}/${silk_bin}"
-	if SILK_BIN="$silk_bin" python3 "$demo_hook"; then
+	silkBin="${RELEASE_NATIVE_BIN}"
+	[[ "${silkBin}" = /* ]] || silkBin="${root}/${silkBin}"
+	if SILK_BIN="${silkBin}" python3 "${demoHook}"; then
 		fEcho "OK: demo video"
 	else
 		fEcho "WARNING: demo video hook failed (non-fatal)"
@@ -1246,15 +1238,15 @@ fi
 fSection "8/8  Backup + publish"
 ## Always run the publisher quiet: cicd already gave the initial prompt, so skip
 ## its redundant continue-prompt. The message was settled before stage 0.
-pub_flags=(--quiet)
+pubFlags=(--quiet)
 if ((${#GIT_PUBLISH[@]} == 0)); then
 	fEcho_Clean "publish disabled"
 else
 	## The publisher commits with -m, so no editor opens. GIT_EDITOR is there in
 	## case some other git step ever wants one, so it cannot stall the run.
-	fEcho_Clean "hands-off publish (commit message: \"${publish_msg}\")"
-	GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="${publish_msg}" \
-		GIT_EDITOR="${here}/utility/git-auto-msg.bash" "${GIT_PUBLISH[@]}" "${pub_flags[@]}"
+	fEcho_Clean "hands-off publish (commit message: \"${publishMsg}\")"
+	GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="${publishMsg}" \
+		GIT_EDITOR="${here}/utility/git-auto-msg.bash" "${GIT_PUBLISH[@]}" "${pubFlags[@]}"
 	fEcho "OK: published"
 fi
 

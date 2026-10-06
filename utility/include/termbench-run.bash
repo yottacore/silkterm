@@ -3,7 +3,7 @@
 #  shellcheck disable=2086  ## 'Double quote to prevent globbing and word splitting.' (OK for integers.)
 #  shellcheck disable=2155  ## 'Declare and assign separately to avoid masking return values.'
 #  shellcheck disable=2181  ## 'Check exit code directly, not indirectly with $?.'
-#  shellcheck disable=2329  ## 'This function is never invoked.' cleanup() runs from the trap.
+#  shellcheck disable=2329  ## 'This function is never invoked.' fCleanup() runs from the trap.
 #  shellcheck disable=2012  ## 'Use find instead of ls.' The wayland socket names are known-safe.
 #  shellcheck disable=1091  ## 'Not following.' bench-common.bash is beside this script.
 
@@ -57,7 +57,7 @@ source "${_here}/bench-common.bash"                                ## fEcho, fKi
 declare -i _swayPid=0 _termPid=0 _xvfbPid=0
 declare -i _keepRig=0
 
-cleanup(){
+fCleanup(){
 	local -i rc=$?
 	## The launched pid is the private session bus, with the terminal under it.
 	if ((_termPid)); then
@@ -70,7 +70,7 @@ cleanup(){
 	if ((!_keepRig)); then rm -rf "${_work}" 2>/dev/null || true; fi
 	exit ${rc}
 }
-trap cleanup EXIT INT TERM
+trap fCleanup EXIT INT TERM
 
 
 ##•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -81,7 +81,7 @@ trap cleanup EXIT INT TERM
 ##	on a throwaway account (fPrivateAccount), so nothing personal reaches a published
 ##	run and nothing under the measuring account's home changes. Keys marked awkward
 ##	need a hook the terminal does not offer directly - see showdown-readme.md.
-list_terms(){
+fListTerms(){
 	fEcho_Clean "  silkterm    this tree's release build, as shipped"
 	fEcho_Clean "  silkplain   same binary, every optional effect off"
 	fEcho_Clean "  alacritty   the VT core SilkTerm builds on, as its own terminal"
@@ -96,7 +96,7 @@ list_terms(){
 ##	Alacritty reads the user's own config unless pointed elsewhere, and defaults TERM to
 ##	an entry that need not be installed. Neither matters to the measurement, so both are
 ##	pinned to something inert.
-write_alacritty_config(){
+fWriteAlacrittyConfig(){
 	cat > "${_work}/alacritty.toml" <<-'EOF'
 		[env]
 		TERM = "xterm-256color"
@@ -105,21 +105,21 @@ write_alacritty_config(){
 
 ##	SilkTerm with every optional effect off. Only the overrides are written; the loader
 ##	backfills the rest, so this cannot go stale as new settings are added.
-write_plain_config(){
+fWritePlainConfig(){
 	cp "${_here}/termbench-plain.shcl" "${_work}/plain.shcl"
 }
 
 ##	SilkTerm as shipped, with the automatic profile pinned off so a slow renderer cannot
 ##	turn the effects down under the row that claims them.
-write_candy_config(){
+fWriteCandyConfig(){
 	cp "${_here}/termbench-candy.shcl" "${_work}/candy.shcl"
 }
 
 ##	Tabby ignores SHELL and has no profile hook that takes, so the scene goes in through
 ##	the login shell it starts, which is bash here. With its Welcome tab on, the window
 ##	opens on that tab and no shell starts at all.
-write_tabby_account(){
-	local -r home="$1"
+fWriteTabbyAccount(){
+	local -r home="${1}"
 	local rc=""
 	mkdir -p "${home}/.config/tabby"
 	printf 'enableWelcomeTab: false\n' > "${home}/.config/tabby/config.yaml"
@@ -127,9 +127,9 @@ write_tabby_account(){
 }
 
 ##	Start a terminal on the throwaway account, with its output in term.log.
-launch(){
+fLaunch(){
 	#  shellcheck disable=2154  ## Both arrays are filled by fPrivateAccount in bench-common.bash.
-	env "${_privateEnv[@]}" "${_privateBus[@]}" "$@" > "${_work}/term.log" 2>&1 &
+	env "${_privateEnv[@]}" "${_privateBus[@]}" "${@}" > "${_work}/term.log" 2>&1 &
 	_termPid=$!
 }
 
@@ -141,7 +141,7 @@ launch(){
 ##	A headless sway on the real card. Headless means no monitor and no interference with
 ##	whatever is on the actual desktop, while still handing the client a native Vulkan
 ##	context on the discrete GPU - which is the whole point over Xvfb software GL.
-start_rig(){
+fStartRig(){
 	command -v sway >/dev/null 2>&1 || fDie "sway is not installed - see showdown-readme.md"
 	printf 'default_border none\ndefault_floating_border none\ngaps inner 0\ngaps outer 0\n' > "${_work}/sway.cfg"
 
@@ -193,7 +193,7 @@ start_rig(){
 ##	The compositor tiles its only client to the whole output, so the grid is steered by
 ##	the output mode instead of by each terminal's own geometry flags - which is what
 ##	makes one fitter work for every terminal.
-resize_output(){ swaymsg output HEADLESS-1 mode "${1}x${2}" >/dev/null 2>&1 || true; }
+fResizeOutput(){ swaymsg output HEADLESS-1 mode "${1}x${2}" >/dev/null 2>&1 || true; }
 
 ##	Terminals that draw only on X11 and are measured on an X server of their own rather
 ##	than through the compositor's Xwayland. xterm reads about a third slower through
@@ -203,7 +203,7 @@ declare -r x11Terms=" xterm "
 
 ##	A private X server on a number nobody else is using. One already there is refused
 ##	rather than reused, since it could be somebody else's.
-start_x11(){
+fStartX11(){
 	command -v Xvfb >/dev/null 2>&1 || fDie "Xvfb is not installed (package xvfb)"
 	if DISPLAY="${xDisplayNum}" xdpyinfo >/dev/null 2>&1 || [[ -e "/tmp/.X${xDisplayNum#:}-lock" ]]; then
 		fDie "${xDisplayNum} is already in use; pick another with --display"
@@ -225,11 +225,11 @@ start_x11(){
 }
 
 ##	The terminal is started at the grid, and fFitGrid only confirms it.
-resize_none(){ :; }
+fResizeNone(){ :; }
 
 ##	The X display of the compositor's own Xwayland, for WezTerm, which falls back to X11.
 ##	Only the compositor's children are told it, so it is asked for.
-xwayland_display(){
+fXwaylandDisplay(){
 	local -r file="${_work}/xdisplay"
 	local -i waited=0
 	swaymsg exec "printf '%s' \"\$DISPLAY\" > '${file}'" >/dev/null 2>&1 || true
@@ -249,7 +249,7 @@ declare termKey="" label="" scene="" grid="160x42" xDisplayNum=":98"
 declare -i reps=6 noSave=0
 
 while (($#)); do
-	case "$1" in
+	case "${1}" in
 		--term)    termKey="${2:-}"; shift 2 ;;
 		--reps)    reps="${2:-6}";   shift 2 ;;
 		--grid)    grid="${2:-}";    shift 2 ;;
@@ -258,13 +258,13 @@ while (($#)); do
 		--display) xDisplayNum="${2:-}"; shift 2 ;;
 		--no-save) noSave=1;         shift ;;
 		--keep)    _keepRig=1;       shift ;;
-		--list)    list_terms; exit 0 ;;
+		--list)    fListTerms; exit 0 ;;
 		-h|--help) sed -n '/- Purpose:/,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^##\t\?//'; exit 0 ;;
-		*)         fDie "unknown option: $1" ;;
+		*)         fDie "unknown option: ${1}" ;;
 	esac
 done
 
-[[ -n "${termKey}" ]] || { fEcho "a terminal is required"; list_terms; exit 2; }
+[[ -n "${termKey}" ]] || { fEcho "a terminal is required"; fListTerms; exit 2; }
 declare -i wantC="${grid%x*}" wantR="${grid#*x}"
 
 
@@ -287,12 +287,12 @@ case "${termKey}" in
 	silkterm|silkplain) [[ -x "${silkBin}" ]] || fDie "no build at ${silkBin}" ;;
 esac
 
-declare resizeFn=resize_output
+declare resizeFn=fResizeOutput
 if [[ "${x11Terms}" == *" ${termKey} "* ]]; then
-	start_x11
-	resizeFn=resize_none
+	fStartX11
+	resizeFn=fResizeNone
 else
-	start_rig
+	fStartRig
 fi
 
 ## The scene script waits on the go file, reporting its grid meanwhile, so the fitter
@@ -313,37 +313,37 @@ esac
 declare xDisplay=""
 case "${termKey}" in
 	wezterm)
-		xDisplay="$(xwayland_display)" || fDie "the compositor has no Xwayland display" ;;
+		xDisplay="$(fXwaylandDisplay)" || fDie "the compositor has no Xwayland display" ;;
 esac
 
 case "${termKey}" in
 	silkterm)
-		write_candy_config
-		launch "${silkBin}" --config "${_work}/candy.shcl" --shell "${sceneCmd}" ;;
+		fWriteCandyConfig
+		fLaunch "${silkBin}" --config "${_work}/candy.shcl" --shell "${sceneCmd}" ;;
 	silkplain)
-		write_plain_config
-		launch "${silkBin}" --config "${_work}/plain.shcl" --shell "${sceneCmd}" ;;
+		fWritePlainConfig
+		fLaunch "${silkBin}" --config "${_work}/plain.shcl" --shell "${sceneCmd}" ;;
 	alacritty)
-		write_alacritty_config
-		launch "${termBin}" --config-file "${_work}/alacritty.toml" -e ${sceneCmd} ;;
+		fWriteAlacrittyConfig
+		fLaunch "${termBin}" --config-file "${_work}/alacritty.toml" -e ${sceneCmd} ;;
 	kitty)
-		launch "${termBin}" ${sceneCmd} ;;
+		fLaunch "${termBin}" ${sceneCmd} ;;
 	wezterm)
 		## 20240203 falls back to X11 under sway 1.10 whatever enable_wayland says.
-		launch env DISPLAY="${xDisplay}" "${termBin}" --config enable_wayland=true start --always-new-process -- ${sceneCmd} ;;
+		fLaunch env DISPLAY="${xDisplay}" "${termBin}" --config enable_wayland=true start --always-new-process -- ${sceneCmd} ;;
 	tabby)
-		write_tabby_account "${_work}/home"
-		launch "${termBin}" --ozone-platform=wayland ;;
+		fWriteTabbyAccount "${_work}/home"
+		fLaunch "${termBin}" --ozone-platform=wayland ;;
 	xfce4)
-		launch xfce4-terminal --disable-server -x ${sceneCmd} ;;
+		fLaunch xfce4-terminal --disable-server -x ${sceneCmd} ;;
 	gnome)
 		## gnome-terminal never resizes with the compositor output, so it is the one
 		## terminal that has to be told its geometry directly.
-		launch gnome-terminal --wait --geometry=${wantC}x${wantR} -- ${sceneCmd} ;;
+		fLaunch gnome-terminal --wait --geometry=${wantC}x${wantR} -- ${sceneCmd} ;;
 	terminator)
-		launch terminator -e "${sceneCmd}" ;;
+		fLaunch terminator -e "${sceneCmd}" ;;
 	xterm)
-		launch xterm -geometry ${wantC}x${wantR} -e ${sceneCmd} ;;
+		fLaunch xterm -geometry ${wantC}x${wantR} -e ${sceneCmd} ;;
 	*)
 		fDie "unknown terminal key: ${termKey} (--list)" ;;
 esac

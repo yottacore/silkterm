@@ -33,10 +33,10 @@ fCheck "the stage is found in cicd.bash" test -n "${stage}"
 ## The helpers the stage calls. fRemoteGit is plain git here, so no account
 ## wrapper decides the result.
 fSection(){ :; }
-fEcho(){ echo "[ $* ]"; }
-fEcho_Clean(){ echo "$*"; }
-fDie(){ echo "DIE: $*"; exit 1; }
-fRemoteGit(){ git "$@"; }
+fEcho(){ echo "[ ${*} ]"; }
+fEcho_Clean(){ echo "${*}"; }
+fDie(){ echo "DIE: ${*}"; exit 1; }
+fRemoteGit(){ git "${@}"; }
 fStage(){  ## fStage <clone> [sync]: run the stage there; sets rc and out
 	rc=0
 	out="$(cd "${1}" && sync="${2:-1}" && eval "${stage}" 2>&1)" || rc=$?

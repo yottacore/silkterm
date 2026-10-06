@@ -133,14 +133,14 @@ def launch_env(script: str) -> dict[str, str]:
 	return dict(ln.split("=", 1) for ln in got.stdout.splitlines() if "=" in ln)
 
 headless = (RECORDER.parents[1] / "gui-headless.bash").read_text(encoding="utf-8")
-on_x = next((ln for ln in headless.splitlines() if ln.startswith("onX(){")), "")
-e = launch_env(f'display=:197\n{on_x}\nonX env') if on_x else {}
-check("gui-headless.bash's onX drops the Wayland session",
+on_x = next((ln for ln in headless.splitlines() if ln.startswith("fOnX(){")), "")
+e = launch_env(f'display=:197\n{on_x}\nfOnX env') if on_x else {}
+check("gui-headless.bash's fOnX drops the Wayland session",
 	e and "WAYLAND_DISPLAY" not in e and "XDG_SESSION_TYPE" not in e and e.get("DISPLAY") == ":197",
-	on_x or "no onX line")
-check("gui-headless.bash's onX leaves the desktop's session", e and "SESSION_MANAGER" not in e, on_x or "no onX line")
+	on_x or "no fOnX line")
+check("gui-headless.bash's fOnX leaves the desktop's session", e and "SESSION_MANAGER" not in e, on_x or "no fOnX line")
 ## In the background it execs, so the pid recorded for stop is the program's.
-got = launch_env(f'display=:197\n{on_x}\nonX --bg sh -c \'echo PID=$$\' &\necho BG=$!\nwait') if on_x else {}
+got = launch_env(f'display=:197\n{on_x}\nfOnX --bg sh -c \'echo PID=$$\' &\necho BG=$!\nwait') if on_x else {}
 check("gui-headless.bash records the program's own pid, not a subshell's",
 	bool(got.get("PID")) and got.get("PID") == got.get("BG"), f"{got.get('PID')} against {got.get('BG')}")
 

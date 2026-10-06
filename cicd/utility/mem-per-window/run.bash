@@ -45,7 +45,7 @@ fMain(){
 	local scrim=true outline=1.0 wallpaper="" noWallpaper=false scene=idle minimap=true settings=false
 	local -i settle=15 opens=1 flood=0
 	while (($#)); do
-		case "$1" in
+		case "${1}" in
 			--no-halo)      scrim=false ;;
 			--no-scrim)     scrim=false; outline=0.0 ;;
 			--no-wallpaper) noWallpaper=true ;;
@@ -53,10 +53,10 @@ fMain(){
 			--fill)         scene=fill ;;
 			--no-minimap)   minimap=false ;;
 			--settings)     settings=true ;;
-			--opens)        fCount "$1" "${2:-}" || return 2; settings=true; opens="$2"; shift ;;
-			--flood)        fCount "$1" "${2:-}" || return 2; flood="$2"; scene=flood; shift ;;
-			--settle)       fCount "$1" "${2:-}" || return 2; settle="$2"; shift ;;
-			*) echo "unknown option: $1" >&2; return 2 ;;
+			--opens)        fCount "${1}" "${2:-}" || return 2; settings=true; opens="${2}"; shift ;;
+			--flood)        fCount "${1}" "${2:-}" || return 2; flood="${2}"; scene=flood; shift ;;
+			--settle)       fCount "${1}" "${2:-}" || return 2; settle="${2}"; shift ;;
+			*) echo "unknown option: ${1}" >&2; return 2 ;;
 		esac
 		shift
 	done
@@ -97,7 +97,7 @@ fMain(){
 
 # Checked as text first, since a -i variable evaluates whatever it is given.
 fCount(){
-	[[ "$2" =~ ^[1-9][0-9]*$ ]] || { echo "$1 takes a whole number above 0" >&2; return 1; }
+	[[ "${2}" =~ ^[1-9][0-9]*$ ]] || { echo "${1} takes a whole number above 0" >&2; return 1; }
 }
 
 # Graphics memory is shared with the desktop and whatever else is running. A
@@ -110,7 +110,7 @@ fGpuHasRoom(){
 }
 
 fWriteConfig(){
-	local -r file="$1" scrim="$2" outline="$3" noWallpaper="$4" wallpaper="$5" minimap="$6"
+	local -r file="${1}" scrim="${2}" outline="${3}" noWallpaper="${4}" wallpaper="${5}" minimap="${6}"
 	{
 		printf 'performance:\n\tautomatic: false\n\tprofile: custom\n\tcheck_hardware: false\n'
 		printf 'transparency:\n\tenabled: false\n'
@@ -126,7 +126,7 @@ fWriteConfig(){
 }
 
 fWriteScene(){
-	local -r file="$1" scene="$2" seconds="$3"
+	local -r file="${1}" scene="${2}" seconds="${3}"
 	if [[ "${scene}" == flood ]]; then
 		cat >"${file}" <<EOF
 sleep 3
@@ -154,7 +154,7 @@ EOF
 # sized by sway instead. The X display is whichever number sway's Xwayland
 # takes, so it is read from the socket sway itself listens on.
 fStartSway(){
-	local -r work="$1" output="$2"
+	local -r work="${1}" output="${2}"
 	local node=""
 	for node in /sys/class/drm/renderD*; do
 		[[ "$(cat "${node}/device/vendor" 2>/dev/null)" == 0x10de ]] && break
@@ -177,7 +177,7 @@ fStartSway(){
 }
 
 fSample(){
-	local -r work="$1" tag="$2"
+	local -r work="${1}" tag="${2}"
 	echo "== ${tag}"
 	nvidia-smi -q -d PIDS | awk -v p="${appPid}" '/Process ID/ {on = ($4 == p)} on && /Used GPU Memory/ {print "graphics memory (nvidia-smi):", $5, $6}'
 	python3 "${repoDir}/utility/include/sizebench-classify.py" --summary "${appPid}" 2>/dev/null \
@@ -191,7 +191,7 @@ fSample(){
 # Ctrl+, opens Settings and Escape closes it, sent through XTEST to the
 # focused window, which is the only kind of input winit takes.
 fSettingsOnce(){
-	local -r work="$1"
+	local -r work="${1}"
 	local win dialog
 	win="$(DISPLAY="${xDisplay}" xdotool search --all --pid "${appPid}" --onlyvisible --name . 2>/dev/null | head -1)"
 	DISPLAY="${xDisplay}" xdotool windowactivate --sync "${win}" 2>/dev/null

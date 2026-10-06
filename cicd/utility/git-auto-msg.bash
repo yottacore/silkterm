@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-file="$1"
+file="${1}"
 
 ## Ask git for its comment string rather than assume `#`: core.commentChar can
 ## be anything, and git strips by whatever it is.
@@ -22,26 +22,26 @@ scissors="${cc} ------------------------ >8 ------------------------"
 
 ## What git keeps: everything above the scissors (commit.verbose puts a diff
 ## below it), minus comment lines and blank runs.
-fKept(){ SC="$scissors" awk '$0 == ENVIRON["SC"] {exit} {print}' | git stripspace --strip-comments; }
+fKept(){ SC="${scissors}" awk '$0 == ENVIRON["SC"] {exit} {print}' | git stripspace --strip-comments; }
 
 tmpl="$(git config --path commit.template 2>/dev/null || true)"
-existing="$(fKept <"$file")"
+existing="$(fKept <"${file}")"
 ## An untouched template is not a message; git refuses it as unedited.
-if [[ -n "$existing" && -n "$tmpl" && -r "$tmpl" && "$existing" == "$(fKept <"$tmpl")" ]]; then existing=""; fi
-[[ -n "$existing" ]] && exit 0
+if [[ -n "${existing}" && -n "${tmpl}" && -r "${tmpl}" && "${existing}" == "$(fKept <"${tmpl}")" ]]; then existing=""; fi
+[[ -n "${existing}" ]] && exit 0
 
 msg="${GIT_AUTO_MESSAGE:-}"
-[[ -n "$(printf '%s' "$msg" | tr -d '[:space:]')" ]] || msg="CI/CD automated commit"
-kept="$(printf '%s\n' "$msg" | git stripspace --strip-comments)"
-if [[ "$kept" != "$(printf '%s\n' "$msg" | git stripspace)" ]]; then
-	printf 'git-auto-msg: message has a line starting with "%s", which git drops as a comment\n' "$cc" >&2
+[[ -n "$(printf '%s' "${msg}" | tr -d '[:space:]')" ]] || msg="CI/CD automated commit"
+kept="$(printf '%s\n' "${msg}" | git stripspace --strip-comments)"
+if [[ "${kept}" != "$(printf '%s\n' "${msg}" | git stripspace)" ]]; then
+	printf 'git-auto-msg: message has a line starting with "%s", which git drops as a comment\n' "${cc}" >&2
 	exit 1
 fi
 
 ## Keep git's own comment lines and anything from the scissors down; drop
 ## template text above them.
-rest="$(SC="$scissors" CC="$cc" awk 'f || $0 == ENVIRON["SC"] {f=1; print; next} index($0, ENVIRON["CC"]) == 1 {print}' "$file")"
-printf '%s\n\n%s\n' "$msg" "$rest" >"$file"
+rest="$(SC="${scissors}" CC="${cc}" awk 'f || $0 == ENVIRON["SC"] {f=1; print; next} index($0, ENVIRON["CC"]) == 1 {print}' "${file}")"
+printf '%s\n\n%s\n' "${msg}" "${rest}" >"${file}"
 
 ##	History:
 ##		- 20260628: First commit.

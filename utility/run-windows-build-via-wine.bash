@@ -120,8 +120,8 @@ declare -a passThrough=()
 #••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 # Helpers
 
-fEcho(){ echo "[ $* ]"; }
-fDie(){ echo -e "\nError in $(basename "${BASH_SOURCE[0]}"): $*\n" >&2; exit 1; }
+fEcho(){ echo "[ ${*} ]"; }
+fDie(){ echo -e "\nError in $(basename "${BASH_SOURCE[0]}"): ${*}\n" >&2; exit 1; }
 
 ## Unix path -> the wine drive Z: form. Z: is mapped to the unix root by default.
 fToWin(){ echo "Z:${1//\//\\}"; }

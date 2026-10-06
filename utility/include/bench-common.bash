@@ -27,33 +27,33 @@ declare -r _benchCommonLoaded=1
 declare -r _letterbox="$(printf '%.0s-' {1..78})"
 
 declare -i _wasLastEchoBlank=0
-fEcho_Clean(){ if [[ -n "${1:-}" ]]; then echo -e "$*"; _wasLastEchoBlank=0; elif [[ $_wasLastEchoBlank -eq 0 ]] && echo; then _wasLastEchoBlank=1; fi; }
-fEcho(){ if [[ -n "$*" ]]; then fEcho_Clean "[ $* ]"; else fEcho_Clean ""; fi; }
-fSection(){ fEcho_Clean; fEcho_Clean "${_letterbox}"; fEcho "$*"; }
-fDie(){ { fEcho_Clean; fEcho "FAILED: $*"; } >&2; exit 1; }
+fEcho_Clean(){ if [[ -n "${1:-}" ]]; then echo -e "${*}"; _wasLastEchoBlank=0; elif [[ ${_wasLastEchoBlank} -eq 0 ]] && echo; then _wasLastEchoBlank=1; fi; }
+fEcho(){ if [[ -n "${*}" ]]; then fEcho_Clean "[ ${*} ]"; else fEcho_Clean ""; fi; }
+fSection(){ fEcho_Clean; fEcho_Clean "${_letterbox}"; fEcho "${*}"; }
+fDie(){ { fEcho_Clean; fEcho "FAILED: ${*}"; } >&2; exit 1; }
 
 ##	Kill only pids this script started, and only by pid. A pattern kill matches the
 ##	harness's own command line and any copy already open and in use; that has taken out a
 ##	session mid-run before now.
 fKillPids(){
 	local -i pid=0
-	for pid in "$@"; do ((pid > 0)) && kill ${pid} 2>/dev/null || true; done
+	for pid in "${@}"; do ((pid > 0)) && kill ${pid} 2>/dev/null || true; done
 	sleep 1
-	for pid in "$@"; do ((pid > 0)) && kill -9 ${pid} 2>/dev/null || true; done
+	for pid in "${@}"; do ((pid > 0)) && kill -9 ${pid} 2>/dev/null || true; done
 	return 0
 }
 
 ##	Where cargo put the build. CARGO_TARGET_DIR moves it, and a relative one is taken
 ##	from the repository, where cargo runs.
 fTargetDir(){
-	local -r repo="$1" dir="${CARGO_TARGET_DIR:-target}"
+	local -r repo="${1}" dir="${CARGO_TARGET_DIR:-target}"
 	if [[ "${dir}" == /* ]]; then printf '%s' "${dir}"; else printf '%s' "${repo}/${dir}"; fi
 }
 
 ##	A terminal binary: PATH first, then the kept downloads, so a re-measure needs no
 ##	re-download.
 fFindTerm(){
-	local -r repo="$1" name="$2"
+	local -r repo="${1}" name="${2}"
 	local -r terms="${repo}/cicd/artifacts/sizebench/terms"
 	local candidate=""
 	if candidate="$(command -v "${name}" 2>/dev/null)"; then printf '%s' "${candidate}"; return 0; fi
@@ -68,7 +68,7 @@ fFindTerm(){
 ##	child, since dbus-daemon forks twice, so the tree alone misses GNOME Terminal's server.
 ##	HOME alone misses Electron, which writes its process title over its environment.
 fOwnedPids(){
-	local -r home="$1" launched="${2:-0}"
+	local -r home="${1}" launched="${2:-0}"
 	local pid="" environ=""
 	if ((launched > 0)); then fCollectTree "${launched}"; fi
 	for pid in $(pgrep -u "$(id -u)" 2>/dev/null || true); do
@@ -82,7 +82,7 @@ fOwnedPids(){
 ##	there down, so neither the bus nor a client that only asked for a window is billed.
 ##	Usage: fOwnedRoot <executable> <throwaway home> <launched pid>
 fOwnedRoot(){
-	local -r exe="$1" home="$2" launched="$3"
+	local -r exe="${1}" home="${2}" launched="${3}"
 	local want="" pid="" parent=""
 	local -A mine=()
 	want="$(readlink -f "${exe}")"
@@ -101,7 +101,7 @@ fOwnedRoot(){
 ##	can predate the resize it is meant to answer (80x24 from a window not yet tiled), so
 ##	a size is taken only once two reports in a row agree.
 fReadGrid(){
-	local -r reportFile="$1"
+	local -r reportFile="${1}"
 	local seen="" again=""
 	local -i waited=0 tries=0
 	while ((waited < 60)); do [[ -f "${reportFile}" ]] && break; sleep 0.25; waited+=1; done
@@ -120,9 +120,9 @@ fReadGrid(){
 ##	metrics or its geometry flags.
 ##	Usage: fFitGrid <cols> <rows> <report file> <resize function> <start width> <start height>
 fFitGrid(){
-	local -i wantC=$1 wantR=$2
-	local reportFile="$3" resizeFn="$4"
-	local -i w=$5 h=$6 pass=0 gotC=0 gotR=0
+	local -i wantC=${1} wantR=${2}
+	local reportFile="${3}" resizeFn="${4}"
+	local -i w=${5} h=${6} pass=0 gotC=0 gotR=0
 	## A proportional step can hop over the answer and come back (43 rows, 41, 43 ...)
 	## when a cell is near 20 pixels, which a new account's default font made routine.
 	## When two passes in a row land close on either side, the next try is the middle
@@ -158,7 +158,7 @@ fFitGrid(){
 ##	would sweep in whatever else the desktop started meanwhile, and a name match would find
 ##	copies that were already running.
 fCollectTree(){
-	local -i root="$1"
+	local -i root="${1}"
 	local -a out=("${root}") queue=("${root}")
 	local -i pid=0 kid=0
 	while ((${#queue[@]} > 0)); do
@@ -185,7 +185,7 @@ fCollectTree(){
 ##	Usage: fPrivateAccount <dir>, then: env "${_privateEnv[@]}" "${_privateBus[@]}" <terminal...>
 declare -a _privateEnv=() _privateBus=()
 fPrivateAccount(){
-	local -r home="$1"
+	local -r home="${1}"
 	command -v dbus-run-session >/dev/null 2>&1 || fDie "dbus-run-session is not installed (package dbus-daemon)"
 	mkdir -p "${home}/.config" "${home}/.local/share" "${home}/.local/state" "${home}/.cache" "${home}/.bus"
 	local service=""
@@ -227,7 +227,7 @@ fPrivateAccount(){
 ##	What a SilkTerm settings file says about its performance profile, in either the
 ##	nested or the dotted spelling: "automatic=<value> profile=<value>".
 fSilkProfile(){
-	local -r file="$1"
+	local -r file="${1}"
 	awk '
 		function bare(v){ gsub(/["\047]/, "", v); return v }
 		/^performance:/              { inside = 1; next }
@@ -242,7 +242,7 @@ fSilkProfile(){
 
 ##	The +candy row is only that if nothing turned its effects down.
 fRequireCandyProfile(){
-	local -r file="$1"
+	local -r file="${1}"
 	local state=""
 	state="$(fSilkProfile "${file}")"
 	fEcho "SilkTerm profile in force: ${state}"

@@ -6,7 +6,7 @@
 ##		'target' builds and then looks for its binary where it was never put -
 ##		the Windows installer step did exactly that, warned, and went on, so a
 ##		release could go out with no installers in it.
-##		build_packages() is lifted out of cicd.bash and run against the real
+##		fBuildPackages() is lifted out of cicd.bash and run against the real
 ##		template and makensis, once with each shape of target directory.
 ##		The release collection and the Linux packages run too, on stand-in
 ##		binaries and a stand-in cargo, for the names and checksums download
@@ -46,23 +46,23 @@ else
 	RELEASE_ARTIFACT_DIR="cicd/artifacts/release"   ## only ever printed
 	ver="0.0.1-beta2"
 	root="${fakeRoot}"
-	write_sums(){ :; }
-	fEcho(){ echo "    $*"; }
-	fEcho_Clean(){ echo "    $*"; }
-	eval "$(sed -n '/^build_packages(){/,/^}/p' "${realRoot}/cicd/cicd.bash")"
+	fWriteSums(){ :; }
+	fEcho(){ echo "    ${*}"; }
+	fEcho_Clean(){ echo "    ${*}"; }
+	eval "$(sed -n '/^fBuildPackages(){/,/^}/p' "${realRoot}/cicd/cicd.bash")"
 
 	## $1 is the binary path as stage 5 recorded it - relative to the repository
 	## with no CARGO_TARGET_DIR, absolute with one.
 	fRunStep() {
-		local bin="$1" out="$2"
+		local bin="${1}" out="${2}"
 		local abs="${bin}"
 		[[ "${abs}" = /* ]] || abs="${fakeRoot}/${abs}"
 		mkdir -p "$(dirname "${abs}")"
 		printf 'MZ stand-in\n' > "${abs}"
-		art_dir="${out}"
-		mkdir -p "${art_dir}"
-		built_arts=("windows-x86_64|${bin}")
-		build_packages > "${work}/step.log" 2>&1 || true
+		artDir="${out}"
+		mkdir -p "${artDir}"
+		builtArts=("windows-x86_64|${bin}")
+		fBuildPackages > "${work}/step.log" 2>&1 || true
 	}
 
 	setup="${work}/art-rel/silkterm-${ver}-windows-x86_64-setup.exe"
@@ -70,7 +70,7 @@ else
 	fCheck "a relative target dir still makes the installer" test -f "${setup}"
 
 	## It carries the program's icon, not the stock one, and a version block.
-	fHasIcon(){ python3 - "$1" "${realRoot}/source/assets/icon.ico" <<'PY'
+	fHasIcon(){ python3 - "${1}" "${realRoot}/source/assets/icon.ico" <<'PY'
 import struct, sys
 exe, ico = (open(p, "rb").read() for p in sys.argv[1:3])
 size, off = struct.unpack_from("<II", ico, 6 + 16 * 2 + 8)
@@ -91,20 +91,20 @@ PY
 fi
 
 ## The release collection and the Linux packages, lifted out of cicd.bash with
-## release_expects and write_sums. The binaries are stand-ins, and so are cargo
+## fReleaseExpects and fWriteSums. The binaries are stand-ins, and so are cargo
 ## and the two package tools, so what is checked is the names, the calls and
 ## the checksums.
 pkgWork="$(mktemp -d)"
 trap 'rc=$?; rm -rf "${work:-}" "${pkgWork}"; fTestDir_End "${rc}"' EXIT
 (
 	engine="${realRoot}/cicd/cicd.bash"
-	fEcho(){ echo "    $*"; }
-	fEcho_Clean(){ echo "    $*"; }
-	fDie(){ echo "DIE: $*"; exit 1; }
+	fEcho(){ echo "    ${*}"; }
+	fEcho_Clean(){ echo "    ${*}"; }
+	fDie(){ echo "DIE: ${*}"; exit 1; }
 	fWriteBuiltFrom(){ :; }
-	eval "$(sed -n '/^release_expects(){/,/^}/p; /^write_sums(){/,/^}/p; /^build_packages(){/,/^}/p' "${engine}")"
+	eval "$(sed -n '/^fReleaseExpects(){/,/^}/p; /^fWriteSums(){/,/^}/p; /^fBuildPackages(){/,/^}/p' "${engine}")"
 	collect="$(sed -n '/^if \[\[ -n "\${RELEASE_ARTIFACT_DIR:-}" \]\]; then$/,/^fi$/p' "${engine}")"
-	noArm="$(sed -n '/^if ((no_arm)) && declare -p CROSS_TARGETS/,/^fi$/p' "${engine}")"
+	noArmBlock="$(sed -n '/^if ((noArm)) && declare -p CROSS_TARGETS/,/^fi$/p' "${engine}")"
 	mapfile -t shippedCross < <(bash -c 'source "$1" && printf "%s\n" "${CROSS_TARGETS[@]}"' _ "${realRoot}/cicd/config.bash")
 
 	stubs="${pkgWork}/stubs"
@@ -122,44 +122,44 @@ STUB
 	chmod +x "${stubs}/cargo" "${stubs}/cargo-deb" "${stubs}/cargo-generate-rpm"
 	export STUB_LOG="${pkgWork}/cargo.log"
 
-	## One run of stages 5 and 6 as far as these pieces go. $1 is no_arm.
+	## One run of stages 5 and 6 as far as these pieces go. $1 is noArm.
 	fStages(){
 		local t rest osarch art
-		no_arm="${1}"; CROSS_TARGETS=("${shippedCross[@]}"); BUILD_CROSS=1
-		eval "${noArm}"
+		noArm="${1}"; CROSS_TARGETS=("${shippedCross[@]}"); BUILD_CROSS=1
+		eval "${noArmBlock}"
 		root="${pkgWork}/repo-${1}"
 		mkdir -p "${root}/source" "${root}/bin"
 		printf '[package]\nname = "silkterm"\nversion = "1.2.3-beta4"\n' >"${root}/source/Cargo.toml"
 		printf 'native\n' >"${root}/bin/native"
-		built_arts=("linux-x86_64|${root}/bin/native")
+		builtArts=("linux-x86_64|${root}/bin/native")
 		for t in "${CROSS_TARGETS[@]}"; do
 			rest="${t#*|}"; osarch="${rest%%|*}"; rest="${rest#*|}"; art="${root}/bin/${osarch}"
 			[[ "${rest%%|*}" == *.exe ]] && art+=".exe"
 			printf '%s\n' "${osarch}" >"${art}"
-			built_arts+=("${osarch}|${art}")
+			builtArts+=("${osarch}|${art}")
 		done
 		EXE_NAME=silkterm; RELEASE_NATIVE_OSARCH=linux-x86_64; PACKAGE_ENABLE=1
 		RELEASE_ARTIFACT_DIR="art"; VERSION_MANIFEST="source/Cargo.toml"; NSIS_TEMPLATE="no-such-template"
 		eval "${collect}"
 		: >"${STUB_LOG}"
-		PATH="${stubs}:${PATH}" build_packages
+		PATH="${stubs}:${PATH}" fBuildPackages
 	}
 
 	failures=0
 	fStages 0 >"${pkgWork}/stages.log" 2>&1 || { sed 's/^/    /' "${pkgWork}/stages.log"; }
 	pre="silkterm-1.2.3-beta4"
-	fCheck "each binary is collected as <exe>-<version>-<os-arch>" test -f "${art_dir}/${pre}-linux-x86_64" -a -f "${art_dir}/${pre}-linux-arm64"
-	fCheck "with .exe kept on the Windows ones" test -f "${art_dir}/${pre}-windows-x86_64.exe" -a -f "${art_dir}/${pre}-windows-arm64.exe"
-	fCheck "holding the binary it names" test "$(cat "${art_dir}/${pre}-windows-arm64.exe")" = "windows-arm64"
+	fCheck "each binary is collected as <exe>-<version>-<os-arch>" test -f "${artDir}/${pre}-linux-x86_64" -a -f "${artDir}/${pre}-linux-arm64"
+	fCheck "with .exe kept on the Windows ones" test -f "${artDir}/${pre}-windows-x86_64.exe" -a -f "${artDir}/${pre}-windows-arm64.exe"
+	fCheck "holding the binary it names" test "$(cat "${artDir}/${pre}-windows-arm64.exe")" = "windows-arm64"
 	fCheck "the checksums file is <exe>-<version>-sha256sums.txt, and they check" \
-		bash -c 'cd "$1" && sha256sum --quiet -c "$2"' _ "${art_dir}" "${pre}-sha256sums.txt"
+		bash -c 'cd "$1" && sha256sum --quiet -c "$2"' _ "${artDir}" "${pre}-sha256sums.txt"
 	fCheck "one .deb and one .rpm per Linux arch" test "$(grep -c '^deb ' "${STUB_LOG}")" -eq 2 -a "$(grep -c '^generate-rpm ' "${STUB_LOG}")" -eq 2
 	fCheck "the ARM64 ones built for aarch64" test -n "$(grep -E '^deb .*--output [^ ]*linux-arm64\.deb --target aarch64-unknown-linux-gnu$' "${STUB_LOG}")" \
 		-a -n "$(grep -E '^generate-rpm .*linux-arm64\.rpm --target aarch64-unknown-linux-gnu --arch aarch64$' "${STUB_LOG}")"
 	fCheck "the .rpm version has no dash" grep -qF 'version = "1.2.3~beta4"' "${STUB_LOG}"
-	fCheck "and the packages are in the checksums" test "$(grep -cE "  ${pre}-linux-(x86_64|arm64)\.(deb|rpm)$" "${art_dir}/${pre}-sha256sums.txt")" -eq 4
-	fCheck "which still check" bash -c 'cd "$1" && sha256sum --quiet -c "$2"' _ "${art_dir}" "${pre}-sha256sums.txt"
-	fCheck "and cover every file there" test "$(wc -l <"${art_dir}/${pre}-sha256sums.txt")" -eq "$(find "${art_dir}" -type f ! -name '*sha256sums.txt' | wc -l)"
+	fCheck "and the packages are in the checksums" test "$(grep -cE "  ${pre}-linux-(x86_64|arm64)\.(deb|rpm)$" "${artDir}/${pre}-sha256sums.txt")" -eq 4
+	fCheck "which still check" bash -c 'cd "$1" && sha256sum --quiet -c "$2"' _ "${artDir}" "${pre}-sha256sums.txt"
+	fCheck "and cover every file there" test "$(wc -l <"${artDir}/${pre}-sha256sums.txt")" -eq "$(find "${artDir}" -type f ! -name '*sha256sums.txt' | wc -l)"
 
 	fStages 1 >"${pkgWork}/stages.log" 2>&1 || { sed 's/^/    /' "${pkgWork}/stages.log"; }
 	fCheck "--no-arm leaves x86_64 packages only" test "$(grep -c '^deb ' "${STUB_LOG}")" -eq 1 -a "$(grep -c '^generate-rpm ' "${STUB_LOG}")" -eq 1 \
@@ -169,7 +169,7 @@ STUB
 
 ## The Windows linkers write the link time into the PE header unless told not to,
 ## and then the same commit built twice has two checksums.
-fLinkFlag(){ python3 - "${realRoot}/.cargo/config.toml" "$1" "$2" <<'PY'
+fLinkFlag(){ python3 - "${realRoot}/.cargo/config.toml" "${1}" "${2}" <<'PY'
 import sys, tomllib
 cfg = tomllib.load(open(sys.argv[1], "rb"))
 flags = cfg.get("target", {}).get(sys.argv[2], {}).get("rustflags", [])

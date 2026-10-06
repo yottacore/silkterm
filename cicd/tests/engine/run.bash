@@ -24,24 +24,24 @@ engine="${cicd}/cicd.bash"
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 fLift(){ sed -n "/${1}/,/${2}/p" "${engine}"; }
-fNot(){ ! "$@"; }
+fNot(){ ! "${@}"; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-engine.XXXXXX")"
 declare -a started=()
 fEnd(){ local -r rc=$?; local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; rm -rf "${work}"; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
-fEcho(){ echo "    $*"; }
-fDie(){ echo "DIE: $*"; exit 1; }
+fEcho(){ echo "    ${*}"; }
+fDie(){ echo "DIE: ${*}"; exit 1; }
 
 ## The build retry. rustc has crashed inside LLVM twice in a row, so the one
 ## rebuild the profiler stage first had was not enough.
-eval "$(fLift '^retry_build(){' '^}')"
+eval "$(fLift '^fRetryBuild(){' '^}')"
 counter="${work}/tries"
 fFlaky(){ local n; n=$(( $(cat "${counter}") + 1 )); echo "${n}" >"${counter}"; ((n > ${1})); }
 fRetry(){  ## fRetry <failures before success> [BUILD_ATTEMPTS]; sets rc, out, tries
 	echo 0 >"${counter}"
-	rc=0; out="$(if [[ -n "${2:-}" ]]; then export BUILD_ATTEMPTS="${2}"; else unset BUILD_ATTEMPTS; fi; retry_build test fFlaky "${1}")" || rc=$?
+	rc=0; out="$(if [[ -n "${2:-}" ]]; then export BUILD_ATTEMPTS="${2}"; else unset BUILD_ATTEMPTS; fi; fRetryBuild test fFlaky "${1}")" || rc=$?
 	tries="$(cat "${counter}")"
 }
 fRetry 2 3
@@ -55,16 +55,16 @@ fRetry 0 3
 fCheck "a build that works runs once" test "${rc}" -eq 0 -a "${tries}" -eq 1
 fCheck "the shipped config allows at least three attempts" \
 	bash -c 'source "$1" && ((BUILD_ATTEMPTS >= 3))' _ "${cicd}/config.bash"
-fCheck "the profiler build goes through the retry" grep -q '^[[:space:]]*retry_build profiler ' "${engine}"
-fCheck "the native release build does" grep -q '^retry_build "native release" ' "${engine}"
-fCheck "and each cross build does" grep -q '^[[:space:]]*retry_build "${local_label}" ' "${engine}"
+fCheck "the profiler build goes through the retry" grep -q '^[[:space:]]*fRetryBuild profiler ' "${engine}"
+fCheck "the native release build does" grep -q '^fRetryBuild "native release" ' "${engine}"
+fCheck "and each cross build does" grep -q '^[[:space:]]*fRetryBuild "${localLabel}" ' "${engine}"
 
 ## The dogfood tag: toolchain, built on, target, arch. A cross build is tagged
 ## for where it will run.
-eval "$(fLift '^build_tag(){' '^}')"
+eval "$(fLift '^fBuildTag(){' '^}')"
 hostName="Linux"
 uname(){ echo "${hostName}"; }
-fTag(){ test "$(build_tag "${1}")" = "${2}"; }
+fTag(){ test "$(fBuildTag "${1}")" = "${2}"; }
 fCheck "linux-x86_64 built here is gnulli" fTag linux-x86_64 gnulli
 fCheck "windows-x86_64 built here is gnulwi" fTag windows-x86_64 gnulwi
 fCheck "windows-arm64 built here is gnulwa" fTag windows-arm64 gnulwa
@@ -78,13 +78,13 @@ fCheck "an unknown host gets no tag" fTag linux-x86_64 ""
 unset -f uname
 
 ## --quick turns off every slow stage, and is an option the parser knows.
-parse="$(fLift '^assume_yes=0; ' '^esac; done$')"
+parse="$(fLift '^assumeYes=0; ' '^esac; done$')"
 fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits as it does
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
 	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=0
-	set -- "$@"
+	set -- "${@}"
 	eval "${parse}"
-	echo "quick=${quick} cross=${BUILD_CROSS} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assume_yes} sync=${sync}"
+	echo "quick=${quick} cross=${BUILD_CROSS} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assumeYes} sync=${sync}"
 }
 rc=0; out="$(fParse --quick 2>&1)" || rc=$?
 fCheck "--quick is accepted" test "${rc}" -eq 0
@@ -163,8 +163,8 @@ fCheck "and so does a folder that is not a repository" fNearNow "$(fMinutes "${w
 fCheck "a value handed down is kept" test "$(cd "${repo}" && SILK_BUILD_MINUTES=12345 && fPinBuildMinutes && echo "${SILK_BUILD_MINUTES}")" = 12345
 
 ## The plan's host line, for each host the pipeline runs on.
-eval "$(fLift '^host_describe(){' '^}')"
-fHost(){ test "$(env -u CICD_LINUX_HALF -u WSL_DISTRO_NAME "${@:3}" bash -c "$(declare -f host_describe); "'host_describe "$@"' _ "${1}" x86_64 "${2}" "Debian GNU/Linux 13 (trixie)")" = "${want}"; }
+eval "$(fLift '^fHostDescribe(){' '^}')"
+fHost(){ test "$(env -u CICD_LINUX_HALF -u WSL_DISTRO_NAME "${@:3}" bash -c "$(declare -f fHostDescribe); "'fHostDescribe "$@"' _ "${1}" x86_64 "${2}" "Debian GNU/Linux 13 (trixie)")" = "${want}"; }
 want="Linux (Debian GNU/Linux 13 (trixie)), x86_64"
 fCheck "plain Linux names the distribution and arch" fHost Linux "Linux version 6.12.101+deb13-amd64 (debian-kernel@lists.debian.org)"
 wsl2="Linux version 5.15.167.4-microsoft-standard-WSL2 (root@f9c826d3017f)"
@@ -178,8 +178,8 @@ want="Windows (MSYS bash) - cicd-win.ps1 is the pipeline for this box"
 fCheck "an MSYS shell is pointed at the Windows pipeline" fHost MINGW64_NT-10.0-26100 ""
 want="FreeBSD, x86_64"
 fCheck "anything else is named as it is" fHost FreeBSD ""
-eval "$(fLift '^host_line(){' '^}')"
-fCheck "and this box gets a line" test -n "$(host_line)"
+eval "$(fLift '^fHostLine(){' '^}')"
+fCheck "and this box gets a line" test -n "$(fHostLine)"
 
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"

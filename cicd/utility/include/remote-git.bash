@@ -13,8 +13,8 @@
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
 
-fRemoteGit(){ if command -v gitsby >/dev/null 2>&1; then gitsby raw git "$@"; else git "$@"; fi; }
-fRemoteGh(){ if command -v gitsby >/dev/null 2>&1; then gitsby raw gh "$@"; else gh "$@"; fi; }
+fRemoteGit(){ if command -v gitsby >/dev/null 2>&1; then gitsby raw git "${@}"; else git "${@}"; fi; }
+fRemoteGh(){ if command -v gitsby >/dev/null 2>&1; then gitsby raw gh "${@}"; else gh "${@}"; fi; }
 
 ##	History:
 ##		- 20260925 JC: Created.

@@ -98,7 +98,7 @@ fWriteBuiltFrom(){
 			while IFS= read -r line; do echo "untracked ${line}"; done <<< "${untrackedList}"
 		fi
 		local name
-		for name in "$@"; do echo "expect ${name}"; done
+		for name in "${@}"; do echo "expect ${name}"; done
 	} > "${dir}/${BUILT_FROM_FILE}"
 	return 0
 }

@@ -149,7 +149,7 @@ PS
 	started+=("${kid}")
 	pwsh -NoProfile -File "${meDir}/_stop.ps1" -List "${work}/started.txt"
 	sleep 0.3
-	fGone(){ ! kill -0 "$1" 2>/dev/null ;}
+	fGone(){ ! kill -0 "${1}" 2>/dev/null ;}
 	fCheck "a process the run started is stopped" fGone "${ours}"
 	fCheck "and what it started in turn" fGone "${kid:-0}"
 	fCheck "a silkterm the run did not start keeps running" kill -0 "${theirs}"
