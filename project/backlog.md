@@ -964,7 +964,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the first frames after a window shows are drawn at the default size
 	- ID: 2026100517535929
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: The `newwin` Windows scenario on vm925w, since every resize event now reads the window's size. A window resize and Settings on Wayland.
 	- Severity: Low
 	- Opened: 20261005-175359
 	- Opened by: CC
@@ -976,6 +977,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The first frame on screen is drawn at the window's size.
 	- Reproduced: No. Seen 20261005 on b26 in what the window reported about its size, not looked at on screen.
 	- Possible cause: winit's `request_inner_size` answers nothing on macOS, though the window takes the size at once, so the surface waits for the resize event. A hidden window's frame is refused as occluded and the window is shown at once (2026100114274893), before that event comes.
+	- Reproduced: Partly, 20261006 on b26. For about 85 ms after launch the surface was at the creation size, 2000x1280 pixels, while the window was already 2394x828, and the late resize from creation set it back to 2000x1280 once more. But no frame was drawn at that size in 6 launches. macOS refuses every frame until the window is on screen, about 110 ms in, and the real size has arrived by then. The Settings dialog was the same at its first size, 560x800.
+	- Actual cause:
+		- winit on macOS answers nothing when asked for a size, though the window takes it at once. So the surface stayed at the creation size until a resize event came.
+		- The resize event from the window's creation comes after the real size is in place, and it moved the surface back to the creation size until the next one.
+	- Actual fix:
+		- A size request that winit answers with nothing still counts when the window already has a new size. The surface is made at the window's size before the first frame. Every size request goes through this, the dialogs' too.
+		- A resize event sizes the surface at the window's own size, not the event's, so a stale one changes nothing. Same for the dialogs.
+	- Swept: every `request_inner_size` call, 2 in app.rs and 6 in dialog.rs, and the 3 resize event handlers (window, dialog, notice).
+	- Verified:
+		- b26: 6 launches with the fix and 6 without, and Settings opened once each. With the fix the surface had the window's size from the start, and the late creation resize left it alone. Without it, as under Reproduced.
+		- Linux X11: `cicd/tests/startsize/run.bash` and `cicd/tests/wpresize/run.bash` pass, the unit tests pass, and Settings opened and resized under xfwm4 drew at its size.
+	- Note: Windows and Wayland already answer a size request at once, and their resize events carry the window's size, so nothing should change there. Not run on either.
+	- Branch: macfirst
+	- Commit: 621d931
+	- Test case: `a_size_the_window_took_without_saying_is_drawn_at` (ErwgxDd), failing on the old code. The resize event half has no unit test, since it needs a real window.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
