@@ -1,10 +1,15 @@
-##	Helpers for a scenario running inside the console session. Dot-sourced by
-##	_run.ps1, which has already checked that there is a desktop to draw on.
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	Helpers for a scenario running inside the console session.
+.DESCRIPTION
+	Dot-sourced by _run.ps1, which has already checked that there is a desktop
+	to draw on, and which sets StrictMode for the scenario and these helpers.
+.NOTES
+	History: At bottom of file.
+#>
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -Namespace Silk -Name Win -MemberDefinition @'
@@ -128,17 +133,17 @@ public static class SilkKeys {
 }
 '@
 
-$script:checks   = @()
+$script:checks   = [System.Collections.Generic.List[string]]::new()
 $script:failures = 0
 $script:shotDir  = $null
 
-function fCheck($what, $ok) {
-	if ($ok) { $script:checks += "  ok   $what" }
-	else     { $script:checks += "  FAIL $what"; $script:failures++ }
+function fCheck([string]$What, [bool]$Ok) {
+	if ($ok) { $script:checks.Add("  ok   $what") }
+	else     { $script:checks.Add("  FAIL $what"); $script:failures++ }
 	$ok
 }
 
-function fNote($text) { $script:checks += "  note $text" }
+function fNote([string]$Text) { $script:checks.Add("  note $text") }
 
 ##	Whether anyone could actually see or type into this desktop. A locked session
 ##	still runs windows and still answers PrintWindow, but screen grabs come back
@@ -155,7 +160,7 @@ function fSessionUsable {
 	if ($fg -ne [IntPtr]::Zero) {
 		$owner = 0
 		[void][Silk.Win]::GetWindowThreadProcessId($fg, [ref]$owner)
-		$name = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName
+		$name = fProcessName $owner
 		if ($name -in @("LockApp", "LogonUI")) { return $false }
 	}
 	$d = [Silk.Win]::OpenInputDesktop(0, $false, 0x0100)
@@ -184,13 +189,13 @@ function fLockState {
 ##	after launch, so anything that types has to switch it off or wait it out - and
 ##	waiting it out makes the scenario slow and its timing a guess. Only the ladder
 ##	scenario wants the rating.
-function fFreshConfig($path, $extra = @()) {
+function fFreshConfig([string]$Path, [string[]]$Extra = @()) {
 	Remove-Item $path -ErrorAction SilentlyContinue
 	$body = @("performance:", "`tautomatic: false", "`tprofile: `"custom`"") + $extra
 	Set-Content -Path $path -Value $body -Encoding UTF8
 }
 
-function fStartSilk($exe, $silkArgs, $envVars) {
+function fStartSilk([string]$Exe, [string[]]$SilkArgs, [hashtable]$EnvVars) {
 	foreach ($k in $envVars.Keys) { [Environment]::SetEnvironmentVariable($k, $envVars[$k]) }
 	$p = Start-Process $exe -ArgumentList $silkArgs -PassThru
 	foreach ($k in $envVars.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
@@ -199,11 +204,11 @@ function fStartSilk($exe, $silkArgs, $envVars) {
 }
 
 ##	What _stop.ps1 may end, and nothing else.
-function fTrack($p) {
+function fTrack([System.Diagnostics.Process]$P) {
 	if ($script:startedList) { Add-Content -Path $script:startedList -Value "$($p.Id) $($p.StartTime.ToUniversalTime().Ticks)" }
 }
 
-function fWaitWindow($p, $seconds = 30) {
+function fWaitWindow([System.Diagnostics.Process]$P, [int]$Seconds = 30) {
 	for ($i = 0; $i -lt ($seconds * 4); $i++) {
 		if ($p.HasExited) { return [IntPtr]::Zero }
 		$h = [SilkEnum]::Largest([uint32]$p.Id)
@@ -218,7 +223,7 @@ function fWaitWindow($p, $seconds = 30) {
 
 ##	A window the process owns that is not the one already known - the dialog is a
 ##	second window in the same process, so it cannot be found by pid alone.
-function fWaitOther($p, $known, $seconds = 20) {
+function fWaitOther([System.Diagnostics.Process]$P, [IntPtr]$Known, [int]$Seconds = 20) {
 	for ($i = 0; $i -lt ($seconds * 4); $i++) {
 		foreach ($h in [SilkEnum]::All([uint32]$p.Id)) {
 			if ($h -eq $known) { continue }
@@ -234,8 +239,8 @@ function fWaitOther($p, $known, $seconds = 20) {
 ##	received the last input. On a session just reconnected to the console nobody
 ##	owns either, so a bare SetForegroundWindow is refused - press a harmless key
 ##	first, and borrow the current owner's input queue.
-function fFocus($h) {
-	$escaped = @()
+function fFocus([IntPtr]$H) {
+	$escaped = [System.Collections.Generic.List[uint32]]::new()
 	for ($try = 0; $try -lt 4; $try++) {
 		##	Search and the Start menu take the foreground and hold it, and no amount
 		##	of asking gets it back while they are open. Escape closes them. A Search
@@ -246,7 +251,7 @@ function fFocus($h) {
 		if ($fg -ne [IntPtr]::Zero -and -not (fForegroundIsOurs $h)) {
 			$owner = 0
 			[void][Silk.Win]::GetWindowThreadProcessId($fg, [ref]$owner)
-			$name = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName
+			$name = fProcessName $owner
 			if ($name -in @("SearchHost", "StartMenuExperienceHost", "ShellExperienceHost", "TextInputHost")) {
 				if ($owner -in $escaped) {
 					Stop-Process -Id $owner -Force -ErrorAction SilentlyContinue
@@ -254,7 +259,7 @@ function fFocus($h) {
 					Start-Sleep -Milliseconds 1500
 				} else {
 					[SilkKeys]::Tap([uint16]0x1B)        ## escape
-					$escaped += $owner
+					$escaped.Add($owner)
 					Start-Sleep -Milliseconds 500
 				}
 			}
@@ -275,7 +280,7 @@ function fFocus($h) {
 	$false
 }
 
-function fForegroundIsOurs($h) {
+function fForegroundIsOurs([IntPtr]$H) {
 	$fg = [Silk.Win]::GetForegroundWindow()
 	if ($fg -eq $h) { return $true }
 	if ($fg -eq [IntPtr]::Zero) { return $false }
@@ -293,13 +298,19 @@ function fForeground {
 	[void][Silk.Win]::GetWindowThreadProcessId($fg, [ref]$pid2)
 	$sb = New-Object System.Text.StringBuilder 256
 	[void][Silk.Win]::GetWindowTextW($fg, $sb, 256)
-	$name = (Get-Process -Id $pid2 -ErrorAction SilentlyContinue).ProcessName
+	$name = fProcessName $pid2
 	"hwnd $fg pid $pid2 ($name) '$($sb.ToString())'"
+}
+
+##	$null for a process that has gone, which happens between two lines here.
+function fProcessName([uint32]$Id) {
+	$proc = Get-Process -Id $Id -ErrorAction SilentlyContinue
+	if ($proc) { $proc.ProcessName } else { $null }
 }
 
 ##	Clicking moves the real pointer, because there is only one. Fine on a machine
 ##	nobody is sitting at, which is the only kind this runs on.
-function fClick($x, $y, $double = $false) {
+function fClick([int]$X, [int]$Y, [bool]$Double = $false) {
 	[void][Silk.Win]::SetCursorPos([int]$x, [int]$y)
 	Start-Sleep -Milliseconds 120
 	foreach ($n in 1..$(if ($double) { 2 } else { 1 })) {
@@ -317,22 +328,21 @@ $script:vks = @{
 }
 
 ##	Literal text, typed through the keyboard layout the way a keyboard does.
-function fSend($text) { [SilkKeys]::Text($text); Start-Sleep -Milliseconds 250 }
+function fSend([string]$Text) { [SilkKeys]::Text($text); Start-Sleep -Milliseconds 250 }
 
 ##	The other way a character reaches a window: handed over whole instead of
 ##	typed. The touch keyboard, text expanders and some accessibility tools all
 ##	send the characters their layout has no key for this way.
-function fSendChars($text) { [SilkKeys]::TextUnicode($text); Start-Sleep -Milliseconds 400 }
+function fSendChars([string]$Text) { [SilkKeys]::TextUnicode($text); Start-Sleep -Milliseconds 400 }
 
 ##	One chord, spelled "ctrl+shift+t" or "alt+f" or "escape". A single character is
 ##	looked up through the keyboard layout so a comma is a comma wherever it lives.
-function fPress($combo) {
+function fPress([string]$Combo) {
 	$parts = $combo.ToLower() -split '\+'
 	$key = $parts[-1]
-	$mods = @()
-	foreach ($m in $parts[0..([math]::Max(0, $parts.Count - 2))]) {
-		if ($m -ne $key -and $script:vks.ContainsKey($m)) { $mods += [uint16]$script:vks[$m] }
-	}
+	$mods = @(foreach ($m in $parts[0..([math]::Max(0, $parts.Count - 2))]) {
+		if ($m -ne $key -and $script:vks.ContainsKey($m)) { [uint16]$script:vks[$m] }
+	})
 	if ($parts.Count -eq 1) { $mods = @() }
 	$vk = if ($script:vks.ContainsKey($key)) { [uint16]$script:vks[$key] }
 	      else { [uint16]([SilkKeys]::VkKeyScanW([char]$key) -band 0xFF) }
@@ -340,7 +350,7 @@ function fPress($combo) {
 	Start-Sleep -Milliseconds 300
 }
 
-function fRect($h) {
+function fRect([IntPtr]$H) {
 	$r = New-Object Silk.Win+RECT
 	[void][Silk.Win]::GetWindowRect($h, [ref]$r)
 	@{ x = $r.Left; y = $r.Top; w = $r.Right - $r.Left; h = $r.Bottom - $r.Top }
@@ -349,7 +359,7 @@ function fRect($h) {
 ##	A screen grab is the faithful picture - it is what the compositor put up, and
 ##	it is the only one that sees a window drawn without a redirection bitmap (the
 ##	transparent path). PrintWindow is the fallback for a session nobody can see.
-function fShot($h, $name) {
+function fShot([IntPtr]$H, [string]$Name) {
 	$r = fRect $h
 	if ($r.w -le 0 -or $r.h -le 0) { return $null }
 	$bmp = New-Object System.Drawing.Bitmap $r.w, $r.h
@@ -374,7 +384,7 @@ function fShot($h, $name) {
 ##	Fraction of sampled pixels carrying any light. A window that came up but never
 ##	drew reads near zero, which is the difference between a real capture and the
 ##	black rectangle a locked session hands back.
-function fInk($bmp, $step = 4) {
+function fInk([System.Drawing.Bitmap]$Bmp, [int]$Step = 4) {
 	if (-not $bmp) { return 0.0 }
 	$lit = 0; $seen = 0
 	for ($y = 0; $y -lt $bmp.Height; $y += $step) {
@@ -389,7 +399,7 @@ function fInk($bmp, $step = 4) {
 
 ##	How much of the picture moved. Ink saturates on a wallpaper, so 'did anything
 ##	happen' has to be asked as a difference rather than a brightness.
-function fDiff($a, $b, $step = 3) {
+function fDiff([System.Drawing.Bitmap]$A, [System.Drawing.Bitmap]$B, [int]$Step = 3) {
 	if (-not $a -or -not $b) { return 1.0 }
 	if ($a.Width -ne $b.Width -or $a.Height -ne $b.Height) { return 1.0 }
 	$moved = 0; $seen = 0
@@ -406,7 +416,7 @@ function fDiff($a, $b, $step = 3) {
 ##	One value out of a written config, and whether the file actually says it. A
 ##	setting left at its shipped default stays commented in the template, so a
 ##	scenario that cannot tell those apart reads an empty answer and calls it a bug.
-function fSetting($path, $dotted) {
+function fSetting([string]$Path, [string]$Dotted) {
 	if (-not (Test-Path $path)) { return @{ value = $null; source = "no file" } }
 	$block, $leaf = $dotted -split '\.', 2
 	$in = $false
@@ -428,9 +438,10 @@ function fWorkArea {
 	@{ x = $r.Left; y = $r.Top; w = $r.Right - $r.Left; h = $r.Bottom - $r.Top }
 }
 
-function fStop($p) {
+function fStop([System.Diagnostics.Process]$P) {
 	if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 }
 
 ##	History:
 ##		- 20260908 JC: Created.
+##		- 20261006 JC: Help block, typed parameters, checks kept in a list.

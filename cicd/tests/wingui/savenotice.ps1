@@ -1,13 +1,20 @@
-##	A settings file with a line that cannot be read cannot be saved either, and
-##	on Windows the only word of it went to a console a release build does not
-##	have. Now a standard message box says so, a few seconds after launch, when
-##	the shell scan's save is refused.
-##	Test ID: EqH8w4O
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	A settings file with a line that cannot be read cannot be saved either, and
+	on Windows the only word of it went to a console a release build does not
+	have.
+.DESCRIPTION
+	Now a standard message box says so, a few seconds after launch, when the
+	shell scan's save is refused.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: EqH8w4O
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the box cannot be grabbed" }
 
@@ -16,8 +23,8 @@ Add-Type -Namespace SilkBox -Name Win -MemberDefinition @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, System.Text.StringBuilder s, int n);
 [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
 '@
-function fText($h) { $sb = New-Object System.Text.StringBuilder 2048; [void][SilkBox.Win]::GetWindowTextW($h, $sb, 2048); $sb.ToString() }
-function fClass($h) { $sb = New-Object System.Text.StringBuilder 256; [void][SilkBox.Win]::GetClassNameW($h, $sb, 256); $sb.ToString() }
+function fText([IntPtr]$H) { $sb = New-Object System.Text.StringBuilder 2048; [void][SilkBox.Win]::GetWindowTextW($h, $sb, 2048); $sb.ToString() }
+function fClass([IntPtr]$H) { $sb = New-Object System.Text.StringBuilder 256; [void][SilkBox.Win]::GetClassNameW($h, $sb, 256); $sb.ToString() }
 
 $cfg = Join-Path $OutDir "savenotice-config.shcl"
 ##	The margin line steps back to a depth nothing uses, so the reader cannot place
@@ -26,7 +33,7 @@ $cfg = Join-Path $OutDir "savenotice-config.shcl"
 ##	makes the shell scan's save do that.
 fFreshConfig $cfg @("window:", "`t`topacity: 1.0", "`tmargin: 4", "shells:", "`tcmd:", "`t`tcommand: cmd.exe", "shells:", "`tpwsh:", "`t`tcommand: pwsh.exe")
 
-$p = fStartSilk $Exe @("--config=$cfg", "--columns", "100", "--rows", "30") @{}
+$p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg", "--columns", "100", "--rows", "30") -EnvVars @{}
 $h = fWaitWindow $p 40
 if (-not (fCheck "a window came up" ($h -ne [IntPtr]::Zero))) { fStop $p; return }
 
@@ -52,3 +59,4 @@ fStop $p
 
 ##	History:
 ##		- 20260918 JC: Created.
+##		- 20261006 JC: Help block, typed parameters, named arguments.

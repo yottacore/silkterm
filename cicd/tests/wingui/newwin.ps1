@@ -1,14 +1,20 @@
-##	A window opened with Ctrl+Shift+N opens at the size of the one it came
-##	from, and a launch nobody resized saves no size. On macOS a stale resize
-##	from the window's creation once saved the default window's grid on every
-##	launch, so the next window opened at that. A minimized window has no area,
-##	and that is no size to save either.
-##	Test ID: ErsO6KS
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	A window opened with Ctrl+Shift+N opens at the size of the one it came from,
+	and a launch nobody resized saves no size.
+.DESCRIPTION
+	On macOS a stale resize from the window's creation once saved the default
+	window's grid on every launch, so the next window opened at that. A
+	minimized window has no area, and that is no size to save either.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: ErsO6KS
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
@@ -16,7 +22,7 @@ $cfg = Join-Path $OutDir "newwin-config.shcl"
 fFreshConfig $cfg @("window:", "`tremembered_columns: 100", "`tremembered_rows: 30")
 function fKept { "$((fSetting $cfg 'window.remembered_columns').value)x$((fSetting $cfg 'window.remembered_rows').value)" }
 
-$p = fStartSilk $Exe @("--config=$cfg") @{}
+$p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg") -EnvVars @{}
 $h = fWaitWindow $p 40
 if (-not (fCheck "a window came up" ($h -ne [IntPtr]::Zero))) { fStop $p; return }
 Start-Sleep -Seconds 3
@@ -57,3 +63,4 @@ fStop $p
 
 ##	History:
 ##		- 20261005 JC: Created.
+##		- 20261006 JC: Help block, named arguments.

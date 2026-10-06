@@ -1,12 +1,18 @@
-##	The performance ladder rating itself on real hardware. It has only ever run on
-##	a software adapter, where it answers Standard, so what a discrete or integrated
-##	GPU actually rates has never been seen.
-##	Test ID: EpJ5h1E
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	The performance ladder rating itself on real hardware.
+.DESCRIPTION
+	It has only ever run on a software adapter, where it answers Standard, so
+	what a discrete or integrated GPU actually rates has never been seen.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: EpJ5h1E
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the banner cannot be grabbed" }
 
@@ -17,7 +23,7 @@ $adapter = (Get-CimInstance Win32_VideoController | Select-Object -First 1)
 fNote "adapter $($adapter.Name) at $($adapter.CurrentRefreshRate)Hz"
 fNote "remote session: $([Silk.Win]::GetSystemMetrics(0x1000))"
 
-$p = fStartSilk $Exe @("--config=$cfg", "--columns", "110", "--rows", "32") @{ SILK_BENCH = "1" }
+$p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg", "--columns", "110", "--rows", "32") -EnvVars @{ SILK_BENCH = "1" }
 $h = fWaitWindow $p 40
 if (-not (fCheck "a window came up" ($h -ne [IntPtr]::Zero))) { fStop $p; return }
 ##	The banner stays up four seconds at least, so the shot is taken two seconds
@@ -55,7 +61,7 @@ fNote "PROFILE CHOSEN: $($chosen.value)   (from the $($chosen.source) line; auto
 fStop $p
 Start-Sleep -Seconds 2
 $stamp = (Get-Item $cfg).LastWriteTime
-$p2 = fStartSilk $Exe @("--config=$cfg", "--columns", "110", "--rows", "32") @{}
+$p2 = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg", "--columns", "110", "--rows", "32") -EnvVars @{}
 $h2 = fWaitWindow $p2 40
 [void](fCheck "it comes up again on the stored rating" ($h2 -ne [IntPtr]::Zero))
 ##	A re-rating that finds the same hardware writes the same id, so the id alone
@@ -74,3 +80,4 @@ fStop $p2
 
 ##	History:
 ##		- 20260908 JC: Created.
+##		- 20261006 JC: Help block, named arguments.

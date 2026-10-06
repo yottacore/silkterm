@@ -1,33 +1,38 @@
-##	The Settings dialog is a second window with its own GPU context, and winit's
-##	parenting on Windows makes it a child rather than an owned window - so nothing
-##	about it follows from the main window working.
-##	Test ID: EpJAgKe
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	The Settings dialog is a second window with its own GPU context, and winit's
+	parenting on Windows makes it a child rather than an owned window - so
+	nothing about it follows from the main window working.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: EpJAgKe
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the dialog cannot be grabbed" }
 
 $cfg = Join-Path $OutDir "dlg-config.shcl"
 fFreshConfig $cfg
 
-$p = fStartSilk $Exe @("--config=$cfg", "--columns", "110", "--rows", "32") @{}
+$p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg", "--columns", "110", "--rows", "32") -EnvVars @{}
 $h = fWaitWindow $p 40
 if (-not (fCheck "the terminal came up" ($h -ne [IntPtr]::Zero))) { fStop $p; return }
 [void](fCheck "the terminal takes the foreground" (fFocus $h))
 Start-Sleep -Seconds 4
 
 fPress "ctrl+,"
-$d = fWaitOther $p $h 25
+$d = fWaitOther -P $p -Known $h -Seconds 25
 if (-not (fCheck "ctrl+comma opens the dialog" ($d -ne [IntPtr]::Zero))) { [void](fShot $h "dlg-none"); fStop $p; return }
 
 Start-Sleep -Seconds 2
 $r = fRect $d
 fNote "dialog $($r.w)x$($r.h) at $($r.x),$($r.y)"
 $first = fShot $d "dlg-tab-first"
-fNote "capture via $($first.How), ink $(fInk $first)"
+fNote "capture via $(if ($first) { $first.How }), ink $(fInk $first)"
 [void](fCheck "the dialog drew something" ((fInk $first) -gt 0.05))
 
 ##	A child window is clipped to its parent. The dialog is taller than it is wide,
@@ -58,3 +63,4 @@ fStop $p
 
 ##	History:
 ##		- 20260908 JC: Created.
+##		- 20261006 JC: Help block, named arguments.

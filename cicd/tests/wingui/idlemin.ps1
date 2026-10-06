@@ -1,19 +1,26 @@
-##	"Minutes when hidden" on a minimized window on a real Windows desktop, at
-##	its shipped 1 minute. Each arm, Transparency on and then off: a minimized
-##	window keeps its device for half a minute, lets it go within a minute and
-##	a quarter, and shows what it did once restored.
-##	Not in the pipeline: about three minutes, close to the harness limit.
-##	Test ID: ErqPAvG
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	"Minutes when hidden" on a minimized window on a real Windows desktop, at
+	its shipped 1 minute.
+.DESCRIPTION
+	Each arm, Transparency on and then off: a minimized window keeps its device
+	for half a minute, lets it go within a minute and a quarter, and shows what
+	it did once restored. Not in the pipeline: about three minutes, close to the
+	harness limit.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: ErqPAvG
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
 ##	The text area only. The title says how the device is doing.
-function fBody($bmp) {
+function fBody([System.Drawing.Bitmap]$Bmp) {
 	if (-not $bmp) { return $null }
 	$top = 80; $edge = 12
 	if ($bmp.Width -le 2 * $edge -or $bmp.Height -le $top + $edge) { return $bmp }
@@ -22,7 +29,7 @@ function fBody($bmp) {
 }
 
 ##	The log so far. The file is still open for writing, so it is read shared.
-function fReleased($path) {
+function fReleased([string]$Path) {
 	try {
 		$fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite')
 		$text = (New-Object IO.StreamReader $fs).ReadToEnd()
@@ -67,7 +74,7 @@ foreach ($arm in @("seethru", "opaque")) {
 	$moved = 1.0
 	for ($i = 0; $i -lt 6 -and $moved -ge 0.02; $i++) {
 		Start-Sleep -Seconds 1
-		$moved = fDiff $ref (fBody (fShot $h "idlemin-$arm-back")) 6
+		$moved = fDiff -A $ref -B (fBody (fShot $h "idlemin-$arm-back")) -Step 6
 	}
 	fNote "restored, moved $moved after $i s"
 	[void](fCheck "$arm restored shows what it did" ($moved -lt 0.02))
@@ -80,3 +87,4 @@ foreach ($arm in @("seethru", "opaque")) {
 ##	History:
 ##		- 20261005 JC: Created.
 ##		- 20261005 JC: Minimized takes "Minutes when hidden" again, now 1 by default.
+##		- 20261006 JC: Help block, typed parameters.

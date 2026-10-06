@@ -1,18 +1,23 @@
-##	Proves the rig itself: a window comes up on the real adapter, it draws, it takes
-##	the foreground, and what is typed reaches the shell inside it.
-##	Test ID: EpJ4XDc
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	Proves the rig itself: a window comes up on the real adapter, it draws, it
+	takes the foreground, and what is typed reaches the shell inside it.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: EpJ4XDc
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
 $cfg = Join-Path $OutDir "smoke-config.shcl"
 fFreshConfig $cfg
 
-$p = fStartSilk $Exe @("--config=$cfg", "--columns", "100", "--rows", "30") @{}
+$p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg", "--columns", "100", "--rows", "30") -EnvVars @{}
 $h = fWaitWindow $p 40
 if (-not (fCheck "a window came up" ($h -ne [IntPtr]::Zero))) { fStop $p; return }
 
@@ -20,7 +25,7 @@ Start-Sleep -Seconds 3
 $r = fRect $h
 fNote "window $($r.w)x$($r.h) at $($r.x),$($r.y)"
 $idle = fShot $h "smoke-idle"
-fNote "capture via $($idle.How), ink $(fInk $idle)"
+fNote "capture via $(if ($idle) { $idle.How }), ink $(fInk $idle)"
 [void](fCheck "the window is a real size" ($r.w -gt 400 -and $r.h -gt 200))
 [void](fCheck "the window actually drew" ((fInk $idle) -gt 0.02))
 
@@ -46,3 +51,4 @@ fStop $p
 
 ##	History:
 ##		- 20260908 JC: Created.
+##		- 20261006 JC: Help block, named arguments.

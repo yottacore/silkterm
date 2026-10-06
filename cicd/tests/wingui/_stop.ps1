@@ -1,14 +1,23 @@
-##	Stops what a run started, by pid, and whatever those processes started in
-##	turn. The boxes are shared, and a stop by name ended any SilkTerm on the
-##	box along with whatever its panes were running.
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+<#
+.SYNOPSIS
+	Stops what a run started, by pid, and whatever those processes started in
+	turn.
+.DESCRIPTION
+	The boxes are shared, and a stop by name ended any SilkTerm on the box along
+	with whatever its panes were running.
+.PARAMETER List
+	The started list: one "<pid> <start ticks>" line per process a run started.
+.NOTES
+	History: At bottom of file.
+#>
+
+[CmdletBinding()]
 param([Parameter(Mandatory)] [string] $List)
 
+Set-StrictMode -Version Latest
 if (-not (Test-Path $List)) { return }
 $ours = foreach ($line in Get-Content $List) {
 	$id, $ticks = $line -split ' '
@@ -38,3 +47,4 @@ foreach ($p in $found.Values) { Stop-Process -Id $p.Id -Force -ErrorAction Silen
 
 ##	History:
 ##		- 20260918 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

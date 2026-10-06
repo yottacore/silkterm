@@ -1,18 +1,24 @@
-##	Free resources when idle, with a short idle time, on a window left alone.
-##	Each arm, Transparency on and then off: the window is let go while
-##	minimized and restored without focus, then left in view unfocused past the
-##	idle time, then let go minimized again and restored with focus. What it
-##	shows after each is held against what it showed before.
-##	A restore can catch the window with no size yet, which a busy GPU makes
-##	likelier. idlewake-load.txt in the run's folder starts gpu-stress.exe
-##	(run.bash WINGUI_EXTRA) with its arguments for each arm.
-##	Not in the pipeline: about three minutes, and the load is sent by hand.
-##	Test ID: Erkt9mD
-
-##	History: At bottom of file.
-
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
+
+<#
+.SYNOPSIS
+	Free resources when idle, with a short idle time, on a window left alone.
+.DESCRIPTION
+	Each arm, Transparency on and then off: the window is let go while minimized
+	and restored without focus, then left in view unfocused past the idle time,
+	then let go minimized again and restored with focus. What it shows after
+	each is held against what it showed before. A restore can catch the window
+	with no size yet, which a busy GPU makes likelier. idlewake-load.txt in the
+	run's folder starts gpu-stress.exe (run.bash WINGUI_EXTRA) with its
+	arguments for each arm. Not in the pipeline: about three minutes, and the
+	load is sent by hand.
+.NOTES
+	History: At bottom of file.
+#>
+
+##	Test ID: Erkt9mD
+
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
@@ -22,7 +28,7 @@ Add-Type -Namespace SilkIdle -Name Win -MemberDefinition @'
 '@
 ##	Restored without focus, and raised over the scenario's own console window,
 ##	which would otherwise cover it in the shots.
-function fShowNoFocus($h) {
+function fShowNoFocus([IntPtr]$H) {
 	[void][Silk.Win]::ShowWindow($h, 4)   ## SW_SHOWNOACTIVATE
 	$flags = 0x0001 -bor 0x0002 -bor 0x0010   ## no size, no move, no activate
 	[void][SilkIdle.Win]::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, $flags)
@@ -31,11 +37,11 @@ function fShowNoFocus($h) {
 
 $script:t0 = Get-Date
 function fElapsed { "{0,6:N1}s" -f ((Get-Date) - $script:t0).TotalSeconds }
-function fStep($text) { fNote "$(fElapsed) $text" }
+function fStep([string]$Text) { fNote "$(fElapsed) $text" }
 
 ##	The text area only. The title says how the device is doing, and the frame
 ##	and the menu bar's boxes change with focus.
-function fBody($bmp) {
+function fBody([System.Drawing.Bitmap]$Bmp) {
 	if (-not $bmp) { return $null }
 	$top = 80; $edge = 12
 	if ($bmp.Width -le 2 * $edge -or $bmp.Height -le $top + $edge) { return $bmp }
@@ -43,16 +49,16 @@ function fBody($bmp) {
 	$bmp.Clone($area, $bmp.PixelFormat)
 }
 
-function fRef($name) {
+function fRef([string]$Name) {
 	$script:ref = fBody (fShot $h "idle-$arm-$name")
 	fStep "shot ${name}: ink $(fInk $script:ref 6)"
 }
 
 ##	How much of the picture moved since the reference. A parked cursor is all
 ##	that should differ.
-function fGrab($name) {
+function fGrab([string]$Name) {
 	$bmp = fBody (fShot $h "idle-$arm-$name")
-	$moved = fDiff $script:ref $bmp 6
+	$moved = fDiff -A $script:ref -B $bmp -Step 6
 	fStep "shot ${name}: ink $(fInk $bmp 6), vs ref $moved"
 	$moved
 }
@@ -60,7 +66,7 @@ $same = 0.02
 
 ##	A device taken back decodes the wallpaper again, so a restore is given a
 ##	few seconds to settle. Text that went missing never does.
-function fSettled($name) {
+function fSettled([string]$Name) {
 	$moved = 1.0
 	for ($i = 0; $i -lt 6 -and $moved -ge $same; $i++) {
 		Start-Sleep -Seconds 1
@@ -70,7 +76,7 @@ function fSettled($name) {
 }
 
 $script:typed = 0
-function fType($label) {
+function fType([string]$Label) {
 	$script:typed++
 	$proof = Join-Path $OutDir "typed-$arm-$($script:typed).txt"
 	[void](fFocus $h)
@@ -152,3 +158,4 @@ foreach ($arm in @("seethru", "opaque")) {
 
 ##	History:
 ##		- 20261004 JC: Created.
+##		- 20261006 JC: Help block, typed parameters.
