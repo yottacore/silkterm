@@ -801,32 +801,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- macOS: a window opened with Command+N is smaller, and its size is the one remembered
-	- ID: 2026100514211602
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261005-142116
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435600, 2026100408214201
-	- Target OS: macOS
-	- Test environment: b26
-	- Requirements:
-		- Before RC1.
-	- Steps to reproduce:
-		- Open a window with Command+N.
-		- Close the new window, then the one it was opened from.
-		- Launch SilkTerm again.
-	- Incorrect behavior:
-		- The new window opens smaller than the one it was opened from.
-		- The next launch opens at that smaller size.
-	- Expected behavior: A new window opens at the size a fresh launch would use. Closing windows doesn't shrink the remembered size unless one of them was resized.
-	- Reproduced: No. Seen on b26.
-	- Possible cause:
-		- Each window is its own process, and the new one reads the remembered size for the monitor it thinks it opens on (`MonitorId::of_new_window`). macOS may answer that differently for a window started from another one.
-		- A size is saved at close only if the window changed size (`flush_window_size`). If the new window's first size counts as a change, it saves the small size, and the first window, never resized, saves nothing.
-
 - Tabs: a setting for new tabs to open next to the current one
 	- ID: 2026100513581812
 	- Type: Feature
@@ -1032,6 +1006,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The PowerShell lint, with the positional and alias rules added.
 	- Note: Code review 20261003 item 15.
 
+- macOS: the first frames after a window shows are drawn at the default size
+	- ID: 2026100517535929
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261005-175359
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100514211602, 2026100114274893
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: For about 80 ms after a new window shows, its frames are drawn at 1000x640 points, while the window is already at its launch size.
+	- Expected behavior: The first frame on screen is drawn at the window's size.
+	- Reproduced: No. Seen 20261005 on b26 in what the window reported about its size, not looked at on screen.
+	- Possible cause: winit's `request_inner_size` answers nothing on macOS, though the window takes the size at once, so the surface waits for the resize event. A hidden window's frame is refused as occluded and the window is shown at once (2026100114274893), before that event comes.
+
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
 	- Type: Enhancement
@@ -1174,6 +1164,76 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- macOS: a window opened with Command+N is smaller, and its size is the one remembered
+	- ID: 2026100514211602
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261005-142116
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435600, 2026100408214201
+	- Target OS: macOS
+	- Test environment: b26
+	- Requirements:
+		- Before RC1.
+	- Steps to reproduce:
+		- Open a window with Command+N.
+		- Close the new window, then the one it was opened from.
+		- Launch SilkTerm again.
+	- Incorrect behavior:
+		- The new window opens smaller than the one it was opened from.
+		- The next launch opens at that smaller size.
+	- Expected behavior: A new window opens at the size a fresh launch would use. Closing windows doesn't shrink the remembered size unless one of them was resized.
+	- Reproduced: 20261005 on b26. A window opened at a remembered 140x22, and nobody resized it, yet within a second the file said 116x35. A window opened from it with New window came up at 116x35, which is also what the next launch reads.
+	- Possible cause:
+		- Each window is its own process, and the new one reads the remembered size for the monitor it thinks it opens on (`MonitorId::of_new_window`). macOS may answer that differently for a window started from another one.
+		- A size is saved at close only if the window changed size (`flush_window_size`). If the new window's first size counts as a change, it saves the small size, and the first window, never resized, saves nothing.
+	- Actual cause:
+		- Neither guess. Both windows looked up the same monitor, and the first one's size was not the one saved.
+		- On macOS winit hands over the resize from the window's creation, at the default 1000x640 points, after the first frame. A resize counts as the user's from the first frame on, so the default window's grid was saved. The real size came next, inside the wait that skips the system's resizes after a scale change, so nothing put it back.
+		- So every macOS launch saved the default grid, 116x35 at b26's font, while the window itself showed the remembered size. A new window, or the next launch, then opened at 116x35.
+	- Actual fix: A resize counts only when it is the size the window has at that moment, so a late one is skipped. On every platform a current resize carries that size.
+	- Swept: every path that saves a size. The window's resize had the fault. A font zoom takes the window's own size, and a move to another monitor asks for its size inside the skip. A resize to no area, which a minimized window on Windows sends, saved 1x1; filed and fixed as 2026100517535924.
+	- Verified:
+		- b26: with the fix, the item's steps at 140x22 kept 140x22 in the file, and the new window and the next launch opened at the first window's size. A resize was still saved, and the next window followed it.
+		- Linux X11: no fault before the fix either. Ctrl+Shift+N opened at the first window's size, and nothing was saved. With the fix, resizes are still saved.
+		- Linux Wayland, with the fix: a launch saves nothing, and a resize is saved. Not run before the fix.
+		- Windows, vm925w: no fault for New window or a launch before the fix either.
+	- Note: Not checked by hand on b26: the Command+N key, and a resize with the mouse. The New window menu action ran, and so did a resize that reaches the program the way a drag does.
+	- Note: b26's dogfood build is from 20261003, so it keeps saving 116x35 until the pool has a newer build. Its config holds 116x35 from that build.
+	- Branch: cmdnsize
+	- Commit: f442520
+	- Test case: `a_resize_the_window_has_moved_past_is_not_saved` (ErsO6GB), failing on the old code. The X11 window test `cicd/tests/startsize/run.bash` (Erkahb9) now checks that a launch saves no size, and the Windows scenario `newwin` (ErsO6KS) checks New window, a launch, and a minimize.
+	- Acceptance signoff: Self-closed: reproduced on b26, the item's steps pass there with the fix, and Linux, Wayland and Windows were checked.
+	- Closed: 20261005-175359
+
+- Windows: a minimized window saves 1x1 as the size to open at
+	- ID: 2026100517535924
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261005-175359
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100514211602
+	- Target OS: Windows
+	- Test environment: vm925w
+	- Steps to reproduce:
+		- Minimize the window and wait a second.
+		- Close it from the taskbar, then launch SilkTerm again.
+	- Incorrect behavior: While the window is minimized the file says 1x1. Closed that way, the next launch opens at 1 column by 1 row.
+	- Expected behavior: A minimized window keeps the size it had.
+	- Reproduced: 20261005 on vm925w. The file said 1x1 three seconds after a minimize. The launch after a close from the taskbar was not run.
+	- Actual cause: Windows reports a minimized window's size as 0x0, and that was saved half a second later as the smallest grid there is.
+	- Actual fix: A resize to no area is not saved. Same change as 2026100514211602.
+	- Verified: vm925w, the old build saved 1x1 and the fix kept 100x30. The window came back at its size either way.
+	- Branch: cmdnsize
+	- Commit: f442520
+	- Test case: The Windows scenario `newwin` (ErsO6KS), failing on the old build, now in the pipeline's list. `a_resize_the_window_has_moved_past_is_not_saved` (ErsO6GB) covers the 0x0 case.
+	- Acceptance signoff: Self-closed: reproduced, fixed, and the scenario fails before and passes after.
+	- Closed: 20261005-175359
 
 - Light mode: the scrim is much too strong next to dark mode
 	- ID: 2026100513581811
