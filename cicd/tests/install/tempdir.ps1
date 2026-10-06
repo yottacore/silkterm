@@ -24,7 +24,6 @@
 [CmdletBinding()]
 param(
 	[string]$Installer = (Join-Path $PSScriptRoot '../../../install.ps1')
-
 )
 
 Set-StrictMode -Version Latest

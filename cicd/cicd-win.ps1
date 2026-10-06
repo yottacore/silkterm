@@ -1,61 +1,82 @@
-﻿##	Purpose:
-##		- Windows-native CI/CD pipeline for SilkTerm. A PowerShell port of the
-##		  Linux cicd.bash, doing as much of the same work as Windows allows -
-##		  including the parts cicd.bash farms out to helper scripts (the git
-##		  backup/publish). Does NOT touch cicd.bash (that stays the
-##		  Linux/cross pipeline).
-##		- Stages (fail-fast; any error aborts before the next stage):
-##		   0. remote sync    (fetch; fast-forward if safely behind; abort if diverged)
-##		   1. format         (cargo fmt)
-##		   2. debug build    (cargo build)
-##		   3. tests + lints  (cargo test; clippy + cargo-deny are ADVISORY here)
-##		   4. release builds  x86_64 msvc AND gnu (always both), + ARM64 when its
-##		                      toolchain is present (auto-detected, else warn-skip)
-##		   5. packages       (NSIS installer .exe per built arch, if makensis found)
-##		   6. linux half     (-Wsl: hand the Linux-only work to WSL2 - see below)
-##		   7. dogfood        (copy the best x86_64 build to <dogfood>\silkterm.exe)
-##		   8. publish        (stash -> pull -> add -> commit -> push, current branch)
-##		- What Windows can't do (dropped vs cicd.bash): the profiler (pprof's
-##		  SIGPROF sampler is Unix-only - the profiling feature can't even compile
-##		  for a Windows target), the headless scroll harness / demo
-##		  (need Xvfb), .deb/.rpm packages (Linux), and the rar version-archive step
-##		  of publish (skipped by request). clippy is advisory, not gating: the
-##		  Unix-gated ctl code emits dead_code warnings here, so -D warnings can't
-##		  pass.
-##		- -Wsl gets all of that back on a box that has WSL2, by running the Linux
-##		  pipeline (cicd.bash --no-windows) there against THIS working tree. The
-##		  two halves split cleanly: Windows builds what only Windows can, msvc
-##		  above all, and WSL builds what only Linux can. Neither repeats the
-##		  other's targets. Off by default - it roughly doubles a run.
-##		- Dogfood pick: prefer the msvc build IF it's self-contained (statically
-##		  linked, no VCRUNTIME140/MSVCP140 dependency); else the gnu build; else
-##		  whichever single build exists. The fixed silkterm.exe goes to the SYNCED
-##		  app dir; the runterm launcher keeps its own rotated pool locally
-##		  (the two stay separate dirs on purpose).
-##		- Syntax:
-##		  pwsh cicd/cicd-win.ps1 [options]
-##		  Options:
-##		   -Yes            run unattended (no confirm / message prompt)
-##		   -Quiet          quiet + unattended (implies -Yes); publish runs quiet too
-##		   -Quick          skip the slow stages (ARM builds + packages)
-##		   -Gate           merge gate only: fmt --check + clippy + tests, then exit
-##		   -NoFmt          skip the formatter stage
-##		   -NoArm          skip the ARM64 release builds + their packages
-##		   -NoPackage      skip the packages stage (NSIS installers)
-##		   -NoDogfood      skip the dogfood install
-##		   -NoPublish      skip the git publish stage
-##		   -Wsl            also run the Linux half in WSL2 (.deb/.rpm, profiler,
-##		                   scroll harness - everything Windows can't do)
-##		   -WslDistro NAME which distribution to use (default: the first WSL2 one)
-##		   -NoSync         skip the remote sync check (stage 0)
-##		   -Message MSG    publish hands-off with this commit message (no editor)
-##		   -Help           show this help
-##	History: At bottom of script.
-
-##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+﻿##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
+
+<#
+.SYNOPSIS
+	Windows-native CI/CD pipeline for SilkTerm.
+.DESCRIPTION
+	A PowerShell port of the Linux cicd.bash, doing as much of the same work as
+	Windows allows - including the parts cicd.bash farms out to helper scripts
+	(the git backup/publish). Does NOT touch cicd.bash (that stays the
+	Linux/cross pipeline).
+
+	Stages (fail-fast; any error aborts before the next stage):
+	 0. remote sync    (fetch; fast-forward if safely behind; abort if diverged)
+	 1. format         (cargo fmt)
+	 2. debug build    (cargo build)
+	 3. tests + lints  (cargo test; clippy + cargo-deny are ADVISORY here)
+	 4. release builds  x86_64 msvc AND gnu (always both), + ARM64 when its
+	                    toolchain is present (auto-detected, else warn-skip)
+	 5. packages       (NSIS installer .exe per built arch, if makensis found)
+	 6. linux half     (-Wsl: hand the Linux-only work to WSL2 - see below)
+	 7. dogfood        (copy the best x86_64 build to <dogfood>\silkterm.exe)
+	 8. publish        (stash -> pull -> add -> commit -> push, current branch)
+
+	What Windows can't do (dropped vs cicd.bash): the profiler (pprof's
+	SIGPROF sampler is Unix-only - the profiling feature can't even compile
+	for a Windows target), the headless scroll harness / demo
+	(need Xvfb), .deb/.rpm packages (Linux), and the rar version-archive step
+	of publish (skipped by request). clippy is advisory, not gating: the
+	Unix-gated ctl code emits dead_code warnings here, so -D warnings can't
+	pass.
+
+	-Wsl gets all of that back on a box that has WSL2, by running the Linux
+	pipeline (cicd.bash --no-windows) there against THIS working tree. The
+	two halves split cleanly: Windows builds what only Windows can, msvc
+	above all, and WSL builds what only Linux can. Neither repeats the
+	other's targets. Off by default - it roughly doubles a run.
+
+	Dogfood pick: prefer the msvc build IF it's self-contained (statically
+	linked, no VCRUNTIME140/MSVCP140 dependency); else the gnu build; else
+	whichever single build exists. The fixed silkterm.exe goes to the SYNCED
+	app dir; the runterm launcher keeps its own rotated pool locally
+	(the two stay separate dirs on purpose).
+.PARAMETER Yes
+	Run unattended (no confirm / message prompt).
+.PARAMETER Quiet
+	Quiet + unattended (implies -Yes); publish runs quiet too.
+.PARAMETER Quick
+	Skip the slow stages (ARM builds + packages).
+.PARAMETER Gate
+	Merge gate only: fmt --check + clippy + tests, then exit.
+.PARAMETER NoFmt
+	Skip the formatter stage.
+.PARAMETER NoArm
+	Skip the ARM64 release builds + their packages.
+.PARAMETER NoPackage
+	Skip the packages stage (NSIS installers).
+.PARAMETER NoDogfood
+	Skip the dogfood install.
+.PARAMETER NoPublish
+	Skip the git publish stage.
+.PARAMETER NoSync
+	Skip the remote sync check (stage 0).
+.PARAMETER Wsl
+	Also run the Linux half in WSL2 (.deb/.rpm, profiler, scroll harness -
+	everything Windows can't do).
+.PARAMETER WslDistro
+	Which distribution to use (default: the first WSL2 one).
+.PARAMETER Message
+	Publish hands-off with this commit message (no editor).
+.PARAMETER Help
+	Show this help.
+.EXAMPLE
+	pwsh cicd/cicd-win.ps1 [options]
+.NOTES
+	History: At bottom of script.
+#>
 
 [CmdletBinding()]
 param(
@@ -91,16 +112,7 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
 if ($Help) {
-	## Print only the leading Purpose..History header block (mirrors cicd.bash's
-	## `sed -n '/Purpose:/,/History:/p'`), not every top-level ## comment.
-	$inBlock = $false
-	foreach ($line in (Get-Content -LiteralPath $PSCommandPath)) {
-		if ($line -match '^##\tPurpose:') { $inBlock = $true }
-		if ($inBlock) {
-			if ($line -match '^##\tHistory:') { break }
-			$line -replace '^##\t?', ''
-		}
-	}
+	Get-Help -Name $PSCommandPath -Detailed
 	exit 0
 }
 
@@ -320,7 +332,7 @@ function fTargetInstalled {
 ## Decide whether an ARM64 target can build here; returns a reason string when it
 ## can't (for a clear warn-skip), or $null when it's good to go.
 function fArmSkipReason {
-	param([Parameter(Mandatory)]$Target)
+	param([Parameter(Mandatory)][pscustomobject]$Target)
 	if (-not (fTargetInstalled $Target.Triple)) { return "rustup target $($Target.Triple) not installed" }
 	if ($Target.Builder -eq "zigbuild") {
 		if (-not (Get-Command cargo-zigbuild -ErrorAction SilentlyContinue)) { return "cargo-zigbuild not found" }
@@ -381,7 +393,7 @@ function fRotateLogs {
 ## Build one release target. Returns a result object on success, or $null when an
 ## ARM target is skipped (x86_64 failures abort - house rule: always build both).
 function fBuildTarget {
-	param([Parameter(Mandatory)]$Target)
+	param([Parameter(Mandatory)][pscustomobject]$Target)
 
 	if ($Target.Arm) {
 		if ($NoArm)  { fNote "skip $($Target.OsArch): -NoArm";  return $null }
@@ -407,7 +419,7 @@ function fBuildTarget {
 			fWarn "$($Target.OsArch) build failed (non-gating)"; return $null
 		}
 	} else {
-		fExec "release build ($($Target.OsArch))" "cargo" $cargoArgs
+		fExec -What "release build ($($Target.OsArch))" -File "cargo" -CmdArgs $cargoArgs
 		if (-not (Test-Path -LiteralPath $exe)) { fDie "missing artifact for $($Target.OsArch): $exe" }
 	}
 
@@ -544,15 +556,15 @@ function fRemoteSync {
 	if ($dirtyTracked -or $dirtyStaged -or $untracked) {
 		$before = @(& git stash list).Count
 		fEcho_Clean "git stash push --include-untracked ..."
-		fExec "git stash" "git" @("stash", "push", "--include-untracked", "-m", "auto-stash")
+		fExec -What "git stash" -File "git" -CmdArgs @("stash", "push", "--include-untracked", "-m", "auto-stash")
 		$after = @(& git stash list).Count
 		$didStash = ($after -gt $before)
 	}
 	fEcho_Clean "git pull --ff-only ..."
-	fExec "git pull" "fRemoteGit" @("pull", "--ff-only")
+	fExec -What "git pull" -File "fRemoteGit" -CmdArgs @("pull", "--ff-only")
 	if ($didStash) {
 		fEcho_Clean "git stash pop ..."
-		fExec "git stash pop" "git" @("stash", "pop")
+		fExec -What "git stash pop" -File "git" -CmdArgs @("stash", "pop")
 	}
 	fEcho "OK: fast-forwarded $behind commit(s) from upstream"
 }
@@ -573,7 +585,7 @@ function fPublish {
 	if ($dirtyTracked -or $dirtyStaged -or $untracked) {
 		$before = @(& git stash list).Count
 		fEcho_Clean "git stash push --include-untracked ..."
-		fExec "git stash" "git" @("stash", "push", "--include-untracked", "-m", "auto-stash")
+		fExec -What "git stash" -File "git" -CmdArgs @("stash", "push", "--include-untracked", "-m", "auto-stash")
 		$after = @(& git stash list).Count
 		$didStash = ($after -gt $before)
 	}
@@ -585,20 +597,20 @@ function fPublish {
 	$hasUpstream = ($LASTEXITCODE -eq 0)
 	if ($hasUpstream) {
 		fEcho_Clean "git pull --ff-only ..."
-		fExec "git pull" "fRemoteGit" @("pull", "--ff-only")
+		fExec -What "git pull" -File "fRemoteGit" -CmdArgs @("pull", "--ff-only")
 	}
 	if ($didStash) {
 		fEcho_Clean "git stash pop ..."
-		fExec "git stash pop" "git" @("stash", "pop")
+		fExec -What "git stash pop" -File "git" -CmdArgs @("stash", "pop")
 	}
 
 	fEcho_Clean "git add --all ..."
-	fExec "git add" "git" @("add", "--all")
+	fExec -What "git add" -File "git" -CmdArgs @("add", "--all")
 
 	& git diff --cached --quiet; $hasStaged = ($LASTEXITCODE -ne 0)
 	if ($hasStaged) {
 		if ($Msg) {
-			fExec "git commit" "git" @("commit", "-m", $Msg)
+			fExec -What "git commit" -File "git" -CmdArgs @("commit", "-m", $Msg)
 			fEcho "OK: committed (`"$Msg`")"
 		} else {
 			## No message -> let git open the configured editor (core.editor / EDITOR).
@@ -613,13 +625,13 @@ function fPublish {
 	## Push: set upstream on first publish, else push only when ahead.
 	if (-not $hasUpstream) {
 		fEcho_Clean "git push -u origin HEAD ..."
-		fExec "git push" "fRemoteGit" @("push", "-u", "origin", "HEAD")
+		fExec -What "git push" -File "fRemoteGit" -CmdArgs @("push", "-u", "origin", "HEAD")
 		fEcho "OK: pushed $branch (upstream set)"
 	} else {
 		$ahead = (& git log '@{u}..' --oneline)
 		if ($ahead) {
 			fEcho_Clean "git push origin ..."
-			fExec "git push" "fRemoteGit" @("push", "origin")
+			fExec -What "git push" -File "fRemoteGit" -CmdArgs @("push", "origin")
 			fEcho "OK: pushed $branch"
 		} else {
 			fNote "up to date with upstream; nothing to push"
@@ -685,13 +697,13 @@ function fWslDistros {
 	$env:WSL_UTF8 = "1"
 	try { $lines = & wsl.exe --list --verbose 2>$null } finally { $env:WSL_UTF8 = $saved }
 	if ($LASTEXITCODE -ne 0 -or -not $lines) { return @() }
-	$found = @()
+	$found = [System.Collections.Generic.List[string]]::new()
 	foreach ($line in $lines) {
 		## "  NAME  STATE  VERSION", '*' marking the default. The header line has
 		## no digit in its last column, so it falls out here without a special case.
 		if ($line -match '^\s*(\*?)\s*(\S+)\s+(\S+)\s+(\d+)\s*$') {
 			if ($Matches[4] -ne "2") { continue }        ## WSL1 has no kernel to build on
-			if ($Matches[1]) { $found = @($Matches[2]) + $found } else { $found += $Matches[2] }
+			if ($Matches[1]) { $found.Insert(0, $Matches[2]) } else { $found.Add($Matches[2]) }
 		}
 	}
 	return $found
@@ -778,12 +790,12 @@ function fMain {
 	## stand-in for a hosted CI check; nothing is mutated or published.
 	if ($Gate) {
 		fSection "Gate 1/3  Format check"
-		fExec "format check" "cargo" @("fmt", "--check")
+		fExec -What "format check" -File "cargo" -CmdArgs @("fmt", "--check")
 		fEcho "OK: formatting clean"
 		fSection "Gate 2/3  Lints (advisory)"
 		fLintAdvisory
 		fSection "Gate 3/3  Tests"
-		fExec "tests" "cargo" @("test")
+		fExec -What "tests" -File "cargo" -CmdArgs @("test")
 		fEcho "OK: tests passed"
 		fSection "$AppName gate: PASSED."
 		fEcho_Clean
@@ -862,20 +874,20 @@ function fMain {
 	## Stage 1: format.
 	fSection "1  Format"
 	if ($NoFmt) { fNote "format skipped" }
-	else { fExec "format" "cargo" @("fmt"); fEcho "OK: formatted" }
+	else { fExec -What "format" -File "cargo" -CmdArgs @("fmt"); fEcho "OK: formatted" }
 
 	## Stage 2: debug build.
 	fSection "2  Debug build"
-	fExec "debug build" "cargo" @("build")
+	fExec -What "debug build" -File "cargo" -CmdArgs @("build")
 	fEcho "OK: debug build"
 
 	## Stage 3: tests + advisory lints.
 	fSection "3  Tests"
-	fExec "tests" "cargo" @("test")
+	fExec -What "tests" -File "cargo" -CmdArgs @("test")
 	fEcho "OK: tests passed"
 	fInstallerTests
 	## In a process of its own, since fTestDir_Use moves TEMP and TMP for the whole process.
-	fExec "test run folder removal" "pwsh" @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\testdir\remove.ps1"))
+	fExec -What "test run folder removal" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\testdir\remove.ps1"))
 	fEcho "OK: test run folder removal"
 	fLintAdvisory
 
@@ -883,11 +895,7 @@ function fMain {
 	## (No profiler stage here: pprof's SIGPROF sampler is Unix-only - the
 	## profiling feature can't even compile for a Windows target.)
 	$script:RemapConfig = fRemapConfig
-	$built = @()
-	foreach ($t in $Targets) {
-		$r = fBuildTarget $t
-		if ($r) { $built += $r }
-	}
+	$built = @(foreach ($t in $Targets) { fBuildTarget -Target $t | Where-Object { $_ } })
 	if (-not $built) { fDie "no release binaries were produced" }
 	foreach ($b in $built) {
 		if (fHasLocalPaths $b.Exe) { fDie "$($b.Exe) still holds a local path ($env:USERPROFILE or $Root)" }
@@ -929,6 +937,8 @@ try {
 
 
 ##	History:
+##		- 2026-10-06 JC: Help block, read by -Help; named arguments to fExec; no
+##		  array growth in loops.
 ##		- 2026-09-25 JC: Release builds map the box's paths away and fail if one
 ##		  is left; tool pins come from tool-pins.txt; old run logs are pruned;
 ##		  PowerShell scripts are linted when PSScriptAnalyzer is installed;
