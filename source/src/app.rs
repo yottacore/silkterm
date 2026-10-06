@@ -160,6 +160,14 @@ impl App {
 				.and_then(|gpu| gpu.wallpaper_img.as_ref())
 				.map_or_else(|| "wallpaper: none".to_string(), ImageRenderer::memdbg_line);
 			self.memdbg.say("wallpaper", wallpaper);
+			let kept = state.wp_standin.as_ref().map_or_else(
+				|| "stand-in: none".to_string(),
+				|small| {
+					let (w, h) = small.rgba.dimensions();
+					format!("stand-in: {w}x{h}, {} bytes", small.rgba.len())
+				},
+			);
+			self.memdbg.say("standin", kept);
 			self.memdbg.say("glyphs", state.text.memdbg_line());
 			for pm in &state.tabs.list {
 				for (id, pane) in &pm.panes {
@@ -3254,6 +3262,9 @@ struct State {
 	// When to prepare the wallpaper again for the window's new size. Pushed back
 	// by every resize, so it comes once the resizing stops.
 	wp_resize_at: Option<Instant>,
+	// A few KiB of the picture showing, kept through an idle release and drawn
+	// at the rebuild until the real one is prepared again (`rebuild_gpu`).
+	wp_standin: Option<crate::wallpaper::Prepared>,
 	// A worker has answered - with an image, or with the news that there is none.
 	wp_answered: bool,
 	// ...and a frame has been drawn since, so whatever it said is ON SCREEN. This
@@ -5547,9 +5558,11 @@ impl State {
 	}
 
 	// The device again, on the same window, and everything that lived on it
-	// built afresh. The wallpaper is decoded again rather than having been kept,
-	// as after a VT switch (recover_gpu). A failure leaves the window released
-	// and owed, and it is tried again on a backoff while the window shows.
+	// built afresh. The wallpaper is prepared again from the file rather than
+	// kept, as after a VT switch (recover_gpu), and its small stand-in shows
+	// from the first frame until it arrives. A failure leaves the window
+	// released and owed, and it is tried again on a backoff while the window
+	// shows.
 	fn rebuild_gpu(&mut self) {
 		let Some(rebirth) = self.rebirth.as_ref() else {
 			return;
@@ -5577,11 +5590,14 @@ impl State {
 		let rects = RectRenderer::new(&gfx.device, gfx.format);
 		let minimap = crate::minimap::MapRenderer::new(&gfx.device, gfx.format);
 		let scrim = crate::scrim::Scrim::new(&gfx.device, gfx.format, w, h);
+		let wallpaper_img = self.wp_standin.as_ref().map(|small| {
+			ImageRenderer::new(&gfx.device, &gfx.queue, gfx.format, small).standing_in()
+		});
 		self.gpu = Some(Gpu {
 			gfx,
 			rects,
 			minimap,
-			wallpaper_img: None,
+			wallpaper_img,
 			scrim,
 		});
 		self.idle.rebuilt();
@@ -5886,6 +5902,11 @@ impl State {
 		}
 		// A window without a device drops the pixels: the rebuild asks for the
 		// wallpaper again, and decoding it twice beats holding a copy of it.
+		// The stand-in is kept either way, so it is always the newest picture.
+		self.wp_standin = loaded.standin;
+		if self.conserve == Conserve::Restoring {
+			idledbg("wallpaper prepared again");
+		}
 		if let Some(gpu) = self.gpu.as_mut() {
 			gpu.wallpaper_img = loaded.image.map(|img| {
 				ImageRenderer::new(&gpu.gfx.device, &gpu.gfx.queue, gpu.gfx.format, &img)
@@ -8757,6 +8778,7 @@ impl ApplicationHandler<UserEvent> for App {
 			wp_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
 			wp_pacing: crate::wallpaper::Pacing::default(),
 			wp_resize_at: None,
+			wp_standin: None,
 			wp_answered: false,
 			wp_shown: false,
 			shell_scan_cap: None,

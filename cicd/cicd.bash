@@ -781,6 +781,18 @@ if [[ -x "${root}/cicd/tests/wpresize/run.bash" ]]; then
 		*) fDie "wallpaper held at window size test failed ($(fTestId cicd/tests/wpresize/run.bash))" ;;
 	esac
 fi
+## A window waking from the idle release shows a small copy of its wallpaper
+## until the real one is prepared again. Exit 3 is a skip: no binary, display,
+## window manager or tools.
+if [[ -x "${root}/cicd/tests/wakepic/run.bash" ]]; then
+	fEcho_Clean "wallpaper kept through an idle wake ..."
+	wakeRc=0; "${root}/cicd/tests/wakepic/run.bash" >/dev/null || wakeRc=$?
+	case "${wakeRc}" in
+		0) fEcho "OK: wallpaper kept through an idle wake ($(fTestId cicd/tests/wakepic/run.bash))" ;;
+		3) fEcho "WARNING: wallpaper kept through an idle wake skipped" ;;
+		*) fDie "wallpaper kept through an idle wake test failed ($(fTestId cicd/tests/wakepic/run.bash))" ;;
+	esac
+fi
 if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
 	fEcho_Clean "pipeline steps ..."
 	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed ($(fTestId cicd/tests/engine/run.bash))"

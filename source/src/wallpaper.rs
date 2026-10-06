@@ -138,8 +138,77 @@ pub struct Rotation {
 pub struct Loaded {
 	pub seq: u64,
 	pub image: Option<Prepared>,
+	// A small copy of `image` the window keeps through an idle release.
+	pub standin: Option<Prepared>,
 	pub rotation: Option<Rotation>,
 	pub scanned: bool,
+}
+
+// The long edge of the stand-in. A 2560x1440 picture keeps 160x90, 56 KiB.
+const STANDIN_EDGE: u32 = 160;
+
+impl Prepared {
+	// What a window shows the moment it takes its device back, until the real
+	// picture is prepared again: this one shrunk to a few KiB and drawn
+	// stretched, smoothed by the shader. Everything but the pixels is kept, so
+	// it lands where the real one will.
+	pub fn standin(&self) -> Prepared {
+		let (w, h) = self.rgba.dimensions();
+		let small = fit_within(w, h, STANDIN_EDGE).unwrap_or((w, h));
+		Prepared {
+			rgba: box_shrink(&self.rgba, small),
+			sizing: self.sizing,
+			opacity: self.opacity,
+			fit: self.fit,
+			anchor: self.anchor,
+			summary: self.summary,
+		}
+	}
+}
+
+// Each small pixel the plain average of the block it covers, in linear light,
+// the way the sampler filters an sRGB texture. One read per source pixel, and
+// no float copy of the picture.
+fn box_shrink(src: &image::RgbaImage, (w, h): (u32, u32)) -> image::RgbaImage {
+	let (fw, fh) = src.dimensions();
+	let span = |i: u32, to: u32, from: u32| {
+		let start = (u64::from(i) * u64::from(from) / u64::from(to)) as u32;
+		let end = (u64::from(i + 1) * u64::from(from) / u64::from(to)) as u32;
+		start..end.max(start + 1).min(from)
+	};
+	let columns: Vec<_> = (0..w).map(|x| span(x, w, fw)).collect();
+	let mut out = image::RgbaImage::new(w, h);
+	let mut sums = vec![[0.0f32; 4]; w as usize];
+	for oy in 0..h {
+		sums.fill([0.0; 4]);
+		let rows = span(oy, h, fh);
+		let tall = rows.len();
+		for y in rows {
+			for (sum, cols) in sums.iter_mut().zip(&columns) {
+				for x in cols.clone() {
+					let px = src.get_pixel(x, y);
+					sum[0] += config::to_linear(px[0]);
+					sum[1] += config::to_linear(px[1]);
+					sum[2] += config::to_linear(px[2]);
+					sum[3] += f32::from(px[3]) / 255.0;
+				}
+			}
+		}
+		for (ox, (sum, cols)) in sums.iter().zip(&columns).enumerate() {
+			let n = (tall * cols.len()) as f32;
+			out.put_pixel(
+				ox as u32,
+				oy,
+				image::Rgba([
+					config::from_linear_u8(sum[0] / n),
+					config::from_linear_u8(sum[1] / n),
+					config::from_linear_u8(sum[2] / n),
+					(sum[3] / n * 255.0 + 0.5) as u8,
+				]),
+			);
+		}
+	}
+	out
 }
 
 // Run one request on its own thread and post the result back to the event loop.
@@ -201,9 +270,11 @@ fn run(request: &Request) -> Loaded {
 			})
 		})
 		.flatten();
+	let standin = image.as_ref().map(Prepared::standin);
 	Loaded {
 		seq: request.seq,
 		image,
+		standin,
 		rotation,
 		scanned: request.scan,
 	}
@@ -1183,6 +1254,80 @@ mod tests {
 		assert!(run(&request(false)).image.is_none());
 		// the control: switched on, the same request shows the built-in
 		assert!(run(&request(true)).image.is_some());
+	}
+
+	// A window taking its device back after an idle release showed no picture
+	// until this one was prepared again from the file, which is seconds for a
+	// large photo. It now keeps a small copy through the release. The point of
+	// letting go is the memory, so the copy has to stay small.
+	// Test ID: Ersiipp
+	#[test]
+	fn every_picture_comes_with_a_small_standin() {
+		let request = |window, enabled| Request {
+			seq: 1,
+			newest: Arc::new(AtomicU64::new(1)),
+			settings: Arc::new(Settings {
+				wallpaper_enabled: enabled,
+				..flat_settings()
+			}),
+			scan: false,
+			current: None,
+			cleared: false,
+			window,
+			summary: None,
+		};
+		for window in [(2560, 1440), (640, 360), (0, 0)] {
+			let loaded = run(&request(window, true));
+			let image = loaded.image.expect("the built-in");
+			let small = loaded.standin.expect("a stand-in");
+			let (w, h) = small.rgba.dimensions();
+			assert_eq!(w.max(h), super::STANDIN_EDGE, "{w}x{h}");
+			assert!(small.rgba.len() <= 64 << 10, "{} bytes", small.rgba.len());
+			// everything but the pixels, so it is drawn where the real one will be
+			assert_eq!(small.sizing, image.sizing);
+			assert_eq!(small.summary, image.summary);
+			assert_eq!(small.fit, image.fit);
+			assert_eq!(small.anchor, image.anchor);
+			assert!((small.opacity - image.opacity).abs() < f32::EPSILON);
+		}
+		// no picture, nothing kept: a rebuild then shows none, as it should
+		assert!(run(&request((800, 500), false)).standin.is_none());
+	}
+
+	// The sampler filters an sRGB texture in linear light, so the stand-in is
+	// averaged the same way. In sRGB values half black and half white would be
+	// 128; the eye, and the real picture drawn small, say 188.
+	// Test ID: ErsiiuM
+	#[test]
+	fn the_standin_is_averaged_in_linear_light() {
+		use crate::config::{from_linear_u8, to_linear};
+		let checker = image::RgbaImage::from_fn(320, 180, |x, y| {
+			let v = if (x + y) % 2 == 0 { 255 } else { 0 };
+			image::Rgba([v, v, v, 255])
+		});
+		let small = super::box_shrink(&checker, (160, 90));
+		assert!(
+			small
+				.pixels()
+				.all(|px| px[0] == 188 && px[1] == 188 && px[3] == 255),
+			"{:?}",
+			small.get_pixel(0, 0)
+		);
+		// and over a real picture, nothing drifts: each channel's mean in
+		// linear light is kept to within a level
+		let prepared = prepare(&flat_settings(), None, false, WHOLE, &|| false).expect("built-in");
+		let small = prepared.standin();
+		let mean = |img: &image::RgbaImage, c: usize| {
+			img.pixels()
+				.map(|px| f64::from(to_linear(px[c])))
+				.sum::<f64>()
+				/ img.pixels().len() as f64
+		};
+		for c in 0..3 {
+			let (big, little) = (mean(&prepared.rgba, c), mean(&small.rgba, c));
+			let off = from_linear_u8(big as f32).abs_diff(from_linear_u8(little as f32));
+			assert!(off <= 1, "channel {c}: {off} levels");
+		}
 	}
 
 	// Rotation off leaves the folder in the settings, so switching it back on

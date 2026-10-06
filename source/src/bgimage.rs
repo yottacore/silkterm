@@ -21,7 +21,8 @@ struct Uniform {
 	// are only read on the perceptual path, which writes the background itself.
 	bg: [f32; 4],
 	perceptual: f32,
-	_pad: [f32; 3],
+	standin: f32, // 1 for a stand-in: cubic sampling (`ImageRenderer::standing_in`)
+	_pad: [f32; 2],
 }
 
 // Wallpaper VRAM-content probe verdict (see `vram_check_poll`).
@@ -49,6 +50,7 @@ pub struct ImageRenderer {
 	opacity: f32,
 	fit: f32,
 	anchor: [f32; 2],
+	standin: bool,
 	// last resolution written to the uniform (skip the per-frame re-write)
 	last: std::cell::Cell<(f32, f32, crate::visibility::Mix, [f32; 4])>,
 	// VT-switch loss probe: this texture is a REAL casualty of a VRAM purge
@@ -242,6 +244,7 @@ impl ImageRenderer {
 			opacity: img.opacity,
 			fit: if img.fit == Fit::Zoom { 1.0 } else { 0.0 },
 			anchor: [img.anchor[0].clamp(0.0, 1.0), img.anchor[1].clamp(0.0, 1.0)],
+			standin: false,
 			texture,
 			probe_at,
 			probe_ref,
@@ -259,10 +262,18 @@ impl ImageRenderer {
 		}
 	}
 
+	// Built from `Prepared::standin` while the real picture is prepared again.
+	// Drawn many times its size, so the shader smooths it, and its size is no
+	// reason to prepare anything: the real one is already on its way.
+	pub fn standing_in(mut self) -> Self {
+		self.standin = true;
+		self
+	}
+
 	// Whether a window this size would hold the picture at another size. Until
 	// it is prepared again, the one held now is drawn scaled.
 	pub fn needs_resize(&self, window: (u32, u32)) -> bool {
-		self.sizing.held(window) != self.held
+		!self.standin && self.sizing.held(window) != self.held
 	}
 
 	// SILK_MEMDBG's line for the picture. The GL path has no allocator report to
@@ -270,8 +281,9 @@ impl ImageRenderer {
 	pub fn memdbg_line(&self) -> String {
 		let ((w, h), (fw, fh)) = (self.held, self.sizing.full);
 		format!(
-			"wallpaper: {w}x{h} held of {fw}x{fh}, {:.1} MiB",
-			crate::memdbg::mib(w as usize * h as usize * 4)
+			"wallpaper: {w}x{h} held of {fw}x{fh}, {:.1} MiB{}",
+			crate::memdbg::mib(w as usize * h as usize * 4),
+			if self.standin { ", stand-in" } else { "" }
 		)
 	}
 
@@ -304,7 +316,8 @@ impl ImageRenderer {
 			anchor: self.anchor,
 			bg,
 			perceptual: if mix.perceptual { 1.0 } else { 0.0 },
-			_pad: [0.0; 3],
+			standin: if self.standin { 1.0 } else { 0.0 },
+			_pad: [0.0; 2],
 		};
 		queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&uniform_data));
 	}
@@ -424,6 +437,7 @@ struct Uniform {
     anchor: vec2<f32>,
     bg: vec4<f32>,
     perceptual: f32,
+    standin: f32,
 };
 @group(0) @binding(0) var<uniform> u: Uniform;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -446,6 +460,28 @@ fn dec(c: vec3<f32>) -> vec3<f32> {
     return select(pow((cl + 0.055) / 1.055, vec3<f32>(2.4)), cl / 12.92, cl <= vec3<f32>(0.04045));
 }
 
+// A cubic B-spline from four bilinear taps. A stand-in is a few texels
+// stretched over the window, and a plain bilinear stretch shows their grid.
+fn smooth_sample(uv: vec2<f32>) -> vec4<f32> {
+    let size = vec2<f32>(textureDimensions(tex));
+    let p = uv * size - 0.5;
+    let i = floor(p);
+    let f = p - i;
+    let f2 = f * f;
+    let f3 = f2 * f;
+    let w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+    let w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+    let w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0;
+    let w3 = f3 / 6.0;
+    let g0 = w0 + w1;
+    let g1 = w2 + w3;
+    let h0 = (i - 0.5 + w1 / g0) / size;
+    let h1 = (i + 1.5 + w3 / g1) / size;
+    let top = textureSample(tex, samp, h0) * g0.x + textureSample(tex, samp, vec2<f32>(h1.x, h0.y)) * g1.x;
+    let bottom = textureSample(tex, samp, vec2<f32>(h0.x, h1.y)) * g0.x + textureSample(tex, samp, h1) * g1.x;
+    return top * g0.y + bottom * g1.y;
+}
+
 @fragment
 fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     let p = frag.xy; // framebuffer pixels (y-down)
@@ -459,7 +495,10 @@ fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
         let disp = u.image_size * scale;
         uv = (p + (disp - u.resolution) * u.anchor) / disp;
     }
-    let c = textureSample(tex, samp, uv);
+    var c = textureSample(tex, samp, uv);
+    if (u.standin > 0.5) {
+        c = smooth_sample(uv);
+    }
     if (u.perceptual < 0.5) {
         let a = c.a * u.amount;
         return vec4<f32>(c.rgb * a, a); // premultiplied
@@ -482,3 +521,39 @@ fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     return vec4<f32>(mixed * la, la); // premultiplied
 }
 ";
+
+#[cfg(test)]
+mod tests {
+	use super::{BG_WGSL, Uniform};
+
+	// A shader edit that does not compile only shows up at pipeline creation,
+	// in a window.
+	// Test ID: ErsiiyG
+	#[test]
+	fn the_wallpaper_shader_compiles() {
+		use wgpu::naga;
+		let module = naga::front::wgsl::parse_str(BG_WGSL).expect("the wallpaper shader parses");
+		naga::valid::Validator::new(
+			naga::valid::ValidationFlags::all(),
+			naga::valid::Capabilities::empty(),
+		)
+		.validate(&module)
+		.expect("the wallpaper shader validates");
+		// and the Rust side of the uniform still lines up with the WGSL one
+		assert_eq!(std::mem::size_of::<Uniform>(), 64);
+		assert_eq!(std::mem::offset_of!(Uniform, standin), 52);
+	}
+
+	// Every ordinary frame draws what it always has. Only a stand-in, there for
+	// the moment after an idle wake, takes the cubic sampling.
+	// Test ID: Ersij2D
+	#[test]
+	fn only_a_standin_is_smoothed() {
+		let fs = BG_WGSL.split("fn fs(").nth(1).expect("the fragment shader");
+		let guard = fs.find("if (u.standin > 0.5)").expect("no guard");
+		let call = fs.find("smooth_sample(").expect("no call");
+		assert!(guard < call, "the cubic runs unguarded");
+		assert_eq!(fs.matches("smooth_sample(").count(), 1);
+		assert!(fs.contains("var c = textureSample(tex, samp, uv);"));
+	}
+}
