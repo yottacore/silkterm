@@ -64,8 +64,14 @@ struct CompU {
 	radius: f32,    // distance path: halo extent in px (normalizes the distance)
 	strength: f32,  // doublings of the finished halo alpha, 0..5 (0 = as built)
 	// 0 = outline only: the blur did not run, so the halo texture is stale.
-	// (Also what rounds the struct up to the WGSL side's 8-byte alignment.)
 	halo: f32,
+	// 1 = redraw each alpha off `curve` (`visibility::HaloMatch`). 0 leaves it as
+	// asked, which is all dark mode gets.
+	matched: f32,
+	// puts `curve` on the 16-byte boundary a WGSL uniform array sits on
+	_pad: f32,
+	// the HALO_NODES points
+	curve: [f32; 12],
 }
 
 // The view keeps its texture alive.
@@ -573,7 +579,12 @@ impl Scrim {
 		radius: f32,
 		strength: f32,
 		halo: f32,
+		matched: Option<crate::visibility::HaloMatch>,
 	) {
+		let mut curve = [0.0f32; 12];
+		if let Some(m) = matched {
+			curve[..m.curve.len()].copy_from_slice(&m.curve);
+		}
 		queue.write_buffer(
 			&self.comp_u,
 			0,
@@ -587,6 +598,9 @@ impl Scrim {
 				radius,
 				strength,
 				halo,
+				matched: if matched.is_some() { 1.0 } else { 0.0 },
+				_pad: 0.0,
+				curve,
 			}),
 		);
 	}
@@ -905,7 +919,7 @@ fn fs_dist_b(in: VsOut) -> @location(0) vec4<f32> {
     return vec4<f32>(best, 0.0, 0.0, 1.0);
 }
 
-struct CompU { resolution: vec2<f32>, intensity: f32, border_px: f32, cursor: f32, function: f32, ramp: f32, radius: f32, strength: f32, halo: f32 };
+struct CompU { resolution: vec2<f32>, intensity: f32, border_px: f32, cursor: f32, function: f32, ramp: f32, radius: f32, strength: f32, halo: f32, matched: f32, _pad: f32, curve: array<vec4<f32>, 3> };
 @group(0) @binding(0) var<uniform> cu: CompU;
 @group(0) @binding(1) var gtex: texture_2d<f32>;   // scrim: blurred coverage or distance (.r)
 @group(0) @binding(2) var gsamp: sampler;
@@ -915,6 +929,19 @@ struct CompU { resolution: vec2<f32>, intensity: f32, border_px: f32, cursor: f3
 
 fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
     return select(pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
+}
+
+// Light mode's halo alpha, read off the twelve points visibility::halo_match
+// solved for this picture, joined by straight lines. They are spaced by how far
+// dark mode's halo moves a picture rather than by alpha, which is where the
+// curve bends. The Rust side reads them the same way in HaloMatch::alpha.
+fn curve_at(i: u32) -> f32 {
+    return cu.curve[i / 4u][i % 4u];
+}
+fn matched_alpha(a: f32) -> f32 {
+    let x = (1.0 - pow(1.0 - clamp(a, 0.0, 1.0), 1.0 / 2.4)) * 11.0;
+    let i = min(u32(x), 10u);
+    return mix(curve_at(i), curve_at(i + 1u), x - f32(i));
 }
 
 // color the scrim coverage per-pixel by the local bg color; premultiplied.
@@ -975,7 +1002,10 @@ fn fs_comp(in: VsOut) -> @location(0) vec4<f32> {
         m = max(m, border_tap(in.uv + vec2<f32>(-dg, -dg) * texel));
         border = clamp(m, 0.0, 1.0);
     }
-    let a = max(ga, border);
+    var a = max(ga, border);
+    if (cu.matched > 0.5) {
+        a = matched_alpha(a);
+    }
     return vec4<f32>(rgb * a, a);
 }
 ";
@@ -1082,6 +1112,45 @@ mod tests {
 			assert!(v < prev, "not falling at {i}");
 			prev = v;
 		}
+	}
+
+	// A shader edit that does not compile only shows up at pipeline creation, in
+	// a window. This catches it here, with no GPU.
+	// Test ID: Ers4srl
+	#[test]
+	fn the_scrim_shader_compiles() {
+		use wgpu::naga;
+		let module = naga::front::wgsl::parse_str(WGSL).expect("the scrim shader parses");
+		naga::valid::Validator::new(
+			naga::valid::ValidationFlags::all(),
+			naga::valid::Capabilities::empty(),
+		)
+		.validate(&module)
+		.expect("the scrim shader validates");
+	}
+
+	// Dark mode is the reference and must draw what it always has, so the light
+	// mode match runs only behind its own flag, and the flag is only set when
+	// visibility.rs hands over a match.
+	// Test ID: Ers4tCw
+	#[test]
+	fn only_a_matched_halo_is_redrawn() {
+		let comp = WGSL
+			.split("fn fs_comp")
+			.nth(1)
+			.expect("the composite shader");
+		let guard = comp.find("if (cu.matched > 0.5)").expect("no guard");
+		let call = comp.find("matched_alpha(").expect("no call");
+		assert!(guard < call, "the match runs unguarded");
+		assert_eq!(comp.matches("matched_alpha(").count(), 1);
+		// and the Rust side of the uniform still lines up with the WGSL one
+		assert_eq!(std::mem::size_of::<super::CompU>(), 96);
+		assert_eq!(std::mem::offset_of!(super::CompU, curve), 48);
+		assert_eq!(crate::visibility::HALO_NODES, 12);
+		assert!(
+			WGSL.contains(&format!("* {}.0;", crate::visibility::HALO_NODES - 1)),
+			"the shader's span count and HALO_NODES have drifted apart"
+		);
 	}
 
 	// Test ID: EpHXO9g

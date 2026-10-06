@@ -801,22 +801,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- Light mode: the scrim is much too strong next to dark mode
-	- ID: 2026100513581811
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261005-135818
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-	- Incorrect behavior: Over a wallpaper, the light-mode scrim reads much stronger than the dark-mode one at the same setting.
-	- Expected behavior: The two modes look about as strong as each other.
-	- Notes:
-		- 20261005: From the look at the old-format cursor plate item.
-
 - macOS: a window opened with Command+N is smaller, and its size is the one remembered
 	- ID: 2026100514211602
 	- Type: Bug
@@ -842,22 +826,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause:
 		- Each window is its own process, and the new one reads the remembered size for the monitor it thinks it opens on (`MonitorId::of_new_window`). macOS may answer that differently for a window started from another one.
 		- A size is saved at close only if the window changed size (`flush_window_size`). If the new window's first size counts as a change, it saves the small size, and the first window, never resized, saves nothing.
-
-- Light mode: the text is still not dark enough in any light theme
-	- ID: 2026100513581810
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261005-135818
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- Darker text in each light-mode theme.
-		- Perhaps much more saturated too, so it still reads as a color.
-	- Notes:
-		- 20261005: From the look at the old-format cursor plate item, whose text was darkened on 20260929. That was not enough.
 
 - Tabs: a setting for new tabs to open next to the current one
 	- ID: 2026100513581812
@@ -1207,6 +1175,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
 
+- Light mode: the scrim is much too strong next to dark mode
+	- ID: 2026100513581811
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+	- Incorrect behavior: Over a wallpaper, the light-mode scrim reads much stronger than the dark-mode one at the same setting.
+	- Expected behavior: The two modes look about as strong as each other.
+	- Notes:
+		- 20261005: From the look at the old-format cursor plate item.
+	- Reproduced: 20261005 on b23. Measured as how far the halo and outline move pixels from the same scene drawn without them, mean sRGB levels per pixel over a screenful of text, dark against light. Built-in wallpaper 6.6 against 20.1, a dark photo 3.8 against 13.0, a near-black photo 2.2 against 13.8. So light mode was 3 to 6 times as strong. In Oklab lightness the two looked about even, but sRGB levels are what the visibility work matched and what the eye agreed with.
+	- Actual cause:
+		- Light mode scaled the halo by one gain, matched at half the halo over an average picture. sRGB's curve makes dark mode's halo build slowly and light mode's fast, so the faint tail showed far more in light mode.
+		- Light mode draws a picture, dark parts most of all, much further from the paper than dark mode draws it from black. A gain matched to an average picture could not follow that.
+		- The 1 px outline was never scaled at all, so in light mode it moved pixels by up to 119 levels.
+	- Actual fix: Light mode redraws every halo alpha, the outline included, off a curve solved per picture. The curve makes the halo move the picture toward the background as far, in sRGB levels a channel at a time and on average over the picture, as dark mode's halo moves dark mode's. The wallpaper summary now keeps 16 quantiles of each channel for this. Dark mode, and light mode with no wallpaper up, are drawn as before. After: built-in 9.5, dark photo 4.9, near-black photo 2.6, against dark mode's 6.6, 3.8 and 2.2 (1.2 to 1.4 times). The rest is the picture under the text not being the picture's average, which the composite cannot see.
+	- Decisions:
+		- The old floor of a quarter of the asked alpha is gone. It held the tail, which is where the excess was. The text's own contrast is what keeps it readable, and light-mode text is darker now (2026100513581810).
+		- Matched in sRGB levels, not Oklab, as the wallpaper visibility work was.
+	- Verified: dark mode draws exactly the pixels it drew before, in all four themes and with no wallpaper. Full unit suite passes.
+	- Swept: the composite has one output, the union of halo and outline, and the match runs there, so the cursor's halo and outline go through it too. `halo_gain` had one caller. The cursor plate has its own light-mode alpha and is not part of the scrim.
+	- Branch: lightink
+	- Commit: b36853d
+	- Test case: `the_halo_covers_the_same_ground_in_both_modes` (EqT4HIg), now at every alpha and over gray and strongly colored pictures, and `the_halo_follows_the_picture_it_sits_on` (Ers4sAg), both failing on the old single gain. `only_a_matched_halo_is_redrawn` (Ers4tCw) holds dark mode out of the match, `the_scrim_shader_compiles` (Ers4srl) validates the shader with no GPU, `the_matched_halo_only_ever_grows_with_what_was_asked` (Ers4sWJ) and `the_memo_never_hands_back_a_stale_halo` (Ers4ttU).
+	- Acceptance signoff: Self-closed: measured before and after in both modes, dark mode pixel-identical, tests pass.
+	- Closed: 20261005-171619
+
 - Linux: the window opens at one size, then jumps to another
 	- ID: 2026100408214201
 	- Type: Bug
@@ -1334,6 +1334,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- Light mode: the text is still not dark enough in any light theme
+	- ID: 2026100513581810
+	- Type: Enhancement
+	- Status: Done
+	- Priority: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Darker text in each light-mode theme.
+		- Perhaps much more saturated too, so it still reads as a color.
+	- Notes:
+		- 20261005: From the look at the old-format cursor plate item, whose text was darkened on 20260929. That was not enough.
+		- Measured: 20261005. In Oklab lightness under the paper, the light themes' colored ANSI text averaged 0.36 to 0.47, below the 0.45 contrast floor for most colors, against 0.60 to 0.77 over black in the dark themes. The foreground sat 0.70 to 0.73 under the paper.
+	- Progress log:
+		- Done: every light theme's foreground is darker, 0.74 to 0.80 under the paper, and SilkTerm's is a deep ink blue rather than a gray. The ANSI colors average 0.57 under the paper, the normal row deeper than the bright one, with chroma kept or raised so they read as more saturated. Matrix and Retro Amber moved their whole set down, keeping the spread that tells their colors apart. Measured on screen over flat paper, the core of body text went from Oklab 0.24 to 0.17.
+		- Not as deep as dark mode's colors on purpose: much past this a yellow or a cyan has no color left.
+		- A cost: the same colors as a cell background, a tmux status bar say, are now dark, so the contrast floor turns their text light.
+		- Saved themes are untouched, since they are stored whole. Dark palettes did not change.
+	- Verified: dark mode draws exactly the pixels it drew before, in all four themes. The cursor plate tests still pass unchanged. Full unit suite passes.
+	- Branch: lightink
+	- Commit: 726a70a
+	- Test case: `light_text_is_dark_and_still_a_color` (Ers4tYC), failing on the old light palettes.
+	- Acceptance signoff: Self-closed: darker and more saturated in every light theme as asked, tests pass, dark mode pixel-identical. The exact depth is taste and easy to move.
+	- Closed: 20261005-171619
 
 - Hold the wallpaper at the size it is drawn at
 	- ID: 2026100418225503
@@ -1978,42 +2006,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
 
-- Four unit tests fail on Windows
-	- ID: 2026093010080316
-	- Type: Bug
-	- Status: Done
-	- Priority|Severity: Avg
-	- Opened: 20260930-100803
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w, `cargo test`
-	- Steps to reproduce: Run `cargo test` on Windows.
-	- Incorrect behavior:
-		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
-		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
-		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
-	- Expected behavior: They pass, as on Linux.
-	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
-	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
-	- Actual cause: All four are faults in the tests. None is timing.
-		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
-		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
-	- Progress log:
-		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
-	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
-	- Branch: wintests
-	- Commit: 731d528
-	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
-	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
-	- Swept:
-		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
-		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
-		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
-		- The Windows run this item came from named only these four. That full suite was not run again.
-	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
-	- Closed: 20260930-125357
-
 - Settings: the dialog repeats whole-table work for each row on every frame
 	- ID: 2026100314050004
 	- Type: Enhancement
@@ -2570,38 +2562,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
-
-- Windows: open scripts and folders in SilkTerm
-	- ID: 2026093009280571
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
-	- Priority|Severity: Avg
-	- Opened: 20260930-092805
-	- Opened by: JC
-	- Assigned to: JC
-	- Related IDs: 2026092810510800
-	- Target OS: Windows
-	- Test environment: vm925w, Windows 11 25H2
-	- Requirements:
-		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
-			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
-			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
-			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
-		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
-			- Windows only. Other platforms don't show them.
-		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
-		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
-	- Estimated effort: Avg
-	- Progress log:
-		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
-		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
-		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
-		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
-		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
-	- Branch: winassoc
-	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
-	- Acceptance signoff: 20260930-183819
 
 - Code style: single letters name parameters, fields and long-lived values
 	- ID: 2026100314050009
@@ -3217,6 +3177,74 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None, the items are notes.
 	- Closed: 20260929-170507
 
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
+	- Status: Done
+	- Priority|Severity: Avg
+	- Opened: 20260930-100803
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
+	- Actual cause: All four are faults in the tests. None is timing.
+		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
+		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Progress log:
+		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
+	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
+	- Branch: wintests
+	- Commit: 731d528
+	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
+	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
+	- Swept:
+		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
+		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
+		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
+		- The Windows run this item came from named only these four. That full suite was not run again.
+	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
+	- Closed: 20260930-125357
+
+- Windows: open scripts and folders in SilkTerm
+	- ID: 2026093009280571
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
+	- Priority|Severity: Avg
+	- Opened: 20260930-092805
+	- Opened by: JC
+	- Assigned to: JC
+	- Related IDs: 2026092810510800
+	- Target OS: Windows
+	- Test environment: vm925w, Windows 11 25H2
+	- Requirements:
+		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
+			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
+			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
+			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
+		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
+			- Windows only. Other platforms don't show them.
+		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
+		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
+		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
+		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
+		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
+		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
+	- Branch: winassoc
+	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
+	- Acceptance signoff: 20260930-183819
+
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082
 	- Type: Bug
@@ -3364,19 +3392,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Opened: 20260924-115032
 
 ### Features and enhancements
-
-- 🛠️ Two more settings of the same class as the light mode calibration, neither fixed.
-	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.
-	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already holds the text on it legible in both modes, so this is a question of how loud it looks rather than whether it works.
-	- Fixed: 20260928, window transparency. The cause was not the eye. The fill was encoded to sRGB after it was premultiplied, so a light fill at 80% came out as 91% of itself and covered most of the desktop. Black was not affected. A light fill now lets through exactly as much as a dark one.
-	- Test: `a_light_fill_is_as_see_through_as_a_dark_one`, which fails on the old code.
-	- Note: 20260928, the cursor plate is placed by the contrast floor, not by its alpha. Every shipped theme's plate already sits right at the floor from the text, in both modes. Light text is at Oklab 0.32 to 0.37 and the background at 0.94 to 0.97, so the plate can only get 0.12 to 0.20 away from the background. Dark mode gets 0.20 to 0.42. A stronger alpha would push the plate into the text, so the theme cursor colors would have to get lighter to compensate, and the plate would end up where it is now. Only darker light-mode text makes more room. Waiting on a call.
-	- Note: 20260928, the answer is to darken the shipped light-mode text, so the plate has room to be louder.
-	- Fixed: 20260929, the cursor plate. The shipped light themes have darker text, and over a light background the plate is drawn at 80% instead of 55%, as far as the text on it still clears the floor. Darker text alone was not enough, since at 55% even a black cursor could not take the plate much past 0.2 from a light background. Their plates now sit 0.25 to 0.28 from the background, where they were 0.12 to 0.20. Dark mode is unchanged. A saved theme keeps about the plate it had.
-	- Test: `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
-	- Note: 20260930, both halves are fixed now, the window transparency on 20260928 and the cursor plate on 20260929. The title is out of date. What is left is the look on screen.
-	- Note: 20261005, looked at. The light-mode text is still not dark enough, and the light-mode scrim is still much too strong next to dark mode. Filed as 2026100513581810 and 2026100513581811.
-	- Opened: 20260920-190859
 
 - **Stop here to work on releasing RC1**.
 
@@ -5519,6 +5534,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Closed: 20260723-190021
 
 #### Done - Features and enhancements
+
+- ✅ Two more settings of the same class as the light mode calibration, neither fixed.
+	- Window transparency. At the same `transparency.opacity` a light terminal over a dark desktop shows far less of it than a dark terminal over a light one. There is no reference to calibrate against, since what is behind the window is not ours to measure. Off by default, so nobody meets it unasked.
+	- The block cursor's plate. It is drawn at a fixed 55%, so in light mode it is a pale plate and in dark mode a dark one, which is the same asymmetry the scrim had. The contrast floor already holds the text on it legible in both modes, so this is a question of how loud it looks rather than whether it works.
+	- Fixed: 20260928, window transparency. The cause was not the eye. The fill was encoded to sRGB after it was premultiplied, so a light fill at 80% came out as 91% of itself and covered most of the desktop. Black was not affected. A light fill now lets through exactly as much as a dark one.
+	- Test: `a_light_fill_is_as_see_through_as_a_dark_one`, which fails on the old code.
+	- Note: 20260928, the cursor plate is placed by the contrast floor, not by its alpha. Every shipped theme's plate already sits right at the floor from the text, in both modes. Light text is at Oklab 0.32 to 0.37 and the background at 0.94 to 0.97, so the plate can only get 0.12 to 0.20 away from the background. Dark mode gets 0.20 to 0.42. A stronger alpha would push the plate into the text, so the theme cursor colors would have to get lighter to compensate, and the plate would end up where it is now. Only darker light-mode text makes more room. Waiting on a call.
+	- Note: 20260928, the answer is to darken the shipped light-mode text, so the plate has room to be louder.
+	- Fixed: 20260929, the cursor plate. The shipped light themes have darker text, and over a light background the plate is drawn at 80% instead of 55%, as far as the text on it still clears the floor. Darker text alone was not enough, since at 55% even a black cursor could not take the plate much past 0.2 from a light background. Their plates now sit 0.25 to 0.28 from the background, where they were 0.12 to 0.20. Dark mode is unchanged. A saved theme keeps about the plate it had.
+	- Test: `a_light_cursor_plate_stands_off_the_background_like_a_dark_one`, which fails on the old colors, and `a_light_plate_stops_where_its_text_would_sink` for a saved theme.
+	- Note: 20260930, both halves are fixed now, the window transparency on 20260928 and the cursor plate on 20260929. The title is out of date. What is left is the look on screen.
+	- Note: 20261005, looked at. The light-mode text is still not dark enough, and the light-mode scrim is still much too strong next to dark mode. Filed as 2026100513581810 and 2026100513581811.
+	- Note: 20261005, both are done: darker, more saturated light text (2026100513581810) and a light scrim matched to dark mode's (2026100513581811).
+	- Opened: 20260920-190859
+	- Closed: 20261005-171619
 
 - ✅ Minimap: with a very deep scrollback, redrawing the map under heavy output stops the terminal for a moment each time.
 	- At 100,000 lines one redraw holds the terminal for about 150 ms, and at the 1,000,000-line maximum it would be over a second. The time between redraws already grows with it, so the average cost stays small; the pause itself does not.

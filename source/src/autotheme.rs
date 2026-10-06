@@ -62,8 +62,11 @@ const MIN_CHROMA: f32 = 0.02;
 // what SilkTerm's and Pastel's cursors already are.
 const CURSOR_ROTATE: f32 = 120.0;
 
-// What one image is worth to the derivation. Six numbers, so the live settings
-// can hold it and re-derive on a theme change without decoding anything.
+// How many evenly spaced quantiles of each channel a summary keeps.
+pub const SPREAD: usize = 16;
+
+// What one image is worth to the derivation. A handful of numbers, so the live
+// settings can hold it and re-derive on a theme change without decoding anything.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Summary {
 	// Per-cell linear luma at the bright and dark ends, alpha premultiplied.
@@ -72,6 +75,12 @@ pub struct Summary {
 	// And the mean of the same grid. Only the visibility ramp reads it, which
 	// wants how bright the picture is overall rather than where its ends are.
 	pub luma_mean: f32,
+	// Each linear channel of the same grid at SPREAD evenly spaced quantiles,
+	// darkest first, taken one channel at a time. The halo match averages over
+	// these, since an average over the picture is not the picture's average once
+	// the sRGB curve is applied, and both renderers work a channel at a time
+	// (`visibility::halo_match`).
+	pub spread: [[f32; 3]; SPREAD],
 	// Mean alpha, so the share of a cell the image does not cover can be given
 	// back to the background color. 1.0 for every ordinary photo.
 	pub alpha: f32,
@@ -96,6 +105,7 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 			luma_hi: 0.0,
 			luma_lo: 0.0,
 			luma_mean: 0.0,
+			spread: [[0.0; 3]; SPREAD],
 			alpha: 1.0,
 			hue: 0.0,
 			chroma: 0.0,
@@ -118,6 +128,7 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 	}
 
 	let mut lumas: Vec<f32> = Vec::with_capacity(GRID_W * GRID_H);
+	let mut channels: [Vec<f32>; 3] = std::array::from_fn(|_| Vec::with_capacity(GRID_W * GRID_H));
 	let (mut a_sum, mut a_n) = (0.0f64, 0u32);
 	// Chroma-weighted hue histogram, one bin a degree. A mean color cannot be
 	// used here: opposite hues cancel, and 17 of the shipped pack average to a
@@ -132,6 +143,9 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 		let n = n as f32;
 		let rgb = [bin[0] / n, bin[1] / n, bin[2] / n];
 		lumas.push(rgb[0] * LUMA[0] + rgb[1] * LUMA[1] + rgb[2] * LUMA[2]);
+		for (channel, value) in channels.iter_mut().zip(rgb) {
+			channel.push(value);
+		}
 		a_sum += f64::from(bin[3] / n);
 		a_n += 1;
 		let (_, a, b) = to_oklab_linear(rgb);
@@ -145,6 +159,7 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 			luma_hi: 0.0,
 			luma_lo: 0.0,
 			luma_mean: 0.0,
+			spread: [[0.0; 3]; SPREAD],
 			alpha: 1.0,
 			hue: 0.0,
 			chroma: 0.0,
@@ -152,6 +167,9 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 		};
 	}
 	lumas.sort_by(f32::total_cmp);
+	for channel in &mut channels {
+		channel.sort_by(f32::total_cmp);
+	}
 	let cells = a_n.max(1) as f64;
 	let mean = if lumas.is_empty() {
 		0.0
@@ -162,6 +180,14 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 		luma_hi: pct(&lumas, HI_PCT),
 		luma_lo: pct(&lumas, LO_PCT),
 		luma_mean: mean,
+		spread: std::array::from_fn(|i| {
+			let at = (i as f32 + 0.5) / SPREAD as f32;
+			[
+				pct(&channels[0], at),
+				pct(&channels[1], at),
+				pct(&channels[2], at),
+			]
+		}),
 		alpha: (a_sum / cells) as f32,
 		hue: dominant_hue(&hist),
 		chroma: (chroma_sum / cells) as f32,

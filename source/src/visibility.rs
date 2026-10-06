@@ -21,10 +21,10 @@
 //!   picture to the same displacement, fading out toward 100% where the picture
 //!   has to be drawn as it is.
 //!
-//! The scrim's halo is the one thing still calibrated rather than derived. That
-//! composite blends against the destination through the pipeline's blend state
-//! and cannot read it, so there is nothing to solve against: its alpha is scaled
-//! down until it covers the same ground dark mode's does.
+//! The scrim's halo blends against the destination through the pipeline's blend
+//! state and cannot read it, so it is matched against the picture's average
+//! instead: light mode redraws each halo alpha at whatever moves that field as
+//! far as dark mode's halo moves dark mode's.
 //!
 //! The measure throughout is a transfer curve taken on Rec.709 luma. Luma
 //! because it is affine under the alpha composite, so one number stands in for a
@@ -50,16 +50,6 @@ const MIX_GAMMA: f32 = 2.4;
 const REF_MEAN: f32 = 0.124;
 const REF_HI: f32 = 0.337;
 
-// Where the two halos are compared. The gain cannot be right across the whole
-// falloff - the curves meet at both ends whatever it is - so it is matched at
-// half the halo, which is the widest the gap gets.
-const HALO_REF: f32 = 0.5;
-
-// The halo never drops below a quarter of what was asked for. Past that the
-// plate stops doing the job it is there for, and legibility over a busy picture
-// matters more than the plate being tidy.
-const MIN_HALO_GAIN: f32 = 0.25;
-
 // Does this settings copy resolve to the dark variant? `Settings` rather than
 // the live store, so everything here stays a function of what it is handed.
 fn dark(settings: &Settings) -> bool {
@@ -70,24 +60,17 @@ fn dark(settings: &Settings) -> bool {
 // against. An overridden `bg` in light mode is still compared with the theme the
 // user picked, since that is the dark mode they would see.
 fn paired_dark_luma(settings: &Settings) -> f32 {
-	config::luma(crate::theme::resolve_in(&settings.user_themes, &settings.theme, "dark", true).bg)
+	config::luma(paired_dark_bg(settings))
+}
+
+fn paired_dark_bg(settings: &Settings) -> [u8; 3] {
+	crate::theme::resolve_in(&settings.user_themes, &settings.theme, "dark", true).bg
 }
 
 // How far a linear-light mix of `from` toward `to` travels in sRGB-encoded luma.
 // Signed, in the direction of the mix.
 fn shift(from: f32, to: f32, alpha: f32) -> f32 {
 	config::from_linear(from + (to - from) * alpha) - config::from_linear(from)
-}
-
-// The inverse: the alpha at which that mix covers `want` of sRGB distance. A mix
-// that cannot get that far is pinned at 1.
-fn alpha_for(from: f32, to: f32, want: f32) -> f32 {
-	let span = to - from;
-	if span.abs() < 1e-4 {
-		return 1.0;
-	}
-	let target = (config::from_linear(from) + span.signum() * want).clamp(0.0, 1.0);
-	((config::to_linear_f32(target) - from) / span).clamp(0.0, 1.0)
 }
 
 // The sRGB transfer curve's slope at a linear value. How much of a change in the
@@ -200,43 +183,167 @@ pub fn wallpaper_mix(settings: &Settings, slider: f32, picture: Option<(f32, f32
 	}
 }
 
-// How much of the asked-for halo alpha is actually drawn, for a wallpaper whose
-// slider reads `slider`. 0 means no picture, which leaves the halo alone - it is
-// then sitting on the background color it is made of, and invisible either way.
-pub fn halo_gain(settings: &Settings, slider: f32) -> f32 {
-	if dark(settings) || slider <= 0.0 {
-		return 1.0;
-	}
-	gain_for(
-		slider,
-		config::luma(settings.bg),
-		paired_dark_luma(settings),
-	)
+// How many points the light-mode halo curve is solved at. They are spaced
+// evenly in how far dark mode's halo moves a picture, which is
+// `1 - (1 - alpha)^(1/2.4)` of its distance from black, rather than evenly in
+// alpha: that is where the curve bends, and in those terms it is close to a
+// straight line. The shader joins the points with straight lines.
+pub const HALO_NODES: usize = 12;
+
+// The asked alpha at node `k`.
+fn halo_node(k: usize) -> f32 {
+	1.0 - (1.0 - k as f32 / (HALO_NODES - 1) as f32).powf(MIX_GAMMA)
 }
 
-// Light mode's share of the halo alpha, given the two backgrounds. Both modes
-// are measured at their own worst case: the halo is the background color, and
-// the field under it is the picture as that mode draws it.
-fn gain_for(slider: f32, light: f32, dark: f32) -> f32 {
-	let shown = Mix {
-		amount: encoded_scale(slider, dark).clamp(0.0, 1.0),
-		perceptual: true,
+// Light mode's halo, as the alpha to draw for each alpha asked. Solved so the
+// halo moves the picture under it toward the background as far, in sRGB levels
+// and on average over the picture, as dark mode's halo moves dark mode's
+// picture. The composite runs it on every halo alpha, the crisp outline
+// included (`matched_alpha` in scrim.rs).
+//
+// One scalar gain used to stand in for this, matched at half the halo over an
+// average picture, with the outline left at full strength. sRGB's curve is
+// steep near black and flat near white, so dark mode's halo builds slowly and
+// light mode's fast, and the gap is widest over the dark parts of a picture,
+// which light mode shows far more of. A gain could not follow either.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct HaloMatch {
+	pub curve: [f32; HALO_NODES],
+}
+
+impl HaloMatch {
+	// What the shader draws for `asked`. It reads the same numbers the same
+	// way, so this is what the tests hold.
+	#[cfg(test)]
+	pub fn alpha(&self, asked: f32) -> f32 {
+		let reach = 1.0 - (1.0 - asked.clamp(0.0, 1.0)).powf(1.0 / MIX_GAMMA);
+		let x = reach * (HALO_NODES - 1) as f32;
+		let i = (x as usize).min(HALO_NODES - 2);
+		let t = x - i as f32;
+		self.curve[i] + (self.curve[i + 1] - self.curve[i]) * t
+	}
+}
+
+// Rec.709, matching config::luma.
+const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+
+// How far, on average and in sRGB levels, a halo of `alpha` moves these fields
+// toward `bg`. A channel at a time, weighted as luma, since that is how both
+// renderers blend and how far a colored pixel visibly moves.
+fn moved(fields: &[[f32; 3]], bg: [f32; 3], alpha: f32) -> f32 {
+	let one = |f: &[f32; 3]| {
+		(0..3)
+			.map(|c| LUMA[c] * shift(f[c], bg[c], alpha).abs())
+			.sum::<f32>()
 	};
-	let drawn = Mix {
-		amount: slider,
+	fields.iter().map(one).sum::<f32>() / fields.len().max(1) as f32
+}
+
+// How the halo is redrawn for a wallpaper whose slider reads `slider`, whose
+// brightness is `picture` and whose linear channels run `spread` (the summary's
+// quantiles). None leaves the halo as asked: dark mode is the reference, and
+// with no picture up the halo sits on the background color it is made of. A
+// picture not summarized yet stands in as a gray at the shipped pack's median.
+pub fn halo_match(
+	settings: &Settings,
+	slider: f32,
+	picture: Option<(f32, f32)>,
+	spread: &[[f32; 3]],
+) -> Option<HaloMatch> {
+	if dark(settings) || slider <= 0.0 {
+		return None;
+	}
+	let picture = picture.unwrap_or((REF_MEAN, REF_HI));
+	let gray = [[picture.0; 3]];
+	let spread = if spread.is_empty() { &gray[..] } else { spread };
+	let linear = |c: [u8; 3]| c.map(config::to_linear);
+	let (dark_bg, light_bg) = (linear(paired_dark_bg(settings)), linear(settings.bg));
+	// each mode's own blend, the visibility ramp included
+	let dark_mix = Mix {
+		amount: evened(
+			slider,
+			slider,
+			picture,
+			paired_dark_luma(settings),
+			settings.wallpaper_even,
+		),
 		perceptual: false,
 	};
-	let field_dark = drawn.field(WALLPAPER_LUMA, dark);
-	let field_light = shown.field(WALLPAPER_LUMA, light);
-	let want = shift(field_dark, dark, HALO_REF).abs();
-	(alpha_for(field_light, light, want) / HALO_REF).clamp(MIN_HALO_GAIN, 1.0)
+	let light_mix = wallpaper_mix(settings, slider, Some(picture));
+	let fields = |mix: Mix, bg: [f32; 3]| -> Vec<[f32; 3]> {
+		spread
+			.iter()
+			.map(|p| std::array::from_fn(|c| mix.field(p[c], bg[c])))
+			.collect()
+	};
+	let (dark, light) = (fields(dark_mix, dark_bg), fields(light_mix, light_bg));
+	let reach = moved(&light, light_bg, 1.0);
+	let mut curve = [0.0f32; HALO_NODES];
+	for (k, node) in curve.iter_mut().enumerate().skip(1) {
+		let want = moved(&dark, dark_bg, halo_node(k));
+		// a light field that cannot move that far is simply covered
+		if reach <= want {
+			*node = 1.0;
+			continue;
+		}
+		let (mut lo, mut hi) = (0.0f32, 1.0f32);
+		for _ in 0..16 {
+			let mid = 0.5 * (lo + hi);
+			if moved(&light, light_bg, mid) < want {
+				lo = mid;
+			} else {
+				hi = mid;
+			}
+		}
+		*node = 0.5 * (lo + hi);
+	}
+	Some(HaloMatch { curve })
+}
+
+// `halo_match` is several thousand powers, and its inputs change only with the
+// picture, the theme or a slider, so a window keeps the last answer.
+#[derive(Default, Debug)]
+pub struct HaloMemo {
+	key: Vec<u32>,
+	next: Vec<u32>,
+	value: Option<HaloMatch>,
+}
+
+impl HaloMemo {
+	pub fn get(
+		&mut self,
+		settings: &Settings,
+		slider: f32,
+		picture: Option<(f32, f32)>,
+		spread: &[[f32; 3]],
+	) -> Option<HaloMatch> {
+		let key = &mut self.next;
+		key.clear();
+		let (bg, dark_bg) = (settings.bg, paired_dark_bg(settings));
+		key.extend([
+			u32::from(dark(settings)),
+			slider.to_bits(),
+			u32::from_le_bytes([bg[0], bg[1], bg[2], 0]),
+			u32::from_le_bytes([dark_bg[0], dark_bg[1], dark_bg[2], 0]),
+			settings.wallpaper_even.to_bits(),
+		]);
+		if let Some((mean, hi)) = picture {
+			key.extend([1, mean.to_bits(), hi.to_bits()]);
+		}
+		key.extend(spread.iter().flatten().map(|l| l.to_bits()));
+		if self.next != self.key {
+			self.value = halo_match(settings, slider, picture, spread);
+			std::mem::swap(&mut self.key, &mut self.next);
+		}
+		self.value
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::{
-		HALO_REF, MIN_HALO_GAIN, MIX_GAMMA, Mix, REF_HI, REF_MEAN, WALLPAPER_LUMA, encoded_scale,
-		gain_for, halo_gain, shift, standout, wallpaper_mix,
+		HALO_NODES, HaloMemo, MIX_GAMMA, Mix, REF_HI, REF_MEAN, encoded_scale, halo_match, moved,
+		standout, wallpaper_mix,
 	};
 	use crate::config::{self, Settings};
 
@@ -278,7 +385,13 @@ mod tests {
 							"{name} {mode} {v}"
 						);
 					}
-					assert_eq!(halo_gain(&s, v), 1.0, "{name} {mode} {v}");
+					for picture in [None, Some(DIM), Some(BRIGHT)] {
+						assert_eq!(
+							halo_match(&s, v, picture, &SPREAD),
+							None,
+							"{name} {mode} {v}"
+						);
+					}
 				}
 				s.wallpaper_even = 0.0;
 				for v in SLIDERS {
@@ -384,37 +497,176 @@ mod tests {
 		}
 	}
 
+	// A picture's quantiles, darkest first, standing in for a summary's
+	const SPREAD: [[f32; 3]; 6] = [
+		[0.004; 3], [0.02; 3], [0.06; 3], [0.13; 3], [0.25; 3], [0.5; 3],
+	];
+
+	// Quantiles that go with each stand-in picture: grays, and a strongly colored
+	// version of the same, which is where a luma-only model went wrong.
+	fn spreads_of(picture: (f32, f32)) -> [Vec<[f32; 3]>; 2] {
+		let (mean, hi) = picture;
+		let steps = [
+			mean * 0.05,
+			mean * 0.3,
+			mean * 0.7,
+			mean,
+			(mean + hi) * 0.5,
+			hi,
+		];
+		[
+			steps.iter().map(|&l| [l; 3]).collect(),
+			steps
+				.iter()
+				.map(|&l| [(l * 2.5).min(1.0), l * 0.4, (l * 1.5).min(1.0)])
+				.collect(),
+		]
+	}
+
+	fn bg_linear(name: &str, mode: &str) -> [f32; 3] {
+		crate::theme::resolve(name, mode, true)
+			.bg
+			.map(config::to_linear)
+	}
+
+	// Each mode's fields for these channels, as the renderers draw them.
+	fn fields(
+		name: &str,
+		mode: &str,
+		v: f32,
+		picture: (f32, f32),
+		spread: &[[f32; 3]],
+	) -> Vec<[f32; 3]> {
+		let mix = wallpaper_mix(&themed(name, mode), v, Some(picture));
+		let bg = bg_linear(name, mode);
+		spread
+			.iter()
+			.map(|p| std::array::from_fn(|c| mix.field(p[c], bg[c])))
+			.collect()
+	}
+
 	// Test ID: EqT4HIf
 	#[test]
 	fn the_halo_is_quietened_wherever_a_picture_is_up() {
 		let s = themed("SilkTerm", "light");
 		for v in [0.05f32, 0.1, 0.35, 0.75, 1.0] {
-			let g = halo_gain(&s, v);
-			assert!((MIN_HALO_GAIN..1.0).contains(&g), "{v}: {g}");
+			let m = halo_match(&s, v, None, &SPREAD).expect("a light theme with a picture up");
+			for a in [0.1f32, 0.5, 1.0] {
+				let drawn = m.alpha(a);
+				assert!(drawn > 0.0 && drawn < a, "{v} at {a}: {drawn}");
+			}
 		}
 	}
 
+	// was: matched at half the halo only, through one gain, over one average
+	// picture. It now has to hold at every alpha and over the whole picture, since
+	// the tail and the dark parts are where the old gain left light mode loud.
 	// Test ID: EqT4HIg
 	#[test]
 	fn the_halo_covers_the_same_ground_in_both_modes() {
-		let name = "SilkTerm";
-		let (dark, light) = (bg_luma(name, "dark"), bg_luma(name, "light"));
-		for v in [0.05f32, 0.1, 0.25, 0.5] {
-			let gain = gain_for(v, light, dark);
-			let field_dark = Mix {
-				amount: v,
-				perceptual: false,
+		for name in crate::theme::names() {
+			let s = themed(name, "light");
+			for picture in [DIM, ORDINARY, BRIGHT] {
+				for (v, spread) in [0.05f32, 0.1, 0.25, 0.5]
+					.into_iter()
+					.flat_map(|v| spreads_of(picture).map(|sp| (v, sp)))
+				{
+					let m = halo_match(&s, v, Some(picture), &spread).expect("a picture is up");
+					let dark = fields(name, "dark", v, picture, &spread);
+					let light = fields(name, "light", v, picture, &spread);
+					let (dark_bg, light_bg) = (bg_linear(name, "dark"), bg_linear(name, "light"));
+					for i in 0..=32 {
+						let a = i as f32 / 32.0;
+						let want = moved(&dark, dark_bg, a);
+						let drawn = m.alpha(a);
+						let got = moved(&light, light_bg, drawn);
+						// within a level, or full where light mode cannot reach that far
+						assert!(
+							(got - want).abs() < 1.0 / 255.0 || (drawn >= 1.0 && got < want),
+							"{name} {picture:?} {v} at {a}: wanted {}, got {}",
+							want * 255.0,
+							got * 255.0
+						);
+					}
+				}
 			}
-			.field(WALLPAPER_LUMA, dark);
-			let field_light =
-				wallpaper_mix(&themed(name, "light"), v, None).field(WALLPAPER_LUMA, light);
-			let want = shift(field_dark, dark, HALO_REF).abs();
-			let got = shift(field_light, light, HALO_REF * gain).abs();
+		}
+	}
+
+	// A picture that barely shows in dark mode gets a halo that barely shows in
+	// light mode too, rather than the one an ordinary picture would get. Light
+	// mode draws a dark picture much further from its paper than dark mode
+	// draws it from black, so without this its halo was the loudest of all.
+	// Test ID: Ers4sAg
+	#[test]
+	fn the_halo_follows_the_picture_it_sits_on() {
+		let s = themed("SilkTerm", "light");
+		for v in [0.1f32, 0.35] {
+			let dim = halo_match(&s, v, Some(DIM), &[[DIM.0; 3], [DIM.1; 3]]).expect("up");
+			let ordinary = halo_match(&s, v, Some(ORDINARY), &[]).expect("up");
 			assert!(
-				(got - want).abs() < 0.01 || gain <= MIN_HALO_GAIN,
-				"{v}: wanted {want}, got {got}"
+				dim.alpha(1.0) < ordinary.alpha(1.0) * 0.8,
+				"{v}: dim {dim:?}, ordinary {ordinary:?}"
 			);
 		}
+		// and with no quantiles the picture's own mean stands in for them
+		assert_eq!(
+			halo_match(&s, 0.1, Some(ORDINARY), &[]),
+			halo_match(&s, 0.1, Some(ORDINARY), &[[ORDINARY.0; 3]])
+		);
+	}
+
+	// Test ID: Ers4sWJ
+	#[test]
+	fn the_matched_halo_only_ever_grows_with_what_was_asked() {
+		for name in crate::theme::names() {
+			for picture in [DIM, ORDINARY, BRIGHT] {
+				let m =
+					halo_match(&themed(name, "light"), 0.1, Some(picture), &SPREAD).expect("up");
+				assert_eq!(m.alpha(0.0), 0.0, "{name} {picture:?}");
+				assert_eq!(m.curve.len(), HALO_NODES);
+				let mut last = 0.0;
+				for i in 0..=100 {
+					let drawn = m.alpha(i as f32 / 100.0);
+					assert!(drawn >= last - 1e-6, "{name} {picture:?} at {i}");
+					assert!(drawn <= 1.0, "{name} {picture:?} at {i}");
+					last = drawn;
+				}
+			}
+		}
+	}
+
+	// The memo answers what a fresh solve would, and solves again when anything
+	// it is keyed on moves.
+	// Test ID: Ers4ttU
+	#[test]
+	fn the_memo_never_hands_back_a_stale_halo() {
+		let mut memo = HaloMemo::default();
+		let light = themed("SilkTerm", "light");
+		let first = memo.get(&light, 0.1, Some(ORDINARY), &SPREAD);
+		assert_eq!(first, halo_match(&light, 0.1, Some(ORDINARY), &SPREAD));
+		assert_eq!(memo.get(&light, 0.1, Some(ORDINARY), &SPREAD), first);
+		let moved_slider = memo.get(&light, 0.35, Some(ORDINARY), &SPREAD);
+		assert_ne!(moved_slider, first);
+		assert_eq!(
+			moved_slider,
+			halo_match(&light, 0.35, Some(ORDINARY), &SPREAD)
+		);
+		let dimmer = [[0.002f32; 3], [0.01; 3], [0.03, 0.01, 0.02]];
+		assert_eq!(
+			memo.get(&light, 0.35, Some(ORDINARY), &dimmer),
+			halo_match(&light, 0.35, Some(ORDINARY), &dimmer)
+		);
+		assert_eq!(
+			memo.get(&themed("SilkTerm", "dark"), 0.35, Some(ORDINARY), &dimmer),
+			None
+		);
+		let mut pastel = themed("Pastel", "light");
+		pastel.wallpaper_even = 0.0;
+		assert_eq!(
+			memo.get(&pastel, 0.35, Some(ORDINARY), &dimmer),
+			halo_match(&pastel, 0.35, Some(ORDINARY), &dimmer)
+		);
 	}
 
 	// The visibility ramp. A picture further from the background than the pack's
@@ -558,6 +810,9 @@ mod tests {
 	// Test ID: EqT4HIh
 	#[test]
 	fn no_picture_leaves_the_halo_alone() {
-		assert_eq!(halo_gain(&themed("SilkTerm", "light"), 0.0), 1.0);
+		assert_eq!(
+			halo_match(&themed("SilkTerm", "light"), 0.0, None, &SPREAD),
+			None
+		);
 	}
 }
