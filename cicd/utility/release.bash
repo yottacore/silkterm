@@ -31,7 +31,7 @@ source "${here}/include/remote-git.bash"
 source "${here}/include/echo.bash"
 
 doPush=0; doPublish=0; assumeYes=0
-while (($#)); do case "$1" in
+while (($#)); do case "${1}" in
 	--push)    doPush=1; shift ;;
 	--publish) doPush=1; doPublish=1; shift ;;
 	-y|--yes)  assumeYes=1; shift ;;
@@ -42,11 +42,11 @@ esac; done
 ## 1. Preconditions: releases only cut from a clean main, with the version
 ## already bumped on dev (so no commit ever goes directly onto main here).
 branch="$(git rev-parse --abbrev-ref HEAD)"
-[[ "$branch" == "main" ]] || fDie "not on main (on ${branch}); merge dev --no-ff into main first"
+[[ "${branch}" == "main" ]] || fDie "not on main (on ${branch}); merge dev --no-ff into main first"
 git diff --quiet && git diff --cached --quiet || fDie "working tree not clean"
 
 ver="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "${VERSION_MANIFEST}" | head -1)"
-[[ -n "$ver" ]] || fDie "no version in ${VERSION_MANIFEST}"
+[[ -n "${ver}" ]] || fDie "no version in ${VERSION_MANIFEST}"
 tag="v${ver}"
 git rev-parse -q --verify "refs/tags/${tag}" >/dev/null && fDie "tag ${tag} already exists - bump the version on dev first"
 
@@ -58,7 +58,7 @@ grep -q "Release-${badgeVer}-" README.md || fDie "README release badge does not 
 ## 2. Release artifacts must exist and carry this version (full cicd run makes them).
 artDir="${RELEASE_ARTIFACT_DIR}"
 sums="${artDir}/${EXE_NAME}-${ver}-sha256sums.txt"
-[[ -s "$sums" ]] || fDie "no ${sums} - run cicd/cicd.bash (full, not --quick) first"
+[[ -s "${sums}" ]] || fDie "no ${sums} - run cicd/cicd.bash (full, not --quick) first"
 ( cd "${artDir}" && sha256sum -c "${EXE_NAME}-${ver}-sha256sums.txt" >/dev/null ) || fDie "artifact checksums do not verify"
 ## The sums only say the artifacts match each other. This says they match the
 ## source being tagged - without it a pipeline run, more commits, then a merge
@@ -76,12 +76,12 @@ why="$(fCheckBuiltFrom "${artDir}")" || fDie "${why}"
 ## stops the notes naming a build nobody can download.
 native="${artDir}/${EXE_NAME}-${ver}-linux-$(uname -m)"
 buildId=""
-if [[ -x "$native" ]]; then
+if [[ -x "${native}" ]]; then
 	## || true: pipefail makes an artifact that won't run (wrong arch, missing lib)
 	## fail the assignment, and set -e would take the whole release down with it.
-	buildId="$("$native" --version 2>/dev/null | sed -n 's/.* build \([^ ]*\)$/\1/p' || true)"
+	buildId="$("${native}" --version 2>/dev/null | sed -n 's/.* build \([^ ]*\)$/\1/p' || true)"
 fi
-[[ -n "$buildId" ]] || fEcho_Clean "note: could not read a build number from ${native##*/}; notes will omit it"
+[[ -n "${buildId}" ]] || fEcho_Clean "note: could not read a build number from ${native##*/}; notes will omit it"
 
 ## Sign the checksum file. Everything else is covered by it, so one signature
 ## covers the whole release. Done before the tag so a signing failure costs
@@ -114,7 +114,7 @@ fEcho_Clean
 fEcho_Clean "Release ${tag} from $(git rev-parse --short HEAD) on main${buildId:+, build ${buildId}}"
 fEcho_Clean "Artifacts:"; ls -1 "${artDir}/${EXE_NAME}-${ver}-"* | sed 's/^/  /'
 fEcho_Clean "Push: ${doPush}  Publish (gh): ${doPublish}"
-if ((! assumeYes)); then read -r -p "Proceed? [y/N] " a; [[ "$a" == [yY]* ]] || exit 1; fi
+if ((! assumeYes)); then read -r -p "Proceed? [y/N] " a; [[ "${a}" == [yY]* ]] || exit 1; fi
 
 ## 3. Tag the merge.
 git tag -a "${tag}" -m "${tag}"
@@ -133,7 +133,7 @@ fi
 ## go by that mark, and a stable install takes a pre-release only when no full
 ## release exists. Publishing a beta unmarked makes it the stable answer.
 prerelease=()
-if [[ "$ver" == *-* ]]; then prerelease=(--prerelease); fi
+if [[ "${ver}" == *-* ]]; then prerelease=(--prerelease); fi
 
 if ((doPublish)); then
 	command -v gh >/dev/null 2>&1 || fDie "gh CLI not found"

@@ -52,7 +52,7 @@ declare -i doSheet=1 doPage=1 doCheck=0
 tile="160x100"
 thumb="360x225"
 
-while (($#)); do case "$1" in
+while (($#)); do case "${1}" in
 	--cols)       cols="${2:-}"; shift 2 ;;
 	--tile)       tile="${2:-}"; shift 2 ;;
 	--src)        src="${2:-}"; shift 2 ;;
@@ -64,44 +64,44 @@ while (($#)); do case "$1" in
 	--sheet-only) doPage=0; shift ;;
 	--page-only)  doSheet=0; shift ;;
 	--check)      doCheck=1; shift ;;
-	-h|--help)    grep -E '^##' "$0" | sed 's/^##\t\?//'; exit 0 ;;
-	*) echo "wallpaper-gallery: unknown option: $1" >&2; exit 2 ;;
+	-h|--help)    grep -E '^##' "${0}" | sed 's/^##\t\?//'; exit 0 ;;
+	*) echo "wallpaper-gallery: unknown option: ${1}" >&2; exit 2 ;;
 esac; done
 
-fEcho()       { echo "[ $* ]"; }
-fEcho_Clean() { echo "$*"; }
-fSkip()       { echo "wallpaper-gallery: $1" >&2; exit 2; }   ## 2 = non-fatal skip, as elsewhere in cicd
+fEcho()       { echo "[ ${*} ]"; }
+fEcho_Clean() { echo "${*}"; }
+fSkip()       { echo "wallpaper-gallery: ${1}" >&2; exit 2; }   ## 2 = non-fatal skip, as elsewhere in cicd
 
-[[ -d "$src" ]] || fSkip "no wallpaper folder: $src"
+[[ -d "${src}" ]] || fSkip "no wallpaper folder: ${src}"
 ((doCheck)) || command -v ffmpeg >/dev/null || fSkip "ffmpeg not found"
 
 declare -i tileW="${tile%%x*}" tileH="${tile##*x}"
 declare -i thumbW="${thumb%%x*}" thumbH="${thumb##*x}"
 ((tileW > 0 && tileH > 0 && cols > 0)) || fSkip "bad --tile/--cols: ${tile}, ${cols}"
 ((thumbW > 0 && thumbH > 0))           || fSkip "bad --thumb: ${thumb}"
-if ((doPage)) && [[ ! -r "$template" ]]; then fSkip "no page template: ${template}"; fi
+if ((doPage)) && [[ ! -r "${template}" ]]; then fSkip "no page template: ${template}"; fi
 
 ##	ffmpeg on Windows is a native binary and cannot read an MSYS path, so hand it a
 ##	native one where cygpath exists. A no-op everywhere else.
-fNativePath() { if command -v cygpath >/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
+fNativePath() { if command -v cygpath >/dev/null; then cygpath -w "${1}"; else printf '%s' "${1}"; fi; }
 
 ##	One image, filled and centre-cropped to a fixed box. The pack's own XMP anchors
 ##	are all 50%,50%, so a centre crop is what each image asks for anyway.
 fCrop() {
-	local -r from="$1" to="$2"; local -ri w="$3" h="$4" q="$5"
-	ffmpeg -y -v error -i "$(fNativePath "$from")" \
+	local -r from="${1}" to="${2}"; local -ri w="${3}" h="${4}" q="${5}"
+	ffmpeg -y -v error -i "$(fNativePath "${from}")" \
 		-vf "scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h}" \
-		-q:v "$q" "$(fNativePath "$to")" \
-		|| fSkip "could not render a tile for: $(basename "$from")"
+		-q:v "${q}" "$(fNativePath "${to}")" \
+		|| fSkip "could not render a tile for: $(basename "${from}")"
 }
 
 ##	Collect the pack in a stable order - the filenames lead with their source, so
 ##	alphabetical keeps each collection together on the sheet and in the grid.
 declare -a images=()
-while IFS= read -r f; do images+=("$f"); done < <(find "$src" -maxdepth 1 -type f \
+while IFS= read -r f; do images+=("${f}"); done < <(find "${src}" -maxdepth 1 -type f \
 	\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | LC_ALL=C sort)
 declare -i count="${#images[@]}"
-((count)) || fSkip "no images in $src"
+((count)) || fSkip "no images in ${src}"
 
 declare -i rows=$(( (count + cols - 1) / cols ))
 
@@ -111,17 +111,17 @@ declare -i rows=$(( (count + cols - 1) / cols ))
 ##	within one row is not caught.
 if ((doCheck)); then
 	page="${docs}/wallpapers/index.html"
-	[[ -r "$page" ]] || { echo "wallpaper-gallery: no gallery page at ${page}" >&2; exit 1; }
+	[[ -r "${page}" ]] || { echo "wallpaper-gallery: no gallery page at ${page}" >&2; exit 1; }
 	declare -i bad=0
 	stale="$(diff <(printf '%s\n' "${images[@]}" | sed 's:.*/::' | LC_ALL=C sort) \
-		<(grep -o '"f":"[^"]*"' "$page" | sed 's/^"f":"//; s/"$//; s/\\"/"/g; s/\\\\/\\/g' | LC_ALL=C sort) || true)"
-	if [[ -n "$stale" ]]; then
+		<(grep -o '"f":"[^"]*"' "${page}" | sed 's/^"f":"//; s/"$//; s/\\"/"/g; s/\\\\/\\/g' | LC_ALL=C sort) || true)"
+	if [[ -n "${stale}" ]]; then
 		echo "wallpaper-gallery: the gallery page does not match the pack (< pack only, > page only):" >&2
-		grep '^[<>]' <<<"$stale" | sed 's/^/    /' >&2
+		grep '^[<>]' <<<"${stale}" | sed 's/^/    /' >&2
 		bad=1
 	fi
-	dims="$(file -b "$out" 2>/dev/null | grep -oE '[0-9]+x[0-9]+' | tail -1 || true)"
-	if [[ -n "$dims" ]]; then
+	dims="$(file -b "${out}" 2>/dev/null | grep -oE '[0-9]+x[0-9]+' | tail -1 || true)"
+	if [[ -n "${dims}" ]]; then
 		## margin and padding are both 6, as the tile filter below lays them out
 		declare -i sheetRows=$(( (${dims##*x} - 12 + 6) / (tileH + 6) ))
 		if ((sheetRows != rows)); then
@@ -131,12 +131,12 @@ if ((doCheck)); then
 	fi
 	## README names the pack's size in sentences, which go stale the same way.
 	said="$(grep -oE '[0-9]+ (more )?wallpapers' "${repoDir}/README.md" 2>/dev/null | grep -oE '[0-9]+' || true)"
-	if [[ -z "$said" ]]; then
+	if [[ -z "${said}" ]]; then
 		echo "wallpaper-gallery: README.md no longer says 'N wallpapers', so its count goes unchecked" >&2
 		exit 1
 	fi
 	for n in ${said}; do
-		if [[ "$n" != "$count" ]]; then
+		if [[ "${n}" != "${count}" ]]; then
 			echo "wallpaper-gallery: README.md says ${n} wallpapers, and the pack has ${count}" >&2
 			exit 1
 		fi
@@ -164,7 +164,7 @@ if ((doSheet)); then
 	declare -i i=0
 	for f in "${images[@]}"; do
 		i+=1
-		fCrop "$f" "${tmpDir}/$(printf '%03d' "$i").jpg" "$tileW" "$tileH" 2
+		fCrop "${f}" "${tmpDir}/$(printf '%03d' "${i}").jpg" "${tileW}" "${tileH}" 2
 	done
 	fEcho "Rendered ${i} sheet tiles"
 
@@ -172,9 +172,9 @@ if ((doSheet)); then
 	##	come out as the padding colour.
 	ffmpeg -y -v error -framerate 1 -i "$(fNativePath "${tmpDir}")/%03d.jpg" \
 		-filter_complex "tile=${cols}x${rows}:margin=6:padding=6:color=#14141a" \
-		-frames:v 1 -q:v "$quality" "$(fNativePath "$out")"
+		-frames:v 1 -q:v "${quality}" "$(fNativePath "${out}")"
 
-	fEcho "Wrote $(du -h "$out" | cut -f1) to ${out}"
+	fEcho "Wrote $(du -h "${out}" | cut -f1) to ${out}"
 	fEcho_Clean
 fi
 
@@ -189,14 +189,14 @@ if ((doPage)); then
 	declare -i i=0
 	for f in "${images[@]}"; do
 		i+=1
-		fCrop "$f" "${pageDir}/thumb/$(printf '%03d' "$i").jpg" "$thumbW" "$thumbH" "$thumbQuality"
+		fCrop "${f}" "${pageDir}/thumb/$(printf '%03d' "${i}").jpg" "${thumbW}" "${thumbH}" "${thumbQuality}"
 	done
 	fEcho "Rendered ${i} thumbnails ($(du -sh --apparent-size "${pageDir}/thumb" | cut -f1))"
 
 	##	Provenance, joined on the file name. The table's columns are, in order:
 	##	confidence, stars, file name, original name, original date, source URL,
 	##	copyright, licence - and a leading empty field, since the row starts with '|'.
-	if [[ -r "$attrib" ]]; then
+	if [[ -r "${attrib}" ]]; then
 		awk -F'|' 'NF>=14 && $4 ~ /\.(jpg|jpeg|png)[[:space:]\r]*$/ {
 			n=$4; u=$7; c=$8; l=$9
 			gsub(/^[ \t]+|[ \t\r]+$/,"",n); gsub(/^[ \t]+|[ \t\r]+$/,"",u)
@@ -206,7 +206,7 @@ if ((doPage)); then
 			if (c == "-") c = ""
 			if (l == "-") l = ""
 			print n "\t" c "\t" l "\t" u
-		}' "$attrib" > "${tmpDir}/attrib.tsv"
+		}' "${attrib}" > "${tmpDir}/attrib.tsv"
 	else
 		: > "${tmpDir}/attrib.tsv"
 		fEcho "No attribution table at ${attrib} - the page will carry names only"
@@ -237,11 +237,11 @@ if ((doPage)); then
 
 	##	Splice the records into the template. Line-oriented rather than a sed
 	##	substitution, so nothing in a file name can be read as a replacement.
-	awk -v raw="$rawBase" -v data="${tmpDir}/data.json" '
+	awk -v raw="${rawBase}" -v data="${tmpDir}/data.json" '
 		BEGIN { gsub(/&/, "\\&", raw) }   ## & is the matched text in a sub() replacement
 		{ sub(/@@RAW@@/, raw) }
 		/^[[:space:]]*\/\/@@DATA@@[[:space:]]*$/ { while ((getline line < data) > 0) print line; next }
-		{ print }' "$template" > "${pageDir}/index.html"
+		{ print }' "${template}" > "${pageDir}/index.html"
 
 	##	Jekyll would process the site otherwise; there is nothing here for it to do.
 	: > "${docs}/.nojekyll"

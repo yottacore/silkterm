@@ -22,12 +22,12 @@ root="$(cd "${here}/../.." && pwd)"
 export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"
 
 triple=""; keep=0; commit="HEAD"
-while (($#)); do case "$1" in
-	--target) [[ $# -ge 2 ]] || { echo "--target needs a triple" >&2; exit 2; }; triple="$2"; shift 2 ;;
+while (($#)); do case "${1}" in
+	--target) [[ $# -ge 2 ]] || { echo "--target needs a triple" >&2; exit 2; }; triple="${2}"; shift 2 ;;
 	--keep)   keep=1; shift ;;
 	-h|--help) sed -n '/^##	- Purpose:/,/^##	- History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
-	-*)       echo "unknown option: $1" >&2; exit 2 ;;
-	*)        commit="$1"; shift ;;
+	-*)       echo "unknown option: ${1}" >&2; exit 2 ;;
+	*)        commit="${1}"; shift ;;
 esac; done
 commit="$(git -C "${root}" rev-parse --verify "${commit}^{commit}")" || exit 2
 
@@ -59,7 +59,7 @@ jobs="$(( $(nproc) / 2 ))"; ((jobs > 0)) || jobs=1
 export CARGO_BUILD_JOBS="${jobs}"
 
 fBuild(){
-	local dir="$1" try
+	local dir="${1}" try
 	git clone --quiet --no-hardlinks "${root}" "${dir}"
 	git -C "${dir}" checkout --quiet --detach "${commit}"
 	mkdir -p "${dir}/target"
