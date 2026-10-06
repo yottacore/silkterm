@@ -1,4 +1,4 @@
-﻿##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	Copyright (C) 2026 Jim Collier
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -127,7 +127,7 @@ if (-not $IsWindows) {
 $Unattended = ($Yes -or $Quiet)
 
 
-#••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+#==============================================================================
 # Configuration
 
 ## Repo root = the parent of this script's cicd/ dir. All cargo commands run here.
@@ -201,11 +201,11 @@ $CargoBin  = Join-Path $env:USERPROFILE ".cargo\bin"
 $MingwBin  = "C:\ProgramData\mingw64\mingw64\bin"
 
 
-#••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+#==============================================================================
 # Output helpers (mirror cicd.bash: fEcho / fEcho_Clean / fSection)
 
 $script:WasLastEchoBlank = $false
-$script:Letterbox = "•" * 73
+$script:Letterbox = ([string][char]0x2022) * 73
 
 function fEcho_Clean {
 	param([string]$Msg = "")
@@ -219,7 +219,7 @@ function fWarn     { param([string]$Msg); fEcho "WARNING: $Msg" }
 function fDie      { param([string]$Msg); fEcho "FAILED: $Msg"; fTestDir_End 1; exit 1 }
 
 
-#••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+#==============================================================================
 # Functions
 
 ## Run a native command from the repo root; abort (fail-fast) on a non-zero exit.
@@ -675,7 +675,7 @@ function fLintPowerShell {
 }
 
 
-#••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+#==============================================================================
 # The Linux half, handed to WSL2
 
 ## A box with both can cover the whole matrix. Windows builds what only Windows
@@ -773,7 +773,7 @@ function fWslLinuxHalf {
 }
 
 
-#••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+#==============================================================================
 # Entry point
 
 function fMain {

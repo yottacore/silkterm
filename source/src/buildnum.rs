@@ -322,12 +322,15 @@ mod tests {
 
 	// A copyright line's text after "Copyright ": the sign, the year or span,
 	// then the holder. Answers whether it is the Bubbles form, or why it is
-	// neither form.
-	fn copyright_form(text: &str, marker: &str) -> Result<bool, String> {
+	// neither form. PowerShell files are ASCII, so theirs is "(C)" with no ID.
+	fn copyright_form(text: &str, marker: &str, ascii: bool) -> Result<bool, String> {
+		let plain = ascii && text.starts_with("(C) ");
 		let (bubbles, rest) = if let Some(rest) = text.strip_prefix("© ") {
 			(false, rest)
 		} else if let Some(rest) = text.strip_prefix("(c) ") {
 			(true, rest)
+		} else if plain {
+			(false, &text["(C) ".len()..])
 		} else {
 			return Err(format!("copyright sign in neither form: {text}"));
 		};
@@ -339,6 +342,8 @@ mod tests {
 		}
 		let expected = if bubbles {
 			"Bubbles".to_string()
+		} else if plain {
+			"Jim Collier".to_string()
 		} else {
 			format!("Jim Collier {marker}")
 		};
@@ -354,7 +359,7 @@ mod tests {
 	}
 
 	// What is wrong with one script's header and History, if anything.
-	fn script_header_faults(lines: &[&str], cmd: bool, marker: &str) -> Vec<String> {
+	fn script_header_faults(lines: &[&str], cmd: bool, ps1: bool, marker: &str) -> Vec<String> {
 		let at = lines
 			.iter()
 			.position(|line| comment_text(line).is_some_and(is_copyright_line));
@@ -381,7 +386,7 @@ mod tests {
 			}
 		}
 		let copyright = &comment_text(lines[at]).unwrap()["Copyright ".len()..];
-		let bubbles = match copyright_form(copyright, marker) {
+		let bubbles = match copyright_form(copyright, marker, ps1) {
 			Ok(bubbles) => bubbles,
 			Err(fault) => {
 				faults.push(fault);
@@ -416,8 +421,9 @@ mod tests {
 	}
 
 	// The rest of the tree: build.rs, the Rust outside src/, and every script
-	// git tracks. A copyright line in the Jim Collier or the Bubbles form, the
-	// license within a few lines under it, nothing but comments above it, and
+	// git tracks. A copyright line in the Jim Collier or the Bubbles form (or
+	// a .ps1's ASCII one), the license within a few lines under it, nothing but
+	// comments above it, and
 	// History at the bottom of the file, not in the header. Tracked files only,
 	// so a scratch file in a working tree is never judged.
 	// Test ID: ErloT4L
@@ -457,8 +463,6 @@ mod tests {
 			let Ok(text) = std::fs::read_to_string(&path) else {
 				continue;
 			};
-			// cicd-win.ps1 starts with a byte-order mark.
-			let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
 			let lines: Vec<&str> = text
 				.lines()
 				.map(|line| line.trim_end_matches('\r'))
@@ -470,7 +474,7 @@ mod tests {
 				let copyright = lines
 					.get(1)
 					.and_then(|line| line.strip_prefix("// Copyright "));
-				match copyright.map(|text| copyright_form(text, &marker)) {
+				match copyright.map(|text| copyright_form(text, &marker, false)) {
 					Some(Ok(false)) => {}
 					Some(Ok(true)) => {
 						faults.push(format!("{name}: a GPL file in the Bubbles form"));
@@ -484,7 +488,7 @@ mod tests {
 			if !matches!(ext, "bash" | "sh" | "py" | "ps1" | "cmd") && !text.starts_with("#!") {
 				continue;
 			}
-			for fault in script_header_faults(&lines, ext == "cmd", &marker) {
+			for fault in script_header_faults(&lines, ext == "cmd", ext == "ps1", &marker) {
 				faults.push(format!("{name}: {fault}"));
 			}
 			seen += 1;

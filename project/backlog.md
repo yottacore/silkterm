@@ -37,9 +37,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Light mode: text looks thinner than in dark mode
 	- ID: 2026100607293301
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Done
 	- Priority: High
 	- Opened: 20261006-072933
+	- Closed: 20261006-134629
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026100513581810
@@ -58,8 +59,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: the contrast floor is a tenth higher in a light theme, 45% becoming about 50% at the default. Among the built-in colors it only moves SilkTerm's and Pastel's gray (ANSI 8) a little darker, and lightens the Matrix and Retro Amber cursor plates slightly.
 		- Left alone: the light palettes from 2026100513581810. The lift adds ink only at the edges of strokes. The solid part of a letter, which is what that item darkened, has the same color as before, so nothing measured says the colors can come back up. Whether they can is a call to make by eye.
 		- Owed: a look in a real window, the Settings dialog in a light theme included.
+		- 20261006: The light ANSI colors were eased about a third of the way back toward their old ones, each kept just past the light contrast floor so the floor never moves it. They average 0.52 to 0.54 Oklab L under the paper, from 0.57. The text color stayed where it was, since the cursor needs that depth.
 	- Decisions:
 		- 20261006: thicken light-mode text with a coverage boost, a contrast curve on glyph alpha in light mode only, the way desktop text renderers darken dark-on-light text. Same font, same shapes, no layout change. Not synthetic emboldening, not a heavier font weight.
+		- 20261006: the light palettes can ease back toward lighter now that the text is heavier, but not too light.
 	- Against: the themes design doc accepted that the menu and tab labels got the light-mode correction in the wrong direction. With the stronger lift that would show, so each glyph now says which side of the pair it is on.
 	- Verified: dark mode draws exactly the pixels it drew before, in all four themes, with and without a wallpaper, on Vulkan and GL. Light mode's halo moves the picture as far as before. Full unit suite, clippy and the glyphon fork's tests pass.
 	- Swept: every caller of the contrast floor goes through `Settings::min_contrast` (pane cells, link underline, cursor plate, minimap, wallpaper-derived text). The Settings dialog and the scrim's text pass share the lift through the same correction. Chrome tips are never repainted, so they keep the plain floor.
@@ -70,11 +73,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26, open Settings with the terminal at the top, the middle and the bottom of the screen. The whole dialog stays below the menu bar and above the Dock, buttons in view, centered over the terminal where it fits. Again with the Dock on the side and hidden. About opens over the terminal too.
 	- Severity: High
 	- Opened: 20261001-144356
 	- Opened by: JC
+	- Closed: 20261006-140904
 	- Assigned to: CC
 	- Target OS: macOS
 	- Test environment: b26, Intel Iris Plus 655, macOS 15.8
@@ -148,10 +152,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A shell is listed twice by name, with a different command each time
 	- ID: 2026100408214203
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26, a scan into a new throwaway config (`--config`). The Tabs menu and the Shell tab should show "Bash 3.2.57" and "Bash 5.x" with their own commands, and no plain "Bash" twice. Nothing should flash on screen while the versions are asked. The live config's list should not change.
 	- Severity: High
 	- Opened: 20261004-082142
+	- Closed: 20261006-140839
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026100408214202
@@ -194,10 +199,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the extra prompt info for PowerShell 7 does not work
 	- ID: 2026100408214204
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: A look in a real SilkTerm pane on b26: a PowerShell 7 tab or split opened from a bash pane inside a git project starts there and shows the git part of the prompt.
 	- Severity: High
 	- Opened: 20261004-082142
+	- Closed: 20261006-140822
 	- Opened by: JC
 	- Assigned to: CC
 	- Target OS: macOS
@@ -225,10 +231,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - wgpu's allocator holds far more graphics memory than it uses
 	- ID: 2026100419463460
 	- Type: Enhancement
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: vm925w: the graphics memory a window and Settings take on DX12, against a build with the old hint, that Settings opens, and `a_new_device_reserves_little_graphics_memory` under `cargo test` there.
 	- Priority: High
 	- Opened: 20261004-194634
+	- Closed: 20261006-140800
 	- Opened by: CC
 	- Assigned to: CC
 	- Related IDs: 2026100418225501, 2026100418225505
@@ -255,10 +262,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26, terminal text at the size `defaults read -g NSFixedPitchFontSize` gives, or about 11 pt when that is unset, and the menus, tabs and Settings at the size of other apps' interface text. A config with the system size switched off keeps its own size.
 	- Severity: Avg
 	- Opened: 20261001-144356
+	- Closed: 20261006-140739
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026100114435547
@@ -284,10 +292,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: window transparency does not work
 	- ID: 2026100114435574
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26, turn on Transparency. The desktop shows through the terminal background at the opacity set, while text, menus, tabs and Settings stay solid. A light theme lets through as much as a dark one. Turning it off makes the window solid again, with no relaunch.
 	- Severity: Avg
 	- Opened: 20261001-144356
+	- Closed: 20261006-140959
 	- Opened by: JC
 	- Assigned to: CC
 	- Target OS: macOS
@@ -311,11 +320,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the menu is inside the window, not in the macOS menu bar
 	- ID: 2026100114435587
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26, the macOS menu bar shows the SilkTerm menu (About SilkTerm, Settings, Services, Hide SilkTerm, Hide others, Show all, Quit SilkTerm), then File, Edit, View, Tabs and Panes, and no menu bar shows inside the window. Each row does what the same row does in the window. The check marks follow the focused pane and the View toggles, and the shell submenus list the active shells. Command+Q quits and the window size is remembered. Command+H hides. With Settings or About open, a menu pick brings that dialog forward instead.
 		- 20261002: No in-window bar comes up with `--hide-menu=false`, and neither View nor the right-click menu has a Menu bar row. File starts with New window, which opens one. Edit's Copy on select and Copy on output check marks follow the focused pane, also when changed from the right-click menu. Full screen covers the macOS menu bar. View has one fullscreen row, with no second Enter Full Screen added by macOS beside it.
 	- Severity: Avg
 	- Opened: 20261001-144356
+	- Closed: 20261006-141012
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026100114435613
@@ -391,10 +401,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Tab rename: Paste from the menu bar goes into the shell, and the box has only basic editing
 	- ID: 2026100219054483
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26, while a tab is being renamed: Edit > Copy and Paste on the menu bar, and Command+C and V, act on the name and nothing reaches the shell. Command+X and A cut and select all. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. A click, a drag, a double-click and a triple-click in the name place the caret, select, take a word and take it all. Right-click opens Cut, Copy, Paste, Delete and Select all. Any other menu pick, such as Command+T, keeps the name first.
 	- Severity: Avg
 	- Opened: 20261002-190545
+	- Closed: 20261006-141118
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026100219054469, 2026100114435613
@@ -421,13 +432,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: Ctrl+click should open the right-click menu
 	- ID: 2026100220260471
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26. In a pane at a shell prompt, Ctrl+click opens the right-click menu at the pointer, and letting go does not pick a row. On a URL the menu starts with Open link and Copy link. In vim with `:set mouse=a`, Ctrl+click opens the menu and the vim cursor does not move.
 		- Double-click a tab to rename it. Ctrl+click on the name opens Cut, Copy, Paste, Delete and Select all. Ctrl+click on a pane ends the rename and opens the pane menu.
 		- Ctrl+Shift+click and Ctrl+Command+click open the menu too. A plain click still selects, Command+click still opens a link, and a two-finger click still opens the menu.
 		- In Settings, Ctrl+click in a text box opens its Cut, Copy, Paste, Delete and Select all menu.
 	- Severity: Avg
 	- Opened: 20261002-202604
+	- Closed: 20261006-141214
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026100219054469
@@ -448,12 +460,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: a plain click in a reopened Settings can act as a Ctrl+click
 	- ID: 2026100220463754
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26. Open Settings, hold Ctrl and press Esc, then let go of Ctrl. Open Settings again and click a checkbox with no keys held: it changes. Do the same with Enter in place of Esc.
 		- After closing Settings that way, open About and click its link: the link opens.
 		- Ctrl+click in a Settings text box still opens its Cut, Copy, Paste menu, and a plain click after letting go of Ctrl is a plain click again.
 	- Severity: Avg
 	- Opened: 20261002-204637
+	- Closed: 20261006-141403
 	- Opened by: CC
 	- Related IDs: 2026100220260471
 	- Target OS: macOS
@@ -478,7 +491,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
 	- ID: 2026100219054497
 	- Type: Feature
-	- Status: Waiting for testing
+	- Status: Reopened
+		- Command+Shift+[ and ] doesn't work reliably, seems to be tied in to system screenshots.
+		- Command+{ and } works.
 	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
 		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
 		- With Settings open, the two tab rows and their chords change the dialog's tab.
@@ -509,7 +524,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
-	- Status: Waiting for testing
+	- Status: Waiting for testing [started]
+		- Works on Linux [20261006-141835]
 	- Needs external testing:
 		- Two real monitors that differ, on X11, Windows and macOS. The window opens at each monitor's own size and font zoom, and takes the other's once dropped there, never while still held. A resize right after the drop is kept, and the window does not swap sizes when it straddles the two.
 		- On Windows and macOS, that the monitor's name in the config ends in its size in mm.
@@ -565,13 +581,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings: a Keys tab to see and change hotkeys
 	- ID: 2026100307252506
 	- Type: Feature
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
 	- Needs external testing:
 		- vm925w: the Keys tab in a real Settings window, which is a child window there. Ctrl, Alt and Alt+Shift chords set by pressing them, a chord held with the Windows key, AltGr, Escape and Backspace, and the new chord working in the terminal after OK.
 		- b26: Command chords set while Settings has focus, including ones the menu bar owns such as Command+W, Command+Q and Command+,. The menu bar may act on those before the dialog sees them, and Command+Q could quit. Option plus a letter may read as the character it types.
 	- Priority: Avg
 	- Opened: 20261003-072525
+	- Closed: 20261006-141937
 	- Opened by: JC
 	- Assigned to: CC
 	- Prereq IDs: 2026100220292607
@@ -607,7 +624,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Hotkeys for splitting panes and moving between them, and menus that show the hotkey they share
 	- ID: 2026100220292607
 	- Type: Feature
-	- Status: Waiting for testing
+	- Status: Done
+		- Tested b23 [20261006-142134]
 	- Needs local test suite run?: No. A full pipeline run passed on 20261003, at 8877157.
 	- Needs external testing:
 		- b26: Command+D and Command+Shift+D split, Command+Option+arrows move, the Panes rows on the menu bar show Command+D and Shift+Command+D, and a chord changed under `keys:` shows on the menu bar.
@@ -615,6 +633,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- vm925w: Alt+Shift+Plus, Alt+Shift+Minus, Alt+Shift+W and Alt+arrows in a real window, Alt plus a menu title's letter still opening it, and the chords on the menu rows.
 	- Priority: Avg
 	- Opened: 20261002-202926
+	- Closed: 20261006-144614
 	- Opened by: JC
 	- Assigned to: CC
 	- Target OS: All
@@ -666,7 +685,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened by: CC
 	- Target OS: All
 	- Requirements:
-		- Nothing that waits on the X server, reads the environment or builds strings runs on every `about_to_wait` pass.
+		- Nothing that waits on the X server should read the environment or builds strings runs on every `about_to_wait` pass.
 	- Progress log:
 		- 20261003: `freeze_sync` runs on every pass and every redraw. Its `hidden()` asks `is_minimized()`, which on X11 is a property request that waits for its reply.
 		- 20261003: `idle_rule` reads `SILK_IDLE_SECS` twice per pass through `release_deadline`. The file's own note at `env_flag` says to read the environment once.
@@ -690,11 +709,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings: every label is shaped again on each pointer move
 	- ID: 2026100314050003
 	- Type: Enhancement
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs local test suite run?: No
 	- Needs external testing: A real-window look on b23. The caret blinks, a field edit eases, and a tip comes up on time, now that the dialog draws only when told to.
 	- Priority: Avg
 	- Opened: 20261003-140500
+	- Closed: 20261006-142420
 	- Opened by: CC
 	- Target OS: All
 	- Requirements:
@@ -721,12 +741,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26, Command+, opens Settings from the terminal, and the menu bar shows it beside Settings. With Settings already open it brings that one forward. Ctrl+, still opens Settings too.
 		- 20261002: The menu rows show Command+N, T, W, C, V, Plus, Minus, 0, Control+Command+F, and the app menu's Command+, H, Option+H and Q, with no Ctrl chord in any label. Each chord works from the keyboard, Command+= as well as Command+Plus. Command+K or any other unbound Command chord types nothing at the shell. Ctrl+Shift+T, Ctrl+Shift+C and the other Ctrl chords still work, and plain Ctrl+T, Ctrl+W and Ctrl+V still reach the shell. The right-click menu reads "Copy (Command+C)" and so on.
 		- 20261002: The Ctrl lines above are replaced by 2026100219054469's test row. On macOS the Ctrl chords now all go to the shell.
 	- Severity: Low
 	- Opened: 20261001-144356
+	- Closed: 20261006-142459
 	- Opened by: JC
 	- Assigned to: CC
 	- Related IDs: 2026100114435587
@@ -753,10 +774,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: Option plus a letter types nothing into a Settings text box
 	- ID: 2026100219240881
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On b26, Option+O types "ø" into a Settings text box and into a tab rename, and Option held underlines nothing on the Settings buttons. With a German layout, if one is set up there, Option+8 types "{".
 	- Severity: Low
 	- Opened: 20261002-192408
+	- Closed: 20261006-143006
 	- Opened by: CC
 	- Related IDs: 2026100219054469, 2026100219054483
 	- Target OS: macOS
@@ -774,12 +796,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: a Ctrl+click right after a window gets the focus acts as a plain click
 	- ID: 2026100310321918
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing:
 		- b26: hold Ctrl and click into a SilkTerm window that doesn't have the focus. That first click opens the right-click menu. The same on a Settings dialog that doesn't have the focus.
 		- b26: bring a window forward with Ctrl held, from the Dock or its title bar, then Ctrl+click in it before pressing anything else. The menu opens.
 	- Severity: Low
 	- Opened: 20261003-103219
+	- Closed: 20261006-142958
 	- Opened by: CC
 	- Related IDs: 2026100220463754, 2026100220260471
 	- Target OS: macOS
@@ -802,10 +825,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: the first frames after a window shows are drawn at the default size
 	- ID: 2026100517535929
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: The `newwin` Windows scenario on vm925w, since every resize event now reads the window's size. A window resize and Settings on Wayland.
 	- Severity: Low
 	- Opened: 20261005-175359
+	- Closed: 20261006-143038
 	- Opened by: CC
 	- Assigned to: CC
 	- Related IDs: 2026100514211602, 2026100114274893
@@ -822,6 +846,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix:
 		- A size request that winit answers with nothing still counts when the window already has a new size. The surface is made at the window's size before the first frame. Every size request goes through this, the dialogs' too.
 		- A resize event sizes the surface at the window's own size, not the event's, so a stale one changes nothing. Same for the dialogs.
+		- 20261006: kept as a guard against the race, though no wrong frame was seen.
 	- Swept: every `request_inner_size` call, 2 in app.rs and 6 in dialog.rs, and the 3 resize event handlers (window, dialog, notice).
 	- Verified:
 		- b26: 6 launches with the fix and 6 without, and Settings opened once each. With the fix the surface had the window's size from the start, and the late creation resize left it alone. Without it, as under Reproduced.
@@ -834,11 +859,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: bash scripts drift from the house conventions
 	- ID: 2026100314050013
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs local test suite run?: Yes. A full `cicd/cicd.bash` run, since the profiler, dogfood and publish stages only run there.
 	- Needs external testing: install.bash under the macOS bash 3.2 on b26.
 	- Severity: Low
 	- Opened: 20261003-140500
+	- Closed: 20261006-143052
 	- Opened by: CC
 	- Target OS: Linux
 	- Incorrect behavior:
@@ -872,10 +898,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: the PowerShell scripts follow bash conventions
 	- ID: 2026100314050015
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: The Windows GUI scenarios on vm925w, since they run under StrictMode now: the pipeline list, idlewake and idlemin, and gpuload-on and gpuload-off with gpu-stress sent along. On b29w only consolemsg and _selftest ran. The rest skipped, since the console session there was locked.
 	- Severity: Low
 	- Opened: 20261003-140500
+	- Closed: 20261006-143134
 	- Opened by: CC
 	- Target OS: Windows
 	- Incorrect behavior:
@@ -896,6 +923,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: Three shell scan unit tests fail on Windows, apart from this item. Filed as 2026100612422856.
 	- Decisions:
 		- 20261003: `fCamelCase` function names stay. They are an exception for this project only. The rest of the item stands.
+		- 20261006: every PowerShell file is ASCII only, the way shcl's are. The copyright line is `Copyright (C) <year> Jim Collier` with no ID, rules are `=`, and cicd-win.ps1 lost its byte-order mark. ps-lint fails on any byte above 127.
 	- Actual fix:
 		- `ps-lint.ps1` checks two more things: a PowerShell command given three or more arguments by position, and a common parameter by its alias, such as `-EA`. A command counts as PowerShell's when a linted script defines it, or when it is Verb-Noun and no program has that name.
 		- The 42 findings are fixed: arguments named, `-EA` written out.
@@ -981,6 +1009,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100418225506
 	- Type: Enhancement
 	- Status: Queued
+		- Accepted on b23 [20261006-143341]
 	- Priority: Avg
 	- Opened: 20261004-182255
 	- Opened by: JC
@@ -1033,7 +1062,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- On a resize, use a kept copy within about 5% of the total pixel count. If there is none, resample the original again and keep that one too.
 		- Prune the oldest copies once the cache goes over its size limit.
 	- Notes:
-		- 20261005: Asked as a question, would this make sense?
 		- 20261005: It helps most at launch and when rotation comes back to an image, since both prepare from scratch now. A resize already waits 500 ms after the last change and prepares once.
 		- 20261005: The key needs everything that changes the stored pixels: the file and its mtime, the held size, blur, and the look tags.
 		- 20261005: A copy is 4 bytes a pixel, so about 14 MB at 2560x1440 unless it's stored compressed. Block compression (2026100418225507) cuts that to a quarter or less.

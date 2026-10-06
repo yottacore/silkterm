@@ -45,6 +45,9 @@ printf 'if ($true) {\n\t$x = (1 -eq 1) -and\n\t     (2 -eq 2)\n\t$x\n}\n$t = @"\
 printf "Join-Path 'a' 'b' 'c'\nfunction fThree { param([string]\$One, [string]\$Two, [string]\$Three) \$One + \$Two + \$Three }\nfThree 'a' 'b' 'c'\n" >"${work}/positional.ps1"
 ## Two by position is fine, and a program's arguments are its own.
 printf "Join-Path 'a' 'b'\nfunction fThree { param([string]\$One, [string]\$Two, [string]\$Three) \$One + \$Two + \$Three }\nfThree 'a' 'b' -Three 'c'\ngit -C 'a' log -n 1\n" >"${work}/twopos.ps1"
+## A non-ASCII comment, and a BOM.
+printf '# caf\xc3\xa9\nGet-Date\n' >"${work}/nonascii.ps1"
+printf '\xef\xbb\xbfGet-Date\n' >"${work}/bom.ps1"
 ## Common parameters by their aliases.
 printf "Get-Item -Path 'a' -EA SilentlyContinue\nGet-Item -Path 'b' -ea:Stop\n" >"${work}/alias.ps1"
 
@@ -79,6 +82,11 @@ fCheck "two positional, or a program's arguments, pass" test "${rc}" -eq 0 -a -z
 fLint "${work}/alias.ps1"
 fCheck "a parameter alias fails" test "${rc}" -eq 1
 fCheck "spaced or with a colon" test "$(grep -cF ": ParameterAlias:" <<<"${out}")" -eq 2
+fLint "${work}/nonascii.ps1"
+fCheck "a non-ASCII byte fails" test "${rc}" -eq 1
+fCheck "and is named with its line" grep -qF "nonascii.ps1:1: NonAscii:" <<<"${out}"
+fLint "${work}/bom.ps1"
+fCheck "a byte-order mark fails" grep -qF "bom.ps1:1: NonAscii:" <<<"${out}"
 
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
@@ -87,3 +95,4 @@ echo "all passed"
 ##		- 20260926 JC: Created.
 ##		- 20261004 JC: Tab indentation cases; the finding no longer an unapproved verb.
 ##		- 20261006 JC: Positional argument and parameter alias cases.
+##		- 20261006 JC: Non-ASCII and BOM cases.

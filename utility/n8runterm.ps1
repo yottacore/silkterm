@@ -51,7 +51,7 @@
 #>
 
 
-#••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+#==============================================================================
 # Configuration
 
 ## Which OS we are on. $IsWindows/$IsLinux/$IsMacOS are PowerShell 7 automatics.
@@ -172,7 +172,7 @@ $WrapperCandidates = switch ($Platform) {
 $RunAsAdmin = $false
 
 
-#••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+#==============================================================================
 # Functions
 
 ## Entry point: what this launcher runs. Edit this to launch a different terminal.
@@ -978,7 +978,7 @@ function fGuiShow {
 }
 
 
-#••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+#==============================================================================
 # Script entry point
 
 Set-StrictMode -Version Latest
