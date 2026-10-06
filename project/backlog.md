@@ -804,7 +804,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Tabs: a setting for new tabs to open next to the current one
 	- ID: 2026100513581812
 	- Type: Feature
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Priority: High
 	- Opened: 20261005-135818
 	- Opened by: JC
@@ -814,11 +814,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Before RC1.
 		- "New tabs go next to current", on by default.
 		- Off puts a new tab at the end, as now.
+	- Progress log:
+		- 20261005: "New tabs go next to current" is on the Window tab, under the two tab widths. The config key is `window.new_tab_next_to_current`, on by default. Off puts a new tab at the end as before.
+		- New tab and the shells under it, in the menus, and the New tab hotkey all make a tab the same way, macOS menus included. Each window is its own process, so nothing else adds a tab to a running window.
+		- A command-line layout follows the same rule. `--new-tab` after `--tab=` picked an earlier tab goes right of that one. One `--new-tab` after another comes out the same either way. `--open` runs in whichever tab the layout makes.
+		- A name typed on a tab moves with its tab, and so do the kept labels. A held close button, the double-click and the tab's flyover are dropped when a new tab moves the others along, since they are kept by position.
+		- Closing a tab made next to the current one goes back to the tab it was made from, not the one on its right. Only with the setting on. Without that, a new tab closed right away would leave a different tab in front than before. Question: keep it?
+	- Verified: unit suite, fmt, and clippy on the Linux, Windows and macOS targets. In a real window on Linux: a layout with `--tab=main --new-tab` put the new tab second. Ctrl+Shift+T put the new tab right of the current one with the setting on, and at the end with it off. A renamed tab kept its name across an insert. Closing the new tab went back to the tab it came from.
+	- Swept: every place a tab is added (`new_tab_with`, `build_layout`), and every state kept by tab position: the rename, the close button, the double-click, the hover and its flyover, the kept labels, the shaped title cache, and the strip's paging.
+	- Branch: tabnext
+	- Commit: 75ebca3
+	- Test case: ErsV4PO `a_new_tab_goes_next_to_the_current_one` (placement, the kept labels, and the tab shown after a close), ErsWrcn `a_new_tab_after_a_tab_selection_goes_next_to_it` (the command line), ErsV4Fc `new_tabs_go_next_to_current_unless_turned_off`. The row is covered by `every_row_survives_a_save_and_a_relaunch`. The first two were seen failing with the setting ignored, and the first with the way back to the maker taken out.
 
 - Drop "Minutes when minimized", and make "Minutes when hidden" 1 by default
 	- ID: 2026100513581813
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: High
 	- Opened: 20261005-135818
 	- Opened by: JC
@@ -831,6 +842,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- "Minutes when hidden", under "Free resources when idle", defaults to 1.
 	- Notes:
 		- 20261005: 2026100418354006 is built and merged, so this takes it back out. Configs written since then have its commented line.
+	- Progress log:
+		- 20261005: "Minutes when minimized" is gone from the Window tab and the config. A minimized window takes "Minutes when hidden" again, which now ships at 1. Its tip and the template comment say it is for a minimized or covered window.
+		- An existing config loses the old line, commented or set. A set value is not moved to "Minutes when hidden", since it was a different wait. A commented "Minutes when hidden" line at the old 30 becomes 1. A set one stays as set.
+		- A config written from the template since 2026100418354006 keeps that template's comment paragraph about three waits, since nothing rewrites comments. No dogfood build wrote that template.
+		- The release tells only hidden from shown again, so the minimized check is no longer asked while the desktop says the window is covered.
+	- Verified: unit suite, fmt, test IDs, the docs and table gates, and clippy on the Linux, Windows and macOS targets. On Linux at the shipped settings, a minimized window let go of the card between 50 and 75 s after the minimize and took it back on restore, while an unfocused window beside it kept its device. A config written from scratch lists only the two waits.
+	- Note: `a_minimized_window_waits_its_own_time` (ErmpLNm) and `an_existing_config_learns_the_minimized_wait` (ErmrbFB) are commented out, since the wait they pinned is gone. `cicd/tests/wingui/idlemin.ps1` (ErqPAvG) still makes sense, since it relies on the shipped 1 minute and sets no wait, so only its header changed. It was not rerun on vm925w.
+	- Swept: every `idle_release_minimized_min` and `IdleMinimizedMin` site in config.rs, settings_ui.rs, settings_ui.shcl and ui_spec.rs, every use of the minimized-or-covered split in app.rs, both resource design docs, and the README, whose idle text needed nothing. `minimized_min` is now found only in the retired-key list, the commented tests and the backlog.
+	- Branch: tabnext
+	- Commit: 75ebca3
+	- Test case: ErsV4Jy `a_minimized_window_takes_the_hidden_wait` and ErsV4Ak `an_existing_config_loses_the_minimized_wait`, both seen failing with the old default and without the retired-key and old-default entries.
+	- Acceptance signoff: Self-closed: the request named the change exactly, the tests pass, and a minimized window was seen letting go at the new default.
+	- Closed: 20261005-181940
 
 - Keep the old picture on screen while a let-go window takes the card back
 	- ID: 2026100513581814
