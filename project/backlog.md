@@ -59,8 +59,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Done: the contrast floor is a tenth higher in a light theme, 45% becoming about 50% at the default. Among the built-in colors it only moves SilkTerm's and Pastel's gray (ANSI 8) a little darker, and lightens the Matrix and Retro Amber cursor plates slightly.
 		- Left alone: the light palettes from 2026100513581810. The lift adds ink only at the edges of strokes. The solid part of a letter, which is what that item darkened, has the same color as before, so nothing measured says the colors can come back up. Whether they can is a call to make by eye.
 		- Owed: a look in a real window, the Settings dialog in a light theme included.
+		- 20261006: The light ANSI colors were eased about a third of the way back toward their old ones, each kept just past the light contrast floor so the floor never moves it. They average 0.52 to 0.54 Oklab L under the paper, from 0.57. The text color stayed where it was, since the cursor needs that depth.
 	- Decisions:
 		- 20261006: thicken light-mode text with a coverage boost, a contrast curve on glyph alpha in light mode only, the way desktop text renderers darken dark-on-light text. Same font, same shapes, no layout change. Not synthetic emboldening, not a heavier font weight.
+		- 20261006: the light palettes can ease back toward lighter now that the text is heavier, but not too light.
 	- Against: the themes design doc accepted that the menu and tab labels got the light-mode correction in the wrong direction. With the stronger lift that would show, so each glyph now says which side of the pair it is on.
 	- Verified: dark mode draws exactly the pixels it drew before, in all four themes, with and without a wallpaper, on Vulkan and GL. Light mode's halo moves the picture as far as before. Full unit suite, clippy and the glyphon fork's tests pass.
 	- Swept: every caller of the contrast floor goes through `Settings::min_contrast` (pane cells, link underline, cursor plate, minimap, wallpaper-derived text). The Settings dialog and the scrim's text pass share the lift through the same correction. Chrome tips are never repainted, so they keep the plain floor.
@@ -844,6 +846,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix:
 		- A size request that winit answers with nothing still counts when the window already has a new size. The surface is made at the window's size before the first frame. Every size request goes through this, the dialogs' too.
 		- A resize event sizes the surface at the window's own size, not the event's, so a stale one changes nothing. Same for the dialogs.
+		- 20261006: kept as a guard against the race, though no wrong frame was seen.
 	- Swept: every `request_inner_size` call, 2 in app.rs and 6 in dialog.rs, and the 3 resize event handlers (window, dialog, notice).
 	- Verified:
 		- b26: 6 launches with the fix and 6 without, and Settings opened once each. With the fix the surface had the window's size from the start, and the late creation resize left it alone. Without it, as under Reproduced.
@@ -920,6 +923,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: Three shell scan unit tests fail on Windows, apart from this item. Filed as 2026100612422856.
 	- Decisions:
 		- 20261003: `fCamelCase` function names stay. They are an exception for this project only. The rest of the item stands.
+		- 20261006: every PowerShell file is ASCII only, the way shcl's are. The copyright line is `Copyright (C) <year> Jim Collier` with no ID, rules are `=`, and cicd-win.ps1 lost its byte-order mark. ps-lint fails on any byte above 127.
 	- Actual fix:
 		- `ps-lint.ps1` checks two more things: a PowerShell command given three or more arguments by position, and a common parameter by its alias, such as `-EA`. A command counts as PowerShell's when a linted script defines it, or when it is Verb-Noun and no program has that name.
 		- The 42 findings are fixed: arguments named, `-EA` written out.
