@@ -1852,6 +1852,40 @@ fn default_fb(_: &wgpu::Device, _: wgpu::TextureFormat, _: u32, _: u32) -> wgpu:
 	unreachable!("no GL backend on macOS")
 }
 
+/// What the quad shader draws for one `RectInstance`. The GPU gets `code` in
+/// `params.x`, and `fs` in `RECT_WGSL` tells them apart by that number.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum QuadMode {
+	Solid,
+	CloseMark,
+	Rounded,
+	Triangle,
+	PickSquare,
+	HueStrip,
+}
+
+impl QuadMode {
+	const ALL: [QuadMode; 6] = [
+		QuadMode::Solid,
+		QuadMode::CloseMark,
+		QuadMode::Rounded,
+		QuadMode::Triangle,
+		QuadMode::PickSquare,
+		QuadMode::HueStrip,
+	];
+
+	pub fn code(self) -> f32 {
+		match self {
+			QuadMode::Solid => 0.0,
+			QuadMode::CloseMark => 1.0,
+			QuadMode::Rounded => 2.0,
+			QuadMode::Triangle => 3.0,
+			QuadMode::PickSquare => 4.0,
+			QuadMode::HueStrip => 5.0,
+		}
+	}
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct RectInstance {
@@ -1874,6 +1908,17 @@ pub struct RectInstance {
 	/// the box is showing. Neither may use params.y - it is a length, and
 	/// `quads_px` scales it.
 	pub params: [f32; 2],
+}
+
+impl RectInstance {
+	/// The mode in `params.x`. Only `QuadMode::code` writes it, so the numbers
+	/// compare exactly.
+	pub fn mode(&self) -> QuadMode {
+		QuadMode::ALL
+			.into_iter()
+			.find(|mode| mode.code() == self.params[0])
+			.unwrap_or(QuadMode::Solid)
+	}
 }
 
 #[repr(C)]
@@ -2218,6 +2263,52 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// `fs` picks a mode by `params.x > N`, top down. Each mode's number has to
+	// reach the branch that calls what draws it, and a quad gives its mode back.
+	// Test ID: Erstb2f
+	#[test]
+	fn each_quad_mode_reaches_its_own_branch_of_the_shader() {
+		let body = RECT_WGSL
+			.split("fn fs(")
+			.nth(1)
+			.expect("the fragment shader");
+		let mut branches: Vec<(f32, &str)> = Vec::new();
+		let mut rest = body;
+		while let Some(at) = rest.find("in.params.x > ") {
+			let after = &rest[at + "in.params.x > ".len()..];
+			let bound = after
+				.split(')')
+				.next()
+				.and_then(|n| n.trim().parse().ok())
+				.expect("a number");
+			let end = after.find("} else").unwrap_or(after.len());
+			branches.push((bound, &after[..end]));
+			rest = &after[end..];
+		}
+		assert_eq!(branches.len(), QuadMode::ALL.len() - 1, "{branches:?}");
+		for mode in QuadMode::ALL {
+			let drawn_by = match mode {
+				QuadMode::Solid => None,
+				QuadMode::CloseMark => Some("xbar("),
+				QuadMode::Rounded => Some("round_box("),
+				QuadMode::Triangle => Some("right_triangle("),
+				QuadMode::PickSquare => Some("mix(vec3<f32>(1.0)"),
+				QuadMode::HueStrip => Some("hue_rgb("),
+			};
+			let branch = branches.iter().find(|(bound, _)| mode.code() > *bound);
+			match (branch, drawn_by) {
+				(None, None) => {}
+				(Some((_, text)), Some(call)) => assert!(text.contains(call), "{mode:?}: {text}"),
+				(branch, call) => panic!("{mode:?}: {branch:?} against {call:?}"),
+			}
+			let quad = RectInstance {
+				params: [mode.code(), 0.0],
+				..Default::default()
+			};
+			assert_eq!(quad.mode(), mode);
+		}
+	}
 
 	// What the compositor shows through a pane fill, as an encoded value: the
 	// fill's premultiplied pixel after the one encode, plus the desktop at 1 - a.

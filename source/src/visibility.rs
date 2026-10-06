@@ -53,7 +53,7 @@ const REF_HI: f32 = 0.337;
 // Does this settings copy resolve to the dark variant? `Settings` rather than
 // the live store, so everything here stays a function of what it is handed.
 fn dark(settings: &Settings) -> bool {
-	crate::theme::is_dark_mode(&settings.theme_mode, config::os_dark())
+	settings.theme_mode.is_dark(config::os_dark())
 }
 
 // The theme's own dark background - what "as prominent as dark mode" is measured
@@ -64,7 +64,13 @@ fn paired_dark_luma(settings: &Settings) -> f32 {
 }
 
 fn paired_dark_bg(settings: &Settings) -> [u8; 3] {
-	crate::theme::resolve_in(&settings.user_themes, &settings.theme, "dark", true).bg
+	crate::theme::resolve_in(
+		&settings.user_themes,
+		&settings.theme,
+		crate::theme::Mode::Dark,
+		true,
+	)
+	.bg
 }
 
 // How far a linear-light mix of `from` toward `to` travels in sRGB-encoded luma.
@@ -347,11 +353,16 @@ mod tests {
 	};
 	use crate::config::{self, Settings};
 
+	// the tests name a mode by its config word
+	fn mode_of(word: &str) -> crate::theme::Mode {
+		<crate::theme::Mode as crate::config::Choice>::parse(word).expect("a mode")
+	}
+
 	fn themed(name: &str, mode: &str) -> Settings {
-		let pal = crate::theme::resolve(name, mode, true);
+		let pal = crate::theme::resolve(name, mode_of(mode), true);
 		Settings {
 			theme: name.to_string(),
-			theme_mode: mode.to_string(),
+			theme_mode: mode_of(mode),
 			bg: pal.bg,
 			fg: pal.fg,
 			cursor: pal.cursor,
@@ -360,7 +371,7 @@ mod tests {
 	}
 
 	fn bg_luma(name: &str, mode: &str) -> f32 {
-		config::luma(crate::theme::resolve(name, mode, true).bg)
+		config::luma(crate::theme::resolve(name, mode_of(mode), true).bg)
 	}
 
 	const SLIDERS: [f32; 7] = [0.0, 0.05, 0.1, 0.25, 0.5, 0.8, 1.0];
@@ -524,7 +535,7 @@ mod tests {
 	}
 
 	fn bg_linear(name: &str, mode: &str) -> [f32; 3] {
-		crate::theme::resolve(name, mode, true)
+		crate::theme::resolve(name, mode_of(mode), true)
 			.bg
 			.map(config::to_linear)
 	}
@@ -725,13 +736,13 @@ mod tests {
 		assert!(
 			standout(
 				BRIGHT,
-				config::luma(crate::theme::resolve("SilkTerm", "dark", true).bg)
+				config::luma(crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true).bg)
 			) > 1.0
 		);
 		assert!(
 			standout(
 				BRIGHT,
-				config::luma(crate::theme::resolve("SilkTerm", "light", true).bg)
+				config::luma(crate::theme::resolve("SilkTerm", crate::theme::Mode::Light, true).bg)
 			) < 1.0
 		);
 	}

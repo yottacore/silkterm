@@ -87,7 +87,7 @@ fn open_console() {
 	}
 }
 fn cli_only(cli: &cli::Cli) -> bool {
-	cli.help || cli.syntax || cli.about || cli.donate || cli.version
+	cli.info.is_some()
 }
 fn control(cli: &cli::Cli) -> bool {
 	cli.reload || cli.wallpaper.is_some()
@@ -122,23 +122,19 @@ fn main() -> anyhow::Result<()> {
 	// window. All but --version are padded with a blank line either side so the
 	// block stands clear of the prompts above and below it; --version stays flush
 	// because its job is to be captured.
-	if cli_only(&cli) {
-		if cli.help {
-			print!(
+	if let Some(info) = cli.info {
+		match info {
+			cli::Info::Help => print!(
 				"{}",
 				cli::padded(&format!("{}\n\n{}", cli::version_line(), cli::usage()))
-			);
-		} else if cli.syntax {
-			print!("{}", cli::padded(cli::usage()));
-		} else if cli.about {
-			print!(
+			),
+			cli::Info::Syntax => print!("{}", cli::padded(cli::usage())),
+			cli::Info::About => print!(
 				"{}",
 				cli::padded(&cli::about(gfx::probe_adapter_info().as_ref()))
-			);
-		} else if cli.donate {
-			print!("{}", cli::padded(&cli::donate()));
-		} else {
-			println!("{}", cli::version_line());
+			),
+			cli::Info::Donate => print!("{}", cli::padded(&cli::donate())),
+			cli::Info::Version => println!("{}", cli::version_line()),
 		}
 		return Ok(());
 	}

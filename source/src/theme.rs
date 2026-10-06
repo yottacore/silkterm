@@ -331,19 +331,50 @@ pub fn find_user<'a>(user: &'a [UserTheme], name: &str) -> Option<&'a UserTheme>
 		.find(|t| t.name.eq_ignore_ascii_case(name.trim()))
 }
 
-/// Does this mode resolve to the dark variant? "system" follows the OS.
-pub fn is_dark_mode(mode: &str, system_dark: bool) -> bool {
-	match mode.trim().to_ascii_lowercase().as_str() {
-		"light" => false,
-		"system" => system_dark,
-		_ => true, // "dark" / unknown
+/// Which variant of the theme to use, `theme_mode`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Mode {
+	Dark,
+	Light,
+	System,
+}
+
+impl crate::config::Choice for Mode {
+	const ALL: &'static [Self] = &[Self::Dark, Self::Light, Self::System];
+
+	fn key(self) -> &'static str {
+		match self {
+			Self::Dark => "dark",
+			Self::Light => "light",
+			Self::System => "system",
+		}
+	}
+
+	// The palette always read the mode this loosely, and the rest of the
+	// program reads it from here now.
+	fn parse(text: &str) -> Option<Self> {
+		Self::ALL
+			.iter()
+			.copied()
+			.find(|mode| mode.key().eq_ignore_ascii_case(text.trim()))
+	}
+}
+
+impl Mode {
+	/// Does this mode resolve to the dark variant? System follows the OS.
+	pub fn is_dark(self, system_dark: bool) -> bool {
+		match self {
+			Self::Dark => true,
+			Self::Light => false,
+			Self::System => system_dark,
+		}
 	}
 }
 
 /// Resolve the active palette from a theme name + mode. A saved theme wins over a
 /// built-in of the same name; an unknown name falls back to the first built-in.
-pub fn resolve_in(user: &[UserTheme], name: &str, mode: &str, system_dark: bool) -> Palette {
-	let dark = is_dark_mode(mode, system_dark);
+pub fn resolve_in(user: &[UserTheme], name: &str, mode: Mode, system_dark: bool) -> Palette {
+	let dark = mode.is_dark(system_dark);
 	if let Some(t) = find_user(user, name) {
 		return if dark { t.dark } else { t.light };
 	}
@@ -355,7 +386,7 @@ pub fn resolve_in(user: &[UserTheme], name: &str, mode: &str, system_dark: bool)
 }
 
 /// Built-ins only - for paths that have no user themes to hand (and the tests).
-pub fn resolve(name: &str, mode: &str, system_dark: bool) -> Palette {
+pub fn resolve(name: &str, mode: Mode, system_dark: bool) -> Palette {
 	resolve_in(&[], name, mode, system_dark)
 }
 
@@ -366,17 +397,25 @@ mod tests {
 	// Test ID: EiMPv8L
 	#[test]
 	fn resolve_picks_theme_and_mode() {
+		use crate::config::Choice;
 		// unknown name falls back to the first theme (SilkTerm)
-		assert_eq!(resolve("nope", "dark", true).bg, THEMES[0].1.dark.bg);
+		assert_eq!(resolve("nope", Mode::Dark, true).bg, THEMES[0].1.dark.bg);
 		// mode selects the variant; "system" honors system_dark
-		assert_eq!(resolve("Matrix", "light", true).bg, find("Matrix").light.bg);
-		assert_eq!(resolve("Matrix", "system", true).bg, find("Matrix").dark.bg);
 		assert_eq!(
-			resolve("Matrix", "system", false).bg,
+			resolve("Matrix", Mode::Light, true).bg,
+			find("Matrix").light.bg
+		);
+		assert_eq!(
+			resolve("Matrix", Mode::System, true).bg,
+			find("Matrix").dark.bg
+		);
+		assert_eq!(
+			resolve("Matrix", Mode::System, false).bg,
 			find("Matrix").light.bg
 		);
 		// case/space tolerant
-		assert_eq!(resolve(" matrix ", "DARK", true).fg, find("Matrix").dark.fg);
+		let dark = Mode::parse("DARK").unwrap();
+		assert_eq!(resolve(" matrix ", dark, true).fg, find("Matrix").dark.fg);
 	}
 
 	// Test ID: EiuvVez

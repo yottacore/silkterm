@@ -1296,7 +1296,7 @@ mod tests {
 	// setting and asserts they diverge.
 	fn with(mut cfg: config::Settings) {
 		// the feel is read off the live settings, where a profile would mask it
-		cfg.performance_profile = "custom".to_string();
+		cfg.performance_profile = crate::profile::Profile::Custom;
 		config::update(cfg);
 	}
 

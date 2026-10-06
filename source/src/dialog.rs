@@ -48,7 +48,6 @@ enum Content {
 	About {
 		lines: Vec<Line>,
 		links: Vec<AboutLink>,
-		notice: bool,
 		// what the lines were made from, so a scale change can make them again
 		source: AboutSource,
 	},
@@ -62,6 +61,16 @@ enum AboutSource {
 	// Windows says a notice with MessageBoxW, so it has no dialog window of its own
 	#[cfg(not(target_os = "windows"))]
 	Notice(Vec<String>),
+}
+
+impl AboutSource {
+	fn is_notice(&self) -> bool {
+		match self {
+			AboutSource::About(_) => false,
+			#[cfg(not(target_os = "windows"))]
+			AboutSource::Notice(_) => true,
+		}
+	}
 }
 
 #[derive(Debug)]
@@ -135,8 +144,8 @@ impl DialogWin {
 	}
 
 	fn kind(&self) -> &'static str {
-		match self.content {
-			Content::About { notice: true, .. } => "Notice",
+		match &self.content {
+			Content::About { source, .. } if source.is_notice() => "Notice",
 			Content::About { .. } => "About",
 			Content::Settings(_) => "Settings",
 		}
@@ -252,7 +261,6 @@ impl DialogWin {
 			content: Content::About {
 				lines,
 				links,
-				notice: false,
 				source: AboutSource::About(Box::new(adapter.clone())),
 			},
 			mouse: (0.0, 0.0),
@@ -297,7 +305,6 @@ impl DialogWin {
 			content: Content::About {
 				lines,
 				links,
-				notice: true,
 				source: AboutSource::Notice(paras.to_vec()),
 			},
 			mouse: (0.0, 0.0),
@@ -626,7 +633,7 @@ impl DialogWin {
 		match &mut self.content {
 			Content::Settings(dialog) => map_action(dialog.key_space()),
 			// a notice's one button has the focus
-			Content::About { notice, .. } => notice.then_some(DialogAction::Close),
+			Content::About { source, .. } => source.is_notice().then_some(DialogAction::Close),
 		}
 	}
 
@@ -723,7 +730,7 @@ impl DialogWin {
 				}
 				map_action(action)
 			}
-			Content::About { notice, .. } => notice.then_some(DialogAction::Close),
+			Content::About { source, .. } => source.is_notice().then_some(DialogAction::Close),
 		}
 	}
 
@@ -1310,12 +1317,11 @@ fn scene(
 		Content::About {
 			lines,
 			links,
-			notice,
-			..
+			source,
 		} => {
 			// a notice's OK is the default button, outlined the way Settings
 			// outlines its own
-			let btn_border = if *notice {
+			let btn_border = if source.is_notice() {
 				crate::settings_ui::dialog_btn_hl()
 			} else {
 				border_col
@@ -2647,6 +2653,16 @@ mod tests {
 		assert_eq!(size_within_caps((800, 600), (0.0, 0.0)), (800, 600));
 	}
 
+	// A notice is whatever was laid out from a notice's paragraphs. Nothing else
+	// says so, so the box's title, focus and OK all follow its source.
+	// Test ID: ErstbFF
+	#[test]
+	fn only_a_notice_source_is_a_notice() {
+		assert!(!AboutSource::About(Box::new(adapter())).is_notice());
+		#[cfg(not(target_os = "windows"))]
+		assert!(AboutSource::Notice(vec!["text".into()]).is_notice());
+	}
+
 	fn adapter() -> wgpu::AdapterInfo {
 		crate::gfx::test_adapter("X", wgpu::DeviceType::Cpu)
 	}
@@ -3124,7 +3140,6 @@ mod tests {
 		let mut about = super::Content::About {
 			lines,
 			links,
-			notice: false,
 			source: AboutSource::About(Box::new(adapter())),
 		};
 		let mut dwell = crate::tip::Dwell::default();

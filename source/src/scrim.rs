@@ -20,6 +20,7 @@
 //! flag; the first pass folds the cursor in when `cursor_scrim`, the composite samples
 //! both to add the border when `cursor_outline`).
 
+use crate::config::Choice;
 use crate::gfx::{RectInstance, RectRenderer};
 
 /// Each layer stores only what is read back from it. Only alpha of the text
@@ -195,6 +196,94 @@ impl Use {
 			(true, _) => Self::Halo,
 			(false, true) => Self::OutlineOnly,
 			(false, false) => Self::Nothing,
+		}
+	}
+}
+
+/// The halo's falloff curve, `text.scrim.ramp`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ramp {
+	Exp,
+	HalfNormal,
+	Log,
+	Sigmoid,
+	Linear,
+}
+
+impl Choice for Ramp {
+	const ALL: &'static [Self] = &[
+		Self::Exp,
+		Self::HalfNormal,
+		Self::Log,
+		Self::Sigmoid,
+		Self::Linear,
+	];
+
+	fn key(self) -> &'static str {
+		match self {
+			Self::Exp => "exp",
+			Self::HalfNormal => "half_normal",
+			Self::Log => "log",
+			Self::Sigmoid => "sigmoid",
+			Self::Linear => "linear",
+		}
+	}
+
+	// the older spellings still parse: "s" was renamed to "sigmoid" (which is
+	// what a smoothstep is), and the falloff's "gaussian" to "half_normal" so
+	// it stops reading like the gaussian BLUR the function list also offers.
+	fn parse(text: &str) -> Option<Self> {
+		match text {
+			"s" => Some(Self::Sigmoid),
+			"gaussian" => Some(Self::HalfNormal),
+			_ => Self::ALL.iter().copied().find(|ramp| ramp.key() == text),
+		}
+	}
+}
+
+impl Ramp {
+	// the number `falloff` in the WGSL below tests
+	fn code(self) -> f32 {
+		match self {
+			Self::Sigmoid => 0.0,
+			Self::HalfNormal => 1.0,
+			Self::Linear => 2.0,
+			Self::Log => 3.0,
+			Self::Exp => 4.0,
+		}
+	}
+}
+
+/// How the halo is built from the glyphs, `text.scrim.function`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Function {
+	Sdf,
+	Dt,
+	Dilate,
+	Gaussian,
+}
+
+impl Choice for Function {
+	const ALL: &'static [Self] = &[Self::Sdf, Self::Dt, Self::Dilate, Self::Gaussian];
+
+	fn key(self) -> &'static str {
+		match self {
+			Self::Sdf => "sdf",
+			Self::Dt => "dt",
+			Self::Dilate => "dilate",
+			Self::Gaussian => "gaussian",
+		}
+	}
+}
+
+impl Function {
+	// the number `fs_comp` in the WGSL below tests
+	fn code(self) -> f32 {
+		match self {
+			Self::Dilate => 0.0,
+			Self::Sdf => 1.0,
+			Self::Dt => 2.0,
+			Self::Gaussian => 3.0,
 		}
 	}
 }
@@ -482,8 +571,8 @@ impl Scrim {
 
 	/// Two separable passes producing the scrim in `halo_a`; the text layer keeps
 	/// the crisp coverage for the border pass. `function` picks the path: gaussian
-	/// (3) runs the legacy sum-blur (H text->halo_b, V halo_b->halo_a) shaped by
-	/// `ramp`; the distance paths (dilate 0 / sdf 1 / dt 2) run a separable
+	/// runs the legacy sum-blur (H text->halo_b, V halo_b->halo_a) shaped by
+	/// `ramp`; the distance paths (dilate / sdf / dt) run a separable
 	/// Euclidean/Chebyshev distance transform (pass a = per-column 1D distance,
 	/// pass b = row combine) into `halo_a`, bounded to `radius`. `sigma` = gaussian
 	/// blur sigma; `radius` = distance extent. `cursor` (0/1) folds the cursor
@@ -495,13 +584,18 @@ impl Scrim {
 		encoder: &mut wgpu::CommandEncoder,
 		sigma: f32,
 		radius: f32,
-		ramp: f32,
+		ramp: Ramp,
 		cursor: f32,
-		function: f32,
+		function: Function,
 	) {
 		let res = [self.halo_size.0 as f32, self.halo_size.1 as f32];
-		let gaussian = function >= 2.5;
-		let metric = if function < 0.5 { 1.0 } else { 0.0 }; // dilate = chebyshev, else euclid
+		// dilate is chebyshev, the other distance paths euclidean
+		let (gaussian, metric) = match function {
+			Function::Gaussian => (true, 0.0),
+			Function::Dilate => (false, 1.0),
+			Function::Sdf | Function::Dt => (false, 0.0),
+		};
+		let ramp = ramp.code();
 		// write both uniforms up front (they target different buffers, so neither
 		// overwrites the other when the queue applies them before the passes run)
 		queue.write_buffer(
@@ -574,8 +668,8 @@ impl Scrim {
 		intensity: f32,
 		border_px: f32,
 		cursor: f32,
-		function: f32,
-		ramp: f32,
+		function: Function,
+		ramp: Ramp,
 		radius: f32,
 		strength: f32,
 		halo: f32,
@@ -593,8 +687,8 @@ impl Scrim {
 				intensity,
 				border_px,
 				cursor,
-				function,
-				ramp,
+				function: function.code(),
+				ramp: ramp.code(),
 				radius,
 				strength,
 				halo,
@@ -1013,8 +1107,93 @@ fn fs_comp(in: VsOut) -> @location(0) vec4<f32> {
 #[cfg(test)]
 mod tests {
 	use super::{
-		BG_FMT, CURSOR_FMT, EXT_MAX, HALO_FMT, TEXT_FMT, Use, WGSL, alloc_size, clamp_ext,
+		BG_FMT, CURSOR_FMT, EXT_MAX, Function, HALO_FMT, Ramp, TEXT_FMT, Use, WGSL, alloc_size,
+		clamp_ext,
 	};
+	use crate::config::Choice;
+
+	// The shader tells the curves apart by `ramp < N`, and each branch names its
+	// curve in a comment. Every curve's number has to land in its own branch.
+	// Test ID: Erstarj
+	#[test]
+	fn each_ramp_code_lands_in_the_shader_branch_for_that_curve() {
+		let body = WGSL
+			.split("fn falloff(")
+			.nth(1)
+			.and_then(|rest| rest.split("\n}\n").next())
+			.expect("the falloff function");
+		let named = |note: &str| {
+			note.split_whitespace()
+				.next()
+				.unwrap_or("")
+				.trim_end_matches(':')
+				.to_string()
+		};
+		let mut ladder: Vec<(f32, String)> = Vec::new();
+		for line in body.lines() {
+			let Some((code, note)) = line.split_once("//") else {
+				continue;
+			};
+			if let Some(rest) = code.split("ramp < ").nth(1) {
+				let bound = rest
+					.trim_end_matches(|c: char| c == ')' || c == '{' || c.is_whitespace())
+					.parse::<f32>()
+					.expect("a number");
+				ladder.push((bound, named(note)));
+			} else if code.contains("} else {") {
+				ladder.push((f32::INFINITY, named(note)));
+			}
+		}
+		assert_eq!(ladder.len(), Ramp::ALL.len(), "{ladder:?}");
+		for &ramp in Ramp::ALL {
+			let want = match ramp {
+				Ramp::Exp => "exponential",
+				Ramp::HalfNormal => "half-normal",
+				Ramp::Log => "logarithmic",
+				Ramp::Sigmoid => "sigmoid",
+				Ramp::Linear => "linear",
+			};
+			let (_, got) = ladder
+				.iter()
+				.find(|(bound, _)| ramp.code() < *bound)
+				.expect("a branch");
+			assert_eq!(got, want, "{ramp:?}");
+		}
+	}
+
+	// The composite takes the legacy blur at `function >= 2.5` and hardens dt's
+	// glow at `function >= 1.5`, in that order.
+	// Test ID: Erstaxm
+	#[test]
+	fn each_function_code_takes_its_own_path_in_the_composite() {
+		let gates: Vec<f32> = WGSL
+			.split("cu.function >= ")
+			.skip(1)
+			.map(|rest| {
+				rest.split(')')
+					.next()
+					.and_then(|n| n.trim().parse().ok())
+					.expect("a number")
+			})
+			.collect();
+		let [blur, harden] = gates[..] else {
+			panic!("two gates, got {gates:?}");
+		};
+		for &function in Function::ALL {
+			let code = function.code();
+			assert_eq!(code >= blur, function == Function::Gaussian, "{function:?}");
+			if function != Function::Gaussian {
+				assert_eq!(code >= harden, function == Function::Dt, "{function:?}");
+			}
+		}
+		// the shader cannot tell two paths with one number apart
+		let codes: Vec<f32> = Function::ALL.iter().map(|f| f.code()).collect();
+		assert!(
+			codes
+				.iter()
+				.all(|c| codes.iter().filter(|o| *o == c).count() == 1)
+		);
+	}
 
 	// The exponential arm's exponent, mirrored so the curve can be checked
 	// without a GPU. The shader owns the number and the test below holds the

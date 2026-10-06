@@ -500,12 +500,42 @@ pub(crate) fn cursor_plate(cursor: [u8; 3], bg: [u8; 3], alpha: f32) -> [u8; 3] 
 	[mix(0), mix(1), mix(2)]
 }
 
+/// How the cursor moves while it is alive, `cursor.animation`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CursorAnimation {
+	Off,
+	Phase,
+	PulseVertical,
+	PulseHorizontal,
+	PulseBoth,
+}
+
+impl config::Choice for CursorAnimation {
+	const ALL: &'static [Self] = &[
+		Self::Off,
+		Self::Phase,
+		Self::PulseVertical,
+		Self::PulseHorizontal,
+		Self::PulseBoth,
+	];
+
+	fn key(self) -> &'static str {
+		match self {
+			Self::Off => "none",
+			Self::Phase => "phase",
+			Self::PulseVertical => "pulse_vertical",
+			Self::PulseHorizontal => "pulse_horizontal",
+			Self::PulseBoth => "pulse_both",
+		}
+	}
+}
+
 // What the animation makes of the cursor at `phase` of its cycle: the (width,
-// height) fractions, the alpha, and whether each axis pulses. "phase" fades
+// height) fractions, the alpha, and whether each axis pulses. Phase fades
 // `full`, the plate's own alpha, on a cosine; the pulses scale an axis by
-// `pulse_env`; "none" and anything unknown leave the cursor as it is.
+// `pulse_env`; Off leaves the cursor as it is.
 fn cursor_envelope(
-	anim: &str,
+	anim: CursorAnimation,
 	phase: f32,
 	geom: (f32, f32),
 	full: f32,
@@ -513,25 +543,25 @@ fn cursor_envelope(
 	let (mut w_frac, mut h_frac) = geom;
 	let mut alpha = full;
 	let (pulsing_w, pulsing_h) = match anim {
-		"phase" => {
+		CursorAnimation::Phase => {
 			alpha = full * (0.5 + 0.5 * (phase * std::f32::consts::TAU).cos());
 			(false, false)
 		}
-		"pulse_vertical" => {
+		CursorAnimation::PulseVertical => {
 			h_frac *= pulse_env(phase);
 			(false, true)
 		}
-		"pulse_horizontal" => {
+		CursorAnimation::PulseHorizontal => {
 			w_frac *= pulse_env(phase);
 			(true, false)
 		}
-		"pulse_both" => {
+		CursorAnimation::PulseBoth => {
 			let envelope = pulse_env(phase);
 			w_frac *= envelope;
 			h_frac *= envelope;
 			(true, true)
 		}
-		_ => (false, false),
+		CursorAnimation::Off => (false, false),
 	};
 	(w_frac, h_frac, alpha, pulsing_w, pulsing_h)
 }
@@ -797,9 +827,15 @@ fn glide_to_full(blink_t: f32, dt: f32, period: f32, full_phase: f32) -> (f32, b
 // the only point a resume ever starts from - "phase" fades from full at 0, the
 // pulses peak mid-cycle. Both the pause and the refocus resume read it here so
 // they cannot drift apart.
-fn cursor_cycle(anim: &str, blink_rate_ms: f32) -> (f32, f32) {
+fn cursor_cycle(anim: CursorAnimation, blink_rate_ms: f32) -> (f32, f32) {
 	let period = (blink_rate_ms / 1000.0 * 2.0).max(0.05); // full on->off->on
-	let full_phase = if anim == "phase" { 0.0 } else { 0.5 };
+	let full_phase = match anim {
+		CursorAnimation::Phase => 0.0,
+		CursorAnimation::Off
+		| CursorAnimation::PulseVertical
+		| CursorAnimation::PulseHorizontal
+		| CursorAnimation::PulseBoth => 0.5,
+	};
 	(period, full_phase)
 }
 
@@ -2520,7 +2556,7 @@ impl Pane {
 		self.cursor_active_at = std::time::Instant::now();
 		let settings = config::settings();
 		let (period, full_phase) =
-			cursor_cycle(&settings.cursor_animation, settings.cursor_blink_rate_ms);
+			cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_ms);
 		self.blink_t = full_phase * period;
 		self.cursor_pause.resume();
 	}
@@ -2897,9 +2933,9 @@ impl Pane {
 		// cursor renders no frames - the timed resume comes from cursor_wake, and
 		// a refocus ends the park outright (poke_cursor).
 		let settings = config::settings();
-		let anim = settings.cursor_animation.as_str();
+		let anim = settings.cursor_animation;
 		let (period, full_phase) = cursor_cycle(anim, settings.cursor_blink_rate_ms);
-		let anim_on = anim != "none";
+		let anim_on = anim != CursorAnimation::Off;
 		let mut parked = false;
 		self.cursor_wake = None;
 		if anim_on && !CURSOR_ANIM_CONTINUOUS {
@@ -4968,11 +5004,11 @@ fn band_row_line(screen_row: i32, display_offset: i32, split_row: i32, ob: usize
 mod tests {
 	use super::{
 		APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA,
-		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, DepthSampler, Dir, GColor, LinkHit, Node, OffStrip,
-		PROMPT_SKEL_MIN, PauseState, Rect, SLIDE_TOP_BAND_APPS, StripCell, Style, Weight,
-		adopt_band, alloc_pane_id, band_row_line, bar_applies_to, bar_pos_to_lines, bar_thumb_span,
-		bar_track, bell_brighten, bracket_reach, capture_grid_text, capture_start, child_areas,
-		cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate,
+		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, CursorAnimation, DepthSampler, Dir, GColor, LinkHit,
+		Node, OffStrip, PROMPT_SKEL_MIN, PauseState, Rect, SLIDE_TOP_BAND_APPS, StripCell, Style,
+		Weight, adopt_band, alloc_pane_id, band_row_line, bar_applies_to, bar_pos_to_lines,
+		bar_thumb_span, bar_track, bell_brighten, bracket_reach, capture_grid_text, capture_start,
+		child_areas, cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate,
 		cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair, divider_at,
 		drop_hold_over, ease_output, edge_scroll_rate, equalize_dir_run, fingerprint_frame,
 		fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged, handle_pos, has_ink,
@@ -5766,10 +5802,13 @@ mod tests {
 	// Test ID: EldrZxZ
 	#[test]
 	fn cursor_cycle_full_phase_matches_the_animation() {
-		assert_eq!(cursor_cycle("pulse_vertical", 500.0), (1.0, 0.5));
-		assert_eq!(cursor_cycle("phase", 500.0), (1.0, 0.0));
-		assert_eq!(cursor_cycle("pulse_both", 250.0).0, 0.5);
-		assert_eq!(cursor_cycle("phase", 0.0).0, 0.05); // period never reaches zero
+		assert_eq!(
+			cursor_cycle(CursorAnimation::PulseVertical, 500.0),
+			(1.0, 0.5)
+		);
+		assert_eq!(cursor_cycle(CursorAnimation::Phase, 500.0), (1.0, 0.0));
+		assert_eq!(cursor_cycle(CursorAnimation::PulseBoth, 250.0).0, 0.5);
+		assert_eq!(cursor_cycle(CursorAnimation::Phase, 0.0).0, 0.05); // period never reaches zero
 	}
 
 	// Test ID: EleFUn2
@@ -5794,7 +5833,7 @@ mod tests {
 		assert!(resume_delay(false, 1.0) < 0.1);
 
 		// drive the park itself: same state machine, output's delay
-		let (period, full) = cursor_cycle("pulse_vertical", 500.0);
+		let (period, full) = cursor_cycle(CursorAnimation::PulseVertical, 500.0);
 		let delay = resume_delay(false, 1.0);
 		let mut st = PauseState::default();
 		let mut blink = 0.2;
@@ -7912,17 +7951,20 @@ mod tests {
 
 		let geom = (0.8, 0.6);
 		let env = pulse_env(0.2);
-		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_vertical", 0.2, geom, CURSOR_ALPHA);
+		let (w, h, alpha, pw, ph) =
+			cursor_envelope(CursorAnimation::PulseVertical, 0.2, geom, CURSOR_ALPHA);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8, 0.6 * env, CURSOR_ALPHA, false, true)
 		);
-		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_horizontal", 0.2, geom, CURSOR_ALPHA);
+		let (w, h, alpha, pw, ph) =
+			cursor_envelope(CursorAnimation::PulseHorizontal, 0.2, geom, CURSOR_ALPHA);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8 * env, 0.6, CURSOR_ALPHA, true, false)
 		);
-		let (w, h, alpha, pw, ph) = cursor_envelope("pulse_both", 0.2, geom, CURSOR_ALPHA);
+		let (w, h, alpha, pw, ph) =
+			cursor_envelope(CursorAnimation::PulseBoth, 0.2, geom, CURSOR_ALPHA);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8 * env, 0.6 * env, CURSOR_ALPHA, true, true)
@@ -8096,7 +8138,8 @@ mod tests {
 	// Test ID: Er2VGXA
 	#[test]
 	fn the_phase_blink_fades_instead_of_switching() {
-		let alpha = |phase: f32| cursor_envelope("phase", phase, (1.0, 1.0), CURSOR_ALPHA).2;
+		let alpha =
+			|phase: f32| cursor_envelope(CursorAnimation::Phase, phase, (1.0, 1.0), CURSOR_ALPHA).2;
 		assert_eq!(alpha(0.0), CURSOR_ALPHA);
 		assert!(alpha(0.5).abs() < 1e-6, "gone at mid-cycle: {}", alpha(0.5));
 		for phase in [0.25, 0.75] {
@@ -8117,13 +8160,14 @@ mod tests {
 		let geom = (0.4, 0.6);
 		for phase in [0.0, 0.2, 0.5, 0.95] {
 			assert_eq!(
-				cursor_envelope("none", phase, geom, CURSOR_ALPHA),
+				cursor_envelope(CursorAnimation::Off, phase, geom, CURSOR_ALPHA),
 				(0.4, 0.6, CURSOR_ALPHA, false, false)
 			);
-			let (w, h, _, pw, ph) = cursor_envelope("phase", phase, geom, CURSOR_ALPHA);
+			let (w, h, _, pw, ph) =
+				cursor_envelope(CursorAnimation::Phase, phase, geom, CURSOR_ALPHA);
 			assert_eq!((w, h, pw, ph), (0.4, 0.6, false, false));
 		}
-		assert!(cursor_envelope("phase", 0.5, geom, CURSOR_ALPHA).2 < CURSOR_ALPHA);
+		assert!(cursor_envelope(CursorAnimation::Phase, 0.5, geom, CURSOR_ALPHA).2 < CURSOR_ALPHA);
 	}
 
 	// Leaving the alt screen hands the normal screen's scrollback back in one
