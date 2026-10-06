@@ -786,7 +786,7 @@ mod tests {
 
 	// Test ID: ErNFx0h
 	#[test]
-	fn a_windows_group_cannot_hold_a_row_for_everyone() {
+	fn a_windows_group_cannot_contain_a_row_for_everyone() {
 		let bad = "tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\t\twindows: true\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: 0, 1\n\t\tsetting: margin\n";
 		let Err(problems) = parse(bad) else {
 			panic!("a shared row under a Windows-only heading must be reported")

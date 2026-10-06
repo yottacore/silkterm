@@ -1373,7 +1373,7 @@ mod tests {
 
 	// Test ID: Er2UJeV
 	#[test]
-	fn tab_selects_by_handle_or_first_and_later_options_land_there() {
+	fn tab_selects_by_handle_or_first_and_later_options_go_there() {
 		let c = p("--new-tab=a --new-tab --tab=a --title A --tab main --title M");
 		assert_eq!(c.tabs.len(), 3);
 		assert_eq!(c.tabs[1].title.as_deref(), Some("A"));

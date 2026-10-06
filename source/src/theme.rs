@@ -434,7 +434,7 @@ mod tests {
 	// highlighted in the same color, which is the whole point of splitting them.
 	// Test ID: Em3Pif6
 	#[test]
-	fn the_two_attention_colours_stay_apart() {
+	fn the_two_attention_colors_stay_apart() {
 		for (name, t) in THEMES {
 			for pal in [t.dark, t.light] {
 				let apart: i32 = (0..3)
@@ -500,7 +500,7 @@ mod tests {
 	// setting says, dark mode exactly at it, and off stays off.
 	// Test ID: ErwdARW
 	#[test]
-	fn a_light_theme_holds_text_a_little_further_off() {
+	fn a_light_theme_keeps_text_a_little_further_off() {
 		let floor = crate::config::Settings::default().text_min_contrast;
 		for (name, t) in THEMES {
 			assert_eq!(floor_of(&t.dark), floor, "{name} dark");

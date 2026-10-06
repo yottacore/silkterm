@@ -1140,7 +1140,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// up further down is the one this block wraps.
 	// Test ID: EnalvtR
 	#[test]
-	fn the_block_lands_at_the_end_and_keeps_what_was_there() {
+	fn the_block_goes_at_the_end_and_keeps_what_was_there() {
 		let before = "Import-Module Cows\r\nSet-Alias ll Get-ChildItem\r\n";
 		let after = with_block(before, "\r\n");
 		assert!(after.starts_with(before), "existing content moved");
@@ -1367,7 +1367,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// halves of the version split have to reach it.
 	// Test ID: EoTnK8X
 	#[test]
-	fn the_block_carries_the_prompt() {
+	fn the_block_has_the_prompt() {
 		assert!(SNIPPET.contains("function global:__SilkTermPrompt"));
 		assert!(SNIPPET.contains("git status --porcelain=v2 --branch"));
 		// the 6+ hook branch, and the 5.1 wrap
@@ -1405,7 +1405,7 @@ Write-Host \"COLOR=$global:__SilkTermHostColor\"",
 	// show an example. A real machine name in a live line would ship with them.
 	// Test ID: Erftpx4
 	#[test]
-	fn the_shipped_prompts_color_no_named_machine() {
+	fn the_bundled_prompts_color_no_named_machine() {
 		let live = |text: &'static str| {
 			text.lines()
 				.map(str::trim_start)

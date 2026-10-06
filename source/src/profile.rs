@@ -823,7 +823,7 @@ mod tests {
 
 	// Test ID: EowvGev
 	#[test]
-	fn the_run_stops_at_the_first_rung_that_holds_the_rate() {
+	fn the_run_stops_at_the_first_rung_that_keeps_the_rate() {
 		let budget = budget_ms(60.0);
 		// comfortably inside the budget: the heaviest rung stands, and nothing
 		// below it is ever put live

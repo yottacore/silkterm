@@ -1216,7 +1216,7 @@ mod tests {
 	// ink, which is what read as thin.
 	// Test ID: ErwcyUJ
 	#[test]
-	fn light_text_carries_the_ink_dark_text_does() {
+	fn light_text_puts_down_the_ink_dark_text_does() {
 		for (name, t) in crate::theme::THEMES {
 			let dark = ink(t.dark.fg, t.dark.bg, crate::config::DARK_ON_LIGHT_CONTRAST);
 			let light = ink(

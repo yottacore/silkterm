@@ -2786,7 +2786,7 @@ mod tests {
 	// out short has to ask for another compose or it stays short.
 	// Test ID: EqN59w1
 	#[test]
-	fn a_trimmed_compose_owes_another() {
+	fn a_trimmed_compose_needs_another() {
 		let settings = config::Settings::default();
 		let (cols, lines) = (40, 24);
 		let composed = |lag: usize| {
@@ -2823,7 +2823,7 @@ mod tests {
 	// pane sat there, with no output and nobody touching it.
 	// Test ID: EqQ9f4K
 	#[test]
-	fn a_parked_view_stops_owing_composes() {
+	fn a_parked_view_stops_asking_for_composes() {
 		let _g = config::test_store_lock();
 		config::update(config::Settings::default());
 		let settings = config::Settings::default();

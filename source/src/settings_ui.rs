@@ -8845,7 +8845,7 @@ mod tests {
 	// that says the saturating cast is being RELIED on rather than tolerated.
 	// Test ID: EnRWor6
 	#[test]
-	fn a_line_dragged_off_the_top_lands_on_the_first() {
+	fn a_line_dragged_off_the_top_ends_up_first() {
 		let (mut d, i) = mk_shell_dialog(3);
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
 		let line = d.shell_line_h();
@@ -8884,7 +8884,7 @@ mod tests {
 	// pseudo-row scheme.
 	// Test ID: EnQUIKt
 	#[test]
-	fn a_field_edit_lands_on_its_own_entry() {
+	fn a_field_edit_goes_to_its_own_entry() {
 		let (mut d, _) = mk_shell_dialog(3);
 		d.open_edit(super::shell_field_row(2, false), true);
 		d.select_all();
@@ -9118,7 +9118,7 @@ mod tests {
 	// done rather than replacing it.
 	// Test ID: EnQUIKx
 	#[test]
-	fn a_scan_that_lands_mid_edit_is_not_mistaken_for_an_edit() {
+	fn a_scan_that_arrives_mid_edit_is_not_mistaken_for_an_edit() {
 		let (mut d, _) = mk_shell_dialog(1);
 		d.edited.shells[0].title = "Renamed by hand".into();
 		// the command is the one already stored, so nothing is added
@@ -10368,7 +10368,7 @@ mod tests {
 
 	// Test ID: EkIvixI
 	#[test]
-	fn blink_holds_solid_on_activity() {
+	fn blink_stays_solid_on_activity() {
 		let (mut d, _) = mk_text_edit("abc");
 		let mut m = |s: &str| s.chars().count() as f32;
 		settle(&mut d, &mut m); // ~3.2s idle: blink well past the hold
@@ -10404,7 +10404,7 @@ mod tests {
 	// the answer is the same after a restart.
 	// Test ID: Em3lZEu
 	#[test]
-	fn an_edited_colour_is_what_makes_the_theme_dirty() {
+	fn an_edited_color_is_what_makes_the_theme_dirty() {
 		let mut d = on_theme("Matrix");
 		let row = theme_row(&d);
 		assert!(!d.theme_dirty());
@@ -10455,7 +10455,7 @@ mod tests {
 	// back to the first control on the tab.
 	// Test ID: Em430PA
 	#[test]
-	fn focus_carries_on_when_the_control_under_it_greys_out() {
+	fn focus_stays_when_the_control_under_it_grays_out() {
 		let mut d = on_theme("Matrix");
 		let row = theme_row(&d);
 		d.tab = d.specs[row].tab;
@@ -10535,7 +10535,7 @@ mod tests {
 	// make the picker look broken on every color that had been edited.
 	// Test ID: Em3lZEx
 	#[test]
-	fn picking_a_theme_adopts_its_colours() {
+	fn picking_a_theme_adopts_its_colors() {
 		let mut d = on_theme("SilkTerm");
 		d.set_col(Key::ColFg, [1, 2, 3]);
 		let i = d
@@ -10560,7 +10560,7 @@ mod tests {
 	// change, which also freezes one variant when the mode follows the desktop.
 	// Test ID: Em430PB
 	#[test]
-	fn adopting_a_theme_clears_the_colour_overrides() {
+	fn adopting_a_theme_clears_the_color_overrides() {
 		let mut d = on_theme("SilkTerm");
 		d.set_col(Key::ColFg, [1, 2, 3]);
 		d.set_col(Key::ColBg, [4, 5, 6]);
@@ -10669,7 +10669,7 @@ mod tests {
 	// the hue without disturbing what the square set.
 	// Test ID: EqSaSRm
 	#[test]
-	fn a_drag_across_the_square_carries_the_color_with_it() {
+	fn a_drag_across_the_square_moves_the_color_with_it() {
 		let (mut d, _) = mk_picker();
 		let g = d.pick_geom();
 		let mut m = |s: &str| s.chars().count() as f32;
@@ -11733,7 +11733,7 @@ mod tests {
 	// old Performance tab is gone.
 	// Test ID: Er2X6El
 	#[test]
-	fn the_silk_tab_holds_performance_readability_and_scrolling() {
+	fn the_silk_tab_has_performance_readability_and_scrolling() {
 		let specs = &super::ui().specs;
 		let at = |key: Key| specs.iter().position(|s| s.key == key).unwrap();
 		let silk = specs[at(Key::PerfProfile)].tab;
@@ -11870,7 +11870,7 @@ mod tests {
 	// by key so a relabel does not move it.
 	// Test ID: Er2X6Ep
 	#[test]
-	fn each_tab_holds_its_designed_sub_groups() {
+	fn each_tab_has_its_designed_sub_groups() {
 		let specs = &super::ui().specs;
 		let at = |key: Key| {
 			specs

@@ -939,7 +939,7 @@ mod tests {
 	// rather than on nothing.
 	// Test ID: ElvpdEu
 	#[test]
-	fn an_unreadable_image_still_lands_on_the_builtin() {
+	fn an_unreadable_image_still_falls_back_to_the_builtin() {
 		let mut s = flat_settings();
 		let missing = crate::testdir::run_dir().join("silkterm_no_such_wallpaper.png");
 		let _ = std::fs::remove_file(&missing);

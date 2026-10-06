@@ -1160,7 +1160,7 @@ mod tests {
 
 	// Test ID: ElcxMmv
 	#[test]
-	fn snap_lands_at_rest_instantly() {
+	fn snap_comes_to_rest_instantly() {
 		let _g = pin();
 		// unfreeze catch-up: pending output backlog and any slide drop at once
 		let mut s = Scroll::new();
@@ -1181,7 +1181,7 @@ mod tests {
 
 	// Test ID: EloyL8L
 	#[test]
-	fn smooth_off_lands_every_scroll_instantly() {
+	fn smooth_off_finishes_every_scroll_instantly() {
 		let _g = pin();
 		// the master switch: no eased wheel, no output lag, no app slide
 		with(config::Settings {
@@ -1465,7 +1465,7 @@ mod tests {
 
 	// Test ID: ElpQBim
 	#[test]
-	fn ease_out_sets_how_gently_the_tail_lands() {
+	fn ease_out_sets_how_gently_the_tail_settles() {
 		let _g = pin();
 		// Frames spent inside the stop band - the tail, and nothing else: the
 		// approach above the band is identical either way.
@@ -1524,7 +1524,7 @@ mod tests {
 	// once per line of leftover backlog (the nano wobble).
 	// Test ID: Eo9w0Z6
 	#[test]
-	fn an_alt_screen_entry_lands_a_running_ease_at_rest() {
+	fn an_alt_screen_entry_puts_a_running_ease_at_rest() {
 		let _g = pin();
 		let mut s = Scroll::new();
 		s.set_max(1000.0);

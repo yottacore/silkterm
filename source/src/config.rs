@@ -7534,7 +7534,7 @@ mod tests {
 	// privilege at all: `unshare -Ur cargo test`.
 	// Test ID: EpPPU7c
 	#[test]
-	fn the_title_reports_the_rights_this_process_holds() {
+	fn the_title_reports_the_rights_this_process_has() {
 		assert_eq!(rights().say, privilege_word());
 		assert_eq!(rights().decorated, cfg!(windows));
 	}
@@ -8204,7 +8204,7 @@ mod tests {
 	// would outlive the picture they came from.
 	// Test ID: EqRxesl
 	#[test]
-	fn a_text_colour_taken_from_the_wallpaper_never_reaches_the_file() {
+	fn a_text_color_taken_from_the_wallpaper_never_reaches_the_file() {
 		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
 		let _guard = super::test_config_lock();
 		let _ = settings();
@@ -10892,7 +10892,7 @@ mod tests {
 	// default, since the window rewrites it on every resize.
 	// Test ID: Er2UFeN
 	#[test]
-	fn the_template_carries_the_remembered_size_as_live_lines() {
+	fn the_template_has_the_remembered_size_as_live_lines() {
 		for want in [
 			"window.remembered_columns",
 			"window.remembered_rows",
@@ -12012,7 +12012,7 @@ mod tests {
 	// still not UTF-8, and says so on the terminal only.
 	// Test ID: ErgZKCc
 	#[test]
-	fn a_footer_line_that_is_not_utf8_goes_back_as_shipped() {
+	fn a_footer_line_that_is_not_utf8_goes_back_to_the_original() {
 		let latin1 = |text: &str| -> Vec<u8> {
 			text.chars()
 				.map(|c| u8::try_from(u32::from(c)).unwrap_or(b'?'))
@@ -12718,7 +12718,7 @@ mod tests {
 	// name on Windows would be a very quiet way to fail.
 	// Test ID: EnRWor2
 	#[test]
-	fn a_home_token_expands_however_it_is_spelled() {
+	fn a_home_token_expands_however_it_is_written() {
 		let home = super::home_string();
 		assert!(!home.is_empty(), "this box names no home directory");
 		for spelling in [
@@ -12749,7 +12749,7 @@ mod tests {
 	// same thing or the first save rewrites the file we just wrote (G69, G72).
 	// Test ID: Eq3hq92
 	#[test]
-	fn the_shipped_startup_directory_is_this_platforms_home_variable() {
+	fn the_default_startup_directory_is_this_platforms_home_variable() {
 		let home = super::home_string();
 		assert!(!home.is_empty(), "this box names no home directory");
 		let want = if cfg!(windows) {
@@ -12899,7 +12899,7 @@ mod tests {
 
 	// Test ID: Erg8fz0
 	#[test]
-	fn idle_release_ships_on() {
+	fn idle_release_defaults_on() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(Settings::default().idle_release);
 		assert!(resolve(read_raw("", p).0).idle_release, "default on");
@@ -12915,7 +12915,7 @@ mod tests {
 
 	// Test ID: ErnMaKh
 	#[test]
-	fn software_rendering_ships_off() {
+	fn software_rendering_defaults_off() {
 		let p = std::path::Path::new("test.shcl");
 		assert!(!Settings::default().software_rendering);
 		assert!(
@@ -13109,7 +13109,7 @@ mod tests {
 	// one wins.
 	// Test ID: ElmIYG0
 	#[test]
-	fn legacy_config_converts_with_values_carried() {
+	fn legacy_config_converts_with_values_kept() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_convert_{}", std::process::id()));
 		let _ = std::fs::create_dir_all(&dir);
@@ -13365,7 +13365,7 @@ mod tests {
 	// is either carried to a setting or dropped, and the block keeps its heading.
 	// Test ID: EpZcBUP
 	#[test]
-	fn a_flat_key_named_like_a_block_never_lands_on_its_heading() {
+	fn a_flat_key_named_like_a_block_never_ends_up_on_its_heading() {
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_flathead_{}", std::process::id()));
 		let heads = active_headings(default_config());
@@ -13919,7 +13919,7 @@ mod tests {
 	// commented lines both go; the settings around them stay put.
 	// Test ID: Elqv6O0
 	#[test]
-	fn retired_scroll_knobs_are_removed_not_carried() {
+	fn retired_scroll_knobs_are_removed_not_kept() {
 		let out = migrate_config_text(
 			"scroll:\n\ttau_ms: 120.0\n\tease_in: 0.5\n\tramp_up_ms: 200.0\n\t# tau_ms: 230.0  ## Default\n",
 		)
@@ -14358,7 +14358,7 @@ mod tests {
 	// rewrites the file just written (G69, G72).
 	// Test ID: Er1vmpM
 	#[test]
-	fn the_shipped_wallpaper_folder_is_this_platforms_usual_place() {
+	fn the_default_wallpaper_folder_is_this_platforms_usual_place() {
 		let want = if cfg!(windows) {
 			r"%LOCALAPPDATA%\silkterm\wallpaper"
 		} else if cfg!(target_os = "macos") {
@@ -14589,7 +14589,7 @@ mod tests {
 	// simply never added. This names the one default that changed most recently.
 	// Test ID: Erg8g2c
 	#[test]
-	fn an_existing_config_learns_that_the_idle_release_ships_on() {
+	fn an_existing_config_learns_that_the_idle_release_defaults_on() {
 		let out = migrate_config_text("window:\n\t# idle_release: false  ## Default\n")
 			.expect("the outgoing default should be refreshed");
 		assert!(out.contains("# idle_release: true  ## Default"), "{out:?}");
@@ -14599,7 +14599,7 @@ mod tests {
 
 	// Test ID: EreA6Db
 	#[test]
-	fn an_existing_config_learns_that_copy_on_select_ships_on() {
+	fn an_existing_config_learns_that_copy_on_select_defaults_on() {
 		let out = migrate_config_text("shell:\n\t# copy_on_select: false  ## Default\n")
 			.expect("the outgoing default should be refreshed");
 		assert!(
@@ -14610,7 +14610,7 @@ mod tests {
 
 	// Test ID: EqSm2Rl
 	#[test]
-	fn an_existing_config_learns_that_wallpaper_text_colors_ship_on() {
+	fn an_existing_config_learns_that_wallpaper_text_colors_default_on() {
 		let out = migrate_config_text("colors:\n\t# from_wallpaper: false  ## Default\n")
 			.expect("the outgoing default should be refreshed");
 		assert!(
@@ -14831,7 +14831,7 @@ mod tests {
 	// the file, attached to the siblings.
 	// Test ID: EllvVHE
 	#[test]
-	fn a_straggler_lands_beside_its_siblings_not_with_a_second_paragraph() {
+	fn a_straggler_goes_beside_its_siblings_not_with_a_second_paragraph() {
 		let path = crate::testdir::run_dir().join("silkterm_backfill_straggler_test.shcl");
 		// interval_s is missing from an otherwise-present rotation block
 		let drifted = "wallpaper:\n\
@@ -15407,7 +15407,7 @@ mod tests {
 		// no second conversion.
 		// Test ID: EpZcBUQ
 		#[test]
-		fn a_flat_file_carries_every_value_to_its_path() {
+		fn a_flat_file_moves_every_value_to_its_path() {
 			use super::super::{CONFIG_REMOVED, LEGACY_KEYS, converted_config_text};
 			use super::active_headings;
 			use std::fmt::Write;

@@ -1104,7 +1104,7 @@ mod tests {
 	// has no color font at all.
 	// Test ID: ElDEZZo
 	#[test]
-	fn colr_v1_emoji_rasterizes_in_colour() {
+	fn colr_v1_emoji_rasterizes_in_color() {
 		let mut db = fontdb::Database::new();
 		db.load_system_fonts();
 		let mut glyphs = ColorGlyphs::new();

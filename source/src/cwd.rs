@@ -615,7 +615,7 @@ mod tests {
 	// need not have printed one for the payload to decode into one.
 	// Test ID: EpQN0oF
 	#[test]
-	fn a_reported_directory_carrying_a_control_character_is_refused() {
+	fn a_reported_directory_with_a_control_character_is_refused() {
 		assert_eq!(directory("9;9;/srv/lo\u{0}g", "box"), None);
 		assert_eq!(directory("7;file:///srv/lo%00g", "box"), None);
 		assert_eq!(directory("7;file:///srv/two%0Alines", "box"), None);

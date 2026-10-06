@@ -2007,7 +2007,7 @@ mod tests {
 
 	// Test ID: EnM97jN
 	#[test]
-	fn a_new_shell_lands_at_the_end_with_its_own_key() {
+	fn a_new_shell_goes_at_the_end_with_its_own_key() {
 		let stored = vec![entry("bash", "bash", true)];
 		let found = vec![Found::new("PowerShell 7", "pwsh".into(), "note")];
 		let out = merged(&stored, &found, &installed(&["bash", "pwsh"]));
@@ -2178,7 +2178,7 @@ mod tests {
 	// which, and only the two that share a name are asked.
 	// Test ID: ErkT4QH
 	#[test]
-	fn two_versions_of_one_shell_each_carry_their_version() {
+	fn two_versions_of_one_shell_each_show_their_version() {
 		let which = on_path(&[
 			"/silk-test/usr/local/bin/bash",
 			"/silk-test/bin/zsh",

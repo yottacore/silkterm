@@ -470,7 +470,7 @@ mod tests {
 
 	// Test ID: EqTOWF8
 	#[test]
-	fn the_shipped_default_asks_for_the_scale_black_would_have_given() {
+	fn the_default_asks_for_the_scale_black_would_have_given() {
 		let s = themed("SilkTerm", "light");
 		let mix = wallpaper_mix(&s, 0.10, None);
 		assert!(mix.perceptual);
@@ -722,7 +722,7 @@ mod tests {
 	// for: over a light background it is the DARK picture that stands out.
 	// Test ID: EqTTXtj
 	#[test]
-	fn light_mode_holds_back_the_picture_that_stands_out_there_instead() {
+	fn light_mode_tones_down_the_picture_that_stands_out_there_instead() {
 		let s = themed("SilkTerm", "light");
 		for v in [0.05f32, 0.1, 0.35, 0.6] {
 			let plain = wallpaper_mix(&s, v, None).amount;
