@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 
-##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	Copyright (C) 2026 Jim Collier
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
 <#
@@ -9,8 +9,9 @@
 .DESCRIPTION
 	Runs PSScriptAnalyzer at warning level with the rules in
 	cicd/PSScriptAnalyzerSettings.psd1, then checks what it has no rule for:
-	indentation is tabs, no PowerShell command takes three or more arguments by
-	position, and no common parameter goes by its alias (-EA and the like).
+	indentation is tabs, the file is ASCII with no byte-order mark, no
+	PowerShell command takes three or more arguments by position, and no common
+	parameter goes by its alias (-EA and the like).
 	One line per finding. cicd.bash gates on it, and cicd-win.ps1 runs it as
 	advice.
 .PARAMETER Paths
@@ -55,6 +56,21 @@ foreach ($one in $parsed) {
 		$lineNo++
 		if (-not $inText.Contains($lineNo) -and $line -match '^\t* +\t|^ +\S') {
 			Write-Host ('{0}:{1}: Indentation: indented with spaces, not tabs' -f $one.Path, $lineNo)
+			$other++
+		}
+	}
+}
+
+##	ASCII only. Windows PowerShell 5.1 reads a file with no BOM in the ANSI code
+##	page, and a BOM kept by `irm | iex` breaks the parse. Read as Latin-1 by
+##	hand, since ReadAllLines would eat a BOM before we saw it.
+$latin1 = [System.Text.Encoding]::GetEncoding(28591)
+foreach ($one in $parsed) {
+	$lineNo = 0
+	foreach ($line in ($latin1.GetString([System.IO.File]::ReadAllBytes($one.Path)) -split "`n")) {
+		$lineNo++
+		if ($line -match '[^\x00-\x7F]') {
+			Write-Host ('{0}:{1}: NonAscii: a byte above 127; PowerShell files are ASCII only' -f $one.Path, $lineNo)
 			$other++
 		}
 	}
@@ -119,3 +135,4 @@ exit 0
 ##		- 20260925 JC: Created.
 ##		- 20261004 JC: Tab indentation check.
 ##		- 20261006 JC: Positional argument and parameter alias checks. Help block.
+##		- 20261006 JC: ASCII only check.

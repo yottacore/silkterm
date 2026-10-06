@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 
-##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
+##	Copyright (C) 2026 Jim Collier
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -51,7 +51,7 @@ param(
 )
 
 
-##	•••••••••••••••••••  Per-project settings - edit only these  ••••••••••••••••••
+##	===================  Per-project settings - edit only these  ==================
 
 $installerVersion = '1.3.0'
 $ownerRepo        = 'yottacore/silkterm'
@@ -73,7 +73,7 @@ $desktopIcon      = 'utilities-terminal'
 $desktopCategories = 'System;TerminalEmulator;'
 $desktopKeywords  = 'terminal;shell;prompt;command;'
 
-##	••••••••••••••••••••••••  End per-project settings  ••••••••••••••••••••••••••
+##	========================  End per-project settings  ==========================
 
 $apiBase = "https://api.github.com/repos/$ownerRepo"
 $dlBase  = "https://github.com/$ownerRepo/releases/download"
