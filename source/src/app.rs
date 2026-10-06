@@ -3195,6 +3195,8 @@ struct State {
 	// the text alone (the cursor has its own coverage texture), so a cursor-only
 	// frame reuses it instead of re-rendering and re-blurring the whole window.
 	scrim_sig: Option<u64>,
+	// light mode's halo curve, solved again only when its inputs move
+	halo_memo: crate::visibility::HaloMemo,
 	occluded: bool, // window fully hidden: skip rendering entirely until it comes back
 	// The last resize was to nothing (minimized on Windows). Read by `hidden`,
 	// since a restore stops reporting minimized before the size comes back.
@@ -7348,16 +7350,22 @@ impl State {
 			_ => 0.0, // "sigmoid"
 		};
 		// "Strength" 0..100% -> doublings of the finished halo alpha (0 = as built),
-		// so the top of the slider is x32. In light mode the halo is a pale plate
-		// on whatever the picture darkened, which reads harder than dark mode's
-		// does at the same alpha, so it gives back a fraction of a doubling
-		// (visibility.rs). The gain is 1 in dark mode and with no picture up.
-		let shown_wallpaper = gpu
-			.wallpaper_img
-			.as_ref()
-			.map_or(0.0, ImageRenderer::opacity);
-		let scrim_strength = cfg.text_scrim_strength.clamp(0.0, 100.0) / SCRIM_PCT_PER_DOUBLING
-			+ crate::visibility::halo_gain(&cfg, shown_wallpaper).log2();
+		// so the top of the slider is x32.
+		let scrim_strength = cfg.text_scrim_strength.clamp(0.0, 100.0) / SCRIM_PCT_PER_DOUBLING;
+		// In light mode the halo is a pale plate on whatever the picture darkened,
+		// and the same alpha moves that much further than in dark mode, so the
+		// composite redraws each alpha to match (visibility.rs). None in dark mode
+		// and with no picture up.
+		let halo_match = gpu.wallpaper_img.as_ref().and_then(|img| {
+			self.halo_memo.get(
+				&cfg,
+				img.opacity(),
+				cfg.wallpaper_summary.map(|s| s.picture()),
+				cfg.wallpaper_summary
+					.as_ref()
+					.map_or(&[][..], |s| &s.spread[..]),
+			)
+		});
 		// build function index: 0 dilate, 1 sdf, 2 dt, 3 gaussian (legacy blur)
 		let scrim_function = match cfg.text_scrim_function.as_str() {
 			"dilate" => 0.0,
@@ -7546,6 +7554,7 @@ impl State {
 					scrim_ext,
 					scrim_strength,
 					if halo_on { 1.0 } else { 0.0 },
+					halo_match,
 				);
 				// The scrim is a full-frame blur - each glyph's halo spreads ~scrim_ext
 				// px every direction. Composite it PER-PANE, clipped per-side: an edge that
@@ -8686,6 +8695,7 @@ impl ApplicationHandler<UserEvent> for App {
 			text_sig: None,
 			overlay_sig: None,
 			scrim_sig: None,
+			halo_memo: crate::visibility::HaloMemo::default(),
 			occluded: false,
 			no_area: false,
 			keeps_picture: !(cfg!(windows) && want_transparent),
