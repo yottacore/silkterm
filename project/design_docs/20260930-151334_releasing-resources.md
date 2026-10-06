@@ -105,6 +105,8 @@ What a window costs while in use is in the [Reducing resources](20261004-182255_
 
 - The fonts and metrics stay, since layout and input still need them. Gone with the device: the rasterized glyphs, the shaped chrome, the scrim's textures, the minimap's texture and the wallpaper, which is decoded again on the way back, as after a console switch.
 
+- A small copy of the wallpaper is kept through the release, 160 pixels on its long edge, about 56 KiB at 16:9. The rebuilt window draws it stretched and smoothed from its first frame until the real one is prepared again. Before that, a window taking its device back showed the bare background for 1.3 to 3 seconds at 2560x1440, longer for a bigger photo.
+
 - The release unbinds the GL context before destroying it. Otherwise the window keeps its old GLX surface, and NVIDIA refuses a second one. A GLX error is claimed before winit can keep it, and logged as not fatal. winit's IME focus calls expect its one error slot to be empty, and a stale GLX error there was taking whole windows down at the next focus change.
 
 - Nothing a frame calls may read `self.gpu` while it is released.
@@ -184,6 +186,7 @@ So the switch is detected instead. A watcher notes the console the window starte
 ## Roadmap
 
 - The GPU release has not been measured under the NVIDIA driver on Linux, on Wayland or on macOS. What a released window shows on Wayland and macOS is not known.
+	- 20261005: Under sway, on Wayland and through Xwayland, a released window keeps its last frame. On an X server with no compositor a minimized window has nothing to show, and a restore shows the empty window until the first frame. macOS is still not known.
 
 - The warm dialog context's 52 MiB moved to the [Reducing resources](20261004-182255_reduce-resources.md) design doc.
 
@@ -208,6 +211,8 @@ So the switch is detected instead. A watcher notes the console the window starte
 - "After waking from Free resources when idle, the window sometimes shows only the prompt's last character until typed into" (Opened 20261003-191345)
 
 - "Severe - VT bug" (Opened 20260722-100516)
+
+- "Keep the old picture on screen while a let-go window takes the card back" (Opened 20261005-135818)
 
 - "When switching virtual desktops (on regular non-VM GPU-acellerated Linux), Silkterm sometimes won't repaint"
 

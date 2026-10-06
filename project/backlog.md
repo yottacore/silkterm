@@ -826,20 +826,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- Keep the old picture on screen while a let-go window takes the card back
-	- ID: 2026100513581814
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: High
-	- Opened: 20261005-135818
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418354006
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- A window that has let go of the card still shows its background, somehow. When it takes the card back, leave that picture in place until the new wallpaper is ready to show.
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -1388,6 +1374,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 30 alone, the native unit tests (1058 passed), the fuzz soak at 60 seconds a target (23 targets, all clean), and native and Windows-target clippy.
 	- Acceptance signoff: JC, 20261003.
 	- Closed: 20261003-193000
+
+- Keep the old picture on screen while a let-go window takes the card back
+	- ID: 2026100513581814
+	- Type: Enhancement
+	- Status: Done
+	- Priority: High
+	- Opened: 20261005-135818
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418354006, 2026100514211603
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- A window that has let go of the card still shows its background, somehow. When it takes the card back, leave that picture in place until the new wallpaper is ready to show.
+	- Progress log:
+		- 20261005: Before the change, at 2560x1440 on b23. While let go, the window kept its last frame under sway, both on Wayland and through Xwayland, and on an X server with no compositor while it stayed in view. When it took the card back it showed the bare theme background, text and no picture, until the wallpaper was prepared again from the file. On Wayland that was 1.5 s for a 2560x1440 photo, 2.6 s for 8624x5120 and 3.0 s for 9433x5306. On X11 with the card it was 1.3 to 1.5 s, and over 3 s in software. In dark mode it reads as a flash to black and back.
+		- 20261005: The window now keeps a small copy of the picture, 160 pixels on its long edge, 57,600 bytes at 16:9. It is made when the picture is prepared. A window taking its card back draws it from the first frame, stretched and smoothed, until the real one arrives.
+		- 20261005: After the change there is no bare frame on Wayland or on X11 with the card. Against the real picture the copy is off by 0.1 to 0.6 levels on average and 5 to 11 at most. The bare background was 7 to 41 on average. Normal frames are unchanged, 0 changed pixels against the old build in dark and light mode, on Vulkan and GL.
+		- 20261005: Where it cannot be done. An X server with no compositor keeps nothing of a minimized window, so a restore shows the empty window until the first frame: 20 to 60 ms with the card, about 300 ms in software at 2560x1440. Covering that would take a full-size copy held by the X server. On Windows a window with Transparency on goes black once let go in view, so it is only let go while minimized (2026100319134501). macOS was not run.
+		- 20261005: For 2026100514211603: the wake asks for the wallpaper the same way any other request does, so a cache inside the prepare step makes the wake shorter with no change here.
+	- Decisions:
+		- 20261005: Best guess, reversible: a 160 pixel copy drawn with a smooth stretch. 96 pixels was nearly twice as far off, and a plain stretch showed blocky edges. The copy is kept the whole time, not only while let go, since once the card is gone there is nothing left to make it from. That is 56 KiB per window.
+	- Verified: unit tests, clippy for Linux, Windows and macOS, the new window test on X11, and the `idlewake` and `idlemin` Windows scenarios on vm925w, Transparency on and off.
+	- Branch: wakepic
+	- Commit: 26f6ce3
+	- Test case: Ersij5t (`cicd/tests/wakepic/run.bash`, fails on the old build), Ersiipp, ErsiiuM, ErsiiyG, Ersij2D.
+	- Acceptance signoff: Self-closed: tested on Wayland, X11 and Windows. The copy's size and look are a reversible guess.
+	- Closed: 20261005-190956
 
 - Drop "Minutes when minimized", and make "Minutes when hidden" 1 by default
 	- ID: 2026100513581813
