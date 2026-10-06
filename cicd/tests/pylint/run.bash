@@ -57,7 +57,7 @@ cp "${work}/clean.py" "${work}/two/run.py"
 cp "${work}/clean.py" "${work}/with-dash.py"
 
 ## stdout only: with no mypy the lint says so on stderr, and still passes a clean script.
-fLint(){ rc=0; out="$(python3 "${lint}" "$@" 2>/dev/null)" || rc=$?; }
+fLint(){ rc=0; out="$(python3 "${lint}" "${@}" 2>/dev/null)" || rc=$?; }
 haveMypy=0
 { command -v mypy || [[ -x "${HOME}/.local/bin/mypy" ]]; } >/dev/null && haveMypy=1
 

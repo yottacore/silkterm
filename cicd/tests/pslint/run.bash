@@ -42,7 +42,7 @@ printf 'if ($true) {\n    Get-Date\n}\n' >"${work}/spaces.ps1"
 ## Tabs, then spaces to line up a continuation, and a here-string whose text starts with spaces.
 printf 'if ($true) {\n\t$x = (1 -eq 1) -and\n\t     (2 -eq 2)\n\t$x\n}\n$t = @"\n    text\n"@\n$t\n' >"${work}/aligned.ps1"
 
-fLint(){ rc=0; out="$(pwsh -NoProfile -NonInteractive -File "${lint}" "$@" 2>&1)" || rc=$?; }
+fLint(){ rc=0; out="$(pwsh -NoProfile -NonInteractive -File "${lint}" "${@}" 2>&1)" || rc=$?; }
 
 fLint "${work}/clean.ps1"
 if ((rc == 2)); then

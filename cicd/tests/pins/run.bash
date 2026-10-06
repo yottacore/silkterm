@@ -26,7 +26,7 @@ fEnd(){ local -r rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ## "name|version" for each pin whose platform is one of $2..., straight from the file.
-fListed(){ local -r file="${1}"; shift; awk -F'|' -v want=" $* " 'NF == 4 && $1 !~ /^#/ && index(want, " " $3 " ") { print $1 "|" $2 }' "${file}" | sort; }
+fListed(){ local -r file="${1}"; shift; awk -F'|' -v want=" ${*} " 'NF == 4 && $1 !~ /^#/ && index(want, " " $3 " ") { print $1 "|" $2 }' "${file}" | sort; }
 ## What config.bash makes of the list beside it.
 fBashPins(){ bash -c 'source "$1" && for p in "${TOOL_PINS[@]}"; do n="${p%%|*}"; r="${p#*|}"; echo "${n}|${r%%|*}"; done' _ "${1}/config.bash" | sort; }
 ## What cicd-win.ps1 makes of it.

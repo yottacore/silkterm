@@ -58,7 +58,7 @@ fRemote(){  ## fRemote <down addresses> <args...>: sets rc, out and calls
 	local -r down="${1}"; shift
 	: >"${work}/calls"
 	rc=0; out="$(PATH="${stubs}:${PATH}" WINRIG_CONF="${conf}" WINRIG_USER=tester STUB_LOG="${work}/calls" \
-		STUB_DOWN="${down}" "${winRemote}" "$@" 2>&1)" || rc=$?
+		STUB_DOWN="${down}" "${winRemote}" "${@}" 2>&1)" || rc=$?
 }
 fSaid(){ grep -qF -- "${1}" <<<"${out}"; }
 fCalled(){ grep -qF -- "${1}" "${work}/calls"; }
@@ -117,7 +117,7 @@ fLocked(){  ## fLocked <busy boxes> <exit of the held command> <args...>
 	local -r busy="${1}" code="${2}"; shift 2
 	: >"${work}/calls"
 	rc=0; out="$(PATH="${stubs}:${PATH}" WINRIG_CONF="${lockConf}" WINRIG_USER=tester STUB_LOG="${work}/calls" \
-		STUB_BUSY="${busy}" HELD_EXIT="${code}" WIN_REMOTE="${winRemote}" "${winRemote}" "$@" 2>&1)" || rc=$?
+		STUB_BUSY="${busy}" HELD_EXIT="${code}" WIN_REMOTE="${winRemote}" "${winRemote}" "${@}" 2>&1)" || rc=$?
 }
 cat >"${work}/held" <<'STUB'
 #!/usr/bin/env bash

@@ -97,7 +97,7 @@ stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
 assumeYes=0; quiet=0; quick=0; gate=0; noArm=0; noWindows=0; sync=1; cliMessage=""
-while (($#)); do case "$1" in
+while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
 	--gate)                   gate=1; shift ;;                  ## merge gate only, then exit
@@ -117,14 +117,14 @@ while (($#)); do case "$1" in
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
 	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
 	-h|--help)                sed -n '/^##	- Purpose:/,/^##	History:/p' "${BASH_SOURCE[0]}" | sed '$d; s/^##	\{0,1\}//'; exit 0 ;;
-	*) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
+	*) echo "unknown option: ${1} (try --help)" >&2; exit 2 ;;
 esac; done
 
 ## --no-arm: drop the ARM64 cross targets so the run (and its packages) stay
 ## x86_64-only. Native x86_64 is untouched; the Windows/Linux x86_64 crosses stay.
 if ((noArm)) && declare -p CROSS_TARGETS &>/dev/null; then
 	kept=()
-	for t in "${CROSS_TARGETS[@]}"; do case "$t" in *arm64*|*aarch64*) ;; *) kept+=("$t") ;; esac; done
+	for t in "${CROSS_TARGETS[@]}"; do case "${t}" in *arm64*|*aarch64*) ;; *) kept+=("${t}") ;; esac; done
 	CROSS_TARGETS=("${kept[@]}")
 fi
 
@@ -133,7 +133,7 @@ fi
 ## natively is the only way to get the msvc one at all.
 if ((noWindows)) && declare -p CROSS_TARGETS &>/dev/null; then
 	kept=()
-	for t in "${CROSS_TARGETS[@]}"; do case "$t" in *windows*) ;; *) kept+=("$t") ;; esac; done
+	for t in "${CROSS_TARGETS[@]}"; do case "${t}" in *windows*) ;; *) kept+=("${t}") ;; esac; done
 	CROSS_TARGETS=("${kept[@]}")
 fi
 declare -p PACKAGE_ENABLE &>/dev/null || PACKAGE_ENABLE=0   ## tolerate a config predating the packages stage
@@ -152,19 +152,19 @@ fPublishMessage(){
 	fi
 }
 publishMsg=""
-if [[ -n "$cliMessage" || -n "${PUBLISH_AUTO_MESSAGE:-}" ]] || ((assumeYes)); then
-	publishMsg="$(fPublishMessage "$cliMessage" "${PUBLISH_AUTO_MESSAGE:-}" "")"
+if [[ -n "${cliMessage}" || -n "${PUBLISH_AUTO_MESSAGE:-}" ]] || ((assumeYes)); then
+	publishMsg="$(fPublishMessage "${cliMessage}" "${PUBLISH_AUTO_MESSAGE:-}" "")"
 fi
 
 ## A test script's ID, from the "Test ID:" line in its header.
-fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/$1" 2>/dev/null || true; }
+fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/${1}" 2>/dev/null || true; }
 ## Runs cargo test with each result line as status, test ID and name. Every other
 ## line goes through untouched, and the command's own exit status is kept.
 fTestLines(){
 	if [[ -x "${root}/cicd/utility/test-id.py" ]] && command -v python3 >/dev/null 2>&1; then
-		"$@" | "${root}/cicd/utility/test-id.py" --annotate
+		"${@}" | "${root}/cicd/utility/test-id.py" --annotate
 	else
-		"$@"
+		"${@}"
 	fi
 }
 ## True when a process here is running the file at $1. Reads /proc, since fuser is
@@ -172,9 +172,9 @@ fTestLines(){
 ## -ef is a builtin stat, so only a process running that very file costs a fork.
 ## The readlink after it keeps a hard link elsewhere, or a process in another
 ## mount namespace, from counting.
-fInUse(){ local want exe; want="$(readlink -f "$1" 2>/dev/null)" || return 1; [[ -n "$want" ]] || return 1
+fInUse(){ local want exe; want="$(readlink -f "${1}" 2>/dev/null)" || return 1; [[ -n "${want}" ]] || return 1
 	for exe in /proc/[0-9]*/exe; do
-		if [[ "$exe" -ef "$want" && "$(readlink "$exe" 2>/dev/null)" == "$want" ]]; then return 0; fi
+		if [[ "${exe}" -ef "${want}" && "$(readlink "${exe}" 2>/dev/null)" == "${want}" ]]; then return 0; fi
 	done; return 1
 }
 ## Tag for a build copy: '<toolchain: gnu|msvc><built on: l|m|b|w><target: l|m|b|w><arch: i|a>'.
@@ -202,7 +202,7 @@ fBuildTag(){
 		arm64)   arch=a ;;
 		*)       return 0 ;;
 	esac
-	printf 'gnu%s%s%s' "$here" "$target" "$arch"
+	printf 'gnu%s%s%s' "${here}" "${target}" "${arch}"
 }
 ## First writable dir out of a '|'-separated candidate list, or nothing. Reports
 ## only - the preflight calls it too, and a plan that is never confirmed must not
@@ -212,8 +212,8 @@ fDogfoodDest(){
 	local -a dirs=()
 	IFS='|' read -r -a dirs <<< "${1:-}"
 	for dir in "${dirs[@]}"; do
-		if [[ -d "$dir" && -w "$dir" ]]; then
-			printf '%s' "$dir"
+		if [[ -d "${dir}" && -w "${dir}" ]]; then
+			printf '%s' "${dir}"
 			return 0
 		fi
 	done
@@ -230,20 +230,20 @@ fHostLine(){
 }
 ## fHostDescribe <uname -s> <uname -m> <kernel version string> <distribution>
 fHostDescribe(){
-	local -r sys="$1" arch="$2" kernel="$3" os="$4" distro="${WSL_DISTRO_NAME:-}"
+	local -r sys="${1}" arch="${2}" kernel="${3}" os="${4}" distro="${WSL_DISTRO_NAME:-}"
 	case "${sys}" in
 		MINGW*|MSYS*|CYGWIN*)
 			printf 'Windows (MSYS bash) - cicd-win.ps1 is the pipeline for this box' ;;
 		Linux)
 			if [[ "${kernel,,}" == *microsoft* ]]; then
-				local gen="WSL"; [[ "$kernel" == *WSL2* ]] && gen="WSL2"
+				local gen="WSL"; [[ "${kernel}" == *WSL2* ]] && gen="WSL2"
 				if [[ -n "${CICD_LINUX_HALF:-}" ]]; then
-					printf '%s%s on Windows, the Linux half of a cicd-win.ps1 run' "$gen" "${distro:+ ($distro)}"
+					printf '%s%s on Windows, the Linux half of a cicd-win.ps1 run' "${gen}" "${distro:+ (${distro})}"
 				else
-					printf '%s%s on Windows, run on its own' "$gen" "${distro:+ ($distro)}"
+					printf '%s%s on Windows, run on its own' "${gen}" "${distro:+ (${distro})}"
 				fi
 			else
-				printf 'Linux%s, %s' "${os:+ ($os)}" "${arch}"
+				printf 'Linux%s, %s' "${os:+ (${os})}" "${arch}"
 			fi ;;
 		*) printf '%s, %s' "${sys}" "${arch}" ;;
 	esac
@@ -256,14 +256,14 @@ fHostDescribe(){
 ## already compiled everything bar the feature-gated profiler hooks, so a genuine
 ## error surfaces in seconds here and the extra tries cost nothing on that path.
 fRetryBuild(){
-	local -r what="$1"; shift
+	local -r what="${1}"; shift
 	local -i tries="${BUILD_ATTEMPTS:-3}"
 	((tries >= 1)) || tries=1
 	local -i n=0 rc=0
 	while ((n < tries)); do
 		n+=1
 		rc=0
-		"$@" || rc=$?
+		"${@}" || rc=$?
 		((rc)) || return 0
 		if ((n < tries)); then
 			fEcho "WARNING: ${what} build failed (attempt ${n} of ${tries}) - retrying, since a compiler crash here has been a toolchain flake"
@@ -308,7 +308,7 @@ fWriteSums(){
 	[[ -n "${artDir:-}" && -d "${artDir:-/nonexist}" ]] || return 0
 	( cd "${artDir}"
 	  ## the signature covers the sums file, so it can never be inside it
-	  files=(); for x in "${EXE_NAME}-${ver}-"*; do [[ "$x" == "$sums" || "$x" == *.sig || ! -f "$x" ]] && continue; files+=("$x"); done
+	  files=(); for x in "${EXE_NAME}-${ver}-"*; do [[ "${x}" == "${sums}" || "${x}" == *.sig || ! -f "${x}" ]] && continue; files+=("${x}"); done
 	  ((${#files[@]})) && sha256sum "${files[@]}" > "${sums}" )
 	local -a expects=()
 	mapfile -t expects < <(fReleaseExpects)
@@ -356,9 +356,9 @@ if declare -p TOOL_PINS &>/dev/null; then
 	for pin in "${TOOL_PINS[@]}"; do
 		pinName="${pin%%|*}"; pinRest="${pin#*|}"; pinVer="${pinRest%%|*}"; pinCmd="${pinRest#*|}"
 		have="$(${pinCmd} 2>/dev/null | head -1 | sed 's/[^0-9.]*\([0-9][0-9.]*\).*/\1/')" || have=""
-		if [[ -z "$have" ]]; then
+		if [[ -z "${have}" ]]; then
 			fEcho "WARNING: ${pinName} not found (pinned ${pinVer})"
-		elif [[ "$have" != "$pinVer" ]]; then
+		elif [[ "${have}" != "${pinVer}" ]]; then
 			fEcho "WARNING: ${pinName} is ${have}, pinned ${pinVer} (cargo install ${pinName} --version ${pinVer} --locked, or update the pin)"
 		fi
 	done
@@ -420,7 +420,7 @@ if ((${#DOGFOOD_DESTS[@]})); then
 	for xd in "${DOGFOOD_DESTS[@]}"; do
 		xosarch="${xd%%|*}"; xrest="${xd#*|}"; xname="${xrest%%|*}"
 		xdest="$(fDogfoodDest "${xrest#*|}")"
-		if [[ -n "$xdest" ]]; then fEcho_Clean "    - ${xosarch} -> ${xdest}/${xname}"
+		if [[ -n "${xdest}" ]]; then fEcho_Clean "    - ${xosarch} -> ${xdest}/${xname}"
 		else fEcho_Clean "    - ${xosarch} -> <none of: ${xrest#*|} writable - will skip>"; fi
 	done
 else
@@ -428,7 +428,7 @@ else
 fi
 if ((${#GIT_PUBLISH[@]} == 0)); then
 	fEcho_Clean "Publish (last) ......: (disabled)"
-elif [[ -n "$publishMsg" ]]; then
+elif [[ -n "${publishMsg}" ]]; then
 	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (hands-off: \"${publishMsg}\")"
 else
 	fEcho_Clean "Publish (last) ......: ${GIT_PUBLISH[*]} (will prompt for message; blank = \"${autoMsg}\")"
@@ -441,10 +441,10 @@ if ((! assumeYes)); then
 	## Capture the commit message up front so the run can finish unattended. This
 	## is the natural place to bail on the common (publish) path - Ctrl+C here
 	## aborts; there is no separate "Proceed? [y/N]" (removed to cut friction).
-	if ((${#GIT_PUBLISH[@]})) && [[ -z "$publishMsg" ]]; then
+	if ((${#GIT_PUBLISH[@]})) && [[ -z "${publishMsg}" ]]; then
 		read -r -p "Publish commit message (blank = \"${autoMsg}\"; Ctrl+C aborts): " m
 		fEcho_ResetBlankCounter
-		publishMsg="$(fPublishMessage "" "" "$m")"
+		publishMsg="$(fPublishMessage "" "" "${m}")"
 	fi
 fi
 
@@ -941,9 +941,9 @@ fRunProfiler(){
 	## Xvfb + python3 + the workload.
 	local skip=""
 	command -v python3 >/dev/null 2>&1 || skip="python3 not found"
-	[[ -z "$skip" ]] && [[ ! -f "$absScript" ]] && skip="workload missing: ${absScript}"
-	[[ -z "$skip" ]] && ! command -v Xvfb >/dev/null 2>&1 && skip="Xvfb not found (headless display unavailable)"
-	if [[ -n "$skip" ]]; then
+	[[ -z "${skip}" ]] && [[ ! -f "${absScript}" ]] && skip="workload missing: ${absScript}"
+	[[ -z "${skip}" ]] && ! command -v Xvfb >/dev/null 2>&1 && skip="Xvfb not found (headless display unavailable)"
+	if [[ -n "${skip}" ]]; then
 		((PROFILE_STRICT)) && fDie "profiler: ${skip}"
 		fEcho "WARNING: profiler skipped: ${skip}"; return 0
 	fi
@@ -979,21 +979,21 @@ fRunProfiler(){
 		"${PROFILE_BIN}" --shell "python3 ${absScript} ${PROFILE_WORKLOAD_ARGS}" || prc=$?
 	"${headless}" stop >/dev/null 2>&1 || true
 	((prc == 0)) || { rm -f "${part}"; fDie "profiler run failed (non-zero exit - app problem)"; }
-	[[ -s "$part" ]] || { rm -f "${part}"; fDie "profiler produced no SVG (app problem): ${out}"; }
+	[[ -s "${part}" ]] || { rm -f "${part}"; fDie "profiler produced no SVG (app problem): ${out}"; }
 	mv -f "${part}" "${out}"
 	gfs_rotate "${profileDir}" flame svg
 	## Rotation renamed this run's file (newest) to the "latest" role.
 	local latest="${profileDir}/flame_${stamp}_latest.svg"
-	[[ -e "$latest" ]] || latest="$out"
+	[[ -e "${latest}" ]] || latest="${out}"
 	fEcho "OK: flamegraph: ${latest}"
 	fEcho_Clean "open: ${latest}  (in a browser)"
 
 	## Hot-spot summary into the log (non-fatal, no marker - the marker is for the
 	## per-session --check gate, not the pipeline).
 	local report="${here}/utility/flame-report.py"
-	if [[ -f "$report" ]]; then
+	if [[ -f "${report}" ]]; then
 		fEcho_Clean ""
-		python3 "$report" --dir "${profileDir}" 2>/dev/null || fEcho_Clean "hot spots: (report unavailable)"
+		python3 "${report}" --dir "${profileDir}" 2>/dev/null || fEcho_Clean "hot spots: (report unavailable)"
 	fi
 }
 fSection "4/8  Profiler"
@@ -1012,7 +1012,7 @@ remapTarget="$(cd "${TARGET_DIR}" && pwd)"
 printf "[target.'cfg(all())']\nrustflags = ['--remap-path-prefix=%s=/cargo', '--remap-path-prefix=%s=/silkterm', '--remap-path-prefix=%s=/target']\n" \
 	"${CARGO_HOME:-${HOME}/.cargo}" "${root}" "${remapTarget}" > "${remapCfg}"
 ## True when a built file still names this box's home or checkout.
-fHasLocalPaths(){ grep -a -q -F -e "${HOME}/" -e "${root}/" "$1"; }
+fHasLocalPaths(){ grep -a -q -F -e "${HOME}/" -e "${root}/" "${1}"; }
 fRetryBuild "native release" "${RELEASE_NATIVE_CMD[@]}" --config "${remapCfg}"
 [[ -f "${RELEASE_NATIVE_BIN}" ]] || fDie "native release binary missing: ${RELEASE_NATIVE_BIN}"
 fEcho "OK: native release: ${RELEASE_NATIVE_BIN} ($(du -h "${RELEASE_NATIVE_BIN}" | cut -f1))"
@@ -1053,13 +1053,13 @@ fi
 ## ready to attach to a release as plain uploads. Version = Cargo.toml alone.
 if [[ -n "${RELEASE_ARTIFACT_DIR:-}" ]]; then
 	ver="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "${root}/${VERSION_MANIFEST}" | head -1)"
-	[[ -n "$ver" ]] || fDie "no version found in ${VERSION_MANIFEST}"
+	[[ -n "${ver}" ]] || fDie "no version found in ${VERSION_MANIFEST}"
 	artDir="${root}/${RELEASE_ARTIFACT_DIR}"
 	rm -rf "${artDir}"; mkdir -p "${artDir}"
 	sums="${EXE_NAME}-${ver}-sha256sums.txt"
 	for pair in "${builtArts[@]}"; do
 		osarch="${pair%%|*}"; src="${pair#*|}"
-		ext=""; [[ "$src" == *.exe ]] && ext=".exe"
+		ext=""; [[ "${src}" == *.exe ]] && ext=".exe"
 		cp -f "${src}" "${artDir}/${EXE_NAME}-${ver}-${osarch}${ext}"
 	done
 	fWriteSums
@@ -1079,7 +1079,7 @@ fBuildPackages(){
 	local rpmver="${ver//-/\~}"   ## RPM versions forbid '-' (it splits version-release); 1.0.0-beta1 -> 1.0.0~beta1
 	for pair in "${builtArts[@]}"; do
 		osarch="${pair%%|*}"; bin="${pair#*|}"
-		case "$osarch" in
+		case "${osarch}" in
 			linux-x86_64) triple="" ;;
 			linux-arm64)  triple="aarch64-unknown-linux-gnu" ;;
 			windows-*)    triple="" ;;   ## handled below
@@ -1087,11 +1087,11 @@ fBuildPackages(){
 		esac
 
 		## Linux: .deb then .rpm. Both package the existing binary (no rebuild).
-		if [[ "$osarch" == linux-* ]]; then
+		if [[ "${osarch}" == linux-* ]]; then
 			if command -v cargo-deb >/dev/null 2>&1; then
 				local -a da=(deb --no-build --no-strip --manifest-path source/Cargo.toml
 					--output "${artDir}/${EXE_NAME}-${ver}-${osarch}.deb")
-				[[ -n "$triple" ]] && da+=(--target "$triple")
+				[[ -n "${triple}" ]] && da+=(--target "${triple}")
 				if cargo "${da[@]}" >/dev/null; then fEcho "OK: .deb (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: .deb build failed (${osarch})"; fi
 			else fEcho "WARNING: cargo-deb missing; .deb skipped (${osarch})"; fi
@@ -1101,21 +1101,21 @@ fBuildPackages(){
 				## so target/release/silkterm is found; -s overrides the RPM-illegal version.
 				local -a ra=(generate-rpm -p source -s "version = \"${rpmver}\""
 					--output "${artDir}/${EXE_NAME}-${ver}-${osarch}.rpm")
-				[[ -n "$triple" ]] && ra+=(--target "$triple" --arch aarch64)
+				[[ -n "${triple}" ]] && ra+=(--target "${triple}" --arch aarch64)
 				if cargo "${ra[@]}" >/dev/null; then fEcho "OK: .rpm (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: .rpm build failed (${osarch})"; fi
 			else fEcho "WARNING: cargo-generate-rpm missing; .rpm skipped (${osarch})"; fi
 		fi
 
 		## Windows: one self-contained NSIS installer .exe per arch.
-		if [[ "$osarch" == windows-* ]]; then
+		if [[ "${osarch}" == windows-* ]]; then
 			if command -v makensis >/dev/null 2>&1 && [[ -f "${root}/${NSIS_TEMPLATE}" ]]; then
 				out="${artDir}/${EXE_NAME}-${ver}-${osarch}-setup.exe"
 				nsi="$(mktemp --suffix=.nsi)"
 				## An absolute CARGO_TARGET_DIR already gives an absolute path, and
 				## prefixing the repo root then names a file that was never there.
 				srcexe="${bin}"
-				[[ "$srcexe" = /* ]] || srcexe="${root}/${srcexe}"
+				[[ "${srcexe}" = /* ]] || srcexe="${root}/${srcexe}"
 				## Four numbers for the version block: the release, less any pre-release tag.
 				vernum="${ver%%[-+]*}.0"
 				sed -e "s|@VERSION@|${ver}|g" -e "s|@ARCH@|${osarch}|g" \
@@ -1124,7 +1124,7 @@ fBuildPackages(){
 					"${root}/${NSIS_TEMPLATE}" > "${nsi}"
 				rc=0; makensis -INPUTCHARSET UTF8 -V2 "${nsi}" >/dev/null || rc=$?
 				rm -f "${nsi}"
-				if ((rc == 0)) && [[ -f "$out" ]]; then fEcho "OK: installer (${osarch})"; made=$((made+1))
+				if ((rc == 0)) && [[ -f "${out}" ]]; then fEcho "OK: installer (${osarch})"; made=$((made+1))
 				else fEcho "WARNING: NSIS installer failed (${osarch})"; fi
 			else fEcho "WARNING: makensis/template missing; installer skipped (${osarch})"; fi
 		fi
@@ -1167,21 +1167,21 @@ for xd in "${DOGFOOD_DESTS[@]:-}"; do
 
 	xsrc=""
 	for pair in "${builtArts[@]}"; do
-		[[ "${pair%%|*}" == "$xosarch" ]] && { xsrc="${pair#*|}"; break; }
+		[[ "${pair%%|*}" == "${xosarch}" ]] && { xsrc="${pair#*|}"; break; }
 	done
-	if [[ -z "$xsrc" ]]; then
+	if [[ -z "${xsrc}" ]]; then
 		fEcho_Clean "no ${xosarch} build this run; dogfood skipped"
 		continue
 	fi
 
 	## Make the first candidate when none is there yet, so a fresh box needs no
 	## setup step of its own.
-	xdest="$(fDogfoodDest "$xdirs")"
-	if [[ -z "$xdest" ]]; then
+	xdest="$(fDogfoodDest "${xdirs}")"
+	if [[ -z "${xdest}" ]]; then
 		mkdir -p "${xdirs%%|*}" 2>/dev/null || true
-		xdest="$(fDogfoodDest "$xdirs")"
+		xdest="$(fDogfoodDest "${xdirs}")"
 	fi
-	if [[ -z "$xdest" ]]; then
+	if [[ -z "${xdest}" ]]; then
 		fEcho "WARNING: no dogfood dest writable for ${xosarch} (${xdirs//|/, }); skipping"
 		continue
 	fi
@@ -1192,13 +1192,13 @@ for xd in "${DOGFOOD_DESTS[@]:-}"; do
 	fi
 
 	## -p: the launcher dates a build by its mtime, so the copy has to keep it.
-	cp -pf "$xsrc" "${xdest}/${xname}"
+	cp -pf "${xsrc}" "${xdest}/${xname}"
 	chmod +x "${xdest}/${xname}"
 
 	## A cross-build says nothing about the box that later reads it, so the tag
 	## rides along in a sidecar rather than being guessed at the far end.
-	xtag="${DOGFOOD_TAG-$(fBuildTag "$xosarch")}"
-	if [[ -n "$xtag" ]]; then printf '%s\n' "$xtag" > "${xdest}/${xname}.tag"
+	xtag="${DOGFOOD_TAG-$(fBuildTag "${xosarch}")}"
+	if [[ -n "${xtag}" ]]; then printf '%s\n' "${xtag}" > "${xdest}/${xname}.tag"
 	else rm -f "${xdest}/${xname}.tag"; fi
 
 	if [[ -n "${DOGFOOD_ICON:-}" && -f "${root}/${DOGFOOD_ICON}" ]]; then
@@ -1219,13 +1219,13 @@ if ((! ${DEMO_ENABLE:-0})); then
 	fEcho_Clean "demo video disabled"
 elif ((quick)); then
 	fEcho_Clean "demo video skipped (--quick)"
-elif [[ -f "$demoHook" ]]; then
+elif [[ -f "${demoHook}" ]]; then
 	fEcho_Clean "recording demo video ..."
 	## Absolute: the recorder runs the app from a scratch home of its own, so a
 	## relative path would resolve against the wrong directory.
 	silkBin="${RELEASE_NATIVE_BIN}"
-	[[ "$silkBin" = /* ]] || silkBin="${root}/${silkBin}"
-	if SILK_BIN="$silkBin" python3 "$demoHook"; then
+	[[ "${silkBin}" = /* ]] || silkBin="${root}/${silkBin}"
+	if SILK_BIN="${silkBin}" python3 "${demoHook}"; then
 		fEcho "OK: demo video"
 	else
 		fEcho "WARNING: demo video hook failed (non-fatal)"

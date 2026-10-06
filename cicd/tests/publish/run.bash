@@ -141,7 +141,7 @@ APP_NAME=Silk stamp=20260101-000000
 source <(sed -n '/^autoMsg=/,/^}/p' "${root}/cicd.bash")
 fCheck "the plan names the automatic message" grep -qF '(will prompt for message; blank = \"${autoMsg}\")' "${root}/cicd.bash"
 fCheck "the prompt does too" grep -qF 'Publish commit message (blank = \"${autoMsg}\"' "${root}/cicd.bash"
-fCheck "and its answer goes through the same choice" grep -qF 'publishMsg="$(fPublishMessage "" "" "$m")"' "${root}/cicd.bash"
+fCheck "and its answer goes through the same choice" grep -qF 'publishMsg="$(fPublishMessage "" "" "${m}")"' "${root}/cicd.bash"
 fCheck "a blank answer takes the automatic message" test "$(fPublishMessage "" "" "")" = "Silk CI/CD 20260101-000000"
 fCheck "a typed answer is used as typed" test "$(fPublishMessage "" "" "typed")" = "typed"
 fCheck "--message still wins" test "$(fPublishMessage "cli" "cfg" "")" = "cli"

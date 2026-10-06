@@ -51,17 +51,17 @@ trap 'rc=$?; rm -rf "${work}"; fTestDir_End "${rc}"' EXIT
 ## fReleaseElf makes each program a copy of sleep instead, since only a running
 ## binary, not a script, makes a copy over it fail with "text file busy".
 fRelease() {
-	local dir="$1" ver; shift
+	local dir="${1}" ver; shift
 	mkdir -p "${dir}"
-	for ver in "$@"; do
+	for ver in "${@}"; do
 		printf '#!/bin/sh\n#ver %s\nprintf ran > "${HOME}/ran.txt"\n' "${ver}" > "${dir}/silkterm-${ver}-linux-x86_64"
 		( cd "${dir}" && sha256sum "silkterm-${ver}-linux-x86_64" > "silkterm-${ver}-sha256sums.txt" )
 	done
 }
 fReleaseElf() {
-	local dir="$1" ver; shift
+	local dir="${1}" ver; shift
 	mkdir -p "${dir}"
-	for ver in "$@"; do
+	for ver in "${@}"; do
 		{ cat "$(command -v sleep)"; printf '\n#ver %s\n' "${ver}"; } > "${dir}/silkterm-${ver}-linux-x86_64"
 		( cd "${dir}" && sha256sum "silkterm-${ver}-linux-x86_64" > "silkterm-${ver}-sha256sums.txt" )
 	done
@@ -106,7 +106,7 @@ chmod +x "${stubDir}/curl"
 ## has none, so there an "Error:" line is the failure.
 pwshDir="$(dirname "$(readlink -f "$(command -v pwsh 2>/dev/null || echo /nonexistent)")")"
 fInstall() {
-	local home="$1" rc=0; shift
+	local home="${1}" rc=0; shift
 	local -a args=() run=()
 	read -r -a args <<<"${INSTALL_ARGS:-}"
 	if [[ "${INSTALLER:-bash}" = "ps1" ]]; then
@@ -117,7 +117,7 @@ fInstall() {
 	mkdir -p "${home}" "${home}/.tmp"
 	env -i PATH="${stubDir}:/usr/bin:/bin:${pwshDir}" HOME="${home}" TMPDIR="${home}/.tmp" \
 		STUB_DIR="${STUB_DIR:-${relDir}}" STUB_API_CODE="${STUB_API_CODE:-200}" \
-		STUB_LOG="${home}/.tmp/calls.log" "$@" \
+		STUB_LOG="${home}/.tmp/calls.log" "${@}" \
 		"${run[@]}" "${args[@]}" >"${home}/out.log" 2>&1 || rc=$?
 	if [[ "${rc}" = "0" ]] && grep -q '^Error:' "${home}/out.log"; then rc=1; fi
 	return "${rc}"
@@ -180,7 +180,7 @@ fi
 ## The cases both installers have to get right, run once for each. $1 is bash
 ## or ps1.
 fCases() {
-	local kind="$1" h caseDir rc pid
+	local kind="${1}" h caseDir rc pid
 	local INSTALLER="${kind}"
 	export INSTALLER
 	## Which release: the highest version, not the first listed, with drafts
@@ -311,7 +311,7 @@ fi
 ## The headless rig's run directory: predictable name, so it must refuse anything
 ## it does not own. Driven for real, in a sandbox of its own.
 headless="${root}/cicd/utility/gui-headless.bash"
-sandboxUser="silktest-$$-$RANDOM"
+sandboxUser="silktest-$$-${RANDOM}"
 runDir="/tmp/cicd-gui-headless-${sandboxUser}"
 elsewhere="$(mktemp -d)"
 ln -s "${elsewhere}" "${runDir}"

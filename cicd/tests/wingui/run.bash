@@ -27,20 +27,20 @@ root="$(cd "${meDir}/../../.." && pwd)"
 winRemote="${WINGUI_WIN_REMOTE:-${root}/cicd/utility/win-remote.bash}"
 shotDir="${root}/cicd/artifacts/wingui"
 
-origArgs=("$@")
+origArgs=("${@}")
 host=(); keep=0
-while (($#)); do case "$1" in
+while (($#)); do case "${1}" in
 	--host) host=(--host "${2:-}"); shift 2 ;;
 	--keep) keep=1; shift ;;
-	-h|--help) grep -E '^##' "$0" | sed 's/^##\t\?//'; exit 0 ;;
+	-h|--help) grep -E '^##' "${0}" | sed 's/^##\t\?//'; exit 0 ;;
 	*) break ;;
 esac; done
-scenarios=("$@"); ((${#scenarios[@]})) || scenarios=(smoke)
+scenarios=("${@}"); ((${#scenarios[@]})) || scenarios=(smoke)
 
 [[ -x "${winRemote}" ]] || { echo "wingui: no win-remote.bash, skipped"; exit 0; }
 ##	Keep the boxes for the whole run, or another session can get in between a
 ##	scenario and fetching its shots.
-[[ -n "${WINRIG_HELD:-}" ]] || exec "${winRemote}" "${host[@]}" --optional hold "$0" "${origArgs[@]}"
+[[ -n "${WINRIG_HELD:-}" ]] || exec "${winRemote}" "${host[@]}" --optional hold "${0}" "${origArgs[@]}"
 ##	Only after the exec, which runs no trap, so the held pass makes the run
 ##	folder and removes it.
 # shellcheck source=cicd/tests/_testdir.bash
@@ -83,7 +83,7 @@ echo "wingui: testing ${commit}, $(basename "${exe}") $(stat -c %s "${exe}") byt
 fQuote(){ local -r text="${1//\'/\'\'}"; printf "'%s'" "${text}" ;}
 
 fRun() {
-	local box="$1" scenario="$2"
+	local box="${1}" scenario="${2}"
 	launcher="$(mktemp --suffix=.ps1)"
 	{
 		printf '$ErrorActionPreference = "Stop"\n'
@@ -165,7 +165,7 @@ PS
 ##	One box at a time, since each run folder is in its own box's console user's
 ##	temp folder, made there by _stage.ps1 and read back.
 fBox(){
-	local -r box="$1"
+	local -r box="${1}"
 	local said scenario
 	local -i boxFailed=0
 	stage="$(mktemp --suffix=.ps1)"

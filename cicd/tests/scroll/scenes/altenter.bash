@@ -16,26 +16,26 @@
 settle="${SILK_SCENE_SETTLE:-13}"   ## seconds to idle past the GL pipeline warmup
 gap="${SILK_SCENE_GAP:-0.25}"       ## seconds between the burst and the alt screen
 
-sleep "$settle"
+sleep "${settle}"
 seq 1 400 | sed 's/^/output line /'
-sleep "$gap"
+sleep "${gap}"
 
 printf '\033[?1049h\033[2J'                       ## enter alt screen, clear
 trap 'printf "\033[?1049l"' EXIT INT TERM         ## restore on the way out
 
 sz=$(stty size 2>/dev/null) || sz=""
 rows=${sz% *}
-case "$rows" in ''|*[!0-9]*) rows=30 ;; esac
-[ "$rows" -ge 10 ] || rows=30
+case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
+[ "${rows}" -ge 10 ] || rows=30
 
 printf '\033[1;1H\033[7m  GNU nano                       New Buffer                   \033[0m\033[K'
 r=2
-while [ "$r" -le $((rows - 3)) ]; do
-	printf '\033[%d;1H  text line %d\033[K' "$r" "$r"
+while [ "${r}" -le $((rows - 3)) ]; do
+	printf '\033[%d;1H  text line %d\033[K' "${r}" "${r}"
 	r=$((r + 1))
 done
 printf '\033[%d;1H\033[7m^G\033[0m Help    \033[7m^O\033[0m Write Out\033[K' $((rows - 1))
-printf '\033[%d;1H\033[7m^X\033[0m Exit    \033[7m^R\033[0m Read File\033[K' "$rows"
+printf '\033[%d;1H\033[7m^X\033[0m Exit    \033[7m^R\033[0m Read File\033[K' "${rows}"
 printf '\033[2;1H'
 
 while :; do sleep 1; done

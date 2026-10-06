@@ -24,15 +24,15 @@ engine="${cicd}/cicd.bash"
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
 fLift(){ sed -n "/${1}/,/${2}/p" "${engine}"; }
-fNot(){ ! "$@"; }
+fNot(){ ! "${@}"; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-engine.XXXXXX")"
 declare -a started=()
 fEnd(){ local -r rc=$?; local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; rm -rf "${work}"; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
-fEcho(){ echo "    $*"; }
-fDie(){ echo "DIE: $*"; exit 1; }
+fEcho(){ echo "    ${*}"; }
+fDie(){ echo "DIE: ${*}"; exit 1; }
 
 ## The build retry. rustc has crashed inside LLVM twice in a row, so the one
 ## rebuild the profiler stage first had was not enough.
@@ -82,7 +82,7 @@ parse="$(fLift '^assumeYes=0; ' '^esac; done$')"
 fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits as it does
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
 	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=0
-	set -- "$@"
+	set -- "${@}"
 	eval "${parse}"
 	echo "quick=${quick} cross=${BUILD_CROSS} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assumeYes} sync=${sync}"
 }

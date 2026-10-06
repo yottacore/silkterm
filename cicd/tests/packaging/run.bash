@@ -47,14 +47,14 @@ else
 	ver="0.0.1-beta2"
 	root="${fakeRoot}"
 	fWriteSums(){ :; }
-	fEcho(){ echo "    $*"; }
-	fEcho_Clean(){ echo "    $*"; }
+	fEcho(){ echo "    ${*}"; }
+	fEcho_Clean(){ echo "    ${*}"; }
 	eval "$(sed -n '/^fBuildPackages(){/,/^}/p' "${realRoot}/cicd/cicd.bash")"
 
 	## $1 is the binary path as stage 5 recorded it - relative to the repository
 	## with no CARGO_TARGET_DIR, absolute with one.
 	fRunStep() {
-		local bin="$1" out="$2"
+		local bin="${1}" out="${2}"
 		local abs="${bin}"
 		[[ "${abs}" = /* ]] || abs="${fakeRoot}/${abs}"
 		mkdir -p "$(dirname "${abs}")"
@@ -70,7 +70,7 @@ else
 	fCheck "a relative target dir still makes the installer" test -f "${setup}"
 
 	## It carries the program's icon, not the stock one, and a version block.
-	fHasIcon(){ python3 - "$1" "${realRoot}/source/assets/icon.ico" <<'PY'
+	fHasIcon(){ python3 - "${1}" "${realRoot}/source/assets/icon.ico" <<'PY'
 import struct, sys
 exe, ico = (open(p, "rb").read() for p in sys.argv[1:3])
 size, off = struct.unpack_from("<II", ico, 6 + 16 * 2 + 8)
@@ -98,9 +98,9 @@ pkgWork="$(mktemp -d)"
 trap 'rc=$?; rm -rf "${work:-}" "${pkgWork}"; fTestDir_End "${rc}"' EXIT
 (
 	engine="${realRoot}/cicd/cicd.bash"
-	fEcho(){ echo "    $*"; }
-	fEcho_Clean(){ echo "    $*"; }
-	fDie(){ echo "DIE: $*"; exit 1; }
+	fEcho(){ echo "    ${*}"; }
+	fEcho_Clean(){ echo "    ${*}"; }
+	fDie(){ echo "DIE: ${*}"; exit 1; }
 	fWriteBuiltFrom(){ :; }
 	eval "$(sed -n '/^fReleaseExpects(){/,/^}/p; /^fWriteSums(){/,/^}/p; /^fBuildPackages(){/,/^}/p' "${engine}")"
 	collect="$(sed -n '/^if \[\[ -n "\${RELEASE_ARTIFACT_DIR:-}" \]\]; then$/,/^fi$/p' "${engine}")"
@@ -169,7 +169,7 @@ STUB
 
 ## The Windows linkers write the link time into the PE header unless told not to,
 ## and then the same commit built twice has two checksums.
-fLinkFlag(){ python3 - "${realRoot}/.cargo/config.toml" "$1" "$2" <<'PY'
+fLinkFlag(){ python3 - "${realRoot}/.cargo/config.toml" "${1}" "${2}" <<'PY'
 import sys, tomllib
 cfg = tomllib.load(open(sys.argv[1], "rb"))
 flags = cfg.get("target", {}).get(sys.argv[2], {}).get("rustflags", [])
