@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// What a double-click takes when the text under the pointer is a shape we can
-// name: a URL, a Windows or posix path, an scp target. Word selection cuts those
-// in the wrong places - a space in a folder name ends the path early, a `:12`
-// line number gets dragged in, a bracket in a wiki URL splits it - so a shape
-// that is recognized here is taken whole and outranks both the pair rule and the
-// word rule.
-//
-// Everything a shape can start with is anchored: a drive letter, a UNC prefix, a
-// leading slash or `~/`. Nothing else is a path, which is what keeps prose out.
+//! What a double-click takes when the text under the pointer is a shape we can
+//! name: a URL, a Windows or posix path, an scp target. Word selection cuts those
+//! in the wrong places - a space in a folder name ends the path early, a `:12`
+//! line number gets dragged in, a bracket in a wiki URL splits it - so a shape
+//! that is recognized here is taken whole and outranks both the pair rule and the
+//! word rule.
+//!
+//! Everything a shape can start with is anchored: a drive letter, a UNC prefix, a
+//! leading slash or `~/`. Nothing else is a path, which is what keeps prose out.
 
 // How far past a space a path separator may sit and still read as part of the
 // same path. A folder name runs to a few words; prose does not reach a slash

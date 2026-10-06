@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// Shell discovery, off the winit thread.
-//
-// The list the Tabs menu offers lives in the config (`shells.*`), so a title,
-// an order or a disabled entry survives a launch and stays the user's. What
-// this module adds is the part nobody wants to type: after the window is up and
-// settled, look around for the shells that are actually installed and fold the
-// new ones in.
-//
-// None of it may sit between launch and the first frame. A PATH scan stats every
-// directory on the user's PATH - any of which can be a mount that answers slowly
-// or never - and the Windows side reads the registry as well. So the window
-// starts with whatever the config already holds, and a scan arrives later as
-// UserEvent::ShellsReady. Same shape as the wallpaper pipeline, deliberately:
-// a thread per request, and the result is folded in on the winit thread.
-//
-// Two rules decide what a scan is allowed to do to a stored list, and they are
-// deliberately lopsided (see `merge`): it may ADD a shell it found, and it may
-// switch OFF one whose program has gone. It never switches one on and never
-// rewrites a command line - those are the user's, and a scan has no way to tell
-// a deliberate "no thanks" from a program that happened to be missing.
+//! Shell discovery, off the winit thread.
+//!
+//! The list the Tabs menu offers lives in the config (`shells.*`), so a title,
+//! an order or a disabled entry survives a launch and stays the user's. What
+//! this module adds is the part nobody wants to type: after the window is up and
+//! settled, look around for the shells that are actually installed and fold the
+//! new ones in.
+//!
+//! None of it may sit between launch and the first frame. A PATH scan stats every
+//! directory on the user's PATH - any of which can be a mount that answers slowly
+//! or never - and the Windows side reads the registry as well. So the window
+//! starts with whatever the config already holds, and a scan arrives later as
+//! `UserEvent::ShellsReady`. Same shape as the wallpaper pipeline, deliberately:
+//! a thread per request, and the result is folded in on the winit thread.
+//!
+//! Two rules decide what a scan is allowed to do to a stored list, and they are
+//! deliberately lopsided (see `merge`): it may ADD a shell it found, and it may
+//! switch OFF one whose program has gone. It never switches one on and never
+//! rewrites a command line - those are the user's, and a scan has no way to tell
+//! a deliberate "no thanks" from a program that happened to be missing.
 
 use std::path::{Path, PathBuf};
 
@@ -29,10 +29,10 @@ use winit::event_loop::EventLoopProxy;
 use crate::config;
 use crate::term::UserEvent;
 
-// One shell the Tabs menu can offer, as stored under `shells.<slug>` in the
-// config. `slug` is the config key and never changes once written; `title` is
-// what the menu shows and the user may rename freely. `active` is the user's
-// switch - an inactive entry stays in the file and stays out of the menu.
+/// One shell the Tabs menu can offer, as stored under `shells.<slug>` in the
+/// config. `slug` is the config key and never changes once written; `title` is
+/// what the menu shows and the user may rename freely. `active` is the user's
+/// switch - an inactive entry stays in the file and stays out of the menu.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShellEntry {
 	pub slug: String,
@@ -40,22 +40,27 @@ pub struct ShellEntry {
 	pub command: String,
 	pub active: bool,
 	pub comment: String,
-	// The last date a scan found this shell's program installed, YYYY-MM-DD.
-	// Empty means no scan has ever seen it - a hand-written entry, or one that
-	// was already switched off when the field was added.
+	/// The last date a scan found this shell's program installed, YYYY-MM-DD.
+	/// Empty means no scan has ever seen it - a hand-written entry, or one that
+	/// was already switched off when the field was added.
 	pub last_seen: String,
 }
 
-// Where a find sits in the order the list is offered in. A scan sorts by this
-// and then by `seq`/title, so the order is stated once, in one place, instead of
-// falling out of the sequence the detection happens to run in.
-//
-// It only ever decides an INITIAL population and where a newly-found shell is
-// offered - `merge` keeps a stored list's own order whole, because that order is
-// the user's (the Shell tab exists to set it). So changing anything here reaches
-// a fresh config and nobody's existing one.
-// Several groups are Windows-only finds, but the order is declared as one list.
-#[cfg_attr(unix, allow(dead_code))]
+/// Where a find sits in the order the list is offered in. A scan sorts by this
+/// and then by `seq`/title, so the order is stated once, in one place, instead of
+/// falling out of the sequence the detection happens to run in.
+///
+/// It only ever decides an INITIAL population and where a newly-found shell is
+/// offered - `merge` keeps a stored list's own order whole, because that order is
+/// the user's (the Shell tab exists to set it). So changing anything here reaches
+/// a fresh config and nobody's existing one.
+#[cfg_attr(
+	unix,
+	allow(
+		dead_code,
+		reason = "several groups are Windows-only finds, but the order is declared as one list"
+	)
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Group {
 	// The user's own login shell, and directly under it the twin that skips its
@@ -101,16 +106,16 @@ impl Group {
 	}
 }
 
-// One shell a scan turned up. It becomes a `ShellEntry` only if the stored list
-// has nothing already running the same program.
+/// One shell a scan turned up. It becomes a `ShellEntry` only if the stored list
+/// has nothing already running the same program.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Found {
 	pub title: String,
 	pub command: String,
 	pub comment: String,
-	// Almost everything found is offered switched ON - it is installed, so it is
-	// presumably wanted. A variant that only exists as an alternative to another
-	// entry arrives OFF instead, so the list gains a row rather than a surprise.
+	/// Almost everything found is offered switched ON - it is installed, so it is
+	/// presumably wanted. A variant that only exists as an alternative to another
+	/// entry arrives OFF instead, so the list gains a row rather than a surprise.
 	pub active: bool,
 	// Where this sits in the offered order, and its position inside its own group
 	// where that group is curated rather than alphabetical.
@@ -156,9 +161,9 @@ impl Found {
 	}
 }
 
-// Run a scan on its own thread and post the merged list back to the event loop.
-// A thread per scan rather than a long-lived worker: a PATH entry on a dead
-// mount blocks its own thread forever, and there is nothing queued behind it.
+/// Run a scan on its own thread and post the merged list back to the event loop.
+/// A thread per scan rather than a long-lived worker: a PATH entry on a dead
+/// mount blocks its own thread forever, and there is nothing queued behind it.
 pub fn spawn(proxy: &EventLoopProxy<UserEvent>) {
 	let proxy = proxy.clone();
 	let spawned = std::thread::Builder::new()
@@ -175,14 +180,14 @@ pub fn spawn(proxy: &EventLoopProxy<UserEvent>) {
 	}
 }
 
-// Fold a scan's findings into the stored list, in place and conservatively.
-//
-// The stored order is kept whole (it is the menu's order, and the future Shells
-// tab lets the user set it); anything new goes at the end. `active` only ever
-// falls: an entry whose program cannot be found is switched off rather than
-// deleted, so a shell that is merely uninstalled keeps its title, its flags and
-// its place. It is NOT switched back on if the program returns - a scan cannot
-// tell that from a switch the user turned off on purpose.
+/// Fold a scan's findings into the stored list, in place and conservatively.
+///
+/// The stored order is kept whole (it is the menu's order, and the future Shells
+/// tab lets the user set it); anything new goes at the end. `active` only ever
+/// falls: an entry whose program cannot be found is switched off rather than
+/// deleted, so a shell that is merely uninstalled keeps its title, its flags and
+/// its place. It is NOT switched back on if the program returns - a scan cannot
+/// tell that from a switch the user turned off on purpose.
 pub fn merge(stored: &[ShellEntry], found: &[Found]) -> Vec<ShellEntry> {
 	merge_with(stored, found, &which, &today())
 }
@@ -243,9 +248,9 @@ fn merge_with(
 	out
 }
 
-// Today's date as YYYY-MM-DD, UTC. A "last seen" only ever has to be readable
-// and comparable by eye, so a plain date is the whole of it - no clock, no zone,
-// and nothing worth pulling a calendar crate in for.
+/// Today's date as YYYY-MM-DD, UTC. A "last seen" only ever has to be readable
+/// and comparable by eye, so a plain date is the whole of it - no clock, no zone,
+/// and nothing worth pulling a calendar crate in for.
 pub fn today() -> String {
 	let secs = std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
@@ -338,15 +343,15 @@ impl Ident {
 	}
 }
 
-// Do two command lines name the same shell? Same rule the scan folds on, so a
-// caller outside this module gets the same answer: a bare name is looked up
-// before comparing, and a stored entry whose program has gone falls back to its
-// bare name. Asked in both directions because that fallback is one-sided.
-//
-// `adopt_default_shell` is what needs it. The retired `shell.default` was
-// routinely a bare name (`pwsh`) where the scanned list already carried the full
-// path to the same file, and comparing those as STRINGS put a second copy of one
-// shell at the top of the list - which is then the default shell, twice over.
+/// Do two command lines name the same shell? Same rule the scan folds on, so a
+/// caller outside this module gets the same answer: a bare name is looked up
+/// before comparing, and a stored entry whose program has gone falls back to its
+/// bare name. Asked in both directions because that fallback is one-sided.
+///
+/// `adopt_default_shell` is what needs it. The retired `shell.default` was
+/// routinely a bare name (`pwsh`) where the scanned list already carried the full
+/// path to the same file, and comparing those as STRINGS put a second copy of one
+/// shell at the top of the list - which is then the default shell, twice over.
 pub fn same_command(a: &str, b: &str) -> bool {
 	same_command_with(a, b, &which)
 }
@@ -358,9 +363,9 @@ fn same_command_with(a: &str, b: &str, resolve: &dyn Fn(&str) -> Option<PathBuf>
 	}
 }
 
-// An argv back as one command line, quoted the way this module's own tables
-// write one - so `friendly` can be asked about a pane launched from the CLI,
-// where the shell arrives already split.
+/// An argv back as one command line, quoted the way this module's own tables
+/// write one - so `friendly` can be asked about a pane launched from the CLI,
+/// where the shell arrives already split.
 pub fn command_line(argv: &[String]) -> String {
 	argv.iter()
 		.map(|arg| {
@@ -374,12 +379,12 @@ pub fn command_line(argv: &[String]) -> String {
 		.join(" ")
 }
 
-// What a tab calls the shell it is running. The stored list is the authority -
-// the user renamed those titles, so "Windows PowerShell 5 (relaxed)" is what
-// their tab should say - and only where nothing matches does the program's own
-// name stand in. Matching goes through `same_command`, not string equality, for
-// the reason that rule exists at all: the pane may have been launched with a
-// bare `pwsh` where the list carries the full path to the same file.
+/// What a tab calls the shell it is running. The stored list is the authority -
+/// the user renamed those titles, so "Windows PowerShell 5 (relaxed)" is what
+/// their tab should say - and only where nothing matches does the program's own
+/// name stand in. Matching goes through `same_command`, not string equality, for
+/// the reason that rule exists at all: the pane may have been launched with a
+/// bare `pwsh` where the list carries the full path to the same file.
 pub fn friendly(command: &str, stored: &[ShellEntry]) -> String {
 	// Answering costs a PATH search and two canonicalize calls per stored entry,
 	// and a tab asks again whenever its task or folder moves, and its tip twice a
@@ -439,11 +444,11 @@ fn friendly_uncached(command: &str, stored: &[ShellEntry]) -> String {
 		.unwrap_or_else(|| "Shell".to_string())
 }
 
-// A list entry for a command line the list does not carry yet: the Settings
-// dialog's "Add", and the one-time adoption of the old `shell.default`. The
-// title is the program's own name, tidied - the user renames it if they want
-// something else - and the key is made unique against what is already stored.
-// `last_seen` stays empty: no scan has vouched for this one.
+/// A list entry for a command line the list does not carry yet: the Settings
+/// dialog's "Add", and the one-time adoption of the old `shell.default`. The
+/// title is the program's own name, tidied - the user renames it if they want
+/// something else - and the key is made unique against what is already stored.
+/// `last_seen` stays empty: no scan has vouched for this one.
 pub fn adopted(command: &str, existing: &[ShellEntry]) -> ShellEntry {
 	let title = crate::cli::shell_split(command)
 		.ok()
@@ -516,11 +521,11 @@ fn base_name(prog: &str) -> String {
 	name.strip_suffix(".exe").unwrap_or(&name).to_string()
 }
 
-// Where `prog` would run from, or None if it is not installed. A name with a
-// separator in it is taken literally (that is the user saying where); a bare
-// name is looked up on PATH, honouring PATHEXT on Windows.
-// Counts every PATH search, so a test can hold the frame path to a number
-// rather than to a stopwatch.
+/// Where `prog` would run from, or None if it is not installed. A name with a
+/// separator in it is taken literally (that is the user saying where); a bare
+/// name is looked up on PATH, honouring PATHEXT on Windows.
+/// Counts every PATH search, so a test can hold the frame path to a number
+/// rather than to a stopwatch.
 pub static PATH_SEARCHES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 pub fn which(prog: &str) -> Option<PathBuf> {
@@ -816,8 +821,8 @@ fn launch(command: &str, program: &str) -> String {
 	}
 }
 
-// Everything installed that looks like a shell, in the order it should be
-// offered in (see `Group`).
+/// Everything installed that looks like a shell, in the order it should be
+/// offered in (see `Group`).
 pub fn detect() -> Vec<Found> {
 	detect_with(login_shell(), &which, platform_extras, &|program| {
 		probe_version(program, VERSION_WAIT)

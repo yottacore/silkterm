@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// Pop-out dialog windows (About / Settings) as real child OS windows, so a
-// dialog larger than the main window is still fully visible (the in-surface
-// overlay was clipped by the main window). Each dialog owns its surface + text
-// context and is sized to its content (non-resizable).
+//! Pop-out dialog windows (About / Settings) as real child OS windows, so a
+//! dialog larger than the main window is still fully visible (the in-surface
+//! overlay was clipped by the main window). Each dialog owns its surface + text
+//! context and is sized to its content (non-resizable).
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -83,7 +83,7 @@ pub struct DialogWin {
 	// the wake cadence the app loop should keep while something animates
 	last_frame: std::time::Instant,
 	anim_wake: Option<u64>,
-	// a frame the surface refused, drawn again on this (read by the app loop)
+	/// a frame the surface refused, drawn again on this (read by the app loop)
 	pub refused: Retry,
 	// what the pointer is resting on, and since when: flyover help waits the same
 	// DELAY here as it does in the tab strip and the menus
@@ -122,10 +122,10 @@ impl DialogWin {
 		self.window.id()
 	}
 
-	// Restack the terminal to sit directly beneath this dialog. Called when the
-	// dialog gains focus, so a window that got in front of the terminal can't
-	// stay wedged between them - the transient hints alone don't force this on
-	// WMs that don't raise a transient's parent with it (Compiz).
+	/// Restack the terminal to sit directly beneath this dialog. Called when the
+	/// dialog gains focus, so a window that got in front of the terminal can't
+	/// stay wedged between them - the transient hints alone don't force this on
+	/// WMs that don't raise a transient's parent with it (Compiz).
 	pub fn raise_parent(&self) {
 		// SILK_MODALDBG=1 traces the restack + the resulting stack order, so a WM
 		// where this misbehaves (e.g. a Compiz profile that ignores the restack)
@@ -269,8 +269,8 @@ impl DialogWin {
 		})
 	}
 
-	// A message and an OK button, standing in for the system's message box on a
-	// platform that has none SilkTerm can count on.
+	/// A message and an OK button, standing in for the system's message box on a
+	/// platform that has none SilkTerm can count on.
 	#[cfg(not(target_os = "windows"))]
 	pub fn new_notice(
 		el: &ActiveEventLoop,
@@ -314,10 +314,10 @@ impl DialogWin {
 		})
 	}
 
-	// `resume` is the view a recently closed Settings window was left on (see
-	// App::settings_view); None opens at the top of the first tab. `sized` is a
-	// size the user dragged it to earlier this session, which outlives the view
-	// and is never written anywhere.
+	/// `resume` is the view a recently closed Settings window was left on (see
+	/// `App::settings_view`); None opens at the top of the first tab. `sized` is a
+	/// size the user dragged it to earlier this session, which outlives the view
+	/// and is never written anywhere.
 	pub fn new_settings(
 		el: &ActiveEventLoop,
 		parent: Option<RawWindowHandle>,
@@ -400,7 +400,7 @@ impl DialogWin {
 		})
 	}
 
-	// (orig, edited, use_system_font) for the app to apply, if this is Settings.
+	/// (orig, edited, `use_system_font`) for the app to apply, if this is Settings.
 	pub fn settings_values(&self) -> Option<(config::Settings, config::Settings, bool)> {
 		match &self.content {
 			Content::Settings(dialog) => Some((
@@ -412,16 +412,16 @@ impl DialogWin {
 		}
 	}
 
-	// A background shell scan arrived while this dialog was open. Fold it into the
-	// settings BOTH copies hold: the edited one so the user sees what turned up,
-	// and the baseline so the fold does not read as an edit they made.
+	/// A background shell scan arrived while this dialog was open. Fold it into the
+	/// settings BOTH copies hold: the edited one so the user sees what turned up,
+	/// and the baseline so the fold does not read as an edit they made.
 	pub fn fold_shells(&mut self, found: &[crate::shells::Found]) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.fold_shells(found);
 		}
 	}
 
-	// The tab + scroll this dialog is sitting on, for a later reopen to resume.
+	/// The tab + scroll this dialog is sitting on, for a later reopen to resume.
 	pub fn settings_view(&self) -> Option<View> {
 		match &self.content {
 			Content::Settings(dialog) => Some(dialog.view()),
@@ -429,9 +429,9 @@ impl DialogWin {
 		}
 	}
 
-	// The size it is sitting at, in DIP. Kept for the rest of the session so a
-	// reopen comes back the size it was dragged to - and on a monitor at another
-	// scale, the same apparent size rather than the same count of pixels.
+	/// The size it is sitting at, in DIP. Kept for the rest of the session so a
+	/// reopen comes back the size it was dragged to - and on a monitor at another
+	/// scale, the same apparent size rather than the same count of pixels.
 	pub fn settings_size(&self) -> Option<(f32, f32)> {
 		match &self.content {
 			Content::Settings(_) => {
@@ -445,16 +445,16 @@ impl DialogWin {
 		}
 	}
 
-	// After an Apply, reset the settings baseline to the applied values so a later
-	// Apply diffs against the live state (see SettingsDialog::commit_baseline).
+	/// After an Apply, reset the settings baseline to the applied values so a later
+	/// Apply diffs against the live state (see `SettingsDialog::commit_baseline`).
 	pub fn commit_baseline(&mut self) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.commit_baseline();
 		}
 	}
 
-	// Config keys the user hit "revert to default" on since the last Apply; the
-	// app comments them out in config.shcl (config::revert_keys).
+	/// Config keys the user hit "revert to default" on since the last Apply; the
+	/// app comments them out in config.shcl (`config::revert_keys`).
 	pub fn take_reverted(&mut self) -> Vec<&'static str> {
 		match &mut self.content {
 			Content::Settings(dialog) => dialog.take_reverted(),
@@ -462,7 +462,7 @@ impl DialogWin {
 		}
 	}
 
-	// True when the move changed what the window shows, so it is owed a frame.
+	/// True when the move changed what the window shows, so it is owed a frame.
 	pub fn set_cursor(&mut self, x: f32, y: f32) -> bool {
 		let from = std::mem::replace(&mut self.mouse, (x, y));
 		pointer_moved(
@@ -508,8 +508,8 @@ impl DialogWin {
 		}
 	}
 
-	// Right mouse button: pop the field context menu (Settings only). `paste_ok`
-	// grays the Paste item when the clipboard holds nothing.
+	/// Right mouse button: pop the field context menu (Settings only). `paste_ok`
+	/// grays the Paste item when the clipboard holds nothing.
 	pub fn mouse_right(&mut self, paste_ok: bool) {
 		let (mx, my) = self.mouse;
 		if let Content::Settings(dialog) = &mut self.content {
@@ -520,8 +520,8 @@ impl DialogWin {
 		}
 	}
 
-	// Shift held (from the dialog's own modifier tracking): Shift+F10 opens the
-	// field context menu like the Menu key.
+	/// Shift held (from the dialog's own modifier tracking): Shift+F10 opens the
+	/// field context menu like the Menu key.
 	pub fn shift_held(&self) -> bool {
 		match &self.content {
 			Content::Settings(dialog) => dialog.shift(),
@@ -529,7 +529,7 @@ impl DialogWin {
 		}
 	}
 
-	// Keyboard Menu key: context menu at the caret of the active field edit.
+	/// Keyboard Menu key: context menu at the caret of the active field edit.
 	pub fn menu_key(&mut self, paste_ok: bool) {
 		if let Content::Settings(dialog) = &mut self.content {
 			let attrs = ui_attrs();
@@ -548,16 +548,16 @@ impl DialogWin {
 		}
 	}
 
-	// wheel scroll for an overflowing settings tab (positive dy = scroll up)
+	/// wheel scroll for an overflowing settings tab (positive dy = scroll up)
 	pub fn wheel(&mut self, dx_px: f32, dy_px: f32) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.wheel(dx_px, dy_px);
 		}
 	}
 
-	// Modifier state (from ModifiersChanged), already read for the platform:
-	// Alt underlines button accelerators; Shift and the shortcut key steer
-	// Tab-key focus and tab switching.
+	/// Modifier state (from `ModifiersChanged`), already read for the platform:
+	/// Alt underlines button accelerators; Shift and the shortcut key steer
+	/// Tab-key focus and tab switching.
 	pub fn set_keys(&mut self, keys: crate::input::EditKeys) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.set_keys(keys);
@@ -572,8 +572,8 @@ impl DialogWin {
 		self.mods
 	}
 
-	// A press while a Keys row waits for its new chord, which takes every key
-	// until it has one. False when nothing is waiting.
+	/// A press while a Keys row waits for its new chord, which takes every key
+	/// until it has one. False when nothing is waiting.
 	pub fn capture_key(&mut self, key: &winit::keyboard::Key) -> bool {
 		match &mut self.content {
 			Content::Settings(dialog) => dialog.capture_key(key, self.mods),
@@ -581,47 +581,47 @@ impl DialogWin {
 		}
 	}
 
-	// Copy or Paste from the macOS menu bar, which takes Command+C and
-	// Command+V before the dialog sees them.
+	/// Copy or Paste from the macOS menu bar, which takes Command+C and
+	/// Command+V before the dialog sees them.
 	pub fn menu_edit(&mut self, cmd: EditCmd, clip: Option<&mut crate::clipboard::Clipboard>) {
 		if let Content::Settings(dialog) = &mut self.content {
 			edit_cmd(dialog, cmd, clip);
 		}
 	}
 
-	// The tab to the left or right, from the macOS Window menu's tab rows.
+	/// The tab to the left or right, from the macOS Window menu's tab rows.
 	pub fn switch_tab(&mut self, forward: bool) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.switch_tab(forward);
 		}
 	}
 
-	// Tab key: walk control focus (Ctrl = switch tabs, Shift = backwards).
+	/// Tab key: walk control focus (Ctrl = switch tabs, Shift = backwards).
 	pub fn key_tab(&mut self) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.key_tab();
 		}
 	}
-	// Ctrl+PageUp / Ctrl+PageDown: cycle tabs (PageDown = next).
+	/// Ctrl+PageUp / Ctrl+PageDown: cycle tabs (PageDown = next).
 	pub fn key_page(&mut self, forward: bool) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.key_page(forward);
 		}
 	}
-	// Up / Down: walk control focus.
+	/// Up / Down: walk control focus.
 	pub fn focus_vertical(&mut self, forward: bool) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.key_vertical(forward);
 		}
 	}
-	// Left / Right: caret motion (editing) or adjust the focused slider/radio.
+	/// Left / Right: caret motion (editing) or adjust the focused slider/radio.
 	pub fn key_horizontal(&mut self, dir: i32) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.key_horizontal(dir);
 		}
 	}
-	// Space: type into an active edit, activate a focused footer button, or
-	// activate the focused control.
+	/// Space: type into an active edit, activate a focused footer button, or
+	/// activate the focused control.
 	pub fn key_space(&mut self) -> Option<DialogAction> {
 		match &mut self.content {
 			Content::Settings(dialog) => map_action(dialog.key_space()),
@@ -630,10 +630,10 @@ impl DialogWin {
 		}
 	}
 
-	// A character key: while Alt is held it's an accelerator (Cancel/Apply/OK);
-	// while the shortcut key (Ctrl, Command on a Mac) is held it's an edit
-	// shortcut (select-all/copy/cut/paste); otherwise it types into the focused
-	// field.
+	/// A character key: while Alt is held it's an accelerator (Cancel/Apply/OK);
+	/// while the shortcut key (Ctrl, Command on a Mac) is held it's an edit
+	/// shortcut (select-all/copy/cut/paste); otherwise it types into the focused
+	/// field.
 	pub fn key_char(
 		&mut self,
 		ch: char,
@@ -666,9 +666,9 @@ impl DialogWin {
 		}
 	}
 
-	// Home / End / Delete / Insert inside a focused settings field (Left/Right go
-	// through key_horizontal so they can double as slider/radio adjust when not
-	// editing). Shift+Delete = cut, Ctrl+Insert = copy, Shift+Insert = paste.
+	/// Home / End / Delete / Insert inside a focused settings field (Left/Right go
+	/// through `key_horizontal` so they can double as slider/radio adjust when not
+	/// editing). Shift+Delete = cut, Ctrl+Insert = copy, Shift+Insert = paste.
 	pub fn edit_nav(
 		&mut self,
 		key: winit::keyboard::NamedKey,
@@ -727,9 +727,9 @@ impl DialogWin {
 		}
 	}
 
-	// When the loop next owes this dialog a frame with no input: the next step
-	// of a field edit's animation (view scroll, caret ease, blink), or a resting
-	// pointer's tip coming due.
+	/// When the loop next owes this dialog a frame with no input: the next step
+	/// of a field edit's animation (view scroll, caret ease, blink), or a resting
+	/// pointer's tip coming due.
 	pub fn wake_at(&self) -> Option<std::time::Instant> {
 		let anim = self
 			.anim_wake
@@ -753,10 +753,10 @@ impl DialogWin {
 		self.window.request_redraw();
 	}
 
-	// DPI/scale changed under an open dialog: dragged to a monitor at another
-	// scale, or the desktop's scaling moved. Only the boundary follows - the text
-	// context rasterizes at the new size and the chrome is measured again - while
-	// every value and unapplied edit stays put.
+	/// DPI/scale changed under an open dialog: dragged to a monitor at another
+	/// scale, or the desktop's scaling moved. Only the boundary follows - the text
+	/// context rasterizes at the new size and the chrome is measured again - while
+	/// every value and unapplied edit stays put.
 	pub fn set_scale(&mut self, scale_factor: f64) {
 		let scale = config::display_scale(scale_factor);
 		if (scale - self.text.scale).abs() < 1e-4 {
@@ -1869,8 +1869,8 @@ fn line_names(lines: &[usize], lost: usize) -> String {
 	}
 }
 
-// A notice's window title and its paragraphs. The path is a paragraph of its
-// own, since it is the one part that cannot be wrapped at a space.
+/// A notice's window title and its paragraphs. The path is a paragraph of its
+/// own, since it is the one part that cannot be wrapped at a space.
 pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 	let which = line_names(&refusal.lines, refusal.lost);
 	let many = refusal.lines.len() > 1 || (refusal.lines.is_empty() && refusal.lost > 1);
@@ -1886,8 +1886,8 @@ pub fn refusal_notice(refusal: &config::Refusal) -> (String, Vec<String>) {
 	)
 }
 
-// What a launch says when converting the settings file left settings behind:
-// how many, and the name the file as it was is kept under, in the same folder.
+/// What a launch says when converting the settings file left settings behind:
+/// how many, and the name the file as it was is kept under, in the same folder.
 pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>) {
 	let (done, lost) = match (loss.how, loss.lost) {
 		(config::Converted::Dropped(rewrite), _) => return dropped_notice(loss, rewrite),
@@ -2070,11 +2070,11 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 	(lines, links, (content_w + pad * 2.0, y + pad))
 }
 
-// The part of the screen a window can actually occupy: the monitor minus the
-// taskbar/panels/docks. winit has no API for it, so each platform is asked in
-// its own way and anything else falls back to the whole monitor. Physical
-// pixels, screen coordinates. Takes a handle rather than a window because the
-// window that WANTS the answer is often not the one to ask - see settings_caps.
+/// The part of the screen a window can actually occupy: the monitor minus the
+/// taskbar/panels/docks. winit has no API for it, so each platform is asked in
+/// its own way and anything else falls back to the whole monitor. Physical
+/// pixels, screen coordinates. Takes a handle rather than a window because the
+/// window that WANTS the answer is often not the one to ask - see `settings_caps`.
 #[cfg(target_os = "windows")]
 pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	use windows_sys::Win32::Graphics::Gdi::{
@@ -2101,11 +2101,11 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	}
 }
 
-// X11 publishes it as _NET_WORKAREA on the root window - four CARDINALs per
-// virtual desktop, so the current desktop picks the entry. It covers the whole
-// virtual screen rather than one monitor, which is as much as the protocol
-// offers, so `usable_screen` treats it as a cap rather than an answer. Wayland
-// has no equivalent and returns None.
+/// X11 publishes it as _`NET_WORKAREA` on the root window - four CARDINALs per
+/// virtual desktop, so the current desktop picks the entry. It covers the whole
+/// virtual screen rather than one monitor, which is as much as the protocol
+/// offers, so `usable_screen` treats it as a cap rather than an answer. Wayland
+/// has no equivalent and returns None.
 #[cfg(target_os = "linux")]
 pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	use x11rb::connection::Connection;
@@ -2144,9 +2144,9 @@ pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	))
 }
 
-// macOS: the screen's visible frame, which leaves out the menu bar and the
-// Dock. Without it the cap was the whole display, and a dialog that tall was
-// pushed down from under the menu bar until its buttons left the screen.
+/// macOS: the screen's visible frame, which leaves out the menu bar and the
+/// Dock. Without it the cap was the whole display, and a dialog that tall was
+/// pushed down from under the menu bar until its buttons left the screen.
 #[cfg(target_os = "macos")]
 pub fn work_area_of(handle: RawWindowHandle) -> Option<(i32, i32, i32, i32)> {
 	use objc2::MainThreadMarker;
@@ -2195,10 +2195,10 @@ fn flip_cocoa_rect(
 	)
 }
 
-// Where a dialog goes: centered over the terminal, then pulled back onto the
-// work area, or a tall dialog centered on a tall terminal puts its own buttons
-// under the taskbar or the Dock. With no work area to go by it only keeps off
-// the negative side of the origin.
+/// Where a dialog goes: centered over the terminal, then pulled back onto the
+/// work area, or a tall dialog centered on a tall terminal puts its own buttons
+/// under the taskbar or the Dock. With no work area to go by it only keeps off
+/// the negative side of the origin.
 #[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
 pub fn dialog_origin(
 	parent_pos: (i32, i32),

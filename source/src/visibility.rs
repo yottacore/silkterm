@@ -136,22 +136,22 @@ fn evened(amount: f32, slider: f32, picture: (f32, f32), bg: f32, strength: f32)
 	(amount * standout(picture, bg).powf(-fade)).clamp(0.0, 1.0)
 }
 
-// What the wallpaper pass does this frame.
+/// What the wallpaper pass does this frame.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Mix {
-	// The alpha of the linear blend, or the share of the picture in the power
-	// curve. Which one is decided by `perceptual`.
+	/// The alpha of the linear blend, or the share of the picture in the power
+	/// curve. Which one is decided by `perceptual`.
 	pub amount: f32,
-	// False is the linear-light blend the program has always drawn, and is what
-	// dark mode gets. True mixes the background and the picture in a power curve,
-	// which needs the background color and so cannot be a hardware blend.
+	/// False is the linear-light blend the program has always drawn, and is what
+	/// dark mode gets. True mixes the background and the picture in a power curve,
+	/// which needs the background color and so cannot be a hardware blend.
 	pub perceptual: bool,
 }
 
 impl Mix {
-	// The field a glyph sits on, as a linear luma, for a picture of `picture`
-	// over a background of `bg`. The renderer's own blend in one number, so the
-	// derived text colors are placed against what will really be there.
+	/// The field a glyph sits on, as a linear luma, for a picture of `picture`
+	/// over a background of `bg`. The renderer's own blend in one number, so the
+	/// derived text colors are placed against what will really be there.
 	pub fn field(self, picture: f32, bg: f32) -> f32 {
 		if !self.perceptual {
 			return bg + (picture - bg) * self.amount;
@@ -162,9 +162,9 @@ impl Mix {
 	}
 }
 
-// How the wallpaper is drawn, for a slider reading `slider`. `picture` is how
-// bright it is - its overall level and its bright end - and None leaves the
-// ramp out, for a caller with no picture summarized yet.
+/// How the wallpaper is drawn, for a slider reading `slider`. `picture` is how
+/// bright it is - its overall level and its bright end - and None leaves the
+/// ramp out, for a caller with no picture summarized yet.
 pub fn wallpaper_mix(settings: &Settings, slider: f32, picture: Option<(f32, f32)>) -> Mix {
 	let bg = config::luma(settings.bg);
 	let even = |amount: f32| match picture {
@@ -183,11 +183,11 @@ pub fn wallpaper_mix(settings: &Settings, slider: f32, picture: Option<(f32, f32
 	}
 }
 
-// How many points the light-mode halo curve is solved at. They are spaced
-// evenly in how far dark mode's halo moves a picture, which is
-// `1 - (1 - alpha)^(1/2.4)` of its distance from black, rather than evenly in
-// alpha: that is where the curve bends, and in those terms it is close to a
-// straight line. The shader joins the points with straight lines.
+/// How many points the light-mode halo curve is solved at. They are spaced
+/// evenly in how far dark mode's halo moves a picture, which is
+/// `1 - (1 - alpha)^(1/2.4)` of its distance from black, rather than evenly in
+/// alpha: that is where the curve bends, and in those terms it is close to a
+/// straight line. The shader joins the points with straight lines.
 pub const HALO_NODES: usize = 12;
 
 // The asked alpha at node `k`.
@@ -195,17 +195,17 @@ fn halo_node(k: usize) -> f32 {
 	1.0 - (1.0 - k as f32 / (HALO_NODES - 1) as f32).powf(MIX_GAMMA)
 }
 
-// Light mode's halo, as the alpha to draw for each alpha asked. Solved so the
-// halo moves the picture under it toward the background as far, in sRGB levels
-// and on average over the picture, as dark mode's halo moves dark mode's
-// picture. The composite runs it on every halo alpha, the crisp outline
-// included (`matched_alpha` in scrim.rs).
-//
-// One scalar gain used to stand in for this, matched at half the halo over an
-// average picture, with the outline left at full strength. sRGB's curve is
-// steep near black and flat near white, so dark mode's halo builds slowly and
-// light mode's fast, and the gap is widest over the dark parts of a picture,
-// which light mode shows far more of. A gain could not follow either.
+/// Light mode's halo, as the alpha to draw for each alpha asked. Solved so the
+/// halo moves the picture under it toward the background as far, in sRGB levels
+/// and on average over the picture, as dark mode's halo moves dark mode's
+/// picture. The composite runs it on every halo alpha, the crisp outline
+/// included (`matched_alpha` in scrim.rs).
+///
+/// One scalar gain used to stand in for this, matched at half the halo over an
+/// average picture, with the outline left at full strength. sRGB's curve is
+/// steep near black and flat near white, so dark mode's halo builds slowly and
+/// light mode's fast, and the gap is widest over the dark parts of a picture,
+/// which light mode shows far more of. A gain could not follow either.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct HaloMatch {
 	pub curve: [f32; HALO_NODES],
@@ -239,11 +239,11 @@ fn moved(fields: &[[f32; 3]], bg: [f32; 3], alpha: f32) -> f32 {
 	fields.iter().map(one).sum::<f32>() / fields.len().max(1) as f32
 }
 
-// How the halo is redrawn for a wallpaper whose slider reads `slider`, whose
-// brightness is `picture` and whose linear channels run `spread` (the summary's
-// quantiles). None leaves the halo as asked: dark mode is the reference, and
-// with no picture up the halo sits on the background color it is made of. A
-// picture not summarized yet stands in as a gray at the shipped pack's median.
+/// How the halo is redrawn for a wallpaper whose slider reads `slider`, whose
+/// brightness is `picture` and whose linear channels run `spread` (the summary's
+/// quantiles). None leaves the halo as asked: dark mode is the reference, and
+/// with no picture up the halo sits on the background color it is made of. A
+/// picture not summarized yet stands in as a gray at the shipped pack's median.
 pub fn halo_match(
 	settings: &Settings,
 	slider: f32,
@@ -300,8 +300,8 @@ pub fn halo_match(
 	Some(HaloMatch { curve })
 }
 
-// `halo_match` is several thousand powers, and its inputs change only with the
-// picture, the theme or a slider, so a window keeps the last answer.
+/// `halo_match` is several thousand powers, and its inputs change only with the
+/// picture, the theme or a slider, so a window keeps the last answer.
 #[derive(Default, Debug)]
 pub struct HaloMemo {
 	key: Vec<u32>,

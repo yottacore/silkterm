@@ -55,37 +55,38 @@ pub enum UserEvent {
 // delivered separately.
 const COALESCE_WAKEUPS: bool = true;
 
-// One outstanding "there is new output" notice per pane.
-//
-// The engine finishes a read cycle roughly every 900 bytes under a flood, and
-// each cycle used to become its own window event: measured on 32 MiB of output,
-// about 20,000 of them, costing 2.5 SECONDS of main-thread CPU inside the OS
-// message pump alone - more than the parsing and the drawing put together, for
-// a message that says nothing but "look again".
-//
-// Nothing is lost by folding them. The notice carries no payload: whenever the
-// window gets round to one it reads the grid as it stands, so a queue of twenty
-// identical notices produced twenty identical reads. `handled` is cleared BEFORE
-// the window acts on it, so a cycle that arrives mid-handling posts a fresh notice
-// rather than being dropped.
+/// One outstanding "there is new output" notice per pane.
+///
+/// The engine finishes a read cycle roughly every 900 bytes under a flood, and
+/// each cycle used to become its own window event: measured on 32 MiB of output,
+/// about 20,000 of them, costing 2.5 SECONDS of main-thread CPU inside the OS
+/// message pump alone - more than the parsing and the drawing put together, for
+/// a message that says nothing but "look again".
+///
+/// Nothing is lost by folding them. The notice carries no payload: whenever the
+/// window gets round to one it reads the grid as it stands, so a queue of twenty
+/// identical notices produced twenty identical reads. `handled` is cleared BEFORE
+/// the window acts on it, so a cycle that arrives mid-handling posts a fresh notice
+/// rather than being dropped.
 #[derive(Debug, Default)]
 pub struct WakeGate {
 	pending: std::sync::atomic::AtomicBool,
 }
 
 impl WakeGate {
-	// True when this notice has to be posted (nothing outstanding).
+	/// True when this notice has to be posted (nothing outstanding).
 	pub fn post(&self) -> bool {
 		!COALESCE_WAKEUPS || !self.pending.swap(true, std::sync::atomic::Ordering::AcqRel)
 	}
 
+	/// The window took the notice, so the next read cycle posts a new one.
 	pub fn handled(&self) {
 		self.pending
 			.store(false, std::sync::atomic::Ordering::Release);
 	}
 }
 
-// bridges alacritty's PTY thread back to the winit loop
+/// bridges alacritty's PTY thread back to the winit loop
 #[derive(Debug, Clone)]
 pub struct EventProxy {
 	id: PaneId,
@@ -248,7 +249,7 @@ fn grid_dims(cols: usize, lines: usize) -> TermDimensions {
 	}
 }
 
-// size descriptor handed to the crate; history is set separately via Config
+/// size descriptor handed to the crate; history is set separately via Config
 #[derive(Debug, Clone, Copy)]
 pub struct TermDimensions {
 	pub columns: usize,
@@ -267,7 +268,7 @@ impl Dimensions for TermDimensions {
 	}
 }
 
-// What a pane's shell is doing, as its tab reports it.
+/// What a pane's shell is doing, as its tab reports it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Task {
 	/// A command is in the foreground right now.
@@ -325,15 +326,16 @@ impl std::fmt::Debug for TermInstance {
 }
 
 impl TermInstance {
-	// The window has taken delivery of an output notice, so the next read cycle
-	// posts a fresh one (see WakeGate).
+	/// The window has taken delivery of an output notice, so the next read cycle
+	/// posts a fresh one (see `WakeGate`).
 	pub fn wake_handled(&self) {
 		self.notifier.wake.handled();
 	}
 
-	// command is owned by the spawned terminal conceptually; the by-value
-	// constructor input threads through split_at/spawn_pane as a move
-	#[allow(clippy::needless_pass_by_value)]
+	#[allow(
+		clippy::needless_pass_by_value,
+		reason = "command is owned by the spawned terminal conceptually; the by-value constructor input threads through split_at/spawn_pane as a move"
+	)]
 	pub fn spawn(
 		id: PaneId,
 		cols: usize,
@@ -426,15 +428,15 @@ impl TermInstance {
 		})
 	}
 
-	// What this pane's shell is doing, for the tab to say. "Running" is the
-	// program the shell has in the foreground right now; "Last" is what it ran
-	// most recently, which is what an idle tab reports instead. A shell that has
-	// never run anything is Idle, and the tab shows its directory instead.
-	//
-	// Both platforms answer this, by quite different means - a foreground process
-	// group on unix, a live child process on Windows (see at_shell_prompt) - and
-	// both are throttled the same way: render asks per tab per frame, and paying
-	// for a probe on every idle blink frame added up.
+	/// What this pane's shell is doing, for the tab to say. "Running" is the
+	/// program the shell has in the foreground right now; "Last" is what it ran
+	/// most recently, which is what an idle tab reports instead. A shell that has
+	/// never run anything is Idle, and the tab shows its directory instead.
+	///
+	/// Both platforms answer this, by quite different means - a foreground process
+	/// group on unix, a live child process on Windows (see `at_shell_prompt`) - and
+	/// both are throttled the same way: render asks per tab per frame, and paying
+	/// for a probe on every idle blink frame added up.
 	pub fn task(&mut self) -> Task {
 		const PROBE_IVL: std::time::Duration = std::time::Duration::from_millis(250);
 		let now = std::time::Instant::now();
@@ -480,15 +482,15 @@ impl TermInstance {
 		None
 	}
 
-	// The shell's current directory, for a new tab/split to start in.
-	//
-	// What the shell SAID wins over what the OS can see, and that order is the
-	// point: a shell reporting its directory is answering the question directly,
-	// while the OS can only see where the process itself sits - which for
-	// PowerShell is the launch directory forever. A report that no longer names
-	// a directory (a stale one, or a path on the far side of an ssh) is dropped
-	// rather than trusted, and the OS answer stands instead. So is a report from
-	// a program that has since exited, on unix, where that can be told.
+	/// The shell's current directory, for a new tab/split to start in.
+	///
+	/// What the shell SAID wins over what the OS can see, and that order is the
+	/// point: a shell reporting its directory is answering the question directly,
+	/// while the OS can only see where the process itself sits - which for
+	/// PowerShell is the launch directory forever. A report that no longer names
+	/// a directory (a stale one, or a path on the far side of an ssh) is dropped
+	/// rather than trusted, and the OS answer stands instead. So is a report from
+	/// a program that has since exited, on unix, where that can be told.
 	pub fn cwd(&self) -> Option<std::path::PathBuf> {
 		// Throttled the way `task()` beside it is, and for the same reason: the
 		// tab strip asks once per tab per frame, and both halves of the answer
@@ -536,31 +538,31 @@ impl TermInstance {
 		None
 	}
 
-	// Is the shell itself (not a spawned command) the terminal's foreground
-	// process? Drives copy-output's command start/end detection. On unix that is
-	// the foreground process group: the fg pgid equals the shell's while at the
-	// prompt, and a command's while it runs. Windows answers the same question a
-	// different way, below.
+	/// Is the shell itself (not a spawned command) the terminal's foreground
+	/// process? Drives copy-output's command start/end detection. On unix that is
+	/// the foreground process group: the fg pgid equals the shell's while at the
+	/// prompt, and a command's while it runs. Windows answers the same question a
+	/// different way, below.
 	#[cfg(unix)]
 	pub fn at_shell_prompt(&self) -> bool {
 		// SAFETY: takes no pointer, so a closed or reused fd can only answer wrong.
 		let pgid = unsafe { libc::tcgetpgrp(self.master_fd) };
 		pgid <= 0 || pgid as u32 == self.shell_pid
 	}
-	// A Windows console has no foreground process group, so the stand-in is "does
-	// the shell have a live child?" - measured on this box: a command the shell
-	// launches is its DIRECT child and is gone again by the time the prompt
-	// returns, while the console host (conhost/OpenConsole) hangs off OUR process,
-	// never the shell's. A shell builtin spawns nothing, which reads as "at the
-	// prompt" throughout - right, since its output ends when the prompt returns.
-	// A background job (PowerShell's Start-Job) does read as a command still
-	// running; Windows offers nothing that tells one from a foreground command.
-	// The only way to ask is a walk of the whole process table, and that is not
-	// cheap - 6.4ms per scan measured here, release and debug alike, across 237
-	// processes - so the answer is cached until the terminal next stirs (see
-	// note_activity) instead of being taken per event-loop pass. Callers only
-	// ask once output has gone quiet, so in practice this is one scan per
-	// command rather than one per frame.
+	/// A Windows console has no foreground process group, so the stand-in is "does
+	/// the shell have a live child?" - measured on this box: a command the shell
+	/// launches is its DIRECT child and is gone again by the time the prompt
+	/// returns, while the console host (conhost/OpenConsole) hangs off OUR process,
+	/// never the shell's. A shell builtin spawns nothing, which reads as "at the
+	/// prompt" throughout - right, since its output ends when the prompt returns.
+	/// A background job (PowerShell's Start-Job) does read as a command still
+	/// running; Windows offers nothing that tells one from a foreground command.
+	/// The only way to ask is a walk of the whole process table, and that is not
+	/// cheap - 6.4ms per scan measured here, release and debug alike, across 237
+	/// processes - so the answer is cached until the terminal next stirs (see
+	/// `note_activity`) instead of being taken per event-loop pass. Callers only
+	/// ask once output has gone quiet, so in practice this is one scan per
+	/// command rather than one per frame.
 	#[cfg(windows)]
 	pub fn at_shell_prompt(&self) -> bool {
 		self.command_child().is_none()
@@ -581,10 +583,10 @@ impl TermInstance {
 		answer
 	}
 
-	// Windows: the cached at-prompt answer holds only until the terminal next
-	// stirs. Both halves matter - anything typed can start a command, and a
-	// command that ends always brings the prompt back with it, so its own last
-	// act is PTY output. Anywhere else this is nothing.
+	/// Windows: the cached at-prompt answer holds only until the terminal next
+	/// stirs. Both halves matter - anything typed can start a command, and a
+	/// command that ends always brings the prompt back with it, so its own last
+	/// act is PTY output. Anywhere else this is nothing.
 	#[cfg(windows)]
 	pub fn note_activity(&self) {
 		*self.child_probe.borrow_mut() = None;
@@ -599,9 +601,9 @@ impl TermInstance {
 		let _ = self.sender.send(Msg::Input(bytes.into().into()));
 	}
 
-	// Put text on screen without a PTY behind it. The engine's thread owns the
-	// parser and dies with the shell, so anything added afterwards (the
-	// --keep-open exit line) needs a parser of our own.
+	/// Put text on screen without a PTY behind it. The engine's thread owns the
+	/// parser and dies with the shell, so anything added afterwards (the
+	/// --keep-open exit line) needs a parser of our own.
 	pub fn feed(&self, bytes: &[u8]) {
 		let mut parser = alacritty_terminal::vte::ansi::Processor::<
 			alacritty_terminal::vte::ansi::StdSyncHandler,
@@ -692,17 +694,17 @@ fn join_for(io: std::thread::JoinHandle<()>, wait: std::time::Duration) -> bool 
 // session_env below, whose unix arm cannot tell the difference.
 const SHELL_PRIVATE_ENV: &[&str] = &["PSModulePath", "PSExecutionPolicyPreference", "OLDPWD"];
 
-// Put the shell-private variables back to what a freshly launched process would
-// see, so a pane's shell starts the way it would from the desktop. Everything
-// else is left exactly as inherited - discarding the whole environment would
-// throw away the user's own exports, which is the one thing inheriting from a
-// shell is for.
-//
-// Called ONCE from main, before any thread exists: an environment write is
-// process-global and unsound beside a reader. Doing it to our own environment
-// rather than per spawn is what makes it cover every path at once - the first
-// pane, a split, a new tab, a new window, the shell scan and the PowerShell the
-// profile installer starts.
+/// Put the shell-private variables back to what a freshly launched process would
+/// see, so a pane's shell starts the way it would from the desktop. Everything
+/// else is left exactly as inherited - discarding the whole environment would
+/// throw away the user's own exports, which is the one thing inheriting from a
+/// shell is for.
+///
+/// Called ONCE from main, before any thread exists: an environment write is
+/// process-global and unsound beside a reader. Doing it to our own environment
+/// rather than per spawn is what makes it cover every path at once - the first
+/// pane, a split, a new tab, a new window, the shell scan and the PowerShell the
+/// profile installer starts.
 pub fn sanitize_shell_env() {
 	// No answer means leave the environment alone. A pane that starts with a
 	// stale variable beats one that starts with none.

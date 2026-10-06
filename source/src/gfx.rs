@@ -18,25 +18,25 @@ use wgpu::hal::api::Gles;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes};
 
-// COLOR PIPELINE CONTRACT (breaking it reproduces the "everything too dark /
-// SELECTION_BG invisible" bug class): every fragment shader in this app writes
-// LINEAR light (rect srgb_f32, glyphon Accurate, bg-image, scrim), and exactly
-// ONE sRGB encode happens per frame, owned by this module - on the native path
-// the sRGB surface format encodes on write; on the GL path the blit's lin2srgb
-// does it into the non-sRGB fbo 0, so the offscreen MUST stay a non-sRGB,
-// high-precision format (Rgba16Float; an sRGB view would decode in the blit's
-// sample and cancel the encode, an 8-bit linear one bands dark gradients).
-// New render features must not add their own encode. The scrim's color map is
-// stored encoded, but only as storage: scrim.rs decodes it on read, so what it
-// draws is still linear.
-//
-// That one encode runs on premultiplied values, which is exact at alpha 1 and
-// wrong anywhere else: sRGB(a * c) is brighter than a * sRGB(c), and the
-// compositor blends what it gets as if it were the second. A light background
-// at 80% came out as 91% of itself, so it covered most of what the desktop
-// behind it should have shown, while black stayed black. The only translucent
-// thing drawn is the pane fill, so rather than move the encode, the fill is
-// given the color whose encoded, premultiplied value is right.
+/// COLOR PIPELINE CONTRACT (breaking it reproduces the "everything too dark /
+/// `SELECTION_BG` invisible" bug class): every fragment shader in this app writes
+/// LINEAR light (rect `srgb_f32`, glyphon Accurate, bg-image, scrim), and exactly
+/// ONE sRGB encode happens per frame, owned by this module - on the native path
+/// the sRGB surface format encodes on write; on the GL path the blit's lin2srgb
+/// does it into the non-sRGB fbo 0, so the offscreen MUST stay a non-sRGB,
+/// high-precision format (`Rgba16Float`; an sRGB view would decode in the blit's
+/// sample and cancel the encode, an 8-bit linear one bands dark gradients).
+/// New render features must not add their own encode. The scrim's color map is
+/// stored encoded, but only as storage: scrim.rs decodes it on read, so what it
+/// draws is still linear.
+///
+/// That one encode runs on premultiplied values, which is exact at alpha 1 and
+/// wrong anywhere else: sRGB(a * c) is brighter than a * sRGB(c), and the
+/// compositor blends what it gets as if it were the second. A light background
+/// at 80% came out as 91% of itself, so it covered most of what the desktop
+/// behind it should have shown, while black stayed black. The only translucent
+/// thing drawn is the pane fill, so rather than move the encode, the fill is
+/// given the color whose encoded, premultiplied value is right.
 pub fn see_through(color: [f32; 4]) -> [f32; 4] {
 	let a = color[3];
 	if a >= 1.0 || a <= 0.0 {
@@ -172,18 +172,18 @@ impl Blit {
 	}
 }
 
-// Why begin_frame had nothing to draw into. Metal answers Occluded for a window
-// that is hidden, minimized or fully covered, and draws nothing until it shows.
+/// Why `begin_frame` had nothing to draw into. Metal answers Occluded for a window
+/// that is hidden, minimized or fully covered, and draws nothing until it shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoFrame {
 	Occluded,
 	Other,
 }
 
-// Backoff for GPU work that was refused: a frame with no surface to draw into,
-// or a device that would not come back. Nothing else asks again once the load
-// is gone, and a GPU that stays unavailable must not cost a spin. The delay
-// doubles per miss up to a cap, and a success starts it over.
+/// Backoff for GPU work that was refused: a frame with no surface to draw into,
+/// or a device that would not come back. Nothing else asks again once the load
+/// is gone, and a GPU that stays unavailable must not cost a spin. The delay
+/// doubles per miss up to a cap, and a success starts it over.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct Retry {
 	pub misses: u32,
@@ -191,7 +191,7 @@ pub struct Retry {
 }
 
 impl Retry {
-	// Another refusal; the next try waits longer. Returns the wait.
+	/// Another refusal; the next try waits longer. Returns the wait.
 	pub fn missed(&mut self, now: Instant, first: Duration, cap: Duration) -> Duration {
 		let wait = first.saturating_mul(1 << self.misses.min(16)).min(cap);
 		self.misses = self.misses.saturating_add(1);
@@ -199,8 +199,8 @@ impl Retry {
 		wait
 	}
 
-	// True once, when the wait is over. The miss count stays, so the next
-	// refusal waits longer.
+	/// True once, when the wait is over. The miss count stays, so the next
+	/// refusal waits longer.
 	pub fn take_due(&mut self, now: Instant) -> bool {
 		let due = self.at.is_some_and(|at| now >= at);
 		if due {
@@ -213,7 +213,7 @@ impl Retry {
 pub const FRAME_RETRY_FIRST: Duration = Duration::from_millis(16);
 pub const FRAME_RETRY_MAX: Duration = Duration::from_secs(2);
 
-// A frame in flight, returned by `begin_frame` and consumed by `end_frame`.
+/// A frame in flight, returned by `begin_frame` and consumed by `end_frame`.
 pub enum Frame {
 	Native(wgpu::SurfaceTexture),
 	Gl,
@@ -262,7 +262,7 @@ fn sentinel_pattern() -> Vec<u8> {
 		.collect()
 }
 
-// One probe's verdict (see `vram_check_poll`).
+/// One probe's verdict (see `vram_check_poll`).
 #[derive(Debug)]
 pub enum VramProbe {
 	Intact,
@@ -388,7 +388,7 @@ pub struct Gfx {
 	// set for a window glutin made, whichever device it has now
 	gl_route: Option<GlRoute>,
 	pub drawn: Drawn,
-	// what the device was asked for, so a change of setting can be told
+	/// what the device was asked for, so a change of setting can be told
 	pub want: Want,
 	_window: Arc<Window>,
 }
@@ -403,20 +403,20 @@ impl std::fmt::Debug for Gfx {
 	}
 }
 
-// What is kept of a released `Gfx`, enough to build the device again on the
-// same window. The instance is kept rather than made afresh because on the GL
-// path its teardown terminates an EGL display that the glutin context may
-// share, and because the adapter enumeration it holds is the slow part of a
-// cold start on the others.
+/// What is kept of a released `Gfx`, enough to build the device again on the
+/// same window. The instance is kept rather than made afresh because on the GL
+/// path its teardown terminates an EGL display that the glutin context may
+/// share, and because the adapter enumeration it holds is the slow part of a
+/// cold start on the others.
 pub enum Rebirth {
 	Native(wgpu::Instance),
 	Gl(GlRoute),
 }
 
-// How a window glutin made gets a device: the GL instance and the framebuffer
-// config a context on the window has to match, and the instance a software
-// device on it comes from, once one was needed. Kept as a whole, so a window
-// drawing in software goes back to GL at its next build.
+/// How a window glutin made gets a device: the GL instance and the framebuffer
+/// config a context on the window has to match, and the instance a software
+/// device on it comes from, once one was needed. Kept as a whole, so a window
+/// drawing in software goes back to GL at its next build.
 #[derive(Clone)]
 pub struct GlRoute {
 	instance: wgpu::Instance,
@@ -432,8 +432,8 @@ impl std::fmt::Debug for GlRoute {
 	}
 }
 
-// Which kind of adapter a device is asked of first. The other is tried once
-// when the first cannot make a device.
+/// Which kind of adapter a device is asked of first. The other is tried once
+/// when the first cannot make a device.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Want {
 	Card,
@@ -441,8 +441,8 @@ pub enum Want {
 }
 
 impl Want {
-	// `force_fallback_adapter` for each try, in order. false lets wgpu pick
-	// any adapter, a card ahead of software; true takes software only.
+	/// `force_fallback_adapter` for each try, in order. false lets wgpu pick
+	/// any adapter, a card ahead of software; true takes software only.
 	pub const fn order(self) -> [bool; 2] {
 		match self {
 			Self::Card => [false, true],
@@ -451,11 +451,11 @@ impl Want {
 	}
 }
 
-// wgpu has a software adapter everywhere but macOS: lavapipe on Linux, WARP on
-// Windows.
+/// wgpu has a software adapter everywhere but macOS: lavapipe on Linux, WARP on
+/// Windows.
 pub const SOFTWARE_POSSIBLE: bool = !cfg!(target_os = "macos");
 
-// What the next device is asked for.
+/// What the next device is asked for.
 pub fn wanted() -> Want {
 	if SOFTWARE_POSSIBLE && crate::config::settings().software_rendering {
 		Want::Software
@@ -464,7 +464,7 @@ pub fn wanted() -> Want {
 	}
 }
 
-// How a device came to be on its adapter.
+/// How a device came to be on its adapter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Drawn {
 	Card,
@@ -489,8 +489,8 @@ impl Drawn {
 		}
 	}
 
-	// Software on a machine that has a card. The card keeps its performance
-	// rating then, since this is not new hardware.
+	/// Software on a machine that has a card. The card keeps its performance
+	/// rating then, since this is not new hardware.
 	pub const fn instead_of_card(self) -> bool {
 		matches!(self, Self::Software | Self::Fallback)
 	}
@@ -510,12 +510,12 @@ impl Gfx {
 		Self::with_backends(window, wgpu::Backends::all(), want)
 	}
 
-	// Let the device and everything on it go. Every other wgpu object made on
-	// this device must be gone already, or the device outlives this call: the
-	// handles are refcounted, and the last one standing is what frees it.
-	// Ordered by hand, since the GL objects are deleted through a context that
-	// has to be current while it happens and glutin destroys one without
-	// unbinding it first.
+	/// Let the device and everything on it go. Every other wgpu object made on
+	/// this device must be gone already, or the device outlives this call: the
+	/// handles are refcounted, and the last one standing is what frees it.
+	/// Ordered by hand, since the GL objects are deleted through a context that
+	/// has to be current while it happens and glutin destroys one without
+	/// unbinding it first.
 	pub fn release(self) -> Rebirth {
 		let Self {
 			instance,
@@ -559,9 +559,9 @@ impl Gfx {
 		gl_route.map_or(Rebirth::Native(instance), Rebirth::Gl)
 	}
 
-	// The device again, on the window it was released from. A kept instance that
-	// can no longer serve the window (a driver that went away in the meantime)
-	// falls back to a cold start.
+	/// The device again, on the window it was released from. A kept instance that
+	/// can no longer serve the window (a driver that went away in the meantime)
+	/// falls back to a cold start.
 	pub fn rebuild(rebirth: &Rebirth, window: &Arc<Window>, want: Want) -> anyhow::Result<Self> {
 		match rebirth {
 			Rebirth::Native(instance) => {
@@ -572,12 +572,12 @@ impl Gfx {
 		}
 	}
 
-	// Windows per-pixel transparency. A swapchain made straight from the HWND
-	// only ever composites opaque, whatever the window asked for, so the setting
-	// used to change nothing there. DX12 can instead present through a
-	// DirectComposition visual, which does carry premultiplied alpha - and it is
-	// the only backend with that option, so it has to be the one picked. Falls
-	// back to the ordinary path (opaque) when DX12 cannot serve this window.
+	/// Windows per-pixel transparency. A swapchain made straight from the HWND
+	/// only ever composites opaque, whatever the window asked for, so the setting
+	/// used to change nothing there. DX12 can instead present through a
+	/// `DirectComposition` visual, which does carry premultiplied alpha - and it is
+	/// the only backend with that option, so it has to be the one picked. Falls
+	/// back to the ordinary path (opaque) when DX12 cannot serve this window.
 	#[cfg(windows)]
 	pub fn new_composited(window: Arc<Window>, want: Want) -> anyhow::Result<Self> {
 		let dx12 = wgpu::Dx12BackendOptions {
@@ -597,11 +597,11 @@ impl Gfx {
 		})
 	}
 
-	// Native wgpu path with a chosen backend set. Pop-out dialog windows pass
-	// `Backends::PRIMARY` (Vulkan/Metal/DX12, NO GL): initializing wgpu's GL
-	// backend while the main window holds a glutin GL/EGL context panics in
-	// wgpu-hal's EGL teardown (`unmake_current().unwrap()`), so dialogs must avoid
-	// touching EGL entirely.
+	/// Native wgpu path with a chosen backend set. Pop-out dialog windows pass
+	/// `Backends::PRIMARY` (Vulkan/Metal/DX12, NO GL): initializing wgpu's GL
+	/// backend while the main window holds a glutin GL/EGL context panics in
+	/// wgpu-hal's EGL teardown (`unmake_current().unwrap()`), so dialogs must avoid
+	/// touching EGL entirely.
 	pub fn with_backends(
 		window: Arc<Window>,
 		backends: wgpu::Backends,
@@ -711,11 +711,11 @@ impl Gfx {
 		Ok(gfx)
 	}
 
-	// Same native path, but on a context that was built ahead of time (see
-	// `DialogGpu`). Only the surface is created here, which is sub-millisecond -
-	// the instance/adapter/device that dominate `with_backends` are already paid
-	// for. `None` means this warm context cannot serve this window, so the caller
-	// must fall back to a cold `with_backends`.
+	/// Same native path, but on a context that was built ahead of time (see
+	/// `DialogGpu`). Only the surface is created here, which is sub-millisecond -
+	/// the instance/adapter/device that dominate `with_backends` are already paid
+	/// for. `None` means this warm context cannot serve this window, so the caller
+	/// must fall back to a cold `with_backends`.
 	pub fn with_dialog_gpu(window: Arc<Window>, gpu: &DialogGpu) -> Option<Self> {
 		// The warm instance was built with no display connection, so it may not be
 		// able to make a surface for this window at all. That is the same answer as
@@ -767,9 +767,9 @@ impl Gfx {
 		.expect("GL reported no framebuffer configs")
 	}
 
-	// X11-only per-pixel transparency: glutin creates the window with a 32-bit
-	// ARGB visual + transparent GL context, and wgpu runs on it via hal external
-	// interop (PoCs on branch spike/x11-transparency). Returns the window it created.
+	/// X11-only per-pixel transparency: glutin creates the window with a 32-bit
+	/// ARGB visual + transparent GL context, and wgpu runs on it via hal external
+	/// interop (PoCs on branch spike/x11-transparency). Returns the window it created.
 	pub fn new_gl_transparent(
 		el: &ActiveEventLoop,
 		attrs: WindowAttributes,
@@ -938,7 +938,7 @@ impl Gfx {
 		})
 	}
 
-	// Acquire the frame's render target, or say why there is none this time.
+	/// Acquire the frame's render target, or say why there is none this time.
 	pub fn begin_frame(&mut self) -> Result<Frame, NoFrame> {
 		match &self.backend {
 			Backend::Native(surface) => {
@@ -970,8 +970,8 @@ impl Gfx {
 		}
 	}
 
-	// Err when the frame never reached the window. Only the GL path can tell:
-	// a native present reports through wgpu's error handler instead.
+	/// Err when the frame never reached the window. Only the GL path can tell:
+	/// a native present reports through wgpu's error handler instead.
 	pub fn end_frame(&self, frame: Frame) -> Result<(), NoFrame> {
 		match (frame, &self.backend) {
 			(Frame::Native(surface_tex), _) => {
@@ -1054,8 +1054,8 @@ impl Gfx {
 // VRAM-content probe (see the Sentinel comment above). All no-ops on the
 // native backend, where sentinel is None.
 impl Gfx {
-	// Made by glutin, with an ARGB visual and a VT watcher, whether it draws
-	// through GL right now or in software.
+	/// Made by glutin, with an ARGB visual and a VT watcher, whether it draws
+	/// through GL right now or in software.
 	pub const fn on_glutin_window(&self) -> bool {
 		self.gl_route.is_some()
 	}
@@ -1064,8 +1064,8 @@ impl Gfx {
 		matches!(self.backend, Backend::Gl { .. })
 	}
 
-	// Start an async sentinel readback (both witnesses into one buffer). False
-	// when there's no sentinel (native path) or a probe is already in flight.
+	/// Start an async sentinel readback (both witnesses into one buffer). False
+	/// when there's no sentinel (native path) or a probe is already in flight.
 	pub fn vram_check_start(&mut self) -> bool {
 		let Some(sent) = &mut self.sentinel else {
 			return false;
@@ -1107,9 +1107,9 @@ impl Gfx {
 		true
 	}
 
-	// Poll an in-flight probe. Some(Lost{..}) = a witness pattern is gone (the
-	// sentinels are reseeded before returning so the caller only rebuilds the
-	// rest). None = still pending / no probe.
+	/// Poll an in-flight probe. Some(Lost{..}) = a witness pattern is gone (the
+	/// sentinels are reseeded before returning so the caller only rebuilds the
+	/// rest). None = still pending / no probe.
 	pub fn vram_check_poll(&mut self) -> Option<VramProbe> {
 		let sent = self.sentinel.as_mut()?;
 		let flag = sent.inflight.as_ref()?.clone();
@@ -1147,8 +1147,8 @@ impl Gfx {
 		}
 	}
 
-	// Diagnostic (SILK_VRAMLOSS): zero both sentinels to fake a content loss,
-	// so the detect->rebuild path can be exercised without a real VT switch.
+	/// Diagnostic (`SILK_VRAMLOSS`): zero both sentinels to fake a content loss,
+	/// so the detect->rebuild path can be exercised without a real VT switch.
 	pub fn vram_clobber(&self) {
 		if let Some(sent) = &self.sentinel {
 			sent.seed(&self.device, &self.queue, &vec![0u8; SENTINEL_BYTES]);
@@ -1157,8 +1157,8 @@ impl Gfx {
 }
 
 impl Gfx {
-	// Diagnostic: read the GL offscreen texture back and save it as a PNG. Bypasses
-	// the compositor/X-pixmap quirks that make screenshotting GL windows unreliable.
+	/// Diagnostic: read the GL offscreen texture back and save it as a PNG. Bypasses
+	/// the compositor/X-pixmap quirks that make screenshotting GL windows unreliable.
 	pub fn dump_offscreen(&self, path: &str) {
 		let Backend::Gl { offscreen, .. } = &self.backend else {
 			return;
@@ -1436,16 +1436,16 @@ fn pick_alpha_mode(
 	(offered.first().copied().unwrap_or(Mode::Opaque), false)
 }
 
-// A wgpu instance/adapter/device kept for the life of the process and shared by
-// every pop-out dialog.
-//
-// Dialogs cannot borrow the terminal's context: on X11 that one is a glutin
-// GL/EGL context, and a second GL instance panics in wgpu-hal's EGL teardown. So
-// each dialog used to build a whole PRIMARY context of its own, on the click, and
-// again on every reopen since nothing was retained. Building the instance,
-// adapter and device is most of the time it takes to open a dialog. Warming it
-// once on a worker thread moves that off the click, and keeping it moves it off
-// every later open too.
+/// A wgpu instance/adapter/device kept for the life of the process and shared by
+/// every pop-out dialog.
+///
+/// Dialogs cannot borrow the terminal's context: on X11 that one is a glutin
+/// GL/EGL context, and a second GL instance panics in wgpu-hal's EGL teardown. So
+/// each dialog used to build a whole PRIMARY context of its own, on the click, and
+/// again on every reopen since nothing was retained. Building the instance,
+/// adapter and device is most of the time it takes to open a dialog. Warming it
+/// once on a worker thread moves that off the click, and keeping it moves it off
+/// every later open too.
 #[derive(Clone, Debug)]
 pub struct DialogGpu {
 	instance: wgpu::Instance,
@@ -1457,21 +1457,21 @@ pub struct DialogGpu {
 	want: Want,
 }
 
-// The instance of a `DialogGpu` whose device has been let go: what a rebuild
-// starts from, since the device is the memory and the instance is the part a
-// driver may not fully give back (file descriptors stayed open on NVIDIA's
-// after every instance destroyed). The adapter is picked again, since the
-// software setting may have changed in between.
+/// The instance of a `DialogGpu` whose device has been let go: what a rebuild
+/// starts from, since the device is the memory and the instance is the part a
+/// driver may not fully give back (file descriptors stayed open on NVIDIA's
+/// after every instance destroyed). The adapter is picked again, since the
+/// software setting may have changed in between.
 #[derive(Clone, Debug)]
 pub struct DialogSeed {
 	instance: wgpu::Instance,
 }
 
 impl DialogGpu {
-	// Runs off the winit thread, so there is no window to check the adapter
-	// against - `Gfx::with_dialog_gpu` does that later against the real surface.
-	// Not logged: the terminal already reported the GPU, and this picks the same
-	// one on any single-adapter box.
+	/// Runs off the winit thread, so there is no window to check the adapter
+	/// against - `Gfx::with_dialog_gpu` does that later against the real surface.
+	/// Not logged: the terminal already reported the GPU, and this picks the same
+	/// one on any single-adapter box.
 	pub fn build(want: Want) -> anyhow::Result<Self> {
 		Self::on(
 			DialogSeed {
@@ -1545,11 +1545,11 @@ impl GpuWarm {
 		}
 	}
 
-	// Start warming. Called once the terminal is actually on screen, so the
-	// device build happens in dead time rather than competing with startup.
-	// Repeat calls are no-ops. After a release the device is asked of the
-	// adapter that was kept, and a cold build is the fallback when that adapter
-	// no longer answers.
+	/// Start warming. Called once the terminal is actually on screen, so the
+	/// device build happens in dead time rather than competing with startup.
+	/// Repeat calls are no-ops. After a release the device is asked of the
+	/// adapter that was kept, and a cold build is the fallback when that adapter
+	/// no longer answers.
 	pub fn start(&mut self) {
 		if !matches!(self.state, Warm::Idle) {
 			return;
@@ -1576,8 +1576,8 @@ impl GpuWarm {
 		}));
 	}
 
-	// Let the device go, keeping the instance and adapter it was built on for
-	// the next `start`. The idle release calls this beside the terminal's own.
+	/// Let the device go, keeping the instance and adapter it was built on for
+	/// the next `start`. The idle release calls this beside the terminal's own.
 	pub fn release(&mut self) {
 		self.state = std::mem::replace(&mut self.state, Warm::Failed).settled();
 		if let Warm::Ready(gpu) = &self.state {
@@ -1586,7 +1586,7 @@ impl GpuWarm {
 		self.state = Warm::Idle;
 	}
 
-	// The warm device if it is built, without waiting for it.
+	/// The warm device if it is built, without waiting for it.
 	pub fn ready_device(&mut self) -> Option<&wgpu::Device> {
 		if matches!(&self.state, Warm::Building(job) if job.is_finished()) {
 			self.state = std::mem::replace(&mut self.state, Warm::Failed).settled();
@@ -1597,9 +1597,9 @@ impl GpuWarm {
 		}
 	}
 
-	// The warm context, waiting on the worker if it is still going. That wait can
-	// never cost more than building one here would have, since the work is
-	// already under way - and normally it finished seconds ago.
+	/// The warm context, waiting on the worker if it is still going. That wait can
+	/// never cost more than building one here would have, since the work is
+	/// already under way - and normally it finished seconds ago.
 	pub fn get(&mut self) -> Option<DialogGpu> {
 		self.state = std::mem::replace(&mut self.state, Warm::Failed).settled();
 		match &self.state {
@@ -1609,8 +1609,8 @@ impl GpuWarm {
 	}
 }
 
-// How the About text names an adapter's device type. Shared by the dialog and
-// `--about`, so a bug report reads the same either way.
+/// How the About text names an adapter's device type. Shared by the dialog and
+/// `--about`, so a bug report reads the same either way.
 pub const fn acceleration(device_type: wgpu::DeviceType) -> &'static str {
 	match device_type {
 		wgpu::DeviceType::Cpu => "Software (CPU)",
@@ -1639,11 +1639,11 @@ pub fn test_adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterI
 	}
 }
 
-// Adapter details for `--about`, with no window and no device. Only the adapter
-// is asked for: request_device is the expensive half (measured ~161ms against
-// ~6ms), and nothing here draws. PRIMARY matches what the About dialog runs on,
-// so the two report the same GPU. None on a box with no usable adapter - the
-// rest of the About text is still worth printing.
+/// Adapter details for `--about`, with no window and no device. Only the adapter
+/// is asked for: `request_device` is the expensive half (measured ~161ms against
+/// ~6ms), and nothing here draws. PRIMARY matches what the About dialog runs on,
+/// so the two report the same GPU. None on a box with no usable adapter - the
+/// rest of the About text is still worth printing.
 pub fn probe_adapter_info() -> Option<wgpu::AdapterInfo> {
 	let instance = plain_instance(wgpu::Backends::PRIMARY);
 	wanted().order().into_iter().find_map(|software| {
@@ -1858,21 +1858,21 @@ pub struct RectInstance {
 	pub pos: [f32; 2],
 	pub size: [f32; 2],
 	pub color: [f32; 4],
-	// params.x = mode (0 solid quad, 1 close-"X" mark, 2 rounded quad,
-	// 3 triangle - a submenu arrow, or the Settings warning mark,
-	// 4 the color picker's saturation/brightness square, 5 its hue strip),
-	// params.y = stroke px for the X, corner radius for the rounded quad,
-	// quarter-turns clockwise for the triangle (0 right, 1 down, 2 left, 3 up).
-	// The X and the arrows are drawn in the fragment shader, so each centers
-	// exactly in its quad (a font glyph never did - baseline metrics vary, and
-	// there is no arrow every interface font carries).
-	//
-	// Mode 4 reads `color` as sRGB rather than linear, unlike every other mode:
-	// it is the hue the square mixes toward, and mixing toward white in linear
-	// light gives a gradient nobody would recognise as a color picker. Modes 4
-	// and 5 encode the result themselves, so the value that arrives is the one
-	// the box is showing. Neither may use params.y - it is a length, and
-	// `quads_px` scales it.
+	/// params.x = mode (0 solid quad, 1 close-"X" mark, 2 rounded quad,
+	/// 3 triangle - a submenu arrow, or the Settings warning mark,
+	/// 4 the color picker's saturation/brightness square, 5 its hue strip),
+	/// params.y = stroke px for the X, corner radius for the rounded quad,
+	/// quarter-turns clockwise for the triangle (0 right, 1 down, 2 left, 3 up).
+	/// The X and the arrows are drawn in the fragment shader, so each centers
+	/// exactly in its quad (a font glyph never did - baseline metrics vary, and
+	/// there is no arrow every interface font carries).
+	///
+	/// Mode 4 reads `color` as sRGB rather than linear, unlike every other mode:
+	/// it is the hue the square mixes toward, and mixing toward white in linear
+	/// light gives a gradient nobody would recognise as a color picker. Modes 4
+	/// and 5 encode the result themselves, so the value that arrives is the one
+	/// the box is showing. Neither may use params.y - it is a length, and
+	/// `quads_px` scales it.
 	pub params: [f32; 2],
 }
 
@@ -1883,7 +1883,7 @@ struct Uniform {
 	_pad: [f32; 2],
 }
 
-// flat colored quads: backgrounds, cursor, dividers, focus ring
+/// flat colored quads: backgrounds, cursor, dividers, focus ring
 pub struct RectRenderer {
 	pipeline: wgpu::RenderPipeline,
 	instances: wgpu::Buffer,

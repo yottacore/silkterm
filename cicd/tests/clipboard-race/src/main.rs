@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// Does a SelectionClear left over from an earlier hand-over wipe the text a
-// later store just put in? Steal the selection from a second connection in this
-// same process, so the hand-over and the re-store can be squeezed together, and
-// see whether a reader can still get the text.
+//! Does a SelectionClear left over from an earlier hand-over wipe the text a
+//! later store just put in? Steal the selection from a second connection in this
+//! same process, so the hand-over and the re-store can be squeezed together, and
+//! see whether a reader can still get the text.
 use std::process::Command;
 use std::time::Duration;
 use x11_clipboard::Clipboard;

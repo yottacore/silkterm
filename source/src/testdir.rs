@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// One folder per test run, `<temp>/test_silkterm_YYYYmmDD-HHMMSSNN`, that every
-// file a test writes goes under. A runner that sets SILKTERM_TEST_DIR hands its
-// own folder down instead, so a whole pipeline run shares one. The scripts
-// under cicd/tests keep the same contract in _testdir.bash, .py and .ps1.
-// A folder this process made is removed when the run passes, and kept when a
-// test panicked. One named by SILKTERM_TEST_DIR is never removed.
+//! One folder per test run, `<temp>/test_silkterm_YYYYmmDD-HHMMSSNN`, that every
+//! file a test writes goes under. A runner that sets `SILKTERM_TEST_DIR` hands its
+//! own folder down instead, so a whole pipeline run shares one. The scripts
+//! under cicd/tests keep the same contract in _testdir.bash, .py and .ps1.
+//! A folder this process made is removed when the run passes, and kept when a
+//! test panicked. One named by `SILKTERM_TEST_DIR` is never removed.
 
 use std::cell::Cell;
 use std::io::{self, ErrorKind, Write};

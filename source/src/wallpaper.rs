@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// The wallpaper pipeline, off the winit thread.
-//
-// Everything here touches the filesystem or spends real CPU: scanning the
-// rotation folder, reading the shuffle history, decoding the image, blurring and
-// contrast-flattening it, reading its XMP tags. Any of those paths can be a
-// mounted share that answers slowly or not at all, and the blur alone costs
-// hundreds of milliseconds on a large image - so none of it may sit between
-// launch and the first frame. The window paints with no wallpaper and picks one
-// up when the result arrives (UserEvent::WallpaperReady).
-//
-// Only the GPU upload stays on the winit thread; it needs the device, and it is
-// a plain texture write.
+//! The wallpaper pipeline, off the winit thread.
+//!
+//! Everything here touches the filesystem or spends real CPU: scanning the
+//! rotation folder, reading the shuffle history, decoding the image, blurring and
+//! contrast-flattening it, reading its XMP tags. Any of those paths can be a
+//! mounted share that answers slowly or not at all, and the blur alone costs
+//! hundreds of milliseconds on a large image - so none of it may sit between
+//! launch and the first frame. The window paints with no wallpaper and picks one
+//! up when the result arrives (`UserEvent::WallpaperReady`).
+//!
+//! Only the GPU upload stays on the winit thread; it needs the device, and it is
+//! a plain texture write.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -30,35 +30,35 @@ const DEFAULT_BACKGROUND: &[u8] = include_bytes!("../assets/default-background.j
 // How many recently-shown images the shuffle holds back at most.
 const WP_AVOID_MAX: usize = 32;
 
-// What the worker was asked to do. `settings` is a snapshot: the worker must
-// never read the live store, since it outlives the settings it was started with.
+/// What the worker was asked to do. `settings` is a snapshot: the worker must
+/// never read the live store, since it outlives the settings it was started with.
 #[derive(Debug)]
 pub struct Request {
 	pub seq: u64,
-	// The newest request's seq, shared with the window. A worker whose own seq
-	// is no longer the newest has been superseded, and stops at its next stage
-	// rather than blurring a photo nobody will see.
+	/// The newest request's seq, shared with the window. A worker whose own seq
+	/// is no longer the newest has been superseded, and stops at its next stage
+	/// rather than blurring a photo nobody will see.
 	pub newest: Arc<AtomicU64>,
 	pub settings: Arc<Settings>,
-	// also scan the rotation folder and pick from it (startup and each rotation
-	// step); false just loads whatever `settings.wallpaper` names.
+	/// also scan the rotation folder and pick from it (startup and each rotation
+	/// step); false just loads whatever `settings.wallpaper` names.
 	pub scan: bool,
-	// The image showing now. Order-mode rotation advances from it (by name, so a
-	// re-scan that moved things around still ends in the right place), and a
-	// non-scanning request keeps it when the settings name none - otherwise
-	// re-reading the config while rotating would blank the wallpaper until the
-	// next tick, since a rotated pick is live-only and never written to the file.
+	/// The image showing now. Order-mode rotation advances from it (by name, so a
+	/// re-scan that moved things around still ends in the right place), and a
+	/// non-scanning request keeps it when the settings name none - otherwise
+	/// re-reading the config while rotating would blank the wallpaper until the
+	/// next tick, since a rotated pick is live-only and never written to the file.
 	pub current: Option<PathBuf>,
-	// A bare `--wallpaper` or `--wallpaper-file` asked for no picture, and gets
-	// none. Without this the built-in stood in, or a rotation folder left the
-	// window bare, so one flag meant two things depending on a folder.
+	/// A bare `--wallpaper` or `--wallpaper-file` asked for no picture, and gets
+	/// none. Without this the built-in stood in, or a rotation folder left the
+	/// window bare, so one flag meant two things depending on a folder.
 	pub cleared: bool,
-	// The window's size in pixels, which the image is held at (`Sizing::held`).
-	// 0x0 when unknown, which keeps it whole.
+	/// The window's size in pixels, which the image is held at (`Sizing::held`).
+	/// 0x0 when unknown, which keeps it whole.
 	pub window: (u32, u32),
-	// Set when this only sizes the picture already showing for a new window
-	// size. Its summary is kept, so the derived text colors don't move by a
-	// rounding error each time the window is resized.
+	/// Set when this only sizes the picture already showing for a new window
+	/// size. Its summary is kept, so the derived text colors don't move by a
+	/// rounding error each time the window is resized.
 	pub summary: Option<crate::autotheme::Summary>,
 }
 
@@ -68,14 +68,14 @@ impl Request {
 	}
 }
 
-// Rotation pacing, kept apart from the window so it can be driven by a clock.
-//
-// A tick that finds a request still working sends nothing. Sending would only
-// retire the one in flight, and once preparing an image took longer than the
-// interval every request was retired before it arrived: the picture never
-// changed, and each abandoned thread went on blurring a photo to the end. The
-// tick is remembered and served when the result arrives - by the result itself
-// when it was a rotation, or by sending one then when it was not.
+/// Rotation pacing, kept apart from the window so it can be driven by a clock.
+///
+/// A tick that finds a request still working sends nothing. Sending would only
+/// retire the one in flight, and once preparing an image took longer than the
+/// interval every request was retired before it arrived: the picture never
+/// changed, and each abandoned thread went on blurring a photo to the end. The
+/// tick is remembered and served when the result arrives - by the result itself
+/// when it was a rotation, or by sending one then when it was not.
 #[derive(Debug, Default)]
 pub struct Pacing {
 	inflight: Option<u64>,
@@ -91,7 +91,7 @@ impl Pacing {
 		self.inflight.is_some()
 	}
 
-	// A tick: whether to send a rotation request now.
+	/// A tick: whether to send a rotation request now.
 	pub fn tick(&mut self) -> bool {
 		if self.inflight.is_some() {
 			self.owed = true;
@@ -100,8 +100,8 @@ impl Pacing {
 		true
 	}
 
-	// The newest request answered. True means a tick fired while it was working
-	// and the answer was no rotation, so one is due now.
+	/// The newest request answered. True means a tick fired while it was working
+	/// and the answer was no rotation, so one is due now.
 	pub fn arrived(&mut self, scanned: bool) -> bool {
 		self.inflight = None;
 		if scanned {
@@ -112,7 +112,7 @@ impl Pacing {
 	}
 }
 
-// Image pixels ready for upload, with the layout the file's own tags asked for.
+/// Image pixels ready for upload, with the layout the file's own tags asked for.
 #[derive(Debug, Clone)]
 pub struct Prepared {
 	pub rgba: image::RgbaImage,
@@ -120,14 +120,14 @@ pub struct Prepared {
 	pub opacity: f32,
 	pub fit: Fit,
 	pub anchor: [f32; 2],
-	// What this picture is worth to a derived text color (autotheme.rs). Summed
-	// here because this is where the finished pixels are, and it is six numbers
-	// rather than a copy of them.
+	/// What this picture is worth to a derived text color (autotheme.rs). Summed
+	/// here because this is where the finished pixels are, and it is six numbers
+	/// rather than a copy of them.
 	pub summary: crate::autotheme::Summary,
 }
 
-// What a scan found. Absent when the request didn't scan, or when the folder
-// turned out to hold nothing.
+/// What a scan found. Absent when the request didn't scan, or when the folder
+/// turned out to hold nothing.
 #[derive(Debug, Clone)]
 pub struct Rotation {
 	pub count: usize,
@@ -138,7 +138,7 @@ pub struct Rotation {
 pub struct Loaded {
 	pub seq: u64,
 	pub image: Option<Prepared>,
-	// A small copy of `image` the window keeps through an idle release.
+	/// A small copy of `image` the window keeps through an idle release.
 	pub standin: Option<Prepared>,
 	pub rotation: Option<Rotation>,
 	pub scanned: bool,
@@ -148,10 +148,10 @@ pub struct Loaded {
 const STANDIN_EDGE: u32 = 160;
 
 impl Prepared {
-	// What a window shows the moment it takes its device back, until the real
-	// picture is prepared again: this one shrunk to a few KiB and drawn
-	// stretched, smoothed by the shader. Everything but the pixels is kept, so
-	// it lands where the real one will.
+	/// What a window shows the moment it takes its device back, until the real
+	/// picture is prepared again: this one shrunk to a few KiB and drawn
+	/// stretched, smoothed by the shader. Everything but the pixels is kept, so
+	/// it lands where the real one will.
 	pub fn standin(&self) -> Prepared {
 		let (w, h) = self.rgba.dimensions();
 		let small = fit_within(w, h, STANDIN_EDGE).unwrap_or((w, h));
@@ -211,13 +211,13 @@ fn box_shrink(src: &image::RgbaImage, (w, h): (u32, u32)) -> image::RgbaImage {
 	out
 }
 
-// Run one request on its own thread and post the result back to the event loop.
-//
-// A thread per request rather than one long-lived worker, deliberately: a
-// request that hangs on a dead mount blocks its own thread forever, and a shared
-// worker would leave every later request queued behind it. The stale result is
-// harmless when it finally arrives - the sequence stamp retires it. A worker
-// that has been superseded while doing real work gives up between stages.
+/// Run one request on its own thread and post the result back to the event loop.
+///
+/// A thread per request rather than one long-lived worker, deliberately: a
+/// request that hangs on a dead mount blocks its own thread forever, and a shared
+/// worker would leave every later request queued behind it. The stale result is
+/// harmless when it finally arrives - the sequence stamp retires it. A worker
+/// that has been superseded while doing real work gives up between stages.
 pub fn spawn(proxy: &EventLoopProxy<UserEvent>, request: Request) {
 	let proxy = proxy.clone();
 	let spawned = std::thread::Builder::new()
@@ -346,21 +346,21 @@ fn fit_within(w: u32, h: u32, max: u32) -> Option<(u32, u32)> {
 	))
 }
 
-// How big a prepared wallpaper is, so the window can tell when a new size wants
-// it prepared again.
+/// How big a prepared wallpaper is, so the window can tell when a new size wants
+/// it prepared again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sizing {
-	// The image after the MAX_EDGE cut. The blur's sigma is in these pixels, and
-	// the shader takes the picture's proportions from it.
+	/// The image after the `MAX_EDGE` cut. The blur's sigma is in these pixels, and
+	/// the shader takes the picture's proportions from it.
 	pub full: (u32, u32),
 }
 
 impl Sizing {
-	// The size held for a window: what the fit draws the picture at, so the GPU
-	// never keeps pixels it only scales away. Never bigger than `full`. Stretch
-	// takes the larger of the two axis scales, the same as zoom, so the picture
-	// keeps its proportions and the blur stays round, as it was when the whole
-	// image was held.
+	/// The size held for a window: what the fit draws the picture at, so the GPU
+	/// never keeps pixels it only scales away. Never bigger than `full`. Stretch
+	/// takes the larger of the two axis scales, the same as zoom, so the picture
+	/// keeps its proportions and the blur stays round, as it was when the whole
+	/// image was held.
 	pub fn held(self, window: (u32, u32)) -> (u32, u32) {
 		let ((fw, fh), (ww, wh)) = (self.full, window);
 		if fw == 0 || fh == 0 || ww == 0 || wh == 0 {

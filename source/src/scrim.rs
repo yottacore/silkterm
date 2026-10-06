@@ -22,16 +22,16 @@
 
 use crate::gfx::{RectInstance, RectRenderer};
 
-// Each layer stores only what is read back from it. Only alpha of the text
-// coverage is read, but glyphon writes the glyph's color too, so the text keeps
-// four 8-bit channels, the precision the glyph atlas has anyway. The cursor
-// quads are ours and draw white, so their coverage ends up in one red channel. The
-// blur layers hold blurred coverage or a distance in px, which bands in 8 bits
-// (see the reducing resources design doc). The color map holds opaque cell
-// colors that came from sRGB bytes, so it stores them sRGB encoded and gives
-// them back exactly. The encode is done here rather than by an sRGB format,
-// because the GL path never turns sRGB writes on: an sRGB target there stores
-// the linear value as is and still decodes it on read.
+/// Each layer stores only what is read back from it. Only alpha of the text
+/// coverage is read, but glyphon writes the glyph's color too, so the text keeps
+/// four 8-bit channels, the precision the glyph atlas has anyway. The cursor
+/// quads are ours and draw white, so their coverage ends up in one red channel. The
+/// blur layers hold blurred coverage or a distance in px, which bands in 8 bits
+/// (see the reducing resources design doc). The color map holds opaque cell
+/// colors that came from sRGB bytes, so it stores them sRGB encoded and gives
+/// them back exactly. The encode is done here rather than by an sRGB format,
+/// because the GL path never turns sRGB writes on: an sRGB target there stores
+/// the linear value as is and still decodes it on read.
 pub const TEXT_FMT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const CURSOR_FMT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
 const HALO_FMT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
@@ -181,7 +181,7 @@ impl std::fmt::Debug for Scrim {
 	}
 }
 
-// What draws this frame, which decides what is worth allocating.
+/// What draws this frame, which decides what is worth allocating.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Use {
 	Nothing,
@@ -199,10 +199,10 @@ impl Use {
 	}
 }
 
-// The widest halo the distance passes can measure. They tap at most DIST_MAX
-// pixels, and the composite divides by the extent it is given - so an extent past
-// this made every pixel of every pane come out at full halo, a flat plate of
-// background color. Both halves read the same number now.
+/// The widest halo the distance passes can measure. They tap at most `DIST_MAX`
+/// pixels, and the composite divides by the extent it is given - so an extent past
+/// this made every pixel of every pane come out at full halo, a flat plate of
+/// background color. Both halves read the same number now.
 pub const EXT_MAX: f32 = 40.0;
 
 pub fn clamp_ext(ext: f32) -> f32 {
@@ -337,8 +337,8 @@ impl Scrim {
 		}
 	}
 
-	// Answers whether anything was reallocated, which is the caller's cue that
-	// this frame's prepared set is stale.
+	/// Answers whether anything was reallocated, which is the caller's cue that
+	/// this frame's prepared set is stale.
 	pub fn set_use(&mut self, device: &wgpu::Device, what: Use) -> bool {
 		if what == self.use_ {
 			return false;
@@ -384,13 +384,13 @@ impl Scrim {
 		self.halo_size = halo;
 	}
 
-	// Build the per-pixel scrim-color map: clear to the global bg color, then draw
-	// the per-cell bg rects (opaque) over it. A glyph's halo then takes its own
-	// cell's bg color instead of always the global one. The alpha channel doubles
-	// as an "own-bg" mask - cleared to 0, the opaque cell rects write 1, so the blur
-	// can drop coverage from cells that already carry a solid bg (reverse video,
-	// colored bg, selection): they have full contrast, so a halo there is only
-	// artifact (nano's reverse header cast a jumping drop-shadow). See fs_blur.
+	/// Build the per-pixel scrim-color map: clear to the global bg color, then draw
+	/// the per-cell bg rects (opaque) over it. A glyph's halo then takes its own
+	/// cell's bg color instead of always the global one. The alpha channel doubles
+	/// as an "own-bg" mask - cleared to 0, the opaque cell rects write 1, so the blur
+	/// can drop coverage from cells that already carry a solid bg (reverse video,
+	/// colored bg, selection): they have full contrast, so a halo there is only
+	/// artifact (nano's reverse header cast a jumping drop-shadow). See `fs_blur`.
 	pub fn render_bgcolor(
 		&mut self,
 		device: &wgpu::Device,
@@ -438,21 +438,21 @@ impl Scrim {
 		self.bg_rects.draw(&mut pass, 0..cells.len() as u32);
 	}
 
-	// The render target for the scene's text. Clear it transparent and render the
-	// prepared text into it before calling `blur`.
+	/// The render target for the scene's text. Clear it transparent and render the
+	/// prepared text into it before calling `blur`.
 	pub fn text_view(&self) -> &wgpu::TextureView {
 		&self.layers.text.view
 	}
 
-	// The render target for the cursor coverage, separate from the text. Clear it
-	// transparent and draw the cursor quads (`draw_cursors`) into it before
-	// calling `blur`; the flags in `blur`/`composite` decide where it contributes.
+	/// The render target for the cursor coverage, separate from the text. Clear it
+	/// transparent and draw the cursor quads (`draw_cursors`) into it before
+	/// calling `blur`; the flags in `blur`/`composite` decide where it contributes.
 	pub fn cursor_view(&self) -> &wgpu::TextureView {
 		&self.layers.cursor.view
 	}
 
-	// Upload the cursor quads destined for the cursor layer. Call before the
-	// cursor pass; draw with `draw_cursors`.
+	/// Upload the cursor quads destined for the cursor layer. Call before the
+	/// cursor pass; draw with `draw_cursors`.
 	pub fn upload_cursors(
 		&mut self,
 		device: &wgpu::Device,
@@ -473,22 +473,22 @@ impl Scrim {
 		self.cursor_count = quads.len() as u32;
 	}
 
-	// Draw the uploaded cursor quads into the current (cursor layer) pass.
+	/// Draw the uploaded cursor quads into the current (cursor layer) pass.
 	pub fn draw_cursors(&self, pass: &mut wgpu::RenderPass<'_>) {
 		if self.cursor_count > 0 {
 			self.cursor_rects.draw(pass, 0..self.cursor_count);
 		}
 	}
 
-	// Two separable passes producing the scrim in halo_a; the text layer keeps
-	// the crisp coverage for the border pass. `function` picks the path: gaussian
-	// (3) runs the legacy sum-blur (H text->halo_b, V halo_b->halo_a) shaped by
-	// `ramp`; the distance paths (dilate 0 / sdf 1 / dt 2) run a separable
-	// Euclidean/Chebyshev distance transform (pass a = per-column 1D distance,
-	// pass b = row combine) into halo_a, bounded to `radius`. `sigma` = gaussian
-	// blur sigma; `radius` = distance extent. `cursor` (0/1) folds the cursor
-	// coverage in - only in the first pass (the second reads halo_b, which
-	// already carries it, so its flag stays 0).
+	/// Two separable passes producing the scrim in `halo_a`; the text layer keeps
+	/// the crisp coverage for the border pass. `function` picks the path: gaussian
+	/// (3) runs the legacy sum-blur (H text->halo_b, V halo_b->halo_a) shaped by
+	/// `ramp`; the distance paths (dilate 0 / sdf 1 / dt 2) run a separable
+	/// Euclidean/Chebyshev distance transform (pass a = per-column 1D distance,
+	/// pass b = row combine) into `halo_a`, bounded to `radius`. `sigma` = gaussian
+	/// blur sigma; `radius` = distance extent. `cursor` (0/1) folds the cursor
+	/// coverage in - only in the first pass (the second reads `halo_b`, which
+	/// already carries it, so its flag stays 0).
 	pub fn blur(
 		&self,
 		queue: &wgpu::Queue,
@@ -565,9 +565,9 @@ impl Scrim {
 		}
 	}
 
-	// Upload the composite uniform. Split from composite(): the draw runs once
-	// per pane (scissored), but the args are frame-invariant, so the render loop
-	// writes this once instead of staging an identical write per pane.
+	/// Upload the composite uniform. Split from `composite()`: the draw runs once
+	/// per pane (scissored), but the args are frame-invariant, so the render loop
+	/// writes this once instead of staging an identical write per pane.
 	pub fn write_comp_uniform(
 		&self,
 		queue: &wgpu::Queue,
@@ -605,10 +605,10 @@ impl Scrim {
 		);
 	}
 
-	// Draw the scrim into the current pass, under the text: the halo from halo_a,
-	// colored per-pixel by the bgcolor map, plus a `border_px` dilated outline of
-	// the crisp coverage (text, + cursor when `cursor` is 1).
-	// write_comp_uniform must have run this frame.
+	/// Draw the scrim into the current pass, under the text: the halo from `halo_a`,
+	/// colored per-pixel by the bgcolor map, plus a `border_px` dilated outline of
+	/// the crisp coverage (text, + cursor when `cursor` is 1).
+	/// `write_comp_uniform` must have run this frame.
 	pub fn composite(&self, pass: &mut wgpu::RenderPass<'_>) {
 		pass.set_pipeline(&self.comp_pipe);
 		pass.set_bind_group(0, &self.comp_bind, &[]);

@@ -3,10 +3,10 @@
 
 //! What a tab says, and how it is shortened to fit.
 //!
-//! A tab reads "<shell> [<task>] <path>": the shell's friendly name, the command
+//! A tab reads `<shell> [<task>] <path>`: the shell's friendly name, the command
 //! it is running (or `[last: cmd]` for the one it just finished), and where it
 //! is. A shell that has never run anything drops the brackets and reads
-//! "<shell> - <path>" instead.
+//! `<shell> - <path>` instead.
 //!
 //! When that does not fit, the parts give way in a fixed order, each rung
 //! strictly narrower than the one above it: the shell's name shortens first,
@@ -888,11 +888,11 @@ pub fn slot_at_x(widths: &[f32], x: f32) -> Option<usize> {
 	None
 }
 
-// One value on a hover-tip line, quoted only where the eye needs the boundary:
-// a value carrying a space or a quote character. Which quote is picked follows
-// the config file's own habit - single ones around a value that already holds
-// double quotes, so a Windows command line reads inside them rather than
-// fighting them - and a value holding both is escaped instead.
+/// One value on a hover-tip line, quoted only where the eye needs the boundary:
+/// a value carrying a space or a quote character. Which quote is picked follows
+/// the config file's own habit - single ones around a value that already holds
+/// double quotes, so a Windows command line reads inside them rather than
+/// fighting them - and a value holding both is escaped instead.
 pub fn tip_value(value: &str) -> String {
 	let has_double = value.contains('"');
 	let has_single = value.contains('\'');
@@ -908,12 +908,12 @@ pub fn tip_value(value: &str) -> String {
 	format!("\"{value}\"")
 }
 
-// The tip's lines: every value starts at one column, so the pairs read down the
-// left the way a table does. This is the whole reason the tip is drawn in the
-// TERMINAL font rather than the interface one - padding with spaces aligns
-// nothing in a proportional face. The KEY is padded, never the value, so a long
-// path runs on to the right and the box grows for it instead of the column
-// moving.
+/// The tip's lines: every value starts at one column, so the pairs read down the
+/// left the way a table does. This is the whole reason the tip is drawn in the
+/// TERMINAL font rather than the interface one - padding with spaces aligns
+/// nothing in a proportional face. The KEY is padded, never the value, so a long
+/// path runs on to the right and the box grows for it instead of the column
+/// moving.
 pub fn tip_lines(rows: &[(&str, String)]) -> Vec<String> {
 	let key_w = rows
 		.iter()

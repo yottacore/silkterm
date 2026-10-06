@@ -54,11 +54,11 @@ const CURSOR_MOVE_TAU_MS: f32 = 55.0; // horizontal slide responsiveness (lower 
 const CURSOR_CATCHUP: f32 = 0.45; // tau divisor per cell of lag
 const CURSOR_MAX_LAG: f32 = 8.0; // hard cap on how far behind the slide may sit (cells)
 pub(crate) const CURSOR_ALPHA: f32 = 0.55; // solid block-cursor alpha; theme.rs tests cursor colors against it
-// The same plate over a light background. A linear-light blend moves a light
-// ground very little, so at 55% the darkest plate any cursor could draw sat
-// barely 0.2 Oklab L under the shipped light backgrounds. At 80% it can reach
-// the floor from the text with the cursor itself still mid-toned, so its hue
-// shows. `cursor_alpha` decides which one a palette gets.
+/// The same plate over a light background. A linear-light blend moves a light
+/// ground very little, so at 55% the darkest plate any cursor could draw sat
+/// barely 0.2 Oklab L under the shipped light backgrounds. At 80% it can reach
+/// the floor from the text with the cursor itself still mid-toned, so its hue
+/// shows. `cursor_alpha` decides which one a palette gets.
 pub(crate) const CURSOR_ALPHA_LIGHT: f32 = 0.8;
 // Escape hatch: true restores the old always-running animation (the removed
 // cursor_animation_input = "continuous"), bypassing the pause/park machinery.
@@ -112,10 +112,10 @@ const PROMPT_SKEL_MIN: usize = 6;
 // under ~3 frames stale while costing nothing when nothing is contending.
 const LOCK_WAIT_AFTER: u32 = 2;
 
-// The two independent auto-copy triggers a pane can have on. Each is a per-pane
-// bool; the enum just names which one a UI action or menu row refers to. Copy on
-// output is session-only. A copy-on-select toggle is saved as the default for new
-// panes.
+/// The two independent auto-copy triggers a pane can have on. Each is a per-pane
+/// bool; the enum just names which one a UI action or menu row refers to. Copy on
+/// output is session-only. A copy-on-select toggle is saved as the default for new
+/// panes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CopyKind {
 	Select, // copy the highlighted selection the moment a select finishes
@@ -459,12 +459,12 @@ fn pulse_env(phase: f32) -> f32 {
 	}
 }
 
-// The block cursor's plate alpha for this text, background and cursor. Dark
-// text on a light ground takes the stronger light alpha, but only as far as the
-// text on the plate still clears the contrast floor. The shipped light cursors
-// are chosen to reach it; a saved theme or an overridden cursor picked against
-// the old 55% stops where its text would start to sink into the plate, so it
-// keeps about the plate it always had. Everything else keeps `CURSOR_ALPHA`.
+/// The block cursor's plate alpha for this text, background and cursor. Dark
+/// text on a light ground takes the stronger light alpha, but only as far as the
+/// text on the plate still clears the contrast floor. The shipped light cursors
+/// are chosen to reach it; a saved theme or an overridden cursor picked against
+/// the old 55% stops where its text would start to sink into the plate, so it
+/// keeps about the plate it always had. Everything else keeps `CURSOR_ALPHA`.
 pub(crate) fn cursor_alpha(fg: [u8; 3], bg: [u8; 3], cursor: [u8; 3], floor: f32) -> f32 {
 	let fg_l = palette::to_oklab(fg).0;
 	if fg_l >= palette::to_oklab(bg).0 {
@@ -489,8 +489,8 @@ pub(crate) fn cursor_alpha(fg: [u8; 3], bg: [u8; 3], cursor: [u8; 3], floor: f32
 	lo
 }
 
-// The plate a cursor draws at `alpha` over `bg`, blended in linear light as the
-// sRGB surface does.
+/// The plate a cursor draws at `alpha` over `bg`, blended in linear light as the
+/// sRGB surface does.
 pub(crate) fn cursor_plate(cursor: [u8; 3], bg: [u8; 3], alpha: f32) -> [u8; 3] {
 	let mix = |k: usize| {
 		config::from_linear_u8(
@@ -621,9 +621,9 @@ const EDGE_SCROLL_MAX_CELLS: f32 = 6.0;
 // would leave that window creeping forever.
 const EDGE_SCROLL_RAMP_S: f32 = 2.0;
 
-// Lines a second the view should crawl while a drag-selection is held past the
-// top (positive, back into history) or bottom (negative) of its pane. Zero while
-// the pointer is inside. `held_s` is how long it has been past the edge.
+/// Lines a second the view should crawl while a drag-selection is held past the
+/// top (positive, back into history) or bottom (negative) of its pane. Zero while
+/// the pointer is inside. `held_s` is how long it has been past the edge.
 pub fn edge_scroll_rate(y: f32, top: f32, bottom: f32, cell_h: f32, held_s: f32) -> f32 {
 	let over = if y < top {
 		top - y
@@ -950,7 +950,7 @@ pub enum Dir {
 	Horizontal,
 }
 
-// Which way a focus move goes.
+/// Which way a focus move goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Toward {
 	Left,
@@ -959,10 +959,10 @@ pub enum Toward {
 	Down,
 }
 
-// The pane next to `from` in that direction: the nearest one wholly on that
-// side that shares some of its edge. Of several the same distance off, the one
-// the last move came from, so a move and its opposite go back and forth, then
-// the top or left one. None at the window's edge; a move does not wrap around.
+/// The pane next to `from` in that direction: the nearest one wholly on that
+/// side that shares some of its edge. Of several the same distance off, the one
+/// the last move came from, so a move and its opposite go back and forth, then
+/// the top or left one. None at the window's edge; a move does not wrap around.
 pub fn neighbor_toward(
 	from: (PaneId, Rect),
 	panes: &[(PaneId, Rect)],
@@ -1010,7 +1010,7 @@ const BAR_MIN_THUMB: f32 = 1.6;
 // the configured thickness it widens.
 const BAR_HOVER_SLOP: f32 = 6.0;
 
-// Where a press hit the scrollbar.
+/// Where a press hit the scrollbar.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BarHit {
 	// on the handle
@@ -1020,7 +1020,7 @@ pub enum BarHit {
 	TrackDown,
 }
 
-// A pane's scrollbar geometry for this frame, in absolute window px.
+/// A pane's scrollbar geometry for this frame, in absolute window px.
 #[derive(Clone, Copy, Debug)]
 pub struct Bar {
 	pub track: Rect,
@@ -1113,44 +1113,44 @@ enum Node {
 	},
 }
 
-// result of building one pane's frame: text lives in pane.buffer, the
-// quads come back here for the shared rect renderer
+/// result of building one pane's frame: text lives in pane.buffer, the
+/// quads come back here for the shared rect renderer
 #[derive(Debug, Clone)]
 pub struct PaneDraw {
 	pub top: f32,
 	pub bg: Vec<RectInstance>,
-	// Underline quads for the hovered hyperlink. Kept out of `bg` deliberately:
-	// those double as the scrim's "this cell paints its own background" mask, and
-	// an underline is not a cell background - filing it there would punch the
-	// readability halo out of every line holding a link.
+	/// Underline quads for the hovered hyperlink. Kept out of `bg` deliberately:
+	/// those double as the scrim's "this cell paints its own background" mask, and
+	/// an underline is not a cell background - filing it there would punch the
+	/// readability halo out of every line holding a link.
 	pub links: Vec<RectInstance>,
 	pub cursor: Option<RectInstance>,
-	// App-scroll slide (None = common case: whole pane at `top`). While a
-	// full-screen app's scroll eases, the current frame draws shifted at `top`
-	// and the scrolled-off strip (pane.strip_buf) fills the revealed gap.
+	/// App-scroll slide (None = common case: whole pane at `top`). While a
+	/// full-screen app's scroll eases, the current frame draws shifted at `top`
+	/// and the scrolled-off strip (`pane.strip_buf`) fills the revealed gap.
 	pub slide: Option<Slide>,
 }
 
-// One frame of an easing app-scroll slide. The current frame renders at
-// `PaneDraw.top`, clipped to `[region_clip_t, region_clip_b]`; the scrolled-off
-// strip renders at `strip_top` clipped to the scroll region `[top_split_y,
-// split_y]` (it holds only region rows, so nothing can bleed into the bands);
-// and the fixed bands - a bottom status/input line (`has_band`, below `split_y`)
-// and a top title bar (`has_top_band`, above `top_split_y`) - redraw unshifted
-// at `band_top`. `top_split_y` is f32::MIN when there's no top band (open clip).
-//
-// The region clip is WELDED to the shifted content's extent, not just the band
-// boundaries: the current-frame draw is the whole buffer translated by voff, so
-// band rows ride into the region during a slide - the title's glyphs (and their
-// scrim) sit voff below the real title, the status rows sit voff above theirs
-// - rendering as ghost copies that bounce with the ease. Clipping at the
-// content edge cuts them off; the strip owns the gap on the other side of the
-// weld.
+/// One frame of an easing app-scroll slide. The current frame renders at
+/// `PaneDraw.top`, clipped to `[region_clip_t, region_clip_b]`; the scrolled-off
+/// strip renders at `strip_top` clipped to the scroll region `[top_split_y,
+/// split_y]` (it holds only region rows, so nothing can bleed into the bands);
+/// and the fixed bands - a bottom status/input line (`has_band`, below `split_y`)
+/// and a top title bar (`has_top_band`, above `top_split_y`) - redraw unshifted
+/// at `band_top`. `top_split_y` is `f32::MIN` when there's no top band (open clip).
+///
+/// The region clip is WELDED to the shifted content's extent, not just the band
+/// boundaries: the current-frame draw is the whole buffer translated by voff, so
+/// band rows ride into the region during a slide - the title's glyphs (and their
+/// scrim) sit voff below the real title, the status rows sit voff above theirs -
+/// rendering as ghost copies that bounce with the ease. Clipping at the
+/// content edge cuts them off; the strip owns the gap on the other side of the
+/// weld.
 #[derive(Debug, Clone)]
 pub struct Slide {
 	pub strip_top: f32,
-	// the strip rows on screen this frame (see OffStrip::visible), and where the
-	// first of them draws
+	/// the strip rows on screen this frame (see `OffStrip::visible`), and where the
+	/// first of them draws
 	pub strip_rows: std::ops::Range<usize>,
 	pub strip_text_top: f32,
 	pub top_split_y: f32,
@@ -1175,8 +1175,8 @@ struct FallbackGlyph {
 	base_dy: f32,
 }
 
-// The hyperlink under the pointer: the URL, and the grid span it occupies so the
-// underline can be drawn (inclusive, absolute grid lines - negative in history).
+/// The hyperlink under the pointer: the URL, and the grid span it occupies so the
+/// underline can be drawn (inclusive, absolute grid lines - negative in history).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LinkHit {
 	pub url: String,
@@ -1206,15 +1206,15 @@ pub struct Pane {
 	// Recycles the per-row Strings the build's attr-run assembler fills each
 	// rebuilt frame (set_text copies out of them, so fresh ones were pure churn).
 	rows_scratch: Vec<(String, AttrsList)>,
-	// `rect` is the text area; `full` is everything the layout gave this pane,
-	// which is wider by the minimap column when one is showing.
+	/// `rect` is the text area; `full` is everything the layout gave this pane,
+	/// which is wider by the minimap column when one is showing.
 	pub rect: Rect,
 	pub full: Rect,
 	pub title: String,
 	pub read_only: bool, // accept no PTY input/paste; selection + copy still work
-	// --keep-open: hold this pane after its shell exits instead of closing it.
-	// `held` is that pane once the shell has gone - it shows the exit line and
-	// waits for a key.
+	/// --keep-open: hold this pane after its shell exits instead of closing it.
+	/// `held` is that pane once the shell has gone - it shows the exit line and
+	/// waits for a key.
 	pub keep_open: bool,
 	pub held: bool,
 	// launch argv (None = default shell); a split inherits this so a new pane
@@ -1293,8 +1293,8 @@ pub struct Pane {
 	cursor_by_input: bool,
 	cursor_pause: PauseState,
 	pub cursor_animating: bool,
-	// parked cursor: when the loop must wake to resume the cycle (no frames flow
-	// while parked). None while animating, or when parked with no timed resume.
+	/// parked cursor: when the loop must wake to resume the cycle (no frames flow
+	/// while parked). None while animating, or when parked with no timed resume.
 	pub cursor_wake: Option<std::time::Instant>,
 	// Scrollbar fade: `bar_alpha` eases toward 0 or 1, `bar_hold` keeps it up for
 	// a moment after the last user scroll. `bar_drag` is the grab offset from the
@@ -1324,34 +1324,34 @@ pub struct Pane {
 	// frame is a pure cursor animation (no content/scroll/bell change), build skips
 	// the expensive text re-shape and reuses the cached buffer/bg/glyphs.
 	text_built: bool,
-	// Bumped on every full re-shape, so the renderer can tell "this pane's text
-	// is byte-for-byte the frame before" without inspecting the buffers. Drives
-	// the prepare/scrim skip in app.rs.
+	/// Bumped on every full re-shape, so the renderer can tell "this pane's text
+	/// is byte-for-byte the frame before" without inspecting the buffers. Drives
+	/// the prepare/scrim skip in app.rs.
 	pub shape_rev: u64,
-	// TermMode snapshot from the last build, so per-keystroke/wheel input paths
-	// read it lock-free (at worst one frame stale) instead of taking the term
-	// lock the PTY reader may hold across a whole read cycle.
+	/// `TermMode` snapshot from the last build, so per-keystroke/wheel input paths
+	/// read it lock-free (at worst one frame stale) instead of taking the term
+	/// lock the PTY reader may hold across a whole read cycle.
 	pub mode: TermMode,
-	// Is the minimap column showing? A full-screen program can take it (see
-	// minimap::wanted), and that changes the text width, so it is layout state
-	// rather than something the draw decides.
+	/// Is the minimap column showing? A full-screen program can take it (see
+	/// `minimap::wanted`), and that changes the text width, so it is layout state
+	/// rather than something the draw decides.
 	pub map_on: bool,
-	// This pane's PTY produced output since the last successful build. Set by
-	// the Wakeup(id) event, cleared in build() once the term lock is acquired
-	// (a busy-term frame keeps it, so the rebuild retries next frame). Scopes
-	// re-shaping to panes that changed: one busy pane no longer forces its
-	// idle siblings through set_rich_text every frame.
+	/// This pane's PTY produced output since the last successful build. Set by
+	/// the Wakeup(id) event, cleared in `build()` once the term lock is acquired
+	/// (a busy-term frame keeps it, so the rebuild retries next frame). Scopes
+	/// re-shaping to panes that changed: one busy pane no longer forces its
+	/// idle siblings through `set_rich_text` every frame.
 	pub content_dirty: bool,
-	// Auto-copy triggers, independent and session-only (never persisted). A new
-	// pane inherits both from the pane it split off (see split_at); a new tab or
-	// window starts with both off. Only the focused pane of the active tab in the
-	// focused window actually copies - the flags stay set otherwise (see the copy
-	// gating in app.rs), so leaving them on across background tabs/windows is fine.
-	// copy_output drives the command-output capture (see arm_capture / poll_capture):
-	// on Enter at the shell prompt we arm and record `cmd_start` (the line after the
-	// prompt); when the terminal settles back at the prompt, the lines since are
-	// copied. `last_output` is refreshed on every Wakeup so the settle timer measures
-	// true idle. This catches both instant (ls) and long commands.
+	/// Auto-copy triggers, independent and session-only (never persisted). A new
+	/// pane inherits both from the pane it split off (see `split_at`); a new tab or
+	/// window starts with both off. Only the focused pane of the active tab in the
+	/// focused window actually copies - the flags stay set otherwise (see the copy
+	/// gating in app.rs), so leaving them on across background tabs/windows is fine.
+	/// `copy_output` drives the command-output capture (see `arm_capture` / `poll_capture`):
+	/// on Enter at the shell prompt we arm and record `cmd_start` (the line after the
+	/// prompt); when the terminal settles back at the prompt, the lines since are
+	/// copied. `last_output` is refreshed on every Wakeup so the settle timer measures
+	/// true idle. This catches both instant (ls) and long commands.
 	pub copy_select: bool,
 	pub copy_output: bool,
 	capture_armed: bool,
@@ -1386,9 +1386,9 @@ impl std::fmt::Debug for Pane {
 }
 
 impl Pane {
-	// SILK_MEMDBG: the grid's cells (screen plus scrollback, both screens) and
-	// the minimap's cache. The grid figure leaves out per-row headers and the
-	// rows the engine allocates ahead of use, up to a thousand.
+	/// `SILK_MEMDBG`: the grid's cells (screen plus scrollback, both screens) and
+	/// the minimap's cache. The grid figure leaves out per-row headers and the
+	/// rows the engine allocates ahead of use, up to a thousand.
 	pub fn memdbg_line(&self) -> String {
 		let (hist, screen, cols) = {
 			let term = self.term.term.lock();
@@ -1406,7 +1406,7 @@ impl Pane {
 		)
 	}
 
-	// The program this pane was started with, so a title naming it can be known.
+	/// The program this pane was started with, so a title naming it can be known.
 	pub fn launched(&self) -> Option<&str> {
 		self.command.as_deref()?.first().map(String::as_str)
 	}
@@ -2448,14 +2448,14 @@ impl Pane {
 		};
 	}
 
-	// The frame build() just produced (or the retained one on a lock miss).
+	/// The frame `build()` just produced (or the retained one on a lock miss).
 	pub fn draw(&self) -> &PaneDraw {
 		&self.last_draw
 	}
 
-	// Where the pointer sits over this pane (None = elsewhere). Only asks for a
-	// re-scan when the CELL changed, so sweeping across a row costs one scan per
-	// cell rather than one per pixel; the scan itself happens in build().
+	/// Where the pointer sits over this pane (None = elsewhere). Only asks for a
+	/// re-scan when the CELL changed, so sweeping across a row costs one scan per
+	/// cell rather than one per pixel; the scan itself happens in `build()`.
 	pub fn set_hover(&mut self, px: Option<(f32, f32)>, ctx: &TextCtx) {
 		let cell_of = |(x, y): (f32, f32)| {
 			(
@@ -2472,17 +2472,17 @@ impl Pane {
 		}
 	}
 
-	// A re-scan is pending, so the frame it falls on must actually be drawn.
+	/// A re-scan is pending, so the frame it falls on must actually be drawn.
 	pub fn link_probing(&self) -> bool {
 		self.link_probe
 	}
 
-	// The link at window pixel (x, y) as of RIGHT NOW - its own scan under the
-	// term lock. `link_hover` is a frame behind the pointer (it is filled in by
-	// build), which is fine for an underline and not fine for a click: the paths
-	// that act on a link ask here instead, so they work even where hover never
-	// ran (a mouse-tracking app owns the pointer, but our menu still wins the
-	// right-click).
+	/// The link at window pixel (x, y) as of RIGHT NOW - its own scan under the
+	/// term lock. `link_hover` is a frame behind the pointer (it is filled in by
+	/// build), which is fine for an underline and not fine for a click: the paths
+	/// that act on a link ask here instead, so they work even where hover never
+	/// ran (a mouse-tracking app owns the pointer, but our menu still wins the
+	/// right-click).
 	pub fn link_at_px(&self, x: f32, y: f32, ctx: &TextCtx) -> Option<LinkHit> {
 		let settings = config::settings();
 		if !settings.hyperlinks || !self.rect.contains(x, y) {
@@ -2503,17 +2503,17 @@ impl Pane {
 		)
 	}
 
-	// The user sent input here (a keystroke, a paste). Stamps the moment so the
-	// cursor move it echoes is told apart from a program's own output.
+	/// The user sent input here (a keystroke, a paste). Stamps the moment so the
+	/// cursor move it echoes is told apart from a program's own output.
 	pub fn note_typed(&mut self) {
 		let now = std::time::Instant::now();
 		self.typed_at = Some(now);
 		self.cursor_active_at = now;
 	}
 
-	// A window/tab/pane refocus resumes the cursor animation AT ONCE - no resume
-	// delay, unlike a keystroke - starting from the top of the cycle, which is
-	// the same full-size point a pause always parks at.
+	/// A window/tab/pane refocus resumes the cursor animation AT ONCE - no resume
+	/// delay, unlike a keystroke - starting from the top of the cycle, which is
+	/// the same full-size point a pause always parks at.
 	pub fn poke_cursor(&mut self) {
 		self.cursor_idle_t = 0.0;
 		self.cursor_step_at = Some(std::time::Instant::now());
@@ -2535,17 +2535,17 @@ impl Pane {
 		)
 	}
 
-	// The user scrolled this pane: show the bar, and hold it up briefly afterwards
-	// so a flick of the wheel doesn't leave it flickering. Deliberately NOT called
-	// for output-driven scrolling - that happens constantly and would pin the bar
-	// on-screen for the life of any busy pane.
+	/// The user scrolled this pane: show the bar, and hold it up briefly afterwards
+	/// so a flick of the wheel doesn't leave it flickering. Deliberately NOT called
+	/// for output-driven scrolling - that happens constantly and would pin the bar
+	/// on-screen for the life of any busy pane.
 	pub fn poke_scrollbar(&mut self) {
 		self.bar_hold = BAR_HOLD_S;
 	}
 
-	// Advance the fade. Runs once per pane per frame, before the geometry is asked
-	// for, and sets `bar_animating` so the event loop keeps rendering while it
-	// moves (a bar resting at full or fully gone costs no frames).
+	/// Advance the fade. Runs once per pane per frame, before the geometry is asked
+	/// for, and sets `bar_animating` so the event loop keeps rendering while it
+	/// moves (a bar resting at full or fully gone costs no frames).
 	pub fn scrollbar_tick(&mut self, dt: f32, cfg: &config::Settings) {
 		self.bar_hold = (self.bar_hold - dt).max(0.0);
 		if let Some(at) = self.handle_drop_at
@@ -2579,16 +2579,16 @@ impl Pane {
 		self.bar_animating = self.bar_alpha != want || self.bar_hold > 0.0;
 	}
 
-	// This frame's fade level, 0..1. Zero means the bar is not drawn AND not
-	// clickable - the two must agree, or an invisible bar eats selection clicks.
+	/// This frame's fade level, 0..1. Zero means the bar is not drawn AND not
+	/// clickable - the two must agree, or an invisible bar eats selection clicks.
 	pub fn bar_fade(&self) -> f32 {
 		self.bar_alpha
 	}
 
-	// Track and thumb in absolute window px, or None when there's nothing to show.
-	// The bar hugs the pane's far right edge, past the minimap when there is one
-	// (overlay, so it costs the grid no columns), and runs the height of the
-	// content area.
+	/// Track and thumb in absolute window px, or None when there's nothing to show.
+	/// The bar hugs the pane's far right edge, past the minimap when there is one
+	/// (overlay, so it costs the grid no columns), and runs the height of the
+	/// content area.
 	pub fn scrollbar(&self, ctx: &TextCtx, cfg: &config::Settings) -> Option<Bar> {
 		if !self.bar_applies(cfg) || self.bar_alpha <= 0.0 {
 			return None;
@@ -2618,8 +2618,8 @@ impl Pane {
 		})
 	}
 
-	// Would a press at (x, y) hit the bar, and where? None when the bar is
-	// faded out, so clicks fall through to selection exactly when it's invisible.
+	/// Would a press at (x, y) hit the bar, and where? None when the bar is
+	/// faded out, so clicks fall through to selection exactly when it's invisible.
 	pub fn bar_hit(&self, x: f32, y: f32, ctx: &TextCtx, cfg: &config::Settings) -> Option<BarHit> {
 		let bar = self.scrollbar(ctx, cfg)?;
 		if self.bar_alpha < BAR_VISIBLE_EPS || !bar.track.contains(x, y) {
@@ -2634,9 +2634,9 @@ impl Pane {
 		}
 	}
 
-	// Is the pointer on (or just beside) the bar's strip? Drives the fade-in, so
-	// it uses the strip rather than a hit: with auto-hide on there is no bar to
-	// hit until this has already brought one back.
+	/// Is the pointer on (or just beside) the bar's strip? Drives the fade-in, so
+	/// it uses the strip rather than a hit: with auto-hide on there is no bar to
+	/// hit until this has already brought one back.
 	pub fn bar_near(&self, x: f32, y: f32, ctx: &TextCtx, cfg: &config::Settings) -> bool {
 		if !self.bar_applies(cfg) {
 			return false;
@@ -2652,8 +2652,8 @@ impl Pane {
 		strip.contains(x, y)
 	}
 
-	// Start a thumb drag, remembering where inside the handle it was grabbed so
-	// the thumb doesn't jump under the pointer.
+	/// Start a thumb drag, remembering where inside the handle it was grabbed so
+	/// the thumb doesn't jump under the pointer.
 	pub fn bar_grab(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
 		if let Some(bar) = self.scrollbar(ctx, cfg) {
 			self.bar_drag = Some(y - bar.thumb.y);
@@ -2661,8 +2661,8 @@ impl Pane {
 		}
 	}
 
-	// Continue a thumb drag: put the thumb's top where the pointer says, and map
-	// that back to a scroll position.
+	/// Continue a thumb drag: put the thumb's top where the pointer says, and map
+	/// that back to a scroll position.
 	pub fn bar_drag_to(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
 		let Some(grab) = self.bar_drag else { return };
 		let Some(bar) = self.scrollbar(ctx, cfg) else {
@@ -2678,8 +2678,8 @@ impl Pane {
 		self.poke_scrollbar();
 	}
 
-	// Click on the track above/below the thumb: page that way, like every other
-	// scrollbar. A page is the viewport less one line of overlap.
+	/// Click on the track above/below the thumb: page that way, like every other
+	/// scrollbar. A page is the viewport less one line of overlap.
 	pub fn bar_page(&mut self, up: bool, ctx: &TextCtx) {
 		let (_, _, _, rows) = content_dims(self.rect, ctx);
 		let page = (rows as f32 - 1.0).max(1.0);
@@ -2700,8 +2700,8 @@ impl Pane {
 		)
 	}
 
-	// End a handle drag. The handle stays where it was let go and the text eases
-	// up to it, instead of snapping back onto text that is still travelling.
+	/// End a handle drag. The handle stays where it was let go and the text eases
+	/// up to it, instead of snapping back onto text that is still travelling.
 	pub fn release_handle(&mut self) {
 		self.bar_drag = None;
 		self.map_drag = None;
@@ -2709,7 +2709,7 @@ impl Pane {
 		self.poke_scrollbar();
 	}
 
-	// The minimap's pieces for this frame, or None when the column is off.
+	/// The minimap's pieces for this frame, or None when the column is off.
 	pub fn minimap(&self, ctx: &TextCtx, cfg: &config::Settings) -> Option<minimap::Geom> {
 		let rows = self.term.lines;
 		let pos = self.handle_lines();
@@ -2737,19 +2737,19 @@ impl Pane {
 		(hist + rows, self.map.shown_lines(hist, rows))
 	}
 
-	// The rasterized buffer and the image composed from it, for the renderer.
+	/// The rasterized buffer and the image composed from it, for the renderer.
 	pub fn map_cache(&self) -> &Minimap {
 		&self.map
 	}
 
-	// When a compose the throttle deferred comes due.
+	/// When a compose the throttle deferred comes due.
 	pub fn map_wake(&self) -> Option<std::time::Instant> {
 		self.map.wake()
 	}
 
-	// Start a marker drag, remembering the pointer and what the view sat at.
-	// Working from there rather than from the marker's drawn top is what keeps
-	// a press with no movement from scrolling anything.
+	/// Start a marker drag, remembering the pointer and what the view sat at.
+	/// Working from there rather than from the marker's drawn top is what keeps
+	/// a press with no movement from scrolling anything.
 	pub fn map_grab(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
 		if self.minimap(ctx, cfg).and_then(|g| g.handle).is_some() {
 			self.map_drag = Some((y, self.scroll.visual_lines()));
@@ -2769,7 +2769,7 @@ impl Pane {
 		self.poke_scrollbar();
 	}
 
-	// A press outside the marker: center the view there, eased rather than cut.
+	/// A press outside the marker: center the view there, eased rather than cut.
 	pub fn map_jump(&mut self, y: f32, ctx: &TextCtx, cfg: &config::Settings) {
 		let Some(g) = self.minimap(ctx, cfg) else {
 			return;
@@ -2781,35 +2781,36 @@ impl Pane {
 		self.poke_scrollbar();
 	}
 
-	// Coming back from a freeze (hidden tab shown, minimized window restored):
-	// everything that happened meanwhile arrives as one instant cut. Snap any
-	// leftover motion now and flag the next build to rebaseline its scroll
-	// detectors instead of easing across the gap - that ease is the bounce class.
+	/// Coming back from a freeze (hidden tab shown, minimized window restored):
+	/// everything that happened meanwhile arrives as one instant cut. Snap any
+	/// leftover motion now and flag the next build to rebaseline its scroll
+	/// detectors instead of easing across the gap - that ease is the bounce class.
 	pub fn hard_cut(&mut self) {
 		self.pending_cut = true;
 		self.scroll.snap();
 	}
 
-	// Sample the scrollback depth for this PTY read cycle. `history_size()` is a
-	// COUNT, and `clear` (E3) TRUNCATES it, so growth measured between two frames
-	// reads zero across a clear-and-refill that pushed a whole screenful past -
-	// repeating `clear; ls -lA ~/` eased the first time and snapped every time
-	// after, because the identical listing refilled the buffer to the identical
-	// depth. A build never sees the dip (the clear and the output arrive in one
-	// parse cycle), but a wakeup does, so accumulate here instead: a DROP can only
-	// mean the scrollback was cleared, and everything left in it arrived after
-	// that, so the whole of it is new. `try_lock_unfair` and give up on a miss -
-	// this must never contend with the reader; the baseline only advances on a
-	// successful sample, so the next one spans the cycles that were missed and
-	// nothing is lost.
-	// After a reflow the depth can change with nothing having scrolled, so
-	// re-baseline rather than let the next sample read that as a clear. Resizes
-	// are rare and this is bounded (one read cycle), so take the fair lock.
+	/// Sample the scrollback depth for this PTY read cycle. `history_size()` is a
+	/// COUNT, and `clear` (E3) TRUNCATES it, so growth measured between two frames
+	/// reads zero across a clear-and-refill that pushed a whole screenful past -
+	/// repeating `clear; ls -lA ~/` eased the first time and snapped every time
+	/// after, because the identical listing refilled the buffer to the identical
+	/// depth. A build never sees the dip (the clear and the output arrive in one
+	/// parse cycle), but a wakeup does, so accumulate here instead: a DROP can only
+	/// mean the scrollback was cleared, and everything left in it arrived after
+	/// that, so the whole of it is new. `try_lock_unfair` and give up on a miss -
+	/// this must never contend with the reader; the baseline only advances on a
+	/// successful sample, so the next one spans the cycles that were missed and
+	/// nothing is lost.
+	/// After a reflow the depth can change with nothing having scrolled, so
+	/// re-baseline rather than let the next sample read that as a clear. Resizes
+	/// are rare and this is bounded (one read cycle), so take the fair lock.
 	pub fn rebaseline_history(&mut self) {
 		self.depth
 			.rebaseline(self.term.term.lock().grid().history_size());
 	}
 
+	/// Samples the history depth for the output ease, and skips it when the term lock is busy.
 	pub fn note_history(&mut self) {
 		let Some(guard) = self.term.term.try_lock_unfair() else {
 			return;
@@ -2984,9 +2985,9 @@ impl Pane {
 		})
 	}
 
-	// Same as `text_area` but for the scrim source pass: uses the de-bolded buffer
-	// when it was built this frame (text_scrim_regular_weight + bold on screen), so
-	// the halo weight matches non-bold text while the crisp text keeps its weight.
+	/// Same as `text_area` but for the scrim source pass: uses the de-bolded buffer
+	/// when it was built this frame (`text_scrim_regular_weight` + bold on screen), so
+	/// the halo weight matches non-bold text while the crisp text keeps its weight.
 	pub fn scrim_text_area(&self, top: f32, margin: f32) -> TextArea<'_> {
 		let mut area = self.text_area(top, margin);
 		if self.scrim_debold {
@@ -2997,7 +2998,7 @@ impl Pane {
 		area
 	}
 
-	// scrim_text_area with the band clip of text_area_band (see there).
+	/// `scrim_text_area` with the band clip of `text_area_band` (see there).
 	pub fn scrim_text_area_band(
 		&self,
 		top: f32,
@@ -3037,9 +3038,9 @@ impl Pane {
 		self.buf_area(&self.buffer, top, margin)
 	}
 
-	// Same buffer as text_area, positioned at `top`, but with its vertical clip
-	// narrowed to [clip_top, clip_bottom]. Used by the app-scroll slide to draw the
-	// current buffer clipped to the scroll region and the static band separately.
+	/// Same buffer as `text_area`, positioned at `top`, but with its vertical clip
+	/// narrowed to [`clip_top`, `clip_bottom`]. Used by the app-scroll slide to draw the
+	/// current buffer clipped to the scroll region and the static band separately.
 	pub fn text_area_band(
 		&self,
 		top: f32,
@@ -3053,12 +3054,12 @@ impl Pane {
 		area
 	}
 
-	// The scrolled-off strip at its slide position, clipped to the scroll region
-	// exactly like the current content (it holds only region rows, so the bands
-	// need no protection from it; descender spill across the weld matches what
-	// adjacent rows in one buffer do). None while the strip is empty. Serves the
-	// scrim pass too - the strip is always scrim-safe, unlike the old retained
-	// frame whose own-bg furniture had to be guarded out.
+	/// The scrolled-off strip at its slide position, clipped to the scroll region
+	/// exactly like the current content (it holds only region rows, so the bands
+	/// need no protection from it; descender spill across the weld matches what
+	/// adjacent rows in one buffer do). None while the strip is empty. Serves the
+	/// scrim pass too - the strip is always scrim-safe, unlike the old retained
+	/// frame whose own-bg furniture had to be guarded out.
 	pub fn strip_text_area<'a>(&'a self, slide: &Slide, margin: f32) -> Option<TextArea<'a>> {
 		if slide.strip_rows.is_empty() || self.strip.shaped.is_empty() {
 			return None;
@@ -3142,10 +3143,10 @@ impl Pane {
 			.shape_until_scroll(&mut ctx.font_system, false);
 	}
 
-	// Per-cell fallback glyphs, already positioned (see Pane::build). Drawn in
-	// the same text pass as `text_area`, on top of their space placeholders.
-	// Iterator, not a Vec: both callers extend() into their own area list, so a
-	// materialized intermediate was two throwaway allocations per frame.
+	/// Per-cell fallback glyphs, already positioned (see `Pane::build`). Drawn in
+	/// the same text pass as `text_area`, on top of their space placeholders.
+	/// Iterator, not a Vec: both callers `extend()` into their own area list, so a
+	/// materialized intermediate was two throwaway allocations per frame.
 	pub fn glyph_areas(&self, margin: f32) -> impl Iterator<Item = TextArea<'_>> {
 		// content clip, same as buf_area: an edge row's fallback glyph (ink
 		// taller than its cell, or shifted by a scroll fraction) must not
@@ -3171,9 +3172,9 @@ impl Pane {
 			})
 	}
 
-	// This frame's color glyphs (see Pane::build). One text area carries them all:
-	// their coordinates are absolute, so it sits at the origin with an empty
-	// buffer and exists only to hand glyphon the custom-glyph list.
+	/// This frame's color glyphs (see `Pane::build`). One text area carries them all:
+	/// their coordinates are absolute, so it sits at the origin with an empty
+	/// buffer and exists only to hand glyphon the custom-glyph list.
 	pub fn emoji_area(&self, margin: f32) -> Option<TextArea<'_>> {
 		if self.emoji.is_empty() {
 			return None;
@@ -3196,12 +3197,12 @@ impl Pane {
 		})
 	}
 
-	// Copy-output: Enter was pressed at the shell prompt, so a command is (maybe)
-	// about to run. Record where its output will begin (the line after the prompt/
-	// echoed command) and arm the settle-based capture. Only arms at the shell
-	// prompt, so an Enter inside a foreground app (vim, a REPL) doesn't arm.
-	// Blocking (unfair) lock: a try_lock here silently skipped that command's
-	// copy whenever Enter raced a PTY burst.
+	/// Copy-output: Enter was pressed at the shell prompt, so a command is (maybe)
+	/// about to run. Record where its output will begin (the line after the prompt/
+	/// echoed command) and arm the settle-based capture. Only arms at the shell
+	/// prompt, so an Enter inside a foreground app (vim, a REPL) doesn't arm.
+	/// Blocking (unfair) lock: a `try_lock` here silently skipped that command's
+	/// copy whenever Enter raced a PTY burst.
 	pub fn arm_capture(&mut self) {
 		if !self.term.at_shell_prompt() {
 			return;
@@ -3240,16 +3241,16 @@ impl Pane {
 		self.last_output = std::time::Instant::now();
 	}
 
-	// Cancel a pending capture. Called when the pane stops being the active copy
-	// target (window unfocused, tab switched, focus moved, trigger turned off):
-	// output that finished while the user was elsewhere must not copy late on
-	// refocus - only a command launched after returning copies.
+	/// Cancel a pending capture. Called when the pane stops being the active copy
+	/// target (window unfocused, tab switched, focus moved, trigger turned off):
+	/// output that finished while the user was elsewhere must not copy late on
+	/// refocus - only a command launched after returning copies.
 	pub fn disarm_capture(&mut self) {
 		self.capture_armed = false;
 	}
 
-	// New PTY output arrived: push the settle deadline out so capture waits for the
-	// command (and its prompt) to finish before copying.
+	/// New PTY output arrived: push the settle deadline out so capture waits for the
+	/// command (and its prompt) to finish before copying.
 	pub fn note_output(&mut self) {
 		self.last_output = std::time::Instant::now();
 		// windows: a returning prompt is itself output, so this is where the
@@ -3257,17 +3258,17 @@ impl Pane {
 		self.term.note_activity();
 	}
 
-	// While armed, the instant the settle timer would fire (so the loop can wake to
-	// check) - None when nothing is pending.
+	/// While armed, the instant the settle timer would fire (so the loop can wake to
+	/// check) - None when nothing is pending.
 	pub fn capture_deadline(&self, settle: std::time::Duration) -> Option<std::time::Instant> {
 		self.capture_armed
 			.then(|| next_capture_poll(self.last_output, settle, self.capture_retry_at))
 	}
 
-	// If armed and the terminal has settled (no output for `settle`) back at the
-	// shell prompt, return the command's output as plain Unicode text (control/
-	// color codes are already gone - it's read from the parsed grid) and disarm.
-	// Returns None otherwise, and skips empty output (e.g. a bare Enter or `cd`).
+	/// If armed and the terminal has settled (no output for `settle`) back at the
+	/// shell prompt, return the command's output as plain Unicode text (control/
+	/// color codes are already gone - it's read from the parsed grid) and disarm.
+	/// Returns None otherwise, and skips empty output (e.g. a bare Enter or `cd`).
 	pub fn poll_capture(&mut self, settle: std::time::Duration) -> Option<String> {
 		if !self.capture_armed || self.last_output.elapsed() < settle {
 			return None;
@@ -3294,8 +3295,8 @@ impl Pane {
 		(!text.trim().is_empty()).then_some(text)
 	}
 
-	// Map a window pixel to a 0-based on-screen cell (col, row) within this pane's
-	// viewport, for mouse reporting. Clamped to the grid; None if outside the pane.
+	/// Map a window pixel to a 0-based on-screen cell (col, row) within this pane's
+	/// viewport, for mouse reporting. Clamped to the grid; None if outside the pane.
 	pub fn screen_cell_at(&self, x: f32, y: f32, ctx: &TextCtx) -> Option<(usize, usize)> {
 		if !self.rect.contains(x, y) {
 			return None;
@@ -3310,18 +3311,18 @@ impl Pane {
 		Some((col as usize, row as usize))
 	}
 
-	// Map a window pixel to a grid point + which half of the cell, for selection.
-	// Returns None if the pixel is outside this pane.
+	/// Map a window pixel to a grid point + which half of the cell, for selection.
+	/// Returns None if the pixel is outside this pane.
 	pub fn point_at(&self, x: f32, y: f32, ctx: &TextCtx) -> Option<(Point, Side)> {
 		self.rect
 			.contains(x, y)
 			.then(|| self.point_clamped(x, y, ctx))
 	}
 
-	// Same, but a pixel outside the pane is pulled to the nearest edge cell. This
-	// is what a drag held past an edge wants: the selection runs on to the end of
-	// what is on screen instead of stopping dead, and a drag that strays into a
-	// neighboring pane still belongs to the one it started in.
+	/// Same, but a pixel outside the pane is pulled to the nearest edge cell. This
+	/// is what a drag held past an edge wants: the selection runs on to the end of
+	/// what is on screen instead of stopping dead, and a drag that strays into a
+	/// neighboring pane still belongs to the one it started in.
 	pub fn point_clamped(&self, x: f32, y: f32, ctx: &TextCtx) -> (Point, Side) {
 		let display_offset = self.term.term.lock_unfair().grid().display_offset() as i32;
 		grid_point(
@@ -3335,10 +3336,10 @@ impl Pane {
 		)
 	}
 
-	// If a double-click `point` sits inside a matched pair on its line, return
-	// the inside span (start..=end, same line) of the highest-precedence
-	// enclosing non-empty pair. Single line only (multi-line pairs aren't
-	// handled). `pairs` is (open, close) in precedence order.
+	/// If a double-click `point` sits inside a matched pair on its line, return
+	/// the inside span (start..=end, same line) of the highest-precedence
+	/// enclosing non-empty pair. Single line only (multi-line pairs aren't
+	/// handled). `pairs` is (open, close) in precedence order.
 	pub fn pair_span(&self, point: Point, pairs: &[(char, char)]) -> Option<(Point, Point)> {
 		let cols = self.term.cols;
 		let col = point.column.0;
@@ -3357,16 +3358,16 @@ impl Pane {
 		))
 	}
 
-	// A double-click on a bracket, when neither a shape nor a pair took it
-	// (bracket_reach).
+	/// A double-click on a bracket, when neither a shape nor a pair took it
+	/// (`bracket_reach`).
 	pub fn bracket_span(&self, point: Point) -> Option<(Point, Point)> {
 		let guard = self.term.term.lock_unfair();
 		bracket_reach(guard.grid(), point)
 	}
 
-	// The shape (URL, path, scp target) covering `point`, if there is one, as
-	// (first, last) cells. Spans a soft-wrapped line the way a hyperlink does,
-	// since a long path is exactly the thing that wraps.
+	/// The shape (URL, path, scp target) covering `point`, if there is one, as
+	/// (first, last) cells. Spans a soft-wrapped line the way a hyperlink does,
+	/// since a long path is exactly the thing that wraps.
 	pub fn shape_span(&self, point: Point) -> Option<(Point, Point)> {
 		let cols = self.term.cols;
 		if cols == 0 || point.column.0 >= cols {
@@ -3400,8 +3401,8 @@ impl Pane {
 		Some((point_of(start), point_of(end - 1)))
 	}
 
-	// The whole logical line containing `point`, spanning soft-wrapped rows, as
-	// (top-row col 0 .. bottom-row last col) - the span a triple-click selects.
+	/// The whole logical line containing `point`, spanning soft-wrapped rows, as
+	/// (top-row col 0 .. bottom-row last col) - the span a triple-click selects.
 	pub fn line_span(&self, point: Point) -> (Point, Point) {
 		let cols = self.term.cols;
 		let last_col = Column(cols.saturating_sub(1));
@@ -3454,9 +3455,9 @@ impl Pane {
 			.filter(|s| !s.is_empty())
 	}
 
-	// Anything the user's own hands sent - typing, a mouse report, the wheel
-	// driving an app's cursor keys. Read-only withholds all of it. A reply the
-	// terminal owes the program is not this, and goes straight to `term.write`.
+	/// Anything the user's own hands sent - typing, a mouse report, the wheel
+	/// driving an app's cursor keys. Read-only withholds all of it. A reply the
+	/// terminal owes the program is not this, and goes straight to `term.write`.
 	pub fn write_input<B: Into<Vec<u8>>>(&self, bytes: B) {
 		if self.read_only {
 			return;
@@ -3464,9 +3465,9 @@ impl Pane {
 		self.term.write(bytes);
 	}
 
-	// Write pasted text to the PTY (wrapped in bracketed paste when the app
-	// enabled it, and put through paste_payload either way). No-op when the
-	// pane is read-only.
+	/// Write pasted text to the PTY (wrapped in bracketed paste when the app
+	/// enabled it, and put through `paste_payload` either way). No-op when the
+	/// pane is read-only.
 	pub fn paste(&mut self, text: &str) {
 		if self.read_only || text.is_empty() {
 			return;
@@ -3492,10 +3493,10 @@ pub struct PaneManager {
 	pub focused: PaneId,
 	// The pane a keyboard focus move last left, which wins a tie on the way back.
 	came_from: Option<PaneId>,
-	// CLI `--title` for this tab; overrides the computed "<shell> [program]".
+	/// CLI `--title` for this tab; overrides the computed `<shell> [program]`.
 	pub title_override: Option<String>,
-	// When this tab was opened, for the tip's elapsed time. A tab, not a pane:
-	// splitting one does not start it over.
+	/// When this tab was opened, for the tip's elapsed time. A tab, not a pane:
+	/// splitting one does not start it over.
 	pub created: std::time::Instant,
 }
 
@@ -3530,9 +3531,9 @@ impl PaneManager {
 		})
 	}
 
-	// Interactive split (menu/keyboard): even ratio, new pane after; inherits the
-	// source pane's command and current directory, so the new pane runs the same
-	// shell it forked off, starting where that shell is now.
+	/// Interactive split (menu/keyboard): even ratio, new pane after; inherits the
+	/// source pane's command and current directory, so the new pane runs the same
+	/// shell it forked off, starting where that shell is now.
 	pub fn split(
 		&mut self,
 		ctx: &mut TextCtx,
@@ -3545,8 +3546,8 @@ impl PaneManager {
 		self.split_cmd(ctx, proxy, id, dir, cmd, area);
 	}
 
-	// The same split, but the new pane runs `command` - a shell picked off the
-	// menu - and still starts where the source pane's shell is.
+	/// The same split, but the new pane runs `command` - a shell picked off the
+	/// menu - and still starts where the source pane's shell is.
 	pub fn split_with(
 		&mut self,
 		ctx: &mut TextCtx,
@@ -3574,10 +3575,10 @@ impl PaneManager {
 		self.split_at(ctx, proxy, id, dir, false, None, command, cwd, area);
 	}
 
-	// What the tab has to say about itself: the command its focused pane was
-	// launched with (None = whatever the default shell is), what that shell is
-	// running, and where it is now. `&mut` because asking what is running costs a
-	// probe, which the term throttles and caches for itself.
+	/// What the tab has to say about itself: the command its focused pane was
+	/// launched with (None = whatever the default shell is), what that shell is
+	/// running, and where it is now. `&mut` because asking what is running costs a
+	/// probe, which the term throttles and caches for itself.
 	pub fn tab_facts(
 		&mut self,
 	) -> (
@@ -3592,18 +3593,18 @@ impl PaneManager {
 		)
 	}
 
-	// What a new tab/window spawned "from" the focused pane should inherit:
-	// its launch command (None = default shell) and the shell's current dir.
+	/// What a new tab/window spawned "from" the focused pane should inherit:
+	/// its launch command (None = default shell) and the shell's current dir.
 	pub fn inherit_spawn(&self) -> (Option<Vec<String>>, Option<std::path::PathBuf>) {
 		self.panes
 			.get(&self.focused)
 			.map_or((None, None), |pane| (pane.command.clone(), pane.term.cwd()))
 	}
 
-	// General split used by the CLI: split `id` along `dir`, the new pane on the
-	// `before` side (a) or after (b); runs `command`. Returns the new pane id (None
-	// if `id` wasn't a leaf). `new_ratio` is the new pane's share, kept as given;
-	// None evens out the same-direction run it joined, see `place_split`.
+	/// General split used by the CLI: split `id` along `dir`, the new pane on the
+	/// `before` side (a) or after (b); runs `command`. Returns the new pane id (None
+	/// if `id` wasn't a leaf). `new_ratio` is the new pane's share, kept as given;
+	/// None evens out the same-direction run it joined, see `place_split`.
 	pub fn split_at(
 		&mut self,
 		ctx: &mut TextCtx,
@@ -3649,7 +3650,7 @@ impl PaneManager {
 		Some(new_id)
 	}
 
-	// returns true when the last pane closed (caller should exit)
+	/// returns true when the last pane closed (caller should exit)
 	pub fn close(&mut self, ctx: &mut TextCtx, id: PaneId, area: Rect) -> bool {
 		if let Some(n) = prune(std::mem::replace(&mut self.root, Node::Leaf(0)), id) {
 			self.root = n;
@@ -3665,9 +3666,9 @@ impl PaneManager {
 		}
 	}
 
-	// Recreate each pane's text buffer from `ctx`'s font system. Needed after a
-	// TextCtx rebuild (font size / line height change) since buffers are tied to
-	// the FontSystem they were made with. Follow with `relayout`.
+	/// Recreate each pane's text buffer from `ctx`'s font system. Needed after a
+	/// `TextCtx` rebuild (font size / line height change) since buffers are tied to
+	/// the `FontSystem` they were made with. Follow with `relayout`.
 	pub fn rebuild_buffers(&mut self, ctx: &mut TextCtx) {
 		for pane in self.panes.values_mut() {
 			pane.buffer = ctx.new_buffer(pane.rect.w.max(1.0), pane.rect.h.max(1.0));
@@ -3683,11 +3684,11 @@ impl PaneManager {
 		}
 	}
 
-	// The minimap column comes and goes with what is running, and losing it gives
-	// the text its columns back - so it is a relayout, not a draw-time choice.
-	// Answers whether any pane changed its mind, which is the caller's cue to do
-	// one. Both probes behind it are cheap: the mode is already cached from the
-	// last build, and the program lookup is throttled inside `task`.
+	/// The minimap column comes and goes with what is running, and losing it gives
+	/// the text its columns back - so it is a relayout, not a draw-time choice.
+	/// Answers whether any pane changed its mind, which is the caller's cue to do
+	/// one. Both probes behind it are cheap: the mode is already cached from the
+	/// last build, and the program lookup is throttled inside `task`.
 	pub fn sync_minimap(&mut self, cfg: &config::Settings) -> bool {
 		let mut moved = false;
 		for pane in self.panes.values_mut() {
@@ -3734,8 +3735,8 @@ impl PaneManager {
 		}
 	}
 
-	// Move the focus to the pane beside the focused one. False when there is
-	// none that way.
+	/// Move the focus to the pane beside the focused one. False when there is
+	/// none that way.
 	pub fn move_focus(&mut self, toward: Toward) -> bool {
 		let Some(from) = self.panes.get(&self.focused).map(|p| p.full) else {
 			return false;
@@ -3756,20 +3757,20 @@ impl PaneManager {
 			.map(|(id, _)| *id)
 	}
 
-	// A grabbable divider under the cursor: its path in the split-tree and
-	// orientation (for the resize cursor).
+	/// A grabbable divider under the cursor: its path in the split-tree and
+	/// orientation (for the resize cursor).
 	pub fn divider_at(&self, x: f32, y: f32, area: Rect, scale: f32) -> Option<(Vec<bool>, Dir)> {
 		let mut path = Vec::new();
 		divider_at(&self.root, area, x, y, scale, &mut path).map(|dir| (path, dir))
 	}
 
-	// Drag a divider (identified by `path`) to the cursor and relayout.
+	/// Drag a divider (identified by `path`) to the cursor and relayout.
 	pub fn drag_divider(&mut self, ctx: &mut TextCtx, path: &[bool], area: Rect, x: f32, y: f32) {
 		set_ratio(&mut self.root, area, path, x, y, ctx.scale);
 		self.relayout(ctx, area);
 	}
 
-	// Swap two panes' positions in the split-tree (drag-and-drop reorder).
+	/// Swap two panes' positions in the split-tree (drag-and-drop reorder).
 	pub fn swap_panes(&mut self, ctx: &mut TextCtx, a: PaneId, b: PaneId, area: Rect) {
 		if a == b {
 			return;

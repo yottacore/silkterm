@@ -19,17 +19,17 @@ pub struct MonitorId {
 }
 
 impl MonitorId {
-	// The monitor the window is on now, at the scale the window is drawn at.
-	// None when the platform cannot say, which on Wayland is the case until
-	// the window has been shown.
+	/// The monitor the window is on now, at the scale the window is drawn at.
+	/// None when the platform cannot say, which on Wayland is the case until
+	/// the window has been shown.
 	pub fn of_window(window: &Window) -> Option<Self> {
 		Self::find(window, false)
 	}
 
-	// The monitor a window not shown yet will open on. It has no place of its
-	// own until the window manager maps it, and xfwm4 maps a window that asks
-	// for no position on the monitor under the pointer. winit guesses the
-	// window's scale the same way.
+	/// The monitor a window not shown yet will open on. It has no place of its
+	/// own until the window manager maps it, and xfwm4 maps a window that asks
+	/// for no position on the monitor under the pointer. winit guesses the
+	/// window's scale the same way.
 	pub fn of_new_window(window: &Window) -> Option<Self> {
 		Self::find(window, true)
 	}
@@ -59,9 +59,9 @@ impl MonitorId {
 		})
 	}
 
-	// `2560x1440_125pct`, with `_597x336mm` after it when the size is known.
-	// It is the monitor's name in the config file, so it keeps to what SHCL
-	// allows in a bare name: letters, digits, `-` and `_`.
+	/// `2560x1440_125pct`, with `_597x336mm` after it when the size is known.
+	/// It is the monitor's name in the config file, so it keeps to what SHCL
+	/// allows in a bare name: letters, digits, `-` and `_`.
 	pub fn key(&self) -> String {
 		let key = format!("{}x{}_{}pct", self.width, self.height, self.scale_pct);
 		match self.size_mm {
@@ -311,9 +311,9 @@ fn physical_mm(_monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 	None
 }
 
-// Is a mouse button down anywhere on the screen? A window being dragged by
-// its title bar sees no button events of its own, and a pause in the drag
-// looks the same as the drop.
+/// Is a mouse button down anywhere on the screen? A window being dragged by
+/// its title bar sees no button events of its own, and a pause in the drag
+/// looks the same as the drop.
 #[cfg(target_os = "linux")]
 pub fn button_held(window: &Window) -> bool {
 	use raw_window_handle::{HasWindowHandle, RawWindowHandle};

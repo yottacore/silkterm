@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// A small deterministic fuzzer, shared by the targets that live beside the code
-// they hammer (search for `mod fuzz` inside a module's tests).
-//
-// Not coverage-guided, and that is a choice rather than a limitation: every
-// untrusted surface here is grammar-shaped - escape sequences, config lines,
-// URLs - and a generator that knows the grammar reaches deep states in a few
-// hundred cases where bit flips need millions. Bit flips still run, over the
-// generated cases and over the saved corpus, because they find the edges a
-// well-formed generator never emits.
-//
-// Every case is a pure function of one u64 seed, so a failure needs nothing
-// saved to reproduce: SILK_FUZZ_SEED=<n> cargo test <name> runs that case alone.
+//! A small deterministic fuzzer, shared by the targets that live beside the code
+//! they hammer (search for `mod fuzz` inside a module's tests).
+//!
+//! Not coverage-guided, and that is a choice rather than a limitation: every
+//! untrusted surface here is grammar-shaped - escape sequences, config lines,
+//! URLs - and a generator that knows the grammar reaches deep states in a few
+//! hundred cases where bit flips need millions. Bit flips still run, over the
+//! generated cases and over the saved corpus, because they find the edges a
+//! well-formed generator never emits.
+//!
+//! Every case is a pure function of one u64 seed, so a failure needs nothing
+//! saved to reproduce: `SILK_FUZZ_SEED`=<n> cargo test <name> runs that case alone.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-// xorshift64*. Small, fast, and good enough to pick between branches; nothing
-// here needs a real distribution.
+/// xorshift64*. Small, fast, and good enough to pick between branches; nothing
+/// here needs a real distribution.
 #[derive(Debug)]
 pub struct Rng(u64);
 
@@ -43,7 +43,7 @@ impl Rng {
 		}
 	}
 
-	// 1 in n.
+	/// 1 in n.
 	pub fn chance(&mut self, n: usize) -> bool {
 		self.below(n.max(1)) == 0
 	}
@@ -85,9 +85,9 @@ fn one_seed() -> Option<u64> {
 		.and_then(|v| v.parse().ok())
 }
 
-// Run `case` over seeds: MIN_CASES of them at least, then on while the budget
-// holds out. A panic is caught so the
-// report names the seed that caused it, which is the whole reproduction recipe.
+/// Run `case` over seeds: `MIN_CASES` of them at least, then on while the budget
+/// holds out. A panic is caught so the
+/// report names the seed that caused it, which is the whole reproduction recipe.
 pub fn soak(name: &str, mut case: impl FnMut(u64)) {
 	if let Some(seed) = one_seed() {
 		case(seed);
@@ -118,8 +118,8 @@ fn corpus_dir(target: &str) -> PathBuf {
 	.join(target)
 }
 
-// Saved cases for one target: anything a fuzz run once broke, kept so it is
-// replayed on every run afterwards. An empty or missing directory is normal.
+/// Saved cases for one target: anything a fuzz run once broke, kept so it is
+/// replayed on every run afterwards. An empty or missing directory is normal.
 pub fn corpus(target: &str) -> Vec<Vec<u8>> {
 	let Ok(entries) = std::fs::read_dir(corpus_dir(target)) else {
 		return Vec::new();
@@ -141,8 +141,8 @@ const NASTY: [u8; 16] = [
 	0x90, 0x9b, 0x9c, 0xc0, 0xed, 0xf5, 0xfe, 0xff,
 ];
 
-// Chew on one case. Deliberately crude - the point is to reach shapes the
-// generators cannot produce, not to be a good mutator.
+/// Chew on one case. Deliberately crude - the point is to reach shapes the
+/// generators cannot produce, not to be a good mutator.
 pub fn mutate(rng: &mut Rng, parent: &[u8]) -> Vec<u8> {
 	let mut out = parent.to_vec();
 	for _ in 0..=rng.below(6) {
@@ -171,8 +171,8 @@ pub fn mutate(rng: &mut Rng, parent: &[u8]) -> Vec<u8> {
 	out
 }
 
-// One case's input: either freshly generated, or a saved case chewed on. With
-// no corpus every case is generated, which is the normal state.
+/// One case's input: either freshly generated, or a saved case chewed on. With
+/// no corpus every case is generated, which is the normal state.
 pub fn input(
 	rng: &mut Rng,
 	corpus: &[Vec<u8>],
@@ -185,10 +185,10 @@ pub fn input(
 	mutate(rng, &parent)
 }
 
-// Text with the awkward parts of Unicode in it, for anything that takes a string
-// rather than bytes. Length is short on purpose: most parser bugs sit within a
-// few characters of a state change, and a long case only makes a failure harder
-// to read.
+/// Text with the awkward parts of Unicode in it, for anything that takes a string
+/// rather than bytes. Length is short on purpose: most parser bugs sit within a
+/// few characters of a state change, and a long case only makes a failure harder
+/// to read.
 pub fn text(rng: &mut Rng) -> String {
 	#[rustfmt::skip]
 	const PIECES: [&str; 22] = [
@@ -203,11 +203,11 @@ pub fn text(rng: &mut Rng) -> String {
 	out
 }
 
-// A stream of the kind a program on the other end of a pty sends: printable
-// runs with escape sequences threaded through them. Weighted toward the
-// sequences that do something rather than the ones a parser discards, and
-// deliberately willing to emit malformed ones - an unterminated OSC, a CSI with
-// forty parameters, a truncated UTF-8 character.
+/// A stream of the kind a program on the other end of a pty sends: printable
+/// runs with escape sequences threaded through them. Weighted toward the
+/// sequences that do something rather than the ones a parser discards, and
+/// deliberately willing to emit malformed ones - an unterminated OSC, a CSI with
+/// forty parameters, a truncated UTF-8 character.
 pub fn vt_stream(rng: &mut Rng) -> Vec<u8> {
 	let mut out = Vec::new();
 	for _ in 0..=rng.below(40) {
@@ -317,9 +317,9 @@ fn string_sequence(rng: &mut Rng, out: &mut Vec<u8>) {
 	}
 }
 
-// Every sequence that asks the terminal a question, so each case exercises the
-// reply path as well as the parse. Appended after the generated stream, which
-// has by then left the terminal in whatever state it managed to reach.
+/// Every sequence that asks the terminal a question, so each case exercises the
+/// reply path as well as the parse. Appended after the generated stream, which
+/// has by then left the terminal in whatever state it managed to reach.
 pub const VT_PROBES: &[u8] = b"\x1b[6n\x1b[0c\x1b[>0c\x1b[5n\x1b[14t\x1b[16t\x1b[18t\
 \x1b[19t\x1b[20t\x1b[21t\x1b]4;1;?\x07\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07\
 \x1b]52;c;?\x07";

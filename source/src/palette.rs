@@ -6,11 +6,10 @@ use alacritty_terminal::vte::ansi::{Color, NamedColor};
 
 use crate::config::Settings;
 
-// The 16 ANSI colors come from the active theme (config::settings().ansi),
-// resolved in config from the theme name + mode. See theme.rs. Callers pass
-// their per-frame Settings snapshot: this runs ~2x per cell per rebuilt frame,
-// and settings() is an RwLock read + Arc clone - too hot to take per color.
-
+/// The 16 ANSI colors come from the active theme (`config::settings().ansi`),
+/// resolved in config from the theme name + mode. See theme.rs. Callers pass
+/// their per-frame Settings snapshot: this runs ~2x per cell per rebuilt frame,
+/// and `settings()` is an `RwLock` read + Arc clone - too hot to take per color.
 pub fn resolve(c: Color, colors: &Colors, settings: &Settings) -> [u8; 3] {
 	match c {
 		Color::Spec(rgb) => [rgb.r, rgb.g, rgb.b],
@@ -74,16 +73,15 @@ fn named(n: NamedColor, colors: &Colors, settings: &Settings) -> [u8; 3] {
 	}
 }
 
-// Minimum-contrast lift. A program that writes near-black text (ANSI black, a
-// dark 256-cube entry) on a dark background, or a pale color on a light one, is
-// unreadable through no fault of the theme. `readable` measures the gap in Oklab
-// lightness and, when it is too small, moves the text away from its background -
-// L only, so the hue and the saturation survive and colors stay told apart.
-//
-// Oklab rather than the WCAG ratio: that ratio's +0.05 term swamps the dark end,
-// so two near-blacks score well while being invisible, which is exactly the case
-// this is for.
-
+/// Minimum-contrast lift. A program that writes near-black text (ANSI black, a
+/// dark 256-cube entry) on a dark background, or a pale color on a light one, is
+/// unreadable through no fault of the theme. `readable` measures the gap in Oklab
+/// lightness and, when it is too small, moves the text away from its background -
+/// L only, so the hue and the saturation survive and colors stay told apart.
+///
+/// Oklab rather than the WCAG ratio: that ratio's +0.05 term swamps the dark end,
+/// so two near-blacks score well while being invisible, which is exactly the case
+/// this is for.
 pub fn readable(fg: [u8; 3], bg: [u8; 3], min_gap: f32) -> [u8; 3] {
 	// Equal colors are deliberate concealment (the HIDDEN attribute, or a program
 	// hiding text on purpose). Never second-guess that.
@@ -140,9 +138,9 @@ pub(crate) fn from_oklab(lightness: f32, a: f32, b: f32) -> [u8; 3] {
 	]
 }
 
-// The distinct (fg, bg) pairs on one screen are few - a handful even in a busy
-// TUI - and `readable` is six cube roots. Memo it for the length of a build; a
-// screen with more pairs than the cap just recomputes past that point.
+/// The distinct (fg, bg) pairs on one screen are few - a handful even in a busy
+/// TUI - and `readable` is six cube roots. Memo it for the length of a build; a
+/// screen with more pairs than the cap just recomputes past that point.
 #[derive(Debug, Default)]
 pub struct Readable {
 	seen: Vec<([u8; 3], [u8; 3], [u8; 3])>,
@@ -152,6 +150,7 @@ pub struct Readable {
 const READABLE_MEMO_CAP: usize = 64;
 
 impl Readable {
+	/// The same answer `readable` gives, kept per color pair.
 	pub fn get(&mut self, fg: [u8; 3], bg: [u8; 3], min_gap: f32) -> [u8; 3] {
 		if min_gap <= 0.0 {
 			return fg;

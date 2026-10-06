@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// SILK_MEMDBG=1 prints what a window holds, on the graphics card and in its
-// own heap, to stderr whenever it changes. The card figures are the
-// allocator's own (Vulkan and DX12; the GL path keeps no report). The heap
-// figures are counted from the structures that grow with use, so they are a
-// floor: malloc's own overhead and everything else in the process are not in
-// them. See the reducing resources design doc for what they were used for.
+//! `SILK_MEMDBG=1` prints what a window holds, on the graphics card and in its
+//! own heap, to stderr whenever it changes. The card figures are the
+//! allocator's own (Vulkan and DX12; the GL path keeps no report). The heap
+//! figures are counted from the structures that grow with use, so they are a
+//! floor: malloc's own overhead and everything else in the process are not in
+//! them. See the reducing resources design doc for what they were used for.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -17,8 +17,8 @@ pub fn mib(bytes: usize) -> f64 {
 	bytes as f64 / MIB
 }
 
-// One device's allocations, summed by label, largest first. Swapchain images
-// belong to the window system, not the allocator, so they are never in here.
+/// One device's allocations, summed by label, largest first. Swapchain images
+/// belong to the window system, not the allocator, so they are never in here.
 pub fn gpu_line(tag: &str, device: &wgpu::Device) -> String {
 	let Some(report) = device.generate_allocator_report() else {
 		return format!("{tag}: no allocator report on this backend");
@@ -54,13 +54,14 @@ pub fn gpu_line(tag: &str, device: &wgpu::Device) -> String {
 	line
 }
 
-// Prints each line only when it differs from what was printed under its tag.
+/// Prints each line only when it differs from what was printed under its tag.
 #[derive(Debug, Default)]
 pub struct Printer {
 	last: BTreeMap<String, String>,
 }
 
 impl Printer {
+	/// Prints `line` unless it is what `tag` printed last time.
 	pub fn say(&mut self, tag: &str, line: String) {
 		if self.last.get(tag) == Some(&line) {
 			return;

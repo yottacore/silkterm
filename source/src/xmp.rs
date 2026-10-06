@@ -33,10 +33,10 @@ const MAX_PACKET: u64 = 1 << 20;
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Tags {
 	pub fit: Option<Fit>,
-	// x, y in 0.0..=1.0; 0 is left/top, 1 is right/bottom. Zoom only.
+	/// x, y in 0.0..=1.0; 0 is left/top, 1 is right/bottom. Zoom only.
 	pub anchor: Option<[f32; 2]>,
-	// Same units as the two settings they replace: visibility 0..1, blur sigma
-	// in px. A tagged image takes these over the sliders.
+	/// Same units as the two settings they replace: visibility 0..1, blur sigma
+	/// in px. A tagged image takes these over the sliders.
 	pub opacity: Option<f32>,
 	pub blur: Option<f32>,
 }

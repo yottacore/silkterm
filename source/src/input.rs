@@ -10,8 +10,8 @@ use winit::keyboard::{Key, ModifiersState, NamedKey, SmolStr};
 use crate::keys::Bindings;
 use crate::pane::Toward;
 
-// A mouse event to report to the PTY. Wheel notches ride buttons 64/65; `None`
-// is the "no button" code (3) used for bare motion and the X10 release.
+/// A mouse event to report to the PTY. Wheel notches ride buttons 64/65; `None`
+/// is the "no button" code (3) used for bare motion and the X10 release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseBtn {
 	None,
@@ -39,12 +39,12 @@ impl MouseBtn {
 	}
 }
 
-// True when the app has any mouse tracking turned on (DECSET 1000/1002/1003).
+/// True when the app has any mouse tracking turned on (DECSET 1000/1002/1003).
 pub fn wants_mouse(mode: TermMode) -> bool {
 	mode.intersects(TermMode::MOUSE_REPORT_CLICK | TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION)
 }
 
-// winit button -> the reportable subset (None for Back/Forward/etc.)
+/// winit button -> the reportable subset (None for Back/Forward/etc.)
 pub fn mouse_btn_of(button: MouseButton) -> Option<MouseBtn> {
 	match button {
 		MouseButton::Left => Some(MouseBtn::Left),
@@ -54,31 +54,31 @@ pub fn mouse_btn_of(button: MouseButton) -> Option<MouseBtn> {
 	}
 }
 
-// Whether a press goes to a mouse-tracking app instead of being handled here.
-// Right-click is reserved for our own context menu (muffer pastes on it), an
-// open menu takes the click to operate or dismiss it, and Shift is the
-// local-action override.
+/// Whether a press goes to a mouse-tracking app instead of being handled here.
+/// Right-click is reserved for our own context menu (muffer pastes on it), an
+/// open menu takes the click to operate or dismiss it, and Shift is the
+/// local-action override.
 pub fn press_is_reported(btn: MouseBtn, menu_open: bool, shift: bool) -> bool {
 	btn != MouseBtn::Right && !menu_open && !shift
 }
 
-// A release is reported only for the button whose press was. Any other one
-// would clear the held state, and the app would see a release it never saw
-// pressed.
+/// A release is reported only for the button whose press was. Any other one
+/// would clear the held state, and the app would see a release it never saw
+/// pressed.
 pub fn release_is_reported(held: Option<MouseBtn>, button: MouseButton) -> bool {
 	held.is_some() && held == mouse_btn_of(button)
 }
 
-// A left press in the tab-bar band goes to the tab bar - unless a dropdown is
-// open. One opens flush under the menu bar, so its top item overlaps the band,
-// and "Tabs|New tab" would select a tab instead of firing.
+/// A left press in the tab-bar band goes to the tab bar - unless a dropdown is
+/// open. One opens flush under the menu bar, so its top item overlaps the band,
+/// and "Tabs|New tab" would select a tab instead of firing.
 pub fn tab_bar_takes_press(menu_open: bool, bar_shown: bool, y: f32, top: f32, h: f32) -> bool {
 	!menu_open && bar_shown && y >= top && y < top + h
 }
 
-// A tab close armed by a press fires only if the release is still over that
-// tab's close box. `close_x` is the left edge of the armed tab's box, None when
-// the tab is gone. Dragging off before releasing cancels, like any button.
+/// A tab close armed by a press fires only if the release is still over that
+/// tab's close box. `close_x` is the left edge of the armed tab's box, None when
+/// the tab is gone. Dragging off before releasing cancels, like any button.
 pub fn close_on_release(
 	armed: usize,
 	x: f32,
@@ -89,11 +89,11 @@ pub fn close_on_release(
 	in_bar && close_x.is_some_and(|left| x >= left) && tab_at == Some(armed)
 }
 
-// How soon, and how near, a click has to follow the last one to count with it.
+/// How soon, and how near, a click has to follow the last one to count with it.
 pub const MULTI_CLICK: Duration = Duration::from_millis(400);
 
-// A press's place in a run of clicks on one spot: 1, 2 or 3, and a fourth
-// starts over. One too late, or more than a cell away, starts a new run.
+/// A press's place in a run of clicks on one spot: 1, 2 or 3, and a fourth
+/// starts over. One too late, or more than a cell away, starts a new run.
 pub fn click_count(
 	last: Option<(Instant, f32, f32)>,
 	count: u32,
@@ -117,6 +117,7 @@ pub enum ClickSelect {
 	Line,  // the whole logical line, wrapped rows included
 }
 
+/// What a click selects by its place in a run. With the shortcut key held, a lone click starts a block.
 pub fn click_select(count: u32, shortcut: bool) -> ClickSelect {
 	match count {
 		2 => ClickSelect::Word,
@@ -150,17 +151,17 @@ pub fn acting_button(button: MouseButton, mods: ModifiersState, mac: bool) -> Mo
 /// What the held keys mean to a text box in a dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct EditKeys {
-	// the accelerator key for a dialog's buttons; a Mac has none, and Option
-	// types a character there
+	/// the accelerator key for a dialog's buttons; a Mac has none, and Option
+	/// types a character there
 	pub alt: bool,
 	pub shift: bool,
-	// copy, cut, paste and select all, and the dialog's tab switching
+	/// copy, cut, paste and select all, and the dialog's tab switching
 	pub shortcut: bool,
-	// the arrows and the erase keys go by words
+	/// the arrows and the erase keys go by words
 	pub word: bool,
-	// the arrows go to either end and Backspace erases to the start
+	/// the arrows go to either end and Backspace erases to the start
 	pub line: bool,
-	// a character key types
+	/// a character key types
 	pub types: bool,
 }
 
@@ -197,9 +198,9 @@ pub enum WheelRoute {
 	Scrollback, // our own smooth scrollback
 }
 
-// Where a wheel turn goes. Alternate scroll (DECSET 1007) is on by default, so
-// cursor keys also need the alt screen: on the primary screen they would walk
-// shell history instead of scrolling. Shift keeps the wheel local.
+/// Where a wheel turn goes. Alternate scroll (DECSET 1007) is on by default, so
+/// cursor keys also need the alt screen: on the primary screen they would walk
+/// shell history instead of scrolling. Shift keeps the wheel local.
 pub fn wheel_route(mode: TermMode, shift: bool) -> WheelRoute {
 	if !shift && wants_mouse(mode) {
 		WheelRoute::Report
@@ -211,14 +212,14 @@ pub fn wheel_route(mode: TermMode, shift: bool) -> WheelRoute {
 	}
 }
 
-// The copy chord, read off the held modifiers. A grab's pass-through arrives
-// with them zeroed, so it never matches.
+/// The copy chord, read off the held modifiers. A grab's pass-through arrives
+/// with them zeroed, so it never matches.
 pub fn is_copy_chord(keys: &Bindings, mods: ModifiersState, key: &Key) -> bool {
 	keys.hotkey(key, mods) == Some(Hotkey::Copy)
 }
 
-// A key the terminal keeps rather than typing at the shell. Every one but
-// `MenuTitle` can be bound in the config file (keys.rs).
+/// A key the terminal keeps rather than typing at the shell. Every one but
+/// `MenuTitle` can be bound in the config file (keys.rs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hotkey {
 	Settings,
@@ -249,7 +250,7 @@ pub fn reaches_shell(mods: ModifiersState, mac: bool) -> bool {
 	!(mac && mods.super_key())
 }
 
-// Which hotkey a press is, if any, by the bindings in force.
+/// Which hotkey a press is, if any, by the bindings in force.
 pub fn hotkey_for(key: &Key, mods: ModifiersState, menu_bar: bool) -> Option<Hotkey> {
 	hotkey_in(
 		&crate::config::settings().keys,
@@ -292,13 +293,13 @@ fn hotkey_in(
 	None
 }
 
-// Only Alt alone makes a letter a menu title. Ctrl rules out AltGr, which
-// Windows reports as Ctrl+Alt; Shift or Super makes it some other chord.
+/// Only Alt alone makes a letter a menu title. Ctrl rules out AltGr, which
+/// Windows reports as Ctrl+Alt; Shift or Super makes it some other chord.
 pub fn opens_menu_title(mods: ModifiersState) -> bool {
 	mods == ModifiersState::ALT
 }
 
-// Where a write to the desktop clipboard comes from.
+/// Where a write to the desktop clipboard comes from.
 #[derive(Debug, Clone, Copy)]
 pub enum CopyFrom {
 	Chord,   // Ctrl+Shift+C, Command+C on macOS
@@ -307,13 +308,13 @@ pub enum CopyFrom {
 	Output,  // a finished command's output, with copy on output on
 }
 
-// Whether a copy goes through. The window-focus flag can lag the window
-// manager, so the two a person drives never wait on it: a chord typed at this
-// window, or a drag in it, is proof enough it is the one in use. The two that
-// fire on their own take only the pane in use - a background pane printing a
-// hostile file cannot swap what the next paste holds - and output copies only
-// while its window has focus, so a command that finished while the user was
-// elsewhere never copies late.
+/// Whether a copy goes through. The window-focus flag can lag the window
+/// manager, so the two a person drives never wait on it: a chord typed at this
+/// window, or a drag in it, is proof enough it is the one in use. The two that
+/// fire on their own take only the pane in use - a background pane printing a
+/// hostile file cannot swap what the next paste holds - and output copies only
+/// while its window has focus, so a command that finished while the user was
+/// elsewhere never copies late.
 pub fn copy_allowed(from: CopyFrom, window_focused: bool, pane_in_use: bool) -> bool {
 	match from {
 		CopyFrom::Chord | CopyFrom::Select => true,
@@ -322,11 +323,11 @@ pub fn copy_allowed(from: CopyFrom, window_focused: bool, pane_in_use: bool) -> 
 	}
 }
 
-// Encode a mouse event as a report for the PTY, honouring the app's tracking
-// mode (SGR 1006 vs the legacy X10 form) and modifier bits. `col`/`row` are
-// 0-based cells within the viewport; `pressed` is press vs release (wheel is
-// press-only); `motion` marks a drag/move report. Returns None when no tracking
-// mode is set.
+/// Encode a mouse event as a report for the PTY, honouring the app's tracking
+/// mode (SGR 1006 vs the legacy X10 form) and modifier bits. `col`/`row` are
+/// 0-based cells within the viewport; `pressed` is press vs release (wheel is
+/// press-only); `motion` marks a drag/move report. Returns None when no tracking
+/// mode is set.
 pub fn mouse_report(
 	mode: TermMode,
 	btn: MouseBtn,
@@ -374,16 +375,16 @@ pub fn mouse_report(
 	])
 }
 
-// Cursor-key sequence. In application-cursor-keys mode (DECCKM, set by full
-// screen apps like `less`/vim) these use the SS3 (`ESC O`) form; otherwise CSI
-// (`ESC [`). Sending the wrong form is why `less` arrow keys did nothing.
+/// Cursor-key sequence. In application-cursor-keys mode (DECCKM, set by full
+/// screen apps like `less`/vim) these use the SS3 (`ESC O`) form; otherwise CSI
+/// (`ESC [`). Sending the wrong form is why `less` arrow keys did nothing.
 pub fn cursor_seq(letter: u8, app_cursor: bool) -> Vec<u8> {
 	let prefix = if app_cursor { b'O' } else { b'[' };
 	vec![0x1b, prefix, letter]
 }
 
-// Translate a key press into the bytes a PTY expects. Returns None for keys
-// we don't forward (modifiers alone, unhandled named keys, etc.).
+/// Translate a key press into the bytes a PTY expects. Returns None for keys
+/// we don't forward (modifiers alone, unhandled named keys, etc.).
 pub fn encode(ev: &KeyEvent, mods: ModifiersState, app_cursor: bool) -> Option<Vec<u8>> {
 	encode_key(&ev.logical_key, ev.text.as_deref(), mods, app_cursor)
 }
@@ -402,9 +403,9 @@ fn typed_key(key: &Key, text: Option<&str>) -> Option<Key> {
 	}
 }
 
-// Name a key the platform could not, so every reader of the event sees the
-// character rather than nothing. Both window event handlers call this before
-// they look at a key.
+/// Name a key the platform could not, so every reader of the event sees the
+/// character rather than nothing. Both window event handlers call this before
+/// they look at a key.
 pub fn name_typed(mut ev: KeyEvent) -> KeyEvent {
 	if let Some(key) = typed_key(&ev.logical_key, ev.text.as_deref()) {
 		ev.logical_key = key;

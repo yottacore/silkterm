@@ -9,10 +9,10 @@
 
 use crate::pane::Rect;
 
-// Hue 0..1 (wrapping), saturation and brightness 0..1. This is what the box
-// holds, not the bytes: a drag down into black or left into gray leaves the
-// hue with nothing to be read back from, and deriving it per frame would send
-// the marker home the moment the color reached an edge.
+/// Hue 0..1 (wrapping), saturation and brightness 0..1. This is what the box
+/// holds, not the bytes: a drag down into black or left into gray leaves the
+/// hue with nothing to be read back from, and deriving it per frame would send
+/// the marker home the moment the color reached an edge.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Hsv {
 	pub h: f32,
@@ -20,8 +20,8 @@ pub struct Hsv {
 	pub v: f32,
 }
 
-// The fully lit color at this hue, 0..1 per channel, in sRGB space. The square's
-// shader computes the same thing, so the two agree on what a hue looks like.
+/// The fully lit color at this hue, 0..1 per channel, in sRGB space. The square's
+/// shader computes the same thing, so the two agree on what a hue looks like.
 pub fn hue_rgb(h: f32) -> [f32; 3] {
 	let k = h.rem_euclid(1.0) * 6.0;
 	[
@@ -38,9 +38,9 @@ pub fn to_rgb(color: Hsv) -> [u8; 3] {
 	[chan(hue[0]), chan(hue[1]), chan(hue[2])]
 }
 
-// `keep` supplies what the bytes cannot say. A gray has no hue and black has no
-// saturation either, so typing 0 into Brightness would otherwise reset the two
-// sliders the user had just set.
+/// `keep` supplies what the bytes cannot say. A gray has no hue and black has no
+/// saturation either, so typing 0 into Brightness would otherwise reset the two
+/// sliders the user had just set.
 pub fn from_rgb(c: [u8; 3], keep: Hsv) -> Hsv {
 	let [r, g, b] = c.map(|v| f32::from(v) / 255.0);
 	let max = r.max(g).max(b);
@@ -61,7 +61,7 @@ pub fn from_rgb(c: [u8; 3], keep: Hsv) -> Hsv {
 	}
 }
 
-// The six value boxes down the right side, top to bottom.
+/// The six value boxes down the right side, top to bottom.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Field {
 	Red,
@@ -99,7 +99,7 @@ impl Field {
 			Field::Brightness | Field::Saturation | Field::Hex => None,
 		}
 	}
-	// What the box shows while nobody is typing in it.
+	/// What the box shows while nobody is typing in it.
 	pub fn text(self, color: Hsv) -> String {
 		let rgb = to_rgb(color);
 		match self {
@@ -111,8 +111,8 @@ impl Field {
 			}
 		}
 	}
-	// A typed buffer read back into the model. None where it says nothing yet -
-	// a half-typed hex, or an empty box.
+	/// A typed buffer read back into the model. None where it says nothing yet -
+	/// a half-typed hex, or an empty box.
 	pub fn apply(self, color: Hsv, buf: &str) -> Option<Hsv> {
 		match self {
 			Field::Hex => crate::config::parse_hex(buf).map(|rgb| from_rgb(rgb, color)),
@@ -126,8 +126,8 @@ impl Field {
 			}
 		}
 	}
-	// One arrow press, the same hundredth-of-range step every number box in the
-	// dialog takes (a tenth with Shift).
+	/// One arrow press, the same hundredth-of-range step every number box in the
+	/// dialog takes (a tenth with Shift).
 	pub fn step(self, color: Hsv, dir: i32, shift: bool) -> Hsv {
 		let by = if shift { 0.1 } else { 0.01 } * dir as f32;
 		match self {
@@ -151,8 +151,8 @@ impl Field {
 			}
 		}
 	}
-	// Characters the box takes. Hex is the Color row's own rule; the rest are
-	// whole percents.
+	/// Characters the box takes. Hex is the Color row's own rule; the rest are
+	/// whole percents.
 	pub fn accepts(self, ch: char, len: usize, at_start: bool) -> bool {
 		match self {
 			Field::Hex => {
@@ -173,7 +173,7 @@ fn pct(buf: &str) -> Option<f32> {
 	Some((v / 100.0).clamp(0.0, 1.0))
 }
 
-// Where the keyboard is inside the box, in Tab order.
+/// Where the keyboard is inside the box, in Tab order.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Focus {
 	Square,
@@ -183,7 +183,7 @@ pub enum Focus {
 	Ok,
 }
 
-// What the pointer took hold of.
+/// What the pointer took hold of.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Grab {
 	Square,
@@ -192,9 +192,9 @@ pub enum Grab {
 
 #[derive(Debug)]
 pub struct Picker {
-	// The Color row the box is editing.
+	/// The Color row the box is editing.
 	pub row: usize,
-	// What that row held when it opened, so Cancel has something to put back.
+	/// What that row held when it opened, so Cancel has something to put back.
 	pub start: [u8; 3],
 	pub hsv: Hsv,
 	pub focus: Focus,
@@ -214,8 +214,8 @@ impl Picker {
 	}
 }
 
-// The metrics the box is built from. All of them grow with the interface font,
-// so a large desktop font gets a proportionally larger box.
+/// The metrics the box is built from. All of them grow with the interface font,
+/// so a large desktop font gets a proportionally larger box.
 #[derive(Debug)]
 pub struct Metrics {
 	pub pad: f32,
@@ -243,9 +243,9 @@ pub struct Geom {
 	pub ok: Rect,
 }
 
-// Centered over the panel and sized to what it holds, the way the name box is.
-// The square is what gives on a narrow panel: it is the one piece with no text
-// in it, so shrinking it costs nothing that can be read.
+/// Centered over the panel and sized to what it holds, the way the name box is.
+/// The square is what gives on a narrow panel: it is the one piece with no text
+/// in it, so shrinking it costs nothing that can be read.
 pub fn geom(panel: Rect, m: &Metrics) -> Geom {
 	let column = m.label_w + m.field_w;
 	let fields_h = 6.0 * m.field_h + 5.0 * m.gap;
@@ -309,7 +309,7 @@ impl Geom {
 	pub fn field(&self, f: Field) -> Rect {
 		self.fields[Field::ALL.iter().position(|&a| a == f).unwrap_or(0)]
 	}
-	// Where the marker sits in the square, and where a press in it lands.
+	/// Where the marker sits in the square, and where a press in it lands.
 	pub fn marker(&self, color: Hsv) -> (f32, f32) {
 		(
 			self.square.x + color.s.clamp(0.0, 1.0) * self.square.w,
@@ -334,8 +334,8 @@ impl Geom {
 	}
 }
 
-// Black or white, whichever can be seen on `c`. The marker sits on a field that
-// runs from white to black to full color, so it cannot be one fixed ink.
+/// Black or white, whichever can be seen on `c`. The marker sits on a field that
+/// runs from white to black to full color, so it cannot be one fixed ink.
 pub fn ink_on(c: [u8; 3]) -> [u8; 3] {
 	if crate::palette::to_oklab(c).0 > 0.6 {
 		[0, 0, 0]

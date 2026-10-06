@@ -41,14 +41,14 @@ const MAX_PAYLOAD: usize = 4096;
 const ESC: u8 = 0x1b;
 const BEL: u8 = 0x07;
 
-// What the shell last said about where it is. Written by the PTY reader thread
-// and read by the window thread, so it is behind a lock - one taken only when a
-// prompt reports and when a new tab/pane/window opens, never per byte and never
-// per frame.
-//
-// On unix it also keeps who said it: the terminal's foreground process group
-// when the report arrived. A zsh started from dash reports, then exits, and dash
-// reports nothing - so the answer has to go with the program that gave it.
+/// What the shell last said about where it is. Written by the PTY reader thread
+/// and read by the window thread, so it is behind a lock - one taken only when a
+/// prompt reports and when a new tab/pane/window opens, never per byte and never
+/// per frame.
+///
+/// On unix it also keeps who said it: the terminal's foreground process group
+/// when the report arrived. A zsh started from dash reports, then exits, and dash
+/// reports nothing - so the answer has to go with the program that gave it.
 #[derive(Debug, Clone, Default)]
 pub struct Reported {
 	slot: Arc<Mutex<Option<(PathBuf, Option<u32>)>>>,
@@ -57,8 +57,8 @@ pub struct Reported {
 }
 
 impl Reported {
-	// Reads the speaker from this PTY master. The fd stays valid for as long as
-	// the loop that feeds the tap owns the PTY.
+	/// Reads the speaker from this PTY master. The fd stays valid for as long as
+	/// the loop that feeds the tap owns the PTY.
 	#[cfg(unix)]
 	pub fn for_tty(tty: std::os::unix::io::RawFd) -> Self {
 		Self {
@@ -74,7 +74,7 @@ impl Reported {
 		Some(crate::locks::lock(&self.slot).as_ref()?.0.clone())
 	}
 
-	// The last report, while the program that sent it is still running.
+	/// The last report, while the program that sent it is still running.
 	pub fn live(&self) -> Option<PathBuf> {
 		let (dir, speaker) = crate::locks::lock(&self.slot).clone()?;
 		speaker.is_none_or(still_running).then_some(dir)
@@ -114,8 +114,8 @@ fn still_running(_: u32) -> bool {
 	true
 }
 
-// The PTY, with its read side scanned on the way past. Everything else is
-// forwarded untouched, including the child-exit channel and resize.
+/// The PTY, with its read side scanned on the way past. Everything else is
+/// forwarded untouched, including the child-exit channel and resize.
 pub struct TappedPty<P> {
 	pty: P,
 	scan: Scan,
@@ -321,8 +321,8 @@ fn wanted(payload: &[u8]) -> bool {
 	})
 }
 
-// The directory an OSC payload names, in either spelling. `local_host` is what
-// an OSC 7 URL has to name to be believed.
+/// The directory an OSC payload names, in either spelling. `local_host` is what
+/// an OSC 7 URL has to name to be believed.
 pub fn directory(payload: &str, local_host: &str) -> Option<PathBuf> {
 	if let Some(rest) = payload.strip_prefix("7;") {
 		return from_url(rest, local_host);

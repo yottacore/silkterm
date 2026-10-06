@@ -44,22 +44,22 @@ fn pin_mono_family(fs: &FontSystem) {
 	MONO_WEIGHT_BOLD.store(bold, Ordering::Relaxed);
 }
 
-// What the text pass needs to blend glyph coverage the way an sRGB blend would,
-// which is the weight the font was drawn for: the pair as sRGB grays of the same
-// brightness, and how much of the correction to apply.
-//
-// Coverage is blended in linear light, so a half covered pixel comes out near
-// three quarters brightness whichever way round the two colors are. On a dark
-// background that reads as a strong edge; on a light one it is almost no ink at
-// all, and the thin parts of every letter go with it. Only text darker than what
-// is behind it needs the correction - the other way round is already heavy
-// enough - and that side is decided on Oklab lightness, the measure minimum
-// contrast uses.
-//
-// One alpha serves all three channels, so the curve is built from grays of the
-// pair's own brightness. A glyph in some other color takes the same curve, which
-// is off by up to about 20 levels on its partly covered pixels and always in the
-// direction of more ink.
+/// What the text pass needs to blend glyph coverage the way an sRGB blend would,
+/// which is the weight the font was drawn for: the pair as sRGB grays of the same
+/// brightness, and how much of the correction to apply.
+///
+/// Coverage is blended in linear light, so a half covered pixel comes out near
+/// three quarters brightness whichever way round the two colors are. On a dark
+/// background that reads as a strong edge; on a light one it is almost no ink at
+/// all, and the thin parts of every letter go with it. Only text darker than what
+/// is behind it needs the correction - the other way round is already heavy
+/// enough - and that side is decided on Oklab lightness, the measure minimum
+/// contrast uses.
+///
+/// One alpha serves all three channels, so the curve is built from grays of the
+/// pair's own brightness. A glyph in some other color takes the same curve, which
+/// is off by up to about 20 levels on its partly covered pixels and always in the
+/// direction of more ink.
 pub fn text_blend(fg: [u8; 3], bg: [u8; 3], amount: f32) -> (f32, f32, f32) {
 	let (fg_gray, bg_gray) = (gray_of(fg), gray_of(bg));
 	let on = crate::palette::to_oklab(fg).0 < crate::palette::to_oklab(bg).0;
@@ -84,9 +84,9 @@ fn gray_of(c: [u8; 3]) -> f32 {
 	crate::config::from_linear(luma)
 }
 
-// Weight a terminal bold cell should request: the closest weight to Bold the
-// pinned mono family really ships. Use instead of a literal Weight::BOLD, which
-// kicks the family out (into a proportional fallback) when it has no bold face.
+/// Weight a terminal bold cell should request: the closest weight to Bold the
+/// pinned mono family really ships. Use instead of a literal `Weight::BOLD`, which
+/// kicks the family out (into a proportional fallback) when it has no bold face.
 pub fn mono_bold_weight() -> glyphon::Weight {
 	use std::sync::atomic::Ordering;
 	glyphon::Weight(MONO_WEIGHT_BOLD.load(Ordering::Relaxed))
@@ -237,17 +237,17 @@ fn ui_ink_center_top(ui_line_h: f32, vmetrics: (f32, f32), bar_top: f32, bar_h: 
 	bar_top + bar_h / 2.0 - ui_baseline_in_buf(ui_line_h, vmetrics) + (ascent - descent) / 2.0
 }
 
-// Emphasis weight for chrome (dialog titles, section headers): the closest
-// weight to Bold the pinned family really ships. Use this instead of a literal
-// `Weight::BOLD`, which kicks the whole family out when no 700 face exists.
+/// Emphasis weight for chrome (dialog titles, section headers): the closest
+/// weight to Bold the pinned family really ships. Use this instead of a literal
+/// `Weight::BOLD`, which kicks the whole family out when no 700 face exists.
 pub fn ui_bold_weight() -> glyphon::Weight {
 	use std::sync::atomic::Ordering;
 	glyphon::Weight(UI_WEIGHT_BOLD.load(Ordering::Relaxed))
 }
 
-// Proportional attrs for chrome - menus, the menu bar, dialogs - in the pinned
-// desktop interface font (family/weight/slant), so chrome reads like the rest
-// of the user's desktop rather than terminal text.
+/// Proportional attrs for chrome - menus, the menu bar, dialogs - in the pinned
+/// desktop interface font (family/weight/slant), so chrome reads like the rest
+/// of the user's desktop rather than terminal text.
 pub fn ui_attrs() -> Attrs<'static> {
 	use std::sync::atomic::Ordering;
 	let mut attrs = Attrs::new();
@@ -392,24 +392,24 @@ pub struct TextCtx {
 	// GPU go (see app.rs, `release_gpu`); the metrics and the font system stay,
 	// since layout and input keep asking for them.
 	gpu: Option<TextGpu>,
-	// The display's scale factor this context was built at. Every chrome
-	// measurement in the main window is written in DIP and converted through
-	// `dip` at its use site, since chrome shares a coordinate space with the
-	// terminal grid and has no boundary to convert at.
+	/// The display's scale factor this context was built at. Every chrome
+	/// measurement in the main window is written in DIP and converted through
+	/// `dip` at its use site, since chrome shares a coordinate space with the
+	/// terminal grid and has no boundary to convert at.
 	pub scale: f32,
 	pub cell_w: f32,
 	pub cell_h: f32,
-	// Whether a bold run shapes to the same per-cell advance as regular. When
-	// false (font ignores set_monospace_width and its bold face has a different
-	// advance - common on Windows), the de-bold scrim buffer would drift from the
-	// display buffer along the line, so panes reuse the display buffer for the
-	// scrim instead (see Pane::build, text_scrim_regular_weight).
+	/// Whether a bold run shapes to the same per-cell advance as regular. When
+	/// false (font ignores `set_monospace_width` and its bold face has a different
+	/// advance - common on Windows), the de-bold scrim buffer would drift from the
+	/// display buffer along the line, so panes reuse the display buffer for the
+	/// scrim instead (see `Pane::build`, `text_scrim_regular_weight`).
 	pub debold_safe: bool,
-	// physical-px inset between content and pane edge
+	/// physical-px inset between content and pane edge
 	pub margin: f32,
 	pub metrics: Metrics,
-	// Chrome (menus/tabs/dialogs) renders at the DESKTOP interface font size,
-	// independent of the terminal font size; bars and rows size from this.
+	/// Chrome (menus/tabs/dialogs) renders at the DESKTOP interface font size,
+	/// independent of the terminal font size; bars and rows size from this.
 	pub ui_line_h: f32,
 	ui_metrics: Metrics,
 	// chrome vertical metrics at ui_px (ascent, descent) in the units cosmic-text
@@ -434,8 +434,8 @@ pub struct TextCtx {
 	// turns that into a lookup. Bounded (cleared) so dynamic tab titles can't
 	// grow it without limit.
 	ui_measure_cache: HashMap<String, f32>,
-	// Which context this is. A font, size or scale change builds a new one, so
-	// anything measured with the old one can tell it is stale by this alone.
+	/// Which context this is. A font, size or scale change builds a new one, so
+	/// anything measured with the old one can tell it is stale by this alone.
 	pub generation: u64,
 }
 
@@ -528,7 +528,7 @@ fn advance_cells(advance: f32, unit: f32) -> u8 {
 }
 
 impl TextCtx {
-	// SILK_MEMDBG: rasterized glyphs kept on the heap, and the font faces known.
+	/// `SILK_MEMDBG`: rasterized glyphs kept on the heap, and the font faces known.
 	pub fn memdbg_line(&self) -> String {
 		let images = &self.swash_cache.image_cache;
 		let bytes: usize = images
@@ -555,8 +555,8 @@ impl TextCtx {
 		ctx
 	}
 
-	// The device half again, on a new device. The atlases start empty, so the
-	// next frame rasterizes what it shows.
+	/// The device half again, on a new device. The atlases start empty, so the
+	/// next frame rasterizes what it shows.
 	pub fn attach_gpu(
 		&mut self,
 		device: &wgpu::Device,
@@ -566,9 +566,9 @@ impl TextCtx {
 		self.gpu = Some(TextGpu::new(device, queue, format));
 	}
 
-	// Let the device half go, and with it the rasterized glyphs, which are only
-	// worth keeping while there is an atlas to put them in. Nothing may draw
-	// until `attach_gpu`.
+	/// Let the device half go, and with it the rasterized glyphs, which are only
+	/// worth keeping while there is an atlas to put them in. Nothing may draw
+	/// until `attach_gpu`.
 	pub fn detach_gpu(&mut self) {
 		self.gpu = None;
 		self.swash_cache = SwashCache::new();
@@ -578,8 +578,8 @@ impl TextCtx {
 		attached(&mut self.gpu)
 	}
 
-	// Fonts and metrics alone: everything the layout needs and nothing a device
-	// does.
+	/// Fonts and metrics alone: everything the layout needs and nothing a device
+	/// does.
 	pub fn new_cpu(scale: f32) -> Self {
 		let mut font_system = FontSystem::new();
 		pin_mono_family(&font_system);
@@ -640,21 +640,21 @@ impl TextCtx {
 		}
 	}
 
-	// A chrome measurement written in DIP, in physical pixels at this display's
-	// scale factor. See config::dip - chrome is converted where it is used, not
-	// at a boundary, because it shares a coordinate space with the terminal grid.
+	/// A chrome measurement written in DIP, in physical pixels at this display's
+	/// scale factor. See `config::dip` - chrome is converted where it is used, not
+	/// at a boundary, because it shares a coordinate space with the terminal grid.
 	pub fn dip(&self, v: f32) -> f32 {
 		config::dip(v, self.scale)
 	}
 
-	// Can `ch` ride the shared row buffer, given the grid puts it in `cells`
-	// columns? ASCII always can. Coverage alone isn't enough: a monospace face
-	// can carry a double-width char (emoji, fullwidth punctuation) at its
-	// ordinary single advance, and then one glyph eats one column of layout
-	// where the grid gave it two - every later glyph
-	// on the row sits a cell left of the grid position its background, cursor
-	// and any per-cell glyph still use. Demanding the advance match the grid
-	// sends those to the per-cell path, which fits them to their real box.
+	/// Can `ch` ride the shared row buffer, given the grid puts it in `cells`
+	/// columns? ASCII always can. Coverage alone isn't enough: a monospace face
+	/// can carry a double-width char (emoji, fullwidth punctuation) at its
+	/// ordinary single advance, and then one glyph eats one column of layout
+	/// where the grid gave it two - every later glyph
+	/// on the row sits a cell left of the grid position its background, cursor
+	/// and any per-cell glyph still use. Demanding the advance match the grid
+	/// sends those to the per-cell path, which fits them to their real box.
 	pub fn covered_at(&mut self, ch: char, cells: u8) -> bool {
 		self.face_cells(ch) == cells
 	}
@@ -686,27 +686,27 @@ impl TextCtx {
 		cells
 	}
 
-	// Color glyph for `ch`, with the design box a caller fits to the cell. None
-	// for anything no installed color font paints - i.e. almost everything.
-	// Gated by the caller (`color_emoji`), which already holds the settings.
+	/// Color glyph for `ch`, with the design box a caller fits to the cell. None
+	/// for anything no installed color font paints - i.e. almost everything.
+	/// Gated by the caller (`color_emoji`), which already holds the settings.
 	pub fn color_metrics(&mut self, ch: char) -> Option<ColorMetrics> {
 		self.color_glyphs.metrics(self.font_system.db(), ch)
 	}
 
-	// Build the raster for a placed color glyph. Done here, during the frame
-	// build, because `prepare` holds the FontSystem (the font bytes) mutably.
+	/// Build the raster for a placed color glyph. Done here, during the frame
+	/// build, because `prepare` holds the `FontSystem` (the font bytes) mutably.
 	pub fn color_warm(&mut self, id: u16, w: u16, h: u16) {
 		self.color_glyphs.warm(self.font_system.db(), id, w, h);
 	}
 
-	// Open a frame's color-glyph warming, so the raster cache knows which of
-	// its entries this frame is about to depend on.
+	/// Open a frame's color-glyph warming, so the raster cache knows which of
+	/// its entries this frame is about to depend on.
 	pub fn color_frame(&mut self) {
 		self.color_glyphs.begin_frame();
 	}
 
-	// Buffer for a single fallback glyph: no monospace snapping (render at its
-	// natural width), positioned per-cell by the caller.
+	/// Buffer for a single fallback glyph: no monospace snapping (render at its
+	/// natural width), positioned per-cell by the caller.
 	pub fn new_plain_buffer(&mut self) -> Buffer {
 		let mut buf = Buffer::new(&mut self.font_system, self.metrics);
 		buf.set_wrap(&mut self.font_system, Wrap::None);
@@ -718,11 +718,11 @@ impl TextCtx {
 		buf
 	}
 
-	// Shape one fallback glyph into `buf` and return its *ink* box (rasterized,
-	// at scale 1): `(width_px, left_px)` where `left_px` is the ink's x offset
-	// from the text-area origin. The caller fits this to the cell box - using
-	// the ink box, not the advance, because these fallback symbols routinely
-	// paint wider than they advance and would otherwise overlap the next cell.
+	/// Shape one fallback glyph into `buf` and return its *ink* box (rasterized,
+	/// at scale 1): `(width_px, left_px)` where `left_px` is the ink's x offset
+	/// from the text-area origin. The caller fits this to the cell box - using
+	/// the ink box, not the advance, because these fallback symbols routinely
+	/// paint wider than they advance and would otherwise overlap the next cell.
 	pub fn fill_glyph(&mut self, buf: &mut Buffer, ch: char, attrs: &Attrs) -> (f32, f32, f32) {
 		// Where the terminal font puts the baseline in this line box. A fallback
 		// face has its own ascent, so its glyph sits a pixel or two off the text
@@ -800,36 +800,36 @@ impl TextCtx {
 		shaped_ink(&mut self.font_system, &mut self.swash_cache, buf, ch, attrs)
 	}
 
-	// `top` for a chrome text buffer so its VISIBLE box (cap-top to baseline)
-	// centers in a bar of height `bar_h` at `bar_top`. Uses the real font
-	// metrics, so it stays centered across font/size changes - unlike the old
-	// hand-tuned per-bar padding, which left menu titles (no descenders) riding
-	// high with empty descent space below.
+	/// `top` for a chrome text buffer so its VISIBLE box (cap-top to baseline)
+	/// centers in a bar of height `bar_h` at `bar_top`. Uses the real font
+	/// metrics, so it stays centered across font/size changes - unlike the old
+	/// hand-tuned per-bar padding, which left menu titles (no descenders) riding
+	/// high with empty descent space below.
 	pub fn ui_text_top(&self, bar_top: f32, bar_h: f32) -> f32 {
 		ui_visible_center_top(self.ui_line_h, self.ui_vmetrics, bar_top, bar_h)
 	}
 
-	// As `ui_text_top`, but centering the whole ink box - for tab titles.
+	/// As `ui_text_top`, but centering the whole ink box - for tab titles.
 	pub fn ui_ink_top(&self, bar_top: f32, bar_h: f32) -> f32 {
 		ui_ink_center_top(self.ui_line_h, self.ui_vmetrics, bar_top, bar_h)
 	}
 
-	// How far to drop a chrome buffer that a caller centered by its LINE box, so
-	// what ends up centered is the text's visible box instead. Same rule as
-	// `ui_text_top`, as an offset for callers doing their own arithmetic.
+	/// How far to drop a chrome buffer that a caller centered by its LINE box, so
+	/// what ends up centered is the text's visible box instead. Same rule as
+	/// `ui_text_top`, as an offset for callers doing their own arithmetic.
 	pub fn ui_center_dy(&self) -> f32 {
 		self.ui_vmetrics.1 / 2.0
 	}
 
-	// Screen-space baseline of chrome text placed with `ui_text_top` - for the
-	// Alt-accelerator underline.
+	/// Screen-space baseline of chrome text placed with `ui_text_top` - for the
+	/// Alt-accelerator underline.
 	pub fn ui_baseline(&self, bar_top: f32, bar_h: f32) -> f32 {
 		self.ui_text_top(bar_top, bar_h) + ui_baseline_in_buf(self.ui_line_h, self.ui_vmetrics)
 	}
 
-	// Width in px of chrome `text` shaped with `attrs` at the UI font size.
-	// Sizes menus, bar titles, dialog labels to the real rendered text.
-	// Memoized by text (see ui_measure_cache).
+	/// Width in px of chrome `text` shaped with `attrs` at the UI font size.
+	/// Sizes menus, bar titles, dialog labels to the real rendered text.
+	/// Memoized by text (see `ui_measure_cache`).
 	pub fn measure_ui_text(&mut self, text: &str, attrs: &Attrs) -> f32 {
 		if let Some(&w) = self.ui_measure_cache.get(text) {
 			return w;
@@ -842,10 +842,10 @@ impl TextCtx {
 		w
 	}
 
-	// Width in px of `text` in the TERMINAL font. The tab hover tip is the one
-	// piece of chrome that uses it: its lines are key/value pairs padded to a
-	// column with spaces, which only aligns in a monospace face. Uncached - the
-	// tip keeps its width until its lines change (`TabTip` in app.rs).
+	/// Width in px of `text` in the TERMINAL font. The tab hover tip is the one
+	/// piece of chrome that uses it: its lines are key/value pairs padded to a
+	/// column with spaces, which only aligns in a monospace face. Uncached - the
+	/// tip keeps its width until its lines change (`TabTip` in app.rs).
 	pub fn measure_mono_text(&mut self, text: &str) -> f32 {
 		let attrs = mono_attrs();
 		self.measure_at(text, &attrs, self.metrics)
@@ -860,8 +860,8 @@ impl TextCtx {
 		buf.layout_runs().next().map_or(0.0, |run| run.line_w)
 	}
 
-	// Chrome buffer: UI-font metrics, natural (proportional) advances - no
-	// cell-grid snap, chrome has no grid.
+	/// Chrome buffer: UI-font metrics, natural (proportional) advances - no
+	/// cell-grid snap, chrome has no grid.
 	pub fn new_ui_buffer(&mut self, w_px: f32, h_px: f32) -> Buffer {
 		let mut buf = Buffer::new(&mut self.font_system, self.ui_metrics);
 		buf.set_wrap(&mut self.font_system, Wrap::None);
@@ -897,8 +897,8 @@ impl TextCtx {
 		);
 	}
 
-	// Set the coverage exponent for every renderer sharing this context. Cheap
-	// per frame: the uniform is only rewritten when the value moves.
+	/// Set the coverage exponent for every renderer sharing this context. Cheap
+	/// per frame: the uniform is only rewritten when the value moves.
 	pub fn set_text_blend(&mut self, queue: &wgpu::Queue, blend: (f32, f32, f32)) {
 		self.gpu()
 			.viewport

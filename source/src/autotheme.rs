@@ -62,40 +62,40 @@ const MIN_CHROMA: f32 = 0.02;
 // what SilkTerm's and Pastel's cursors already are.
 const CURSOR_ROTATE: f32 = 120.0;
 
-// How many evenly spaced quantiles of each channel a summary keeps.
+/// How many evenly spaced quantiles of each channel a summary keeps.
 pub const SPREAD: usize = 16;
 
-// What one image is worth to the derivation. A handful of numbers, so the live
-// settings can hold it and re-derive on a theme change without decoding anything.
+/// What one image is worth to the derivation. A handful of numbers, so the live
+/// settings can hold it and re-derive on a theme change without decoding anything.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Summary {
-	// Per-cell linear luma at the bright and dark ends, alpha premultiplied.
+	/// Per-cell linear luma at the bright and dark ends, alpha premultiplied.
 	pub luma_hi: f32,
 	pub luma_lo: f32,
-	// And the mean of the same grid. Only the visibility ramp reads it, which
-	// wants how bright the picture is overall rather than where its ends are.
+	/// And the mean of the same grid. Only the visibility ramp reads it, which
+	/// wants how bright the picture is overall rather than where its ends are.
 	pub luma_mean: f32,
-	// Each linear channel of the same grid at SPREAD evenly spaced quantiles,
-	// darkest first, taken one channel at a time. The halo match averages over
-	// these, since an average over the picture is not the picture's average once
-	// the sRGB curve is applied, and both renderers work a channel at a time
-	// (`visibility::halo_match`).
+	/// Each linear channel of the same grid at SPREAD evenly spaced quantiles,
+	/// darkest first, taken one channel at a time. The halo match averages over
+	/// these, since an average over the picture is not the picture's average once
+	/// the sRGB curve is applied, and both renderers work a channel at a time
+	/// (`visibility::halo_match`).
 	pub spread: [[f32; 3]; SPREAD],
-	// Mean alpha, so the share of a cell the image does not cover can be given
-	// back to the background color. 1.0 for every ordinary photo.
+	/// Mean alpha, so the share of a cell the image does not cover can be given
+	/// back to the background color. 1.0 for every ordinary photo.
 	pub alpha: f32,
-	// Chroma-weighted dominant hue, degrees in Oklab's a/b plane, and the mean
-	// per-cell chroma behind it.
+	/// Chroma-weighted dominant hue, degrees in Oklab's a/b plane, and the mean
+	/// per-cell chroma behind it.
 	pub hue: f32,
 	pub chroma: f32,
-	// The visibility this image is drawn at, its own tag folded in already. Baked
-	// in rather than read live because changing the slider reloads the wallpaper
-	// anyway, where changing the theme does not.
+	/// The visibility this image is drawn at, its own tag folded in already. Baked
+	/// in rather than read live because changing the slider reloads the wallpaper
+	/// anyway, where changing the theme does not.
 	pub opacity: f32,
 }
 
-// Reduce a prepared wallpaper to a `Summary`. `opacity` is what the image will
-// actually be drawn at.
+/// Reduce a prepared wallpaper to a `Summary`. `opacity` is what the image will
+/// actually be drawn at.
 pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 	let (w, h) = (img.width() as usize, img.height() as usize);
 	let mut sum = vec![[0.0f32; 4]; GRID_W * GRID_H];
@@ -325,22 +325,22 @@ fn cursor_for(plate_target: f32, behind_luma: f32, alpha: f32, hue: f32, chroma:
 }
 
 impl Summary {
-	// How bright the picture is, for the visibility ramp: its overall level and
-	// its bright end, which is where glare comes from.
+	/// How bright the picture is, for the visibility ramp: its overall level and
+	/// its bright end, which is where glare comes from.
 	pub fn picture(&self) -> (f32, f32) {
 		(self.luma_mean, self.luma_hi)
 	}
 }
 
-// The derived pair. `None` for either means the theme's own color stands.
+/// The derived pair. `None` for either means the theme's own color stands.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Derived {
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],
 }
 
-// Text and cursor for this image under these settings. Pure, so the same
-// wallpaper gives the same answer on any box and a test needs no pixels.
+/// Text and cursor for this image under these settings. Pure, so the same
+/// wallpaper gives the same answer on any box and a test needs no pixels.
 pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	let floor = settings.text_min_contrast.clamp(0.0, 1.0);
 	let (bg, fg, cursor) = (settings.bg, settings.fg, settings.cursor);
@@ -404,16 +404,16 @@ pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	}
 }
 
-// The user's own text and cursor, held while the derived ones are live. Two
-// colors, built the same way as `profile::Shadow` and for the same reason: the
-// file and the Settings dialog must only ever see what the user chose.
+/// The user's own text and cursor, held while the derived ones are live. Two
+/// colors, built the same way as `profile::Shadow` and for the same reason: the
+/// file and the Settings dialog must only ever see what the user chose.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Shadow {
 	fg: [u8; 3],
 	cursor: [u8; 3],
 }
 
-// Put the user's own colors back. Safe on settings carrying no derived pair.
+/// Put the user's own colors back. Safe on settings carrying no derived pair.
 pub fn unapply(settings: &mut Settings) {
 	if let Some(shadow) = settings.wallpaper_colors.take() {
 		settings.fg = shadow.fg;
@@ -421,10 +421,10 @@ pub fn unapply(settings: &mut Settings) {
 	}
 }
 
-// Overwrite fg and cursor with the wallpaper's, keeping the user's in the
-// shadow. Idempotent, so a live copy that already carries a derived pair is
-// unwound first and the new one is derived from the user's values rather than
-// from the last answer.
+/// Overwrite fg and cursor with the wallpaper's, keeping the user's in the
+/// shadow. Idempotent, so a live copy that already carries a derived pair is
+/// unwound first and the new one is derived from the user's values rather than
+/// from the last answer.
 pub fn apply(settings: &mut Settings) {
 	unapply(settings);
 	if !settings.colors_from_wallpaper || !settings.wallpaper_enabled {

@@ -122,9 +122,9 @@ mod platform {
 		}
 	}
 
-	// The desktop interface (UI) font. GNOME/MATE/Cinnamon expose it through
-	// gsettings; Xfce through xfconf. Either may be a serif - that's the point:
-	// chrome follows whatever the user picked, not a sans assumption.
+	/// The desktop interface (UI) font. GNOME/MATE/Cinnamon expose it through
+	/// gsettings; Xfce through xfconf. Either may be a serif - that's the point:
+	/// chrome follows whatever the user picked, not a sans assumption.
 	pub fn interface() -> super::UiFont {
 		interface_from(
 			&desktop(),
@@ -374,9 +374,9 @@ mod platform {
 		(!family.is_empty()).then(|| family.to_string())
 	}
 
-	// macOS has no user-set UI font, and the actual one (San Francisco) hides
-	// behind a private name fontdb can't query. Report AppKit's system size and
-	// let the family fall back (curated list has Helvetica Neue).
+	/// macOS has no user-set UI font, and the actual one (San Francisco) hides
+	/// behind a private name fontdb can't query. Report `AppKit`'s system size and
+	/// let the family fall back (curated list has Helvetica Neue).
 	pub fn interface() -> super::UiFont {
 		let size = NSFont::systemFontSize() as f32;
 		super::UiFont {
@@ -396,11 +396,11 @@ mod platform {
 		NONCLIENTMETRICSW, SPI_GETNONCLIENTMETRICS, SystemParametersInfoW,
 	};
 
-	// Windows has no dedicated monospace setting; report the message-box font
-	// size (the conventional system size). No reliable system *monospace* family,
-	// so leave family None - the resolver then walks the user's font_family stack
-	// and config::DEFAULT_FONT_STACK (never the bare Family::Monospace db lottery,
-	// whose winner can lack a bold face).
+	/// Windows has no dedicated monospace setting; report the message-box font
+	/// size (the conventional system size). No reliable system *monospace* family,
+	/// so leave family None - the resolver then walks the user's `font_family` stack
+	/// and `config::DEFAULT_FONT_STACK` (never the bare `Family::Monospace` db lottery,
+	/// whose winner can lack a bold face).
 	pub fn monospace() -> Monospace {
 		Monospace {
 			family: None,
@@ -408,8 +408,8 @@ mod platform {
 		}
 	}
 
-	// The menu font is what native chrome (menus/dialog labels) uses; family,
-	// size, weight and slant all honor the user's "Menu" font setting.
+	/// The menu font is what native chrome (menus/dialog labels) uses; family,
+	/// size, weight and slant all honor the user's "Menu" font setting.
 	pub fn interface() -> super::UiFont {
 		// SAFETY: `ncm` is an all-integer struct, zeroed with `cbSize` set, that
 		// outlives the call, and a screen DC is released on the path that got it.

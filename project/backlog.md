@@ -914,7 +914,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: public items are commented with `//`, not `///`
 	- ID: 2026100314050006
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -923,8 +923,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The style guide says "Document public items with `///`".
 	- Origin: c6eaa04 (2026-06-28) onward, in every file. No earlier review item. Confirmed.
 	- Note: Most of the text already exists. The fix is mostly a change of comment form, then one line for the items with none. `buildnum.rs` stays on `//`, since `build.rs` includes it and `//!` would not compile there.
-	- Test case: A check in the docs gate that a public item outside the tests has a `///` line above it.
 	- Note: Code review 20261003 item 6.
+	- Decisions:
+		- The rule is about the form of a comment, not that one exists. A comment on anything declared `pub` is `///`, and a file's opening comment is `//!`. An item whose name says it all needs no doc, since one would only repeat the name. The style guide says so now.
+		- A note that covers a run of items, such as a group of colors, is a `///` on the first one. Its text reads the same in the source.
+		- Pub fields count too, since they are declared `pub` the same way. Enum variants and trailing `//` notes at a line's end are left as they are.
+		- `missing_docs` can't do this: on a bin crate it only asks for the crate's own doc.
+	- Actual fix:
+		- About 2,050 `//` lines on pub items and fields are now `///`, with the words unchanged. Items with a doc went from 67 to 641 of 938. Fields with one went from 5 to 79.
+		- 16 files' opening comments are `//!`, including build.rs and the two test crates. `buildnum.rs` keeps `//`.
+		- 11 items with no comment got one short line, where the name hid something: the three `take_*` calls in config.rs, `click_select`, `note_history`, `WakeGate::handled` and five more. 297 items stay without one.
+		- Two lint reasons that sat above their attribute moved into `reason = "..."`, on `TermInstance::spawn` and `shells::Group`.
+		- Two notes in palette.rs that a blank line had cut off from their function are joined back on.
+		- New docs set off `doc_markdown` in about 140 places, fixed with backticks. `SilkTerm` and a few key names are listed in clippy.toml as words. Two lines that began with a dash read as a list, so the dash moved to the line above. `cargo doc` warned on `<shell>` style text in two places, now in backticks.
+	- Test case: `cicd/tests/docs/run.py` (Er2UgYD) now fails on a plain `//` line above a pub item or field, past its attributes, outside test code, and on an opening comment that is not `//!`. It failed on 2,053 lines and 16 files on the old tree and passes after. Planting one `//` line above `shells::Group`'s attributes turned it red again.
+	- Verified: clippy clean for Linux, `--features profiling`, Windows and macOS targets, `cargo doc` with private items, rustfmt, the full unit suite (1147 passed), test ID check, Python lint.
+	- Swept: every tracked `.rs`, by the gate. That includes build.rs, the diagnostics example and the two crates under cicd.
+	- Branch: pubdocs
+	- Acceptance signoff: Self-closed: mechanical. Comment form only, with the gate failing before and passing after.
+	- Closed: 20261005-192554
 
 - Code style: fixed choices are kept as strings, float codes and flags that must agree
 	- ID: 2026100314050011
