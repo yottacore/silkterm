@@ -21,16 +21,16 @@ gated=0
 mainLocal=""
 mainRemote=""
 while read -r _ localSha remoteRef remoteSha; do
-	case "$remoteRef" in
+	case "${remoteRef}" in
 		refs/heads/main)
 			# deleting the branch pushes the zero sha - nothing to verify
-			case "$localSha" in *[!0]*) gated=1 ;; esac
+			case "${localSha}" in *[!0]*) gated=1 ;; esac
 			;;
 	esac
 	# main is release-only: remember its shas for the version-bump check below
-	case "$remoteRef" in
+	case "${remoteRef}" in
 		refs/heads/main)
-			case "$localSha" in *[!0]*) mainLocal="$localSha"; mainRemote="$remoteSha" ;; esac
+			case "${localSha}" in *[!0]*) mainLocal="${localSha}"; mainRemote="${remoteSha}" ;; esac
 			;;
 	esac
 done
@@ -38,13 +38,13 @@ done
 # Release guard: a push to main must strictly INCREASE the version. main is where
 # releases are cut, so shipping the same-or-lower version is a mistake - block it
 # here (before the slower gate) so a forgotten Cargo.toml bump can't reach main.
-if [ -n "$mainLocal" ]; then
+if [ -n "${mainLocal}" ]; then
 	manifest=source/Cargo.toml
-	fReadVer() { git show "$1:$manifest" 2>/dev/null | sed -n 's/^version *= *"\(.*\)".*/\1/p' | head -1; }
+	fReadVer() { git show "${1}:${manifest}" 2>/dev/null | sed -n 's/^version *= *"\(.*\)".*/\1/p' | head -1; }
 	# fVerGt A B: exit 0 iff A > B by semver precedence (numeric core fields;
 	# a prerelease ranks below its release; numeric ids below alphanumeric; ASCII).
 	fVerGt() {
-		LC_ALL=C awk -v a="$1" -v b="$2" '
+		LC_ALL=C awk -v a="${1}" -v b="${2}" '
 		function cmp(a, b,   ca, cb, pa, pb, xa, xb, ia, ib, na, nb, m, i, va, vb, x, y, xn, yn) {
 			sub(/\+.*/, "", a); sub(/\+.*/, "", b)
 			ca = a; pa = ""; if (index(a, "-")) { ca = substr(a, 1, index(a,"-")-1); pa = substr(a, index(a,"-")+1) }
@@ -72,22 +72,22 @@ if [ -n "$mainLocal" ]; then
 		BEGIN { exit (cmp(a, b) > 0) ? 0 : 1 }
 		'
 	}
-	newv=$(fReadVer "$mainLocal")
-	[ -n "$newv" ] || { echo "pre-push: cannot read version from $manifest on the pushed commit" >&2; exit 1; }
+	newv=$(fReadVer "${mainLocal}")
+	[ -n "${newv}" ] || { echo "pre-push: cannot read version from ${manifest} on the pushed commit" >&2; exit 1; }
 	# zero remote sha = main does not exist yet (first push), nothing to compare
-	case "$mainRemote" in
+	case "${mainRemote}" in
 		*[!0]*)
-			oldv=$(fReadVer "$mainRemote")
-			if [ -n "$oldv" ] && ! fVerGt "$newv" "$oldv"; then
-				echo "pre-push: version $newv must be greater than $oldv on main - bump $manifest (and the README Release badge) before releasing. (SKIP_GATE=1 or --no-verify to override)" >&2
+			oldv=$(fReadVer "${mainRemote}")
+			if [ -n "${oldv}" ] && ! fVerGt "${newv}" "${oldv}"; then
+				echo "pre-push: version ${newv} must be greater than ${oldv} on main - bump ${manifest} (and the README Release badge) before releasing. (SKIP_GATE=1 or --no-verify to override)" >&2
 				exit 1
 			fi
 			;;
 	esac
 	# README release badge must match the pushed version (shields escapes '-' as '--').
-	badgeVer=$(printf '%s' "$newv" | sed 's/-/--/g')
-	if ! git show "$mainLocal:README.md" 2>/dev/null | grep -qF "Release-${badgeVer}-"; then
-		echo "pre-push: README Release badge does not match version $newv - update it on dev before the release merge. (SKIP_GATE=1 or --no-verify to override)" >&2
+	badgeVer=$(printf '%s' "${newv}" | sed 's/-/--/g')
+	if ! git show "${mainLocal}:README.md" 2>/dev/null | grep -qF "Release-${badgeVer}-"; then
+		echo "pre-push: README Release badge does not match version ${newv} - update it on dev before the release merge. (SKIP_GATE=1 or --no-verify to override)" >&2
 		exit 1
 	fi
 fi
@@ -96,12 +96,12 @@ top="$(git rev-parse --show-toplevel)"
 
 # Private content scrub, on every push, when this machine has the private tree.
 # A clone without it pushes as before.
-scrub="$top/../private/hooks/scrub.bash"
-if [ -x "$scrub" ]; then
-	"$scrub" "$top" || { echo "pre-push: content scrub failed" >&2; exit 1; }
+scrub="${top}/../private/hooks/scrub.bash"
+if [ -x "${scrub}" ]; then
+	"${scrub}" "${top}" || { echo "pre-push: content scrub failed" >&2; exit 1; }
 fi
 
-[ "$gated" = "1" ] || exit 0
+[ "${gated}" = "1" ] || exit 0
 
 echo "pre-push: gating push to main (cicd.bash --gate; --no-verify skips)" >&2
 # Gate the commit being pushed, not whatever the working tree holds. Those are
@@ -110,17 +110,17 @@ echo "pre-push: gating push to main (cicd.bash --gate; --no-verify skips)" >&2
 # detached worktree is the cheap way to get the real thing. Cargo's output goes
 # to the usual place, so only this crate is rebuilt, not its dependencies.
 gatedir="$(mktemp -d "${TMPDIR:-/tmp}/silk-gate.XXXXXX")"
-tree="$gatedir/tree"
+tree="${gatedir}/tree"
 fCleanup() {
-	git -C "$top" worktree remove --force "$tree" >/dev/null 2>&1 || :
-	rm -rf "$gatedir"
+	git -C "${top}" worktree remove --force "${tree}" >/dev/null 2>&1 || :
+	rm -rf "${gatedir}"
 }
 trap fCleanup EXIT INT TERM
-git -C "$top" worktree add --detach -q "$tree" "$mainLocal" \
-	|| { echo "pre-push: cannot check out $mainLocal to gate it" >&2; exit 1; }
-CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$top/target}"
+git -C "${top}" worktree add --detach -q "${tree}" "${mainLocal}" \
+	|| { echo "pre-push: cannot check out ${mainLocal} to gate it" >&2; exit 1; }
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${top}/target}"
 export CARGO_TARGET_DIR
-"$tree/cicd/cicd.bash" --gate
+"${tree}/cicd/cicd.bash" --gate
 
 ##	History:
 ##		- 20260711: Created.

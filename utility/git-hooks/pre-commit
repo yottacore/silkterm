@@ -14,58 +14,58 @@
 set -eu
 
 # rustfmt lives in the rustup toolchain; ensure it's reachable.
-command -v rustfmt >/dev/null 2>&1 || PATH="$HOME/.cargo/bin:$PATH"
+command -v rustfmt >/dev/null 2>&1 || PATH="${HOME}/.cargo/bin:${PATH}"
 command -v rustfmt >/dev/null 2>&1 || { echo "pre-commit: rustfmt not found; skipping format" >&2; exit 0; }
 
 files="$(git diff --cached --name-only --diff-filter=ACM -- '*.rs')"
-[ -n "$files" ] || exit 0
+[ -n "${files}" ] || exit 0
 
 root="$(git rev-parse --show-toplevel)"
 # The staged copy is formatted outside the tree, so name the config explicitly -
 # rustfmt otherwise walks up from the file and would find nothing.
 fmtcfg=""
-if [ -f "$root/rustfmt.toml" ]; then
-	fmtcfg="$root/rustfmt.toml"
-elif [ -f "$root/.rustfmt.toml" ]; then
-	fmtcfg="$root/.rustfmt.toml"
+if [ -f "${root}/rustfmt.toml" ]; then
+	fmtcfg="${root}/rustfmt.toml"
+elif [ -f "${root}/.rustfmt.toml" ]; then
+	fmtcfg="${root}/.rustfmt.toml"
 fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT INT TERM
 
-oldIFS=$IFS
+oldIFS=${IFS}
 IFS='
 '
-for f in $files; do
-	blob="$(git rev-parse --verify --quiet ":$f")" || continue
-	mode="$(git ls-files --stage -- "$f" | cut -c1-6)"
-	[ -n "$mode" ] || continue
+for f in ${files}; do
+	blob="$(git rev-parse --verify --quiet ":${f}")" || continue
+	mode="$(git ls-files --stage -- "${f}" | cut -c1-6)"
+	[ -n "${mode}" ] || continue
 	# one name per path, so two files called mod.rs cannot tread on each other
-	tmp="$work/$(printf '%s' "$f" | tr '/' '_')"
-	git cat-file blob "$blob" >"$tmp"
+	tmp="${work}/$(printf '%s' "${f}" | tr '/' '_')"
+	git cat-file blob "${blob}" >"${tmp}"
 	# asked before the index moves, or the reformat itself reads as unstaged work
-	if git diff --quiet -- "$f"; then whole=1; else whole=0; fi
+	if git diff --quiet -- "${f}"; then whole=1; else whole=0; fi
 	# Through stdin: given a file, rustfmt follows its `mod` lines, which name
 	# files that are not beside the copy, so a crate root could not commit.
-	if [ -n "$fmtcfg" ]; then
-		rustfmt --edition 2024 --config-path "$fmtcfg" <"$tmp" >"$tmp.fmt"
+	if [ -n "${fmtcfg}" ]; then
+		rustfmt --edition 2024 --config-path "${fmtcfg}" <"${tmp}" >"${tmp}.fmt"
 	else
-		rustfmt --edition 2024 <"$tmp" >"$tmp.fmt"
-	fi || { echo "pre-commit: rustfmt failed on $f" >&2; IFS=$oldIFS; exit 1; }
-	mv -- "$tmp.fmt" "$tmp"
-	new="$(git hash-object -w -- "$tmp")"
-	[ "$new" = "$blob" ] && continue
-	git update-index --cacheinfo "$mode,$new,$f"
+		rustfmt --edition 2024 <"${tmp}" >"${tmp}.fmt"
+	fi || { echo "pre-commit: rustfmt failed on ${f}" >&2; IFS=${oldIFS}; exit 1; }
+	mv -- "${tmp}.fmt" "${tmp}"
+	new="$(git hash-object -w -- "${tmp}")"
+	[ "${new}" = "${blob}" ] && continue
+	git update-index --cacheinfo "${mode},${new},${f}"
 	# Nothing unstaged in this file: the working copy is the old staged content,
 	# so replace it and the two stay in step. Otherwise leave it - those edits
 	# are not part of this commit and reformatting around them would drag them in.
-	if [ "$whole" = "1" ]; then
-		cp -- "$tmp" "$root/$f"
+	if [ "${whole}" = "1" ]; then
+		cp -- "${tmp}" "${root}/${f}"
 	else
-		echo "pre-commit: formatted the staged part of $f; the working copy has unstaged changes and was left alone" >&2
+		echo "pre-commit: formatted the staged part of ${f}; the working copy has unstaged changes and was left alone" >&2
 	fi
 done
-IFS=$oldIFS
+IFS=${oldIFS}
 exit 0
 
 ##	History:

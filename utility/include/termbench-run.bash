@@ -119,7 +119,7 @@ fWriteCandyConfig(){
 ##	the login shell it starts, which is bash here. With its Welcome tab on, the window
 ##	opens on that tab and no shell starts at all.
 fWriteTabbyAccount(){
-	local -r home="$1"
+	local -r home="${1}"
 	local rc=""
 	mkdir -p "${home}/.config/tabby"
 	printf 'enableWelcomeTab: false\n' > "${home}/.config/tabby/config.yaml"
@@ -129,7 +129,7 @@ fWriteTabbyAccount(){
 ##	Start a terminal on the throwaway account, with its output in term.log.
 fLaunch(){
 	#  shellcheck disable=2154  ## Both arrays are filled by fPrivateAccount in bench-common.bash.
-	env "${_privateEnv[@]}" "${_privateBus[@]}" "$@" > "${_work}/term.log" 2>&1 &
+	env "${_privateEnv[@]}" "${_privateBus[@]}" "${@}" > "${_work}/term.log" 2>&1 &
 	_termPid=$!
 }
 
@@ -249,7 +249,7 @@ declare termKey="" label="" scene="" grid="160x42" xDisplayNum=":98"
 declare -i reps=6 noSave=0
 
 while (($#)); do
-	case "$1" in
+	case "${1}" in
 		--term)    termKey="${2:-}"; shift 2 ;;
 		--reps)    reps="${2:-6}";   shift 2 ;;
 		--grid)    grid="${2:-}";    shift 2 ;;
@@ -260,7 +260,7 @@ while (($#)); do
 		--keep)    _keepRig=1;       shift ;;
 		--list)    fListTerms; exit 0 ;;
 		-h|--help) sed -n '/- Purpose:/,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^##\t\?//'; exit 0 ;;
-		*)         fDie "unknown option: $1" ;;
+		*)         fDie "unknown option: ${1}" ;;
 	esac
 done
 

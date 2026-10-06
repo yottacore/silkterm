@@ -71,7 +71,7 @@ trap fCleanup EXIT
 ## Each entry: key|binary|how it is told its grid. The keep-alive shell matters - a
 ## terminal whose child exits takes the window with it before anything can be measured.
 fTermBinary() {
-	local -r key="$1"
+	local -r key="${1}"
 	local path=""
 	case "${key}" in
 		silkterm|silkplain) path="$(fTargetDir "${repoDir}")/release/silkterm" ;;
@@ -108,7 +108,7 @@ fWriteHold() {
 ##	Hyper reads its settings from here whenever XDG_CONFIG_HOME is set, and rewrites the
 ##	file at launch, so it is written new every run.
 fWriteHyperConfig() {
-	local -r home="$1"
+	local -r home="${1}"
 	mkdir -p "${home}/.config/hyper"
 	cat > "${home}/.config/hyper/.hyper.js" <<-EOF
 		module.exports = {
@@ -125,7 +125,7 @@ fWriteHyperConfig() {
 }
 
 fLaunch() {
-	local -r key="$1" bin="$2" cols="$3" rows="$4"
+	local -r key="${1}" bin="${2}" cols="${3}" rows="${4}"
 	local -r keepAlive="/bin/dash -c 'exec sleep 1000000'"
 
 	export DISPLAY="${display}"
@@ -207,7 +207,7 @@ fLaunch() {
 fAppDir() {
 	local dir=""
 	local -i level=0
-	dir="$(dirname "$(readlink -f "$1")")"
+	dir="$(dirname "$(readlink -f "${1}")")"
 	for ((level = 0; level < 3; level++)); do
 		if [[ -e "${dir}/AppRun" ]]; then printf '%s' "${dir}"; return 0; fi
 		dir="$(dirname "${dir}")"
@@ -218,7 +218,7 @@ fAppDir() {
 ##	The terminal's window on the private display, and its size, once it is up.
 declare -i _winW=0 _winH=0
 fFindWindow() {
-	local -r exe="$1"
+	local -r exe="${1}"
 	local -i waited=0
 	local main="" ids="" geometry=""
 	while ((waited < 120)); do
@@ -240,7 +240,7 @@ fFindWindow() {
 ##	The Electron two take no grid on the command line, so their window is resized until
 ##	the shell inside reports it.
 fResizeWindow() {
-	DISPLAY="${display}" xdotool windowsize "${_winId}" "$1" "$2" >/dev/null 2>&1 || true
+	DISPLAY="${display}" xdotool windowsize "${_winId}" "${1}" "${2}" >/dev/null 2>&1 || true
 }
 
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -256,7 +256,7 @@ fMain() {
 	optKeep=""; optVerbose=""
 
 	while (($# > 0)); do
-		case "$1" in
+		case "${1}" in
 			--term)    key="${2:-}"; shift 2 ;;
 			--grid)    grid="${2:-}"; shift 2 ;;
 			--settle)  settleSecs="${2:-22}"; shift 2 ;;
@@ -264,7 +264,7 @@ fMain() {
 			--keep)    optKeep=1; shift ;;
 			--list)    fEcho_Clean "silkterm silkplain alacritty xterm kitty xfce4 terminator gnome wezterm tabby hyper"; return 0 ;;
 			-h|--help) fUsage; return 0 ;;
-			*)         fDie "unknown option '$1'" ;;
+			*)         fDie "unknown option '${1}'" ;;
 		esac
 	done
 	[[ -n "${key}" ]] || { fUsage; fDie "--term is required"; }
@@ -345,7 +345,7 @@ fMain() {
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-	fMain "$@"
+	fMain "${@}"
 fi
 
 ##

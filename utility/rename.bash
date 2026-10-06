@@ -20,20 +20,20 @@
 set -euo pipefail
 
 newDisplay="${1:-}"
-if [[ -z "$newDisplay" ]]; then
+if [[ -z "${newDisplay}" ]]; then
 	echo "usage: utility/rename.bash <NewDisplayName>" >&2
 	exit 1
 fi
-case "$newDisplay" in
+case "${newDisplay}" in
 	*/* | *'&'* | *'\'*)
 		echo "error: name must not contain / & or backslash" >&2
 		exit 1
 		;;
 esac
 
-newId="$(printf '%s' "$newDisplay" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
-if [[ -z "$newId" ]]; then
-	echo "error: '$newDisplay' yields no usable lowercase identifier" >&2
+newId="$(printf '%s' "${newDisplay}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
+if [[ -z "${newId}" ]]; then
+	echo "error: '${newDisplay}' yields no usable lowercase identifier" >&2
 	exit 1
 fi
 
@@ -41,7 +41,7 @@ oldDisplay="SilkTerm"
 oldId="silkterm"
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$root"
+cd "${root}"
 
 mapfile -t candidates < <(
 	{ git ls-files; git ls-files --others --exclude-standard; } | sort -u
@@ -52,13 +52,13 @@ mapfile -t candidates < <(
 # -I skips binaries, so the wallpaper pack and the icons never get rewritten.
 files=()
 for f in "${candidates[@]}"; do
-	[[ -f "$f" ]] || continue
-	case "$f" in utility/rename.bash | Cargo.lock | */Cargo.lock) continue ;; esac
-	if grep -qI -e "$oldDisplay" -e "$oldId" -- "$f" 2>/dev/null; then files+=("$f"); fi
+	[[ -f "${f}" ]] || continue
+	case "${f}" in utility/rename.bash | Cargo.lock | */Cargo.lock) continue ;; esac
+	if grep -qI -e "${oldDisplay}" -e "${oldId}" -- "${f}" 2>/dev/null; then files+=("${f}"); fi
 done
 
 for f in "${files[@]}"; do
-	sed -i "s/${oldDisplay}/${newDisplay}/g; s/${oldId}/${newId}/g" "$f"
+	sed -i "s/${oldDisplay}/${newDisplay}/g; s/${oldId}/${newId}/g" "${f}"
 done
 
 # Paths carrying the id, deepest component first so a rename never invalidates
@@ -66,7 +66,7 @@ done
 # name: miss it and every Windows build of the renamed tree fails in build.rs.
 mapfile -t paths < <(
 	printf '%s\n' "${candidates[@]}" \
-		| awk -v id="$oldId" '
+		| awk -v id="${oldId}" '
 			{
 				n = split($0, part, "/"); path = ""
 				for (i = 1; i <= n; i++) {
@@ -79,13 +79,13 @@ mapfile -t paths < <(
 
 renamed=0
 for p in "${paths[@]}"; do
-	[[ -e "$p" ]] || continue
-	base="$(basename "$p")"
-	parent="$(dirname "$p")"
+	[[ -e "${p}" ]] || continue
+	base="$(basename "${p}")"
+	parent="$(dirname "${p}")"
 	new="${base//${oldId}/${newId}}"
-	[[ "$parent" == "." ]] || new="${parent}/${new}"
-	[[ "$p" != "$new" ]] || continue
-	git mv "$p" "$new" 2>/dev/null || mv "$p" "$new"
+	[[ "${parent}" == "." ]] || new="${parent}/${new}"
+	[[ "${p}" != "${new}" ]] || continue
+	git mv "${p}" "${new}" 2>/dev/null || mv "${p}" "${new}"
 	renamed=$((renamed + 1))
 done
 

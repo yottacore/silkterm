@@ -53,7 +53,7 @@ rawBase="https://raw.githubusercontent.com/${ownerRepo}/main"
 
 ##	fFail "message" ["hint" ...] - one error line, then any hints, then exit.
 function fFail() {
-	local first="$1"; shift
+	local first="${1}"; shift
 	echo "Error: ${first}" >&2
 	while [[ "$#" -gt 0 ]]; do echo "  ${1}" >&2; shift; done
 	echo >&2
@@ -87,7 +87,7 @@ EOF
 }
 
 ##	Lowercase, the 3.2 way - \${x,,} is bash 4.
-function fLower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
+function fLower() { echo "${1}" | tr '[:upper:]' '[:lower:]'; }
 
 
 ##	Network + hashing (curl preferred, wget accepted so minimal images work)
@@ -95,7 +95,7 @@ function fLower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 ##	fGet <url> <outfile> - quiet fetch. Returns non-zero on any HTTP or
 ##	transport error rather than writing a "404: not found" page to the file.
 function fGet() {
-	local url="$1" out="$2"
+	local url="${1}" out="${2}"
 	if [[ "${dlTool}" = "curl" ]]; then
 		curl -fsSL "${httpsOnly_curl[@]}" -o "${out}" "${url}"
 	else
@@ -134,7 +134,7 @@ function fAuthInit() {
 }
 
 function fApi() {
-	local url="$1" out="$2" code="" rc=0
+	local url="${1}" out="${2}" code="" rc=0
 	if [[ "${dlTool}" = "curl" ]]; then
 		if [[ -n "${authFile}" ]]; then
 			code="$(curl -sSL "${httpsOnly_curl[@]}" --config "${authFile}" -o "${out}" -w '%{http_code}' "${url}" 2>"${out}.err")" || rc=$?
@@ -157,7 +157,7 @@ function fApi() {
 
 ##	Same, but shows progress - the release binary is the only big download.
 function fGetShown() {
-	local url="$1" out="$2"
+	local url="${1}" out="${2}"
 	if [[ "${dlTool}" = "curl" ]]; then
 		curl -fSL "${httpsOnly_curl[@]}" --progress-bar -o "${out}" "${url}"
 	else
@@ -176,7 +176,7 @@ releaseSignNamespace="silkterm-release"
 ##	Verify the checksums file against the pinned key. Everything else is covered
 ##	by the checksums, so this one signature covers the whole release.
 function fVerifySignature() {
-	local dir="$1" sums="$2" tag="$3"
+	local dir="${1}" sums="${2}" tag="${3}"
 	if [[ -z "${releaseSignPubkey}" ]]; then
 		echo "Note: this release is not signed; the download is checked against its checksums only."
 		return 0
@@ -200,9 +200,9 @@ function fVerifySignature() {
 function fSha256() {
 	if [[ -n "${shaTool}" ]]; then
 		case "${shaTool}" in
-			sha256sum) sha256sum "$1" | awk '{print $1}' ;;
-			shasum)    shasum -a 256 "$1" | awk '{print $1}' ;;
-			openssl)   openssl dgst -sha256 "$1" | awk '{print $NF}' ;;
+			sha256sum) sha256sum "${1}" | awk '{print $1}' ;;
+			shasum)    shasum -a 256 "${1}" | awk '{print $1}' ;;
+			openssl)   openssl dgst -sha256 "${1}" | awk '{print $NF}' ;;
 		esac
 	fi
 }
@@ -228,28 +228,28 @@ function fReleaseRows() {
 ##	as numbers and sort below words. Two words with the same letters and a
 ##	trailing number compare by that number, so beta10 is above beta3.
 function fFieldCmp() {
-	local a="$1" b="$2" num='^[0-9]+$' word='^([^0-9]*)([0-9]+)$'
-	if [[ $a =~ $num ]] && [[ $b =~ $num ]]; then
+	local a="${1}" b="${2}" num='^[0-9]+$' word='^([^0-9]*)([0-9]+)$'
+	if [[ ${a} =~ ${num} ]] && [[ ${b} =~ ${num} ]]; then
 		if ((10#${a} > 10#${b})); then echo 1; elif ((10#${a} < 10#${b})); then echo -1; else echo 0; fi
 		return 0
 	fi
-	if [[ $a =~ $num ]]; then echo -1; return 0; fi
-	if [[ $b =~ $num ]]; then echo 1; return 0; fi
+	if [[ ${a} =~ ${num} ]]; then echo -1; return 0; fi
+	if [[ ${b} =~ ${num} ]]; then echo 1; return 0; fi
 	local aStem="" aNum="" bStem="" bNum=""
-	if [[ $a =~ $word ]]; then aStem="${BASH_REMATCH[1]}"; aNum="${BASH_REMATCH[2]}"; fi
-	if [[ $b =~ $word ]]; then bStem="${BASH_REMATCH[1]}"; bNum="${BASH_REMATCH[2]}"; fi
+	if [[ ${a} =~ ${word} ]]; then aStem="${BASH_REMATCH[1]}"; aNum="${BASH_REMATCH[2]}"; fi
+	if [[ ${b} =~ ${word} ]]; then bStem="${BASH_REMATCH[1]}"; bNum="${BASH_REMATCH[2]}"; fi
 	if [[ -n "${aNum}" ]] && [[ -n "${bNum}" ]] && [[ "${aStem}" = "${bStem}" ]]; then
 		fFieldCmp "${aNum}" "${bNum}"
 		return 0
 	fi
-	if [[ $a < $b ]]; then echo -1; elif [[ $a > $b ]]; then echo 1; else echo 0; fi
+	if [[ ${a} < ${b} ]]; then echo -1; elif [[ ${a} > ${b} ]]; then echo 1; else echo 0; fi
 }
 
 ##	fListCmp <a> <b> <missing> - dotted lists, field by field. <missing> is what
 ##	a list that runs out first counts as: -1 for a pre-release, where fewer
 ##	fields sort lower, or 0 for the core, where 1.0 is 1.0.0.
 function fListCmp() {
-	local a="$1" b="$2" missing="$3" c=""
+	local a="${1}" b="${2}" missing="${3}" c=""
 	while [[ -n "${a}" ]] || [[ -n "${b}" ]]; do
 		if [[ -z "${a}" ]]; then
 			if [[ "${missing}" = "0" ]]; then a="0"; else echo -1; return 0; fi
@@ -283,7 +283,7 @@ function fNewer() {
 ##	fPickTag <stable|dev> - the highest version in the release rows on stdin,
 ##	skipping drafts, and pre-releases too for stable. Prints nothing if none.
 function fPickTag() {
-	local want="$1" tag draft pre best=""
+	local want="${1}" tag draft pre best=""
 	while read -r tag draft pre; do
 		[[ "${draft}" = "-" ]] || continue
 		[[ "${want}" = "dev" ]] || [[ "${pre}" = "full" ]] || continue
@@ -294,7 +294,7 @@ function fPickTag() {
 
 ##	True when the deepest existing parent of $1 is writable by us.
 function fCanWrite() {
-	local dir="$1"
+	local dir="${1}"
 	while [[ -n "${dir}" ]] && [[ "${dir}" != "/" ]] && [[ ! -e "${dir}" ]]; do
 		dir="$(dirname "${dir}")"
 	done
@@ -306,7 +306,7 @@ function fCanWrite() {
 ##	backtick or '$' as two-plus-itself, and a literal '%' has to be doubled or it
 ##	reads as a field code. The whole value is quoted, which is what a space needs.
 function fDesktopExec() {
-	printf '%s' "$1" | sed -e 's/[\\"`$]/\\&/g' -e 's/\\/\\\\/g' -e 's/%/%%/g'
+	printf '%s' "${1}" | sed -e 's/[\\"`$]/\\&/g' -e 's/\\/\\\\/g' -e 's/%/%%/g'
 }
 
 ##	fPathNote <dir> <file> - how to run it when <dir> is not on PATH.
@@ -333,7 +333,7 @@ function fCleanup() {
 ##	Falling back to stdin is what keeps a piped `echo y | ...` working.
 function fConfirm() {
 	local answer=""
-	printf "%s [y/N]: " "$1"
+	printf "%s [y/N]: " "${1}"
 	if { : </dev/tty; } 2>/dev/null; then
 		read -r answer </dev/tty || { echo; return 2; }
 	else
@@ -371,15 +371,15 @@ function fMain() {
 
 	##	Parse arguments
 	local release="stable" target="user" assumeYes=0
-	while [[ "$#" -gt 0 ]]; do case "$1" in
-		--release)   [[ "$#" -ge 2 ]] || fFail "--release needs a value: stable or dev"; release="$2"; shift 2 ;;
+	while [[ "$#" -gt 0 ]]; do case "${1}" in
+		--release)   [[ "$#" -ge 2 ]] || fFail "--release needs a value: stable or dev"; release="${2}"; shift 2 ;;
 		--release=*) release="${1#*=}"; shift ;;
-		--target)    [[ "$#" -ge 2 ]] || fFail "--target needs a value: user or system"; target="$2"; shift 2 ;;
+		--target)    [[ "$#" -ge 2 ]] || fFail "--target needs a value: user or system"; target="${2}"; shift 2 ;;
 		--target=*)  target="${1#*=}"; shift ;;
 		--yes|-y)    assumeYes=1; shift ;;
 		--version)   echo "${appName} installer ${installerVersion}"; echo; exit 0 ;;
 		-h|--help)   fHelp; exit 0 ;;
-		*)           fFail "unknown option: $1" "Run with --help to see the options." ;;
+		*)           fFail "unknown option: ${1}" "Run with --help to see the options." ;;
 	esac; done
 	case "${release}" in stable|dev) : ;; *) fFail "--release must be stable or dev (got '${release}')" ;; esac
 	case "${target}" in user|system) : ;; *) fFail "--target must be user or system (got '${target}')" ;; esac
@@ -618,7 +618,7 @@ shopt -s inherit_errexit 2>/dev/null || true
 if [[ "${BASH_SOURCE[0]:-}" = "${0}" ]] || [[ -z "${BASH_SOURCE[0]:-}" ]]; then
 	##	"$@" with no arguments is an unbound-variable error under `set -u` on
 	##	bash 3.2 (the macOS system bash), so only pass it when there is one.
-	if [[ "$#" -gt 0 ]]; then fMain "$@"; else fMain; fi
+	if [[ "$#" -gt 0 ]]; then fMain "${@}"; else fMain; fi
 fi
 
 ##	History:
