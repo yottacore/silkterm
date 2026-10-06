@@ -656,7 +656,9 @@ function fMain {
 					[System.IO.File]::Move($staged, $destFile)
 				} else {
 					& chmod 0755 $staged
-					& mv -f $staged $destFile
+					##	By path: on Windows 'mv' is Move-Item's alias, and the lint there says so.
+					$mvExe = (Get-Command -Name mv -CommandType Application -TotalCount 1).Source
+					& $mvExe -f $staged $destFile
 					if ($LASTEXITCODE -ne 0) { throw "mv exited $LASTEXITCODE" }
 				}
 			} catch {
@@ -842,4 +844,5 @@ if ($state.failed -and $runningAsScriptFile) { exit 1 }
 ##		  shortcut, launcher or PATH entry.
 ##		- 20261006 JC: Help block; StrictMode Latest; named arguments where there
 ##		  were three by position. Runs from a shell that has StrictMode on.
+##		  mv is called by path.
 
