@@ -10906,7 +10906,7 @@ mod tests {
 			keeps_picture: true,
 		};
 		// The release shipped off until 2026100312470540 turned it on by default,
-		// which `idle_release_ships_on` pins now.
+		// which `idle_release_defaults_on` pins now.
 		// let mut cfg = config::Settings::default();
 		// assert!(
 		// 	release_deadline(&cfg, &idle(false, true)).is_none(),
@@ -11111,7 +11111,7 @@ mod tests {
 	// clock alone, but a released window is still owed its device for the reveal.
 	// Test ID: EqBNCpU
 	#[test]
-	fn output_into_a_hidden_window_does_not_hold_its_device() {
+	fn output_into_a_hidden_window_does_not_keep_its_device() {
 		let long_ago = Instant::now()
 			.checked_sub(Duration::from_secs(1))
 			.expect("a second of uptime");
@@ -11178,7 +11178,7 @@ mod tests {
 	// wait for input, so a window nobody touched stayed blank after the load.
 	// Test ID: Erfy7yk
 	#[test]
-	fn a_refused_rebuild_stays_owed_and_is_tried_again() {
+	fn a_refused_rebuild_stays_pending_and_is_tried_again() {
 		let now = Instant::now();
 		let mut clock = IdleClock::new();
 		clock.owe(true);
@@ -11648,7 +11648,7 @@ mod tests {
 	// with a line the parse cannot place, and one with the key twice.
 	// Test ID: EpXN9p3
 	#[test]
-	fn a_rating_survives_to_the_next_launch_whatever_else_the_file_holds() {
+	fn a_rating_survives_to_the_next_launch_whatever_else_is_in_the_file() {
 		use crate::profile::Profile;
 		let _guard = config::test_config_lock();
 		let saved = config::settings();
@@ -12402,7 +12402,7 @@ mod tests {
 	// thing the shortening exists to avoid.
 	// Test ID: EnbYSzw
 	#[test]
-	fn a_title_is_fitted_to_the_width_it_is_actually_given() {
+	fn a_title_is_fitted_to_the_width_it_is_given() {
 		for scale in [1.0, 1.5, 2.0] {
 			for tab_w in [60.0, 140.0, 300.0] {
 				let title_w = tab_title_w(tab_w, scale);
@@ -12428,7 +12428,7 @@ mod tests {
 	// running PowerShell labelled Command Prompt.
 	// Test ID: EnbYSzx
 	#[test]
-	fn a_tab_names_only_the_shell_it_can_actually_see() {
+	fn a_tab_names_only_the_shell_it_can_see() {
 		assert_eq!(tab_command_line(None), "");
 		// An argument holding a space survives the round trip back into one line,
 		// so the name lookup splits it the same way the launch did.
@@ -12974,7 +12974,7 @@ mod tests {
 	// Ctrl+, keeps its comma: the style guide spells it that way too.
 	// Test ID: Er2UvPl
 	#[test]
-	fn every_shortcut_in_a_menu_is_spelled_one_way() {
+	fn every_shortcut_in_a_menu_is_written_one_way() {
 		for (name, items) in every_menu(&three_shells()) {
 			for label in items.iter().filter_map(entry_label) {
 				let Some(keys) = shortcut_of(label) else {
@@ -13278,7 +13278,7 @@ mod tests {
 
 	// Test ID: Er2UvPp
 	#[test]
-	fn the_bar_reads_file_to_help_and_file_holds_no_tab_or_pane_action() {
+	fn the_bar_reads_file_to_help_and_file_has_no_tab_or_pane_action() {
 		assert_eq!(MENU_BAR, ["File", "Edit", "View", "Tabs", "Panes", "Help"]);
 		for action in actions_in(&file_menu_items()) {
 			assert!(!matches!(
@@ -13296,7 +13296,7 @@ mod tests {
 
 	// Test ID: Er2UvPq
 	#[test]
-	fn the_right_click_menu_carries_the_pane_actions_and_their_checkmarks() {
+	fn the_right_click_menu_has_the_pane_actions_and_their_checkmarks() {
 		for on in [false, true] {
 			let items = context_menu_items(
 				CtxState {

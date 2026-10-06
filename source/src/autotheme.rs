@@ -513,7 +513,7 @@ mod tests {
 	// gray, and the mean hue is then whichever way the rounding fell.
 	// Test ID: EqRxesU
 	#[test]
-	fn the_dominant_hue_survives_a_second_colour_that_would_cancel_a_mean() {
+	fn the_dominant_hue_survives_a_second_color_that_would_cancel_a_mean() {
 		let red: [u8; 3] = [0xd0, 0x30, 0x30];
 		let img = image::RgbaImage::from_fn(90, 60, |x, _| {
 			// two thirds red, one third its near-opposite
@@ -534,7 +534,7 @@ mod tests {
 	// the vivid patch is what anybody looking at it would call its color.
 	// Test ID: EqRxesV
 	#[test]
-	fn the_hue_weight_is_chroma_rather_than_how_many_cells_carry_it() {
+	fn the_hue_weight_is_chroma_rather_than_how_many_cells_have_it() {
 		let faint: [u8; 3] = [0x76, 0x78, 0x84]; // barely blue
 		let vivid: [u8; 3] = [0xe6, 0x78, 0x14]; // plainly orange
 		assert!(
@@ -620,7 +620,7 @@ mod tests {
 	// that little chroma would swing the text about between two gray images.
 	// Test ID: EqRxesa
 	#[test]
-	fn a_grey_image_keeps_the_themes_own_hue() {
+	fn a_gray_image_keeps_the_themes_own_hue() {
 		let s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
 		let out = derive(&summarize(&plain([100, 100, 100], 32, 32), 0.3), &s);
 		let (want, _) = hue_chroma(SILK_FG);
@@ -655,7 +655,7 @@ mod tests {
 	// that the theme's own foreground wins either way.
 	// Test ID: EqT4HIe
 	#[test]
-	fn light_mode_places_the_text_against_the_alpha_it_will_really_be_drawn_at() {
+	fn light_mode_places_the_text_against_the_alpha_it_will_be_drawn_at() {
 		let light_bg = [0xf6u8, 0xf5, 0xf0];
 		let dark_text = [0x30u8, 0x32, 0x38];
 		let sum = summarize(&plain([10, 10, 12], 32, 32), 0.50);
@@ -759,7 +759,7 @@ mod tests {
 	// install re-colors its text without anyone visiting the Themes tab.
 	// Test ID: EqSm2Rk
 	#[test]
-	fn the_shipped_defaults_take_the_text_color_from_the_wallpaper() {
+	fn the_defaults_take_the_text_color_from_the_wallpaper() {
 		let mut s = Settings::default();
 		assert!(s.colors_from_wallpaper, "shipped off");
 		assert!(s.wallpaper_enabled, "no wallpaper to read");

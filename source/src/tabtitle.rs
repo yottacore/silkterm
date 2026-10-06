@@ -1075,7 +1075,7 @@ mod tests {
 	// four columns against a whole directory name.
 	// Test ID: EnbYT02
 	#[test]
-	fn an_ellipsis_only_appears_where_it_actually_shortens() {
+	fn an_ellipsis_only_appears_where_it_shortens() {
 		let forms = path_forms(r"C:\a\b\c\d\e\project", None, Style::Windows);
 		let first_ellipsis = forms
 			.iter()
@@ -1138,7 +1138,7 @@ mod tests {
 	// something a rule gets to from "Windows Cmd".
 	// Test ID: EnoacsS
 	#[test]
-	fn a_shipped_shell_name_has_hand_picked_short_forms() {
+	fn a_known_shell_name_has_hand_picked_short_forms() {
 		assert_eq!(shell_forms("Windows Cmd"), ["Windows Cmd", "Cmd", "C"]);
 		assert_eq!(shell_forms("PowerShell 7"), ["PowerShell 7", "PS 7", "P7"]);
 		// a curated short form that is already the shortest yields two rungs
@@ -1635,7 +1635,7 @@ mod tests {
 	// selects a tab other than the one under the pointer.
 	// Test ID: EnbYT08
 	#[test]
-	fn a_click_lands_on_the_tab_it_is_over() {
+	fn a_click_picks_the_tab_it_is_over() {
 		let widths = [91.0, 140.0, 60.0, 200.0];
 		let mut edge = 0.0;
 		for (slot, w) in widths.iter().enumerate() {

@@ -5359,7 +5359,7 @@ mod tests {
 	//   +-----------+
 	// Test ID: EreU3sY
 	#[test]
-	fn a_focus_move_lands_on_the_pane_beside_it() {
+	fn a_focus_move_goes_to_the_pane_beside_it() {
 		use super::{Toward, neighbor_toward};
 		let middle = split(Dir::Horizontal, 0.5, false, leaf(2), leaf(3));
 		let top = split(
@@ -6671,7 +6671,7 @@ mod tests {
 
 	// Test ID: EpyCuGg
 	#[test]
-	fn a_recorded_scroll_holds_an_overlay_repainted_at_its_strip_edge() {
+	fn a_recorded_scroll_pins_an_overlay_repainted_at_its_strip_edge() {
 		// the same pill, with the engine's record saying rows 0..25 scrolled: the rows
 		// under the region are held by the region alone, the pill row by this
 		let (cur, last) = muffer_pill_frames(700, 701);
@@ -6696,7 +6696,7 @@ mod tests {
 
 	// Test ID: EpyCuGi
 	#[test]
-	fn a_frame_repainted_wholesale_holds_nothing() {
+	fn a_frame_repainted_wholesale_pins_nothing() {
 		let last: Vec<u64> = (0..30).map(|i| 100 + i).collect();
 		let cur: Vec<u64> = (0..30).map(|i| 5000 + i).collect();
 		assert_eq!(repainted_edge(&cur, &last, &(0..25), -1), 0);
@@ -7206,7 +7206,7 @@ mod tests {
 
 	// Test ID: EpaxTds
 	#[test]
-	fn output_band_never_holds_plain_output() {
+	fn output_band_never_pins_plain_output() {
 		let blank = 0u64;
 		let last: Vec<u64> = (1..=8).collect();
 		let cur: Vec<u64> = (3..=10).collect();

@@ -352,7 +352,7 @@ Almost everything a terminal handles came from somewhere else. Bytes arriving fr
 
 - A reported directory is not automatically a directory. A shell says where it is with an escape sequence, and the answer both names the tab and decides where the next pane starts. A payload carrying a control character is refused, since it would reach the tab strip and the title. Whether the path is absolute is asked separately, at the one gate on what becomes a working directory - a relative path resolves against wherever the terminal itself was started, somewhere nobody can see, and a posix path on Windows names a real directory in the wrong filesystem.
 
-	- Pinned by `a_reported_directory_carrying_a_control_character_is_refused` in `cwd.rs` and `a_pane_only_ever_starts_in_an_absolute_directory` in `term.rs`.
+	- Pinned by `a_reported_directory_with_a_control_character_is_refused` in `cwd.rs` and `a_pane_only_ever_starts_in_an_absolute_directory` in `term.rs`.
 
 - A program may set the clipboard, but only from the pane in use (2026-09-15). This is the one place output changes something outside the pane, and it is allowed because tmux, editors over ssh and muffer's auto-copy all copy this way. A pane in the background or in another tab is ignored, so a log scrolling past in one cannot swap out what the next paste holds. A store over a megabyte is dropped whole rather than clipped. Reading the clipboard is still refused, and text a program put there goes through the paste rule above on its way back.
 

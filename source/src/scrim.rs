@@ -1122,7 +1122,7 @@ mod tests {
 	// curve in a comment. Every curve's number has to land in its own branch.
 	// Test ID: Erstarj
 	#[test]
-	fn each_ramp_code_lands_in_the_shader_branch_for_that_curve() {
+	fn each_ramp_code_reaches_the_shader_branch_for_that_curve() {
 		let body = WGSL
 			.split("fn falloff(")
 			.nth(1)

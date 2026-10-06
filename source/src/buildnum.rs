@@ -200,7 +200,7 @@ mod tests {
 	// manifest does.
 	// Test ID: Er2UFeX
 	#[test]
-	fn every_source_file_carries_the_license_header() {
+	fn every_source_file_has_the_license_header() {
 		let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
 		let manifest = std::fs::read_to_string(crate_dir.join("Cargo.toml")).unwrap();
 		assert!(
@@ -428,7 +428,7 @@ mod tests {
 	// so a scratch file in a working tree is never judged.
 	// Test ID: ErloT4L
 	#[test]
-	fn every_script_carries_the_license_header_with_history_at_the_bottom() {
+	fn every_script_has_the_license_header_with_history_at_the_bottom() {
 		// shell_integration.ps1 is written whole into a user's PowerShell
 		// profile, so it names no license there. It ships inside the binary,
 		// which does.

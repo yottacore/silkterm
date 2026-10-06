@@ -725,7 +725,7 @@ mod tests {
 
 	// Test ID: EpPhAdW
 	#[test]
-	fn a_key_that_carries_no_text_stays_unnamed() {
+	fn a_key_with_no_text_stays_unnamed() {
 		let injected = Key::Unidentified(NativeKey::Windows(0xe7));
 		assert_eq!(typed_key(&injected, None), None);
 		assert_eq!(typed_key(&injected, Some("")), None);

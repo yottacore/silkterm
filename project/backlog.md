@@ -68,7 +68,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every caller of the contrast floor goes through `Settings::min_contrast` (pane cells, link underline, cursor plate, minimap, wallpaper-derived text). The Settings dialog and the scrim's text pass share the lift through the same correction. Chrome tips are never repainted, so they keep the plain floor.
 	- Branch: lightweight
 	- Commit: 531f6c7
-	- Test case: `light_text_carries_the_ink_dark_text_does` (ErwcyUJ) and `a_light_theme_holds_text_a_little_further_off` (ErwdARW), both seen failing with the lift or the stretch taken out. In the glyphon fork, `the_contrast_boost_adds_ink_between_the_ends` and the shader text check, both seen failing on a broken mirror.
+	- Test case: `light_text_puts_down_the_ink_dark_text_does` (ErwcyUJ) and `a_light_theme_keeps_text_a_little_further_off` (ErwdARW), both seen failing with the lift or the stretch taken out. In the glyphon fork, `the_contrast_boost_adds_ink_between_the_ends` and the shader text check, both seen failing on a broken mirror.
 
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
@@ -146,7 +146,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every frame and rebuild site. The terminal's acquire and GL swap in `render_with`, reached from both `about_to_wait` and the desktop's redraw. The dialog and notice windows' acquire and swap in `DialogWin::render`. `rebuild_gpu`, which the console-return heal also calls. `grep -n 'begin_frame\|end_frame\|Gfx::rebuild'` finds no others.
 	- Branch: gpuload
 	- Commit: 8cb6a4d
-	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_owed_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
+	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
 
 - A shell is listed twice by name, with a different command each time
@@ -194,7 +194,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: unit tests, and clippy for Linux, macOS and Windows. No real Mac scan yet.
 	- Branch: shname
 	- Commit: 07ad847
-	- Test case: ErkT4QH `two_versions_of_one_shell_each_carry_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path`, ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`, ErkT4bY `a_shell_and_its_link_are_offered_at_the_shorter_path`, ErkT4gH `a_version_goes_into_a_name_the_way_a_person_would_write_it`, ErkT4k5 `the_version_probe_gives_up_on_a_program_that_never_answers`. The first four failed before the fix.
+	- Test case: ErkT4QH `two_versions_of_one_shell_each_show_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path`, ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`, ErkT4bY `a_shell_and_its_link_are_offered_at_the_shorter_path`, ErkT4gH `a_version_goes_into_a_name_the_way_a_person_would_write_it`, ErkT4k5 `the_version_probe_gives_up_on_a_program_that_never_answers`. The first four failed before the fix.
 
 - macOS: the extra prompt info for PowerShell 7 does not work
 	- ID: 2026100408214204
@@ -567,7 +567,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The per-monitor sizes are kept only while both switches are on. The last size anywhere is kept either way, as before.
 	- Note: A monitor is told apart by its resolution, its scale percent, and its physical size in mm where the system gives it. X11 reads the size from the X server, Windows from the EDID it keeps in the registry, and macOS from `CGDisplayScreenSize`. Wayland gives no size, so there it is resolution and scale.
 	- Note: Wayland gives a window no position and no move events. It opens at the last size anywhere, and looks for its monitor just after it opens, on a scale change, and when the pointer comes back after a drag. So there a window may resize a moment after it opens.
-	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_carries_the_remembered_size_as_live_lines`.
+	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_has_the_remembered_size_as_live_lines`.
 	- Verified:
 		- The unit tests on Linux, and clippy with warnings as errors for Linux, Windows and macOS.
 		- On one X11 monitor: opening at the monitor's own size and zoom, a move taking the other's, a resize before the move saved for the monitor it left, a resize right after the move kept, and a command-line size held until resized by hand.
@@ -669,7 +669,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every menu that opens goes through `with_shortcuts` (the menu bar dropdowns, the right-click menu, and their submenus). The tab rename menu has no hotkey rows. The macOS bar reads the same bindings, and its rebuild check includes them. The copy chord on an unfocused window reads them too. No menu label in `app.rs` writes out a chord by hand any more.
 	- Branch: panekeys, mackeys
 	- Commit: 4cafdde, f4bd3f7
-	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_lands_on_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
+	- Test case: `alt_shift_chords_split_and_close_panes_and_alt_arrows_move`, `command_d_splits_and_command_option_arrows_move_on_macos`, `a_focus_move_goes_to_the_pane_beside_it`, the seven tests in `keys.rs`, `a_hotkey_set_in_the_file_loads_and_a_bad_one_is_reported`, `a_changed_hotkey_is_written_back_by_its_name`, `an_older_file_gains_the_keys_block_commented`, `a_menu_row_shows_the_chord_its_hotkey_answers_to`, `the_mac_menu_bar_follows_the_bindings`. For Option+Command+W: `the_mac_menu_bar_shows_the_command_chords`, `the_keys_tab_shows_the_mac_chords_on_a_mac`, and `migrate_refreshes_a_superseded_commented_default` on a Mac.
 	- Closed:
 
 - The event loop does blocking work on every pass
@@ -984,7 +984,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened by: CC
 	- Related IDs: 2026100408214203
 	- Target OS: Windows
-	- Incorrect behavior: `cargo test` on Windows fails ErkT4QH `two_versions_of_one_shell_each_carry_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path` and ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`. So `cicd-win.ps1` stops at its test stage. The other 1130 pass.
+	- Incorrect behavior: `cargo test` on Windows fails ErkT4QH `two_versions_of_one_shell_each_show_their_version`, ErkT4Tm `one_version_installed_twice_is_offered_once_at_the_shorter_path` and ErkT4Xv `a_shell_that_will_not_say_its_version_keeps_its_name`. So `cicd-win.ps1` stops at its test stage. The other 1130 pass.
 	- Expected behavior: They pass on Windows, or say why they are Unix only.
 	- Reproduced: 20261006 on b29w, at dev c4dc098's source.
 
@@ -1782,7 +1782,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every device and adapter request. The window's native path, the X11 GL path at launch and at a rebuild, the Windows composited path, the dialogs' kept context and the one a dialog builds without it, and the adapter `--about` reports. `grep -rn 'request_adapter\|request_device(' source/src` finds only `gl_on`, `pick_device`, `probe_adapter_info` and a test.
 	- Branch: softrender
 	- Commit: 4fec2af
-	- Test case: `a_card_that_refuses_a_device_falls_back_to_software` (ErnMa8F), `a_device_is_named_by_what_drew_it_and_why` (ErnMa3y), `a_software_device_steps_the_session_and_the_card_takes_it_back` (ErnMaCH), `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS), `software_rendering_ships_off` (ErnMaKh). `cicd/tests/wingui/softrender.ps1` (ErqPAbe) runs the vm925w check, in the pipeline.
+	- Test case: `a_card_that_refuses_a_device_falls_back_to_software` (ErnMa8F), `a_device_is_named_by_what_drew_it_and_why` (ErnMa3y), `a_software_device_steps_the_session_and_the_card_takes_it_back` (ErnMaCH), `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS), `software_rendering_defaults_off` (ErnMaKh). `cicd/tests/wingui/softrender.ps1` (ErqPAbe) runs the vm925w check, in the pipeline.
 	- Acceptance signoff: Self-closed: the Windows path that was only compiled now runs in the pipeline. The macOS gray is pinned by a unit test.
 	- Closed: 20261005-094503
 
@@ -2093,7 +2093,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A launch that finds the file busy leaves it, and the next save or rating write does the same rewrite and says it the same way.
 		- `upgrade` in config.rs makes the choice for this case too, and the copy is made by the same writer.
 	- Swept: Every writer of the file. `persist` (Settings save, window size, font zoom, per-monitor sizes, copy toggles, shells found at launch) reads through `read_doc`, which now gets the rewritten text. The rating write reads it too and writes through the same writer. `adopt_default_shell` uses `read_doc`. The launch's other steps read with `read_to_string`, so they run on the rewritten file, or write nothing to a busy one. The window size refresh reads the rewritten text. `--reset-config` moves the bytes aside unread. The writer keeps a copy before replacing any settings file that is not UTF-8, whoever calls it.
-	- Test case: `a_current_file_that_is_not_utf8_drops_only_those_lines` (ErgZK0Q), `a_launch_writes_a_current_file_that_is_not_utf8_again` (ErgZK4X) and `a_save_on_a_current_file_that_is_not_utf8_writes_it_again` (ErgZK8b) fail with the old answer put back in `upgrade` and pass now. `a_footer_line_that_is_not_utf8_goes_back_as_shipped` (ErgZKCc), seen to fail with the footer step off. `a_notice_for_dropped_lines_names_them_and_the_copy` (ErgZJw3). Fuzz target `a_rewrite_for_lines_that_are_not_utf8_settles` (ErgZKGo). `cicd/tests/config-convert/run.bash` (ErgDpjX) checks the rewrite, the copy, the terminal line and the new notice; those checks failed on a build with the old answer put back.
+	- Test case: `a_current_file_that_is_not_utf8_drops_only_those_lines` (ErgZK0Q), `a_launch_writes_a_current_file_that_is_not_utf8_again` (ErgZK4X) and `a_save_on_a_current_file_that_is_not_utf8_writes_it_again` (ErgZK8b) fail with the old answer put back in `upgrade` and pass now. `a_footer_line_that_is_not_utf8_goes_back_to_the_original` (ErgZKCc), seen to fail with the footer step off. `a_notice_for_dropped_lines_names_them_and_the_copy` (ErgZJw3). Fuzz target `a_rewrite_for_lines_that_are_not_utf8_settles` (ErgZKGo). `cicd/tests/config-convert/run.bash` (ErgDpjX) checks the rewrite, the copy, the terminal line and the new notice; those checks failed on a build with the old answer put back.
 		- Commented out, since they pin the refusal: `a_current_file_shcl_cannot_read_is_left_alone` (ErgDoiP), `a_current_file_that_is_not_utf8_loads_what_reads` (ErgK1sy), `a_save_on_a_current_file_that_is_not_utf8_is_refused` (ErgK2CS), `a_notice_for_lines_that_are_not_utf8_says_so` (ErgK2Vb), and the pipeline test's left-alone and `notsaved` checks.
 	- Verified: The unit suite passes, 1083 tests, and a 60 s soak of both upgrade fuzz targets. fmt is clean, clippy is clean for Linux and Windows, and the test ID, markdown spacing and table checks pass. The pipeline test passes, notice window included. A whole config saved in Latin-1 was written again in one launch with its footer whole, and a second launch changed nothing.
 	- Branch: badutf8b
@@ -2502,7 +2502,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: `Settings::default()`, the template line, `SUPERSEDED_DEFAULTS`, the profile governed lists (`Shadow` in profile.rs, `GOVERNED` in settings_ui.rs), and every `.md` and `.shcl` naming the setting.
 	- Branch: idleon
 	- Commit: ce9412c
-	- Test case: `idle_release_ships_on` (Erg8fz0) and `an_existing_config_learns_that_the_idle_release_ships_on` (Erg8g2c).
+	- Test case: `idle_release_defaults_on` (Erg8fz0) and `an_existing_config_learns_that_the_idle_release_defaults_on` (Erg8g2c).
 	- Note: 20261003, the look under GPU load is left to 2026100312470535, which shares this path.
 	- Acceptance signoff: Self-closed: the default and its refresh are pinned by tests that pass on dev 1ab651f, and the release and wake cycle ran with software GL.
 	- Closed: 20261003-165133
@@ -2776,7 +2776,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260930: Checked on b23 under xfwm4: maximize, close, relaunch opens maximized; un-maximize goes back to the remembered size and saves the state off; a resize by hand still saves the size.
 		- 20261001: Off by default now. A config that still has the old commented default line gets the new one.
 	- Branch: maxdlg, maxoff
-	- Test case: `a_window_left_maximized_opens_maximized` (ErPSaVM), and `the_template_carries_the_remembered_size_as_live_lines` now covers the new line. Both seen to fail.
+	- Test case: `a_window_left_maximized_opens_maximized` (ErPSaVM), and `the_template_has_the_remembered_size_as_live_lines` now covers the new line. Both seen to fail.
 	- Acceptance signoff: JC, 20261001, with the default changed to off.
 	- Closed: 20261001
 
@@ -2799,7 +2799,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Rough edge, same build: the Format line still says 3, so a file stamped during the beta is taken as current, and `migrate` leaves its single-backslash paths alone.
 	- Fix: Use '\\' inside double quotes, for Windows paths. (Or anything that requires an actual backslash.)
 	- Note: 20261001, the template has written Windows paths that way since `shcl3e`. The two rough edges stay with shcl.
-	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`.
+	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`.
 	- Acceptance signoff: Self-closed: the fix line names what the template already does.
 	- Closed: 20261001-191500
 
@@ -2844,7 +2844,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The built-in wallpaper on new windows that day was a different thing. `~/.config/silkterm/wallpaper` links into the synced tree that moved to `private/` that afternoon.
 	- Branch: cfgorder
 	- Commit: d24bb6e
-	- Test case: `the_shipped_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
+	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
 
 - Windows: open scripts and folders in SilkTerm
@@ -3274,7 +3274,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The two scroll scenes keep `##` comments only, and still run under dash.
 	- Swept: `git ls-files` for every `.bash`, `.sh`, `.py`, `.ps1`, `.cmd` and `.rs` file and every file with a shebang. Left alone as not scripts: `PSScriptAnalyzerSettings.psd1` and the two `.in` templates.
 	- Verified: the new test failed with 58 faults before the fix and passes after. It also failed on one changed marker character, a line of code after a History block, and a History block in a header. shellcheck, PSScriptAnalyzer, the test ID check, the docs check, the wingui harness test and the install test pass. Every edited PowerShell file parses.
-	- Test case: `every_script_carries_the_license_header_with_history_at_the_bottom` (ErloT4L) in `buildnum.rs`. The old `every_source_file_carries_the_license_header` still covers `source/src/`.
+	- Test case: `every_script_has_the_license_header_with_history_at_the_bottom` (ErloT4L) in `buildnum.rs`. The old `every_source_file_has_the_license_header` still covers `source/src/`.
 	- Branch: hdrdbg
 	- Commit: 32b7b68
 	- Acceptance signoff: Self-closed: mechanical. The test failed before and passes after.
@@ -3515,7 +3515,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261003: Remove the machine names from both bundled prompts and leave an example.
 	- Note: The bash prompt file is rewritten from the binary at each launch, so a host color added to it does not last. On the machines that were in the table, the bash prompt's host is now white.
-	- Test case: `the_shipped_prompts_color_no_named_machine` (Erftpx4). It failed on each old script and passes on both new ones.
+	- Test case: `the_bundled_prompts_color_no_named_machine` (Erftpx4). It failed on each old script and passes on both new ones.
 	- Branch: hostnames
 	- Acceptance signoff: Self-closed: its test passes on dev 1ab651f, in a full unit suite run.
 	- Closed: 20261003-165133
@@ -3978,7 +3978,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The layout moves to the new scale, but nothing asks the window for a size to match it, so the two only agree because the toolkit asks for one straight after. Where the window manager declines, such as a maximized or tiled window, the dialog draws at the new scale inside a window that kept its old size, and clicks no longer land where they look.
 	- The screen caps are measured again at the same time but nothing is held to them, so a window dragged from a wide screen to a smaller one at a higher scale can come out taller than the screen, with the footer buttons under the taskbar.
 	- `Fixed:` the dialog is handed the size the window measures, and the window is asked for that size held to the new caps. Both halves now happen whether or not a resize follows.
-	- `Pinned by:` `a_window_is_held_to_what_the_screen_can_hold_at_the_new_scale` and `a_window_that_keeps_its_pixels_through_a_scale_change_still_fits_them`, both mutation-checked.
+	- `Pinned by:` `a_window_is_capped_to_what_the_screen_can_fit_at_the_new_scale` and `a_window_that_keeps_its_pixels_through_a_scale_change_still_fits_them`, both mutation-checked.
 	- `Left alone:` the early return when the factor has not moved. The size was the fault, and it is put right the first time now.
 	- Opened: 20260919-151810
 	- Closed: 20260920-092436
@@ -4178,7 +4178,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: the other new window was running a program whose spinner prints all the time, and any output restarted the idle clock. That is fine for a window on screen, but a minimized window printing forever would never let go, although nobody could see the output.
 	- Fixed: output only restarts the clock while the window can be seen. A released hidden window still gets its device back at the reveal, so a desktop that says nothing about showing it again cannot leave old text up.
 	- Left alone: a window that is only behind others. Under a compositing desktop it is never reported as covered, so it counts as unfocused, and its own output keeps it.
-	- Pinned by: `output_into_a_hidden_window_does_not_hold_its_device`, watched failing with the hidden case removed. A minimized window printing twice a second let go within the wait and came back on restore, where the build before it never let go.
+	- Pinned by: `output_into_a_hidden_window_does_not_keep_its_device`, watched failing with the hidden case removed. A minimized window printing twice a second let go within the wait and came back on restore, where the build before it never let go.
 	- Opened: 20260917-164802
 	- Closed: 20260917-183116
 
@@ -4261,7 +4261,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: the 20260803 fix only covered programs that redraw their lines. Since the terminal started recording scrolls, a program that scrolls a region gets that region's edges as its fixed rows. An indicator painted over the region's last row then slid with the text, and its old copy rode in the gap below.
 	- Changed: a row at that edge which the scroll does not account for is held still, and the gap fills from the rows that did leave. The other full-screen programs checked are unchanged.
 	- Tested OK.
-	- Pinned by: `a_recorded_scroll_holds_an_overlay_repainted_at_its_strip_edge`.
+	- Pinned by: `a_recorded_scroll_pins_an_overlay_repainted_at_its_strip_edge`.
 	- Opened: 20260911-120617
 	- Closed: 20260915-145824
 
@@ -4344,7 +4344,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed: the rating is written into its own lines and nothing else is touched, so a file with a bad line still keeps it. A linked or private settings file stays that way. The write is refused if any other setting would read differently.
 	- When the rating still cannot be kept, the banner says why before it goes away.
 	- Switching between a build from before this change and one after still tests each time, since the rating version changed.
-	- Pinned by: `rating_lines_replace_insert_and_collapse`, `a_rating_survives_to_the_next_launch_whatever_else_the_file_holds`, `the_banner_says_why_a_rating_was_not_kept` and `a_rating_from_before_the_version_is_stale`.
+	- Pinned by: `rating_lines_replace_insert_and_collapse`, `a_rating_survives_to_the_next_launch_whatever_else_is_in_the_file`, `the_banner_says_why_a_rating_was_not_kept` and `a_rating_from_before_the_version_is_stale`.
 	- Opened: n/a
 	- Closed: 20260911-002318
 
@@ -4383,7 +4383,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Seen on both Windows machines with the fix in, and on one of them before and after: an injected line reached nothing on the old build and runs on the new one, an accented character and a CJK character both arrive, and ordinary typing is unaffected.
 	- Two things came out of verifying it and are fixed with it. The unit suite had not compiled on Windows since a stray attribute left one test ungated, and two lint findings sat in code this machine never compiles. Both are now caught here: the lints run a second time for the Windows target, which takes under a minute and needs no Windows machine.
 	- The remote job runner can put a machine on a named branch, so a fix gets tried on Windows before it is merged rather than after.
-	- Pinned by: `an_unnamed_key_is_read_as_its_text`, `a_key_that_carries_no_text_stays_unnamed`, `a_key_the_layout_named_is_left_alone` and `cicd/tests/wingui/injchar.ps1`.
+	- Pinned by: `an_unnamed_key_is_read_as_its_text`, `a_key_with_no_text_stays_unnamed`, `a_key_the_layout_named_is_left_alone` and `cicd/tests/wingui/injchar.ps1`.
 	- Opened: 20260908-141500
 	- Closed: 20260909-171500
 
@@ -4786,7 +4786,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Setting the performance profile to "Standard terminal" and back to "Max silk" leaves the window with no wallpaper at all.
 	- Cause: both are the same thing. A rotation folder is configured (or found by convention), so the built-in is suppressed, since the folder is meant to supply the picture. But only a request that reads the folder picks one, and a settings change does not read it. Switching the wallpaper off drops the pick, so switching it back on had nothing to show and nothing to fall back on.
 	- Fixed. A request reads the folder whenever there is one and nothing has been picked from it, so an empty folder falls back to the built-in and turning the wallpaper back on picks again. Rotation timing resumes with it, which it did not before. Separately, an image that will not open now falls back to the built-in even inside a rotation folder, since a file that cannot be read supplies nothing.
-	- Pinned by: `a_rotation_folder_with_nothing_showing_is_read_again`, `an_unreadable_image_still_lands_on_the_builtin` and `an_empty_rotation_folder_falls_back_to_the_builtin`.
+	- Pinned by: `a_rotation_folder_with_nothing_showing_is_read_again`, `an_unreadable_image_still_falls_back_to_the_builtin` and `an_empty_rotation_folder_falls_back_to_the_builtin`.
 	- Opened: 20260905-113000
 	- Closed: 20260905-113000
 
@@ -4812,7 +4812,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Fixed. A remote session goes straight to the lowest profile without measuring, and an adapter with no card behind it to the second lowest. Everything else is measured: the window comes up whole, then a banner takes it for a few seconds while three profiles are timed in turn and the first that holds the display's refresh rate is kept. The window keeps drawing underneath, dimmed, and takes no input while the run is on.
 	- The profile is written down against a hash of the processor, the graphics adapter, the amount of memory and whether the screen is remote, so a different machine is rated again, and so is the same one seen locally after a remote session. "Check for hardware change" at the bottom of the Silk tab switches that off.
 	- Differs from the item in two places, both on purpose. A remote session is taken as the answer on its own, not only when the adapter also reads as software: over a remote session the reported adapter can be the real card, which is how this was rated Max silk in the first place. The dialog label is also shorter than the wording in the item, because the widest label on any tab sets the panel's width and the full sentence made the whole dialog a quarter wider.
-	- Pinned by: `a_display_naming_another_host_is_a_remote_screen`, `a_missing_card_is_picked_for_rather_than_timed`, `the_run_stops_at_the_first_rung_that_holds_the_rate`, `the_remote_override_sits_over_the_stored_profile` and `rating_due_matches_the_launch_rules`.
+	- Pinned by: `a_display_naming_another_host_is_a_remote_screen`, `a_missing_card_is_picked_for_rather_than_timed`, `the_run_stops_at_the_first_rung_that_keeps_the_rate`, `the_remote_override_sits_over_the_stored_profile` and `rating_due_matches_the_launch_rules`.
 	- Opened: 20260904-163124
 	- Closed: 20260904-163124
 
@@ -4918,7 +4918,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: the smooth offset is kept in two parts. The grid is scrolled by a whole number of lines and the renderer draws the fraction left over. The output ease was allowed to run up to sixteen lines past the end of the scrollback. The alt screen has no scrollback at all, so when nano took over mid-ease the whole part sat pinned at zero while the fraction kept counting down through the leftover backlog, wrapping through a full cell once per line. Every wrap drew as a whole-cell hop. That is also why it looked random: it needs output still easing at the moment nano starts, which a long push before `git commit` gives reliably and a quiet prompt never does.
 	- Fixed: the view can no longer sit past the grid. Entering the alt screen stops the ease on the spot, which is the cut a screen swap wants anyway, and a shallow scrollback caps how far a fresh terminal's first output eases. Both halves of the residual one-line scroll on alt-screen enter and exit go with it.
 	- The scroll harness has a fifth scene for it: a burst still easing when an alt screen takes over must sit still there.
-	- Pinned by: `an_alt_screen_entry_lands_a_running_ease_at_rest` and `the_ease_floor_is_capped_by_the_history`.
+	- Pinned by: `an_alt_screen_entry_puts_a_running_ease_at_rest` and `the_ease_floor_is_capped_by_the_history`.
 	- Opened: 20260709-115247
 	- Closed: 20260827-073521
 
@@ -4935,7 +4935,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Bug: Residual 1-line smooth scroll-up on alt-screen enter and exit (`smooth_scroll_apps`). The enter/exit hard-cut fixed the big jiggle and scroll-in, but a slight single-line ease still rides the transition. Livable, deferred. Likely the output-ease firing one frame after the transition. A candidate fix is to rebaseline the history baseline and suppress the nudge one frame past the transition.
 	- Gone with the nano wobble fix. The ease never sits past the grid now, so there is nothing left to ride the transition.
-	- Pinned by: `an_alt_screen_entry_lands_a_running_ease_at_rest` and `the_ease_floor_is_capped_by_the_history`.
+	- Pinned by: `an_alt_screen_entry_puts_a_running_ease_at_rest` and `the_ease_floor_is_capped_by_the_history`.
 	- Opened: 20260706-101054
 	- Closed: 20260827-073521
 
@@ -5151,7 +5151,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Other terminals show the same fonts in color because their text rasterizer reads COLRv1.
 	- Fixed: color glyphs are now painted directly - the paint graph is walked and rendered through a small 2D back end (transforms, clip and layer stacks, solid/linear/radial/sweep fills, Porter-Duff and blend compositing), then handed to the renderer's color atlas as a per-cell image fitted to the cell box. Chars with no color glyph are untouched and still take the monochrome fallback path.
 	- `color_emoji` (default true) turns it off, which restores the monochrome outlines.
-	- Pinned by: `colr_v1_emoji_rasterizes_in_colour`.
+	- Pinned by: `colr_v1_emoji_rasterizes_in_color`.
 	- Note: 20260930, the key is `text.color_emoji` now.
 	- Opened: n/a
 	- Closed: 20260727-014507
@@ -6081,7 +6081,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- ✅ As an example, 50% for a very bright image, may be significantly darker than 50% for a very dark image.
 				- Pinned by: `a_glaring_picture_is_held_back_and_a_faint_one_lifted`.
 		- ✅ And the inverse, for light-mode themes.
-			- Pinned by: `light_mode_holds_back_the_picture_that_stands_out_there_instead`.
+			- Pinned by: `light_mode_tones_down_the_picture_that_stands_out_there_instead`.
 		- ✅ Need a config file name and a default value for the resulting strength of this calculation.
 			- Pinned by: `the_strength_setting_turns_the_ramp_off`.
 	- Opened: 20260703-100322
@@ -6121,7 +6121,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Make auto text color default to "On".
 	- `Fixed:` `colors.from_wallpaper` is on by default. The three places a default change touches are all updated, so an existing config's commented line is refreshed and a hand-set value stays.
 	- `Decision:` on rather than off. The wallpaper is on by default too, and the derived text is never dimmer than the theme's own, so it can only help. With no picture up it does nothing at all.
-	- `Pinned by:` `the_shipped_defaults_take_the_text_color_from_the_wallpaper` in autotheme.rs, and `an_existing_config_learns_that_wallpaper_text_colors_ship_on` in config.rs. The second one names the path, since nothing else can catch a table entry that was never added. Three mutations watched red.
+	- `Pinned by:` `the_defaults_take_the_text_color_from_the_wallpaper` in autotheme.rs, and `an_existing_config_learns_that_wallpaper_text_colors_default_on` in config.rs. The second one names the path, since nothing else can catch a table entry that was never added. Three mutations watched red.
 	- `Measured:` with the switch off the ink is `#88eecc`, the theme's own; with it on, `(169, 226, 237)`, lifted and cooled against a warm wallpaper.
 	- Opened: 20260920-174824
 	- Closed: 20260920-175632
@@ -6279,7 +6279,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Cause: two earlier tries each read the scroll position from outside the scroll model, and that one number mixes the output chase's undrained backlog with a gesture's remaining travel. Trimming whenever the view follows the bottom read a jump to the bottom as output. Trimming only while the chase owned the motion lost the rest of a flood after one keystroke.
 	- Fixed: the scroll model counts the output lines the view has not come down to. Arriving lines raise the count, and the view gives it back as it reaches them, so a gesture neither creates it nor clears it. The map stops at that point, and a short map asks for another compose and follows the ease down.
 	- Decision: the count lives inside the scroll model, since only it can tell a gesture's remaining travel from the chase's backlog.
-	- Pinned by: `a_gesture_to_the_bottom_is_not_unshown_output`, `a_flood_stays_trimmed_through_a_keystroke`, `unshown_output_drains_as_the_view_reaches_it`, `smooth_off_leaves_nothing_unshown`, `the_map_stops_where_the_eased_text_has_reached`, `blank_rows_under_a_prompt_are_part_of_the_map`, `a_trimmed_compose_owes_another` and `a_parked_view_stops_owing_composes`. Each watched failing with its own rule taken out, and with both narrower readings put back one at a time.
+	- Pinned by: `a_gesture_to_the_bottom_is_not_unshown_output`, `a_flood_stays_trimmed_through_a_keystroke`, `unshown_output_drains_as_the_view_reaches_it`, `smooth_off_leaves_nothing_unshown`, `the_map_stops_where_the_eased_text_has_reached`, `blank_rows_under_a_prompt_are_part_of_the_map`, `a_trimmed_compose_needs_another` and `a_parked_view_stops_asking_for_composes`. Each watched failing with its own rule taken out, and with both narrower readings put back one at a time.
 	- Fixed: a short map asked for a redraw for as long as it was short, and a view parked in the scrollback freezes the lag, so it asked for a frame and a whole redraw about eleven times a second with no output at all. It asks for one only while the count is draining now.
 	- Note: this widens the open bug about the marker moving at a different rate from the map under it, from at most a screen of blank rows to the whole output lag, measured at 218 against 225 lines under a 600 lines/s flood, and the gap now stays while the view is parked.
 	- To confirm: how it looks under a real flood. It is pinned by number, not by eye.
@@ -6307,7 +6307,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Fixed: the map stops where the eased text has reached. Under a flood the view sits behind the newest line, and the column now holds back the output the view has not come down to. A gesture does not create that count and does not clear it, so a jump to the bottom never shortens the column and typing during a flood does not switch the trim off. A short map asks for another compose and follows the ease down. One line is always kept, so the column never disappears.
 		- Decision: the wording reads two ways. This fix first took the half with a symptom on screen all the time. The other half, that the map runs ahead of the eased text under a flood, is the one meant, so the trim to the last inked row comes back out and the blank rows under a prompt are part of the buffer again. That half is its own open item.
 		- Left alone: scrolling does not move where the map ends, since the screen is the screen whatever the display offset is.
-		- Pinned by: `a_gesture_to_the_bottom_is_not_unshown_output`, `a_flood_stays_trimmed_through_a_keystroke`, `unshown_output_drains_as_the_view_reaches_it`, `the_map_stops_where_the_eased_text_has_reached`, `blank_rows_under_a_prompt_are_part_of_the_map` and `a_trimmed_compose_owes_another`. Each watched failing with its own rule taken out, and with the two narrower readings put back one at a time.
+		- Pinned by: `a_gesture_to_the_bottom_is_not_unshown_output`, `a_flood_stays_trimmed_through_a_keystroke`, `unshown_output_drains_as_the_view_reaches_it`, `the_map_stops_where_the_eased_text_has_reached`, `blank_rows_under_a_prompt_are_part_of_the_map` and `a_trimmed_compose_needs_another`. Each watched failing with its own rule taken out, and with the two narrower readings put back one at a time.
 	- Fixed: reworking the marker to end on the last drawn line broke the round trip between where it is drawn and the position a drag reads back from it, so a press plus one pixel of movement scrolled the view by itself. The marker's height and travel now come off one helper and the two directions divide by the same travel. The same fault was reachable before this work at a deep scrollback, where the marker's minimum height ate into its travel; that is fixed with it.
 	- Pinned by: `a_marker_reads_back_the_position_it_was_drawn_at`, over 21 positions across six buffer shapes, watched failing on both.
 	- Note: the marker now moves at a slightly different rate from the map under it, which is filed as its own bug.
@@ -6378,7 +6378,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Measured on the Linux box under software GL: about 3 ms to let go, about 25 ms to take back, no CPU while released. Not yet measured under the NVIDIA driver, on Wayland or on Windows.
 	- Found on the way and fixed: glibc kept each wallpaper decode's buffers resident in the worker's arena, about 50 MB per window from the first decode alone. The mmap threshold is pinned now, which cut launch memory by about 60 MB with a wallpaper. And every Vulkan instance destroyed on NVIDIA left two file descriptors open, so the warm dialog context keeps its instance across a release.
 	- Rows on the Window tab: "Free resources when idle", "Minutes when hidden" (30), "Minutes otherwise" (240). Config keys `window.idle_release`, `window.idle_release_hidden_min`, `window.idle_release_min`.
-	- Pinned by: `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` and `output_into_a_hidden_window_does_not_hold_its_device`.
+	- Pinned by: `the_idle_release_waits_on_the_window_and_only_an_unwatched_one` and `output_into_a_hidden_window_does_not_keep_its_device`.
 	- Note: 20260930, the planning bullets above were answered by the Done bullets: nothing is disabled under transparency, and the label is "Free resources when idle". The design is in the [releasing resources design doc](design_docs/20260930-151334_releasing-resources.md).
 	- Note: 20261004, the open point "figure out a way to reduce CPU and memory usage" moved to the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md).
 	- Note: 20261003, on by default now, per 2026100312470540.
@@ -6563,7 +6563,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The section heading is "Scrolling" rather than "Smooth scrolling", because the master toggle directly under it is already called that.
 	- The two scrollbar colors moved to the Themes tab, at the end of the palette. They are still not part of a theme, and their row says so.
 	- Provisional. Easy to put back if it reads worse in use.
-	- Pinned by: `the_silk_tab_holds_performance_readability_and_scrolling`.
+	- Pinned by: `the_silk_tab_has_performance_readability_and_scrolling`.
 	- Opened: 20260904-082000
 	- Closed: 20260904-090000
 
@@ -6683,7 +6683,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- "Save as…" and "Rename" on the Themes tab now end in a real ellipsis, the way Settings and About already did.
 		- The three font-size items on the View menu read "Ctrl+Plus", "Ctrl+Minus" and "Ctrl+0", so every shortcut in every menu is spelled one way. Both were looked at on screen.
 		- Two differences are deliberate and stay listed rather than fixed: the capital S in "Paste Selection", which is what its accelerator has to take, and "Copy on select" sitting on the Cursor tab, which is intended and is pinned by a test.
-		- Pinned by: `every_shortcut_in_a_menu_is_spelled_one_way` and `a_row_that_asks_for_more_ends_in_a_real_ellipsis`.
+		- Pinned by: `every_shortcut_in_a_menu_is_written_one_way` and `a_row_that_asks_for_more_ends_in_a_real_ellipsis`.
 	- Opened: 20260719-085918
 	- Closed: 20260830-204500
 
@@ -6730,7 +6730,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The remembered values live in the config file only, never in the dialog, so the toggle can be turned off and the previous numeric size comes back. They track the last manual resize whether the toggle is on or not.
 			- ✅ "Remembered" values always active, never commented out. But only valid if 'remember_size' is true.
 				- Done: a new config file has the pair as live lines. An existing file already has them from the first resize.
-				- Pinned by: `the_template_carries_the_remembered_size_as_live_lines`.
+				- Pinned by: `the_template_has_the_remembered_size_as_live_lines`.
 	- ✅ All values, including slider numbers, should also have directly editable fields (that are part of the tab order).
 		- Done: each slider has a numeric field that can be clicked or typed into, with the value clamped to the slider's range. The field joins the Tab order along with the rest of the dialog.
 		- Pinned by: `slider_numeric_field_edits_and_clamps` and `keyboard_focus_walks_controls_then_buttons`.
@@ -6755,7 +6755,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Same rule as before: only a prompt that is still the stock one is replaced. `X9PS1_STANDARD=1` puts a plain prompt back for a session.
 	- Costs one `git` call inside a working tree and none outside one. The console is put on UTF-8 at load so that git's own output decodes.
 	- Seen on Windows under both 5.1 and 7. Note 5.1 will not load a profile at all while its execution policy blocks scripts, which is the state that box is in.
-	- Pinned by: `the_block_carries_the_prompt`.
+	- Pinned by: `the_block_has_the_prompt`.
 	- Opened: n/a
 	- Closed: 20260830-170541
 
@@ -6831,7 +6831,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- "Strength" (Formerly "Mask strength". 0% to 100%)
 				- "Automask mix" (Formerly "Mask auto". 0% to 100%)
 			- Three sub-groups as listed. Renames done: Background image -> File or folder, Bg image opacity -> Visibility, Bg image blur -> Blur, Mask size/strength/auto -> Size/Strength/Automask mix.
-			- Pinned by: `each_tab_holds_its_designed_sub_groups`.
+			- Pinned by: `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Text"
 			- Group "Font"
 				- Use system font    [ ] Face   [ ] Size
@@ -6850,7 +6850,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 					- Function
 					- Falloff
 			- ✅ Done as specified, with Strength first under the switch, since the others depend on it. The default font stack already read exactly as listed, so nothing changed there.
-				- Pinned by: `each_tab_holds_its_designed_sub_groups`.
+				- Pinned by: `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Cursor"
 			- "Blink rate" slider
 			- "Shape"
@@ -6862,22 +6862,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- "Inactivity timer" 100 ms to 1m
 			- "Visibility"    [ ] Scrim   [ ] Outline
 			- Blink rate, Height, Width, Animation and the Scrim/Outline pair (now "Visibility"), plus Inactivity timer as a sub-group under Animation. All were config-only settings before; none is new.
-			- Pinned by: `each_tab_holds_its_designed_sub_groups`.
+			- Pinned by: `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Movement" (formerly "Scrolling")
 			- Sub-groups:
 				- Scrolling
 				- Cursor
 			- Done as two sub-groups: Smooth scrolling (the five feel sliders) and Scrollbar (width, hide-when-idle, and its two colors). There is no Cursor sub-group, since cursor movement has no settings behind it, only source constants.
-			- Pinned by: `each_tab_holds_its_designed_sub_groups`.
+			- Pinned by: `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Themes"
 			- ✅ Group: "Themes"
 				- ✅ "Theme" (drop-down of selectable themes).
-					- Pinned by: `picking_a_theme_adopts_its_colours` and `an_edited_theme_reads_as_unsaved_in_the_box`.
+					- Pinned by: `picking_a_theme_adopts_its_colors` and `an_edited_theme_reads_as_unsaved_in_the_box`.
 				- ✅ Buttons aligned underneath theme dropdown box, arranged in one horizontal row:
 					- [Save]  [Save as …]  [Rename]  [Delete]
 					- Behavior:
 						- ✅ [Save] is only enabled, if the user has unsaved changes to current theme. Even across sessions.
-							- Pinned by: `an_edited_colour_is_what_makes_the_theme_dirty` and `focus_carries_on_when_the_control_under_it_greys_out`.
+							- Pinned by: `an_edited_color_is_what_makes_the_theme_dirty` and `focus_stays_when_the_control_under_it_grays_out`.
 						- ✅ [Save as …] pops up a small dialog with the text "Enter a new theme name", and below that, an empty textbox. buttons at bottom-right "Cancel|OK" (OK default)
 							- Pinned by: `the_prompt_box_owns_the_keyboard_until_it_closes`.
 						- ✅ [Rename] pops up a small dialog to edit existing name (all text selected by default), with buttons "Cancel|OK" (OK default).
@@ -6894,23 +6894,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 					- ✅ Sub-group: "Terminal background" (formerly labeled "Background")
 						- "Foreground"
 						- "Cursor"
-						- Pinned by: `each_tab_holds_its_designed_sub_groups`.
+						- Pinned by: `each_tab_has_its_designed_sub_groups`.
 					- ✅ Sub-group: "Dialog and menu background"
 						- ✅ "Gutter" (a new color defining small areas with no interactive elements, e.g. behind the top tabs).
 							- Pinned by: `chrome_defaults_shared_across_themes` and `every_row_survives_a_save_and_a_relaunch`.
 						- ✅ "Highlights" (formerly "Focus ring"; same color but with expanded meaning as noted above)
 							- Pinned by: `a_renamed_key_frees_its_old_name_for_a_new_setting`.
 						- ✅ "Focus" (a new color category that used to be part of "Focus ring", but now applies only to focused element)
-							- Pinned by: `the_two_attention_colours_stay_apart` and `a_renamed_key_frees_its_old_name_for_a_new_setting`.
+							- Pinned by: `the_two_attention_colors_stay_apart` and `a_renamed_key_frees_its_old_name_for_a_new_setting`.
 						- Done: all three are themable and live on the Colors tab. The sub-group headings above wait on the grouping work; the rows are in place.
 						- ✅ Both sub-groups are in place now. The dialog and menu backgrounds and their two text colors picked up rows at the same time. They were themable but not editable, and showing only part of the set looked like an omission.
-							- Pinned by: `each_tab_holds_its_designed_sub_groups`.
+							- Pinned by: `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Window":
 			- Sub-group: "Remember last size" checkbox
 				- Columns
 				- Rows
 			- Margin px
-			- Pinned by: `each_tab_holds_its_designed_sub_groups`.
+			- Pinned by: `each_tab_has_its_designed_sub_groups`.
 		- ✅ Tab: "Shell"
 			- UI:
 				- A grid, one line per stored shell, every field edited in place: "Name", "Command", "Last seen", "Active"
@@ -6918,11 +6918,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 					- "Active" is a checkbox. When it is on, the shell's name appears under "Tabs/New tab with shell … ->".
 					- The command is required: emptying the field leaves the stored one standing, and an entry that never got one is dropped rather than saved.
 				- ✅ A grip at the left of each line reorders it by dragging. This supersedes the four move icons this item first listed ("Move to top", "Move up", "Move down", "Move to bottom"), which are gone; reordering is mouse-only now.
-					- Pinned by: `a_grip_drag_reorders_the_list`, `the_grip_is_a_gesture_and_not_a_keyboard_stop` and `a_line_dragged_off_the_top_lands_on_the_first`.
+					- Pinned by: `a_grip_drag_reorders_the_list`, `the_grip_is_a_gesture_and_not_a_keyboard_stop` and `a_line_dragged_off_the_top_ends_up_first`.
 				- ✅ "Remove" sits between "Command" and "Last seen" rather than at the end of the line, so it is harder to press by accident, and its X is red. It still asks first, the way the theme delete does.
 					- Pinned by: `the_grid_columns_stay_inside_the_panel_in_order`, `the_grip_reads_as_bars_and_the_remove_mark_reads_as_red` and `removing_a_shell_asks_before_it_happens`.
 				- ✅ Below the grid, a "Default startup directory" section. It's the literal `$HOME` / `%USERPROFILE%`, understands `~` and either platform's variable spellings, and is the lowest of three precedences - a new tab, pane or window inherits from the pane it came from, and a SilkTerm launched from a shell keeps that shell's directory.
-					- Pinned by: `the_shipped_startup_directory_is_this_platforms_home_variable`, `a_home_token_expands_however_it_is_spelled`, `an_inherited_directory_is_a_choice_unless_a_launcher_picked_it` and `the_shells_grid_has_a_tab_to_itself`.
+					- Pinned by: `the_default_startup_directory_is_this_platforms_home_variable`, `a_home_token_expands_however_it_is_written`, `an_inherited_directory_is_a_choice_unless_a_launcher_picked_it` and `the_shells_grid_has_a_tab_to_itself`.
 				- An "Add" button below the grid, for a shell the scan cannot find. It adds a new line and puts the caret straight in its command field.
 				- The first switched-on shell in the list is the default for new windows, tabs and panes. The old `shell.default` setting is retired: a config that had one has that entry moved to the top of the list, once, and the line removed.
 				- Done: the whole tab. The grip and the remove mark are drawn in the shader rather than set as glyphs, since no interface font can be relied on to have either one.
@@ -7008,7 +7008,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: narrowed 20260916 by F37, but only for a command. Its arguments are handed to the program as written now, and only the program name is expanded. A setting that names a path still reads all three spellings on either platform, as below. The startup directory defaults to the home variable in the platform's own spelling.
 	- Reaches the startup directory and `--directory` as before, and now the wallpaper image, the rotation folder, the link opener, and every shell command in the list. A command is split into arguments first, so a variable holding a path with a space in it stays one argument.
 	- A `~` with no home directory to put there is left standing rather than turned into an absolute path meaning something else.
-	- Pinned by: `a_home_token_expands_however_it_is_spelled`, `the_other_platforms_spelling_of_a_name_still_answers`, `a_config_command_expands_the_program_and_nothing_after_it` and `tilde_expands_to_home_but_only_for_this_user`.
+	- Pinned by: `a_home_token_expands_however_it_is_written`, `the_other_platforms_spelling_of_a_name_still_answers`, `a_config_command_expands_the_program_and_nothing_after_it` and `tilde_expands_to_home_but_only_for_this_user`.
 	- Opened: 20260826-123553
 	- Closed: 20260830-133718
 
@@ -7126,7 +7126,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Pinned by: `tabs_and_panes`.
 		- ✅ `--tab[=| ]<id>`
 			- Select an existing tab (ID "0"/"main" or a handle) and make it current - to add panes or change its settings. ID required; selecting a nonexistent tab errors.
-			- Pinned by: `tab_selects_by_handle_or_first_and_later_options_land_there`.
+			- Pinned by: `tab_selects_by_handle_or_first_and_later_options_go_there`.
 		- ✅ `--new-pane[[=| ]<handle>]`
 			- Create a new pane (splitting `--splits`, default = the current pane) and make it current. Optional handle names it (unique within the tab) for later `--pane=<handle>` / `--splits=<handle>`. The implicit first pane (ID "0"/"main") always exists and is never created by `--new-pane`.
 			- Pinned by: `tabs_and_panes`.
@@ -7420,7 +7420,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- A tab now shows its path alongside whatever it is running, where before a tab running something said only that.
 	- When a tab runs out of room, the parts give way in order: shell name shortens, then the command's name is truncated, then the path abbreviates, then the command goes, then the path, leaving the shortest form of the shell's name. That last form is the floor a tab cannot shrink past. The tabs beyond it become a page.
 	- Short shell names are hand-picked for the shells SilkTerm comes with ("Windows Cmd" reads "Cmd", "PowerShell 7" reads "PS 7") and derived for anything renamed.
-	- Pinned by: `a_tab_with_nothing_pressing_it_sits_at_the_regular_width`, `a_long_label_grows_its_own_tab_and_no_other`, `a_crowded_bar_shrinks_every_tab_alike_and_stops_at_the_floor`, `a_tab_says_the_shell_the_task_and_the_path_and_gives_them_up_in_order` and `a_shipped_shell_name_has_hand_picked_short_forms`.
+	- Pinned by: `a_tab_with_nothing_pressing_it_sits_at_the_regular_width`, `a_long_label_grows_its_own_tab_and_no_other`, `a_crowded_bar_shrinks_every_tab_alike_and_stops_at_the_floor`, `a_tab_says_the_shell_the_task_and_the_path_and_gives_them_up_in_order` and `a_known_shell_name_has_hand_picked_short_forms`.
 	- Opened: n/a
 	- Closed: 20260823-160233
 
@@ -7532,7 +7532,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Chrome and dialog theming. Settings and About follow dark and light.
 		- No test: the drawing needs a window. The colors are pinned by `chrome_defaults_shared_across_themes`.
 	- ✅ The Themes tab, with the theme dropdown and the save, rename and delete buttons. Picking a theme takes on its colors wholesale, so per-color tweaks belonging to the theme being left behind are dropped.
-		- Pinned by: `picking_a_theme_adopts_its_colours`, `adopting_a_theme_clears_the_colour_overrides` and `a_saved_theme_shadows_a_builtin_and_delete_uncovers_it`.
+		- Pinned by: `picking_a_theme_adopts_its_colors`, `adopting_a_theme_clears_the_color_overrides` and `a_saved_theme_shadows_a_builtin_and_delete_uncovers_it`.
 	- ✅ A theme can be added or edited in the config file, and the dropdown picks it up. A saved theme is written whole under its own name, so it stands on its own and can be handed to someone else.
 		- Pinned by: `a_saved_theme_survives_a_relaunch` and `saving_folds_the_edits_into_the_theme`.
 	- Note: a fourth theme and a per-theme menu color are still open under Features and enhancements.
@@ -7549,7 +7549,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Pinned by: `a_renamed_key_frees_its_old_name_for_a_new_setting`.
 		- ✅ Second highlight color should be a different, complimentary color that is also more vivid and saturated. That's for the current focus.
 			- Every theme sets its own, and the two are always far enough apart that they cannot read as the same signal.
-			- Pinned by: `the_two_attention_colours_stay_apart`.
+			- Pinned by: `the_two_attention_colors_stay_apart`.
 		- ✅ When text fields have focus highlight, there should only be one visible outline (rather than two - the highlight and the textbox outline).
 			- The ring goes on the field's own outline and the field stands its border down. The old build drew two rules with a gap of panel between them; there is now a single rule.
 			- Pinned by: `a_focused_field_draws_one_outline`.
@@ -7653,7 +7653,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Two side effects: an empty rotation folder now falls back to the built-in wallpaper instead of leaving the background blank, and a wallpaper file that can't be opened is reported rather than silently ignored.
 	- Reloading settings while rotating used to blank the wallpaper until the next rotation; it now keeps what is on screen.
 	- The config file itself still loads up front - window size, font and theme all come from it, and the window waits to open at its final size.
-	- Pinned by: `an_empty_rotation_folder_falls_back_to_the_builtin`, `an_unreadable_image_still_lands_on_the_builtin` and `a_superseded_request_stops_before_its_next_stage`.
+	- Pinned by: `an_empty_rotation_folder_falls_back_to_the_builtin`, `an_unreadable_image_still_falls_back_to_the_builtin` and `a_superseded_request_stops_before_its_next_stage`.
 	- Opened: n/a
 	- Closed: 20260803-164818
 
@@ -7675,7 +7675,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ A single boolean option to disable/enable smooth scrolling, without changing other settings (but disabling their controls).
 	- New "Smooth scrolling" switch at the top of the Scrolling tab (config: `scroll.smooth`, default on). Off = wheel, output and full-screen-app scrolling all jump instantly, and the two speed sliders gray out. Wheel lines, scrollbar and the rest stay active since they apply either way.
-	- Pinned by: `smooth_off_lands_every_scroll_instantly` and `smooth_off_leaves_nothing_unshown`.
+	- Pinned by: `smooth_off_finishes_every_scroll_instantly` and `smooth_off_leaves_nothing_unshown`.
 	- Note: 20260930, there are five speed sliders now, not two. All five gray out.
 	- Opened: n/a
 	- Closed: 20260802-123859
@@ -7791,7 +7791,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- An old flat-style config converts in one launch: the file moves aside to config.shcl.bak and a fresh nested file is written with every active value moved to its new place, so settings survive. A setting can also still be written as a single dotted line ('wallpaper.opacity: 0.1') and reads the same.
 	- Saving keeps the nested layout intact: comments keep their indentation and the blank-line grouping survives a settings save.
 	- A fresh file matches the default template byte for byte, and a relaunch never rewrites it.
-	- Pinned by: `legacy_config_converts_with_values_carried`, `walker_resolves_nested_paths`, `a_save_keeps_nested_comment_layout` and `default_config_survives_a_save_unchanged`.
+	- Pinned by: `legacy_config_converts_with_values_kept`, `walker_resolves_nested_paths`, `a_save_keeps_nested_comment_layout` and `default_config_survives_a_save_unchanged`.
 	- Opened: 20260802-002500
 	- Closed: 20260802-014027
 
@@ -7832,7 +7832,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pinned by: `parse_lenient_drops_only_the_bad_line`, `a_bad_line_drops_only_its_own_setting` and `persist_survives_bare_decimal_float`.
 	- ✅ Convert already implicitly hierarchical config names, to actual nested hierarchical.
 		- Done as part of the nesting item above.
-		- Pinned by: `walker_resolves_nested_paths` and `legacy_config_converts_with_values_carried`.
+		- Pinned by: `walker_resolves_nested_paths` and `legacy_config_converts_with_values_kept`.
 	- ✅ Each setting gets it's own newline-delimited (above and below) section, with helpful comments directly above the setting without newlines.
 		- No test: replaced by the later template layout.
 	- ✅ Common comment format, use what's appropriate for each setting:
@@ -7883,7 +7883,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ A new setting no longer duplicates its neighbors' comment block.
 	- Description: adding a setting to a group that an existing config already had part of appended the group's whole comment paragraph a second time at the end of the file, alongside the one already in place.
 	- Fixed: a setting whose group is already partly present is put back beside its siblings, in the order the template lists them, with no comment block - those comments are already there. A group the file has never seen still arrives whole.
-	- Pinned by: `a_straggler_lands_beside_its_siblings_not_with_a_second_paragraph`.
+	- Pinned by: `a_straggler_goes_beside_its_siblings_not_with_a_second_paragraph`.
 	- Opened: n/a
 	- Closed: 20260802-000854
 
@@ -7893,7 +7893,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ✅ Switching the master off grays out every wallpaper row under it, the way the contrast-mask rows already followed their own checkbox.
 		- Pinned by: `a_profile_shows_its_values_in_its_rows`.
 	- ✅ `wallpaper_default` is now `wallpaper_fallback_builtin` and `wallpaper_fit` is now `wallpaper_default_fit`, matching what the Settings dialog calls them. Existing configs are renamed on the next launch.
-		- Pinned by: `legacy_config_converts_with_values_carried`.
+		- Pinned by: `legacy_config_converts_with_values_kept`.
 	- ✅ The wallpaper folder is `wallpaper/` beside the config now, not `wallpapers/`. The older spellings still work.
 		- Pinned by: `the_default_wallpaper_folder_is_found_in_the_usual_place`.
 	- ✅ A path in the config can start with `~`.
@@ -8135,7 +8135,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- CLI adds `--wallpaper-file/-stretch/-zoom/-opacity` with the old `--background-image*` kept as aliases; runtime `--wallpaper` and window `--background-opacity` (see-through, not the image) unchanged.
 		- Auto-detect now checks `wallpapers/wallpaper.{png,jpg,jpeg}` first, falling back to the legacy `backgrounds/background.*`.
 		- Settings-dialog labels deferred per the note.
-	- Pinned by: `wallpaper_never_eats_the_next_option`, `legacy_config_converts_with_values_carried` and `the_default_wallpaper_folder_is_found_in_the_usual_place`.
+	- Pinned by: `wallpaper_never_eats_the_next_option`, `legacy_config_converts_with_values_kept` and `the_default_wallpaper_folder_is_found_in_the_usual_place`.
 	- Opened: 20260719-085918
 	- Closed: 20260721-132454
 
@@ -8160,7 +8160,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- background53.jpg
 	- Done: background53.jpg (~100KB, negligible vs the ~13MB binary) is embedded via include_bytes and decoded as the wallpaper when no image and no rotation folder are configured. It runs through the same blur/contrast/opacity pipeline as a file wallpaper. New config key `background_default` (default true) opts out for a plain background-colored terminal.
 	- Note: this changes the look for anyone running with no wallpaper - fresh installs (and existing configs with no background_image/folder) now show the built-in one until they set `background_default = false`. Config-only for now (not in the Settings dialog, which is due for its big reorg); it backfills into existing configs as a commented default.
-	- Pinned by: `an_unreadable_image_still_lands_on_the_builtin` and `a_cleared_wallpaper_shows_nothing_with_or_without_a_folder`.
+	- Pinned by: `an_unreadable_image_still_falls_back_to_the_builtin` and `a_cleared_wallpaper_shows_nothing_with_or_without_a_folder`.
 	- Note: 20260930, the image was replaced later ("Wallpaper: change the default image baked into the executable"), and the key is `wallpaper.fallback_builtin`, which is in Settings.
 	- Opened: 20260719-085918
 	- Closed: 20260720-071134
@@ -8550,7 +8550,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - ✅ Whenever a program update adds or changes config file settings, update the existing toml file in-place. E.g. reorganize, add/remove/rename items, but preserve existing active user settings and values that remain. (20260701; reorder 20260702, branch cfgorder)
 	- ✅ `migrate_config` (runs before backfill on load): renames changed keys (value preserved), removes obsolete ones; `backfill_config` adds missing keys. Together: add/remove/rename + preserve, in-place, comments/layout kept.
 		- Note: a config with cursor_insert_shape/cursor_overwrite_shape/cursor_blink migrates correctly, and this auto-cleans the old invalid `cursor_blink = enable`.
-		- Pinned by: `a_renamed_setting_keeps_its_value_and_its_block`, `retired_scroll_knobs_are_removed_not_carried`, `migrate_config_noop_when_current` and `pipeline_convert_migrate_backfill_on_disk`.
+		- Pinned by: `a_renamed_setting_keeps_its_value_and_its_block`, `retired_scroll_knobs_are_removed_not_kept`, `migrate_config_noop_when_current` and `pipeline_convert_migrate_backfill_on_disk`.
 	- ✅ Literal reordering to match template order (20260702, branch cfgorder).
 		- `reorder_config` runs on load after migrate and backfill, rewriting an existing config into the template's canonical section order.
 		- Each setting keeps its value and its enabled/commented state, while the section headers and explanatory comments refresh from the current template.
@@ -8665,7 +8665,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Font settings:
 		- ✅ Add a sane set of fonts and fallbacks to the default "font family" setting, and make it an active setting in config. (20260701, decision #4)
 			- Done: a use_system_font bool (default true) follows the OS monospace, overriding an always-active comma-separated font_family fallback stack (first installed wins) plus size. A pre-existing explicit font migrates to use_system_font=false.
-			- Pinned by: `legacy_config_converts_with_values_carried`, `system_font_size_split_inference` and `mono_candidates_keep_one_order_on_every_platform`.
+			- Pinned by: `legacy_config_converts_with_values_kept`, `system_font_size_split_inference` and `mono_candidates_keep_one_order_on_every_platform`.
 		- ✅ If using the system-defined font, enable the checbox and disable the related font adjustements (but don't clear their values). (20260701)
 			- Done: the box opens checked when on the system font; Font family and Font size gray out but keep their values.
 			- User can un-check this later (or change the related config setting), to user the defined font settings instead.
@@ -8793,7 +8793,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- The reason it was MIT before, was due to the misunderstanding that derived works have to also be MIT. But that's not the case, MIT allows relicensing derived works.
 	- GNU General Public License v2.0 or later offers more protections, while being compatible with the Linux kernel and Darwin.
 		- Also, some included libraries are Apache, which is compatible with GPLv3 (and therefore GPLv2+), but not bare GPLv2.
-	- Pinned by: `every_source_file_carries_the_license_header`.
+	- Pinned by: `every_source_file_has_the_license_header`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -8813,7 +8813,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Using `tail -f` to monitor the log output of a running background process. Such output can go one line at a time randomly occasionally; then suddenly have a long sustained burst of high-speed output. And everything in-between. Scrolling should dynamically adjust to be smooth at slower output, and fast at faster output.
 	- ✅ Set default "Initial scroll speed" to 25.
 		- Done: the default is now speed 25 on the 1..100 scale, in both the code default and the config template.
-		- Pinned by: `retired_scroll_knobs_are_removed_not_carried`, since the setting was retired.
+		- Pinned by: `retired_scroll_knobs_are_removed_not_kept`, since the setting was retired.
 	- Note: 20260930, superseded. "Initial scroll speed" was retired on 20260804. The output chase's Ease-in and Ramp-up do its job now. See the [smooth scrolling design doc](design_docs/20260930-144720_smooth-scrolling.md).
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
@@ -8822,7 +8822,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Done: the default template is grouped consistently, each setting with its own comment, and settings that had been riding another group's comment are split into their own.
 		- Backfill knows about the groups now. A key put back takes its comment block with it, different groups stay separated by a blank line, and keys that belong together, such as columns and rows, stay together.
 		- Note: this only reaches freshly written or newly backfilled keys. Bare keys already in a file are not reformatted; regenerating the file is what gets the clean layout.
-	- Pinned by: `a_straggler_lands_beside_its_siblings_not_with_a_second_paragraph` and `backfill_puts_each_group_in_its_own_section`.
+	- Pinned by: `a_straggler_goes_beside_its_siblings_not_with_a_second_paragraph` and `backfill_puts_each_group_in_its_own_section`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
@@ -9081,26 +9081,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 - ✅ Menu content change: No tab or pane setting under the "File" menu. "Panes" can be it's own top-level menu item, between "Tabs" and "Help".
 	- Done. Menu bar is now File / Edit / View / Tabs / Panes / Help. File = Reload Config, Settings…, Quit (no tab/pane items). Tabs = New/Next/Previous/Close Tab. Panes (new, between Tabs and Help) = Split Vertical, Split Horizontal, Close Pane (moved out of View). View = Fullscreen, Hide window frame, Menu bar.
-	- Pinned by: `the_bar_reads_file_to_help_and_file_holds_no_tab_or_pane_action`.
+	- Pinned by: `the_bar_reads_file_to_help_and_file_has_no_tab_or_pane_action`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 
 - ✅ Right-click menu options (with logical grouping):
 	- ✅ Copy; selection -> CLIPBOARD
-		- Pinned by: `the_right_click_menu_carries_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Paste; CLIPBOARD -> pane (bracketed-aware)
 		- Pinned by: `a_bracketed_paste_cannot_be_closed_from_inside` and `a_pasted_line_break_arrives_the_way_enter_delivers_one`.
 	- ✅ Paste selection; PRIMARY -> pane
-		- Pinned by: `the_right_click_menu_carries_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Read-only (accept no input or interruption, but mouse selection and copy still work; toggle with checkmark)
 		- Pinned by: `a_read_only_pane_takes_nothing_the_user_sent`.
 	- ✅ New tab
 		- Done: "New Tab" on the right-click menu, the same action as the hotkey.
-		- Pinned by: `the_right_click_menu_carries_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Split vertical (already exists)
-		- Pinned by: `the_right_click_menu_carries_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Split horizontal (already exists)
-		- Pinned by: `the_right_click_menu_carries_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- ✅ Hide menu (toggle with checkmark)
 		- Done: View > "Menu bar" and the right-click menu both toggle it. Hidden, the content runs to the top edge, and the right-click menu brings it back.
 		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
@@ -9115,7 +9115,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pinned by: `every_view_toggle_is_checked_while_its_subject_is_on`.
 	- ✅ Settings
 		- Done: "Settings…" on the right-click menu opens the dialog, as does Ctrl+Comma. "Reload Config" beside it applies edits made to the file by hand.
-		- Pinned by: `the_right_click_menu_carries_the_pane_actions_and_their_checkmarks`.
+		- Pinned by: `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 	- Opened: 20260628-083740
 	- Closed: 20260629-214404
 

@@ -2637,7 +2637,7 @@ mod tests {
 	// back onto it.
 	// Test ID: EqQh9oO
 	#[test]
-	fn a_window_is_held_to_what_the_screen_can_hold_at_the_new_scale() {
+	fn a_window_is_capped_to_what_the_screen_can_fit_at_the_new_scale() {
 		// inside the caps: left exactly as it is, no resize asked for
 		assert_eq!(size_within_caps((800, 600), (1920.0, 1080.0)), (800, 600));
 		// taller than the screen now holds: pulled back, width untouched
