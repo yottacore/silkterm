@@ -273,7 +273,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: text.min_contrast
-		help: "Lighten text too dark to read on a dark background, and darken it on a light one. Text set to exactly the background color stays hidden. 0 leaves every color alone."
+		help: "Lighten text too dark to read on a dark background, and darken it on a light one. Light themes hold text a little further off. Text set to exactly the background color stays hidden. 0 leaves every color alone."
 
 	## Its own one-row group under the scrim: it works with the halo or without it.
 	Outline:

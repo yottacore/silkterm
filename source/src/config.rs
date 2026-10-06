@@ -178,10 +178,31 @@ pub const PANE_GAP_PX: f32 = 1.0;
 pub const DIVIDER_GRAB_PX: f32 = 5.0; // mouse tolerance for grabbing a pane divider
 pub const FOCUS_RING_PX: f32 = 2.0;
 pub const SETTLE_EPS: f32 = 0.002; // a settle threshold, not a measurement - never scaled
-/// Ceiling on `text.dark_on_light`. 1.0 is the sRGB blend the font was drawn for;
-/// the headroom above it is for taste, and past this the counters of small
-/// letters fill in.
+/// Ceiling on `text.dark_on_light`. 1.0 is the whole correction, an sRGB blend
+/// plus `DARK_ON_LIGHT_CONTRAST`; the headroom above it is for taste, and past
+/// this the counters of small letters fill in.
 pub const MAX_DARK_ON_LIGHT: f32 = 2.0;
+/// How far dark-on-light text's partly covered pixels are lifted ahead of that
+/// correction, so light mode's letters carry the ink dark mode's do. Set by
+/// measuring both modes over the same text in every built-in theme.
+pub const DARK_ON_LIGHT_CONTRAST: f32 = 2.2;
+
+/// A light theme's contrast floor over the one the setting names. Dark strokes on
+/// paper read thinner than light ones on black, so they get a little more room.
+pub const LIGHT_MIN_CONTRAST_STRETCH: f32 = 1.1;
+
+/// The contrast floor for text in `fg` over `bg` at the setting `floor`. Light
+/// themes, where the theme's text is darker than its background, are held to a
+/// little more. The side is read off linear luma, cheap enough to ask per cell.
+pub fn min_contrast_for(fg: [u8; 3], bg: [u8; 3], floor: f32) -> f32 {
+	let luma =
+		|c: [u8; 3]| 0.2126 * to_linear(c[0]) + 0.7152 * to_linear(c[1]) + 0.0722 * to_linear(c[2]);
+	if luma(fg) < luma(bg) {
+		(floor * LIGHT_MIN_CONTRAST_STRETCH).min(1.0)
+	} else {
+		floor
+	}
+}
 
 pub const DIVIDER: [u8; 3] = [0x2c, 0x2c, 0x36];
 
@@ -529,7 +550,7 @@ pub struct Settings {
 	pub text_scrim_softness: f32, // 0 = hard/solid scrim, 1 = soft/faint (maps to the intensity boost)
 	pub text_scrim_strength: f32, // 0..100% -> 0..5 doublings of the halo alpha (0 = as built)
 	pub text_outline: f32, // antialiased outline around glyphs, px (0 = none; scrim color rules)
-	pub text_dark_on_light: f32, // how much of the sRGB-blend correction dark-on-light text gets, 0..2 (0 = off, 1 = the blend)
+	pub text_dark_on_light: f32, // how much of the correction dark-on-light text gets, 0..2 (0 = off, 1 = as heavy as dark mode)
 	pub text_scrim_ramp: crate::scrim::Ramp, // halo falloff curve
 	pub text_scrim_function: crate::scrim::Function, // how the halo is built from the glyphs
 	pub text_scrim_regular_weight: bool, // blur bold text at regular weight (uniform halo; crisp text keeps its weight)
@@ -669,6 +690,12 @@ pub fn settings_clones() -> usize {
 }
 
 impl Settings {
+	/// The contrast floor text is held to, `text_min_contrast` in a dark theme and
+	/// a little more in a light one (`min_contrast_for`).
+	pub fn min_contrast(&self) -> f32 {
+		min_contrast_for(self.fg, self.bg, self.text_min_contrast)
+	}
+
 	/// The rotation folder, or None when either master switch is off. Both callers
 	/// (arming rotation, and the built-in fallback's "nothing is configured" test)
 	/// go through this so they cannot disagree - and it is derived rather than
@@ -7165,16 +7192,16 @@ text:
 	## How much of the correction text darker than its background gets.
 	## Partly covered pixels are blended in linear light, which costs dark text
 	## on a light background most of the ink at the edge of every stroke, so a
-	## light theme reads thin and pale. At 1.0 a letter carries the ink it was
-	## drawn with, the way almost every other program paints text; 0 turns the
-	## correction off. Above 1.0 it keeps going, for a display or a font where
-	## even that reads light - expect small letters to start closing up.
+	## light theme reads thin and pale. At 1.0 a letter carries as much ink as
+	## the same letter in a dark theme; 0 turns the correction off. Above 1.0
+	## it keeps going, for a display or a font where even that reads light -
+	## expect small letters to start closing up.
 	## Light themes only - light-on-dark text is left alone.
 	## Range: 0 to 2
 	# dark_on_light: 1.0  ## Default
 
 	## Brighten or darken text that is too close to its background color to
-	## read. 0 is off.
+	## read. Light themes hold text a tenth further off. 0 is off.
 	# min_contrast: 0.45  ## Default
 
 	# color_emoji: true  ## Default

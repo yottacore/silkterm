@@ -343,7 +343,7 @@ pub struct Derived {
 /// Text and cursor for this image under these settings. Pure, so the same
 /// wallpaper gives the same answer on any box and a test needs no pixels.
 pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
-	let floor = settings.text_min_contrast.clamp(0.0, 1.0);
+	let floor = settings.min_contrast().clamp(0.0, 1.0);
 	let (bg, fg, cursor) = (settings.bg, settings.fg, settings.cursor);
 	let mix = crate::visibility::wallpaper_mix(settings, sum.opacity, Some(sum.picture()));
 	let hi = gray_lightness(field_luma(sum, sum.luma_hi, bg, mix));
