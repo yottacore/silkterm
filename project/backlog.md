@@ -82,6 +82,49 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
 
+- Software rendering crashes on b23 with an X11 BadDrawable error
+	- ID: 2026100614510979
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs local test suite run?: No
+	- Needs external testing: On b23's own desktop, launch with "Always use software rendering" on and open Settings. Then turn it off and on again from Settings and close the dialog. The window draws each time and stays up, with no X error on the command line.
+	- Severity: High
+	- Opened: 20261006-145109
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225504
+	- Target OS: Linux
+	- Test environment: b23, X11
+	- Steps to reproduce:
+		- Run with software rendering on b23. Exact steps not known yet.
+	- Incorrect behavior: The program panics. Output on the command line:
+		~~~text
+		SilkTerm: renderer = llvmpipe (LLVM 19.1.7, 256 bits) [Vulkan / Cpu] alpha = premultiplied
+		[2026-10-06T20:35:24Z ERROR winit::platform_impl::linux] X11 error: XError {
+		        description: "BadDrawable (invalid Pixmap or Window parameter)",
+		        error_code: 9,
+		        request_code: 149,
+		        minor_code: 4,
+		    }
+		(the same error twice more)
+		thread 'main' (313787) panicked at /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.13/src/platform_impl/linux/x11/window.rs:1276:37:
+		Failed to call XResizeWindow: XError { description: "BadDrawable (invalid Pixmap or Window parameter)", error_code: 9, request_code: 149, minor_code: 4 }
+		~~~
+	- Expected behavior: Software rendering runs like the card does, only slower.
+	- Reproduced: Yes, at launch with the setting on and when it is turned on while running, with the same errors, on an X server that cannot make shared pixmaps as b23's cannot.
+	- Possible cause: Request 149 is DRI3 on b23's X server, and minor 4 is FenceFromFD, which lavapipe's X11 present path sends. So lavapipe presented to a window the server no longer knew. winit only reports a queued X error at its next checked call, so XResizeWindow got the blame. A window swapped or rebuilt under a live surface would fit.
+	- Actual cause: Mesa's software Vulkan presents on X11 through shared memory pixmaps whenever the server has DRI3, without asking whether the server can make them. b23's X server, on the NVIDIA driver, cannot. Each one is refused without a word, the fence made on it then fails, and winit dies at its next X call. Every software window and dialog was hit, so the launch and the switch failed alike.
+	- Actual fix: At launch on such a server, the program turns Mesa's shared memory path off (`MESA_VK_WSI_DEBUG=noshm`), so software frames reach the window as plain images. X11 only, and only when the server says it has no shared pixmaps. Shells started from SilkTerm inherit the variable, which keeps a software Vulkan program run there off the same crash.
+	- Note: The checks on 2026-10-04 passed because those X servers can make shared pixmaps.
+	- Sweep: every software device that draws to an X window.
+	- Swept: the main window at launch, after a switch and after an idle rebuild, the dialogs' kept context, and the one a dialog builds without it. All read the one process setting, which is in place before any of them exists. Windows and macOS have no such path.
+	- Branch: swcrash
+	- Commit: 7e50f19
+	- Test case: `cicd/tests/swnoshm/run.bash` (ErxxHzT), which fails on the old build at launch and on the switch and passes with the fix. Unit test `no_shared_pixmaps_turns_mesa_shm_off` (ErxxHvN).
+	- Verified: The window test both ways, the Linux unit tests, and clippy for Linux, Windows and macOS.
+	- Notes:
+		- Before RC1.
+
 - macOS: the program's own shortcuts still use Ctrl in places, where a Mac uses Command
 	- ID: 2026100219054469
 	- Type: Bug
@@ -276,49 +319,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
 	- Branch: maccmd
 	- Commit: 7179fa9
-
-- Software rendering crashes on b23 with an X11 BadDrawable error
-	- ID: 2026100614510979
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs local test suite run?: No
-	- Needs external testing: On b23's own desktop, launch with "Always use software rendering" on and open Settings. Then turn it off and on again from Settings and close the dialog. The window draws each time and stays up, with no X error on the command line.
-	- Severity: High
-	- Opened: 20261006-145109
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225504
-	- Target OS: Linux
-	- Test environment: b23, X11
-	- Steps to reproduce:
-		- Run with software rendering on b23. Exact steps not known yet.
-	- Incorrect behavior: The program panics. Output on the command line:
-		~~~text
-		SilkTerm: renderer = llvmpipe (LLVM 19.1.7, 256 bits) [Vulkan / Cpu] alpha = premultiplied
-		[2026-10-06T20:35:24Z ERROR winit::platform_impl::linux] X11 error: XError {
-		        description: "BadDrawable (invalid Pixmap or Window parameter)",
-		        error_code: 9,
-		        request_code: 149,
-		        minor_code: 4,
-		    }
-		(the same error twice more)
-		thread 'main' (313787) panicked at /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.13/src/platform_impl/linux/x11/window.rs:1276:37:
-		Failed to call XResizeWindow: XError { description: "BadDrawable (invalid Pixmap or Window parameter)", error_code: 9, request_code: 149, minor_code: 4 }
-		~~~
-	- Expected behavior: Software rendering runs like the card does, only slower.
-	- Reproduced: Yes, at launch with the setting on and when it is turned on while running, with the same errors, on an X server that cannot make shared pixmaps as b23's cannot.
-	- Possible cause: Request 149 is DRI3 on b23's X server, and minor 4 is FenceFromFD, which lavapipe's X11 present path sends. So lavapipe presented to a window the server no longer knew. winit only reports a queued X error at its next checked call, so XResizeWindow got the blame. A window swapped or rebuilt under a live surface would fit.
-	- Actual cause: Mesa's software Vulkan presents on X11 through shared memory pixmaps whenever the server has DRI3, without asking whether the server can make them. b23's X server, on the NVIDIA driver, cannot. Each one is refused without a word, the fence made on it then fails, and winit dies at its next X call. Every software window and dialog was hit, so the launch and the switch failed alike.
-	- Actual fix: At launch on such a server, the program turns Mesa's shared memory path off (`MESA_VK_WSI_DEBUG=noshm`), so software frames reach the window as plain images. X11 only, and only when the server says it has no shared pixmaps. Shells started from SilkTerm inherit the variable, which keeps a software Vulkan program run there off the same crash.
-	- Note: The checks on 2026-10-04 passed because those X servers can make shared pixmaps.
-	- Sweep: every software device that draws to an X window.
-	- Swept: the main window at launch, after a switch and after an idle rebuild, the dialogs' kept context, and the one a dialog builds without it. All read the one process setting, which is in place before any of them exists. Windows and macOS have no such path.
-	- Branch: swcrash
-	- Commit: 7e50f19
-	- Test case: `cicd/tests/swnoshm/run.bash` (ErxxHzT), which fails on the old build at launch and on the switch and passes with the fix. Unit test `no_shared_pixmaps_turns_mesa_shm_off` (ErxxHvN).
-	- Verified: The window test both ways, the Linux unit tests, and clippy for Linux, Windows and macOS.
-	- Notes:
-		- Before RC1.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
