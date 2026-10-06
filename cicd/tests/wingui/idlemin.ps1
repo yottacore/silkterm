@@ -1,7 +1,7 @@
-##	"Minutes when minimized" on a real Windows desktop, at its shipped 1 minute,
-##	with the other two waits left at theirs. Each arm, Transparency on and then
-##	off: a minimized window keeps its device for half a minute, lets it go
-##	within a minute and a quarter, and shows what it did once restored.
+##	"Minutes when hidden" on a minimized window on a real Windows desktop, at
+##	its shipped 1 minute. Each arm, Transparency on and then off: a minimized
+##	window keeps its device for half a minute, lets it go within a minute and
+##	a quarter, and shows what it did once restored.
 ##	Not in the pipeline: about three minutes, close to the harness limit.
 ##	Test ID: ErqPAvG
 
@@ -79,3 +79,4 @@ foreach ($arm in @("seethru", "opaque")) {
 
 ##	History:
 ##		- 20261005 JC: Created.
+##		- 20261005 JC: Minimized takes "Minutes when hidden" again, now 1 by default.

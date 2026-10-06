@@ -27,6 +27,7 @@
 	- [The Resource use group](#the-resource-use-group)
 - [Alternative ideas](#alternative-ideas)
 	- [Rejected](#rejected)
+	- [Superseded](#superseded)
 - [Research findings](#research-findings)
 - [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
@@ -45,7 +46,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 - The wallpaper is held at the size it is drawn at, and is prepared again in the background after the window is resized.
 
-- A minimized window lets go of the graphics card after 1 minute by default, on its own setting.
+- A minimized or covered window lets go of the graphics card after 1 minute by default.
 
 - "Always use software rendering" makes SilkTerm draw on the CPU. Off by default.
 
@@ -305,15 +306,13 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 ### A shorter wait for a minimized window
 
-- Today a minimized window and a covered one share "Minutes when hidden", 30 by default.
-
-- A minimized window gets its own wait, "Minutes when minimized", 1 by default. A covered window keeps the 30.
+- A minimized window and a covered one share "Minutes when hidden", now 1 by default. It was 30.
 
 - The cost is the way back. Taking the card back is about 25 ms on Linux, but 0.8 to 1.2 s on Windows with an RTX 2060. What a restored window shows on Windows in that second needs a look.
 
-- The release code knows only "hidden" today, which joins minimized, covered and a window with no size. Minimized has to be told apart.
+- The release code knows only "hidden", which joins minimized, covered and a window with no size. Wayland reports none of them, so a window there still waits "Minutes otherwise".
 
-- Built 2026-10-04. A window with no size counts as minimized, and so does one reported as both minimized and covered. Wayland reports neither, so a window there still waits "Minutes otherwise".
+- Built 2026-10-04 as a wait of its own for a minimized window, then taken back out on 2026-10-05 in favor of the shorter shared wait. See [Superseded](#superseded).
 
 ### Software rendering
 
@@ -367,6 +366,10 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 - One channel for the text coverage. glyphon writes each glyph's own color, so it would take a change to our glyphon branch to write white. It would save 3 more bytes a pixel. Not tried.
 
+### Superseded
+
+- A wait of its own for a minimized window, "Minutes when minimized", 1 by default, with a covered window keeping its 30. Built 2026-10-04 and taken out on 2026-10-05, when "Minutes when hidden" went to 1 for both. A config that has its line loses it on the next launch.
+
 ## Research findings
 
 - Block compression support, checked on b23 with Mesa 26.1.2:
@@ -385,7 +388,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 
 1. Measure.
 
-2. Shrink the scrim and hold the wallpaper at window size. Settle the dialogs' context. Give a minimized window its own short wait.
+2. Shrink the scrim and hold the wallpaper at window size. Settle the dialogs' context. Shorten the wait for a minimized window.
 
 3. "Always use software rendering" and the fallback on device failure.
 
@@ -406,6 +409,8 @@ What a window already gives back while unused is in the [Releasing resources](20
 - "The dialogs' kept GPU context costs every process about 52 MiB" (ID 2026100418225505)
 
 - "A minimized window lets go of the graphics card after its own short wait" (ID 2026100418354006)
+
+- "Drop "Minutes when minimized", and make "Minutes when hidden" 1 by default" (ID 2026100513581813)
 
 - "Settings: a Resource use group, with warning marks" (ID 2026100418225506)
 

@@ -781,6 +781,12 @@ rows:
 		setting: window.tab_max_width_pct
 		help: "How far a tab may grow past its regular width when its text needs the room."
 
+	NewTabNextToCurrent:
+		label: New tabs go next to current
+		kind: toggle
+		setting: window.new_tab_next_to_current
+		help: "Open a new tab just right of the one in front. Off puts it at the end."
+
 	Margin:
 		label: Margin px
 		kind: slider
@@ -795,15 +801,6 @@ rows:
 		setting: window.idle_release
 		help: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment the window is used again. Nothing running in the window is affected."
 
-	IdleMinimizedMin:
-		label: Minutes when minimized
-		kind: slider
-		range: 1, 1440
-		whole: true
-		indent: 1
-		setting: window.idle_release_minimized_min
-		help: "How long a minimized window waits. On Windows, taking the graphics card back on a restore can take about a second."
-
 	IdleHiddenMin:
 		label: Minutes when hidden
 		kind: slider
@@ -811,7 +808,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: window.idle_release_hidden_min
-		help: "How long a window covered by other windows waits."
+		help: "How long a minimized or covered window waits. On Windows, taking the graphics card back on a restore can take about a second."
 
 	IdleMin:
 		label: Minutes otherwise
@@ -1175,7 +1172,6 @@ gates:
 
 	FontFamily: !SystemFont
 
-	IdleMinimizedMin: IdleRelease
 	IdleHiddenMin: IdleRelease
 	IdleMin: IdleRelease
 	FontSize: !SystemFontSize
