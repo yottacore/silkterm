@@ -914,7 +914,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Code style: fixed choices are kept as strings, float codes and flags that must agree
 	- ID: 2026100314050011
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
+	- Needs local test suite run?: No. The full unit suite passed on the branch.
 	- Severity: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -926,7 +927,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- `Cli.hierarchical` always equals `!tabs.is_empty()`. The five info flags in `Cli` are one choice. `Content::About`'s `notice` always matches its `source`.
 	- Expected behavior: Enums with one exhaustive match, and state derived rather than stored twice. `Fit` and bgimage.rs already work this way.
 	- Origin: 20f2b413 (2026-08-04) and e4060188 (2026-07-01) for the settings, f9deff9 (2026-07-08) for the scrim codes, e79a250 (2026-08-05) for `is_dark_mode`. No earlier review item. Confirmed.
-	- Test case: Owed. Each enum's parse and key round trip, and the config fuzz.
+	- Actual fix:
+		- The five settings are enums: `scrim::Ramp`, `scrim::Function`, `pane::CursorAnimation`, `theme::Mode`, and the existing `profile::Profile`. Each spells its config word in one `key` match. The `config::Choice` trait gets parsing and the dialog index from that and from `ALL`, which is in the dialog's order.
+		- The words in the file are the same. An unknown word still reads as the default, and a save that does not change the setting leaves the word as written.
+		- `is_dark_mode` is gone. `Mode::is_dark` is a plain match with no string made.
+		- The scrim's ramp and function and the quad shader's six modes (`gfx::QuadMode`) are enums on the Rust side, with one place each that turns them into the number the shader reads. The dialog's quad scaling is an exhaustive match on the mode.
+		- `Cli::hierarchical()` reads the tab list. The five print-and-exit flags are one `Cli.info`, and help, syntax, about, donate, version is still the order that wins. A notice is known by its source.
+	- Note: Two hand-typed words now read one way everywhere. A theme mode in another case, such as `Light`, gave a light palette but dark dialogs and a Dark dialog row; it is light throughout now. An unknown cursor animation drew a still cursor that kept asking for frames, while the dialog showed Pulse vertical; it is Pulse vertical now, the default.
+	- Swept: every string match and compare of the five fields (config.rs, settings_ui.rs, app.rs, pane.rs, profile.rs, theme.rs, visibility.rs, autotheme.rs), every `params: [N, ...]` and `params[0]` test (app.rs, settings_ui.rs), the `function >= 2.5` and `< 0.5` tests in the scrim's `blur`, and every caller of `hierarchical`, the info flags and `notice` (app.rs, main.rs, dialog.rs). No script or doc names any of them. The other `String` settings are names, paths or free text. `Profile` keeps its own `parse`, case-insensitive with Max as the fallback, as before.
+	- Verified: 20261005. The full unit suite passes, and each new test fails with its mapping or rule broken. Clippy is clean for Linux, Windows, macOS and the profiling build. A 60 s soak of every fuzz target is clean. The window draws the same pixels as dev in all three modes, every scrim function and ramp, three profiles and two tabs.
+	- Branch: choices
+	- Commit: 7110468
+	- Test case: config.rs ErstaMt `every_fixed_choice_reads_and_writes_its_own_word` and Erstagk `a_config_with_each_fixed_choice_loads_and_saves_byte_identical`. settings_ui.rs ErstamD `each_choice_row_shows_and_sets_the_option_it_names`. scrim.rs Erstarj and Erstaxm check the codes against the shader's own branches, and gfx.rs Erstb2f does the same for the quad modes. cli.rs Erstb6Z and ErstbB0, dialog.rs ErstbFF.
+	- Acceptance signoff: Self-closed: the file's words are unchanged, each new test fails before and passes after, and nothing on screen moved.
+	- Closed: 20261005-200300
 	- Note: Code review 20261003 item 11.
 
 - Code style: bash scripts drift from the house conventions
