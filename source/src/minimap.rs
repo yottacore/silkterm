@@ -1209,7 +1209,7 @@ fn paint(
 		fg = bg;
 	}
 	Ink {
-		fg: readable.get(fg, bg, cfg.text_min_contrast),
+		fg: readable.get(fg, bg, cfg.min_contrast()),
 		bg,
 		own_bg: bg != cfg.bg,
 	}

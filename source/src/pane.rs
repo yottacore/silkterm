@@ -375,7 +375,7 @@ fn strip_cell(
 			fg[2] / 2 + fg[2] / 4,
 		];
 	}
-	fg = readable.get(fg, cell_bg, settings.text_min_contrast);
+	fg = readable.get(fg, cell_bg, settings.min_contrast());
 	StripCell {
 		c: cell.c,
 		fg,
@@ -739,7 +739,7 @@ fn link_at(
 	let fg = palette::readable(
 		palette::resolve(fg, colors, settings),
 		palette::resolve(bg, colors, settings),
-		settings.text_min_contrast,
+		settings.min_contrast(),
 	);
 	Some(LinkHit {
 		url,
@@ -2213,7 +2213,7 @@ impl Pane {
 				} else {
 					cell_bg
 				};
-				fg = self.readable.get(fg, behind, settings.text_min_contrast);
+				fg = self.readable.get(fg, behind, settings.min_contrast());
 				if bell > 0.0 {
 					fg = bell_brighten(fg, bell); // visual-bell flash
 				}
@@ -2981,7 +2981,7 @@ impl Pane {
 			settings.fg,
 			settings.bg,
 			cursor_rgb,
-			settings.text_min_contrast,
+			settings.min_contrast(),
 		);
 		let (w_frac, h_frac, alpha, pulsing_w, pulsing_h) =
 			cursor_envelope(anim, phase, cursor_geom, full);

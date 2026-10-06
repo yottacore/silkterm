@@ -160,7 +160,7 @@ Full design: [Text scrim](design_docs/20260930-145304_scrim.md).
 
 ### Themes and text color
 
-Four built-in themes, each a dark and a light palette, plus saved themes stored whole. A minimum contrast floor in Oklab moves text that is too close to its cell's background, the block cursor's plate has to carry the text on it, and dark text on a light background is corrected to the weight an sRGB blend would give. Full design: [Themes and text color](design_docs/20260930-150458_themes.md).
+Four built-in themes, each a dark and a light palette, plus saved themes stored whole. A minimum contrast floor in Oklab moves text that is too close to its cell's background, the block cursor's plate has to carry the text on it, and dark text on a light background is corrected to look as heavy as light text on dark. Full design: [Themes and text color](design_docs/20260930-150458_themes.md).
 
 ### Wallpaper
 

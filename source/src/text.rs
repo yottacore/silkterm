@@ -60,6 +60,11 @@ fn pin_mono_family(fs: &FontSystem) {
 /// pair's own brightness. A glyph in some other color takes the same curve, which
 /// is off by up to about 20 levels on its partly covered pixels and always in the
 /// direction of more ink.
+///
+/// The shader also lifts the partly covered pixels first, by
+/// `config::DARK_ON_LIGHT_CONTRAST`, since light on dark still looks heavier than
+/// dark on light at the same blend. A glyph lighter than the gray halfway between
+/// the pair, such as a menu label on dark chrome, gets neither.
 pub fn text_blend(fg: [u8; 3], bg: [u8; 3], amount: f32) -> (f32, f32, f32) {
 	let (fg_gray, bg_gray) = (gray_of(fg), gray_of(bg));
 	let on = crate::palette::to_oklab(fg).0 < crate::palette::to_oklab(bg).0;
@@ -494,7 +499,9 @@ impl TextGpu {
 		// "incompatible color attachments" on the first scrim frame. One Cache backs
 		// both atlases (it's built to serve multiple target formats).
 		let mut scrim_atlas = TextAtlas::new(device, queue, &cache, crate::scrim::TEXT_FMT);
-		let viewport = Viewport::new(device, &cache);
+		let mut viewport = Viewport::new(device, &cache);
+		// Acts only where `set_text_blend` turns the correction on.
+		viewport.set_text_contrast(queue, crate::config::DARK_ON_LIGHT_CONTRAST);
 		let renderer =
 			TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
 		let overlay =
@@ -897,7 +904,7 @@ impl TextCtx {
 		);
 	}
 
-	/// Set the coverage exponent for every renderer sharing this context. Cheap
+	/// Set the coverage correction for every renderer sharing this context. Cheap
 	/// per frame: the uniform is only rewritten when the value moves.
 	pub fn set_text_blend(&mut self, queue: &wgpu::Queue, blend: (f32, f32, f32)) {
 		self.gpu()
@@ -1175,6 +1182,56 @@ mod tests {
 		// a saturated pair still reads in the right order
 		let (fg, bg, _) = text_blend([0x07, 0x3d, 0x14], [0xe9, 0xee, 0xe9], 1.0);
 		assert!(fg < bg, "{fg} against {bg}");
+	}
+
+	// Ink a screen of text puts down, in sRGB levels as a share of the way from
+	// the background to the text, averaged over every coverage. Dark mode blends
+	// in linear light untouched; light mode goes through the shader's lift and
+	// sRGB match, mirrored here.
+	fn ink(fg: [u8; 3], bg: [u8; 3], contrast: f32) -> f32 {
+		let (fg_g, bg_g, amount) = text_blend(fg, bg, 1.0);
+		let (fg_l, bg_l) = (
+			crate::config::to_linear_f32(fg_g),
+			crate::config::to_linear_f32(bg_g),
+		);
+		let steps = 100;
+		let mut sum = 0.0;
+		for step in 0..steps {
+			let coverage = (step as f32 + 0.5) / steps as f32;
+			let alpha = if amount > 0.0 {
+				let lifted = coverage * (contrast + 1.0) / (coverage * contrast + 1.0);
+				let blended = lifted * fg_g + (1.0 - lifted) * bg_g;
+				(crate::config::to_linear_f32(blended) - bg_l) / (fg_l - bg_l)
+			} else {
+				coverage
+			};
+			let out = crate::config::from_linear(alpha * fg_l + (1.0 - alpha) * bg_l);
+			sum += (out - bg_g) / (fg_g - bg_g);
+		}
+		sum / steps as f32
+	}
+
+	// Light mode's text has to look as heavy as dark mode's, every built-in
+	// theme. With the sRGB match alone it put down about three quarters of the
+	// ink, which is what read as thin.
+	// Test ID: ErwcyUJ
+	#[test]
+	fn light_text_carries_the_ink_dark_text_does() {
+		for (name, t) in crate::theme::THEMES {
+			let dark = ink(t.dark.fg, t.dark.bg, crate::config::DARK_ON_LIGHT_CONTRAST);
+			let light = ink(
+				t.light.fg,
+				t.light.bg,
+				crate::config::DARK_ON_LIGHT_CONTRAST,
+			);
+			let ratio = light / dark;
+			assert!(
+				(0.95..=1.12).contains(&ratio),
+				"{name}: light mode puts down {ratio:.3} of dark mode's ink"
+			);
+			let plain = ink(t.light.fg, t.light.bg, 0.0) / dark;
+			assert!(plain < 0.85, "{name}: {plain:.3} with no lift");
+		}
 	}
 
 	// A monospace face routinely carries a double-width char at its ordinary

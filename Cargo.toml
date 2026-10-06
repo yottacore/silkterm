@@ -60,8 +60,11 @@ x11-clipboard = { git = "https://github.com/jim-collier/x11-clipboard", branch =
 # the params uniform, and bends coverage so the finished pixel lands where an
 # sRGB blend of that pair would have put it. That is the weight the font was
 # drawn for and what almost every other program paints; the output stays linear,
-# so the target is still encoded once. A blend of 0 leaves coverage alone. The
-# branch is the published 0.11.0 plus that change and its tests.
+# so the target is still encoded once. A blend of 0 leaves coverage alone. A
+# contrast amount lifts the partly covered pixels ahead of that, since even an
+# sRGB blend looks thinner than light text on dark, and a glyph lighter than the
+# pair's midpoint is left alone. The branch is the published 0.11.0 plus those
+# changes and their tests.
 #
 # `coverage-gamma-0.11.0` is the same work as an exponent, which was the wrong
 # curve: it smudged the faintest pixels and still left the stems pale. Left

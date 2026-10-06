@@ -450,9 +450,9 @@ mod tests {
 	// Test ID: EoTQgug
 	#[test]
 	fn a_theme_fg_clears_the_floor_and_ansi_black_does_not() {
-		let floor = crate::config::Settings::default().text_min_contrast;
 		for (name, t) in THEMES {
 			for pal in [t.dark, t.light] {
+				let floor = floor_of(&pal);
 				assert_eq!(
 					crate::palette::readable(pal.fg, pal.bg, floor),
 					pal.fg,
@@ -460,7 +460,7 @@ mod tests {
 				);
 			}
 			assert_ne!(
-				crate::palette::readable(t.dark.ansi[0], t.dark.bg, floor),
+				crate::palette::readable(t.dark.ansi[0], t.dark.bg, floor_of(&t.dark)),
 				t.dark.ansi[0],
 				"{name}: ansi black on a dark ground should be lifted"
 			);
@@ -488,6 +488,32 @@ mod tests {
 		}
 	}
 
+	// The floor the renderer holds this palette's text to at the shipped setting.
+	fn floor_of(pal: &Palette) -> f32 {
+		let floor = crate::config::Settings::default().text_min_contrast;
+		crate::config::min_contrast_for(pal.fg, pal.bg, floor)
+	}
+
+	// Light mode holds text a little further off its background than the
+	// setting says, dark mode exactly at it, and off stays off.
+	// Test ID: ErwdARW
+	#[test]
+	fn a_light_theme_holds_text_a_little_further_off() {
+		let floor = crate::config::Settings::default().text_min_contrast;
+		for (name, t) in THEMES {
+			assert_eq!(floor_of(&t.dark), floor, "{name} dark");
+			let light = floor_of(&t.light);
+			assert!(
+				light > floor + 0.02 && light < floor * 1.2,
+				"{name} light: {light} against {floor}"
+			);
+			assert_eq!(
+				crate::config::min_contrast_for(t.light.fg, t.light.bg, 0.0),
+				0.0
+			);
+		}
+	}
+
 	// The plate a theme's cursor draws over its background, at the alpha the
 	// renderer picks for that palette.
 	fn cursor_plate(pal: &Palette, floor: f32) -> [u8; 3] {
@@ -501,9 +527,9 @@ mod tests {
 	// Test ID: Eq9PYAL
 	#[test]
 	fn text_on_the_cursor_plate_clears_the_floor() {
-		let floor = crate::config::Settings::default().text_min_contrast;
 		for (name, t) in THEMES {
 			for (mode, pal) in [("dark", t.dark), ("light", t.light)] {
+				let floor = floor_of(&pal);
 				let plate = cursor_plate(&pal, floor);
 				assert_eq!(
 					crate::palette::readable(pal.fg, plate, floor),
@@ -520,11 +546,10 @@ mod tests {
 	// Test ID: ErJIAXF
 	#[test]
 	fn a_light_cursor_plate_stands_off_the_background_like_a_dark_one() {
-		let floor = crate::config::Settings::default().text_min_contrast;
 		let lightness = |c: [u8; 3]| crate::palette::to_oklab(c).0;
 		for (name, t) in THEMES {
 			let pal = t.light;
-			let gap = lightness(pal.bg) - lightness(cursor_plate(&pal, floor));
+			let gap = lightness(pal.bg) - lightness(cursor_plate(&pal, floor_of(&pal)));
 			assert!(
 				gap >= 0.24,
 				"{name} light: the cursor plate is only {gap:.3} off the background"
