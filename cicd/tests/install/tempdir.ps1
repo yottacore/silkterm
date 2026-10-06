@@ -1,24 +1,33 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose:
-##		install.ps1 makes its download folder under the shared temp folder. A name
-##		someone else can make first, or a step that takes over a folder already
-##		there, hands the download to whoever made it. This runs the installer's own
-##		lines for that step, lifted from the file: a new name each time, and a path
-##		that already exists is refused.
-##	- Syntax: tempdir.ps1 [-Installer <path to install.ps1>]
-##	- Exit: 0 when every check passed, 1 otherwise.
-##	- Test ID: EqBoTW4
-##	- History: At bottom of file.
+<#
+.SYNOPSIS
+	Check that install.ps1 makes its download folder safely.
+.DESCRIPTION
+	install.ps1 makes its download folder under the shared temp folder. A name
+	someone else can make first, or a step that takes over a folder already
+	there, hands the download to whoever made it. This runs the installer's own
+	lines for that step, lifted from the file: a new name each time, and a path
+	that already exists is refused.
+.PARAMETER Installer
+	Path to install.ps1. Default: the one in this repo.
+.NOTES
+	Exit: 0 when every check passed, 1 otherwise.
+	History: At bottom of file.
+#>
+
+##	Test ID: EqBoTW4
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+[CmdletBinding()]
 param(
 	[string]$Installer = (Join-Path $PSScriptRoot '../../../install.ps1')
+
 )
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 $failures = 0
 function fCheck([string]$What, [bool]$Ok) {
@@ -61,3 +70,4 @@ exit 0
 
 ##	History:
 ##		- 20260917 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest.

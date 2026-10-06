@@ -1,24 +1,33 @@
 #!/usr/bin/env pwsh
 
-##	- Purpose:
-##		Run install.ps1's own signature check, not a retyped command, against a
-##		throwaway key: a good signature passes, and a changed checksums file, a
-##		missing signature and another key's signature are each refused.
-##	- Self-contained (keys, signing and the checks all happen here), so the
-##		Windows pipeline runs it as well as the Linux one. Needs ssh-keygen.
-##	- Syntax: verify-sign.ps1 [-Installer <path to install.ps1>]
-##	- Exit: 0 when every check passed or ssh-keygen is missing, 1 otherwise.
-##	- Test ID: Eq9wAnY
-##	- History: At bottom of file.
+<#
+.SYNOPSIS
+	Check install.ps1's own signature check against a throwaway key.
+.DESCRIPTION
+	Runs the installer's check, not a retyped command: a good signature passes,
+	and a changed checksums file, a missing signature and another key's
+	signature are each refused.
+
+	Self-contained (keys, signing and the checks all happen here), so the
+	Windows pipeline runs it as well as the Linux one. Needs ssh-keygen.
+.PARAMETER Installer
+	Path to install.ps1. Default: the one in this repo.
+.NOTES
+	Exit: 0 when every check passed or ssh-keygen is missing, 1 otherwise.
+	History: At bottom of file.
+#>
+
+##	Test ID: Eq9wAnY
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+[CmdletBinding()]
 param(
 	[string]$Installer = (Join-Path $PSScriptRoot '../../../install.ps1')
 )
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../_testdir.ps1'); fTestDir_Use
 
@@ -101,7 +110,7 @@ try {
 		"`$onWindows = `$$(if ($PSVersionTable.PSVersion.Major -ge 6) { $IsWindows } else { $true })",
 		##	The installer fetches the signature over https. Here the release is a
 		##	folder, so the same call copies the file, or fails when it is missing.
-		'function Invoke-WebRequest { param($Uri, $OutFile, [switch]$UseBasicParsing) Copy-Item -LiteralPath $Uri -Destination $OutFile }',
+		'function Invoke-WebRequest { param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing) Copy-Item -LiteralPath $Uri -Destination $OutFile }',
 		(fLift 'fVerifySignature'),
 		(fLift 'fFail')
 	) -join "`n"
@@ -121,15 +130,15 @@ try {
 		else { Write-Host "  FAIL $What"; $script:failures++ }
 	}
 
-	fCheck 'install.ps1 accepts a signed checksums file' $true (fVerifies $good)
+	fCheck -What 'install.ps1 accepts a signed checksums file' -Want $true -Got (fVerifies $good)
 	$tampered = [System.Text.Encoding]::ASCII.GetBytes("fedcba9876543210  silkterm-0.0.0-test`n")
-	fCheck 'install.ps1 refuses a changed one' $false (fVerifies $tampered)
+	fCheck -What 'install.ps1 refuses a changed one' -Want $false -Got (fVerifies $tampered)
 
 	Remove-Item -LiteralPath $sig
-	fCheck 'install.ps1 refuses a release with no signature' $false (fVerifies $good)
+	fCheck -What 'install.ps1 refuses a release with no signature' -Want $false -Got (fVerifies $good)
 
 	fKeygen ('-Y sign -f "{0}" -n {1} "{2}"' -f $other, $namespace, $signed)
-	fCheck "install.ps1 refuses another key's signature" $false (fVerifies $good)
+	fCheck -What "install.ps1 refuses another key's signature" -Want $false -Got (fVerifies $good)
 
 	if ($failures) { Write-Host "$failures failed" } else { $rc = 0 }
 } finally {
@@ -140,3 +149,4 @@ exit $rc
 
 ##	History:
 ##		- 20260917 JC: Created.
+##		- 20261006 JC: Help block, StrictMode Latest, named arguments.
