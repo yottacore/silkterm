@@ -18,17 +18,19 @@ pub struct Palette {
 	pub bg: [u8; 3],
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],
-	/// Two attention colors, deliberately separate. `highlight` marks several
-	/// things at once - the live pane's ring, slider handles, revert icons, the
-	/// default button - so it stays calm. `focus` marks the ONE element the
-	/// keyboard is on, so it is the more vivid of the pair and sits well away
-	/// from `highlight` in hue.
+
+	// Two attention colors, deliberately separate. `highlight` marks several
+	// things at once - the live pane's ring, slider handles, revert icons, the
+	// default button - so it stays calm. `focus` marks the ONE element the
+	// keyboard is on, so it is the more vivid of the pair and sits well away
+	// from `highlight` in hue.
 	pub highlight: [u8; 3],
 	pub focus: [u8; 3],
-	/// Chrome: menu bar / dropdowns (menu_*) and pop-out dialogs (dialog_*). Every
-	/// built-in theme uses the SAME neutral defaults below (menu identical in both
-	/// modes, dialog lighter in Light mode) - a theme MAY override, and the
-	/// colors.menu_*/dialog_* keys tweak them per-user.
+
+	// Chrome: menu bar / dropdowns (menu_*) and pop-out dialogs (dialog_*). Every
+	// built-in theme uses the SAME neutral defaults below (menu identical in both
+	// modes, dialog lighter in Light mode) - a theme MAY override, and the
+	// colors.menu_*/dialog_* keys tweak them per-user.
 	pub menu_bg: [u8; 3],
 	pub menu_fg: [u8; 3],
 	pub dialog_bg: [u8; 3],
@@ -99,8 +101,8 @@ pub struct UserTheme {
 	pub light: Palette,
 }
 
-/// Shared chrome defaults (same for every theme). The menu keeps one neutral gray
-/// in both modes (unchanged look); the dialog panel is dark-gray / light-gray by mode.
+// Shared chrome defaults (same for every theme). The menu keeps one neutral gray
+// in both modes (unchanged look); the dialog panel is dark-gray / light-gray by mode.
 pub const MENU_BG_DEF: [u8; 3] = [0x36, 0x36, 0x3b];
 pub const MENU_FG_DEF: [u8; 3] = [0xf0, 0xf0, 0xf2];
 const DLG_BG_DARK: [u8; 3] = [0x20, 0x20, 0x2a];
@@ -348,15 +350,6 @@ impl crate::config::Choice for Mode {
 			Self::Light => "light",
 			Self::System => "system",
 		}
-	}
-
-	// The palette always read the mode this loosely, and the rest of the
-	// program reads it from here now.
-	fn parse(text: &str) -> Option<Self> {
-		Self::ALL
-			.iter()
-			.copied()
-			.find(|mode| mode.key().eq_ignore_ascii_case(text.trim()))
 	}
 }
 

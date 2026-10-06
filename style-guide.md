@@ -112,7 +112,7 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 
 ### Documentation
 
-- Document public items with `///`. A comment on anything declared `pub` is a `///` doc, never a plain `//`. A name that already says all there is to say needs no doc, since one would only repeat it.
+- Document public items with `///`. A comment on anything declared `pub` is a `///` doc, never a plain `//`. A name that already says all there is to say needs no doc, since one would only repeat it. A note that covers a group of items is a plain `//` right above the group, with a blank line above the note, since a `///` only belongs to the one item below it.
 
 - A file that opens with a comment about itself uses `//!` for it.
 

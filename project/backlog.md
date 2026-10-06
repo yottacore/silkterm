@@ -2676,6 +2676,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Note: Two hand-typed words now read one way everywhere. A theme mode in another case, such as `Light`, gave a light palette but dark dialogs and a Dark dialog row; it is light throughout now. An unknown cursor animation drew a still cursor that kept asking for frames, while the dialog showed Pulse vertical; it is Pulse vertical now, the default.
 	- Decisions:
 		- 20261006: An unknown cursor animation reading as the default is OK. The `Light` case was explained again and is open.
+		- 20261006: Our own words in the config never care about case, setting names included. Case counts only for text shown the way it was typed, like a tab title, and for paths on a system where case matters.
+	- Note: 20261006, all the fixed words read in any case now, not just the theme mode. The scrim ramp's old names and the wallpaper fit too. A block name typed with a capital, like `Window:`, loaded fine but got a second `window:` block added at launch, since the text side only knew lower case names. Fixed, test ErwTlu9.
 	- Swept: every string match and compare of the five fields (config.rs, settings_ui.rs, app.rs, pane.rs, profile.rs, theme.rs, visibility.rs, autotheme.rs), every `params: [N, ...]` and `params[0]` test (app.rs, settings_ui.rs), the `function >= 2.5` and `< 0.5` tests in the scrim's `blur`, and every caller of `hierarchical`, the info flags and `notice` (app.rs, main.rs, dialog.rs). No script or doc names any of them. The other `String` settings are names, paths or free text. `Profile` keeps its own `parse`, case-insensitive with Max as the fallback, as before.
 	- Verified: 20261005. The full unit suite passes, and each new test fails with its mapping or rule broken. Clippy is clean for Linux, Windows, macOS and the profiling build. A 60 s soak of every fuzz target is clean. The window draws the same pixels as dev in all three modes, every scrim function and ramp, three profiles and two tabs.
 	- Branch: choices
@@ -2701,6 +2703,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- The rule is about the form of a comment, not that one exists. A comment on anything declared `pub` is `///`, and a file's opening comment is `//!`. An item whose name says it all needs no doc, since one would only repeat the name. The style guide says so now.
 		- A note that covers a run of items, such as a group of colors, is a `///` on the first one. Its text reads the same in the source.
+		- 20261006: Changed. A note over a run of items is a plain `//` right above them, with a blank line above the note, since a `///` belongs only to the item right below it. rustfmt takes out a blank line between a comment and a struct field, so the note can't have one under it. 20 of them changed back, in config.rs, theme.rs, pane.rs, autotheme.rs, tip.rs and xmp.rs. The docs check lets a `//` through when the next line is another pub item with no comment of its own.
 		- Pub fields count too, since they are declared `pub` the same way. Enum variants and trailing `//` notes at a line's end are left as they are.
 		- `missing_docs` can't do this: on a bin crate it only asks for the crate's own doc.
 	- Actual fix:
