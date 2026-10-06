@@ -19,26 +19,26 @@
 ##	SPDX-License-Identifier: MIT
 set -euo pipefail
 
-new_display="${1:-}"
-if [[ -z "$new_display" ]]; then
+newDisplay="${1:-}"
+if [[ -z "$newDisplay" ]]; then
 	echo "usage: utility/rename.bash <NewDisplayName>" >&2
 	exit 1
 fi
-case "$new_display" in
+case "$newDisplay" in
 	*/* | *'&'* | *'\'*)
 		echo "error: name must not contain / & or backslash" >&2
 		exit 1
 		;;
 esac
 
-new_id="$(printf '%s' "$new_display" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
-if [[ -z "$new_id" ]]; then
-	echo "error: '$new_display' yields no usable lowercase identifier" >&2
+newId="$(printf '%s' "$newDisplay" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
+if [[ -z "$newId" ]]; then
+	echo "error: '$newDisplay' yields no usable lowercase identifier" >&2
 	exit 1
 fi
 
-old_display="SilkTerm"
-old_id="silkterm"
+oldDisplay="SilkTerm"
+oldId="silkterm"
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
@@ -54,11 +54,11 @@ files=()
 for f in "${candidates[@]}"; do
 	[[ -f "$f" ]] || continue
 	case "$f" in utility/rename.bash | Cargo.lock | */Cargo.lock) continue ;; esac
-	if grep -qI -e "$old_display" -e "$old_id" -- "$f" 2>/dev/null; then files+=("$f"); fi
+	if grep -qI -e "$oldDisplay" -e "$oldId" -- "$f" 2>/dev/null; then files+=("$f"); fi
 done
 
 for f in "${files[@]}"; do
-	sed -i "s/${old_display}/${new_display}/g; s/${old_id}/${new_id}/g" "$f"
+	sed -i "s/${oldDisplay}/${newDisplay}/g; s/${oldId}/${newId}/g" "$f"
 done
 
 # Paths carrying the id, deepest component first so a rename never invalidates
@@ -66,7 +66,7 @@ done
 # name: miss it and every Windows build of the renamed tree fails in build.rs.
 mapfile -t paths < <(
 	printf '%s\n' "${candidates[@]}" \
-		| awk -v id="$old_id" '
+		| awk -v id="$oldId" '
 			{
 				n = split($0, part, "/"); path = ""
 				for (i = 1; i <= n; i++) {
@@ -82,7 +82,7 @@ for p in "${paths[@]}"; do
 	[[ -e "$p" ]] || continue
 	base="$(basename "$p")"
 	parent="$(dirname "$p")"
-	new="${base//${old_id}/${new_id}}"
+	new="${base//${oldId}/${newId}}"
 	[[ "$parent" == "." ]] || new="${parent}/${new}"
 	[[ "$p" != "$new" ]] || continue
 	git mv "$p" "$new" 2>/dev/null || mv "$p" "$new"
@@ -90,8 +90,8 @@ for p in "${paths[@]}"; do
 done
 
 echo "Renamed:"
-echo "  display : ${old_display} -> ${new_display}"
-echo "  id      : ${old_id} -> ${new_id}"
+echo "  display : ${oldDisplay} -> ${newDisplay}"
+echo "  id      : ${oldId} -> ${newId}"
 echo "  in      : ${#files[@]} files"
 echo "  paths   : ${renamed} renamed"
 echo

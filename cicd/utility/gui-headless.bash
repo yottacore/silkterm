@@ -54,16 +54,16 @@ size="${CICD_HEADLESS_SIZE:-${RPD_HEADLESS_SIZE:-1920x1080x24}}"
 num="${display#:}"
 ## ${USER} is unset in a cron or ssh context, and `set -u` then reports this
 ## as "headless display failed to start".
-run_dir="/tmp/cicd-gui-headless-${USER:-$(id -un)}"
+runDir="/tmp/cicd-gui-headless-${USER:-$(id -un)}"
 ## The name is predictable, so somebody else can get there first. Refuse anything
 ## we do not own, and anything that is a link to somewhere else - the pid files
 ## under here are read and acted on, and the auth cookie is a key to the display.
-mkdir -p "$run_dir"
-if [[ -L "$run_dir" || ! -d "$run_dir" || ! -O "$run_dir" ]]; then
-	echo "${run_dir} is not ours; refusing to use it" >&2
+mkdir -p "$runDir"
+if [[ -L "$runDir" || ! -d "$runDir" || ! -O "$runDir" ]]; then
+	echo "${runDir} is not ours; refusing to use it" >&2
 	exit 1
 fi
-chmod 700 "$run_dir"
+chmod 700 "$runDir"
 
 ## Run something on our private display. Clearing the Wayland vars matters as much
 ## as setting DISPLAY: winit and GTK both prefer Wayland when they see it, so on a
@@ -73,51 +73,51 @@ chmod 700 "$run_dir"
 ## display, where it took the next run's screen.
 ## --bg is for a background job: it execs, so $! is the program itself. Without
 ## it $! was a subshell, and stop killed that and left the program running.
-onX(){ local how=""; [[ "${1:-}" == "--bg" ]] && { how="exec"; shift; }; ${how} env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE -u SESSION_MANAGER DISPLAY="$display" "$@"; }
+fOnX(){ local how=""; [[ "${1:-}" == "--bg" ]] && { how="exec"; shift; }; ${how} env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE -u SESSION_MANAGER DISPLAY="$display" "$@"; }
 
-xvfb_pid="$run_dir/xvfb-${num}.pid"
-wm_pid="$run_dir/wm-${num}.pid"
-apps_pids="$run_dir/apps-${num}.pids"
-auth="$run_dir/Xauthority-${num}"
+xvfbPid="$runDir/xvfb-${num}.pid"
+wmPid="$runDir/wm-${num}.pid"
+appsPids="$runDir/apps-${num}.pids"
+auth="$runDir/Xauthority-${num}"
 
-owner_file="$run_dir/owner-${num}"
-x_lock="/tmp/.X${num}-lock"
+ownerFile="$runDir/owner-${num}"
+xLock="/tmp/.X${num}-lock"
 
 ## A pid alone is not a process: a run killed before `stop` leaves its pid file,
 ## and the number can come back as anything. The start time from /proc goes with
 ## it, so a record names one process and no other.
-started_at() { local s; s="$(cat "/proc/$1/stat" 2>/dev/null)" || return 1; s="${s##*) }"; set -- $s; echo "${20}"; }
-record() { echo "$1 $(started_at "$1")"; }
-same() { local p t; read -r p t <<<"$1"; [[ -n "$t" && "$(started_at "$p" || true)" == "$t" ]]; }
-alive() { [[ -f "$1" ]] && same "$(cat "$1")"; }
-pid_of() { local p _; read -r p _ <"$1"; echo "$p"; }
+fStartedAt() { local s; s="$(cat "/proc/$1/stat" 2>/dev/null)" || return 1; s="${s##*) }"; set -- $s; echo "${20}"; }
+fRecord() { echo "$1 $(fStartedAt "$1")"; }
+fSame() { local p t; read -r p t <<<"$1"; [[ -n "$t" && "$(fStartedAt "$p" || true)" == "$t" ]]; }
+fAlive() { [[ -f "$1" ]] && fSame "$(cat "$1")"; }
+fPidOf() { local p _; read -r p _ <"$1"; echo "$p"; }
 ## Kill a recorded process and wait for it to go. A server still shutting down
 ## holds the lock, and a start right after a stop found the number taken.
-end_it() {
+fEndIt() {
 	local i
-	same "$1" || return 0
+	fSame "$1" || return 0
 	kill "${1%% *}" 2>/dev/null || true
-	for ((i = 0; i < 50; i++)); do same "$1" || return 0; sleep 0.1; done
+	for ((i = 0; i < 50; i++)); do fSame "$1" || return 0; sleep 0.1; done
 	kill -9 "${1%% *}" 2>/dev/null || true
 }
 
 ## Who is asking: the script that ran this one.
-me="$(record "$PPID")"
-owned_by_other() { [[ -f "$owner_file" ]] && [[ "$(cat "$owner_file")" != "$me" ]] && same "$(cat "$owner_file")"; }
+me="$(fRecord "$PPID")"
+fOwnedByOther() { [[ -f "$ownerFile" ]] && [[ "$(cat "$ownerFile")" != "$me" ]] && fSame "$(cat "$ownerFile")"; }
 
-start() {
+fStart() {
 	local fresh=""
-	if alive "$xvfb_pid"; then
-		if owned_by_other; then
-			echo "Xvfb on $display belongs to another run (pid $(pid_of "$owner_file")); not sharing it" >&2
+	if fAlive "$xvfbPid"; then
+		if fOwnedByOther; then
+			echo "Xvfb on $display belongs to another run (pid $(fPidOf "$ownerFile")); not sharing it" >&2
 			exit 1
 		fi
-		echo "$me" > "$owner_file"
-		echo "Xvfb already on $display (pid $(pid_of "$xvfb_pid"))"
+		echo "$me" > "$ownerFile"
+		echo "Xvfb already on $display (pid $(fPidOf "$xvfbPid"))"
 	else
 		## Another X server on this number would answer xdpyinfo in our place,
 		## while our own Xvfb quits at once.
-		local held; held="$(tr -dc '0-9' 2>/dev/null <"$x_lock" || true)"
+		local held; held="$(tr -dc '0-9' 2>/dev/null <"$xLock" || true)"
 		if [[ -n "$held" && -d "/proc/$held" ]]; then
 			echo "$display is taken by another X server (pid $held)" >&2
 			exit 1
@@ -125,46 +125,46 @@ start() {
 		## The cookie is a key to the display; the ambient umask left it readable.
 		(umask 077; : > "$auth")
 		Xvfb "$display" -screen 0 "$size" -nolisten tcp -auth "$auth" \
-			>"$run_dir/xvfb-${num}.log" 2>&1 &
+			>"$runDir/xvfb-${num}.log" 2>&1 &
 		local pid=$!
-		record "$pid" > "$xvfb_pid"
-		echo "$me" > "$owner_file"
+		fRecord "$pid" > "$xvfbPid"
+		echo "$me" > "$ownerFile"
 		## Up means ours is still running, holds the number, and takes connections.
 		local ok=""
 		for _ in $(seq 1 50); do
 			kill -0 "$pid" 2>/dev/null || break
-			if [[ "$(tr -dc '0-9' 2>/dev/null <"$x_lock" || true)" == "$pid" ]] \
+			if [[ "$(tr -dc '0-9' 2>/dev/null <"$xLock" || true)" == "$pid" ]] \
 				&& DISPLAY="$display" xdpyinfo >/dev/null 2>&1; then ok=1; break; fi
 			sleep 0.1
 		done
 		if [[ -z "$ok" ]]; then
 			kill "$pid" 2>/dev/null || true
-			rm -f "$xvfb_pid" "$owner_file"
-			echo "Xvfb did not come up on $display; see $run_dir/xvfb-${num}.log" >&2
+			rm -f "$xvfbPid" "$ownerFile"
+			echo "Xvfb did not come up on $display; see $runDir/xvfb-${num}.log" >&2
 			exit 1
 		fi
 		fresh=1
 		echo "Started Xvfb on $display (pid $pid, $size)"
 	fi
 	if [[ "${1:-}" == "--wm" ]]; then
-		if ! alive "$wm_pid"; then
-			onX --bg xfwm4 --compositor=off >"$run_dir/wm-${num}.log" 2>&1 &
-			record $! > "$wm_pid"
-			echo "Started xfwm4 on $display (pid $(pid_of "$wm_pid"))"
+		if ! fAlive "$wmPid"; then
+			fOnX --bg xfwm4 --compositor=off >"$runDir/wm-${num}.log" 2>&1 &
+			fRecord $! > "$wmPid"
+			echo "Started xfwm4 on $display (pid $(fPidOf "$wmPid"))"
 		fi
 		## xfwm4 is still setting up when the fork returns, and a caller that
 		## asks for the WM right away finds none (2026100512560044).
-		wm_wait || {
-			local why="did not come up within ${wm_wait_secs}s"
-			alive "$wm_pid" || why="exited"
-			echo "xfwm4 ${why} on $display; see $run_dir/wm-${num}.log" >&2
-			[[ -f "$wm_pid" ]] && end_it "$(cat "$wm_pid")"
-			rm -f "$wm_pid"
+		fWmWait || {
+			local why="did not come up within ${wmWaitSecs}s"
+			fAlive "$wmPid" || why="exited"
+			echo "xfwm4 ${why} on $display; see $runDir/wm-${num}.log" >&2
+			[[ -f "$wmPid" ]] && fEndIt "$(cat "$wmPid")"
+			rm -f "$wmPid"
 			## A display started just now would be left behind by a caller that
 			## only stops what it saw start.
 			if [[ -n "${fresh}" ]]; then
-				end_it "$(cat "$xvfb_pid")"
-				rm -f "$xvfb_pid" "$owner_file"
+				fEndIt "$(cat "$xvfbPid")"
+				rm -f "$xvfbPid" "$ownerFile"
 			fi
 			exit 1
 		}
@@ -172,69 +172,69 @@ start() {
 }
 
 ## Digits only: the value goes into arithmetic, which would run a $( ) in it.
-wm_wait_secs="${CICD_HEADLESS_WM_WAIT:-10}"
-[[ "$wm_wait_secs" =~ ^[0-9]+$ ]] || wm_wait_secs=10
+wmWaitSecs="${CICD_HEADLESS_WM_WAIT:-10}"
+[[ "$wmWaitSecs" =~ ^[0-9]+$ ]] || wmWaitSecs=10
 ## Up per EWMH: the root names a check window, and that window names itself.
 ## A WM that died leaves the root property behind, so the first half alone lies.
-wm_up() {
+fWmUp() {
 	local id self
-	id="$(onX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
+	id="$(fOnX xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
 	[[ "$id" == *"window id # "* ]] || return 1
 	id="${id##* }"
-	self="$(onX xprop -id "$id" _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
+	self="$(fOnX xprop -id "$id" _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
 	[[ "${self##* }" == "$id" ]]
 }
-wm_wait() {
+fWmWait() {
 	local i
-	for ((i = 0; i < wm_wait_secs * 10; i++)); do
-		alive "$wm_pid" || return 1
-		wm_up && return 0
+	for ((i = 0; i < wmWaitSecs * 10; i++)); do
+		fAlive "$wmPid" || return 1
+		fWmUp && return 0
 		sleep 0.1
 	done
 	return 1
 }
 
-launch() {
+fLaunch() {
 	[[ $# -gt 0 ]] || { echo "usage: launch <cmd...>" >&2; exit 2; }
-	alive "$xvfb_pid" || start
-	onX --bg "$@" >"$run_dir/app-${num}.log" 2>&1 &
-	record $! >> "$apps_pids"
-	echo "Launched on $display (pid $!); log: $run_dir/app-${num}.log"
+	fAlive "$xvfbPid" || fStart
+	fOnX --bg "$@" >"$runDir/app-${num}.log" 2>&1 &
+	fRecord $! >> "$appsPids"
+	echo "Launched on $display (pid $!); log: $runDir/app-${num}.log"
 }
 
-shot() {
+fShot() {
 	local out="${1:-}"
 	[[ -n "$out" ]] || { echo "usage: shot <out.png>" >&2; exit 2; }
-	alive "$xvfb_pid" || { echo "no Xvfb on $display - run 'start' first" >&2; exit 1; }
+	fAlive "$xvfbPid" || { echo "no Xvfb on $display - run 'start' first" >&2; exit 1; }
 	import -display "$display" -window root "$out"
 	echo "Wrote $out"
 }
 
-stop() {
-	if alive "$xvfb_pid" && owned_by_other; then
-		echo "Xvfb on $display belongs to another run (pid $(pid_of "$owner_file")); leaving it" >&2
+fStop() {
+	if fAlive "$xvfbPid" && fOwnedByOther; then
+		echo "Xvfb on $display belongs to another run (pid $(fPidOf "$ownerFile")); leaving it" >&2
 		return 1
 	fi
 	local line
-	if [[ -f "$apps_pids" ]]; then
-		while read -r line; do end_it "$line"; done < "$apps_pids"
-		rm -f "$apps_pids"
+	if [[ -f "$appsPids" ]]; then
+		while read -r line; do fEndIt "$line"; done < "$appsPids"
+		rm -f "$appsPids"
 	fi
-	for f in "$wm_pid" "$xvfb_pid"; do
+	for f in "$wmPid" "$xvfbPid"; do
 		[[ -f "$f" ]] || continue
-		end_it "$(cat "$f")"
+		fEndIt "$(cat "$f")"
 		rm -f "$f"
 	done
-	rm -f "$owner_file"
+	rm -f "$ownerFile"
 	echo "Stopped headless session on $display"
 }
 
 case "${1:-}" in
-	start)  shift; start "${1:-}" ;;
-	launch) shift; launch "$@" ;;
-	shot)   shift; shot "${1:-}" ;;
-	status) alive "$xvfb_pid" && echo "Xvfb up on $display (pid $(pid_of "$xvfb_pid"))" || echo "no Xvfb on $display" ;;
-	stop)   stop ;;
+	start)  shift; fStart "${1:-}" ;;
+	launch) shift; fLaunch "$@" ;;
+	shot)   shift; fShot "${1:-}" ;;
+	status) fAlive "$xvfbPid" && echo "Xvfb up on $display (pid $(fPidOf "$xvfbPid"))" || echo "no Xvfb on $display" ;;
+	stop)   fStop ;;
 	*) echo "usage: gui-headless.bash {start [--wm]|launch <cmd...>|shot <out.png>|status|stop}" >&2; exit 2 ;;
 esac
 
