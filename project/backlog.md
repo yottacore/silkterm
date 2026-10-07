@@ -583,7 +583,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: Verified: the 1186 unit tests pass, with the same test names and IDs. fmt, clippy for Linux, Windows and macOS, and the test ID, docs, tables and TOC checks pass. The read-only check fails when a file under `app/` writes to the terminal directly. A launch opens, takes typing, opens a new tab, renames and closes it, draws the menus, opens Settings and quits from the menu.
 	- Origin: c6eaa04 (2026-06-28), grown since. No earlier review item. Plausible.
 	- Branch: uisplit, appsplit
-	- Commit: 21ad437, c632770, 931d3cd, 7d8ccbe
+	- Commit: 21ad437, c632770, 931d3cd, 7d8ccbe, 8ab54a6
 	- Test case: The existing tests. Behavior does not change.
 	- Acceptance signoff: Self-closed: the code moved unchanged, and the tests and checks pass.
 	- Decisions:
