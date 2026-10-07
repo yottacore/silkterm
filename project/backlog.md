@@ -221,34 +221,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- Windows: a Git Bash tab keeps its starting folder in the title after a `cd`
-	- ID: 2026100709325306
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20261007-093253
-	- Opened by: CC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w
-	- Steps to reproduce:
-		- Open a Git Bash pane, with the git prompt on.
-		- `cd` into another folder.
-	- Incorrect behavior: the tab and window title still name the folder the pane started in.
-	- Expected behavior: the title follows the shell's folder, as it does for the other shells.
-	- Reproduced: once, 20261007 on vm925w at 107b8e6. Not tried with the git prompt off.
-		- 20261007 on vm925w with the 46a2193 build, every time. Git prompt on: the title kept the start folder and also showed `[bash]` as a running command. Git prompt off: the window title followed, but only because Git's own prompt sets a title with its path.
-	- Possible cause: a bash pane sends no directory report, so the title comes from the process's own folder, which Git Bash may not move on a `cd`. The pane's prompt sent no report before the 20261006 prompt change either.
-	- Actual cause: not the report. Git Bash and MSYS2 bash both move their own process folder on a `cd`. Git's `bin\bash.exe` is a launcher, though: it starts `usr\bin\bash.exe` as its child and waits. The pane kept the launcher's process, which never moves, and whose child read as a command that never ends.
-	- Actual fix: on Windows a pane started from Git's `bin\bash.exe` or `bin\sh.exe` is read through the real shell, the launcher's child of the same name started within a few seconds of it. Its folder and its commands are what the title and copy-output now see. A launcher is told by its layout, a `usr\bin` copy of the same program one level up.
-	- Swept: MSYS2 bash is no launcher and its folder moves (seen on vm925w). Git's `bin\sh.exe` has the same launcher and is covered. Cygwin bash has no `usr\bin` copy, so it is left alone; not installed on vm925w, so not run. WSL is not a launcher and is unchanged: `wsl.exe` never moves, so its title follows only a shell inside that reports where it is. Linux and macOS bash read `/proc` or `proc_pidinfo`, and the new code is Windows only.
-	- Verified: 20261007 on vm925w. The new unit test failed with the fix taken out (the folder stayed at the start folder) and passes with it. The window test failed on the 46a2193 build with the git prompt on and passes on the branch build, prompt off and on. The full Windows unit suite passed. Clippy is clean for Linux and Windows, and the term tests pass on b23.
-	- Branch: gbtitle
-	- Commit: c24cc57, 70fab8b, dc2842b
-	- Test case: `a_git_bash_pane_is_read_past_its_launcher` (Es2dAll), `only_the_git_for_windows_layout_is_a_launcher` (Es2dB6L), window test `cicd/tests/wingui/gbtitle.ps1` (Es2etJZ), now in the GUI test list.
-	- Acceptance signoff: Self-closed: reproduced, tests failed before and pass after, and the title does what the item expects.
-	- Closed: 20261007-114831
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -1156,6 +1128,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- Windows: a Git Bash tab keeps its starting folder in the title after a `cd`
+	- ID: 2026100709325306
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261007-093253
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w
+	- Steps to reproduce:
+		- Open a Git Bash pane, with the git prompt on.
+		- `cd` into another folder.
+	- Incorrect behavior: the tab and window title still name the folder the pane started in.
+	- Expected behavior: the title follows the shell's folder, as it does for the other shells.
+	- Reproduced: once, 20261007 on vm925w at 107b8e6. Not tried with the git prompt off.
+		- 20261007 on vm925w with the 46a2193 build, every time. Git prompt on: the title kept the start folder and also showed `[bash]` as a running command. Git prompt off: the window title followed, but only because Git's own prompt sets a title with its path.
+	- Possible cause: a bash pane sends no directory report, so the title comes from the process's own folder, which Git Bash may not move on a `cd`. The pane's prompt sent no report before the 20261006 prompt change either.
+	- Actual cause: not the report. Git Bash and MSYS2 bash both move their own process folder on a `cd`. Git's `bin\bash.exe` is a launcher, though: it starts `usr\bin\bash.exe` as its child and waits. The pane kept the launcher's process, which never moves, and whose child read as a command that never ends.
+	- Actual fix: on Windows a pane started from Git's `bin\bash.exe` or `bin\sh.exe` is read through the real shell, the launcher's child of the same name started within a few seconds of it. Its folder and its commands are what the title and copy-output now see. A launcher is told by its layout, a `usr\bin` copy of the same program one level up.
+	- Swept: MSYS2 bash is no launcher and its folder moves (seen on vm925w). Git's `bin\sh.exe` has the same launcher and is covered. Cygwin bash has no `usr\bin` copy, so it is left alone; not installed on vm925w, so not run. WSL is not a launcher and is unchanged: `wsl.exe` never moves, so its title follows only a shell inside that reports where it is. Linux and macOS bash read `/proc` or `proc_pidinfo`, and the new code is Windows only.
+	- Verified: 20261007 on vm925w. The new unit test failed with the fix taken out (the folder stayed at the start folder) and passes with it. The window test failed on the 46a2193 build with the git prompt on and passes on the branch build, prompt off and on. The full Windows unit suite passed. Clippy is clean for Linux and Windows, and the term tests pass on b23.
+	- Branch: gbtitle
+	- Commit: c24cc57, 70fab8b, dc2842b
+	- Test case: `a_git_bash_pane_is_read_past_its_launcher` (Es2dAll), `only_the_git_for_windows_layout_is_a_launcher` (Es2dB6L), window test `cicd/tests/wingui/gbtitle.ps1` (Es2etJZ), now in the GUI test list.
+	- Acceptance signoff: Self-closed: reproduced, tests failed before and pass after, and the title does what the item expects.
+	- Closed: 20261007-114831
 
 - macOS: a double-click on a word after a link selects from the link's start
 	- ID: 2026100709325308
