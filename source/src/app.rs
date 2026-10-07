@@ -5790,6 +5790,7 @@ impl State {
 				cleared,
 				window: self.surface_px,
 				summary,
+				kept: config::cache_dir().map(|dir| dir.join("wallpaper")),
 			},
 		);
 	}

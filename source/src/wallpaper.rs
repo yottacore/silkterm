@@ -22,6 +22,7 @@ use winit::event_loop::EventLoopProxy;
 
 use crate::config::{self, Fit, Settings};
 use crate::term::UserEvent;
+use crate::wpcache;
 
 // A built-in wallpaper baked into the binary, shown when the user has none
 // configured (wallpaper_fallback_builtin). ~100KB - negligible next to the binary.
@@ -60,6 +61,8 @@ pub struct Request {
 	/// size. Its summary is kept, so the derived text colors don't move by a
 	/// rounding error each time the window is resized.
 	pub summary: Option<crate::autotheme::Summary>,
+	/// The folder prepared copies are kept in (`wpcache`), or None to keep none.
+	pub kept: Option<PathBuf>,
 }
 
 impl Request {
@@ -124,6 +127,9 @@ pub struct Prepared {
 	/// here because this is where the finished pixels are, and it is six numbers
 	/// rather than a copy of them.
 	pub summary: crate::autotheme::Summary,
+	/// The size asked for. A kept copy a little off it stands in for it, so
+	/// `rgba` may be a few pixels bigger or smaller.
+	pub held: (u32, u32),
 }
 
 /// What a scan found. Absent when the request didn't scan, or when the folder
@@ -142,6 +148,9 @@ pub struct Loaded {
 	pub standin: Option<Prepared>,
 	pub rotation: Option<Rotation>,
 	pub scanned: bool,
+	/// Set when `image` was prepared from the original and should be kept.
+	/// Taken off before the result is sent.
+	pub keep: Option<wpcache::Key>,
 }
 
 // The long edge of the stand-in. A 2560x1440 picture keeps 160x90, 56 KiB.
@@ -162,6 +171,7 @@ impl Prepared {
 			fit: self.fit,
 			anchor: self.anchor,
 			summary: self.summary,
+			held: self.held,
 		}
 	}
 }
@@ -223,14 +233,29 @@ pub fn spawn(proxy: &EventLoopProxy<UserEvent>, request: Request) {
 	let spawned = std::thread::Builder::new()
 		.name("wallpaper".into())
 		.spawn(move || {
-			let loaded = run(&request);
-			let _ = proxy.send_event(UserEvent::WallpaperReady(Box::new(loaded)));
+			answer(&request, |loaded| {
+				let _ = proxy.send_event(UserEvent::WallpaperReady(Box::new(loaded)));
+			});
 		});
 	if let Err(e) = spawned {
 		eprintln!(
 			"{}: could not start wallpaper loader: {e}",
 			config::APP_NAME
 		);
+	}
+}
+
+// A copy is kept after the result is sent, since the encode is a tenth of a
+// second at 2560x1440 and nothing on screen waits for it.
+fn answer(request: &Request, send: impl FnOnce(Loaded)) {
+	let mut loaded = run(request);
+	let keep = loaded.keep.take().and_then(|key| {
+		let image = loaded.image.as_ref()?;
+		Some((key, image.rgba.clone(), image.summary))
+	});
+	send(loaded);
+	if let (Some((key, rgba, summary)), Some(dir)) = (keep, &request.kept) {
+		keep_copy(dir, &key, &rgba, &summary);
 	}
 }
 
@@ -259,17 +284,23 @@ fn run(request: &Request) -> Loaded {
 	} else {
 		settings.rotation_folder().is_some()
 	};
-	let image = (settings.wallpaper_enabled && !request.cleared)
+	let prepared = (settings.wallpaper_enabled && !request.cleared)
 		.then(|| {
 			let hold = Hold {
 				window: request.window,
 				summary: request.summary,
 			};
-			prepare(settings, path.as_deref(), folder_active, hold, &|| {
-				request.stale()
-			})
+			prepare_keeping(
+				settings,
+				path.as_deref(),
+				folder_active,
+				hold,
+				&|| request.stale(),
+				request.kept.as_deref(),
+			)
 		})
 		.flatten();
+	let (image, keep) = prepared.map_or((None, None), |(image, keep)| (Some(image), keep));
 	let standin = image.as_ref().map(Prepared::standin);
 	Loaded {
 		seq: request.seq,
@@ -277,6 +308,7 @@ fn run(request: &Request) -> Loaded {
 		standin,
 		rotation,
 		scanned: request.scan,
+		keep,
 	}
 }
 
@@ -384,71 +416,200 @@ struct Hold {
 	summary: Option<crate::autotheme::Summary>,
 }
 
+// Where the pixels come from, settled before anything is decoded so a kept
+// copy can be looked for first.
+#[derive(Debug, Clone, Copy)]
+enum Origin<'a> {
+	File(&'a Path),
+	Builtin,
+}
+
+// The look values for this image: its own tags when they are honored, else
+// the settings'. In the settings' units, so in pixels of the full image.
+fn look(settings: &Settings, tags: &crate::xmp::Tags) -> (f32, f32) {
+	if settings.wallpaper_honor_xmp_look {
+		return (
+			tags.opacity.unwrap_or(settings.wallpaper_opacity),
+			tags.blur.unwrap_or(settings.wallpaper_blur),
+		);
+	}
+	(settings.wallpaper_opacity, settings.wallpaper_blur)
+}
+
+// A photo isn't squashed by a default that suits gradients.
+fn layout(settings: &Settings, tags: &crate::xmp::Tags) -> (Fit, [f32; 2]) {
+	let mut fit = settings.wallpaper_default_fit;
+	let mut anchor = [0.5, 0.5];
+	if settings.wallpaper_honor_xmp {
+		if let Some(tagged) = tags.fit {
+			fit = tagged;
+		}
+		if let Some(tagged) = tags.anchor {
+			anchor = tagged;
+		}
+	}
+	(fit, anchor)
+}
+
+// The blur's sigma in held pixels. The blur asserts on a sigma that is not a
+// normal float, and a panic here takes every shell down with it. 1e-40 is
+// inside the config's range.
+fn held_blur(blur: f32, scale: f32) -> f32 {
+	let blur = blur * scale;
+	if blur.is_normal() { blur } else { 0.0 }
+}
+
+// The key for a kept copy of this picture, and its size, read from the file's
+// header rather than a decode. Everything `prepare_keeping` reads that changes
+// the stored pixels goes in, bar the held size, which names the copy. Light or dark
+// mode is not one of them: that is applied when the picture is drawn (G116).
+fn kept_key(
+	settings: &Settings,
+	origin: Origin,
+	tags: &crate::xmp::Tags,
+) -> Option<(wpcache::Key, Sizing)> {
+	let mut key = wpcache::Key::default();
+	let (w, h) = match origin {
+		Origin::File(path) => {
+			key.push_file(path)?;
+			image::image_dimensions(path).ok()?
+		}
+		Origin::Builtin => {
+			key.push_bytes(b"built-in");
+			key.push_hash(DEFAULT_BACKGROUND);
+			image::ImageReader::new(std::io::Cursor::new(DEFAULT_BACKGROUND))
+				.with_guessed_format()
+				.ok()?
+				.into_dimensions()
+				.ok()?
+		}
+	};
+	let sizing = Sizing {
+		full: fit_within(w, h, MAX_EDGE).unwrap_or((w, h)),
+	};
+	key.push_number(u64::from(sizing.full.0));
+	key.push_number(u64::from(sizing.full.1));
+	key.push_float(look(settings, tags).1);
+	key.push_number(u64::from(settings.wallpaper_contrast_mask));
+	if settings.wallpaper_contrast_mask {
+		key.push_float(settings.wallpaper_contrast_mask_size);
+		key.push_float(settings.wallpaper_contrast_mask_strength);
+		key.push_float(settings.wallpaper_contrast_mask_auto);
+	}
+	Some((key, sizing))
+}
+
+// Whether `prepare` does more than decode and cut. Only then is a kept copy
+// worth reading, and only then is one made.
+fn works(settings: &Settings, sizing: Sizing, held: (u32, u32), blur: f32) -> bool {
+	let scale = held.0 as f32 / sizing.full.0.max(1) as f32;
+	held_blur(blur, scale) > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full
+}
+
 // Decode the wallpaper and apply everything that is fixed at load time (blur,
 // contrast mask, the image's own layout tags), at the size the window draws it.
 // `folder_active` suppresses the built-in stand-in where no path was given at
 // all, since rotation is about to supply one; a path that fails to open still
 // falls back to it. `stale` is asked before each stage, and answers None once
-// the request has been superseded.
-fn prepare(
+// the request has been superseded. With `kept` set, a copy kept there is used
+// when one is near the size, and otherwise the key to keep this one under
+// comes back with it. A change to the pixels this makes needs `wpcache`'s
+// FORMAT bumped, or kept copies go on showing the old look.
+fn prepare_keeping(
 	settings: &Settings,
 	path: Option<&Path>,
 	folder_active: bool,
 	hold: Hold,
 	stale: &dyn Fn() -> bool,
-) -> Option<Prepared> {
+	kept: Option<&Path>,
+) -> Option<(Prepared, Option<wpcache::Key>)> {
 	if stale() {
 		return None;
 	}
-	let mut source = None;
-	let decoded = match path {
-		Some(path) => match image::open(path) {
-			Ok(loaded) => {
-				source = Some(path);
-				loaded
+	let origin = match path {
+		Some(path) => Origin::File(path),
+		// No image or rotation folder configured: fall back to the embedded
+		// default so a fresh install still looks the part. Opt out with
+		// wallpaper_fallback_builtin.
+		None if folder_active || !settings.wallpaper_fallback_builtin => return None,
+		None => Origin::Builtin,
+	};
+	// The image's own tags: layout, and the two look values. The embedded
+	// default wallpaper has no path, and keeps the configured values.
+	let mut tags = match origin {
+		Origin::File(path) if settings.wallpaper_honor_xmp || settings.wallpaper_honor_xmp_look => {
+			crate::xmp::read(path)
+		}
+		_ => crate::xmp::Tags::default(),
+	};
+	let mut keep = None;
+	if let Some((dir, (key, sizing))) =
+		kept.and_then(|dir| Some((dir, kept_key(settings, origin, &tags)?)))
+	{
+		let held = sizing.held(hold.window);
+		let (opacity, blur) = look(settings, &tags);
+		if works(settings, sizing, held, blur) {
+			if let Some(copy) = wpcache::find(dir, &key, held) {
+				memdbg(&format!(
+					"used {}x{} for {}x{}",
+					copy.rgba.width(),
+					copy.rgba.height(),
+					held.0,
+					held.1
+				));
+				let (fit, anchor) = layout(settings, &tags);
+				let summary = hold.summary.unwrap_or(crate::autotheme::Summary {
+					opacity: opacity.clamp(0.0, 1.0),
+					..copy.summary
+				});
+				let image = Prepared {
+					rgba: copy.rgba,
+					sizing,
+					opacity,
+					fit,
+					anchor,
+					summary,
+					held,
+				};
+				return Some((image, None));
 			}
+			keep = Some((key, sizing));
+		}
+	}
+	let decoded = match origin {
+		Origin::File(path) => match image::open(path) {
+			Ok(loaded) => loaded,
 			Err(e) => {
 				eprintln!(
 					"{}: background image {}: {e}",
 					config::APP_NAME,
 					path.display()
 				);
-				// A file that won't open supplies nothing, folder or not.
+				// A file that won't open supplies nothing, folder or not, and
+				// neither its tags nor its key belong to the built-in.
+				tags = crate::xmp::Tags::default();
+				keep = None;
 				builtin(settings)?
 			}
 		},
-		// No image or rotation folder configured: fall back to the embedded default
-		// so a fresh install still looks the part. Opt out with wallpaper_fallback_builtin.
-		None => (!folder_active).then(|| builtin(settings)).flatten()?,
+		Origin::Builtin => builtin(settings)?,
 	};
-	// The image's own tags: layout, and the two look values. Read straight from
-	// the file the pixels came from - the embedded default wallpaper has no
-	// path, and keeps the configured values.
-	let tags = source
-		.filter(|_| settings.wallpaper_honor_xmp || settings.wallpaper_honor_xmp_look)
-		.map_or_else(crate::xmp::Tags::default, crate::xmp::read);
 	let sizing = Sizing {
 		full: fit_within(decoded.width(), decoded.height(), MAX_EDGE)
 			.unwrap_or((decoded.width(), decoded.height())),
 	};
+	let keep = keep.and_then(|(key, header)| (header == sizing).then_some(key));
 	let held = sizing.held(hold.window);
 	let mut img = cut_to_rgba(decoded, sizing.full);
 	// The look settings are in pixels of the full image.
 	let scale = held.0 as f32 / sizing.full.0.max(1) as f32;
-	let (mut opacity, mut blur) = (settings.wallpaper_opacity, settings.wallpaper_blur);
-	if settings.wallpaper_honor_xmp_look {
-		opacity = tags.opacity.unwrap_or(opacity);
-		blur = tags.blur.unwrap_or(blur);
-	}
+	let (opacity, blur) = look(settings, &tags);
 	// Blur and contrast-flatten, done in LINEAR light (decode sRGB -> process in
 	// f32 -> re-encode) so transitions are gamma-correct; an sRGB-space blur
 	// darkens edges. The f32 intermediate also avoids 8-bit banding inside the
 	// blur (final banding is handled by the high-precision offscreen + the blit's
 	// dither).
-	// The blur asserts on a sigma that is not a normal float, and a panic here
-	// takes every shell down with it. 1e-40 is inside the config's range.
-	let blur = blur * scale;
-	let blur = if blur.is_normal() { blur } else { 0.0 };
+	let blur = held_blur(blur, scale);
 	if blur > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full {
 		// The float copy is sixteen bytes a pixel and the blur is the slow part,
 		// so this is where a superseded request costs the most to carry on.
@@ -513,28 +674,52 @@ fn prepare(
 	if stale() {
 		return None;
 	}
-	// A photo isn't squashed by a default that suits gradients.
-	let mut fit = settings.wallpaper_default_fit;
-	let mut anchor = [0.5, 0.5];
-	if settings.wallpaper_honor_xmp {
-		if let Some(tagged) = tags.fit {
-			fit = tagged;
-		}
-		if let Some(tagged) = tags.anchor {
-			anchor = tagged;
-		}
-	}
+	let (fit, anchor) = layout(settings, &tags);
 	let summary = hold
 		.summary
 		.unwrap_or_else(|| crate::autotheme::summarize(&img, opacity));
-	Some(Prepared {
+	let image = Prepared {
 		rgba: img,
 		sizing,
 		opacity,
 		fit,
 		anchor,
 		summary,
-	})
+		held,
+	};
+	Some((image, keep))
+}
+
+#[cfg(test)]
+fn prepare(
+	settings: &Settings,
+	path: Option<&Path>,
+	folder_active: bool,
+	hold: Hold,
+	stale: &dyn Fn() -> bool,
+) -> Option<Prepared> {
+	prepare_keeping(settings, path, folder_active, hold, stale, None).map(|(image, _)| image)
+}
+
+// Write a copy `prepare` made, after its result went out. A box whose cache
+// cannot be written just goes without, so only the debug line says so.
+fn keep_copy(
+	dir: &Path,
+	key: &wpcache::Key,
+	rgba: &image::RgbaImage,
+	summary: &crate::autotheme::Summary,
+) {
+	match wpcache::store(dir, key, rgba, summary, wpcache::LIMIT) {
+		Ok(true) => memdbg(&format!("stored {}x{}", rgba.width(), rgba.height())),
+		Ok(false) => {}
+		Err(e) => memdbg(&format!("not stored: {e}")),
+	}
+}
+
+fn memdbg(what: &str) {
+	if crate::app::env_flag(crate::app::EnvFlag::MemDbg) {
+		eprintln!("memdbg wallpaper copy: {what}");
+	}
 }
 
 type Linear = image::ImageBuffer<image::Rgba<f32>, Vec<f32>>;
@@ -844,6 +1029,7 @@ mod tests {
 			cleared: false,
 			window,
 			summary,
+			kept: None,
 		};
 		let first = run(&request((1280, 800), None)).image.expect("first");
 		let again = run(&request((700, 400), None)).image.expect("again");
@@ -1133,6 +1319,7 @@ mod tests {
 			cleared: false,
 			window: (0, 0),
 			summary: None,
+			kept: None,
 		};
 		assert!(run(&request).image.is_none());
 	}
@@ -1250,6 +1437,7 @@ mod tests {
 			cleared: false,
 			window: (0, 0),
 			summary: None,
+			kept: None,
 		};
 		assert!(run(&request(false)).image.is_none());
 		// the control: switched on, the same request shows the built-in
@@ -1275,6 +1463,7 @@ mod tests {
 			cleared: false,
 			window,
 			summary: None,
+			kept: None,
 		};
 		for window in [(2560, 1440), (640, 360), (0, 0)] {
 			let loaded = run(&request(window, true));
@@ -1463,6 +1652,7 @@ mod tests {
 				cleared,
 				window: (0, 0),
 				summary: None,
+				kept: None,
 			};
 			assert!(run(&request(true)).image.is_none(), "folder {folder:?}");
 			if folder.is_none() {
@@ -1470,6 +1660,241 @@ mod tests {
 				assert!(run(&request(false)).image.is_some());
 			}
 		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A kept copy stands for the original only while nothing that changes its
+	// pixels has moved. What only changes how it is drawn stays out of the key.
+	// Test ID: EryHI98
+	#[test]
+	fn a_kept_copy_is_keyed_on_everything_that_changes_its_pixels() {
+		use super::{Origin, kept_key};
+		let path = tagged_file("key", "");
+		let base = Settings {
+			wallpaper_blur: 10.0,
+			wallpaper_contrast_mask: true,
+			..Settings::default()
+		};
+		let key = |s: &Settings, path: &std::path::Path| {
+			let tags = crate::xmp::read(path);
+			kept_key(s, Origin::File(path), &tags).expect("keyed").0
+		};
+		let first = key(&base, &path);
+		assert_eq!(key(&base, &path), first, "the same file and settings");
+		let moved: [(&str, Settings); 6] = [
+			(
+				"blur",
+				Settings {
+					wallpaper_blur: 11.0,
+					..base.clone()
+				},
+			),
+			(
+				"mask off",
+				Settings {
+					wallpaper_contrast_mask: false,
+					..base.clone()
+				},
+			),
+			(
+				"mask size",
+				Settings {
+					wallpaper_contrast_mask_size: 0.7,
+					..base.clone()
+				},
+			),
+			(
+				"mask strength",
+				Settings {
+					wallpaper_contrast_mask_strength: 0.1,
+					..base.clone()
+				},
+			),
+			(
+				"mask auto",
+				Settings {
+					wallpaper_contrast_mask_auto: 0.2,
+					..base.clone()
+				},
+			),
+			(
+				"look tags off, with a blur tag",
+				Settings {
+					wallpaper_honor_xmp_look: false,
+					..base.clone()
+				},
+			),
+		];
+		let tagged = tagged_file("keyblur", "<wallpaper:Blur>3</wallpaper:Blur>");
+		for (what, settings) in &moved {
+			let probe = if what.starts_with("look") {
+				&tagged
+			} else {
+				&path
+			};
+			assert_ne!(key(settings, probe), key(&base, probe), "{what}");
+		}
+		// a tagged blur replaces the slider, so the slider no longer matters
+		assert_eq!(
+			key(
+				&Settings {
+					wallpaper_blur: 30.0,
+					..base.clone()
+				},
+				&tagged
+			),
+			key(&base, &tagged)
+		);
+		let kept: [(&str, Settings); 4] = [
+			(
+				"opacity",
+				Settings {
+					wallpaper_opacity: 0.4,
+					..base.clone()
+				},
+			),
+			(
+				"fit",
+				Settings {
+					wallpaper_default_fit: Fit::Zoom,
+					..base.clone()
+				},
+			),
+			(
+				"light mode",
+				Settings {
+					theme_mode: crate::theme::Mode::Light,
+					..base.clone()
+				},
+			),
+			(
+				"dark mode",
+				Settings {
+					theme_mode: crate::theme::Mode::Dark,
+					..base.clone()
+				},
+			),
+		];
+		for (what, settings) in &kept {
+			assert_eq!(key(settings, &path), first, "{what}");
+		}
+		// the file itself: written again, and swapped for another picture
+		let bytes = std::fs::read(&path).unwrap();
+		let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+		std::fs::File::options()
+			.append(true)
+			.open(&path)
+			.unwrap()
+			.set_modified(later)
+			.unwrap();
+		assert_ne!(key(&base, &path), first, "a new time");
+		std::fs::write(&path, [bytes.as_slice(), b"\0"].concat()).unwrap();
+		assert_ne!(key(&base, &path), first, "another length");
+		// the built-in has a key of its own, and keeps it
+		let builtin = |s: &Settings| {
+			kept_key(s, Origin::Builtin, &crate::xmp::Tags::default())
+				.expect("built-in")
+				.0
+		};
+		assert_eq!(builtin(&base), builtin(&base));
+		assert_ne!(builtin(&base), first);
+		let _ = std::fs::remove_file(&path);
+		let _ = std::fs::remove_file(&tagged);
+	}
+
+	// A prepared picture is kept after its result goes out, and the next
+	// request for it, or for a size within 5% of the pixels, reads the copy.
+	// Test ID: EryHICk
+	#[test]
+	fn a_prepared_wallpaper_is_kept_and_read_back() {
+		use super::answer;
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_wp_kept_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		let settings = Arc::new(Settings {
+			wallpaper_blur: 4.0,
+			..flat_settings()
+		});
+		let request = |window, kept: Option<&std::path::Path>| Request {
+			seq: 1,
+			newest: Arc::new(AtomicU64::new(1)),
+			settings: settings.clone(),
+			scan: false,
+			current: None,
+			cleared: false,
+			window,
+			summary: None,
+			kept: kept.map(std::path::Path::to_path_buf),
+		};
+		let copies = || {
+			std::fs::read_dir(&dir).map_or(0, |list| {
+				list.flatten()
+					.filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc"))
+					.count()
+			})
+		};
+		let ask = |window, kept| {
+			let mut got = None;
+			answer(&request(window, kept), |loaded| {
+				// sent before anything is written
+				got = Some((loaded, copies()));
+			});
+			let (loaded, before) = got.expect("answered");
+			(loaded.image.expect("the built-in"), before)
+		};
+		// with no folder, nothing anywhere
+		let (plain, _) = ask((640, 360), None);
+		assert!(!dir.exists());
+		let (first, before) = ask((640, 360), Some(&dir));
+		assert_eq!(before, 0, "written before the result went out");
+		assert_eq!(copies(), 1);
+		assert_eq!(first.rgba.dimensions(), plain.rgba.dimensions());
+		assert_eq!(
+			first.rgba, plain.rgba,
+			"the first one is prepared as before"
+		);
+
+		let (again, _) = ask((640, 360), Some(&dir));
+		assert_eq!(copies(), 1, "read, not made again");
+		assert_eq!(again.summary, first.summary);
+		assert_eq!(again.held, first.held);
+		assert_eq!(again.rgba.dimensions(), first.rgba.dimensions());
+		// High quality JPEG: under a level on average, a few at hard edges
+		// (this blur is light, so the built-in still has some)
+		let off: Vec<u8> = first
+			.rgba
+			.pixels()
+			.zip(again.rgba.pixels())
+			.flat_map(|(a, b)| (0..3).map(move |c| a[c].abs_diff(b[c])))
+			.collect();
+		let mean = off.iter().map(|&d| f64::from(d)).sum::<f64>() / off.len() as f64;
+		let worst = off.iter().max().copied().unwrap_or(0);
+		assert!(
+			mean < 1.0 && worst <= 16,
+			"off by {mean:.3} on average, {worst} at most"
+		);
+
+		// 2% more pixels: the copy stands in, and says what was asked for, so
+		// the window does not ask again
+		let (near, _) = ask((646, 364), Some(&dir));
+		assert_eq!(copies(), 1);
+		assert_eq!(near.rgba.dimensions(), first.rgba.dimensions());
+		assert_eq!(near.held, near.sizing.held((646, 364)));
+		assert_ne!(near.held, first.held);
+		// 10% more is prepared and kept as well
+		let (far, _) = ask((672, 378), Some(&dir));
+		assert_eq!(far.rgba.dimensions(), far.held);
+		assert_eq!(copies(), 2);
+
+		// held whole with no blur and no mask is only a decode, so nothing is kept
+		let whole = Request {
+			settings: Arc::new(flat_settings()),
+			..request((0, 0), Some(&dir))
+		};
+		let mut loaded = None;
+		answer(&whole, |got| loaded = Some(got));
+		assert!(loaded.and_then(|l| l.image).is_some());
+		assert_eq!(copies(), 2);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 }

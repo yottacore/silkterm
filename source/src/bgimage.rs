@@ -240,7 +240,7 @@ impl ImageRenderer {
 			uniform,
 			image_size: [img.sizing.full.0 as f32, img.sizing.full.1 as f32],
 			sizing: img.sizing,
-			held: (width, height),
+			held: img.held,
 			opacity: img.opacity,
 			fit: if img.fit == Fit::Zoom { 1.0 } else { 0.0 },
 			anchor: [img.anchor[0].clamp(0.0, 1.0), img.anchor[1].clamp(0.0, 1.0)],
@@ -280,9 +280,10 @@ impl ImageRenderer {
 	/// find it in.
 	pub fn memdbg_line(&self) -> String {
 		let ((w, h), (fw, fh)) = (self.held, self.sizing.full);
+		let texture = self.texture.size();
 		format!(
 			"wallpaper: {w}x{h} held of {fw}x{fh}, {:.1} MiB{}",
-			crate::memdbg::mib(w as usize * h as usize * 4),
+			crate::memdbg::mib(texture.width as usize * texture.height as usize * 4),
 			if self.standin { ", stand-in" } else { "" }
 		)
 	}

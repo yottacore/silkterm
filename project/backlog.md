@@ -432,7 +432,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wallpaper: keep resized copies on disk, oldest pruned first
 	- ID: 2026100514211603
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpresize, wakepic and new wpkept window tests passed.
+	- Needs external testing: The unit tests on vm925w and b26, since a copy is replaced by rename while another process may hold it open. A launch on each, to see the copy land in the platform's cache folder.
 	- Priority: Avg
 	- Opened: 20261005-142116
 	- Opened by: JC
@@ -457,6 +459,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
 			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
 			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
+		- 20261006: Timed on b23 with a non-LTO optimized build, at the shipped settings: a prepare took 0.76 to 2.55 s at 1920x1080 and 2560x1440, and 0.41 s at 1280x800. So it is well over the resize wait, and resizes gain too. A JPEG decode of the result took 6 to 24 ms, and reading a kept copy 13 to 33 ms. Writing one took 62 to 118 ms, so it happens after the picture is sent. Full table in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#kept-copies-on-disk).
+		- 20261006: Done: copies are kept as quality 95 JPEG in the platform's cache folder, under a `wallpaper` folder. A `--config` keeps them beside that config. Each copy keeps the original's summary, so derived colors don't move. A copy within 5% stands in for the size asked, and the window takes it as that size. Pictures with transparency, and pictures held whole with no blur or mask, are not kept.
+		- 20261006: Light and dark mode are not in the key, since the mode is applied when the picture is drawn.
+		- Verified: unit tests and the wpkept window test pass, and each was seen failing with its part of the feature taken out.
+	- Decisions:
+		- 20261006: Built first, as high quality JPEG. Block compression (2026100418225507) stays queued.
+		- 20261006: Prune at 256 MB, oldest used first.
+	- Branch: wpcache
+	- Commit:
+	- Test case: Unit tests EryHHqn, EryHHuh, EryHHyF, EryHI1u, EryHI5c, EryHI98, EryHICk. Window test `cicd/tests/wpkept/run.bash` (EryJg1H) in stage 3.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
