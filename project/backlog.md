@@ -360,6 +360,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl), `the_resource_use_group_ends_the_window_tab` (EryD9rp), `the_hidden_wait_is_grayed_where_the_desktop_never_says` (EryD9vW), `only_the_windows_build_warns_that_transparency_keeps_memory` (EryD9zK).
 	- Closed:
 
+- Wallpaper: keep resized copies on disk, oldest pruned first
+	- ID: 2026100514211603
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpresize, wakepic and new wpkept window tests passed.
+	- Needs external testing: The unit tests on vm925w and b26, since a copy is replaced by rename while another process may hold it open. A launch on each, to see the copy land in the platform's cache folder.
+	- Priority: Avg
+	- Opened: 20261005-142116
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225503, 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When a window loads or is resized and the original wallpaper is resampled, keep that copy at that size.
+		- On a resize, use a kept copy within about 5% of the total pixel count. If there is none, resample the original again and keep that one too.
+		- Prune the oldest copies once the cache goes over its size limit.
+	- Notes:
+		- 20261005: It helps most at launch and when rotation comes back to an image, since both prepare from scratch now. A resize already waits 500 ms after the last change and prepares once.
+		- 20261005: The key needs everything that changes the stored pixels: the file and its mtime, the held size, blur, and the look tags.
+		- 20261005: A copy is 4 bytes a pixel, so about 14 MB at 2560x1440 unless it's stored compressed. Block compression (2026100418225507) cuts that to a quarter or less.
+		- 20261005: Time a release build's prepare first. If it is well under the resize wait, only launch and rotation gain.
+		- 20261005: Settled:
+			- Store the copies compressed.
+			- Waking from resource saving prepares from the file again too, so it gains as well. 2026100513581814 covers what shows in the meantime, and the two work together.
+		- 20261005: How block compression compares with JPEG, or a wavelet format, in size and quality on a blurred picture:
+			- Not in size. BC1 is a fixed 4 bits a pixel and BC7 is 8, so 1/8 and 1/4 of a plain copy. JPEG on a blurred picture is often 1/20 or less, since the blur takes out the fine detail it spends bits on.
+			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
+			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
+			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
+		- 20261006: Timed on b23 with a non-LTO optimized build, at the shipped settings: a prepare took 0.76 to 2.55 s at 1920x1080 and 2560x1440, and 0.41 s at 1280x800. So it is well over the resize wait, and resizes gain too. A JPEG decode of the result took 6 to 24 ms, and reading a kept copy 13 to 33 ms. Writing one took 62 to 118 ms, so it happens after the picture is sent. Full table in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#kept-copies-on-disk).
+		- 20261006: Done: copies are kept as quality 95 JPEG in the platform's cache folder, under a `wallpaper` folder. A `--config` keeps them beside that config. Each copy keeps the original's summary, so derived colors don't move. A copy within 5% stands in for the size asked, and the window takes it as that size. Pictures with transparency, and pictures held whole with no blur or mask, are not kept.
+		- 20261006: Light and dark mode are not in the key, since the mode is applied when the picture is drawn.
+		- Verified: unit tests and the wpkept window test pass, and each was seen failing with its part of the feature taken out.
+	- Decisions:
+		- 20261006: Built first, as high quality JPEG. Block compression (2026100418225507) stays queued.
+		- 20261006: Prune at 256 MB, oldest used first.
+	- Branch: wpcache
+	- Commit: 34fa3fe
+	- Test case: Unit tests EryHHqn, EryHHuh, EryHHyF, EryHI1u, EryHI5c, EryHI98, EryHICk. Window test `cicd/tests/wpkept/run.bash` (EryJg1H) in stage 3.
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -428,47 +469,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
 	- Closed:
-
-- Wallpaper: keep resized copies on disk, oldest pruned first
-	- ID: 2026100514211603
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpresize, wakepic and new wpkept window tests passed.
-	- Needs external testing: The unit tests on vm925w and b26, since a copy is replaced by rename while another process may hold it open. A launch on each, to see the copy land in the platform's cache folder.
-	- Priority: Avg
-	- Opened: 20261005-142116
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225503, 2026100418225507
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- When a window loads or is resized and the original wallpaper is resampled, keep that copy at that size.
-		- On a resize, use a kept copy within about 5% of the total pixel count. If there is none, resample the original again and keep that one too.
-		- Prune the oldest copies once the cache goes over its size limit.
-	- Notes:
-		- 20261005: It helps most at launch and when rotation comes back to an image, since both prepare from scratch now. A resize already waits 500 ms after the last change and prepares once.
-		- 20261005: The key needs everything that changes the stored pixels: the file and its mtime, the held size, blur, and the look tags.
-		- 20261005: A copy is 4 bytes a pixel, so about 14 MB at 2560x1440 unless it's stored compressed. Block compression (2026100418225507) cuts that to a quarter or less.
-		- 20261005: Time a release build's prepare first. If it is well under the resize wait, only launch and rotation gain.
-		- 20261005: Settled:
-			- Store the copies compressed.
-			- Waking from resource saving prepares from the file again too, so it gains as well. 2026100513581814 covers what shows in the meantime, and the two work together.
-		- 20261005: How block compression compares with JPEG, or a wavelet format, in size and quality on a blurred picture:
-			- Not in size. BC1 is a fixed 4 bits a pixel and BC7 is 8, so 1/8 and 1/4 of a plain copy. JPEG on a blurred picture is often 1/20 or less, since the blur takes out the fine detail it spends bits on.
-			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
-			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
-			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
-		- 20261006: Timed on b23 with a non-LTO optimized build, at the shipped settings: a prepare took 0.76 to 2.55 s at 1920x1080 and 2560x1440, and 0.41 s at 1280x800. So it is well over the resize wait, and resizes gain too. A JPEG decode of the result took 6 to 24 ms, and reading a kept copy 13 to 33 ms. Writing one took 62 to 118 ms, so it happens after the picture is sent. Full table in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#kept-copies-on-disk).
-		- 20261006: Done: copies are kept as quality 95 JPEG in the platform's cache folder, under a `wallpaper` folder. A `--config` keeps them beside that config. Each copy keeps the original's summary, so derived colors don't move. A copy within 5% stands in for the size asked, and the window takes it as that size. Pictures with transparency, and pictures held whole with no blur or mask, are not kept.
-		- 20261006: Light and dark mode are not in the key, since the mode is applied when the picture is drawn.
-		- Verified: unit tests and the wpkept window test pass, and each was seen failing with its part of the feature taken out.
-	- Decisions:
-		- 20261006: Built first, as high quality JPEG. Block compression (2026100418225507) stays queued.
-		- 20261006: Prune at 256 MB, oldest used first.
-	- Branch: wpcache
-	- Commit: 34fa3fe
-	- Test case: Unit tests EryHHqn, EryHHuh, EryHHyF, EryHI1u, EryHI5c, EryHI98, EryHICk. Window test `cicd/tests/wpkept/run.bash` (EryJg1H) in stage 3.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
