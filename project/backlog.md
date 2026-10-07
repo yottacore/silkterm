@@ -614,7 +614,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - app.rs and settings_ui.rs each do too many jobs
 	- ID: 2026100314050023
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Started
 	- Priority: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -623,7 +623,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: app.rs is about 9,800 lines before its tests. It has the menu model, the tab strip and rename field, the idle and GPU release states, the VT watcher, benchmark and rating control, wallpaper rotation, monitor checks and the command-line layout. `render_with` is about 1,500 lines and `State` has about 90 fields.
 		- 20261003: Chrome is built inline with the pane frame, so its cost is paid every frame. Items 2 and 18 come from that. A chrome layer kept between frames and changed by events would remove most of it.
 		- 20261003: settings_ui.rs is about 6,900 lines before its tests, with shells, themes, the picker and the prompt in one file.
+		- 20261006: settings_ui.rs is split. The shells grid, themes, the color picker and the prompt box moved to `settings_ui/shell_grid.rs`, `themes.rs`, `picker.rs` and `prompt.rs`, each with its own tests. The code moved as it was; what changed is imports, visibility, and doc comments on what is now shared. settings_ui.rs is about 5,600 lines before its tests.
+		- 20261006: `git log --follow` on each new file reaches back into settings_ui.rs's history. `git blame` there needs `--minimal`.
+		- 20261006: The two unit tests that read every source file, the license header and the Debug check, now read the subfolder too. Three grid types gained `Debug` for it.
+		- 20261006: app.rs is left for a later round, so this stays Started.
+		- 20261006: Verified: the 158 settings_ui tests all run, under the same names and IDs. The full unit suite (1186), fmt, clippy for Linux, Windows and macOS, and the test ID, docs, tables and TOC checks pass. The header and Debug tests fail on a subfolder file with a bad header or a type with no Debug. Settings opens, every tab draws, and so do the name box and the color picker.
 	- Origin: c6eaa04 (2026-06-28), grown since. No earlier review item. Plausible.
+	- Branch: uisplit
+	- Commit: 21ad437, c632770
 	- Test case: The existing tests. Behavior does not change.
 	- Decisions:
 		- 20261005: Do it last, after the other open items, when there is time.
