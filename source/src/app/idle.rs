@@ -724,6 +724,75 @@ mod tests {
 		);
 	}
 
+	// Off since the minimized wait was taken out again (2026100513581813): a
+	// minimized window takes the hidden wait, now a minute by default.
+	// `a_minimized_window_takes_the_hidden_wait` covers it.
+	// // A minimized window lets go after its own wait, a minute by default,
+	// // rather than the half hour a covered one waits. Whatever else the desktop
+	// // says of it, and on Windows a window with no area, is minimized.
+	// // Test ID: ErmpLNm
+	// #[test]
+	// fn a_minimized_window_waits_its_own_time() {
+	// 	let since = Instant::now();
+	// 	let defaults = config::Settings::default();
+	// 	assert_eq!(defaults.idle_release_minimized_min, 1);
+	// 	assert_eq!(
+	// 		defaults.idle_release_hidden_min, 30,
+	// 		"covered keeps its wait"
+	// 	);
+	// 	let cfg = config::Settings {
+	// 		idle_release: true,
+	// 		idle_release_minimized_min: 3,
+	// 		idle_release_hidden_min: 30,
+	// 		idle_release_min: 240,
+	// 		..defaults
+	// 	};
+	// 	let idle = |focused, sight, keeps_picture| Idle {
+	// 		focused,
+	// 		sight,
+	// 		revealed: true,
+	// 		bench_busy: false,
+	// 		since,
+	// 		keeps_picture,
+	// 	};
+	// 	for focused in [false, true] {
+	// 		for keeps_picture in [false, true] {
+	// 			assert_eq!(
+	// 				release_deadline(&cfg, &idle(focused, Sight::Minimized, keeps_picture)),
+	// 				Some(since + Duration::from_mins(3)),
+	// 				"focused {focused}, keeps picture {keeps_picture}"
+	// 			);
+	// 		}
+	// 	}
+	// 	assert_eq!(
+	// 		release_deadline(&cfg, &idle(false, Sight::Covered, true)),
+	// 		Some(since + Duration::from_mins(30))
+	// 	);
+	// 	let mut owed = idle(false, Sight::Minimized, true);
+	// 	owed.bench_busy = true;
+	// 	assert!(
+	// 		release_deadline(&cfg, &owed).is_none(),
+	// 		"a rating in flight"
+	// 	);
+	// 	let off = config::Settings {
+	// 		idle_release: false,
+	// 		..cfg
+	// 	};
+	// 	assert!(release_deadline(&off, &idle(false, Sight::Minimized, true)).is_none());
+	//
+	// 	// what the window reports, as (occluded, no area, minimized)
+	// 	let sight =
+	// 		|occluded, no_area, minimized| window_sight(true, occluded, no_area, || minimized);
+	// 	assert_eq!(
+	// 		sight(true, false, true),
+	// 		Sight::Minimized,
+	// 		"minimized and occluded"
+	// 	);
+	// 	assert_eq!(sight(false, true, false), Sight::Minimized, "no area");
+	// 	assert_eq!(sight(true, false, false), Sight::Covered);
+	// 	assert_eq!(sight(false, false, false), Sight::Shown);
+	// }
+
 	// A minimized window is out of sight like a covered one and takes the same
 	// wait, a minute by default, whatever else holds the window. Whether the
 	// desktop calls it covered as well makes no difference.

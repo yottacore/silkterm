@@ -1832,6 +1832,23 @@ mod tests {
 		}
 	}
 
+	// Off since macOS has no in-window bar at all (20261002): `--hide-menu=false`
+	// no longer brings it back there. `there_is_no_in_window_menu_bar_on_macos`
+	// covers it.
+	// // macOS has the system menu bar, so the in-window one starts hidden there
+	// // unless --hide-menu says otherwise. Elsewhere nothing changes.
+	// // Test ID: ErUnxsD
+	// #[test]
+	// fn the_in_window_menu_bar_starts_hidden_on_macos_only() {
+	// 	use super::menu_bar_at_launch;
+	// 	assert!(menu_bar_at_launch(None, false));
+	// 	assert!(!menu_bar_at_launch(None, true));
+	// 	for mac in [false, true] {
+	// 		assert!(menu_bar_at_launch(Some(false), mac));
+	// 		assert!(!menu_bar_at_launch(Some(true), mac));
+	// 	}
+	// }
+
 	// The system menu bar is the only one on a Mac: `--hide-menu` is taken and
 	// ignored there, and no menu row offers the in-window bar. Elsewhere nothing
 	// changes.
