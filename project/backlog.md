@@ -262,6 +262,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
+- The scroll record timing test fails now and then when the box is busy
+	- ID: 2026100714145220
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261007-141452
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run the full pipeline while something else keeps the box busy, load about 13 to 20.
+	- Incorrect behavior: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO) failed with "keeping rows cost 45.2ms against 40.4ms", 12% over where it allows 10%. That stopped the pipeline at stage 3.
+	- Expected behavior: a timing test doesn't fail the pipeline because of other load on the box.
+	- Reproduced: once, 20261007 at 7fdea4e. The next full run passed. Nothing in that run touched the parse or the scroll record.
+	- Possible cause: it compares two wall clock times taken while the rest of the suite runs beside it. Best of 28 turns still lost to the load.
+	- Notes:
+		- 20261007: The same round also saw one SIGSEGV of the unit test process at about load 13, with no core kept. 3 runs of the suite alone and the next 2 pipeline runs passed. Not filed apart, since there is nothing to go on yet.
+
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
 	- Type: Bug
