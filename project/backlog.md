@@ -425,6 +425,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the other `$( )` and `which` calls in the script (`fPromptSafe`, the remote lookups, `tput`), the bundled copy against upstream (only the host table differs), and the PowerShell copy, which already walked up for `.git`.
 	- Note: Code review 20261003 item 19.
 
+- Small repeated work on the frame and drag paths
+	- ID: 2026100314050018
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs local test suite run?: The scroll harness, since `Pane::build` and the strip snapshot changed.
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Buffers a frame fills are kept and cleared, not built from empty.
+		- A frame reads settings from the snapshot it already has.
+		- Work the cell loop already did is not done again.
+	- Progress log:
+		- 20261003: `render_with` starts about a dozen new vectors and maps each frame. `tops` and `slides` copy what `p.draw()` already has. `scrim_cells` copies every background quad even on frames that do not rebuild the scrim.
+		- 20261003: `Pane::build` starts its background quad list from empty on every full rebuild, while `rows_scratch` and `cells_scratch` beside it are reused for that reason.
+		- 20261003: `TextCtx::prepare` and its two siblings take a `Vec` by value, so three new vectors are built per frame. `task()` and `cwd()` clone a string and a path per tab per frame.
+		- 20261003: `snapshot_rows` and `strip_rows` resolve every cell's colors again after the cell loop did, with a new `Readable` memo each call, though `Pane` keeps one across frames.
+		- 20261003: the menu and tip color getters each take the settings lock. `render_with` calls them per separator and per row while it already has `cfg`.
+		- 20261003: a drag select takes the terminal lock twice per mouse move, once only to read the scroll offset.
+		- 20261006: Measured as heap allocations on the window thread per frame, with two tabs, a split pane of colored rows and the halo on. At rest: 189 before, 167 after. Drag select: 382 before, 340 after. About 130 of each are the graphics driver's own. A debug build counts them, and `SILK_ALLOCS=1` prints them per frame.
+		- 20261006: Done: `render_with` keeps its frame lists from one frame to the next and clears them. `tops` and `slides` are gone, since `p.draw()` already has both. The scrim's color map reads the background quads straight out of the frame's quad list, so nothing is copied. 11 a frame at rest.
+		- 20261006: Done: the menu bar layout is a fixed array, and the tab strip's widths and titles are read in place. 8 a frame at rest with 2 tabs.
+		- 20261006: Done: `Pane::build` reuses last frame's background quad list. `snapshot_rows` and `strip_rows` use the pane's own contrast memo, and the minimap keeps its memo between plans too. About 5 a frame in the drag. The snapshot still works out each cell's colors a second time; moving it into the cell loop is a larger change than this item.
+		- 20261006: Done: the menu and tip colors come from the frame's settings snapshot. Their getters had no other caller and are gone, bar `menu_fg()`. No change in allocations; it saves a settings read per menu row.
+		- 20261006: Done: a drag select takes the terminal lock once per move, for the pointer move and the edge scroll both (`drag_selection_to`). No change in allocations.
+		- 20261006: Left alone: `TextCtx::prepare` taking a `Vec`. The text areas borrow the pane and chrome buffers, so a kept list can't outlive the frame, and it is only built on frames that prepare text again. Also left: `task()` and `cwd()` per tab per frame, about 10 a frame with 2 tabs, since the kept tab labels (2026100314050002) see a change by comparing them. `update_title` costs about 12 a frame reading the same facts and was left for the same reason.
+	- Origin: c6eaa04 (2026-06-28) for the frame vectors and the quad list, 349c92bf (2026-07-31) for `scrim_cells`, a92aeb1 (2026-08-30) for `snapshot_rows`, ec82922 (2026-07-06) for the drag. No earlier review item. Plausible when filed; measured 20261006.
+	- Verified: the new window test fails both limits on the old code (189 and 381 against 178 and 360) and passes on the branch (167 and 338).
+	- Verified: full unit suite passes. Clippy is clean for Linux, Windows and macOS targets.
+	- Swept: every `Vec::new`, `HashMap::new`, `.clone()` and `collect()` left in `render_with` (the rest are the text area lists, the overlay's shaped lines, and clones made only while a tab is renamed or a title shaped again). Every `config::menu_*` and `config::tip_*` call. Both `point_clamped` plus `update_selection` pairs. Every `Readable::default()` outside tests: the pane's own and the minimap plan's.
+	- Branch: framework
+	- Commit: 3d74d15, fd408fb
+	- Test case: `cicd/tests/allocs/run.bash` (ErzCQC2), in pipeline stage 3. Allocations per frame at rest and in a drag select, limits 178 and 360.
+	- Note: Code review 20261003 item 18.
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -497,42 +533,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261006: An in-house BC1 encoder, a few hundred lines, no crate. BC7 only if a test finds BC1 banding, and that comes back as a question first.
 	- Closed:
-
-- Small repeated work on the frame and drag paths
-	- ID: 2026100314050018
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: The scroll harness, since `Pane::build` and the strip snapshot changed.
-	- Priority: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Buffers a frame fills are kept and cleared, not built from empty.
-		- A frame reads settings from the snapshot it already has.
-		- Work the cell loop already did is not done again.
-	- Progress log:
-		- 20261003: `render_with` starts about a dozen new vectors and maps each frame. `tops` and `slides` copy what `p.draw()` already has. `scrim_cells` copies every background quad even on frames that do not rebuild the scrim.
-		- 20261003: `Pane::build` starts its background quad list from empty on every full rebuild, while `rows_scratch` and `cells_scratch` beside it are reused for that reason.
-		- 20261003: `TextCtx::prepare` and its two siblings take a `Vec` by value, so three new vectors are built per frame. `task()` and `cwd()` clone a string and a path per tab per frame.
-		- 20261003: `snapshot_rows` and `strip_rows` resolve every cell's colors again after the cell loop did, with a new `Readable` memo each call, though `Pane` keeps one across frames.
-		- 20261003: the menu and tip color getters each take the settings lock. `render_with` calls them per separator and per row while it already has `cfg`.
-		- 20261003: a drag select takes the terminal lock twice per mouse move, once only to read the scroll offset.
-		- 20261006: Measured as heap allocations on the window thread per frame, with two tabs, a split pane of colored rows and the halo on. At rest: 189 before, 167 after. Drag select: 382 before, 340 after. About 130 of each are the graphics driver's own. A debug build counts them, and `SILK_ALLOCS=1` prints them per frame.
-		- 20261006: Done: `render_with` keeps its frame lists from one frame to the next and clears them. `tops` and `slides` are gone, since `p.draw()` already has both. The scrim's color map reads the background quads straight out of the frame's quad list, so nothing is copied. 11 a frame at rest.
-		- 20261006: Done: the menu bar layout is a fixed array, and the tab strip's widths and titles are read in place. 8 a frame at rest with 2 tabs.
-		- 20261006: Done: `Pane::build` reuses last frame's background quad list. `snapshot_rows` and `strip_rows` use the pane's own contrast memo, and the minimap keeps its memo between plans too. About 5 a frame in the drag. The snapshot still works out each cell's colors a second time; moving it into the cell loop is a larger change than this item.
-		- 20261006: Done: the menu and tip colors come from the frame's settings snapshot. Their getters had no other caller and are gone, bar `menu_fg()`. No change in allocations; it saves a settings read per menu row.
-		- 20261006: Done: a drag select takes the terminal lock once per move, for the pointer move and the edge scroll both (`drag_selection_to`). No change in allocations.
-		- 20261006: Left alone: `TextCtx::prepare` taking a `Vec`. The text areas borrow the pane and chrome buffers, so a kept list can't outlive the frame, and it is only built on frames that prepare text again. Also left: `task()` and `cwd()` per tab per frame, about 10 a frame with 2 tabs, since the kept tab labels (2026100314050002) see a change by comparing them. `update_title` costs about 12 a frame reading the same facts and was left for the same reason.
-	- Origin: c6eaa04 (2026-06-28) for the frame vectors and the quad list, 349c92bf (2026-07-31) for `scrim_cells`, a92aeb1 (2026-08-30) for `snapshot_rows`, ec82922 (2026-07-06) for the drag. No earlier review item. Plausible when filed; measured 20261006.
-	- Verified: the new window test fails both limits on the old code (189 and 381 against 178 and 360) and passes on the branch (167 and 338).
-	- Verified: full unit suite passes. Clippy is clean for Linux, Windows and macOS targets.
-	- Swept: every `Vec::new`, `HashMap::new`, `.clone()` and `collect()` left in `render_with` (the rest are the text area lists, the overlay's shaped lines, and clones made only while a tab is renamed or a title shaped again). Every `config::menu_*` and `config::tip_*` call. Both `point_clamped` plus `update_selection` pairs. Every `Readable::default()` outside tests: the pane's own and the minimap plan's.
-	- Branch: framework
-	- Commit: 3d74d15, fd408fb
-	- Test case: `cicd/tests/allocs/run.bash` (ErzCQC2), in pipeline stage 3. Allocations per frame at rest and in a drag select, limits 178 and 360.
-	- Note: Code review 20261003 item 18.
 
 - Repeated blocks that should be one helper
 	- ID: 2026100314050021
