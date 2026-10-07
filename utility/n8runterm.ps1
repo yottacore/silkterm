@@ -120,6 +120,10 @@ $PeriodKeep = @{ day = 3; week = 2; month = 2; year = 1 }
 $RunLog        = Join-Path $InstallRoot "runterm.log"
 $RunLogMaxSize = 256KB
 
+## Where the Windows Start menu entry was last found, when it is not at the
+## default place. See fFindStartMenuLink.
+$MenuNote = Join-Path $InstallRoot "runterm.menu"
+
 ## Fallback terminals, in preference order, for when nothing is held and no source
 ## answers. Ours keeps the tagged title; the rest are launched plainly, since
 ## SilkTerm's own options would not parse for them.
@@ -381,8 +385,7 @@ function fRotate {
 	$all = @(fHeldVersions | Sort-Object Stamp -Descending)
 	if ($all.Count -eq 0) { return }
 
-	$now     = Get-Date
-	$running = @(fRunningExePaths)
+	$now = Get-Date
 
 	## For each period, the newest copy in each period key. A copy is only eligible
 	## for that role once its period has ended, so today's builds stay "frequent"
@@ -428,10 +431,13 @@ function fRotate {
 	}
 
 	## Anything not selected goes, unless it is running - a window open on a build
-	## must not have its binary deleted out from under it.
+	## must not have its binary deleted out from under it. The process list opens
+	## every process on the box, so it is read only once something is due to go.
 	$deleted = 0
+	$running = $null
 	foreach ($version in $all) {
 		if ($seen.ContainsKey($version.Name)) { continue }
+		if ($null -eq $running) { $running = @(fRunningExePaths) }
 		if ($running -contains $version.File.FullName) {
 			fNote "kept (running): $($version.Name)"
 			$seen[$version.Name] = $true
@@ -735,19 +741,7 @@ function fWriteStartMenuLink {
 	try {
 		fEnsureDir $dir
 		$shell = New-Object -ComObject WScript.Shell
-
-		## Adopt an entry that already points at the wrapper, wherever it was filed -
-		## these menus get organised by hand, and writing our own name beside one the
-		## user already put in a folder of terminals just leaves two of everything.
-		## Quick Launch is deliberately not searched: a taskbar pin is not a menu entry.
-		foreach ($root in (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu"),
-		                  (Join-Path $env:ProgramData "Microsoft\Windows\Start Menu")) {
-			if (-not (Test-Path -LiteralPath $root)) { continue }
-			$hit = Get-ChildItem -LiteralPath $root -Recurse -Force -Filter *.lnk -ErrorAction SilentlyContinue |
-				Where-Object { $shell.CreateShortcut($_.FullName).TargetPath -eq $Wrapper } |
-				Select-Object -First 1
-			if ($hit) { $path = $hit.FullName; break }
-		}
+		$path  = fFindStartMenuLink -Shell $shell -Wrapper $Wrapper -Default $path
 
 		$link = $shell.CreateShortcut($path)
 		if ($link.TargetPath -eq $Wrapper -and $link.IconLocation -eq "$LatestLink,0") { return }
@@ -761,6 +755,49 @@ function fWriteStartMenuLink {
 	} catch {
 		fWarn "couldn't write the start menu shortcut ($($_.Exception.Message))"
 	}
+}
+
+
+## The menu entry that already runs the wrapper, else $Default. Adopted wherever
+## it was filed - these menus get organised by hand, and writing our own name
+## beside one the user already put in a folder of terminals just leaves two of
+## everything. Quick Launch is deliberately not searched: a taskbar pin is not a
+## menu entry.
+## Where it was found is kept in $MenuNote, so a launch opens one or two
+## shortcuts. Walking both Start menus opens every one of them, a few hundred on
+## a normal box, and only happens when neither known place answers.
+function fFindStartMenuLink {
+	param(
+		[Parameter(Mandatory)][object]$Shell,
+		[Parameter(Mandatory)][string]$Wrapper,
+		[Parameter(Mandatory)][string]$Default
+	)
+
+	$known = New-Object System.Collections.Generic.List[string]
+	$noted = Get-Content -LiteralPath $MenuNote -TotalCount 1 -ErrorAction SilentlyContinue
+	if ($noted) { $known.Add($noted.Trim()) }
+	$known.Add($Default)
+	foreach ($cand in $known) {
+		if ((Test-Path -LiteralPath $cand) -and $Shell.CreateShortcut($cand).TargetPath -eq $Wrapper) { return $cand }
+	}
+
+	$hit = $null
+	foreach ($root in (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu"),
+	                  (Join-Path $env:ProgramData "Microsoft\Windows\Start Menu")) {
+		if (-not (Test-Path -LiteralPath $root)) { continue }
+		$hit = Get-ChildItem -LiteralPath $root -Recurse -Force -Filter *.lnk -ErrorAction SilentlyContinue |
+			Where-Object { $Shell.CreateShortcut($_.FullName).TargetPath -eq $Wrapper } |
+			Select-Object -First 1
+		if ($hit) { break }
+	}
+	if (-not $hit) {
+		fLog "searched the Start menus: no entry runs $Wrapper"
+		Remove-Item -LiteralPath $MenuNote -Force -ErrorAction SilentlyContinue
+		return $Default
+	}
+	fLog "searched the Start menus: found $($hit.FullName)"
+	try { Set-Content -LiteralPath $MenuNote -Value $hit.FullName -Encoding utf8 } catch { }
+	return $hit.FullName
 }
 
 
@@ -952,10 +989,11 @@ function fIsElevated {
 ## Used to auto-enable GUI feedback so a flash-and-close click can still report.
 function fLaunchedFromShortcut {
 	if ($Platform -ne "windows") { return $false }
+	## pwsh 7's Parent reads it from the process. Asking WMI loaded the CIM
+	## module for one number, on every launch.
 	try {
-		$parentId = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -ErrorAction Stop).ParentProcessId
-		$parent   = (Get-Process -Id $parentId -ErrorAction Stop).ProcessName
-		return ($parent -ieq "explorer")
+		$parent = (Get-Process -Id $PID -ErrorAction Stop).Parent
+		return ($null -ne $parent -and $parent.ProcessName -ieq "explorer")
 	} catch { return $false }
 }
 
@@ -1044,6 +1082,9 @@ if ($script:GuiFeedback -and $script:RunWarnings.Count) {
 
 
 ##	History:
+##		- 2026-10-06: The parent process comes from pwsh, not WMI. The process
+##		  list is read only when a copy is due to go, and the Start menus are
+##		  searched only when the entry is not where it was last found.
 ##		- 2026-10-06: Help block; no array growth in loops.
 ##		- 2026-10-01: An app in ~/Applications is the menu entry on a Mac. It runs
 ##		  the build in its own process, so the Dock sees one program.

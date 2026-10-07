@@ -104,6 +104,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 00058c2
 	- Test case: `a_shared_line_puts_its_parts_side_by_side` (Ery4fxK), `one_revert_puts_back_all_four_tab_text_toggles` (Ery4g1k), `each_tab_text_toggle_flips_only_its_own_setting` (Ery4g6B), `each_tab_text_toggle_has_its_own_tip_over_box_and_label` (Ery4gAt), `the_tab_text_line_fits_the_panel` (Ery4gFO). Each failed with the change broken. `a_paired_row_shares_the_line_above_it` (EpOQNMU) is commented out, since it took every row with one beside it for a line's first. `a_heading_that_repeats_its_tab_takes_no_room` now counts a shared line once.
 
+- The dogfood launcher makes three slow Windows queries per launch
+	- ID: 2026100314050020
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: A full `cicd-win.ps1` run, for its new stage 3 line. The test it calls passed on its own on vm925w.
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: Windows
+	- Requirements:
+		- A launch through runterm does no WMI query and no Start menu walk when nothing needs them.
+	- Progress log:
+		- 20261003: n8runterm.ps1 asks `Get-CimInstance Win32_Process` for its parent, where pwsh 7 has `(Get-Process -Id $PID).Parent`. `fRotate` reads every process's path even when nothing will be deleted. The shortcut search walks both Start menus and opens every `.lnk` through COM.
+		- 20261006: The parent comes from `(Get-Process -Id $PID).Parent`. The rotation reads the process list only once a copy is due to go, and still spares a running one.
+		- 20261006: The Start menu entry is looked for where it was last found, then at the default place, and both menus are searched only when neither runs the wrapper. Where it was found is kept in a new one-line file, `runterm.menu`, beside `runterm.log`. An entry filed by hand is still adopted wherever it is, and one that moves is found again on the next launch.
+		- 20261006: On vm925w, with nothing to do, the launcher's own time went from about 660 to 540 ms, past pwsh's own start. That box's two Start menus hold about 340 shortcuts, and searching them all costs about 390 ms by itself, which a launch now skips unless the entry moved.
+	- Origin: 94b62ab (2026-07-19), 4050e29 (2026-09-08), 8a88445 (2026-09-08). No earlier review item. Confirmed: the counts below were 1 per launch before the change.
+	- Note: The live launcher copies sit outside the repo, so a fix reaches them only when they are replaced. They were not touched, and they already differ from the repo copy, older than 9572727.
+	- Against: The rule that a shortcut never names the versions folder still holds. It runs the wrapper and takes its icon from the symlink. 9572727's guard on an installed build is unchanged.
+	- Swept: `git grep` for `Get-CimInstance`, `Win32_Process`, `CreateShortcut` and `Start Menu` over the scripts. The other WMI calls are in GUI tests and the info job, not on a launch path. install.ps1 writes one shortcut and searches nothing. runterm.cmd only finds the script.
+	- Verified: ps-lint on the changed scripts. The launcher harness on Linux, with the new case failing on the old launcher and passing on the new. The new Start menu test on vm925w, failing 6 checks on the old launcher and passing on the new.
+	- Branch: fastlaunch
+	- Commit: 5ce6265
+	- Test case: The launcher harness (EpHRcSG) case "the process list is read only when a copy is due to go". New Windows test `cicd/tests/launcher/startmenu.ps1` (EryVaSD), run by `cicd-win.ps1` in stage 3: a launch after the first asks WMI nothing, searches no Start menu and reads no process list, all counted at 0.
+	- Note: Code review 20261003 item 20.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -522,24 +548,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Origin: c6eaa04 (2026-06-28) for the frame vectors and the quad list, 349c92bf (2026-07-31) for `scrim_cells`, a92aeb1 (2026-08-30) for `snapshot_rows`, ec82922 (2026-07-06) for the drag. No earlier review item. Plausible, each one small and none measured.
 	- Test case: None yet. Allocation counts per idle frame from the profiler, with a threshold.
 	- Note: Code review 20261003 item 18.
-
-- The dogfood launcher makes three slow Windows queries per launch
-	- ID: 2026100314050020
-	- Type: Enhancement
-	- Status: Queued
-	- Needs external testing: vm925w
-	- Priority: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: Windows
-	- Requirements:
-		- A launch through runterm does no WMI query and no Start menu walk when nothing needs them.
-	- Progress log:
-		- 20261003: n8runterm.ps1 asks `Get-CimInstance Win32_Process` for its parent, where pwsh 7 has `(Get-Process -Id $PID).Parent`. `fRotate` reads every process's path even when nothing will be deleted. The shortcut search walks both Start menus and opens every `.lnk` through COM.
-	- Origin: 94b62ab (2026-07-19), 4050e29 (2026-09-08), 8a88445 (2026-09-08). No earlier review item. Plausible, not timed.
-	- Note: The live launcher copies sit outside the repo, so a fix reaches them only when they are replaced.
-	- Test case: None yet. A timed launch on vm925w before and after.
-	- Note: Code review 20261003 item 20.
 
 - Repeated blocks that should be one helper
 	- ID: 2026100314050021
