@@ -544,8 +544,10 @@ const SLIDER_HANDLE_W: f32 = 10.0;
 // What a hotkey row's box says while it waits for the new chord.
 const CAPTURE_PROMPT: &str = "Press keys - Esc cancels, Backspace turns off";
 
-// Clear space between the two halves of a row that carries two controls, DIP.
+// Clear space between the parts of a line that carries several controls, DIP.
 const PAIR_GAP: f32 = 12.0;
+// Between a shared line's part label and the box after it, DIP.
+const PART_LABEL_GAP: f32 = 6.0;
 
 // The warning mark after a label, in UI line heights, so it grows with the
 // interface font. Ratios, because the label column is measured in physical
@@ -942,6 +944,7 @@ pub struct SettingsDialog {
 	specs: &'static [Spec],
 	tab: usize,                        // active tab
 	tab_ws: Vec<f32>,                  // measured tab-button widths (UI font)
+	label_ws: Vec<f32>,                // each row's measured label, by spec index
 	scroll: f32,                       // rows-region scroll offset (0 when everything fits)
 	hscroll: f32,                      // sideways offset, when the window is narrower than `natural`
 	drag_thumb: Option<f32>,           // scrollbar-thumb drag: grab offset within the thumb
@@ -1107,6 +1110,42 @@ impl SettingsDialog {
 	fn pairs_down(specs: &[Spec], i: usize, tab: usize) -> bool {
 		Self::paired_with(specs, i, tab).is_some()
 	}
+	// The line row `i` is drawn on: its first row, how many rows share it, and
+	// which of them `i` is. The parser keeps a line's rows next to each other.
+	fn line_of(specs: &[Spec], i: usize) -> (usize, usize, usize) {
+		let mut lead = i;
+		while lead > 0 && specs[lead].beside {
+			lead -= 1;
+		}
+		let parts = 1 + specs[lead + 1..].iter().take_while(|s| s.beside).count();
+		(lead, parts, i - lead)
+	}
+	// The control column a line led by `lead` needs, from what each part has to
+	// show: a dropdown its pair floor, a toggle its box and any label before it.
+	// The middle parts lose a whole gap to their neighbors and the end ones half.
+	fn line_need(specs: &[Spec], lead: usize, label_ws: &[f32], font_scale: f32) -> f32 {
+		let (_, parts, _) = Self::line_of(specs, lead);
+		if parts < 2 {
+			return 0.0;
+		}
+		let n = parts as f32;
+		(0..parts)
+			.map(|k| {
+				let spec = &specs[lead + k];
+				let own = match spec.kind {
+					Kind::Dropdown(_) => lay().dropdown_pair_width * font_scale,
+					Kind::Toggle if k > 0 && !spec.label.is_empty() => {
+						label_ws.get(lead + k).copied().unwrap_or(0.0)
+							+ PART_LABEL_GAP + lay().swatch
+					}
+					Kind::Toggle => lay().swatch,
+					_ => 0.0,
+				};
+				let gaps = [k > 0, k + 1 < parts].iter().filter(|&&g| g).count() as f32;
+				n * (own + gaps * PAIR_GAP / 2.0)
+			})
+			.fold(0.0f32, f32::max)
+	}
 	// A row leads a sub-group when the row drawn under it is indented further.
 	// Read off the indentation rather than declared a second time, so the two
 	// cannot disagree.
@@ -1164,8 +1203,8 @@ impl SettingsDialog {
 		}
 	}
 
-	/// `line_h` is the chrome (UI font) line height; `label_w`/`btn_w`/`tab_ws`
-	/// are the measured widths in that font (see `chrome_widths`) so nothing
+	/// `line_h` is the chrome (UI font) line height; `label_w`/`btn_w`/`tab_ws`/
+	/// `label_ws` are the measured widths in that font (see `chrome_widths`) so nothing
 	/// truncates. `max_w`/`max_h` cap the window to what the screen can show; a
 	/// tab that doesn't fit scrolls instead of clipping the buttons.
 	/// `scale` is the window's DIP -> physical factor; every other argument arrives
@@ -1179,6 +1218,7 @@ impl SettingsDialog {
 		btn_w: f32,
 		row_btn_w: f32,
 		tab_ws: Vec<f32>,
+		label_ws: Vec<f32>,
 		max_w: f32,
 		max_h: f32,
 		scale: f32,
@@ -1188,13 +1228,14 @@ impl SettingsDialog {
 		let (line_h, max_w, max_h) = (line_h / scale, max_w / scale, max_h / scale);
 		let (label_w, btn_w, row_btn_w) = (label_w / scale, btn_w / scale, row_btn_w / scale);
 		let tab_ws: Vec<f32> = tab_ws.into_iter().map(|w| w / scale).collect();
+		let label_ws: Vec<f32> = label_ws.into_iter().map(|w| w / scale).collect();
 		let label_w = label_w.max(lay().label_width);
 		let btn_w = btn_w.max(lay().button_width);
 		let row_btn_w = row_btn_w.max(lay().button_width);
 		// Natural size first, then what the screen leaves room for. Below the
 		// natural size the rows region scrolls in that direction; above it the
 		// stretchy controls spread out.
-		let natural = Self::natural_dip(line_h, label_w, btn_w, row_btn_w, &tab_ws);
+		let natural = Self::natural_dip(line_h, label_w, btn_w, row_btn_w, &tab_ws, &label_ws);
 		let (w, natural_h) = natural;
 		let (min_w, min_h) = Self::min_size_dip(line_h, btn_w);
 		let w = w.min(max_w.max(min_w));
@@ -1217,6 +1258,7 @@ impl SettingsDialog {
 			specs,
 			tab: 0,
 			tab_ws,
+			label_ws,
 			scroll: 0.0,
 			hscroll: 0.0,
 			drag_thumb: None,
@@ -1270,6 +1312,7 @@ impl SettingsDialog {
 		btn_w: f32,
 		row_btn_w: f32,
 		tab_ws: &[f32],
+		label_ws: &[f32],
 	) -> (f32, f32) {
 		let specs: &'static [Spec] = &ui().specs;
 		let btn_h = lay().button_height.max(line_h + lay().row_pad);
@@ -1298,16 +1341,11 @@ impl SettingsDialog {
 			.unwrap_or(0) as f32;
 		let radio_w =
 			lay().pad + label_w + max_radio_opts * lay().radio_pitch * font_scale + lay().pad;
-		// a dropdown's collapsed box (+ revert column) must fit too, and a row
-		// carrying two of them needs the column twice over
-		let dd_ctl = specs
-			.windows(2)
-			.filter(|w| {
-				w[1].beside
-					&& (matches!(w[0].kind, Kind::Dropdown(_))
-						|| matches!(w[1].kind, Kind::Dropdown(_)))
-			})
-			.map(|_| lay().dropdown_pair_width * font_scale * 2.0 + PAIR_GAP)
+		// a dropdown's collapsed box (+ revert column) must fit too, and a shared
+		// line needs every part's room in every one of its even parts
+		let dd_ctl = (0..specs.len())
+			.filter(|&i| !specs[i].beside)
+			.map(|lead| Self::line_need(specs, lead, label_ws, font_scale))
 			.chain(
 				specs
 					.iter()
@@ -1366,6 +1404,7 @@ impl SettingsDialog {
 		btn_w: f32,
 		row_btn_w: f32,
 		tab_ws: Vec<f32>,
+		label_ws: Vec<f32>,
 		max_w: f32,
 		max_h: f32,
 		scale: f32,
@@ -1374,6 +1413,7 @@ impl SettingsDialog {
 		let (line_h, max_w, max_h) = (line_h / scale, max_w / scale, max_h / scale);
 		let (label_w, btn_w, row_btn_w) = (label_w / scale, btn_w / scale, row_btn_w / scale);
 		self.tab_ws = tab_ws.into_iter().map(|w| w / scale).collect();
+		self.label_ws = label_ws.into_iter().map(|w| w / scale).collect();
 		self.line_h = line_h;
 		self.label_w = label_w.max(lay().label_width);
 		self.btn_w = btn_w.max(lay().button_width);
@@ -1385,6 +1425,7 @@ impl SettingsDialog {
 			self.btn_w,
 			self.row_btn_w,
 			&self.tab_ws,
+			&self.label_ws,
 		);
 		// The screen holds fewer DIP at a higher scale, so the window may no
 		// longer fit what it was dragged to.
@@ -1654,14 +1695,28 @@ impl SettingsDialog {
 	fn ctl_right_full(&self) -> f32 {
 		self.content_x() + self.layout_w() - lay().pad - lay().revert_width - 6.0
 	}
-	// The same, for one row: the first of a pair stops at the halfway mark.
+	// The same, for one row: a row sharing its line stops at the end of its part.
 	fn ctl_right(&self, i: usize) -> f32 {
-		if Self::pairs_down(self.specs, i, self.tab) {
-			let left = self.content_x() + lay().pad + self.label_w;
-			left + self.pair_split(left) - PAIR_GAP / 2.0
+		let (_, parts, k) = Self::line_of(self.specs, i);
+		self.part_span(k, parts).1
+	}
+	// Part `k` of a control column split `parts` ways: its left and right edge,
+	// with a gap between neighbors and none at either end of the column.
+	fn part_span(&self, k: usize, parts: usize) -> (f32, f32) {
+		let left = self.content_x() + lay().pad + self.label_w;
+		let full = self.ctl_right_full();
+		let w = ((full - left) / parts as f32).max(0.0);
+		let start = if k > 0 {
+			left + k as f32 * w + PAIR_GAP / 2.0
 		} else {
-			self.ctl_right_full()
-		}
+			left
+		};
+		let end = if k + 1 < parts {
+			left + (k + 1) as f32 * w - PAIR_GAP / 2.0
+		} else {
+			full
+		};
+		(start, end)
 	}
 	fn hthumb(&self) -> Option<Rect> {
 		let scroll_max = self.max_hscroll();
@@ -2728,25 +2783,22 @@ impl SettingsDialog {
 	// Left edge of a row's label: its own sub-group depth in from the panel pad.
 	fn label_x(&self, i: usize) -> f32 {
 		if self.specs[i].beside {
-			// half a line has no label column: the label follows its control, the
-			// way a checkbox's always has
-			return self.control_x(i) + lay().swatch + 6.0;
+			// part of a shared line has no label column: its label starts its part
+			let (_, parts, k) = Self::line_of(self.specs, i);
+			return self.part_span(k, parts).0;
 		}
 		self.content_x() + lay().pad + f32::from(self.specs[i].indent) * lay().indent
 	}
-	// Where row `i`'s controls start. A pair splits the control column down the
-	// middle, so the second of the two starts halfway across.
+	// Where row `i`'s controls start. A shared line splits the control column
+	// evenly, and a part with a label of its own puts the control after it.
 	fn control_x(&self, i: usize) -> f32 {
-		let left = self.content_x() + lay().pad + self.label_w;
-		if self.specs[i].beside {
-			left + (self.pair_split(left) + PAIR_GAP / 2.0)
+		let (_, parts, k) = Self::line_of(self.specs, i);
+		let start = self.part_span(k, parts).0;
+		if self.specs[i].beside && !self.specs[i].label.is_empty() {
+			start + self.label_ws.get(i).copied().unwrap_or(0.0) + PART_LABEL_GAP
 		} else {
-			left
+			start
 		}
-	}
-	// Half the control column, measured from its left edge.
-	fn pair_split(&self, left: f32) -> f32 {
-		((self.ctl_right_full() - left) / 2.0).max(0.0)
 	}
 	// Top of a control `h` tall, centered in row `i`'s line.
 	fn centered_in_row(&self, i: usize, h: f32) -> f32 {
@@ -3044,10 +3096,12 @@ impl SettingsDialog {
 					h: self.line_h,
 				}
 			} else if self.specs[i].beside {
+				// its own part of the line, label and control both
+				let x = self.label_x(i);
 				Rect {
-					x: self.control_x(i),
+					x,
 					y: self.row_y(i),
-					w: (self.ctl_right(i) - self.control_x(i)).max(ctl.w),
+					w: (self.ctl_right(i) - x).max(ctl.x + ctl.w - x),
 					h: self.row_screen_h(i),
 				}
 			} else {
@@ -3166,15 +3220,18 @@ impl SettingsDialog {
 			}
 	}
 	// Every setting one revert arrow answers for: the row's own, both halves of a
-	// Dual, and whatever is drawn beside it.
+	// Dual, and every row drawn beside it on its line.
 	fn row_keys(&self, i: usize) -> Vec<Key> {
 		let own = |i: usize| match self.specs[i].kind {
 			Kind::Dual { keys, .. } => keys.to_vec(),
 			_ => vec![self.specs[i].key],
 		};
 		let mut keys = own(i);
-		if let Some(j) = Self::paired_with(self.specs, i, self.tab) {
-			keys.extend(own(j));
+		if !self.specs[i].beside {
+			let (_, parts, _) = Self::line_of(self.specs, i);
+			for j in i + 1..i + parts {
+				keys.extend(own(j));
+			}
 		}
 		keys
 	}
@@ -6986,7 +7043,10 @@ pub fn sane_scale(scale: f32) -> f32 {
 /// what put a tab's title `tab_pad/2` from its left edge inside a box only
 /// `tab_pad/scale` wider than the title - flush right at 2x, overflowing past it
 /// above that.
-pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> (f32, f32, f32, Vec<f32>) {
+pub fn chrome_widths(
+	text: &mut crate::text::TextCtx,
+	scale: f32,
+) -> (f32, f32, f32, Vec<f32>, Vec<f32>) {
 	let attrs = crate::text::ui_attrs();
 	let dip = |v: f32| config::dip(v, scale);
 	// an indented label starts further right, so the column has to clear the
@@ -7030,7 +7090,14 @@ pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> (f32, f32, 
 		.iter()
 		.map(|title| measured_plus(text.measure_ui_text(title, &attrs), lay().tab_pad, scale))
 		.collect();
-	(label_w, btn_w, row_btn_w, tab_ws)
+	// a label on a shared line sits in its own part, before its box, so the part
+	// has to know how long it is
+	let label_ws = ui()
+		.specs
+		.iter()
+		.map(|spec| text.measure_ui_text(spec.label, &attrs))
+		.collect();
+	(label_w, btn_w, row_btn_w, tab_ws, label_ws)
 }
 
 /// Returns true if `old` and `new` differ in any field that needs a text-context
@@ -7078,6 +7145,15 @@ mod tests {
 		s.chars().count() as f32 * 7.0
 	}
 
+	// Each row's label measured in that font, `scale` times over.
+	fn labels7(scale: f32) -> Vec<f32> {
+		super::ui()
+			.specs
+			.iter()
+			.map(|s| chars7(s.label) * scale)
+			.collect()
+	}
+
 	fn mk_dialog(max_h: f32) -> SettingsDialog {
 		mk_dialog_at(max_h, 1.0)
 	}
@@ -7092,6 +7168,7 @@ mod tests {
 			80.0 * scale,
 			90.0 * scale,
 			vec![90.0 * scale; tab_titles().len()],
+			labels7(scale),
 			f32::MAX,
 			max_h * scale,
 			scale,
@@ -7123,6 +7200,7 @@ mod tests {
 			80.0 * 2.0,
 			90.0 * 2.0,
 			vec![90.0 * 2.0; tab_titles().len()],
+			labels7(2.0),
 			f32::MAX,
 			900.0 * 2.0,
 			2.0,
@@ -7163,6 +7241,7 @@ mod tests {
 			80.0 * 2.0,
 			90.0 * 2.0,
 			vec![90.0 * 2.0; tab_titles().len()],
+			labels7(2.0),
 			f32::MAX,
 			900.0 * 2.0,
 			2.0,
@@ -7382,40 +7461,276 @@ mod tests {
 		);
 	}
 
-	// A row declared `beside` shares the line above it: same y, and the two split
-	// the control column without touching. The pair costs one line, not two.
-	// Test ID: EpOQNMU
+	// Commented out 20261006: a line may hold more than two rows now
+	// (2026100614510984), and this read every row followed by a `beside` one as
+	// a line's first, which the tab text line's middle rows are not. Replaced by
+	// `a_shared_line_puts_its_parts_side_by_side` (Ery4fxK), which checks the same
+	// things for every part of every line.
+	// // A row declared `beside` shares the line above it: same y, and the two split
+	// // the control column without touching. The pair costs one line, not two.
+	// // Test ID: EpOQNMU
+	// #[test]
+	// fn a_paired_row_shares_the_line_above_it() {
+	// 	let d = mk_dialog(4000.0);
+	// 	let mut pairs = 0;
+	// 	for tab in 0..tab_titles().len() {
+	// 		let rows: Vec<usize> = SettingsDialog::visible(d.specs, tab)
+	// 			.map(|(i, _)| i)
+	// 			.collect();
+	// 		for w in rows.windows(2) {
+	// 			let (lead, follow) = (w[0], w[1]);
+	// 			if !d.specs[follow].beside {
+	// 				continue;
+	// 			}
+	// 			pairs += 1;
+	// 			let mut d = mk_dialog(4000.0);
+	// 			d.tab = tab;
+	// 			assert_eq!(d.row_y(lead), d.row_y(follow), "one line, not two");
+	// 			assert!(
+	// 				d.ctl_right(lead) <= d.control_x(follow),
+	// 				"the two halves do not overlap"
+	// 			);
+	// 			assert!(
+	// 				d.control_x(follow) < d.ctl_right(follow),
+	// 				"the second half has room to draw in"
+	// 			);
+	// 			// one revert arrow answers for both settings
+	// 			assert!(d.has_revert(lead) && !d.has_revert(follow));
+	// 			assert!(d.row_keys(lead).contains(&d.specs[follow].key));
+	// 		}
+	// 	}
+	// 	assert!(pairs >= 2, "expected paired rows, saw {pairs}");
+	// }
+
+	// Every row declared `beside` shares its line's y, and the line's parts sit
+	// in order without touching, each with room to draw in. One revert arrow,
+	// on the first row, answers for every setting on the line.
+	// Test ID: Ery4fxK
 	#[test]
-	fn a_paired_row_shares_the_line_above_it() {
-		let d = mk_dialog(4000.0);
-		let mut pairs = 0;
-		for tab in 0..tab_titles().len() {
-			let rows: Vec<usize> = SettingsDialog::visible(d.specs, tab)
-				.map(|(i, _)| i)
-				.collect();
-			for w in rows.windows(2) {
-				let (lead, follow) = (w[0], w[1]);
-				if !d.specs[follow].beside {
-					continue;
-				}
-				pairs += 1;
-				let mut d = mk_dialog(4000.0);
-				d.tab = tab;
-				assert_eq!(d.row_y(lead), d.row_y(follow), "one line, not two");
+	fn a_shared_line_puts_its_parts_side_by_side() {
+		let mut d = mk_dialog(4000.0);
+		let (w, h) = d.natural;
+		d.set_size(w, h);
+		let mut lines = 0;
+		let mut widest = 0;
+		for lead in 0..d.specs.len() {
+			let (_, parts, _) = SettingsDialog::line_of(d.specs, lead);
+			if d.specs[lead].beside || parts < 2 {
+				continue;
+			}
+			lines += 1;
+			widest = widest.max(parts);
+			d.tab = d.specs[lead].tab;
+			assert!(d.has_revert(lead), "the line's first row has the arrow");
+			for j in lead + 1..lead + parts {
+				assert_eq!(d.row_y(lead), d.row_y(j), "one line, not {parts}");
 				assert!(
-					d.ctl_right(lead) <= d.control_x(follow),
-					"the two halves do not overlap"
+					!d.has_revert(j),
+					"{:?} has an arrow of its own",
+					d.specs[j].key
+				);
+				assert!(d.row_keys(lead).contains(&d.specs[j].key));
+				// the part before ends before this one's label starts
+				assert!(
+					d.ctl_right(j - 1) <= d.label_x(j),
+					"{:?} runs into {:?}",
+					d.specs[j - 1].key,
+					d.specs[j].key
 				);
 				assert!(
-					d.control_x(follow) < d.ctl_right(follow),
-					"the second half has room to draw in"
+					d.control_x(j) < d.ctl_right(j),
+					"{:?} has room to draw in",
+					d.specs[j].key
 				);
-				// one revert arrow answers for both settings
-				assert!(d.has_revert(lead) && !d.has_revert(follow));
-				assert!(d.row_keys(lead).contains(&d.specs[follow].key));
 			}
 		}
-		assert!(pairs >= 2, "expected paired rows, saw {pairs}");
+		assert!(lines >= 3, "expected shared lines, saw {lines}");
+		assert!(widest >= 4, "the tab text line has four parts");
+	}
+
+	// Where the tab text line is, on whatever tab it is on.
+	fn tab_text_line(d: &mut SettingsDialog) -> [usize; 4] {
+		let at = |key: Key| d.specs.iter().position(|s| s.key == key).unwrap();
+		let line = [
+			at(Key::TabShowsTitle),
+			at(Key::TabShowsShell),
+			at(Key::TabShowsProgram),
+			at(Key::TabShowsDirectory),
+		];
+		d.tab = d.specs[line[0]].tab;
+		line
+	}
+
+	// The four tab text toggles are one line with one revert arrow, and the
+	// arrow puts all four back - whichever of them moved.
+	// Test ID: Ery4g1k
+	#[test]
+	fn one_revert_puts_back_all_four_tab_text_toggles() {
+		let mut d = mk_dialog(4000.0);
+		let line = tab_text_line(&mut d);
+		let lead = line[0];
+		assert_eq!(SettingsDialog::line_of(d.specs, lead), (lead, 4, 0));
+		for i in line {
+			assert_eq!(d.row_y(i), d.row_y(lead));
+			assert_eq!(d.has_revert(i), i == lead);
+		}
+		let keys = line.map(|i| d.specs[i].key);
+		assert_eq!(d.row_keys(lead), keys.to_vec());
+
+		// each one alone lights the arrow
+		for key in keys {
+			for k in keys {
+				let at = super::toggle_of(&d.defaults, k);
+				d.set_toggle(k, at);
+			}
+			assert!(d.row_is_default(lead));
+			let at = super::toggle_of(&d.defaults, key);
+			d.set_toggle(key, !at);
+			assert!(!d.row_is_default(lead), "{key:?} off its default");
+		}
+
+		// all four off their defaults, then one click on the arrow
+		for k in keys {
+			let at = super::toggle_of(&d.defaults, k);
+			d.set_toggle(k, !at);
+		}
+		let arrow = d.revert_box(lead);
+		d.mouse_down_dip(
+			arrow.x + arrow.w / 2.0,
+			arrow.y + arrow.h / 2.0,
+			&mut chars7,
+		);
+		for k in keys {
+			assert!(d.is_default(k), "{k:?} was not put back");
+		}
+		assert!(d.row_is_default(lead));
+		// and all four lines go back to the template's at Apply
+		let reverted = d.take_reverted();
+		for path in [
+			"window.tab_shows_title",
+			"window.tab_shows_shell",
+			"window.tab_shows_program",
+			"window.tab_shows_directory",
+		] {
+			assert!(
+				reverted.contains(&path),
+				"{path} stays in force: {reverted:?}"
+			);
+		}
+	}
+
+	// A click on one of the four boxes, or Space with focus on it, flips that
+	// setting and leaves the other three alone. Tab and the arrows reach each.
+	// Test ID: Ery4g6B
+	#[test]
+	fn each_tab_text_toggle_flips_only_its_own_setting() {
+		let mut d = mk_dialog(4000.0);
+		let line = tab_text_line(&mut d);
+		let keys = line.map(|i| d.specs[i].key);
+		let values = |d: &SettingsDialog| keys.map(|k| d.get_toggle(k));
+		for (n, &i) in line.iter().enumerate() {
+			let before = values(&d);
+			let bx = d.checkbox(i);
+			d.mouse_down_dip(bx.x + bx.w / 2.0, bx.y + bx.h / 2.0, &mut chars7);
+			let mut want = before;
+			want[n] = !want[n];
+			assert_eq!(values(&d), want, "a click on {:?}", keys[n]);
+			assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
+		}
+
+		// the keyboard: Down walks onto each box in turn, Space flips only it
+		d.focus = Some(super::Focus::Row(line[0], 0));
+		for (n, &i) in line.iter().enumerate() {
+			assert_eq!(
+				d.focus,
+				Some(super::Focus::Row(i, 0)),
+				"Down reaches {:?}",
+				keys[n]
+			);
+			let before = values(&d);
+			d.key_space();
+			let mut want = before;
+			want[n] = !want[n];
+			assert_eq!(values(&d), want, "Space on {:?}", keys[n]);
+			d.key_vertical(true);
+		}
+		// and Shift+Tab walks back over the same four
+		d.focus = Some(super::Focus::Row(line[3], 0));
+		d.shift = true;
+		for &i in line.iter().rev().skip(1) {
+			d.key_tab();
+			assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
+		}
+	}
+
+	// Each toggle keeps its own flyover, over its box and over its label.
+	// Test ID: Ery4gAt
+	#[test]
+	fn each_tab_text_toggle_has_its_own_tip_over_box_and_label() {
+		let mut d = mk_dialog(4000.0);
+		let line = tab_text_line(&mut d);
+		for i in line {
+			let help = d.specs[i].help;
+			assert!(!help.is_empty(), "{:?} has a tip", d.specs[i].key);
+			let bx = d.checkbox(i);
+			let mid = bx.y + bx.h / 2.0;
+			for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
+				let tip = d.hover_tip_dip(x, mid, &mut chars7).map(|(text, _)| text);
+				assert_eq!(tip, Some(help), "{:?} at x {x}", d.specs[i].key);
+			}
+		}
+	}
+
+	// At its natural width the panel fits the whole line: each label ends before
+	// its own box, each box inside its part, and the last before the arrow. Also
+	// with labels long enough that the line, not the tab strip, sets the width.
+	// Test ID: Ery4gFO
+	#[test]
+	fn the_tab_text_line_fits_the_panel() {
+		for per_char in [7.0f32, 16.0] {
+			for line_h in [18.0f32, 38.0] {
+				let k = line_h / 18.0;
+				let labels = super::ui()
+					.specs
+					.iter()
+					.map(|s| s.label.chars().count() as f32 * per_char * k)
+					.collect();
+				let mut d = SettingsDialog::new(
+					0.0,
+					0.0,
+					line_h,
+					170.0 * k,
+					80.0 * k,
+					90.0 * k,
+					vec![90.0 * k; tab_titles().len()],
+					labels,
+					f32::MAX,
+					4000.0,
+					1.0,
+				);
+				let (w, h) = d.natural;
+				d.set_size(w, h);
+				let line = tab_text_line(&mut d);
+				for &i in &line[1..] {
+					let label_end =
+						d.label_x(i) + d.specs[i].label.chars().count() as f32 * per_char * k;
+					let bx = d.checkbox(i);
+					assert!(
+						label_end < bx.x,
+						"{:?}: label runs into its box ({per_char}, {line_h})",
+						d.specs[i].key
+					);
+					assert!(
+						bx.x + bx.w <= d.ctl_right(i),
+						"{:?}: box past its part ({per_char}, {line_h})",
+						d.specs[i].key
+					);
+				}
+				let last = d.checkbox(line[3]);
+				assert!(last.x + last.w < d.revert_box(line[0]).x);
+				assert!(d.revert_box(line[0]).x + d.revert_box(line[0]).w <= d.rect.x + d.rect.w);
+			}
+		}
 	}
 
 	// A pair shares one revert arrow, so a profile showing the FIRST half must not
@@ -8500,7 +8815,15 @@ mod tests {
 				.specs
 				.iter()
 				.filter(|s| s.tab == tab && !SettingsDialog::header_is_tab_title(s))
-				.map(|s| SettingsDialog::row_h_for(&s.kind, d.line_h, shells))
+				// Changed 20261006: a shared line is drawn once, so a row with
+				// others beside it counts once (2026100614510984). This summed
+				// every row whole, which held only while no tab with a hidden
+				// heading had a shared line:
+				//     .map(|s| SettingsDialog::row_h_for(&s.kind, d.line_h, shells))
+				.map(|s| {
+					let i = d.specs.iter().position(|o| std::ptr::eq(o, s)).unwrap();
+					SettingsDialog::row_advance(d.specs, i, tab, d.line_h, shells)
+				})
 				.sum();
 			// the surplus over the rows is the declared gaps and NOTHING else -
 			// stated exactly rather than bounded by a heading's height, so
@@ -9366,6 +9689,7 @@ mod tests {
 			160.0,
 			180.0,
 			vec![180.0; tab_titles().len()],
+			labels7(2.0),
 			f32::MAX,
 			4000.0,
 			1.0,
@@ -11635,6 +11959,7 @@ mod tests {
 			80.0 * k,
 			90.0 * k,
 			vec![90.0 * k; tab_titles().len()],
+			labels7(k),
 			f32::MAX,
 			4000.0,
 			1.0,
