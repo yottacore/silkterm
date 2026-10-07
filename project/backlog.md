@@ -548,10 +548,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wallpaper: optional BC7 in place of BC1
 	- ID: 2026100705511507
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpkept, wpresize and wakepic window tests passed.
+	- Needs external testing: A look on Windows (DX12 and WARP) and macOS (Metal) at no blur on Custom, where a BC7 upload has not been seen. The unit tests on vm925w and b26.
 	- Priority: Avg
 	- Opened: 20261007-055115
 	- Opened by: JC
+	- Assigned to: CC
 	- Parent ID: 2026100418225507
 	- Prereq IDs: 2026100418225507
 	- Target OS: All
@@ -562,6 +565,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Not settled yet: where the option lives and what it is called.
 	- Decisions:
 		- 20261007: BC7 follows the performance profile, like the blur hold: High, Max and Custom use BC7, and Low, Standard and Remote keep BC1. No Settings row. The config file can override it.
+	- Progress log:
+		- 20261007: Chosen: an encoder of our own in `bc7.rs`, using 2 of BC7's 8 modes. Mode 6 has 16 steps between a block's 2 colors, where BC1 has 4, and that is what fixes the gradients. Mode 5 is tried for a dark block that touches black, since mode 6 can't reach 0 in an opaque picture. The other modes are for edges between several colors, which a wallpaper has few of, at several times the code and encode time.
+		- 20261007: Chosen: `wallpaper.compression` in the config file, "auto" by default, or "bc1" or "bc7". Auto follows the profile as decided. Either of the other two wins over any profile. The name and words are a best guess, for signoff.
+		- 20261007: Done: a profile change or a new value in the file prepares the picture again. Kept copies on disk have a key per kind, so a BC1 copy is never handed to a BC7 window or the reverse.
+		- 20261007: Done: BC7 also covers a device without BC (plain), padding, the GL loss check and the memory debug line, the same as BC1.
+		- 20261007: Verified on b23 at 2560x1440 with no blur, against plain, in sRGB levels. BC7 averages about a third of BC1's error: built-in 0.08 dark and 0.17 light (BC1 0.24 and 0.49), a large photo 0.15 (0.47), a star field 0.16 (0.55). The worst pixels are the same few colored stars as with BC1, 30 against 32, and 62 against 65 at 100% visibility with no scrim. GL and Vulkan alike. Full table in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#bc7-by-profile).
+		- 20261007: Verified: in smooth areas the steps at block edges are less than half BC1's, and with the contrast stretched 8 times the built-in's gradients look like the plain picture.
+		- 20261007: Verified: the texture is 3.5 MiB for a 2560x1440 picture, against 1.8 as BC1 and 14.1 plain. Encoding takes 59 to 116 ms at 2560x1440 where BC1 takes 15 to 44, and up to about 160 ms in the size-optimized release build with the box busy. The release binary is 8 KB bigger.
+		- 20261007: Verified: at the shipped blur the picture stays plain on every profile, and 0 pixels changed against the build before, dark and light and at Low. "auto" on Custom draws the same as "bc7".
+		- 20261007: Verified: the new tests fail with the BC7 key left off kept copies, with the profile mapping changed, with a profile change not preparing the picture again, and with a block laid out wrong in both the encoder and its own decoder. The GPU's own decoder is what catches that last one. The new wpkept checks fail on the build before this.
+	- Branch: wpbc7
+	- Commit: 66071a6
+	- Test case: `bc7.rs` tests Es1eEgS, Es1eEgT, Es1eEgU, Es1eEgV, Es1gYa7; `the_profile_picks_bc1_or_bc7_unless_the_file_says` (Es1erXj), `a_bc7_window_never_takes_a_bc1_copy` (Es1erXk), `a_bc7_copy_comes_back_block_for_block` (Es1eZ5s); `a_bc1_wallpaper_draws_like_the_plain_one` (Erz0m6t) now draws BC7 too; `every_fixed_choice_reads_and_writes_its_own_word` (ErstaMt) reads the new setting; `cicd/tests/wpkept/run.bash` (EryJg1H) has a BC7 case.
+	- Swept: every user of the BC1 blocks, kept copies and texture format: `Prepared`, `Kept`, `Stored`, `ImageRenderer::new`, the loss probe, `memdbg_line`, `wallpaper_changed`, and the wpkept script, the only one reading the BC lines.
 
 - One VRAM readback probe for gfx.rs and bgimage.rs
 	- ID: 2026100622234832
