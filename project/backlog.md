@@ -132,8 +132,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Feature
 	- Status: Waiting for testing [started]
 		- Works on Linux [20261006-141835]
+		- Works on Windows [20261007-101900]
 	- Needs external testing:
-		- Two real monitors that differ, on X11, Windows and macOS. The window opens at each monitor's own size and font zoom, and takes the other's once dropped there, never while still held. A resize right after the drop is kept, and the window does not swap sizes when it straddles the two.
+		- Two real monitors that differ, on macOS. The window opens at each monitor's own size and font zoom, and takes the other's once dropped there, never while still held. A resize right after the drop is kept, and the window does not swap sizes when it straddles the two.
 		- On Windows and macOS, that the monitor's name in the config ends in its size in mm.
 		- Wayland: opening on a second output, and a drag between outputs.
 		- A look at the Per monitor row on the Window tab.
@@ -168,6 +169,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Started on branch `permon`. Done: the per-monitor store, the Per monitor switch under Remember last size, and opening at the monitor's own size.
 		- 20261003: Done: a window moved to another monitor takes that monitor's size once it has stopped. Left: the font size.
 		- 20261003: Done: the font zoom is kept with the size, both as the last one anywhere and per monitor, and used at launch and after a move. The README line is in. Checked on one monitor only, by changing its resolution under the window. A real two-monitor look is still needed.
+		- 20261007: Two real monitors passed on Windows and on b23 (X11). macOS and Wayland are left.
 		- Choices made here, still open:
 			- The font zoom is remembered under Remember last size, with no switch of its own, as px on the font size. Zooming saves the grid too, so the window reopens at the same pixel size.
 			- A monitor with no entry of its own gets the last size anywhere, at launch and after a move, as the requirements say.
