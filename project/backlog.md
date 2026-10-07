@@ -34,32 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- The dogfood launcher makes three slow Windows queries per launch
-	- ID: 2026100314050020
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: A full `cicd-win.ps1` run, for its new stage 3 line. The test it calls passed on its own on vm925w.
-	- Priority: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: Windows
-	- Requirements:
-		- A launch through runterm does no WMI query and no Start menu walk when nothing needs them.
-	- Progress log:
-		- 20261003: n8runterm.ps1 asks `Get-CimInstance Win32_Process` for its parent, where pwsh 7 has `(Get-Process -Id $PID).Parent`. `fRotate` reads every process's path even when nothing will be deleted. The shortcut search walks both Start menus and opens every `.lnk` through COM.
-		- 20261006: The parent comes from `(Get-Process -Id $PID).Parent`. The rotation reads the process list only once a copy is due to go, and still spares a running one.
-		- 20261006: The Start menu entry is looked for where it was last found, then at the default place, and both menus are searched only when neither runs the wrapper. Where it was found is kept in a new one-line file, `runterm.menu`, beside `runterm.log`. An entry filed by hand is still adopted wherever it is, and one that moves is found again on the next launch.
-		- 20261006: On vm925w, with nothing to do, the launcher's own time went from about 660 to 540 ms, past pwsh's own start. That box's two Start menus hold about 340 shortcuts, and searching them all costs about 390 ms by itself, which a launch now skips unless the entry moved.
-	- Origin: 94b62ab (2026-07-19), 4050e29 (2026-09-08), 8a88445 (2026-09-08). No earlier review item. Confirmed: the counts below were 1 per launch before the change.
-	- Note: The live launcher copies sit outside the repo, so a fix reaches them only when they are replaced. They were not touched, and they already differ from the repo copy, older than 9572727.
-	- Against: The rule that a shortcut never names the versions folder still holds. It runs the wrapper and takes its icon from the symlink. 9572727's guard on an installed build is unchanged.
-	- Swept: `git grep` for `Get-CimInstance`, `Win32_Process`, `CreateShortcut` and `Start Menu` over the scripts. The other WMI calls are in GUI tests and the info job, not on a launch path. install.ps1 writes one shortcut and searches nothing. runterm.cmd only finds the script.
-	- Verified: ps-lint on the changed scripts. The launcher harness on Linux, with the new case failing on the old launcher and passing on the new. The new Start menu test on vm925w, failing 6 checks on the old launcher and passing on the new.
-	- Branch: fastlaunch
-	- Commit: 5ce6265
-	- Test case: The launcher harness (EpHRcSG) case "the process list is read only when a copy is due to go". New Windows test `cicd/tests/launcher/startmenu.ps1` (EryVaSD), run by `cicd-win.ps1` in stage 3: a launch after the first asks WMI nothing, searches no Start menu and reads no process list, all counted at 0.
-	- Note: Code review 20261003 item 20.
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -153,44 +127,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 
-- macOS: the program's own shortcuts still use Ctrl in places, where a Mac uses Command
-	- ID: 2026100219054469
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs external testing: On b26, in the terminal, Ctrl+Shift+T, W, N, C and V, Ctrl+, , Ctrl+Plus, Minus and 0, Ctrl+PageUp and PageDown, and Ctrl+F4 all reach the shell and do none of the program's actions. Ctrl+Shift+C interrupts, as Ctrl+C does. The Command chords do each of those jobs. Command+click opens a link, Command held at a press makes a block selection, and Ctrl+click is a plain click. F11 still toggles fullscreen when macOS lets it through.
-		- In a Settings text box: Command+A, C, X and V work from the keyboard, and Edit > Copy and Paste on the menu bar work too. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. Ctrl or Command plus a letter types nothing. Command+PageUp and PageDown change tab, and Ctrl+Tab moves focus like Tab.
-		- In a tab rename: Command+A selects the name. Ctrl or Command plus a letter types nothing.
-		- This replaces the lines in 2026100114435613's check that say the Ctrl chords still work.
-		- 20261002: Ctrl+click opens the right-click menu instead of being a plain click (2026100220260471).
-	- Severity: Avg
-	- Opened: 20261002-190545
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435613, 2026100114435587, 2026100219054483
-	- Target OS: macOS
-	- Test environment: b26
-	- Incorrect behavior: The Settings dialog's text boxes take Ctrl+C, X, V and A only, so Command+C and Command+V there go to the menu bar, which just brings the dialog forward. The terminal's own Ctrl and Ctrl+Shift chords, such as Ctrl+Shift+T, Ctrl+Shift+C and Ctrl+, still work beside the Command ones.
-	- Expected behavior: On macOS every shortcut the program itself takes uses Command where other platforms use Ctrl. That includes the Settings text boxes, the tab rename and the terminal window. Ctrl chords then go to the shell.
-	- Reproduced: No. Read from the code on 20261002.
-	- Decisions:
-		- 20261002: Use the Mac's Command chords everywhere on macOS, instead of Ctrl, including on the terminal itself. This replaces the 20261002 decision on 2026100114435587 that kept every Ctrl chord working beside the Command ones.
-	- Actual cause: The key handling took the Ctrl chords on every platform, and on a Mac took the Command ones beside them. The Settings text boxes, the tab rename, the link click and the block selection read Ctrl alone. On a Mac the menu bar takes Command+C and V first, and a pick with Settings open only brought it forward.
-	- Actual fix:
-		- On a Mac the program's chords are the Command ones from the one table the menu bar reads, and no Ctrl chord is the program's. The Ctrl chords go to the shell. Linux and Windows are unchanged.
-		- The tab chords move too: Command+PageUp and PageDown walk the tabs, and Shift with them moves the tab, as Ctrl does elsewhere. Command+Shift+[ and ] are 2026100219054497.
-		- Command+click opens a link and Command held at a press selects a block.
-		- A Settings text box takes Command+A, C, X and V. Edit > Copy and Paste on the menu bar now act on the box when Settings is open. Moving by words is Option, the Mac's word key, since Command+Left and Right go to either end in a Mac text box. Command+Backspace erases to the start. Ctrl plus a letter types nothing.
-		- The tab rename takes Command+A, and Command+V when it is pressed as a key. Neither Command nor Ctrl plus a letter types into the name. Paste from the menu bar is 2026100219054483.
-		- Ctrl+Shift+C copies an unfocused window's selection elsewhere; on a Mac that is Command+C.
-	- Note: F11 is not a Ctrl chord, so it still toggles fullscreen on a Mac. macOS usually takes F11 for itself.
-	- Swept: Every reader of Ctrl as a program key in `app.rs`, `dialog.rs`, `settings_ui.rs` and `input.rs`: the key bindings, the unfocused copy, the tab rename, the link click, the block selection, the Settings text boxes and the dialog's tab keys. Menu labels on a Mac already came from the Command table. Shortcut text in the UI style guide, the README, design.md and three feature designs. No tip, help text or Settings text names a Ctrl chord.
-	- Test case: `command_comma_is_the_only_settings_chord_on_macos` (ErbGP9B), `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5), `the_shortcut_key_is_command_on_macos_and_ctrl_elsewhere` (ErbGPK5) and `a_mac_text_box_takes_the_mac_keys` (ErbGPQa). Each fails with its part of the change undone.
-		- The old `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm) are commented out, since they pinned the Ctrl chords working on a Mac.
-		- The Linux key tests now ask for the Linux answer by name, so they also hold when run on a Mac. `only_a_held_ctrl_shift_c_is_the_copy_chord` (EpyCuGe) passes the platform in.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: maccmd
-	- Commit: 7179fa9
-
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
@@ -248,288 +184,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 684d3a0, 754c9cb, 8624cc2
 	- Closed:
 
-- The event loop does blocking work on every pass
-	- ID: 2026100314050005
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: No
-	- Needs external testing: macOS on b26: the menu bar still follows a hotkey rebinding and a View menu state change (fullscreen, Read only), and is not rebuilt while nothing changes.
-	- Priority: Avg
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Nothing that waits on the X server, reads the environment or builds strings runs on every `about_to_wait` pass.
-	- Progress log:
-		- 20261003: `freeze_sync` runs on every pass and every redraw. Its `hidden()` asks `is_minimized()`, which on X11 is a property request that waits for its reply.
-		- 20261003: `idle_rule` reads `SILK_IDLE_SECS` twice per pass through `release_deadline`. The file's own note at `env_flag` says to read the environment once.
-		- 20261003: on macOS, `bar_menus_key` asks for the fullscreen state and builds a string per hotkey on every pass.
-		- 20261003: `monitor.rs` opens a new X11 connection in `x11_monitor_under` and again in `button_held`. That runs every 250 ms during a window drag.
-		- 20261003: Measured with output every 16 ms: `freeze_sync` took 240 to 275 us a call and was most of a pass's own time outside the frame (283 to 538 us). An idle window with the cursor animating: 61 us a call.
-		- 20261003: winit's X11 backend sends nothing when a window is minimized; it never reads `_NET_WM_STATE` changes or unmap. A minimize with focus gives `Focused(false)`; one without focus gives no event at all. A restore gives `Focused`, `Occluded(false)` and a redraw.
-		- 20261003: Done: the minimized answer is kept for 250 ms and dropped on focus, occlusion, resize and redraw events, so a restore is still seen at once and the WM's redraw still does the catch-up (G89). Same runs after: 56 to 77 us a call, 93 to 118 us a pass outside the frame; idle 26 us a call. Those runs draw about 17 frames a second, so at 60 the saving is larger.
-		- 20261003: Done: `SILK_IDLE_SECS` is read once per process.
-		- 20261003: Done: the macOS menu key hashes the bindings in force directly instead of building a `keys.<name>` string per hotkey. The fullscreen read is winit's own cached flag on macOS, not a call into AppKit, so it stays.
-		- 20261003: Left alone: the monitor check during a drag. It costs about 130 us a check, four a second, only while a button is held, then once more when the move settles. Keeping a second X connection open for the life of the process would save little.
-	- Origin: 6d543d37 (2026-08-30) for `freeze_sync`, 90073855 (2026-09-17) for `idle_rule`, 02482bb7 (2026-10-01) for the menu key, 754c9cb (2026-10-03) for the monitor check. No earlier review item. Plausible when filed; measured 20261003.
-	- Verified: minimize and restore during output, focused and unfocused. A focused minimize froze within 11 ms and an unfocused one within 104 ms. The catch-up frame came 3 ms after the restore. A minimized window still let its device go and got it back on restore. Frame counts matched the old build.
-	- Verified: full unit suite passes. Clippy is clean for Linux, Windows and macOS targets.
-	- Swept: every environment read in the source. Only `SILK_PROFILE_OUT`, in profiling builds, is still read per pass; the rest are read once or on a rare event. Every `self.window` state query in app.rs; none other runs per pass. `config_paths()` callers: the rest are tests or config reads, not per pass.
-	- Branch: loopwork
-	- Commit: 2e1e8e5
-	- Test case: `the_idle_wait_switch_is_read_once` (fails on the old code, passes now), `the_minimized_state_is_asked_at_most_once_per_recheck` (at most four asks in a second of 60 passes, and the restore events), `the_bindings_in_force_give_every_hotkey`.
-	- Note: Code review 20261003 item 5.
-
-- Settings: a Resource use group, with warning marks
-	- ID: 2026100418225506
-	- Type: Enhancement
-	- Status: Waiting for testing
-		- Accepted on b23 [20261006-143341]
-	- Needs external testing:
-		- vm925w: Transparency's mark tip names the memory, and the Resource use group looks right.
-		- b26: the group looks right, and there is no software rendering row.
-	- Priority: Avg
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225504, 2026100418354006
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- "Free resources when idle", its waits and "Always use software rendering" go in one group, "Resource use".
-		- "Free resources when idle" gets a warning mark. Its tip says it matters most on a card with little memory or next to GPU-heavy programs, with many windows open that are not all in view. Turn it off only if the graphics driver has trouble with it.
-		- A setting that stops a window from giving memory back gets a warning mark that says so, only where it does. Today that is Transparency on Windows.
-		- A row that cannot work here is grayed with a tip that says why. Hidden only in a build that can never use it.
-		- Tips stay short.
-	- Notes:
-		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-resource-use-group).
-	- Progress log:
-		- 20261006: "Resource use" is the last group on the Window tab: "Free resources when idle", its two waits, then "Always use software rendering".
-		- 20261006: "Free resources when idle" has a warning mark on every platform. Its tip is the requirement's wording, in two sentences. The row's own tip is unchanged.
-		- 20261006: Transparency keeps its one mark. In the Windows build its tip adds "It also keeps a window in view from giving back its graphics memory when idle." A new row field, `windows_warning`, holds the Windows text.
-		- 20261006: On Wayland "Minutes when hidden" is grayed, with a tip saying Wayland never tells a window it is hidden, so Minutes otherwise is the wait used.
-		- 20261006: "Always use software rendering" stays grayed on macOS. The UI guide's Known deviations entry for it stays, since the macOS build can never use it.
-		- 20261006: "Always use software rendering" is now left out of the macOS build, per the UI guide's rule. A new row field, `not_macos`, does it. The gray, its tip and the UI guide's Known deviations entry are gone.
-		- 20261006: The UI guide and both design docs say so.
-	- Verified: the 4 new tests failed on the old code and pass now. The full unit suite (1169), fmt, the docs checks, and clippy for Linux, Windows and macOS pass. Seen in a window on X11, mark and tips included, and on Wayland with the hidden wait grayed.
-	- Note: `the_transparency_row_warns_that_it_needs_the_compositor` (EreHnrx) is commented out, since Transparency is no longer the only row with a mark. Its checks moved into EryD9nl.
-	- Swept: every row with `warning:` in `settings_ui.shcl` (Transparency only before this), and every grayed-row tip in `disabled_tip`.
-	- Branch: resuse
-	- Commit: 1643a82
-	- Test case: `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl), `the_resource_use_group_ends_the_window_tab` (EryD9rp), `the_hidden_wait_is_grayed_where_the_desktop_never_says` (EryD9vW), `only_the_windows_build_warns_that_transparency_keeps_memory` (EryD9zK).
-		- 20261006: `only_software_rendering_leaves_the_macos_build` (ErycRzO) and `software_rendering_is_a_plain_switch_beside_the_idle_rows` (ErycRwI). `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS) is commented out.
-	- Closed:
-
-- Wallpaper: keep resized copies on disk, oldest pruned first
-	- ID: 2026100514211603
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpresize, wakepic and new wpkept window tests passed.
-	- Needs external testing: The unit tests on vm925w, since a copy is replaced by rename while another process may hold it open. A launch on vm925w and b26, to see the copy land in the platform's cache folder.
-		- 20261007: Verified: the unit tests passed on b26 in the full pipeline run at 46a2193.
-	- Priority: Avg
-	- Opened: 20261005-142116
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225503, 2026100418225507
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- When a window loads or is resized and the original wallpaper is resampled, keep that copy at that size.
-		- On a resize, use a kept copy within about 5% of the total pixel count. If there is none, resample the original again and keep that one too.
-		- Prune the oldest copies once the cache goes over its size limit.
-	- Notes:
-		- 20261005: It helps most at launch and when rotation comes back to an image, since both prepare from scratch now. A resize already waits 500 ms after the last change and prepares once.
-		- 20261005: The key needs everything that changes the stored pixels: the file and its mtime, the held size, blur, and the look tags.
-		- 20261005: A copy is 4 bytes a pixel, so about 14 MB at 2560x1440 unless it's stored compressed. Block compression (2026100418225507) cuts that to a quarter or less.
-		- 20261005: Time a release build's prepare first. If it is well under the resize wait, only launch and rotation gain.
-		- 20261005: Settled:
-			- Store the copies compressed.
-			- Waking from resource saving prepares from the file again too, so it gains as well. 2026100513581814 covers what shows in the meantime, and the two work together.
-		- 20261005: How block compression compares with JPEG, or a wavelet format, in size and quality on a blurred picture:
-			- Not in size. BC1 is a fixed 4 bits a pixel and BC7 is 8, so 1/8 and 1/4 of a plain copy. JPEG on a blurred picture is often 1/20 or less, since the blur takes out the fine detail it spends bits on.
-			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
-			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
-			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
-		- 20261006: Timed on b23 with a non-LTO optimized build, at the shipped settings: a prepare took 0.76 to 2.55 s at 1920x1080 and 2560x1440, and 0.41 s at 1280x800. So it is well over the resize wait, and resizes gain too. A JPEG decode of the result took 6 to 24 ms, and reading a kept copy 13 to 33 ms. Writing one took 62 to 118 ms, so it happens after the picture is sent. Full table in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#kept-copies-on-disk).
-		- 20261006: Done: copies are kept as quality 95 JPEG in the platform's cache folder, under a `wallpaper` folder. A `--config` keeps them beside that config. Each copy keeps the original's summary, so derived colors don't move. A copy within 5% stands in for the size asked, and the window takes it as that size. Pictures with transparency, and pictures held whole with no blur or mask, are not kept.
-		- 20261006: Light and dark mode are not in the key, since the mode is applied when the picture is drawn.
-		- Verified: unit tests and the wpkept window test pass, and each was seen failing with its part of the feature taken out.
-	- Decisions:
-		- 20261006: Built first, as high quality JPEG. Block compression (2026100418225507) stays queued.
-		- 20261006: Prune at 256 MB, oldest used first.
-	- Branch: wpcache
-	- Commit: 34fa3fe
-	- Test case: Unit tests EryHHqn, EryHHuh, EryHHyF, EryHI1u, EryHI5c, EryHI98, EryHICk. Window test `cicd/tests/wpkept/run.bash` (EryJg1H) in stage 3.
-
-- Block compression for the wallpaper
-	- ID: 2026100418225507
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpkept, wpresize and wakepic window tests passed.
-	- Needs external testing: A look on Windows (DX12 and WARP) and macOS (Metal), where BC1 upload and the padded texture have not been seen. The unit tests on vm925w.
-		- 20261007: Verified: the unit tests passed on b26 in the full pipeline run at 46a2193.
-	- Priority: Avg
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Prereq IDs: 2026100418225503
-	- Target OS: All
-	- Requirements:
-		- Compress the wallpaper once it is prepared at window size and blur.
-		- Pick by blur and size: smaller and plain for a heavy blur, BC1 for little or none, BC7 only where BC1 bands.
-		- A pure Rust encoder. Weigh its cost in executable size.
-		- Keep a plain fallback for an adapter without BC support.
-	- Notes:
-		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
-		- 20261006: The disk cache (2026100514211603) went first, as JPEG. When this is built, the cache keeps the BC data in place of the JPEG, so a kept copy needs no decode or encode.
-		- 20261006: The smaller hold for a heavy blur is split out as 2026100619365706.
-	- Decisions:
-		- 20261006: An in-house BC1 encoder, a few hundred lines, no crate. BC7 only if a test finds BC1 banding, and that comes back as a question first.
-		- 20261007: BC1 stays as built and is the default. BC7 becomes an option, filed as 2026100705511507.
-	- Progress log:
-		- 20261007: Chosen: BC1 only for a picture held by the window. One held by its blur stays plain, since its blocks would be drawn several screen pixels wide. Tried: at most 5 levels off, but the blocks showed as a grid with the contrast stretched. It would have saved 2 MiB at 2560x1440.
-		- 20261007: Done: a picture held by the window goes to the GPU as BC1, an eighth of its plain size. Pictures held by their blur, and any with transparency, stay plain.
-		- 20261007: Done: a device without BC gets the picture plain. A BC1 texture is padded to whole 4x4 blocks, and the shader reads only the part that holds the picture.
-		- 20261007: Done: the disk cache keeps a BC1 picture as its blocks, so a kept copy needs no decode or encode. A picture held by its blur is still kept as JPEG. Copies in the old format are removed at the next prune.
-		- 20261007: Done: on GL the check for a lost wallpaper skips a BC1 picture, since GL cannot read a compressed texture back.
-		- 20261007: Verified on b23, 2560x1440 photo with no blur at 2560x1440: the texture went from 14.1 MiB to 1.8. On X11 the wallpaper's share of graphics memory went from 32 MiB to 1, and of regular memory from 46 to 11. On Vulkan the allocator's in-use figure went from 65.5 to 52.4 MiB, and the driver's figure stayed the same.
-		- 20261007: Verified: at the shipped blur, 0 changed pixels against the build before, dark and light, GL and Vulkan, and the same memory.
-		- 20261007: Verified: with no blur, under a level off on average. At most 6 or 7 on the built-in in dark mode, 12 to 17 in light mode, 32 around small colored stars, and 65 there at 100% visibility with no scrim. A light blur of 2 was at most 4 to 7. An odd window size was no worse at the edges.
-		- 20261007: Verified: encoding takes 20 to 41 ms at 2560x1440. The release binary is 13 KB bigger.
-		- 20261007: Verified: the new tests fail with the padded mapping taken out, with the border sized by the texture, with the loss check left on, with BC asked of a device that lacks it, without the flat color tables, with the padding not repeating the edge, with old copies left by the prune, with BC1 copies kept as JPEG, and with blur-held pictures compressed. The new window checks fail on the build before this.
-		- 20261007: Question: with no blur, BC1's 4x4 blocks show as faint steps in smooth gradients. Seen on the built-in in light mode on a close look, and plainly with the contrast stretched 4 times. No contour bands. Is that the banding the BC7 decision was for? Options: keep BC1 as built, BC7 for pictures with little or no blur (twice BC1's size, 3.5 MiB at 2560x1440, and far better on gradients), or keep pictures with no blur plain.
-	- Branch: wpbc1
-	- Commit: e868c37
-	- Test case: `a_bc1_wallpaper_draws_like_the_plain_one` (Erz0m6t), `a_flat_color_comes_back_within_a_level` (Erz0m8u), `a_slow_gradient_comes_back_within_two_levels` (Erz0mAu), `sizes_round_up_to_whole_blocks` (Erz0mCs), `a_bc1_copy_comes_back_block_for_block` (Erz0mF1), `a_copy_in_the_old_format_is_pruned` (Erz0mH0), and the light blur case in `cicd/tests/wpkept/run.bash` (EryJg1H).
-	- Swept: every maker of `Prepared` (the prepare, the kept copy, the stand-in), everything that reads the wallpaper texture (the loss check, its clobber, the debug line), every caller of `wpcache::store` and `find`, and the one place devices are made. Changed tests: EryHICk checks the kept blocks come back exactly in place of a JPEG error bound, which moved to Erym5s3; ErsiiyG's uniform is 80 bytes; EryHI1u's planted copies start with the new format's mark.
-	- Closed:
-
-- Wallpaper: optional BC7 in place of BC1
-	- ID: 2026100705511507
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpkept, wpresize and wakepic window tests passed.
-	- Needs external testing: A look on Windows (DX12 and WARP) and macOS (Metal) at no blur on Custom, where a BC7 upload has not been seen. The unit tests on vm925w and b26.
-	- Priority: Avg
-	- Opened: 20261007-055115
-	- Opened by: JC
-	- Assigned to: CC
-	- Parent ID: 2026100418225507
-	- Prereq IDs: 2026100418225507
-	- Target OS: All
-	- Requirements:
-		- Implement optional BC7.
-	- Notes:
-		- 20261007: With no blur, BC1's 4x4 blocks show as faint steps in smooth gradients. BC7 is twice BC1's size, 3.5 MiB at 2560x1440, and much better on gradients. BC1 stays the default.
-		- 20261007: Not settled yet: where the option lives and what it is called.
-	- Decisions:
-		- 20261007: BC7 follows the performance profile, like the blur hold: High, Max and Custom use BC7, and Low, Standard and Remote keep BC1. No Settings row. The config file can override it.
-	- Progress log:
-		- 20261007: Chosen: an encoder of our own in `bc7.rs`, using 2 of BC7's 8 modes. Mode 6 has 16 steps between a block's 2 colors, where BC1 has 4, and that is what fixes the gradients. Mode 5 is tried for a dark block that touches black, since mode 6 can't reach 0 in an opaque picture. The other modes are for edges between several colors, which a wallpaper has few of, at several times the code and encode time.
-		- 20261007: Chosen: `wallpaper.compression` in the config file, "auto" by default, or "bc1" or "bc7". Auto follows the profile as decided. Either of the other two wins over any profile. The name and words are a best guess, for signoff.
-		- 20261007: Done: a profile change or a new value in the file prepares the picture again. Kept copies on disk have a key per kind, so a BC1 copy is never handed to a BC7 window or the reverse.
-		- 20261007: Done: BC7 also covers a device without BC (plain), padding, the GL loss check and the memory debug line, the same as BC1.
-		- 20261007: Verified on b23 at 2560x1440 with no blur, against plain, in sRGB levels. BC7 averages about a third of BC1's error: built-in 0.08 dark and 0.17 light (BC1 0.24 and 0.49), a large photo 0.15 (0.47), a star field 0.16 (0.55). The worst pixels are the same few colored stars as with BC1, 30 against 32, and 62 against 65 at 100% visibility with no scrim. GL and Vulkan alike. Full table in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#bc7-by-profile).
-		- 20261007: Verified: in smooth areas the steps at block edges are less than half BC1's, and with the contrast stretched 8 times the built-in's gradients look like the plain picture.
-		- 20261007: Verified: the texture is 3.5 MiB for a 2560x1440 picture, against 1.8 as BC1 and 14.1 plain. Encoding takes 59 to 116 ms at 2560x1440 where BC1 takes 15 to 44, and up to about 160 ms in the size-optimized release build with the box busy. The release binary is 8 KB bigger.
-		- 20261007: Verified: at the shipped blur the picture stays plain on every profile, and 0 pixels changed against the build before, dark and light and at Low. "auto" on Custom draws the same as "bc7".
-		- 20261007: Verified: the new tests fail with the BC7 key left off kept copies, with the profile mapping changed, with a profile change not preparing the picture again, and with a block laid out wrong in both the encoder and its own decoder. The GPU's own decoder is what catches that last one. The new wpkept checks fail on the build before this.
-	- Branch: wpbc7
-	- Commit: 66071a6
-	- Test case: `bc7.rs` tests Es1eEgS, Es1eEgT, Es1eEgU, Es1eEgV, Es1gYa7; `the_profile_picks_bc1_or_bc7_unless_the_file_says` (Es1erXj), `a_bc7_window_never_takes_a_bc1_copy` (Es1erXk), `a_bc7_copy_comes_back_block_for_block` (Es1eZ5s); `a_bc1_wallpaper_draws_like_the_plain_one` (Erz0m6t) now draws BC7 too; `every_fixed_choice_reads_and_writes_its_own_word` (ErstaMt) reads the new setting; `cicd/tests/wpkept/run.bash` (EryJg1H) has a BC7 case.
-	- Swept: every user of the BC1 blocks, kept copies and texture format: `Prepared`, `Kept`, `Stored`, `ImageRenderer::new`, the loss probe, `memdbg_line`, `wallpaper_changed`, and the wpkept script, the only one reading the BC lines.
-
-- The git-aware bash prompt starts about six processes per prompt
-	- ID: 2026100314050019
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs external testing: a bash pane with the prompt on, in and out of a repository, in Git Bash on vm925w and in macOS's own /bin/bash on b26.
-	- Priority: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Outside a git working tree the prompt starts no process.
-		- Inside one it starts as few as it can.
-	- Progress log:
-		- 20261003: x9ps1-git.bash runs `which git`, then `git status` even outside a repository, up to three more `git config` and `git remote` calls, and two `$( )` subshells. The PowerShell copy walks up for `.git` first to avoid exactly this.
-		- 20261003: The prompt is off by default, so only those who turn it on pay. Git Bash on Windows pays the most, since its process start is slowest.
-		- 20261006: Measured per prompt before the fix: 5 outside a repository and 13 inside, on bash 5.2. On bash 3.2, 6 and 14.
-		- 20261006: Fixed in x9ps1-git (a8c2488, merged into its main as c68cb19). The script can be sourced, which only defines `fX9ps1Git_*` functions. It looks for a `.git` above the directory with file tests before asking git, and asks git when `GIT_DIR` is set or a symlink is on the way up. Inside a repository it runs `git status` and one `git config`, and nothing else. The pane's `PROMPT_COMMAND` now sources the script once per shell and calls `fX9ps1Git_SetPs1`.
-		- 20261006: After: 0 outside and 2 inside, on bash 5.2 and 3.2.57. A symlinked directory outside a repository still costs 1, since git goes by the real path.
-		- 20261006: One small change in what shows. With no tracked remote and no `origin`, the first remote by name is now the first one that has a URL. Before, a remote with no URL hid the repository name.
-	- Decisions:
-		- Fixed in x9ps1-git first, then the copy taken again unchanged, with a test on each side.
-	- Against: the decision above. The copy is x9ps1-git's new text with one difference kept: the host color table, cut to a commented example on 20261003 (test Erftpx4).
-	- Origin: 4aca2f7 (2026-08-30) and a7eb82d (2026-09-17). No earlier review item. Confirmed for the process count; the delay is not measured.
-	- Branch: promptfork. x9ps1-git: quickprompt, merged into its main.
-	- Commit: 6e283be
-	- Test case: EryR5sU counts processes over 10 prompts through the pane's own `PROMPT_COMMAND`: 0 outside a repository, at most 2 a prompt inside. It failed on the old script and passes now. EryR5wI shows the git part inside a working tree and none outside. EryR5kj and EryR5oo replace EoTbwMT and EoTbwMU, which are commented out with the reason, since they pinned the old command and the old function name. x9ps1-git's own test has new "Sourced", "Finding the repository" and "Processes per prompt" sections; it passes on bash 5.2 and, through `X9PS1_TEST_BASH`, on 3.2.57.
-	- Swept: the other `$( )` and `which` calls in the script (`fPromptSafe`, the remote lookups, `tput`), the bundled copy against upstream (only the host table differs), and the PowerShell copy, which already walked up for `.git`.
-	- Note: Code review 20261003 item 19.
-
-- Repeated blocks that should be one helper
-	- ID: 2026100314050021
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: No. The full `cicd.bash` run at 46a2193 passed, every stage 3 line included.
-	- Needs external testing: A `cicd-win.ps1` run on vm925w or b29w with a dirty tree, so `fStashIfDirty` runs for real. It runs at publish, and in stage 0 when the branch is behind.
-	- Priority: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Progress log:
-		- 20261003: app.rs: one wake-merge `match` pasted 15 times in `about_to_wait`, and the settings read, clone, persist and update sequence written out 11 times.
-		- 20261003: settings_ui.rs and dialog.rs: the quad, border and text closures copied four or five times each. `texts_dip` has its own copy of `clip_rect`.
-		- 20261003: gfx.rs and bgimage.rs build the same VRAM readback probe. The Oklab matrix is in autotheme.rs and palette.rs. `LUMA` is defined twice and `text::gray_of` writes out `config::luma` by hand.
-		- 20261003: config.rs works out the base font size the same way in three functions. A program's base name is found four ways across shells.rs and integration.rs, and `shells::launch` strips `.exe` from a name that has none. macmenu.rs has its own `APP_NAME`.
-		- 20261003: cicd.bash has 21 near-identical test script blocks. cicd-win.ps1 repeats one stash block.
-		- 20261006: app.rs: the 18 wake merges in `about_to_wait` are `wake_by` calls. The 11 settings edits go through `set_live`, for the session only, or `save_live`, which also writes what changed.
-		- 20261006: settings_ui.rs and dialog.rs share one `quad` and one `border`. The text closures build on `TextItem::plain`, and `texts_dip` uses `clip_rect`. The dropdown's own four-quad frame is a `border` call now.
-		- 20261006: `config::LUMA` is the one set of weights, used by contrast.rs, autotheme.rs, visibility.rs and `config::luma`. `text::gray_of` and `min_contrast_for` call `config::luma`. Oklab from linear light is `palette::to_oklab_linear`, shared by `to_oklab` and autotheme.rs.
-		- 20261006: config.rs works out the base font size in `base_font_size`. integration.rs has one `program_base` for `is_powershell` and `is_bash`. `shells::base_name` stays separate, since it follows the host's own path rules, and `launch` no longer strips `.exe` a second time. macmenu.rs uses `config::APP_NAME`.
-		- 20261006: cicd.bash: 25 plain test blocks are now `fRunTest` lines and the 8 with a skip exit are `fRunTest_MaySkip` lines. cicd-win.ps1 has `fStashIfDirty`, and git's own output goes to the screen rather than into its answer.
-		- 20261006: The gfx.rs and bgimage.rs readback probe is split out as 2026100622234832, since branch `wpbc1` changes both files there.
-		- 20261006: Verified: unit suite (1184) passes, fmt, clippy for Linux, Windows and macOS, the bash-style, shellcheck, ps-lint, Python lint, docs and test ID gates, and the cicd-win pieces test. Both PowerShell files parse.
-		- 20261006: Verified: the stage 3 test lines print and exit the same as the old blocks for every script passing, failing, skipping or missing, with and without `--quick`. The plan `cicd.bash` prints is unchanged.
-		- 20261006: Verified: `a_wake_folds_into_the_flow_by_the_earliest` fails with `max` in place of `min`, and the stash check fails when git's output reaches the answer.
-	- Origin: 754c9cb8 (2026-10-03) for the wake merge, 5456e2a (2026-07-09) for the dialog closures, 2acb998 (2026-07-22) for the probe, 02482bb (2026-10-01) for `APP_NAME`. No earlier review item. Confirmed.
-	- Branch: onehelper
-	- Commit: acb89f6
-	- Test case: The existing tests over each area, plus `a_wake_folds_into_the_flow_by_the_earliest` (ErzM4AJ) and the stash check in `cicd/tests/cicd-win/run.bash` (Er2UgYE).
-	- Swept: no `until.min(wake)` left outside `wake_by`. No quad or border closure left in settings_ui.rs or dialog.rs. `0.2126` is left only in `config::LUMA` and a theme.rs test, which weighs sRGB bytes on purpose. The Oklab matrix is only in palette.rs. `APP_NAME` is only in config.rs. The two-separator base names in term.rs and minimap.rs are left: `wsl_cd` matches both spellings itself, and `trim_exe` hands back a borrowed name for a compare that ignores case.
-	- Note: Code review 20261003 item 21.
-
-- Errors are plain strings in most modules and `anyhow` in a few
-	- ID: 2026100314050022
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs external testing: `cargo test` on vm925w or b29w, for the registry store's errors (ErNHwGL).
-	- Priority: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Progress log:
-		- 20261003: config.rs, cli.rs, ctl.rs, fileassoc.rs, integration.rs and build.rs return `Result<_, String>`. gfx.rs, dialog.rs, term.rs, pane.rs and main.rs use `anyhow`. config.rs also reports through `bool` plus a printed line, and `backfilled_text` uses its `String` error for a setting name, not a message.
-		- 20261003: The usual guidance prefers `anyhow` for an application. Either move to it, or write `String` errors into the style guide as the house choice.
-		- 20261006: config.rs, cli.rs, ctl.rs, fileassoc.rs, integration.rs and keys.rs return `anyhow::Result`. keys.rs came after the review with the same `String` errors. `.context()` names the file where the old text was "file: reason". Every place that prints one uses `{e:#}`, so the reason under it still shows.
-		- 20261006: `backfilled_text` and `unbury` answer `Buried`: a setting, a line, or none found. The launch line prints it as before.
-		- 20261006: build.rs keeps `String`. Its one error only becomes a cargo warning, so anyhow would change nothing there. Build time was not the reason, since anyhow builds in under half a second here.
-		- 20261006: Left alone: the `bool` reporters in config.rs, since no caller needs the error. Also shcl's own `String` error on the publish seam, turned into anyhow where it is called, the test helper in buildnum.rs, and ui_spec.rs's list of complaints.
-		- 20261006: No wording changed. The command line and control errors read the same as the 10-06 dogfood build's.
-		- 20261006: wallpaper.rs and wpcache.rs have no `String` errors on dev or on `wpbc1`, so no follow-up is needed for them.
-		- 20261006: The style guide says the app uses `anyhow`, prints with `{e:#}`, and where an enum or build.rs's `String` fits instead.
-	- Decisions:
-		- 20261003: Move to `anyhow`, with `.context()` where a message names the file or step. It is the usual choice for an application, and it keeps the source error. `backfilled_text` and `unbury` get a small named error type instead, since their `String` is a setting name, not a message.
-	- Origin: c6eaa04 (2026-06-28) for cli.rs, f61b1769 (2026-09-16) for config.rs. No earlier review item. Confirmed.
-	- Branch: anyerr
-	- Commit: f304265
-	- Test case: The existing tests over each module, plus ErzSLrd (an unreadable profile is named, then why) and ErzSLtc (`Buried` prints the old words). ErNGry4's refusing registry now answers a context over a reason, so it reads the printed form. All three failed with the print or the words broken, and pass with the change. keys.rs tests that compared a result to `Ok(...)` compare `.ok()` now, and EpZszNA's fake writers return anyhow; neither checks less.
-	- Swept: `Result<_, String>` across source/. What is left is build.rs, shcl's publish seam, and test code.
-	- Verified: unit suite on Linux, 1186 passed. Clippy with -D warnings for Linux, x86_64-pc-windows-gnu and x86_64-apple-darwin. fmt, test ID and docs gates.
-	- Note: Code review 20261003 item 22.
-
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -565,6 +219,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
+- Windows: a Git Bash tab keeps its starting folder in the title after a `cd`
+	- ID: 2026100709325306
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261007-093253
+	- Opened by: CC
+	- Target OS: Windows
+	- Test environment: vm925w
+	- Steps to reproduce:
+		- Open a Git Bash pane, with the git prompt on.
+		- `cd` into another folder.
+	- Incorrect behavior: the tab and window title still name the folder the pane started in.
+	- Expected behavior: the title follows the shell's folder, as it does for the other shells.
+	- Reproduced: once, 20261007 on vm925w at 107b8e6. Not tried with the git prompt off.
+	- Possible cause: a bash pane sends no directory report, so the title comes from the process's own folder, which Git Bash may not move on a `cd`. The pane's prompt sent no report before the 20261006 prompt change either.
+
+- macOS: a double-click on a word after a link selects from the link's start
+	- ID: 2026100709325308
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261007-093253
+	- Opened by: CC
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- Print `b'https://example.invalid/silk1007 CLIPMARK'`.
+		- Double-click "CLIPMARK".
+	- Incorrect behavior: the selection runs from the start of the link to the click.
+	- Expected behavior: only "CLIPMARK" is selected.
+	- Reproduced: 20261007 on b26 at 107b8e6, every time, with clicks sent by script only. A double-click on a plain word on another line selected only that word. Not tried on Linux or Windows.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -579,6 +266,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- macOS: the git prompt's second line starts with an empty box
+	- ID: 2026100709325307
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261007-093253
+	- Opened by: CC
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- In a bash pane with the git prompt on, `cd` into a git working tree.
+	- Incorrect behavior: the prompt's second line starts with an empty box.
+	- Reproduced: 20261007 on b26 at 107b8e6.
+	- Possible cause: the arrow the prompt draws there (U+1F846) is in none of the fonts on b26, and the fallback finds nothing.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
@@ -1410,6 +1112,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- macOS: the program's own shortcuts still use Ctrl in places, where a Mac uses Command
+	- ID: 2026100219054469
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On b26, in the terminal, Ctrl+Shift+T, W, N, C and V, Ctrl+, , Ctrl+Plus, Minus and 0, Ctrl+PageUp and PageDown, and Ctrl+F4 all reach the shell and do none of the program's actions. Ctrl+Shift+C interrupts, as Ctrl+C does. The Command chords do each of those jobs. Command+click opens a link, Command held at a press makes a block selection, and Ctrl+click is a plain click. F11 still toggles fullscreen when macOS lets it through.
+		- In a Settings text box: Command+A, C, X and V work from the keyboard, and Edit > Copy and Paste on the menu bar work too. Option+Left and Right move by words, Option+Backspace erases a word, Command+Left and Right go to either end, and Command+Backspace erases to the start. Ctrl or Command plus a letter types nothing. Command+PageUp and PageDown change tab, and Ctrl+Tab moves focus like Tab.
+		- In a tab rename: Command+A selects the name. Ctrl or Command plus a letter types nothing.
+		- This replaces the lines in 2026100114435613's check that say the Ctrl chords still work.
+		- 20261002: Ctrl+click opens the right-click menu instead of being a plain click (2026100220260471).
+		- Verified 20261007 on b26 at 107b8e6: every check in this row passed. The Ctrl chords reached the shell as their control bytes and did none of the program's actions. Ctrl+, Plus, Minus and 0 send no bytes on any platform, so nothing reached the shell for them. The Command chords, the Settings text box keys, the tab rename keys and Ctrl+click all work as listed.
+	- Severity: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435613, 2026100114435587, 2026100219054483
+	- Target OS: macOS
+	- Test environment: b26
+	- Incorrect behavior: The Settings dialog's text boxes take Ctrl+C, X, V and A only, so Command+C and Command+V there go to the menu bar, which just brings the dialog forward. The terminal's own Ctrl and Ctrl+Shift chords, such as Ctrl+Shift+T, Ctrl+Shift+C and Ctrl+, still work beside the Command ones.
+	- Expected behavior: On macOS every shortcut the program itself takes uses Command where other platforms use Ctrl. That includes the Settings text boxes, the tab rename and the terminal window. Ctrl chords then go to the shell.
+	- Reproduced: No. Read from the code on 20261002.
+	- Decisions:
+		- 20261002: Use the Mac's Command chords everywhere on macOS, instead of Ctrl, including on the terminal itself. This replaces the 20261002 decision on 2026100114435587 that kept every Ctrl chord working beside the Command ones.
+	- Actual cause: The key handling took the Ctrl chords on every platform, and on a Mac took the Command ones beside them. The Settings text boxes, the tab rename, the link click and the block selection read Ctrl alone. On a Mac the menu bar takes Command+C and V first, and a pick with Settings open only brought it forward.
+	- Actual fix:
+		- On a Mac the program's chords are the Command ones from the one table the menu bar reads, and no Ctrl chord is the program's. The Ctrl chords go to the shell. Linux and Windows are unchanged.
+		- The tab chords move too: Command+PageUp and PageDown walk the tabs, and Shift with them moves the tab, as Ctrl does elsewhere. Command+Shift+[ and ] are 2026100219054497.
+		- Command+click opens a link and Command held at a press selects a block.
+		- A Settings text box takes Command+A, C, X and V. Edit > Copy and Paste on the menu bar now act on the box when Settings is open. Moving by words is Option, the Mac's word key, since Command+Left and Right go to either end in a Mac text box. Command+Backspace erases to the start. Ctrl plus a letter types nothing.
+		- The tab rename takes Command+A, and Command+V when it is pressed as a key. Neither Command nor Ctrl plus a letter types into the name. Paste from the menu bar is 2026100219054483.
+		- Ctrl+Shift+C copies an unfocused window's selection elsewhere; on a Mac that is Command+C.
+	- Note: F11 is not a Ctrl chord, so it still toggles fullscreen on a Mac. macOS usually takes F11 for itself.
+	- Swept: Every reader of Ctrl as a program key in `app.rs`, `dialog.rs`, `settings_ui.rs` and `input.rs`: the key bindings, the unfocused copy, the tab rename, the link click, the block selection, the Settings text boxes and the dialog's tab keys. Menu labels on a Mac already came from the Command table. Shortcut text in the UI style guide, the README, design.md and three feature designs. No tip, help text or Settings text names a Ctrl chord.
+	- Test case: `command_comma_is_the_only_settings_chord_on_macos` (ErbGP9B), `the_command_chords_are_the_only_program_chords_on_macos` (ErbGPD5), `the_shortcut_key_is_command_on_macos_and_ctrl_elsewhere` (ErbGPK5) and `a_mac_text_box_takes_the_mac_keys` (ErbGPQa). Each fails with its part of the change undone.
+		- The old `command_comma_opens_settings_on_macos_only` (ErUnDJY) and `the_command_chords_work_on_macos_and_leave_ctrl_alone` (ErZrRVm) are commented out, since they pinned the Ctrl chords working on a Mac.
+		- The Linux key tests now ask for the Linux answer by name, so they also hold when run on a Mac. `only_a_held_ctrl_shift_c_is_the_copy_chord` (EpyCuGe) passes the platform in.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+	- Branch: maccmd
+	- Commit: 7179fa9
+	- Acceptance signoff: Self-closed: tested on b26.
+	- Closed: 20261007-093253
+
 - macOS: the interface and terminal fonts are too big
 	- ID: 2026100114435561
 	- Type: Bug
@@ -2032,6 +1775,216 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- The event loop does blocking work on every pass
+	- ID: 2026100314050005
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No
+	- Needs external testing: macOS on b26: the menu bar still follows a hotkey rebinding and a View menu state change (fullscreen, Read only), and is not rebuilt while nothing changes.
+		- Verified 20261007 on b26 at 107b8e6: the menu bar follows a hotkey moved in the `keys:` block, and the Read only and fullscreen checks. Sampled during 7 s of typing, the menu bar was never rebuilt.
+	- Priority: Avg
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Nothing that waits on the X server, reads the environment or builds strings runs on every `about_to_wait` pass.
+	- Progress log:
+		- 20261003: `freeze_sync` runs on every pass and every redraw. Its `hidden()` asks `is_minimized()`, which on X11 is a property request that waits for its reply.
+		- 20261003: `idle_rule` reads `SILK_IDLE_SECS` twice per pass through `release_deadline`. The file's own note at `env_flag` says to read the environment once.
+		- 20261003: on macOS, `bar_menus_key` asks for the fullscreen state and builds a string per hotkey on every pass.
+		- 20261003: `monitor.rs` opens a new X11 connection in `x11_monitor_under` and again in `button_held`. That runs every 250 ms during a window drag.
+		- 20261003: Measured with output every 16 ms: `freeze_sync` took 240 to 275 us a call and was most of a pass's own time outside the frame (283 to 538 us). An idle window with the cursor animating: 61 us a call.
+		- 20261003: winit's X11 backend sends nothing when a window is minimized; it never reads `_NET_WM_STATE` changes or unmap. A minimize with focus gives `Focused(false)`; one without focus gives no event at all. A restore gives `Focused`, `Occluded(false)` and a redraw.
+		- 20261003: Done: the minimized answer is kept for 250 ms and dropped on focus, occlusion, resize and redraw events, so a restore is still seen at once and the WM's redraw still does the catch-up (G89). Same runs after: 56 to 77 us a call, 93 to 118 us a pass outside the frame; idle 26 us a call. Those runs draw about 17 frames a second, so at 60 the saving is larger.
+		- 20261003: Done: `SILK_IDLE_SECS` is read once per process.
+		- 20261003: Done: the macOS menu key hashes the bindings in force directly instead of building a `keys.<name>` string per hotkey. The fullscreen read is winit's own cached flag on macOS, not a call into AppKit, so it stays.
+		- 20261003: Left alone: the monitor check during a drag. It costs about 130 us a check, four a second, only while a button is held, then once more when the move settles. Keeping a second X connection open for the life of the process would save little.
+	- Origin: 6d543d37 (2026-08-30) for `freeze_sync`, 90073855 (2026-09-17) for `idle_rule`, 02482bb7 (2026-10-01) for the menu key, 754c9cb (2026-10-03) for the monitor check. No earlier review item. Plausible when filed; measured 20261003.
+	- Verified: minimize and restore during output, focused and unfocused. A focused minimize froze within 11 ms and an unfocused one within 104 ms. The catch-up frame came 3 ms after the restore. A minimized window still let its device go and got it back on restore. Frame counts matched the old build.
+	- Verified: full unit suite passes. Clippy is clean for Linux, Windows and macOS targets.
+	- Swept: every environment read in the source. Only `SILK_PROFILE_OUT`, in profiling builds, is still read per pass; the rest are read once or on a rare event. Every `self.window` state query in app.rs; none other runs per pass. `config_paths()` callers: the rest are tests or config reads, not per pass.
+	- Branch: loopwork
+	- Commit: 2e1e8e5
+	- Test case: `the_idle_wait_switch_is_read_once` (fails on the old code, passes now), `the_minimized_state_is_asked_at_most_once_per_recheck` (at most four asks in a second of 60 passes, and the restore events), `the_bindings_in_force_give_every_hotkey`.
+	- Note: Code review 20261003 item 5.
+	- Acceptance signoff: Self-closed: tested on Linux and b26.
+	- Closed: 20261007-093253
+
+- Settings: a Resource use group, with warning marks
+	- ID: 2026100418225506
+	- Type: Enhancement
+	- Status: Done
+		- Accepted on b23 [20261006-143341]
+	- Needs external testing:
+		- vm925w: Transparency's mark tip names the memory, and the Resource use group looks right.
+		- b26: the group looks right, and there is no software rendering row.
+		- Verified 20261007 on vm925w at 107b8e6: Resource use ends the Window tab, and the Transparency mark tip has the Windows memory sentence.
+		- Verified 20261007 on b26 at 107b8e6: Resource use ends the Window tab, with no software rendering row.
+	- Priority: Avg
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225504, 2026100418354006
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- "Free resources when idle", its waits and "Always use software rendering" go in one group, "Resource use".
+		- "Free resources when idle" gets a warning mark. Its tip says it matters most on a card with little memory or next to GPU-heavy programs, with many windows open that are not all in view. Turn it off only if the graphics driver has trouble with it.
+		- A setting that stops a window from giving memory back gets a warning mark that says so, only where it does. Today that is Transparency on Windows.
+		- A row that cannot work here is grayed with a tip that says why. Hidden only in a build that can never use it.
+		- Tips stay short.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-resource-use-group).
+	- Progress log:
+		- 20261006: "Resource use" is the last group on the Window tab: "Free resources when idle", its two waits, then "Always use software rendering".
+		- 20261006: "Free resources when idle" has a warning mark on every platform. Its tip is the requirement's wording, in two sentences. The row's own tip is unchanged.
+		- 20261006: Transparency keeps its one mark. In the Windows build its tip adds "It also keeps a window in view from giving back its graphics memory when idle." A new row field, `windows_warning`, holds the Windows text.
+		- 20261006: On Wayland "Minutes when hidden" is grayed, with a tip saying Wayland never tells a window it is hidden, so Minutes otherwise is the wait used.
+		- 20261006: "Always use software rendering" stays grayed on macOS. The UI guide's Known deviations entry for it stays, since the macOS build can never use it.
+		- 20261006: "Always use software rendering" is now left out of the macOS build, per the UI guide's rule. A new row field, `not_macos`, does it. The gray, its tip and the UI guide's Known deviations entry are gone.
+		- 20261006: The UI guide and both design docs say so.
+	- Verified: the 4 new tests failed on the old code and pass now. The full unit suite (1169), fmt, the docs checks, and clippy for Linux, Windows and macOS pass. Seen in a window on X11, mark and tips included, and on Wayland with the hidden wait grayed.
+	- Note: `the_transparency_row_warns_that_it_needs_the_compositor` (EreHnrx) is commented out, since Transparency is no longer the only row with a mark. Its checks moved into EryD9nl.
+	- Swept: every row with `warning:` in `settings_ui.shcl` (Transparency only before this), and every grayed-row tip in `disabled_tip`.
+	- Branch: resuse
+	- Commit: 1643a82
+	- Test case: `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl), `the_resource_use_group_ends_the_window_tab` (EryD9rp), `the_hidden_wait_is_grayed_where_the_desktop_never_says` (EryD9vW), `only_the_windows_build_warns_that_transparency_keeps_memory` (EryD9zK).
+		- 20261006: `only_software_rendering_leaves_the_macos_build` (ErycRzO) and `software_rendering_is_a_plain_switch_beside_the_idle_rows` (ErycRwI). `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS) is commented out.
+	- Acceptance signoff: Self-closed: accepted on b23, and the looks on vm925w and b26 match.
+	- Closed: 20261007-093253
+
+- Wallpaper: keep resized copies on disk, oldest pruned first
+	- ID: 2026100514211603
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpresize, wakepic and new wpkept window tests passed.
+	- Needs external testing: The unit tests on vm925w, since a copy is replaced by rename while another process may hold it open. A launch on vm925w and b26, to see the copy land in the platform's cache folder.
+		- 20261007: Verified: the unit tests passed on b26 in the full pipeline run at 46a2193.
+		- Verified 20261007 on vm925w at 107b8e6: the unit tests passed, and one launch kept its copy in `%LOCALAPPDATA%\silkterm\cache\wallpaper`.
+		- Verified 20261007 on b26 at 107b8e6: one launch kept its copy in `~/Library/Caches/silkterm/wallpaper`.
+	- Priority: Avg
+	- Opened: 20261005-142116
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225503, 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- When a window loads or is resized and the original wallpaper is resampled, keep that copy at that size.
+		- On a resize, use a kept copy within about 5% of the total pixel count. If there is none, resample the original again and keep that one too.
+		- Prune the oldest copies once the cache goes over its size limit.
+	- Notes:
+		- 20261005: It helps most at launch and when rotation comes back to an image, since both prepare from scratch now. A resize already waits 500 ms after the last change and prepares once.
+		- 20261005: The key needs everything that changes the stored pixels: the file and its mtime, the held size, blur, and the look tags.
+		- 20261005: A copy is 4 bytes a pixel, so about 14 MB at 2560x1440 unless it's stored compressed. Block compression (2026100418225507) cuts that to a quarter or less.
+		- 20261005: Time a release build's prepare first. If it is well under the resize wait, only launch and rotation gain.
+		- 20261005: Settled:
+			- Store the copies compressed.
+			- Waking from resource saving prepares from the file again too, so it gains as well. 2026100513581814 covers what shows in the meantime, and the two work together.
+		- 20261005: How block compression compares with JPEG, or a wavelet format, in size and quality on a blurred picture:
+			- Not in size. BC1 is a fixed 4 bits a pixel and BC7 is 8, so 1/8 and 1/4 of a plain copy. JPEG on a blurred picture is often 1/20 or less, since the blur takes out the fine detail it spends bits on.
+			- In quality, BC1 can band on smooth gradients. BC7 and high quality JPEG look like the original. A wavelet format has no blocks, but JPEG blocks only show at low quality anyway.
+			- JPEG and wavelet save disk only. They decode to full size before the upload, which costs time and is a second lossy step. BC stays compressed in graphics memory and uploads with no decode.
+			- So if 2026100418225507 is built, keep the BC data on disk, maybe with a general compressor over it. Otherwise high quality JPEG, since the decoder is already in the build. Time the decode against the prepare first.
+		- 20261006: Timed on b23 with a non-LTO optimized build, at the shipped settings: a prepare took 0.76 to 2.55 s at 1920x1080 and 2560x1440, and 0.41 s at 1280x800. So it is well over the resize wait, and resizes gain too. A JPEG decode of the result took 6 to 24 ms, and reading a kept copy 13 to 33 ms. Writing one took 62 to 118 ms, so it happens after the picture is sent. Full table in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#kept-copies-on-disk).
+		- 20261006: Done: copies are kept as quality 95 JPEG in the platform's cache folder, under a `wallpaper` folder. A `--config` keeps them beside that config. Each copy keeps the original's summary, so derived colors don't move. A copy within 5% stands in for the size asked, and the window takes it as that size. Pictures with transparency, and pictures held whole with no blur or mask, are not kept.
+		- 20261006: Light and dark mode are not in the key, since the mode is applied when the picture is drawn.
+		- Verified: unit tests and the wpkept window test pass, and each was seen failing with its part of the feature taken out.
+	- Decisions:
+		- 20261006: Built first, as high quality JPEG. Block compression (2026100418225507) stays queued.
+		- 20261006: Prune at 256 MB, oldest used first.
+	- Branch: wpcache
+	- Commit: 34fa3fe
+	- Test case: Unit tests EryHHqn, EryHHuh, EryHHyF, EryHI1u, EryHI5c, EryHI98, EryHICk. Window test `cicd/tests/wpkept/run.bash` (EryJg1H) in stage 3.
+	- Acceptance signoff: Self-closed: tested on Linux, Windows and macOS.
+	- Closed: 20261007-093253
+
+- Block compression for the wallpaper
+	- ID: 2026100418225507
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpkept, wpresize and wakepic window tests passed.
+	- Needs external testing: A look on Windows (DX12 and WARP) and macOS (Metal), where BC1 upload and the padded texture have not been seen. The unit tests on vm925w.
+		- 20261007: Verified: the unit tests passed on b26 in the full pipeline run at 46a2193.
+		- Verified 20261007 on vm925w at 107b8e6: the unit tests passed. With no blur the picture draws right as BC1 on DX12, Vulkan and WARP: no stray strip at the right or bottom edge at an odd size, and no block grid.
+		- Verified 20261007 on b26 at 107b8e6: the same on Metal, and `cargo test` passed.
+	- Priority: Avg
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225503
+	- Target OS: All
+	- Requirements:
+		- Compress the wallpaper once it is prepared at window size and blur.
+		- Pick by blur and size: smaller and plain for a heavy blur, BC1 for little or none, BC7 only where BC1 bands.
+		- A pure Rust encoder. Weigh its cost in executable size.
+		- Keep a plain fallback for an adapter without BC support.
+	- Notes:
+		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
+		- 20261006: The disk cache (2026100514211603) went first, as JPEG. When this is built, the cache keeps the BC data in place of the JPEG, so a kept copy needs no decode or encode.
+		- 20261006: The smaller hold for a heavy blur is split out as 2026100619365706.
+	- Decisions:
+		- 20261006: An in-house BC1 encoder, a few hundred lines, no crate. BC7 only if a test finds BC1 banding, and that comes back as a question first.
+		- 20261007: BC1 stays as built and is the default. BC7 becomes an option, filed as 2026100705511507.
+	- Progress log:
+		- 20261007: Chosen: BC1 only for a picture held by the window. One held by its blur stays plain, since its blocks would be drawn several screen pixels wide. Tried: at most 5 levels off, but the blocks showed as a grid with the contrast stretched. It would have saved 2 MiB at 2560x1440.
+		- 20261007: Done: a picture held by the window goes to the GPU as BC1, an eighth of its plain size. Pictures held by their blur, and any with transparency, stay plain.
+		- 20261007: Done: a device without BC gets the picture plain. A BC1 texture is padded to whole 4x4 blocks, and the shader reads only the part that holds the picture.
+		- 20261007: Done: the disk cache keeps a BC1 picture as its blocks, so a kept copy needs no decode or encode. A picture held by its blur is still kept as JPEG. Copies in the old format are removed at the next prune.
+		- 20261007: Done: on GL the check for a lost wallpaper skips a BC1 picture, since GL cannot read a compressed texture back.
+		- 20261007: Verified on b23, 2560x1440 photo with no blur at 2560x1440: the texture went from 14.1 MiB to 1.8. On X11 the wallpaper's share of graphics memory went from 32 MiB to 1, and of regular memory from 46 to 11. On Vulkan the allocator's in-use figure went from 65.5 to 52.4 MiB, and the driver's figure stayed the same.
+		- 20261007: Verified: at the shipped blur, 0 changed pixels against the build before, dark and light, GL and Vulkan, and the same memory.
+		- 20261007: Verified: with no blur, under a level off on average. At most 6 or 7 on the built-in in dark mode, 12 to 17 in light mode, 32 around small colored stars, and 65 there at 100% visibility with no scrim. A light blur of 2 was at most 4 to 7. An odd window size was no worse at the edges.
+		- 20261007: Verified: encoding takes 20 to 41 ms at 2560x1440. The release binary is 13 KB bigger.
+		- 20261007: Verified: the new tests fail with the padded mapping taken out, with the border sized by the texture, with the loss check left on, with BC asked of a device that lacks it, without the flat color tables, with the padding not repeating the edge, with old copies left by the prune, with BC1 copies kept as JPEG, and with blur-held pictures compressed. The new window checks fail on the build before this.
+		- 20261007: Question: with no blur, BC1's 4x4 blocks show as faint steps in smooth gradients. Seen on the built-in in light mode on a close look, and plainly with the contrast stretched 4 times. No contour bands. Is that the banding the BC7 decision was for? Options: keep BC1 as built, BC7 for pictures with little or no blur (twice BC1's size, 3.5 MiB at 2560x1440, and far better on gradients), or keep pictures with no blur plain.
+	- Branch: wpbc1
+	- Commit: e868c37
+	- Test case: `a_bc1_wallpaper_draws_like_the_plain_one` (Erz0m6t), `a_flat_color_comes_back_within_a_level` (Erz0m8u), `a_slow_gradient_comes_back_within_two_levels` (Erz0mAu), `sizes_round_up_to_whole_blocks` (Erz0mCs), `a_bc1_copy_comes_back_block_for_block` (Erz0mF1), `a_copy_in_the_old_format_is_pruned` (Erz0mH0), and the light blur case in `cicd/tests/wpkept/run.bash` (EryJg1H).
+	- Swept: every maker of `Prepared` (the prepare, the kept copy, the stand-in), everything that reads the wallpaper texture (the loss check, its clobber, the debug line), every caller of `wpcache::store` and `find`, and the one place devices are made. Changed tests: EryHICk checks the kept blocks come back exactly in place of a JPEG error bound, which moved to Erym5s3; ErsiiyG's uniform is 80 bytes; EryHI1u's planted copies start with the new format's mark.
+	- Acceptance signoff: Self-closed: tested on every backend.
+	- Closed: 20261007-093253
+
+- Wallpaper: optional BC7 in place of BC1
+	- ID: 2026100705511507
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpkept, wpresize and wakepic window tests passed.
+	- Needs external testing: A look on Windows (DX12 and WARP) and macOS (Metal) at no blur on Custom, where a BC7 upload has not been seen. The unit tests on vm925w and b26.
+		- Verified 20261007 on vm925w at 107b8e6: the unit tests passed. With no blur on Custom the picture draws right as BC7 on DX12, Vulkan and WARP, with no stray edge strip or block grid, and smooth where BC1 shows its steps.
+		- Verified 20261007 on b26 at 107b8e6: the same on Metal, and `cargo test` passed (1192).
+		- Note: the Standard profile has no wallpaper, so the BC1 looks used Low with an untagged blur, or Custom with `compression: "bc1"`.
+	- Priority: Avg
+	- Opened: 20261007-055115
+	- Opened by: JC
+	- Assigned to: CC
+	- Parent ID: 2026100418225507
+	- Prereq IDs: 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- Implement optional BC7.
+	- Notes:
+		- 20261007: With no blur, BC1's 4x4 blocks show as faint steps in smooth gradients. BC7 is twice BC1's size, 3.5 MiB at 2560x1440, and much better on gradients. BC1 stays the default.
+		- 20261007: Not settled yet: where the option lives and what it is called.
+	- Decisions:
+		- 20261007: BC7 follows the performance profile, like the blur hold: High, Max and Custom use BC7, and Low, Standard and Remote keep BC1. No Settings row. The config file can override it.
+	- Progress log:
+		- 20261007: Chosen: an encoder of our own in `bc7.rs`, using 2 of BC7's 8 modes. Mode 6 has 16 steps between a block's 2 colors, where BC1 has 4, and that is what fixes the gradients. Mode 5 is tried for a dark block that touches black, since mode 6 can't reach 0 in an opaque picture. The other modes are for edges between several colors, which a wallpaper has few of, at several times the code and encode time.
+		- 20261007: Chosen: `wallpaper.compression` in the config file, "auto" by default, or "bc1" or "bc7". Auto follows the profile as decided. Either of the other two wins over any profile. The name and words are a best guess, for signoff.
+		- 20261007: Done: a profile change or a new value in the file prepares the picture again. Kept copies on disk have a key per kind, so a BC1 copy is never handed to a BC7 window or the reverse.
+		- 20261007: Done: BC7 also covers a device without BC (plain), padding, the GL loss check and the memory debug line, the same as BC1.
+		- 20261007: Verified on b23 at 2560x1440 with no blur, against plain, in sRGB levels. BC7 averages about a third of BC1's error: built-in 0.08 dark and 0.17 light (BC1 0.24 and 0.49), a large photo 0.15 (0.47), a star field 0.16 (0.55). The worst pixels are the same few colored stars as with BC1, 30 against 32, and 62 against 65 at 100% visibility with no scrim. GL and Vulkan alike. Full table in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#bc7-by-profile).
+		- 20261007: Verified: in smooth areas the steps at block edges are less than half BC1's, and with the contrast stretched 8 times the built-in's gradients look like the plain picture.
+		- 20261007: Verified: the texture is 3.5 MiB for a 2560x1440 picture, against 1.8 as BC1 and 14.1 plain. Encoding takes 59 to 116 ms at 2560x1440 where BC1 takes 15 to 44, and up to about 160 ms in the size-optimized release build with the box busy. The release binary is 8 KB bigger.
+		- 20261007: Verified: at the shipped blur the picture stays plain on every profile, and 0 pixels changed against the build before, dark and light and at Low. "auto" on Custom draws the same as "bc7".
+		- 20261007: Verified: the new tests fail with the BC7 key left off kept copies, with the profile mapping changed, with a profile change not preparing the picture again, and with a block laid out wrong in both the encoder and its own decoder. The GPU's own decoder is what catches that last one. The new wpkept checks fail on the build before this.
+	- Branch: wpbc7
+	- Commit: 66071a6
+	- Test case: `bc7.rs` tests Es1eEgS, Es1eEgT, Es1eEgU, Es1eEgV, Es1gYa7; `the_profile_picks_bc1_or_bc7_unless_the_file_says` (Es1erXj), `a_bc7_window_never_takes_a_bc1_copy` (Es1erXk), `a_bc7_copy_comes_back_block_for_block` (Es1eZ5s); `a_bc1_wallpaper_draws_like_the_plain_one` (Erz0m6t) now draws BC7 too; `every_fixed_choice_reads_and_writes_its_own_word` (ErstaMt) reads the new setting; `cicd/tests/wpkept/run.bash` (EryJg1H) has a BC7 case.
+	- Swept: every user of the BC1 blocks, kept copies and texture format: `Prepared`, `Kept`, `Stored`, `ImageRenderer::new`, the loss probe, `memdbg_line`, `wallpaper_changed`, and the wpkept script, the only one reading the BC lines.
+	- Acceptance signoff: Self-closed: tested on every backend. The setting name `wallpaper.compression` was a best guess and is easy to change.
+	- Closed: 20261007-093253
 
 - Wallpaper: hold a blurred picture smaller than the window
 	- ID: 2026100619365706
@@ -3680,6 +3633,135 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: smallfix
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
 	- Closed: 20260929-170546
+
+- The dogfood launcher makes three slow Windows queries per launch
+	- ID: 2026100314050020
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: A full `cicd-win.ps1` run, for its new stage 3 line. The test it calls passed on its own on vm925w.
+		- Verified 20261007 on vm925w at 107b8e6: the full `cicd-win.ps1` run passed, its new Start menu test (EryVaSD) included, with WMI, the Start menu search and the process list all at 0.
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: Windows
+	- Requirements:
+		- A launch through runterm does no WMI query and no Start menu walk when nothing needs them.
+	- Progress log:
+		- 20261003: n8runterm.ps1 asks `Get-CimInstance Win32_Process` for its parent, where pwsh 7 has `(Get-Process -Id $PID).Parent`. `fRotate` reads every process's path even when nothing will be deleted. The shortcut search walks both Start menus and opens every `.lnk` through COM.
+		- 20261006: The parent comes from `(Get-Process -Id $PID).Parent`. The rotation reads the process list only once a copy is due to go, and still spares a running one.
+		- 20261006: The Start menu entry is looked for where it was last found, then at the default place, and both menus are searched only when neither runs the wrapper. Where it was found is kept in a new one-line file, `runterm.menu`, beside `runterm.log`. An entry filed by hand is still adopted wherever it is, and one that moves is found again on the next launch.
+		- 20261006: On vm925w, with nothing to do, the launcher's own time went from about 660 to 540 ms, past pwsh's own start. That box's two Start menus hold about 340 shortcuts, and searching them all costs about 390 ms by itself, which a launch now skips unless the entry moved.
+	- Origin: 94b62ab (2026-07-19), 4050e29 (2026-09-08), 8a88445 (2026-09-08). No earlier review item. Confirmed: the counts below were 1 per launch before the change.
+	- Note: The live launcher copies sit outside the repo, so a fix reaches them only when they are replaced. They were not touched, and they already differ from the repo copy, older than 9572727.
+	- Against: The rule that a shortcut never names the versions folder still holds. It runs the wrapper and takes its icon from the symlink. 9572727's guard on an installed build is unchanged.
+	- Swept: `git grep` for `Get-CimInstance`, `Win32_Process`, `CreateShortcut` and `Start Menu` over the scripts. The other WMI calls are in GUI tests and the info job, not on a launch path. install.ps1 writes one shortcut and searches nothing. runterm.cmd only finds the script.
+	- Verified: ps-lint on the changed scripts. The launcher harness on Linux, with the new case failing on the old launcher and passing on the new. The new Start menu test on vm925w, failing 6 checks on the old launcher and passing on the new.
+	- Branch: fastlaunch
+	- Commit: 5ce6265
+	- Test case: The launcher harness (EpHRcSG) case "the process list is read only when a copy is due to go". New Windows test `cicd/tests/launcher/startmenu.ps1` (EryVaSD), run by `cicd-win.ps1` in stage 3: a launch after the first asks WMI nothing, searches no Start menu and reads no process list, all counted at 0.
+	- Note: Code review 20261003 item 20.
+	- Acceptance signoff: Self-closed: tested on vm925w, and the full run passes.
+	- Closed: 20261007-093253
+
+- The git-aware bash prompt starts about six processes per prompt
+	- ID: 2026100314050019
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: a bash pane with the prompt on, in and out of a repository, in Git Bash on vm925w and in macOS's own /bin/bash on b26.
+		- Verified 20261007 on vm925w at 107b8e6: in Git Bash the prompt shows git inside a repository and none outside. 0 processes per prompt outside, 2 git runs per prompt inside.
+		- Verified 20261007 on b26 at 107b8e6: the same with /bin/bash 3.2.57. About 0.04 processes per prompt outside, 2 inside, and 1 in `/tmp`, the symlink case.
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Outside a git working tree the prompt starts no process.
+		- Inside one it starts as few as it can.
+	- Progress log:
+		- 20261003: x9ps1-git.bash runs `which git`, then `git status` even outside a repository, up to three more `git config` and `git remote` calls, and two `$( )` subshells. The PowerShell copy walks up for `.git` first to avoid exactly this.
+		- 20261003: The prompt is off by default, so only those who turn it on pay. Git Bash on Windows pays the most, since its process start is slowest.
+		- 20261006: Measured per prompt before the fix: 5 outside a repository and 13 inside, on bash 5.2. On bash 3.2, 6 and 14.
+		- 20261006: Fixed in x9ps1-git (a8c2488, merged into its main as c68cb19). The script can be sourced, which only defines `fX9ps1Git_*` functions. It looks for a `.git` above the directory with file tests before asking git, and asks git when `GIT_DIR` is set or a symlink is on the way up. Inside a repository it runs `git status` and one `git config`, and nothing else. The pane's `PROMPT_COMMAND` now sources the script once per shell and calls `fX9ps1Git_SetPs1`.
+		- 20261006: After: 0 outside and 2 inside, on bash 5.2 and 3.2.57. A symlinked directory outside a repository still costs 1, since git goes by the real path.
+		- 20261006: One small change in what shows. With no tracked remote and no `origin`, the first remote by name is now the first one that has a URL. Before, a remote with no URL hid the repository name.
+	- Decisions:
+		- Fixed in x9ps1-git first, then the copy taken again unchanged, with a test on each side.
+	- Against: the decision above. The copy is x9ps1-git's new text with one difference kept: the host color table, cut to a commented example on 20261003 (test Erftpx4).
+	- Origin: 4aca2f7 (2026-08-30) and a7eb82d (2026-09-17). No earlier review item. Confirmed for the process count; the delay is not measured.
+	- Branch: promptfork. x9ps1-git: quickprompt, merged into its main.
+	- Commit: 6e283be
+	- Test case: EryR5sU counts processes over 10 prompts through the pane's own `PROMPT_COMMAND`: 0 outside a repository, at most 2 a prompt inside. It failed on the old script and passes now. EryR5wI shows the git part inside a working tree and none outside. EryR5kj and EryR5oo replace EoTbwMT and EoTbwMU, which are commented out with the reason, since they pinned the old command and the old function name. x9ps1-git's own test has new "Sourced", "Finding the repository" and "Processes per prompt" sections; it passes on bash 5.2 and, through `X9PS1_TEST_BASH`, on 3.2.57.
+	- Swept: the other `$( )` and `which` calls in the script (`fPromptSafe`, the remote lookups, `tput`), the bundled copy against upstream (only the host table differs), and the PowerShell copy, which already walked up for `.git`.
+	- Note: Code review 20261003 item 19.
+	- Acceptance signoff: Self-closed: tested on Linux, Windows and macOS.
+	- Closed: 20261007-093253
+
+- Repeated blocks that should be one helper
+	- ID: 2026100314050021
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. The full `cicd.bash` run at 46a2193 passed, every stage 3 line included.
+	- Needs external testing: A `cicd-win.ps1` run on vm925w or b29w with a dirty tree, so `fStashIfDirty` runs for real. It runs at publish, and in stage 0 when the branch is behind.
+		- Verified 20261007 on vm925w at 107b8e6: a full `cicd-win.ps1` run with the clone 10 commits behind and a tracked file changed. Stage 0 stashed, moved to 107b8e6 and put the change back, with no stash left. The run passed.
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Progress log:
+		- 20261003: app.rs: one wake-merge `match` pasted 15 times in `about_to_wait`, and the settings read, clone, persist and update sequence written out 11 times.
+		- 20261003: settings_ui.rs and dialog.rs: the quad, border and text closures copied four or five times each. `texts_dip` has its own copy of `clip_rect`.
+		- 20261003: gfx.rs and bgimage.rs build the same VRAM readback probe. The Oklab matrix is in autotheme.rs and palette.rs. `LUMA` is defined twice and `text::gray_of` writes out `config::luma` by hand.
+		- 20261003: config.rs works out the base font size the same way in three functions. A program's base name is found four ways across shells.rs and integration.rs, and `shells::launch` strips `.exe` from a name that has none. macmenu.rs has its own `APP_NAME`.
+		- 20261003: cicd.bash has 21 near-identical test script blocks. cicd-win.ps1 repeats one stash block.
+		- 20261006: app.rs: the 18 wake merges in `about_to_wait` are `wake_by` calls. The 11 settings edits go through `set_live`, for the session only, or `save_live`, which also writes what changed.
+		- 20261006: settings_ui.rs and dialog.rs share one `quad` and one `border`. The text closures build on `TextItem::plain`, and `texts_dip` uses `clip_rect`. The dropdown's own four-quad frame is a `border` call now.
+		- 20261006: `config::LUMA` is the one set of weights, used by contrast.rs, autotheme.rs, visibility.rs and `config::luma`. `text::gray_of` and `min_contrast_for` call `config::luma`. Oklab from linear light is `palette::to_oklab_linear`, shared by `to_oklab` and autotheme.rs.
+		- 20261006: config.rs works out the base font size in `base_font_size`. integration.rs has one `program_base` for `is_powershell` and `is_bash`. `shells::base_name` stays separate, since it follows the host's own path rules, and `launch` no longer strips `.exe` a second time. macmenu.rs uses `config::APP_NAME`.
+		- 20261006: cicd.bash: 25 plain test blocks are now `fRunTest` lines and the 8 with a skip exit are `fRunTest_MaySkip` lines. cicd-win.ps1 has `fStashIfDirty`, and git's own output goes to the screen rather than into its answer.
+		- 20261006: The gfx.rs and bgimage.rs readback probe is split out as 2026100622234832, since branch `wpbc1` changes both files there.
+		- 20261006: Verified: unit suite (1184) passes, fmt, clippy for Linux, Windows and macOS, the bash-style, shellcheck, ps-lint, Python lint, docs and test ID gates, and the cicd-win pieces test. Both PowerShell files parse.
+		- 20261006: Verified: the stage 3 test lines print and exit the same as the old blocks for every script passing, failing, skipping or missing, with and without `--quick`. The plan `cicd.bash` prints is unchanged.
+		- 20261006: Verified: `a_wake_folds_into_the_flow_by_the_earliest` fails with `max` in place of `min`, and the stash check fails when git's output reaches the answer.
+	- Origin: 754c9cb8 (2026-10-03) for the wake merge, 5456e2a (2026-07-09) for the dialog closures, 2acb998 (2026-07-22) for the probe, 02482bb (2026-10-01) for `APP_NAME`. No earlier review item. Confirmed.
+	- Branch: onehelper
+	- Commit: acb89f6
+	- Test case: The existing tests over each area, plus `a_wake_folds_into_the_flow_by_the_earliest` (ErzM4AJ) and the stash check in `cicd/tests/cicd-win/run.bash` (Er2UgYE).
+	- Swept: no `until.min(wake)` left outside `wake_by`. No quad or border closure left in settings_ui.rs or dialog.rs. `0.2126` is left only in `config::LUMA` and a theme.rs test, which weighs sRGB bytes on purpose. The Oklab matrix is only in palette.rs. `APP_NAME` is only in config.rs. The two-separator base names in term.rs and minimap.rs are left: `wsl_cd` matches both spellings itself, and `trim_exe` hands back a borrowed name for a compare that ignores case.
+	- Note: Code review 20261003 item 21.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and the full runs on both platforms pass.
+	- Closed: 20261007-093253
+
+- Errors are plain strings in most modules and `anyhow` in a few
+	- ID: 2026100314050022
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: `cargo test` on vm925w or b29w, for the registry store's errors (ErNHwGL).
+		- Verified 20261007 on vm925w at 107b8e6: `cargo test` built on the box passed 1169 of 1169, ErNHwGL, ErNGry4, ErzSLrd and ErzSLtc included.
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Progress log:
+		- 20261003: config.rs, cli.rs, ctl.rs, fileassoc.rs, integration.rs and build.rs return `Result<_, String>`. gfx.rs, dialog.rs, term.rs, pane.rs and main.rs use `anyhow`. config.rs also reports through `bool` plus a printed line, and `backfilled_text` uses its `String` error for a setting name, not a message.
+		- 20261003: The usual guidance prefers `anyhow` for an application. Either move to it, or write `String` errors into the style guide as the house choice.
+		- 20261006: config.rs, cli.rs, ctl.rs, fileassoc.rs, integration.rs and keys.rs return `anyhow::Result`. keys.rs came after the review with the same `String` errors. `.context()` names the file where the old text was "file: reason". Every place that prints one uses `{e:#}`, so the reason under it still shows.
+		- 20261006: `backfilled_text` and `unbury` answer `Buried`: a setting, a line, or none found. The launch line prints it as before.
+		- 20261006: build.rs keeps `String`. Its one error only becomes a cargo warning, so anyhow would change nothing there. Build time was not the reason, since anyhow builds in under half a second here.
+		- 20261006: Left alone: the `bool` reporters in config.rs, since no caller needs the error. Also shcl's own `String` error on the publish seam, turned into anyhow where it is called, the test helper in buildnum.rs, and ui_spec.rs's list of complaints.
+		- 20261006: No wording changed. The command line and control errors read the same as the 10-06 dogfood build's.
+		- 20261006: wallpaper.rs and wpcache.rs have no `String` errors on dev or on `wpbc1`, so no follow-up is needed for them.
+		- 20261006: The style guide says the app uses `anyhow`, prints with `{e:#}`, and where an enum or build.rs's `String` fits instead.
+	- Decisions:
+		- 20261003: Move to `anyhow`, with `.context()` where a message names the file or step. It is the usual choice for an application, and it keeps the source error. `backfilled_text` and `unbury` get a small named error type instead, since their `String` is a setting name, not a message.
+	- Origin: c6eaa04 (2026-06-28) for cli.rs, f61b1769 (2026-09-16) for config.rs. No earlier review item. Confirmed.
+	- Branch: anyerr
+	- Commit: f304265
+	- Test case: The existing tests over each module, plus ErzSLrd (an unreadable profile is named, then why) and ErzSLtc (`Buried` prints the old words). ErNGry4's refusing registry now answers a context over a reason, so it reads the printed form. All three failed with the print or the words broken, and pass with the change. keys.rs tests that compared a result to `Ok(...)` compare `.ok()` now, and EpZszNA's fake writers return anyhow; neither checks less.
+	- Swept: `Result<_, String>` across source/. What is left is build.rs, shcl's publish seam, and test code.
+	- Verified: unit suite on Linux, 1186 passed. Clippy with -D warnings for Linux, x86_64-pc-windows-gnu and x86_64-apple-darwin. fmt, test ID and docs gates.
+	- Note: Code review 20261003 item 22.
+	- Acceptance signoff: Self-closed: no wording changed, and the tests pass on Linux and Windows.
+	- Closed: 20261007-093253
 
 - One VRAM readback probe for gfx.rs and bgimage.rs
 	- ID: 2026100622234832
