@@ -585,7 +585,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Errors are plain strings in most modules and `anyhow` in a few
 	- ID: 2026100314050022
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: `cargo test` on vm925w or b29w, for the registry store's errors (ErNHwGL).
 	- Priority: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -593,10 +594,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261003: config.rs, cli.rs, ctl.rs, fileassoc.rs, integration.rs and build.rs return `Result<_, String>`. gfx.rs, dialog.rs, term.rs, pane.rs and main.rs use `anyhow`. config.rs also reports through `bool` plus a printed line, and `backfilled_text` uses its `String` error for a setting name, not a message.
 		- 20261003: The usual guidance prefers `anyhow` for an application. Either move to it, or write `String` errors into the style guide as the house choice.
+		- 20261006: config.rs, cli.rs, ctl.rs, fileassoc.rs, integration.rs and keys.rs return `anyhow::Result`. keys.rs came after the review with the same `String` errors. `.context()` names the file where the old text was "file: reason". Every place that prints one uses `{e:#}`, so the reason under it still shows.
+		- 20261006: `backfilled_text` and `unbury` answer `Buried`: a setting, a line, or none found. The launch line prints it as before.
+		- 20261006: build.rs keeps `String`. Its one error only becomes a cargo warning, so anyhow would change nothing there. Build time was not the reason, since anyhow builds in under half a second here.
+		- 20261006: Left alone: the `bool` reporters in config.rs, since no caller needs the error. Also shcl's own `String` error on the publish seam, turned into anyhow where it is called, the test helper in buildnum.rs, and ui_spec.rs's list of complaints.
+		- 20261006: No wording changed. The command line and control errors read the same as the 10-06 dogfood build's.
+		- 20261006: wallpaper.rs and wpcache.rs have no `String` errors on dev or on `wpbc1`, so no follow-up is needed for them.
+		- 20261006: The style guide says the app uses `anyhow`, prints with `{e:#}`, and where an enum or build.rs's `String` fits instead.
 	- Decisions:
 		- 20261003: Move to `anyhow`, with `.context()` where a message names the file or step. It is the usual choice for an application, and it keeps the source error. `backfilled_text` and `unbury` get a small named error type instead, since their `String` is a setting name, not a message.
 	- Origin: c6eaa04 (2026-06-28) for cli.rs, f61b1769 (2026-09-16) for config.rs. No earlier review item. Confirmed.
-	- Test case: The existing tests over each module. Messages a test reads stay the same.
+	- Branch: anyerr
+	- Commit: f304265
+	- Test case: The existing tests over each module, plus ErzSLrd (an unreadable profile is named, then why) and ErzSLtc (`Buried` prints the old words). ErNGry4's refusing registry now answers a context over a reason, so it reads the printed form. All three failed with the print or the words broken, and pass with the change. keys.rs tests that compared a result to `Ok(...)` compare `.ok()` now, and EpZszNA's fake writers return anyhow; neither checks less.
+	- Swept: `Result<_, String>` across source/. What is left is build.rs, shcl's publish seam, and test code.
+	- Verified: unit suite on Linux, 1186 passed. Clippy with -D warnings for Linux, x86_64-pc-windows-gnu and x86_64-apple-darwin. fmt, test ID and docs gates.
 	- Note: Code review 20261003 item 22.
 
 - app.rs and settings_ui.rs each do too many jobs
