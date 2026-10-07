@@ -308,18 +308,22 @@ fn weld_region_clip(
 // given, snapshot the styled cells too - the scrolled-off strip's source data.
 // Colors resolve the same way build()'s cell loop does (minus the transient
 // bell flash and selection, which don't belong in a retained row). Recycles the
-// caller's row allocations. One entry per column; a wide-char spacer stays as a
-// wide=0 placeholder so indexes keep matching columns.
+// caller's row allocations and its contrast memo. One entry per column; a
+// wide-char spacer stays as a wide=0 placeholder so indexes keep matching columns.
 fn snapshot_rows(
 	grid: &Grid<Cell>,
 	lines: usize,
 	cols: usize,
-	styled: Option<(&Colors, &config::Settings, &mut Vec<Vec<StripCell>>)>,
+	styled: Option<(
+		&Colors,
+		&config::Settings,
+		&mut Vec<Vec<StripCell>>,
+		&mut palette::Readable,
+	)>,
 ) -> Vec<u64> {
 	let mut rows: Vec<u64> = Vec::with_capacity(lines);
 	let mut styled = styled;
-	let mut readable = palette::Readable::default();
-	if let Some((_, _, out)) = &mut styled {
+	if let Some((_, _, out, _)) = &mut styled {
 		out.resize_with(lines, Vec::new);
 	}
 	for i in 0..lines as i32 {
@@ -329,12 +333,11 @@ fn snapshot_rows(
 			hash = (hash ^ row[Column(c)].c as u64).wrapping_mul(0x100_0000_01b3);
 		}
 		rows.push(hash);
-		if let Some((colors, settings, out)) = &mut styled {
+		if let Some((colors, settings, out, readable)) = &mut styled {
 			let out_row = &mut out[i as usize];
 			out_row.clear();
-			out_row.extend(
-				(0..cols).map(|c| strip_cell(&row[Column(c)], colors, settings, &mut readable)),
-			);
+			out_row
+				.extend((0..cols).map(|c| strip_cell(&row[Column(c)], colors, settings, readable)));
 		}
 	}
 	rows
@@ -398,13 +401,13 @@ fn strip_rows(
 	cols: usize,
 	colors: &Colors,
 	settings: &config::Settings,
+	readable: &mut palette::Readable,
 ) -> Vec<Vec<StripCell>> {
-	let mut readable = palette::Readable::default();
 	rows.iter()
 		.filter(|row| row.len() == cols)
 		.map(|row| {
 			(0..cols)
-				.map(|c| strip_cell(&row[Column(c)], colors, settings, &mut readable))
+				.map(|c| strip_cell(&row[Column(c)], colors, settings, readable))
 				.collect()
 		})
 		.collect()
@@ -1548,7 +1551,12 @@ impl Pane {
 					guard.grid(),
 					lines,
 					cols,
-					Some((guard.colors(), &settings, &mut cur_cells)),
+					Some((
+						guard.colors(),
+						&settings,
+						&mut cur_cells,
+						&mut self.readable,
+					)),
 				);
 				self.cells_scratch = std::mem::replace(&mut self.last_cells, cur_cells);
 				rows
@@ -1631,6 +1639,7 @@ impl Pane {
 				cols,
 				guard.colors(),
 				&settings,
+				&mut self.readable,
 			)
 		});
 		// While a slide is in flight the ledger keeps its region and direction, so
@@ -1661,7 +1670,12 @@ impl Pane {
 				guard.grid(),
 				lines,
 				cols,
-				apps.then_some((guard.colors(), &settings, &mut cur_cells)),
+				apps.then_some((
+					guard.colors(),
+					&settings,
+					&mut cur_cells,
+					&mut self.readable,
+				)),
 			);
 			if let (true, Some(step)) = (apps, step) {
 				shift_dbg = step;
@@ -2087,7 +2101,9 @@ impl Pane {
 		let sel_range = guard.selection.as_ref().and_then(|s| s.to_range(&*guard));
 		let grid = guard.grid();
 
-		let mut bg = Vec::new();
+		// last frame's list, emptied, so a rebuild doesn't grow one from nothing
+		let mut bg = std::mem::take(&mut self.last_draw.bg);
+		bg.clear();
 		// fallback glyphs to draw per-cell: (char, fg, bold, italic, col, screen-row, cells)
 		let mut glyph_specs: Vec<(char, [u8; 3], bool, bool, usize, i32, u8)> = Vec::new();
 		let default_attrs = mono_attrs();
@@ -3463,6 +3479,25 @@ impl Pane {
 
 	pub fn update_selection(&self, point: Point, side: Side) {
 		let mut guard = self.term.term.lock_unfair();
+		if let Some(sel) = guard.selection.as_mut() {
+			sel.update(point, side);
+		}
+	}
+
+	/// `update_selection` at `point_clamped(x, y)`, under one lock: the view's
+	/// offset is read with the same hold that moves the selection, so a drag
+	/// takes the lock once per move rather than twice.
+	pub fn drag_selection_to(&self, x: f32, y: f32, ctx: &TextCtx) {
+		let mut guard = self.term.term.lock_unfair();
+		let (point, side) = grid_point(
+			x,
+			y,
+			self.rect,
+			ctx.margin,
+			(ctx.cell_w, ctx.cell_h),
+			(self.term.cols, self.term.lines),
+			guard.grid().display_offset() as i32,
+		);
 		if let Some(sel) = guard.selection.as_mut() {
 			sel.update(point, side);
 		}
@@ -5023,7 +5058,7 @@ mod tests {
 		slide_is_visible, snapshot_rows, static_bands, strip_cell, strip_rows, swap_leaves,
 		text_buffer_h, translate_span, vanished_range, weld_region_clip,
 	};
-	use crate::config;
+	use crate::{config, palette};
 	use alacritty_terminal::event::{Event, EventListener};
 	use alacritty_terminal::grid::Dimensions;
 	use alacritty_terminal::index::{Column, Line, Point, Side};
@@ -6830,7 +6865,13 @@ mod tests {
 		feed(&mut term, "\r\n\r\n");
 		assert_eq!(term.scroll_ledger().lines(), 2);
 		let settings = config::Settings::default();
-		let rows = strip_rows(term.scroll_ledger().rows(), cols, term.colors(), &settings);
+		let rows = strip_rows(
+			term.scroll_ledger().rows(),
+			cols,
+			term.colors(),
+			&settings,
+			&mut palette::Readable::default(),
+		);
 		let text: Vec<String> = rows
 			.iter()
 			.map(|r| {
@@ -6848,7 +6889,16 @@ mod tests {
 			columns: cols + 1,
 			screen_lines: lines,
 		});
-		assert!(strip_rows(term.scroll_ledger().rows(), cols, term.colors(), &settings).is_empty());
+		assert!(
+			strip_rows(
+				term.scroll_ledger().rows(),
+				cols,
+				term.colors(),
+				&settings,
+				&mut palette::Readable::default()
+			)
+			.is_empty()
+		);
 	}
 
 	// Test ID: EqAQm2a
@@ -6880,7 +6930,13 @@ mod tests {
 			let ledger = term.scroll_ledger();
 			let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
 			let step = ledger.lines();
-			let chunk = strip_rows(ledger.rows(), cols, term.colors(), &settings);
+			let chunk = strip_rows(
+				ledger.rows(),
+				cols,
+				term.colors(),
+				&settings,
+				&mut palette::Readable::default(),
+			);
 			term.scroll_ledger_mut().drain(); // a slide is in flight from here on
 			assert_eq!(step, -1);
 			let want = if offsets.is_empty() { end } else { 45 };
@@ -6945,14 +7001,25 @@ mod tests {
 			term.grid(),
 			lines,
 			cols,
-			Some((term.colors(), &settings, &mut last)),
+			Some((
+				term.colors(),
+				&settings,
+				&mut last,
+				&mut palette::Readable::default(),
+			)),
 		);
 		term.scroll_ledger_mut().clear();
 		feed(&mut term, "\x1b[6;1H\x1b[2L| in 2 |\r\n| in 3 |");
 		let ledger = term.scroll_ledger();
 		let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
 		assert_eq!((ledger.lines(), region.clone()), (-2, 5..lines));
-		let chunk = strip_rows(ledger.rows(), cols, term.colors(), &settings);
+		let chunk = strip_rows(
+			ledger.rows(),
+			cols,
+			term.colors(),
+			&settings,
+			&mut palette::Readable::default(),
+		);
 		assert_eq!(ledger_step(false, true, 0, false, -2), Some(-2));
 		assert!(
 			slide_is_visible(-2, &region, &last, &chunk),
@@ -6968,13 +7035,24 @@ mod tests {
 			full.grid(),
 			8,
 			cols,
-			Some((full.colors(), &settings, &mut full_last)),
+			Some((
+				full.colors(),
+				&settings,
+				&mut full_last,
+				&mut palette::Readable::default(),
+			)),
 		);
 		full.scroll_ledger_mut().clear();
 		feed(&mut full, "\x1b[6;1H\x1b[L| in 2 |");
 		let ledger = full.scroll_ledger();
 		let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
-		let chunk = strip_rows(ledger.rows(), cols, full.colors(), &settings);
+		let chunk = strip_rows(
+			ledger.rows(),
+			cols,
+			full.colors(),
+			&settings,
+			&mut palette::Readable::default(),
+		);
 		assert_eq!(ledger.lines(), -1);
 		assert!(!ledger_makes_room(-1, &region, 8, &full_last, &chunk));
 
@@ -7024,7 +7102,12 @@ mod tests {
 			term.grid(),
 			lines,
 			cols,
-			Some((term.colors(), &settings, &mut last)),
+			Some((
+				term.colors(),
+				&settings,
+				&mut last,
+				&mut palette::Readable::default(),
+			)),
 		);
 		term.scroll_ledger_mut().clear();
 		feed(
@@ -7034,7 +7117,13 @@ mod tests {
 		let ledger = term.scroll_ledger();
 		let region = ledger.region().start.0 as usize..ledger.region().end.0 as usize;
 		assert_eq!((ledger.lines(), region.clone()), (-1, 0..lines));
-		let chunk = strip_rows(ledger.rows(), cols, term.colors(), &settings);
+		let chunk = strip_rows(
+			ledger.rows(),
+			cols,
+			term.colors(),
+			&settings,
+			&mut palette::Readable::default(),
+		);
 		assert!(
 			!chunk.iter().any(|r| has_ink(r)),
 			"the kept row was blanked"
@@ -7407,7 +7496,12 @@ mod tests {
 			term.grid(),
 			lines,
 			cols,
-			Some((term.colors(), &settings, &mut last)),
+			Some((
+				term.colors(),
+				&settings,
+				&mut last,
+				&mut palette::Readable::default(),
+			)),
 		);
 		feed(
 			&mut term,
@@ -7422,7 +7516,13 @@ mod tests {
 			0,
 			"the screen was not full: nothing left it"
 		);
-		let chunk = strip_rows(ledger.rows(), cols, term.colors(), &settings);
+		let chunk = strip_rows(
+			ledger.rows(),
+			cols,
+			term.colors(),
+			&settings,
+			&mut palette::Readable::default(),
+		);
 		assert!(!slide_is_visible(-3, &region, &last, &chunk));
 		assert_eq!(
 			ledger_step(false, true, 0, false, -3),

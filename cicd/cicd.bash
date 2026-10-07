@@ -796,6 +796,17 @@ if [[ -x "${root}/cicd/tests/wpkept/run.bash" ]]; then
 		*) fDie "prepared wallpaper kept on disk test failed ($(fTestId cicd/tests/wpkept/run.bash))" ;;
 	esac
 fi
+## Heap allocations per frame at rest and in a drag select, against a limit.
+## Exit 3 is a skip: no debug binary, display, window manager or xdotool.
+if [[ -x "${root}/cicd/tests/allocs/run.bash" ]]; then
+	fEcho_Clean "allocations per frame ..."
+	allocsRc=0; "${root}/cicd/tests/allocs/run.bash" >/dev/null || allocsRc=$?
+	case "${allocsRc}" in
+		0) fEcho "OK: allocations per frame ($(fTestId cicd/tests/allocs/run.bash))" ;;
+		3) fEcho "WARNING: allocations per frame skipped" ;;
+		*) fDie "allocations per frame test failed ($(fTestId cicd/tests/allocs/run.bash))" ;;
+	esac
+fi
 ## Software rendering on an X server with no shared pixmaps, at launch and
 ## switched on later. Exit 3 is a skip: no binary, sway, Xwayland with DRI3,
 ## render node or tools.

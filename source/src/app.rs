@@ -1482,6 +1482,33 @@ struct ChromeCache {
 	tabs: Vec<(String, f32, Buffer)>,
 }
 
+// The lists a frame fills, kept between frames so each frame clears them
+// rather than growing them from empty. `render_with` takes them out for the
+// frame and puts them back emptied; an early return just drops them.
+#[derive(Default)]
+struct FrameBufs {
+	instances: Vec<RectInstance>,
+	pane_fulls: Vec<Rect>,
+	cursors: Vec<(Rect, RectInstance)>,
+	scrim_cursors: Vec<RectInstance>,
+	group_ranges: Vec<(Rect, u32, u32)>,
+	link_ranges: Vec<(Rect, u32, u32)>,
+	cursor_ranges: Vec<(Rect, u32, u32)>,
+}
+
+impl FrameBufs {
+	fn emptied(mut self) -> Self {
+		self.instances.clear();
+		self.pane_fulls.clear();
+		self.cursors.clear();
+		self.scrim_cursors.clear();
+		self.group_ranges.clear();
+		self.link_ranges.clear();
+		self.cursor_ranges.clear();
+		self
+	}
+}
+
 // The tab strip as drawn: which tab it starts at, and per tab shown, how wide
 // it is and what it says. Tabs are no longer one width apiece, so a position on
 // the bar is a running total rather than a multiplication (see tabtitle).
@@ -3233,6 +3260,8 @@ struct State {
 	scrim_sig: Option<u64>,
 	// light mode's halo curve, solved again only when its inputs move
 	halo_memo: crate::visibility::HaloMemo,
+	// the lists render_with fills, kept for the next frame
+	frame_bufs: FrameBufs,
 	occluded: bool, // window fully hidden: skip rendering entirely until it comes back
 	// The last resize was to nothing (minimized on Windows). Read by `hidden`,
 	// since a restore stops reporting minimized before the size comes back.
@@ -4143,8 +4172,7 @@ impl State {
 		}
 		// The pointer sits still while the content moves under it, so the far end
 		// of the selection has to be re-read against the rows now on screen.
-		let (point, side) = pane.point_clamped(x, y, &self.text);
-		pane.update_selection(point, side);
+		pane.drag_selection_to(x, y, &self.text);
 		// Pinned at either end there is nothing left to reveal, so don't ask for
 		// another frame - held past the bottom, that would be a spin.
 		moved
@@ -4794,16 +4822,15 @@ impl State {
 
 	// Per-title (x_left, width) layout of the menu bar, used for drawing and
 	// hit-testing so they can't disagree. Titles use the proportional font.
-	fn menubar_layout(&mut self) -> Vec<(f32, f32)> {
+	fn menubar_layout(&mut self) -> [(f32, f32); MENU_BAR.len()] {
 		let attrs = crate::text::ui_attrs();
 		let mut x = 0.0;
-		let mut out = Vec::with_capacity(MENU_BAR.len());
-		for title in MENU_BAR {
+		MENU_BAR.map(|title| {
 			let w = self.text.measure_ui_text(title, &attrs) + self.text.dip(MENU_BAR_PAD) * 2.0;
-			out.push((x, w));
+			let at = (x, w);
 			x += w;
-		}
-		out
+			at
+		})
 	}
 
 	fn menubar_hit(&mut self, mx: f32) -> Option<usize> {
@@ -6237,6 +6264,11 @@ impl State {
 		let dt = (now - self.last_frame).as_secs_f32().min(0.1);
 		self.last_frame = now;
 		let cfg = config::settings(); // one snapshot per frame, not per use/pane
+		// chrome colors from the same snapshot, read once a frame
+		let menu_fg_rgb = cfg.menu_fg;
+		let menu_bg_rgb = cfg.menu_bg;
+		let menu_border_rgb = config::menu_border_of(menu_bg_rgb);
+		let menu_hover_rgb = config::menu_hover_of(menu_bg_rgb);
 
 		// A full-screen program takes the minimap column and gives its width back to
 		// the text, so the answer has to be settled before anything is laid out.
@@ -6274,21 +6306,23 @@ impl State {
 			1.0
 		};
 
-		let mut under: Vec<RectInstance> = Vec::new();
-		// what each pane's fill covers - the light-mode wallpaper draws the fill
-		// itself and has to be clipped to it
-		let mut pane_fulls: Vec<Rect> = Vec::new();
-		// cursors are drawn separately (above the scrim, so its halo can't obscure them)
-		let mut cursors: Vec<(Rect, RectInstance)> = Vec::new();
-		let mut tops: HashMap<u64, f32> = HashMap::new();
-		// retained-frame app-scroll slide geometry per pane (None = no active slide)
-		let mut slides: HashMap<u64, Option<crate::pane::Slide>> = HashMap::new();
+		// Every list below comes out of the last frame's, emptied, and goes back at
+		// the end. `pane_fulls` is what each pane's fill covers: the light-mode
+		// wallpaper draws the fill itself and has to be clipped to it. Cursors are
+		// drawn separately, above the scrim, so its halo can't obscure them.
+		let FrameBufs {
+			mut instances,
+			mut pane_fulls,
+			mut cursors,
+			mut scrim_cursors,
+			mut group_ranges,
+			mut link_ranges,
+			mut cursor_ranges,
+		} = std::mem::take(&mut self.frame_bufs);
 		let mut animating = bell > 0.0;
 		if self.autoscroll_selection(dt) {
 			animating = true;
 		}
-		// text-scrim color map needs each cell's bg (so a glyph's halo takes its
-		// own cell color, not always the global) - collect them while building.
 		// The outline shares the scrim's source and composite, so the pass runs
 		// for either; only the blur is the halo's alone.
 		let halo_on = cfg.text_scrim && cfg.text_scrim_radius > 0.0;
@@ -6300,7 +6334,6 @@ impl State {
 		if gpu.scrim.set_use(&gpu.gfx.device, scrim_use) {
 			self.invalidate_prepared();
 		}
-		let mut scrim_cells: Vec<RectInstance> = Vec::new();
 
 		self.text.color_frame();
 		let win_focused = self.focused;
@@ -6336,9 +6369,7 @@ impl State {
 				animating = true;
 			}
 			let draw = pane.draw();
-			tops.insert(*id, draw.top);
-			slides.insert(*id, draw.slide.clone());
-			under.push(RectInstance {
+			instances.push(RectInstance {
 				pos: [pane.full.x, pane.full.y],
 				size: [pane.full.w, pane.full.h],
 				color: crate::gfx::see_through(pane_bg),
@@ -6355,18 +6386,14 @@ impl State {
 		// has stopped moving gets no further pointer event to react to.
 		self.sync_cursor_icon();
 
-		let under_len = under.len() as u32;
-		let mut instances = under;
+		let under_len = instances.len() as u32;
 		// per-pane bg quads (scissored to the pane so overscan rows don't bleed
-		// into neighbors), copied once from each pane's retained frame
-		let mut group_ranges: Vec<(Rect, u32, u32)> = Vec::new();
+		// into neighbors), copied once from each pane's retained frame. The
+		// text-scrim color map reads the same run, so a glyph's halo takes its own
+		// cell color, not always the global.
 		for p in self.tabs.cur().panes.values() {
-			let bg_quads = &p.draw().bg;
 			let start = instances.len() as u32;
-			instances.extend_from_slice(bg_quads);
-			if scrim_on {
-				scrim_cells.extend_from_slice(bg_quads);
-			}
+			instances.extend_from_slice(&p.draw().bg);
 			group_ranges.push((p.rect, start, instances.len() as u32));
 		}
 
@@ -6428,11 +6455,9 @@ impl State {
 		// so cursor_scrim/cursor_outline gate it independently); the cursor still
 		// draws crisp ABOVE the composite below. Collect them whenever the scrim is
 		// on - the shader flags decide whether they reach the halo and/or outline.
-		let scrim_cursor_quads: Vec<RectInstance> = if scrim_on {
-			cursors.iter().map(|(_, q)| *q).collect()
-		} else {
-			Vec::new()
-		};
+		if scrim_on {
+			scrim_cursors.extend(cursors.iter().map(|(_, q)| *q));
+		}
 
 		// Hyperlink underlines sit with the cursor, AFTER the scrim composite - they
 		// are chrome about the text, not a cell background. Filed with the bg quads
@@ -6440,7 +6465,6 @@ impl State {
 		// glyphs, so a solid rule came out as a barcode tracing the letterforms.
 		// They stay out of the scrim's coverage map either way (an underline should
 		// cast no halo of its own), and stay under the cursor as before.
-		let mut link_ranges: Vec<(Rect, u32, u32)> = Vec::new();
 		for p in self.tabs.cur().panes.values() {
 			let link_quads = &p.draw().links;
 			if link_quads.is_empty() {
@@ -6452,8 +6476,7 @@ impl State {
 		}
 
 		// cursor quads get their own per-pane ranges, drawn after the scrim composite
-		let mut cursor_ranges: Vec<(Rect, u32, u32)> = Vec::new();
-		for (rect, cursor_quad) in cursors {
+		for &(rect, cursor_quad) in &cursors {
 			let start = instances.len() as u32;
 			instances.push(cursor_quad);
 			cursor_ranges.push((rect, start, instances.len() as u32));
@@ -6471,7 +6494,7 @@ impl State {
 			let layout = self.menubar_layout();
 			if let Some(idx) = self.bar_open {
 				if let Some(&(x, w)) = layout.get(idx) {
-					instances.push(rect_inst(x, 0.0, w, menu_h, config::menu_hover()));
+					instances.push(rect_inst(x, 0.0, w, menu_h, menu_hover_rgb));
 				}
 			}
 			// Alt held alone (no dropdown open): underline each title's
@@ -6495,7 +6518,7 @@ impl State {
 						underline_y,
 						letter_w,
 						rule,
-						config::menu_fg(),
+						menu_fg_rgb,
 					));
 				}
 			}
@@ -6509,8 +6532,8 @@ impl State {
 				fp.is_some_and(|p| p.copy_output),
 			];
 			if let Some(cb) = self.copybox_layout() {
-				let border = copy_dim(config::menu_border(), self.focused);
-				let fill = copy_dim(config::menu_fg(), self.focused);
+				let border = copy_dim(menu_border_rgb, self.focused);
+				let fill = copy_dim(menu_fg_rgb, self.focused);
 				let box_rule = self.text.dip(CHROME_HAIRLINE);
 				let tick_inset = self.text.dip(COPYBOX_TICK_INSET);
 				for (checkbox, on) in cb.boxes.iter().zip(checked) {
@@ -6554,9 +6577,7 @@ impl State {
 			let start = instances.len() as u32;
 			instances.push(rect_inst(0.0, tab_bar_y, win_w, tab_h, config::TAB_BAR_BG));
 			let first = self.tab_layout.first;
-			let strip = self.tab_layout.widths.clone();
-			// per-tab loop invariants (each config accessor is an RwLock read)
-			let box_border = config::menu_border();
+			// per-tab loop invariants
 			let x_rgb = close_x_rgb();
 			let tab_gap = self.text.dip(TAB_GAP);
 			let (btn_y, btn_h) = tab_button_v(tab_bar_y, tab_h, self.text.scale);
@@ -6576,7 +6597,7 @@ impl State {
 			let edit_pad = self.text.dip(TAB_EDIT_PAD);
 			let caret_w = self.text.dip(CHROME_HAIRLINE).max(1.0);
 			let mut x = 0.0;
-			for (slot, tab_w) in strip.iter().copied().enumerate() {
+			for (slot, tab_w) in self.tab_layout.widths.iter().copied().enumerate() {
 				let i = first + slot;
 				let color = if i == self.tabs.active {
 					config::TAB_ACTIVE
@@ -6611,7 +6632,7 @@ impl State {
 							field.y - cb_rule,
 							field.w + 2.0 * cb_rule,
 							field.h + 2.0 * cb_rule,
-							config::settings().highlight,
+							cfg.highlight,
 						));
 						instances.push(rect_inst(
 							field.x,
@@ -6652,7 +6673,7 @@ impl State {
 					cb.y - cb_rule,
 					cb.w + 2.0 * cb_rule,
 					cb.h + 2.0 * cb_rule,
-					box_border,
+					menu_border_rgb,
 				));
 				let box_fill = if self.tab_close_arm == Some(i) {
 					// held down: light the button (press feedback; closes on release)
@@ -6684,22 +6705,16 @@ impl State {
 					menu.y - border,
 					menu.w + 2.0 * border,
 					popup_h + 2.0 * border,
-					config::menu_border(),
+					menu_border_rgb,
 				));
-				instances.push(rect_inst(
-					menu.x,
-					menu.y,
-					menu.w,
-					popup_h,
-					config::menu_bg(),
-				));
+				instances.push(rect_inst(menu.x, menu.y, menu.w, popup_h, menu_bg_rgb));
 				if let Some(i) = menu.hover {
 					instances.push(rect_inst(
 						menu.x,
 						menu.row_top(i),
 						menu.w,
 						menu.item_h,
-						config::menu_hover(),
+						menu_hover_rgb,
 					));
 				}
 				// faint separator lines between logical groups
@@ -6712,7 +6727,7 @@ impl State {
 							sep_y,
 							menu.w - pad_x * 2.0,
 							self.text.dip(CHROME_HAIRLINE),
-							config::menu_sep(),
+							config::menu_sep_of(menu_bg_rgb),
 						));
 					}
 				}
@@ -6730,7 +6745,7 @@ impl State {
 							w,
 							h,
 						};
-						instances.push(sub_arrow_inst(arrow, config::menu_fg()));
+						instances.push(sub_arrow_inst(arrow, menu_fg_rgb));
 					}
 				}
 				// accelerator underline under each item's accelerator letter (press it
@@ -6754,7 +6769,7 @@ impl State {
 								top + line_h - self.text.dip(MENU_ACCEL_DROP),
 								letter_w,
 								acc_rule,
-								config::menu_fg(),
+								menu_fg_rgb,
 							));
 						}
 					}
@@ -6789,14 +6804,16 @@ impl State {
 				// Flyover help has its own fill, a warmed lift off the menu color, so a
 				// tip does not read as more of the chrome it hangs off. The banner is
 				// a modal notice rather than a tip, so it keeps the menu's.
+				let tip_edge = config::tip_border_of(menu_bg_rgb);
+				let tip_fill = config::tip_bg_of(menu_bg_rgb);
 				let boxes = tip_layout
 					.iter()
 					.chain(menu_tip.iter())
-					.map(|(rect, _)| (rect, config::tip_border(), config::tip_bg()))
+					.map(|(rect, _)| (rect, tip_edge, tip_fill))
 					.chain(
 						bench_banner
 							.iter()
-							.map(|(rect, _)| (rect, config::menu_border(), config::menu_bg())),
+							.map(|(rect, _)| (rect, menu_border_rgb, menu_bg_rgb)),
 					);
 				for (box_rect, edge, fill) in boxes {
 					instances.push(rect_inst(
@@ -6818,22 +6835,21 @@ impl State {
 		};
 
 		let margin = self.text.margin;
-		let menu_fg_rgb = config::menu_fg();
 		let menu_fg = GColor::rgb(menu_fg_rgb[0], menu_fg_rgb[1], menu_fg_rgb[2]);
 		// copy-mode labels dim with their checkboxes when the window is unfocused
 		let copy_label_fg = {
 			let c = copy_dim(menu_fg_rgb, self.focused);
 			GColor::rgb(c[0], c[1], c[2])
 		};
+		// compute before borrowing panes for `areas` (menubar_layout takes &mut self)
+		let bar_layout = self.menubar_layout();
+		let copyboxes = self.copybox_layout();
 		// tab titles, as measured above. Each is fitted to the space its own tab
 		// has, which is where a path gets shortened.
-		let (tab_widths, tab_titles) = if self.tab_bar_visible() {
-			(
-				self.tab_layout.widths.clone(),
-				self.tab_layout.labels.clone(),
-			)
+		let (tab_widths, tab_titles): (&[f32], &[String]) = if self.tab_bar_visible() {
+			(&self.tab_layout.widths, &self.tab_layout.labels)
 		} else {
-			(Vec::new(), Vec::new())
+			(&[], &[])
 		};
 		// keep the shaped chrome text current (see ChromeCache) - a color change
 		// rebuilds it all, otherwise only changed tab titles re-shape
@@ -6876,12 +6892,12 @@ impl State {
 			let mut reshaped = cache.tabs.len() > tab_titles.len();
 			cache.tabs.truncate(tab_titles.len());
 			let scale = self.text.scale;
-			for (i, title) in tab_titles.into_iter().enumerate() {
+			for (i, title) in tab_titles.iter().enumerate() {
 				let title_w = tab_title_w(tab_widths[i], scale);
 				// an unchanged title in an unchanged tab keeps its shaped buffer;
 				// a width change re-wraps it
 				if cache.tabs.get(i).is_some_and(|(cached, cached_w, _)| {
-					cached == &title && (*cached_w - title_w).abs() < 0.01
+					cached == title && (*cached_w - title_w).abs() < 0.01
 				}) {
 					continue;
 				}
@@ -6891,25 +6907,22 @@ impl State {
 				attrs.color_opt = Some(menu_fg);
 				buf.set_text(
 					&mut self.text.font_system,
-					&title,
+					title,
 					&attrs,
 					Shaping::Advanced,
 					None,
 				);
 				buf.shape_until_scroll(&mut self.text.font_system, false);
 				if i < cache.tabs.len() {
-					cache.tabs[i] = (title, title_w, buf);
+					cache.tabs[i] = (title.clone(), title_w, buf);
 				} else {
-					cache.tabs.push((title, title_w, buf));
+					cache.tabs.push((title.clone(), title_w, buf));
 				}
 			}
 			if reshaped {
 				self.chrome_rev = self.chrome_rev.wrapping_add(1);
 			}
 		}
-		// compute before borrowing panes for `areas` (menubar_layout takes &mut self)
-		let bar_layout = self.menubar_layout();
-		let copyboxes = self.copybox_layout();
 
 		// Fingerprint every input to the prepared text set. A pure cursor frame
 		// reproduces it exactly, which is the signal that glyphon's retained
@@ -6923,7 +6936,7 @@ impl State {
 			gpu.gfx.config.width.hash(&mut hasher);
 			gpu.gfx.config.height.hash(&mut hasher);
 			margin.to_bits().hash(&mut hasher);
-			for w in &tab_widths {
+			for w in tab_widths {
 				w.to_bits().hash(&mut hasher);
 			}
 			self.menu_bar.hash(&mut hasher);
@@ -6937,11 +6950,11 @@ impl State {
 			for (id, p) in &self.tabs.cur().panes {
 				id.hash(&mut hasher);
 				p.shape_rev.hash(&mut hasher); // bumped by every full re-shape
-				tops[id].to_bits().hash(&mut hasher);
+				p.draw().top.to_bits().hash(&mut hasher);
 				for v in [p.rect.x, p.rect.y, p.rect.w, p.rect.h] {
 					v.to_bits().hash(&mut hasher);
 				}
-				match &slides[id] {
+				match &p.draw().slide {
 					None => 0u8.hash(&mut hasher),
 					Some(s) => {
 						1u8.hash(&mut hasher);
@@ -7008,13 +7021,14 @@ impl State {
 			for p in self.tabs.cur().panes.values() {
 				// app-scroll slide: fill the revealed gap from the scrolled-off strip,
 				// draw the current scroll region over it, then the static bands unshifted
-				match &slides[&p.id] {
+				let draw = p.draw();
+				match &draw.slide {
 					Some(slide) => {
 						if let Some(strip) = p.strip_text_area(slide, margin) {
 							areas.push(strip);
 						}
 						areas.push(p.text_area_band(
-							tops[&p.id],
+							draw.top,
 							margin,
 							slide.region_clip_t,
 							slide.region_clip_b,
@@ -7036,7 +7050,7 @@ impl State {
 							));
 						}
 					}
-					None => areas.push(p.text_area(tops[&p.id], margin)),
+					None => areas.push(p.text_area(draw.top, margin)),
 				}
 				areas.extend(p.glyph_areas(margin));
 				areas.extend(p.emoji_area(margin));
@@ -7141,13 +7155,14 @@ impl State {
 					// and the halo "pops" when the slide settles, reading as a shadow that
 					// jumps at the band boundary. The strip holds only region rows, so it
 					// is always scrim-safe (no furniture to guard out of the scrim).
-					match &slides[&p.id] {
+					let draw = p.draw();
+					match &draw.slide {
 						Some(slide) => {
 							if let Some(strip) = p.strip_text_area(slide, margin) {
 								scrim_areas.push(strip);
 							}
 							scrim_areas.push(p.scrim_text_area_band(
-								tops[&p.id],
+								draw.top,
 								margin,
 								slide.region_clip_t,
 								slide.region_clip_b,
@@ -7169,7 +7184,7 @@ impl State {
 								));
 							}
 						}
-						None => scrim_areas.push(p.scrim_text_area(tops[&p.id], margin)),
+						None => scrim_areas.push(p.scrim_text_area(draw.top, margin)),
 					}
 					scrim_areas.extend(p.glyph_areas(margin));
 					scrim_areas.extend(p.emoji_area(margin));
@@ -7243,9 +7258,8 @@ impl State {
 				// (left, top, buffer) collected first so the borrow of self.text ends
 				let mut specs: Vec<(f32, f32, Buffer)> = Vec::new();
 				let mut attrs = crate::text::ui_attrs();
-				let fg = config::menu_fg();
-				attrs.color_opt = Some(GColor::rgb(fg[0], fg[1], fg[2]));
-				let tip_fg = config::tip_fg();
+				attrs.color_opt = Some(menu_fg);
+				let tip_fg = config::tip_fg_of(menu_fg_rgb);
 				let tip_col = Some(GColor::rgb(tip_fg[0], tip_fg[1], tip_fg[2]));
 				// The tip alone shapes in the terminal font: its lines are a table
 				// padded with spaces, which no proportional face can align.
@@ -7332,7 +7346,6 @@ impl State {
 					}
 				}
 				let (sw, sh) = (gpu.gfx.config.width as i32, gpu.gfx.config.height as i32);
-				let menu_color = GColor::rgb(fg[0], fg[1], fg[2]);
 				let areas: Vec<TextArea> = specs
 					.iter()
 					.map(|(left, top, buf)| TextArea {
@@ -7346,7 +7359,7 @@ impl State {
 							right: sw,
 							bottom: sh,
 						},
-						default_color: menu_color,
+						default_color: menu_fg,
 						custom_glyphs: &[],
 					})
 					.collect();
@@ -7432,13 +7445,13 @@ impl State {
 					&gpu.gfx.device,
 					&gpu.gfx.queue,
 					&mut encoder,
-					&scrim_cells,
+					&instances[under_len as usize..ring_start as usize],
 					config::srgb_f32(cfg.bg),
 				);
 			}
 			if cfg.cursor_scrim || cfg.cursor_outline {
 				gpu.scrim
-					.upload_cursors(&gpu.gfx.device, &gpu.gfx.queue, &scrim_cursor_quads);
+					.upload_cursors(&gpu.gfx.device, &gpu.gfx.queue, &scrim_cursors);
 			}
 			if !scrim_cached {
 				let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -7745,6 +7758,16 @@ impl State {
 		if !text_same {
 			self.text.trim_atlas();
 		}
+		self.frame_bufs = FrameBufs {
+			instances,
+			pane_fulls,
+			cursors,
+			scrim_cursors,
+			group_ranges,
+			link_ranges,
+			cursor_ranges,
+		}
+		.emptied();
 		animating && presented
 	}
 }
@@ -8773,6 +8796,7 @@ impl ApplicationHandler<UserEvent> for App {
 			overlay_sig: None,
 			scrim_sig: None,
 			halo_memo: crate::visibility::HaloMemo::default(),
+			frame_bufs: FrameBufs::default(),
 			occluded: false,
 			no_area: false,
 			keeps_picture: !(cfg!(windows) && want_transparent),
@@ -9168,8 +9192,7 @@ impl ApplicationHandler<UserEvent> for App {
 					// pointer dragged off the pane keeps selecting to the edge cell,
 					// and the per-frame step below scrolls to reveal more.
 					if let Some(p) = state.tabs.cur().panes.get(&id) {
-						let (point, side) = p.point_clamped(x, y, &state.text);
-						p.update_selection(point, side);
+						p.drag_selection_to(x, y, &state.text);
 					}
 					state.dirty = true;
 				} else if state.dragging_pane.is_some() {
@@ -10382,7 +10405,9 @@ impl ApplicationHandler<UserEvent> for App {
 			let force = state.dirty || bell_anim;
 			state.dirty = false;
 			crate::perf::bump(&crate::perf::FRAMES);
+			let allocs = crate::perf::thread_allocs();
 			let animating = crate::perf::timed(&crate::perf::RENDER_NS, || state.render(force));
+			crate::perf::frame_allocs(allocs);
 			// how the ease is paced tells whether the display keeps up
 			let step = rating_step(
 				state.bench.is_some(),
