@@ -9363,7 +9363,7 @@ mod tests {
 		);
 		// and the app does move the baseline on every Apply
 		// a Windows checkout has CRLF line ends
-		let app = include_str!("app.rs").replace("\r\n", "\n");
+		let app = include_str!("app/dialogs.rs").replace("\r\n", "\n");
 		let at = app
 			.find("fn apply_dialog_settings")
 			.expect("apply_dialog_settings");
