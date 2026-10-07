@@ -112,7 +112,7 @@ fn main() -> anyhow::Result<()> {
 		Ok(parsed) => parsed,
 		Err(e) => {
 			open_console();
-			eprintln!("{}: {e}\nTry --help.", config::APP_NAME);
+			eprintln!("{}: {e:#}\nTry --help.", config::APP_NAME);
 			std::process::exit(2);
 		}
 	};
@@ -162,7 +162,7 @@ fn main() -> anyhow::Result<()> {
 		}
 		for cmd in &cmds {
 			if let Err(e) = ctl::send(cmd) {
-				eprintln!("{}: {e}", config::APP_NAME);
+				eprintln!("{}: {e:#}", config::APP_NAME);
 				std::process::exit(2);
 			}
 		}
@@ -192,7 +192,7 @@ fn main() -> anyhow::Result<()> {
 		if !command_line.trim().is_empty() {
 			match cli::shell_split(&command_line).and_then(cli::parse) {
 				Ok(parsed) => cli = parsed,
-				Err(e) => eprintln!("{}: config command_line: {e}", config::APP_NAME),
+				Err(e) => eprintln!("{}: config command_line: {e:#}", config::APP_NAME),
 			}
 		}
 	}

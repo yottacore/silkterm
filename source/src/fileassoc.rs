@@ -77,12 +77,12 @@ impl Value {
 /// Paths start with the hive, `HKCU\` or `HKCR\`. Only HKCU is ever written.
 pub trait Store {
 	fn get(&self, key: &str, name: &str) -> Option<Value>;
-	fn set(&mut self, key: &str, name: &str, value: &Value) -> Result<(), String>;
-	fn delete(&mut self, key: &str, name: &str) -> Result<(), String>;
+	fn set(&mut self, key: &str, name: &str, value: &Value) -> anyhow::Result<()>;
+	fn delete(&mut self, key: &str, name: &str) -> anyhow::Result<()>;
 	fn exists(&self, key: &str) -> bool;
 	// Remove the key if nothing is left in it. Not an error when it is gone
 	// already or still holds something.
-	fn prune(&mut self, key: &str) -> Result<(), String>;
+	fn prune(&mut self, key: &str) -> anyhow::Result<()>;
 }
 
 const STATE: &str = r"HKCU\Software\SilkTerm\Associations";
@@ -206,7 +206,7 @@ pub fn overridden(assoc: Assoc, store: &dyn Store) -> Vec<&'static str> {
 
 /// Register, or register again: a second call puts back what the first saved
 /// and saves it over, so the path follows the build that was last asked.
-pub fn register(assoc: Assoc, exe: &Path, store: &mut dyn Store) -> Result<(), String> {
+pub fn register(assoc: Assoc, exe: &Path, store: &mut dyn Store) -> anyhow::Result<()> {
 	if registered(assoc, store) {
 		unregister(assoc, store)?;
 	}
@@ -232,7 +232,7 @@ pub fn register(assoc: Assoc, exe: &Path, store: &mut dyn Store) -> Result<(), S
 
 /// Put back what registering replaced, newest first so a key made for a value
 /// is empty by the time its turn comes.
-pub fn unregister(assoc: Assoc, store: &mut dyn Store) -> Result<(), String> {
+pub fn unregister(assoc: Assoc, store: &mut dyn Store) -> anyhow::Result<()> {
 	let state = state_key(assoc);
 	let text = |store: &dyn Store, name: String| store.get(&state, &name).map(|v| v.text);
 	let count: usize = text(store, "count".into())
@@ -418,11 +418,9 @@ mod registry {
 		(status == ERROR_SUCCESS).then_some(Key(handle))
 	}
 
-	fn fail(what: &str, key: &str, status: u32) -> String {
-		format!(
-			"{what} {key}: {}",
-			std::io::Error::from_raw_os_error(status as i32)
-		)
+	fn fail(what: &str, key: &str, status: u32) -> anyhow::Error {
+		anyhow::Error::new(std::io::Error::from_raw_os_error(status as i32))
+			.context(format!("{what} {key}"))
 	}
 
 	impl Store for Registry {
@@ -469,9 +467,9 @@ mod registry {
 			})
 		}
 
-		fn set(&mut self, key: &str, name: &str, value: &Value) -> Result<(), String> {
+		fn set(&mut self, key: &str, name: &str, value: &Value) -> anyhow::Result<()> {
 			let Some((hive, path)) = split(key).filter(|(h, _)| *h == HKEY_CURRENT_USER) else {
-				return Err(format!("not a per-user key: {key}"));
+				anyhow::bail!("not a per-user key: {key}");
 			};
 			let wpath = wide(path);
 			let mut handle: HKEY = std::ptr::null_mut();
@@ -517,7 +515,7 @@ mod registry {
 			}
 		}
 
-		fn delete(&mut self, key: &str, name: &str) -> Result<(), String> {
+		fn delete(&mut self, key: &str, name: &str) -> anyhow::Result<()> {
 			let Some(handle) = open(key, KEY_SET_VALUE) else {
 				return Ok(());
 			};
@@ -535,7 +533,7 @@ mod registry {
 			open(key, KEY_READ).is_some()
 		}
 
-		fn prune(&mut self, key: &str) -> Result<(), String> {
+		fn prune(&mut self, key: &str) -> anyhow::Result<()> {
 			let Some(handle) = open(key, KEY_READ) else {
 				return Ok(());
 			};
@@ -598,9 +596,9 @@ impl Store for Memory {
 			.get(&name.to_ascii_lowercase())
 			.cloned()
 	}
-	fn set(&mut self, key: &str, name: &str, value: &Value) -> Result<(), String> {
+	fn set(&mut self, key: &str, name: &str, value: &Value) -> anyhow::Result<()> {
 		if !key.starts_with(r"HKCU\") {
-			return Err(format!("not a per-user key: {key}"));
+			anyhow::bail!("not a per-user key: {key}");
 		}
 		// creating a key creates every key above it, as the registry does
 		let mut at = key;
@@ -614,7 +612,7 @@ impl Store for Memory {
 			.insert(name.to_ascii_lowercase(), value.clone());
 		Ok(())
 	}
-	fn delete(&mut self, key: &str, name: &str) -> Result<(), String> {
+	fn delete(&mut self, key: &str, name: &str) -> anyhow::Result<()> {
 		if let Some(values) = self.keys.get_mut(&Self::fold(key)) {
 			values.remove(&name.to_ascii_lowercase());
 		}
@@ -623,7 +621,7 @@ impl Store for Memory {
 	fn exists(&self, key: &str) -> bool {
 		self.keys.contains_key(&Self::fold(key))
 	}
-	fn prune(&mut self, key: &str) -> Result<(), String> {
+	fn prune(&mut self, key: &str) -> anyhow::Result<()> {
 		let folded = Self::fold(key);
 		let below = format!("{folded}\\");
 		let empty = self

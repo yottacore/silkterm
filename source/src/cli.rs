@@ -150,7 +150,7 @@ fn parse_bool(s: &str) -> Option<bool> {
 /// `git log --oneline`, `bash --norc`, and `sh -c "a | b"` all argv-split right.
 /// Outside quotes a backslash only escapes whitespace and quotes, so Windows paths
 /// can be written plainly; inside double quotes the usual POSIX escapes apply.
-pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
+pub fn shell_split(s: &str) -> anyhow::Result<Vec<String>> {
 	let mut out = Vec::new();
 	let mut word = String::new();
 	let mut chars = s.chars().peekable();
@@ -215,7 +215,7 @@ pub fn shell_split(s: &str) -> Result<Vec<String>, String> {
 		out.push(word);
 	}
 	if out.is_empty() {
-		return Err("empty command".into());
+		anyhow::bail!("empty command");
 	}
 	Ok(out)
 }
@@ -234,12 +234,12 @@ impl Args {
 		token
 	}
 	// value for a flag whose `=value` (if any) is `inline`; else the next token.
-	fn value(&mut self, flag: &str, inline: Option<String>) -> Result<String, String> {
+	fn value(&mut self, flag: &str, inline: Option<String>) -> anyhow::Result<String> {
 		if let Some(v) = inline {
 			return Ok(v);
 		}
 		self.next_token()
-			.ok_or_else(|| format!("{flag} needs a value"))
+			.ok_or_else(|| anyhow::anyhow!("{flag} needs a value"))
 	}
 	// value-optional flag: inline `=value`, else the next token only when it isn't
 	// another option - so a bare flag reads as "no value" instead of eating the
@@ -254,9 +254,9 @@ impl Args {
 		}
 	}
 	// optional-bool flag: inline, else a following bool literal, else true.
-	fn bool_value(&mut self, flag: &str, inline: Option<String>) -> Result<bool, String> {
+	fn bool_value(&mut self, flag: &str, inline: Option<String>) -> anyhow::Result<bool> {
 		if let Some(v) = inline {
-			return parse_bool(&v).ok_or_else(|| format!("{flag}: not a bool: {v}"));
+			return parse_bool(&v).ok_or_else(|| anyhow::anyhow!("{flag}: not a bool: {v}"));
 		}
 		if let Some(token) = self.items.get(self.pos) {
 			if let Some(b) = parse_bool(token) {
@@ -268,25 +268,25 @@ impl Args {
 	}
 }
 
-fn parse_hex(flag: &str, v: &str) -> Result<[u8; 3], String> {
-	config::parse_hex(v).ok_or_else(|| format!("{flag}: not a #rrggbb color: {v}"))
+fn parse_hex(flag: &str, v: &str) -> anyhow::Result<[u8; 3]> {
+	config::parse_hex(v).ok_or_else(|| anyhow::anyhow!("{flag}: not a #rrggbb color: {v}"))
 }
 
-fn parse_f32(flag: &str, v: &str) -> Result<f32, String> {
+fn parse_f32(flag: &str, v: &str) -> anyhow::Result<f32> {
 	match v.parse::<f32>() {
 		Ok(n) if n.is_finite() => Ok(n),
 		// nan and inf parse fine and then survive every clamp. One that reaches a
 		// setting is written over the user's own value at the session's first save,
 		// because a NaN compares unequal to the value it replaced.
-		Ok(_) => Err(format!("{flag}: not a finite number: {v}")),
-		Err(_) => Err(format!("{flag}: not a number: {v}")),
+		Ok(_) => Err(anyhow::anyhow!("{flag}: not a finite number: {v}")),
+		Err(_) => Err(anyhow::anyhow!("{flag}: not a number: {v}")),
 	}
 }
 
 // A number standing for a setting is held to that setting's own range, the way
 // the config file's is. The command line has no business asking for a value the
 // file could not hold.
-fn parse_f32_in(flag: &str, v: &str, (lo, hi): (f32, f32)) -> Result<f32, String> {
+fn parse_f32_in(flag: &str, v: &str, (lo, hi): (f32, f32)) -> anyhow::Result<f32> {
 	Ok(parse_f32(flag, v)?.clamp(lo, hi))
 }
 
@@ -303,7 +303,7 @@ const OPACITY: (f32, f32) = (0.0, 1.0);
 // and 100, and a cell count to at least one column or row.
 const SPLIT_PCT: (f32, f32) = (5.0, 95.0);
 
-fn parse_size(v: &str) -> Result<Size, String> {
+fn parse_size(v: &str) -> anyhow::Result<Size> {
 	if let Some(percent) = v.strip_suffix('%') {
 		Ok(Size::Percent(parse_f32_in(
 			"--size",
@@ -314,13 +314,13 @@ fn parse_size(v: &str) -> Result<Size, String> {
 		Ok(Size::Cells(
 			v.trim()
 				.parse::<u32>()
-				.map_err(|_| format!("--size: bad cell count: {v}"))?
+				.map_err(|_| anyhow::anyhow!("--size: bad cell count: {v}"))?
 				.max(1),
 		))
 	}
 }
 
-pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
+pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 	let mut tokens = Args {
 		items: args.into_iter().collect(),
 		pos: 0,
@@ -340,7 +340,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			continue;
 		}
 		let Some(body) = token.strip_prefix("--") else {
-			return Err(format!("unexpected argument: {token}"));
+			anyhow::bail!("unexpected argument: {token}");
 		};
 		let (name, inline) = match body.split_once('=') {
 			Some((n, v)) => (n, Some(v.to_string())),
@@ -379,7 +379,8 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			"tab" => {
 				ensure_first_tab(&mut cli);
 				let id = tokens.value("--tab", inline)?;
-				let idx = find_tab(&cli, &id).ok_or_else(|| format!("--tab: no such tab: {id}"))?;
+				let idx = find_tab(&cli, &id)
+					.ok_or_else(|| anyhow::anyhow!("--tab: no such tab: {id}"))?;
 				cur_tab = Some(idx);
 				cur_pane = 0;
 				continue;
@@ -399,7 +400,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 				let tab_idx = cur_tab.unwrap_or(0);
 				let id = tokens.value("--pane", inline)?;
 				let pane_idx = find_pane(&cli.tabs[tab_idx], &id)
-					.ok_or_else(|| format!("--pane: no such pane: {id}"))?;
+					.ok_or_else(|| anyhow::anyhow!("--pane: no such pane: {id}"))?;
 				cur_pane = pane_idx;
 				cur_tab = Some(tab_idx);
 				continue;
@@ -436,9 +437,9 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 		);
 		if window_only {
 			if cur_tab.is_some() {
-				return Err(format!(
+				anyhow::bail!(
 					"--{name} is a window option; put it before --new-tab/--tab/--new-pane/--pane"
-				));
+				);
 			}
 			match name {
 				"columns" => {
@@ -446,7 +447,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 						tokens
 							.value(name, inline)?
 							.parse()
-							.map_err(|_| "bad --columns")?,
+							.map_err(|_| anyhow::anyhow!("bad --columns"))?,
 					));
 				}
 				"rows" => {
@@ -454,7 +455,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 						tokens
 							.value(name, inline)?
 							.parse()
-							.map_err(|_| "bad --rows")?,
+							.map_err(|_| anyhow::anyhow!("bad --rows"))?,
 					));
 				}
 				"pixel-width" => {
@@ -462,7 +463,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 						tokens
 							.value(name, inline)?
 							.parse()
-							.map_err(|_| "bad --pixel-width")?,
+							.map_err(|_| anyhow::anyhow!("bad --pixel-width"))?,
 					);
 				}
 				"pixel-height" => {
@@ -470,7 +471,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 						tokens
 							.value(name, inline)?
 							.parse()
-							.map_err(|_| "bad --pixel-height")?,
+							.map_err(|_| anyhow::anyhow!("bad --pixel-height"))?,
 					);
 				}
 				"background-opacity" => {
@@ -493,12 +494,10 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 			"splits" | "splits-pane" | "down" | "up" | "left" | "right" | "size"
 		) {
 			let tab_idx =
-				cur_tab.ok_or_else(|| format!("--{name} only applies to a --new-pane"))?;
+				cur_tab.ok_or_else(|| anyhow::anyhow!("--{name} only applies to a --new-pane"))?;
 			let pane = &mut cli.tabs[tab_idx].panes[cur_pane];
 			if pane.first {
-				return Err(format!(
-					"--{name} can't apply to the first pane (main); use --new-pane"
-				));
+				anyhow::bail!("--{name} can't apply to the first pane (main); use --new-pane");
 			}
 			match name {
 				"splits" | "splits-pane" => pane.splits = Some(tokens.value(name, inline)?),
@@ -597,22 +596,20 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Cli, String> {
 				style.wallpaper_opacity =
 					Some(parse_f32_in(name, &tokens.value(name, inline)?, OPACITY)?);
 			}
-			_ => return Err(format!("unknown option: --{name}")),
+			_ => anyhow::bail!("unknown option: --{name}"),
 		}
 	}
 
 	Ok(cli)
 }
 
-fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> Result<(), String> {
+fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> anyhow::Result<()> {
 	if !on {
 		return Ok(()); // --right=false etc. is a no-op (leaves default/inherit)
 	}
 	if let Some(prev) = pane.dir {
 		if prev != dir {
-			return Err(format!(
-				"--{flag} conflicts with an earlier direction on this pane"
-			));
+			anyhow::bail!("--{flag} conflicts with an earlier direction on this pane");
 		}
 	}
 	pane.dir = Some(dir);
