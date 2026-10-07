@@ -532,7 +532,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
 		- 20261006: The disk cache (2026100514211603) went first, as JPEG. When this is built, the cache keeps the BC data in place of the JPEG, so a kept copy needs no decode or encode.
+		- 20261006: The smaller hold for a heavy blur is split out as 2026100619365706.
+	- Decisions:
+		- 20261006: An in-house BC1 encoder, a few hundred lines, no crate. BC7 only if a test finds BC1 banding, and that comes back as a question first.
 	- Closed:
+
+- Wallpaper: hold a blurred picture smaller than the window
+	- ID: 2026100619365706
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261006-193657
+	- Opened by: CC
+	- Parent ID: 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- A blurred picture is held smaller than the window, so the blur's sigma comes to a set number of held pixels, and the GPU scales it up.
+		- That number goes by the performance profile: 2 for Low and Standard, 4 for High and Max.
+		- A one pixel border keeps the picture's edge as close to the old look as its inside.
+		- A small blur never shrinks it below what the window shows.
+	- Notes:
+		- 20261006: Tried 2026-10-05 and measured in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size). At 4, at most 1 level off inside; at 2, at most 2. The edge was up to 6 and 8 off without a border.
+	- Decisions:
+		- 20261006: Per profile, 2 for Low and Standard, 4 for High and Max.
+		- 20261006: Remote follows Standard, since it uses Standard's values. Custom follows High. Both are best guesses and can change.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
