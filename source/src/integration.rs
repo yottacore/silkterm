@@ -135,15 +135,24 @@ pub fn powershells(found: &[Found]) -> Vec<String> {
 // table is (lowercased, `.exe` dropped), so a full path answers the same as a
 // bare name - and `pwsh-preview` and the like answer yes as well.
 fn is_powershell(program: &str) -> bool {
-	// split on both separators: a Windows path reaches this on any platform, and
-	// Path would hand back the whole string for one on unix
+	let base = program_base(program);
+	base == "powershell" || base == "pwsh" || base.starts_with("pwsh-")
+}
+
+// A program's name with no directory, lowercased and `.exe` dropped. Unlike
+// `shells::base_name` this splits on both separators on every platform, since
+// a Windows path reaches it on any of them and Path would hand back the whole
+// string for one on unix.
+fn program_base(program: &str) -> String {
 	let base = program
 		.rsplit(['/', '\\'])
 		.next()
 		.unwrap_or(program)
 		.to_ascii_lowercase();
-	let base = base.strip_suffix(".exe").unwrap_or(&base);
-	base == "powershell" || base == "pwsh" || base.starts_with("pwsh-")
+	match base.strip_suffix(".exe") {
+		Some(stem) => stem.to_string(),
+		None => base,
+	}
 }
 
 /// Put the block in every PowerShell profile that reports nothing. Called on the
@@ -469,12 +478,7 @@ const BASH_PROMPT_FILE: &str = "x9ps1-git";
 // Is this program bash? Same base-name matching as `is_powershell`, so Git Bash
 // and a full path both answer yes, while `sh` (which may well be dash) does not.
 fn is_bash(program: &str) -> bool {
-	let base = program
-		.rsplit(['/', '\\'])
-		.next()
-		.unwrap_or(program)
-		.to_ascii_lowercase();
-	base.strip_suffix(".exe").unwrap_or(&base) == "bash"
+	program_base(program) == "bash"
 }
 
 // The PROMPT_COMMAND a bash pane is given, for a script sitting at `path`.

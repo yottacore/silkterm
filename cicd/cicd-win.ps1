@@ -525,6 +525,23 @@ function fRemoteGit {
 	else { & git @args }
 }
 
+## Stash local changes, tracked and untracked, when there are any. True when a
+## stash was made, so the caller knows to pop it. git's own lines go to the
+## host, or they would ride out in the answer.
+function fStashIfDirty {
+	[OutputType([bool])]
+	param()
+	& git diff --quiet;          $dirtyTracked = ($LASTEXITCODE -ne 0)
+	& git diff --cached --quiet; $dirtyStaged  = ($LASTEXITCODE -ne 0)
+	$untracked = (& git ls-files --others --exclude-standard)
+	if (-not ($dirtyTracked -or $dirtyStaged -or $untracked)) { return $false }
+	$before = @(& git stash list).Count
+	fEcho_Clean "git stash push --include-untracked ..."
+	fExec -What "git stash" -File "git" -CmdArgs @("stash", "push", "--include-untracked", "-m", "auto-stash") | Out-Host
+	$after = @(& git stash list).Count
+	return ($after -gt $before)
+}
+
 ## Stage 0: make sure the local branch can be safely refreshed from its upstream
 ## BEFORE spending the build - what stage 7 pushes should be what got built and
 ## tested here, not an untested post-build merge. Behind-only is safe (fast-
@@ -549,17 +566,7 @@ function fRemoteSync {
 	if ($ahead -gt 0) { fDie "diverged from upstream ($ahead ahead, $behind behind) - reconcile first, or rerun with -NoSync" }
 	## Behind only: a fast-forward can't lose anything. Same stash dance as
 	## fPublish so a dirty tree can't block the pull.
-	& git diff --quiet;          $dirtyTracked = ($LASTEXITCODE -ne 0)
-	& git diff --cached --quiet; $dirtyStaged  = ($LASTEXITCODE -ne 0)
-	$untracked = (& git ls-files --others --exclude-standard)
-	$didStash = $false
-	if ($dirtyTracked -or $dirtyStaged -or $untracked) {
-		$before = @(& git stash list).Count
-		fEcho_Clean "git stash push --include-untracked ..."
-		fExec -What "git stash" -File "git" -CmdArgs @("stash", "push", "--include-untracked", "-m", "auto-stash")
-		$after = @(& git stash list).Count
-		$didStash = ($after -gt $before)
-	}
+	$didStash = fStashIfDirty
 	fEcho_Clean "git pull --ff-only ..."
 	fExec -What "git pull" -File "fRemoteGit" -CmdArgs @("pull", "--ff-only")
 	if ($didStash) {
@@ -578,17 +585,7 @@ function fPublish {
 	fNote "branch: $branch"
 
 	## Stash local changes (tracked + untracked) before syncing with upstream.
-	& git diff --quiet;        $dirtyTracked = ($LASTEXITCODE -ne 0)
-	& git diff --cached --quiet; $dirtyStaged = ($LASTEXITCODE -ne 0)
-	$untracked = (& git ls-files --others --exclude-standard)
-	$didStash = $false
-	if ($dirtyTracked -or $dirtyStaged -or $untracked) {
-		$before = @(& git stash list).Count
-		fEcho_Clean "git stash push --include-untracked ..."
-		fExec -What "git stash" -File "git" -CmdArgs @("stash", "push", "--include-untracked", "-m", "auto-stash")
-		$after = @(& git stash list).Count
-		$didStash = ($after -gt $before)
-	}
+	$didStash = fStashIfDirty
 
 	## Sync with this branch's upstream if it has one (a brand-new local branch has
 	## nothing to pull; the push below sets its upstream on first publish). Stage 0

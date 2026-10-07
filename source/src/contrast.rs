@@ -16,13 +16,13 @@
 //!   busyness (a busy image gets flattened more). 1.0 = full auto override, 0.0 =
 //!   manual only, 0.5 = average of the two.
 
+use crate::config::LUMA;
 use image::{ImageBuffer, Rgba};
 use std::array::from_fn;
 
 type Linear = ImageBuffer<Rgba<f32>, Vec<f32>>;
 
 // Rec.709 luma weights (the buffer is linear-light).
-const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
 
 // Busyness -> auto knob endpoints (feel-tunable). A smooth image needs little;
 // a busy one wants fine detail knocked down: smaller scale, more strength.

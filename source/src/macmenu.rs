@@ -8,9 +8,8 @@
 use winit::keyboard::NamedKey;
 
 use crate::app::{Entry, MenuAction, mac_entries, menu_hotkey, without_rows};
+use crate::config::APP_NAME;
 use crate::keys::{Bindings, Chord, KeyName, us_shifted};
-
-pub const APP_NAME: &str = "SilkTerm";
 
 /// App and Window menu rows `AppKit` carries out by itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

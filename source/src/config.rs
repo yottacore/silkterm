@@ -195,8 +195,6 @@ pub const LIGHT_MIN_CONTRAST_STRETCH: f32 = 1.1;
 /// themes, where the theme's text is darker than its background, are held to a
 /// little more. The side is read off linear luma, cheap enough to ask per cell.
 pub fn min_contrast_for(fg: [u8; 3], bg: [u8; 3], floor: f32) -> f32 {
-	let luma =
-		|c: [u8; 3]| 0.2126 * to_linear(c[0]) + 0.7152 * to_linear(c[1]) + 0.0722 * to_linear(c[2]);
 	if luma(fg) < luma(bg) {
 		(floor * LIGHT_MIN_CONTRAST_STRETCH).min(1.0)
 	} else {
@@ -2639,10 +2637,12 @@ pub fn from_linear_u8(c: f32) -> u8 {
 	(from_linear(c) * 255.0 + 0.5) as u8
 }
 
-/// Rec.709 luma of an sRGB color, in linear light. Matches contrast.rs and the
-/// per-pixel weights in autotheme.rs.
+/// Rec.709 luma weights, for linear light.
+pub const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+
+/// Rec.709 luma of an sRGB color, in linear light.
 pub fn luma(c: [u8; 3]) -> f32 {
-	0.2126 * to_linear(c[0]) + 0.7152 * to_linear(c[1]) + 0.0722 * to_linear(c[2])
+	LUMA[0] * to_linear(c[0]) + LUMA[1] * to_linear(c[1]) + LUMA[2] * to_linear(c[2])
 }
 
 // config file loading
@@ -3959,22 +3959,12 @@ pub fn font_zoom_px() -> i32 {
 /// Step the zoom, clamped so the effective size stays renderable - stepping
 /// past the floor must not bank offset the other direction has to pay back.
 pub fn nudge_font_zoom(dir: i32) {
-	let current = settings();
-	let base = if system_font_size_active(&current) {
-		default_font_size()
-	} else {
-		current.font_size
-	};
+	let base = base_font_size(&settings());
 	FONT_ZOOM_PX.store(zoom_within(font_zoom_px() + dir, base), Ordering::Relaxed);
 }
 /// Put the zoom at `px`, held the same way a step is.
 pub fn set_font_zoom(px: i32) {
-	let current = settings();
-	let base = if system_font_size_active(&current) {
-		default_font_size()
-	} else {
-		current.font_size
-	};
+	let base = base_font_size(&settings());
 	FONT_ZOOM_PX.store(zoom_within(px, base), Ordering::Relaxed);
 }
 fn zoom_within(px: i32, base: f32) -> i32 {
@@ -3989,13 +3979,16 @@ pub fn reset_font_zoom() {
 /// `use_system_font_size` is on (and the OS has one), else the configured
 /// `font_size`; plus any session zoom, clamped to a renderable range.
 pub fn effective_font_size() -> f32 {
-	let current = settings();
-	let base = if system_font_size_active(&current) {
+	(base_font_size(&settings()) + font_zoom_px() as f32).clamp(4.0, 128.0)
+}
+
+// The size before any zoom: the OS monospace size or the configured one.
+fn base_font_size(settings: &Settings) -> f32 {
+	if system_font_size_active(settings) {
 		default_font_size()
 	} else {
-		current.font_size
-	};
-	(base + font_zoom_px() as f32).clamp(4.0, 128.0)
+		settings.font_size
+	}
 }
 
 /// Resolve the background image: an explicit path (absolute, or a filename

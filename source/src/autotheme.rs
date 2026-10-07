@@ -26,13 +26,8 @@
 //! white. The derived color takes the best position available and the text scrim
 //! covers the rest, which is the job it already had.
 
-use crate::config::{self, Settings};
-use crate::palette::{from_oklab, to_oklab};
-
-// Rec.709 luma, matching contrast.rs. Luma rather than Oklab L because it is
-// affine under the alpha composite, which is what lets a percentile taken on
-// the image alone survive being composited over a background color later.
-const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+use crate::config::{self, LUMA, Settings};
+use crate::palette::{from_oklab, to_oklab, to_oklab_linear};
 
 // The summary grid. One sample per terminal cell is the right footprint, since
 // a glyph covers a cell and that average is what its legibility is decided by.
@@ -143,6 +138,9 @@ pub fn summarize(img: &image::RgbaImage, opacity: f32) -> Summary {
 		}
 		let n = n as f32;
 		let rgb = [bin[0] / n, bin[1] / n, bin[2] / n];
+		// luma rather than Oklab L because it is affine under the alpha composite,
+		// which is what lets a percentile taken on the image alone survive being
+		// composited over a background color later
 		lumas.push(rgb[0] * LUMA[0] + rgb[1] * LUMA[1] + rgb[2] * LUMA[2]);
 		for (channel, value) in channels.iter_mut().zip(rgb) {
 			channel.push(value);
@@ -215,20 +213,6 @@ fn dominant_hue(hist: &[f32; 360]) -> f32 {
 		}
 	}
 	best.1 as f32
-}
-
-// Oklab straight from linear RGB. `palette::to_oklab` takes sRGB bytes, and the
-// grid is already linear.
-fn to_oklab_linear(rgb: [f32; 3]) -> (f32, f32, f32) {
-	let (r, g, b) = (rgb[0], rgb[1], rgb[2]);
-	let l = (0.412_221_5 * r + 0.536_332_54 * g + 0.051_445_995 * b).cbrt();
-	let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();
-	let s = (0.088_302_46 * r + 0.281_718_85 * g + 0.629_978_7 * b).cbrt();
-	(
-		0.210_454_26 * l + 0.793_617_8 * m - 0.004_072_047 * s,
-		1.977_998_5 * l - 2.428_592_2 * m + 0.450_593_7 * s,
-		0.025_904_037 * l + 0.782_771_77 * m - 0.808_675_77 * s,
-	)
 }
 
 // A gray's Oklab lightness from its linear luma. The three L coefficients sum to

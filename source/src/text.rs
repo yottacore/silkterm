@@ -83,10 +83,7 @@ pub fn text_blend(fg: [u8; 3], bg: [u8; 3], amount: f32) -> (f32, f32, f32) {
 // encoded back, so the curve built from it runs over the range the real pair
 // does.
 fn gray_of(c: [u8; 3]) -> f32 {
-	let luma = 0.2126 * crate::config::to_linear(c[0])
-		+ 0.7152 * crate::config::to_linear(c[1])
-		+ 0.0722 * crate::config::to_linear(c[2]);
-	crate::config::from_linear(luma)
+	crate::config::from_linear(crate::config::luma(c))
 }
 
 /// Weight a terminal bold cell should request: the closest weight to Bold the

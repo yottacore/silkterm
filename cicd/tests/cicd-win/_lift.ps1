@@ -8,8 +8,9 @@
 	Run pieces of cicd-win.ps1 here, lifted out of the file rather than retyped.
 .DESCRIPTION
 	The pieces: the run log rotation, the path map it hands the release builds,
-	the check for a local path left in a built file, and the installer tests,
-	which must leave the pipeline's temp folder as they found it.
+	the check for a local path left in a built file, the installer tests,
+	which must leave the pipeline's temp folder as they found it, and the stash
+	taken before a pull, which answers whether it stashed anything.
 
 	Prints one ok or FAIL line per check, and the path map's file and the values
 	it should hold as JSON on the last line, for a TOML reader to check.
@@ -32,7 +33,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $Pipeline).Path, [ref]$null, [ref]$null)
-foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fInstallerTests') {
+foreach ($name in 'fRotateLogs', 'fTargetDir', 'fRemapConfig', 'fHasLocalPaths', 'fExec', 'fInstallerTests', 'fStashIfDirty') {
 	$fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
 	if (-not $fn) { throw "$name not found in $Pipeline" }
 	. ([scriptblock]::Create($fn.Extent.Text))
@@ -120,6 +121,31 @@ fCheck 'and none of the installer tests removed it' (Test-Path -LiteralPath $run
 fTestDir_End 0
 fCheck 'while the pipeline''s own fTestDir_End 0 does' (-not (Test-Path -LiteralPath $run))
 
+##	The stash before a pull answers with a bare bool, so git's own lines must
+##	not end up in it. A clean tree stashes nothing; a dirty one is stashed with
+##	its untracked files.
+function fEcho_Clean { }
+$repo = Join-Path $Work 'stash'
+New-Item -ItemType Directory -Path $repo -Force | Out-Null
+Push-Location -LiteralPath $repo
+try {
+	& git init --quiet
+	& git config user.name 'test'
+	& git config user.email 'test@example.invalid'
+	& git config commit.gpgsign false
+	& git config core.hooksPath (Join-Path $Work 'nohooks')
+	Set-Content -LiteralPath 'a.txt' -Value 'one'
+	& git add a.txt
+	& git commit --quiet -m 'first'
+	$clean = fStashIfDirty
+	fCheck 'a clean tree is not stashed' ($clean -is [bool] -and -not $clean -and @(& git stash list).Count -eq 0)
+	Set-Content -LiteralPath 'a.txt' -Value 'two'
+	Set-Content -LiteralPath 'b.txt' -Value 'new'
+	$dirty = fStashIfDirty
+	fCheck 'a dirty tree is, untracked files too, and the answer is only true' ($dirty -is [bool] -and $dirty -and @(& git stash list).Count -eq 1 -and -not (Test-Path -LiteralPath 'b.txt'))
+}
+finally { Pop-Location }
+
 ##	The path map, from folders whose names hold a backslash and a quote. The
 ##	TOML reader on the other end decides whether they were escaped right.
 $Root = "$Work/sil\k`"term"
@@ -140,3 +166,4 @@ exit 0
 ##		- 20260930 JC: The installer tests leave the temp folder alone.
 ##		- 20261002 JC: Only the pipeline removes its run folder.
 ##		- 20261006 JC: Help block, StrictMode Latest.
+##		- 20261006 JC: The stash before a pull.

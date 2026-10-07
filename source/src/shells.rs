@@ -813,9 +813,7 @@ const KNOWN_WINDOWS: &[(&str, &str, &str, Group)] = &[
 // per thought. Nothing here may change how a shell BEHAVES - every such flag
 // belongs in COSMETIC_FLAGS too, or the next scan adds a duplicate.
 fn launch(command: &str, program: &str) -> String {
-	let base = base_name(program);
-	let base = base.strip_suffix(".exe").unwrap_or(&base);
-	match base {
+	match base_name(program).as_str() {
 		"pwsh" | "powershell" => format!("{command} -NoLogo"),
 		_ => command.to_string(),
 	}

@@ -5,7 +5,8 @@
 ##		the newest run logs, which it once never pruned, and it maps the build
 ##		box's paths out of release builds and fails on one left behind. The map
 ##		is a TOML file, so a folder name holding a quote or a backslash has to
-##		come through escaped.
+##		come through escaped. The stash it takes before a pull says whether it
+##		stashed anything, and nothing else.
 ##	- Test ID: Er2UgYE
 ##	- History: At bottom of file.
 
@@ -48,3 +49,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20260926 JC: Created.
+##		- 20261006 JC: The stash before a pull.
