@@ -889,6 +889,9 @@ function fMain {
 	## The dogfood launcher's Start menu entry, and what a launch with nothing to do asks for.
 	fExec -What "launcher Start menu entry" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\launcher\startmenu.ps1"))
 	fEcho "OK: launcher Start menu entry"
+	## The wrapper a shortcut runs, finding PowerShell 7 with it gone from PATH.
+	fExec -What "launcher wrapper" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\launcher\wrapper.ps1"))
+	fEcho "OK: launcher wrapper"
 	fLintAdvisory
 
 	## Stage 4: release builds (x86_64 msvc + gnu always; ARM64 when ready).
