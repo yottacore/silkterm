@@ -81,8 +81,8 @@ fn encode_rows(rgba: &image::RgbaImage, first: usize, out: &mut [u8]) {
 	}
 }
 
-/// Unpack `encode`'s blocks for a picture `size` big, as a GPU without BC
-/// support would need them. Opaque.
+/// Unpack `encode`'s blocks for a picture `size` big: for a kept copy's
+/// stand-in, and for a GPU without BC support. Opaque.
 pub fn decode(blocks: &[u8], (w, h): (u32, u32)) -> Option<image::RgbaImage> {
 	if blocks.len() != len_for((w, h)) {
 		return None;
