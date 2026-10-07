@@ -497,7 +497,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The git-aware bash prompt starts about six processes per prompt
 	- ID: 2026100314050019
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs external testing: a bash pane with the prompt on, in and out of a repository, in Git Bash on vm925w and in macOS's own /bin/bash on b26.
 	- Priority: Low
 	- Opened: 20261003-140500
 	- Opened by: CC
@@ -508,10 +509,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261003: x9ps1-git.bash runs `which git`, then `git status` even outside a repository, up to three more `git config` and `git remote` calls, and two `$( )` subshells. The PowerShell copy walks up for `.git` first to avoid exactly this.
 		- 20261003: The prompt is off by default, so only those who turn it on pay. Git Bash on Windows pays the most, since its process start is slowest.
+		- 20261006: Measured per prompt before the fix: 5 outside a repository and 13 inside, on bash 5.2. On bash 3.2, 6 and 14.
+		- 20261006: Fixed in x9ps1-git (a8c2488, merged into its main as c68cb19). The script can be sourced, which only defines `fX9ps1Git_*` functions. It looks for a `.git` above the directory with file tests before asking git, and asks git when `GIT_DIR` is set or a symlink is on the way up. Inside a repository it runs `git status` and one `git config`, and nothing else. The pane's `PROMPT_COMMAND` now sources the script once per shell and calls `fX9ps1Git_SetPs1`.
+		- 20261006: After: 0 outside and 2 inside, on bash 5.2 and 3.2.57. A symlinked directory outside a repository still costs 1, since git goes by the real path.
+		- 20261006: One small change in what shows. With no tracked remote and no `origin`, the first remote by name is now the first one that has a URL. Before, a remote with no URL hid the repository name.
 	- Decisions:
 		- Fixed in x9ps1-git first, then the copy taken again unchanged, with a test on each side.
+	- Against: the decision above. The copy is x9ps1-git's new text with one difference kept: the host color table, cut to a commented example on 20261003 (test Erftpx4).
 	- Origin: 4aca2f7 (2026-08-30) and a7eb82d (2026-09-17). No earlier review item. Confirmed for the process count; the delay is not measured.
-	- Test case: None yet. A process count per prompt outside a repository, which should be zero.
+	- Branch: promptfork. x9ps1-git: quickprompt, merged into its main.
+	- Commit: 6e283be
+	- Test case: EryR5sU counts processes over 10 prompts through the pane's own `PROMPT_COMMAND`: 0 outside a repository, at most 2 a prompt inside. It failed on the old script and passes now. EryR5wI shows the git part inside a working tree and none outside. EryR5kj and EryR5oo replace EoTbwMT and EoTbwMU, which are commented out with the reason, since they pinned the old command and the old function name. x9ps1-git's own test has new "Sourced", "Finding the repository" and "Processes per prompt" sections; it passes on bash 5.2 and, through `X9PS1_TEST_BASH`, on 3.2.57.
+	- Swept: the other `$( )` and `which` calls in the script (`fPromptSafe`, the remote lookups, `tput`), the bundled copy against upstream (only the host table differs), and the PowerShell copy, which already walked up for `.git`.
 	- Note: Code review 20261003 item 19.
 
 - The dogfood launcher makes three slow Windows queries per launch
