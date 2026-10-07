@@ -34,41 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Wallpaper: hold a blurred picture smaller than the window
-	- ID: 2026100619365706
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing: Optional: a look on Windows and macOS, where the shader's border mapping has not been seen.
-	- Priority: Avg
-	- Opened: 20261006-193657
-	- Opened by: CC
-	- Parent ID: 2026100418225507
-	- Target OS: All
-	- Requirements:
-		- A blurred picture is held smaller than the window, so the blur's sigma comes to a set number of held pixels, and the GPU scales it up.
-		- That number goes by the performance profile: 2 for Low and Standard, 4 for High and Max.
-		- A one pixel border keeps the picture's edge as close to the old look as its inside.
-		- A small blur never shrinks it below what the window shows.
-	- Notes:
-		- 20261006: Tried 2026-10-05 and measured in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size). At 4, at most 1 level off inside; at 2, at most 2. The edge was up to 6 and 8 off without a border.
-	- Decisions:
-		- 20261006: Per profile, 2 for Low and Standard, 4 for High and Max.
-		- 20261006: Remote follows Standard, since it uses Standard's values. Custom follows High. Both are best guesses and can change.
-	- Progress log:
-		- 20261006: A blurred picture is held at the smaller of the window's size and the blur's, where the sigma comes to 4 held pixels on High, Max and Custom and 2 on Low, Standard and Remote. A light blur keeps the window's size.
-		- 20261006: A picture held by its blur keeps a one pixel border from the blur's margin, and the shader blends into it at the edge. The stand-in and the derived colors leave the border out.
-		- 20261006: Kept copies with a border have a key of their own. A profile change prepares the picture again.
-		- 20261006: Growing the window no longer prepares a picture held by its blur again, since its size stays the same.
-		- 20261006: The wpresize window test now uses a light blur for its window size checks and adds a heavy blur case. The wpkept test expects the smaller copy.
-		- 20261006: Verified on b23 against the build before this, at the same window size: with the blur off or light, 0 changed pixels, dark and light, GL and Vulkan, at 2560x1440, 1280x800 and 800x450. Held by the blur, at most 1 level on GL, edge included, and 2 on Vulkan, at both 4 and 2 pixels a sigma and at 100% visibility. A light mode zoom of a large photo had about 4,000 pixels at 2 to 4 along one sharp edge. Numbers in the design doc.
-		- 20261006: Verified: the texture for a 2560x1440 picture in a 2560x1440 window went from 14.1 MiB to 2.3 at 4 and 0.6 at 2.
-		- 20261006: Verified: the new tests fail with the border key taken out, with a border copied from the edge pixels, and with no hold by the blur. The new window checks fail on the build before this. The full unit suite (1183), fmt, and clippy for Linux and Windows pass, and the wpresize, wpkept and wakepic window tests pass.
-	- Branch: blurhold
-	- Commit: d15441b
-	- Test case: `a_blurred_wallpaper_is_held_by_its_blur` (Erym5o5), `a_bordered_wallpaper_looks_like_the_window_size_one` (Erym5q4), `a_bordered_copy_is_kept_apart` (Erym5s3), `only_a_bordered_texture_is_remapped` (ErymwsR), and `cicd/tests/wpresize/run.bash` (Err031q) with its heavy blur case.
-	- Swept: every user of `Sizing`, `Prepared` and the held size: `ImageRenderer::new`, `needs_resize` and `memdbg_line`, the stand-in, the summary, the kept copy lookup and store, and `wallpaper_changed`. The wpresize and wpkept window tests were the only scripts reading the held size.
-	- Acceptance signoff: Waiting: the picture looks a level different in places, and kept copies are written under a new key.
-
 - The dogfood launcher makes three slow Windows queries per launch
 	- ID: 2026100314050020
 	- Type: Enhancement
@@ -360,7 +325,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Enhancement
 	- Status: Waiting for testing
 	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpresize, wakepic and new wpkept window tests passed.
-	- Needs external testing: The unit tests on vm925w and b26, since a copy is replaced by rename while another process may hold it open. A launch on each, to see the copy land in the platform's cache folder.
+	- Needs external testing: The unit tests on vm925w, since a copy is replaced by rename while another process may hold it open. A launch on vm925w and b26, to see the copy land in the platform's cache folder.
+		- 20261007: Verified: the unit tests passed on b26 in the full pipeline run at 46a2193.
 	- Priority: Avg
 	- Opened: 20261005-142116
 	- Opened by: JC
@@ -401,7 +367,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Type: Enhancement
 	- Status: Waiting for testing
 	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpkept, wpresize and wakepic window tests passed.
-	- Needs external testing: A look on Windows (DX12 and WARP) and macOS (Metal), where BC1 upload and the padded texture have not been seen. The unit tests on vm925w and b26.
+	- Needs external testing: A look on Windows (DX12 and WARP) and macOS (Metal), where BC1 upload and the padded texture have not been seen. The unit tests on vm925w.
+		- 20261007: Verified: the unit tests passed on b26 in the full pipeline run at 46a2193.
 	- Priority: Avg
 	- Opened: 20261004-182255
 	- Opened by: JC
@@ -467,47 +434,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: the other `$( )` and `which` calls in the script (`fPromptSafe`, the remote lookups, `tput`), the bundled copy against upstream (only the host table differs), and the PowerShell copy, which already walked up for `.git`.
 	- Note: Code review 20261003 item 19.
 
-- Small repeated work on the frame and drag paths
-	- ID: 2026100314050018
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: The scroll harness, since `Pane::build` and the strip snapshot changed.
-	- Priority: Low
-	- Opened: 20261003-140500
-	- Opened by: CC
-	- Target OS: All
-	- Requirements:
-		- Buffers a frame fills are kept and cleared, not built from empty.
-		- A frame reads settings from the snapshot it already has.
-		- Work the cell loop already did is not done again.
-	- Progress log:
-		- 20261003: `render_with` starts about a dozen new vectors and maps each frame. `tops` and `slides` copy what `p.draw()` already has. `scrim_cells` copies every background quad even on frames that do not rebuild the scrim.
-		- 20261003: `Pane::build` starts its background quad list from empty on every full rebuild, while `rows_scratch` and `cells_scratch` beside it are reused for that reason.
-		- 20261003: `TextCtx::prepare` and its two siblings take a `Vec` by value, so three new vectors are built per frame. `task()` and `cwd()` clone a string and a path per tab per frame.
-		- 20261003: `snapshot_rows` and `strip_rows` resolve every cell's colors again after the cell loop did, with a new `Readable` memo each call, though `Pane` keeps one across frames.
-		- 20261003: the menu and tip color getters each take the settings lock. `render_with` calls them per separator and per row while it already has `cfg`.
-		- 20261003: a drag select takes the terminal lock twice per mouse move, once only to read the scroll offset.
-		- 20261006: Measured as heap allocations on the window thread per frame, with two tabs, a split pane of colored rows and the halo on. At rest: 189 before, 167 after. Drag select: 382 before, 340 after. About 130 of each are the graphics driver's own. A debug build counts them, and `SILK_ALLOCS=1` prints them per frame.
-		- 20261006: Done: `render_with` keeps its frame lists from one frame to the next and clears them. `tops` and `slides` are gone, since `p.draw()` already has both. The scrim's color map reads the background quads straight out of the frame's quad list, so nothing is copied. 11 a frame at rest.
-		- 20261006: Done: the menu bar layout is a fixed array, and the tab strip's widths and titles are read in place. 8 a frame at rest with 2 tabs.
-		- 20261006: Done: `Pane::build` reuses last frame's background quad list. `snapshot_rows` and `strip_rows` use the pane's own contrast memo, and the minimap keeps its memo between plans too. About 5 a frame in the drag. The snapshot still works out each cell's colors a second time; moving it into the cell loop is a larger change than this item.
-		- 20261006: Done: the menu and tip colors come from the frame's settings snapshot. Their getters had no other caller and are gone, bar `menu_fg()`. No change in allocations; it saves a settings read per menu row.
-		- 20261006: Done: a drag select takes the terminal lock once per move, for the pointer move and the edge scroll both (`drag_selection_to`). No change in allocations.
-		- 20261006: Left alone: `TextCtx::prepare` taking a `Vec`. The text areas borrow the pane and chrome buffers, so a kept list can't outlive the frame, and it is only built on frames that prepare text again. Also left: `task()` and `cwd()` per tab per frame, about 10 a frame with 2 tabs, since the kept tab labels (2026100314050002) see a change by comparing them. `update_title` costs about 12 a frame reading the same facts and was left for the same reason.
-	- Origin: c6eaa04 (2026-06-28) for the frame vectors and the quad list, 349c92bf (2026-07-31) for `scrim_cells`, a92aeb1 (2026-08-30) for `snapshot_rows`, ec82922 (2026-07-06) for the drag. No earlier review item. Plausible when filed; measured 20261006.
-	- Verified: the new window test fails both limits on the old code (189 and 381 against 178 and 360) and passes on the branch (167 and 338).
-	- Verified: full unit suite passes. Clippy is clean for Linux, Windows and macOS targets.
-	- Swept: every `Vec::new`, `HashMap::new`, `.clone()` and `collect()` left in `render_with` (the rest are the text area lists, the overlay's shaped lines, and clones made only while a tab is renamed or a title shaped again). Every `config::menu_*` and `config::tip_*` call. Both `point_clamped` plus `update_selection` pairs. Every `Readable::default()` outside tests: the pane's own and the minimap plan's.
-	- Branch: framework
-	- Commit: 3d74d15, fd408fb
-	- Test case: `cicd/tests/allocs/run.bash` (ErzCQC2), in pipeline stage 3. Allocations per frame at rest and in a drag select, limits 178 and 360.
-	- Note: Code review 20261003 item 18.
-
 - Repeated blocks that should be one helper
 	- ID: 2026100314050021
 	- Type: Enhancement
 	- Status: Waiting for testing
-	- Needs local test suite run?: A full `cicd.bash` run, since every stage 3 test line now goes through `fRunTest` or `fRunTest_MaySkip`.
+	- Needs local test suite run?: No. The full `cicd.bash` run at 46a2193 passed, every stage 3 line included.
 	- Needs external testing: A `cicd-win.ps1` run on vm925w or b29w with a dirty tree, so `fStashIfDirty` runs for real. It runs at publish, and in stage 0 when the branch is behind.
 	- Priority: Low
 	- Opened: 20261003-140500
@@ -629,6 +560,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261007: With no blur, BC1's 4x4 blocks show as faint steps in smooth gradients. BC7 is twice BC1's size, 3.5 MiB at 2560x1440, and much better on gradients. BC1 stays the default.
 		- 20261007: Not settled yet: where the option lives and what it is called.
+	- Decisions:
+		- 20261007: BC7 follows the performance profile, like the blur hold: High, Max and Custom use BC7, and Low, Standard and Remote keep BC1. No Settings row. The config file can override it.
 
 - One VRAM readback probe for gfx.rs and bgimage.rs
 	- ID: 2026100622234832
@@ -2098,6 +2031,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Wallpaper: hold a blurred picture smaller than the window
+	- ID: 2026100619365706
+	- Type: Enhancement
+	- Status: Done
+	- Needs external testing: Optional: a look on Windows and macOS, where the shader's border mapping has not been seen.
+	- Priority: Avg
+	- Opened: 20261006-193657
+	- Opened by: CC
+	- Parent ID: 2026100418225507
+	- Target OS: All
+	- Requirements:
+		- A blurred picture is held smaller than the window, so the blur's sigma comes to a set number of held pixels, and the GPU scales it up.
+		- That number goes by the performance profile: 2 for Low and Standard, 4 for High and Max.
+		- A one pixel border keeps the picture's edge as close to the old look as its inside.
+		- A small blur never shrinks it below what the window shows.
+	- Notes:
+		- 20261006: Tried 2026-10-05 and measured in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size). At 4, at most 1 level off inside; at 2, at most 2. The edge was up to 6 and 8 off without a border.
+	- Decisions:
+		- 20261006: Per profile, 2 for Low and Standard, 4 for High and Max.
+		- 20261006: Remote follows Standard, since it uses Standard's values. Custom follows High. Both are best guesses and can change.
+	- Progress log:
+		- 20261006: A blurred picture is held at the smaller of the window's size and the blur's, where the sigma comes to 4 held pixels on High, Max and Custom and 2 on Low, Standard and Remote. A light blur keeps the window's size.
+		- 20261006: A picture held by its blur keeps a one pixel border from the blur's margin, and the shader blends into it at the edge. The stand-in and the derived colors leave the border out.
+		- 20261006: Kept copies with a border have a key of their own. A profile change prepares the picture again.
+		- 20261006: Growing the window no longer prepares a picture held by its blur again, since its size stays the same.
+		- 20261006: The wpresize window test now uses a light blur for its window size checks and adds a heavy blur case. The wpkept test expects the smaller copy.
+		- 20261006: Verified on b23 against the build before this, at the same window size: with the blur off or light, 0 changed pixels, dark and light, GL and Vulkan, at 2560x1440, 1280x800 and 800x450. Held by the blur, at most 1 level on GL, edge included, and 2 on Vulkan, at both 4 and 2 pixels a sigma and at 100% visibility. A light mode zoom of a large photo had about 4,000 pixels at 2 to 4 along one sharp edge. Numbers in the design doc.
+		- 20261006: Verified: the texture for a 2560x1440 picture in a 2560x1440 window went from 14.1 MiB to 2.3 at 4 and 0.6 at 2.
+		- 20261006: Verified: the new tests fail with the border key taken out, with a border copied from the edge pixels, and with no hold by the blur. The new window checks fail on the build before this. The full unit suite (1183), fmt, and clippy for Linux and Windows pass, and the wpresize, wpkept and wakepic window tests pass.
+	- Branch: blurhold
+	- Commit: d15441b
+	- Test case: `a_blurred_wallpaper_is_held_by_its_blur` (Erym5o5), `a_bordered_wallpaper_looks_like_the_window_size_one` (Erym5q4), `a_bordered_copy_is_kept_apart` (Erym5s3), `only_a_bordered_texture_is_remapped` (ErymwsR), and `cicd/tests/wpresize/run.bash` (Err031q) with its heavy blur case.
+	- Swept: every user of `Sizing`, `Prepared` and the held size: `ImageRenderer::new`, `needs_resize` and `memdbg_line`, the stand-in, the summary, the kept copy lookup and store, and `wallpaper_changed`. The wpresize and wpkept window tests were the only scripts reading the held size.
+	- Acceptance signoff: Signed off 20261007.
+	- Closed: 20261007-072707
 
 - macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
 	- ID: 2026100219054497
@@ -3710,6 +3679,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: smallfix
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
 	- Closed: 20260929-170546
+
+- Small repeated work on the frame and drag paths
+	- ID: 2026100314050018
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: The scroll harness, since `Pane::build` and the strip snapshot changed.
+		- 20261007: Verified: passed on X11 and Wayland in the full pipeline run at 46a2193.
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Requirements:
+		- Buffers a frame fills are kept and cleared, not built from empty.
+		- A frame reads settings from the snapshot it already has.
+		- Work the cell loop already did is not done again.
+	- Progress log:
+		- 20261003: `render_with` starts about a dozen new vectors and maps each frame. `tops` and `slides` copy what `p.draw()` already has. `scrim_cells` copies every background quad even on frames that do not rebuild the scrim.
+		- 20261003: `Pane::build` starts its background quad list from empty on every full rebuild, while `rows_scratch` and `cells_scratch` beside it are reused for that reason.
+		- 20261003: `TextCtx::prepare` and its two siblings take a `Vec` by value, so three new vectors are built per frame. `task()` and `cwd()` clone a string and a path per tab per frame.
+		- 20261003: `snapshot_rows` and `strip_rows` resolve every cell's colors again after the cell loop did, with a new `Readable` memo each call, though `Pane` keeps one across frames.
+		- 20261003: the menu and tip color getters each take the settings lock. `render_with` calls them per separator and per row while it already has `cfg`.
+		- 20261003: a drag select takes the terminal lock twice per mouse move, once only to read the scroll offset.
+		- 20261006: Measured as heap allocations on the window thread per frame, with two tabs, a split pane of colored rows and the halo on. At rest: 189 before, 167 after. Drag select: 382 before, 340 after. About 130 of each are the graphics driver's own. A debug build counts them, and `SILK_ALLOCS=1` prints them per frame.
+		- 20261006: Done: `render_with` keeps its frame lists from one frame to the next and clears them. `tops` and `slides` are gone, since `p.draw()` already has both. The scrim's color map reads the background quads straight out of the frame's quad list, so nothing is copied. 11 a frame at rest.
+		- 20261006: Done: the menu bar layout is a fixed array, and the tab strip's widths and titles are read in place. 8 a frame at rest with 2 tabs.
+		- 20261006: Done: `Pane::build` reuses last frame's background quad list. `snapshot_rows` and `strip_rows` use the pane's own contrast memo, and the minimap keeps its memo between plans too. About 5 a frame in the drag. The snapshot still works out each cell's colors a second time; moving it into the cell loop is a larger change than this item.
+		- 20261006: Done: the menu and tip colors come from the frame's settings snapshot. Their getters had no other caller and are gone, bar `menu_fg()`. No change in allocations; it saves a settings read per menu row.
+		- 20261006: Done: a drag select takes the terminal lock once per move, for the pointer move and the edge scroll both (`drag_selection_to`). No change in allocations.
+		- 20261006: Left alone: `TextCtx::prepare` taking a `Vec`. The text areas borrow the pane and chrome buffers, so a kept list can't outlive the frame, and it is only built on frames that prepare text again. Also left: `task()` and `cwd()` per tab per frame, about 10 a frame with 2 tabs, since the kept tab labels (2026100314050002) see a change by comparing them. `update_title` costs about 12 a frame reading the same facts and was left for the same reason.
+	- Origin: c6eaa04 (2026-06-28) for the frame vectors and the quad list, 349c92bf (2026-07-31) for `scrim_cells`, a92aeb1 (2026-08-30) for `snapshot_rows`, ec82922 (2026-07-06) for the drag. No earlier review item. Plausible when filed; measured 20261006.
+	- Verified: the new window test fails both limits on the old code (189 and 381 against 178 and 360) and passes on the branch (167 and 338).
+	- Verified: full unit suite passes. Clippy is clean for Linux, Windows and macOS targets.
+	- Swept: every `Vec::new`, `HashMap::new`, `.clone()` and `collect()` left in `render_with` (the rest are the text area lists, the overlay's shaped lines, and clones made only while a tab is renamed or a title shaped again). Every `config::menu_*` and `config::tip_*` call. Both `point_clamped` plus `update_selection` pairs. Every `Readable::default()` outside tests: the pane's own and the minimap plan's.
+	- Branch: framework
+	- Commit: 3d74d15, fd408fb
+	- Test case: `cicd/tests/allocs/run.bash` (ErzCQC2), in pipeline stage 3. Allocations per frame at rest and in a drag select, limits 178 and 360.
+	- Note: Code review 20261003 item 18.
+	- Acceptance signoff: Self-closed: the change does what the item asked, and its tests and the scroll harness pass.
+	- Closed: 20261007-072707
 
 - app.rs and settings_ui.rs each do too many jobs
 	- ID: 2026100314050023
