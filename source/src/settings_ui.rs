@@ -32,7 +32,15 @@ use crate::pick::{self, Picker};
 use crate::profile::Profile;
 use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at};
 use crate::ui_spec::{self, Key, Kind, Layout, Spec, ui};
+use prompt::{Prompt, PromptFocus, PromptJob};
+use shell_grid::{ShellDrag, ShellPart, ShellStop, shell_stop};
+use themes::ThemeBtn;
 use winit::keyboard::ModifiersState;
+
+mod picker;
+mod prompt;
+mod shell_grid;
+mod themes;
 
 // The declared geometry, all of it in DIP (see the units note above).
 fn lay() -> &'static Layout {
@@ -739,7 +747,7 @@ fn assoc_slot(assoc: Assoc) -> usize {
 // - selection, word ops, the clipboard, the caret ease, the right-click menu -
 // works in all of them without a second copy. None belongs to a spec row, so
 // each borrows an index no row can have: every `specs[edit.row]` comparison in
-// this file simply never matches one, and the four places that INDEX specs by it
+// this module simply never matches one, and the four places that INDEX specs by it
 // each carry their own guard.
 const PSEUDO_ROW: usize = usize::MAX / 2;
 const PROMPT_ROW: usize = usize::MAX;
@@ -2982,8 +2990,6 @@ impl SettingsDialog {
 			});
 		}
 	}
-
-	// themes
 
 	// One of a Buttons row's push-buttons. They start at the control column, so
 	// they line up under whatever the row above them holds.
@@ -5649,10 +5655,9 @@ mod tests {
 	};
 	use crate::config;
 	use crate::gfx::QuadMode;
-	use crate::pick;
 
 	// A stand-in for the UI font: every character the same width.
-	fn chars7(s: &str) -> f32 {
+	pub(super) fn chars7(s: &str) -> f32 {
 		s.chars().count() as f32 * 7.0
 	}
 
@@ -5665,7 +5670,7 @@ mod tests {
 			.collect()
 	}
 
-	fn mk_dialog(max_h: f32) -> SettingsDialog {
+	pub(super) fn mk_dialog(max_h: f32) -> SettingsDialog {
 		mk_dialog_at(max_h, 1.0)
 	}
 	// Everything a real dialog is handed arrives in physical pixels, so a scale
@@ -7302,7 +7307,7 @@ mod tests {
 		}
 	}
 
-	fn shell_entry(title: &str, command: &str) -> crate::shells::ShellEntry {
+	pub(super) fn shell_entry(title: &str, command: &str) -> crate::shells::ShellEntry {
 		crate::shells::ShellEntry {
 			slug: title.to_lowercase().replace(' ', "_"),
 			title: title.into(),
@@ -8799,7 +8804,7 @@ mod tests {
 	}
 
 	// Put the dialog on a known theme with no color overrides on top.
-	fn on_theme(name: &str) -> SettingsDialog {
+	pub(super) fn on_theme(name: &str) -> SettingsDialog {
 		let mut d = mk_dialog(4000.0);
 		d.edited = config::Settings::default();
 		d.edited.theme = name.to_string();

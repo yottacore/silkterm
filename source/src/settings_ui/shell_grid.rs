@@ -1,15 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// One shell's own controls, in Tab order - which is also left to right across
-// its line. `Add` is the single stop past the last entry, so a grid of `n`
-// entries has `n * ShellPart::COUNT + 1` stops.
-//
-// The grip is deliberately NOT one of them. Reordering is a mouse gesture now,
-// so a Tab through the grid walks the values and nothing else; there is no stop
-// that draws a control the keyboard cannot work.
+//! The shells grid spans the whole content width rather than starting at the
+//! control column: there is no label beside it, and the command it holds is the
+//! one value in the dialog that is routinely too long to read. Columns are laid
+//! out from BOTH ends - the fixed ones from the right, the name from the left -
+//! and the command takes whatever is left between them, so a wider panel widens
+//! the column that needs it.
+
+use super::{
+	Dlg, Focus, Prompt, PromptFocus, PromptJob, SettingsDialog, border, lay, quad, shell_field_row,
+};
+use crate::config;
+use crate::gfx::{QuadMode, RectInstance};
+use crate::pane::Rect;
+use crate::ui_spec::Kind;
+
+/// One shell's own controls, in Tab order - which is also left to right across
+/// its line. `Add` is the single stop past the last entry, so a grid of `n`
+/// entries has `n * ShellPart::COUNT + 1` stops.
+///
+/// The grip is deliberately NOT one of them. Reordering is a mouse gesture now,
+/// so a Tab through the grid walks the values and nothing else; there is no stop
+/// that draws a control the keyboard cannot work.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum ShellPart {
+pub(super) enum ShellPart {
 	Name,
 	Command,
 	Remove,
@@ -17,50 +32,53 @@ enum ShellPart {
 }
 
 impl ShellPart {
-	const COUNT: u16 = 4;
+	pub(super) const COUNT: u16 = 4;
 	const ALL: [ShellPart; 4] = [
 		ShellPart::Name,
 		ShellPart::Command,
 		ShellPart::Remove,
 		ShellPart::Active,
 	];
-	fn of(stop: u16) -> ShellPart {
+	pub(super) fn of(stop: u16) -> ShellPart {
 		ShellPart::ALL[(stop % ShellPart::COUNT) as usize]
 	}
 }
 
-// Left edge of every column on a shells line, plus the width of the one column
-// that is not fixed. The fixed columns are placed from BOTH ends and the command
-// takes whatever is left between them, so a wider panel widens the one value
-// that is routinely too long to read.
-struct ShellCols {
+/// Left edge of every column on a shells line, plus the width of the one column
+/// that is not fixed. The fixed columns are placed from BOTH ends and the command
+/// takes whatever is left between them, so a wider panel widens the one value
+/// that is routinely too long to read.
+#[derive(Debug)]
+pub(super) struct ShellCols {
 	grip: f32,
-	name: f32,
-	command: f32,
+	pub(super) name: f32,
+	pub(super) command: f32,
 	command_w: f32,
 	remove: f32,
-	seen: f32,
-	active: f32,
+	pub(super) seen: f32,
+	pub(super) active: f32,
 }
 
-// A line being dragged by its grip. `at` is where it currently sits, because the
-// list is reordered as the pointer moves rather than on release - the line the
-// user is dragging is the line they can see moving, which is the whole reason to
-// use a grip instead of buttons.
-struct ShellDrag {
-	at: usize,
-	// where inside the line the pointer took hold, so it does not jump on grab
-	grab_dy: f32,
+/// A line being dragged by its grip. `at` is where it currently sits, because the
+/// list is reordered as the pointer moves rather than on release - the line the
+/// user is dragging is the line they can see moving, which is the whole reason to
+/// use a grip instead of buttons.
+#[derive(Debug)]
+pub(super) struct ShellDrag {
+	pub(super) at: usize,
+	/// where inside the line the pointer took hold, so it does not jump on grab
+	pub(super) grab_dy: f32,
 }
 
-// Where a part index sits in the grid: an entry's control, or the Add button
-// past the end.
-enum ShellStop {
+/// Where a part index sits in the grid: an entry's control, or the Add button
+/// past the end.
+#[derive(Debug)]
+pub(super) enum ShellStop {
 	Entry(usize, ShellPart),
 	Add,
 }
 
-fn shell_stop(part: u16, entries: usize) -> ShellStop {
+pub(super) fn shell_stop(part: u16, entries: usize) -> ShellStop {
 	let entry = (part / ShellPart::COUNT) as usize;
 	if entry >= entries {
 		ShellStop::Add
@@ -75,15 +93,15 @@ fn shell_part_index(entry: usize, part: ShellPart) -> u16 {
 }
 
 impl SettingsDialog {
-	// One line of the grid - the same height as an ordinary settings row, so the
-	// fields in it match every other field in the dialog.
-	fn shell_line_h(&self) -> f32 {
+	/// One line of the grid - the same height as an ordinary settings row, so the
+	/// fields in it match every other field in the dialog.
+	pub(super) fn shell_line_h(&self) -> f32 {
 		self.line_row_h()
 	}
 
-	// Space or Enter on a grid stop: open a field, flip the switch, move the
-	// entry, or ask before dropping it.
-	fn shell_activate(&mut self, i: usize, part: u16) {
+	/// Space or Enter on a grid stop: open a field, flip the switch, move the
+	/// entry, or ask before dropping it.
+	pub(super) fn shell_activate(&mut self, i: usize, part: u16) {
 		match shell_stop(part, self.edited.shells.len()) {
 			ShellStop::Add => self.shell_add(i),
 			ShellStop::Entry(shell_index, ShellPart::Name) => {
@@ -133,25 +151,16 @@ impl SettingsDialog {
 		self.edited.shells = crate::shells::merge(&self.edited.shells, found);
 	}
 
-	// the shells grid
-	//
-	// The grid spans the whole content width rather than starting at the control
-	// column: there is no label beside it, and the command it holds is the one
-	// value in the dialog that is routinely too long to read. Columns are laid
-	// out from BOTH ends - the fixed ones from the right, the name from the left
-	// - and the command takes whatever is left between them, so a wider panel
-	// widens the column that needs it.
-
-	// The spec index of the grid, for the pseudo-row fields, which know which
-	// entry they belong to but not which row draws it.
-	fn shell_row(&self) -> Option<usize> {
+	/// The spec index of the grid, for the pseudo-row fields, which know which
+	/// entry they belong to but not which row draws it.
+	pub(super) fn shell_row(&self) -> Option<usize> {
 		(0..self.specs.len()).find(|&i| matches!(self.specs[i].kind, Kind::ShellList))
 	}
 
-	// Total width of everything except the command's own slack: what the panel
-	// must clear for the grid to be readable at all. Static, so `new` can size
-	// the window before Self exists.
-	fn shell_columns_w(font_scale: f32) -> f32 {
+	/// Total width of everything except the command's own slack: what the panel
+	/// must clear for the grid to be readable at all. Static, so `new` can size
+	/// the window before Self exists.
+	pub(super) fn shell_columns_w(font_scale: f32) -> f32 {
 		let l = lay();
 		l.shell_name_width
 			+ l.shell_command_width
@@ -171,11 +180,11 @@ impl SettingsDialog {
 		lay().shell_button * self.ui_scale()
 	}
 
-	// x of each column's left edge, plus the command column's width. Remove sits
-	// between the command and the read-only date rather than at the end of the
-	// line: it is the one control here that doing the opposite cannot undo, so
-	// it is deliberately kept off the right-hand edge the pointer travels down.
-	fn shell_cols(&self) -> ShellCols {
+	/// x of each column's left edge, plus the command column's width. Remove sits
+	/// between the command and the read-only date rather than at the end of the
+	/// line: it is the one control here that doing the opposite cannot undo, so
+	/// it is deliberately kept off the right-hand edge the pointer travels down.
+	pub(super) fn shell_cols(&self) -> ShellCols {
 		let l = lay();
 		let left = self.content_x() + l.pad;
 		let right = self.content_x() + self.layout_w() - l.pad;
@@ -196,12 +205,12 @@ impl SettingsDialog {
 		}
 	}
 
-	// Top of the grid's column titles, and of entry `shell_index`'s own line.
-	fn shell_head_y(&self, i: usize) -> f32 {
+	/// Top of the grid's column titles, and of entry `shell_index`'s own line.
+	pub(super) fn shell_head_y(&self, i: usize) -> f32 {
 		self.row_y(i)
 	}
 
-	fn shell_line_y(&self, i: usize, shell_index: usize) -> f32 {
+	pub(super) fn shell_line_y(&self, i: usize, shell_index: usize) -> f32 {
 		self.shell_head_y(i)
 			+ self.line_h
 			+ lay().shell_head_gap
@@ -220,7 +229,7 @@ impl SettingsDialog {
 		}
 	}
 
-	fn shell_name_box(&self, i: usize, shell_index: usize) -> Rect {
+	pub(super) fn shell_name_box(&self, i: usize, shell_index: usize) -> Rect {
 		self.shell_box(
 			i,
 			shell_index,
@@ -229,7 +238,7 @@ impl SettingsDialog {
 		)
 	}
 
-	fn shell_cmd_box(&self, i: usize, shell_index: usize) -> Rect {
+	pub(super) fn shell_cmd_box(&self, i: usize, shell_index: usize) -> Rect {
 		let cols = self.shell_cols();
 		self.shell_box(i, shell_index, cols.command, cols.command_w)
 	}
@@ -265,7 +274,7 @@ impl SettingsDialog {
 		}
 	}
 
-	fn shell_add_box(&self, i: usize) -> Rect {
+	pub(super) fn shell_add_box(&self, i: usize) -> Rect {
 		let n = self.edited.shells.len();
 		Rect {
 			x: self.shell_cols().grip,
@@ -275,8 +284,8 @@ impl SettingsDialog {
 		}
 	}
 
-	// The rect the keyboard ring goes around, for any stop in the grid.
-	fn shell_stop_rect(&self, i: usize, part: u16) -> Rect {
+	/// The rect the keyboard ring goes around, for any stop in the grid.
+	pub(super) fn shell_stop_rect(&self, i: usize, part: u16) -> Rect {
 		match shell_stop(part, self.edited.shells.len()) {
 			ShellStop::Add => self.shell_add_box(i),
 			ShellStop::Entry(shell_index, ShellPart::Name) => self.shell_name_box(i, shell_index),
@@ -290,10 +299,10 @@ impl SettingsDialog {
 		}
 	}
 
-	// Move one entry to another place in the list - the whole point of the grip.
-	// The list IS the order the Tabs menu offers, and its first switched-on line
-	// is the default shell, so a reorder is a real edit and not a view setting.
-	fn shell_move_to(&mut self, from: usize, to: usize) {
+	/// Move one entry to another place in the list - the whole point of the grip.
+	/// The list IS the order the Tabs menu offers, and its first switched-on line
+	/// is the default shell, so a reorder is a real edit and not a view setting.
+	pub(super) fn shell_move_to(&mut self, from: usize, to: usize) {
 		let last = self.edited.shells.len().saturating_sub(1);
 		let to = to.min(last);
 		if from > last || from == to {
@@ -303,22 +312,22 @@ impl SettingsDialog {
 		self.edited.shells.insert(to, entry);
 	}
 
-	// Where a pointer at `y` wants the dragged line to sit. Measured from the
-	// line's own TOP - the pointer keeps whatever offset inside the grip it took
-	// hold at - and rounded, so an entry changes place once it has travelled half
-	// a line rather than a whole one.
-	//
-	// Both ends are clamped and neither needs a branch: a float-to-integer `as`
-	// saturates in Rust, so a line dragged off the top comes back 0 rather than
-	// wrapping, and `min` catches the other end.
-	fn shell_drop_at(&self, i: usize, y: f32, grab_dy: f32) -> usize {
+	/// Where a pointer at `y` wants the dragged line to sit. Measured from the
+	/// line's own TOP - the pointer keeps whatever offset inside the grip it took
+	/// hold at - and rounded, so an entry changes place once it has travelled half
+	/// a line rather than a whole one.
+	///
+	/// Both ends are clamped and neither needs a branch: a float-to-integer `as`
+	/// saturates in Rust, so a line dragged off the top comes back 0 rather than
+	/// wrapping, and `min` catches the other end.
+	pub(super) fn shell_drop_at(&self, i: usize, y: f32, grab_dy: f32) -> usize {
 		let last = self.edited.shells.len().saturating_sub(1);
 		let line = self.shell_line_h().max(1.0);
 		let offset = (y - grab_dy - self.shell_line_y(i, 0)) / line;
 		(offset.round() as usize).min(last)
 	}
 
-	fn shell_remove(&mut self, shell_index: usize) {
+	pub(super) fn shell_remove(&mut self, shell_index: usize) {
 		if shell_index < self.edited.shells.len() {
 			self.edited.shells.remove(shell_index);
 		}
@@ -340,10 +349,10 @@ impl SettingsDialog {
 		self.open_edit(shell_field_row(shell_index, true), true);
 	}
 
-	// A click somewhere in the grid. Returns whether it hit something.
-	// The move and remove buttons arm on press and fire on release, the same way
-	// the footer and the theme buttons do, so a press that drifts off cancels.
-	fn shell_mouse_down(
+	/// A click somewhere in the grid. Returns whether it hit something.
+	/// The move and remove buttons arm on press and fire on release, the same way
+	/// the footer and the theme buttons do, so a press that drifts off cancels.
+	pub(super) fn shell_mouse_down(
 		&mut self,
 		i: usize,
 		x: f32,
@@ -396,9 +405,9 @@ impl SettingsDialog {
 		false
 	}
 
-	// Which of the shells grid's editable fields is under (x, y): its pseudo row,
-	// its box, and the tab stop it belongs to.
-	fn shell_field_at(&self, i: usize, x: f32, y: f32) -> Option<(usize, Rect, u16)> {
+	/// Which of the shells grid's editable fields is under (x, y): its pseudo row,
+	/// its box, and the tab stop it belongs to.
+	pub(super) fn shell_field_at(&self, i: usize, x: f32, y: f32) -> Option<(usize, Rect, u16)> {
 		for part in 0..self.parts_of(i) {
 			if !self.shell_stop_rect(i, part).contains(x, y) {
 				continue;
@@ -420,12 +429,12 @@ impl SettingsDialog {
 		None
 	}
 
-	// The grid's own quads: the two field boxes and the checkbox per entry, the
-	// five icon buttons, and the Add button. The arrows are shader-drawn (mode 3
-	// with a quarter-turn) for the same reason the tab close mark is - no
-	// interface font can be relied on to carry one, and a glyph's own metrics
-	// decide where it goes.
-	fn shell_rects(
+	/// The grid's own quads: the two field boxes and the checkbox per entry, the
+	/// five icon buttons, and the Add button. The arrows are shader-drawn (mode 3
+	/// with a quarter-turn) for the same reason the tab close mark is - no
+	/// interface font can be relied on to carry one, and a glyph's own metrics
+	/// decide where it goes.
+	pub(super) fn shell_rects(
 		&self,
 		colors: &Dlg,
 		i: usize,
@@ -534,6 +543,12 @@ impl SettingsDialog {
 
 #[cfg(test)]
 mod tests {
+	use super::super::SettingsDialog;
+	use super::super::lay;
+	use super::super::tests::{mk_dialog, shell_entry};
+	use crate::gfx::QuadMode;
+	use crate::ui_spec::Kind;
+
 	// The shells grid is one spec row carrying two editable fields per entry, and
 	// the right-click handler walked spec rows - so those two were the only fields
 	// in the dialog with no menu, while the Menu key worked on them.
@@ -573,7 +588,7 @@ mod tests {
 			);
 			assert_eq!(
 				d.edit.as_ref().map(|e| e.row),
-				Some(super::shell_field_row(0, command)),
+				Some(super::super::shell_field_row(0, command)),
 				"the menu acts on the field that was clicked"
 			);
 			d.emenu = None;
@@ -585,15 +600,13 @@ mod tests {
 		assert!(d.emenu.is_none(), "a menu appeared off the fields");
 	}
 
-	// the shells grid
-
 	// A dialog sitting on the Shell tab with `n` shells in it.
 	fn mk_shell_dialog(n: usize) -> (SettingsDialog, usize) {
 		let mut d = mk_dialog(4000.0);
 		let i = d
 			.specs
 			.iter()
-			.position(|s| matches!(s.kind, super::Kind::ShellList))
+			.position(|s| matches!(s.kind, super::super::Kind::ShellList))
 			.expect("a shells grid");
 		d.tab = d.specs[i].tab;
 		d.edited.shells = (0..n)
@@ -611,21 +624,21 @@ mod tests {
 	#[test]
 	fn a_part_index_names_one_control_on_one_line() {
 		let (d, i) = mk_shell_dialog(3);
-		assert_eq!(d.parts_of(i), 3 * super::ShellPart::COUNT + 1);
+		assert_eq!(d.parts_of(i), 3 * super::super::ShellPart::COUNT + 1);
 		for k in 0..3 {
-			for part in super::ShellPart::ALL {
+			for part in super::super::ShellPart::ALL {
 				let p = super::shell_part_index(k, part);
-				match super::shell_stop(p, 3) {
-					super::ShellStop::Entry(entry, named) => {
+				match super::super::shell_stop(p, 3) {
+					super::super::ShellStop::Entry(entry, named) => {
 						assert_eq!((entry, named), (k, part));
 					}
-					super::ShellStop::Add => panic!("{k}/{part:?} read as the Add button"),
+					super::super::ShellStop::Add => panic!("{k}/{part:?} read as the Add button"),
 				}
 			}
 		}
 		assert!(matches!(
-			super::shell_stop(d.parts_of(i) - 1, 3),
-			super::ShellStop::Add
+			super::super::shell_stop(d.parts_of(i) - 1, 3),
+			super::super::ShellStop::Add
 		));
 	}
 
@@ -636,7 +649,7 @@ mod tests {
 	#[test]
 	fn the_grip_is_a_gesture_and_not_a_keyboard_stop() {
 		let (d, i) = mk_shell_dialog(3);
-		assert_eq!(d.parts_of(i), 3 * super::ShellPart::COUNT + 1);
+		assert_eq!(d.parts_of(i), 3 * super::super::ShellPart::COUNT + 1);
 		for part in 0..d.parts_of(i) {
 			assert!(!d.part_disabled(i, part), "part {part} came up grayed");
 		}
@@ -662,7 +675,7 @@ mod tests {
 		let (mut d, i) = mk_shell_dialog(3);
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
 		let line = d.shell_line_h();
-		let titles = |d: &super::SettingsDialog| -> Vec<String> {
+		let titles = |d: &super::super::SettingsDialog| -> Vec<String> {
 			d.edited.shells.iter().map(|e| e.title.clone()).collect()
 		};
 		let grip = d.shell_grip_box(i, 0);
@@ -715,7 +728,7 @@ mod tests {
 	#[test]
 	fn a_blank_command_cannot_replace_a_stored_one() {
 		let (mut d, _) = mk_shell_dialog(2);
-		let row = super::shell_field_row(1, true);
+		let row = super::super::shell_field_row(1, true);
 		d.open_edit(row, true);
 		d.select_all();
 		d.backspace();
@@ -736,7 +749,7 @@ mod tests {
 	#[test]
 	fn a_field_edit_goes_to_its_own_entry() {
 		let (mut d, _) = mk_shell_dialog(3);
-		d.open_edit(super::shell_field_row(2, false), true);
+		d.open_edit(super::super::shell_field_row(2, false), true);
 		d.select_all();
 		d.insert_str("Renamed");
 		assert_eq!(d.edited.shells[2].title, "Renamed");
@@ -755,13 +768,13 @@ mod tests {
 		assert!(d.edited.shells[1].command.is_empty());
 		assert_eq!(
 			d.edit.as_ref().map(|e| e.row),
-			Some(super::shell_field_row(1, true))
+			Some(super::super::shell_field_row(1, true))
 		);
 		assert_eq!(
 			d.focus,
-			Some(super::Focus::Row(
+			Some(super::super::Focus::Row(
 				i,
-				super::shell_part_index(1, super::ShellPart::Command)
+				super::shell_part_index(1, super::super::ShellPart::Command)
 			))
 		);
 	}
@@ -780,7 +793,7 @@ mod tests {
 		);
 		assert!(matches!(
 			d.prompt.as_ref().map(|p| p.job),
-			Some(super::PromptJob::DropShell(1))
+			Some(super::super::PromptJob::DropShell(1))
 		));
 		d.prompt_accept();
 		let titles: Vec<&str> = d.edited.shells.iter().map(|e| e.title.as_str()).collect();
@@ -796,8 +809,8 @@ mod tests {
 	#[test]
 	fn the_grid_columns_stay_inside_the_panel_in_order() {
 		let (d, i) = mk_shell_dialog(2);
-		let left = d.rect.x + super::lay().pad;
-		let right = d.rect.x + d.rect.w - super::lay().pad;
+		let left = d.rect.x + super::super::lay().pad;
+		let right = d.rect.x + d.rect.w - super::super::lay().pad;
 		let cols = d.shell_cols();
 		for k in 0..2 {
 			let grip = d.shell_grip_box(i, k);
@@ -815,7 +828,7 @@ mod tests {
 				"remove runs into the date"
 			);
 			assert!(
-				cols.seen + super::lay().shell_seen_width <= active.x + 0.01,
+				cols.seen + super::super::lay().shell_seen_width <= active.x + 0.01,
 				"the date runs into active"
 			);
 			assert!(
@@ -839,8 +852,8 @@ mod tests {
 		d.tab = d.specs[i].tab;
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;
 		let (_, rows) = d.rects_dip(d.line_h, &mut measure);
-		let danger = super::config::srgb_f32(super::dlg().danger);
-		let dim = super::config::srgb_f32(super::dlg().dim);
+		let danger = super::super::config::srgb_f32(super::super::dlg().danger);
+		let dim = super::super::config::srgb_f32(super::super::dlg().dim);
 
 		// the X: one per line, in the danger colour, inside the remove box
 		let marks: Vec<_> = rows
@@ -855,7 +868,7 @@ mod tests {
 			);
 			assert_ne!(
 				mark.color,
-				super::config::srgb_f32(super::dlg().text),
+				super::super::config::srgb_f32(super::super::dlg().text),
 				"the remove mark reads as ordinary text"
 			);
 			let box_r = d.shell_remove_box(i, k);
@@ -953,7 +966,7 @@ mod tests {
 	#[test]
 	fn a_grid_field_being_edited_shows_what_is_typed() {
 		let (mut d, _) = mk_shell_dialog(2);
-		d.open_edit(super::shell_field_row(1, false), true);
+		d.open_edit(super::super::shell_field_row(1, false), true);
 		d.select_all();
 		d.insert_str("Half typed");
 		let mut measure = |s: &str| s.chars().count() as f32 * 7.0;

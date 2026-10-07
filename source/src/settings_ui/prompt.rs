@@ -1,34 +1,39 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// A small box over the panel: name a new theme, rename one, or confirm a delete
-// - of a theme, or of a shell. It is drawn in the overlay pass and takes every
-// click and key while it is up, so the panel behind it can be left exactly as it
-// was.
-// Where the keyboard is inside the box. A confirmation has no field, so `Field`
-// is unreachable there and the focus walk starts at Cancel.
+//! A small box over the panel: name a new theme, rename one, or confirm a
+//! delete - of a theme, or of a shell. It is drawn in the overlay pass and takes
+//! every click and key while it is up, so the panel behind it can be left exactly
+//! as it was.
+
+use super::{Dlg, PROMPT_ROW, SettingsDialog, TextItem, ThemeBtn, border, lay, quad};
+use crate::gfx::RectInstance;
+use crate::pane::Rect;
+
+/// Where the keyboard is inside the box. A confirmation has no field, so `Field`
+/// is unreachable there and the focus walk starts at Cancel.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum PromptFocus {
+pub(super) enum PromptFocus {
 	Field,
 	Cancel,
 	Ok,
 }
 
-// What OK will do. The box itself is the same either way; only this says who
-// asked for it and what to carry out.
+/// What OK will do. The box itself is the same either way; only this says who
+/// asked for it and what to carry out.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum PromptJob {
+pub(super) enum PromptJob {
 	Theme(ThemeBtn),
 	DropShell(usize), // index into `edited.shells`
 	Notice,           // says something and asks nothing; OK alone
 }
 
 #[derive(Debug)]
-struct Prompt {
-	job: PromptJob,
-	title: String,
-	focus: PromptFocus,
-	warn: Option<String>, // why OK is refusing (a blank or taken name)
+pub(super) struct Prompt {
+	pub(super) job: PromptJob,
+	pub(super) title: String,
+	pub(super) focus: PromptFocus,
+	pub(super) warn: Option<String>, // why OK is refusing (a blank or taken name)
 }
 
 impl Prompt {
@@ -40,8 +45,8 @@ impl Prompt {
 			PromptJob::Theme(ThemeBtn::SaveAs | ThemeBtn::Rename)
 		)
 	}
-	// A notice has nothing to cancel, so it has no Cancel.
-	fn parts(&self) -> &'static [PromptFocus] {
+	/// A notice has nothing to cancel, so it has no Cancel.
+	pub(super) fn parts(&self) -> &'static [PromptFocus] {
 		if self.has_field() {
 			&[PromptFocus::Field, PromptFocus::Cancel, PromptFocus::Ok]
 		} else if self.job == PromptJob::Notice {
@@ -53,8 +58,8 @@ impl Prompt {
 }
 
 impl SettingsDialog {
-	// OK in the prompt box. A name that will not do keeps the box open and says why.
-	fn prompt_accept(&mut self) {
+	/// OK in the prompt box. A name that will not do keeps the box open and says why.
+	pub(super) fn prompt_accept(&mut self) {
 		let Some(prompt) = self.prompt.as_ref() else {
 			return;
 		};
@@ -83,15 +88,13 @@ impl SettingsDialog {
 		self.prompt_close();
 	}
 
-	fn prompt_close(&mut self) {
+	pub(super) fn prompt_close(&mut self) {
 		self.prompt = None;
 		self.emenu = None;
 		if self.edit.as_ref().is_some_and(|e| e.row == PROMPT_ROW) {
 			self.edit = None;
 		}
 	}
-
-	// the prompt box
 
 	// Centered over the panel, sized to what it holds. Two buttons, right-aligned,
 	// the same way the dialog's own footer reads.
@@ -122,7 +125,7 @@ impl SettingsDialog {
 		}
 	}
 
-	fn prompt_field_rect(&self) -> Option<Rect> {
+	pub(super) fn prompt_field_rect(&self) -> Option<Rect> {
 		let prompt = self.prompt.as_ref()?;
 		if !prompt.has_field() {
 			return None;
@@ -152,8 +155,8 @@ impl SettingsDialog {
 		}
 	}
 
-	// Tab / arrows walk field -> Cancel -> OK, wrapping; a confirmation has no field.
-	fn prompt_focus_move(&mut self, forward: bool) {
+	/// Tab / arrows walk field -> Cancel -> OK, wrapping; a confirmation has no field.
+	pub(super) fn prompt_focus_move(&mut self, forward: bool) {
 		let Some(prompt) = self.prompt.as_mut() else {
 			return;
 		};
@@ -163,9 +166,14 @@ impl SettingsDialog {
 		prompt.focus = stops[(cur + step) % stops.len()];
 	}
 
-	// Every click while the box is up belongs to it: its own controls act, and
-	// anything outside is swallowed rather than reaching the panel behind.
-	fn prompt_mouse_down(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) {
+	/// Every click while the box is up belongs to it: its own controls act, and
+	/// anything outside is swallowed rather than reaching the panel behind.
+	pub(super) fn prompt_mouse_down(
+		&mut self,
+		x: f32,
+		y: f32,
+		measure: &mut impl FnMut(&str) -> f32,
+	) {
 		if self.emenu.is_some() {
 			return;
 		}
@@ -193,10 +201,10 @@ impl SettingsDialog {
 		}
 	}
 
-	// The name / confirm box, drawn over everything the panel just drew. Its own
-	// field caret rides the same edit state the rows use, so it blinks and eases
-	// the same way.
-	fn prompt_overlay(
+	/// The name / confirm box, drawn over everything the panel just drew. Its own
+	/// field caret rides the same edit state the rows use, so it blinks and eases
+	/// the same way.
+	pub(super) fn prompt_overlay(
 		&self,
 		colors: &Dlg,
 		measure: &mut impl FnMut(&str) -> f32,
@@ -279,6 +287,9 @@ impl SettingsDialog {
 
 #[cfg(test)]
 mod tests {
+	use super::super::tests::on_theme;
+	use crate::ui_spec::Key;
+
 	// The box is modal by gate, and the gate is a list every input path has to be
 	// on. These four were missed once: the accelerators applied and closed the
 	// dialog through the box, and typing edited the row sitting behind it.
@@ -286,11 +297,14 @@ mod tests {
 	#[test]
 	fn the_prompt_swallows_every_input_path() {
 		let mut m = |s: &str| s.chars().count() as f32;
-		for which in [super::ThemeBtn::SaveAs, super::ThemeBtn::Delete] {
+		for which in [
+			super::super::ThemeBtn::SaveAs,
+			super::super::ThemeBtn::Delete,
+		] {
 			let mut d = on_theme("Matrix");
 			d.save_theme_as("Mine"); // Rename and Delete need a theme of the user's own
 			d.reverted.clear();
-			d.focus = Some(super::Focus::Row(
+			d.focus = Some(super::super::Focus::Row(
 				d.specs.iter().position(|s| s.key == Key::ColFg).unwrap(),
 				0,
 			));
@@ -301,7 +315,7 @@ mod tests {
 			for c in ['o', 'a', 'c'] {
 				assert_eq!(
 					d.alt_key(c),
-					super::Action::None,
+					super::super::Action::None,
 					"Alt+{c} must not reach OK"
 				);
 			}
@@ -312,7 +326,9 @@ mod tests {
 			assert!(d.prompt.is_some(), "the box is still up");
 			assert_eq!(d.get_col(Key::ColFg), before, "the row behind is untouched");
 			assert!(
-				d.edit.as_ref().is_none_or(|e| e.row == super::PROMPT_ROW),
+				d.edit
+					.as_ref()
+					.is_none_or(|e| e.row == super::super::PROMPT_ROW),
 				"no edit opened on a panel row"
 			);
 		}
@@ -327,12 +343,12 @@ mod tests {
 		let mut m = |s: &str| s.chars().count() as f32;
 		let mut d = on_theme("Matrix");
 		let row = d.specs.iter().position(|s| s.key == Key::ColFg).unwrap();
-		d.focus = Some(super::Focus::Row(row, 0));
-		d.theme_action(super::ThemeBtn::SaveAs);
+		d.focus = Some(super::super::Focus::Row(row, 0));
+		d.theme_action(super::super::ThemeBtn::SaveAs);
 		let field = d.prompt_field_rect().expect("the box has a name field");
 		d.prompt_mouse_down(field.x + 4.0, field.y + field.h / 2.0, &mut m);
 
-		if let Some(super::Focus::Row(r, _)) = d.focus {
+		if let Some(super::super::Focus::Row(r, _)) = d.focus {
 			assert!(r < d.specs.len(), "focus row {r} is not a row");
 		}
 		// the frame that used to abort
@@ -347,23 +363,23 @@ mod tests {
 	fn the_prompt_box_owns_the_keyboard_until_it_closes() {
 		let mut d = on_theme("Matrix");
 		d.set_col(Key::ColFg, [7, 7, 7]);
-		d.theme_action(super::ThemeBtn::SaveAs);
+		d.theme_action(super::super::ThemeBtn::SaveAs);
 		assert!(d.prompt.is_some() && d.edit.is_some());
 
 		for c in "My Theme".chars() {
 			d.char_input(c);
 		}
 		// Esc closes the box, not the dialog, and saves nothing
-		assert_eq!(d.key_escape(), super::Action::None);
+		assert_eq!(d.key_escape(), super::super::Action::None);
 		assert!(d.prompt.is_none() && d.edit.is_none());
 		assert!(d.edited.user_themes.is_empty());
 
 		// again, this time through OK
-		d.theme_action(super::ThemeBtn::SaveAs);
+		d.theme_action(super::super::ThemeBtn::SaveAs);
 		for c in "My Theme".chars() {
 			d.char_input(c);
 		}
-		assert_eq!(d.key_enter(), super::Action::None);
+		assert_eq!(d.key_enter(), super::super::Action::None);
 		assert!(d.prompt.is_none());
 		assert_eq!(d.edited.theme, "My Theme");
 		assert_eq!(
@@ -382,7 +398,7 @@ mod tests {
 	fn a_name_it_cannot_take_keeps_the_box_open() {
 		let mut d = on_theme("Matrix");
 		d.save_theme_as("Mine");
-		d.theme_action(super::ThemeBtn::Rename);
+		d.theme_action(super::super::ThemeBtn::Rename);
 		d.select_all();
 		for c in "   ".chars() {
 			d.char_input(c);

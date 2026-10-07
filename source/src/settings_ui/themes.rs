@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// The theme row's four buttons, in the order they are declared.
+use super::{EditState, PROMPT_ROW, Prompt, PromptFocus, PromptJob, SettingsDialog};
+use crate::config;
+use crate::ui_spec::Key;
+
+/// The theme row's four buttons, in the order they are declared.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum ThemeBtn {
+pub(super) enum ThemeBtn {
 	Save,
 	SaveAs,
 	Rename,
@@ -11,7 +15,7 @@ enum ThemeBtn {
 }
 
 impl ThemeBtn {
-	fn of(part: u16) -> ThemeBtn {
+	pub(super) fn of(part: u16) -> ThemeBtn {
 		match part {
 			0 => ThemeBtn::Save,
 			1 => ThemeBtn::SaveAs,
@@ -31,10 +35,10 @@ impl SettingsDialog {
 			.position(|t| t.name.eq_ignore_ascii_case(name))
 	}
 
-	// Has the user moved a color away from what the current theme says? That IS
-	// the unsaved-changes test, and it needs no flag of its own: an edited color
-	// lives on as a `colors.*` line, so the answer survives a restart for free.
-	fn theme_dirty(&self) -> bool {
+	/// Has the user moved a color away from what the current theme says? That IS
+	/// the unsaved-changes test, and it needs no flag of its own: an edited color
+	/// lives on as a `colors.*` line, so the answer survives a restart for free.
+	pub(super) fn theme_dirty(&self) -> bool {
 		// resolve the palette once - this runs per button, per frame
 		let palette = self.theme_palette();
 		(0..crate::theme::PALETTE_KEYS.len())
@@ -57,7 +61,7 @@ impl SettingsDialog {
 		}
 	}
 
-	fn theme_btn_enabled(&self, which: ThemeBtn) -> bool {
+	pub(super) fn theme_btn_enabled(&self, which: ThemeBtn) -> bool {
 		match which {
 			ThemeBtn::Save => self.theme_dirty(),
 			ThemeBtn::SaveAs => true,
@@ -67,17 +71,17 @@ impl SettingsDialog {
 		}
 	}
 
-	// Take on the colors of whatever theme and mode are now selected. Switching
-	// theme adopts the new scheme rather than keeping tweaks made to the old one
-	// on top of it - a picker that visibly changed nothing would be worse, and the
-	// tweaks were changes to the theme being left behind.
-	//
-	// Reverting each key rather than just setting it is what keeps the file honest:
-	// the colors on screen are now the theme's own, so the per-color overrides have
-	// nothing left to say and Apply comments them out. Setting them alone would
-	// write ten active colors.* lines pinning this one palette, which then wins over
-	// every later theme change and freezes one variant under theme_mode: system.
-	fn adopt_theme(&mut self) {
+	/// Take on the colors of whatever theme and mode are now selected. Switching
+	/// theme adopts the new scheme rather than keeping tweaks made to the old one
+	/// on top of it - a picker that visibly changed nothing would be worse, and the
+	/// tweaks were changes to the theme being left behind.
+	///
+	/// Reverting each key rather than just setting it is what keeps the file honest:
+	/// the colors on screen are now the theme's own, so the per-color overrides have
+	/// nothing left to say and Apply comments them out. Setting them alone would
+	/// write ten active colors.* lines pinning this one palette, which then wins over
+	/// every later theme change and freezes one variant under `theme_mode: system`.
+	pub(super) fn adopt_theme(&mut self) {
 		let pal = self.theme_palette();
 		for i in 0..crate::theme::PALETTE_KEYS.len() {
 			// default_col resolves through theme_palette, so this ends on pal.get(i)
@@ -86,10 +90,10 @@ impl SettingsDialog {
 		self.edited.ansi = pal.ansi;
 	}
 
-	// Store the colors on screen under `name`, replacing a saved theme of that
-	// name or adding one. The variant the dialog is NOT showing is carried over
-	// from whatever `name` resolves to today, so a theme is always complete.
-	fn save_theme_as(&mut self, name: &str) {
+	/// Store the colors on screen under `name`, replacing a saved theme of that
+	/// name or adding one. The variant the dialog is NOT showing is carried over
+	/// from whatever `name` resolves to today, so a theme is always complete.
+	pub(super) fn save_theme_as(&mut self, name: &str) {
 		let name = name.trim().to_string();
 		let dark_now = self.edited.theme_mode.is_dark(config::is_dark());
 		let other = crate::theme::resolve_in(
@@ -165,8 +169,8 @@ impl SettingsDialog {
 			.unwrap_or(base)
 	}
 
-	// Why OK cannot accept the typed name, if it cannot.
-	fn name_problem(&self, which: ThemeBtn, name: &str) -> Option<String> {
+	/// Why OK cannot accept the typed name, if it cannot.
+	pub(super) fn name_problem(&self, which: ThemeBtn, name: &str) -> Option<String> {
 		let name = name.trim();
 		if name.is_empty() {
 			return Some("Enter a name.".into());
@@ -191,8 +195,8 @@ impl SettingsDialog {
 		None
 	}
 
-	// Press a theme button: Save acts at once, the other three ask first.
-	fn theme_action(&mut self, which: ThemeBtn) {
+	/// Press a theme button: Save acts at once, the other three ask first.
+	pub(super) fn theme_action(&mut self, which: ThemeBtn) {
 		if !self.theme_btn_enabled(which) {
 			return;
 		}
@@ -234,7 +238,7 @@ impl SettingsDialog {
 		}
 	}
 
-	fn rename_theme(&mut self, name: &str) {
+	pub(super) fn rename_theme(&mut self, name: &str) {
 		let name = name.trim().to_string();
 		if let Some(theme_index) = self.user_theme_index() {
 			self.edited.user_themes[theme_index].name.clone_from(&name);
@@ -242,9 +246,9 @@ impl SettingsDialog {
 		}
 	}
 
-	// Drop the saved theme. A built-in of the same name comes back out from behind
-	// it; otherwise the selection falls to the first theme left.
-	fn delete_theme(&mut self) {
+	/// Drop the saved theme. A built-in of the same name comes back out from behind
+	/// it; otherwise the selection falls to the first theme left.
+	pub(super) fn delete_theme(&mut self) {
 		let Some(theme_index) = self.user_theme_index() else {
 			return;
 		};
@@ -262,12 +266,15 @@ impl SettingsDialog {
 
 #[cfg(test)]
 mod tests {
-	// themes
+	use super::super::SettingsDialog;
+	use super::super::tests::{mk_dialog, on_theme};
+	use crate::config;
+	use crate::ui_spec::Key;
 
 	fn theme_row(d: &SettingsDialog) -> usize {
 		d.specs
 			.iter()
-			.position(|s| matches!(s.kind, super::Kind::Buttons(_)))
+			.position(|s| matches!(s.kind, super::super::Kind::Buttons(_)))
 			.expect("the theme actions row")
 	}
 
@@ -280,7 +287,7 @@ mod tests {
 		let mut d = on_theme("Matrix");
 		let row = theme_row(&d);
 		assert!(!d.theme_dirty());
-		assert!(!d.theme_btn_enabled(super::ThemeBtn::Save));
+		assert!(!d.theme_btn_enabled(super::super::ThemeBtn::Save));
 		assert!(d.part_disabled(row, 0), "Save starts grayed");
 
 		d.set_col(Key::ColFg, [1, 2, 3]);
@@ -332,15 +339,15 @@ mod tests {
 		let row = theme_row(&d);
 		d.tab = d.specs[row].tab;
 		d.set_col(Key::ColFg, [1, 2, 3]);
-		d.focus = Some(super::Focus::Row(row, 0));
-		d.theme_action(super::ThemeBtn::Save);
+		d.focus = Some(super::super::Focus::Row(row, 0));
+		d.theme_action(super::super::ThemeBtn::Save);
 		assert!(d.part_disabled(row, 0), "Save grays out once it has saved");
 		d.focus_move(true);
-		assert_eq!(d.focus, Some(super::Focus::Row(row, 1)));
+		assert_eq!(d.focus, Some(super::super::Focus::Row(row, 1)));
 		// and backwards off the same gap goes to the row above, not the last button
-		d.focus = Some(super::Focus::Row(row, 0));
+		d.focus = Some(super::super::Focus::Row(row, 0));
 		d.focus_move(false);
-		assert!(matches!(d.focus, Some(super::Focus::Row(i, _)) if i < row));
+		assert!(matches!(d.focus, Some(super::super::Focus::Row(i, _)) if i < row));
 	}
 
 	// A theme may take a built-in's name and stand in for it; deleting it puts the
@@ -386,12 +393,12 @@ mod tests {
 			.expect("the mode row");
 
 		d.set_col(Key::ColFg, [1, 2, 3]);
-		assert_eq!(d.dd_closed_label(row), super::UNSAVED_THEME);
+		assert_eq!(d.dd_closed_label(row), super::super::UNSAVED_THEME);
 		// only this one box: every other dropdown still says what it is on
 		assert_eq!(d.dd_closed_label(mode), "Dark");
 		// the list itself is untouched, and the highlight still finds Matrix
 		let names = d.dd_options(row);
-		assert!(!names.iter().any(|n| n == super::UNSAVED_THEME));
+		assert!(!names.iter().any(|n| n == super::super::UNSAVED_THEME));
 		assert_eq!(names[d.get_radio(Key::Theme)], "Matrix");
 
 		d.set_radio(Key::Theme, d.get_radio(Key::Theme));
@@ -443,7 +450,7 @@ mod tests {
 
 		let pending = d.take_reverted();
 		for i in 0..crate::theme::PALETTE_KEYS.len() {
-			for cfg_key in super::ui().settings_of(SettingsDialog::palette_key(i)) {
+			for cfg_key in super::super::ui().settings_of(SettingsDialog::palette_key(i)) {
 				assert!(
 					pending.contains(cfg_key),
 					"{cfg_key} must be commented out on Apply"
@@ -462,8 +469,14 @@ mod tests {
 		d.save_theme_as("Mine");
 		// Rename opens on the theme's own name, so OK with nothing changed used
 		// to answer "that name is taken" and keep the box up.
-		assert!(d.name_problem(super::ThemeBtn::Rename, "Mine").is_none());
-		assert!(d.name_problem(super::ThemeBtn::Rename, "MINE").is_none());
+		assert!(
+			d.name_problem(super::super::ThemeBtn::Rename, "Mine")
+				.is_none()
+		);
+		assert!(
+			d.name_problem(super::super::ThemeBtn::Rename, "MINE")
+				.is_none()
+		);
 
 		let slug = d.edited.user_themes[0].slug.clone();
 		d.rename_theme("MINE");
@@ -472,7 +485,10 @@ mod tests {
 
 		// another saved theme's name is still refused
 		d.save_theme_as("Other");
-		assert!(d.name_problem(super::ThemeBtn::Rename, "mine").is_some());
+		assert!(
+			d.name_problem(super::super::ThemeBtn::Rename, "mine")
+				.is_some()
+		);
 	}
 
 	// Test ID: Em3lZEy
@@ -491,11 +507,23 @@ mod tests {
 		// two themes cannot share a name, or one would swallow the other
 		d.save_theme_as("Theirs");
 		assert_eq!(d.edited.user_themes.len(), 2);
-		assert!(d.name_problem(super::ThemeBtn::Rename, "ours").is_some());
-		assert!(d.name_problem(super::ThemeBtn::Rename, "  ").is_some());
-		assert!(d.name_problem(super::ThemeBtn::Rename, "Third").is_none());
+		assert!(
+			d.name_problem(super::super::ThemeBtn::Rename, "ours")
+				.is_some()
+		);
+		assert!(
+			d.name_problem(super::super::ThemeBtn::Rename, "  ")
+				.is_some()
+		);
+		assert!(
+			d.name_problem(super::super::ThemeBtn::Rename, "Third")
+				.is_none()
+		);
 		// Save as over an existing name replaces it, which is a fair reading
-		assert!(d.name_problem(super::ThemeBtn::SaveAs, "ours").is_none());
+		assert!(
+			d.name_problem(super::super::ThemeBtn::SaveAs, "ours")
+				.is_none()
+		);
 	}
 
 	// A saved theme has to come back after a restart, or saving it meant nothing.
@@ -567,7 +595,7 @@ mod tests {
 	fn rename_opens_on_the_name_selected() {
 		let mut d = on_theme("Matrix");
 		d.save_theme_as("Mine");
-		d.theme_action(super::ThemeBtn::Rename);
+		d.theme_action(super::super::ThemeBtn::Rename);
 		let edit = d.edit.as_ref().expect("the name field");
 		assert_eq!(edit.buf, "Mine");
 		assert_eq!(edit.sel, Some(0), "the name is not selected");

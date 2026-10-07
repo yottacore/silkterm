@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-impl SettingsDialog {
-	// the color picker box
+use super::{
+	Dlg, EditState, SettingsDialog, TextItem, border, lay, pick_field_of, pick_field_row, quad,
+};
+use crate::config;
+use crate::gfx::{QuadMode, RectInstance};
+use crate::pane::Rect;
+use crate::pick::{self, Picker};
 
+impl SettingsDialog {
 	// Every measurement the box is built from. The floors come from the
 	// declarations; what each one grows with is the interface line height, so a
 	// big desktop font gets a bigger box rather than a cramped one.
@@ -24,14 +30,14 @@ impl SettingsDialog {
 		}
 	}
 
-	fn pick_geom(&self) -> pick::Geom {
+	pub(super) fn pick_geom(&self) -> pick::Geom {
 		pick::geom(self.rect, &self.pick_metrics())
 	}
 
-	// A chip opened. The box holds the color as HSV from here on, and the row
-	// behind it follows every change - so the swatch, and the window under the
-	// dialog, show what is being chosen while it is chosen.
-	fn pick_open(&mut self, i: usize) {
+	/// A chip opened. The box holds the color as HSV from here on, and the row
+	/// behind it follows every change - so the swatch, and the window under the
+	/// dialog, show what is being chosen while it is chosen.
+	pub(super) fn pick_open(&mut self, i: usize) {
 		self.commit_edit();
 		self.open = None;
 		let start = self.get_col(self.specs[i].key);
@@ -51,10 +57,10 @@ impl SettingsDialog {
 		});
 	}
 
-	// Cancel puts back what the row held when the box opened. There is nothing
-	// else to undo: the box writes through, so the row is the only place the
-	// change ever reached.
-	fn pick_cancel(&mut self) {
+	/// Cancel puts back what the row held when the box opened. There is nothing
+	/// else to undo: the box writes through, so the row is the only place the
+	/// change ever reached.
+	pub(super) fn pick_cancel(&mut self) {
 		if let Some(picker) = self.pick.take() {
 			let key = self.specs[picker.row].key;
 			self.set_col(key, picker.start);
@@ -62,7 +68,7 @@ impl SettingsDialog {
 		self.pick_drop_edit();
 	}
 
-	fn pick_accept(&mut self) {
+	pub(super) fn pick_accept(&mut self) {
 		self.pick = None;
 		self.pick_drop_edit();
 	}
@@ -78,10 +84,10 @@ impl SettingsDialog {
 		}
 	}
 
-	// The one place the box's color changes. The row follows it, and an open
-	// value box is refreshed and reselected the way a slider's number field is -
-	// so stepping it with the arrows keeps working and a commit sees the number.
-	fn pick_set(&mut self, hsv: pick::Hsv) {
+	/// The one place the box's color changes. The row follows it, and an open
+	/// value box is refreshed and reselected the way a slider's number field is -
+	/// so stepping it with the arrows keeps working and a commit sees the number.
+	pub(super) fn pick_set(&mut self, hsv: pick::Hsv) {
 		let Some(picker) = self.pick.as_mut() else {
 			return;
 		};
@@ -106,9 +112,9 @@ impl SettingsDialog {
 		}
 	}
 
-	// Focus arriving on a value box opens it with the value selected, the same
-	// as anywhere else in the dialog; leaving one closes it.
-	fn pick_focus_to(&mut self, to: pick::Focus) {
+	/// Focus arriving on a value box opens it with the value selected, the same
+	/// as anywhere else in the dialog; leaving one closes it.
+	pub(super) fn pick_focus_to(&mut self, to: pick::Focus) {
 		self.commit_edit();
 		self.pick_drop_edit();
 		let Some(picker) = self.pick.as_mut() else {
@@ -123,7 +129,7 @@ impl SettingsDialog {
 		}
 	}
 
-	fn pick_focus_move(&mut self, forward: bool) {
+	pub(super) fn pick_focus_move(&mut self, forward: bool) {
 		let Some(picker) = self.pick.as_ref() else {
 			return;
 		};
@@ -133,10 +139,10 @@ impl SettingsDialog {
 		self.pick_focus_to(stops[(at + step) % stops.len()]);
 	}
 
-	// Arrow keys. The square and the strip take them as direct adjustment, a
-	// value box steps its number, and the two buttons pass them on as focus moves.
-	// dir is +1 for Right/Down.
-	fn pick_arrow(&mut self, dir: i32, vertical: bool) {
+	/// Arrow keys. The square and the strip take them as direct adjustment, a
+	/// value box steps its number, and the two buttons pass them on as focus moves.
+	/// dir is +1 for Right/Down.
+	pub(super) fn pick_arrow(&mut self, dir: i32, vertical: bool) {
 		let Some(picker) = self.pick.as_ref() else {
 			return;
 		};
@@ -164,9 +170,9 @@ impl SettingsDialog {
 		}
 	}
 
-	// Space or Enter on whatever the keyboard is on. The square and the strip
-	// have nothing to activate, so they stay where they are.
-	fn pick_activate(&mut self) {
+	/// Space or Enter on whatever the keyboard is on. The square and the strip
+	/// have nothing to activate, so they stay where they are.
+	pub(super) fn pick_activate(&mut self) {
 		let Some(picker) = self.pick.as_ref() else {
 			return;
 		};
@@ -178,9 +184,14 @@ impl SettingsDialog {
 		}
 	}
 
-	// Every click while the box is up belongs to it: its own controls act, and
-	// anything outside is swallowed rather than reaching the panel behind.
-	fn pick_mouse_down(&mut self, x: f32, y: f32, measure: &mut impl FnMut(&str) -> f32) {
+	/// Every click while the box is up belongs to it: its own controls act, and
+	/// anything outside is swallowed rather than reaching the panel behind.
+	pub(super) fn pick_mouse_down(
+		&mut self,
+		x: f32,
+		y: f32,
+		measure: &mut impl FnMut(&str) -> f32,
+	) {
 		if self.emenu.is_some() {
 			return;
 		}
@@ -217,9 +228,9 @@ impl SettingsDialog {
 		}
 	}
 
-	// A drag that strays off the square or the strip keeps adjusting, clamped to
-	// the edge - the same rule a slider drag follows.
-	fn pick_drag_to(&mut self, x: f32, y: f32) {
+	/// A drag that strays off the square or the strip keeps adjusting, clamped to
+	/// the edge - the same rule a slider drag follows.
+	pub(super) fn pick_drag_to(&mut self, x: f32, y: f32) {
 		let Some(picker) = self.pick.as_ref() else {
 			return;
 		};
@@ -234,9 +245,9 @@ impl SettingsDialog {
 		self.pick_set(hsv);
 	}
 
-	// The picker box. Drawn in the overlay pass, over a dimmed panel, the same
-	// way the name box is.
-	fn pick_overlay(
+	/// The picker box. Drawn in the overlay pass, over a dimmed panel, the same
+	/// way the name box is.
+	pub(super) fn pick_overlay(
 		&self,
 		colors: &Dlg,
 		measure: &mut impl FnMut(&str) -> f32,
@@ -394,7 +405,11 @@ impl SettingsDialog {
 
 #[cfg(test)]
 mod tests {
-	// the color picker
+	use super::super::SettingsDialog;
+	use super::super::tests::{chars7, mk_dialog};
+	use crate::gfx::QuadMode;
+	use crate::pick;
+	use crate::ui_spec::{Key, Kind};
 
 	fn color_row(d: &SettingsDialog) -> usize {
 		d.specs
@@ -435,7 +450,11 @@ mod tests {
 		let g = d.pick_geom();
 		d.mouse_down_dip(g.square.x, g.square.y, &mut m);
 		d.mouse_up_dip(g.square.x, g.square.y);
-		assert_eq!(d.key_enter(), super::Action::None, "Enter is the box's OK");
+		assert_eq!(
+			d.key_enter(),
+			super::super::Action::None,
+			"Enter is the box's OK"
+		);
 		assert!(d.pick.is_none());
 		assert_eq!(d.get_col(Key::ColBg), [255, 255, 255]);
 	}
@@ -496,12 +515,12 @@ mod tests {
 			.iter()
 			.position(|s| matches!(s.kind, Kind::Text))
 			.expect("a text row");
-		d.focus = Some(super::Focus::Row(other, 0));
+		d.focus = Some(super::super::Focus::Row(other, 0));
 
 		for c in ['o', 'a', 'c'] {
 			assert_eq!(
 				d.alt_key(c),
-				super::Action::None,
+				super::super::Action::None,
 				"Alt+{c} must not reach OK"
 			);
 		}
@@ -529,24 +548,28 @@ mod tests {
 	// Test ID: EqSaSRo
 	#[test]
 	fn a_value_box_is_never_mistaken_for_a_shells_field() {
-		for f in super::pick::Field::ALL {
-			let row = super::pick_field_row(f);
-			assert_eq!(super::pick_field_of(row), Some(f));
-			assert_eq!(super::shell_field_of(row), None, "{f:?} read as a shell");
+		for f in super::super::pick::Field::ALL {
+			let row = super::super::pick_field_row(f);
+			assert_eq!(super::super::pick_field_of(row), Some(f));
+			assert_eq!(
+				super::super::shell_field_of(row),
+				None,
+				"{f:?} read as a shell"
+			);
 		}
 		// and the grid's own rows are not value boxes
 		for entry in 0..4 {
 			for command in [false, true] {
-				let row = super::shell_field_row(entry, command);
+				let row = super::super::shell_field_row(entry, command);
 				assert_eq!(
-					super::pick_field_of(row),
+					super::super::pick_field_of(row),
 					None,
 					"shell {entry} read as a value box"
 				);
 			}
 		}
-		assert_eq!(super::pick_field_of(super::PROMPT_ROW), None);
-		assert_eq!(super::pick_field_of(0), None);
+		assert_eq!(super::super::pick_field_of(super::super::PROMPT_ROW), None);
+		assert_eq!(super::super::pick_field_of(0), None);
 	}
 
 	// Tab walks the box, a value box opens with its number selected on the way
@@ -672,17 +695,17 @@ mod tests {
 		assert_eq!(d.parts_of(i), 2, "the chip and the hex box");
 		assert_eq!(d.focus_ctl_rect(i, 0), d.swatch(i));
 		assert_eq!(d.focus_ctl_rect(i, 1), d.hexbox(i));
-		d.focus = Some(super::Focus::Row(i, 0));
+		d.focus = Some(super::super::Focus::Row(i, 0));
 		d.open_focused_field();
 		assert!(d.edit.is_none(), "the chip is not a field");
 		assert!(d.pick.is_none(), "and walking onto it opens nothing");
 		d.key_space();
 		assert!(d.pick.is_some(), "Space on the chip opens the picker");
 		d.pick_cancel();
-		d.focus = Some(super::Focus::Row(i, 0));
+		d.focus = Some(super::super::Focus::Row(i, 0));
 		assert_eq!(
 			d.key_enter(),
-			super::Action::None,
+			super::super::Action::None,
 			"Enter is not the OK here"
 		);
 		assert!(d.pick.is_some(), "Enter on the chip opens the picker");
@@ -696,7 +719,7 @@ mod tests {
 		let (mut d, _) = mk_picker();
 		let mut m = |s: &str| s.chars().count() as f32;
 		d.pick_focus_to(pick::Focus::Field(pick::Field::Saturation));
-		if let Some(super::Focus::Row(r, _)) = d.focus {
+		if let Some(super::super::Focus::Row(r, _)) = d.focus {
 			assert!(r < d.specs.len(), "focus row {r} is not a row");
 		}
 		let _ = d.rects_dip(d.line_h, &mut m);

@@ -2,8 +2,8 @@
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
 //! The color picker box: the color model behind it and where every piece of it
-//! sits. The dialog owns the input and the drawing (`settings_ui.rs`); this is
-//! the part that can be worked out and tested without a window.
+//! sits. The dialog owns the input and the drawing (`settings_ui/picker.rs`);
+//! this is the part that can be worked out and tested without a window.
 //!
 //! Units are DIP throughout, like the rest of the dialog.
 

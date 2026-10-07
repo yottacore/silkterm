@@ -4,7 +4,7 @@
 //! The Settings dialog's declarations, read from `settings_ui.shcl` (compiled
 //! in). The file owns what the dialog IS - rows, order, sections, tabs, the
 //! config path behind each row, when a row grays out, and the geometry.
-//! `settings_ui.rs` owns what it DOES.
+//! The `settings_ui` module owns what it DOES.
 //!
 //! The document is constant, so it is parsed once and handed out as `'static`.
 //! Anything wrong with it is a build-time mistake rather than a user's, and
