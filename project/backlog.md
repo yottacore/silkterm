@@ -34,79 +34,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
-	- ID: 2026100219054497
-	- Type: Feature
-	- Status: Done
-		- Command+Shift+[ and ] doesn't work reliably, seems to be tied in to system screenshots.
-		- Command+{ and } works.
-	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
-		- 20261006: Typed through the remote session, the Shift+[ press can reach b26 as Shift+3 (see Progress log). Check the chord from b26's own keyboard, or after the session's keyboard mode is changed.
-		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
-		- With Settings open, the two tab rows and their chords change the dialog's tab.
-		- Neither View nor Window has Show Tab Bar, Merge All Windows or a second pair of tab rows, since the system's own window tabs are off.
-		- 20261006: Closed with these Window menu rows not looked at by hand. The unit tests cover them.
-	- Priority: Avg
-	- Opened: 20261002-190545
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100114435587, 2026100114435613
-	- Target OS: macOS
-	- Test environment: b26
-	- Requirements:
-		- Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, as in other Mac apps.
-		- The macOS menu bar has a Window menu, with Minimize (Command+M) and the other rows Mac apps have there.
-	- Progress log:
-		- 20261006: The failing presses reached b26 as Command+Shift+3, not Command+Shift+[. macOS took each one as its own full screen screenshot shortcut, so SilkTerm never saw them. The chirps were the screenshot sound, dozens in a row from a held key at 14:14, then one per press at 14:17, b26's time. Twelve screenshots were saved to b26's desktop. SilkTerm asked for no sound at all in that time.
-		- 20261006: Presses at about 14:16, likely the Command+{ ones, had the same keys held and took no screenshot, so they came in as another key. A RustDesk session to b26 has been open since 10-05, and a Mac's own keyboard cannot turn [ into 3, so the change happens on that path, not in SilkTerm. RustDesk's keyboard modes (Map, Translate, Legacy) are known to treat Mac shortcuts differently.
-		- 20261006: Nothing on b26 claims Command+Shift+[ or ]. No custom shortcut is set, the login items and menu bar apps (Dropbox, NordVPN, Bitwarden, Stats, RustDesk) are not screenshot tools, and macOS's own screenshot shortcuts are on 3, 4 and 5.
-		- 20261006: SilkTerm's side checks out on b26, so no code changed. Command+Shift+[ and ] change tabs whether the press comes in as { and } or as [ and ] with Shift. Command+Shift+3 and Command+[ do nothing, and no alert sound plays for any of them.
-		- 20261006: What can be changed outside SilkTerm: the session's keyboard mode in the RustDesk toolbar, or the client's keyboard layout. Turning off "Save picture of screen as a file" in System Settings > Keyboard > Keyboard Shortcuts > Screenshots stops the screenshots, but the tab chord still would not arrive.
-		- 20261006: Question: Which machine, keyboard layout and RustDesk keyboard mode is b26 reached from? The chord stays Command+Shift+[ and ], the Mac standard. Should this close once the Window menu checks pass, or should a second chord be added for the remote session?
-		- 20261006: b26 is reached from a custom keyboard through RustDesk, so that path turns Shift+[ into Shift+3. Closed, since the chord works when it arrives.
-	- Decisions:
-		- 20261002: Command+Shift+[ and ] switch tabs, and the menu bar gets a Window menu.
-		- 20261006: No second chord for the remote session.
-	- Done:
-		- Command+Shift+[ and ] are in the Command chord table, so they work as keys and show on the Window menu's Show previous tab and Show next tab rows. A Mac reports Shift+[ as "{" on a US layout, so both spellings count, and the menu row is handed "{" with Command, the form macOS matches.
-		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are done by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
-		- The system's own window tabs are turned off. They would add a Show Tab Bar row to View, and tab rows to Window that take Ctrl+Tab from the shell, beside SilkTerm's own tabs.
-		- With Settings open, the tab rows change the dialog's tab, as they reach it before the dialog sees the keys.
-	- Note: Each window is its own process, so the window list and Bring all to front reach only that window and its dialogs.
-	- Test case: `command_shift_brackets_walk_the_tabs_on_macos` (ErbGPGY) and `the_mac_window_menu_minimizes_zooms_and_walks_the_tabs` (ErbGPNM), which fail with the chords or the Window menu taken out. `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8) and `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) now list the Window menu and its chords.
-		- 20261006: No new test, since no code changed.
-	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-		- 20261006 on b26, current dev, presses sent to the window rather than typed: Command+Shift+[ and ] go through the Window menu's rows when they come in as { and }, and through the key handler when they come in as [ and ] with Shift. Command+T opens a tab from the menu bar. Command+Shift+3 and Command+[ do nothing. No alert sound for any of them.
-	- Branch: maccmd, then tabchord (notes only)
-	- Commit: 7179fa9
-
-- Settings: the four tab text toggles on one line, with one revert arrow
-	- ID: 2026100614510984
+- Wallpaper: hold a blurred picture smaller than the window
+	- ID: 2026100619365706
 	- Type: Enhancement
-	- Status: Done
+	- Status: Waiting on signoff
+	- Needs external testing: Optional: a look on Windows and macOS, where the shader's border mapping has not been seen.
 	- Priority: Avg
-	- Opened: 20261006-145109
-	- Opened by: JC
-	- Assigned to: CC
+	- Opened: 20261006-193657
+	- Opened by: CC
+	- Parent ID: 2026100418225507
 	- Target OS: All
 	- Requirements:
-		- Before RC1.
-		- Under Tab text on the Window tab, put the toggles on one line: Program title [ ]  Shell [ ]  Program [ ]  Directory [ ]
-		- One revert arrow for all of them.
+		- A blurred picture is held smaller than the window, so the blur's sigma comes to a set number of held pixels, and the GPU scales it up.
+		- That number goes by the performance profile: 2 for Low and Standard, 4 for High and Max.
+		- A one pixel border keeps the picture's edge as close to the old look as its inside.
+		- A small blur never shrinks it below what the window shows.
 	- Notes:
-		- 20261006: Each of the four has its own tip now, and every row today has one setting.
-	- Progress log:
-		- 20261006: The four stay four rows, each with its own setting, tip and focus stop. The last three are declared `beside`, which now allows more than one row after the first, so any run of toggles can share a line this way. The line splits the control column evenly, and the panel grows if the labels need it.
-		- 20261006: A toggle sharing a line now has its label in front of its box, as the sketch shows. That also moves "Re-test next run" on the Silk tab, which had its label after its box.
-		- 20261006: "Program's own title" is now "Program title", as in the sketch, and its tip says "the other three" in place of "the three below".
-		- 20261006: The revert arrow is lit when any of the four is off its default, and puts all four back, config lines included.
+		- 20261006: Tried 2026-10-05 and measured in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size). At 4, at most 1 level off inside; at 2, at most 2. The edge was up to 6 and 8 off without a border.
 	- Decisions:
-		- 20261006: Each toggle keeps its own tip, shown over its box or its label.
-		- 20261006: "Program title", and labels before the box on a shared line, both OK. Signed off.
-	- Verified: unit suite, clippy, fmt, test IDs and the docs gate. In a real window at 1x and 2x, the line draws on one row with one arrow, each box flips only itself, the arrow lights and puts both changed boxes back, and the Program label shows its own tip.
-	- Branch: tabline
-	- Commit: 00058c2
-	- Test case: `a_shared_line_puts_its_parts_side_by_side` (Ery4fxK), `one_revert_puts_back_all_four_tab_text_toggles` (Ery4g1k), `each_tab_text_toggle_flips_only_its_own_setting` (Ery4g6B), `each_tab_text_toggle_has_its_own_tip_over_box_and_label` (Ery4gAt), `the_tab_text_line_fits_the_panel` (Ery4gFO). Each failed with the change broken. `a_paired_row_shares_the_line_above_it` (EpOQNMU) is commented out, since it took every row with one beside it for a line's first. `a_heading_that_repeats_its_tab_takes_no_room` now counts a shared line once.
+		- 20261006: Per profile, 2 for Low and Standard, 4 for High and Max.
+		- 20261006: Remote follows Standard, since it uses Standard's values. Custom follows High. Both are best guesses and can change.
+	- Progress log:
+		- 20261006: A blurred picture is held at the smaller of the window's size and the blur's, where the sigma comes to 4 held pixels on High, Max and Custom and 2 on Low, Standard and Remote. A light blur keeps the window's size.
+		- 20261006: A picture held by its blur keeps a one pixel border from the blur's margin, and the shader blends into it at the edge. The stand-in and the derived colors leave the border out.
+		- 20261006: Kept copies with a border have a key of their own. A profile change prepares the picture again.
+		- 20261006: Growing the window no longer prepares a picture held by its blur again, since its size stays the same.
+		- 20261006: The wpresize window test now uses a light blur for its window size checks and adds a heavy blur case. The wpkept test expects the smaller copy.
+		- 20261006: Verified on b23 against the build before this, at the same window size: with the blur off or light, 0 changed pixels, dark and light, GL and Vulkan, at 2560x1440, 1280x800 and 800x450. Held by the blur, at most 1 level on GL, edge included, and 2 on Vulkan, at both 4 and 2 pixels a sigma and at 100% visibility. A light mode zoom of a large photo had about 4,000 pixels at 2 to 4 along one sharp edge. Numbers in the design doc.
+		- 20261006: Verified: the texture for a 2560x1440 picture in a 2560x1440 window went from 14.1 MiB to 2.3 at 4 and 0.6 at 2.
+		- 20261006: Verified: the new tests fail with the border key taken out, with a border copied from the edge pixels, and with no hold by the blur. The new window checks fail on the build before this. The full unit suite (1183), fmt, and clippy for Linux and Windows pass, and the wpresize, wpkept and wakepic window tests pass.
+	- Branch: blurhold
+	- Commit: d15441b
+	- Test case: `a_blurred_wallpaper_is_held_by_its_blur` (Erym5o5), `a_bordered_wallpaper_looks_like_the_window_size_one` (Erym5q4), `a_bordered_copy_is_kept_apart` (Erym5s3), `only_a_bordered_texture_is_remapped` (ErymwsR), and `cicd/tests/wpresize/run.bash` (Err031q) with its heavy blur case.
+	- Swept: every user of `Sizing`, `Prepared` and the held size: `ImageRenderer::new`, `needs_resize` and `memdbg_line`, the stand-in, the summary, the kept copy lookup and store, and `wallpaper_changed`. The wpresize and wpkept window tests were the only scripts reading the held size.
+	- Acceptance signoff: Waiting: the picture looks a level different in places, and kept copies are written under a new key.
 
 - The dogfood launcher makes three slow Windows queries per launch
 	- ID: 2026100314050020
@@ -536,41 +497,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261006: An in-house BC1 encoder, a few hundred lines, no crate. BC7 only if a test finds BC1 banding, and that comes back as a question first.
 	- Closed:
-
-- Wallpaper: hold a blurred picture smaller than the window
-	- ID: 2026100619365706
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing: Optional: a look on Windows and macOS, where the shader's border mapping has not been seen.
-	- Priority: Avg
-	- Opened: 20261006-193657
-	- Opened by: CC
-	- Parent ID: 2026100418225507
-	- Target OS: All
-	- Requirements:
-		- A blurred picture is held smaller than the window, so the blur's sigma comes to a set number of held pixels, and the GPU scales it up.
-		- That number goes by the performance profile: 2 for Low and Standard, 4 for High and Max.
-		- A one pixel border keeps the picture's edge as close to the old look as its inside.
-		- A small blur never shrinks it below what the window shows.
-	- Notes:
-		- 20261006: Tried 2026-10-05 and measured in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-wallpaper-at-window-size). At 4, at most 1 level off inside; at 2, at most 2. The edge was up to 6 and 8 off without a border.
-	- Decisions:
-		- 20261006: Per profile, 2 for Low and Standard, 4 for High and Max.
-		- 20261006: Remote follows Standard, since it uses Standard's values. Custom follows High. Both are best guesses and can change.
-	- Progress log:
-		- 20261006: A blurred picture is held at the smaller of the window's size and the blur's, where the sigma comes to 4 held pixels on High, Max and Custom and 2 on Low, Standard and Remote. A light blur keeps the window's size.
-		- 20261006: A picture held by its blur keeps a one pixel border from the blur's margin, and the shader blends into it at the edge. The stand-in and the derived colors leave the border out.
-		- 20261006: Kept copies with a border have a key of their own. A profile change prepares the picture again.
-		- 20261006: Growing the window no longer prepares a picture held by its blur again, since its size stays the same.
-		- 20261006: The wpresize window test now uses a light blur for its window size checks and adds a heavy blur case. The wpkept test expects the smaller copy.
-		- 20261006: Verified on b23 against the build before this, at the same window size: with the blur off or light, 0 changed pixels, dark and light, GL and Vulkan, at 2560x1440, 1280x800 and 800x450. Held by the blur, at most 1 level on GL, edge included, and 2 on Vulkan, at both 4 and 2 pixels a sigma and at 100% visibility. A light mode zoom of a large photo had about 4,000 pixels at 2 to 4 along one sharp edge. Numbers in the design doc.
-		- 20261006: Verified: the texture for a 2560x1440 picture in a 2560x1440 window went from 14.1 MiB to 2.3 at 4 and 0.6 at 2.
-		- 20261006: Verified: the new tests fail with the border key taken out, with a border copied from the edge pixels, and with no hold by the blur. The new window checks fail on the build before this. The full unit suite (1183), fmt, and clippy for Linux and Windows pass, and the wpresize, wpkept and wakepic window tests pass.
-	- Branch: blurhold
-	- Commit: d15441b
-	- Test case: `a_blurred_wallpaper_is_held_by_its_blur` (Erym5o5), `a_bordered_wallpaper_looks_like_the_window_size_one` (Erym5q4), `a_bordered_copy_is_kept_apart` (Erym5s3), `only_a_bordered_texture_is_remapped` (ErymwsR), and `cicd/tests/wpresize/run.bash` (Err031q) with its heavy blur case.
-	- Swept: every user of `Sizing`, `Prepared` and the held size: `ImageRenderer::new`, `needs_resize` and `memdbg_line`, the stand-in, the summary, the kept copy lookup and store, and `wallpaper_changed`. The wpresize and wpkept window tests were the only scripts reading the held size.
-	- Acceptance signoff: Waiting: the picture looks a level different in places, and kept copies are written under a new key.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
@@ -2101,6 +2027,80 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
+	- ID: 2026100219054497
+	- Type: Feature
+	- Status: Done
+		- Command+Shift+[ and ] doesn't work reliably, seems to be tied in to system screenshots.
+		- Command+{ and } works.
+	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
+		- 20261006: Typed through the remote session, the Shift+[ press can reach b26 as Shift+3 (see Progress log). Check the chord from b26's own keyboard, or after the session's keyboard mode is changed.
+		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
+		- With Settings open, the two tab rows and their chords change the dialog's tab.
+		- Neither View nor Window has Show Tab Bar, Merge All Windows or a second pair of tab rows, since the system's own window tabs are off.
+		- 20261006: Closed with these Window menu rows not looked at by hand. The unit tests cover them.
+	- Priority: Avg
+	- Opened: 20261002-190545
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100114435587, 2026100114435613
+	- Target OS: macOS
+	- Test environment: b26
+	- Requirements:
+		- Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, as in other Mac apps.
+		- The macOS menu bar has a Window menu, with Minimize (Command+M) and the other rows Mac apps have there.
+	- Progress log:
+		- 20261006: The failing presses reached b26 as Command+Shift+3, not Command+Shift+[. macOS took each one as its own full screen screenshot shortcut, so SilkTerm never saw them. The chirps were the screenshot sound, dozens in a row from a held key at 14:14, then one per press at 14:17, b26's time. Twelve screenshots were saved to b26's desktop. SilkTerm asked for no sound at all in that time.
+		- 20261006: Presses at about 14:16, likely the Command+{ ones, had the same keys held and took no screenshot, so they came in as another key. A RustDesk session to b26 has been open since 10-05, and a Mac's own keyboard cannot turn [ into 3, so the change happens on that path, not in SilkTerm. RustDesk's keyboard modes (Map, Translate, Legacy) are known to treat Mac shortcuts differently.
+		- 20261006: Nothing on b26 claims Command+Shift+[ or ]. No custom shortcut is set, the login items and menu bar apps (Dropbox, NordVPN, Bitwarden, Stats, RustDesk) are not screenshot tools, and macOS's own screenshot shortcuts are on 3, 4 and 5.
+		- 20261006: SilkTerm's side checks out on b26, so no code changed. Command+Shift+[ and ] change tabs whether the press comes in as { and } or as [ and ] with Shift. Command+Shift+3 and Command+[ do nothing, and no alert sound plays for any of them.
+		- 20261006: What can be changed outside SilkTerm: the session's keyboard mode in the RustDesk toolbar, or the client's keyboard layout. Turning off "Save picture of screen as a file" in System Settings > Keyboard > Keyboard Shortcuts > Screenshots stops the screenshots, but the tab chord still would not arrive.
+		- 20261006: Question: Which machine, keyboard layout and RustDesk keyboard mode is b26 reached from? The chord stays Command+Shift+[ and ], the Mac standard. Should this close once the Window menu checks pass, or should a second chord be added for the remote session?
+		- 20261006: b26 is reached from a custom keyboard through RustDesk, so that path turns Shift+[ into Shift+3. Closed, since the chord works when it arrives.
+	- Decisions:
+		- 20261002: Command+Shift+[ and ] switch tabs, and the menu bar gets a Window menu.
+		- 20261006: No second chord for the remote session.
+	- Done:
+		- Command+Shift+[ and ] are in the Command chord table, so they work as keys and show on the Window menu's Show previous tab and Show next tab rows. A Mac reports Shift+[ as "{" on a US layout, so both spellings count, and the menu row is handed "{" with Command, the form macOS matches.
+		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are done by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
+		- The system's own window tabs are turned off. They would add a Show Tab Bar row to View, and tab rows to Window that take Ctrl+Tab from the shell, beside SilkTerm's own tabs.
+		- With Settings open, the tab rows change the dialog's tab, as they reach it before the dialog sees the keys.
+	- Note: Each window is its own process, so the window list and Bring all to front reach only that window and its dialogs.
+	- Test case: `command_shift_brackets_walk_the_tabs_on_macos` (ErbGPGY) and `the_mac_window_menu_minimizes_zooms_and_walks_the_tabs` (ErbGPNM), which fail with the chords or the Window menu taken out. `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8) and `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) now list the Window menu and its chords.
+		- 20261006: No new test, since no code changed.
+	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
+		- 20261006 on b26, current dev, presses sent to the window rather than typed: Command+Shift+[ and ] go through the Window menu's rows when they come in as { and }, and through the key handler when they come in as [ and ] with Shift. Command+T opens a tab from the menu bar. Command+Shift+3 and Command+[ do nothing. No alert sound for any of them.
+	- Branch: maccmd, then tabchord (notes only)
+	- Commit: 7179fa9
+
+- Settings: the four tab text toggles on one line, with one revert arrow
+	- ID: 2026100614510984
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261006-145109
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- Under Tab text on the Window tab, put the toggles on one line: Program title [ ]  Shell [ ]  Program [ ]  Directory [ ]
+		- One revert arrow for all of them.
+	- Notes:
+		- 20261006: Each of the four has its own tip now, and every row today has one setting.
+	- Progress log:
+		- 20261006: The four stay four rows, each with its own setting, tip and focus stop. The last three are declared `beside`, which now allows more than one row after the first, so any run of toggles can share a line this way. The line splits the control column evenly, and the panel grows if the labels need it.
+		- 20261006: A toggle sharing a line now has its label in front of its box, as the sketch shows. That also moves "Re-test next run" on the Silk tab, which had its label after its box.
+		- 20261006: "Program's own title" is now "Program title", as in the sketch, and its tip says "the other three" in place of "the three below".
+		- 20261006: The revert arrow is lit when any of the four is off its default, and puts all four back, config lines included.
+	- Decisions:
+		- 20261006: Each toggle keeps its own tip, shown over its box or its label.
+		- 20261006: "Program title", and labels before the box on a shared line, both OK. Signed off.
+	- Verified: unit suite, clippy, fmt, test IDs and the docs gate. In a real window at 1x and 2x, the line draws on one row with one arrow, each box flips only itself, the arrow lights and puts both changed boxes back, and the Program label shows its own tip.
+	- Branch: tabline
+	- Commit: 00058c2
+	- Test case: `a_shared_line_puts_its_parts_side_by_side` (Ery4fxK), `one_revert_puts_back_all_four_tab_text_toggles` (Ery4g1k), `each_tab_text_toggle_flips_only_its_own_setting` (Ery4g6B), `each_tab_text_toggle_has_its_own_tip_over_box_and_label` (Ery4gAt), `the_tab_text_line_fits_the_panel` (Ery4gFO). Each failed with the change broken. `a_paired_row_shares_the_line_above_it` (EpOQNMU) is commented out, since it took every row with one beside it for a line's first. `a_heading_that_repeats_its_tab_takes_no_room` now counts a shared line once.
 
 - Settings: a Keys tab to see and change hotkeys
 	- ID: 2026100307252506
