@@ -2039,11 +2039,6 @@ mod tests {
 				.output();
 			let _ = child.wait();
 		}
-		assert_ne!(
-			inner,
-			child.id(),
-			"the launcher's own pid was never looked past"
-		);
 		assert_eq!(
 			seen.0,
 			Some(real(&moved_to)),
@@ -2052,6 +2047,11 @@ mod tests {
 		assert_eq!(
 			seen.1, None,
 			"a bash at its prompt read as running a command"
+		);
+		assert_ne!(
+			inner,
+			child.id(),
+			"the launcher's own pid was never looked past"
 		);
 	}
 
