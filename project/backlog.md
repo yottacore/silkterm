@@ -262,21 +262,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- macOS: the git prompt's second line starts with an empty box
-	- ID: 2026100709325307
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261007-093253
-	- Opened by: CC
-	- Target OS: macOS
-	- Test environment: b26
-	- Steps to reproduce:
-		- In a bash pane with the git prompt on, `cd` into a git working tree.
-	- Incorrect behavior: the prompt's second line starts with an empty box.
-	- Reproduced: 20261007 on b26 at 107b8e6.
-	- Possible cause: the arrow the prompt draws there (U+1F846) is in none of the fonts on b26, and the fallback finds nothing.
-
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
 	- Type: Bug
@@ -2895,6 +2880,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- macOS: the git prompt's second line starts with an empty box
+	- ID: 2026100709325307
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261007-093253
+	- Opened by: CC
+	- Target OS: macOS
+	- Test environment: b26
+	- Steps to reproduce:
+		- In a bash pane with the git prompt on, `cd` into a git working tree.
+	- Incorrect behavior: the prompt's second line starts with an empty box.
+	- Reproduced: 20261007 on b26 at 107b8e6.
+	- Possible cause: the arrow the prompt draws there (U+1F846) is in none of the fonts on b26, and the fallback finds nothing.
+	- Actual cause: confirmed. None of the 526 font faces on b26 has U+1F846. U+279C is in Menlo, Zapf Dingbats, Arial Unicode MS and 3 more.
+	- Decisions:
+		- 20261007: On macOS the bundled prompt uses an arrow every Mac font set has. U+279C was suggested, and is used. Linux and Windows keep U+1F846. Fixed upstream in x9ps1-git too.
+	- Actual fix: x9ps1-git picks U+279C when bash's `OSTYPE` starts with `darwin`, which costs no process. Fixed upstream first (x9ps1-git `macarrow`, cc8a671, merged into its main as ea09069), then the bundled copy refreshed. It is still upstream plus the cut host color table.
+	- Verified: in a real window on b26 the second line showed the empty box before and the arrow after. Under b26's /bin/bash 3.2 the default picks U+279C, and `OSTYPE=linux-gnu` picks U+1F846. The x9ps1-git suite passes on b23 (33 tests) and its new arrow section failed on the old script. The upstream suite does not run on macOS, since it needs GNU `realpath`.
+	- Swept: the PowerShell prompt draws no arrow, its second line is the bare `>` on purpose. Its other marks (U+2713, U+2717, U+2191, U+2193) are all in Menlo on b26. So are the bash prompt's (U+2714, U+2718, U+2191, U+2193, U+2022). A grep for U+1F846 across the repo finds only the bundled prompt.
+	- Branch: macarrow
+	- Commit: cc14768
+	- Test case: `the_prompt_arrow_is_one_a_mac_has_a_font_for` (Es2nCJ6), which failed on the old bundled script and passes now. Upstream, the "Arrow" section of x9ps1-git's `cicd/test.bash`.
+	- Acceptance signoff: Self-closed: the decision set the arrow, it was seen in a real window on b26, and the test failed before and passes after.
+	- Closed: 20261007-122500
 
 - macOS: Command+, should open Settings
 	- ID: 2026100114435613

@@ -995,6 +995,51 @@ mod tests {
 		);
 	}
 
+	// No font a Mac ships has U+1F846, so the second line in a repository
+	// started with an empty box there. bash takes OSTYPE from the environment
+	// when it is set, which lets either side run anywhere.
+	// Test ID: Es2nCJ6
+	#[cfg(unix)]
+	#[test]
+	fn the_prompt_arrow_is_one_a_mac_has_a_font_for() {
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_x9ps1arrow_{}", std::process::id()));
+		let (_outside, deep, script) = prompt_fixture(&dir);
+		let shown = |ostype: &str| {
+			let out = std::process::Command::new("bash")
+				.args([
+					"--norc",
+					"--noprofile",
+					"-c",
+					r#"eval "$PROMPT_COMMAND" && printf '%s' "${PS1@P}""#,
+				])
+				.current_dir(&deep)
+				.env("GIT_CONFIG_GLOBAL", "/dev/null")
+				.env("GIT_CONFIG_NOSYSTEM", "1")
+				.env_remove("GIT_DIR")
+				.env_remove("GIT_WORK_TREE")
+				.env_remove("X9PS1_STANDARD")
+				.env("OSTYPE", ostype)
+				.env("PROMPT_COMMAND", prompt_command(&script))
+				.output()
+				.expect("run bash");
+			assert!(out.status.success(), "{out:?}");
+			String::from_utf8_lossy(&out.stdout).into_owned()
+		};
+		let mac = shown("darwin24");
+		let linux = shown("linux-gnu");
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(
+			mac.contains("\n\u{1b}[1;32m\u{279c}") && !mac.contains('\u{1f846}'),
+			"mac arrow: {mac:?}"
+		);
+		assert!(
+			linux.contains('\u{1f846}') && !linux.contains('\u{279c}'),
+			"other arrow: {linux:?}"
+		);
+	}
+
 	// A profile is a script run at every shell start, and it often holds tokens.
 	// The write used to replace a linked profile with a copy at the umask's mode,
 	// and wrote through a link left at its temp or backup name.

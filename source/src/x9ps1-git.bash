@@ -132,6 +132,9 @@ function fX9ps1Git_Build() {
 	local -r unicodeCheckmark="✔"
 	local -r unicodeUp="↑"
 	local -r unicodeDown="↓"
+	## No font a Mac ships has U+1F846, so it drew as an empty box there.
+	local unicodeArrow="🡆"
+	if [[ "${OSTYPE:-}" == darwin* ]]; then unicodeArrow="➜"; fi
 
 	## Styles and background colors (sorf of mutually exclusive)
 	local -r styleRegular="    0"
@@ -344,7 +347,7 @@ function fX9ps1Git_Build() {
 	tmpArray+=("${final_Path}")
 	if [[ -n "${final_Git}" ]]; then
 		tmpArray+=("${final_Git}")
-		((addArrowToEnd))  &&  tmpArray+=("\n${colorAttn}🡆${colorRESET}")
+		((addArrowToEnd))  &&  tmpArray+=("\n${colorAttn}${unicodeArrow}${colorRESET}")
 	fi
 	if ((addNewlineToEnd)); then
 		tmpArray+=("${Newline}")
@@ -397,3 +400,4 @@ set +eE
 ##		- 20260915 JC: Branch and remote names are escaped before going into PS1. A name holding $(...) or backticks ran as a command at every prompt.
 ##		- 20260917 JC: Git part shows with any remote or none, reads the porcelain status, and shows ahead/behind counts.
 ##		- 20261006 JC: Can be sourced, then PROMPT_COMMAND calls fX9ps1Git_SetPs1. Outside a git working tree it starts no process, and inside one only two git calls.
+##		- 20261007 JC: On macOS the arrow before the second line is U+279C, since no Mac font has U+1F846.
