@@ -241,11 +241,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: a double-click on a word after a link selects from the link's start
 	- ID: 2026100709325308
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261007-093253
 	- Opened by: CC
-	- Target OS: macOS
+	- Assigned to: CC
+	- Target OS: All
 	- Test environment: b26
 	- Steps to reproduce:
 		- Print `b'https://example.invalid/silk1007 CLIPMARK'`.
@@ -253,6 +254,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: the selection runs from the start of the link to the click.
 	- Expected behavior: only "CLIPMARK" is selected.
 	- Reproduced: 20261007 on b26 at 107b8e6, every time, with clicks sent by script only. A double-click on a plain word on another line selected only that word. Not tried on Linux or Windows.
+		- 20261007 on b23 at 5939048, by test: the pair rule picks the same span from that line on Linux. The link plays no part. Without the quotes, or with words around the link, only "CLIPMARK" is picked.
+	- Actual cause: the line on screen was Python's `b'...'`, and the pair rule read the `'` after the `b` as an opening quote. So the click was inside a quoted pair, and the pair's contents were selected, which start at the link. The same miscount hit any apostrophe: in `don't click 'here'`, a click on "click" took `t click`.
+	- Actual fix: a `'` with a letter or digit on both sides is an apostrophe and is neither end of a pair. A quote with a space or punctuation beside it still pairs. The double-click design doc says so.
+	- Swept: The other users of quote pairing. Brackets (`distinct_pair`) and a bracket's partner never look at `'`. A triple-click takes the line and uses no pairs. Word selection in a tab rename or a dialog box uses `textedit.rs`, which has no pairs. The link hover and a link's span stop before any `'`, since it is not a link character. A path shape still counts its own apostrophes when it trims a closing `'` (`shapes.rs` `trim_tail`), so `'/srv/O'Brien/docs'` keeps the last quote. Read, not run, and left as rare.
+	- Verified: 20261007 on b23. The new test failed before the fix and passes after it. The full unit suite, rustfmt and clippy passed.
+	- Branch: clipquote
+	- Commit: 3c6c3ac
+	- Test case: `an_apostrophe_is_not_a_quote` (Es2aZeI).
+	- Acceptance signoff: Self-closed: reproduced by test, failed before and passes after, and the selection is the one the item expects.
+	- Closed: 20261007-112930
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
