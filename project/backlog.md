@@ -560,9 +560,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - app.rs and settings_ui.rs each do too many jobs
 	- ID: 2026100314050023
 	- Type: Enhancement
-	- Status: Started
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261003-140500
+	- Closed: 20261006-235500
 	- Opened by: CC
 	- Target OS: All
 	- Progress log:
@@ -574,10 +575,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: The two unit tests that read every source file, the license header and the Debug check, now read the subfolder too. Three grid types gained `Debug` for it.
 		- 20261006: app.rs is left for a later round, so this stays Started.
 		- 20261006: Verified: the 158 settings_ui tests all run, under the same names and IDs. The full unit suite (1186), fmt, clippy for Linux, Windows and macOS, and the test ID, docs, tables and TOC checks pass. The header and Debug tests fail on a subfolder file with a bad header or a type with no Debug. Settings opens, every tab draws, and so do the name box and the color picker.
+		- 20261006: app.rs is split the same way. The menus, the menu bar, the tab strip, the tab rename, the idle and GPU release, the VT watcher, the benchmark and rating, wallpaper requests and rotation, window size and monitor checks, the command-line layout, and the dialog and notice windows moved to `app/menus.rs`, `menubar.rs`, `tabs.rs`, `tab_edit.rs`, `idle.rs`, `vt.rs`, `rating.rs`, `rotation.rs`, `window_size.rs`, `cmdline.rs` and `dialogs.rs`, each with its own tests. The code moved as it was. What changed is imports, visibility, doc comments on what is now shared, and Debug on 11 types. app.rs is about 5,600 lines before its tests, down from about 10,600.
+		- 20261006: Left in app.rs: `State`, `render_with`, the event loop, mouse reporting, chrome heights, the quad helpers and the tuned constants. Moving `State` or `render_with` means rewriting them, and the chrome layer kept between frames is a redesign, so neither belongs to this item.
+		- 20261006: `git log --follow` works on each new file. The per-file rename commits and the cut (931d3cd) do not build; the merge (3648d73) and 7d8ccbe onward do.
+		- 20261006: The test ID labels on test output now name a test in a module's folder by its full path. The settings_ui half had missed that, so its subfolder tests printed no ID.
+		- 20261006: The read-only write check (EpHQ61Q) reads every file under `app/` too.
+		- 20261006: Verified: the 1186 unit tests pass, with the same test names and IDs. fmt, clippy for Linux, Windows and macOS, and the test ID, docs, tables and TOC checks pass. The read-only check fails when a file under `app/` writes to the terminal directly. A launch opens, takes typing, opens a new tab, renames and closes it, draws the menus, opens Settings and quits from the menu.
 	- Origin: c6eaa04 (2026-06-28), grown since. No earlier review item. Plausible.
-	- Branch: uisplit
-	- Commit: 21ad437, c632770
+	- Branch: uisplit, appsplit
+	- Commit: 21ad437, c632770, 931d3cd, 7d8ccbe
 	- Test case: The existing tests. Behavior does not change.
+	- Acceptance signoff: Self-closed: the code moved unchanged, and the tests and checks pass.
 	- Decisions:
 		- 20261005: Do it last, after the other open items, when there is time.
 	- Note: Code review 20261003 item 23.
