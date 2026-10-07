@@ -328,6 +328,8 @@ pub struct Minimap {
 	// redoes the whole image rather than the rows it rasterized.
 	moved: bool,
 	spare: Vec<Row>,
+	// the contrast memo, kept from one plan to the next
+	readable: palette::Readable,
 	hist: usize, // history lines the cache accounts for
 	// Buffer lines the map actually draws: the whole buffer less the lines the
 	// eased text has not reached yet. Under a flood the view sits behind the
@@ -772,7 +774,7 @@ impl Minimap {
 		scale: f32,
 	) -> Plan {
 		self.fit_spans();
-		let mut readable = palette::Readable::default();
+		let mut readable = std::mem::take(&mut self.readable);
 		let mut plan = Plan {
 			clear: std::mem::take(&mut self.owed_clear),
 			front: std::mem::take(&mut self.owed_front),
@@ -831,6 +833,7 @@ impl Minimap {
 			|| self.img_total != plan.total
 			|| self.img_scale != scale;
 		self.moved = false;
+		self.readable = readable;
 		plan
 	}
 
