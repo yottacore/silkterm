@@ -87,6 +87,23 @@ function fRunSaying { param([string]$Home_, [string[]]$Extra = @())
 	return (& $Pwsh -NoProfile -File $Launcher @Extra 2>&1 | Out-String)
 }
 
+## A launch through a script that counts each whole process list asked for,
+## then hands the call to the real Get-Process. Answers the count.
+function fProcessListsRead { param([string]$Home_)
+	fUseHome $Home_
+	$tally = Join-Path $Home_ "tally.txt"
+	Remove-Item -LiteralPath $tally -ErrorAction SilentlyContinue
+	$counting = Join-Path $Home_ "counting.ps1"
+	Set-Content -LiteralPath $counting -Value @(
+		'param([string]$Launcher)'
+		'function Get-Process { if ($args -notcontains "-Id") { Add-Content -LiteralPath $env:SILK_TALLY -Value processes }; Microsoft.PowerShell.Management\Get-Process @args }'
+		'& $Launcher --install-only'
+	)
+	$env:SILK_TALLY = $tally
+	try { & $Pwsh -NoProfile -File $counting -Launcher $Launcher 2>&1 | Out-Null } finally { Remove-Item -Path Env:SILK_TALLY }
+	return @(Get-Content -LiteralPath $tally -ErrorAction SilentlyContinue).Count
+}
+
 function fPool { param([string]$Home_) return (Join-Path (fBin $Home_) "silkterm_versions") }
 function fRunLog { param([string]$Home_) return [string](Get-Content -LiteralPath (Join-Path (fBin $Home_) "runterm.log") -Raw -ErrorAction SilentlyContinue) }
 function fStamp { param([datetime]$When) return $When.ToString("yyyyMMdd-HHmmss") }
@@ -305,6 +322,20 @@ try {
 	if ($runner) { fCheck "the running copy is kept" ($stamps -contains $runningStamp) }
 	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 
+	## Every process's path is the slow part of a rotation, and only a copy
+	## about to be deleted needs it.
+	Write-Host "the process list is read only when a copy is due to go"
+	$root = fSandbox
+	fRun $root
+	$reads = fProcessListsRead $root
+	fCheck "a launch with nothing to delete reads none ($reads)" ($reads -eq 0)
+	$now = Get-Date
+	foreach ($days in 20..33) { $null = fHold $root $now.AddDays(-$days) }
+	$reads = fProcessListsRead $root
+	fCheck "one with copies to delete reads it once ($reads)" ($reads -eq 1)
+	fCheck "and deletes them ($(@(fHeld $root).Count) left)" (@(fHeld $root).Count -le 10)
+	Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+
 	Write-Host "the pool stops at 1 GB once it holds five"
 	$root = fBareSandbox
 	$now = Get-Date
@@ -378,6 +409,7 @@ Write-Host "all passed"
 fTestDir_End 0
 
 ##	History:
+##		- 2026-10-06: A launch reads the process list only when a copy is due to go.
 ##		- 2026-10-06: Help block.
 ##		- 2026-09-28: LOCALAPPDATA and APPDATA are sandboxed too.
 ##		- 2026-09-26: Pool cases: copy and decline, rotation, the byte cap, the

@@ -889,6 +889,9 @@ function fMain {
 	## In a process of its own, since fTestDir_Use moves TEMP and TMP for the whole process.
 	fExec -What "test run folder removal" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\testdir\remove.ps1"))
 	fEcho "OK: test run folder removal"
+	## The dogfood launcher's Start menu entry, and what a launch with nothing to do asks for.
+	fExec -What "launcher Start menu entry" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\launcher\startmenu.ps1"))
+	fEcho "OK: launcher Start menu entry"
 	fLintAdvisory
 
 	## Stage 4: release builds (x86_64 msvc + gnu always; ARM64 when ready).
@@ -937,6 +940,7 @@ try {
 
 
 ##	History:
+##		- 2026-10-06 JC: Stage 3 runs the launcher's Start menu test.
 ##		- 2026-10-06 JC: Help block, read by -Help; named arguments to fExec; no
 ##		  array growth in loops.
 ##		- 2026-09-25 JC: Release builds map the box's paths away and fail if one
