@@ -540,7 +540,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wallpaper: hold a blurred picture smaller than the window
 	- ID: 2026100619365706
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs external testing: Optional: a look on Windows and macOS, where the shader's border mapping has not been seen.
 	- Priority: Avg
 	- Opened: 20261006-193657
 	- Opened by: CC
@@ -556,6 +557,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20261006: Per profile, 2 for Low and Standard, 4 for High and Max.
 		- 20261006: Remote follows Standard, since it uses Standard's values. Custom follows High. Both are best guesses and can change.
+	- Progress log:
+		- 20261006: A blurred picture is held at the smaller of the window's size and the blur's, where the sigma comes to 4 held pixels on High, Max and Custom and 2 on Low, Standard and Remote. A light blur keeps the window's size.
+		- 20261006: A picture held by its blur keeps a one pixel border from the blur's margin, and the shader blends into it at the edge. The stand-in and the derived colors leave the border out.
+		- 20261006: Kept copies with a border have a key of their own. A profile change prepares the picture again.
+		- 20261006: Growing the window no longer prepares a picture held by its blur again, since its size stays the same.
+		- 20261006: The wpresize window test now uses a light blur for its window size checks and adds a heavy blur case. The wpkept test expects the smaller copy.
+		- 20261006: Verified on b23 against the build before this, at the same window size: with the blur off or light, 0 changed pixels, dark and light, GL and Vulkan, at 2560x1440, 1280x800 and 800x450. Held by the blur, at most 1 level on GL, edge included, and 2 on Vulkan, at both 4 and 2 pixels a sigma and at 100% visibility. A light mode zoom of a large photo had about 4,000 pixels at 2 to 4 along one sharp edge. Numbers in the design doc.
+		- 20261006: Verified: the texture for a 2560x1440 picture in a 2560x1440 window went from 14.1 MiB to 2.3 at 4 and 0.6 at 2.
+		- 20261006: Verified: the new tests fail with the border key taken out, with a border copied from the edge pixels, and with no hold by the blur. The new window checks fail on the build before this. The full unit suite (1183), fmt, and clippy for Linux and Windows pass, and the wpresize, wpkept and wakepic window tests pass.
+	- Branch: blurhold
+	- Commit: d15441b
+	- Test case: `a_blurred_wallpaper_is_held_by_its_blur` (Erym5o5), `a_bordered_wallpaper_looks_like_the_window_size_one` (Erym5q4), `a_bordered_copy_is_kept_apart` (Erym5s3), `only_a_bordered_texture_is_remapped` (ErymwsR), and `cicd/tests/wpresize/run.bash` (Err031q) with its heavy blur case.
+	- Swept: every user of `Sizing`, `Prepared` and the held size: `ImageRenderer::new`, `needs_resize` and `memdbg_line`, the stand-in, the summary, the kept copy lookup and store, and `wallpaper_changed`. The wpresize and wpkept window tests were the only scripts reading the held size.
+	- Acceptance signoff: Waiting: the picture looks a level different in places, and kept copies are written under a new key.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
