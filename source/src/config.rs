@@ -258,20 +258,17 @@ pub const MENU_LINK: [u8; 3] = [0x6c, 0x9c, 0xff]; // clickable URL
 /// via `colors.menu_background/menu_foreground`); hover, border, and the group
 /// separator are derived shades of the bg, so a custom menu color stays coherent
 /// in either a dark or a light direction.
-pub fn menu_bg() -> [u8; 3] {
-	settings().menu_bg
-}
 pub fn menu_fg() -> [u8; 3] {
 	settings().menu_fg
 }
-pub fn menu_hover() -> [u8; 3] {
-	shade(menu_bg(), 22)
+pub(crate) fn menu_hover_of(menu_bg: [u8; 3]) -> [u8; 3] {
+	shade(menu_bg, 22)
 }
-pub fn menu_border() -> [u8; 3] {
-	shade(menu_bg(), 34)
+pub(crate) fn menu_border_of(menu_bg: [u8; 3]) -> [u8; 3] {
+	shade(menu_bg, 34)
 }
-pub fn menu_sep() -> [u8; 3] {
-	shade(menu_bg(), 20)
+pub(crate) fn menu_sep_of(menu_bg: [u8; 3]) -> [u8; 3] {
+	shade(menu_bg, 20)
 }
 // Flyover help in the main window: the tab strip's tip and a menu row's. Both
 // hang off chrome that is painted in the menu color - the shipped menu bg is the
@@ -285,15 +282,6 @@ pub fn menu_sep() -> [u8; 3] {
 const TIP_LIFT: i16 = 34;
 const TIP_WARMTH: i16 = 8;
 const TIP_TEXT_WARMTH: i16 = 5;
-pub fn tip_bg() -> [u8; 3] {
-	tip_bg_of(menu_bg())
-}
-pub fn tip_border() -> [u8; 3] {
-	tip_border_of(menu_bg())
-}
-pub fn tip_fg() -> [u8; 3] {
-	tip_fg_of(menu_fg())
-}
 pub(crate) fn tip_bg_of(menu_bg: [u8; 3]) -> [u8; 3] {
 	warm(shade(menu_bg, TIP_LIFT), TIP_WARMTH)
 }

@@ -336,6 +336,88 @@ fn latency_report() {
 	);
 }
 
+// Heap allocations made on the calling thread. Counted only in a debug build,
+// which is never shipped; a release build keeps the plain allocator and every
+// count reads 0.
+#[cfg(debug_assertions)]
+mod counted {
+	use std::alloc::{GlobalAlloc, Layout, System};
+	use std::cell::Cell;
+
+	thread_local! {
+		/// const with no destructor, so touching it never allocates
+		pub static ALLOCS: Cell<u64> = const { Cell::new(0) };
+	}
+
+	fn note() {
+		let _ = ALLOCS.try_with(|n| n.set(n.get() + 1));
+	}
+
+	struct Counted;
+
+	// SAFETY: every call goes straight to `System` under the same contract; the
+	// count beside it touches no heap.
+	unsafe impl GlobalAlloc for Counted {
+		unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+			note();
+			// SAFETY: the caller's contract is passed on unchanged.
+			unsafe { System.alloc(layout) }
+		}
+		unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+			note();
+			// SAFETY: the caller's contract is passed on unchanged.
+			unsafe { System.alloc_zeroed(layout) }
+		}
+		unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+			note();
+			// SAFETY: the caller's contract is passed on unchanged.
+			unsafe { System.realloc(ptr, layout, new_size) }
+		}
+		unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+			// SAFETY: the caller's contract is passed on unchanged.
+			unsafe { System.dealloc(ptr, layout) }
+		}
+	}
+
+	#[global_allocator]
+	static COUNTED: Counted = Counted;
+}
+
+/// Allocations (a realloc counts as one) this thread has made so far.
+pub fn thread_allocs() -> u64 {
+	#[cfg(debug_assertions)]
+	{
+		counted::ALLOCS.try_with(std::cell::Cell::get).unwrap_or(0)
+	}
+	#[cfg(not(debug_assertions))]
+	{
+		0
+	}
+}
+
+/// `SILK_ALLOCS=1`: one line per frame with the allocations the window thread
+/// made drawing it, and since the last frame ended (events and loop passes).
+pub fn allocs_on() -> bool {
+	static ON: OnceLock<bool> = OnceLock::new();
+	*ON.get_or_init(|| std::env::var_os("SILK_ALLOCS").is_some())
+}
+
+/// Called after a frame with the count taken just before it.
+pub fn frame_allocs(before: u64) {
+	thread_local! {
+		static LAST_END: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+	}
+	if !allocs_on() {
+		return;
+	}
+	let end = thread_allocs();
+	let between = LAST_END.with(|last| last.replace(Some(end)).map(|prev| before - prev));
+	match between {
+		Some(between) => eprintln!("[allocs] frame {} between {between}", end - before),
+		None => eprintln!("[allocs] frame {}", end - before),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::percentiles;
