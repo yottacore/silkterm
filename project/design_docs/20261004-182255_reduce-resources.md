@@ -20,6 +20,7 @@
 	- [The memory hint](#the-memory-hint)
 	- [A smaller scrim](#a-smaller-scrim)
 	- [The wallpaper at window size](#the-wallpaper-at-window-size)
+	- [Kept copies on disk](#kept-copies-on-disk)
 	- [Block compression for the wallpaper](#block-compression-for-the-wallpaper)
 	- [The dialogs' kept GPU context](#the-dialogs-kept-gpu-context)
 	- [A shorter wait for a minimized window](#a-shorter-wait-for-a-minimized-window)
@@ -262,6 +263,33 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- A pack image at 2560x1440 costs 32 MiB on GL at window size, 8 at D of 4, and about 0 at D of 2. As plain RGBA that is 2.3 MiB at D of 4 against BC1's 1.8 at full size, and 0.6 MiB at D of 2.
 	- So at the shipped blur, holding it smaller makes compression unneeded. Compression only pays where the blur is small or off. That choice is left to [Block compression for the wallpaper](#block-compression-for-the-wallpaper), which already picks by blur.
 
+### Kept copies on disk
+
+- Preparing a picture took 0.8 to 2.6 s in an optimized build on b23, most of it the blur. A launch, a rotation back to a picture, a resize and a wake from the idle release all prepared it from the file again.
+
+- Since 2026-10-06 each prepared picture is kept on disk as a high quality JPEG, in the platform's cache folder: `~/.cache/silkterm/wallpaper`, `~/Library/Caches/silkterm/wallpaper` on macOS, `%LOCALAPPDATA%\silkterm\cache\wallpaper` on Windows. `XDG_CACHE_HOME` moves it. A `--config`, or an `XDG_CONFIG_HOME` with no `XDG_CACHE_HOME`, keeps it beside that config, as with the data folder.
+	- The key is everything that changes the stored pixels: the file, its length, its time and which file it is, the size it is cut to, the blur after the image's own tag, and the contrast mask settings. The held size names the copy. Light or dark mode is applied when the picture is drawn, so it is not part of it.
+	- A request takes the nearest copy within 5% of the pixels it asks for. The window takes that as the size it asked for, so it does not ask again.
+	- A copy keeps the summary of the picture it was made from, so the derived text colors are the same with or without it.
+	- It is written after the picture goes to the window, to a temp file renamed into place, since every process on the box shares the folder. A copy that does not read back whole is removed and made again.
+	- Past 256 MB the copies used longest ago go first.
+	- A picture held whole with no blur and no mask is only a decode, so it is not kept. Neither is one with any transparency, since JPEG has none.
+
+- Measured on b23 with a non-LTO optimized build, at the shipped settings. The write happens after the picture is on its way, so nothing waits on it.
+
+	| Picture, window                          | Prepare | Read the copy | Write the copy | Copy
+	| :--------------------------------------- | ------: | ------------: | -------------: | ------:
+	| 2560x1440 photo, at 2560x1440            |  1.39 s |         28 ms |         118 ms | 231 KiB
+	| 2560x1440 photo, at 1920x1080            |  0.76 s |         13 ms |          62 ms | 140 KiB
+	| 9433x5306 photo, at 2560x1440            |  2.55 s |         28 ms |         112 ms | 334 KiB
+	| 9433x5306 photo, at 1920x1080            |  1.99 s |         15 ms |          64 ms | 217 KiB
+	| Starry Night from the pack, at 2560x1440 |  1.36 s |         33 ms |         115 ms | 448 KiB
+	| Starry Night from the pack, at 1920x1080 |  0.78 s |         23 ms |          66 ms | 297 KiB
+
+	- The JPEG decode alone was 6 to 24 ms over the same pictures and sizes.
+	- A copy is within 4 levels of the prepared pixels, and under half a level on average. Quality 100 saves little, since the color conversion costs about half a level by itself. At a light blur, where the picture keeps hard edges, it is up to about 10.
+	- Block compression stays queued. Kept BC data would skip the decode too, but a 2560x1440 copy reads back in about 30 ms as JPEG already.
+
 ### Block compression for the wallpaper
 
 - GPUs read block-compressed formats directly. BC1 is half a byte a pixel and BC7 one byte, against four for plain RGBA.
@@ -422,6 +450,8 @@ What a window already gives back while unused is in the [Releasing resources](20
 - "Settings: a Resource use group, with warning marks" (ID 2026100418225506)
 
 - "Block compression for the wallpaper" (ID 2026100418225507)
+
+- "Wallpaper: keep resized copies on disk, oldest pruned first" (ID 2026100514211603)
 
 - "The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends" (ID 2026100312470535)
 

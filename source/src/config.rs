@@ -6893,6 +6893,15 @@ pub(crate) fn may_write(path: &std::path::Path) -> bool {
 		env_path("LOCALAPPDATA").as_deref(),
 		None,
 	));
+	dirs.extend(cache_dir_for(
+		host_layout(),
+		false,
+		env_path("XDG_CACHE_HOME").as_deref(),
+		env_path("XDG_CONFIG_HOME").is_some(),
+		home_dir().as_deref(),
+		env_path("LOCALAPPDATA").as_deref(),
+		None,
+	));
 	let real: Vec<PathBuf> = dirs.iter().flat_map(std::fs::canonicalize).collect();
 	dirs.extend(real);
 	// a link into the box's folder, or a name not made yet
@@ -6941,6 +6950,51 @@ fn data_dir_for(
 		Layout::Windows if !one_tree => local_appdata.map(|dir| dir.join(APP_DIR)).or(config_dir),
 		_ => config_dir,
 	}
+}
+
+/// Where copies that can always be made again go, such as prepared wallpapers.
+/// The platform's own cache folder, which backup tools and cleaners know they
+/// may skip or empty. A `--config` override keeps it beside that config, for
+/// the same reason `data_dir` does, and so does an explicit `XDG_CONFIG_HOME`
+/// unless `XDG_CACHE_HOME` is set too.
+pub fn cache_dir() -> Option<PathBuf> {
+	cache_dir_for(
+		host_layout(),
+		CONFIG_OVERRIDE.get().is_some(),
+		env_path("XDG_CACHE_HOME").as_deref(),
+		env_path("XDG_CONFIG_HOME").is_some(),
+		home_dir().as_deref(),
+		env_path("LOCALAPPDATA").as_deref(),
+		config_dir(),
+	)
+}
+
+// The decision above with its inputs passed in (G15).
+fn cache_dir_for(
+	layout: Layout,
+	overridden: bool,
+	xdg_cache: Option<&std::path::Path>,
+	xdg_config: bool,
+	home: Option<&std::path::Path>,
+	local_appdata: Option<&std::path::Path>,
+	config_dir: Option<PathBuf>,
+) -> Option<PathBuf> {
+	let beside_config = || config_dir.map(|dir| dir.join("cache"));
+	if overridden {
+		return beside_config();
+	}
+	if let Some(dir) = xdg_cache {
+		return Some(dir.join(APP_DIR));
+	}
+	if xdg_config {
+		return beside_config();
+	}
+	match layout {
+		Layout::Windows => local_appdata.map(|dir| dir.join(APP_DIR).join("cache")),
+		Layout::MacOs => home.map(|h| h.join("Library").join("Caches").join(APP_DIR)),
+		Layout::Xdg => home.map(|h| h.join(".cache").join(APP_DIR)),
+	}
+	.or_else(beside_config)
 }
 
 // Every directory a wallpaper folder may sit in, best first. More than one entry
@@ -7897,6 +7951,17 @@ mod tests {
 		if let Some(real) = env_config_path() {
 			assert!(!may_write(&real));
 			assert!(!may_write(&real.with_file_name(".wallpaper-history")));
+		}
+		if let Some(real) = cache_dir_for(
+			host_layout(),
+			false,
+			env_path("XDG_CACHE_HOME").as_deref(),
+			env_path("XDG_CONFIG_HOME").is_some(),
+			home_dir().as_deref(),
+			env_path("LOCALAPPDATA").as_deref(),
+			None,
+		) {
+			assert!(!may_write(&real.join("wallpaper").join("x.wpc")));
 		}
 	}
 
@@ -14413,6 +14478,68 @@ mod tests {
 		assert_eq!(
 			answer(Layout::Xdg, false, Some(&local)),
 			Some(config.clone())
+		);
+	}
+
+	// Kept copies go where each platform keeps a cache, never in the roaming
+	// settings. A `--config` keeps them beside that config, and so does an
+	// explicit XDG_CONFIG_HOME unless XDG_CACHE_HOME says otherwise.
+	// Test ID: EryHHqn
+	#[test]
+	fn each_platform_keeps_its_cache_where_that_platform_keeps_caches() {
+		let config = PathBuf::from("/c/silkterm");
+		let home = PathBuf::from("/home/u");
+		let local = PathBuf::from("C:/Users/u/AppData/Local");
+		let xdg = PathBuf::from("/x/cache");
+		let answer = |layout, overridden, xdg_cache: Option<&std::path::Path>, xdg_config| {
+			cache_dir_for(
+				layout,
+				overridden,
+				xdg_cache,
+				xdg_config,
+				Some(&home),
+				Some(&local),
+				Some(config.clone()),
+			)
+		};
+		let beside = Some(config.join("cache"));
+		assert_eq!(
+			answer(Layout::Windows, false, None, false),
+			Some(local.join(APP_DIR).join("cache"))
+		);
+		assert_eq!(
+			answer(Layout::MacOs, false, None, false),
+			Some(home.join("Library/Caches").join(APP_DIR))
+		);
+		assert_eq!(
+			answer(Layout::Xdg, false, None, false),
+			Some(home.join(".cache").join(APP_DIR))
+		);
+		for layout in [Layout::Windows, Layout::MacOs, Layout::Xdg] {
+			assert_eq!(answer(layout, true, Some(&xdg), true), beside, "{layout:?}");
+			assert_eq!(
+				answer(layout, false, Some(&xdg), true),
+				Some(xdg.join(APP_DIR)),
+				"{layout:?}"
+			);
+			assert_eq!(answer(layout, false, None, true), beside, "{layout:?}");
+		}
+		// a missing base falls back rather than leaving no cache
+		assert_eq!(
+			cache_dir_for(
+				Layout::Windows,
+				false,
+				None,
+				false,
+				None,
+				None,
+				Some(config.clone())
+			),
+			beside
+		);
+		assert_eq!(
+			cache_dir_for(Layout::Xdg, false, None, false, None, None, None),
+			None
 		);
 	}
 

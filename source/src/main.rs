@@ -59,6 +59,7 @@ mod tip;
 mod ui_spec;
 mod visibility;
 mod wallpaper;
+mod wpcache;
 mod xmp;
 use crate::app::App;
 use crate::term::UserEvent;

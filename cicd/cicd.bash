@@ -785,6 +785,17 @@ if [[ -x "${root}/cicd/tests/wakepic/run.bash" ]]; then
 		*) fDie "wallpaper kept through an idle wake test failed ($(fTestId cicd/tests/wakepic/run.bash))" ;;
 	esac
 fi
+## A prepared wallpaper is kept on disk and the next launch reads it back.
+## Exit 3 is a skip: no binary, display or xdotool.
+if [[ -x "${root}/cicd/tests/wpkept/run.bash" ]]; then
+	fEcho_Clean "prepared wallpaper kept on disk ..."
+	keptRc=0; "${root}/cicd/tests/wpkept/run.bash" >/dev/null || keptRc=$?
+	case "${keptRc}" in
+		0) fEcho "OK: prepared wallpaper kept on disk ($(fTestId cicd/tests/wpkept/run.bash))" ;;
+		3) fEcho "WARNING: prepared wallpaper kept on disk skipped" ;;
+		*) fDie "prepared wallpaper kept on disk test failed ($(fTestId cicd/tests/wpkept/run.bash))" ;;
+	esac
+fi
 ## Software rendering on an X server with no shared pixmaps, at launch and
 ## switched on later. Exit 3 is a skip: no binary, sway, Xwayland with DRI3,
 ## render node or tools.
