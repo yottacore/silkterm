@@ -56,6 +56,8 @@
 
 use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
+
 use crate::config;
 use crate::shells::Found;
 
@@ -284,12 +286,12 @@ pub fn refreshed_block(profile: &str, newline: &str) -> Option<String> {
 // decode as UTF-8 used to arrive here as an empty string, and appending to that
 // replaced the whole file. Windows PowerShell 5.1 writes UTF-16 by default, so
 // that is an ordinary profile rather than a broken one.
-fn read_profile(profile: &Path) -> Result<Option<String>, String> {
+fn read_profile(profile: &Path) -> anyhow::Result<Option<String>> {
 	match std::fs::read(profile) {
 		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-		Err(e) => Err(format!("could not read {}: {e}", profile.display())),
+		Err(e) => Err(e).with_context(|| format!("could not read {}", profile.display())),
 		Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| {
-			format!(
+			anyhow::anyhow!(
 				"{} is not UTF-8 - left it alone, add the block by hand (see shell-integration.md)",
 				profile.display()
 			)
@@ -344,11 +346,12 @@ fn backup_once(profile: &Path, existing: &str) -> bool {
 // half-replaced, a linked profile is written through its link, the mode is kept,
 // and no link at a temp name is written through. A read-only profile is somebody
 // saying no, so it is refused rather than replaced.
-fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
+fn write_atomic(path: &Path, text: &str) -> anyhow::Result<()> {
 	if std::fs::metadata(path).is_ok_and(|meta| meta.permissions().readonly()) {
-		return Err("it is read-only".to_string());
+		anyhow::bail!("could not write {}: it is read-only", path.display());
 	}
 	config::write_config_atomic(path, text)
+		.with_context(|| format!("could not write {}", path.display()))
 }
 
 // Profiles we have written to before, one path per line, kept beside the config.
@@ -401,7 +404,7 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 	let existing = match read_profile(profile) {
 		Ok(text) => text.unwrap_or_default(),
 		Err(why) => {
-			eprintln!("{}: {why}", config::APP_NAME);
+			eprintln!("{}: {why:#}", config::APP_NAME);
 			return;
 		}
 	};
@@ -423,11 +426,7 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 					config::APP_NAME,
 					profile.display()
 				),
-				Err(e) => eprintln!(
-					"{}: could not write {}: {e}",
-					config::APP_NAME,
-					profile.display()
-				),
+				Err(e) => eprintln!("{}: {e:#}", config::APP_NAME),
 			}
 		}
 		return;
@@ -457,11 +456,7 @@ fn install_into_with(profile: &Path, record: Option<&Path>) {
 				profile.display()
 			);
 		}
-		Err(e) => eprintln!(
-			"{}: could not write {}: {e}",
-			config::APP_NAME,
-			profile.display()
-		),
+		Err(e) => eprintln!("{}: {e:#}", config::APP_NAME),
 	}
 }
 
@@ -572,6 +567,21 @@ mod tests {
 		assert!(!is_bash("sh"));
 		assert!(!is_bash("zsh"));
 		assert!(!is_bash("wsl.exe"));
+	}
+
+	// A profile that cannot be read is named first, then the reason, which is
+	// the source error kept under it.
+	// Test ID: ErzSLrd
+	#[test]
+	fn an_unreadable_profile_names_the_file_then_why() {
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_unreadprof_{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		// a folder at the profile's name reads as an error everywhere
+		let said = format!("{:#}", super::read_profile(&dir).expect_err("a folder"));
+		let head = format!("could not read {}: ", dir.display());
+		assert!(said.starts_with(&head) && said.len() > head.len(), "{said}");
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	// Windows answers in the console's code page, so a path is only believed as

@@ -72,7 +72,7 @@ pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 					}
 					"ok\n".to_string()
 				}
-				Err(e) => format!("err {e}\n"),
+				Err(e) => format!("err {e:#}\n"),
 			};
 			let mut stream = reader.into_inner();
 			let _ = stream.write_all(reply.as_bytes());
@@ -145,7 +145,7 @@ pub fn serve(_proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 // One command line -> the event the app applies. Tab separates verb from value
 // so paths with spaces survive.
 #[cfg_attr(not(unix), allow(dead_code))]
-fn parse(line: &str) -> Result<UserEvent, String> {
+fn parse(line: &str) -> anyhow::Result<UserEvent> {
 	let (verb, value) = match line.split_once('\t') {
 		Some((verb, rest)) => (verb, Some(rest)),
 		None => (line, None),
@@ -153,39 +153,37 @@ fn parse(line: &str) -> Result<UserEvent, String> {
 	match verb {
 		"reload" => Ok(UserEvent::ReloadSettings),
 		"wallpaper" => Ok(UserEvent::SetWallpaper(value.map(PathBuf::from))),
-		_ => Err(format!("unknown command: {verb}")),
+		_ => Err(anyhow::anyhow!("unknown command: {verb}")),
 	}
 }
 
 /// Client side: deliver one command to the window this shell runs inside.
 #[cfg(unix)]
-pub fn send(cmd: &str) -> Result<(), String> {
+pub fn send(cmd: &str) -> anyhow::Result<()> {
+	use anyhow::Context as _;
 	use std::io::{Read, Write};
 
-	let sock =
-		std::env::var(ENV_SOCK).map_err(|_| "not inside a running SilkTerm window".to_string())?;
+	let sock = std::env::var(ENV_SOCK)
+		.map_err(|_| anyhow::anyhow!("not inside a running SilkTerm window"))?;
 	let mut stream =
-		std::os::unix::net::UnixStream::connect(&sock).map_err(|e| format!("{sock}: {e}"))?;
+		std::os::unix::net::UnixStream::connect(&sock).with_context(|| sock.clone())?;
 	stream
 		.write_all(cmd.as_bytes())
-		.and_then(|()| stream.write_all(b"\n"))
-		.map_err(|e| e.to_string())?;
+		.and_then(|()| stream.write_all(b"\n"))?;
 	let _ = stream.shutdown(std::net::Shutdown::Write);
 	let mut reply = String::new();
-	stream
-		.read_to_string(&mut reply)
-		.map_err(|e| e.to_string())?;
+	stream.read_to_string(&mut reply)?;
 	let reply = reply.trim();
 	match reply.strip_prefix("err ") {
-		Some(e) => Err(e.to_string()),
+		Some(e) => Err(anyhow::anyhow!("{e}")),
 		None if reply == "ok" => Ok(()),
-		None => Err(format!("unexpected reply: {reply}")),
+		None => Err(anyhow::anyhow!("unexpected reply: {reply}")),
 	}
 }
 
 #[cfg(not(unix))]
-pub fn send(_cmd: &str) -> Result<(), String> {
-	Err("control commands aren't supported on this platform yet".into())
+pub fn send(_cmd: &str) -> anyhow::Result<()> {
+	anyhow::bail!("control commands aren't supported on this platform yet")
 }
 
 #[cfg(test)]

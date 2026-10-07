@@ -3329,7 +3329,7 @@ impl SettingsDialog {
 	fn assoc_set(&mut self, assoc: Assoc, on: bool) {
 		let done = if on {
 			std::env::current_exe()
-				.map_err(|e| e.to_string())
+				.map_err(anyhow::Error::from)
 				.and_then(|exe| {
 					let exe = crate::fileassoc::exe_to_register(&exe, &|p| p.exists());
 					crate::fileassoc::register(assoc, &exe, &mut *self.assoc)
@@ -3340,7 +3340,10 @@ impl SettingsDialog {
 		crate::fileassoc::changed();
 		self.assoc_refresh();
 		let say = match done {
-			Err(why) => Some(("Windows did not take the change".to_string(), why)),
+			Err(why) => Some((
+				"Windows did not take the change".to_string(),
+				format!("{why:#}"),
+			)),
 			Ok(()) if on => {
 				let picked = crate::fileassoc::overridden(assoc, &*self.assoc);
 				(!picked.is_empty()).then(|| {
@@ -8890,16 +8893,16 @@ mod tests {
 				key: &str,
 				_: &str,
 				_: &crate::fileassoc::Value,
-			) -> Result<(), String> {
-				Err(format!("cannot write {key}: Access is denied."))
+			) -> anyhow::Result<()> {
+				Err(anyhow::anyhow!("Access is denied.").context(format!("cannot write {key}")))
 			}
-			fn delete(&mut self, _: &str, _: &str) -> Result<(), String> {
+			fn delete(&mut self, _: &str, _: &str) -> anyhow::Result<()> {
 				Ok(())
 			}
 			fn exists(&self, _: &str) -> bool {
 				false
 			}
-			fn prune(&mut self, _: &str) -> Result<(), String> {
+			fn prune(&mut self, _: &str) -> anyhow::Result<()> {
 				Ok(())
 			}
 		}

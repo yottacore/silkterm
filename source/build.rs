@@ -131,7 +131,8 @@ fn unix_now() -> u64 {
 
 // Compile the .rc to a COFF object and hand it to the linker. Non-fatal by
 // contract (see the caller): if nothing on the box can compile a resource for
-// this architecture, warn and let the exe build iconless.
+// this architecture, warn and let the exe build iconless. The error stays a
+// String, not anyhow: it only ever becomes that one warning line.
 fn windres_compile(out: &str, rc_path: &Path) -> Result<(), String> {
 	let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
 	let obj = Path::new(out).join("silkterm-res.o");

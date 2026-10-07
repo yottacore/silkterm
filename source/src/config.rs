@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+use anyhow::Context as _;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -1551,7 +1552,7 @@ fn fence_run(line: &str) -> Option<(char, usize)> {
 /// converted lossily, which could name a different file. A write that moves the
 /// file to a newer SHCL format, or replaces one that is not UTF-8, keeps the old
 /// one first (`keep_old_format`).
-pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> Result<(), String> {
+pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> anyhow::Result<()> {
 	write_config_keeping(path, text).map(|_| ())
 }
 
@@ -1559,7 +1560,7 @@ pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> Result<
 // Settings the conversion could not keep are said here, so a save that converts
 // a file a busy launch left alone says it as the launch would. A clean
 // conversion says nothing.
-fn write_config_keeping(path: &std::path::Path, text: &str) -> Result<Option<PathBuf>, String> {
+fn write_config_keeping(path: &std::path::Path, text: &str) -> anyhow::Result<Option<PathBuf>> {
 	let kept = publish_keeping(path, text, shcl::write_file_atomic)?;
 	note_seen(path, text);
 	for line in restated_launch_messages(path, text) {
@@ -1582,28 +1583,32 @@ fn lost_converting(path: &std::path::Path, copy: &std::path::Path) -> Option<Con
 	conversion_losses(&old, path, Some(copy.to_path_buf()))
 }
 
+// Answers the message as the user would see it, which is what the tests read.
 #[cfg(test)]
 fn write_config_atomic_with(
 	path: &std::path::Path,
 	text: &str,
 	publish: fn(&str, &str) -> Result<(), String>,
 ) -> Result<(), String> {
-	publish_keeping(path, text, publish).map(|_| ())
+	publish_keeping(path, text, publish)
+		.map(|_| ())
+		.map_err(|e| format!("{e:#}"))
 }
 
 // Windows' replace can fail after the old file is gone (1176, 1177), and shcl
 // then deletes its temp copy too, so the text is written at the empty name
-// rather than lost. The publish is a parameter so a test can fail it that way.
+// rather than lost. The publish is a parameter so a test can fail it that way,
+// and has shcl's own `String` error.
 fn publish_keeping(
 	path: &std::path::Path,
 	text: &str,
 	publish: fn(&str, &str) -> Result<(), String>,
-) -> Result<Option<PathBuf>, String> {
+) -> anyhow::Result<Option<PathBuf>> {
 	if !may_write(path) {
 		return Ok(None);
 	}
 	let Some(file) = path.to_str() else {
-		return Err(format!("{} is not a UTF-8 path", path.display()));
+		anyhow::bail!("{} is not a UTF-8 path", path.display());
 	};
 	// Resolved before the write: once the replace has taken a linked file, the
 	// link dangles and no longer resolves.
@@ -1612,7 +1617,9 @@ fn publish_keeping(
 		Some((real, perms))
 	});
 	let kept = keep_old_format(path, text)?;
-	publish(file, text).or_else(|e| restore_config(before, text, e))?;
+	publish(file, text)
+		.map_err(anyhow::Error::msg)
+		.or_else(|e| restore_config(before, text, e))?;
 	let Some((backup, old)) = kept else {
 		return Ok(None);
 	};
@@ -1655,7 +1662,7 @@ fn backup_name(stem: &str, stamp: &str, n: u32, attempt: u32) -> String {
 // Every older version is kept: a backup already there is never replaced. The
 // write is refused when the copy cannot be made. Answers where the copy is,
 // and the format the file had.
-fn keep_old_format(path: &std::path::Path, text: &str) -> Result<Option<(PathBuf, u32)>, String> {
+fn keep_old_format(path: &std::path::Path, text: &str) -> anyhow::Result<Option<(PathBuf, u32)>> {
 	let (stamp, _) = local_stamp();
 	keep_old_format_at(path, text, &stamp)
 }
@@ -1664,7 +1671,7 @@ fn keep_old_format_at(
 	path: &std::path::Path,
 	text: &str,
 	stamp: &str,
-) -> Result<Option<(PathBuf, u32)>, String> {
+) -> anyhow::Result<Option<(PathBuf, u32)>> {
 	let Some(new) = shcl::format_version(text) else {
 		return Ok(None);
 	};
@@ -1674,7 +1681,9 @@ fn keep_old_format_at(
 	let body = match std::fs::read(path) {
 		Ok(body) => body,
 		Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-		Err(e) => return Err(format!("could not read {} to keep it: {e}", path.display())),
+		Err(e) => {
+			return Err(e).with_context(|| format!("could not read {} to keep it", path.display()));
+		}
 	};
 	let old = format_of(&String::from_utf8_lossy(&body));
 	let decodes = std::str::from_utf8(&body).is_ok();
@@ -1692,7 +1701,7 @@ fn keep_old_format_at(
 		perms.as_ref(),
 	)
 	.map(|copy| Some((copy, old)))
-	.map_err(|e| format!("could not keep the old file beside {}: {e}", path.display()))
+	.with_context(|| format!("could not keep the old file beside {}", path.display()))
 }
 
 // Writes `body` at the first of `names(1)`, `names(2)` and on that nothing has,
@@ -1845,8 +1854,8 @@ pub(crate) fn local_stamp() -> (String, u32) {
 fn restore_config(
 	before: Option<(PathBuf, std::fs::Permissions)>,
 	text: &str,
-	err: String,
-) -> Result<(), String> {
+	err: anyhow::Error,
+) -> anyhow::Result<()> {
 	use std::io::Write;
 	let Some((real, perms)) = before else {
 		return Err(err);
@@ -1882,7 +1891,7 @@ fn restore_config(
 		match written.and_then(|()| file.sync_all()) {
 			Ok(()) => {
 				eprintln!(
-					"{APP_NAME}: {err}; the file was gone after that, so {} was written directly",
+					"{APP_NAME}: {err:#}; the file was gone after that, so {} was written directly",
 					real.display()
 				);
 				return Ok(());
@@ -1895,8 +1904,8 @@ fn restore_config(
 			}
 		}
 	}
-	Err(format!(
-		"{err}; the file it replaced is gone, and writing {} directly failed: {last}",
+	Err(anyhow::anyhow!(
+		"{err:#}; the file it replaced is gone, and writing {} directly failed: {last}",
 		real.display()
 	))
 }
@@ -2041,16 +2050,18 @@ fn write_doc(path: &std::path::Path, doc: &shcl::Document) -> bool {
 		});
 	}
 	let written = if lost > 0 {
-		Err(shcl::SaveError::Refused {
+		Err(anyhow::Error::new(shcl::SaveError::Refused {
 			path: path.display().to_string(),
 			lost,
-		}
-		.to_string())
+		}))
 	} else {
 		write_config_atomic(path, &saved_text(doc))
 	};
 	if let Err(e) = written {
-		eprintln!("{APP_NAME}: could not save config {}: {e}", path.display());
+		eprintln!(
+			"{APP_NAME}: could not save config {}: {e:#}",
+			path.display()
+		);
 		return false;
 	}
 	true
@@ -2788,7 +2799,7 @@ fn load() -> Settings {
 		}
 		if let Err(e) = write_config_atomic(&path, default_config()) {
 			eprintln!(
-				"{APP_NAME}: could not create config {}: {e}",
+				"{APP_NAME}: could not create config {}: {e:#}",
 				path.display()
 			);
 		}
@@ -4625,7 +4636,7 @@ fn repair_wallpaper_heading(path: &std::path::Path) {
 	}
 	if let Err(e) = write_config_atomic(path, &out) {
 		eprintln!(
-			"{APP_NAME}: could not repair config {}: {e}",
+			"{APP_NAME}: could not repair config {}: {e:#}",
 			path.display()
 		);
 		return;
@@ -4659,7 +4670,7 @@ fn convert_legacy_config(path: &std::path::Path) {
 // The writer is a parameter so a test can fail it the ways the real one can.
 fn convert_legacy_config_with(
 	path: &std::path::Path,
-	write: fn(&std::path::Path, &str) -> Result<(), String>,
+	write: fn(&std::path::Path, &str) -> anyhow::Result<()>,
 ) {
 	let Ok(text) = std::fs::read_to_string(path) else {
 		return;
@@ -4682,12 +4693,12 @@ fn convert_legacy_config_with(
 		if std::fs::read(path).is_ok_and(|now| now == text.as_bytes()) {
 			let _ = std::fs::remove_file(&backup);
 			eprintln!(
-				"{APP_NAME}: could not convert config {}: {e}",
+				"{APP_NAME}: could not convert config {}: {e:#}",
 				path.display()
 			);
 		} else {
 			eprintln!(
-				"{APP_NAME}: could not convert config {}: {e}; the old file is kept at {}",
+				"{APP_NAME}: could not convert config {}: {e:#}; the old file is kept at {}",
 				path.display(),
 				backup.display()
 			);
@@ -4888,7 +4899,7 @@ fn migrate_config(path: &std::path::Path) {
 		}
 		if let Err(e) = write_config_atomic(path, &out) {
 			eprintln!(
-				"{APP_NAME}: could not migrate config {}: {e}",
+				"{APP_NAME}: could not migrate config {}: {e:#}",
 				path.display()
 			);
 		}
@@ -5257,7 +5268,7 @@ pub fn revert_keys(keys: &[&str]) {
 	};
 	if let Err(e) = write_config_atomic(&path, &out) {
 		eprintln!(
-			"{APP_NAME}: could not update config {}: {e}",
+			"{APP_NAME}: could not update config {}: {e:#}",
 			path.display()
 		);
 		return;
@@ -5285,7 +5296,7 @@ pub fn disable_keys(keys: &[&str]) {
 	};
 	if let Err(e) = write_config_atomic(&path, &out) {
 		eprintln!(
-			"{APP_NAME}: could not update config {}: {e}",
+			"{APP_NAME}: could not update config {}: {e:#}",
 			path.display()
 		);
 	}
@@ -5450,7 +5461,7 @@ fn backfill_config(path: &std::path::Path) {
 	}
 	if let Err(e) = write_config_atomic(path, &out) {
 		eprintln!(
-			"{APP_NAME}: could not update config {}: {e}",
+			"{APP_NAME}: could not update config {}: {e:#}",
 			path.display()
 		);
 	}
@@ -5458,7 +5469,7 @@ fn backfill_config(path: &std::path::Path) {
 
 // The backfill as text: None where the file lacks nothing. Err names a setting
 // whose value would stop loading, in which case nothing may be written.
-fn backfilled_text(text: &str) -> Result<Option<String>, String> {
+fn backfilled_text(text: &str) -> Result<Option<String>, Buried> {
 	let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
 	// where each line came from, None for one added here
 	let mut origin: Vec<Option<usize>> = (0..lines.len()).map(Some).collect();
@@ -5614,7 +5625,7 @@ fn settle(text: &str, now: &mut Backfill, saved: Backfill, paths: &[&String]) ->
 // it. Such lines are moved out to the depth their block gives, one at a time
 // until the file reads as it did, which a save would do anyway. Err names what
 // still reads differently after that.
-fn unbury(text: &str, lines: &mut [String], origin: &[Option<usize>]) -> Result<(), String> {
+fn unbury(text: &str, lines: &mut [String], origin: &[Option<usize>]) -> Result<(), Buried> {
 	let before = shcl::Document::parse(text);
 	let source: Vec<&str> = text.lines().collect();
 	let walked = walk_settings(text);
@@ -5708,7 +5719,7 @@ fn unbury(text: &str, lines: &mut [String], origin: &[Option<usize>]) -> Result<
 					.iter()
 					.find(|(index, _, proper)| misplaced(*index, proper))
 			});
-		let what = || changed.map_or("a line".to_string(), |path| format!("`{path}`"));
+		let what = || changed.map_or(Buried::Line, |path| Buried::Setting(path.clone()));
 		let Some((index, _, proper)) = pick else {
 			return Err(what());
 		};
@@ -5720,7 +5731,28 @@ fn unbury(text: &str, lines: &mut [String], origin: &[Option<usize>]) -> Result<
 		}
 		lines[now].clone_from(proper);
 	}
-	Err("a setting".to_string())
+	Err(Buried::Unnamed)
+}
+
+// What a backfill would stop reading, and so why it wrote nothing. A name for
+// the launch message, not a message itself.
+#[derive(Debug, PartialEq, Eq)]
+enum Buried {
+	Setting(String),
+	// a line shcl could read before and cannot now
+	Line,
+	// still not as it read after every line was moved
+	Unnamed,
+}
+
+impl std::fmt::Display for Buried {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Buried::Setting(path) => write!(f, "`{path}`"),
+			Buried::Line => f.write_str("a line"),
+			Buried::Unnamed => f.write_str("a setting"),
+		}
+	}
 }
 
 /// What became of a rating's lines.
@@ -5788,7 +5820,7 @@ pub fn keep_rating(lines: &RatingLines) -> Kept {
 	match write_config_atomic(&path, &out) {
 		Ok(()) => Kept::Written,
 		// the reason already names the file
-		Err(e) => Kept::Unwritable(format!("could not write {e}")),
+		Err(e) => Kept::Unwritable(format!("could not write {e:#}")),
 	}
 }
 
@@ -6484,7 +6516,7 @@ fn convert_shcl2_config(path: &std::path::Path) {
 	}
 	if let Err(e) = write_config_atomic(path, &out) {
 		eprintln!(
-			"{APP_NAME}: could not update config {}: {e}",
+			"{APP_NAME}: could not update config {}: {e:#}",
 			path.display()
 		);
 	}
@@ -6606,7 +6638,7 @@ fn refresh_shcl_banner(path: &std::path::Path) {
 	}
 	if let Err(e) = write_config_atomic(path, &out) {
 		eprintln!(
-			"{APP_NAME}: could not update config {}: {e}",
+			"{APP_NAME}: could not update config {}: {e:#}",
 			path.display()
 		);
 	}
@@ -10179,6 +10211,20 @@ mod tests {
 		assert_ne!(text, default_config());
 		assert_eq!(next_launch_text(&text), text);
 		assert_eq!(backfilled_text(&text), Ok(None));
+	}
+
+	// A backfill that would stop a setting reading says which at launch, in the
+	// same words it always did.
+	// Test ID: ErzSLtc
+	#[test]
+	fn a_backfill_that_would_bury_a_setting_names_it() {
+		let named = |buried: Buried| buried.to_string();
+		assert_eq!(
+			named(Buried::Setting("window.rows".into())),
+			"`window.rows`"
+		);
+		assert_eq!(named(Buried::Line), "a line");
+		assert_eq!(named(Buried::Unnamed), "a setting");
 	}
 
 	// Test ID: EpZCS12
@@ -13815,15 +13861,15 @@ mod tests {
 	// Test ID: EpZszNA
 	#[test]
 	fn a_failed_conversion_keeps_the_backup_unless_the_file_is_whole() {
-		type Write = fn(&std::path::Path, &str) -> Result<(), String>;
-		let refuse: Write = |_, _| Err("refused".to_string());
+		type Write = fn(&std::path::Path, &str) -> anyhow::Result<()>;
+		let refuse: Write = |_, _| anyhow::bail!("refused");
 		let remove: Write = |path, _| {
-			std::fs::remove_file(path).map_err(|e| e.to_string())?;
-			Err("replaced file gone".to_string())
+			std::fs::remove_file(path)?;
+			anyhow::bail!("replaced file gone")
 		};
 		let cut: Write = |path, _| {
-			std::fs::write(path, "font_").map_err(|e| e.to_string())?;
-			Err("cut short".to_string())
+			std::fs::write(path, "font_")?;
+			anyhow::bail!("cut short")
 		};
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_convkeep_{}", std::process::id()));

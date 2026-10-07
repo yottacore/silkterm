@@ -155,10 +155,10 @@ pub struct Chord {
 impl Chord {
 	/// Read a chord as the config file writes it: the keys held, then the key
 	/// pressed, joined by "+", in any order and any case. "Ctrl+Shift+T".
-	pub fn parse(text: &str) -> Result<Chord, String> {
+	pub fn parse(text: &str) -> anyhow::Result<Chord> {
 		let parts: Vec<&str> = text.split('+').collect();
 		let Some((last, held)) = parts.split_last() else {
-			return Err(format!("\"{text}\" names no key"));
+			anyhow::bail!("\"{text}\" names no key");
 		};
 		let mut chord = Chord {
 			key: KeyName::Plus,
@@ -173,23 +173,21 @@ impl Chord {
 				"alt" | "option" => chord.alt = true,
 				"shift" => chord.shift = true,
 				"command" | "cmd" | "super" | "win" => chord.command = true,
-				"" => return Err(format!("\"{text}\": write the + key as Plus")),
+				"" => anyhow::bail!("\"{text}\": write the + key as Plus"),
 				_ => {
-					return Err(format!(
-						"\"{text}\": {part} is not Ctrl, Alt, Shift or Command"
-					));
+					anyhow::bail!("\"{text}\": {part} is not Ctrl, Alt, Shift or Command");
 				}
 			}
 		}
 		if last.is_empty() {
-			return Err(format!("\"{text}\": write the + key as Plus"));
+			anyhow::bail!("\"{text}\": write the + key as Plus");
 		}
-		chord.key =
-			KeyName::parse(last).ok_or_else(|| format!("\"{text}\": {last} is not a key name"))?;
+		chord.key = KeyName::parse(last)
+			.ok_or_else(|| anyhow::anyhow!("\"{text}\": {last} is not a key name"))?;
 		if !(chord.ctrl || chord.alt || chord.command || chord.key.free_alone()) {
-			return Err(format!(
+			anyhow::bail!(
 				"\"{text}\" needs Ctrl, Alt or Command held, or the key would stop reaching the shell"
-			));
+			);
 		}
 		Ok(chord)
 	}
@@ -330,7 +328,7 @@ pub fn press(key: &Key, mods: ModifiersState, mac: bool) -> Press {
 
 /// Read a hotkey's value from the config file: one or more chords separated by
 /// spaces, or "none" for no chord at all.
-pub fn parse_value(text: &str) -> Result<Vec<Chord>, String> {
+pub fn parse_value(text: &str) -> anyhow::Result<Vec<Chord>> {
 	let text = text.trim();
 	if text.eq_ignore_ascii_case("none") {
 		return Ok(Vec::new());
@@ -626,7 +624,7 @@ pub fn complaints(
 		}
 		match parse_value(&text) {
 			Ok(chords) => set.push((hotkey, chords)),
-			Err(why) => out.push(format!("`{path}`{} is not used - {why}", cite(&lines))),
+			Err(why) => out.push(format!("`{path}`{} is not used - {why:#}", cite(&lines))),
 		}
 	}
 	out.extend(Bindings::with(mac, &set).1);
@@ -692,10 +690,12 @@ mod tests {
 		assert_eq!(chord("F11").spoken(false), "F11");
 		assert_eq!(chord("Menu").key, KeyName::Named(NamedKey::ContextMenu));
 		assert_eq!(chord("Ctrl+,").spoken(false), "Ctrl+,");
-		assert_eq!(parse_value("NONE"), Ok(Vec::new()));
+		assert_eq!(parse_value("NONE").ok(), Some(Vec::new()));
 		assert_eq!(
-			parse_value("  Ctrl+Shift+W   Ctrl+F4 ").map(|c| value_text(&c, false)),
-			Ok("Ctrl+Shift+W Ctrl+F4".into())
+			parse_value("  Ctrl+Shift+W   Ctrl+F4 ")
+				.ok()
+				.map(|c| value_text(&c, false)),
+			Some("Ctrl+Shift+W Ctrl+F4".into())
 		);
 	}
 
@@ -714,7 +714,7 @@ mod tests {
 			("Left", "needs Ctrl, Alt or Command"),
 			("Shift+Enter", "needs Ctrl, Alt or Command"),
 		] {
-			let got = Chord::parse(text).expect_err(text);
+			let got = Chord::parse(text).expect_err(text).to_string();
 			assert!(got.contains(says), "{text}: {got}");
 		}
 		assert!(parse_value("Ctrl+Shift+W Ctrl+Bogus").is_err());
@@ -879,7 +879,11 @@ mod tests {
 				panic!("{spoken} was not read as a chord");
 			};
 			assert_eq!(chord.spoken(mac), spoken);
-			assert_eq!(Chord::parse(spoken), Ok(chord), "{spoken} reads back");
+			assert_eq!(
+				Chord::parse(spoken).ok(),
+				Some(chord),
+				"{spoken} reads back"
+			);
 			let (bound, _) = Bindings::with(mac, &[(Hotkey::Quit, vec![chord])]);
 			assert_eq!(bound.hotkey(&key, mods), Some(Hotkey::Quit), "{spoken}");
 		}

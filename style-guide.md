@@ -69,6 +69,8 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 - No `panic!`, `unwrap()` or `expect()` outside tests, except where a case can't happen. Then say why in a short comment. Clippy refuses `unwrap()` and `expect()` there.
 
 - Prefer `thiserror` for library-style error types and `anyhow` for application-level error handling.
+	- SilkTerm is an application, so a function that can fail returns `anyhow::Result`, with `.context()` naming the file or step. Print one with `{e:#}`, or the reason under the context is lost.
+	- A small enum takes its place where the error is a name rather than a message, as `Buried` in config.rs is. build.rs keeps `String` errors, since each one only becomes a cargo warning.
 
 ### Ownership and borrowing
 
