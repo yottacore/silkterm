@@ -441,15 +441,6 @@ fn slider_of(settings: &Settings, key: Key) -> f32 {
 		keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => 0.0,
 	}
 }
-// Why "Always use software rendering" is grayed, where it is.
-const fn software_tip(possible: bool) -> Option<&'static str> {
-	if possible {
-		None
-	} else {
-		Some("macOS has no software renderer to draw with.")
-	}
-}
-
 // Why "Minutes when hidden" is grayed on a desktop that never says so.
 const fn hidden_wait_tip(sees_hidden: bool) -> Option<&'static str> {
 	if sees_hidden {
@@ -3015,13 +3006,11 @@ impl SettingsDialog {
 	// Flyover text for a control the environment disables rather than another
 	// setting - explains why it is inert. The system-font toggles, only when the
 	// OS reports no such setting to follow: Windows has a system font size but
-	// no monospace family, a bare desktop may have neither. Software rendering
-	// where the platform has no software renderer, and the hidden wait where
-	// the desktop never says a window is hidden.
+	// no monospace family, a bare desktop may have neither. And the hidden wait
+	// where the desktop never says a window is hidden.
 	fn disabled_tip(&self, key: Key) -> Option<&'static str> {
 		let os = &self.os_font;
 		match key {
-			Key::SoftwareRendering => software_tip(crate::gfx::SOFTWARE_POSSIBLE),
 			Key::IdleHiddenMin => hidden_wait_tip(self.sees_hidden),
 			Key::SystemFont if os.family.is_none() => {
 				Some("The desktop reports no monospace font to follow.")
@@ -7146,6 +7135,8 @@ pub fn wallpaper_changed(old: &Settings, new: &Settings) -> bool {
 		|| old.wallpaper_contrast_mask_size != new.wallpaper_contrast_mask_size
 		|| old.wallpaper_contrast_mask_strength != new.wallpaper_contrast_mask_strength
 		|| old.wallpaper_contrast_mask_auto != new.wallpaper_contrast_mask_auto
+		// a profile change can move how small a blurred picture is held
+		|| crate::wallpaper::per_sigma(old) != crate::wallpaper::per_sigma(new)
 }
 
 #[cfg(test)]
@@ -9594,15 +9585,49 @@ mod tests {
 		assert!(d.take_reverted().contains(&"cursor.scrim"));
 	}
 
-	// Software rendering is grayed, with its reason, only where the platform
-	// has no software renderer. Elsewhere it is an ordinary switch on the
-	// Window tab that a click flips.
-	// Test ID: ErnMaGS
+	// // Software rendering is grayed, with its reason, only where the platform
+	// // has no software renderer. Elsewhere it is an ordinary switch on the
+	// // Window tab that a click flips.
+	// // Test ID: ErnMaGS
+	// #[test]
+	// fn software_rendering_is_grayed_only_without_a_software_renderer() {
+	// 	use super::Key;
+	// 	assert_eq!(super::software_tip(true), None);
+	// 	assert!(super::software_tip(false).is_some_and(|tip| tip.contains("macOS")));
+	// 	let mut d = mk_dialog(2000.0);
+	// 	let i = d
+	// 		.specs
+	// 		.iter()
+	// 		.position(|s| matches!(s.key, Key::SoftwareRendering))
+	// 		.unwrap();
+	// 	assert_eq!(
+	// 		d.specs[i].tab,
+	// 		d.specs
+	// 			.iter()
+	// 			.find(|s| matches!(s.key, Key::IdleRelease))
+	// 			.unwrap()
+	// 			.tab
+	// 	);
+	// 	assert!(!d.defaults.software_rendering, "default off");
+	// 	d.tab = d.specs[i].tab;
+	// 	assert_eq!(
+	// 		d.disabled(Key::SoftwareRendering),
+	// 		!crate::gfx::SOFTWARE_POSSIBLE
+	// 	);
+	// 	if crate::gfx::SOFTWARE_POSSIBLE {
+	// 		let bx = d.checkbox(i);
+	// 		let mut measure = |s: &str| s.len() as f32;
+	// 		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
+	// 		assert!(d.edited.software_rendering);
+	// 	}
+	// }
+
+	// Software rendering is an ordinary switch on the Window tab that a click
+	// flips, never grayed. The macOS build has no row for it at all.
+	// Test ID: ErycRwI
 	#[test]
-	fn software_rendering_is_grayed_only_without_a_software_renderer() {
+	fn software_rendering_is_a_plain_switch_beside_the_idle_rows() {
 		use super::Key;
-		assert_eq!(super::software_tip(true), None);
-		assert!(super::software_tip(false).is_some_and(|tip| tip.contains("macOS")));
 		let mut d = mk_dialog(2000.0);
 		let i = d
 			.specs
@@ -9617,18 +9642,14 @@ mod tests {
 				.unwrap()
 				.tab
 		);
+		assert!(d.specs[i].not_macos);
 		assert!(!d.defaults.software_rendering, "default off");
 		d.tab = d.specs[i].tab;
-		assert_eq!(
-			d.disabled(Key::SoftwareRendering),
-			!crate::gfx::SOFTWARE_POSSIBLE
-		);
-		if crate::gfx::SOFTWARE_POSSIBLE {
-			let bx = d.checkbox(i);
-			let mut measure = |s: &str| s.len() as f32;
-			d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
-			assert!(d.edited.software_rendering);
-		}
+		assert!(!d.disabled(Key::SoftwareRendering));
+		let bx = d.checkbox(i);
+		let mut measure = |s: &str| s.len() as f32;
+		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
+		assert!(d.edited.software_rendering);
 	}
 
 	// The "use system font" face toggle is inert wherever the OS reports no
@@ -12183,6 +12204,7 @@ mod tests {
 			beside: false,
 			revert_help: "",
 			windows: false,
+			not_macos: false,
 			warning: "",
 			windows_warning: "",
 		};

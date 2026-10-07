@@ -21,6 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use winit::event_loop::EventLoopProxy;
 
 use crate::config::{self, Fit, Settings};
+use crate::profile::Profile;
 use crate::term::UserEvent;
 use crate::wpcache;
 
@@ -130,6 +131,9 @@ pub struct Prepared {
 	/// The size asked for. A kept copy a little off it stands in for it, so
 	/// `rgba` may be a few pixels bigger or smaller.
 	pub held: (u32, u32),
+	/// `rgba` has a one pixel ring of what lies past the picture's edge
+	/// (`Sizing::bordered`), which the shader samples into but never shows.
+	pub border: bool,
 }
 
 /// What a scan found. Absent when the request didn't scan, or when the folder
@@ -162,16 +166,20 @@ impl Prepared {
 	/// stretched, smoothed by the shader. Everything but the pixels is kept, so
 	/// it lands where the real one will.
 	pub fn standin(&self) -> Prepared {
+		let ring = u32::from(self.border);
 		let (w, h) = self.rgba.dimensions();
+		let (w, h) = (w.saturating_sub(2 * ring), h.saturating_sub(2 * ring));
 		let small = fit_within(w, h, STANDIN_EDGE).unwrap_or((w, h));
+		let inner = image::imageops::crop_imm(&self.rgba, ring, ring, w, h);
 		Prepared {
-			rgba: box_shrink(&self.rgba, small),
+			rgba: box_shrink(&*inner, small),
 			sizing: self.sizing,
 			opacity: self.opacity,
 			fit: self.fit,
 			anchor: self.anchor,
 			summary: self.summary,
 			held: self.held,
+			border: false,
 		}
 	}
 }
@@ -179,7 +187,10 @@ impl Prepared {
 // Each small pixel the plain average of the block it covers, in linear light,
 // the way the sampler filters an sRGB texture. One read per source pixel, and
 // no float copy of the picture.
-fn box_shrink(src: &image::RgbaImage, (w, h): (u32, u32)) -> image::RgbaImage {
+fn box_shrink(
+	src: &impl image::GenericImageView<Pixel = image::Rgba<u8>>,
+	(w, h): (u32, u32),
+) -> image::RgbaImage {
 	let (fw, fh) = src.dimensions();
 	let span = |i: u32, to: u32, from: u32| {
 		let start = (u64::from(i) * u64::from(from) / u64::from(to)) as u32;
@@ -289,6 +300,7 @@ fn run(request: &Request) -> Loaded {
 			let hold = Hold {
 				window: request.window,
 				summary: request.summary,
+				per_sigma: per_sigma(settings),
 			};
 			prepare_keeping(
 				settings,
@@ -385,15 +397,42 @@ pub struct Sizing {
 	/// The image after the `MAX_EDGE` cut. The blur's sigma is in these pixels, and
 	/// the shader takes the picture's proportions from it.
 	pub full: (u32, u32),
+	/// The most a blurred picture is worth holding: where its sigma comes to
+	/// `per_sigma` held pixels. `full` for a light blur or none.
+	pub most: (u32, u32),
 }
 
 impl Sizing {
+	/// `blur` is the sigma in pixels of `full`, after the image's own tag.
+	pub fn new(full: (u32, u32), blur: f32, per_sigma: f32) -> Sizing {
+		let (fw, fh) = full;
+		let most = if blur > per_sigma && per_sigma > 0.0 {
+			let scale = f64::from(per_sigma) / f64::from(blur);
+			(
+				((f64::from(fw) * scale).round() as u32).clamp(1, fw.max(1)),
+				((f64::from(fh) * scale).round() as u32).clamp(1, fh.max(1)),
+			)
+		} else {
+			full
+		};
+		Sizing { full, most }
+	}
+
 	/// The size held for a window: what the fit draws the picture at, so the GPU
-	/// never keeps pixels it only scales away. Never bigger than `full`. Stretch
-	/// takes the larger of the two axis scales, the same as zoom, so the picture
-	/// keeps its proportions and the blur stays round, as it was when the whole
-	/// image was held.
+	/// never keeps pixels it only scales away. Never bigger than `full`, nor than
+	/// `most`. Stretch takes the larger of the two axis scales, the same as
+	/// zoom, so the picture keeps its proportions and the blur stays round, as it
+	/// was when the whole image was held.
 	pub fn held(self, window: (u32, u32)) -> (u32, u32) {
+		let by_window = self.held_for_window(window);
+		let area = |(w, h): (u32, u32)| u64::from(w) * u64::from(h);
+		if area(self.most) < area(by_window) {
+			return self.most;
+		}
+		by_window
+	}
+
+	fn held_for_window(self, window: (u32, u32)) -> (u32, u32) {
 		let ((fw, fh), (ww, wh)) = (self.full, window);
 		if fw == 0 || fh == 0 || ww == 0 || wh == 0 {
 			return self.full;
@@ -407,6 +446,37 @@ impl Sizing {
 			((f64::from(fh) * scale).round() as u32).clamp(1, fh),
 		)
 	}
+
+	/// Whether a picture held at `held` keeps a one texel border of what lies
+	/// past its edge. Only one the blur shrank does: a held pixel there spans
+	/// several on screen, and the sampler's clamp would flatten the outer half
+	/// of it.
+	pub fn bordered(self, held: (u32, u32)) -> bool {
+		held == self.most && self.most != self.full
+	}
+}
+
+/// Held pixels per sigma of blur, by the profile in force. Detail finer than
+/// the blur is gone anyway, so a blurred picture is held that small and the
+/// GPU scales it up. At 4 it came out at most a level off the window-size
+/// hold, at 2 at most 2 (the reducing resources design doc).
+pub fn per_sigma(settings: &Settings) -> f32 {
+	match crate::profile::current(settings) {
+		Profile::Low | Profile::Standard | Profile::Remote => 2.0,
+		Profile::High | Profile::Max | Profile::Custom => 4.0,
+	}
+}
+
+// The sizing for a picture `full` big, read the same way for a kept copy's
+// key as for the decode, so the two agree.
+fn sizing_of(
+	settings: &Settings,
+	tags: &crate::xmp::Tags,
+	(w, h): (u32, u32),
+	per_sigma: f32,
+) -> Sizing {
+	let full = fit_within(w, h, MAX_EDGE).unwrap_or((w, h));
+	Sizing::new(full, held_blur(look(settings, tags).1, 1.0), per_sigma)
 }
 
 // What a request asks of `prepare` beyond the picture itself.
@@ -414,6 +484,8 @@ impl Sizing {
 struct Hold {
 	window: (u32, u32),
 	summary: Option<crate::autotheme::Summary>,
+	// `per_sigma` of the request's settings; infinite holds by the window alone
+	per_sigma: f32,
 }
 
 // Where the pixels come from, settled before anything is decoded so a kept
@@ -461,12 +533,14 @@ fn held_blur(blur: f32, scale: f32) -> f32 {
 
 // The key for a kept copy of this picture, and its size, read from the file's
 // header rather than a decode. Everything `prepare_keeping` reads that changes
-// the stored pixels goes in, bar the held size, which names the copy. Light or dark
+// the stored pixels goes in, bar the held size, which names the copy, and the
+// border, which `prepare_keeping` adds once it knows the size. Light or dark
 // mode is not one of them: that is applied when the picture is drawn (G116).
 fn kept_key(
 	settings: &Settings,
 	origin: Origin,
 	tags: &crate::xmp::Tags,
+	per_sigma: f32,
 ) -> Option<(wpcache::Key, Sizing)> {
 	let mut key = wpcache::Key::default();
 	let (w, h) = match origin {
@@ -484,9 +558,7 @@ fn kept_key(
 				.ok()?
 		}
 	};
-	let sizing = Sizing {
-		full: fit_within(w, h, MAX_EDGE).unwrap_or((w, h)),
-	};
+	let sizing = sizing_of(settings, tags, (w, h), per_sigma);
 	key.push_number(u64::from(sizing.full.0));
 	key.push_number(u64::from(sizing.full.1));
 	key.push_float(look(settings, tags).1);
@@ -543,19 +615,25 @@ fn prepare_keeping(
 		_ => crate::xmp::Tags::default(),
 	};
 	let mut keep = None;
-	if let Some((dir, (key, sizing))) =
-		kept.and_then(|dir| Some((dir, kept_key(settings, origin, &tags)?)))
+	if let Some((dir, (mut key, sizing))) =
+		kept.and_then(|dir| Some((dir, kept_key(settings, origin, &tags, hold.per_sigma)?)))
 	{
 		let held = sizing.held(hold.window);
+		let border = sizing.bordered(held);
 		let (opacity, blur) = look(settings, &tags);
 		if works(settings, sizing, held, blur) {
-			if let Some(copy) = wpcache::find(dir, &key, held) {
+			// a copy is named by the size stored, border and all
+			let stored = bordered_size(held, border);
+			if border {
+				key.push_bytes(b"border");
+			}
+			if let Some(copy) = wpcache::find(dir, &key, stored) {
 				memdbg(&format!(
 					"used {}x{} for {}x{}",
 					copy.rgba.width(),
 					copy.rgba.height(),
-					held.0,
-					held.1
+					stored.0,
+					stored.1
 				));
 				let (fit, anchor) = layout(settings, &tags);
 				let summary = hold.summary.unwrap_or(crate::autotheme::Summary {
@@ -570,6 +648,7 @@ fn prepare_keeping(
 					anchor,
 					summary,
 					held,
+					border,
 				};
 				return Some((image, None));
 			}
@@ -594,16 +673,21 @@ fn prepare_keeping(
 		},
 		Origin::Builtin => builtin(settings)?,
 	};
-	let sizing = Sizing {
-		full: fit_within(decoded.width(), decoded.height(), MAX_EDGE)
-			.unwrap_or((decoded.width(), decoded.height())),
-	};
+	let sizing = sizing_of(
+		settings,
+		&tags,
+		(decoded.width(), decoded.height()),
+		hold.per_sigma,
+	);
 	let keep = keep.and_then(|(key, header)| (header == sizing).then_some(key));
 	let held = sizing.held(hold.window);
 	let mut img = cut_to_rgba(decoded, sizing.full);
 	// The look settings are in pixels of the full image.
 	let scale = held.0 as f32 / sizing.full.0.max(1) as f32;
 	let (opacity, blur) = look(settings, &tags);
+	// Only a blurred picture is ever bordered, so the border comes out of the
+	// blur's margin.
+	let border = sizing.bordered(held);
 	// Blur and contrast-flatten, done in LINEAR light (decode sRGB -> process in
 	// f32 -> re-encode) so transitions are gamma-correct; an sRGB-space blur
 	// darkens edges. The f32 intermediate also avoids 8-bit banding inside the
@@ -634,7 +718,7 @@ fn prepare_keeping(
 			// The blur reads past the edge as the edge pixel. Shrunk first, that
 			// would be a held pixel standing for several rows of the image, so
 			// the margin it reads is shrunk from the image's own edge instead,
-			// and cut off after.
+			// and cut off after, bar the border.
 			let margin = if blur > 0.0 {
 				(blur * 3.0).ceil() as u32 + 1
 			} else {
@@ -645,8 +729,9 @@ fn prepare_keeping(
 				linear = image::imageops::blur(&linear, blur);
 			}
 			if margin > 0 {
-				linear =
-					image::imageops::crop_imm(&linear, margin, margin, held.0, held.1).to_image();
+				let (w, h) = bordered_size(held, border);
+				let at = margin - u32::from(border);
+				linear = image::imageops::crop_imm(&linear, at, at, w, h).to_image();
 			}
 		}
 		if stale() {
@@ -661,7 +746,7 @@ fn prepare_keeping(
 				scale,
 			);
 		}
-		img = image::RgbaImage::new(held.0, held.1);
+		img = image::RgbaImage::new(linear.width(), linear.height());
 		for (dst, src) in img.pixels_mut().zip(linear.pixels()) {
 			*dst = image::Rgba([
 				config::from_linear_u8(src[0]),
@@ -675,9 +760,13 @@ fn prepare_keeping(
 		return None;
 	}
 	let (fit, anchor) = layout(settings, &tags);
-	let summary = hold
-		.summary
-		.unwrap_or_else(|| crate::autotheme::summarize(&img, opacity));
+	let summary = hold.summary.unwrap_or_else(|| {
+		if border {
+			let inner = image::imageops::crop_imm(&img, 1, 1, held.0, held.1).to_image();
+			return crate::autotheme::summarize(&inner, opacity);
+		}
+		crate::autotheme::summarize(&img, opacity)
+	});
 	let image = Prepared {
 		rgba: img,
 		sizing,
@@ -686,8 +775,16 @@ fn prepare_keeping(
 		anchor,
 		summary,
 		held,
+		border,
 	};
 	Some((image, keep))
+}
+
+// The texture's size for a picture held at `held`: one texel more on every
+// side with the border.
+fn bordered_size((w, h): (u32, u32), border: bool) -> (u32, u32) {
+	let more = 2 * u32::from(border);
+	(w + more, h + more)
 }
 
 #[cfg(test)]
@@ -887,10 +984,11 @@ mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::AtomicU64;
 
-	// Held whole, as before the window's size was known.
+	// Held whole, as before the window's size was known or the blur set it.
 	const WHOLE: Hold = Hold {
 		window: (0, 0),
 		summary: None,
+		per_sigma: f32::INFINITY,
 	};
 
 	// The blur and the contrast mask are the slow half and neither is under test
@@ -937,7 +1035,7 @@ mod tests {
 	#[test]
 	fn a_wallpaper_is_held_at_the_size_it_is_drawn_at() {
 		use super::Sizing;
-		let held = |full, window| Sizing { full }.held(window);
+		let held = |full, window| Sizing::new(full, 0.0, 4.0).held(window);
 		assert_eq!(held((2560, 1440), (1280, 720)), (1280, 720));
 		// zoom covers the window, and stretch keeps the larger scale the same way,
 		// so proportions and a round blur are kept
@@ -957,6 +1055,7 @@ mod tests {
 		let hold = Hold {
 			window: (960, 540),
 			summary: None,
+			per_sigma: 4.0,
 		};
 		let prepared = prepare(&s, None, false, hold, &|| false).expect("prepared");
 		assert_eq!(prepared.sizing.full, (1920, 993), "the built-in");
@@ -980,6 +1079,7 @@ mod tests {
 		let hold = Hold {
 			window: (640, 360),
 			summary: None,
+			per_sigma: 4.0,
 		};
 		let held = prepare(&s, None, false, hold, &|| false).expect("held");
 		let (fw, fh) = whole.rgba.dimensions();
@@ -1013,6 +1113,180 @@ mod tests {
 		// the edge rows too, which the blur reads past
 		assert!(worst <= 2, "{worst} levels");
 		assert!(mean < 0.2, "{mean:.3} levels on average");
+	}
+
+	// Detail finer than the blur is gone, so a blurred picture is held where
+	// its sigma comes to a few held pixels, by the profile, and never smaller
+	// than the window for a light blur.
+	// Test ID: Erym5o5
+	#[test]
+	fn a_blurred_wallpaper_is_held_by_its_blur() {
+		use super::{Sizing, per_sigma};
+		use crate::profile::Profile;
+		let sizing = Sizing::new((2560, 1440), 10.0, 4.0);
+		assert_eq!(sizing.most, (1024, 576));
+		assert_eq!(sizing.held((2560, 1440)), (1024, 576));
+		assert_eq!(sizing.held((0, 0)), (1024, 576));
+		assert!(sizing.bordered((1024, 576)));
+		// a window smaller still sets the size, as before, with no border
+		assert_eq!(sizing.held((640, 360)), (640, 360));
+		assert!(!sizing.bordered((640, 360)));
+		assert_eq!(Sizing::new((2560, 1440), 10.0, 2.0).most, (512, 288));
+		// a light blur, or none, leaves it to the window
+		for blur in [0.0, 3.0, 4.0] {
+			let light = Sizing::new((2560, 1440), blur, 4.0);
+			assert_eq!(light.most, light.full, "blur {blur}");
+			assert_eq!(light.held((2560, 1440)), (2560, 1440));
+			assert!(!light.bordered((2560, 1440)));
+		}
+
+		let with = |profile, remote| Settings {
+			performance_profile: profile,
+			performance_automatic: false,
+			remote_override: remote,
+			..Settings::default()
+		};
+		for (profile, want) in [
+			(Profile::Low, 2.0),
+			(Profile::Standard, 2.0),
+			(Profile::High, 4.0),
+			(Profile::Max, 4.0),
+			(Profile::Custom, 4.0),
+		] {
+			assert!(
+				(per_sigma(&with(profile, false)) - want).abs() < f32::EPSILON,
+				"{profile:?}"
+			);
+		}
+		assert!(
+			(per_sigma(&with(Profile::Max, true)) - 2.0).abs() < f32::EPSILON,
+			"Remote"
+		);
+
+		// and the worker hands over that size, with the border
+		let request = |s: Settings| Request {
+			seq: 1,
+			newest: Arc::new(AtomicU64::new(1)),
+			settings: Arc::new(s),
+			scan: false,
+			current: None,
+			cleared: false,
+			window: (1920, 993),
+			summary: None,
+			kept: None,
+		};
+		let blurred = Settings {
+			wallpaper_blur: 10.0,
+			..flat_settings()
+		};
+		let prepared = run(&request(blurred.clone())).image.expect("prepared");
+		assert_eq!(prepared.sizing.full, (1920, 993), "the built-in");
+		assert_eq!(prepared.held, (768, 397));
+		assert!(prepared.border);
+		assert_eq!(prepared.rgba.dimensions(), (770, 399));
+		// the stand-in leaves the border out
+		let small = prepared.standin();
+		assert!(!small.border);
+		assert_eq!(small.rgba.dimensions(), (160, 83));
+		// Low holds it at 2 pixels a sigma
+		let low = Settings {
+			performance_profile: Profile::Low,
+			performance_automatic: false,
+			..blurred
+		};
+		let prepared = run(&request(low)).image.expect("prepared");
+		assert_eq!(prepared.held, (384, 199));
+		assert_eq!(prepared.rgba.dimensions(), (386, 201));
+	}
+
+	// Drawn at window size, a picture held by its blur should look like the
+	// one held at window size, edge included. The shader reads the inner part
+	// and blends into the border at the edge; without the border the outer
+	// half of each edge texel came out flat.
+	// Test ID: Erym5q4
+	#[test]
+	fn a_bordered_wallpaper_looks_like_the_window_size_one() {
+		use crate::config::{from_linear_u8, to_linear};
+		let s = Settings {
+			wallpaper_blur: 10.0,
+			wallpaper_contrast_mask: true,
+			..flat_settings()
+		};
+		let window = (1044, 540);
+		let by_window = |per_sigma| Hold {
+			window,
+			summary: None,
+			per_sigma,
+		};
+		let reference =
+			prepare(&s, None, false, by_window(f32::INFINITY), &|| false).expect("window size");
+		assert_eq!(reference.rgba.dimensions(), window);
+		// the GPU's bilinear sample, filtered in linear light as an sRGB
+		// texture is, of `tex` at window pixel (x, y), with the border mapping
+		// the shader uses, or the old clamp to the inner part
+		let drawn = |tex: &image::RgbaImage, border: bool, x: u32, y: u32, c: usize| {
+			let (tw, th) = tex.dimensions();
+			let ring = if border { 1.0 } else { 0.0 };
+			let mut u = (f64::from(x) + 0.5) / f64::from(window.0);
+			let mut v = (f64::from(y) + 0.5) / f64::from(window.1);
+			u = (u * (f64::from(tw) - 2.0 * ring) + ring) / f64::from(tw);
+			v = (v * (f64::from(th) - 2.0 * ring) + ring) / f64::from(th);
+			let (u, v) = (u * f64::from(tw) - 0.5, v * f64::from(th) - 0.5);
+			let (x0, y0) = (u.floor() as i64, v.floor() as i64);
+			let (fx, fy) = ((u - u.floor()) as f32, (v - v.floor()) as f32);
+			let texel = |x: i64, y: i64| {
+				let x = x.clamp(0, i64::from(tw) - 1) as u32;
+				let y = y.clamp(0, i64::from(th) - 1) as u32;
+				to_linear(tex.get_pixel(x, y)[c])
+			};
+			let top = texel(x0, y0) * (1.0 - fx) + texel(x0 + 1, y0) * fx;
+			let bottom = texel(x0, y0 + 1) * (1.0 - fx) + texel(x0 + 1, y0 + 1) * fx;
+			from_linear_u8(top * (1.0 - fy) + bottom * fy)
+		};
+		// worst and mean levels off, inside and within 16 pixels of the edge
+		let compare = |tex: &image::RgbaImage, border: bool| {
+			let mut inside = (0u8, 0u64, 0u64);
+			let mut edge = (0u8, 0u64, 0u64);
+			for (x, y, px) in reference.rgba.enumerate_pixels() {
+				let near = x < 16 || y < 16 || x >= window.0 - 16 || y >= window.1 - 16;
+				let tally = if near { &mut edge } else { &mut inside };
+				for c in 0..3 {
+					let off = drawn(tex, border, x, y, c).abs_diff(px[c]);
+					tally.0 = tally.0.max(off);
+					tally.1 += u64::from(off);
+					tally.2 += 1;
+				}
+			}
+			let mean = |t: (u8, u64, u64)| t.1 as f64 / t.2 as f64;
+			(inside.0, mean(inside), edge.0, mean(edge))
+		};
+		for (per_sigma, most) in [(4.0, 1), (2.0, 2)] {
+			let small = prepare(&s, None, false, by_window(per_sigma), &|| false).expect("held");
+			assert!(small.border, "at {per_sigma}");
+			let (w, h) = small.rgba.dimensions();
+			let found = compare(&small.rgba, true);
+			eprintln!(
+				"{per_sigma} a sigma, {w}x{h}: inside {} max {:.3} mean, edge {} max {:.3} mean",
+				found.0, found.1, found.2, found.3
+			);
+			assert!(found.0 <= most, "inside, at {per_sigma}: {found:?}");
+			assert!(found.2 <= most, "edge, at {per_sigma}: {found:?}");
+			assert!(
+				found.1 < 0.5 && found.3 < 0.5,
+				"on average, at {per_sigma}: {found:?}"
+			);
+			// the inner part alone, clamped, is what the border is for
+			let inner = image::imageops::crop_imm(&small.rgba, 1, 1, w - 2, h - 2).to_image();
+			let clamped = compare(&inner, false);
+			eprintln!(
+				"  without the border: edge {} max {:.3} mean",
+				clamped.2, clamped.3
+			);
+			assert!(
+				clamped.2 > found.2 && clamped.3 > found.3,
+				"{clamped:?} against {found:?}"
+			);
+		}
 	}
 
 	// A resize prepares the same picture again, and the colors derived from it
@@ -1677,7 +1951,9 @@ mod tests {
 		};
 		let key = |s: &Settings, path: &std::path::Path| {
 			let tags = crate::xmp::read(path);
-			kept_key(s, Origin::File(path), &tags).expect("keyed").0
+			kept_key(s, Origin::File(path), &tags, 4.0)
+				.expect("keyed")
+				.0
 		};
 		let first = key(&base, &path);
 		assert_eq!(key(&base, &path), first, "the same file and settings");
@@ -1792,7 +2068,7 @@ mod tests {
 		assert_ne!(key(&base, &path), first, "another length");
 		// the built-in has a key of its own, and keeps it
 		let builtin = |s: &Settings| {
-			kept_key(s, Origin::Builtin, &crate::xmp::Tags::default())
+			kept_key(s, Origin::Builtin, &crate::xmp::Tags::default(), 4.0)
 				.expect("built-in")
 				.0
 		};
@@ -1894,6 +2170,61 @@ mod tests {
 		let mut loaded = None;
 		answer(&whole, |got| loaded = Some(got));
 		assert!(loaded.and_then(|l| l.image).is_some());
+		assert_eq!(copies(), 2);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+	// A picture held by its blur is kept with its border and read back with
+	// it. One held by the window a little smaller has no border, so it never
+	// takes that copy, near as the size is.
+	// Test ID: Erym5s3
+	#[test]
+	fn a_bordered_copy_is_kept_apart() {
+		use super::answer;
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_wp_ring_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		let request = |window| Request {
+			seq: 1,
+			newest: Arc::new(AtomicU64::new(1)),
+			settings: Arc::new(Settings {
+				wallpaper_blur: 10.0,
+				..flat_settings()
+			}),
+			scan: false,
+			current: None,
+			cleared: false,
+			window,
+			summary: None,
+			kept: Some(dir.clone()),
+		};
+		let copies = || {
+			std::fs::read_dir(&dir).map_or(0, |list| {
+				list.flatten()
+					.filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc"))
+					.count()
+			})
+		};
+		let ask = |window| {
+			let mut got = None;
+			answer(&request(window), |loaded| got = loaded.image);
+			got.expect("the built-in")
+		};
+		let first = ask((1920, 993));
+		assert!(first.border);
+		assert_eq!(first.rgba.dimensions(), (770, 399));
+		assert_eq!(copies(), 1);
+		// any window as big or bigger reads it back, border and all
+		let again = ask((2560, 1440));
+		assert_eq!(copies(), 1, "read, not made again");
+		assert!(again.border);
+		assert_eq!(again.held, first.held);
+		assert_eq!(again.rgba.dimensions(), first.rgba.dimensions());
+		assert_eq!(again.summary, first.summary);
+		// 2% fewer pixels, held by the window: prepared and kept on its own
+		let near = ask((760, 393));
+		assert_eq!(near.held, (760, 393));
+		assert!(!near.border);
+		assert_eq!(near.rgba.dimensions(), (760, 393));
 		assert_eq!(copies(), 2);
 		let _ = std::fs::remove_dir_all(&dir);
 	}

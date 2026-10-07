@@ -129,14 +129,14 @@ fHolds(){
 }
 
 fLaunch first
-fCheck "first launch: prepared and kept" fSays "memdbg wallpaper copy: stored 967x500"
+fCheck "first launch: prepared and kept" fSays "memdbg wallpaper copy: stored 770x399"
 fStop
 fCheck "kept in the platform's cache folder" fCopiesAre "${kept}" 1
 fCheck "nothing kept beside the settings" fCopiesAre "${native}/cache/wallpaper" 0
 
 fLaunch second
-fCheck "second launch: the copy is used" fSays "memdbg wallpaper copy: used 967x500 for 967x500"
-fCheck "and drawn" fHolds 967x500
+fCheck "second launch: the copy is used" fSays "memdbg wallpaper copy: used 770x399 for 770x399"
+fCheck "and drawn" fHolds 768x397
 fCheck "and nothing prepared" fNeverSays "copy: stored"
 fStop
 
@@ -144,13 +144,13 @@ copy="$(find "${kept}" -maxdepth 1 -name '*.wpc' | head -n 1)"
 size="$(stat -c %s "${copy}")"
 truncate -s $((size / 2)) "${copy}"
 fLaunch third
-fCheck "a copy cut short is prepared again" fSays "memdbg wallpaper copy: stored 967x500"
+fCheck "a copy cut short is prepared again" fSays "memdbg wallpaper copy: stored 770x399"
 fCheck "and not used" fNeverSays "copy: used"
 fStop
 fCheck "and written whole" test "$(stat -c %s "${copy}" 2>/dev/null || echo 0)" == "${size}"
 
 fLaunch alt --config "${work}/alt/config.shcl"
-fCheck "--config: prepared and kept" fSays "memdbg wallpaper copy: stored 967x500"
+fCheck "--config: prepared and kept" fSays "memdbg wallpaper copy: stored 770x399"
 fStop
 fCheck "beside that config" fCopiesAre "${work}/alt/cache/wallpaper" 1
 fCheck "and not in the platform's folder" fCopiesAre "${kept}" 1
@@ -166,3 +166,5 @@ echo "all passed"
 
 ##	History:
 ##		- 20261006 JC: Created.
+##		- 20261006 JC: The blur holds the picture at 768x397 plus a border, so
+##		  the the copy is 770x399.

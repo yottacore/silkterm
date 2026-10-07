@@ -165,6 +165,7 @@ icons:
 ##            shipped default back
 ## windows:   true for a row that exists only on Windows. On a heading it takes
 ##            the whole group, and every row in it has to say so as well.
+## not_macos: true for a row the macOS build can never use, left out there.
 ## warning:   flyover for a warning mark drawn after the label, for a row that
 ##            may not work on every desktop
 ## windows_warning: the same in the Windows build, in place of `warning:`. A
@@ -899,6 +900,7 @@ rows:
 		label: Always use software rendering
 		kind: toggle
 		setting: window.software_rendering
+		not_macos: true
 		help: "Draw on the processor rather than the graphics card. Slower, but uses none of the card's memory. A window whose card cannot give it what it needs falls back to this on its own."
 
 	## --------------------------------------------------------------------- Shell

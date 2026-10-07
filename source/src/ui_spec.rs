@@ -135,6 +135,9 @@ pub struct Spec {
 	/// Only in the Windows build. Test builds keep it everywhere, so its layout
 	/// and behavior are tested on every platform.
 	pub windows: bool,
+	/// Left out of the macOS build, for a row that can never work there. Test
+	/// builds keep it, as with `windows`.
+	pub not_macos: bool,
 	/// Flyover for a warning mark after the label: a row that may not work
 	/// everywhere. Empty means no mark.
 	pub warning: &'static str,
@@ -267,7 +270,11 @@ pub fn ui() -> &'static Ui {
 	static CELL: OnceLock<Ui> = OnceLock::new();
 	CELL.get_or_init(|| match parse(SOURCE) {
 		Ok(mut ui) => {
-			keep_platform(&mut ui.specs, cfg!(any(windows, test)));
+			keep_platform(
+				&mut ui.specs,
+				cfg!(any(windows, test)),
+				cfg!(all(target_os = "macos", not(test))),
+			);
 			// by the real platform, test or not: a mark that is wrong for the
 			// box it shows on is worse than none
 			pick_warnings(&mut ui.specs, cfg!(windows));
@@ -279,8 +286,8 @@ pub fn ui() -> &'static Ui {
 	})
 }
 
-fn keep_platform(specs: &mut Vec<Spec>, windows: bool) {
-	specs.retain(|spec| windows || !spec.windows);
+fn keep_platform(specs: &mut Vec<Spec>, windows: bool, macos: bool) {
+	specs.retain(|spec| (windows || !spec.windows) && !(macos && spec.not_macos));
 }
 
 fn pick_warnings(specs: &mut [Spec], windows: bool) {
@@ -585,6 +592,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			beside,
 			revert_help: doc.get_string(&at("revert_help")).map_or("", keep),
 			windows,
+			not_macos: doc.get_bool(&at("not_macos")).unwrap_or(false),
 			warning: keep(warning),
 			windows_warning: keep(windows_warning),
 		});
@@ -745,6 +753,27 @@ mod tests {
 		);
 	}
 
+	// The macOS build leaves out software rendering and nothing else.
+	// Test ID: ErycRzO
+	#[test]
+	fn only_software_rendering_leaves_the_macos_build() {
+		let Ok(mut ui) = parse(SOURCE) else {
+			panic!("settings_ui.shcl does not parse")
+		};
+		let all = ui.specs.len();
+		keep_platform(&mut ui.specs, false, false);
+		let not_windows = ui.specs.len();
+		assert!(ui.specs.iter().any(|s| s.key == Key::SoftwareRendering));
+		keep_platform(&mut ui.specs, false, true);
+		assert_eq!(ui.specs.len(), not_windows - 1);
+		assert!(!ui.specs.iter().any(|s| s.key == Key::SoftwareRendering));
+		let Ok(mut ui) = parse(SOURCE) else {
+			unreachable!()
+		};
+		keep_platform(&mut ui.specs, true, false);
+		assert_eq!(ui.specs.len(), all, "Windows keeps every row");
+	}
+
 	// Everywhere but Windows the file-type group is gone, heading and all, and
 	// nothing else goes with it.
 	// Test ID: ErNFx0g
@@ -761,7 +790,7 @@ mod tests {
 				.iter()
 				.any(|s| s.windows && matches!(s.kind, Kind::Header(_)))
 		);
-		keep_platform(&mut ui.specs, false);
+		keep_platform(&mut ui.specs, false, false);
 		assert_eq!(ui.specs.len(), all - windows);
 		for key in [
 			Key::OpenBatch,

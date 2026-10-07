@@ -22,7 +22,8 @@ struct Uniform {
 	bg: [f32; 4],
 	perceptual: f32,
 	standin: f32, // 1 for a stand-in: cubic sampling (`ImageRenderer::standing_in`)
-	_pad: [f32; 2],
+	border: f32,  // 1 when the texture has a ring of texels past the picture's edge
+	_pad: f32,
 }
 
 /// Wallpaper VRAM-content probe verdict (see `vram_check_poll`).
@@ -47,6 +48,7 @@ pub struct ImageRenderer {
 	image_size: [f32; 2],
 	sizing: crate::wallpaper::Sizing,
 	held: (u32, u32),
+	border: bool,
 	opacity: f32,
 	fit: f32,
 	anchor: [f32; 2],
@@ -241,6 +243,7 @@ impl ImageRenderer {
 			image_size: [img.sizing.full.0 as f32, img.sizing.full.1 as f32],
 			sizing: img.sizing,
 			held: img.held,
+			border: img.border,
 			opacity: img.opacity,
 			fit: if img.fit == Fit::Zoom { 1.0 } else { 0.0 },
 			anchor: [img.anchor[0].clamp(0.0, 1.0), img.anchor[1].clamp(0.0, 1.0)],
@@ -282,7 +285,8 @@ impl ImageRenderer {
 		let ((w, h), (fw, fh)) = (self.held, self.sizing.full);
 		let texture = self.texture.size();
 		format!(
-			"wallpaper: {w}x{h} held of {fw}x{fh}, {:.1} MiB{}",
+			"wallpaper: {w}x{h} held of {fw}x{fh}{}, {:.1} MiB{}",
+			if self.border { " plus a border" } else { "" },
 			crate::memdbg::mib(texture.width as usize * texture.height as usize * 4),
 			if self.standin { ", stand-in" } else { "" }
 		)
@@ -318,7 +322,8 @@ impl ImageRenderer {
 			bg,
 			perceptual: if mix.perceptual { 1.0 } else { 0.0 },
 			standin: if self.standin { 1.0 } else { 0.0 },
-			_pad: [0.0; 2],
+			border: if self.border { 1.0 } else { 0.0 },
+			_pad: 0.0,
 		};
 		queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&uniform_data));
 	}
@@ -439,6 +444,7 @@ struct Uniform {
     bg: vec4<f32>,
     perceptual: f32,
     standin: f32,
+    border: f32,
 };
 @group(0) @binding(0) var<uniform> u: Uniform;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -496,6 +502,12 @@ fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
         let disp = u.image_size * scale;
         uv = (p + (disp - u.resolution) * u.anchor) / disp;
     }
+    if (u.border > 0.5) {
+        // the outer texels are the blurred picture past its edge, so the edge
+        // blends toward them rather than flattening into the clamp
+        let size = vec2<f32>(textureDimensions(tex));
+        uv = (uv * (size - 2.0) + 1.0) / size;
+    }
     var c = textureSample(tex, samp, uv);
     if (u.standin > 0.5) {
         c = smooth_sample(uv);
@@ -543,6 +555,7 @@ mod tests {
 		// and the Rust side of the uniform still lines up with the WGSL one
 		assert_eq!(std::mem::size_of::<Uniform>(), 64);
 		assert_eq!(std::mem::offset_of!(Uniform, standin), 52);
+		assert_eq!(std::mem::offset_of!(Uniform, border), 56);
 	}
 
 	// Every ordinary frame draws what it always has. Only a stand-in, there for
@@ -556,5 +569,21 @@ mod tests {
 		assert!(guard < call, "the cubic runs unguarded");
 		assert_eq!(fs.matches("smooth_sample(").count(), 1);
 		assert!(fs.contains("var c = textureSample(tex, samp, uv);"));
+	}
+
+	// A texture with no border is sampled exactly as before.
+	// Test ID: ErymwsR
+	#[test]
+	fn only_a_bordered_texture_is_remapped() {
+		let fs = BG_WGSL.split("fn fs(").nth(1).expect("the fragment shader");
+		let guard = fs.find("if (u.border > 0.5)").expect("no guard");
+		let remap = fs
+			.find("uv = (uv * (size - 2.0) + 1.0) / size;")
+			.expect("no remap");
+		let sample = fs
+			.find("var c = textureSample(tex, samp, uv);")
+			.expect("no sample");
+		assert!(guard < remap && remap < sample);
+		assert_eq!(fs.matches("(size - 2.0)").count(), 1);
 	}
 }
