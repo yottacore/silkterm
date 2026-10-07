@@ -266,7 +266,7 @@ A pop-out window with eight tabs, declared in the compiled-in `settings_ui.shcl`
 
 - The alternative considered was the PowerShell approach: append a block to the rc file. That was rejected here because the PowerShell case has no other option - PowerShell cannot report its directory any other way - while bash has one that touches nothing. A prompt is also a matter of taste in a way a directory report is not, so the reversible answer wins.
 
-- The script is written beside the config the first time a bash pane opens, and rewritten whenever it differs from the compiled-in copy, so an updated SilkTerm carries an updated prompt. The pane runs it through `$BASH`, which is bash's own path - no dependency on `PATH` and no execute bit needed.
+- The script is written beside the config the first time a bash pane opens, and rewritten whenever it differs from the compiled-in copy, so an updated SilkTerm carries an updated prompt. The pane's `PROMPT_COMMAND` sources it once per shell and then calls `fX9ps1Git_SetPs1` before each prompt. So outside a git working tree a prompt starts no process, and inside one it runs git twice. Until 2026-10-06 the pane ran it through `$BASH` at every prompt, a new bash each time. Sourcing needs no execute bit and nothing on `PATH`. A shell already open keeps the copy it sourced.
 
 - x9ps1-git is a separate MIT project of the same author. The in-repo copy is a vendored copy of its `bin/x9ps1-git`, and will go stale on its own if nobody looks - the version it carries is in its own header.
 
