@@ -6,8 +6,7 @@
 //! it composites the same way as the rect pipeline and works with transparency.
 
 use crate::config::Fit;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use crate::gfx::{BlockReadback, MapFailed};
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -66,8 +65,7 @@ pub struct ImageRenderer {
 	texture: wgpu::Texture,
 	probe_at: Option<(u32, u32)>, // block origin; None = image too small, probe disabled
 	probe_ref: Vec<u8>,
-	probe_buf: wgpu::Buffer,
-	probe_inflight: Option<Arc<AtomicU8>>,
+	probe_read: BlockReadback,
 }
 
 impl std::fmt::Debug for ImageRenderer {
@@ -258,12 +256,7 @@ impl ImageRenderer {
 			}
 			block
 		});
-		let probe_buf = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("bg probe read"),
-			size: PROBE_BYTES as u64,
-			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-			mapped_at_creation: false,
-		});
+		let probe_read = BlockReadback::new(device, "bg probe read", PROBE_SIDE, 1);
 
 		Self {
 			pipeline,
@@ -281,8 +274,7 @@ impl ImageRenderer {
 			texture,
 			probe_at,
 			probe_ref,
-			probe_buf,
-			probe_inflight: None,
+			probe_read,
 			last: std::cell::Cell::new((
 				0.0,
 				0.0,
@@ -383,71 +375,25 @@ impl ImageRenderer {
 		let Some((bx, by)) = self.probe_at else {
 			return false;
 		};
-		if self.probe_inflight.is_some() {
-			return false;
-		}
-		let mut enc = device.create_command_encoder(&Default::default());
-		enc.copy_texture_to_buffer(
-			wgpu::TexelCopyTextureInfo {
-				texture: &self.texture,
-				mip_level: 0,
-				origin: wgpu::Origin3d { x: bx, y: by, z: 0 },
-				aspect: wgpu::TextureAspect::All,
-			},
-			wgpu::TexelCopyBufferInfo {
-				buffer: &self.probe_buf,
-				layout: wgpu::TexelCopyBufferLayout {
-					offset: 0,
-					bytes_per_row: Some(PROBE_SIDE * 4),
-					rows_per_image: Some(PROBE_SIDE),
-				},
-			},
-			wgpu::Extent3d {
-				width: PROBE_SIDE,
-				height: PROBE_SIDE,
-				depth_or_array_layers: 1,
-			},
-		);
-		queue.submit(Some(enc.finish()));
-		let flag = Arc::new(AtomicU8::new(0));
-		let done = flag.clone();
-		self.probe_buf
-			.slice(..)
-			.map_async(wgpu::MapMode::Read, move |r| {
-				done.store(if r.is_ok() { 1 } else { 2 }, Ordering::Release);
-			});
-		self.probe_inflight = Some(flag);
-		true
+		self.probe_read.start(
+			device,
+			queue,
+			&[(&self.texture, wgpu::Origin3d { x: bx, y: by, z: 0 })],
+		)
 	}
 
 	/// Poll an in-flight probe. Lost is not reseeded here - on loss the caller
 	/// reloads the wallpaper wholesale (`recover_gpu`), replacing this instance.
 	pub fn vram_check_poll(&mut self, device: &wgpu::Device) -> Option<WpProbe> {
-		let flag = self.probe_inflight.as_ref()?.clone();
-		if flag.load(Ordering::Acquire) == 0 {
-			// non-blocking pump so the map callback can run
-			let _ = device.poll(wgpu::PollType::Poll);
-		}
-		match flag.load(Ordering::Acquire) {
-			0 => None,
-			2 => {
-				self.probe_inflight = None;
-				Some(WpProbe::MapFailed)
-			}
-			_ => {
-				self.probe_inflight = None;
-				let intact = {
-					let data = self.probe_buf.slice(..).get_mapped_range();
-					data[..] == self.probe_ref[..]
-				};
-				self.probe_buf.unmap();
-				Some(if intact {
-					WpProbe::Intact
-				} else {
-					WpProbe::Lost
-				})
-			}
-		}
+		let probe_ref = &self.probe_ref;
+		let read = self
+			.probe_read
+			.poll(device, |data| data[..] == probe_ref[..])?;
+		Some(match read {
+			Ok(true) => WpProbe::Intact,
+			Ok(false) => WpProbe::Lost,
+			Err(MapFailed) => WpProbe::MapFailed,
+		})
 	}
 
 	/// Diagnostic (`SILK_VRAMLOSS`): zero the probe block to fake a content loss.
@@ -587,7 +533,16 @@ fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
 
 #[cfg(test)]
 mod tests {
-	use super::{BG_WGSL, Uniform};
+	use super::{BG_WGSL, PROBE_BYTES, PROBE_SIDE, Uniform};
+
+	// The shared block readback copies rows unpadded, so the probe compares
+	// against `probe_ref` as is.
+	// Test ID: Es1upe4
+	#[test]
+	fn the_wallpaper_probe_block_is_copy_aligned() {
+		assert_eq!((PROBE_SIDE * 4) % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
+		assert_eq!(PROBE_BYTES as u64 % wgpu::COPY_BUFFER_ALIGNMENT, 0);
+	}
 
 	// A shader edit that does not compile only shows up at pipeline creation,
 	// in a window.

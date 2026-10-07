@@ -272,12 +272,115 @@ pub enum VramProbe {
 	MapFailed,
 }
 
+/// The readback map failed; inconclusive, the next probe tries again.
+#[derive(Debug)]
+pub struct MapFailed;
+
+/// An async read of square Rgba8 blocks out of textures, started on one probe
+/// tick and checked on a later one. Shared by the sentinels and the wallpaper.
+/// `side * 4` must be a multiple of 256 (`COPY_BYTES_PER_ROW_ALIGNMENT`).
+#[derive(Debug)]
+pub struct BlockReadback {
+	side: u32,
+	buf: wgpu::Buffer,
+	// probe in flight; the map_async callback stores 1 = mapped ok, 2 = failed
+	inflight: Option<Arc<AtomicU8>>,
+}
+
+impl BlockReadback {
+	/// Room for `blocks` blocks of `side` x `side`, back to back.
+	pub fn new(device: &wgpu::Device, label: &str, side: u32, blocks: u64) -> Self {
+		let buf = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some(label),
+			size: u64::from(side * side * 4) * blocks,
+			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+			mapped_at_creation: false,
+		});
+		Self {
+			side,
+			buf,
+			inflight: None,
+		}
+	}
+
+	/// Copy one block per `(texture, origin)` into the buffer in order, and
+	/// map it. False when a read is already in flight.
+	pub fn start(
+		&mut self,
+		device: &wgpu::Device,
+		queue: &wgpu::Queue,
+		from: &[(&wgpu::Texture, wgpu::Origin3d)],
+	) -> bool {
+		if self.inflight.is_some() {
+			return false;
+		}
+		let block = u64::from(self.side * self.side * 4);
+		let mut enc = device.create_command_encoder(&Default::default());
+		for (n, (tex, origin)) in (0u64..).zip(from) {
+			enc.copy_texture_to_buffer(
+				wgpu::TexelCopyTextureInfo {
+					texture: tex,
+					mip_level: 0,
+					origin: *origin,
+					aspect: wgpu::TextureAspect::All,
+				},
+				wgpu::TexelCopyBufferInfo {
+					buffer: &self.buf,
+					layout: wgpu::TexelCopyBufferLayout {
+						offset: n * block,
+						bytes_per_row: Some(self.side * 4),
+						rows_per_image: Some(self.side),
+					},
+				},
+				wgpu::Extent3d {
+					width: self.side,
+					height: self.side,
+					depth_or_array_layers: 1,
+				},
+			);
+		}
+		queue.submit(Some(enc.finish()));
+		let flag = Arc::new(AtomicU8::new(0));
+		let done = flag.clone();
+		self.buf.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+			done.store(if r.is_ok() { 1 } else { 2 }, Ordering::Release);
+		});
+		self.inflight = Some(flag);
+		true
+	}
+
+	/// None while nothing is in flight or the map is still pending. Otherwise
+	/// `check` sees the whole buffer, and the buffer is unmapped after.
+	pub fn poll<T>(
+		&mut self,
+		device: &wgpu::Device,
+		check: impl FnOnce(&[u8]) -> T,
+	) -> Option<Result<T, MapFailed>> {
+		let flag = self.inflight.as_ref()?.clone();
+		if flag.load(Ordering::Acquire) == 0 {
+			// non-blocking pump so the map callback can run
+			let _ = device.poll(wgpu::PollType::Poll);
+		}
+		match flag.load(Ordering::Acquire) {
+			0 => None,
+			2 => {
+				self.inflight = None;
+				Some(Err(MapFailed))
+			}
+			_ => {
+				self.inflight = None;
+				let seen = check(&self.buf.slice(..).get_mapped_range());
+				self.buf.unmap();
+				Some(Ok(seen))
+			}
+		}
+	}
+}
+
 struct Sentinel {
 	up_tex: wgpu::Texture,
 	fbo_tex: wgpu::Texture,
-	buf: wgpu::Buffer, // both witnesses read back into one buffer (up at 0, fbo at SENTINEL_BYTES)
-	// probe in flight; the map_async callback stores 1 = mapped ok, 2 = failed
-	inflight: Option<Arc<AtomicU8>>,
+	read: BlockReadback, // up at block 0, fbo at block 1
 }
 
 impl Sentinel {
@@ -311,17 +414,10 @@ impl Sentinel {
 				| wgpu::TextureUsages::COPY_DST
 				| wgpu::TextureUsages::COPY_SRC,
 		);
-		let buf = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("vram sentinel read"),
-			size: (SENTINEL_BYTES * 2) as u64,
-			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-			mapped_at_creation: false,
-		});
 		let sentinel = Self {
 			up_tex,
 			fbo_tex,
-			buf,
-			inflight: None,
+			read: BlockReadback::new(device, "vram sentinel read", SENTINEL_PX, 2),
 		};
 		sentinel.seed(device, queue, &sentinel_pattern());
 		sentinel
@@ -1070,41 +1166,14 @@ impl Gfx {
 		let Some(sent) = &mut self.sentinel else {
 			return false;
 		};
-		if sent.inflight.is_some() {
-			return false;
-		}
-		let mut enc = self.device.create_command_encoder(&Default::default());
-		for (tex, offset) in [(&sent.up_tex, 0u64), (&sent.fbo_tex, SENTINEL_BYTES as u64)] {
-			enc.copy_texture_to_buffer(
-				wgpu::TexelCopyTextureInfo {
-					texture: tex,
-					mip_level: 0,
-					origin: wgpu::Origin3d::ZERO,
-					aspect: wgpu::TextureAspect::All,
-				},
-				wgpu::TexelCopyBufferInfo {
-					buffer: &sent.buf,
-					layout: wgpu::TexelCopyBufferLayout {
-						offset,
-						bytes_per_row: Some(SENTINEL_ROW),
-						rows_per_image: Some(SENTINEL_PX),
-					},
-				},
-				wgpu::Extent3d {
-					width: SENTINEL_PX,
-					height: SENTINEL_PX,
-					depth_or_array_layers: 1,
-				},
-			);
-		}
-		self.queue.submit(Some(enc.finish()));
-		let flag = Arc::new(AtomicU8::new(0));
-		let done = flag.clone();
-		sent.buf.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-			done.store(if r.is_ok() { 1 } else { 2 }, Ordering::Release);
-		});
-		sent.inflight = Some(flag);
-		true
+		sent.read.start(
+			&self.device,
+			&self.queue,
+			&[
+				(&sent.up_tex, wgpu::Origin3d::ZERO),
+				(&sent.fbo_tex, wgpu::Origin3d::ZERO),
+			],
+		)
 	}
 
 	/// Poll an in-flight probe. Some(Lost{..}) = a witness pattern is gone (the
@@ -1112,38 +1181,24 @@ impl Gfx {
 	/// rest). None = still pending / no probe.
 	pub fn vram_check_poll(&mut self) -> Option<VramProbe> {
 		let sent = self.sentinel.as_mut()?;
-		let flag = sent.inflight.as_ref()?.clone();
-		if flag.load(Ordering::Acquire) == 0 {
-			// non-blocking pump so the map callback can run
-			let _ = self.device.poll(wgpu::PollType::Poll);
-		}
-		match flag.load(Ordering::Acquire) {
-			0 => None,
-			2 => {
-				sent.inflight = None;
-				Some(VramProbe::MapFailed)
-			}
-			_ => {
-				sent.inflight = None;
-				let (up_ok, fbo_ok) = {
-					let data = sent.buf.slice(..).get_mapped_range();
-					let pattern = sentinel_pattern();
-					(
-						data[..SENTINEL_BYTES] == pattern[..],
-						data[SENTINEL_BYTES..] == pattern[..],
-					)
-				};
-				sent.buf.unmap();
-				if up_ok && fbo_ok {
-					Some(VramProbe::Intact)
-				} else {
-					sent.seed(&self.device, &self.queue, &sentinel_pattern());
-					Some(VramProbe::Lost {
-						uploaded: !up_ok,
-						rendered: !fbo_ok,
-					})
-				}
-			}
+		let read = sent.read.poll(&self.device, |data| {
+			let pattern = sentinel_pattern();
+			(
+				data[..SENTINEL_BYTES] == pattern[..],
+				data[SENTINEL_BYTES..] == pattern[..],
+			)
+		})?;
+		let Ok((up_ok, fbo_ok)) = read else {
+			return Some(VramProbe::MapFailed);
+		};
+		if up_ok && fbo_ok {
+			Some(VramProbe::Intact)
+		} else {
+			sent.seed(&self.device, &self.queue, &sentinel_pattern());
+			Some(VramProbe::Lost {
+				uploaded: !up_ok,
+				rendered: !fbo_ok,
+			})
 		}
 	}
 
