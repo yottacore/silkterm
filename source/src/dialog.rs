@@ -338,7 +338,7 @@ impl DialogWin {
 		let (window, mut gfx, mut text, rects) =
 			Self::make(el, "Settings".into(), 560.0, 800.0, true, parent, warm)?;
 		let scale = config::display_scale(window.scale_factor());
-		let (label_w, btn_w, row_btn_w, tab_ws) =
+		let (label_w, btn_w, row_btn_w, tab_ws, label_ws) =
 			crate::settings_ui::chrome_widths(&mut text, scale);
 		// Cap the window to the part of the screen it can actually occupy - the
 		// monitor minus the taskbar, minus the frame the WM puts round it - and to
@@ -355,6 +355,7 @@ impl DialogWin {
 			btn_w,
 			row_btn_w,
 			tab_ws,
+			label_ws,
 			max_w,
 			max_h,
 			scale,
@@ -802,7 +803,7 @@ impl DialogWin {
 	}
 
 	fn rescale_settings(&mut self, scale: f32) {
-		let (label_w, btn_w, row_btn_w, tab_ws) =
+		let (label_w, btn_w, row_btn_w, tab_ws, label_ws) =
 			crate::settings_ui::chrome_widths(&mut self.text, scale);
 		let (max_w, max_h) = Self::settings_caps(&self.window, self.parent, scale);
 		self.caps = (max_w, max_h);
@@ -811,7 +812,7 @@ impl DialogWin {
 			return;
 		};
 		dialog.rescale(
-			line_h, label_w, btn_w, row_btn_w, tab_ws, max_w, max_h, scale,
+			line_h, label_w, btn_w, row_btn_w, tab_ws, label_ws, max_w, max_h, scale,
 		);
 		// the floor is physical, so it was wrong the moment the factor moved
 		let (min_w, min_h) = dialog.min_size();
@@ -2797,7 +2798,8 @@ mod tests {
 	}
 
 	fn settings_content(text: &mut TextCtx) -> super::Content {
-		let (label_w, btn_w, row_btn_w, tab_ws) = crate::settings_ui::chrome_widths(text, 1.0);
+		let (label_w, btn_w, row_btn_w, tab_ws, label_ws) =
+			crate::settings_ui::chrome_widths(text, 1.0);
 		let mut dialog = crate::settings_ui::SettingsDialog::new(
 			0.0,
 			0.0,
@@ -2806,6 +2808,7 @@ mod tests {
 			btn_w,
 			row_btn_w,
 			tab_ws,
+			label_ws,
 			f32::MAX,
 			700.0,
 			1.0,

@@ -121,6 +121,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 - One row edits one setting, and its label names that setting in plain words.
 
 - Two rows may share a line where neither earns one of its own and the two belong together. The upper one keeps the label column, and its label has to name both halves. The lower one is declared `beside`, takes the right half of the control column, and carries its own label only if its control does not say what it is. One revert control at the end of the line answers for both.
+	- A run of toggles may share one line the same way, as the four Tab text switches do. The control column splits evenly between them, each toggle after the first has its label in front of its box, and each keeps its own flyover. The first toggle's label then names only itself, since the rest name themselves. The one revert control puts back all of them.
 
 - Row kinds are: heading, toggle, slider, color, text, radio, dropdown, pair, hotkey, buttons, and shells. The last two are one-offs. A `buttons` row holds no value and acts on the row above it; `shells` is the Shell tab's grid, one declared row that draws a line per stored shell. A new kind needs a reason no existing kind covers.
 	- A row or a whole group that only applies to one platform is declared with `windows: true` and left out of every other build. Rows are not grayed for that, since a control that can never work there is noise.

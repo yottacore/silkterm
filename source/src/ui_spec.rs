@@ -123,10 +123,11 @@ pub struct Spec {
 	/// sub-group is therefore not declared anywhere - it is the leader's own
 	/// depth plus everything deeper that follows.
 	pub indent: u8,
-	/// Drawn on the same line as the row above rather than under it. The pair
-	/// splits the control column in half; the row above keeps the label column and
-	/// its label has to name both halves. This row's own label, if it has one,
-	/// follows its control the way a checkbox's does.
+	/// Drawn on the same line as the row above rather than under it. A line of
+	/// N rows splits the control column into N even parts; the first row keeps
+	/// the label column and its label has to name the line, unless every part
+	/// names itself. This row's own label, if it has one, comes before its box,
+	/// the way the first row's does.
 	pub beside: bool,
 	/// Flyover for the revert arrow, where it does something other than put the
 	/// shipped default back.
@@ -514,9 +515,10 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			}
 		}
 		let beside = doc.get_bool(&at("beside")).unwrap_or(false);
-		// A shared line needs an ordinary row above it to share, and both halves
-		// have to be things that fit on one line. A row whose height is not a
-		// constant (the grid) or that holds no value (a heading) is not.
+		// A shared line needs an ordinary row above it to share, or another row
+		// already beside one, and every part has to be something that fits on one
+		// line. A row whose height is not a constant (the grid) or that holds no
+		// value (a heading) is not.
 		let one_line = |kind: &Kind| {
 			!matches!(
 				kind,
@@ -526,15 +528,15 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		if beside {
 			if !specs
 				.last()
-				.is_some_and(|prev| prev.tab == tab && !prev.beside && one_line(&prev.kind))
+				.is_some_and(|prev| prev.tab == tab && one_line(&prev.kind))
 			{
 				problems.push(format!("rows.{name}: beside needs a plain row above it"));
 			}
 			if !one_line(&kind) {
 				problems.push(format!("rows.{name}: this kind cannot share a line"));
 			}
-			// its label, if any, is drawn where a checkbox puts one - to the right
-			// of the control - so anything else would draw over its own control
+			// its label, if any, takes room in front of a checkbox; any other
+			// control fills its part and would be drawn over by it
 			if !label.is_empty() && !matches!(kind, Kind::Toggle) {
 				problems.push(format!(
 					"rows.{name}: only a toggle beside another may carry a label"
