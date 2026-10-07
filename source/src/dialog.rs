@@ -361,6 +361,7 @@ impl DialogWin {
 			scale,
 		);
 		dialog.start_from(base);
+		dialog.set_sees_hidden(!on_wayland(el));
 		if let Some(view) = resume {
 			dialog.restore(view);
 		}
@@ -1648,6 +1649,14 @@ fn restack_parent_below(dialog: &Window, parent: Option<&RawWindowHandle>, dbg: 
 }
 #[cfg(not(target_os = "linux"))]
 fn restack_parent_below(_d: &Window, _p: Option<&RawWindowHandle>, _dbg: bool, _kind: &str) {}
+
+// Wayland tells a window neither that it is minimized nor that it is covered.
+fn on_wayland(el: &ActiveEventLoop) -> bool {
+	use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+	el.owned_display_handle()
+		.display_handle()
+		.is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)))
+}
 
 // Field context-menu command against the active edit; the clipboard glue lives
 // here (settings_ui stays clipboard-free). The Ctrl+letter shortcuts, Command on

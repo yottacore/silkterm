@@ -450,6 +450,15 @@ const fn software_tip(possible: bool) -> Option<&'static str> {
 	}
 }
 
+// Why "Minutes when hidden" is grayed on a desktop that never says so.
+const fn hidden_wait_tip(sees_hidden: bool) -> Option<&'static str> {
+	if sees_hidden {
+		None
+	} else {
+		Some("Wayland never tells a window it is hidden, so Minutes otherwise is the wait used.")
+	}
+}
+
 // A switch's state in `settings`, for the shown value, the default and the revert.
 fn toggle_of(settings: &Settings, key: Key) -> bool {
 	match key {
@@ -981,6 +990,9 @@ pub struct SettingsDialog {
 	// desktop reports: that answer is the only thing that grays the system-font
 	// row, and a box whose desktop does name a font could not reach the case.
 	os_font: crate::sysfont::Monospace,
+	// Whether the desktop says when a window is minimized or covered. Wayland
+	// does not, so the hidden wait never applies there.
+	sees_hidden: bool,
 	// Where the Windows file-type rows write, and whether each of
 	// `fileassoc::Assoc::ALL` is registered. A map stands in for the registry in
 	// tests. The answer is read when the dialog opens and after each change, not
@@ -1284,6 +1296,7 @@ impl SettingsDialog {
 			mouse: (0.0, 0.0),
 			row_tops: std::cell::RefCell::default(),
 			os_font: crate::sysfont::monospace().clone(),
+			sees_hidden: true,
 			assoc: crate::fileassoc::system(),
 			assoc_on: [false; 4],
 			focus: None,
@@ -1791,6 +1804,10 @@ impl SettingsDialog {
 		let settings = users_own(settings);
 		self.orig = settings.clone();
 		self.edited = settings;
+	}
+	/// Whether the desktop says when a window is minimized or covered.
+	pub fn set_sees_hidden(&mut self, sees: bool) {
+		self.sees_hidden = sees;
 	}
 
 	/// A restored view comes from a dialog that no longer exists, so nothing about
@@ -2998,12 +3015,14 @@ impl SettingsDialog {
 	// Flyover text for a control the environment disables rather than another
 	// setting - explains why it is inert. The system-font toggles, only when the
 	// OS reports no such setting to follow: Windows has a system font size but
-	// no monospace family, a bare desktop may have neither. And software
-	// rendering where the platform has no software renderer.
+	// no monospace family, a bare desktop may have neither. Software rendering
+	// where the platform has no software renderer, and the hidden wait where
+	// the desktop never says a window is hidden.
 	fn disabled_tip(&self, key: Key) -> Option<&'static str> {
 		let os = &self.os_font;
 		match key {
 			Key::SoftwareRendering => software_tip(crate::gfx::SOFTWARE_POSSIBLE),
+			Key::IdleHiddenMin => hidden_wait_tip(self.sees_hidden),
 			Key::SystemFont if os.family.is_none() => {
 				Some("The desktop reports no monospace font to follow.")
 			}
@@ -12165,6 +12184,7 @@ mod tests {
 			revert_help: "",
 			windows: false,
 			warning: "",
+			windows_warning: "",
 		};
 		let specs = [
 			row(Key::PerfCheckHardware, 0),
@@ -12617,59 +12637,158 @@ mod tests {
 		);
 	}
 
-	// The Transparency row carries a warning mark after its label, with its own
-	// flyover, and it is the only row that does.
-	// Test ID: EreHnrx
+	// Commented out 20261006: "Free resources when idle" has a warning mark too
+	// now (2026100418225506), so Transparency is no longer the only row with
+	// one, nor Background the only tab that draws one. Replaced by
+	// `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl), which checks
+	// the same things for both marks.
+	// // The Transparency row carries a warning mark after its label, with its own
+	// // flyover, and it is the only row that does.
+	// // Test ID: EreHnrx
+	// #[test]
+	// fn the_transparency_row_warns_that_it_needs_the_compositor() {
+	// 	let mut d = mk_dialog(4000.0);
+	// 	let warned: Vec<Key> = d
+	// 		.specs
+	// 		.iter()
+	// 		.filter(|s| !s.warning.is_empty())
+	// 		.map(|s| s.key)
+	// 		.collect();
+	// 	assert_eq!(warned, [Key::Transparency]);
+	// 	let i = d
+	// 		.specs
+	// 		.iter()
+	// 		.position(|s| s.key == Key::Transparency)
+	// 		.unwrap();
+	// 	assert!(d.specs[i].warning.contains("compositor"));
+	// 	d.tab = d.specs[i].tab;
+	// 	let mark = d.warning_box(i, &mut chars7);
+	// 	// after the label's text, and clear of the checkbox
+	// 	assert!(mark.x > d.label_x(i) + chars7(d.specs[i].label));
+	// 	assert!(
+	// 		mark.x + mark.w <= d.checkbox(i).x,
+	// 		"the mark runs into the checkbox"
+	// 	);
+	// 	// drawn: one triangle, where the mark is
+	// 	let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
+	// 	let triangles: Vec<_> = rows
+	// 		.iter()
+	// 		.filter(|r| r.mode() == QuadMode::Triangle)
+	// 		.collect();
+	// 	assert_eq!(triangles.len(), 1, "one mark on the tab");
+	// 	assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
+	// 	assert!(
+	// 		(triangles[0].params[1] - 3.0).abs() < f32::EPSILON,
+	// 		"points up"
+	// 	);
+	// 	// its own tip over it, the row's own over the label
+	// 	let (cx, cy) = (mark.x + mark.w / 2.0, mark.y + mark.h / 2.0);
+	// 	assert_eq!(
+	// 		d.hover_tip_dip(cx, cy, &mut chars7).map(|(tip, _)| tip),
+	// 		Some(d.specs[i].warning)
+	// 	);
+	// 	let label = d.label_x(i) + 2.0;
+	// 	assert_eq!(
+	// 		d.hover_tip_dip(label, cy, &mut chars7).map(|(tip, _)| tip),
+	// 		Some(d.specs[i].help)
+	// 	);
+	// 	// no other tab draws one
+	// 	let background = d.tab;
+	// 	for tab in (0..tab_titles().len()).filter(|t| *t != background) {
+	// 		d.tab = tab;
+	// 		let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
+	// 		assert!(
+	// 			!rows.iter().any(|r| r.mode() == QuadMode::Triangle),
+	// 			"a triangle on tab {tab}"
+	// 		);
+	// 	}
+	// }
+
+	// Two rows carry a warning mark: Transparency on the Background tab, and
+	// "Free resources when idle" on the Window tab. Each draws one triangle after
+	// its label, clear of its checkbox, and answers with its own flyover, while
+	// the label keeps the row's usual one. No other tab draws a mark.
+	// Test ID: EryD9nl
 	#[test]
-	fn the_transparency_row_warns_that_it_needs_the_compositor() {
-		let mut d = mk_dialog(4000.0);
+	fn two_rows_warn_and_each_mark_answers_for_its_own() {
+		// the label column the way `chrome_widths` measures it, marks included
+		let line_h = 18.0;
+		let label_w = super::ui()
+			.specs
+			.iter()
+			.map(|s| {
+				let mark = if s.warning.is_empty() {
+					0.0
+				} else {
+					super::warning_room(line_h)
+				};
+				chars7(s.label) + f32::from(s.indent) * lay().indent + mark
+			})
+			.fold(0.0f32, f32::max)
+			+ lay().label_gap;
+		let mut d = SettingsDialog::new(
+			0.0,
+			0.0,
+			line_h,
+			label_w,
+			80.0,
+			90.0,
+			vec![90.0; tab_titles().len()],
+			labels7(1.0),
+			f32::MAX,
+			4000.0,
+			1.0,
+		);
 		let warned: Vec<Key> = d
 			.specs
 			.iter()
 			.filter(|s| !s.warning.is_empty())
 			.map(|s| s.key)
 			.collect();
-		assert_eq!(warned, [Key::Transparency]);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::Transparency)
-			.unwrap();
-		assert!(d.specs[i].warning.contains("compositor"));
-		d.tab = d.specs[i].tab;
-		let mark = d.warning_box(i, &mut chars7);
-		// after the label's text, and clear of the checkbox
-		assert!(mark.x > d.label_x(i) + chars7(d.specs[i].label));
-		assert!(
-			mark.x + mark.w <= d.checkbox(i).x,
-			"the mark runs into the checkbox"
-		);
-		// drawn: one triangle, where the mark is
-		let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
-		let triangles: Vec<_> = rows
-			.iter()
-			.filter(|r| r.mode() == QuadMode::Triangle)
-			.collect();
-		assert_eq!(triangles.len(), 1, "one mark on the tab");
-		assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
-		assert!(
-			(triangles[0].params[1] - 3.0).abs() < f32::EPSILON,
-			"points up"
-		);
-		// its own tip over it, the row's own over the label
-		let (cx, cy) = (mark.x + mark.w / 2.0, mark.y + mark.h / 2.0);
+		assert_eq!(warned, [Key::Transparency, Key::IdleRelease]);
+		let mut marked = Vec::new();
+		for key in warned {
+			let i = d.specs.iter().position(|s| s.key == key).unwrap();
+			d.tab = d.specs[i].tab;
+			marked.push(d.tab);
+			let mark = d.warning_box(i, &mut chars7);
+			assert!(mark.x > d.label_x(i) + chars7(d.specs[i].label));
+			assert!(
+				mark.x + mark.w <= d.checkbox(i).x,
+				"{}'s mark runs into the checkbox",
+				key.name()
+			);
+			let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
+			let triangles: Vec<_> = rows
+				.iter()
+				.filter(|r| r.mode() == QuadMode::Triangle)
+				.collect();
+			assert_eq!(triangles.len(), 1, "one mark on {}'s tab", key.name());
+			assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
+			let (cx, cy) = (mark.x + mark.w / 2.0, mark.y + mark.h / 2.0);
+			assert_eq!(
+				d.hover_tip_dip(cx, cy, &mut chars7).map(|(tip, _)| tip),
+				Some(d.specs[i].warning)
+			);
+			let label = d.label_x(i) + 2.0;
+			assert_eq!(
+				d.hover_tip_dip(label, cy, &mut chars7).map(|(tip, _)| tip),
+				Some(d.specs[i].help)
+			);
+		}
+		assert_eq!(tab_titles()[marked[0]], "Background");
+		assert_eq!(tab_titles()[marked[1]], "Window");
+		let at = |key: Key| d.specs.iter().find(|s| s.key == key).unwrap().warning;
+		assert!(at(Key::Transparency).contains("compositor"));
+		assert!(at(Key::IdleRelease).contains("driver"));
+		// the memory half is Windows' alone
 		assert_eq!(
-			d.hover_tip_dip(cx, cy, &mut chars7).map(|(tip, _)| tip),
-			Some(d.specs[i].warning)
+			at(Key::Transparency).contains("memory"),
+			cfg!(windows),
+			"{}",
+			at(Key::Transparency)
 		);
-		let label = d.label_x(i) + 2.0;
-		assert_eq!(
-			d.hover_tip_dip(label, cy, &mut chars7).map(|(tip, _)| tip),
-			Some(d.specs[i].help)
-		);
-		// no other tab draws one
-		let background = d.tab;
-		for tab in (0..tab_titles().len()).filter(|t| *t != background) {
+		for tab in (0..tab_titles().len()).filter(|t| !marked.contains(t)) {
 			d.tab = tab;
 			let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
 			assert!(
@@ -12677,6 +12796,64 @@ mod tests {
 				"a triangle on tab {tab}"
 			);
 		}
+	}
+
+	// "Resource use" is the last group on the Window tab: the idle switch with
+	// its two waits under it, then software rendering at the switch's depth.
+	// Test ID: EryD9rp
+	#[test]
+	fn the_resource_use_group_ends_the_window_tab() {
+		let specs = &super::ui().specs;
+		let head = specs
+			.iter()
+			.position(|s| matches!(s.kind, Kind::Header(label) if label == "Resource use"))
+			.expect("a Resource use heading");
+		assert_eq!(tab_titles()[specs[head].tab], "Window");
+		let rest: Vec<(Key, u8)> = specs[head + 1..]
+			.iter()
+			.take_while(|s| s.tab == specs[head].tab)
+			.map(|s| (s.key, s.indent))
+			.collect();
+		assert_eq!(
+			rest,
+			[
+				(Key::IdleRelease, 0),
+				(Key::IdleHiddenMin, 1),
+				(Key::IdleMin, 1),
+				(Key::SoftwareRendering, 0),
+			],
+			"nothing else in the group, and nothing after it on the tab"
+		);
+	}
+
+	// A desktop that never says a window is hidden grays "Minutes when hidden"
+	// and says why, since the other wait is the one that runs there. The switch
+	// and the other wait stay as they were.
+	// Test ID: EryD9vW
+	#[test]
+	fn the_hidden_wait_is_grayed_where_the_desktop_never_says() {
+		assert_eq!(super::hidden_wait_tip(true), None);
+		assert!(super::hidden_wait_tip(false).is_some_and(|tip| tip.contains("Wayland")));
+		let mut d = mk_dialog(4000.0);
+		d.edited.idle_release = true;
+		let i = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::IdleHiddenMin)
+			.unwrap();
+		d.tab = d.specs[i].tab;
+		assert!(!d.disabled(Key::IdleHiddenMin));
+		d.set_sees_hidden(false);
+		assert!(d.disabled(Key::IdleHiddenMin));
+		assert!(!d.disabled(Key::IdleMin));
+		assert!(!d.disabled(Key::IdleRelease));
+		let track = d.track(i);
+		let y = track.y + track.h / 2.0;
+		assert_eq!(
+			d.hover_tip_dip(d.label_x(i) + 2.0, y, &mut chars7)
+				.map(|(tip, _)| tip),
+			super::hidden_wait_tip(false)
+		);
 	}
 
 	// A triangle's params.y is a count of quarter-turns, not a length, so the

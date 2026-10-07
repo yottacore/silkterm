@@ -138,6 +138,9 @@ pub struct Spec {
 	/// Flyover for a warning mark after the label: a row that may not work
 	/// everywhere. Empty means no mark.
 	pub warning: &'static str,
+	/// The mark's flyover in the Windows build, in place of `warning`. Moved
+	/// over by `pick_warnings`, so the dialog only ever reads `warning`.
+	pub windows_warning: &'static str,
 }
 
 /// One setting a control has to wait on, resolved from the file's gate lines.
@@ -265,6 +268,9 @@ pub fn ui() -> &'static Ui {
 	CELL.get_or_init(|| match parse(SOURCE) {
 		Ok(mut ui) => {
 			keep_platform(&mut ui.specs, cfg!(any(windows, test)));
+			// by the real platform, test or not: a mark that is wrong for the
+			// box it shows on is worse than none
+			pick_warnings(&mut ui.specs, cfg!(windows));
 			ui
 		}
 		// Unreachable in a tested build: the document is compiled in, so it
@@ -275,6 +281,15 @@ pub fn ui() -> &'static Ui {
 
 fn keep_platform(specs: &mut Vec<Spec>, windows: bool) {
 	specs.retain(|spec| windows || !spec.windows);
+}
+
+fn pick_warnings(specs: &mut [Spec], windows: bool) {
+	for spec in specs {
+		if windows && !spec.windows_warning.is_empty() {
+			spec.warning = spec.windows_warning;
+		}
+		spec.windows_warning = "";
+	}
 }
 
 // A parsed string lives as long as the process; there is exactly one document
@@ -544,9 +559,12 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			}
 		}
 		let warning = doc.get_string(&at("warning")).unwrap_or_default();
+		let windows_warning = doc.get_string(&at("windows_warning")).unwrap_or_default();
 		// the mark sits after the label in the label column, which a heading and
 		// half a line do not have
-		if !warning.is_empty() && (label.is_empty() || beside || matches!(kind, Kind::Header(_))) {
+		if !(warning.is_empty() && windows_warning.is_empty())
+			&& (label.is_empty() || beside || matches!(kind, Kind::Header(_)))
+		{
 			problems.push(format!("rows.{name}: a warning needs a label of its own"));
 		}
 		let windows = doc.get_bool(&at("windows")).unwrap_or(false);
@@ -568,6 +586,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			revert_help: doc.get_string(&at("revert_help")).map_or("", keep),
 			windows,
 			warning: keep(warning),
+			windows_warning: keep(windows_warning),
 		});
 	}
 
@@ -620,7 +639,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-	use super::{Key, Kind, SOURCE, keep_platform, parse, ui};
+	use super::{Key, Kind, SOURCE, Spec, keep_platform, parse, pick_warnings, ui};
 
 	// The one check no parser strictness can make: a setting the code knows but
 	// the document never mentions is a perfectly valid document, and a setting
@@ -784,6 +803,44 @@ mod tests {
 				"{problems:?}"
 			);
 		}
+	}
+
+	// Transparency's mark adds that it keeps a window from giving its memory
+	// back, in the Windows build only, since only there is a window in view
+	// with Transparency on never let go. No other row's mark differs.
+	// Test ID: EryD9zK
+	#[test]
+	fn only_the_windows_build_warns_that_transparency_keeps_memory() {
+		let read = |windows: bool| {
+			let Ok(mut ui) = parse(SOURCE) else {
+				panic!("settings_ui.shcl does not parse")
+			};
+			pick_warnings(&mut ui.specs, windows);
+			ui.specs
+		};
+		let (elsewhere, windows) = (read(false), read(true));
+		let mark = |specs: &[Spec], key: Key| specs.iter().find(|s| s.key == key).unwrap().warning;
+		assert!(!mark(&elsewhere, Key::Transparency).contains("memory"));
+		assert!(mark(&windows, Key::Transparency).contains("memory"));
+		assert!(mark(&windows, Key::Transparency).contains("compositor"));
+		for (one, other) in elsewhere.iter().zip(&windows) {
+			assert!(one.windows_warning.is_empty() && other.windows_warning.is_empty());
+			if one.key != Key::Transparency {
+				assert_eq!(one.warning, other.warning, "{}", one.key.name());
+			}
+		}
+		// a mark for Windows alone has no label column to sit in either, on a
+		// heading or half a line
+		let head =
+			"tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n";
+		let bad = format!("{head}\t\twindows_warning: \"Careful.\"\n");
+		let Err(problems) = parse(&bad) else {
+			panic!("a fragment with no layout block never parses clean")
+		};
+		assert!(
+			problems.iter().any(|p| p.contains("warning")),
+			"{problems:?}"
+		);
 	}
 
 	// Test ID: ErNFx0h

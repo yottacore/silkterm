@@ -125,6 +125,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - Row kinds are: heading, toggle, slider, color, text, radio, dropdown, pair, hotkey, buttons, and shells. The last two are one-offs. A `buttons` row holds no value and acts on the row above it; `shells` is the Shell tab's grid, one declared row that draws a line per stored shell. A new kind needs a reason no existing kind covers.
 	- A row or a whole group that only applies to one platform is declared with `windows: true` and left out of every other build. Rows are not grayed for that, since a control that can never work there is noise.
+	- A row that cannot work on the desktop it is running on is grayed instead, with a flyover saying why. "Minutes when hidden" is grayed on Wayland, which never tells a window it is hidden.
 
 - A slider carries a number field beside it, and the field is the way to enter an exact value.
 
@@ -140,6 +141,8 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 - Why a row is grayed out beats what it does, so a row grayed by the machine says so in its flyover in place of its usual text. A row grayed by another setting says nothing extra, because the switch that did it is the row above. A row set by the performance profile is not grayed at all - it takes input, and its flyover says that it is showing the profile's value and that changing it switches the profile to Custom.
 
 - A row that may not work on every desktop has a warning mark after its label: a small triangle in the label's color, never red. The mark has its own flyover saying what the row depends on, and the row keeps its usual one.
+	- A row that keeps a window from giving its graphics memory back gets one too, as Transparency does on Windows. So does "Free resources when idle", since some graphics drivers have trouble with it.
+	- A mark says only what applies where it is shown. Transparency's memory note is in the Windows build alone, since only there is a window in view with Transparency on never let go.
 
 ### The color picker
 
