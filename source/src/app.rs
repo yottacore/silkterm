@@ -1317,15 +1317,33 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 // A Settings dialog open at that moment is folded into as well, on BOTH of its
 // copies - see `Dialog::fold_shells`.
 fn fold_shells(found: &[crate::shells::Found]) {
-	let orig = (*config::settings()).clone();
-	let shells = crate::shells::merge(&orig.shells, found);
-	if shells == orig.shells {
-		return;
-	}
-	let mut new = orig.clone();
-	new.shells = shells;
-	let _ = config::persist(&orig, &new);
+	save_live(|live| {
+		let shells = crate::shells::merge(&live.shells, found);
+		if shells == live.shells {
+			return false;
+		}
+		live.shells = shells;
+		true
+	});
+}
+
+// The live settings with `edit` made, for this session only.
+fn set_live(edit: impl FnOnce(&mut config::Settings)) {
+	let mut new = (*config::settings()).clone();
+	edit(&mut new);
 	config::update(new);
+}
+
+// The same, and what changed written to the file. `edit` answers false to leave
+// both alone. A config open in another program skips the write, and the
+// session keeps the value anyway.
+fn save_live(edit: impl FnOnce(&mut config::Settings) -> bool) {
+	let orig = (*config::settings()).clone();
+	let mut new = orig.clone();
+	if edit(&mut new) {
+		let _ = config::persist(&orig, &new);
+		config::update(new);
+	}
 }
 
 // argv for the stored shell at `index`. None when the list moved under an open
@@ -2095,9 +2113,7 @@ fn remote_override_at_launch() {
 	if !crate::profile::remote_session() {
 		return;
 	}
-	let mut live = (*config::settings()).clone();
-	live.remote_override = true;
-	config::update(live);
+	set_live(|live| live.remote_override = true);
 }
 
 // A rotation folder with nothing picked from it has to be read, or the request
@@ -2175,11 +2191,8 @@ fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 			..config::RatingLines::default()
 		});
 		note_rating_not_kept(&kept);
-		let mut new = (*live).clone();
-		new.performance_check_next_run = false;
-		config::update(new);
+		set_live(|live| live.performance_check_next_run = false);
 	}
-	let live = config::settings();
 	if crate::profile::worth_measuring(info) {
 		// Nothing is written yet. The id goes down with the measured answer, so a
 		// window closed mid-run is measured again next launch instead of leaving
@@ -2194,10 +2207,10 @@ fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 		check_next_run: None,
 	});
 	note_rating_not_kept(&kept);
-	let mut new = (*live).clone();
-	new.rated_hardware = hardware;
-	new.performance_profile = pick;
-	config::update(new);
+	set_live(|live| {
+		live.rated_hardware = hardware;
+		live.performance_profile = pick;
+	});
 	None
 }
 
@@ -2351,6 +2364,16 @@ fn pace_frame(next: &mut Option<Instant>, ivl: Duration) -> ControlFlow {
 	}
 	*next = Some(at);
 	ControlFlow::WaitUntil(at)
+}
+
+// `flow`, woken by `wake` as well: a wait takes the earlier of the two, and a
+// loop already polling has nothing to add.
+fn wake_by(flow: ControlFlow, wake: Option<Instant>) -> ControlFlow {
+	match (flow, wake) {
+		(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
+		(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
+		(flow, _) => flow,
+	}
 }
 
 // The times a pane asks the loop to come back at, apart from animating. A
@@ -4893,13 +4916,11 @@ impl State {
 		// the last choice is what the next launch and new tabs start with.
 		// Other panes keep their own, which is why this skips apply_new_settings.
 		if kind == CopyKind::Select {
-			let orig = (*config::settings()).clone();
-			if orig.copy_on_select != now {
-				let mut new = orig.clone();
-				new.copy_on_select = now;
-				let _ = config::persist(&orig, &new);
-				config::update(new);
-			}
+			save_live(|live| {
+				let changed = live.copy_on_select != now;
+				live.copy_on_select = now;
+				changed
+			});
 		}
 		if self.tabs.cur().panes.contains_key(&target) {
 			self.tabs.cur_mut().focused = target;
@@ -5030,20 +5051,17 @@ impl State {
 			MenuAction::ToggleBare => self.toggle_bare(),
 			MenuAction::ToggleRemote => self.toggle_remote(),
 			MenuAction::ToggleMinimap => {
-				let orig = (*config::settings()).clone();
-				let mut new = orig.clone();
-				new.minimap = !new.minimap;
-				let _ = config::persist(&orig, &new);
-				config::update(new);
+				save_live(|live| {
+					live.minimap = !live.minimap;
+					true
+				});
 				self.relayout_all();
 			}
 			MenuAction::ToggleSingleTab => {
-				let orig = (*config::settings()).clone();
-				let mut new = orig.clone();
-				new.hide_single_tab = !new.hide_single_tab;
-				// config open elsewhere -> persist skips; the session keeps the value
-				let _ = config::persist(&orig, &new);
-				config::update(new);
+				save_live(|live| {
+					live.hide_single_tab = !live.hide_single_tab;
+					true
+				});
 				self.relayout_all();
 			}
 			MenuAction::NextWallpaper => self.advance_wallpaper(),
@@ -5114,16 +5132,9 @@ impl State {
 		// manager may set the maximized state after the resize it caused.
 		let fullscreen = self.window.fullscreen().is_some();
 		let maximized = self.window.is_maximized();
-		let orig = (*config::settings()).clone();
-		let mut new = orig.clone();
 		let grid =
 			remember_resize(self.size_tracked, fullscreen, maximized).then_some((cols, rows));
 		let zoom = (!self.watch.font_pinned).then(config::font_zoom_px);
-		config::remember_window(&mut new, self.watch.key.as_deref(), grid, zoom);
-		// a fullscreen window hides whether the one under it is maximized
-		if !fullscreen {
-			new.remembered_maximized = maximized;
-		}
 		let kept = |s: &config::Settings| {
 			(
 				s.remembered_columns,
@@ -5133,13 +5144,17 @@ impl State {
 				s.monitor_sizes.clone(),
 			)
 		};
-		if kept(&new) == kept(&orig) {
-			return;
-		}
-		// If the file's open elsewhere persist skips it (retried on the next resize
-		// or at exit); the live size still updates in memory either way.
-		let _ = config::persist(&orig, &new);
-		config::update(new);
+		// If the file's open elsewhere the write is skipped (retried on the next
+		// resize or at exit); the live size still updates in memory either way.
+		save_live(|live| {
+			let before = kept(live);
+			config::remember_window(live, self.watch.key.as_deref(), grid, zoom);
+			// a fullscreen window hides whether the one under it is maximized
+			if !fullscreen {
+				live.remembered_maximized = maximized;
+			}
+			kept(live) != before
+		});
 	}
 
 	// A move starts the wait for the window to settle.
@@ -5910,10 +5925,10 @@ impl State {
 				self.wp_current = Some(rot.current.clone());
 				// live-only, like a --wallpaper-file: the dialog shows what is on
 				// screen, and nothing about the pick reaches config.shcl
-				let mut settings = config::settings().as_ref().clone();
-				settings.wallpaper_raw = rot.current.to_string_lossy().into_owned();
-				settings.wallpaper = Some(rot.current.clone());
-				config::update(settings);
+				set_live(|live| {
+					live.wallpaper_raw = rot.current.to_string_lossy().into_owned();
+					live.wallpaper = Some(rot.current.clone());
+				});
 				let ivl = config::settings().wallpaper_rotate_interval_s;
 				self.wp_next = (ivl > 0.0 && rot.count > 1)
 					.then(|| Instant::now() + Duration::from_secs_f32(ivl));
@@ -5924,9 +5939,7 @@ impl State {
 		// reaches the file, the same as a rotated pick.
 		let summary = loaded.image.as_ref().map(|img| img.summary);
 		if config::settings().wallpaper_summary != summary {
-			let mut settings = config::settings().as_ref().clone();
-			settings.wallpaper_summary = summary;
-			config::update(settings);
+			set_live(|live| live.wallpaper_summary = summary);
 			// the text is a different color now, so nothing retained is good
 			self.invalidate_prepared();
 			self.chrome = None;
@@ -8581,9 +8594,7 @@ impl ApplicationHandler<UserEvent> for App {
 			let live = config::settings();
 			let step = session_step(&live, gfx.drawn, false);
 			if let Some(step) = step {
-				let mut next = (*live).clone();
-				next.stepped_profile = step;
-				config::update(next);
+				set_live(|live| live.stepped_profile = step);
 			}
 			(None, step.is_some_and(|step| step.is_some()))
 		} else {
@@ -10485,30 +10496,14 @@ impl ApplicationHandler<UserEvent> for App {
 		} else {
 			flow
 		};
-		let flow = match (flow, state.watch.check_at) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, state.watch.check_at);
 		// copy-output: while a capture is armed, make sure the loop wakes at its
 		// settle deadline to run the capture check even when otherwise idle.
-		let flow = match (flow, state.capture_wake()) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, state.capture_wake());
 		// keep frames coming while a dialog field edit animates
-		let flow = match (flow, dlg_wake) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, dlg_wake);
 		// keep the loop waking while dialog-raise retries are pending
-		let flow = match (flow, raise_wake) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, raise_wake);
 		// Read after the frame, since the frame and the rating step after it can
 		// set a wake or owe another frame: a cursor that parks, a minimap compose
 		// that owes another, the window revealed, a rating ended. Read before,
@@ -10516,14 +10511,10 @@ impl ApplicationHandler<UserEvent> for App {
 		if let Some(wake) = pane_wake(state.tabs.cur().panes.values(), Instant::now()) {
 			cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
 		}
-		let flow = match (
+		let flow = wake_by(
 			flow,
 			(state.dirty && !hidden && state.gpu.is_some()).then(Instant::now),
-		) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		);
 		// a frame or a device the GPU refused is tried again on its backoff
 		let refused = if state.gpu.is_some() {
 			state.frame_retry.at.filter(|_| !hidden)
@@ -10536,98 +10527,46 @@ impl ApplicationHandler<UserEvent> for App {
 			.filter_map(|d| d.refused.at)
 			.chain(refused)
 			.min();
-		let flow = match (flow, refused) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, refused);
 		// wake a parked cursor at its scheduled resume time, even when idle
-		let flow = match (flow, cursor_wake) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, cursor_wake);
 		// wake to let the device go once the window has sat idle long enough
 		let idle_wake = (state.gpu.is_some() && !dialog_up)
 			.then(|| state.release_deadline(&config::settings()))
 			.flatten();
-		let flow = match (flow, idle_wake) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, idle_wake);
 		let memdbg_wake = env_flag(EnvFlag::MemDbg).then_some(self.memdbg_next);
-		let flow = match (flow, memdbg_wake) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, memdbg_wake);
 		// wake to take "resources restored" out of the title
-		let flow = match (flow, state.conserve.wake()) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, state.conserve.wake());
 		// wake for the second heal after a return to this console
-		let flow = match (flow, state.vt_heal.again) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, state.vt_heal.again);
 		// wake to rotate the wallpaper when its interval is up, even when idle
 		// (not while the device is gone: the rebuild picks up where it left off)
-		let flow = match (flow, state.wp_next.filter(|_| state.gpu.is_some())) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, state.wp_next.filter(|_| state.gpu.is_some()));
 		// wake to prepare the wallpaper for a new size once resizing stops
-		let flow = match (flow, state.wp_resize_at) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, state.wp_resize_at);
 		// wake when the background shell scan comes due, even on an idle window
-		let flow = match (flow, state.shell_scan_at) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, state.shell_scan_at);
 		// wake to raise a tab tip whose pointer has rested, and to keep an open
 		// one current - the pointer sitting still generates no events of its own,
 		// so nothing else would bring the window back
-		let flow = match (flow, state.tip_wake()) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, state.tip_wake());
 		// wake when the benchmark comes due, and again when its banner may come
 		// down - an idle window generates nothing of its own to bring it back
 		let bench_wake = match (state.bench_at, state.bench_cap) {
 			(Some(_), Some(cap)) if state.bench_blocked() => Some(cap),
 			(at, _) => at,
 		};
-		let flow = match (flow, bench_wake.or(state.bench_banner_wake())) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, bench_wake.or(state.bench_banner_wake()));
 		// wake at the reveal deadline so a hidden startup window is shown even if no
 		// post-resize frame arrives
-		let flow = match (flow, (!state.revealed).then_some(state.reveal_deadline)) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		let flow = wake_by(flow, (!state.revealed).then_some(state.reveal_deadline));
 		// slow-tick wake so the VRAM sentinel probe runs even while fully idle
-		let flow = match (
+		let flow = wake_by(
 			flow,
 			(state.gl && state.gpu.is_some()).then_some(state.vram_next),
-		) {
-			(ControlFlow::Wait, Some(wake)) => ControlFlow::WaitUntil(wake),
-			(ControlFlow::WaitUntil(until), Some(wake)) => ControlFlow::WaitUntil(until.min(wake)),
-			(other_flow, _) => other_flow,
-		};
+		);
 		// Profiling keeps the loop hot so the workload is continuously exercised.
 		#[cfg(feature = "profiling")]
 		let flow = if std::env::var_os("SILK_PROFILE_OUT").is_some() {
@@ -10669,7 +10608,7 @@ mod tests {
 		new_window_command, notice_due, pace_frame, pane_wake, rating_step, release_deadline,
 		remember_resize, resize_is_current, reveal_due, rotation_live, rotation_next,
 		settings_after_reload, settle, size_taken, tab_close_box, tab_command_line, tab_title_w,
-		typed_title, view_menu_items, window_hidden, window_px,
+		typed_title, view_menu_items, wake_by, window_hidden, window_px,
 	};
 	use super::{
 		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
@@ -10682,6 +10621,7 @@ mod tests {
 	use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Retry};
 	use std::time::{Duration, Instant};
 	use winit::event::ElementState;
+	use winit::event_loop::ControlFlow;
 
 	// Each debug switch keeps its own cached answer. SILK_IDLEDBG used to share
 	// SILK_DLGDBG's, so whichever was read first answered for both. Run in a
@@ -12768,6 +12708,41 @@ mod tests {
 			map: now.checked_sub(Duration::from_millis(1)),
 		}];
 		assert_eq!(pane_wake(&due, now), None);
+	}
+
+	// Every wake the loop folds in goes through one merge. A wait takes the
+	// earliest, a poll stays a poll, and no wake leaves the flow alone.
+	// Test ID: ErzM4AJ
+	#[test]
+	fn a_wake_folds_into_the_flow_by_the_earliest() {
+		let now = Instant::now();
+		let soon = now + Duration::from_millis(5);
+		let later = now + Duration::from_secs(1);
+		let until = |flow| match flow {
+			ControlFlow::WaitUntil(at) => Some(at),
+			ControlFlow::Wait | ControlFlow::Poll => None,
+		};
+		assert_eq!(until(wake_by(ControlFlow::Wait, Some(soon))), Some(soon));
+		assert_eq!(
+			until(wake_by(ControlFlow::WaitUntil(later), Some(soon))),
+			Some(soon)
+		);
+		assert_eq!(
+			until(wake_by(ControlFlow::WaitUntil(soon), Some(later))),
+			Some(soon)
+		);
+		assert!(matches!(
+			wake_by(ControlFlow::Poll, Some(soon)),
+			ControlFlow::Poll
+		));
+		assert!(matches!(
+			wake_by(ControlFlow::Wait, None),
+			ControlFlow::Wait
+		));
+		assert_eq!(
+			until(wake_by(ControlFlow::WaitUntil(later), None)),
+			Some(later)
+		);
 	}
 
 	// The style guide asks every View toggle to name the thing and be checked

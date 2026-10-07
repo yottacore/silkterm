@@ -158,6 +158,31 @@ fi
 
 ## A test script's ID, from the "Test ID:" line in its header.
 fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/${1}" 2>/dev/null || true; }
+## fRunTest <script> <label> [failure]: runs a test script under the repo root
+## with its output thrown away, if it is there. OK and its test ID on a pass;
+## the failure text, by default "<label> test failed", aborts the run.
+fRunTest(){
+	local -r script="${1}" label="${2}" failure="${3:-${2} test failed}"
+	[[ -x "${root}/${script}" ]] || return 0
+	fEcho_Clean "${label} ..."
+	"${root}/${script}" >/dev/null || fDie "${failure} ($(fTestId "${script}"))"
+	fEcho "OK: ${label} ($(fTestId "${script}"))"
+}
+## fRunTest_MaySkip <script> <label> [skipped]: the same, for a test whose exit 3
+## means it could not run. That is a warning, by default "<label> skipped", and
+## never an OK.
+fRunTest_MaySkip(){
+	local -r script="${1}" label="${2}" skipped="${3:-${2} skipped}"
+	[[ -x "${root}/${script}" ]] || return 0
+	fEcho_Clean "${label} ..."
+	local rc=0
+	"${root}/${script}" >/dev/null || rc=$?
+	case "${rc}" in
+		0) fEcho "OK: ${label} ($(fTestId "${script}"))" ;;
+		3) fEcho "WARNING: ${skipped}" ;;
+		*) fDie "${label} test failed ($(fTestId "${script}"))" ;;
+	esac
+}
 ## Runs cargo test with each result line as status, test ID and name. Every other
 ## line goes through untouched, and the command's own exit status is kept.
 fTestLines(){
@@ -644,242 +669,86 @@ if [[ -n "${DENY_CMD+x}" ]] && ((${#DENY_CMD[@]})); then
 	fi
 fi
 ## A release may only publish what was built from the source being tagged.
-if [[ -x "${root}/cicd/tests/release/run.bash" ]]; then
-	fEcho_Clean "release provenance ..."
-	"${root}/cicd/tests/release/run.bash" >/dev/null || fDie "release provenance test failed ($(fTestId cicd/tests/release/run.bash))"
-	fEcho "OK: release provenance ($(fTestId cicd/tests/release/run.bash))"
-fi
+fRunTest cicd/tests/release/run.bash "release provenance"
 ## The release notes link every download by name, and only those uploaded.
-if [[ -x "${root}/cicd/tests/release-notes/run.bash" ]]; then
-	fEcho_Clean "release notes table ..."
-	"${root}/cicd/tests/release-notes/run.bash" >/dev/null || fDie "release notes test failed ($(fTestId cicd/tests/release-notes/run.bash))"
-	fEcho "OK: release notes table ($(fTestId cicd/tests/release-notes/run.bash))"
-fi
+fRunTest cicd/tests/release-notes/run.bash "release notes table" "release notes test failed"
 ## Installer and rig hygiene: no secret on a command line, no plain-http
 ## redirect, no adopting somebody else's directory in a shared temp folder.
-if [[ -x "${root}/cicd/tests/install/run.bash" ]]; then
-	fEcho_Clean "installer hygiene ..."
-	"${root}/cicd/tests/install/run.bash" >/dev/null || fDie "installer hygiene test failed ($(fTestId cicd/tests/install/run.bash))"
-	fEcho "OK: installer hygiene ($(fTestId cicd/tests/install/run.bash))"
-fi
+fRunTest cicd/tests/install/run.bash "installer hygiene"
 ## The packaging step and the Windows pipeline both look for binaries stage 5
 ## built, and CARGO_TARGET_DIR decides where those are.
-if [[ -x "${root}/cicd/tests/packaging/run.bash" ]]; then
-	fEcho_Clean "packaging paths ..."
-	"${root}/cicd/tests/packaging/run.bash" >/dev/null || fDie "packaging path test failed ($(fTestId cicd/tests/packaging/run.bash))"
-	fEcho "OK: packaging paths ($(fTestId cicd/tests/packaging/run.bash))"
-fi
+fRunTest cicd/tests/packaging/run.bash "packaging paths" "packaging path test failed"
 ## Renaming the project has to leave a tree that still builds. Skipped under
 ## --quick: it clones the repository.
-if ((! quick)) && [[ -x "${root}/cicd/tests/rename/run.bash" ]]; then
-	fEcho_Clean "project rename ..."
-	"${root}/cicd/tests/rename/run.bash" >/dev/null || fDie "project rename test failed ($(fTestId cicd/tests/rename/run.bash))"
-	fEcho "OK: project rename ($(fTestId cicd/tests/rename/run.bash))"
-fi
+((quick)) || fRunTest cicd/tests/rename/run.bash "project rename"
 ## Every file a test writes goes under the run folder. Skipped under --quick: it
 ## runs the Rust tests again.
-if ((! quick)) && [[ -x "${root}/cicd/tests/testdir/run.bash" ]]; then
-	fEcho_Clean "test run folder ..."
-	"${root}/cicd/tests/testdir/run.bash" >/dev/null || fDie "test run folder test failed ($(fTestId cicd/tests/testdir/run.bash))"
-	fEcho "OK: test run folder ($(fTestId cicd/tests/testdir/run.bash))"
-fi
+((quick)) || fRunTest cicd/tests/testdir/run.bash "test run folder"
 ## The git hooks act on a commit or a push, where a mistake is awkward to undo.
-if [[ -x "${root}/cicd/tests/hooks/run.bash" ]]; then
-	fEcho_Clean "git hooks ..."
-	"${root}/cicd/tests/hooks/run.bash" >/dev/null || fDie "git hook test failed ($(fTestId cicd/tests/hooks/run.bash))"
-	fEcho "OK: git hooks ($(fTestId cicd/tests/hooks/run.bash))"
-fi
+fRunTest cicd/tests/hooks/run.bash "git hooks" "git hook test failed"
 ## The publish script commits and pushes, so nothing may reach a shell inside it.
-if [[ -x "${root}/cicd/tests/publish/run.bash" ]]; then
-	fEcho_Clean "publish script safety ..."
-	"${root}/cicd/tests/publish/run.bash" >/dev/null || fDie "publish script safety test failed ($(fTestId cicd/tests/publish/run.bash))"
-	fEcho "OK: publish script safety ($(fTestId cicd/tests/publish/run.bash))"
-fi
+fRunTest cicd/tests/publish/run.bash "publish script safety"
 ## The harness's own exit code, which once printed OK after running no scenes.
-if [[ -x "${root}/cicd/tests/scroll/verdict-test.bash" ]]; then
-	fEcho_Clean "scroll harness verdict ..."
-	"${root}/cicd/tests/scroll/verdict-test.bash" >/dev/null || fDie "scroll harness verdict test failed ($(fTestId cicd/tests/scroll/verdict-test.bash))"
-	fEcho "OK: scroll harness verdict ($(fTestId cicd/tests/scroll/verdict-test.bash))"
-fi
+fRunTest cicd/tests/scroll/verdict-test.bash "scroll harness verdict"
 ## The demo recorder's own window manager session, which once wrote over the
 ## desktop's settings and outlived the recording.
-if [[ -x "${root}/cicd/tests/demo/run.py" ]]; then
-	fEcho_Clean "demo recorder session ..."
-	"${root}/cicd/tests/demo/run.py" >/dev/null || fDie "demo recorder session test failed ($(fTestId cicd/tests/demo/run.py))"
-	fEcho "OK: demo recorder session ($(fTestId cicd/tests/demo/run.py))"
-fi
+fRunTest cicd/tests/demo/run.py "demo recorder session"
 ## The showdown table writers, which once took quick, scaled and wrong-grid runs.
-if [[ -x "${root}/cicd/tests/showdown/run.py" ]]; then
-	fEcho_Clean "showdown table writers ..."
-	"${root}/cicd/tests/showdown/run.py" >/dev/null || fDie "showdown table test failed ($(fTestId cicd/tests/showdown/run.py))"
-	fEcho "OK: showdown table writers ($(fTestId cicd/tests/showdown/run.py))"
-fi
+fRunTest cicd/tests/showdown/run.py "showdown table writers" "showdown table test failed"
 ## Every measured row of that table has a rig entry that can take it again.
-if [[ -x "${root}/cicd/tests/showdown/rigs.py" ]]; then
-	fEcho_Clean "showdown rig entries ..."
-	"${root}/cicd/tests/showdown/rigs.py" >/dev/null || fDie "showdown rig entry test failed ($(fTestId cicd/tests/showdown/rigs.py))"
-	fEcho "OK: showdown rig entries ($(fTestId cicd/tests/showdown/rigs.py))"
-fi
+fRunTest cicd/tests/showdown/rigs.py "showdown rig entries" "showdown rig entry test failed"
 ## The startup gates, which once marked a run as seen while it was being written.
-if [[ -x "${root}/cicd/tests/gates/run.bash" ]]; then
-	fEcho_Clean "startup gates ..."
-	"${root}/cicd/tests/gates/run.bash" >/dev/null || fDie "startup gate test failed ($(fTestId cicd/tests/gates/run.bash))"
-	fEcho "OK: startup gates ($(fTestId cicd/tests/gates/run.bash))"
-fi
-## This script's own steps: the build retry, the dogfood tag, the options, the
-## running-copy check, the build number and the host line.
+fRunTest cicd/tests/gates/run.bash "startup gates" "startup gate test failed"
 ## Old config files converted by the program just built: in place where shcl
 ## can migrate them, written new where it cannot, the old file kept either way.
 ## Exit 3 means there was no binary to run, which is a skip and never an OK.
-if [[ -x "${root}/cicd/tests/config-convert/run.bash" ]]; then
-	fEcho_Clean "config conversion ..."
-	convertRc=0; "${root}/cicd/tests/config-convert/run.bash" >/dev/null || convertRc=$?
-	case "${convertRc}" in
-		0) fEcho "OK: config conversion ($(fTestId cicd/tests/config-convert/run.bash))" ;;
-		3) fEcho "WARNING: config conversion skipped, no binary to run" ;;
-		*) fDie "config conversion test failed ($(fTestId cicd/tests/config-convert/run.bash))" ;;
-	esac
-fi
+fRunTest_MaySkip cicd/tests/config-convert/run.bash "config conversion" "config conversion skipped, no binary to run"
 ## The window shows at the size it keeps, maximized and fullscreen too, with
 ## no jump after. Exit 3 is a skip: no binary, display, window manager or python-xlib.
-if [[ -x "${root}/cicd/tests/startsize/run.bash" ]]; then
-	fEcho_Clean "window size at launch ..."
-	startRc=0; "${root}/cicd/tests/startsize/run.bash" >/dev/null || startRc=$?
-	case "${startRc}" in
-		0) fEcho "OK: window size at launch ($(fTestId cicd/tests/startsize/run.bash))" ;;
-		3) fEcho "WARNING: window size at launch skipped" ;;
-		*) fDie "window size at launch test failed ($(fTestId cicd/tests/startsize/run.bash))" ;;
-	esac
-fi
+fRunTest_MaySkip cicd/tests/startsize/run.bash "window size at launch"
 ## A save after the config was deleted writes it again, keeping what it had.
 ## Exit 3 is a skip: no binary, display or xdotool.
-if [[ -x "${root}/cicd/tests/delcfg/run.bash" ]]; then
-	fEcho_Clean "save after the config was deleted ..."
-	delRc=0; "${root}/cicd/tests/delcfg/run.bash" >/dev/null || delRc=$?
-	case "${delRc}" in
-		0) fEcho "OK: save after the config was deleted ($(fTestId cicd/tests/delcfg/run.bash))" ;;
-		3) fEcho "WARNING: save after the config was deleted skipped" ;;
-		*) fDie "save after the config was deleted test failed ($(fTestId cicd/tests/delcfg/run.bash))" ;;
-	esac
-fi
+fRunTest_MaySkip cicd/tests/delcfg/run.bash "save after the config was deleted"
 ## The wallpaper is held at the size it is drawn at, and again after a resize.
 ## Exit 3 is a skip: no binary, display or xdotool.
-if [[ -x "${root}/cicd/tests/wpresize/run.bash" ]]; then
-	fEcho_Clean "wallpaper held at window size ..."
-	wpRc=0; "${root}/cicd/tests/wpresize/run.bash" >/dev/null || wpRc=$?
-	case "${wpRc}" in
-		0) fEcho "OK: wallpaper held at window size ($(fTestId cicd/tests/wpresize/run.bash))" ;;
-		3) fEcho "WARNING: wallpaper held at window size skipped" ;;
-		*) fDie "wallpaper held at window size test failed ($(fTestId cicd/tests/wpresize/run.bash))" ;;
-	esac
-fi
+fRunTest_MaySkip cicd/tests/wpresize/run.bash "wallpaper held at window size"
 ## A window waking from the idle release shows a small copy of its wallpaper
 ## until the real one is prepared again. Exit 3 is a skip: no binary, display,
 ## window manager or tools.
-if [[ -x "${root}/cicd/tests/wakepic/run.bash" ]]; then
-	fEcho_Clean "wallpaper kept through an idle wake ..."
-	wakeRc=0; "${root}/cicd/tests/wakepic/run.bash" >/dev/null || wakeRc=$?
-	case "${wakeRc}" in
-		0) fEcho "OK: wallpaper kept through an idle wake ($(fTestId cicd/tests/wakepic/run.bash))" ;;
-		3) fEcho "WARNING: wallpaper kept through an idle wake skipped" ;;
-		*) fDie "wallpaper kept through an idle wake test failed ($(fTestId cicd/tests/wakepic/run.bash))" ;;
-	esac
-fi
+fRunTest_MaySkip cicd/tests/wakepic/run.bash "wallpaper kept through an idle wake"
 ## A prepared wallpaper is kept on disk and the next launch reads it back.
 ## Exit 3 is a skip: no binary, display or xdotool.
-if [[ -x "${root}/cicd/tests/wpkept/run.bash" ]]; then
-	fEcho_Clean "prepared wallpaper kept on disk ..."
-	keptRc=0; "${root}/cicd/tests/wpkept/run.bash" >/dev/null || keptRc=$?
-	case "${keptRc}" in
-		0) fEcho "OK: prepared wallpaper kept on disk ($(fTestId cicd/tests/wpkept/run.bash))" ;;
-		3) fEcho "WARNING: prepared wallpaper kept on disk skipped" ;;
-		*) fDie "prepared wallpaper kept on disk test failed ($(fTestId cicd/tests/wpkept/run.bash))" ;;
-	esac
-fi
+fRunTest_MaySkip cicd/tests/wpkept/run.bash "prepared wallpaper kept on disk"
 ## Heap allocations per frame at rest and in a drag select, against a limit.
 ## Exit 3 is a skip: no debug binary, display, window manager or xdotool.
-if [[ -x "${root}/cicd/tests/allocs/run.bash" ]]; then
-	fEcho_Clean "allocations per frame ..."
-	allocsRc=0; "${root}/cicd/tests/allocs/run.bash" >/dev/null || allocsRc=$?
-	case "${allocsRc}" in
-		0) fEcho "OK: allocations per frame ($(fTestId cicd/tests/allocs/run.bash))" ;;
-		3) fEcho "WARNING: allocations per frame skipped" ;;
-		*) fDie "allocations per frame test failed ($(fTestId cicd/tests/allocs/run.bash))" ;;
-	esac
-fi
+fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"
 ## Software rendering on an X server with no shared pixmaps, at launch and
 ## switched on later. Exit 3 is a skip: no binary, sway, Xwayland with DRI3,
 ## render node or tools.
-if [[ -x "${root}/cicd/tests/swnoshm/run.bash" ]]; then
-	fEcho_Clean "software rendering without shared pixmaps ..."
-	noshmRc=0; "${root}/cicd/tests/swnoshm/run.bash" >/dev/null || noshmRc=$?
-	case "${noshmRc}" in
-		0) fEcho "OK: software rendering without shared pixmaps ($(fTestId cicd/tests/swnoshm/run.bash))" ;;
-		3) fEcho "WARNING: software rendering without shared pixmaps skipped" ;;
-		*) fDie "software rendering without shared pixmaps test failed ($(fTestId cicd/tests/swnoshm/run.bash))" ;;
-	esac
-fi
-if [[ -x "${root}/cicd/tests/engine/run.bash" ]]; then
-	fEcho_Clean "pipeline steps ..."
-	"${root}/cicd/tests/engine/run.bash" >/dev/null || fDie "pipeline step test failed ($(fTestId cicd/tests/engine/run.bash))"
-	fEcho "OK: pipeline steps ($(fTestId cicd/tests/engine/run.bash))"
-fi
+fRunTest_MaySkip cicd/tests/swnoshm/run.bash "software rendering without shared pixmaps"
+## This script's own steps: the build retry, the dogfood tag, the options, the
+## running-copy check, the build number and the host line.
+fRunTest cicd/tests/engine/run.bash "pipeline steps" "pipeline step test failed"
 ## Stage 0, which has to stop a diverged tree before anything is built.
-if [[ -x "${root}/cicd/tests/sync/run.bash" ]]; then
-	fEcho_Clean "remote sync ..."
-	"${root}/cicd/tests/sync/run.bash" >/dev/null || fDie "remote sync test failed ($(fTestId cicd/tests/sync/run.bash))"
-	fEcho "OK: remote sync ($(fTestId cicd/tests/sync/run.bash))"
-fi
+fRunTest cicd/tests/sync/run.bash "remote sync"
 ## The rotation that prunes run logs and flamegraphs.
-if [[ -x "${root}/cicd/tests/rotate/run.bash" ]]; then
-	fEcho_Clean "log rotation ..."
-	"${root}/cicd/tests/rotate/run.bash" >/dev/null || fDie "log rotation test failed ($(fTestId cicd/tests/rotate/run.bash))"
-	fEcho "OK: log rotation ($(fTestId cicd/tests/rotate/run.bash))"
-fi
+fRunTest cicd/tests/rotate/run.bash "log rotation"
 ## One tool pin list for both pipelines, and the docs quoting it.
-if [[ -x "${root}/cicd/tests/pins/run.bash" ]]; then
-	fEcho_Clean "tool pins ..."
-	"${root}/cicd/tests/pins/run.bash" >/dev/null || fDie "tool pin test failed ($(fTestId cicd/tests/pins/run.bash))"
-	fEcho "OK: tool pins ($(fTestId cicd/tests/pins/run.bash))"
-fi
+fRunTest cicd/tests/pins/run.bash "tool pins" "tool pin test failed"
 ## The PowerShell lint this stage gates on has to fail on a finding.
-if [[ -x "${root}/cicd/tests/pslint/run.bash" ]]; then
-	fEcho_Clean "PowerShell lint ..."
-	"${root}/cicd/tests/pslint/run.bash" >/dev/null || fDie "PowerShell lint test failed ($(fTestId cicd/tests/pslint/run.bash))"
-	fEcho "OK: PowerShell lint ($(fTestId cicd/tests/pslint/run.bash))"
-fi
+fRunTest cicd/tests/pslint/run.bash "PowerShell lint"
 ## The Python lint, the same way.
-if [[ -x "${root}/cicd/tests/pylint/run.bash" ]]; then
-	fEcho_Clean "Python lint ..."
-	"${root}/cicd/tests/pylint/run.bash" >/dev/null || fDie "Python lint test failed ($(fTestId cicd/tests/pylint/run.bash))"
-	fEcho "OK: Python lint ($(fTestId cicd/tests/pylint/run.bash))"
-fi
+fRunTest cicd/tests/pylint/run.bash "Python lint"
 ## The Windows runner, which steps over a box that is off.
-if [[ -x "${root}/cicd/tests/win-remote/run.bash" ]]; then
-	fEcho_Clean "windows runner ..."
-	"${root}/cicd/tests/win-remote/run.bash" >/dev/null || fDie "windows runner test failed ($(fTestId cicd/tests/win-remote/run.bash))"
-	fEcho "OK: windows runner ($(fTestId cicd/tests/win-remote/run.bash))"
-fi
+fRunTest cicd/tests/win-remote/run.bash "windows runner"
 ## The parts of the Windows pipeline that run anywhere.
-if [[ -x "${root}/cicd/tests/cicd-win/run.bash" ]]; then
-	fEcho_Clean "windows pipeline pieces ..."
-	"${root}/cicd/tests/cicd-win/run.bash" >/dev/null || fDie "windows pipeline test failed ($(fTestId cicd/tests/cicd-win/run.bash))"
-	fEcho "OK: windows pipeline pieces ($(fTestId cicd/tests/cicd-win/run.bash))"
-fi
+fRunTest cicd/tests/cicd-win/run.bash "windows pipeline pieces" "windows pipeline test failed"
 ## Every table of contents, which no markdown linter regenerates. design.md had
 ## been missing eight of its headings.
-if [[ -x "${root}/cicd/tests/toc/run.py" ]]; then
-	fEcho_Clean "tables of contents ..."
-	"${root}/cicd/tests/toc/run.py" >/dev/null || fDie "a table of contents is out of date - run cicd/tests/toc/run.py --fix ($(fTestId cicd/tests/toc/run.py))"
-	fEcho "OK: tables of contents ($(fTestId cicd/tests/toc/run.py))"
-fi
+fRunTest cicd/tests/toc/run.py "tables of contents" "a table of contents is out of date - run cicd/tests/toc/run.py --fix"
 ## Every markdown table, laid out as the README's generated one is. Hand-written
 ## ones had drifted to trailing pipes and ragged columns.
-if [[ -x "${root}/cicd/tests/tables/run.py" ]]; then
-	fEcho_Clean "markdown tables ..."
-	"${root}/cicd/tests/tables/run.py" >/dev/null || fDie "a markdown table is not canonical - run cicd/tests/tables/run.py --fix ($(fTestId cicd/tests/tables/run.py))"
-	fEcho "OK: markdown tables ($(fTestId cicd/tests/tables/run.py))"
-fi
+fRunTest cicd/tests/tables/run.py "markdown tables" "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
 ## Blank lines between top-level bullets and around headings, which no markdown
 ## linter here checks. The README and style guide had drifted. Also banner rules
 ## in .rs comments, and plain comments on pub items.
@@ -896,17 +765,9 @@ if [[ -x "${root}/cicd/utility/test-id.py" ]]; then
 fi
 ## The Windows scenario harness, which once tested whatever the box last built
 ## and stopped every SilkTerm on a shared box.
-if [[ -x "${root}/cicd/tests/wingui/harness-test.bash" ]]; then
-	fEcho_Clean "windows scenario harness ..."
-	"${root}/cicd/tests/wingui/harness-test.bash" >/dev/null || fDie "windows scenario harness test failed ($(fTestId cicd/tests/wingui/harness-test.bash))"
-	fEcho "OK: windows scenario harness ($(fTestId cicd/tests/wingui/harness-test.bash))"
-fi
+fRunTest cicd/tests/wingui/harness-test.bash "windows scenario harness"
 ## The wine launcher, which once left dead file types on the desktop.
-if [[ -x "${root}/cicd/tests/wine/run.bash" ]]; then
-	fEcho_Clean "wine launcher ..."
-	"${root}/cicd/tests/wine/run.bash" >/dev/null || fDie "wine launcher test failed ($(fTestId cicd/tests/wine/run.bash))"
-	fEcho "OK: wine launcher ($(fTestId cicd/tests/wine/run.bash))"
-fi
+fRunTest cicd/tests/wine/run.bash "wine launcher"
 ## The wallpaper gallery and contact sheet are rendered, so they go stale in
 ## silence when the pack changes. Nine removed images sat in both for a month.
 if [[ -f "${root}/cicd/utility/wallpaper-gallery.bash" ]]; then

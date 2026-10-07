@@ -30,7 +30,7 @@
 //! because it is affine under the alpha composite, so one number stands in for a
 //! whole blend; a curve because linear light is not what the eye reads.
 
-use crate::config::{self, Settings};
+use crate::config::{self, LUMA, Settings};
 
 // Where the transfer curve's slope is read when the two modes are compared, as
 // a linear luma. Measured over the shipped pack of 104: median 0.129, mean
@@ -229,9 +229,6 @@ impl HaloMatch {
 		self.curve[i] + (self.curve[i + 1] - self.curve[i]) * t
 	}
 }
-
-// Rec.709, matching config::luma.
-const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
 
 // How far, on average and in sRGB levels, a halo of `alpha` moves these fields
 // toward `bg`. A channel at a time, weighted as luma, since that is how both

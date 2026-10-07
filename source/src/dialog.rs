@@ -17,7 +17,7 @@ use winit::window::{Window, WindowId};
 use crate::config;
 use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, RectInstance, RectRenderer, Retry};
 use crate::pane::Rect;
-use crate::settings_ui::{Action, EditCmd, SettingsDialog, View};
+use crate::settings_ui::{Action, EditCmd, SettingsDialog, View, quad};
 use crate::text::{TextCtx, ui_attrs};
 
 // A laid-out line of static dialog text (window-relative coords).
@@ -1303,12 +1303,6 @@ fn scene(
 	(w, h): (u32, u32),
 ) -> Scene {
 	shaped.start_frame(text);
-	let q = |x: f32, y: f32, bw: f32, bh: f32, color: [u8; 3]| RectInstance {
-		pos: [x, y],
-		size: [bw, bh],
-		color: config::srgb_f32(color),
-		..Default::default()
-	};
 	let mut rects: Vec<RectInstance> = Vec::new();
 	let mut texts: Vec<Placed> = Vec::new();
 	let mut overlay_texts: Vec<Placed> = Vec::new();
@@ -1338,14 +1332,14 @@ fn scene(
 				};
 				let r = link.rect;
 				let b = text.dip(ABOUT_BORDER);
-				rects.push(q(
+				rects.push(quad(
 					r.x - b,
 					r.y - b,
 					r.w + 2.0 * b,
 					r.h + 2.0 * b,
 					btn_border,
 				));
-				rects.push(q(r.x, r.y, r.w, r.h, fill));
+				rects.push(quad(r.x, r.y, r.w, r.h, fill));
 			}
 			for line in lines {
 				let mut attrs = ui_attrs();
@@ -1371,8 +1365,8 @@ fn scene(
 				let at =
 					crate::tip::lay_out(anchor, 1, tip_w, line_h, (w as f32, h as f32), text.scale);
 				let (b, f) = (at.border, at.fill);
-				rects.push(q(b.x, b.y, b.w, b.h, border_col));
-				rects.push(q(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
+				rects.push(quad(b.x, b.y, b.w, b.h, border_col));
+				rects.push(quad(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
 				let dim = crate::settings_ui::dialog_dim();
 				let mut a = ui_attrs();
 				a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
@@ -1464,8 +1458,8 @@ fn scene(
 				);
 				let (b, f) = (at.border, at.fill);
 				let start = overlay_range.map_or(rects.len() as u32, |(s, _)| s);
-				rects.push(q(b.x, b.y, b.w, b.h, border_col));
-				rects.push(q(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
+				rects.push(quad(b.x, b.y, b.w, b.h, border_col));
+				rects.push(quad(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
 				overlay_range = Some((start, rects.len() as u32));
 				let dim = crate::settings_ui::dialog_dim();
 				let mut a = ui_attrs();

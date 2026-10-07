@@ -110,11 +110,16 @@ pub fn readable(fg: [u8; 3], bg: [u8; 3], min_gap: f32) -> [u8; 3] {
 }
 
 pub(crate) fn to_oklab(c: [u8; 3]) -> (f32, f32, f32) {
-	let (r, g, b) = (
+	to_oklab_linear([
 		crate::config::to_linear(c[0]),
 		crate::config::to_linear(c[1]),
 		crate::config::to_linear(c[2]),
-	);
+	])
+}
+
+/// Oklab straight from linear RGB, for a buffer that is already linear.
+pub(crate) fn to_oklab_linear(rgb: [f32; 3]) -> (f32, f32, f32) {
+	let (r, g, b) = (rgb[0], rgb[1], rgb[2]);
 	let l = (0.412_221_5 * r + 0.536_332_54 * g + 0.051_445_995 * b).cbrt();
 	let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();
 	let s = (0.088_302_46 * r + 0.281_718_85 * g + 0.629_978_7 * b).cbrt();

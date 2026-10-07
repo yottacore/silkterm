@@ -575,6 +575,24 @@ fn clip_rect(r: Rect, to: Rect) -> Rect {
 	}
 }
 
+/// A plain quad in one color.
+pub fn quad(x: f32, y: f32, w: f32, h: f32, color: [u8; 3]) -> RectInstance {
+	RectInstance {
+		pos: [x, y],
+		size: [w, h],
+		color: config::srgb_f32(color),
+		..Default::default()
+	}
+}
+
+// A frame `t` thick just outside `r`.
+fn border(out: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
+	out.push(quad(r.x - t, r.y - t, r.w + 2.0 * t, t, color));
+	out.push(quad(r.x - t, r.y + r.h, r.w + 2.0 * t, t, color));
+	out.push(quad(r.x - t, r.y, t, r.h, color));
+	out.push(quad(r.x + r.w, r.y, t, r.h, color));
+}
+
 // What holds keyboard focus: one control within a row, or a footer button (index
 // into `buttons()`: 0 = Cancel, 1 = Apply, 2 = OK). `Row(i, part)` names a row and
 // which of its focusable sub-controls (part 0 for a plain control; sliders and the
@@ -913,6 +931,21 @@ pub struct TextItem {
 	pub clip: Option<Rect>, // when set, clip drawing to this rect (e.g. a field)
 	pub bold: bool,
 	pub scale: f32, // 1.0 normal; >1 for the prominent dialog title
+}
+
+impl TextItem {
+	// Unclipped text at the normal size and weight.
+	fn plain(text: String, x: f32, y: f32, color: [u8; 3]) -> Self {
+		Self {
+			text,
+			x,
+			y,
+			color,
+			clip: None,
+			bold: false,
+			scale: 1.0,
+		}
+	}
 }
 
 // The row tops from the last walk down a tab, and what that walk started from.
@@ -5750,32 +5783,8 @@ impl SettingsDialog {
 		let colors = dlg();
 		let mut fixed = Vec::new();
 		let mut out = Vec::new();
-		let q = |x: f32, y: f32, w: f32, h: f32, color: [u8; 3]| RectInstance {
-			pos: [x, y],
-			size: [w, h],
-			color: config::srgb_f32(color),
-			..Default::default()
-		};
-		let border = |out: &mut Vec<RectInstance>, r: Rect, thickness: f32, color: [u8; 3]| {
-			out.push(q(
-				r.x - thickness,
-				r.y - thickness,
-				r.w + 2.0 * thickness,
-				thickness,
-				color,
-			));
-			out.push(q(
-				r.x - thickness,
-				r.y + r.h,
-				r.w + 2.0 * thickness,
-				thickness,
-				color,
-			));
-			out.push(q(r.x - thickness, r.y, thickness, r.h, color));
-			out.push(q(r.x + r.w, r.y, thickness, r.h, color));
-		};
 		// panel
-		fixed.push(q(
+		fixed.push(quad(
 			self.rect.x,
 			self.rect.y,
 			self.rect.w,
@@ -5788,8 +5797,8 @@ impl SettingsDialog {
 		// accent - it says "you are here", which is not the same job as the
 		// highlight color's "look at this".
 		let gut = self.gutter_rect();
-		fixed.push(q(gut.x, gut.y, gut.w, gut.h, colors.gutter));
-		fixed.push(q(gut.x, gut.y + gut.h, gut.w, 1.0, colors.panel_border));
+		fixed.push(quad(gut.x, gut.y, gut.w, gut.h, colors.gutter));
+		fixed.push(quad(gut.x, gut.y + gut.h, gut.w, 1.0, colors.panel_border));
 		let strip = self.tab_strip();
 		for tab in 0..self.tab_ws.len() {
 			let r = clip_rect(self.tab_rect(tab), strip);
@@ -5797,7 +5806,7 @@ impl SettingsDialog {
 				continue; // scrolled right out of the strip
 			}
 			let active = tab == self.tab;
-			fixed.push(q(
+			fixed.push(quad(
 				r.x,
 				r.y,
 				r.w,
@@ -5808,14 +5817,14 @@ impl SettingsDialog {
 		// scrollbar (only when the active tab overflows the viewport)
 		if let Some(thumb) = self.thumb() {
 			let vp = self.viewport();
-			fixed.push(q(thumb.x, vp.y, thumb.w, vp.h, colors.track));
-			fixed.push(q(thumb.x, thumb.y, thumb.w, thumb.h, colors.handle));
+			fixed.push(quad(thumb.x, vp.y, thumb.w, vp.h, colors.track));
+			fixed.push(quad(thumb.x, thumb.y, thumb.w, thumb.h, colors.handle));
 		}
 		// and the sideways one, in the clear space above the footer buttons
 		if let Some(thumb) = self.hthumb() {
 			let track = self.htrack();
-			fixed.push(q(track.x, track.y, track.w, track.h, colors.track));
-			fixed.push(q(thumb.x, thumb.y, thumb.w, thumb.h, colors.handle));
+			fixed.push(quad(track.x, track.y, track.w, track.h, colors.track));
+			fixed.push(quad(thumb.x, thumb.y, thumb.w, thumb.h, colors.handle));
 		}
 
 		for i in 0..self.specs.len() {
@@ -5829,12 +5838,12 @@ impl SettingsDialog {
 				Kind::Slider { min, max, int } => {
 					let off = self.disabled(self.specs[i].key);
 					let track = self.track(i);
-					out.push(q(track.x, track.y, track.w, track.h, colors.track));
+					out.push(quad(track.x, track.y, track.w, track.h, colors.track));
 					let value = self.get_f32(self.specs[i].key);
 					let frac = ((value - min) / (max - min)).clamp(0.0, 1.0);
 					let handle_x = track.x + frac * track.w - SLIDER_HANDLE_W / 2.0;
 					let _ = int;
-					out.push(q(
+					out.push(quad(
 						handle_x,
 						track.y - 6.0,
 						SLIDER_HANDLE_W,
@@ -5847,7 +5856,7 @@ impl SettingsDialog {
 					));
 					// editable numeric field
 					let val_box = self.valbox(i);
-					out.push(q(
+					out.push(quad(
 						val_box.x,
 						val_box.y,
 						val_box.w,
@@ -5873,7 +5882,7 @@ impl SettingsDialog {
 				}
 				Kind::Color => {
 					let swatch = self.swatch(i);
-					out.push(q(
+					out.push(quad(
 						swatch.x,
 						swatch.y,
 						swatch.w,
@@ -5884,7 +5893,7 @@ impl SettingsDialog {
 						border(&mut out, swatch, 1.0, colors.panel_border);
 					}
 					let hex_box = self.hexbox(i);
-					out.push(q(
+					out.push(quad(
 						hex_box.x,
 						hex_box.y,
 						hex_box.w,
@@ -5910,7 +5919,7 @@ impl SettingsDialog {
 				}
 				Kind::Text => {
 					let text_box = self.textbox(i);
-					out.push(q(
+					out.push(quad(
 						text_box.x,
 						text_box.y,
 						text_box.w,
@@ -5936,7 +5945,7 @@ impl SettingsDialog {
 				}
 				Kind::Hotkey(_) => {
 					let key_box = self.textbox(i);
-					out.push(q(
+					out.push(quad(
 						key_box.x,
 						key_box.y,
 						key_box.w,
@@ -5959,7 +5968,7 @@ impl SettingsDialog {
 				Kind::Toggle => {
 					let off = self.disabled(self.specs[i].key);
 					let check_box = self.checkbox(i);
-					out.push(q(
+					out.push(quad(
 						check_box.x,
 						check_box.y,
 						check_box.w,
@@ -5969,7 +5978,7 @@ impl SettingsDialog {
 					border(&mut out, check_box, 1.0, colors.panel_border);
 					// filled inner square when on (the checkmark glyph is drawn in texts)
 					if self.get_toggle(self.specs[i].key) {
-						out.push(q(
+						out.push(quad(
 							check_box.x + 4.0,
 							check_box.y + 4.0,
 							check_box.w - 8.0,
@@ -5986,10 +5995,10 @@ impl SettingsDialog {
 					for part in 0u16..2 {
 						let off = self.disabled(keys[part as usize]);
 						let bx = self.dual_box(i, part);
-						out.push(q(bx.x, bx.y, bx.w, bx.h, colors.field_bg));
+						out.push(quad(bx.x, bx.y, bx.w, bx.h, colors.field_bg));
 						border(&mut out, bx, 1.0, colors.panel_border);
 						if self.get_toggle(keys[part as usize]) {
-							out.push(q(
+							out.push(quad(
 								bx.x + 4.0,
 								bx.y + 4.0,
 								bx.w - 8.0,
@@ -6007,7 +6016,7 @@ impl SettingsDialog {
 					let sel = self.get_radio(self.specs[i].key);
 					for choice in 0..options.len() {
 						let radio_rect = self.radio_box(i, choice);
-						out.push(q(
+						out.push(quad(
 							radio_rect.x,
 							radio_rect.y,
 							radio_rect.w,
@@ -6016,7 +6025,7 @@ impl SettingsDialog {
 						));
 						border(&mut out, radio_rect, 1.0, colors.panel_border);
 						if choice == sel {
-							out.push(q(
+							out.push(quad(
 								radio_rect.x + 4.0,
 								radio_rect.y + 4.0,
 								radio_rect.w - 8.0,
@@ -6030,7 +6039,7 @@ impl SettingsDialog {
 					// collapsed box only; the open popup is drawn in the overlay pass
 					let off = self.disabled(self.specs[i].key);
 					let box_r = self.dd_box(i);
-					out.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
+					out.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 					if !self.ring_on(i, 0) {
 						border(
 							&mut out,
@@ -6055,19 +6064,19 @@ impl SettingsDialog {
 						} else {
 							colors.btn_bg
 						};
-						out.push(q(r.x, r.y, r.w, r.h, fill));
+						out.push(quad(r.x, r.y, r.w, r.h, fill));
 						if !self.ring_on(i, part) {
 							border(&mut out, r, 1.0, colors.panel_border);
 						}
 					}
 				}
 				Kind::ShellList => {
-					self.shell_rects(&colors, i, &mut out, &q, &border, &mut measure);
+					self.shell_rects(&colors, i, &mut out, &mut measure);
 				}
 				Kind::Header(_) => {
 					let y = self.header_rule_y(i);
 					let x = self.content_x() + lay().pad;
-					out.push(q(
+					out.push(quad(
 						x,
 						y,
 						self.layout_w() - lay().pad * 2.0,
@@ -6103,7 +6112,7 @@ impl SettingsDialog {
 			} else {
 				colors.btn_bg
 			};
-			fixed.push(q(r.x, r.y, r.w, r.h, fill));
+			fixed.push(quad(r.x, r.y, r.w, r.h, fill));
 			let ring = self.focus == Some(Focus::Button(btn_idx));
 			// Only the default button (OK) is outlined in the highlight color;
 			// the others take the same quiet gray the tabs use, so "this is the
@@ -6122,7 +6131,7 @@ impl SettingsDialog {
 			if self.alt && !label.is_empty() {
 				let tx = r.x + (r.w - measure(label)).max(0.0) / 2.0;
 				let ty = r.y + (r.h - line_h) / 2.0 + line_h * 0.82;
-				fixed.push(q(tx, ty, line_h * 0.5, 1.5, colors.text));
+				fixed.push(quad(tx, ty, line_h * 0.5, 1.5, colors.text));
 			}
 		}
 		(fixed, out)
@@ -6138,13 +6147,11 @@ impl SettingsDialog {
 		colors: &Dlg,
 		i: usize,
 		out: &mut Vec<RectInstance>,
-		q: &impl Fn(f32, f32, f32, f32, [u8; 3]) -> RectInstance,
-		border: &impl Fn(&mut Vec<RectInstance>, Rect, f32, [u8; 3]),
 		measure: &mut impl FnMut(&str) -> f32,
 	) {
 		let scale = self.ui_scale();
 		let mut field = |out: &mut Vec<RectInstance>, r: Rect, row: usize, part: u16| {
-			out.push(q(r.x, r.y, r.w, r.h, colors.field_bg));
+			out.push(quad(r.x, r.y, r.w, r.h, colors.field_bg));
 			let focused = matches!(&self.edit, Some(edit) if edit.row == row);
 			if !self.ring_on(i, part) {
 				border(
@@ -6179,7 +6186,7 @@ impl SettingsDialog {
 			);
 			// Active checkbox, drawn the way every other checkbox in the dialog is
 			let box_r = self.shell_active_box(i, shell_index);
-			out.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
+			out.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 			border(out, box_r, 1.0, colors.panel_border);
 			if self
 				.edited
@@ -6188,7 +6195,7 @@ impl SettingsDialog {
 				.is_some_and(|e| e.active)
 			{
 				let inset = (box_r.w * 0.25).max(3.0);
-				out.push(q(
+				out.push(quad(
 					box_r.x + inset,
 					box_r.y + inset,
 					box_r.w - inset * 2.0,
@@ -6212,7 +6219,7 @@ impl SettingsDialog {
 			let stack = bar_h + pitch * 2.0;
 			let top = grip.y + (grip.h - stack) / 2.0;
 			for n in 0..3 {
-				out.push(q(
+				out.push(quad(
 					bar_x,
 					top + n as f32 * pitch,
 					bar_w,
@@ -6223,7 +6230,7 @@ impl SettingsDialog {
 			// Remove, between the command and the date. Red, because it is the
 			// one control in the whole dialog that destroys something.
 			let r = self.shell_remove_box(i, shell_index);
-			out.push(q(r.x, r.y, r.w, r.h, colors.btn_bg));
+			out.push(quad(r.x, r.y, r.w, r.h, colors.btn_bg));
 			if !self.ring_on(i, shell_part_index(shell_index, ShellPart::Remove)) {
 				border(out, r, 1.0, colors.panel_border);
 			}
@@ -6235,7 +6242,7 @@ impl SettingsDialog {
 			});
 		}
 		let add = self.shell_add_box(i);
-		out.push(q(add.x, add.y, add.w, add.h, colors.btn_bg));
+		out.push(quad(add.x, add.y, add.w, add.h, colors.btn_bg));
 		if !self.ring_on(i, self.parts_of(i).saturating_sub(1)) {
 			border(out, add, 1.0, colors.panel_border);
 		}
@@ -6282,15 +6289,7 @@ impl SettingsDialog {
 	fn texts_dip(&self, line_h: f32, mut measure: impl FnMut(&str) -> f32) -> Vec<TextItem> {
 		let colors = dlg();
 		let mut out = Vec::new();
-		let mk = |text: String, x: f32, y: f32| TextItem {
-			text,
-			x,
-			y,
-			color: colors.text,
-			clip: None,
-			bold: false,
-			scale: 1.0,
-		};
+		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - line_h) / 2.0;
 		// tab titles - the current one reads at full strength, the rest step back
 		let strip = self.tab_strip();
@@ -6312,18 +6311,6 @@ impl SettingsDialog {
 		}
 		// row text clips to the scroll viewport so it can't ride over the chrome
 		let vp = self.viewport();
-		let intersect = |r: Rect| -> Rect {
-			let x0 = r.x.max(vp.x);
-			let y0 = r.y.max(vp.y);
-			let x1 = (r.x + r.w).min(vp.x + vp.w);
-			let y1 = (r.y + r.h).min(vp.y + vp.h);
-			Rect {
-				x: x0,
-				y: y0,
-				w: (x1 - x0).max(0.0),
-				h: (y1 - y0).max(0.0),
-			}
-		};
 		for i in 0..self.specs.len() {
 			if self.specs[i].tab != self.tab || Self::header_is_tab_title(&self.specs[i]) {
 				continue;
@@ -6379,7 +6366,7 @@ impl SettingsDialog {
 					};
 					out.push(TextItem {
 						color: label_color,
-						clip: Some(intersect(val_box)),
+						clip: Some(clip_rect(val_box, vp)),
 						..mk(
 							txt,
 							val_box.x + lay().field_pad - view(i),
@@ -6394,7 +6381,7 @@ impl SettingsDialog {
 						_ => config::format_hex(self.get_col(self.specs[i].key)),
 					};
 					out.push(TextItem {
-						clip: Some(intersect(hex_box)),
+						clip: Some(clip_rect(hex_box, vp)),
 						..mk(
 							txt,
 							hex_box.x + lay().field_pad - view(i),
@@ -6427,7 +6414,7 @@ impl SettingsDialog {
 					};
 					out.push(TextItem {
 						color,
-						clip: Some(intersect(text_box)),
+						clip: Some(clip_rect(text_box, vp)),
 						..mk(
 							txt,
 							text_box.x + lay().field_pad - view(i),
@@ -6444,7 +6431,7 @@ impl SettingsDialog {
 						let width = measure(&shown);
 						out.push(TextItem {
 							color: if off { colors.dim } else { colors.text },
-							clip: Some(intersect(key_box)),
+							clip: Some(clip_rect(key_box, vp)),
 							..mk(shown, tx, ty)
 						});
 						tx += width + line_h;
@@ -6452,7 +6439,7 @@ impl SettingsDialog {
 					if !note.is_empty() {
 						out.push(TextItem {
 							color: colors.dim,
-							clip: Some(intersect(key_box)),
+							clip: Some(clip_rect(key_box, vp)),
 							..mk(note, tx, ty)
 						});
 					}
@@ -6488,7 +6475,7 @@ impl SettingsDialog {
 					let label = self.dd_closed_label(i);
 					out.push(TextItem {
 						color,
-						clip: Some(intersect(box_r)),
+						clip: Some(clip_rect(box_r, vp)),
 						..mk(label, box_r.x + 8.0, row_text_y(box_r.y, box_r.h))
 					});
 					out.push(TextItem {
@@ -6555,7 +6542,7 @@ impl SettingsDialog {
 						};
 						out.push(TextItem {
 							color,
-							clip: Some(intersect(name_box)),
+							clip: Some(clip_rect(name_box, vp)),
 							..mk(
 								text(name_row, &entry.title),
 								name_box.x + lay().field_pad - view(name_row),
@@ -6570,7 +6557,7 @@ impl SettingsDialog {
 						};
 						out.push(TextItem {
 							color: cmd_color,
-							clip: Some(intersect(cmd_box)),
+							clip: Some(clip_rect(cmd_box, vp)),
 							..mk(
 								cmd,
 								cmd_box.x + lay().field_pad - view(cmd_row),
@@ -6627,50 +6614,14 @@ impl SettingsDialog {
 			return (rects, texts);
 		}
 		let popup = self.dd_popup(i, n);
-		let q = |x: f32, y: f32, w: f32, h: f32, color: [u8; 3]| RectInstance {
-			pos: [x, y],
-			size: [w, h],
-			color: config::srgb_f32(color),
-			..Default::default()
-		};
-		rects.push(q(popup.x, popup.y, popup.w, popup.h, colors.field_bg));
-		let t = 1.0;
-		rects.push(q(
-			popup.x - t,
-			popup.y - t,
-			popup.w + 2.0 * t,
-			t,
-			colors.panel_border,
-		));
-		rects.push(q(
-			popup.x - t,
-			popup.y + popup.h,
-			popup.w + 2.0 * t,
-			t,
-			colors.panel_border,
-		));
-		rects.push(q(popup.x - t, popup.y, t, popup.h, colors.panel_border));
-		rects.push(q(
-			popup.x + popup.w,
-			popup.y,
-			t,
-			popup.h,
-			colors.panel_border,
-		));
+		rects.push(quad(popup.x, popup.y, popup.w, popup.h, colors.field_bg));
+		border(&mut rects, popup, 1.0, colors.panel_border);
 		let sel = self.get_radio(self.specs[i].key);
-		let mk = |text: String, x: f32, y: f32| TextItem {
-			text,
-			x,
-			y,
-			color: colors.text,
-			clip: None,
-			bold: false,
-			scale: 1.0,
-		};
+		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		for (choice, opt) in options.iter().enumerate() {
 			let r = self.dd_item_rect(i, n, choice);
 			if choice == self.pending {
-				rects.push(q(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
+				rects.push(quad(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
 			}
 			let ty = r.y + (r.h - self.line_h) / 2.0;
 			if choice == sel {
@@ -6694,27 +6645,7 @@ impl SettingsDialog {
 		let Some(prompt) = &self.prompt else {
 			return (rects, texts);
 		};
-		let q = |x: f32, y: f32, w: f32, h: f32, color: [u8; 3]| RectInstance {
-			pos: [x, y],
-			size: [w, h],
-			color: config::srgb_f32(color),
-			..Default::default()
-		};
-		let border = |out: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]| {
-			out.push(q(r.x - t, r.y - t, r.w + 2.0 * t, t, color));
-			out.push(q(r.x - t, r.y + r.h, r.w + 2.0 * t, t, color));
-			out.push(q(r.x - t, r.y, t, r.h, color));
-			out.push(q(r.x + r.w, r.y, t, r.h, color));
-		};
-		let mk = |text: String, x: f32, y: f32| TextItem {
-			text,
-			x,
-			y,
-			color: colors.text,
-			clip: None,
-			bold: false,
-			scale: 1.0,
-		};
+		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
 		// dim the panel behind, so it is plain that it is not taking input
 		rects.push(RectInstance {
@@ -6724,7 +6655,7 @@ impl SettingsDialog {
 			..Default::default()
 		});
 		let box_r = self.prompt_rect();
-		rects.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.panel_bg));
+		rects.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.panel_bg));
 		border(&mut rects, box_r, 1.0, colors.panel_border);
 		// a long message is cut at the box's edge rather than drawn past it
 		texts.push(TextItem {
@@ -6736,7 +6667,7 @@ impl SettingsDialog {
 			)
 		});
 		if let Some(field) = self.prompt_field_rect() {
-			rects.push(q(field.x, field.y, field.w, field.h, colors.field_bg));
+			rects.push(quad(field.x, field.y, field.w, field.h, colors.field_bg));
 			if prompt.focus == PromptFocus::Field {
 				border(&mut rects, field, 1.0, colors.focus_out);
 			} else {
@@ -6766,7 +6697,7 @@ impl SettingsDialog {
 				continue;
 			}
 			let r = self.prompt_btn_rect(part);
-			rects.push(q(r.x, r.y, r.w, r.h, colors.btn_bg));
+			rects.push(quad(r.x, r.y, r.w, r.h, colors.btn_bg));
 			let ring = prompt.focus == part;
 			// OK is the default here too, so it keeps the highlight outline when
 			// the keyboard is elsewhere
@@ -6796,27 +6727,7 @@ impl SettingsDialog {
 		let Some(picker) = &self.pick else {
 			return (rects, texts);
 		};
-		let q = |x: f32, y: f32, w: f32, h: f32, color: [u8; 3]| RectInstance {
-			pos: [x, y],
-			size: [w, h],
-			color: config::srgb_f32(color),
-			..Default::default()
-		};
-		let border = |out: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]| {
-			out.push(q(r.x - t, r.y - t, r.w + 2.0 * t, t, color));
-			out.push(q(r.x - t, r.y + r.h, r.w + 2.0 * t, t, color));
-			out.push(q(r.x - t, r.y, t, r.h, color));
-			out.push(q(r.x + r.w, r.y, t, r.h, color));
-		};
-		let mk = |text: String, x: f32, y: f32| TextItem {
-			text,
-			x,
-			y,
-			color: colors.text,
-			clip: None,
-			bold: false,
-			scale: 1.0,
-		};
+		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - self.line_h) / 2.0;
 		// a disc: a rounded quad whose radius is its own half-width
 		let disc = |x: f32, y: f32, d: f32, color: [u8; 3]| RectInstance {
@@ -6832,7 +6743,7 @@ impl SettingsDialog {
 			..Default::default()
 		});
 		let g = self.pick_geom();
-		rects.push(q(
+		rects.push(quad(
 			g.outer.x,
 			g.outer.y,
 			g.outer.w,
@@ -6883,14 +6794,14 @@ impl SettingsDialog {
 		// The strip is full-chroma at every point, so its marker is plain black
 		// and white rather than a theme color that could land on its own hue.
 		let hy = g.hue_y(picker.hsv);
-		rects.push(q(
+		rects.push(quad(
 			g.strip.x - 2.0,
 			hy - 2.5,
 			g.strip.w + 4.0,
 			5.0,
 			[0, 0, 0],
 		));
-		rects.push(q(
+		rects.push(quad(
 			g.strip.x - 1.0,
 			hy - 1.5,
 			g.strip.w + 2.0,
@@ -6912,7 +6823,7 @@ impl SettingsDialog {
 					row_text_y(box_r.y, box_r.h),
 				)
 			});
-			rects.push(q(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
+			rects.push(quad(box_r.x, box_r.y, box_r.w, box_r.h, colors.field_bg));
 			let open = picker.focus == pick::Focus::Field(f);
 			border(
 				&mut rects,
@@ -6945,7 +6856,7 @@ impl SettingsDialog {
 			(pick::Focus::Cancel, g.cancel, "Cancel"),
 			(pick::Focus::Ok, g.ok, "OK"),
 		] {
-			rects.push(q(r.x, r.y, r.w, r.h, colors.btn_bg));
+			rects.push(quad(r.x, r.y, r.w, r.h, colors.btn_bg));
 			let ring = picker.focus == part;
 			let outline = if ring {
 				colors.focus_out
@@ -6986,28 +6897,22 @@ impl SettingsDialog {
 		if self.emenu.is_none() {
 			return (rects, texts);
 		}
-		let q = |x: f32, y: f32, w: f32, h: f32, color: [u8; 3]| RectInstance {
-			pos: [x, y],
-			size: [w, h],
-			color: config::srgb_f32(color),
-			..Default::default()
-		};
 		let menu = self.em_rect();
 		let t = 1.0;
-		rects.push(q(
+		rects.push(quad(
 			menu.x - t,
 			menu.y - t,
 			menu.w + 2.0 * t,
 			menu.h + 2.0 * t,
 			colors.panel_border,
 		));
-		rects.push(q(menu.x, menu.y, menu.w, menu.h, colors.field_bg));
+		rects.push(quad(menu.x, menu.y, menu.w, menu.h, colors.field_bg));
 		let hover = self.emenu.as_ref().and_then(|m| m.hover);
 		for (item, (label, _)) in EDIT_MENU.iter().enumerate() {
 			let r = self.em_item_rect(item);
 			let enabled = self.em_enabled(item);
 			if enabled && hover == Some(item) {
-				rects.push(q(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
+				rects.push(quad(r.x + 1.0, r.y, r.w - 2.0, r.h, colors.btn_hl));
 			}
 			texts.push(TextItem {
 				text: (*label).into(),
