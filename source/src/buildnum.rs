@@ -196,6 +196,23 @@ mod tests {
 		assert!(seen > 0, "found no includes at all, so the scan is broken");
 	}
 
+	// Every .rs under src, a module's own folder included.
+	fn rust_sources() -> Vec<std::path::PathBuf> {
+		let mut dirs = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+		let mut found = Vec::new();
+		while let Some(dir) = dirs.pop() {
+			for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+				let path = entry.path();
+				if path.is_dir() {
+					dirs.push(path);
+				} else if path.extension().is_some_and(|ext| ext == "rs") {
+					found.push(path);
+				}
+			}
+		}
+		found
+	}
+
 	// Every source file names the license the crate is published under, as the
 	// manifest does.
 	// Test ID: Er2UFeX
@@ -210,11 +227,7 @@ mod tests {
 			"Cargo.toml names another license"
 		);
 		let mut seen = 0;
-		for entry in std::fs::read_dir(crate_dir.join("src")).unwrap().flatten() {
-			let path = entry.path();
-			if path.extension().is_none_or(|ext| ext != "rs") {
-				continue;
-			}
+		for path in rust_sources() {
 			let text = std::fs::read_to_string(&path).unwrap();
 			let mut lines = text.lines();
 			assert_eq!(
@@ -241,13 +254,10 @@ mod tests {
 	// Test ID: ErlrvUZ
 	#[test]
 	fn every_public_type_has_debug() {
-		let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
 		let mut texts = Vec::new();
-		for entry in std::fs::read_dir(src).unwrap().flatten() {
-			let path = entry.path();
-			if path.extension().is_some_and(|ext| ext == "rs") {
-				texts.push((path.clone(), std::fs::read_to_string(&path).unwrap()));
-			}
+		for path in rust_sources() {
+			let text = std::fs::read_to_string(&path).unwrap();
+			texts.push((path, text));
 		}
 		let mut by_hand = std::collections::HashSet::new();
 		for (_, text) in &texts {
