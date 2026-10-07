@@ -302,14 +302,12 @@ pub struct TermInstance {
 	last_program: Option<String>,
 	// throttles the per-frame task probe (see task())
 	task_cache: Option<(std::time::Instant, Task)>,
-	// windows: the shell's pid and the time it started, for the child-process
-	// probe that stands in for a foreground process group (see at_shell_prompt),
+	// windows: the shell process, for the child-process probe that stands in
+	// for a foreground process group (see at_shell_prompt) and for the PEB read,
 	// plus that probe's answer for as long as it holds (see note_activity).
-	// Either 0 means "unknown"; the inner Option is the running command's name.
+	// The inner Option is the running command's name.
 	#[cfg(windows)]
-	shell_pid: u32,
-	#[cfg(windows)]
-	shell_started: u64,
+	shell: ShellProc,
 	#[cfg(windows)]
 	child_probe: std::cell::RefCell<Option<Option<String>>>,
 	#[allow(clippy::type_complexity)]
@@ -419,9 +417,7 @@ impl TermInstance {
 			last_program: None,
 			task_cache: None,
 			#[cfg(windows)]
-			shell_pid,
-			#[cfg(windows)]
-			shell_started: process_start_time(shell_pid).unwrap_or(0),
+			shell: ShellProc::new(shell_pid),
 			#[cfg(windows)]
 			child_probe: std::cell::RefCell::new(None),
 			cwd_cache: std::cell::RefCell::new(None),
@@ -525,10 +521,11 @@ impl TermInstance {
 	// PowerShell 7 and Windows PowerShell 5.1 both leave the process directory
 	// at the launch directory across a `Set-Location`, so a PowerShell pane
 	// reports where it started. cmd.exe, Git Bash and MSYS2 all call
-	// SetCurrentDirectory and read back correctly.
+	// SetCurrentDirectory and read back correctly, Git Bash once it is read
+	// past its launcher (see ShellProc).
 	#[cfg(windows)]
 	fn os_cwd(&self) -> Option<std::path::PathBuf> {
-		peb_cwd(self.shell_pid)
+		peb_cwd(self.shell.current().0)
 	}
 
 	// Neither /proc nor a PEB: only what a shell reports can answer here.
@@ -572,13 +569,14 @@ impl TermInstance {
 	// both questions, so a tab title costs nothing on top of copy-output's.
 	#[cfg(windows)]
 	fn command_child(&self) -> Option<String> {
-		if self.shell_pid == 0 {
+		let (pid, started) = self.shell.current();
+		if pid == 0 {
 			return None; // no pid to probe: report "at prompt" (the feature stays inert)
 		}
 		if let Some(answer) = self.child_probe.borrow().as_ref() {
 			return answer.clone();
 		}
-		let answer = command_child_name(self.shell_pid, self.shell_started);
+		let answer = command_child_name(pid, started);
 		*self.child_probe.borrow_mut() = Some(answer.clone());
 		answer
 	}
@@ -1009,12 +1007,23 @@ fn is_command_child(child_started: Option<u64>, shell_started: u64) -> bool {
 	shell_started == 0 || child_started.is_some_and(|started| started >= shell_started)
 }
 
-// Windows: the name of `shell_pid`'s live child process, if it has one. Walks
-// the process table - there is no narrower query - and stops at the first real
-// child. The name is the executable's, without its extension, which is the same
-// shape unix reports through /proc comm.
+// Windows: the name of `shell_pid`'s live child process, if it has one. The
+// name is the executable's, without its extension, which is the same shape
+// unix reports through /proc comm.
 #[cfg(windows)]
 fn command_child_name(shell_pid: u32, shell_started: u64) -> Option<String> {
+	find_child(shell_pid, shell_started, |_| true).map(|(_, exe, _)| exe_display_name(&exe))
+}
+
+// Windows: the first live child of `parent` that `pick` takes, by its raw exe
+// name, as pid, exe name and start time (0 when unknown). Walks the process
+// table - there is no narrower query - and stops at the first hit.
+#[cfg(windows)]
+fn find_child(
+	parent: u32,
+	parent_started: u64,
+	mut pick: impl FnMut(&[u16]) -> bool,
+) -> Option<(u32, [u16; 260], u64)> {
 	use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
 	use windows_sys::Win32::System::Diagnostics::ToolHelp::{
 		CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
@@ -1033,11 +1042,12 @@ fn command_child_name(shell_pid: u32, shell_started: u64) -> Option<String> {
 	// SAFETY: a live snapshot handle, and a live entry with `dwSize` set.
 	let mut more = unsafe { Process32FirstW(snapshot, &raw mut entry) };
 	while more != 0 {
-		if entry.th32ParentProcessID == shell_pid
-			&& is_command_child(process_start_time(entry.th32ProcessID), shell_started)
-		{
-			found = Some(exe_display_name(&entry.szExeFile));
-			break;
+		if entry.th32ParentProcessID == parent && pick(&entry.szExeFile) {
+			let started = process_start_time(entry.th32ProcessID);
+			if is_command_child(started, parent_started) {
+				found = Some((entry.th32ProcessID, entry.szExeFile, started.unwrap_or(0)));
+				break;
+			}
 		}
 		// SAFETY: as for Process32FirstW.
 		more = unsafe { Process32NextW(snapshot, &raw mut entry) };
@@ -1047,13 +1057,130 @@ fn command_child_name(shell_pid: u32, shell_started: u64) -> Option<String> {
 	found
 }
 
+// Git for Windows installs bin\bash.exe adn bin\sh.exe as launchers: each sets
+// up the environment, starts usr\bin\<same name> as its child and waits. So
+// the pid a pane holds is the launcher's, which never moves and is always
+// "running" the real shell. The layout is what gives it away: MSYS2 and
+// Cygwin have no usr\bin\bash.exe one level up from their bash. Answers the
+// exe name the real shell runs under.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn launcher_target(image: &std::path::Path) -> Option<String> {
+	let name = image.file_name()?;
+	let bin = image.parent()?;
+	if !bin.file_name()?.eq_ignore_ascii_case("bin") {
+		return None;
+	}
+	let target = bin.parent()?.join("usr").join("bin").join(name);
+	target
+		.is_file()
+		.then(|| name.to_string_lossy().into_owned())
+}
+
+// The pane's shell process, read past a launcher when it is one. The real
+// shell is found by name among the launcher's children, and only one started
+// within a few seconds of the launcher, so a bash typed at the prompt later is
+// never taken for it. Until it shows up, and for every other shell, the pid
+// the pane started is the answer. A launcher with no such child is given up on
+// once that window is past, so it costs no table walk after that.
+#[cfg(windows)]
+#[derive(Debug)]
+struct ShellProc {
+	pid: u32,
+	started: u64,
+	launches: Option<String>,
+	inner: std::cell::Cell<Option<(u32, u64)>>,
+	give_up_after: std::time::Instant,
+	gave_up: std::cell::Cell<bool>,
+}
+
+#[cfg(windows)]
+impl ShellProc {
+	// How long after the launcher its shell may start. FILETIME ticks are 100 ns.
+	const LAUNCH_SECS: u64 = 5;
+	const LAUNCH_TICKS: u64 = Self::LAUNCH_SECS * 10_000_000;
+
+	fn new(pid: u32) -> Self {
+		let launches = (pid != 0)
+			.then(|| process_image(pid))
+			.flatten()
+			.and_then(|image| launcher_target(&image));
+		Self {
+			pid,
+			started: process_start_time(pid).unwrap_or(0),
+			launches,
+			inner: std::cell::Cell::new(None),
+			give_up_after: std::time::Instant::now()
+				+ std::time::Duration::from_secs(Self::LAUNCH_SECS * 2),
+			gave_up: std::cell::Cell::new(false),
+		}
+	}
+
+	// The pid and start time to probe: the real shell's once found.
+	fn current(&self) -> (u32, u64) {
+		if let Some(found) = self.inner.get() {
+			return found;
+		}
+		let Some(name) = self.launches.as_deref().filter(|_| !self.gave_up.get()) else {
+			return (self.pid, self.started);
+		};
+		let hit = find_child(self.pid, self.started, |exe| {
+			exe_file_name(exe).eq_ignore_ascii_case(name)
+		})
+		.filter(|&(_, _, at)| at.saturating_sub(self.started) <= Self::LAUNCH_TICKS);
+		if let Some((pid, _, at)) = hit {
+			self.inner.set(Some((pid, at)));
+			return (pid, at);
+		}
+		self.gave_up
+			.set(std::time::Instant::now() > self.give_up_after);
+		(self.pid, self.started)
+	}
+}
+
+// Windows: the full path of a process's executable.
+#[cfg(windows)]
+fn process_image(pid: u32) -> Option<std::path::PathBuf> {
+	use std::os::windows::ffi::OsStringExt;
+
+	use windows_sys::Win32::Foundation::CloseHandle;
+	use windows_sys::Win32::System::Threading::{
+		OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+		QueryFullProcessImageNameW,
+	};
+
+	// SAFETY: takes no pointer.
+	let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+	if process.is_null() {
+		return None;
+	}
+	let mut wide = vec![0u16; 1024];
+	let mut len = u32::try_from(wide.len()).unwrap_or(0);
+	// SAFETY: an open process handle, and a buffer `len` units long.
+	let ok = unsafe {
+		QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, wide.as_mut_ptr(), &raw mut len)
+	};
+	// SAFETY: closed once, and not used after.
+	unsafe { CloseHandle(process) };
+	if ok == 0 {
+		return None;
+	}
+	wide.truncate(usize::try_from(len).unwrap_or(0));
+	Some(std::ffi::OsString::from_wide(&wide).into())
+}
+
+// A PROCESSENTRY32W exe name (NUL-padded UTF-16) as a string.
+#[cfg(windows)]
+fn exe_file_name(raw: &[u16]) -> String {
+	let end = raw.iter().position(|&c| c == 0).unwrap_or(raw.len());
+	String::from_utf16_lossy(&raw[..end])
+}
+
 // A PROCESSENTRY32W name (NUL-padded UTF-16) as the bare program name a tab
 // shows: no directory, no extension. An empty or unreadable name still has to
 // answer something, or a running command would read as an idle prompt.
 #[cfg(windows)]
 fn exe_display_name(raw: &[u16]) -> String {
-	let end = raw.iter().position(|&c| c == 0).unwrap_or(raw.len());
-	let name = String::from_utf16_lossy(&raw[..end]);
+	let name = exe_file_name(raw);
 	let name = name.rsplit(['\\', '/']).next().unwrap_or(&name);
 	let stem = name
 		.rfind('.')
@@ -1850,6 +1977,111 @@ mod tests {
 			Some(real(&moved_to)),
 			"the directory the shell moved to never came back"
 		);
+	}
+
+	// Git Bash's bin\bash.exe starts the real bash as its child and waits, so a
+	// pane that read the pid it started saw the launch folder after every `cd`,
+	// and a command that never ended. Both now come from the real shell.
+	// Test ID: Es2dAll
+	#[cfg(windows)]
+	#[test]
+	fn a_git_bash_pane_is_read_past_its_launcher() {
+		use std::io::Write;
+		use std::process::{Command, Stdio};
+
+		use super::{ShellProc, command_child_name, peb_cwd};
+		let Some(launcher) = ["ProgramFiles", "ProgramW6432"]
+			.iter()
+			.filter_map(|var| std::env::var(var).ok())
+			.map(|base| std::path::PathBuf::from(base).join(r"Git\bin\bash.exe"))
+			.find(|path| path.is_file())
+		else {
+			eprintln!("no Git for Windows here, skipped");
+			return;
+		};
+		let real = |dir: &std::path::Path| std::fs::canonicalize(dir).expect("canonicalize");
+		let moved_to = std::path::PathBuf::from(r"C:\Windows");
+		// bash reads commands off the pipe and exits when it closes
+		let mut child = Command::new(&launcher)
+			.current_dir(crate::testdir::run_dir())
+			.stdin(Stdio::piped())
+			.stdout(Stdio::null())
+			.stderr(Stdio::null())
+			.spawn()
+			.expect("spawn Git Bash");
+		let shell = ShellProc::new(child.id());
+		if let Some(pipe) = child.stdin.as_mut() {
+			let _ = writeln!(pipe, "cd /c/Windows");
+			let _ = pipe.flush();
+		}
+		let mut seen = (None, None);
+		for _ in 0..100 {
+			let (pid, started) = shell.current();
+			seen = (
+				peb_cwd(pid).map(|dir| real(&dir)),
+				command_child_name(pid, started),
+			);
+			if seen == (Some(real(&moved_to)), None) {
+				break;
+			}
+			std::thread::sleep(std::time::Duration::from_millis(50));
+		}
+		drop(child.stdin.take());
+		let (inner, _) = shell.current();
+		let gone = (0..100).any(|_| {
+			std::thread::sleep(std::time::Duration::from_millis(50));
+			child.try_wait().ok().flatten().is_some()
+		});
+		if !gone {
+			// kill() would end the launcher alone and strand the real bash
+			let _ = Command::new("taskkill")
+				.args(["/F", "/T", "/PID", &child.id().to_string()])
+				.output();
+			let _ = child.wait();
+		}
+		assert_eq!(
+			seen.0,
+			Some(real(&moved_to)),
+			"the title folder stayed where the pane started"
+		);
+		assert_eq!(
+			seen.1, None,
+			"a bash at its prompt read as running a command"
+		);
+		assert_ne!(
+			inner,
+			child.id(),
+			"the launcher's own pid was never looked past"
+		);
+	}
+
+	// Only Git for Windows' layout is a launcher. MSYS2's bash sits in usr\bin
+	// and Cygwin's in bin, with no usr\bin\bash.exe a level up from either.
+	// Test ID: Es2dB6L
+	#[test]
+	fn only_the_git_for_windows_layout_is_a_launcher() {
+		use super::launcher_target;
+		let root = crate::testdir::run_dir().join("launcher layouts");
+		let plant = |rel: &str| {
+			let path = root.join(rel);
+			std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+			std::fs::write(&path, b"").expect("write");
+			path
+		};
+		let git_bash = plant("Git/bin/bash.exe");
+		plant("Git/usr/bin/bash.exe");
+		let git_sh = plant("Git/bin/sh.exe");
+		plant("Git/usr/bin/sh.exe");
+		let git_inner = root.join("Git/usr/bin/bash.exe");
+		let msys = plant("msys64/usr/bin/bash.exe");
+		let cygwin = plant("cygwin64/bin/bash.exe");
+		let git_cmd = plant("Git/cmd/bash.exe");
+		assert_eq!(launcher_target(&git_bash).as_deref(), Some("bash.exe"));
+		assert_eq!(launcher_target(&git_sh).as_deref(), Some("sh.exe"));
+		assert_eq!(launcher_target(&git_inner), None);
+		assert_eq!(launcher_target(&msys), None);
+		assert_eq!(launcher_target(&cygwin), None);
+		assert_eq!(launcher_target(&git_cmd), None);
 	}
 
 	// The unix half of the same question. bash and zsh never report where they
