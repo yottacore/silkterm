@@ -1,29 +1,43 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// A remote screen wears the Remote profile for the session. Nothing is written
-// and nothing is rated: the console keeps the profile it had, and the override
-// lifts at the next launch unless that one is remote too.
-fn remote_override_at_launch() {
+//! The performance benchmark and the profile it picks, and the display watch
+//! that steps a slow session down.
+
+use super::{BENCH_BANNER_MIN, BENCH_BANNER_PAD, State, set_live};
+use crate::config;
+use crate::gfx::Drawn;
+use crate::pane::Rect;
+use std::time::Instant;
+
+/// A remote screen wears the Remote profile for the session. Nothing is written
+/// and nothing is rated: the console keeps the profile it had, and the override
+/// lifts at the next launch unless that one is remote too.
+pub(super) fn remote_override_at_launch() {
 	if !crate::profile::remote_session() {
 		return;
 	}
 	set_live(|live| live.remote_override = true);
 }
 
-// What the performance watch does with a pass of the event loop.
+/// What the performance watch does with a pass of the event loop.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum RatingStep {
+pub(super) enum RatingStep {
 	Note,
 	Pause,
 }
 
-// A frame is evidence about the hardware only when this window's own eased
-// rendering paced it. A benchmark is timing the same frames itself, a pinned
-// rate paces itself, and a window without focus is one nobody is watching, so
-// it gets no say in the profile.
+/// A frame is evidence about the hardware only when this window's own eased
+/// rendering paced it. A benchmark is timing the same frames itself, a pinned
+/// rate paces itself, and a window without focus is one nobody is watching, so
+/// it gets no say in the profile.
 #[allow(clippy::fn_params_excessive_bools)] // four independent gates, all sixteen cases tested
-fn rating_step(bench: bool, scroll_anim: bool, pinned_fps: bool, focused: bool) -> RatingStep {
+pub(super) fn rating_step(
+	bench: bool,
+	scroll_anim: bool,
+	pinned_fps: bool,
+	focused: bool,
+) -> RatingStep {
 	if !bench && scroll_anim && !pinned_fps && focused {
 		RatingStep::Note
 	} else {
@@ -31,12 +45,12 @@ fn rating_step(bench: bool, scroll_anim: bool, pinned_fps: bool, focused: bool) 
 	}
 }
 
-// With the profile on automatic, hardware the config has not seen gets a fresh
-// pick, written down against that hardware so the next launch on it leaves the
-// profile where the rating left it. Answers the id a benchmark should write
-// when it finishes, or None where there is nothing to time - a software
-// renderer is decided here and written now, and a remote screen is left alone.
-fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
+/// With the profile on automatic, hardware the config has not seen gets a fresh
+/// pick, written down against that hardware so the next launch on it leaves the
+/// profile where the rating left it. Answers the id a benchmark should write
+/// when it finishes, or None where there is nothing to time - a software
+/// renderer is decided here and written now, and a remote screen is left alone.
+pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	let live = config::settings();
 	if !live.performance_automatic || live.remote_override {
 		return None;
@@ -92,12 +106,12 @@ fn rating_due(live: &config::Settings, hardware: &str) -> bool {
 	live.performance_check_hardware || live.rated_hardware.is_empty()
 }
 
-// The session's stepped profile for a device drawn `drawn`, or None to leave
-// it. Software on a machine with a card is not new hardware, so the card keeps
-// its rating and the session steps down to Low, the way a remote screen takes
-// Remote. A step made here (`ours`) comes off when the card draws again, and
-// a deeper step the display watch took since stays.
-fn session_step(
+/// The session's stepped profile for a device drawn `drawn`, or None to leave
+/// it. Software on a machine with a card is not new hardware, so the card keeps
+/// its rating and the session steps down to Low, the way a remote screen takes
+/// Remote. A step made here (`ours`) comes off when the card draws again, and
+/// a deeper step the display watch took since stays.
+pub(super) fn session_step(
 	live: &config::Settings,
 	drawn: Drawn,
 	ours: bool,
@@ -209,11 +223,11 @@ fn watch_step_down(live: &config::Settings) -> Option<config::Settings> {
 }
 
 impl State {
-	// The benchmark's banner: one box in the middle of the window, over a dimmed
-	// screen. It is what makes the run modal - the window behind it keeps drawing
-	// (that is the thing being timed, and it is worth seeing) but takes no input
-	// while it is up.
-	fn bench_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
+	/// The benchmark's banner: one box in the middle of the window, over a dimmed
+	/// screen. It is what makes the run modal - the window behind it keeps drawing
+	/// (that is the thing being timed, and it is worth seeing) but takes no input
+	/// while it is up.
+	pub(super) fn bench_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
 		self.bench_banner.as_ref()?;
 		let lines = if self.bench_stalled {
 			BENCH_STALLED_LINES
@@ -248,40 +262,40 @@ impl State {
 		Some((Rect { x, y, w, h }, placed))
 	}
 
-	// The rating waits for the wallpaper, since that is part of what it times,
-	// but no longer than its cap.
-	fn bench_blocked(&self) -> bool {
+	/// The rating waits for the wallpaper, since that is part of what it times,
+	/// but no longer than its cap.
+	pub(super) fn bench_blocked(&self) -> bool {
 		!self.wp_shown && self.bench_cap.is_some_and(|cap| Instant::now() < cap)
 	}
 
-	// The banner comes down once the run is over and it has been up long
-	// enough to read.
-	fn bench_banner_wake(&self) -> Option<Instant> {
+	/// The banner comes down once the run is over and it has been up long
+	/// enough to read.
+	pub(super) fn bench_banner_wake(&self) -> Option<Instant> {
 		self.bench_banner
 			.filter(|_| self.bench.is_none() && self.bench_at.is_none())
 			.map(|up| up + BENCH_BANNER_MIN)
 	}
 
-	// The Remote profile on or off by hand. Live only: nothing about it reaches
-	// the file, so the next launch decides for itself.
-	fn toggle_remote(&mut self) {
+	/// The Remote profile on or off by hand. Live only: nothing about it reaches
+	/// the file, so the next launch decides for itself.
+	pub(super) fn toggle_remote(&mut self) {
 		let before = config::settings();
 		let mut next = (*before).clone();
 		next.remote_override = !next.remote_override;
 		self.apply_new_settings(&before, next, false);
 	}
 
-	// Put a rung's settings live for the length of the benchmark. Nothing is
-	// written: the run is a measurement and only its answer reaches the file.
-	fn set_live_profile(&mut self, profile: crate::profile::Profile) {
+	/// Put a rung's settings live for the length of the benchmark. Nothing is
+	/// written: the run is a measurement and only its answer reaches the file.
+	pub(super) fn set_live_profile(&mut self, profile: crate::profile::Profile) {
 		let before = config::settings();
 		let next = with_measured_profile(&before, profile);
 		self.apply_new_settings(&before, next, false);
 	}
 
-	// The benchmark settled on a rung. Write it down against the hardware it was
-	// measured on, and give the window back.
-	fn finish_bench(&mut self, pick: crate::profile::Profile) {
+	/// The benchmark settled on a rung. Write it down against the hardware it was
+	/// measured on, and give the window back.
+	pub(super) fn finish_bench(&mut self, pick: crate::profile::Profile) {
 		self.bench = None;
 		self.rating.reset();
 		eprintln!(
@@ -309,11 +323,11 @@ impl State {
 		self.apply_new_settings(&orig, new, false);
 	}
 
-	// The run could not tell the machine from the display (`Step::Stalled`), most
-	// likely a monitor asleep. Nothing is written, so the next launch tests again,
-	// and the session goes back to the profile it had. Saving Standard here once
-	// left a machine without its wallpaper from then on.
-	fn finish_bench_stalled(&mut self) {
+	/// The run could not tell the machine from the display (`Step::Stalled`), most
+	/// likely a monitor asleep. Nothing is written, so the next launch tests again,
+	/// and the session goes back to the profile it had. Saving Standard here once
+	/// left a machine without its wallpaper from then on.
+	pub(super) fn finish_bench_stalled(&mut self) {
 		self.bench = None;
 		self.bench_id = None;
 		self.rating.reset();
@@ -330,10 +344,10 @@ impl State {
 		}
 	}
 
-	// The display missed its budget over a whole window of eased frames: with
-	// the profile on automatic, take one step down for the rest of the session.
-	// Nothing is written, so the next launch starts from the rated profile.
-	fn step_down_profile(&mut self) {
+	/// The display missed its budget over a whole window of eased frames: with
+	/// the profile on automatic, take one step down for the rest of the session.
+	/// Nothing is written, so the next launch starts from the rated profile.
+	pub(super) fn step_down_profile(&mut self) {
 		let live = config::settings();
 		let Some(next) = watch_step_down(&live) else {
 			return;
@@ -350,6 +364,8 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+	use super::rating_step;
+	use crate::config;
 	// Only a focused window's own eased frame is evidence; every other pass
 	// pauses the watch, so an idle gap is never read as a period.
 	// Test ID: EpWnbLc

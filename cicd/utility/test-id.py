@@ -95,10 +95,13 @@ def rust_tests() -> Iterator[tuple[str, str | None, str]]:
 	##	Every Rust test as (where, id or None, name as cargo prints it). A
 	##	test's ID sits above its whole attribute block, so a #[cfg] ahead of
 	##	#[test] does not hide it. The module path comes from the indent of each
-	##	"mod x {", which rustfmt keeps exact.
+	##	"mod x {", which rustfmt keeps exact, and a file in a module's own folder
+	##	under src/ starts with that folder's path.
 	for path in rust_files():
 		lines = path.read_text(encoding="utf-8").splitlines()
-		base: list[str] = [] if path.stem == "main" else [path.stem]
+		parts = path.relative_to(ROOT).parts
+		folders = list(parts[len(parts) - parts[::-1].index("src"):-1]) if "src" in parts else []
+		base: list[str] = folders + ([] if path.stem == "main" else [path.stem])
 		mods: list[tuple[str, str]] = []
 		for n, line in enumerate(lines):
 			m = MOD_RE.match(line)
@@ -219,3 +222,4 @@ if __name__ == "__main__":
 ##		- 20260926: Created.
 ##		- 20260927: --annotate, for the test lines cicd prints.
 ##		- 20261005: PEP 8 names and type hints.
+##		- 20261006: Module paths take the folder for a file under src/<module>/.

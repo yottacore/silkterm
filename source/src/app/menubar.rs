@@ -1,18 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// macOS has no in-window menu bar, since the system menu bar carries the same
-// menus and a second bar would break the Mac's own menu contract. `--hide-menu`
-// is accepted there and does nothing.
-fn menu_bar_at_launch(hide_menu: Option<bool>, mac: bool) -> bool {
+//! The menu bar: its titles, the Alt underlines, and the copy-mode boxes at its
+//! right end.
+
+use super::{
+	COPYBOX_BOX_GAP, COPYBOX_LABELS, COPYBOX_LEAD_GAP, COPYBOX_PAIR_GAP, MENU_BAR, MENU_BAR_PAD,
+	State, save_live,
+};
+use crate::pane::{CopyKind, Rect};
+use crate::term::PaneId;
+use crate::text::TextCtx;
+
+/// macOS has no in-window menu bar, since the system menu bar carries the same
+/// menus and a second bar would break the Mac's own menu contract. `--hide-menu`
+/// is accepted there and does nothing.
+pub(super) fn menu_bar_at_launch(hide_menu: Option<bool>, mac: bool) -> bool {
 	!mac && !hide_menu.unwrap_or(false)
 }
 
-// The menu bar's right-side copy-mode cluster: "Copy on [ ] select [ ] output".
-// Drawing, label placement, and click hit-testing all read this one layout.
-struct CopyBoxes {
-	boxes: [Rect; 2],  // select, output checkbox squares
-	label_x: [f32; 3], // left edge per COPYBOX_LABELS entry
+/// The menu bar's right-side copy-mode cluster: "Copy on [ ] select [ ] output".
+/// Drawing, label placement, and click hit-testing all read this one layout.
+#[derive(Debug)]
+pub(super) struct CopyBoxes {
+	pub(super) boxes: [Rect; 2], // select, output checkbox squares
+	label_x: [f32; 3],           // left edge per COPYBOX_LABELS entry
 	label_w: [f32; 3],
 	shown: [bool; 3], // which labels there is room for at this window width
 }
@@ -52,14 +64,14 @@ struct CopyMetrics {
 	lead_gap: f32, // "Copy on:" to the first checkbox
 }
 
-// Where menu-bar buffer `i` is drawn: (left, clip left, clip right, top). The
-// titles come first, then the right-aligned copy-mode labels, and at a narrow
-// width some of those are not there at all.
-//
-// Everything on this bar sits on ONE baseline. The copy labels used to center
-// their full ink box, which reads better on its own but left them half a
-// descent above the titles beside them.
-fn menubar_text_slot(
+/// Where menu-bar buffer `i` is drawn: (left, clip left, clip right, top). The
+/// titles come first, then the right-aligned copy-mode labels, and at a narrow
+/// width some of those are not there at all.
+///
+/// Everything on this bar sits on ONE baseline. The copy labels used to center
+/// their full ink box, which reads better on its own but left them half a
+/// descent above the titles beside them.
+pub(super) fn menubar_text_slot(
 	text: &TextCtx,
 	menu_h: f32,
 	bar_layout: &[(f32, f32)],
@@ -114,16 +126,16 @@ fn copybox_place(m: &CopyMetrics, shown: [bool; 3]) -> CopyBoxes {
 	}
 }
 
-// The top-level menu Alt plus `ch` opens: the one whose title starts with it.
-fn bar_menu_for(ch: char) -> Option<usize> {
+/// The top-level menu Alt plus `ch` opens: the one whose title starts with it.
+pub(super) fn bar_menu_for(ch: char) -> Option<usize> {
 	let ch = ch.to_ascii_uppercase();
 	MENU_BAR.iter().position(|title| title.starts_with(ch))
 }
 
-// Which bar titles get their accelerator underlined, and on which letter: all
-// of them while Alt is held, none while a dropdown is open, since the dropdown
-// underlines its own rows then.
-fn bar_title_underlines(
+/// Which bar titles get their accelerator underlined, and on which letter: all
+/// of them while Alt is held, none while a dropdown is open, since the dropdown
+/// underlines its own rows then.
+pub(super) fn bar_title_underlines(
 	alt_held: bool,
 	open: Option<usize>,
 	titles: &[&str],
@@ -139,9 +151,9 @@ fn bar_title_underlines(
 }
 
 impl State {
-	// Per-title (x_left, width) layout of the menu bar, used for drawing and
-	// hit-testing so they can't disagree. Titles use the proportional font.
-	fn menubar_layout(&mut self) -> [(f32, f32); MENU_BAR.len()] {
+	/// Per-title (`x_left`, width) layout of the menu bar, used for drawing and
+	/// hit-testing so they can't disagree. Titles use the proportional font.
+	pub(super) fn menubar_layout(&mut self) -> [(f32, f32); MENU_BAR.len()] {
 		let attrs = crate::text::ui_attrs();
 		let mut x = 0.0;
 		MENU_BAR.map(|title| {
@@ -152,20 +164,20 @@ impl State {
 		})
 	}
 
-	fn menubar_hit(&mut self, mx: f32) -> Option<usize> {
+	pub(super) fn menubar_hit(&mut self, mx: f32) -> Option<usize> {
 		self.menubar_layout()
 			.iter()
 			.position(|&(x, w)| mx >= x && mx < x + w)
 	}
 
-	// The "Copy on [ ] select [ ] output" pair on the right of the menu bar. The
-	// user has to be able to see when the focused pane is auto-copying, so the
-	// cluster sheds parts rather than shrinking: the lead-in goes first, then the
-	// two words, and only when even the boxes cannot clear the menu titles does
-	// the whole thing go (None). Overlapping text says less about the copy state
-	// than a clean absence does. It comes back on its own as the window widens.
-	// label_x/label_w index-match COPYBOX_LABELS.
-	fn copybox_layout(&mut self) -> Option<CopyBoxes> {
+	/// The "Copy on [ ] select [ ] output" pair on the right of the menu bar. The
+	/// user has to be able to see when the focused pane is auto-copying, so the
+	/// cluster sheds parts rather than shrinking: the lead-in goes first, then the
+	/// two words, and only when even the boxes cannot clear the menu titles does
+	/// the whole thing go (None). Overlapping text says less about the copy state
+	/// than a clean absence does. It comes back on its own as the window widens.
+	/// `label_x/label_w` index-match `COPYBOX_LABELS`.
+	pub(super) fn copybox_layout(&mut self) -> Option<CopyBoxes> {
 		let titles_right =
 			self.menubar_layout().last().map_or(0.0, |&(x, w)| x + w) + self.text.dip(MENU_BAR_PAD);
 		let attrs = crate::text::ui_attrs();
@@ -186,8 +198,8 @@ impl State {
 		copybox_fit(&metrics, titles_right)
 	}
 
-	// Which copy-mode checkbox (the square or its word) a menu-bar click hit.
-	fn copybox_hit(&mut self, mx: f32) -> Option<CopyKind> {
+	/// Which copy-mode checkbox (the square or its word) a menu-bar click hit.
+	pub(super) fn copybox_hit(&mut self, mx: f32) -> Option<CopyKind> {
 		let cb = self.copybox_layout()?;
 		for (i, kind) in [CopyKind::Select, CopyKind::Output].into_iter().enumerate() {
 			let (left, right) = cb.hit_range(i);
@@ -198,12 +210,12 @@ impl State {
 		None
 	}
 
-	// Flip one of a pane's two auto-copy triggers. The two are independent and can
-	// both be on; nothing else is touched (other panes/tabs/windows keep theirs -
-	// only the focused pane of the active tab actually copies, gated at copy time).
-	// A toggle from a context menu on an unfocused pane focuses it so the menu-bar
-	// checkboxes reflect the pane just changed.
-	fn toggle_copy(&mut self, target: PaneId, kind: CopyKind) {
+	/// Flip one of a pane's two auto-copy triggers. The two are independent and can
+	/// both be on; nothing else is touched (other panes/tabs/windows keep theirs -
+	/// only the focused pane of the active tab actually copies, gated at copy time).
+	/// A toggle from a context menu on an unfocused pane focuses it so the menu-bar
+	/// checkboxes reflect the pane just changed.
+	pub(super) fn toggle_copy(&mut self, target: PaneId, kind: CopyKind) {
 		let Some(p) = self.tabs.find_pane_mut(target) else {
 			return;
 		};
@@ -226,6 +238,12 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+	use super::super::{MENU_BAR, MENU_BAR_VPAD};
+	use super::{
+		CopyBoxes, CopyMetrics, bar_menu_for, bar_title_underlines, copybox_fit, copybox_place,
+		menubar_text_slot,
+	};
+	use crate::text::TextCtx;
 	// The chrome shares a coordinate space with the terminal grid, so nothing
 	// A narrow window used to draw "Copy on:" straight over "Panes" and "Help" -
 	// both there, neither readable. The cluster sheds parts instead, and the

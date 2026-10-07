@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+//! The About and Settings windows and the save notice, as the main window
+//! drives them.
+
+use super::{App, EnvFlag, RAISE_REASSERT_IVL, RAISE_REASSERTS, env_flag, key_is_typed, open_url};
+use crate::config;
+use crate::input;
+use std::time::Instant;
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::{Key, NamedKey};
+
 impl App {
-	// Events for the pop-out dialog window (its own surface/input).
-	fn handle_dialog_event(&mut self, event: WindowEvent) {
+	/// Events for the pop-out dialog window (its own surface/input).
+	pub(super) fn handle_dialog_event(&mut self, event: WindowEvent) {
 		use crate::dialog::DialogAction as DA;
 		if env_flag(EnvFlag::DlgDbg) {
 			match &event {
@@ -197,14 +208,14 @@ impl App {
 		}
 	}
 
-	// Windows: an owned popup gets no automatic placement (it appears at the
-	// screen origin). macOS centers a new window on the screen at its first
-	// size, and growing it after keeps the bottom edge, so a tall one is pushed
-	// down from under the menu bar and off the bottom. Both center the dialog
-	// over the terminal and keep it on the work area. Linux WMs place
-	// transients themselves.
+	/// Windows: an owned popup gets no automatic placement (it appears at the
+	/// screen origin). macOS centers a new window on the screen at its first
+	/// size, and growing it after keeps the bottom edge, so a tall one is pushed
+	/// down from under the menu bar and off the bottom. Both center the dialog
+	/// over the terminal and keep it on the work area. Linux WMs place
+	/// transients themselves.
 	#[cfg(any(target_os = "windows", target_os = "macos"))]
-	fn center_dialog(&self) {
+	pub(super) fn center_dialog(&self) {
 		let (Some(state), Some(dialog)) = (self.state.as_ref(), self.dialog.as_ref()) else {
 			return;
 		};
@@ -234,25 +245,25 @@ impl App {
 			.window
 			.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
 	}
-	// self kept for call-site parity with the version above
+	/// self kept for call-site parity with the version above
 	#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 	#[allow(clippy::unused_self)]
-	fn center_dialog(&self) {}
+	pub(super) fn center_dialog(&self) {}
 
-	// Windows: the dialog is created hidden (see dialog::make), so after centering it
-	// draw one frame at the final position and then show it - no origin flash, no jump.
-	// Elsewhere the dialog is already mapped by new_about / new_settings.
+	/// Windows: the dialog is created hidden (see `dialog::make`), so after centering it
+	/// draw one frame at the final position and then show it - no origin flash, no jump.
+	/// Elsewhere the dialog is already mapped by `new_about` / `new_settings`.
 	#[cfg(target_os = "windows")]
-	fn reveal_dialog(&mut self) {
+	pub(super) fn reveal_dialog(&mut self) {
 		if let Some(d) = self.dialog.as_mut() {
 			d.render();
 			d.window.set_visible(true);
 		}
 	}
-	// self kept for call-site parity with the Windows version above
+	/// self kept for call-site parity with the Windows version above
 	#[cfg(not(target_os = "windows"))]
 	#[allow(clippy::unused_self)]
-	fn reveal_dialog(&self) {}
+	pub(super) fn reveal_dialog(&self) {}
 
 	// Drop the dialog window, remembering a Settings view on the way out so a
 	// reopen within SETTINGS_RESUME picks up where it left off. Every close goes
@@ -261,20 +272,20 @@ impl App {
 		if let Some(view) = self
 			.dialog
 			.as_ref()
-			.and_then(super::dialog::DialogWin::settings_view)
+			.and_then(crate::dialog::DialogWin::settings_view)
 		{
 			self.settings_view = Some((Instant::now(), view));
 			self.settings_size = self
 				.dialog
 				.as_ref()
-				.and_then(super::dialog::DialogWin::settings_size);
+				.and_then(crate::dialog::DialogWin::settings_size);
 		}
 		self.dialog = None;
 	}
 
-	// Events for the notice window. It has one button, so everything that means
-	// OK or close closes it.
-	fn handle_notice_event(&mut self, event: WindowEvent) {
+	/// Events for the notice window. It has one button, so everything that means
+	/// OK or close closes it.
+	pub(super) fn handle_notice_event(&mut self, event: WindowEvent) {
 		let Some(n) = self.notice.as_mut() else {
 			return;
 		};
@@ -320,9 +331,9 @@ impl App {
 		}
 	}
 
-	// While a notice is up, the windows under it take no input, and a click on
-	// one brings the notice forward: the same rule a dialog holds the terminal to.
-	fn notice_holds(&self, event: &WindowEvent) -> bool {
+	/// While a notice is up, the windows under it take no input, and a click on
+	/// one brings the notice forward: the same rule a dialog holds the terminal to.
+	pub(super) fn notice_holds(&self, event: &WindowEvent) -> bool {
 		let Some(n) = &self.notice else {
 			return false;
 		};
@@ -341,9 +352,9 @@ impl App {
 		}
 	}
 
-	// Put an owed notice up, once nothing is saying one already. In front of
-	// Settings when that is open, since an OK there is the usual way to meet it.
-	fn show_notice(&mut self, event_loop: &ActiveEventLoop) {
+	/// Put an owed notice up, once nothing is saying one already. In front of
+	/// Settings when that is open, since an OK there is the usual way to meet it.
+	pub(super) fn show_notice(&mut self, event_loop: &ActiveEventLoop) {
 		use winit::raw_window_handle::HasWindowHandle;
 		#[cfg(target_os = "windows")]
 		if NOTICE_UP.load(std::sync::atomic::Ordering::SeqCst) {
@@ -426,7 +437,7 @@ impl App {
 		if let Some((orig, edited, sys)) = self
 			.dialog
 			.as_ref()
-			.and_then(super::dialog::DialogWin::settings_values)
+			.and_then(crate::dialog::DialogWin::settings_values)
 		{
 			if let Some(state) = self.state.as_mut() {
 				wrote = state.apply_settings_values(&orig, edited, sys);
@@ -444,7 +455,7 @@ impl App {
 				if let Some(reverted) = self
 					.dialog
 					.as_mut()
-					.map(super::dialog::DialogWin::take_reverted)
+					.map(crate::dialog::DialogWin::take_reverted)
 				{
 					config::revert_keys(&reverted);
 				}
@@ -461,11 +472,15 @@ impl App {
 	}
 }
 
-// Whether a refused save gets a notice. One the user asked for, an OK or Apply
-// in Settings, is answered every time, or the button would seem to do nothing.
-// The others (a resize, a menu switch, shells found at launch) are said once a
-// session for each file, or every resize would raise it again.
-fn notice_due(told: &mut Vec<std::path::PathBuf>, path: &std::path::Path, asked: bool) -> bool {
+/// Whether a refused save gets a notice. One the user asked for, an OK or Apply
+/// in Settings, is answered every time, or the button would seem to do nothing.
+/// The others (a resize, a menu switch, shells found at launch) are said once a
+/// session for each file, or every resize would raise it again.
+pub(super) fn notice_due(
+	told: &mut Vec<std::path::PathBuf>,
+	path: &std::path::Path,
+	asked: bool,
+) -> bool {
 	let first = !told.iter().any(|seen| seen == path);
 	if first {
 		told.push(path.to_path_buf());
@@ -504,6 +519,7 @@ fn message_box(owner: isize, title: &str, body: &str) {
 
 #[cfg(test)]
 mod tests {
+	use super::notice_due;
 	// A save nobody asked for can be refused at every resize, so it is said once
 	// a session for each file. An OK in Settings that could not save is said
 	// every time, or the button would seem to do nothing.

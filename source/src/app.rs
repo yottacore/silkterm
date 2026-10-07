@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -26,12 +25,31 @@ use crate::gfx::{
 	RectRenderer, Retry, VramProbe,
 };
 use crate::input::{self, ClickSelect, CopyFrom, Hotkey, WheelRoute, is_copy_chord};
-use crate::pane::{BarHit, CopyKind, Dir, Pane, PaneManager, Rect};
+use crate::pane::{BarHit, Dir, Pane, Rect};
 use crate::settings_ui::EditCmd;
-use crate::shells::ShellEntry;
 use crate::term::{PaneId, UserEvent};
 use crate::text::TextCtx;
-use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at};
+use cmdline::{build_layout, new_window_command, settings_after_reload};
+use dialogs::notice_due;
+pub(crate) use idle::tune_heap;
+use idle::{Conserve, IdleClock, MinimizedProbe, idledbg, restore_sign};
+use menubar::{bar_menu_for, bar_title_underlines, menu_bar_at_launch, menubar_text_slot};
+use menus::{ContextMenu, entry_accel, entry_label};
+pub(crate) use menus::{Entry, MenuAction};
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) use menus::{mac_entries, menu_hotkey, without_rows};
+#[cfg(test)]
+pub(crate) use menus::{
+	sample_window_menus, sample_window_menus_copying, sample_window_menus_with,
+};
+use rating::{RatingStep, rate_hardware, rating_step, remote_override_at_launch, session_step};
+use tab_edit::TabEdit;
+use tabs::{
+	TabLabels, TabLayout, TabTip, Tabs, tab_button_v, tab_close_box, tab_edit_box, tab_title_w,
+};
+use vt::{VtHeal, spawn_vt_watch, vramdbg};
+pub(crate) use window_size::request_size;
+use window_size::{MonitorWatch, fit_px, launch_maximized, window_px};
 
 mod cmdline;
 mod dialogs;
@@ -5587,26 +5605,15 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+	use super::push_back;
+	use super::tabs::tab_close_box;
 	use super::{
-		Caret, CloseScope, Conserve, ContextMenu, CopyMetrics, Entry, Idle, IdleClock, IdleRule,
-		MenuAction, PaneWakes, RESTORED_SHOWN, SCRIM_PCT_PER_DOUBLING, Settle, TAB_CLOSE_M,
-		TabEdit, VT_SETTLE, ViewState, VtHeal, accel_at, accel_clash, close_scope, copybox_fit,
-		copybox_place, entry_check_accel, entry_item_accel, entry_sub, fit_px, focus_ring,
-		is_copy_chord, key_is_typed, launch_maximized, menu_metrics, needs_folder_read,
-		new_window_command, notice_due, pace_frame, pane_wake, rating_step, release_deadline,
-		remember_resize, resize_is_current, reveal_due, rotation_live, rotation_next,
-		settings_after_reload, settle, size_taken, tab_close_box, tab_command_line, tab_title_w,
-		typed_title, view_menu_items, wake_by, window_hidden, window_px,
+		CloseScope, PaneWakes, SCRIM_PCT_PER_DOUBLING, TAB_CLOSE_M, close_scope, focus_ring,
+		is_copy_chord, key_is_typed, pace_frame, pane_wake, reveal_due, wake_by,
 	};
-	use super::{
-		CopyBoxes, CtxState, Dir, MENU_BAR, MENU_BAR_VPAD, Rect, ShellEntry, TextCtx, bar_menu_for,
-		bar_title_underlines, context_menu_items, default_dir_for, edit_menu_items, entry_accel,
-		entry_label, file_menu_items, help_menu_items, menubar_text_slot, pane_shell,
-		pane_split_dir, panes_menu_items, push_back, split_shells, tabs_menu_items, with_shortcuts,
-	};
-	use super::{EditCmd, Reach, TabEditKey, tab_edit_key, tab_edit_menu_items, tab_edit_takes};
 	use crate::config;
 	use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Retry};
+	use crate::shells::ShellEntry;
 	use std::time::{Duration, Instant};
 	use winit::event::ElementState;
 	use winit::event_loop::ControlFlow;
@@ -5833,10 +5840,21 @@ mod tests {
 	// Test ID: EpHQ61Q
 	#[test]
 	fn a_read_only_pane_takes_nothing_the_user_sent() {
-		let body = include_str!("app.rs")
-			.split("\nmod tests {")
-			.next()
-			.expect("the file above its own tests");
+		// this file and the ones under app/, each above its own tests
+		let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app");
+		let mut texts = vec![include_str!("app.rs").to_string()];
+		for entry in std::fs::read_dir(dir).unwrap().flatten() {
+			texts.push(std::fs::read_to_string(entry.path()).unwrap());
+		}
+		assert!(texts.len() > 1, "found nothing under app/");
+		let body: String = texts
+			.iter()
+			.map(|text| {
+				text.split("\nmod tests {")
+					.next()
+					.expect("the file above its own tests")
+			})
+			.collect();
 		let direct: Vec<&str> = body
 			.lines()
 			.filter(|l| l.contains("term.write("))
@@ -6049,7 +6067,7 @@ mod tests {
 		);
 	}
 
-	fn shell(title: &str, active: bool) -> ShellEntry {
+	pub(super) fn shell(title: &str, active: bool) -> ShellEntry {
 		ShellEntry {
 			slug: title.to_lowercase(),
 			title: title.into(),

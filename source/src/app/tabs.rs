@@ -1,15 +1,31 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// The tab strip as drawn: which tab it starts at, and per tab shown, how wide
-// it is and what it says. Tabs are no longer one width apiece, so a position on
-// the bar is a running total rather than a multiplication (see tabtitle).
-#[derive(Default)]
-struct TabLayout {
+//! The tab strip: each tab's label and width, its hover tip, and opening,
+//! closing and moving tabs.
+
+use super::{
+	CHROME_HAIRLINE, State, TAB_CLOSE_M, TAB_CLOSE_W, TAB_EDIT_INSET, TAB_EDIT_PAD, TAB_TIP_GAP,
+	TAB_TIP_PAD, TAB_TIP_REFRESH, TAB_TITLE_PAD, TAB_TOP_PAD,
+};
+use crate::config;
+use crate::pane::{Pane, PaneManager, Rect};
+use crate::term::{PaneId, UserEvent};
+use crate::text::TextCtx;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use winit::event_loop::EventLoopProxy;
+
+/// The tab strip as drawn: which tab it starts at, and per tab shown, how wide
+/// it is and what it says. Tabs are no longer one width apiece, so a position on
+/// the bar is a running total rather than a multiplication (see tabtitle).
+#[derive(Debug, Default)]
+pub(super) struct TabLayout {
 	key: (u32, usize, usize, usize, u32, u64),
-	first: usize,
-	widths: Vec<f32>,
-	labels: Vec<String>,
+	pub(super) first: usize,
+	pub(super) widths: Vec<f32>,
+	pub(super) labels: Vec<String>,
 }
 
 impl TabLayout {
@@ -48,19 +64,20 @@ struct LabelFacts {
 
 // One tab's label forms, longest first, and the room the longest and the
 // shortest of them want.
+#[derive(Debug)]
 struct TabLabel {
 	facts: LabelFacts,
 	forms: Vec<String>,
 	demand: crate::tabtitle::Demand,
 }
 
-// Every tab's label, kept between frames. A frame still reads each tab's facts,
-// since a shell's task and folder are only known by asking, but forms are built
-// and measured again only for a tab whose facts moved, and for all of them when
-// the settings or the font did. Entries go by position, so a moved tab is
-// rebuilt the first time its slot reads differently.
-#[derive(Default)]
-struct TabLabels {
+/// Every tab's label, kept between frames. A frame still reads each tab's facts,
+/// since a shell's task and folder are only known by asking, but forms are built
+/// and measured again only for a tab whose facts moved, and for all of them when
+/// the settings or the font did. Entries go by position, so a moved tab is
+/// rebuilt the first time its slot reads differently.
+#[derive(Debug, Default)]
+pub(super) struct TabLabels {
 	tabs: Vec<Option<TabLabel>>,
 	// What every entry was built against. Any settings change is a new snapshot,
 	// and any font, zoom or scale change a new text context.
@@ -125,7 +142,7 @@ impl TabLabels {
 		self.revision += 1;
 	}
 
-	fn forms(&self, index: usize) -> &[String] {
+	pub(super) fn forms(&self, index: usize) -> &[String] {
 		self.tabs
 			.get(index)
 			.and_then(Option::as_ref)
@@ -176,29 +193,30 @@ fn label_forms_from(facts: &LabelFacts, settings: &config::Settings) -> Vec<Stri
 	)
 }
 
-// Tab strip: each tab owns its own pane split-tree. Detach/dock to other
-// windows is deferred (needs multi-window support).
-struct Tabs {
-	list: Vec<PaneManager>,
-	active: usize,
+/// Tab strip: each tab owns its own pane split-tree. Detach/dock to other
+/// windows is deferred (needs multi-window support).
+#[derive(Debug)]
+pub(super) struct Tabs {
+	pub(super) list: Vec<PaneManager>,
+	pub(super) active: usize,
 }
 
 impl Tabs {
-	fn cur(&self) -> &PaneManager {
+	pub(super) fn cur(&self) -> &PaneManager {
 		&self.list[self.active]
 	}
-	fn cur_mut(&mut self) -> &mut PaneManager {
+	pub(super) fn cur_mut(&mut self) -> &mut PaneManager {
 		&mut self.list[self.active]
 	}
-	fn len(&self) -> usize {
+	pub(super) fn len(&self) -> usize {
 		self.list.len()
 	}
-	// PaneIds are globally unique; the pane may live in any tab, not just the
-	// active one (background-tab shells reply to ESC[6n etc. too)
-	fn find_pane(&self, id: PaneId) -> Option<&Pane> {
+	/// `PaneIds` are globally unique; the pane may live in any tab, not just the
+	/// active one (background-tab shells reply to ESC[6n etc. too)
+	pub(super) fn find_pane(&self, id: PaneId) -> Option<&Pane> {
 		self.list.iter().find_map(|pm| pm.panes.get(&id))
 	}
-	fn find_pane_mut(&mut self, id: PaneId) -> Option<&mut Pane> {
+	pub(super) fn find_pane_mut(&mut self, id: PaneId) -> Option<&mut Pane> {
 		self.list.iter_mut().find_map(|pm| pm.panes.get_mut(&id))
 	}
 	fn next(&mut self) {
@@ -207,7 +225,7 @@ impl Tabs {
 	fn prev(&mut self) {
 		self.active = tab_step(self.active, self.list.len(), false);
 	}
-	fn move_active(&mut self, fwd: bool) {
+	pub(super) fn move_active(&mut self, fwd: bool) {
 		self.active = move_tab(&mut self.list, self.active, fwd);
 	}
 }
@@ -258,20 +276,20 @@ fn move_tab<T>(list: &mut [T], i: usize, forward: bool) -> usize {
 	j
 }
 
-// Top and height of a tab button inside the bar: inset at the top, and the bar's
-// bottom hairline left showing under it. The draw and the text centering read
-// the one rule.
-fn tab_button_v(bar_y: f32, tab_h: f32, scale: f32) -> (f32, f32) {
+/// Top and height of a tab button inside the bar: inset at the top, and the bar's
+/// bottom hairline left showing under it. The draw and the text centering read
+/// the one rule.
+pub(super) fn tab_button_v(bar_y: f32, tab_h: f32, scale: f32) -> (f32, f32) {
 	let top = config::dip(TAB_TOP_PAD, scale);
 	let rule = config::dip(CHROME_HAIRLINE, scale);
 	(bar_y + top, tab_h - top - rule)
 }
 
-// The close-"x" button box within a tab: a square with equal top/right/bottom
-// margins (the extra room falls to the left, separating it from the title).
-// Shared by the rect draw, the glyph placement, and the click hit-test so they
-// can't drift apart.
-fn tab_close_box(tab_x: f32, tab_w: f32, bar_y: f32, tab_h: f32, scale: f32) -> Rect {
+/// The close-"x" button box within a tab: a square with equal top/right/bottom
+/// margins (the extra room falls to the left, separating it from the title).
+/// Shared by the rect draw, the glyph placement, and the click hit-test so they
+/// can't drift apart.
+pub(super) fn tab_close_box(tab_x: f32, tab_w: f32, bar_y: f32, tab_h: f32, scale: f32) -> Rect {
 	let m = config::dip(TAB_CLOSE_M, scale);
 	let side = (tab_h - 2.0 * m).max(config::dip(8.0, scale));
 	Rect {
@@ -281,10 +299,17 @@ fn tab_close_box(tab_x: f32, tab_w: f32, bar_y: f32, tab_h: f32, scale: f32) -> 
 		h: side,
 	}
 }
-// The box a tab being renamed types into: a real text field inside the tab
-// button, stopping short of the close column and as tall as a line of text plus
-// its own padding, or the button itself where that is shorter.
-fn tab_edit_box(tab_x: f32, tab_w: f32, bar_y: f32, tab_h: f32, line_h: f32, scale: f32) -> Rect {
+/// The box a tab being renamed types into: a real text field inside the tab
+/// button, stopping short of the close column and as tall as a line of text plus
+/// its own padding, or the button itself where that is shorter.
+pub(super) fn tab_edit_box(
+	tab_x: f32,
+	tab_w: f32,
+	bar_y: f32,
+	tab_h: f32,
+	line_h: f32,
+	scale: f32,
+) -> Rect {
 	let inset = config::dip(TAB_EDIT_INSET, scale);
 	let (btn_y, btn_h) = tab_button_v(bar_y, tab_h, scale);
 	let h = (line_h + 2.0 * config::dip(TAB_EDIT_PAD, scale)).min(btn_h - 2.0 * inset);
@@ -298,11 +323,11 @@ fn tab_edit_box(tab_x: f32, tab_w: f32, bar_y: f32, tab_h: f32, line_h: f32, sca
 	}
 }
 
-// How much of a tab its title actually gets: the button less its own inset on
-// both sides and the close-button column it must never run under. The draw and
-// the fit read the one rule, or a title is shortened to a width it is not then
-// given.
-fn tab_title_w(tab_w: f32, scale: f32) -> f32 {
+/// How much of a tab its title actually gets: the button less its own inset on
+/// both sides and the close-button column it must never run under. The draw and
+/// the fit read the one rule, or a title is shortened to a width it is not then
+/// given.
+pub(super) fn tab_title_w(tab_w: f32, scale: f32) -> f32 {
 	let pad = config::dip(TAB_TITLE_PAD, scale);
 	(tab_w - 2.0 * pad - config::dip(TAB_CLOSE_W, scale)).max(config::dip(8.0, scale))
 }
@@ -316,12 +341,13 @@ fn tab_command_line(command: Option<&[String]>) -> String {
 	command.map_or_else(String::new, crate::shells::command_line)
 }
 
-// A tab's hover tip: what it runs, how it was started, where it is, and how
-// long it has been open - the three of those a tab is too narrow to say, plus
-// the one it never says. The lines are built on a timer rather than per frame:
-// naming the shell resolves its program on the filesystem, and the clock at the
-// bottom has to tick anyway.
-struct TabTip {
+/// A tab's hover tip: what it runs, how it was started, where it is, and how
+/// long it has been open - the three of those a tab is too narrow to say, plus
+/// the one it never says. The lines are built on a timer rather than per frame:
+/// naming the shell resolves its program on the filesystem, and the clock at the
+/// bottom has to tick anyway.
+#[derive(Debug)]
+pub(super) struct TabTip {
 	tab: usize,
 	lines: Vec<String>,
 	built: Instant,
@@ -436,9 +462,9 @@ impl State {
 		)
 	}
 
-	// Bring the kept labels up to date: every tab's, or only one. Reading a tab's
-	// facts is cheap; building its forms is the part that is skipped.
-	fn refresh_tab_labels(&mut self, only: Option<usize>) {
+	/// Bring the kept labels up to date: every tab's, or only one. Reading a tab's
+	/// facts is cheap; building its forms is the part that is skipped.
+	pub(super) fn refresh_tab_labels(&mut self, only: Option<usize>) {
 		let settings = config::settings();
 		self.tab_labels.fit(self.tabs.len());
 		let tabs = only.map_or(0..self.tabs.len(), |index| index..index + 1);
@@ -450,47 +476,47 @@ impl State {
 		}
 	}
 
-	// While the bar is hidden nothing is built or measured, but every tab's
-	// shell is still asked what it runs. A shell only learns its last command
-	// by being asked while that command runs, so skipping this would lose one
-	// that started and finished before the bar came back.
-	fn probe_tabs(&mut self) {
+	/// While the bar is hidden nothing is built or measured, but every tab's
+	/// shell is still asked what it runs. A shell only learns its last command
+	/// by being asked while that command runs, so skipping this would lose one
+	/// that started and finished before the bar came back.
+	pub(super) fn probe_tabs(&mut self) {
 		for index in 0..self.tabs.len() {
 			let _ = self.label_facts(index);
 		}
 	}
 
-	// The strip as drawn, measured again only if one of its inputs moved.
-	fn tab_layout(&mut self) -> &TabLayout {
+	/// The strip as drawn, measured again only if one of its inputs moved.
+	pub(super) fn tab_layout(&mut self) -> &TabLayout {
 		if self.tab_layout.key != self.tab_layout_key() {
 			self.rebuild_tab_layout();
 		}
 		&self.tab_layout
 	}
 
-	// Where tab `i` sits on the bar and how wide it is, or None when it is on
-	// another page. Drawing and both hit tests read this one answer, or a click
-	// sits on a different tab than the one under the pointer.
-	fn tab_box(&mut self, i: usize) -> Option<(f32, f32)> {
+	/// Where tab `i` sits on the bar and how wide it is, or None when it is on
+	/// another page. Drawing and both hit tests read this one answer, or a click
+	/// sits on a different tab than the one under the pointer.
+	pub(super) fn tab_box(&mut self, i: usize) -> Option<(f32, f32)> {
 		let layout = self.tab_layout();
 		Some((layout.x(i)?, layout.w(i)?))
 	}
 
-	// Which tab a pointer at `x` is over - the inverse of `tab_box`, and the only
-	// thing the two hit tests may use.
-	fn tab_at(&mut self, x: f32) -> Option<usize> {
+	/// Which tab a pointer at `x` is over - the inverse of `tab_box`, and the only
+	/// thing the two hit tests may use.
+	pub(super) fn tab_at(&mut self, x: f32) -> Option<usize> {
 		self.tab_layout().at_x(x)
 	}
 
-	// The close button of tab `i`, if that tab is on the page.
-	fn tab_close_box_at(&mut self, i: usize, bar_y: f32, tab_h: f32) -> Option<Rect> {
+	/// The close button of tab `i`, if that tab is on the page.
+	pub(super) fn tab_close_box_at(&mut self, i: usize, bar_y: f32, tab_h: f32) -> Option<Rect> {
 		let (x, w) = self.tab_box(i)?;
 		Some(tab_close_box(x, w, bar_y, tab_h, self.text.scale))
 	}
 
-	// A wheel over the tab bar turns the page. Without it a tab past the edge
-	// could only be reached from the keyboard or the Tabs menu.
-	fn scroll_tab_strip(&mut self, lines: f32) {
+	/// A wheel over the tab bar turns the page. Without it a tab past the edge
+	/// could only be reached from the keyboard or the Tabs menu.
+	pub(super) fn scroll_tab_strip(&mut self, lines: f32) {
 		let first = self.tab_layout().first;
 		let step = if lines > 0.0 {
 			first.saturating_sub(1)
@@ -503,9 +529,9 @@ impl State {
 		}
 	}
 
-	// Everything tab `index` could say, built afresh (see label_forms_from).
-	// The strip reads the kept copy in `tab_labels` instead.
-	fn tab_label_forms(&mut self, index: usize) -> Vec<String> {
+	/// Everything tab `index` could say, built afresh (see `label_forms_from`).
+	/// The strip reads the kept copy in `tab_labels` instead.
+	pub(super) fn tab_label_forms(&mut self, index: usize) -> Vec<String> {
 		let settings = config::settings();
 		self.label_facts(index).map_or_else(
 			|| vec![config::APP_NAME.to_string()],
@@ -549,10 +575,10 @@ impl State {
 		})
 	}
 
-	// Which tab the pointer is over, and since when. Anything the pointer is
-	// already busy with - a drag, an open menu - owns it instead, so no tip
-	// appears underneath one.
-	fn note_tab_hover(&mut self, x: f32, y: f32) {
+	/// Which tab the pointer is over, and since when. Anything the pointer is
+	/// already busy with - a drag, an open menu - owns it instead, so no tip
+	/// appears underneath one.
+	pub(super) fn note_tab_hover(&mut self, x: f32, y: f32) {
 		let busy = self.bar_dragging.is_some()
 			|| self.map_dragging.is_some()
 			|| self.dragging_pane.is_some()
@@ -572,9 +598,9 @@ impl State {
 		}
 	}
 
-	// Bring the tab tip up once the pointer has rested, and keep what it says
-	// current while it is up. Returns true when the frame has to be redrawn.
-	fn update_tab_tip(&mut self) -> bool {
+	/// Bring the tab tip up once the pointer has rested, and keep what it says
+	/// current while it is up. Returns true when the frame has to be redrawn.
+	pub(super) fn update_tab_tip(&mut self) -> bool {
 		let limit =
 			Duration::try_from_secs_f32(config::settings().tab_tip_max_s).unwrap_or_default();
 		let Some(tab) = self.tab_hover.ripe_for(limit) else {
@@ -603,9 +629,9 @@ impl State {
 		kept.is_none()
 	}
 
-	// When the loop next has to wake for the tip - to raise one whose pointer has
-	// rested, or to re-read one that is already up (its clock ticks).
-	fn tab_tip_wake(&self) -> Option<Instant> {
+	/// When the loop next has to wake for the tip - to raise one whose pointer has
+	/// rested, or to re-read one that is already up (its clock ticks).
+	pub(super) fn tab_tip_wake(&self) -> Option<Instant> {
 		match &self.tab_tip {
 			Some(tip) => Some(tip.built + TAB_TIP_REFRESH),
 			None => self.tab_hover.wake(),
@@ -680,14 +706,14 @@ impl State {
 		crate::tabtitle::tip_lines(&rows)
 	}
 
-	// The tip's box, and where each of its lines sits inside it. Measured in the
-	// TERMINAL font, which is the one thing in the chrome that is: the lines are a
-	// key/value table padded with spaces, and spaces align nothing in a
-	// proportional face. The box fits the longest line rather than guessing; it
-	// hangs off its own TAB rather than off the pointer, so it does not jitter as
-	// the pointer moves about inside one, and it is pushed back inside the window
-	// rather than being allowed to run off the right edge.
-	fn tab_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
+	/// The tip's box, and where each of its lines sits inside it. Measured in the
+	/// TERMINAL font, which is the one thing in the chrome that is: the lines are a
+	/// key/value table padded with spaces, and spaces align nothing in a
+	/// proportional face. The box fits the longest line rather than guessing; it
+	/// hangs off its own TAB rather than off the pointer, so it does not jitter as
+	/// the pointer moves about inside one, and it is pushed back inside the window
+	/// rather than being allowed to run off the right edge.
+	pub(super) fn tab_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
 		let generation = self.text.generation;
 		let text = &mut self.text;
 		let tip = self.tab_tip.as_mut()?;
@@ -714,14 +740,18 @@ impl State {
 		Some((Rect { x, y, w, h }, placed))
 	}
 
-	fn new_tab(&mut self, proxy: &EventLoopProxy<UserEvent>) {
+	pub(super) fn new_tab(&mut self, proxy: &EventLoopProxy<UserEvent>) {
 		self.new_tab_with(proxy, None);
 	}
 
-	// `shell` is a shell picked by name from the Tabs menu; None inherits from
-	// the pane that was active, as a plain new tab does. The directory is
-	// inherited either way - picking a shell says nothing about where to start.
-	fn new_tab_with(&mut self, proxy: &EventLoopProxy<UserEvent>, shell: Option<Vec<String>>) {
+	/// `shell` is a shell picked by name from the Tabs menu; None inherits from
+	/// the pane that was active, as a plain new tab does. The directory is
+	/// inherited either way - picking a shell says nothing about where to start.
+	pub(super) fn new_tab_with(
+		&mut self,
+		proxy: &EventLoopProxy<UserEvent>,
+		shell: Option<Vec<String>>,
+	) {
 		self.commit_tab_edit();
 		// area with the bar shown (we're about to have >1 tab); relayout_all fixes
 		// the exact rects right after, this is just the new pane's provisional box
@@ -769,12 +799,12 @@ impl State {
 		self.tab_tip = None;
 	}
 
-	fn close_tab(&mut self) {
+	pub(super) fn close_tab(&mut self) {
 		self.close_tab_at(self.tabs.active);
 	}
 
-	// the tab to the left or right, round the end
-	fn step_tab(&mut self, forward: bool) {
+	/// the tab to the left or right, round the end
+	pub(super) fn step_tab(&mut self, forward: bool) {
 		if forward {
 			self.tabs.next();
 		} else {
@@ -785,9 +815,9 @@ impl State {
 		self.dirty = true;
 	}
 
-	// Close the tab at `idx` (not necessarily the active one - a background tab's
-	// shell can exit). Keeps `active` pointing at the same tab where it can.
-	fn close_tab_at(&mut self, idx: usize) {
+	/// Close the tab at `idx` (not necessarily the active one - a background tab's
+	/// shell can exit). Keeps `active` pointing at the same tab where it can.
+	pub(super) fn close_tab_at(&mut self, idx: usize) {
 		// A rename is keyed by position, so any change to the list ends it.
 		self.cancel_tab_edit();
 		if self.tabs.list.len() <= 1 {
@@ -821,6 +851,11 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+	use super::{tab_close_box, tab_command_line, tab_title_w};
+	use crate::config;
+	use crate::shells::ShellEntry;
+	use crate::text::TextCtx;
+	use std::time::Instant;
 	// One frame's pass over the strip's labels, as the render makes it. Returns
 	// how many tabs built their forms.
 	fn label_frame(

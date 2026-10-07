@@ -564,7 +564,7 @@ pub struct Settings {
 	pub tab_shows_program: bool,
 	pub tab_shows_directory: bool,
 	pub title_shows_tab: bool, // let the window title fall back to what the tab says
-	pub idle_release: bool,    // let the GPU device go after a long idle (app.rs, release_gpu)
+	pub idle_release: bool,    // let the GPU device go after a long idle (app/idle.rs, release_gpu)
 	pub idle_release_hidden_min: usize, // ...after this long minimized or covered
 	pub idle_release_min: usize, // ...or this long merely unfocused and quiet
 	pub software_rendering: bool, // draw on the CPU even with a graphics card (gfx::wanted)

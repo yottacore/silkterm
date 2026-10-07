@@ -1,12 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-// When the window last saw a person or a shell: input, focus either way, or
-// output while it could be seen. The idle release counts from `since` (see
-// `release_deadline`). `wake_owed` says something wants the window back since
-// it let its device go, so the device is owed as soon as there is a screen to
-// draw on.
-struct IdleClock {
+//! When an idle or hidden window lets its GPU device go, and how it gets it
+//! back. A hidden window also builds no frames until it is shown again.
+
+use super::{EnvFlag, FREEZE_MINIMIZED, Gpu, State, VRAM_CHECK_IVL, env_flag};
+use crate::bgimage::ImageRenderer;
+use crate::config;
+use crate::gfx::{Gfx, RectRenderer, Retry};
+use std::time::{Duration, Instant};
+use winit::event::WindowEvent;
+
+/// When the window last saw a person or a shell: input, focus either way, or
+/// output while it could be seen. The idle release counts from `since` (see
+/// `release_deadline`). `wake_owed` says something wants the window back since
+/// it let its device go, so the device is owed as soon as there is a screen to
+/// draw on.
+#[derive(Debug)]
+pub(super) struct IdleClock {
 	since: Instant,
 	wake_owed: bool,
 	// a rebuild the GPU refused, tried again on this
@@ -14,7 +25,7 @@ struct IdleClock {
 }
 
 impl IdleClock {
-	fn new() -> Self {
+	pub(super) fn new() -> Self {
 		IdleClock {
 			since: Instant::now(),
 			wake_owed: false,
@@ -22,9 +33,9 @@ impl IdleClock {
 		}
 	}
 
-	// The device back now: it is owed, there is a screen to draw on, and no
-	// refused rebuild is waiting out its backoff.
-	fn rebuild_due(&self, hidden: bool, now: Instant) -> bool {
+	/// The device back now: it is owed, there is a screen to draw on, and no
+	/// refused rebuild is waiting out its backoff.
+	pub(super) fn rebuild_due(&self, hidden: bool, now: Instant) -> bool {
 		self.wake_owed && !hidden && self.retry.at.is_none_or(|at| now >= at)
 	}
 
@@ -44,8 +55,8 @@ impl IdleClock {
 		self.retry = Retry::default();
 	}
 
-	// When the loop has to wake for a refused rebuild.
-	fn rebuild_wake(&self, hidden: bool) -> Option<Instant> {
+	/// When the loop has to wake for a refused rebuild.
+	pub(super) fn rebuild_wake(&self, hidden: bool) -> Option<Instant> {
 		self.retry.at.filter(|_| self.wake_owed && !hidden)
 	}
 
@@ -55,7 +66,7 @@ impl IdleClock {
 		self.owe(released)
 	}
 
-	fn owe(&mut self, released: bool) -> bool {
+	pub(super) fn owe(&mut self, released: bool) -> bool {
 		let newly = released && !self.wake_owed;
 		self.wake_owed |= released;
 		newly
@@ -79,13 +90,13 @@ impl IdleClock {
 const REBUILD_RETRY_FIRST: Duration = Duration::from_millis(250);
 const REBUILD_RETRY_MAX: Duration = Duration::from_secs(5);
 
-// What the window title says about the device. Nothing normally, a note while
-// it is let go, another while it comes back, and a last one for a few seconds
-// after. The wallpaper is the last thing a rebuild waits on, and the only part
-// slow enough for anyone to see, so coming back lasts until it answers.
-// Any rebuild counts, a return to this console as much as the idle release.
+/// What the window title says about the device. Nothing normally, a note while
+/// it is let go, another while it comes back, and a last one for a few seconds
+/// after. The wallpaper is the last thing a rebuild waits on, and the only part
+/// slow enough for anyone to see, so coming back lasts until it answers.
+/// Any rebuild counts, a return to this console as much as the idle release.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Conserve {
+pub(super) enum Conserve {
 	Off,
 	Saving,
 	Restoring,
@@ -95,7 +106,7 @@ enum Conserve {
 const RESTORED_SHOWN: Duration = Duration::from_secs(5);
 
 impl Conserve {
-	fn note(self, now: Instant) -> Option<&'static str> {
+	pub(super) fn note(self, now: Instant) -> Option<&'static str> {
 		match self {
 			Conserve::Off => None,
 			Conserve::Saving => Some("resource conservation mode"),
@@ -104,15 +115,15 @@ impl Conserve {
 		}
 	}
 
-	// When the title next changes on its own.
-	fn wake(self) -> Option<Instant> {
+	/// When the title next changes on its own.
+	pub(super) fn wake(self) -> Option<Instant> {
 		match self {
 			Conserve::Restored(at) => Some(at + RESTORED_SHOWN),
 			_ => None,
 		}
 	}
 
-	fn wallpaper_answered(&mut self, now: Instant) {
+	pub(super) fn wallpaper_answered(&mut self, now: Instant) {
 		if *self == Conserve::Restoring {
 			*self = Conserve::Restored(now);
 		}
@@ -187,9 +198,9 @@ fn idle_secs() -> Option<Duration> {
 	})
 }
 
-// SILK_IDLEDBG=1: the idle release's comings and goings on stderr, stamped
-// with seconds since the first call so a log can be read against a timeline.
-fn idledbg(msg: &str) {
+/// `SILK_IDLEDBG=1`: the idle release's comings and goings on stderr, stamped
+/// with seconds since the first call so a log can be read against a timeline.
+pub(super) fn idledbg(msg: &str) {
 	use std::sync::OnceLock;
 	static T0: OnceLock<Instant> = OnceLock::new();
 	if !env_flag(EnvFlag::IdleDbg) {
@@ -276,10 +287,10 @@ fn window_hidden(
 // reveal is not held up by it.
 const MINIMIZED_RECHECK: Duration = Duration::from_millis(250);
 
-// An event a restore brings. The WM's redraw is one, and it reaches
-// `freeze_sync` before `about_to_wait` does (G89), so it must see the
-// window as shown, not a minimized answer from before.
-fn restore_sign(event: &WindowEvent) -> bool {
+/// An event a restore brings. The WM's redraw is one, and it reaches
+/// `freeze_sync` before `about_to_wait` does (G89), so it must see the
+/// window as shown, not a minimized answer from before.
+pub(super) fn restore_sign(event: &WindowEvent) -> bool {
 	matches!(
 		event,
 		WindowEvent::Focused(_)
@@ -289,10 +300,10 @@ fn restore_sign(event: &WindowEvent) -> bool {
 	)
 }
 
-// The window's minimized state as last asked, so a pass asks at most once per
-// MINIMIZED_RECHECK rather than every time.
-#[derive(Default)]
-struct MinimizedProbe {
+/// The window's minimized state as last asked, so a pass asks at most once per
+/// `MINIMIZED_RECHECK` rather than every time.
+#[derive(Debug, Default)]
+pub(super) struct MinimizedProbe {
 	answer: bool,
 	asked: Option<Instant>,
 }
@@ -309,7 +320,7 @@ impl MinimizedProbe {
 		self.answer
 	}
 
-	fn forget(&mut self) {
+	pub(super) fn forget(&mut self) {
 		self.asked = None;
 	}
 }
@@ -328,11 +339,11 @@ impl State {
 		})
 	}
 
-	// The freeze edge, owned in one place because both render entry points reach
-	// it: on restore the WM's own redraw arrives before `about_to_wait` runs, so
-	// whichever gets here first has to be the one that catches up - otherwise that
-	// frame banks the whole backlog into the ease before anything cuts it.
-	fn freeze_sync(&mut self) -> bool {
+	/// The freeze edge, owned in one place because both render entry points reach
+	/// it: on restore the WM's own redraw arrives before `about_to_wait` runs, so
+	/// whichever gets here first has to be the one that catches up - otherwise that
+	/// frame banks the whole backlog into the ease before anything cuts it.
+	pub(super) fn freeze_sync(&mut self) -> bool {
 		let hidden = self.window_hidden();
 		let frame = freeze_frame(self.was_hidden, hidden);
 		if frame == Frame::CatchUp {
@@ -346,39 +357,39 @@ impl State {
 		frame == Frame::Skip
 	}
 
-	// A frozen surface coming back on screen: hidden tabs never build, and a
-	// minimized/occluded window builds nothing - so the reveal is one dirty
-	// catch-up frame, hard-cut so the gap closes instantly instead of easing in
-	// (that ease is the bounce class, and it also reads as output arriving now).
-	// Every pane is cut, not just the ones flagged dirty: the flag is cleared by
-	// whichever build got there first, so it answers "is a rebuild owed", not
-	// "did the grid move while nobody was looking". A pane that really did sit
-	// still is snapping a scroll already at rest.
-	fn freeze_catchup(&mut self) {
+	/// A frozen surface coming back on screen: hidden tabs never build, and a
+	/// minimized/occluded window builds nothing - so the reveal is one dirty
+	/// catch-up frame, hard-cut so the gap closes instantly instead of easing in
+	/// (that ease is the bounce class, and it also reads as output arriving now).
+	/// Every pane is cut, not just the ones flagged dirty: the flag is cleared by
+	/// whichever build got there first, so it answers "is a rebuild owed", not
+	/// "did the grid move while nobody was looking". A pane that really did sit
+	/// still is snapping a scroll already at rest.
+	pub(super) fn freeze_catchup(&mut self) {
 		for pane in self.tabs.cur_mut().panes.values_mut() {
 			pane.hard_cut();
 		}
 		self.dirty = true;
 	}
 
-	// A sign of life: the idle clock starts over, and a window that let its
-	// device go is owed it back.
-	fn note_active(&mut self, why: &'static str) {
+	/// A sign of life: the idle clock starts over, and a window that let its
+	/// device go is owed it back.
+	pub(super) fn note_active(&mut self, why: &'static str) {
 		if self.idle.active(self.gpu.is_none()) {
 			idledbg(&format!("wake: {why}"));
 		}
 	}
 
-	// Output, which counts only while the window can be seen (IdleClock::output).
-	// The hidden flag is the one the last pass settled on.
-	fn note_output(&mut self) {
+	/// Output, which counts only while the window can be seen (`IdleClock::output`).
+	/// The hidden flag is the one the last pass settled on.
+	pub(super) fn note_output(&mut self) {
 		if self.idle.output(self.gpu.is_none(), self.was_hidden) {
 			idledbg("wake: output");
 		}
 	}
 
-	// Reads the hidden answer the pass's `freeze_sync` settled on.
-	fn release_deadline(&self, cfg: &config::Settings) -> Option<Instant> {
+	/// Reads the hidden answer the pass's `freeze_sync` settled on.
+	pub(super) fn release_deadline(&self, cfg: &config::Settings) -> Option<Instant> {
 		release_deadline(
 			cfg,
 			&Idle {
@@ -392,11 +403,11 @@ impl State {
 		)
 	}
 
-	// Let the device and everything on it go. The window stays, the shells run
-	// on and the grid keeps up; only drawing stops, and `rebuild_gpu` is the
-	// way back. What the CPU held only for the device's sake goes too: the
-	// rasterized glyphs, the shaped chrome.
-	fn release_gpu(&mut self) {
+	/// Let the device and everything on it go. The window stays, the shells run
+	/// on and the grid keeps up; only drawing stops, and `rebuild_gpu` is the
+	/// way back. What the CPU held only for the device's sake goes too: the
+	/// rasterized glyphs, the shaped chrome.
+	pub(super) fn release_gpu(&mut self) {
 		let Some(gpu) = self.gpu.take() else {
 			return;
 		};
@@ -414,13 +425,13 @@ impl State {
 		idledbg(&format!("device released in {:?}", start.elapsed()));
 	}
 
-	// The device again, on the same window, and everything that lived on it
-	// built afresh. The wallpaper is prepared again from the file rather than
-	// kept, as after a VT switch (recover_gpu), and its small stand-in shows
-	// from the first frame until it arrives. A failure leaves the window
-	// released and owed, and it is tried again on a backoff while the window
-	// shows.
-	fn rebuild_gpu(&mut self) {
+	/// The device again, on the same window, and everything that lived on it
+	/// built afresh. The wallpaper is prepared again from the file rather than
+	/// kept, as after a VT switch (`recover_gpu`), and its small stand-in shows
+	/// from the first frame until it arrives. A failure leaves the window
+	/// released and owed, and it is tried again on a backoff while the window
+	/// shows.
+	pub(super) fn rebuild_gpu(&mut self) {
 		let Some(rebirth) = self.rebirth.as_ref() else {
 			return;
 		};
@@ -474,11 +485,11 @@ impl State {
 		self.follow_renderer(drawn);
 	}
 
-	// Everything on the device again, after a return to this console. The whole
-	// device when nothing else shares it, since a switch can spoil any texture
-	// and `recover_gpu` only knows the text and the wallpaper. An open dialog's
-	// context cannot outlive the terminal's on X11, so that case stays partial.
-	fn heal_gpu(&mut self, dialog_open: bool) {
+	/// Everything on the device again, after a return to this console. The whole
+	/// device when nothing else shares it, since a switch can spoil any texture
+	/// and `recover_gpu` only knows the text and the wallpaper. An open dialog's
+	/// context cannot outlive the terminal's on X11, so that case stays partial.
+	pub(super) fn heal_gpu(&mut self, dialog_open: bool) {
 		if self.gpu.is_none() {
 			return; // a released window rebuilds from nothing anyway
 		}
@@ -490,12 +501,12 @@ impl State {
 		self.rebuild_gpu();
 	}
 
-	// GPU texture contents were lost (VT switch / suspend; see the Sentinel note
-	// in gfx.rs). Re-upload everything that was uploaded once: fresh glyph
-	// atlases + chrome via rebuild_text, and the wallpaper. rebuild_text also drops
-	// the prepared/scrim signatures, so the next frame rebuilds the scrim source
-	// instead of reusing a texture that no longer holds anything.
-	fn recover_gpu(&mut self) {
+	/// GPU texture contents were lost (VT switch / suspend; see the Sentinel note
+	/// in gfx.rs). Re-upload everything that was uploaded once: fresh glyph
+	/// atlases + chrome via `rebuild_text`, and the wallpaper. `rebuild_text` also drops
+	/// the prepared/scrim signatures, so the next frame rebuilds the scrim source
+	/// instead of reusing a texture that no longer holds anything.
+	pub(super) fn recover_gpu(&mut self) {
 		if self.gpu.is_none() {
 			return; // nothing uploaded to lose; the rebuild starts from nothing anyway
 		}
@@ -511,6 +522,12 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+	use super::{
+		Conserve, Idle, IdleClock, IdleRule, RESTORED_SHOWN, release_deadline, window_hidden,
+	};
+	use crate::config;
+	use crate::gfx::Retry;
+	use std::time::{Duration, Instant};
 	// SILK_IDLE_SECS is read once per process. The idle rule is asked twice on
 	// every loop pass, and it went to the environment each time. Run in a child
 	// copy of this test binary, since the answer is cached per process.
@@ -518,7 +535,11 @@ mod tests {
 	#[test]
 	fn the_idle_wait_switch_is_read_once() {
 		let out = std::process::Command::new(std::env::current_exe().unwrap())
-			.args(["--exact", "app::tests::idle_wait_child", "--nocapture"])
+			.args([
+				"--exact",
+				"app::idle::tests::idle_wait_child",
+				"--nocapture",
+			])
 			.env("SILK_IDLE_WAIT_CHILD", "1")
 			.env("SILK_IDLE_SECS", "5")
 			.output()

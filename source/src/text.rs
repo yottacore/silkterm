@@ -391,7 +391,7 @@ pub struct TextCtx {
 	pub font_system: FontSystem,
 	pub swash_cache: SwashCache,
 	// The half that lives on the device. Absent while the window has let its
-	// GPU go (see app.rs, `release_gpu`); the metrics and the font system stay,
+	// GPU go (see app/idle.rs, `release_gpu`); the metrics and the font system stay,
 	// since layout and input keep asking for them.
 	gpu: Option<TextGpu>,
 	/// The display's scale factor this context was built at. Every chrome
@@ -849,7 +849,7 @@ impl TextCtx {
 	/// Width in px of `text` in the TERMINAL font. The tab hover tip is the one
 	/// piece of chrome that uses it: its lines are key/value pairs padded to a
 	/// column with spaces, which only aligns in a monospace face. Uncached - the
-	/// tip keeps its width until its lines change (`TabTip` in app.rs).
+	/// tip keeps its width until its lines change (`TabTip` in app/tabs.rs).
 	pub fn measure_mono_text(&mut self, text: &str) -> f32 {
 		let attrs = mono_attrs();
 		self.measure_at(text, &attrs, self.metrics)

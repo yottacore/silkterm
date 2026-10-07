@@ -1,6 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+//! The menus: every menu's rows, the popup that shows them, and what a pick
+//! does.
+
+#[cfg(any(test, target_os = "macos"))]
+use super::MENU_BAR;
+use super::{
+	CloseScope, MENU_TIP_GAP, MENU_TIP_MAX_W, MENU_TIP_PAD, State, close_scope, open_link,
+	save_live, shell_argv,
+};
+use crate::config;
+use crate::input::Hotkey;
+use crate::pane::{CopyKind, Dir, Rect};
+use crate::settings_ui::EditCmd;
+use crate::shells::ShellEntry;
+use crate::term::{PaneId, UserEvent};
+use winit::event_loop::EventLoopProxy;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MenuAction {
 	OpenLink,
@@ -125,23 +142,23 @@ pub(crate) enum Entry {
 	Sep,
 }
 
-// The text a row draws, if it draws any - a separator does not. Item and Sub
-// rows are laid out and measured identically, so everything that walks a menu
-// asks here rather than matching the two arms itself.
-fn entry_label(entry: &Entry) -> Option<&str> {
+/// The text a row draws, if it draws any - a separator does not. Item and Sub
+/// rows are laid out and measured identically, so everything that walks a menu
+/// asks here rather than matching the two arms itself.
+pub(super) fn entry_label(entry: &Entry) -> Option<&str> {
 	match entry {
 		Entry::Item { label, .. } | Entry::Sub { label, .. } => Some(label),
 		Entry::Sep => None,
 	}
 }
 
-// The first accelerator letter two rows of one menu both claim, if any.
-//
-// Typing a letter picks the FIRST row carrying it, so a duplicate does not read
-// as a duplicate - it silently makes the LATER row unreachable from the
-// keyboard, which is why this is asserted where a menu is built rather than
-// left to be noticed.
-fn accel_clash(entries: &[Entry]) -> Option<char> {
+/// The first accelerator letter two rows of one menu both claim, if any.
+///
+/// Typing a letter picks the FIRST row carrying it, so a duplicate does not read
+/// as a duplicate - it silently makes the LATER row unreachable from the
+/// keyboard, which is why this is asserted where a menu is built rather than
+/// left to be noticed.
+pub(super) fn accel_clash(entries: &[Entry]) -> Option<char> {
 	let mut seen: Vec<char> = Vec::new();
 	for entry in entries {
 		let Some((label, pos)) = entry_accel(entry) else {
@@ -158,8 +175,8 @@ fn accel_clash(entries: &[Entry]) -> Option<char> {
 	None
 }
 
-// The label and the byte offset of its accelerator letter, for a row that has one.
-fn entry_accel(entry: &Entry) -> Option<(&str, usize)> {
+/// The label and the byte offset of its accelerator letter, for a row that has one.
+pub(super) fn entry_accel(entry: &Entry) -> Option<(&str, usize)> {
 	match entry {
 		Entry::Item {
 			label,
@@ -191,7 +208,7 @@ fn entry_item(label: &str, action: MenuAction) -> Entry {
 		accel: None,
 	}
 }
-fn entry_item_accel(ch: char, label: &str, action: MenuAction) -> Entry {
+pub(super) fn entry_item_accel(ch: char, label: &str, action: MenuAction) -> Entry {
 	Entry::Item {
 		label: label.into(),
 		action,
@@ -668,18 +685,19 @@ fn menu_metrics(scale: f32) -> (f32, f32) {
 	)
 }
 
-// right-click context menu / menu-bar dropdown over a pane
-struct ContextMenu {
-	x: f32,
-	y: f32,
-	w: f32,
-	item_h: f32,
+/// right-click context menu / menu-bar dropdown over a pane
+#[derive(Debug)]
+pub(super) struct ContextMenu {
+	pub(super) x: f32,
+	pub(super) y: f32,
+	pub(super) w: f32,
+	pub(super) item_h: f32,
 	// this popup's `menu_metrics`, in physical px
 	pad_y: f32,
-	sep_h: f32,
-	target: PaneId,
-	entries: Vec<Entry>,
-	hover: Option<usize>, // index into entries; never a separator
+	pub(super) sep_h: f32,
+	pub(super) target: PaneId,
+	pub(super) entries: Vec<Entry>,
+	pub(super) hover: Option<usize>, // index into entries; never a separator
 	// The submenu standing open off one of these rows, if any. It is placed
 	// clear of this popup's right edge, so "the pointer is in the submenu" and
 	// "the pointer is on a parent row" can never both be true.
@@ -687,7 +705,7 @@ struct ContextMenu {
 }
 
 impl ContextMenu {
-	fn height(&self) -> f32 {
+	pub(super) fn height(&self) -> f32 {
 		let rows: f32 = self.entries.iter().map(|entry| self.entry_h(entry)).sum();
 		rows + self.pad_y * 2.0
 	}
@@ -697,8 +715,8 @@ impl ContextMenu {
 			_ => self.item_h,
 		}
 	}
-	// This popup and every submenu standing open off it, outermost first.
-	fn chain(&self) -> Vec<&ContextMenu> {
+	/// This popup and every submenu standing open off it, outermost first.
+	pub(super) fn chain(&self) -> Vec<&ContextMenu> {
 		let mut out = vec![self];
 		let mut at = self;
 		while let Some(sub) = &at.sub {
@@ -717,11 +735,11 @@ impl ContextMenu {
 			None => self,
 		}
 	}
-	// Anywhere on this popup or a submenu of it.
-	fn hit_any(&self, mx: f32, my: f32) -> bool {
+	/// Anywhere on this popup or a submenu of it.
+	pub(super) fn hit_any(&self, mx: f32, my: f32) -> bool {
 		self.chain().iter().any(|popup| popup.hit(mx, my))
 	}
-	fn row_top(&self, i: usize) -> f32 {
+	pub(super) fn row_top(&self, i: usize) -> f32 {
 		self.y
 			+ self.pad_y
 			+ self.entries[..i]
@@ -748,9 +766,9 @@ impl ContextMenu {
 		}
 		None
 	}
-	// Next selectable item from `from` in direction `dir` (+1 down / -1 up),
-	// wrapping and skipping separators. None only if there are no items.
-	fn step(&self, from: Option<usize>, dir: i32) -> Option<usize> {
+	/// Next selectable item from `from` in direction `dir` (+1 down / -1 up),
+	/// wrapping and skipping separators. None only if there are no items.
+	pub(super) fn step(&self, from: Option<usize>, dir: i32) -> Option<usize> {
 		let n = self.entries.len() as i32;
 		if n == 0 {
 			return None;
@@ -767,11 +785,11 @@ impl ContextMenu {
 }
 
 impl State {
-	// The menu row a tip would describe: the innermost open popup that the
-	// pointer is actually on (a parent keeps its highlight on the row its
-	// submenu hangs off, so the deepest hovered one is the right answer), and
-	// only when that row has something to say.
-	fn menu_tip_target(&self) -> Option<(usize, usize)> {
+	/// The menu row a tip would describe: the innermost open popup that the
+	/// pointer is actually on (a parent keeps its highlight on the row its
+	/// submenu hangs off, so the deepest hovered one is the right answer), and
+	/// only when that row has something to say.
+	pub(super) fn menu_tip_target(&self) -> Option<(usize, usize)> {
 		let root = self.menu.as_ref()?;
 		let (depth, menu, row) = root
 			.chain()
@@ -786,10 +804,10 @@ impl State {
 		(!help.is_empty()).then_some((depth, row))
 	}
 
-	// The menu tip's box and its wrapped lines, once the pointer has rested on a
-	// row that has a tip. It stands beside the popup rather than under the row,
-	// so the rows being chosen between stay readable.
-	fn menu_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
+	/// The menu tip's box and its wrapped lines, once the pointer has rested on a
+	/// row that has a tip. It stands beside the popup rather than under the row,
+	/// so the rows being chosen between stay readable.
+	pub(super) fn menu_tip_layout(&mut self) -> Option<(Rect, Vec<(f32, f32, String)>)> {
 		let (depth, row) = self.menu_tip.ripe()?;
 		let (anchor, help) = {
 			let menu = *self.menu.as_ref()?.chain().get(depth)?;
@@ -828,7 +846,7 @@ impl State {
 		Some((Rect { x, y, w, h }, placed))
 	}
 
-	fn open_menu(&mut self, target: PaneId, mx: f32, my: f32) {
+	pub(super) fn open_menu(&mut self, target: PaneId, mx: f32, my: f32) {
 		let p = self.tabs.cur().panes.get(&target);
 		let read_only = p.is_some_and(|p| p.read_only);
 		let copy_select = p.is_some_and(|p| p.copy_select);
@@ -854,8 +872,8 @@ impl State {
 		self.popup(target, entries, mx, my);
 	}
 
-	// Build and place a dropdown/context popup, clamped on-screen.
-	fn popup(&mut self, target: PaneId, entries: Vec<Entry>, mx: f32, my: f32) {
+	/// Build and place a dropdown/context popup, clamped on-screen.
+	pub(super) fn popup(&mut self, target: PaneId, entries: Vec<Entry>, mx: f32, my: f32) {
 		self.menu = Some(self.build_popup(target, entries, mx, my));
 	}
 
@@ -951,10 +969,10 @@ impl State {
 		}
 	}
 
-	// Point the open menu at (x, y). The innermost popup under the pointer takes
-	// the highlight, and moving onto (or off) a submenu row opens (or closes) its
-	// popup. Returns whether anything moved.
-	fn menu_hover(&mut self, x: f32, y: f32) -> bool {
+	/// Point the open menu at (x, y). The innermost popup under the pointer takes
+	/// the highlight, and moving onto (or off) a submenu row opens (or closes) its
+	/// popup. Returns whether anything moved.
+	pub(super) fn menu_hover(&mut self, x: f32, y: f32) -> bool {
 		let Some(menu) = self.menu.as_mut() else {
 			return false;
 		};
@@ -986,10 +1004,10 @@ impl State {
 		true
 	}
 
-	// Act on a click at (x, y) with a menu open: an item fires and closes the
-	// whole stack, a submenu row opens its popup and leaves everything standing,
-	// and anything else dismisses.
-	fn menu_click(&mut self, x: f32, y: f32, proxy: &EventLoopProxy<UserEvent>) {
+	/// Act on a click at (x, y) with a menu open: an item fires and closes the
+	/// whole stack, a submenu row opens its popup and leaves everything standing,
+	/// and anything else dismisses.
+	pub(super) fn menu_click(&mut self, x: f32, y: f32, proxy: &EventLoopProxy<UserEvent>) {
 		let Some(menu) = self.menu.as_ref() else {
 			return;
 		};
@@ -1023,10 +1041,10 @@ impl State {
 		}
 	}
 
-	// Fire row `row` of the innermost open popup, the way Enter and an
-	// accelerator letter do. A submenu row opens and takes the highlight to its
-	// first item instead of acting.
-	fn menu_activate(&mut self, row: usize, proxy: &EventLoopProxy<UserEvent>) {
+	/// Fire row `row` of the innermost open popup, the way Enter and an
+	/// accelerator letter do. A submenu row opens and takes the highlight to its
+	/// first item instead of acting.
+	pub(super) fn menu_activate(&mut self, row: usize, proxy: &EventLoopProxy<UserEvent>) {
 		let Some(menu) = self.menu.as_ref() else {
 			return;
 		};
@@ -1052,14 +1070,14 @@ impl State {
 		}
 	}
 
-	// The popup the keyboard is on: the innermost one standing open.
-	fn menu_inner(&mut self) -> Option<&mut ContextMenu> {
+	/// The popup the keyboard is on: the innermost one standing open.
+	pub(super) fn menu_inner(&mut self) -> Option<&mut ContextMenu> {
 		self.menu.as_mut().map(ContextMenu::inner_mut)
 	}
 
-	// The highlighted row of the open popup when it is one that opens a submenu
-	// and has not opened it yet - i.e. what Right arrow would enter.
-	fn submenu_row(&self) -> Option<usize> {
+	/// The highlighted row of the open popup when it is one that opens a submenu
+	/// and has not opened it yet - i.e. what Right arrow would enter.
+	pub(super) fn submenu_row(&self) -> Option<usize> {
 		let menu = self.menu.as_ref()?;
 		if menu.sub.is_some() {
 			return None;
@@ -1068,9 +1086,9 @@ impl State {
 			.filter(|&row| matches!(menu.entries[row], Entry::Sub { .. }))
 	}
 
-	// Close the open submenu; returns false when there was none, so the caller
-	// can fall through to whatever it does otherwise.
-	fn close_submenu(&mut self) -> bool {
+	/// Close the open submenu; returns false when there was none, so the caller
+	/// can fall through to whatever it does otherwise.
+	pub(super) fn close_submenu(&mut self) -> bool {
 		let Some(menu) = self.menu.as_mut() else {
 			return false;
 		};
@@ -1116,15 +1134,15 @@ impl State {
 	}
 
 	#[cfg(target_os = "macos")]
-	fn bar_menus(&self) -> Vec<(&'static str, Vec<Entry>)> {
+	pub(super) fn bar_menus(&self) -> Vec<(&'static str, Vec<Entry>)> {
 		let (view, copy_select, copy_output) = self.bar_state();
 		window_menus(view, copy_select, copy_output, &config::settings().shells)
 	}
 
-	// Changes whenever anything the menus show does, so the macOS menu bar is
-	// rebuilt only then.
+	/// Changes whenever anything the menus show does, so the macOS menu bar is
+	/// rebuilt only then.
 	#[cfg(target_os = "macos")]
-	fn bar_menus_key(&self) -> u64 {
+	pub(super) fn bar_menus_key(&self) -> u64 {
 		use std::hash::{Hash, Hasher};
 		let mut hasher = std::collections::hash_map::DefaultHasher::new();
 		self.bar_state().hash(&mut hasher);
@@ -1139,8 +1157,8 @@ impl State {
 		hasher.finish()
 	}
 
-	// Open the dropdown for top-level menu `idx`, anchored under its title.
-	fn open_bar_menu(&mut self, idx: usize) {
+	/// Open the dropdown for top-level menu `idx`, anchored under its title.
+	pub(super) fn open_bar_menu(&mut self, idx: usize) {
 		let items = self.bar_menu_items(idx);
 		let x = self.menubar_layout().get(idx).map_or(0.0, |&(x, _)| x);
 		let target = self.tabs.cur().focused;
@@ -1157,7 +1175,7 @@ impl State {
 		self.bar_open = None;
 	}
 
-	fn apply_menu(
+	pub(super) fn apply_menu(
 		&mut self,
 		action: MenuAction,
 		target: PaneId,
@@ -1186,7 +1204,7 @@ impl State {
 					.cur()
 					.panes
 					.get(&target)
-					.and_then(super::pane::Pane::selection_text)
+					.and_then(crate::pane::Pane::selection_text)
 				{
 					self.clipboard.set_clipboard(text);
 				}
@@ -1298,6 +1316,18 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+	use super::super::MENU_BAR;
+	use super::super::rotation::rotation_live;
+	use super::super::tests::shell;
+	use super::{
+		ContextMenu, CtxState, Entry, MenuAction, ViewState, accel_at, accel_clash,
+		context_menu_items, edit_menu_items, entry_accel, entry_check_accel, entry_item_accel,
+		entry_label, entry_sub, file_menu_items, help_menu_items, menu_metrics, panes_menu_items,
+		split_shells, tabs_menu_items, view_menu_items, with_shortcuts,
+	};
+	use crate::config;
+	use crate::pane::Dir;
+	use crate::shells::ShellEntry;
 	fn test_menu(x: f32, w: f32, entries: Vec<Entry>) -> ContextMenu {
 		ContextMenu {
 			x,
@@ -1808,7 +1838,8 @@ mod tests {
 	// Test ID: ErZrS8g
 	#[test]
 	fn there_is_no_in_window_menu_bar_on_macos() {
-		use super::{mac_entries, menu_bar_at_launch};
+		use super::super::menubar::menu_bar_at_launch;
+		use super::mac_entries;
 		for hide_menu in [None, Some(false), Some(true)] {
 			assert!(!menu_bar_at_launch(hide_menu, true), "{hide_menu:?}");
 		}

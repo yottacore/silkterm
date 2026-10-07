@@ -1,11 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+//! The window's size: the grid it opens at, what gets remembered, and the
+//! monitor checks after a move.
+
+use super::{
+	MONITOR_RECHECK, MONITOR_SETTLE, OWN_RESIZE_GRACE, SAFE_MAX_DIM, SIZE_SAVE_DEBOUNCE, State,
+	save_live,
+};
+use crate::config;
+use std::time::Instant;
+use winit::window::Window;
+
 impl State {
-	// Track the live window size as columns/rows so "remember last size" can
-	// restore it next launch. Kept separate from the user's defined columns/rows
-	// (unchecking the option reverts to those). The inverse of the launch sizing.
-	fn save_window_size(&mut self, w: u32, h: u32) {
+	/// Track the live window size as columns/rows so "remember last size" can
+	/// restore it next launch. Kept separate from the user's defined columns/rows
+	/// (unchecking the option reverts to those). The inverse of the launch sizing.
+	pub(super) fn save_window_size(&mut self, w: u32, h: u32) {
 		// skip the creation/programmatic resizes that fire before the first frame,
 		// so they don't clobber the remembered size with the launch size
 		if !self.size_tracked {
@@ -22,8 +33,8 @@ impl State {
 		self.note_grid(w, h);
 	}
 
-	// The grid the window shows at this size, waiting to be saved.
-	fn note_grid(&mut self, w: u32, h: u32) {
+	/// The grid the window shows at this size, waiting to be saved.
+	pub(super) fn note_grid(&mut self, w: u32, h: u32) {
 		let px_to_cells = |px: f32, cell: f32, chrome: f32| {
 			(((px - 2.0 * self.text.margin - chrome) / cell).floor() as i64).max(1) as usize
 		};
@@ -36,7 +47,7 @@ impl State {
 		self.pending_size_at = Instant::now();
 	}
 
-	fn flush_window_size(&mut self, force: bool) {
+	pub(super) fn flush_window_size(&mut self, force: bool) {
 		let Some((cols, rows)) = self.pending_size else {
 			return;
 		};
@@ -77,8 +88,8 @@ impl State {
 		});
 	}
 
-	// A move starts the wait for the window to settle.
-	fn note_moved(&mut self) {
+	/// A move starts the wait for the window to settle.
+	pub(super) fn note_moved(&mut self) {
 		let now = Instant::now();
 		if now < self.watch.ignore_moves_until {
 			return;
@@ -86,9 +97,9 @@ impl State {
 		self.start_settle(now);
 	}
 
-	// Nothing before the window is shown: a resize then would hold up the
-	// reveal, which waits for the launch size. The reveal looks once itself.
-	fn start_settle(&mut self, now: Instant) {
+	/// Nothing before the window is shown: a resize then would hold up the
+	/// reveal, which waits for the launch size. The reveal looks once itself.
+	pub(super) fn start_settle(&mut self, now: Instant) {
 		if !self.revealed {
 			return;
 		}
@@ -96,7 +107,7 @@ impl State {
 		self.watch.check_at = Some(now + MONITOR_SETTLE);
 	}
 
-	fn check_monitor(&mut self) {
+	pub(super) fn check_monitor(&mut self) {
 		let Some(at) = self.watch.check_at else {
 			return;
 		};
@@ -158,8 +169,8 @@ impl State {
 		self.request_grid(kept.columns, kept.rows);
 	}
 
-	// Ask for the window size that shows this grid with the chrome as it is.
-	fn request_grid(&mut self, cols: usize, rows: usize) {
+	/// Ask for the window size that shows this grid with the chrome as it is.
+	pub(super) fn request_grid(&mut self, cols: usize, rows: usize) {
 		let (w, h) = window_px(
 			cols,
 			rows,
@@ -188,10 +199,10 @@ impl State {
 	}
 }
 
-// The window a grid asks for: the cells, the margins either side, and the chrome
-// above them. `chrome` counts the menu bar and the tab strip where they show, or
-// the shell gets fewer rows than were asked for.
-fn window_px(
+/// The window a grid asks for: the cells, the margins either side, and the chrome
+/// above them. `chrome` counts the menu bar and the tab strip where they show, or
+/// the shell gets fewer rows than were asked for.
+pub(super) fn window_px(
 	cols: usize,
 	rows: usize,
 	cell_w: f32,
@@ -205,17 +216,17 @@ fn window_px(
 	)
 }
 
-// A window may be no bigger than the largest texture the device will make: the
-// GL path renders the scene into an offscreen texture at the window's size, and
-// wgpu treats a refusal as fatal. So a count out of the config or the command
-// line is held here, or it ends the launch in create_texture.
-fn fit_px(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
+/// A window may be no bigger than the largest texture the device will make: the
+/// GL path renders the scene into an offscreen texture at the window's size, and
+/// wgpu treats a refusal as fatal. So a count out of the config or the command
+/// line is held here, or it ends the launch in `create_texture`.
+pub(super) fn fit_px(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
 	(w.clamp(1, max_dim), h.clamp(1, max_dim))
 }
 
-// Open maximized? Only when the last window was left that way and the
-// setting is on. A size or fullscreen asked for on the command line wins.
-fn launch_maximized(settings: &config::Settings, cli: &crate::cli::WindowOpts) -> bool {
+/// Open maximized? Only when the last window was left that way and the
+/// setting is on. A size or fullscreen asked for on the command line wins.
+pub(super) fn launch_maximized(settings: &config::Settings, cli: &crate::cli::WindowOpts) -> bool {
 	settings.remember_maximized
 		&& settings.remembered_maximized
 		&& cli.columns.is_none()
@@ -225,21 +236,22 @@ fn launch_maximized(settings: &config::Settings, cli: &crate::cli::WindowOpts) -
 		&& !cli.fullscreen.unwrap_or(false)
 }
 
-// Which monitor the window's size is kept for, and the wait for a move to
-// another one to settle (monitor.rs, config::remembered_window).
-struct MonitorWatch {
-	key: Option<String>,
-	check_at: Option<Instant>,
-	moved_at: Option<Instant>, // when the move being waited out began
-	ignore_resize_until: Instant,
-	ignore_moves_until: Instant, // the window's own resize can move it, too
+/// Which monitor the window's size is kept for, and the wait for a move to
+/// another one to settle (monitor.rs, `config::remembered_window`).
+#[derive(Debug)]
+pub(super) struct MonitorWatch {
+	pub(super) key: Option<String>,
+	pub(super) check_at: Option<Instant>,
+	pub(super) moved_at: Option<Instant>, // when the move being waited out began
+	pub(super) ignore_resize_until: Instant,
+	pub(super) ignore_moves_until: Instant, // the window's own resize can move it, too
 	// The command line set the size, or the font size, and it stays until
 	// the user resizes the window, or zooms the font.
-	size_pinned: bool,
-	font_pinned: bool,
-	// Wayland tells a window neither where it is nor that it moved, so the
-	// pointer coming back after a drag is the sign to look.
-	positionless: bool,
+	pub(super) size_pinned: bool,
+	pub(super) font_pinned: bool,
+	/// Wayland tells a window neither where it is nor that it moved, so the
+	/// pointer coming back after a drag is the sign to look.
+	pub(super) positionless: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -310,6 +322,11 @@ fn size_taken(
 
 #[cfg(test)]
 mod tests {
+	use super::{
+		Settle, fit_px, launch_maximized, remember_resize, resize_is_current, settle, size_taken,
+		window_px,
+	};
+	use std::time::{Duration, Instant};
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
 	// than the device's largest texture. The GL path's offscreen is made at the
 	// window's size, and wgpu treats the refusal as fatal, so the launch died.

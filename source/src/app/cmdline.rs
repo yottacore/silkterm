@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+//! The tabs and panes a command line asks for, and what a reload or a new
+//! window keeps from it.
+
+use crate::config;
+use crate::pane::{Dir, PaneManager, Rect};
+use crate::term::{PaneId, UserEvent};
+use crate::text::TextCtx;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use winit::event_loop::EventLoopProxy;
+
 // A pane's shell, most specific first: its own --shell, the pane it splits, its
 // tab's, the window's, then the default. The first pane of a tab has no split
 // source, and a window with no tabs given has only the last two.
@@ -28,9 +39,9 @@ fn pane_split_dir(
 	explicit.or(split_source)
 }
 
-// Build the initial tabs/panes from the parsed command line. Without
-// hierarchical flags, one tab with one pane (running any window-level --shell).
-fn build_layout(
+/// Build the initial tabs/panes from the parsed command line. Without
+/// hierarchical flags, one tab with one pane (running any window-level --shell).
+pub(super) fn build_layout(
 	cli: &crate::cli::Cli,
 	text: &mut TextCtx,
 	proxy: &EventLoopProxy<UserEvent>,
@@ -207,11 +218,11 @@ fn build_layout(
 	out
 }
 
-// A reload rereads the file, and the file never held what the command line gave
-// at launch, so that goes back on first. The session's own state goes on after,
-// which lets a wallpaper set through the socket since launch beat the one the
-// launch named.
-fn settings_after_reload(
+/// A reload rereads the file, and the file never held what the command line gave
+/// at launch, so that goes back on first. The session's own state goes on after,
+/// which lets a wallpaper set through the socket since launch beat the one the
+/// launch named.
+pub(super) fn settings_after_reload(
 	live: &config::Settings,
 	mut from_disk: config::Settings,
 	launch: &crate::cli::Style,
@@ -222,12 +233,12 @@ fn settings_after_reload(
 	from_disk
 }
 
-// What Ctrl+Shift+N starts. The settings file comes along, made absolute since
-// the child runs somewhere else, and so does the pane's directory, flagged so
-// the child keeps it even when it is home or a root (config::startup_dir).
-// Passing `--config` alone leaves the file's own command_line in charge, as it
-// is for any launch that names only a file.
-fn new_window_command(
+/// What Ctrl+Shift+N starts. The settings file comes along, made absolute since
+/// the child runs somewhere else, and so does the pane's directory, flagged so
+/// the child keeps it even when it is home or a root (`config::startup_dir`).
+/// Passing `--config` alone leaves the file's own `command_line` in charge, as it
+/// is for any launch that names only a file.
+pub(super) fn new_window_command(
 	exe: &std::path::Path,
 	cwd: Option<&std::path::Path>,
 	config: Option<&std::path::Path>,
@@ -257,6 +268,11 @@ fn default_dir_for(rect: Option<Rect>) -> crate::cli::Dir4 {
 
 #[cfg(test)]
 mod tests {
+	use super::{
+		default_dir_for, new_window_command, pane_shell, pane_split_dir, settings_after_reload,
+	};
+	use crate::config;
+	use crate::pane::Rect;
 	// Test ID: Er2UvPv
 	#[test]
 	fn a_split_with_no_direction_goes_along_the_longer_side() {

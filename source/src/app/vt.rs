@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+//! The virtual console watcher. A return to this console rebuilds the GPU side
+//! twice, once straight away and again after the display settles.
+
+use crate::term::UserEvent;
+use std::time::{Duration, Instant};
+use winit::event_loop::EventLoopProxy;
+
 // After a return to this console, how long until the second heal (VtHeal).
 const VT_SETTLE: Duration = Duration::from_secs(3);
 
-// VT-switch field diagnostics: `touch ~/silk_vramdbg.on` (no relaunch needed)
-// makes the sentinel probes append their results to ~/silk_vramdbg.txt, so a
-// desktop repro can show whether loss detection fired. The marker is re-checked
-// per call - probes tick every 2s, so the stat costs nothing.
-fn vramdbg(msg: &str) {
+/// VT-switch field diagnostics: `touch ~/silk_vramdbg.on` (no relaunch needed)
+/// makes the sentinel probes append their results to `~/silk_vramdbg.txt`, so a
+/// desktop repro can show whether loss detection fired. The marker is re-checked
+/// per call - probes tick every 2s, so the stat costs nothing.
+pub(super) fn vramdbg(msg: &str) {
 	use std::io::Write;
 	let Some(home) = std::env::var_os("HOME") else {
 		return;
@@ -34,22 +41,22 @@ fn vramdbg(msg: &str) {
 	}
 }
 
-// A return to this console is healed twice: at once, and again once the X
-// server has had time to take the display back. The watcher sees the console
-// change before the mode set, so a purge that comes after the first rebuild
-// would spoil it too.
-#[derive(Default)]
-struct VtHeal {
-	again: Option<Instant>,
+/// A return to this console is healed twice: at once, and again once the X
+/// server has had time to take the display back. The watcher sees the console
+/// change before the mode set, so a purge that comes after the first rebuild
+/// would spoil it too.
+#[derive(Debug, Default)]
+pub(super) struct VtHeal {
+	pub(super) again: Option<Instant>,
 }
 
 impl VtHeal {
-	fn returned(&mut self, now: Instant) {
+	pub(super) fn returned(&mut self, now: Instant) {
 		self.again = Some(now + VT_SETTLE);
 	}
 
-	// True once, when the second heal comes due.
-	fn due(&mut self, now: Instant) -> bool {
+	/// True once, when the second heal comes due.
+	pub(super) fn due(&mut self, now: Instant) -> bool {
 		if self.again.is_some_and(|at| now >= at) {
 			self.again = None;
 			return true;
@@ -58,18 +65,18 @@ impl VtHeal {
 	}
 }
 
-// Watch the active virtual console (/sys/class/tty/tty0/active). A VT switch
-// away and back breaks sampling of long-lived textures in ways the readback
-// probes cannot see (field logs: every witness read back intact across a switch
-// that blacked the window - the driver restores readback contents while the
-// sampled copies stay garbage). So detect the switch itself: the value at spawn
-// is the console this display lives on; when the file returns to it after being
-// elsewhere, send VtSwitched so the sampled textures are rebuilt. Only returns
-// are signaled - a rebuild done while parked on another console could itself be
-// purged on the way back. SILK_VTFILE overrides the watched path so a headless
-// test can drive the mechanism (Xvfb has no VTs).
+/// Watch the active virtual console (/sys/class/tty/tty0/active). A VT switch
+/// away and back breaks sampling of long-lived textures in ways the readback
+/// probes cannot see (field logs: every witness read back intact across a switch
+/// that blacked the window - the driver restores readback contents while the
+/// sampled copies stay garbage). So detect the switch itself: the value at spawn
+/// is the console this display lives on; when the file returns to it after being
+/// elsewhere, send `VtSwitched` so the sampled textures are rebuilt. Only returns
+/// are signaled - a rebuild done while parked on another console could itself be
+/// purged on the way back. `SILK_VTFILE` overrides the watched path so a headless
+/// test can drive the mechanism (Xvfb has no VTs).
 #[cfg(target_os = "linux")]
-fn spawn_vt_watch(proxy: EventLoopProxy<UserEvent>) -> bool {
+pub(super) fn spawn_vt_watch(proxy: EventLoopProxy<UserEvent>) -> bool {
 	let path = std::env::var_os("SILK_VTFILE").map_or_else(
 		|| std::path::PathBuf::from("/sys/class/tty/tty0/active"),
 		std::path::PathBuf::from,
@@ -120,12 +127,14 @@ impl VtWatch {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn spawn_vt_watch(_proxy: EventLoopProxy<UserEvent>) -> bool {
+pub(super) fn spawn_vt_watch(_proxy: EventLoopProxy<UserEvent>) -> bool {
 	false
 }
 
 #[cfg(test)]
 mod tests {
+	use super::{VT_SETTLE, VtHeal};
+	use std::time::Instant;
 	// A return to this console is healed at once and once more when the X
 	// server has settled, since a purge after the first rebuild spoiled it
 	// (20260917: text gone and a gray background after a switch to VT 1).

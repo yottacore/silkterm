@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+//! The wallpaper: asking the worker for one, taking its answer, and moving on
+//! through a rotation folder.
+
+use super::idle::{Conserve, idledbg};
+use super::{State, WP_RESIZE_WAIT, set_live};
+use crate::bgimage::ImageRenderer;
+use crate::config;
+use std::time::{Duration, Instant};
+
 // A rotation folder with nothing picked from it has to be read, or the request
 // answers with no picture at all: a configured folder owns the wallpaper and
 // suppresses the built-in stand-in, so there is nothing left to show. A
@@ -13,9 +22,9 @@ fn needs_folder_read(
 	!locked && showing.is_none() && folder.is_some()
 }
 
-// Whether rotation has anywhere to go: not held by a command-line wallpaper,
-// and the last scan found more than the one image showing.
-fn rotation_live(locked: bool, count: usize, folder: bool) -> bool {
+/// Whether rotation has anywhere to go: not held by a command-line wallpaper,
+/// and the last scan found more than the one image showing.
+pub(super) fn rotation_live(locked: bool, count: usize, folder: bool) -> bool {
 	!locked && count >= 2 && folder
 }
 
@@ -37,11 +46,11 @@ impl State {
 		self.apply_new_settings(&orig, edited, true);
 	}
 
-	// Hand the wallpaper to a worker thread and carry on drawing. `scan` also
-	// (re)reads the rotation folder and picks from it. Nothing here waits: the
-	// folder, the image and its tags can all live on a share that answers slowly,
-	// which is precisely why none of it runs on this thread.
-	fn request_wallpaper(&mut self, scan: bool) {
+	/// Hand the wallpaper to a worker thread and carry on drawing. `scan` also
+	/// (re)reads the rotation folder and picks from it. Nothing here waits: the
+	/// folder, the image and its tags can all live on a share that answers slowly,
+	/// which is precisely why none of it runs on this thread.
+	pub(super) fn request_wallpaper(&mut self, scan: bool) {
 		self.post_wallpaper(scan, None);
 	}
 
@@ -83,9 +92,9 @@ impl State {
 		);
 	}
 
-	// The window changed size, or a picture arrived prepared for an older one.
-	// Each call pushes the wait back, so a drag prepares it once, at the end.
-	fn note_wallpaper_size(&mut self) {
+	/// The window changed size, or a picture arrived prepared for an older one.
+	/// Each call pushes the wait back, so a drag prepares it once, at the end.
+	pub(super) fn note_wallpaper_size(&mut self) {
 		let off_size = self
 			.gpu
 			.as_ref()
@@ -94,9 +103,9 @@ impl State {
 		self.wp_resize_at = off_size.then(|| Instant::now() + WP_RESIZE_WAIT);
 	}
 
-	// The resize wait is up. A request still working is left to finish, and its
-	// arrival checks the size again.
-	fn resize_wallpaper(&mut self) {
+	/// The resize wait is up. A request still working is left to finish, and its
+	/// arrival checks the size again.
+	pub(super) fn resize_wallpaper(&mut self) {
 		self.wp_resize_at = None;
 		if self.wp_pacing.busy() {
 			return;
@@ -111,16 +120,16 @@ impl State {
 		}
 	}
 
-	// Wallpaper rotation: unless a wallpaper came in on the command line (a
-	// deliberate choice for this session, which leaves rotation out of it
-	// entirely), scan the folder and pick one. The timer arms when the scan
-	// answers - only then do we know whether there is anything to rotate through.
-	fn init_wallpaper(&mut self, lock: bool) {
+	/// Wallpaper rotation: unless a wallpaper came in on the command line (a
+	/// deliberate choice for this session, which leaves rotation out of it
+	/// entirely), scan the folder and pick one. The timer arms when the scan
+	/// answers - only then do we know whether there is anything to rotate through.
+	pub(super) fn init_wallpaper(&mut self, lock: bool) {
 		self.wp_locked = lock;
 		self.request_wallpaper(!lock);
 	}
 
-	fn can_rotate(&self) -> bool {
+	pub(super) fn can_rotate(&self) -> bool {
 		rotation_live(
 			self.wp_locked,
 			self.wp_count,
@@ -128,10 +137,10 @@ impl State {
 		)
 	}
 
-	// Rotate to the next image. The worker re-scans, so images added to or removed
-	// from the folder since launch are picked up. Next wallpaper comes here too,
-	// so the timer starts over from the pick it asked for.
-	fn advance_wallpaper(&mut self) {
+	/// Rotate to the next image. The worker re-scans, so images added to or removed
+	/// from the folder since launch are picked up. Next wallpaper comes here too,
+	/// so the timer starts over from the pick it asked for.
+	pub(super) fn advance_wallpaper(&mut self) {
 		// locked, switched off since the timer was armed, or one image (or none):
 		// nothing to rotate to, so drop the timer
 		let settings = config::settings();
@@ -150,8 +159,8 @@ impl State {
 		self.request_wallpaper(true);
 	}
 
-	// A worker finished; uploading the pixels is all that was left for this thread.
-	fn wallpaper_ready(&mut self, loaded: crate::wallpaper::Loaded) {
+	/// A worker finished; uploading the pixels is all that was left for this thread.
+	pub(super) fn wallpaper_ready(&mut self, loaded: crate::wallpaper::Loaded) {
 		if loaded.seq != self.wp_seq.load(std::sync::atomic::Ordering::Relaxed) {
 			return; // superseded while it was working
 		}
@@ -212,9 +221,9 @@ impl State {
 		self.dirty = true;
 	}
 
-	// A wallpaper set from the command line while running: honor it for the rest
-	// of the session and stop rotating, without touching the stored settings.
-	fn lock_wallpaper(&mut self, image: Option<std::path::PathBuf>) {
+	/// A wallpaper set from the command line while running: honor it for the rest
+	/// of the session and stop rotating, without touching the stored settings.
+	pub(super) fn lock_wallpaper(&mut self, image: Option<std::path::PathBuf>) {
 		self.wp_locked = true;
 		self.wp_next = None;
 		// rotation is done for this session, so drop what it was showing - otherwise
@@ -226,6 +235,8 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+	use super::{needs_folder_read, rotation_next};
+	use std::time::Instant;
 	// Switching the wallpaper off and on again drops the rotation pick, and a
 	// request that does not re-read the folder then answers with nothing at all:
 	// the folder suppresses the built-in, and there is no pick to fall back on.

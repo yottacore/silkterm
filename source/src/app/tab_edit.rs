@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
+//! Renaming a tab in place, in a text box drawn inside the tab button.
+
+use super::menus::{Entry, MenuAction, entry_item_accel};
+use super::tabs::tab_edit_box;
+use super::{State, TAB_DBL_CLICK, TAB_EDIT_PAD};
+use crate::input;
+use crate::pane::Rect;
+use crate::settings_ui::EditCmd;
+use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at};
+use std::time::Instant;
+use winit::keyboard::{Key, NamedKey};
+
 // What a typed tab title is worth keeping, given what the tab would say on its
 // own. Blank, or the same as the automatic name, means no override at all -
 // both are the way back to a tab that names itself.
@@ -8,17 +20,18 @@ fn typed_title(typed: String, auto: &str) -> Option<String> {
 	(!typed.trim().is_empty() && typed != auto).then_some(typed)
 }
 
-// A tab title being typed in place. `caret` and `anchor` are byte offsets into
-// `text`; equal means no selection. Committing text that matches what the tab
-// would have said on its own puts it back to naming the shell. It edits the way
-// a Settings text box does, from the same keys and the same caret arithmetic.
-struct TabEdit {
-	tab: usize,
-	text: String,
-	caret: usize,
-	anchor: usize,
-	// a press in the box is held, so moving drags the selection
-	dragging: bool,
+/// A tab title being typed in place. `caret` and `anchor` are byte offsets into
+/// `text`; equal means no selection. Committing text that matches what the tab
+/// would have said on its own puts it back to naming the shell. It edits the way
+/// a Settings text box does, from the same keys and the same caret arithmetic.
+#[derive(Debug)]
+pub(super) struct TabEdit {
+	pub(super) tab: usize,
+	pub(super) text: String,
+	pub(super) caret: usize,
+	pub(super) anchor: usize,
+	/// a press in the box is held, so moving drags the selection
+	pub(super) dragging: bool,
 	// the last press on the box and how many came in a row: two take a word,
 	// three the whole name
 	clicks: Option<(Instant, u32)>,
@@ -37,7 +50,7 @@ impl TabEdit {
 		}
 	}
 
-	fn range(&self) -> (usize, usize) {
+	pub(super) fn range(&self) -> (usize, usize) {
 		(self.caret.min(self.anchor), self.caret.max(self.anchor))
 	}
 
@@ -106,10 +119,10 @@ impl TabEdit {
 		}
 	}
 
-	// A press in the box at byte offset `at`. Shift carries the selection there;
-	// otherwise one press places the caret, two take the word and three the
-	// whole name.
-	fn press(&mut self, at: usize, now: Instant, extend: bool) {
+	/// A press in the box at byte offset `at`. Shift carries the selection there;
+	/// otherwise one press places the caret, two take the word and three the
+	/// whole name.
+	pub(super) fn press(&mut self, at: usize, now: Instant, extend: bool) {
 		let clicks = match self.clicks {
 			Some((when, n)) if now.duration_since(when) < TAB_DBL_CLICK => n + 1,
 			_ => 1,
@@ -133,7 +146,7 @@ impl TabEdit {
 		}
 	}
 
-	fn drag_to(&mut self, at: usize) {
+	pub(super) fn drag_to(&mut self, at: usize) {
 		if self.dragging {
 			self.caret = at;
 		}
@@ -254,9 +267,9 @@ fn tab_edit_takes(action: MenuAction) -> bool {
 }
 
 impl State {
-	// Start renaming tab `i` in place, seeded with what it says now and with all
-	// of that selected, so the first thing typed replaces it.
-	fn begin_tab_edit(&mut self, tab: usize) {
+	/// Start renaming tab `i` in place, seeded with what it says now and with all
+	/// of that selected, so the first thing typed replaces it.
+	pub(super) fn begin_tab_edit(&mut self, tab: usize) {
 		let text = self
 			.tabs
 			.list
@@ -278,10 +291,10 @@ impl State {
 		self.dirty = true;
 	}
 
-	// Take what was typed. A title matching what the tab would have said anyway
-	// is dropped rather than frozen, and so is a blank one - either way the tab
-	// goes back to naming itself.
-	fn commit_tab_edit(&mut self) {
+	/// Take what was typed. A title matching what the tab would have said anyway
+	/// is dropped rather than frozen, and so is a blank one - either way the tab
+	/// goes back to naming itself.
+	pub(super) fn commit_tab_edit(&mut self) {
 		let Some(edit) = self.tab_edit.take() else {
 			return;
 		};
@@ -302,24 +315,24 @@ impl State {
 		self.dirty = true;
 	}
 
-	// Change the edit in place and redraw. Every key that types into a tab title
-	// goes through here so no path forgets the redraw.
-	fn edit_tab(&mut self, change: impl FnOnce(&mut TabEdit)) {
+	/// Change the edit in place and redraw. Every key that types into a tab title
+	/// goes through here so no path forgets the redraw.
+	pub(super) fn edit_tab(&mut self, change: impl FnOnce(&mut TabEdit)) {
 		if let Some(edit) = self.tab_edit.as_mut() {
 			change(edit);
 			self.dirty = true;
 		}
 	}
 
-	fn cancel_tab_edit(&mut self) {
+	pub(super) fn cancel_tab_edit(&mut self) {
 		if self.tab_edit.take().is_some() {
 			self.dirty = true;
 		}
 	}
 
-	// A key while a rename is up. Every key is the rename's, so nothing typed
-	// reaches the shell.
-	fn tab_edit_key(&mut self, key: &Key) {
+	/// A key while a rename is up. Every key is the rename's, so nothing typed
+	/// reaches the shell.
+	pub(super) fn tab_edit_key(&mut self, key: &Key) {
 		let keys = input::edit_keys(self.mods, cfg!(target_os = "macos"));
 		let selected = self
 			.tab_edit
@@ -374,18 +387,18 @@ impl State {
 		self.dirty = true;
 	}
 
-	// A middle-click on the name, or Paste Selection from a menu: the primary
-	// selection where there is one, else the clipboard.
-	fn tab_edit_paste_primary(&mut self) {
+	/// A middle-click on the name, or Paste Selection from a menu: the primary
+	/// selection where there is one, else the clipboard.
+	pub(super) fn tab_edit_paste_primary(&mut self) {
 		if let Some(text) = self.clipboard.get_primary() {
 			self.edit_tab(|edit| edit.paste(&text));
 		}
 	}
 
-	// While a tab is being renamed, a menu's Copy and Paste act on the name.
-	// Any other pick ends the rename first, as a click elsewhere does. True
-	// when the rename took the pick.
-	fn menu_reaches_tab_edit(&mut self, action: MenuAction) -> bool {
+	/// While a tab is being renamed, a menu's Copy and Paste act on the name.
+	/// Any other pick ends the rename first, as a click elsewhere does. True
+	/// when the rename took the pick.
+	pub(super) fn menu_reaches_tab_edit(&mut self, action: MenuAction) -> bool {
 		if self.tab_edit.is_none() {
 			return false;
 		}
@@ -402,7 +415,7 @@ impl State {
 		true
 	}
 
-	fn open_tab_edit_menu(&mut self, x: f32, y: f32) {
+	pub(super) fn open_tab_edit_menu(&mut self, x: f32, y: f32) {
 		let Some(edit) = self.tab_edit.as_ref() else {
 			return;
 		};
@@ -435,8 +448,8 @@ impl State {
 		))
 	}
 
-	// The byte offset in the name nearest a pointer at `x`.
-	fn tab_edit_offset(&mut self, x: f32) -> Option<usize> {
+	/// The byte offset in the name nearest a pointer at `x`.
+	pub(super) fn tab_edit_offset(&mut self, x: f32) -> Option<usize> {
 		let field = self.tab_edit_field()?;
 		let rel_x = x - (field.x + self.text.dip(TAB_EDIT_PAD));
 		let text = self.tab_edit.as_ref()?.text.clone();
@@ -449,6 +462,13 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+	use super::super::menus::{Entry, MenuAction, accel_clash, entry_label};
+	use super::{
+		Caret, TabEdit, TabEditKey, tab_edit_key, tab_edit_menu_items, tab_edit_takes, typed_title,
+	};
+	use crate::settings_ui::EditCmd;
+	use crate::textedit::Reach;
+	use std::time::{Duration, Instant};
 	// Clearing the box is how a renamed tab goes back to naming itself, so a
 	// blank title must not be stored as one.
 	// Test ID: EoTYmjQ
