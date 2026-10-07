@@ -21,9 +21,11 @@ struct Uniform {
 	// are only read on the perceptual path, which writes the background itself.
 	bg: [f32; 4],
 	perceptual: f32,
-	standin: f32, // 1 for a stand-in: cubic sampling (`ImageRenderer::standing_in`)
-	border: f32,  // 1 when the texture has a ring of texels past the picture's edge
-	_pad: f32,
+	standin: f32,      // 1 for a stand-in: cubic sampling (`ImageRenderer::standing_in`)
+	border: f32,       // 1 when the texture has a ring of texels past the picture's edge
+	padded: f32,       // 1 when `picture` is less than the texture (BC1 is whole blocks)
+	picture: [f32; 2], // texels holding the picture, border included
+	_pad: [f32; 2],
 }
 
 /// Wallpaper VRAM-content probe verdict (see `vram_check_poll`).
@@ -49,6 +51,7 @@ pub struct ImageRenderer {
 	sizing: crate::wallpaper::Sizing,
 	held: (u32, u32),
 	border: bool,
+	picture: (u32, u32),
 	opacity: f32,
 	fit: f32,
 	anchor: [f32; 2],
@@ -81,7 +84,18 @@ impl ImageRenderer {
 		img: &crate::wallpaper::Prepared,
 	) -> Self {
 		let rgba: &[u8] = &img.rgba;
-		let (width, height) = img.rgba.dimensions();
+		let picture = img.rgba.dimensions();
+		// the plain pixels where the device takes no BC (bc1.rs)
+		let blocks = img.bc1.as_deref().map(Vec::as_slice).filter(|_| {
+			device
+				.features()
+				.contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+		});
+		let (width, height) = if blocks.is_some() {
+			crate::bc1::padded(picture)
+		} else {
+			picture
+		};
 		let size = wgpu::Extent3d {
 			width,
 			height,
@@ -93,12 +107,26 @@ impl ImageRenderer {
 			mip_level_count: 1,
 			sample_count: 1,
 			dimension: wgpu::TextureDimension::D2,
-			format: wgpu::TextureFormat::Rgba8UnormSrgb,
+			// sRGB either way, decoded by the sampler, so the shader reads the
+			// same linear light from both
+			format: if blocks.is_some() {
+				wgpu::TextureFormat::Bc1RgbaUnormSrgb
+			} else {
+				wgpu::TextureFormat::Rgba8UnormSrgb
+			},
 			usage: wgpu::TextureUsages::TEXTURE_BINDING
 				| wgpu::TextureUsages::COPY_DST
 				| wgpu::TextureUsages::COPY_SRC,
 			view_formats: &[],
 		});
+		let (texels, bytes_per_row, rows) = match blocks {
+			Some(blocks) => (
+				blocks,
+				width / 4 * crate::bc1::BLOCK_BYTES as u32,
+				height / 4,
+			),
+			None => (rgba, 4 * width, height),
+		};
 		queue.write_texture(
 			wgpu::TexelCopyTextureInfo {
 				texture: &texture,
@@ -106,11 +134,11 @@ impl ImageRenderer {
 				origin: wgpu::Origin3d::ZERO,
 				aspect: wgpu::TextureAspect::All,
 			},
-			rgba,
+			texels,
 			wgpu::TexelCopyBufferLayout {
 				offset: 0,
-				bytes_per_row: Some(4 * width),
-				rows_per_image: Some(height),
+				bytes_per_row: Some(bytes_per_row),
+				rows_per_image: Some(rows),
 			},
 			size,
 		);
@@ -218,8 +246,11 @@ impl ImageRenderer {
 		});
 
 		// Reference block from the image center (corners are more likely to be a
-		// flat color a zero-wipe could coincidentally match).
-		let probe_at = (width >= PROBE_SIDE && height >= PROBE_SIDE)
+		// flat color a zero-wipe could coincidentally match). The probe runs on
+		// GL only, and GL cannot copy a compressed texture out (wgpu-hal skips
+		// it and the read would come back zeros), so a BC1 picture has none. The
+		// sentinels and the VT watcher still stand.
+		let probe_at = (blocks.is_none() && width >= PROBE_SIDE && height >= PROBE_SIDE)
 			.then(|| ((width - PROBE_SIDE) / 2, (height - PROBE_SIDE) / 2));
 		let probe_ref = probe_at.map_or_else(Vec::new, |(bx, by)| {
 			let mut block = Vec::with_capacity(PROBE_BYTES);
@@ -244,6 +275,7 @@ impl ImageRenderer {
 			sizing: img.sizing,
 			held: img.held,
 			border: img.border,
+			picture,
 			opacity: img.opacity,
 			fit: if img.fit == Fit::Zoom { 1.0 } else { 0.0 },
 			anchor: [img.anchor[0].clamp(0.0, 1.0), img.anchor[1].clamp(0.0, 1.0)],
@@ -283,11 +315,17 @@ impl ImageRenderer {
 	/// find it in.
 	pub fn memdbg_line(&self) -> String {
 		let ((w, h), (fw, fh)) = (self.held, self.sizing.full);
-		let texture = self.texture.size();
+		let format = self.texture.format();
+		let bytes = format.theoretical_memory_footprint(self.texture.size());
 		format!(
-			"wallpaper: {w}x{h} held of {fw}x{fh}{}, {:.1} MiB{}",
+			"wallpaper: {w}x{h} held of {fw}x{fh}{}, {:.1} MiB{}{}",
 			if self.border { " plus a border" } else { "" },
-			crate::memdbg::mib(texture.width as usize * texture.height as usize * 4),
+			crate::memdbg::mib(bytes as usize),
+			if format.is_compressed() {
+				" as BC1"
+			} else {
+				""
+			},
 			if self.standin { ", stand-in" } else { "" }
 		)
 	}
@@ -323,9 +361,16 @@ impl ImageRenderer {
 			perceptual: if mix.perceptual { 1.0 } else { 0.0 },
 			standin: if self.standin { 1.0 } else { 0.0 },
 			border: if self.border { 1.0 } else { 0.0 },
-			_pad: 0.0,
+			padded: if self.padded() { 1.0 } else { 0.0 },
+			picture: [self.picture.0 as f32, self.picture.1 as f32],
+			_pad: [0.0; 2],
 		};
 		queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&uniform_data));
+	}
+
+	fn padded(&self) -> bool {
+		let texture = self.texture.size();
+		(texture.width, texture.height) != self.picture
 	}
 
 	pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
@@ -445,6 +490,8 @@ struct Uniform {
     perceptual: f32,
     standin: f32,
     border: f32,
+    padded: f32,
+    picture: vec2<f32>,
 };
 @group(0) @binding(0) var<uniform> u: Uniform;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -505,8 +552,13 @@ fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     if (u.border > 0.5) {
         // the outer texels are the blurred picture past its edge, so the edge
         // blends toward them rather than flattening into the clamp
-        let size = vec2<f32>(textureDimensions(tex));
+        let size = u.picture;
         uv = (uv * (size - 2.0) + 1.0) / size;
+    }
+    if (u.padded > 0.5) {
+        // a BC1 texture is whole 4x4 blocks, and the picture fills its top
+        // left; the texels past it repeat the edge, as the clamp would
+        uv = uv * u.picture / vec2<f32>(textureDimensions(tex));
     }
     var c = textureSample(tex, samp, uv);
     if (u.standin > 0.5) {
@@ -553,9 +605,11 @@ mod tests {
 		.validate(&module)
 		.expect("the wallpaper shader validates");
 		// and the Rust side of the uniform still lines up with the WGSL one
-		assert_eq!(std::mem::size_of::<Uniform>(), 64);
+		assert_eq!(std::mem::size_of::<Uniform>(), 80);
 		assert_eq!(std::mem::offset_of!(Uniform, standin), 52);
 		assert_eq!(std::mem::offset_of!(Uniform, border), 56);
+		assert_eq!(std::mem::offset_of!(Uniform, padded), 60);
+		assert_eq!(std::mem::offset_of!(Uniform, picture), 64);
 	}
 
 	// Every ordinary frame draws what it always has. Only a stand-in, there for

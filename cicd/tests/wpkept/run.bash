@@ -10,6 +10,8 @@
 ##			- The second uses the copy and prepares nothing.
 ##			- A copy cut short is not used, and is written again.
 ##			- With --config, copies go beside that config instead.
+##			- A light blur leaves the picture held by the window, so the GPU
+##			  gets it as BC1 and the copy is those blocks.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display or
 ##	  xdotool).
@@ -155,6 +157,21 @@ fStop
 fCheck "beside that config" fCopiesAre "${work}/alt/cache/wallpaper" 1
 fCheck "and not in the platform's folder" fCopiesAre "${kept}" 1
 
+## 1920x993 drawn in 800x500 is held at 967x500, and a sigma of 1 is too light
+## to hold it any smaller.
+sed -i 's/^\tblur: 10\.0$/\tblur: 1.0/' "${native}/config.shcl"
+fCheck "the blur is light now" grep -q $'^\tblur: 1.0$' "${native}/config.shcl"
+fLaunch light
+fCheck "light blur: kept as BC1" fSays "memdbg wallpaper copy: stored 967x500 BC1"
+fCheck "and drawn as BC1" fSays "wallpaper: 967x500 held of 1920x993, 0.2 MiB as BC1"
+fStop
+fCheck "a copy of its own" fCopiesAre "${kept}" 2
+fLaunch lightAgain
+fCheck "light blur again: the blocks are used" fSays "memdbg wallpaper copy: used 967x500 for 967x500"
+fCheck "and drawn as BC1" fSays "wallpaper: 967x500 held of 1920x993, 0.2 MiB as BC1"
+fCheck "and nothing prepared" fNeverSays "copy: stored"
+fStop
+
 if ((failures)); then
 	for log in "${work}"/*.txt; do
 		echo "    ${log##*/}:"
@@ -168,3 +185,4 @@ echo "all passed"
 ##		- 20261006 JC: Created.
 ##		- 20261006 JC: The blur holds the picture at 768x397 plus a border, so
 ##		  the the copy is 770x399.
+##		- 20261007 JC: A light blur case, kept as BC1.

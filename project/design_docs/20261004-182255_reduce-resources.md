@@ -300,6 +300,9 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- A copy is within 4 levels of the prepared pixels, and under half a level on average. Quality 100 saves little, since the color conversion costs about half a level by itself. At a light blur, where the picture keeps hard edges, it is up to about 10.
 	- Block compression stays queued. Kept BC data would skip the decode too, but a 2560x1440 copy reads back in about 30 ms as JPEG already.
 
+- Since 2026-10-07 a picture the GPU gets as BC1 is kept as those blocks, 1.8 MiB at 2560x1440, and goes back up as it was stored. Unpacking it for the stand-in takes 6 to 11 ms. A picture held by its blur stays plain and is still kept as JPEG.
+	- Copies from before are in another format and go at the next prune, whatever their age.
+
 ### Block compression for the wallpaper
 
 - GPUs read block-compressed formats directly. BC1 is half a byte a pixel and BC7 one byte, against four for plain RGBA.
@@ -319,6 +322,38 @@ What a window already gives back while unused is in the [Releasing resources](20
 - A plain RGBA fallback is kept for an adapter without BC support, though every one checked has it.
 
 - Executable size is a top priority, so the encoder's cost in bytes decides as much as its quality.
+
+- Built 2026-10-07, with a BC1 encoder of our own in `bc1.rs` and no new crate. The release binary went from 11,946,152 to 11,959,832 bytes, 13 KB more.
+	- A picture held by the window gets BC1. One held by its blur stays plain, as does one with any transparency.
+	- Each 4x4 block takes the better of two tries: the line its colors spread along, refined twice by least squares, or one flat color matched through a table of endpoint pairs. A flat color comes back within a level, where rounding it to 5:6:5 is up to 4 off.
+	- The texture is sRGB, so the sampler decodes it the same way it decodes the plain one. That holds on the X11 GL path too, since the wallpaper is only sampled there and never drawn into.
+	- A BC texture is whole blocks. The picture sits in the top left of one padded to a multiple of 4, the padding repeats its edge, and the shader scales its coordinates to the part that holds the picture.
+	- Every device asks for BC when its adapter has it. Without it the picture goes up plain.
+	- On GL the check for a lost texture reads back a block of the wallpaper, and GL cannot copy a compressed texture out. A BC1 wallpaper skips that check. The sentinel textures and the VT watcher still cover it.
+	- Encoding takes 20 to 41 ms at 2560x1440 on b23, on up to 4 threads, and 22 to 24 ms at 1920x1080.
+
+- Measured on b23 against a control build, with a 2560x1440 photo and no blur in a 2560x1440 window, in MiB. A share is the window less the same window with no wallpaper.
+
+	| Part                                          | Before | After
+	| :-------------------------------------------- | -----: | ----:
+	| The texture                                   |   14.1 |   1.8
+	| Graphics memory on X11, the wallpaper's share |     32 |     1
+	| Regular memory on X11, the wallpaper's share  |     46 |    11
+	| Vulkan allocator, in use                      |   65.5 |  52.4
+
+	- On Vulkan the driver's figure stayed at 198 MiB, since the allocator kept the same 128 MiB of blocks. Regular memory there was the same within the 2 MiB the runs vary by. A first try was 3 MiB over, since a second copy of the blocks for the disk cache stayed in the worker's heap once freed; the copy is shared now.
+	- At the shipped blur the picture is held by its blur and stays plain, so nothing changed.
+
+- How it looks, against the control at the same window size, on GL and Vulkan alike, in sRGB levels:
+	- At the shipped blur, in dark mode and at Low: 0 changed pixels.
+	- No blur, in dark mode: under a level on average, and at most 6 or 7 on the built-in, 13 on a large photo and 32 around small colored stars in a star field.
+	- No blur, in light mode: at most 12 to 17.
+	- A light blur of 2: at most 4 in light mode and 7 in dark.
+	- No blur at 100% visibility and no scrim: at most 65 around the stars, 1.3 on average.
+	- A 1917x993 window, where every edge is padded: the edge rows and columns are no worse than the inside.
+	- No contour bands showed. In the built-in's smooth gradients with no blur, the 4x4 blocks show as faint steps in light mode, and plainly with the contrast stretched 4 times. That is the case BC7 was held back for, so it is an open question on the item.
+
+- BC1 for a picture held by its blur was tried and not kept. It came out at most 3 to 5 levels off, but each block is drawn several screen pixels wide there, and with the contrast stretched 4 times the blocks showed as a grid. It would have saved 2 MiB at 4 held pixels a sigma and 0.5 at 2.
 
 ### The dialogs' kept GPU context
 
@@ -423,7 +458,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- WARP: D3D12 requires the BC formats on every device, WARP included.
 	- Metal: wgpu turns BC on where Metal reports it. Not checked on b26.
 
-- Pure Rust encoders: `texpresso` does BC1 to BC5, and `rusty_dds` does BC1 to BC7. Neither is measured here for speed, quality or binary size.
+- Pure Rust encoders: `texpresso` does BC1 to BC5, and `rusty_dds` does BC1 to BC7. Neither is measured here for speed, quality or binary size. An encoder of our own was built instead, as decided 2026-10-06.
 
 - The scrim's blur takes 25 taps a pass and spaces them more than a pixel apart once the radius passes about 4 pixels.
 
