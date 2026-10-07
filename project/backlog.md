@@ -317,10 +317,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
 	- ID: 2026100219054497
 	- Type: Feature
-	- Status: Reopened
+	- Status: Waiting for answers
 		- Command+Shift+[ and ] doesn't work reliably, seems to be tied in to system screenshots.
 		- Command+{ and } works.
 	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
+		- 20261006: Typed through the remote session, the Shift+[ press can reach b26 as Shift+3 (see Progress log). Check the chord from b26's own keyboard, or after the session's keyboard mode is changed.
 		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
 		- With Settings open, the two tab rows and their chords change the dialog's tab.
 		- Neither View nor Window has Show Tab Bar, Merge All Windows or a second pair of tab rows, since the system's own window tabs are off.
@@ -334,6 +335,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, as in other Mac apps.
 		- The macOS menu bar has a Window menu, with Minimize (Command+M) and the other rows Mac apps have there.
+	- Progress log:
+		- 20261006: The failing presses reached b26 as Command+Shift+3, not Command+Shift+[. macOS took each one as its own full screen screenshot shortcut, so SilkTerm never saw them. The chirps were the screenshot sound, dozens in a row from a held key at 14:14, then one per press at 14:17, b26's time. Twelve screenshots were saved to b26's desktop. SilkTerm asked for no sound at all in that time.
+		- 20261006: Presses at about 14:16, likely the Command+{ ones, had the same keys held and took no screenshot, so they came in as another key. A RustDesk session to b26 has been open since 10-05, and a Mac's own keyboard cannot turn [ into 3, so the change happens on that path, not in SilkTerm. RustDesk's keyboard modes (Map, Translate, Legacy) are known to treat Mac shortcuts differently.
+		- 20261006: Nothing on b26 claims Command+Shift+[ or ]. No custom shortcut is set, the login items and menu bar apps (Dropbox, NordVPN, Bitwarden, Stats, RustDesk) are not screenshot tools, and macOS's own screenshot shortcuts are on 3, 4 and 5.
+		- 20261006: SilkTerm's side checks out on b26, so no code changed. Command+Shift+[ and ] change tabs whether the press comes in as { and } or as [ and ] with Shift. Command+Shift+3 and Command+[ do nothing, and no alert sound plays for any of them.
+		- 20261006: What can be changed outside SilkTerm: the session's keyboard mode in the RustDesk toolbar, or the client's keyboard layout. Turning off "Save picture of screen as a file" in System Settings > Keyboard > Keyboard Shortcuts > Screenshots stops the screenshots, but the tab chord still would not arrive.
+		- 20261006: Question: Which machine, keyboard layout and RustDesk keyboard mode is b26 reached from? The chord stays Command+Shift+[ and ], the Mac standard. Should this close once the Window menu checks pass, or should a second chord be added for the remote session?
 	- Decisions:
 		- 20261002: Command+Shift+[ and ] switch tabs, and the menu bar gets a Window menu.
 	- Done:
@@ -343,8 +351,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- With Settings open, the tab rows change the dialog's tab, as they reach it before the dialog sees the keys.
 	- Note: Each window is its own process, so the window list and Bring all to front reach only that window and its dialogs.
 	- Test case: `command_shift_brackets_walk_the_tabs_on_macos` (ErbGPGY) and `the_mac_window_menu_minimizes_zooms_and_walks_the_tabs` (ErbGPNM), which fail with the chords or the Window menu taken out. `the_mac_menu_bar_has_the_app_menu_first_then_the_window_menus` (ErUnDN8) and `the_mac_menu_bar_shows_the_command_chords` (ErZrSlO) now list the Window menu and its chords.
+		- 20261006: No new test, since no code changed.
 	- Verified: The unit tests on Linux, and clippy for Linux, Windows and macOS.
-	- Branch: maccmd
+		- 20261006 on b26, current dev, presses sent to the window rather than typed: Command+Shift+[ and ] go through the Window menu's rows when they come in as { and }, and through the key handler when they come in as [ and ] with Shift. Command+T opens a tab from the menu bar. Command+Shift+3 and Command+[ do nothing. No alert sound for any of them.
+	- Branch: maccmd, then tabchord (notes only)
 	- Commit: 7179fa9
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
