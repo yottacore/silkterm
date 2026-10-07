@@ -221,39 +221,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
-- vm925w: The silkterm launcher in the taskbar doesn't work.
-	- ID: 2026100710173170
-	- Type: Bug
-	- Status: Done
-	- Severity: High
-	- Opened: 20261007-101731
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100314050020
-	- Target OS: Windows
-	- Test environment: vm925w
-	- Incorrect behavior: A minimized cmd window shows briefly, then disappears.
-		- But the same command it runs, run by hand in a cmd window, works.
-	- Notes:
-		- Before RC1.
-	- Reproduced: 20261007 on vm925w, with a click on the taskbar pin. The minimized cmd window ran `runterm.cmd`, started no pwsh, and exited 1.
-	- Actual cause: The PATH that the taskbar hands to what it starts had lost PowerShell 7's folder, and `runterm.cmd` looked for pwsh on PATH only.
-		- Explorer rebuilds its PATH when a program announces an environment change, and cuts it at 4095 characters. vm925w's machine PATH is 4142 once expanded, so the cut falls just before pwsh's folder and drops the whole user PATH too.
-		- A console opened before that, or a Windows Terminal tab, still has the whole PATH. So the same command worked by hand.
-	- Progress log:
-		- 20261007: The pin runs the live `runterm.cmd` under Dropbox, which is the repo's 01ed285, and that runs the live `n8runterm.ps1`, the repo's 4f2fa50 from 10-01. Neither has the 10-06 launcher changes, so fastlaunch and StrictMode are ruled out. `runterm.log` had no line for any failed click.
-		- 20261007: The taskbar's own PATH was exactly 4095 characters and ended in `C:\Pr`. A fresh environment built from the same registry is whole.
-		- 20261007: install.ps1 announces an environment change, and its tests ran on vm925w at 09:04 that morning. Any installer does the same, so that is the likely trigger but not proven.
-	- Actual fix: `runterm.cmd` looks for pwsh on PATH, then where its installer records it (App Paths), then its default folder, then the Store's alias. The machine install comes before the Store's, so a cut PATH gets the same pwsh as a whole one.
-	- Verified: The new test on vm925w failed 3 checks on the old `runterm.cmd` and passed on the new one. `runterm.cmd` run with the taskbar's own environment on vm925w: the old one exited 1 and started nothing, the new one opened a SilkTerm window. ps-lint on the changed scripts.
-	- Swept: `git grep` for pwsh found by name over install.ps1, `utility/` and the cmd files. `runterm.cmd` was the only launch path that needed PATH. `n8runterm.ps1` relaunches itself by its own full path. The elevated relaunch gets a fresh environment, so the terminal it opens had the whole PATH.
-	- Note: The pin runs the live copies outside the repo, so on vm925w it keeps failing until the live `runterm.cmd` is replaced with this one. The live `n8runterm.ps1` is older than the repo's too. Signing out and back in gives the taskbar a whole PATH again, until the next cut.
-	- Branch: pinpath
-	- Commit: 2f692b7
-	- Test case: New Windows test `cicd/tests/launcher/wrapper.ps1` (Es2WeWF), run by `cicd-win.ps1` in stage 3. It runs `runterm.cmd` with every folder holding pwsh.exe taken off PATH, and checks the launcher is still reached, under the same PowerShell 7 a whole PATH gives.
-	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after, and the fix worked in the taskbar's own environment.
-	- Closed: 20261007-111713
-
 - Windows: a Git Bash tab keeps its starting folder in the title after a `cd`
 	- ID: 2026100709325306
 	- Type: Bug
@@ -359,6 +326,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- vm925w: The silkterm launcher in the taskbar doesn't work.
+	- ID: 2026100710173170
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261007-101731
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100314050020
+	- Target OS: Windows
+	- Test environment: vm925w
+	- Incorrect behavior: A minimized cmd window shows briefly, then disappears.
+		- But the same command it runs, run by hand in a cmd window, works.
+	- Notes:
+		- Before RC1.
+	- Reproduced: 20261007 on vm925w, with a click on the taskbar pin. The minimized cmd window ran `runterm.cmd`, started no pwsh, and exited 1.
+	- Actual cause: The PATH that the taskbar hands to what it starts had lost PowerShell 7's folder, and `runterm.cmd` looked for pwsh on PATH only.
+		- Explorer rebuilds its PATH when a program announces an environment change, and cuts it at 4095 characters. vm925w's machine PATH is 4142 once expanded, so the cut falls just before pwsh's folder and drops the whole user PATH too.
+		- A console opened before that, or a Windows Terminal tab, still has the whole PATH. So the same command worked by hand.
+	- Progress log:
+		- 20261007: The pin runs the live `runterm.cmd` under Dropbox, which is the repo's 01ed285, and that runs the live `n8runterm.ps1`, the repo's 4f2fa50 from 10-01. Neither has the 10-06 launcher changes, so fastlaunch and StrictMode are ruled out. `runterm.log` had no line for any failed click.
+		- 20261007: The taskbar's own PATH was exactly 4095 characters and ended in `C:\Pr`. A fresh environment built from the same registry is whole.
+		- 20261007: install.ps1 announces an environment change, and its tests ran on vm925w at 09:04 that morning. Any installer does the same, so that is the likely trigger but not proven.
+	- Actual fix: `runterm.cmd` looks for pwsh on PATH, then where its installer records it (App Paths), then its default folder, then the Store's alias. The machine install comes before the Store's, so a cut PATH gets the same pwsh as a whole one.
+	- Verified: The new test on vm925w failed 3 checks on the old `runterm.cmd` and passed on the new one. `runterm.cmd` run with the taskbar's own environment on vm925w: the old one exited 1 and started nothing, the new one opened a SilkTerm window. ps-lint on the changed scripts.
+	- Swept: `git grep` for pwsh found by name over install.ps1, `utility/` and the cmd files. `runterm.cmd` was the only launch path that needed PATH. `n8runterm.ps1` relaunches itself by its own full path. The elevated relaunch gets a fresh environment, so the terminal it opens had the whole PATH.
+	- Note: The pin runs the live copies outside the repo, so on vm925w it keeps failing until the live `runterm.cmd` is replaced with this one. The live `n8runterm.ps1` is older than the repo's too. Signing out and back in gives the taskbar a whole PATH again, until the next cut.
+	- Branch: pinpath
+	- Commit: 2f692b7
+	- Test case: New Windows test `cicd/tests/launcher/wrapper.ps1` (Es2WeWF), run by `cicd-win.ps1` in stage 3. It runs `runterm.cmd` with every folder holding pwsh.exe taken off PATH, and checks the launcher is still reached, under the same PowerShell 7 a whole PATH gives.
+	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after, and the fix worked in the taskbar's own environment.
+	- Closed: 20261007-111713
 
 - macOS: the Settings dialog opens almost too big for the screen, with its buttons below the screen edge
 	- ID: 2026100114435547
