@@ -8,6 +8,10 @@
 ##			- At launch, at the window's size.
 ##			- After a resize, at the new size.
 ##			- Grown past the image, at the image's own size.
+##		A heavier blur holds it smaller, where its sigma comes to 4 held
+##		pixels, plus a one pixel border.
+##			- At launch, and after growing the window, held by the blur.
+##			- In a window smaller than that, at the window's size, no border.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display or
 ##	  xdotool).
@@ -85,15 +89,22 @@ if [[ "${status}" == *"no Xvfb"* ]]; then
 fi
 fX(){ DISPLAY="${display}" XAUTHORITY="${auth}" "${@}"; }
 
-said="${work}/said.txt"
+said=""
+window=""
+## Custom holds a blurred picture at 4 pixels a sigma, so a blur of 2 is too
+## light to matter and the window sets the size.
+fLaunch(){  ## fLaunch <name> <blur>
+	said="${work}/${1}.txt"
+	mkdir -p "${work}/${1}"
+	printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' 'window:' $'\tremember_per_monitor: false' $'\tidle_release: false' \
+		'wallpaper:' $'\tenabled: true' $'\tfallback_builtin: true' $'\tblur: '"${2}" $'\trotate:' $'\t\tenabled: false' >"${work}/${1}/config.shcl"
+	DISPLAY="${display}" XAUTHORITY="${auth}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET LIBGL_ALWAYS_SOFTWARE=1 SILK_MEMDBG=1 \
+		HOME="${work}/home" XDG_CONFIG_HOME="${work}/home/.config" XDG_DATA_HOME="${work}/home/.local/share" XDG_RUNTIME_DIR="${work}/home" \
+		"${bin}" --config "${work}/${1}/config.shcl" --pixel-width 800 --pixel-height 500 --shell "/bin/dash -c 'sleep 600'" >/dev/null 2>"${said}" &
+	appPid=$!
+	window="$(fX timeout 30 xdotool search --sync --onlyvisible --pid "${appPid}" 2>/dev/null | head -n 1 || true)"
+}
 mkdir -p "${work}/home"
-printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' 'window:' $'\tremember_per_monitor: false' $'\tidle_release: false' \
-	'wallpaper:' $'\tenabled: true' $'\tfallback_builtin: true' $'\trotate:' $'\t\tenabled: false' >"${work}/config.shcl"
-DISPLAY="${display}" XAUTHORITY="${auth}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET LIBGL_ALWAYS_SOFTWARE=1 SILK_MEMDBG=1 \
-	HOME="${work}/home" XDG_CONFIG_HOME="${work}/home/.config" XDG_DATA_HOME="${work}/home/.local/share" XDG_RUNTIME_DIR="${work}/home" \
-	"${bin}" --config "${work}/config.shcl" --pixel-width 800 --pixel-height 500 --shell "/bin/dash -c 'sleep 120'" >/dev/null 2>"${said}" &
-appPid=$!
-window="$(fX timeout 30 xdotool search --sync --onlyvisible --pid "${appPid}" 2>/dev/null | head -n 1 || true)"
 
 ## What the window should hold at its newest reported size, by the same rule
 ## as Sizing::held: the larger of the two scales, never past the image.
@@ -108,6 +119,8 @@ fWant(){
 	}'
 }
 fHeld(){ grep '^memdbg wallpaper: ' "${said}" | tail -n 1 | awk '{print $3}'; }
+fLastHeld(){ grep '^memdbg wallpaper: ' "${said}" | tail -n 1 || true; }
+fNoBorder(){ local last; last="$(fLastHeld)"; [[ -n "${last}" && "${last}" != *"plus a border"* ]]; }
 
 ## SILK_MEMDBG looks every 2 s, and the resize wait is half a second. The
 ## blur is unoptimized in a debug build, so the full size took 12 s at load 14.
@@ -123,6 +136,7 @@ fHolds(){  ## fHolds <expected WxH> - waits for the newest line to say so
 	return 1
 }
 
+fLaunch light 2.0
 fCheck "a window came up" test -n "${window}"
 fCheck "at launch: held at the window's size" fHolds 967x500
 fX xdotool windowsize "${window}" 1200 700 || true
@@ -134,6 +148,39 @@ for size in "1300 800" "1500 900" "1700 1000"; do
 	sleep 0.1
 done
 fCheck "grown past the image: held whole" fHolds 1920x993
+fStopOurs "${appPid}"; appPid=""
+
+## 1920x993 at a sigma of 10 and 4 pixels a sigma
+fByBlur(){  ## fByBlur - waits for the newest line to say so
+	local -ri giveUp=$((SECONDS + 60))
+	while ((SECONDS < giveUp)); do
+		if [[ "$(fLastHeld)" == *"768x397 held of 1920x993 plus a border"* ]]; then return 0; fi
+		sleep 0.25
+	done
+	echo "    $(fLastHeld)"
+	return 1
+}
+fWindowIs(){ [[ "$(grep '^memdbg window: ' "${said}" | tail -n 1 | awk '{print $3}')" == "${1}" ]]; }
+fWaitWindow(){  ## fWaitWindow <WxH>
+	local -ri giveUp=$((SECONDS + 30))
+	while ((SECONDS < giveUp)); do
+		if fWindowIs "${1}"; then return 0; fi
+		sleep 0.25
+	done
+	return 1
+}
+fLaunch heavy 10.0
+fCheck "a window came up again" test -n "${window}"
+fCheck "a heavy blur: held by the blur, with a border" fByBlur
+fX xdotool windowsize "${window}" 1200 700 || true
+fCheck "grown: the window's size was seen" fWaitWindow 1200x700
+## a prepare is kept once done, so a second one would say so
+sleep 5
+fCheck "grown: still held by the blur" fByBlur
+fCheck "and not prepared again" test "$(grep -c '^memdbg wallpaper copy: stored' "${said}" || true)" == 1
+fX xdotool windowsize "${window}" 600 300 || true
+fCheck "shrunk below it: held at the window's size" fHolds 600x310
+fCheck "and with no border" fNoBorder
 
 if ((failures)); then
 	sed 's/^/    /' "${said}" | grep -v '^    memdbg pane' | tail -n 30
@@ -144,3 +191,5 @@ echo "all passed"
 ##	History:
 ##		- 20261005 JC: Created.
 ##		- 20261005 JC: Waits up to 60 s for each size, not 10.
+##		- 20261006 JC: A light blur for the window checks, and a heavy blur
+##		  held smaller with a border.

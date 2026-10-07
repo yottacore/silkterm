@@ -263,6 +263,16 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- A pack image at 2560x1440 costs 32 MiB on GL at window size, 8 at D of 4, and about 0 at D of 2. As plain RGBA that is 2.3 MiB at D of 4 against BC1's 1.8 at full size, and 0.6 MiB at D of 2.
 	- So at the shipped blur, holding it smaller makes compression unneeded. Compression only pays where the blur is small or off. That choice is left to [Block compression for the wallpaper](#block-compression-for-the-wallpaper), which already picks by blur.
 
+- Built 2026-10-06. The held size is the smaller of the window's and the blur's, where the sigma comes to 4 held pixels on High, Max and Custom, and 2 on Low, Standard and Remote. A blur lighter than that at full size never shrinks the picture below what the window shows.
+	- A picture held by its blur keeps a one pixel border, cut from the blur's margin. The shader reads the inside and blends into the border at the edge, where the clamp used to flatten the outer half of each edge pixel.
+	- A kept copy with a border has a key of its own, so a picture held by the window at a near size never takes it.
+	- Growing the window does not prepare a picture held by its blur again, since its size stays the same.
+	- Checked against the control build at the same window size, in sRGB levels:
+		- With the blur off, or too light to matter: 0 changed pixels, dark and light, on GL and Vulkan.
+		- At 4 pixels a sigma: at most 1 on GL, edge included, and 2 on Vulkan, bar one pixel at 3 in light mode. A light mode zoom of a large photo had about 4,000 pixels at 2 to 4 along one sharp edge.
+		- At 2 pixels a sigma, and at 100% visibility with no scrim: at most 1 on GL and 2 on Vulkan.
+	- In a 2560x1440 window, the texture for a 2560x1440 picture went from 14.1 MiB to 2.3 at 4 pixels a sigma and 0.6 at 2. A 9433x5306 photo went from 14.1 to 5.8 at 4.
+
 ### Kept copies on disk
 
 - Preparing a picture took 0.8 to 2.6 s in an optimized build on b23, most of it the blur. A launch, a rotation back to a picture, a resize and a wake from the idle release all prepared it from the file again.
@@ -297,7 +307,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 - They work only for textures that do not change. A GPU cannot draw into one, so this is for the wallpaper only.
 
 - The image to compress is the one already prepared at window size and blur.
-	- Since 2026-10-05 the window size part is built. Holding a blurred picture smaller still was measured then, and at the shipped blur it beats BC1 at full size with no encoder. See [The wallpaper at window size](#the-wallpaper-at-window-size).
+	- Since 2026-10-05 the window size part is built. Holding a blurred picture smaller still was measured then and built on 2026-10-06. At the shipped blur it beats BC1 at full size with no encoder. See [The wallpaper at window size](#the-wallpaper-at-window-size).
 
 - Pick by blur and size:
 	- A heavy blur: hold it smaller and skip compression. A quarter-size image in plain RGBA is already smaller than BC1 at full size.
