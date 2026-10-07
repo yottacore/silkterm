@@ -1057,7 +1057,7 @@ fn find_child(
 	found
 }
 
-// Git for Windows installs bin\bash.exe and bin\sh.exe as launchers: each sets
+// Git for Windows installs bin\bash.exe adn bin\sh.exe as launchers: each sets
 // up the environment, starts usr\bin\<same name> as its child and waits. So
 // the pid a pane holds is the launcher's, which never moves and is always
 // "running" the real shell. The layout is what gives it away: MSYS2 and
