@@ -583,10 +583,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - One VRAM readback probe for gfx.rs and bgimage.rs
 	- ID: 2026100622234832
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Low
 	- Opened: 20261006-222348
 	- Opened by: CC
+	- Assigned to: CC
 	- Parent ID: 2026100314050021
 	- Prereq IDs: 2026100418225507
 	- Target OS: All
@@ -594,7 +595,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- gfx.rs and bgimage.rs build the same readback probe. Make it one helper.
 	- Progress log:
 		- 20261006: Split from 2026100314050021. Waits on branch `wpbc1`, which changes the readback in both files.
+		- 20261007: `gfx::BlockReadback` owns the read buffer and the in-flight flag. It copies square blocks out of textures and maps them, and its poll hands the bytes to a check. The sentinels read 2 blocks, the wallpaper 1. A BC picture still gets no wallpaper probe on GL.
+		- 20261007: Verified: unit suite (1201) passes, fmt, and clippy for Linux, Windows and macOS. The `wakepic` and `wpkept` window tests pass.
+		- 20261007: Verified: with a faked loss, this build and dev 6fbc639 log the same thing. With no wallpaper, or before it arrives, the sentinels catch it. A plain wallpaper's block catches it. A BC1 wallpaper is skipped and the sentinels catch it. Each case rebuilds once and then reads back intact.
 	- Note: Code review 20261003 item 21.
+	- Swept: every `map_async` and `copy_texture_to_buffer` in the source. The two in gfx.rs that read the whole frame for a screenshot block on the read and are not probes, so they stay as they are. So does the copy in `diagnostics/glyphon_gl.rs`.
+	- Branch: probe1
+	- Commit: 7387a3a
+	- Test case: `the_wallpaper_probe_block_is_copy_aligned` (Es1upe4), seen to fail with an unaligned block, beside `sentinel_row_is_copy_aligned` (Ekm1rM1). No unit test can reach the read itself, since it needs a device. The `wakepic` and `wpkept` window tests run it.
+	- Acceptance signoff: Self-closed: mechanical, same behavior.
+	- Closed: 20261007-085508
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
