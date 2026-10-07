@@ -34,6 +34,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- The "Tab text" options are wonky. There's too much space between "Program title" and its checkbox.
+	- ID: 2026100710173200
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261007-101732
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100614510984
+	- Target OS: All
+	- Requirements:
+		- The gap is because of the column system for labels and controls. But for a more efficient and effective dialog system, some elements need to be able to break out of that system.
+	- Notes:
+		- Before RC1.
+	- Progress log:
+		- 20261007: A shared line made only of toggles now packs. It starts where its first label would, each box sits a small gap after its own label, the first one's too, and the next label comes a fixed, wider gap later. The revert arrow stays at the end. A line with anything else on it, such as the scrim's two dropdowns, still splits the control column.
+		- 20261007: The "Tab text" heading stays its own row above the line. The Silk tab's "Check for hardware change" and "Re-test next run" line packs the same way and still reads well.
+		- 20261007: Labels on a packed line no longer count toward the label column. The panel is kept wide enough for the packed line instead. The width came out the same as before at 1x and 2x.
+		- 20261007: Question: the sketch at round start drew each box before its label. This keeps label first, as the written decision and the earlier signoff say.
+	- Decisions:
+		- 20261007: Pack at natural width. Only lines of `beside` toggles get it: each label right next to its own box, label first, then a fixed gap before the next toggle, then the one revert arrow at the end.
+	- Verified: unit suite, clippy, fmt and test IDs. In a real window at 1x and 2x, both packed lines draw as described and the panel width did not change. A click on a packed box flips only that setting and lights the arrow, a label shows its own tip, and Tab moves the single focus outline to the next box.
+	- Branch: tabpack
+	- Commit: 98a60d6
+	- Test case: `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM), which failed with packing turned off and passes with it. `a_sub_group_indents_labels_and_nothing_else` (Em3akaG) is commented out, since a packed line's first box leaves the control column. It is replaced by `a_sub_group_indents_labels_and_nothing_else_off_a_packed_line` (Es2i58B).
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -235,21 +261,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
-
-- The "Tab text" options are wonky. There's too much space between "Program title" and its checkbox.
-	- ID: 2026100710173200
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261007-101732
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100614510984
-	- Target OS: All
-	- Requirements:
-		- The gap is because of the column system for labels and controls. But for a more efficient and effective dialog system, some elements need to be able to break out of that system.
-	- Notes:
-		- Before RC1.
 
 - macOS: the git prompt's second line starts with an empty box
 	- ID: 2026100709325307

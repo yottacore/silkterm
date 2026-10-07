@@ -556,6 +556,9 @@ const CAPTURE_PROMPT: &str = "Press keys - Esc cancels, Backspace turns off";
 const PAIR_GAP: f32 = 12.0;
 // Between a shared line's part label and the box after it, DIP.
 const PART_LABEL_GAP: f32 = 6.0;
+// Between one toggle and the next label on a packed line, DIP. Well over
+// PART_LABEL_GAP, so each label reads with its own box.
+const PACK_GAP: f32 = 24.0;
 
 // The warning mark after a label, in UI line heights, so it grows with the
 // interface font. Ratios, because the label column is measured in physical
@@ -1017,12 +1020,55 @@ impl SettingsDialog {
 		let parts = 1 + specs[lead + 1..].iter().take_while(|s| s.beside).count();
 		(lead, parts, i - lead)
 	}
+	// A line of toggles packs at its natural width, out of the label and control
+	// columns: each label right before its own box, a fixed gap to the next one
+	// (2026100710173200). A line with anything else on it splits the column.
+	fn packs(specs: &[Spec], i: usize) -> bool {
+		let (lead, parts, _) = Self::line_of(specs, i);
+		parts > 1
+			&& specs[lead..lead + parts]
+				.iter()
+				.all(|s| matches!(s.kind, Kind::Toggle))
+	}
+	// Where part `k` of the packed line led by `lead` puts its label and its box,
+	// in from the line's left edge. A warning mark rides with its label.
+	fn packed_at(
+		specs: &[Spec],
+		lead: usize,
+		k: usize,
+		label_ws: &[f32],
+		line_h: f32,
+	) -> (f32, f32) {
+		let mut x = 0.0;
+		for (j, spec) in specs.iter().enumerate().skip(lead).take(k + 1) {
+			let label = if spec.label.is_empty() {
+				0.0
+			} else {
+				let mark = if spec.warning.is_empty() {
+					0.0
+				} else {
+					warning_room(line_h)
+				};
+				label_ws.get(j).copied().unwrap_or(0.0) + mark + PART_LABEL_GAP
+			};
+			if j == lead + k {
+				return (x, x + label);
+			}
+			x += label + lay().swatch + PACK_GAP;
+		}
+		(x, x)
+	}
+	// How far a packed line runs, from its first label to the end of its last box.
+	fn packed_w(specs: &[Spec], lead: usize, label_ws: &[f32], line_h: f32) -> f32 {
+		let (_, parts, _) = Self::line_of(specs, lead);
+		Self::packed_at(specs, lead, parts - 1, label_ws, line_h).1 + lay().swatch
+	}
 	// The control column a line led by `lead` needs, from what each part has to
 	// show: a dropdown its pair floor, a toggle its box and any label before it.
 	// The middle parts lose a whole gap to their neighbors and the end ones half.
 	fn line_need(specs: &[Spec], lead: usize, label_ws: &[f32], font_scale: f32) -> f32 {
 		let (_, parts, _) = Self::line_of(specs, lead);
-		if parts < 2 {
+		if parts < 2 || Self::packs(specs, lead) {
 			return 0.0;
 		}
 		let n = parts as f32;
@@ -1280,8 +1326,20 @@ impl SettingsDialog {
 		} else {
 			0.0
 		};
+		// a packed line of toggles ignores the columns, so it is a floor of its own
+		let packed_w = (0..specs.len())
+			.filter(|&lead| !specs[lead].beside && Self::packs(specs, lead))
+			.map(|lead| {
+				lay().pad
+					+ f32::from(specs[lead].indent) * lay().indent
+					+ Self::packed_w(specs, lead, label_ws, line_h)
+					+ 6.0 + lay().revert_width
+					+ lay().pad
+			})
+			.fold(0.0f32, f32::max);
 		let w = (lay().width + (label_w - lay().label_width) + (btn_w - lay().button_width) * 3.0)
 			.max(tabs_w)
+			.max(packed_w)
 			.max(radio_w)
 			.max(dd_w)
 			.max(btns_w)
@@ -1595,6 +1653,9 @@ impl SettingsDialog {
 	}
 	// The same, for one row: a row sharing its line stops at the end of its part.
 	fn ctl_right(&self, i: usize) -> f32 {
+		if Self::packs(self.specs, i) {
+			return self.control_x(i) + lay().swatch;
+		}
 		let (_, parts, k) = Self::line_of(self.specs, i);
 		self.part_span(k, parts).1
 	}
@@ -2444,6 +2505,9 @@ impl SettingsDialog {
 	}
 	// Left edge of a row's label: its own sub-group depth in from the panel pad.
 	fn label_x(&self, i: usize) -> f32 {
+		if Self::packs(self.specs, i) {
+			return self.packed_x(i).0;
+		}
 		if self.specs[i].beside {
 			// part of a shared line has no label column: its label starts its part
 			let (_, parts, k) = Self::line_of(self.specs, i);
@@ -2451,9 +2515,13 @@ impl SettingsDialog {
 		}
 		self.content_x() + lay().pad + f32::from(self.specs[i].indent) * lay().indent
 	}
-	// Where row `i`'s controls start. A shared line splits the control column
-	// evenly, and a part with a label of its own puts the control after it.
+	// Where row `i`'s controls start. A packed line puts each box right after its
+	// label. Any other shared line splits the control column evenly, and a part
+	// with a label of its own puts the control after it.
 	fn control_x(&self, i: usize) -> f32 {
+		if Self::packs(self.specs, i) {
+			return self.packed_x(i).1;
+		}
 		let (_, parts, k) = Self::line_of(self.specs, i);
 		let start = self.part_span(k, parts).0;
 		if self.specs[i].beside && !self.specs[i].label.is_empty() {
@@ -2461,6 +2529,15 @@ impl SettingsDialog {
 		} else {
 			start
 		}
+	}
+	// Label and box of row `i` on a packed line. The line starts where its first
+	// row's label would, indent and all.
+	fn packed_x(&self, i: usize) -> (f32, f32) {
+		let (lead, _, k) = Self::line_of(self.specs, i);
+		let start =
+			self.content_x() + lay().pad + f32::from(self.specs[lead].indent) * lay().indent;
+		let (label, ctl) = Self::packed_at(self.specs, lead, k, &self.label_ws, self.line_h);
+		(start + label, start + ctl)
 	}
 	// Top of a control `h` tall, centered in row `i`'s line.
 	fn centered_in_row(&self, i: usize, h: f32) -> f32 {
@@ -5568,10 +5645,13 @@ pub fn chrome_widths(
 	// deepest one plus its own indent - not merely the longest string - and a
 	// warning mark after one
 	let line_h = text.ui_line_h;
-	let label_w = ui()
-		.specs
+	let specs = &ui().specs;
+	let label_w = specs
 		.iter()
-		.map(|spec| {
+		.enumerate()
+		// a packed line's labels sit beside their own boxes, not in the column
+		.filter(|&(i, _)| !SettingsDialog::packs(specs, i))
+		.map(|(_, spec)| {
 			let mark = if spec.warning.is_empty() {
 				0.0
 			} else {
@@ -6251,6 +6331,76 @@ mod tests {
 		}
 	}
 
+	// A line of toggles packs at its natural width (2026100710173200): every
+	// label, the first one's included, sits PART_LABEL_GAP before its own box
+	// instead of across the label column, and the next label starts PACK_GAP
+	// after it. A click, the focus ring and the tip all follow the box where it
+	// is drawn. A line of anything else still splits the control column.
+	// Test ID: Es2i5CM
+	#[test]
+	fn a_line_of_toggles_packs_each_label_against_its_box() {
+		for scale in [1.0f32, 2.0] {
+			let mut d = mk_dialog_at(4000.0, scale);
+			let (w, h) = d.natural;
+			d.set_size(w * scale, h * scale);
+			let (mut packed, mut split) = (0, 0);
+			for lead in 0..d.specs.len() {
+				let (_, parts, _) = SettingsDialog::line_of(d.specs, lead);
+				if d.specs[lead].beside || parts < 2 {
+					continue;
+				}
+				d.tab = d.specs[lead].tab;
+				if !d.specs[lead..lead + parts]
+					.iter()
+					.all(|s| matches!(s.kind, Kind::Toggle))
+				{
+					split += 1;
+					assert!(!SettingsDialog::packs(d.specs, lead));
+					let column = d.rect.x + super::lay().pad + d.label_w;
+					assert!((d.control_x(lead) - column).abs() < 0.01, "{scale}");
+					continue;
+				}
+				packed += 1;
+				for i in lead..lead + parts {
+					let key = d.specs[i].key;
+					let bx = d.checkbox(i);
+					let label_end = d.label_x(i) + chars7(d.specs[i].label);
+					assert!(
+						(bx.x - label_end - super::PART_LABEL_GAP).abs() < 0.01,
+						"{key:?}: label to box is {} ({scale})",
+						bx.x - label_end
+					);
+					if i > lead {
+						let prev = d.checkbox(i - 1);
+						assert!(
+							(d.label_x(i) - (prev.x + prev.w) - super::PACK_GAP).abs() < 0.01,
+							"{key:?}: gap to the toggle before is {} ({scale})",
+							d.label_x(i) - (prev.x + prev.w)
+						);
+					}
+					assert_eq!(d.focus_ctl_rect(i, 0), bx, "{key:?}: focus ring");
+					let mid = bx.y + bx.h / 2.0;
+					for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
+						let tip = d.hover_tip_dip(x, mid, &mut chars7).map(|(t, _)| t);
+						assert_eq!(tip, Some(d.specs[i].help), "{key:?} tip at {x}");
+					}
+					let was = d.get_toggle(key);
+					d.mouse_down_dip(bx.x + bx.w / 2.0, mid, &mut chars7);
+					assert_eq!(d.get_toggle(key), !was, "{key:?}: click on its box");
+					assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
+					d.set_toggle(key, was);
+				}
+				let last = d.checkbox(lead + parts - 1);
+				assert!(
+					last.x + last.w < d.revert_box(lead).x,
+					"runs into the arrow"
+				);
+			}
+			assert!(packed >= 2, "the tab text and re-test lines, saw {packed}");
+			assert!(split >= 1, "the scrim dropdown pair, saw {split}");
+		}
+	}
+
 	// A pair shares one revert arrow, so a profile showing the FIRST half must not
 	// silence the arrow for the second - which is not governed and can still be
 	// off its default with no other way back.
@@ -6353,12 +6503,63 @@ mod tests {
 		assert!(d.rows_y0() > gut.y + gut.h, "rows begin below that line");
 	}
 
+	// Commented out 20261007: a packed line of toggles leaves the control column
+	// (2026100710173200), so its first row's box no longer starts there. Replaced
+	// by `a_sub_group_indents_labels_and_nothing_else_off_a_packed_line` (Es2i58B),
+	// which skips packed lines the way this skipped `beside` rows.
+	// // The whole point of a sub-group: the label steps right, the control does
+	// // not. A control that moved with its label would break the one column every
+	// // row shares, which is what makes a settings list scannable.
+	// // Test ID: Em3akaG
+	// #[test]
+	// fn a_sub_group_indents_labels_and_nothing_else() {
+	// 	let mut d = mk_dialog(4000.0);
+	// 	let mut seen_indented = false;
+	// 	for tab in 0..tab_titles().len() {
+	// 		d.tab = tab;
+	// 		let rows: Vec<usize> = SettingsDialog::visible(d.specs, tab)
+	// 			.map(|(i, _)| i)
+	// 			.collect();
+	// 		for &i in &rows {
+	// 			// a row drawn beside another has no label column of its own
+	// 			if d.specs[i].beside {
+	// 				continue;
+	// 			}
+	// 			let indent = f32::from(d.specs[i].indent);
+	// 			seen_indented |= indent > 0.0;
+	// 			assert!(
+	// 				(d.label_x(i) - (d.rect.x + super::lay().pad + indent * super::lay().indent))
+	// 					.abs() < 0.01
+	// 			);
+	// 			assert!(
+	// 				d.label_x(i) >= d.rect.x + super::lay().pad,
+	// 				"a label never steps left of the panel pad"
+	// 			);
+	// 			// every control on the tab starts in the same column
+	// 			assert!((d.control_x(i) - (d.rect.x + super::lay().pad + d.label_w)).abs() < 0.01);
+	// 			assert!(
+	// 				d.label_x(i) + super::lay().indent <= d.control_x(i),
+	// 				"the label column still clears the deepest indent"
+	// 			);
+	// 		}
+	// 		// a member is never deeper than one step below its leader
+	// 		let rows: Vec<usize> = rows.into_iter().filter(|&i| !d.specs[i].beside).collect();
+	// 		for pair in rows.windows(2) {
+	// 			let (prev, next) = (d.specs[pair[0]].indent, d.specs[pair[1]].indent);
+	// 			assert!(next <= prev + 1, "sub-group depth jumps more than one step");
+	// 		}
+	// 	}
+	// 	assert!(seen_indented, "no sub-groups declared at all");
+	// }
+
 	// The whole point of a sub-group: the label steps right, the control does
 	// not. A control that moved with its label would break the one column every
 	// row shares, which is what makes a settings list scannable.
-	// Test ID: Em3akaG
+	// A packed line of toggles is the one exception (2026100710173200), and has
+	// its own test.
+	// Test ID: Es2i58B
 	#[test]
-	fn a_sub_group_indents_labels_and_nothing_else() {
+	fn a_sub_group_indents_labels_and_nothing_else_off_a_packed_line() {
 		let mut d = mk_dialog(4000.0);
 		let mut seen_indented = false;
 		for tab in 0..tab_titles().len() {
@@ -6367,8 +6568,9 @@ mod tests {
 				.map(|(i, _)| i)
 				.collect();
 			for &i in &rows {
-				// a row drawn beside another has no label column of its own
-				if d.specs[i].beside {
+				// a row drawn beside another has no label column of its own, and
+				// a packed line uses neither column
+				if d.specs[i].beside || SettingsDialog::packs(d.specs, i) {
 					continue;
 				}
 				let indent = f32::from(d.specs[i].indent);
