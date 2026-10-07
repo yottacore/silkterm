@@ -2616,8 +2616,10 @@ mod tests {
 		);
 	}
 
-	// A wallpaper given as BC1 is drawn where the plain one is, padded to whole
-	// blocks and with a border too, and a device without BC gets it plain.
+	// A wallpaper given as BC1 or BC7 is drawn where the plain one is, padded
+	// to whole blocks and with a border too, and a device without BC gets it
+	// plain. BC7 goes through the device's own decoder here, so a block laid
+	// out wrong in bc7.rs shows even where its own decode agrees with it.
 	// Test ID: Erz0m6t
 	#[test]
 	fn a_bc1_wallpaper_draws_like_the_plain_one() {
@@ -2643,11 +2645,19 @@ mod tests {
 				..Default::default()
 			}))
 			.expect("a device without BC");
-		// 8 texel squares line up with the 4x4 blocks, so BC1 keeps each one a
-		// flat color and only a misplaced sample can move a pixel far
-		for (picture, border) in [((203, 117), false), ((100, 71), true)] {
+		// 8 texel squares line up with the 4x4 blocks, so BC keeps each one a
+		// flat color and only a misplaced sample can move a pixel far. Black
+		// speckled with a dark gray both kinds keep exact takes BC7's other mode.
+		for (picture, border, speckled) in [
+			((203, 117), false, false),
+			((100, 71), true, false),
+			((70, 66), false, true),
+		] {
 			let rgba = image::RgbaImage::from_fn(picture.0, picture.1, |x, y| {
-				if (x / 8 + y / 8) % 2 == 0 {
+				if speckled {
+					let lit = (x * 7 + y * 3) % 5 < 2;
+					image::Rgba(if lit { [8, 12, 8, 255] } else { [0, 0, 0, 255] })
+				} else if (x / 8 + y / 8) % 2 == 0 {
 					image::Rgba([230, 140, 40, 255])
 				} else {
 					image::Rgba([20, 60, 120, 255])
@@ -2671,49 +2681,75 @@ mod tests {
 				anchor: [0.5, 0.5],
 				held,
 				border,
-				bc1: None,
+				blocks: None,
 			};
-			let packed = crate::wallpaper::Prepared {
-				bc1: Some(std::sync::Arc::new(crate::bc1::encode(&rgba))),
-				..plain.clone()
-			};
-			let window = (held.0 * 3, held.1 * 3);
-			// The loss probe reads the texture back, which GL cannot do for a
-			// compressed one: the copy is skipped and the zeros read as lost.
-			let draw = |device: &wgpu::Device, queue: &wgpu::Queue, img| {
-				let mut renderer = crate::bgimage::ImageRenderer::new(device, queue, FB_HDR, img);
-				let probed = renderer.vram_check_start(device, queue);
-				let line = renderer.memdbg_line();
-				(
-					line,
-					probed,
-					draw_offscreen(device, queue, window, &renderer),
-				)
-			};
-			let (line, probed, want) = draw(&gpu.device, &gpu.queue, &plain);
-			assert!(!line.contains("BC1") && probed, "{line}");
-			let (line, probed, got) = draw(&gpu.device, &gpu.queue, &packed);
-			assert!(line.contains("as BC1") && !probed, "{line}");
-			let (line, probed, fallback) = draw(&plain_device, &plain_queue, &packed);
-			assert!(!line.contains("BC1") && probed, "{line}");
-			let worst = |a: &[u8], b: &[u8]| {
-				a.iter()
-					.zip(b)
-					.map(|(x, y)| x.abs_diff(*y))
-					.max()
-					.unwrap_or(0)
-			};
-			assert!(
-				worst(&want, &got) <= 2,
-				"{picture:?}: BC1 off by {}",
-				worst(&want, &got)
-			);
-			assert!(
-				worst(&want, &fallback) <= 2,
-				"{picture:?}: the plain fallback off by {}",
-				worst(&want, &fallback)
-			);
+			for packing in [
+				crate::wallpaper::Packing::Bc1,
+				crate::wallpaper::Packing::Bc7,
+			] {
+				let packed = crate::wallpaper::Prepared {
+					blocks: Some(crate::wallpaper::Blocks {
+						packing,
+						bytes: std::sync::Arc::new(packing.encode(&rgba)),
+					}),
+					..plain.clone()
+				};
+				drawn_alike(
+					&gpu,
+					(&plain_device, &plain_queue),
+					&plain,
+					&packed,
+					picture,
+				);
+			}
 		}
+	}
+
+	fn drawn_alike(
+		gpu: &DialogGpu,
+		(plain_device, plain_queue): (&wgpu::Device, &wgpu::Queue),
+		plain: &crate::wallpaper::Prepared,
+		packed: &crate::wallpaper::Prepared,
+		picture: (u32, u32),
+	) {
+		let name = packed.blocks.as_ref().map_or("plain", |b| b.packing.name());
+		let held = plain.held;
+		let window = (held.0 * 3, held.1 * 3);
+		// The loss probe reads the texture back, which GL cannot do for a
+		// compressed one: the copy is skipped and the zeros read as lost.
+		let draw = |device: &wgpu::Device, queue: &wgpu::Queue, img| {
+			let mut renderer = crate::bgimage::ImageRenderer::new(device, queue, FB_HDR, img);
+			let probed = renderer.vram_check_start(device, queue);
+			let line = renderer.memdbg_line();
+			(
+				line,
+				probed,
+				draw_offscreen(device, queue, window, &renderer),
+			)
+		};
+		let (line, probed, want) = draw(&gpu.device, &gpu.queue, plain);
+		assert!(!line.contains(" as ") && probed, "{line}");
+		let (line, probed, got) = draw(&gpu.device, &gpu.queue, packed);
+		assert!(line.contains(&format!("as {name}")) && !probed, "{line}");
+		let (line, probed, fallback) = draw(plain_device, plain_queue, packed);
+		assert!(!line.contains(" as ") && probed, "{line}");
+		let worst = |a: &[u8], b: &[u8]| {
+			a.iter()
+				.zip(b)
+				.map(|(x, y)| x.abs_diff(*y))
+				.max()
+				.unwrap_or(0)
+		};
+		assert!(
+			worst(&want, &got) <= 2,
+			"{picture:?}: {name} off by {}",
+			worst(&want, &got)
+		);
+		assert!(
+			worst(&want, &fallback) <= 2,
+			"{picture:?}: the plain fallback off by {}",
+			worst(&want, &fallback)
+		);
 	}
 
 	const FB_HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;

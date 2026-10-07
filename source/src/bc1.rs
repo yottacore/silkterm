@@ -19,21 +19,40 @@ pub fn padded((w, h): (u32, u32)) -> (u32, u32) {
 }
 
 /// How many bytes `encode` makes for a picture this big.
-pub fn len_for((w, h): (u32, u32)) -> usize {
-	w.div_ceil(4) as usize * h.div_ceil(4) as usize * BLOCK_BYTES
+pub fn len_for(size: (u32, u32)) -> usize {
+	blocks_in(size) * BLOCK_BYTES
 }
 
-type Texel = [i32; 3];
+/// 4x4 blocks in a picture this big, edges rounded up.
+pub fn blocks_in((w, h): (u32, u32)) -> usize {
+	w.div_ceil(4) as usize * h.div_ceil(4) as usize
+}
+
+/// One texel's red, green and blue.
+pub type Texel = [i32; 3];
 
 /// Blocks in rows, left to right. The alpha is not read. About 0.1 s of
 /// CPU at 2560x1440, so it is shared out over a few threads.
 pub fn encode(rgba: &image::RgbaImage) -> Vec<u8> {
+	let tables = tables();
+	encode_blocks(rgba, BLOCK_BYTES, &|block, out| {
+		out.copy_from_slice(&encode_block(block, tables));
+	})
+}
+
+/// Walk `rgba` a 4x4 block at a time, `block_bytes` out for each, in rows
+/// left to right, shared over a few threads. Also what bc7.rs runs on.
+pub fn encode_blocks(
+	rgba: &image::RgbaImage,
+	block_bytes: usize,
+	encode_block: &(dyn Fn(&[Texel; 16], &mut [u8]) + Sync),
+) -> Vec<u8> {
 	let (w, h) = rgba.dimensions();
-	let mut out = vec![0; len_for((w, h))];
+	let mut out = vec![0; blocks_in((w, h)) * block_bytes];
 	if out.is_empty() {
 		return out;
 	}
-	let row_bytes = w.div_ceil(4) as usize * BLOCK_BYTES;
+	let row_bytes = w.div_ceil(4) as usize * block_bytes;
 	let rows = h.div_ceil(4) as usize;
 	let threads = std::thread::available_parallelism()
 		.map_or(1, std::num::NonZero::get)
@@ -44,9 +63,9 @@ pub fn encode(rgba: &image::RgbaImage) -> Vec<u8> {
 	std::thread::scope(|scope| {
 		for (n, blocks) in out.chunks_mut(band).enumerate() {
 			let first = n * band / row_bytes;
-			let job = move || encode_rows(rgba, first, blocks);
+			let job = move || encode_rows(rgba, first, blocks, block_bytes, encode_block);
 			if std::thread::Builder::new()
-				.name("bc1".into())
+				.name("bcn".into())
 				.spawn_scoped(scope, job)
 				.is_err()
 			{
@@ -56,7 +75,13 @@ pub fn encode(rgba: &image::RgbaImage) -> Vec<u8> {
 	});
 	for n in missed {
 		if let Some(blocks) = out.chunks_mut(band).nth(n) {
-			encode_rows(rgba, n * band / row_bytes, blocks);
+			encode_rows(
+				rgba,
+				n * band / row_bytes,
+				blocks,
+				block_bytes,
+				encode_block,
+			);
 		}
 	}
 	out
@@ -64,12 +89,17 @@ pub fn encode(rgba: &image::RgbaImage) -> Vec<u8> {
 
 // Block rows from `first` on, as many as `out` holds. Texels past the
 // picture repeat its edge, the way the sampler's clamp reads it.
-fn encode_rows(rgba: &image::RgbaImage, first: usize, out: &mut [u8]) {
+fn encode_rows(
+	rgba: &image::RgbaImage,
+	first: usize,
+	out: &mut [u8],
+	block_bytes: usize,
+	encode_block: &(dyn Fn(&[Texel; 16], &mut [u8]) + Sync),
+) {
 	let (w, h) = rgba.dimensions();
-	let tables = tables();
 	let across = w.div_ceil(4) as usize;
 	let mut block = [[0; 3]; 16];
-	for (n, bytes) in out.chunks_exact_mut(BLOCK_BYTES).enumerate() {
+	for (n, bytes) in out.chunks_exact_mut(block_bytes).enumerate() {
 		let (bx, by) = ((n % across) as u32, (first + n / across) as u32);
 		for (i, texel) in block.iter_mut().enumerate() {
 			let x = (bx * 4 + i as u32 % 4).min(w - 1);
@@ -77,7 +107,7 @@ fn encode_rows(rgba: &image::RgbaImage, first: usize, out: &mut [u8]) {
 			let px = rgba.get_pixel(x, y);
 			*texel = [i32::from(px[0]), i32::from(px[1]), i32::from(px[2])];
 		}
-		bytes.copy_from_slice(&encode_block(&block, tables));
+		encode_block(&block, bytes);
 	}
 }
 
@@ -290,9 +320,14 @@ fn encode_block(block: &[Texel; 16], tables: &Tables) -> [u8; 8] {
 	best.bytes()
 }
 
-// The block's main direction of color change, through its mean. The two ends
-// are where the texels reach furthest along it.
 fn along_the_axis(block: &[Texel; 16], mean: [f32; 3]) -> Encoded {
+	let [hi, lo] = axis_ends(block, mean);
+	Encoded::of(block, [quantize(hi), quantize(lo)])
+}
+
+/// The block's main direction of color change, through its mean, and the two
+/// points where the texels reach furthest along it, the higher first.
+pub fn axis_ends(block: &[Texel; 16], mean: [f32; 3]) -> [[f32; 3]; 2] {
 	let mut cov = [0.0f32; 6];
 	for texel in block {
 		let d = [0, 1, 2].map(|c| texel[c] as f32 - mean[c]);
@@ -336,7 +371,7 @@ fn along_the_axis(block: &[Texel; 16], mean: [f32; 3]) -> Encoded {
 		hi = hi.max(t);
 	}
 	let at = |t: f32| [0, 1, 2].map(|c| mean[c] + axis[c] * t);
-	Encoded::of(block, [quantize(at(hi)), quantize(at(lo))])
+	[at(hi), at(lo)]
 }
 
 // The endpoints that best fit the colors the texels picked: each texel is a

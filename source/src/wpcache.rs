@@ -3,9 +3,9 @@
 
 //! Prepared wallpapers kept on disk, so a launch, a return to a picture in
 //! rotation, a resize or a wake from the idle release reads a small file
-//! rather than blurring the original again. A picture the GPU gets as BC1 is
-//! kept as those blocks, which go back up wiht no decode or encode. One held
-//! plain is kept as JPEG. Every SilkTerm process on the box shares the
+//! rather than blurring the original again. A picture the GPU gets as BC1 or
+//! BC7 is kept as those blocks, which go back up wiht no decode or encode.
+//! One held plain is kept as JPEG. Every SilkTerm process on the box shares the
 //! folder: an entry is written to a temp file and renamed into place, and one
 //! that does not read back whole is removed and made again.
 
@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crate::autotheme::{SPREAD, Summary};
+use crate::wallpaper::{Blocks, Packing};
 
 // Part of every key. Bump it when `wallpaper::prepare_keeping` changes what it
 // makes, or old copies keep being shown until they age out.
@@ -25,7 +26,7 @@ const MAGIC: &[u8; 8] = b"silkwpc\x02";
 const EXT: &str = "wpc";
 
 /// Past this the least recently used copies go. A copy at 2560x1440 is 1.8 MiB
-/// as BC1, and 230 to 450 KiB as JPEG.
+/// as BC1, 3.5 MiB as BC7, and 230 to 450 KiB as JPEG.
 pub const LIMIT: u64 = 256 << 20;
 
 // The encoder's 4:4:4. At the default blur a copy is within 4 levels of the
@@ -122,19 +123,19 @@ fn fnv(bytes: &[u8]) -> u64 {
 #[derive(Debug)]
 pub struct Kept {
 	pub rgba: image::RgbaImage,
-	/// The blocks `rgba` was unpacked from, for a copy kept as BC1.
-	pub bc1: Option<Arc<Vec<u8>>>,
+	/// The blocks `rgba` was unpacked from, for a copy kept as BC1 or BC7.
+	pub blocks: Option<Blocks>,
 	/// The summary of the pixels as prepared, not as read back, so derived
 	/// colors come out the same with or without the copy. Its opacity is the
 	/// one it was stored with.
 	pub summary: Summary,
 }
 
-/// What `store` keeps: the BC1 blocks the window was given, and their
-/// picture's size, or plain pixels as JPEG.
+/// What `store` keeps: the blocks the window was given, and their picture's
+/// size, or plain pixels as JPEG.
 #[derive(Debug)]
 pub enum Stored {
-	Bc1((u32, u32), Arc<Vec<u8>>),
+	Blocks((u32, u32), Blocks),
 	Jpeg(image::RgbaImage),
 }
 
@@ -142,7 +143,7 @@ impl Stored {
 	/// The picture's size, and how it is kept, for the debug line.
 	pub fn describe(&self) -> ((u32, u32), &'static str) {
 		match self {
-			Stored::Bc1(size, _) => (*size, "BC1"),
+			Stored::Blocks(size, blocks) => (*size, blocks.packing.name()),
 			Stored::Jpeg(rgba) => (rgba.dimensions(), "JPEG"),
 		}
 	}
@@ -151,6 +152,7 @@ impl Stored {
 // How the picture after the header is kept.
 const AS_JPEG: u32 = 1;
 const AS_BC1: u32 = 2;
+const AS_BC7: u32 = 3;
 
 /// The nearest kept copy for `key` within 5% of `want`'s pixel count. A copy
 /// that does not read back whole is removed and the next one tried.
@@ -223,13 +225,19 @@ fn read(path: &Path, key: &Key, size: (u32, u32)) -> Option<Kept> {
 	if !at.0.is_empty() || fnv(picture) != hash {
 		return None;
 	}
-	let (rgba, bc1) = match kind {
-		AS_BC1 => {
-			let rgba = crate::bc1::decode(picture, size)?;
+	let (rgba, blocks) = match kind {
+		AS_BC1 | AS_BC7 => {
+			let packing = if kind == AS_BC1 {
+				Packing::Bc1
+			} else {
+				Packing::Bc7
+			};
+			let rgba = packing.decode(picture, size)?;
 			// the blocks are the file's tail: kept in place, not copied out
-			let mut blocks = bytes;
-			blocks.drain(..blocks.len() - len);
-			(rgba, Some(Arc::new(blocks)))
+			let mut tail = bytes;
+			tail.drain(..tail.len() - len);
+			let bytes = Arc::new(tail);
+			(rgba, Some(Blocks { packing, bytes }))
 		}
 		AS_JPEG => (
 			image::load_from_memory_with_format(picture, image::ImageFormat::Jpeg)
@@ -239,7 +247,11 @@ fn read(path: &Path, key: &Key, size: (u32, u32)) -> Option<Kept> {
 		),
 		_ => return None,
 	};
-	(rgba.dimensions() == size).then_some(Kept { rgba, bc1, summary })
+	(rgba.dimensions() == size).then_some(Kept {
+		rgba,
+		blocks,
+		summary,
+	})
 }
 
 struct Reader<'a>(&'a [u8]);
@@ -302,11 +314,15 @@ pub fn store(
 	}
 	let mut jpeg = Vec::new();
 	let (size, kind, picture) = match stored {
-		Stored::Bc1(size, blocks) => {
-			if blocks.len() != crate::bc1::len_for(*size) {
-				return Err(std::io::Error::other("BC1 blocks for another size"));
+		Stored::Blocks(size, blocks) => {
+			if blocks.bytes.len() != blocks.packing.len_for(*size) {
+				return Err(std::io::Error::other("blocks for another size"));
 			}
-			(*size, AS_BC1, blocks.as_slice())
+			let kind = match blocks.packing {
+				Packing::Bc1 => AS_BC1,
+				Packing::Bc7 => AS_BC7,
+			};
+			(*size, kind, blocks.bytes.as_slice())
 		}
 		Stored::Jpeg(rgba) => {
 			if rgba.pixels().any(|px| px[3] != u8::MAX) {
@@ -418,6 +434,7 @@ fn prune(dir: &Path, limit: u64, now: SystemTime) {
 #[cfg(test)]
 mod tests {
 	use super::{ABANDONED, EXT, Key, LIMIT, MAGIC, Stored, find, prune, read, store};
+	use crate::wallpaper::{Blocks, Packing};
 	use std::path::PathBuf;
 	use std::time::{Duration, SystemTime};
 
@@ -463,7 +480,7 @@ mod tests {
 		let summary = crate::autotheme::summarize(&rgba, 0.25);
 		assert!(store(&dir, &key, &Stored::Jpeg(rgba.clone()), &summary, LIMIT).unwrap());
 		let kept = find(&dir, &key, (300, 200)).expect("kept");
-		assert!(kept.bc1.is_none());
+		assert!(kept.blocks.is_none());
 		assert_eq!(
 			kept.summary, summary,
 			"the summary is the original's, exactly"
@@ -492,20 +509,37 @@ mod tests {
 	// Test ID: Erz0mF1
 	#[test]
 	fn a_bc1_copy_comes_back_block_for_block() {
-		let dir = folder("bc1");
-		let key = key("bc1");
+		blocks_come_back(Packing::Bc1);
+	}
+
+	// The same for BC7, and the copy says which it is.
+	// Test ID: Es1eZ5s
+	#[test]
+	fn a_bc7_copy_comes_back_block_for_block() {
+		blocks_come_back(Packing::Bc7);
+	}
+
+	fn blocks_come_back(packing: Packing) {
+		let name = packing.name();
+		let dir = folder(name);
+		let key = key(name);
 		let size = (301, 203);
 		let rgba = picture(size);
-		let blocks = std::sync::Arc::new(crate::bc1::encode(&rgba));
+		let blocks = Blocks {
+			packing,
+			bytes: std::sync::Arc::new(packing.encode(&rgba)),
+		};
 		let summary = crate::autotheme::summarize(&rgba, 0.25);
-		let stored = Stored::Bc1(size, blocks.clone());
+		let stored = Stored::Blocks(size, blocks.clone());
 		assert!(store(&dir, &key, &stored, &summary, LIMIT).unwrap());
 		let kept = find(&dir, &key, size).expect("kept");
-		assert_eq!(kept.bc1.as_deref(), Some(&*blocks));
-		assert_eq!(Some(kept.rgba), crate::bc1::decode(&blocks, size));
+		let back = kept.blocks.expect("blocks");
+		assert_eq!(back.packing, packing);
+		assert_eq!(back.bytes, blocks.bytes);
+		assert_eq!(Some(kept.rgba), packing.decode(&blocks.bytes, size));
 		assert_eq!(kept.summary, summary);
 		// blocks for another size are refused, not written
-		let wrong = Stored::Bc1((300, 203), blocks.clone());
+		let wrong = Stored::Blocks((300, 203), blocks.clone());
 		assert!(store(&dir, &self::key("wrong"), &wrong, &summary, LIMIT).is_err());
 		assert!(find(&dir, &self::key("wrong"), (300, 203)).is_none());
 		// one block flipped, lengths still right

@@ -7,6 +7,7 @@
 mod app;
 mod autotheme;
 mod bc1;
+mod bc7;
 mod bgimage;
 // Compiled by build.rs, which include!s it to bake the build number in. Pulled
 // into the crate only so its tests run with everything else.
