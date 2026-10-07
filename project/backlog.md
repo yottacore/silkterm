@@ -461,6 +461,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `cicd/tests/allocs/run.bash` (ErzCQC2), in pipeline stage 3. Allocations per frame at rest and in a drag select, limits 178 and 360.
 	- Note: Code review 20261003 item 18.
 
+- Repeated blocks that should be one helper
+	- ID: 2026100314050021
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs local test suite run?: A full `cicd.bash` run, since every stage 3 test line now goes through `fRunTest` or `fRunTest_MaySkip`.
+	- Needs external testing: A `cicd-win.ps1` run on vm925w or b29w with a dirty tree, so `fStashIfDirty` runs for real. It runs at publish, and in stage 0 when the branch is behind.
+	- Priority: Low
+	- Opened: 20261003-140500
+	- Opened by: CC
+	- Target OS: All
+	- Progress log:
+		- 20261003: app.rs: one wake-merge `match` pasted 15 times in `about_to_wait`, and the settings read, clone, persist and update sequence written out 11 times.
+		- 20261003: settings_ui.rs and dialog.rs: the quad, border and text closures copied four or five times each. `texts_dip` has its own copy of `clip_rect`.
+		- 20261003: gfx.rs and bgimage.rs build the same VRAM readback probe. The Oklab matrix is in autotheme.rs and palette.rs. `LUMA` is defined twice and `text::gray_of` writes out `config::luma` by hand.
+		- 20261003: config.rs works out the base font size the same way in three functions. A program's base name is found four ways across shells.rs and integration.rs, and `shells::launch` strips `.exe` from a name that has none. macmenu.rs has its own `APP_NAME`.
+		- 20261003: cicd.bash has 21 near-identical test script blocks. cicd-win.ps1 repeats one stash block.
+		- 20261006: app.rs: the 18 wake merges in `about_to_wait` are `wake_by` calls. The 11 settings edits go through `set_live`, for the session only, or `save_live`, which also writes what changed.
+		- 20261006: settings_ui.rs and dialog.rs share one `quad` and one `border`. The text closures build on `TextItem::plain`, and `texts_dip` uses `clip_rect`. The dropdown's own four-quad frame is a `border` call now.
+		- 20261006: `config::LUMA` is the one set of weights, used by contrast.rs, autotheme.rs, visibility.rs and `config::luma`. `text::gray_of` and `min_contrast_for` call `config::luma`. Oklab from linear light is `palette::to_oklab_linear`, shared by `to_oklab` and autotheme.rs.
+		- 20261006: config.rs works out the base font size in `base_font_size`. integration.rs has one `program_base` for `is_powershell` and `is_bash`. `shells::base_name` stays separate, since it follows the host's own path rules, and `launch` no longer strips `.exe` a second time. macmenu.rs uses `config::APP_NAME`.
+		- 20261006: cicd.bash: 25 plain test blocks are now `fRunTest` lines and the 8 with a skip exit are `fRunTest_MaySkip` lines. cicd-win.ps1 has `fStashIfDirty`, and git's own output goes to the screen rather than into its answer.
+		- 20261006: The gfx.rs and bgimage.rs readback probe is split out as 2026100622234832, since branch `wpbc1` changes both files there.
+		- 20261006: Verified: unit suite (1184) passes, fmt, clippy for Linux, Windows and macOS, the bash-style, shellcheck, ps-lint, Python lint, docs and test ID gates, and the cicd-win pieces test. Both PowerShell files parse.
+		- 20261006: Verified: the stage 3 test lines print and exit the same as the old blocks for every script passing, failing, skipping or missing, with and without `--quick`. The plan `cicd.bash` prints is unchanged.
+		- 20261006: Verified: `a_wake_folds_into_the_flow_by_the_earliest` fails with `max` in place of `min`, and the stash check fails when git's output reaches the answer.
+	- Origin: 754c9cb8 (2026-10-03) for the wake merge, 5456e2a (2026-07-09) for the dialog closures, 2acb998 (2026-07-22) for the probe, 02482bb (2026-10-01) for `APP_NAME`. No earlier review item. Confirmed.
+	- Branch: onehelper
+	- Commit: acb89f6
+	- Test case: The existing tests over each area, plus `a_wake_folds_into_the_flow_by_the_earliest` (ErzM4AJ) and the stash check in `cicd/tests/cicd-win/run.bash` (Er2UgYE).
+	- Swept: no `until.min(wake)` left outside `wake_by`. No quad or border closure left in settings_ui.rs or dialog.rs. `0.2126` is left only in `config::LUMA` and a theme.rs test, which weighs sRGB bytes on purpose. The Oklab matrix is only in palette.rs. `APP_NAME` is only in config.rs. The two-separator base names in term.rs and minimap.rs are left: `wsl_cd` matches both spellings itself, and `trim_exe` hands back a borrowed name for a compare that ignores case.
+	- Note: Code review 20261003 item 21.
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -534,36 +566,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: An in-house BC1 encoder, a few hundred lines, no crate. BC7 only if a test finds BC1 banding, and that comes back as a question first.
 	- Closed:
 
-- Repeated blocks that should be one helper
-	- ID: 2026100314050021
+- One VRAM readback probe for gfx.rs and bgimage.rs
+	- ID: 2026100622234832
 	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: A full `cicd.bash` run, since every stage 3 test line now goes through `fRunTest` or `fRunTest_MaySkip`.
-	- Needs external testing: A `cicd-win.ps1` run on vm925w or b29w with a dirty tree, so `fStashIfDirty` runs for real. It runs at publish, and in stage 0 when the branch is behind.
+	- Status: Queued
 	- Priority: Low
-	- Opened: 20261003-140500
+	- Opened: 20261006-222348
 	- Opened by: CC
+	- Parent ID: 2026100314050021
+	- Prereq IDs: 2026100418225507
 	- Target OS: All
+	- Requirements:
+		- gfx.rs and bgimage.rs build the same readback probe. Make it one helper.
 	- Progress log:
-		- 20261003: app.rs: one wake-merge `match` pasted 15 times in `about_to_wait`, and the settings read, clone, persist and update sequence written out 11 times.
-		- 20261003: settings_ui.rs and dialog.rs: the quad, border and text closures copied four or five times each. `texts_dip` has its own copy of `clip_rect`.
-		- 20261003: gfx.rs and bgimage.rs build the same VRAM readback probe. The Oklab matrix is in autotheme.rs and palette.rs. `LUMA` is defined twice and `text::gray_of` writes out `config::luma` by hand.
-		- 20261003: config.rs works out the base font size the same way in three functions. A program's base name is found four ways across shells.rs and integration.rs, and `shells::launch` strips `.exe` from a name that has none. macmenu.rs has its own `APP_NAME`.
-		- 20261003: cicd.bash has 21 near-identical test script blocks. cicd-win.ps1 repeats one stash block.
-		- 20261006: app.rs: the 18 wake merges in `about_to_wait` are `wake_by` calls. The 11 settings edits go through `set_live`, for the session only, or `save_live`, which also writes what changed.
-		- 20261006: settings_ui.rs and dialog.rs share one `quad` and one `border`. The text closures build on `TextItem::plain`, and `texts_dip` uses `clip_rect`. The dropdown's own four-quad frame is a `border` call now.
-		- 20261006: `config::LUMA` is the one set of weights, used by contrast.rs, autotheme.rs, visibility.rs and `config::luma`. `text::gray_of` and `min_contrast_for` call `config::luma`. Oklab from linear light is `palette::to_oklab_linear`, shared by `to_oklab` and autotheme.rs.
-		- 20261006: config.rs works out the base font size in `base_font_size`. integration.rs has one `program_base` for `is_powershell` and `is_bash`. `shells::base_name` stays separate, since it follows the host's own path rules, and `launch` no longer strips `.exe` a second time. macmenu.rs uses `config::APP_NAME`.
-		- 20261006: cicd.bash: 25 plain test blocks are now `fRunTest` lines and the 8 with a skip exit are `fRunTest_MaySkip` lines. cicd-win.ps1 has `fStashIfDirty`, and git's own output goes to the screen rather than into its answer.
-		- 20261006: The gfx.rs and bgimage.rs readback probe is left for after branch `wpbc1` merges, since that branch changes both files there.
-		- 20261006: Verified: unit suite (1184) passes, fmt, clippy for Linux, Windows and macOS, the bash-style, shellcheck, ps-lint, Python lint, docs and test ID gates, and the cicd-win pieces test. Both PowerShell files parse.
-		- 20261006: Verified: the stage 3 test lines print and exit the same as the old blocks for every script passing, failing, skipping or missing, with and without `--quick`. The plan `cicd.bash` prints is unchanged.
-		- 20261006: Verified: `a_wake_folds_into_the_flow_by_the_earliest` fails with `max` in place of `min`, and the stash check fails when git's output reaches the answer.
-	- Origin: 754c9cb8 (2026-10-03) for the wake merge, 5456e2a (2026-07-09) for the dialog closures, 2acb998 (2026-07-22) for the probe, 02482bb (2026-10-01) for `APP_NAME`. No earlier review item. Confirmed.
-	- Branch: onehelper
-	- Commit: acb89f6
-	- Test case: The existing tests over each area, plus `a_wake_folds_into_the_flow_by_the_earliest` (ErzM4AJ) and the stash check in `cicd/tests/cicd-win/run.bash` (Er2UgYE).
-	- Swept: no `until.min(wake)` left outside `wake_by`. No quad or border closure left in settings_ui.rs or dialog.rs. `0.2126` is left only in `config::LUMA` and a theme.rs test, which weighs sRGB bytes on purpose. The Oklab matrix is only in palette.rs. `APP_NAME` is only in config.rs. The two-separator base names in term.rs and minimap.rs are left: `wsl_cd` matches both spellings itself, and `trim_exe` hands back a borrowed name for a compare that ignores case.
+		- 20261006: Split from 2026100314050021. Waits on branch `wpbc1`, which changes the readback in both files.
 	- Note: Code review 20261003 item 21.
 
 - Errors are plain strings in most modules and `anyhow` in a few
