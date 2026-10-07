@@ -467,7 +467,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: Built first, as high quality JPEG. Block compression (2026100418225507) stays queued.
 		- 20261006: Prune at 256 MB, oldest used first.
 	- Branch: wpcache
-	- Commit:
+	- Commit: 34fa3fe
 	- Test case: Unit tests EryHHqn, EryHHuh, EryHHyF, EryHI1u, EryHI5c, EryHI98, EryHICk. Window test `cicd/tests/wpkept/run.bash` (EryJg1H) in stage 3.
 
 - Small repeated work on the frame and drag paths
