@@ -382,7 +382,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- The idle switch's mark shows on every platform, since a driver anywhere can have trouble with it.
 	- Transparency keeps its one mark. In the Windows build the mark's tip adds that a window in view keeps its graphics memory. A row field, `windows_warning`, holds the Windows text in place of `warning`.
 	- On Wayland "Minutes when hidden" is grayed, since Wayland never tells a window it is minimized or covered. Its tip says the other wait is the one used.
-	- "Always use software rendering" stays grayed on macOS, as before.
+	- "Always use software rendering" is left out of the macOS build, which can never use it. It was grayed there before.
 
 ## Alternative ideas
 

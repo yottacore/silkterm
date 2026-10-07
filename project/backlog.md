@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - macOS: Command+Shift+[ and ] should switch tabs, and there should be a Window menu
 	- ID: 2026100219054497
 	- Type: Feature
-	- Status: Waiting for answers
+	- Status: Done
 		- Command+Shift+[ and ] doesn't work reliably, seems to be tied in to system screenshots.
 		- Command+{ and } works.
 	- Needs external testing: On b26, Command+Shift+[ goes to the tab on the left and Command+Shift+] to the one on the right, round the ends, from the keyboard and from the Window menu. The menu shows the chord, as either Shift+Command+[ or Command+{.
@@ -45,6 +45,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Window menu comes after Panes with Minimize (Command+M), Zoom, Show previous tab, Show next tab and Bring all to front, then the open windows, which macOS adds. Command+M minimizes, Zoom zooms, and Settings is listed while it is open. Note anything else macOS 15.8 adds there, such as its tiling rows.
 		- With Settings open, the two tab rows and their chords change the dialog's tab.
 		- Neither View nor Window has Show Tab Bar, Merge All Windows or a second pair of tab rows, since the system's own window tabs are off.
+		- 20261006: Closed with these Window menu rows not looked at by hand. The unit tests cover them.
 	- Priority: Avg
 	- Opened: 20261002-190545
 	- Opened by: JC
@@ -62,8 +63,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: SilkTerm's side checks out on b26, so no code changed. Command+Shift+[ and ] change tabs whether the press comes in as { and } or as [ and ] with Shift. Command+Shift+3 and Command+[ do nothing, and no alert sound plays for any of them.
 		- 20261006: What can be changed outside SilkTerm: the session's keyboard mode in the RustDesk toolbar, or the client's keyboard layout. Turning off "Save picture of screen as a file" in System Settings > Keyboard > Keyboard Shortcuts > Screenshots stops the screenshots, but the tab chord still would not arrive.
 		- 20261006: Question: Which machine, keyboard layout and RustDesk keyboard mode is b26 reached from? The chord stays Command+Shift+[ and ], the Mac standard. Should this close once the Window menu checks pass, or should a second chord be added for the remote session?
+		- 20261006: b26 is reached from a custom keyboard through RustDesk, so that path turns Shift+[ into Shift+3. Closed, since the chord works when it arrives.
 	- Decisions:
 		- 20261002: Command+Shift+[ and ] switch tabs, and the menu bar gets a Window menu.
+		- 20261006: No second chord for the remote session.
 	- Done:
 		- Command+Shift+[ and ] are in the Command chord table, so they work as keys and show on the Window menu's Show previous tab and Show next tab rows. A Mac reports Shift+[ as "{" on a US layout, so both spellings count, and the menu row is handed "{" with Command, the form macOS matches.
 		- The Window menu is last on the menu bar: Minimize (Command+M), Zoom, the two tab rows, and Bring all to front. Minimize, Zoom and Bring all to front are done by macOS itself. It is set as the app's window menu, so macOS lists the open windows under it.
@@ -80,7 +83,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings: the four tab text toggles on one line, with one revert arrow
 	- ID: 2026100614510984
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261006-145109
 	- Opened by: JC
@@ -99,6 +102,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: The revert arrow is lit when any of the four is off its default, and puts all four back, config lines included.
 	- Decisions:
 		- 20261006: Each toggle keeps its own tip, shown over its box or its label.
+		- 20261006: "Program title", and labels before the box on a shared line, both OK. Signed off.
 	- Verified: unit suite, clippy, fmt, test IDs and the docs gate. In a real window at 1x and 2x, the line draws on one row with one arrow, each box flips only itself, the arrow lights and puts both changed boxes back, and the Program label shows its own tip.
 	- Branch: tabline
 	- Commit: 00058c2
@@ -212,6 +216,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual cause: Mesa's software Vulkan presents on X11 through shared memory pixmaps whenever the server has DRI3, without asking whether the server can make them. b23's X server, on the NVIDIA driver, cannot. Each one is refused without a word, the fence made on it then fails, and winit dies at its next X call. Every software window and dialog was hit, so the launch and the switch failed alike.
 	- Actual fix: At launch on such a server, the program turns Mesa's shared memory path off (`MESA_VK_WSI_DEBUG=noshm`), so software frames reach the window as plain images. X11 only, and only when the server says it has no shared pixmaps. Shells started from SilkTerm inherit the variable, which keeps a software Vulkan program run there off the same crash.
 	- Note: The checks on 2026-10-04 passed because those X servers can make shared pixmaps.
+	- Decisions:
+		- 20261006: Shells inheriting the variable is OK as long as it has no major drawbacks. It has none found: only Mesa's software Vulkan reads it, and only on an X server where the shared path fails anyway. Frames there are copied as plain images, a bit slower on a big window.
 	- Sweep: every software device that draws to an X window.
 	- Swept: the main window at launch, after a switch and after an idle rebuild, the dialogs' kept context, and the one a dialog builds without it. All read the one process setting, which is in place before any of them exists. Windows and macOS have no such path.
 	- Branch: swcrash
@@ -355,7 +361,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Accepted on b23 [20261006-143341]
 	- Needs external testing:
 		- vm925w: Transparency's mark tip names the memory, and the Resource use group looks right.
-		- b26: the group looks right, and software rendering is still grayed.
+		- b26: the group looks right, and there is no software rendering row.
 	- Priority: Avg
 	- Opened: 20261004-182255
 	- Opened by: JC
@@ -377,6 +383,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261006: Transparency keeps its one mark. In the Windows build its tip adds "It also keeps a window in view from giving back its graphics memory when idle." A new row field, `windows_warning`, holds the Windows text.
 		- 20261006: On Wayland "Minutes when hidden" is grayed, with a tip saying Wayland never tells a window it is hidden, so Minutes otherwise is the wait used.
 		- 20261006: "Always use software rendering" stays grayed on macOS. The UI guide's Known deviations entry for it stays, since the macOS build can never use it.
+		- 20261006: "Always use software rendering" is now left out of the macOS build, per the UI guide's rule. A new row field, `not_macos`, does it. The gray, its tip and the UI guide's Known deviations entry are gone.
 		- 20261006: The UI guide and both design docs say so.
 	- Verified: the 4 new tests failed on the old code and pass now. The full unit suite (1169), fmt, the docs checks, and clippy for Linux, Windows and macOS pass. Seen in a window on X11, mark and tips included, and on Wayland with the hidden wait grayed.
 	- Note: `the_transparency_row_warns_that_it_needs_the_compositor` (EreHnrx) is commented out, since Transparency is no longer the only row with a mark. Its checks moved into EryD9nl.
@@ -384,6 +391,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: resuse
 	- Commit: 1643a82
 	- Test case: `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl), `the_resource_use_group_ends_the_window_tab` (EryD9rp), `the_hidden_wait_is_grayed_where_the_desktop_never_says` (EryD9vW), `only_the_windows_build_warns_that_transparency_keeps_memory` (EryD9zK).
+		- 20261006: `only_software_rendering_leaves_the_macos_build` (ErycRzO) and `software_rendering_is_a_plain_switch_beside_the_idle_rows` (ErycRwI). `software_rendering_is_grayed_only_without_a_software_renderer` (ErnMaGS) is commented out.
 	- Closed:
 
 - Wallpaper: keep resized copies on disk, oldest pruned first
@@ -523,6 +531,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Keep a plain fallback for an adapter without BC support.
 	- Notes:
 		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
+		- 20261006: The disk cache (2026100514211603) went first, as JPEG. When this is built, the cache keeps the BC data in place of the JPEG, so a kept copy needs no decode or encode.
 	- Closed:
 
 - Small repeated work on the frame and drag paths
