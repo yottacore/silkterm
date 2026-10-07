@@ -297,6 +297,8 @@ It is not an install:
 
 - Nothing is written into `.bashrc` or any other file of yours. The prompt is handed to the pane as `PROMPT_COMMAND` in its environment.
 
+- The script is sourced into the pane's shell once, which defines a few `fX9ps1Git_` functions and nothing else. Outside a git project a prompt then starts no process, and inside one it runs git twice.
+
 - It sets `PS1` before every prompt, so it replaces a `PS1` set in `.bashrc`. If you set `PROMPT_COMMAND` yourself - directly, or through starship, oh-my-posh or `/etc/profile.d/vte.sh` - yours runs instead, and you will not see this one.
 
 - It reaches bash panes only, and only ones SilkTerm started. A shell you `ssh` into, or a `sudo -i`, keeps whatever prompt it has.

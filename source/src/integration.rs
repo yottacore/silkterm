@@ -51,7 +51,8 @@
 //! which Debian's own files set, so yielding to one would mean never showing.
 //! An rc file that sets a `PROMPT_COMMAND` of its own still wins. Nothing is
 //! written into anyone's rc file, and switching it off is a setting rather
-//! than an uninstall.
+//! than an uninstall. The script is sourced once per shell, so outside a git
+//! working tree a prompt starts no process.
 
 use std::path::{Path, PathBuf};
 
@@ -478,19 +479,25 @@ fn is_bash(program: &str) -> bool {
 
 // The PROMPT_COMMAND a bash pane is given, for a script sitting at `path`.
 //
-// `$BASH` is bash's own path, so the script runs under the same bash the pane
-// does with no dependency on what is on PATH and no execute bit needed. The
-// path is spelled with forward slashes and single-quoted, which every bash
-// takes - including a Windows one, where a backslash inside quotes would
-// otherwise arrive as an escape.
+// The script is sourced into the pane's own shell, which only defines its
+// functions, so a prompt is a function call and starts no process outside a
+// git working tree. Running it as `"$BASH" script` cost a new bash every
+// prompt. A bash started inside the pane inherits PROMPT_COMMAND but not the
+// functions, hence the check rather than a one-time source. Sourcing needs no
+// execute bit and nothing on PATH. The path is spelled with forward slashes and
+// single-quoted, which every bash takes - including a Windows one, where a
+// backslash inside quotes would otherwise arrive as an escape.
 fn prompt_command(path: &Path) -> String {
 	let quoted = path
 		.display()
 		.to_string()
 		.replace('\\', "/")
 		.replace('\'', "'\\''");
-	format!("PS1=$(\"$BASH\" '{quoted}')")
+	format!("{{ declare -F {BASH_PROMPT_FN} >/dev/null || . '{quoted}'; }} && {BASH_PROMPT_FN}")
 }
+
+// What x9ps1-git defines for PROMPT_COMMAND to call once it is sourced.
+const BASH_PROMPT_FN: &str = "fX9ps1Git_SetPs1";
 
 // Put the script in the data directory, once per run, and say where it is.
 // Rewritten whenever it differs, so an updated SilkTerm carries an updated
@@ -547,6 +554,8 @@ mod tests {
 		powershells, prompt_command, refreshed_block, with_block,
 	};
 	use crate::shells::Found;
+	#[cfg(unix)]
+	use std::path::{Path, PathBuf};
 
 	// sh may well be dash, and a shell named by a full path is the ordinary case
 	// on Windows - so both have to answer the way a bare `bash` does.
@@ -623,26 +632,55 @@ mod tests {
 
 	// The value is handed to bash as a command string, so a Windows path has to
 	// arrive as something bash reads rather than as a run of escapes.
-	// Test ID: EoTbwMT
+	// Commented out 20261006: it pinned the old `PS1=$("$BASH" path)` form, which
+	// started a bash every prompt. The pane now sources the script once
+	// (2026100314050019); EryR5kj checks the same paths in the new form.
+	// // Test ID: EoTbwMT
+	// #[test]
+	// fn a_prompt_command_survives_a_windows_path() {
+	// 	let win = prompt_command(std::path::Path::new("C:\\Users\\me\\x9ps1-git"));
+	// 	assert_eq!(win, "PS1=$(\"$BASH\" 'C:/Users/me/x9ps1-git')");
+	// 	let unix = prompt_command(std::path::Path::new("/home/me/.config/silkterm/x9ps1-git"));
+	// 	assert_eq!(
+	// 		unix,
+	// 		"PS1=$(\"$BASH\" '/home/me/.config/silkterm/x9ps1-git')"
+	// 	);
+	// }
+
+	// Test ID: EryR5kj
 	#[test]
-	fn a_prompt_command_survives_a_windows_path() {
+	fn a_prompt_command_sources_a_windows_path_as_bash_reads_it() {
 		let win = prompt_command(std::path::Path::new("C:\\Users\\me\\x9ps1-git"));
-		assert_eq!(win, "PS1=$(\"$BASH\" 'C:/Users/me/x9ps1-git')");
-		let unix = prompt_command(std::path::Path::new("/home/me/.config/silkterm/x9ps1-git"));
 		assert_eq!(
-			unix,
-			"PS1=$(\"$BASH\" '/home/me/.config/silkterm/x9ps1-git')"
+			win,
+			"{ declare -F fX9ps1Git_SetPs1 >/dev/null || . 'C:/Users/me/x9ps1-git'; } && fX9ps1Git_SetPs1"
+		);
+		let odd = prompt_command(std::path::Path::new("/home/o'neil/x9ps1-git"));
+		assert!(
+			odd.contains(". '/home/o'\\''neil/x9ps1-git';"),
+			"quote not escaped: {odd}"
 		);
 	}
 
 	// The compiled-in copy is what gets written out and then run by bash, so a
 	// truncated or mangled vendoring should not reach anybody's prompt.
-	// Test ID: EoTbwMU
+	// Commented out 20261006: `fMain` was renamed, since the script is now
+	// sourced into the pane's shell and a bare name could clobber the user's
+	// own (2026100314050019). EryR5oo checks for the function the pane calls.
+	// // Test ID: EoTbwMU
+	// #[test]
+	// fn the_bash_prompt_script_is_a_whole_script() {
+	// 	assert!(BASH_PROMPT.starts_with("#!/bin/bash"));
+	// 	assert!(BASH_PROMPT.contains("x9ps1-git v"));
+	// 	assert!(BASH_PROMPT.contains("fMain"));
+	// }
+
+	// Test ID: EryR5oo
 	#[test]
-	fn the_bash_prompt_script_is_a_whole_script() {
+	fn the_bash_prompt_script_is_whole_and_defines_what_the_pane_calls() {
 		assert!(BASH_PROMPT.starts_with("#!/bin/bash"));
 		assert!(BASH_PROMPT.contains("x9ps1-git v"));
-		assert!(BASH_PROMPT.contains("fMain"));
+		assert!(BASH_PROMPT.contains(&format!("function {}()", super::BASH_PROMPT_FN)));
 	}
 
 	// Anyone who publishes a repository picks its branch names, and bash expands
@@ -806,6 +844,140 @@ mod tests {
 		assert!(
 			far.contains("\u{2191}2\u{2193}1"),
 			"no ahead and behind count: {far:?}"
+		);
+	}
+
+	// A test repository below `dir`, on branch `prompttest`, plus a plain folder
+	// beside it, and the script written out. Returns (outside, deep in the repo, script).
+	#[cfg(unix)]
+	fn prompt_fixture(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
+		let _ = std::fs::remove_dir_all(dir);
+		let outside = dir.join("outside");
+		let repo = dir.join("repo");
+		let deep = repo.join("a").join("b");
+		std::fs::create_dir_all(&outside).expect("temp dir");
+		std::fs::create_dir_all(&deep).expect("temp dir");
+		let script = dir.join(super::BASH_PROMPT_FILE);
+		std::fs::write(&script, BASH_PROMPT).expect("write script");
+		let init = std::process::Command::new("git")
+			.args(["init", "-q", "-b", "prompttest"])
+			.current_dir(&repo)
+			.env("GIT_CONFIG_GLOBAL", "/dev/null")
+			.env("GIT_CONFIG_NOSYSTEM", "1")
+			.status()
+			.expect("run git");
+		assert!(init.success(), "git init");
+		(outside, deep, script)
+	}
+
+	// What a pane runs, start to finish: the PROMPT_COMMAND it is given, in an
+	// interactive bash. Outside a git working tree a prompt is a function call
+	// and nothing more; inside one it runs git twice. The old form started 5 and
+	// 13. Counted as the difference between 2 prompts and 12, so the shell's own
+	// start is left out. Needs strace, so it is skipped where that cannot run.
+	// Test ID: EryR5sU
+	#[cfg(unix)]
+	#[test]
+	fn a_pane_prompt_starts_no_process_outside_a_repository() {
+		use std::io::Write;
+		use std::process::{Command, Stdio};
+		let traced = Command::new("strace")
+			.args(["-f", "-qq", "-o", "/dev/null", "true"])
+			.stdout(Stdio::null())
+			.stderr(Stdio::null())
+			.status()
+			.is_ok_and(|status| status.success());
+		if !traced {
+			eprintln!("no strace here, skipped");
+			return;
+		}
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_x9ps1forks_{}", std::process::id()));
+		let (outside, deep, script) = prompt_fixture(&dir);
+		let trace = dir.join("strace.out");
+		let forks = |cwd: &Path, prompts: usize| -> i64 {
+			let mut child = Command::new("strace")
+				.args(["-f", "-qq", "-e", "trace=clone,clone3,fork,vfork", "-o"])
+				.arg(&trace)
+				.args(["bash", "--norc", "--noprofile", "-i"])
+				.current_dir(cwd)
+				.env_clear()
+				.env("PATH", std::env::var_os("PATH").unwrap_or_default())
+				.env("HOME", &dir)
+				.env("GIT_CONFIG_GLOBAL", "/dev/null")
+				.env("GIT_CONFIG_NOSYSTEM", "1")
+				.env("PROMPT_COMMAND", prompt_command(&script))
+				.stdin(Stdio::piped())
+				.stdout(Stdio::null())
+				.stderr(Stdio::null())
+				.spawn()
+				.expect("run strace");
+			// bash shows one more prompt than it reads lines, the last before EOF
+			child
+				.stdin
+				.take()
+				.expect("stdin")
+				.write_all(":\n".repeat(prompts - 1).as_bytes())
+				.expect("feed bash");
+			child.wait().expect("wait for bash");
+			let text = std::fs::read_to_string(&trace).expect("read trace");
+			let count = text
+				.lines()
+				.filter(|line| {
+					line.contains("clone(") || line.contains("clone3(") || line.contains("fork(")
+				})
+				.count();
+			i64::try_from(count).unwrap_or(i64::MAX)
+		};
+		let ten = |cwd: &Path| forks(cwd, 12) - forks(cwd, 2);
+		let out = ten(&outside);
+		let inside = ten(&deep);
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(out, 0, "processes in 10 prompts outside a repository");
+		assert!(
+			inside <= 20,
+			"{inside} processes in 10 prompts inside a repository, want 2 a prompt"
+		);
+	}
+
+	// The same PROMPT_COMMAND shows the git part from deep in a working tree,
+	// and none outside one.
+	// Test ID: EryR5wI
+	#[cfg(unix)]
+	#[test]
+	fn a_pane_prompt_shows_the_git_part_only_inside_a_working_tree() {
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_x9ps1shown_{}", std::process::id()));
+		let (outside, deep, script) = prompt_fixture(&dir);
+		let shown = |cwd: &Path| {
+			let out = std::process::Command::new("bash")
+				.args([
+					"--norc",
+					"--noprofile",
+					"-c",
+					r#"eval "$PROMPT_COMMAND" && printf '%s' "${PS1@P}""#,
+				])
+				.current_dir(cwd)
+				.env("GIT_CONFIG_GLOBAL", "/dev/null")
+				.env("GIT_CONFIG_NOSYSTEM", "1")
+				.env_remove("GIT_DIR")
+				.env_remove("GIT_WORK_TREE")
+				.env_remove("X9PS1_STANDARD")
+				.env("PROMPT_COMMAND", prompt_command(&script))
+				.output()
+				.expect("run bash");
+			assert!(out.status.success(), "{out:?}");
+			String::from_utf8_lossy(&out.stdout).into_owned()
+		};
+		let inside = shown(&deep);
+		let away = shown(&outside);
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(inside.contains("prompttest"), "no branch: {inside:?}");
+		assert!(
+			!away.contains('\u{2714}') && !away.contains('\u{2718}'),
+			"git part outside a repository: {away:?}"
 		);
 	}
 
