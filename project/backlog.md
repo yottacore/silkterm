@@ -322,6 +322,44 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_idle_wait_switch_is_read_once` (fails on the old code, passes now), `the_minimized_state_is_asked_at_most_once_per_recheck` (at most four asks in a second of 60 passes, and the restore events), `the_bindings_in_force_give_every_hotkey`.
 	- Note: Code review 20261003 item 5.
 
+- Settings: a Resource use group, with warning marks
+	- ID: 2026100418225506
+	- Type: Enhancement
+	- Status: Waiting for testing
+		- Accepted on b23 [20261006-143341]
+	- Needs external testing:
+		- vm925w: Transparency's mark tip names the memory, and the Resource use group looks right.
+		- b26: the group looks right, and software rendering is still grayed.
+	- Priority: Avg
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225504, 2026100418354006
+	- Target OS: All
+	- Requirements:
+		- Before RC1.
+		- "Free resources when idle", its waits and "Always use software rendering" go in one group, "Resource use".
+		- "Free resources when idle" gets a warning mark. Its tip says it matters most on a card with little memory or next to GPU-heavy programs, with many windows open that are not all in view. Turn it off only if the graphics driver has trouble with it.
+		- A setting that stops a window from giving memory back gets a warning mark that says so, only where it does. Today that is Transparency on Windows.
+		- A row that cannot work here is grayed with a tip that says why. Hidden only in a build that can never use it.
+		- Tips stay short.
+	- Notes:
+		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-resource-use-group).
+	- Progress log:
+		- 20261006: "Resource use" is the last group on the Window tab: "Free resources when idle", its two waits, then "Always use software rendering".
+		- 20261006: "Free resources when idle" has a warning mark on every platform. Its tip is the requirement's wording, in two sentences. The row's own tip is unchanged.
+		- 20261006: Transparency keeps its one mark. In the Windows build its tip adds "It also keeps a window in view from giving back its graphics memory when idle." A new row field, `windows_warning`, holds the Windows text.
+		- 20261006: On Wayland "Minutes when hidden" is grayed, with a tip saying Wayland never tells a window it is hidden, so Minutes otherwise is the wait used.
+		- 20261006: "Always use software rendering" stays grayed on macOS. The UI guide's Known deviations entry for it stays, since the macOS build can never use it.
+		- 20261006: The UI guide and both design docs say so.
+	- Verified: the 4 new tests failed on the old code and pass now. The full unit suite (1169), fmt, the docs checks, and clippy for Linux, Windows and macOS pass. Seen in a window on X11, mark and tips included, and on Wayland with the hidden wait grayed.
+	- Note: `the_transparency_row_warns_that_it_needs_the_compositor` (EreHnrx) is commented out, since Transparency is no longer the only row with a mark. Its checks moved into EryD9nl.
+	- Swept: every row with `warning:` in `settings_ui.shcl` (Transparency only before this), and every grayed-row tip in `disabled_tip`.
+	- Branch: resuse
+	- Commit: 1643a82
+	- Test case: `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl), `the_resource_use_group_ends_the_window_tab` (EryD9rp), `the_hidden_wait_is_grayed_where_the_desktop_never_says` (EryD9vW), `only_the_windows_build_warns_that_transparency_keeps_memory` (EryD9zK).
+	- Closed:
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -370,44 +408,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- When changing the cursor size and animation, change to 50% width.
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
-	- Closed:
-
-- Settings: a Resource use group, with warning marks
-	- ID: 2026100418225506
-	- Type: Enhancement
-	- Status: Waiting on signoff
-		- Accepted on b23 [20261006-143341]
-	- Needs external testing:
-		- vm925w: Transparency's mark tip names the memory, and the Resource use group looks right.
-		- b26: the group looks right, and software rendering is still grayed.
-	- Priority: Avg
-	- Opened: 20261004-182255
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225504, 2026100418354006
-	- Target OS: All
-	- Requirements:
-		- Before RC1.
-		- "Free resources when idle", its waits and "Always use software rendering" go in one group, "Resource use".
-		- "Free resources when idle" gets a warning mark. Its tip says it matters most on a card with little memory or next to GPU-heavy programs, with many windows open that are not all in view. Turn it off only if the graphics driver has trouble with it.
-		- A setting that stops a window from giving memory back gets a warning mark that says so, only where it does. Today that is Transparency on Windows.
-		- A row that cannot work here is grayed with a tip that says why. Hidden only in a build that can never use it.
-		- Tips stay short.
-	- Notes:
-		- 20261004: Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#the-resource-use-group).
-	- Progress log:
-		- 20261006: "Resource use" is the last group on the Window tab: "Free resources when idle", its two waits, then "Always use software rendering".
-		- 20261006: "Free resources when idle" has a warning mark on every platform. Its tip is the requirement's wording, in two sentences. The row's own tip is unchanged.
-		- 20261006: Transparency keeps its one mark. In the Windows build its tip adds "It also keeps a window in view from giving back its graphics memory when idle." A new row field, `windows_warning`, holds the Windows text.
-		- 20261006: On Wayland "Minutes when hidden" is grayed, with a tip saying Wayland never tells a window it is hidden, so Minutes otherwise is the wait used.
-		- 20261006: "Always use software rendering" stays grayed on macOS. The UI guide's Known deviations entry for it stays, since the macOS build can never use it.
-		- 20261006: The UI guide and both design docs say so.
-	- Verified: the 4 new tests failed on the old code and pass now. The full unit suite (1169), fmt, the docs checks, and clippy for Linux, Windows and macOS pass. Seen in a window on X11, mark and tips included, and on Wayland with the hidden wait grayed.
-	- Note: `the_transparency_row_warns_that_it_needs_the_compositor` (EreHnrx) is commented out, since Transparency is no longer the only row with a mark. Its checks moved into EryD9nl.
-	- Swept: every row with `warning:` in `settings_ui.shcl` (Transparency only before this), and every grayed-row tip in `disabled_tip`.
-	- Branch: resuse
-	- Commit: 1643a82
-	- Test case: `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl), `the_resource_use_group_ends_the_window_tab` (EryD9rp), `the_hidden_wait_is_grayed_where_the_desktop_never_says` (EryD9vW), `only_the_windows_build_warns_that_transparency_keeps_memory` (EryD9zK).
 	- Closed:
 
 - Block compression for the wallpaper
