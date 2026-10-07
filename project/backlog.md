@@ -408,7 +408,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings: the four tab text toggles on one line, with one revert arrow
 	- ID: 2026100614510984
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Priority: Avg
 	- Opened: 20261006-145109
 	- Opened by: JC
@@ -420,6 +420,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- One revert arrow for all of them.
 	- Notes:
 		- 20261006: Each of the four has its own tip now, and every row today has one setting.
+	- Progress log:
+		- 20261006: The four stay four rows, each with its own setting, tip and focus stop. The last three are declared `beside`, which now allows more than one row after the first, so any run of toggles can share a line this way. The line splits the control column evenly, and the panel grows if the labels need it.
+		- 20261006: A toggle sharing a line now has its label in front of its box, as the sketch shows. That also moves "Re-test next run" on the Silk tab, which had its label after its box.
+		- 20261006: "Program's own title" is now "Program title", as in the sketch, and its tip says "the other three" in place of "the three below".
+		- 20261006: The revert arrow is lit when any of the four is off its default, and puts all four back, config lines included.
+	- Decisions:
+		- 20261006: Each toggle keeps its own tip, shown over its box or its label.
+	- Verified: unit suite, clippy, fmt, test IDs and the docs gate. In a real window at 1x and 2x, the line draws on one row with one arrow, each box flips only itself, the arrow lights and puts both changed boxes back, and the Program label shows its own tip.
+	- Branch: tabline
+	- Commit: 00058c2
+	- Test case: `a_shared_line_puts_its_parts_side_by_side` (Ery4fxK), `one_revert_puts_back_all_four_tab_text_toggles` (Ery4g1k), `each_tab_text_toggle_flips_only_its_own_setting` (Ery4g6B), `each_tab_text_toggle_has_its_own_tip_over_box_and_label` (Ery4gAt), `the_tab_text_line_fits_the_panel` (Ery4gFO). Each failed with the change broken. `a_paired_row_shares_the_line_above_it` (EpOQNMU) is commented out, since it took every row with one beside it for a line's first. `a_heading_that_repeats_its_tab_takes_no_room` now counts a shared line once.
 
 - Small repeated work on the frame and drag paths
 	- ID: 2026100314050018
