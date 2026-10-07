@@ -219,6 +219,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
 
+- vm925w: The silkterm launcher in the taskbar doesn't work.
+	- ID: 2026100710173170
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261007-101731
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100314050020
+	- Target OS: Windows
+	- Test environment: vm925w
+	- Incorrect behavior: A minimized cmd window shows briefly, then disappears.
+		- But the same command it runs, run by hand in a cmd window, works.
+	- Notes:
+		- Before RC1.
+
 - Windows: a Git Bash tab keeps its starting folder in the title after a `cd`
 	- ID: 2026100709325306
 	- Type: Bug
@@ -266,6 +282,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- The "Tab text" options are wonky. There's too much space between "Program title" and its checkbox.
+	- ID: 2026100710173200
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261007-101732
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100614510984
+	- Target OS: All
+	- Requirements:
+		- The gap is because of the column system for labels and controls. But for a more efficient and effective dialog system, some elements need to be able to break out of that system.
+	- Notes:
+		- Before RC1.
 
 - macOS: the git prompt's second line starts with an empty box
 	- ID: 2026100709325307
