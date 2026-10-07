@@ -167,6 +167,8 @@ icons:
 ##            the whole group, and every row in it has to say so as well.
 ## warning:   flyover for a warning mark drawn after the label, for a row that
 ##            may not work on every desktop
+## windows_warning: the same in the Windows build, in place of `warning:`. A
+##            mark that applies only there has only this one.
 
 rows:
 
@@ -453,6 +455,7 @@ rows:
 		setting: transparency.enabled
 		help: "See through the terminal background. On Windows this takes effect on the next launch."
 		warning: "Transparency relies on the desktop compositor, and may not work on every desktop."
+		windows_warning: "Transparency relies on the desktop compositor, and may not work on every desktop. It also keeps a window in view from giving back its graphics memory when idle."
 
 	Opacity:
 		label: Opacity %
@@ -797,36 +800,6 @@ rows:
 		setting: window.margin
 		help: "Clear space between the text and the window edge."
 
-	IdleRelease:
-		label: Free resources when idle
-		kind: toggle
-		setting: window.idle_release
-		help: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment the window is used again. Nothing running in the window is affected."
-
-	IdleHiddenMin:
-		label: Minutes when hidden
-		kind: slider
-		range: 1, 1440
-		whole: true
-		indent: 1
-		setting: window.idle_release_hidden_min
-		help: "How long a minimized or covered window waits. On Windows, taking the graphics card back on a restore can take about a second."
-
-	IdleMin:
-		label: Minutes otherwise
-		kind: slider
-		range: 1, 1440
-		whole: true
-		indent: 1
-		setting: window.idle_release_min
-		help: "How long a window that is only unfocused, with nothing printing, waits. Longer, since it may be on a second screen being read. On Windows with Transparency on, a window still on screen is never let go, since it would turn black."
-
-	SoftwareRendering:
-		label: Always use software rendering
-		kind: toggle
-		setting: window.software_rendering
-		help: "Draw on the processor rather than the graphics card. Slower, but uses none of the card's memory. A window whose card cannot give it what it needs falls back to this on its own."
-
 	TabText:
 		kind: heading
 		label: Tab text
@@ -889,6 +862,44 @@ rows:
 		indent: 1
 		setting: hyperlinks.open_command
 		help: "What to run for a clicked link. Empty hands it to the desktop."
+
+	## What a window costs the machine. Last on the tab, since it is the part
+	## that depends on the graphics driver.
+	ResourceUse:
+		kind: heading
+		label: Resource use
+		tab: Window
+
+	IdleRelease:
+		label: Free resources when idle
+		kind: toggle
+		setting: window.idle_release
+		help: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment the window is used again. Nothing running in the window is affected."
+		warning: "Matters most on a card with little memory, or next to GPU-heavy programs, with many windows open and not all in view. Turn it off only if the graphics driver has trouble with it."
+
+	IdleHiddenMin:
+		label: Minutes when hidden
+		kind: slider
+		range: 1, 1440
+		whole: true
+		indent: 1
+		setting: window.idle_release_hidden_min
+		help: "How long a minimized or covered window waits. On Windows, taking the graphics card back on a restore can take about a second."
+
+	IdleMin:
+		label: Minutes otherwise
+		kind: slider
+		range: 1, 1440
+		whole: true
+		indent: 1
+		setting: window.idle_release_min
+		help: "How long a window that is only unfocused, with nothing printing, waits. Longer, since it may be on a second screen being read. On Windows with Transparency on, a window still on screen is never let go, since it would turn black."
+
+	SoftwareRendering:
+		label: Always use software rendering
+		kind: toggle
+		setting: window.software_rendering
+		help: "Draw on the processor rather than the graphics card. Slower, but uses none of the card's memory. A window whose card cannot give it what it needs falls back to this on its own."
 
 	## --------------------------------------------------------------------- Shell
 
