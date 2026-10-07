@@ -23,7 +23,7 @@ struct Uniform {
 	perceptual: f32,
 	standin: f32,      // 1 for a stand-in: cubic sampling (`ImageRenderer::standing_in`)
 	border: f32,       // 1 when the texture has a ring of texels past the picture's edge
-	padded: f32,       // 1 when `picture` is less than the texture (BC1 is whole blocks)
+	padded: f32,       // 1 when `picture` is less than the texture (BC is whole blocks)
 	picture: [f32; 2], // texels holding the picture, border included
 	_pad: [f32; 2],
 }
@@ -85,8 +85,8 @@ impl ImageRenderer {
 	) -> Self {
 		let rgba: &[u8] = &img.rgba;
 		let picture = img.rgba.dimensions();
-		// the plain pixels where the device takes no BC (bc1.rs)
-		let blocks = img.bc1.as_deref().map(Vec::as_slice).filter(|_| {
+		// the plain pixels where the device takes no BC (bc1.rs, bc7.rs)
+		let blocks = img.blocks.as_ref().filter(|_| {
 			device
 				.features()
 				.contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
@@ -109,11 +109,9 @@ impl ImageRenderer {
 			dimension: wgpu::TextureDimension::D2,
 			// sRGB either way, decoded by the sampler, so the shader reads the
 			// same linear light from both
-			format: if blocks.is_some() {
-				wgpu::TextureFormat::Bc1RgbaUnormSrgb
-			} else {
-				wgpu::TextureFormat::Rgba8UnormSrgb
-			},
+			format: blocks.map_or(wgpu::TextureFormat::Rgba8UnormSrgb, |blocks| {
+				blocks.packing.texture_format()
+			}),
 			usage: wgpu::TextureUsages::TEXTURE_BINDING
 				| wgpu::TextureUsages::COPY_DST
 				| wgpu::TextureUsages::COPY_SRC,
@@ -121,8 +119,8 @@ impl ImageRenderer {
 		});
 		let (texels, bytes_per_row, rows) = match blocks {
 			Some(blocks) => (
-				blocks,
-				width / 4 * crate::bc1::BLOCK_BYTES as u32,
+				blocks.bytes.as_slice(),
+				width / 4 * blocks.packing.block_bytes() as u32,
 				height / 4,
 			),
 			None => (rgba, 4 * width, height),
@@ -248,7 +246,7 @@ impl ImageRenderer {
 		// Reference block from the image center (corners are more likely to be a
 		// flat color a zero-wipe could coincidentally match). The probe runs on
 		// GL only, and GL cannot copy a compressed texture out (wgpu-hal skips
-		// it and the read would come back zeros), so a BC1 picture has none. The
+		// it and the read would come back zeros), so a BC picture has none. The
 		// sentinels and the VT watcher still stand.
 		let probe_at = (blocks.is_none() && width >= PROBE_SIDE && height >= PROBE_SIDE)
 			.then(|| ((width - PROBE_SIDE) / 2, (height - PROBE_SIDE) / 2));
@@ -321,10 +319,10 @@ impl ImageRenderer {
 			"wallpaper: {w}x{h} held of {fw}x{fh}{}, {:.1} MiB{}{}",
 			if self.border { " plus a border" } else { "" },
 			crate::memdbg::mib(bytes as usize),
-			if format.is_compressed() {
-				" as BC1"
-			} else {
-				""
+			match format {
+				wgpu::TextureFormat::Bc1RgbaUnormSrgb => " as BC1",
+				wgpu::TextureFormat::Bc7RgbaUnormSrgb => " as BC7",
+				_ => "",
 			},
 			if self.standin { ", stand-in" } else { "" }
 		)
@@ -556,7 +554,7 @@ fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
         uv = (uv * (size - 2.0) + 1.0) / size;
     }
     if (u.padded > 0.5) {
-        // a BC1 texture is whole 4x4 blocks, and the picture fills its top
+        // a BC texture is whole 4x4 blocks, and the picture fills its top
         // left; the texels past it repeat the edge, as the clamp would
         uv = uv * u.picture / vec2<f32>(textureDimensions(tex));
     }

@@ -358,6 +358,28 @@ pub enum Fit {
 	Stretch, // fill exactly, ignore aspect
 }
 
+/// How a wallpaper held at window size goes to the GPU, for a GPU that takes
+/// block compression (`wallpaper::packing`). Config file only.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Compression {
+	/// BC7 on the High, Max silk and Custom profiles, BC1 on the others.
+	Auto,
+	Bc1,
+	Bc7,
+}
+
+impl Choice for Compression {
+	const ALL: &'static [Self] = &[Self::Auto, Self::Bc1, Self::Bc7];
+
+	fn key(self) -> &'static str {
+		match self {
+			Self::Auto => "auto",
+			Self::Bc1 => "bc1",
+			Self::Bc7 => "bc7",
+		}
+	}
+}
+
 /// The window size and font zoom kept for one monitor, named by
 /// `monitor::MonitorId::key`. The zoom is px on the font size, as
 /// `font_zoom_px` has it.
@@ -532,6 +554,7 @@ pub struct Settings {
 	pub wallpaper_contrast_mask_size: f32, // flatten scale 0..1 (1 = half the longest pixel dim)
 	pub wallpaper_contrast_mask_strength: f32, // how far toward the local mean 0..1
 	pub wallpaper_contrast_mask_auto: f32, // blend manual knobs with image-derived auto 0..1 (1 = full auto)
+	pub wallpaper_compression: Compression, // BC1 or BC7 in graphics memory; file only
 	pub text_scrim: bool, // bg-colored blurry halo behind glyphs (readability over busy/transparent bg)
 	pub text_scrim_radius: f32, // scrim blur sigma in px
 	pub text_scrim_softness: f32, // 0 = hard/solid scrim, 1 = soft/faint (maps to the intensity boost)
@@ -751,6 +774,7 @@ impl Default for Settings {
 			wallpaper_contrast_mask_size: 0.5,
 			wallpaper_contrast_mask_strength: 0.5,
 			wallpaper_contrast_mask_auto: 0.5,
+			wallpaper_compression: Compression::Auto,
 			text_scrim: true,
 			text_scrim_radius: 8.0,
 			text_scrim_softness: 0.5,
@@ -2703,6 +2727,7 @@ struct RawConfig {
 	wallpaper_contrast_mask_size: Option<f32>,
 	wallpaper_contrast_mask_strength: Option<f32>,
 	wallpaper_contrast_mask_auto: Option<f32>,
+	wallpaper_compression: Option<String>,
 	theme: Option<String>,
 	theme_mode: Option<String>,
 	text_scrim: Option<bool>,
@@ -3155,6 +3180,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		wallpaper_contrast_mask_size: reader.read_f32("wallpaper.contrast_mask.size"),
 		wallpaper_contrast_mask_strength: reader.read_f32("wallpaper.contrast_mask.strength"),
 		wallpaper_contrast_mask_auto: reader.read_f32("wallpaper.contrast_mask.auto"),
+		wallpaper_compression: reader.read_string("wallpaper.compression"),
 		theme: reader.read_string("theme"),
 		theme_mode: reader.read_string("theme_mode"),
 		performance_automatic: reader.read_bool("performance.automatic"),
@@ -3792,6 +3818,10 @@ fn resolve(raw: RawConfig) -> Settings {
 			_ => Fit::Stretch,
 		},
 		wallpaper_honor_xmp: raw.wallpaper_honor_xmp.unwrap_or(d.wallpaper_honor_xmp),
+		wallpaper_compression: choice_or(
+			raw.wallpaper_compression.as_deref(),
+			d.wallpaper_compression,
+		),
 		wallpaper_honor_xmp_look: raw
 			.wallpaper_honor_xmp_look
 			.unwrap_or(d.wallpaper_honor_xmp_look),
@@ -7212,6 +7242,13 @@ wallpaper:
 		# size: 0.5  ## Default
 		# strength: 0.5  ## Default
 		# auto: 0.5  ## Default
+
+	## How the picture is kept in graphics memory. "bc1" is the smallest, but
+	## faint steps can show in smooth gradients. "bc7" takes twice that and
+	## keeps them smooth. "auto" uses bc7 on the High, Max silk and Custom
+	## profiles and bc1 on the others. A picture with a heavy blur is held
+	## smaller instead, and never compressed.
+	# compression: "auto"  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Font
@@ -12609,6 +12646,21 @@ mod tests {
 			("light", M::Light),
 			("system", M::System),
 		]);
+		check(&[
+			("auto", Compression::Auto),
+			("bc1", Compression::Bc1),
+			("bc7", Compression::Bc7),
+		]);
+		// config file only, so read here rather than through a save
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| resolve(read_raw(text, p).0).wallpaper_compression;
+		assert_eq!(read(""), Compression::Auto);
+		assert_eq!(
+			read("wallpaper:\n\tcompression: \"bc7\"\n"),
+			Compression::Bc7
+		);
+		assert_eq!(read("wallpaper:\n\tcompression: BC1\n"), Compression::Bc1);
+		assert_eq!(read("wallpaper:\n\tcompression: bc6\n"), Compression::Auto);
 		// the ramp's older spellings still read, and no word cares about case
 		assert_eq!(R::parse("s"), Some(R::Sigmoid));
 		assert_eq!(R::parse("Gaussian"), Some(R::HalfNormal));

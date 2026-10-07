@@ -134,11 +134,69 @@ pub struct Prepared {
 	/// `rgba` has a one pixel ring of what lies past the picture's edge
 	/// (`Sizing::bordered`), which the shader samples into but never shows.
 	pub border: bool,
-	/// `rgba` as BC1 blocks (bc1.rs), which a GPU that takes them is given
-	/// instead. None keeps it plain (`compressed`). Shared with the kept copy
-	/// rather than cloned: under `tune_heap`'s mmap threshold, every copy
-	/// stays resident in the worker's arena once freed.
-	pub bc1: Option<Arc<Vec<u8>>>,
+	/// `rgba` as BC1 or BC7 blocks, which a GPU that takes them is given
+	/// instead. None keeps it plain (`compressed`).
+	pub blocks: Option<Blocks>,
+}
+
+/// How a picture held by the window is packed for a GPU that takes BC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Packing {
+	/// Half a byte a texel (bc1.rs). Faint steps show in a slow gradient.
+	Bc1,
+	/// A byte a texel (bc7.rs), and smooth.
+	Bc7,
+}
+
+impl Packing {
+	pub fn name(self) -> &'static str {
+		match self {
+			Packing::Bc1 => "BC1",
+			Packing::Bc7 => "BC7",
+		}
+	}
+
+	pub fn block_bytes(self) -> usize {
+		match self {
+			Packing::Bc1 => crate::bc1::BLOCK_BYTES,
+			Packing::Bc7 => crate::bc7::BLOCK_BYTES,
+		}
+	}
+
+	pub fn len_for(self, size: (u32, u32)) -> usize {
+		crate::bc1::blocks_in(size) * self.block_bytes()
+	}
+
+	pub fn encode(self, rgba: &image::RgbaImage) -> Vec<u8> {
+		match self {
+			Packing::Bc1 => crate::bc1::encode(rgba),
+			Packing::Bc7 => crate::bc7::encode(rgba),
+		}
+	}
+
+	pub fn decode(self, blocks: &[u8], size: (u32, u32)) -> Option<image::RgbaImage> {
+		match self {
+			Packing::Bc1 => crate::bc1::decode(blocks, size),
+			Packing::Bc7 => crate::bc7::decode(blocks, size),
+		}
+	}
+
+	/// sRGB either way: the blocks are encoded from the sRGB bytes.
+	pub fn texture_format(self) -> wgpu::TextureFormat {
+		match self {
+			Packing::Bc1 => wgpu::TextureFormat::Bc1RgbaUnormSrgb,
+			Packing::Bc7 => wgpu::TextureFormat::Bc7RgbaUnormSrgb,
+		}
+	}
+}
+
+/// A picture's blocks. Shared with the kept copy rather than cloned: under
+/// `tune_heap`'s mmap threshold, every copy stays resident in the worker's
+/// arena once freed.
+#[derive(Debug, Clone)]
+pub struct Blocks {
+	pub packing: Packing,
+	pub bytes: Arc<Vec<u8>>,
 }
 
 /// What a scan found. Absent when the request didn't scan, or when the folder
@@ -185,7 +243,7 @@ impl Prepared {
 			summary: self.summary,
 			held: self.held,
 			border: false,
-			bc1: None,
+			blocks: None,
 		}
 	}
 }
@@ -263,14 +321,14 @@ pub fn spawn(proxy: &EventLoopProxy<UserEvent>, request: Request) {
 }
 
 // A copy is kept after the result is sent, since a JPEG encode is a tenth of
-// a second at 2560x1440 and nothing on screen waits for it. BC1 blocks are
-// kept as they are.
+// a second at 2560x1440 and nothing on screen waits for it. Blocks are kept
+// as they are.
 fn answer(request: &Request, send: impl FnOnce(Loaded)) {
 	let mut loaded = run(request);
 	let keep = loaded.keep.take().and_then(|key| {
 		let image = loaded.image.as_ref()?;
-		let stored = match &image.bc1 {
-			Some(blocks) => wpcache::Stored::Bc1(image.rgba.dimensions(), Arc::clone(blocks)),
+		let stored = match &image.blocks {
+			Some(blocks) => wpcache::Stored::Blocks(image.rgba.dimensions(), blocks.clone()),
 			None => wpcache::Stored::Jpeg(image.rgba.clone()),
 		};
 		Some((key, stored, image.summary))
@@ -312,6 +370,7 @@ fn run(request: &Request) -> Loaded {
 				window: request.window,
 				summary: request.summary,
 				per_sigma: per_sigma(settings),
+				packing: packing(settings),
 			};
 			prepare_keeping(
 				settings,
@@ -478,6 +537,19 @@ pub fn per_sigma(settings: &Settings) -> f32 {
 	}
 }
 
+/// How a picture held by the window is packed: what the config file says, or
+/// by the profile in force, BC7 where the look comes first.
+pub fn packing(settings: &Settings) -> Packing {
+	match settings.wallpaper_compression {
+		config::Compression::Bc1 => Packing::Bc1,
+		config::Compression::Bc7 => Packing::Bc7,
+		config::Compression::Auto => match crate::profile::current(settings) {
+			Profile::Low | Profile::Standard | Profile::Remote => Packing::Bc1,
+			Profile::High | Profile::Max | Profile::Custom => Packing::Bc7,
+		},
+	}
+}
+
 // The sizing for a picture `full` big, read the same way for a kept copy's
 // key as for the decode, so the two agree.
 fn sizing_of(
@@ -497,6 +569,7 @@ struct Hold {
 	summary: Option<crate::autotheme::Summary>,
 	// `per_sigma` of the request's settings; infinite holds by the window alone
 	per_sigma: f32,
+	packing: Packing,
 }
 
 // Where the pixels come from, settled before anything is decoded so a kept
@@ -583,8 +656,9 @@ fn kept_key(
 }
 
 // Whether `prepare` does more than decode and cut. Only then is a kept copy
-// worth reading, and only then is one made. The BC1 encode a picture held by
-// the window also gets is about 40 ms at 2560x1440, so it does not count.
+// worth reading, and only then is one made. The encode a picture held by the
+// window also gets, 20 to 60 ms as BC1 and 80 to 160 as BC7 at 2560x1440,
+// does not count.
 fn works(settings: &Settings, sizing: Sizing, held: (u32, u32), blur: f32) -> bool {
 	let scale = held.0 as f32 / sizing.full.0.max(1) as f32;
 	held_blur(blur, scale) > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full
@@ -638,6 +712,9 @@ fn prepare_keeping(
 			let stored = bordered_size(held, border);
 			if border {
 				key.push_bytes(b"border");
+			} else if hold.packing == Packing::Bc7 {
+				// never a BC1 copy for a BC7 window, or the reverse
+				key.push_bytes(b"bc7");
 			}
 			if let Some(copy) = wpcache::find(dir, &key, stored) {
 				memdbg(&format!(
@@ -661,7 +738,7 @@ fn prepare_keeping(
 					summary,
 					held,
 					border,
-					bc1: copy.bc1,
+					blocks: copy.blocks,
 				};
 				return Some((image, None));
 			}
@@ -781,7 +858,7 @@ fn prepare_keeping(
 		crate::autotheme::summarize(&img, opacity)
 	});
 	let image = Prepared {
-		bc1: compressed(&img, border),
+		blocks: compressed(&img, border, hold.packing),
 		rgba: img,
 		sizing,
 		opacity,
@@ -794,13 +871,17 @@ fn prepare_keeping(
 	Some((image, keep))
 }
 
-// BC1 for a picture held by the window, an eighth of plain RGBA. One held by
-// its blur stays plain: it is already well under the window's size, and each
-// of its texels is drawn over several screen pixels, so a block's few colors
-// would show as steps that much larger. Opaque only, since a BC1 texel is
-// either opaque or black and clear.
-fn compressed(img: &image::RgbaImage, border: bool) -> Option<Arc<Vec<u8>>> {
-	(!border && img.pixels().all(|px| px[3] == u8::MAX)).then(|| Arc::new(crate::bc1::encode(img)))
+// BC1 or BC7 for a picture held by the window, an eighth or a quarter of
+// plain RGBA. One held by its blur stays plain: it is already well under the
+// window's size, and each of its texels is drawn over several screen pixels,
+// so a block's few colors would show as steps that much larger. Opaque only,
+// since a BC1 texel is either opaque or black and clear, and bc7.rs writes
+// opaque blocks.
+fn compressed(img: &image::RgbaImage, border: bool, packing: Packing) -> Option<Blocks> {
+	(!border && img.pixels().all(|px| px[3] == u8::MAX)).then(|| Blocks {
+		packing,
+		bytes: Arc::new(packing.encode(img)),
+	})
 }
 
 // The texture's size for a picture held at `held`: one texel more on every
@@ -1003,8 +1084,8 @@ fn shuffle_pick(len: usize, recent: &[usize], entropy: u64) -> usize {
 #[cfg(test)]
 mod tests {
 	use super::{
-		Hold, Pacing, Prepared, Request, WP_AVOID_MAX, list_folder_images, next_wallpaper_index,
-		prepare, run, shuffle_pick,
+		Hold, Pacing, Packing, Prepared, Request, WP_AVOID_MAX, list_folder_images,
+		next_wallpaper_index, prepare, run, shuffle_pick,
 	};
 	use crate::config::{Fit, Settings};
 	use std::sync::Arc;
@@ -1015,6 +1096,7 @@ mod tests {
 		window: (0, 0),
 		summary: None,
 		per_sigma: f32::INFINITY,
+		packing: Packing::Bc1,
 	};
 
 	// The blur and the contrast mask are the slow half and neither is under test
@@ -1082,6 +1164,7 @@ mod tests {
 			window: (960, 540),
 			summary: None,
 			per_sigma: 4.0,
+			packing: Packing::Bc1,
 		};
 		let prepared = prepare(&s, None, false, hold, &|| false).expect("prepared");
 		assert_eq!(prepared.sizing.full, (1920, 993), "the built-in");
@@ -1106,6 +1189,7 @@ mod tests {
 			window: (640, 360),
 			summary: None,
 			per_sigma: 4.0,
+			packing: Packing::Bc1,
 		};
 		let held = prepare(&s, None, false, hold, &|| false).expect("held");
 		let (fw, fh) = whole.rgba.dimensions();
@@ -1243,6 +1327,7 @@ mod tests {
 			window,
 			summary: None,
 			per_sigma,
+			packing: Packing::Bc1,
 		};
 		let reference =
 			prepare(&s, None, false, by_window(f32::INFINITY), &|| false).expect("window size");
@@ -2115,6 +2200,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		let settings = Arc::new(Settings {
 			wallpaper_blur: 4.0,
+			wallpaper_compression: crate::config::Compression::Bc1,
 			..flat_settings()
 		});
 		let request = |window, kept: Option<&std::path::Path>| Request {
@@ -2164,14 +2250,15 @@ mod tests {
 		// held by the window, so the GPU was given BC1, and the copy is those
 		// same blocks: what it shows is what the first one showed
 		let blocks = first
-			.bc1
-			.as_deref()
+			.blocks
+			.as_ref()
 			.expect("BC1 for a picture held by the window");
-		assert_eq!(again.bc1.as_deref(), Some(blocks));
-		let blocks = blocks.as_slice();
+		assert_eq!(blocks.packing, Packing::Bc1);
+		let back = again.blocks.as_ref().expect("the same blocks");
+		assert_eq!((back.packing, &back.bytes), (Packing::Bc1, &blocks.bytes));
 		assert_eq!(
 			Some(&again.rgba),
-			crate::bc1::decode(blocks, first.held).as_ref()
+			crate::bc1::decode(&blocks.bytes, first.held).as_ref()
 		);
 
 		// 2% more pixels: the copy stands in, and says what was asked for, so
@@ -2197,6 +2284,134 @@ mod tests {
 		assert_eq!(copies(), 2);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
+	// BC7 goes by the profile, the same split as the blur's hold, and the
+	// config file's word beats the profile. Either way a change prepares the
+	// picture again.
+	// Test ID: Es1erXj
+	#[test]
+	fn the_profile_picks_bc1_or_bc7_unless_the_file_says() {
+		use super::packing;
+		use crate::config::Compression;
+		use crate::profile::Profile;
+		let with = |profile, remote, compression| Settings {
+			performance_profile: profile,
+			performance_automatic: false,
+			remote_override: remote,
+			wallpaper_compression: compression,
+			..Settings::default()
+		};
+		assert_eq!(Settings::default().wallpaper_compression, Compression::Auto);
+		for (profile, want) in [
+			(Profile::Low, Packing::Bc1),
+			(Profile::Standard, Packing::Bc1),
+			(Profile::High, Packing::Bc7),
+			(Profile::Max, Packing::Bc7),
+			(Profile::Custom, Packing::Bc7),
+		] {
+			assert_eq!(
+				packing(&with(profile, false, Compression::Auto)),
+				want,
+				"{profile:?}"
+			);
+			for (word, pinned) in [
+				(Compression::Bc1, Packing::Bc1),
+				(Compression::Bc7, Packing::Bc7),
+			] {
+				assert_eq!(
+					packing(&with(profile, false, word)),
+					pinned,
+					"{profile:?} {word:?}"
+				);
+			}
+		}
+		assert_eq!(
+			packing(&with(Profile::Max, true, Compression::Auto)),
+			Packing::Bc1,
+			"Remote"
+		);
+		assert_eq!(
+			packing(&with(Profile::Max, true, Compression::Bc7)),
+			Packing::Bc7
+		);
+		// High and Max hold a blur alike, so only the packing moves here
+		let changed = crate::settings_ui::wallpaper_changed;
+		let max = with(Profile::Max, false, Compression::Auto);
+		assert!(!changed(
+			&max,
+			&with(Profile::High, false, Compression::Auto)
+		));
+		assert!(changed(&max, &with(Profile::Max, false, Compression::Bc1)));
+		assert!(!changed(&max, &with(Profile::Max, false, Compression::Bc7)));
+	}
+
+	// A kept copy is BC1 or BC7 blocks, and a window never gets the other
+	// kind: each keeps its own copy and reads back only that one.
+	// Test ID: Es1erXk
+	#[test]
+	fn a_bc7_window_never_takes_a_bc1_copy() {
+		use super::answer;
+		use crate::config::Compression;
+		let dir = crate::testdir::run_dir().join(format!("silkterm_wp_bc7_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		let request = |compression| Request {
+			seq: 1,
+			newest: Arc::new(AtomicU64::new(1)),
+			settings: Arc::new(Settings {
+				wallpaper_blur: 2.0,
+				wallpaper_compression: compression,
+				..flat_settings()
+			}),
+			scan: false,
+			current: None,
+			cleared: false,
+			window: (640, 360),
+			summary: None,
+			kept: Some(dir.clone()),
+		};
+		let copies = || {
+			std::fs::read_dir(&dir).map_or(0, |list| {
+				list.flatten()
+					.filter(|entry| entry.path().extension().is_some_and(|ext| ext == "wpc"))
+					.count()
+			})
+		};
+		let ask = |compression| {
+			let mut got = None;
+			answer(&request(compression), |loaded| got = loaded.image);
+			let image = got.expect("the built-in");
+			let blocks = image.blocks.clone().expect("held by the window, so packed");
+			(image, blocks)
+		};
+		let (bc1, bc1_blocks) = ask(Compression::Bc1);
+		assert_eq!(bc1_blocks.packing, Packing::Bc1);
+		assert_eq!(copies(), 1);
+		let (bc7, bc7_blocks) = ask(Compression::Bc7);
+		assert_eq!(bc7_blocks.packing, Packing::Bc7, "not the BC1 copy");
+		assert_eq!(copies(), 2, "kept beside it");
+		assert_eq!(bc7.held, bc1.held);
+		// prepared the same, so the plain pixels match, and BC7 is the closer
+		assert_eq!(bc7.rgba, bc1.rgba);
+		let off = |packing: Packing, blocks: &[u8]| {
+			let back = packing.decode(blocks, bc1.held).expect("unpacks");
+			bc1.rgba
+				.pixels()
+				.zip(back.pixels())
+				.flat_map(|(a, b)| (0..3).map(move |c| u64::from(a[c].abs_diff(b[c]))))
+				.sum::<u64>()
+		};
+		assert!(off(Packing::Bc7, &bc7_blocks.bytes) * 2 < off(Packing::Bc1, &bc1_blocks.bytes));
+		// and each reads back its own
+		for (compression, want) in [
+			(Compression::Bc1, &bc1_blocks),
+			(Compression::Bc7, &bc7_blocks),
+		] {
+			let (_, again) = ask(compression);
+			assert_eq!((again.packing, &again.bytes), (want.packing, &want.bytes));
+			assert_eq!(copies(), 2, "read, not made again");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// A picture held by its blur is kept with its border and read back with
 	// it. One held by the window a little smaller has no border, so it never
 	// takes that copy, near as the size is.
@@ -2235,14 +2450,14 @@ mod tests {
 		};
 		let first = ask((1920, 993));
 		assert!(first.border);
-		assert!(first.bc1.is_none(), "held by its blur, so plain");
+		assert!(first.blocks.is_none(), "held by its blur, so plain");
 		assert_eq!(first.rgba.dimensions(), (770, 399));
 		assert_eq!(copies(), 1);
 		// any window as big or bigger reads it back, border and all
 		let again = ask((2560, 1440));
 		assert_eq!(copies(), 1, "read, not made again");
 		assert!(again.border);
-		assert!(again.bc1.is_none());
+		assert!(again.blocks.is_none());
 		assert_eq!(again.held, first.held);
 		assert_eq!(again.rgba.dimensions(), first.rgba.dimensions());
 		assert_eq!(again.summary, first.summary);

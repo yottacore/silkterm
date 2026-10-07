@@ -22,6 +22,7 @@
 	- [The wallpaper at window size](#the-wallpaper-at-window-size)
 	- [Kept copies on disk](#kept-copies-on-disk)
 	- [Block compression for the wallpaper](#block-compression-for-the-wallpaper)
+		- [BC7 by profile](#bc7-by-profile)
 	- [The dialogs' kept GPU context](#the-dialogs-kept-gpu-context)
 	- [A shorter wait for a minimized window](#a-shorter-wait-for-a-minimized-window)
 	- [Software rendering](#software-rendering)
@@ -316,6 +317,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- A heavy blur: hold it smaller and skip compression. A quarter-size image in plain RGBA is already smaller than BC1 at full size.
 	- Little or no blur: BC1. The wallpaper sits dimmed behind text, so its artifacts should not show.
 	- BC7 where BC1 shows banding, if a test finds any.
+		- Since 2026-10-07, BC7 by the performance profile. See [BC7 by profile](#bc7-by-profile).
 
 - Encoding runs on the wallpaper worker once per image and per resize. A pure Rust encoder is preferred.
 
@@ -354,6 +356,40 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- No contour bands showed. In the built-in's smooth gradients with no blur, the 4x4 blocks show as faint steps in light mode, and plainly with the contrast stretched 4 times. That is the case BC7 was held back for, so it is an open question on the item.
 
 - BC1 for a picture held by its blur was tried and not kept. It came out at most 3 to 5 levels off, but each block is drawn several screen pixels wide there, and with the contrast stretched 4 times the blocks showed as a grid. It would have saved 2 MiB at 4 held pixels a sigma and 0.5 at 2.
+
+#### BC7 by profile
+
+- Built 2026-10-07 in `bc7.rs`, also our own. High, Max silk and Custom give a picture held by the window BC7, and Low, Standard and Remote keep BC1, the same split as the blur's hold. `wallpaper.compression` in the config file takes "auto", "bc1" or "bc7", and either of the last two wins over the profile. There is no Settings row.
+	- At the shipped blur the picture is held by its blur and stays plain on every profile, so this is for pictures with no blur or a light one, from Custom or their own tags.
+	- A profile change or a new value in the file prepares the picture again. A BC1 copy and a BC7 copy on disk have different keys, so neither is handed to a window that wants the other.
+	- The release binary went from 11,952,432 to 11,960,800 bytes, 8 KB more.
+
+- BC7 has 8 modes. Mode 6 is the one that matters here: one pair of colors a block at 7 bits plus a shared low bit, and 16 points between them where BC1 has 4 points between 5:6:5 ends.
+	- An opaque picture needs both alpha ends at 255, which makes the low bit 1 and every color end odd. Even values are reached halfway between two odd ones, but 0 is out of reach. A black sky came back a level up all over, worse on average than BC1.
+	- So a block that touches 0, and spans no more than 12 levels, also tries mode 5. Its ends are 7 bits with 0 and 255 in reach, and alpha is kept apart, but it has only 4 points.
+	- Modes 0 to 3 and 7 split a block in 2 or 3 parts for sharp edges between several colors. A wallpaper has few, and they would cost several times the code and the encode time. Small stars of more than 2 colors are the one place it shows, as it did with BC1.
+	- Unlike BC1, every decoder makes the same texels from a BC7 block, so what the unit tests unpack is what the GPU draws.
+
+- Encoding takes 59 to 116 ms at 2560x1440 on b23 at full speed optimization, where BC1 took 15 to 44 in the same run. The release build is optimized for size, and there it was 83 to 163 ms against BC1's 21 to 59, with the box busy. It runs on the wallpaper worker, and a kept copy skips it.
+
+- Measured on b23 in a 2560x1440 window: the texture is 3.5 MiB for a 2560x1440 photo, against 1.8 as BC1 and 14.1 plain. The Vulkan allocator's in use figure went from 52.4 to 54.3 MiB.
+
+- How it looks against plain, at the same window size, in sRGB levels. GL is shown. Vulkan had the same maxes, adn means within about a tenth.
+
+	| Scene, no blur                           | BC1 mean | BC1 max | BC7 mean | BC7 max
+	| :--------------------------------------- | -------: | ------: | -------: | ------:
+	| Built-in, dark mode                      |     0.24 |       6 |     0.08 |       6
+	| Built-in, light mode                     |     0.49 |      12 |     0.17 |      12
+	| Large photo, dark mode                   |     0.47 |      13 |     0.15 |      12
+	| Earth, light mode, zoomed                |     0.17 |       9 |     0.03 |      10
+	| Star field, dark mode                    |     0.55 |      32 |     0.16 |      30
+	| Star field, light mode                   |     0.33 |      17 |     0.09 |      16
+	| Star field, 100% visibility and no scrim |     1.26 |      65 |     0.36 |      62
+	| Star field, light blur of 2, dark mode   |     0.35 |       7 |     0.09 |       4
+
+	- The worst pixels are the same few in both, colored stars a block can't hold.
+	- On the texture itself, in smooth areas of the 3 pictures with real gradients, the error jumps by 0.5 to 0.6 of a level across a block edge with BC7, against 1.3 to 1.5 with BC1. With the contrast stretched 8 times the built-in's gradients show the blocks in BC1 and look like the plain picture in BC7.
+	- At the shipped blur, and at Low, the build is unchanged: 0 changed pixels against the build before.
 
 ### The dialogs' kept GPU context
 
@@ -459,6 +495,7 @@ What a window already gives back while unused is in the [Releasing resources](20
 	- Metal: wgpu turns BC on where Metal reports it. Not checked on b26.
 
 - Pure Rust encoders: `texpresso` does BC1 to BC5, and `rusty_dds` does BC1 to BC7. Neither is measured here for speed, quality or binary size. An encoder of our own was built instead, as decided 2026-10-06.
+	- The same went for BC7 on 2026-10-07: 2 of its 8 modes, about 8 KB of binary.
 
 - The scrim's blur takes 25 taps a pass and spaces them more than a pixel apart once the radius passes about 4 pixels.
 
@@ -495,6 +532,8 @@ What a window already gives back while unused is in the [Releasing resources](20
 - "Settings: a Resource use group, with warning marks" (ID 2026100418225506)
 
 - "Block compression for the wallpaper" (ID 2026100418225507)
+
+- "Wallpaper: optional BC7 in place of BC1" (ID 2026100705511507)
 
 - "Wallpaper: keep resized copies on disk, oldest pruned first" (ID 2026100514211603)
 

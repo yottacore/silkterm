@@ -5644,6 +5644,8 @@ pub fn wallpaper_changed(old: &Settings, new: &Settings) -> bool {
 		|| old.wallpaper_contrast_mask_auto != new.wallpaper_contrast_mask_auto
 		// a profile change can move how small a blurred picture is held
 		|| crate::wallpaper::per_sigma(old) != crate::wallpaper::per_sigma(new)
+		// and whether it goes up as BC1 or BC7
+		|| crate::wallpaper::packing(old) != crate::wallpaper::packing(new)
 }
 
 #[cfg(test)]
