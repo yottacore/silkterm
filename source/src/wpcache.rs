@@ -1,26 +1,31 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 
-//! Prepared wallpapers kept on disk as JPEG, so a launch, a return to a picture
-//! in rotation, a resize or a wake from the idle release reads a small file
-//! rather than blurring the original again. Every SilkTerm process on the box
-//! shares the folder: an entry is written to a temp file and renamed into
-//! place, and one that does not read back whole is removed and made again.
+//! Prepared wallpapers kept on disk, so a launch, a return to a picture in
+//! rotation, a resize or a wake from the idle release reads a small file
+//! rather than blurring the original again. A picture the GPU gets as BC1 is
+//! kept as those blocks, which go back up wiht no decode or encode. One held
+//! plain is kept as JPEG. Every SilkTerm process on the box shares the
+//! folder: an entry is written to a temp file and renamed into place, and one
+//! that does not read back whole is removed and made again.
 
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crate::autotheme::{SPREAD, Summary};
 
 // Part of every key. Bump it when `wallpaper::prepare_keeping` changes what it
 // makes, or old copies keep being shown until they age out.
-const FORMAT: u64 = 1;
-const MAGIC: &[u8; 8] = b"silkwpc\x01";
+const FORMAT: u64 = 2;
+// A copy that starts any other way is from another format and goes at the
+// next prune (format 1 was JPEG only).
+const MAGIC: &[u8; 8] = b"silkwpc\x02";
 const EXT: &str = "wpc";
 
-/// Past this the least recently used copies go. A copy at 2560x1440 is 230 to
-/// 450 KiB.
+/// Past this the least recently used copies go. A copy at 2560x1440 is 1.8 MiB
+/// as BC1, and 230 to 450 KiB as JPEG.
 pub const LIMIT: u64 = 256 << 20;
 
 // The encoder's 4:4:4. At the default blur a copy is within 4 levels of the
@@ -117,11 +122,35 @@ fn fnv(bytes: &[u8]) -> u64 {
 #[derive(Debug)]
 pub struct Kept {
 	pub rgba: image::RgbaImage,
+	/// The blocks `rgba` was unpacked from, for a copy kept as BC1.
+	pub bc1: Option<Arc<Vec<u8>>>,
 	/// The summary of the pixels as prepared, not as read back, so derived
 	/// colors come out the same with or without the copy. Its opacity is the
 	/// one it was stored with.
 	pub summary: Summary,
 }
+
+/// What `store` keeps: the BC1 blocks the window was given, and their
+/// picture's size, or plain pixels as JPEG.
+#[derive(Debug)]
+pub enum Stored {
+	Bc1((u32, u32), Arc<Vec<u8>>),
+	Jpeg(image::RgbaImage),
+}
+
+impl Stored {
+	/// The picture's size, and how it is kept, for the debug line.
+	pub fn describe(&self) -> ((u32, u32), &'static str) {
+		match self {
+			Stored::Bc1(size, _) => (*size, "BC1"),
+			Stored::Jpeg(rgba) => (rgba.dimensions(), "JPEG"),
+		}
+	}
+}
+
+// How the picture after the header is kept.
+const AS_JPEG: u32 = 1;
+const AS_BC1: u32 = 2;
 
 /// The nearest kept copy for `key` within 5% of `want`'s pixel count. A copy
 /// that does not read back whole is removed and the next one tried.
@@ -169,9 +198,10 @@ fn parse_size(rest: &str) -> Option<(u32, u32)> {
 }
 
 // Layout, all little-endian: magic, key length and key, width and height, the
-// summary's numbers, JPEG length, the JPEG's hash and the JPEG. A file of any
-// other length was cut short or written over, and the hash catches the rest,
-// since the decoder reads a spoiled JPEG without complaint.
+// summary's numbers, how the picture is kept, its length, its hash and the
+// picture. A file of any other length was cut short or written over, and the
+// hash catches the rest, since the decoder reads a spoiled JPEG without
+// complaint and any 8 bytes are a BC1 block.
 fn read(path: &Path, key: &Key, size: (u32, u32)) -> Option<Kept> {
 	let bytes = std::fs::read(path).ok()?;
 	let mut at = Reader(&bytes);
@@ -186,16 +216,30 @@ fn read(path: &Path, key: &Key, size: (u32, u32)) -> Option<Kept> {
 		return None;
 	}
 	let summary = read_summary(&mut at)?;
-	let jpeg_len = at.number()? as usize;
+	let kind = at.number()?;
+	let len = at.number()? as usize;
 	let hash = u64::from_le_bytes(at.take(8)?.try_into().ok()?);
-	let jpeg = at.take(jpeg_len)?;
-	if !at.0.is_empty() || fnv(jpeg) != hash {
+	let picture = at.take(len)?;
+	if !at.0.is_empty() || fnv(picture) != hash {
 		return None;
 	}
-	let rgba = image::load_from_memory_with_format(jpeg, image::ImageFormat::Jpeg)
-		.ok()?
-		.into_rgba8();
-	(rgba.dimensions() == size).then_some(Kept { rgba, summary })
+	let (rgba, bc1) = match kind {
+		AS_BC1 => {
+			let rgba = crate::bc1::decode(picture, size)?;
+			// the blocks are the file's tail: kept in place, not copied out
+			let mut blocks = bytes;
+			blocks.drain(..blocks.len() - len);
+			(rgba, Some(Arc::new(blocks)))
+		}
+		AS_JPEG => (
+			image::load_from_memory_with_format(picture, image::ImageFormat::Jpeg)
+				.ok()?
+				.into_rgba8(),
+			None,
+		),
+		_ => return None,
+	};
+	(rgba.dimensions() == size).then_some(Kept { rgba, bc1, summary })
 }
 
 struct Reader<'a>(&'a [u8]);
@@ -244,38 +288,53 @@ fn read_summary(at: &mut Reader) -> Option<Summary> {
 	})
 }
 
-/// Keep `rgba` for `key`, then prune the folder back under `limit`. A picture
-/// with any transparency is not kept, since a JPEG has no alpha.
+/// Keep `stored` for `key`, then prune the folder back under `limit`. A plain
+/// picture with any transparency is not kept, since a JPEG has no alpha.
 pub fn store(
 	dir: &Path,
 	key: &Key,
-	rgba: &image::RgbaImage,
+	stored: &Stored,
 	summary: &Summary,
 	limit: u64,
 ) -> std::io::Result<bool> {
-	if rgba.pixels().any(|px| px[3] != u8::MAX) || !crate::config::may_write(dir) {
+	if !crate::config::may_write(dir) {
 		return Ok(false);
 	}
 	let mut jpeg = Vec::new();
-	image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, QUALITY)
-		.encode_image(rgba)
-		.map_err(std::io::Error::other)?;
+	let (size, kind, picture) = match stored {
+		Stored::Bc1(size, blocks) => {
+			if blocks.len() != crate::bc1::len_for(*size) {
+				return Err(std::io::Error::other("BC1 blocks for another size"));
+			}
+			(*size, AS_BC1, blocks.as_slice())
+		}
+		Stored::Jpeg(rgba) => {
+			if rgba.pixels().any(|px| px[3] != u8::MAX) {
+				return Ok(false);
+			}
+			image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, QUALITY)
+				.encode_image(rgba)
+				.map_err(std::io::Error::other)?;
+			(rgba.dimensions(), AS_JPEG, jpeg.as_slice())
+		}
+	};
 	let numbers = summary_numbers(summary);
-	let mut bytes = Vec::with_capacity(jpeg.len() + key.0.len() + numbers.len() * 4 + 32);
+	let mut bytes = Vec::with_capacity(picture.len() + key.0.len() + numbers.len() * 4 + 36);
 	bytes.extend_from_slice(MAGIC);
 	push_u32(&mut bytes, key.0.len())?;
 	bytes.extend_from_slice(&key.0);
-	bytes.extend_from_slice(&rgba.width().to_le_bytes());
-	bytes.extend_from_slice(&rgba.height().to_le_bytes());
+	bytes.extend_from_slice(&size.0.to_le_bytes());
+	bytes.extend_from_slice(&size.1.to_le_bytes());
 	for number in numbers {
 		bytes.extend_from_slice(&number.to_bits().to_le_bytes());
 	}
-	push_u32(&mut bytes, jpeg.len())?;
-	bytes.extend_from_slice(&fnv(&jpeg).to_le_bytes());
-	bytes.extend_from_slice(&jpeg);
+	bytes.extend_from_slice(&kind.to_le_bytes());
+	push_u32(&mut bytes, picture.len())?;
+	bytes.extend_from_slice(&fnv(picture).to_le_bytes());
+	bytes.extend_from_slice(picture);
 
 	std::fs::create_dir_all(dir)?;
-	let name = key.name(rgba.dimensions());
+	let name = key.name(size);
 	let nanos = SystemTime::now()
 		.duration_since(SystemTime::UNIX_EPOCH)
 		.unwrap_or_default()
@@ -292,6 +351,17 @@ pub fn store(
 	Ok(true)
 }
 
+// A copy this build can read starts with its magic. One that cannot be
+// opened is left alone, since it may be another process's rename landing.
+fn current_format(path: &Path) -> bool {
+	use std::io::Read;
+	let mut head = [0u8; 8];
+	match std::fs::File::open(path).and_then(|mut file| file.read_exact(&mut head)) {
+		Ok(()) => &head == MAGIC,
+		Err(e) => e.kind() != std::io::ErrorKind::UnexpectedEof,
+	}
+}
+
 fn push_u32(bytes: &mut Vec<u8>, len: usize) -> std::io::Result<()> {
 	let len = u32::try_from(len).map_err(std::io::Error::other)?;
 	bytes.extend_from_slice(&len.to_le_bytes());
@@ -299,7 +369,8 @@ fn push_u32(bytes: &mut Vec<u8>, len: usize) -> std::io::Result<()> {
 }
 
 // Oldest first, by last use, until the copies fit under `limit`. Another
-// process may be pruning too, so a copy already gone counts as removed.
+// process may be pruning too, so a copy already gone counts as removed. A
+// copy in another format goes first, whatever its age: nothing reads it.
 fn prune(dir: &Path, limit: u64, now: SystemTime) {
 	let Ok(entries) = std::fs::read_dir(dir) else {
 		return;
@@ -325,6 +396,10 @@ fn prune(dir: &Path, limit: u64, now: SystemTime) {
 		if !name.ends_with(&format!(".{EXT}")) {
 			continue;
 		}
+		if !current_format(&entry.path()) {
+			let _ = std::fs::remove_file(entry.path());
+			continue;
+		}
 		total += meta.len();
 		copies.push((used, meta.len(), entry.path()));
 	}
@@ -342,7 +417,7 @@ fn prune(dir: &Path, limit: u64, now: SystemTime) {
 
 #[cfg(test)]
 mod tests {
-	use super::{ABANDONED, EXT, Key, LIMIT, find, prune, read, store};
+	use super::{ABANDONED, EXT, Key, LIMIT, MAGIC, Stored, find, prune, read, store};
 	use std::path::PathBuf;
 	use std::time::{Duration, SystemTime};
 
@@ -369,7 +444,10 @@ mod tests {
 	fn keep(dir: &std::path::Path, key: &Key, size: (u32, u32)) {
 		let rgba = picture(size);
 		let summary = crate::autotheme::summarize(&rgba, 0.1);
-		assert!(store(dir, key, &rgba, &summary, LIMIT).unwrap(), "{size:?}");
+		assert!(
+			store(dir, key, &Stored::Jpeg(rgba), &summary, LIMIT).unwrap(),
+			"{size:?}"
+		);
 	}
 
 	fn kept_size(dir: &std::path::Path, key: &Key, want: (u32, u32)) -> Option<(u32, u32)> {
@@ -383,8 +461,9 @@ mod tests {
 		let key = key("a");
 		let rgba = picture((300, 200));
 		let summary = crate::autotheme::summarize(&rgba, 0.25);
-		assert!(store(&dir, &key, &rgba, &summary, LIMIT).unwrap());
+		assert!(store(&dir, &key, &Stored::Jpeg(rgba.clone()), &summary, LIMIT).unwrap());
 		let kept = find(&dir, &key, (300, 200)).expect("kept");
+		assert!(kept.bc1.is_none());
 		assert_eq!(
 			kept.summary, summary,
 			"the summary is the original's, exactly"
@@ -402,8 +481,68 @@ mod tests {
 		// a picture with any transparency is not kept, since JPEG has none
 		let mut clear = picture((40, 40));
 		clear.put_pixel(3, 3, image::Rgba([0, 0, 0, 128]));
-		assert!(!store(&dir, &self::key("c"), &clear, &summary, LIMIT).unwrap());
+		assert!(!store(&dir, &self::key("c"), &Stored::Jpeg(clear), &summary, LIMIT).unwrap());
 		assert!(find(&dir, &self::key("c"), (40, 40)).is_none());
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// BC1 blocks are kept as they are, so a copy uploads exactly what the
+	// window was first given. A spoiled block is caught by the hash, since
+	// any 8 bytes unpack to something.
+	// Test ID: Erz0mF1
+	#[test]
+	fn a_bc1_copy_comes_back_block_for_block() {
+		let dir = folder("bc1");
+		let key = key("bc1");
+		let size = (301, 203);
+		let rgba = picture(size);
+		let blocks = std::sync::Arc::new(crate::bc1::encode(&rgba));
+		let summary = crate::autotheme::summarize(&rgba, 0.25);
+		let stored = Stored::Bc1(size, blocks.clone());
+		assert!(store(&dir, &key, &stored, &summary, LIMIT).unwrap());
+		let kept = find(&dir, &key, size).expect("kept");
+		assert_eq!(kept.bc1.as_deref(), Some(&*blocks));
+		assert_eq!(Some(kept.rgba), crate::bc1::decode(&blocks, size));
+		assert_eq!(kept.summary, summary);
+		// blocks for another size are refused, not written
+		let wrong = Stored::Bc1((300, 203), blocks.clone());
+		assert!(store(&dir, &self::key("wrong"), &wrong, &summary, LIMIT).is_err());
+		assert!(find(&dir, &self::key("wrong"), (300, 203)).is_none());
+		// one block flipped, lengths still right
+		let path = dir.join(key.name(size));
+		let mut spoiled = std::fs::read(&path).unwrap();
+		let at = spoiled.len() - 100;
+		spoiled[at] ^= 0x40;
+		std::fs::write(&path, &spoiled).unwrap();
+		assert!(find(&dir, &key, size).is_none());
+		assert!(!path.exists());
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A copy from before BC1, JPEG only under the old magic, is never read,
+	// and the next prune takes it however recent, under the limit or not.
+	// Test ID: Erz0mH0
+	#[test]
+	fn a_copy_in_the_old_format_is_pruned() {
+		let dir = folder("oldformat");
+		let key = key("old");
+		keep(&dir, &key, (64, 48));
+		let current = dir.join(key.name((64, 48)));
+		let mut old = std::fs::read(&current).unwrap();
+		old[..8].copy_from_slice(b"silkwpc\x01");
+		// under this build's own name: read, refused and removed
+		std::fs::write(&current, &old).unwrap();
+		assert!(find(&dir, &key, (64, 48)).is_none());
+		assert!(!current.exists());
+		// under another name, as the old key made them: gone at the next prune
+		let stale = dir.join(format!("00112233aabbccdd-64x48.{EXT}"));
+		std::fs::write(&stale, &old).unwrap();
+		let short = dir.join(format!("0000000000000000-1x1.{EXT}"));
+		std::fs::write(&short, b"silk").unwrap();
+		keep(&dir, &key, (64, 48));
+		assert!(current.exists());
+		assert!(!stale.exists());
+		assert!(!short.exists());
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -438,7 +577,9 @@ mod tests {
 		let ago = |minutes: u64| now - Duration::from_mins(minutes);
 		let plant = |name: &str, bytes: usize, at: SystemTime| {
 			let path = dir.join(name);
-			std::fs::write(&path, vec![0u8; bytes]).unwrap();
+			let mut body = MAGIC.to_vec();
+			body.resize(bytes, 0);
+			std::fs::write(&path, body).unwrap();
 			std::fs::File::options()
 				.append(true)
 				.open(&path)

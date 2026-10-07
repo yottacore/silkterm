@@ -10,6 +10,7 @@
 #		--no-scrim         halo and outline off, so the scrim pass has nothing to draw
 #		--no-wallpaper
 #		--wallpaper FILE   instead of the built-in one
+#		--blur SIGMA       the wallpaper's blur, in its own pixels (whole numbers)
 #		--fill             fill the scrollback (12000 lines) before sampling
 #		--no-minimap
 #		--settings         open Settings once and sample with it open and closed (gl only)
@@ -42,7 +43,7 @@ swayPid="" appPid="" swayRun="" xDisplay="" rc=0
 fMain(){
 	local -r binary="${1:?binary}" mode="${2:?gl|vulkan}" size="${3:?WxH}"
 	shift 3
-	local scrim=true outline=1.0 wallpaper="" noWallpaper=false scene=idle minimap=true settings=false
+	local scrim=true outline=1.0 wallpaper="" noWallpaper=false scene=idle minimap=true settings=false blur=""
 	local -i settle=15 opens=1 flood=0
 	while (($#)); do
 		case "${1}" in
@@ -50,6 +51,7 @@ fMain(){
 			--no-scrim)     scrim=false; outline=0.0 ;;
 			--no-wallpaper) noWallpaper=true ;;
 			--wallpaper)    wallpaper="$(readlink -f "${2:?file}")"; shift ;;
+			--blur)         [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "--blur takes a whole number" >&2; return 2; }; blur="${2}"; shift ;;
 			--fill)         scene=fill ;;
 			--no-minimap)   minimap=false ;;
 			--settings)     settings=true ;;
@@ -69,11 +71,12 @@ fMain(){
 	trap 'rc=$?; fStop; fTestDir_End "${rc}"' EXIT
 	local -r work="${SILKTERM_TEST_DIR}/mem-per-window"
 	mkdir -p "${work}/cfg/silkterm" "${work}/data"
-	fWriteConfig "${work}/cfg/silkterm/config.shcl" "${scrim}" "${outline}" "${noWallpaper}" "${wallpaper}" "${minimap}"
+	fWriteConfig "${work}/cfg/silkterm/config.shcl" "${scrim}" "${outline}" "${noWallpaper}" "${wallpaper}" "${minimap}" "${blur}"
 	fWriteScene "${work}/scene.sh" "${scene}" "${flood}"
 	fStartSway "${work}" "$((width + 40))x$((height + 120))" || return 1
 
-	local -a env=(env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="${work}/cfg" XDG_DATA_HOME="${work}/data" XDG_RUNTIME_DIR="${swayRun}" SILK_MEMDBG=1 SILK_DLGDBG=1)
+	# its own cache folder, or the box's kept wallpapers are read and written
+	local -a env=(env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="${work}/cfg" XDG_CACHE_HOME="${work}/cache" XDG_DATA_HOME="${work}/data" XDG_RUNTIME_DIR="${swayRun}" SILK_MEMDBG=1 SILK_DLGDBG=1)
 	((flood == 0)) || env+=(SILK_PERF=1)
 	if [[ "${mode}" == gl ]]; then env+=(DISPLAY="${xDisplay}"); else env+=(WAYLAND_DISPLAY=wayland-1); fi
 	"${env[@]}" "${binary}" --pixel-width "${width}" --pixel-height "${height}" --shell "/bin/dash ${work}/scene.sh" 2>"${work}/stderr.log" &
@@ -110,15 +113,17 @@ fGpuHasRoom(){
 }
 
 fWriteConfig(){
-	local -r file="${1}" scrim="${2}" outline="${3}" noWallpaper="${4}" wallpaper="${5}" minimap="${6}"
+	local -r file="${1}" scrim="${2}" outline="${3}" noWallpaper="${4}" wallpaper="${5}" minimap="${6}" blur="${7}"
 	{
 		printf 'performance:\n\tautomatic: false\n\tprofile: custom\n\tcheck_hardware: false\n'
 		printf 'transparency:\n\tenabled: false\n'
 		printf 'window:\n\tidle_release: false\n'
 		if [[ "${noWallpaper}" == true ]]; then
 			printf 'wallpaper:\n\tenabled: false\n'
-		elif [[ -n "${wallpaper}" ]]; then
-			printf 'wallpaper:\n\tenabled: true\n\timage: "%s"\n' "${wallpaper}"
+		elif [[ -n "${wallpaper}" || -n "${blur}" ]]; then
+			printf 'wallpaper:\n\tenabled: true\n'
+			if [[ -n "${wallpaper}" ]]; then printf '\timage: "%s"\n' "${wallpaper}"; fi
+			if [[ -n "${blur}" ]]; then printf '\tblur: %s\n\thonor_xmp_look: false\n' "${blur}"; fi
 		fi
 		printf 'text:\n\tscrim:\n\t\tenabled: %s\n\toutline: %s\n' "${scrim}" "${outline}"
 		printf 'scroll:\n\tminimap:\n\t\tenabled: %s\n' "${minimap}"
@@ -221,3 +226,4 @@ fMain "${@}"
 ##	History:
 ##		- 20261004 JC: Created.
 ##		- 20261004 JC: --opens and --flood.
+##		- 20261007 JC: --blur, and a cache folder of its own.

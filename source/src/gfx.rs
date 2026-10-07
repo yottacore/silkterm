@@ -1251,7 +1251,9 @@ fn request_device(
 	Ok(pollster::block_on(adapter.request_device(
 		&wgpu::DeviceDescriptor {
 			label: Some(label),
-			required_features: wgpu::Features::empty(),
+			// the wallpaper as BC1 (bc1.rs) where the adapter can; ImageRenderer
+			// keeps it plain where not
+			required_features: adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC,
 			required_limits: adapter.limits(),
 			memory_hints: wgpu::MemoryHints::MemoryUsage,
 			..Default::default()
@@ -2612,6 +2614,197 @@ mod tests {
 			report.total_allocated_bytes,
 			gpu.adapter_info.name
 		);
+	}
+
+	// A wallpaper given as BC1 is drawn where the plain one is, padded to whole
+	// blocks and with a border too, and a device without BC gets it plain.
+	// Test ID: Erz0m6t
+	#[test]
+	fn a_bc1_wallpaper_draws_like_the_plain_one() {
+		let gpu = match DialogGpu::build(Want::Software) {
+			Ok(gpu) => gpu,
+			Err(e) => {
+				eprintln!("skipped: no device ({e})");
+				return;
+			}
+		};
+		if !gpu
+			.device
+			.features()
+			.contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+		{
+			eprintln!("skipped: {} has no BC", gpu.adapter_info.name);
+			return;
+		}
+		let (plain_device, plain_queue) =
+			pollster::block_on(gpu.adapter.request_device(&wgpu::DeviceDescriptor {
+				label: Some("no bc"),
+				required_features: wgpu::Features::empty(),
+				..Default::default()
+			}))
+			.expect("a device without BC");
+		// 8 texel squares line up with the 4x4 blocks, so BC1 keeps each one a
+		// flat color and only a misplaced sample can move a pixel far
+		for (picture, border) in [((203, 117), false), ((100, 71), true)] {
+			let rgba = image::RgbaImage::from_fn(picture.0, picture.1, |x, y| {
+				if (x / 8 + y / 8) % 2 == 0 {
+					image::Rgba([230, 140, 40, 255])
+				} else {
+					image::Rgba([20, 60, 120, 255])
+				}
+			});
+			let ring = 2 * u32::from(border);
+			let held = (picture.0 - ring, picture.1 - ring);
+			let plain = crate::wallpaper::Prepared {
+				summary: crate::autotheme::summarize(&rgba, 1.0),
+				rgba: rgba.clone(),
+				sizing: crate::wallpaper::Sizing {
+					full: (held.0 * 4, held.1 * 4),
+					most: if border {
+						held
+					} else {
+						(held.0 * 4, held.1 * 4)
+					},
+				},
+				opacity: 1.0,
+				fit: crate::config::Fit::Stretch,
+				anchor: [0.5, 0.5],
+				held,
+				border,
+				bc1: None,
+			};
+			let packed = crate::wallpaper::Prepared {
+				bc1: Some(std::sync::Arc::new(crate::bc1::encode(&rgba))),
+				..plain.clone()
+			};
+			let window = (held.0 * 3, held.1 * 3);
+			// The loss probe reads the texture back, which GL cannot do for a
+			// compressed one: the copy is skipped and the zeros read as lost.
+			let draw = |device: &wgpu::Device, queue: &wgpu::Queue, img| {
+				let mut renderer = crate::bgimage::ImageRenderer::new(device, queue, FB_HDR, img);
+				let probed = renderer.vram_check_start(device, queue);
+				let line = renderer.memdbg_line();
+				(
+					line,
+					probed,
+					draw_offscreen(device, queue, window, &renderer),
+				)
+			};
+			let (line, probed, want) = draw(&gpu.device, &gpu.queue, &plain);
+			assert!(!line.contains("BC1") && probed, "{line}");
+			let (line, probed, got) = draw(&gpu.device, &gpu.queue, &packed);
+			assert!(line.contains("as BC1") && !probed, "{line}");
+			let (line, probed, fallback) = draw(&plain_device, &plain_queue, &packed);
+			assert!(!line.contains("BC1") && probed, "{line}");
+			let worst = |a: &[u8], b: &[u8]| {
+				a.iter()
+					.zip(b)
+					.map(|(x, y)| x.abs_diff(*y))
+					.max()
+					.unwrap_or(0)
+			};
+			assert!(
+				worst(&want, &got) <= 2,
+				"{picture:?}: BC1 off by {}",
+				worst(&want, &got)
+			);
+			assert!(
+				worst(&want, &fallback) <= 2,
+				"{picture:?}: the plain fallback off by {}",
+				worst(&want, &fallback)
+			);
+		}
+	}
+
+	const FB_HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
+	// One wallpaper frame over black, read back as sRGB bytes.
+	fn draw_offscreen(
+		device: &wgpu::Device,
+		queue: &wgpu::Queue,
+		(w, h): (u32, u32),
+		renderer: &crate::bgimage::ImageRenderer,
+	) -> Vec<u8> {
+		let target = device.create_texture(&wgpu::TextureDescriptor {
+			label: Some("test target"),
+			size: wgpu::Extent3d {
+				width: w,
+				height: h,
+				depth_or_array_layers: 1,
+			},
+			mip_level_count: 1,
+			sample_count: 1,
+			dimension: wgpu::TextureDimension::D2,
+			format: FB_HDR,
+			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+			view_formats: &[],
+		});
+		let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+		let mix = crate::visibility::Mix {
+			amount: 1.0,
+			perceptual: false,
+		};
+		renderer.set_look(queue, w as f32, h as f32, mix, [0.0, 0.0, 0.0, 1.0]);
+		let row = (w * 8).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+		let buf = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("test read"),
+			size: u64::from(row * h),
+			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+			mapped_at_creation: false,
+		});
+		let mut enc = device.create_command_encoder(&Default::default());
+		{
+			let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+				label: Some("test pass"),
+				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+					view: &view,
+					depth_slice: None,
+					resolve_target: None,
+					ops: wgpu::Operations {
+						load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+						store: wgpu::StoreOp::Store,
+					},
+				})],
+				..Default::default()
+			});
+			renderer.draw(&mut pass);
+		}
+		enc.copy_texture_to_buffer(
+			wgpu::TexelCopyTextureInfo {
+				texture: &target,
+				mip_level: 0,
+				origin: wgpu::Origin3d::ZERO,
+				aspect: wgpu::TextureAspect::All,
+			},
+			wgpu::TexelCopyBufferInfo {
+				buffer: &buf,
+				layout: wgpu::TexelCopyBufferLayout {
+					offset: 0,
+					bytes_per_row: Some(row),
+					rows_per_image: Some(h),
+				},
+			},
+			wgpu::Extent3d {
+				width: w,
+				height: h,
+				depth_or_array_layers: 1,
+			},
+		);
+		queue.submit(Some(enc.finish()));
+		buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+		let _ = device.poll(wgpu::PollType::wait_indefinitely());
+		let data = buf.slice(..).get_mapped_range();
+		let mut out = Vec::with_capacity((w * h * 3) as usize);
+		for y in 0..h {
+			let start = (y * row) as usize;
+			for texel in data[start..start + (w * 8) as usize].chunks_exact(8) {
+				for c in 0..3 {
+					let bits = u16::from_le_bytes([texel[c * 2], texel[c * 2 + 1]]);
+					out.push(crate::config::from_linear_u8(f16_to_f32(bits)));
+				}
+			}
+		}
+		out
 	}
 
 	// Every dialog open takes the one kept context. Building one per open cost

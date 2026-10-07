@@ -396,6 +396,48 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 34fa3fe
 	- Test case: Unit tests EryHHqn, EryHHuh, EryHHyF, EryHI1u, EryHI5c, EryHI98, EryHICk. Window test `cicd/tests/wpkept/run.bash` (EryJg1H) in stage 3.
 
+- Block compression for the wallpaper
+	- ID: 2026100418225507
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs local test suite run?: No. The unit tests, clippy for Linux, Windows and macOS, and the wpkept, wpresize and wakepic window tests passed.
+	- Needs external testing: A look on Windows (DX12 and WARP) and macOS (Metal), where BC1 upload and the padded texture have not been seen. The unit tests on vm925w and b26.
+	- Priority: Avg
+	- Opened: 20261004-182255
+	- Opened by: JC
+	- Assigned to: CC
+	- Prereq IDs: 2026100418225503
+	- Target OS: All
+	- Requirements:
+		- Compress the wallpaper once it is prepared at window size and blur.
+		- Pick by blur and size: smaller and plain for a heavy blur, BC1 for little or none, BC7 only where BC1 bands.
+		- A pure Rust encoder. Weigh its cost in executable size.
+		- Keep a plain fallback for an adapter without BC support.
+	- Notes:
+		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
+		- 20261006: The disk cache (2026100514211603) went first, as JPEG. When this is built, the cache keeps the BC data in place of the JPEG, so a kept copy needs no decode or encode.
+		- 20261006: The smaller hold for a heavy blur is split out as 2026100619365706.
+	- Decisions:
+		- 20261006: An in-house BC1 encoder, a few hundred lines, no crate. BC7 only if a test finds BC1 banding, and that comes back as a question first.
+		- 20261007: BC1 stays as built and is the default. BC7 becomes an option, filed as 2026100705511507.
+	- Progress log:
+		- 20261007: Chosen: BC1 only for a picture held by the window. One held by its blur stays plain, since its blocks would be drawn several screen pixels wide. Tried: at most 5 levels off, but the blocks showed as a grid with the contrast stretched. It would have saved 2 MiB at 2560x1440.
+		- 20261007: Done: a picture held by the window goes to the GPU as BC1, an eighth of its plain size. Pictures held by their blur, and any with transparency, stay plain.
+		- 20261007: Done: a device without BC gets the picture plain. A BC1 texture is padded to whole 4x4 blocks, and the shader reads only the part that holds the picture.
+		- 20261007: Done: the disk cache keeps a BC1 picture as its blocks, so a kept copy needs no decode or encode. A picture held by its blur is still kept as JPEG. Copies in the old format are removed at the next prune.
+		- 20261007: Done: on GL the check for a lost wallpaper skips a BC1 picture, since GL cannot read a compressed texture back.
+		- 20261007: Verified on b23, 2560x1440 photo with no blur at 2560x1440: the texture went from 14.1 MiB to 1.8. On X11 the wallpaper's share of graphics memory went from 32 MiB to 1, and of regular memory from 46 to 11. On Vulkan the allocator's in-use figure went from 65.5 to 52.4 MiB, and the driver's figure stayed the same.
+		- 20261007: Verified: at the shipped blur, 0 changed pixels against the build before, dark and light, GL and Vulkan, and the same memory.
+		- 20261007: Verified: with no blur, under a level off on average. At most 6 or 7 on the built-in in dark mode, 12 to 17 in light mode, 32 around small colored stars, and 65 there at 100% visibility with no scrim. A light blur of 2 was at most 4 to 7. An odd window size was no worse at the edges.
+		- 20261007: Verified: encoding takes 20 to 41 ms at 2560x1440. The release binary is 13 KB bigger.
+		- 20261007: Verified: the new tests fail with the padded mapping taken out, with the border sized by the texture, with the loss check left on, with BC asked of a device that lacks it, without the flat color tables, with the padding not repeating the edge, with old copies left by the prune, with BC1 copies kept as JPEG, and with blur-held pictures compressed. The new window checks fail on the build before this.
+		- 20261007: Question: with no blur, BC1's 4x4 blocks show as faint steps in smooth gradients. Seen on the built-in in light mode on a close look, and plainly with the contrast stretched 4 times. No contour bands. Is that the banding the BC7 decision was for? Options: keep BC1 as built, BC7 for pictures with little or no blur (twice BC1's size, 3.5 MiB at 2560x1440, and far better on gradients), or keep pictures with no blur plain.
+	- Branch: wpbc1
+	- Commit: e868c37
+	- Test case: `a_bc1_wallpaper_draws_like_the_plain_one` (Erz0m6t), `a_flat_color_comes_back_within_a_level` (Erz0m8u), `a_slow_gradient_comes_back_within_two_levels` (Erz0mAu), `sizes_round_up_to_whole_blocks` (Erz0mCs), `a_bc1_copy_comes_back_block_for_block` (Erz0mF1), `a_copy_in_the_old_format_is_pruned` (Erz0mH0), and the light blur case in `cicd/tests/wpkept/run.bash` (EryJg1H).
+	- Swept: every maker of `Prepared` (the prepare, the kept copy, the stand-in), everything that reads the wallpaper texture (the loss check, its clobber, the debug line), every caller of `wpcache::store` and `find`, and the one place devices are made. Changed tests: EryHICk checks the kept blocks come back exactly in place of a JPEG error bound, which moved to Erym5s3; ErsiiyG's uniform is 80 bytes; EryHI1u's planted copies start with the new format's mark.
+	- Closed:
+
 - The git-aware bash prompt starts about six processes per prompt
 	- ID: 2026100314050019
 	- Type: Enhancement
@@ -572,28 +614,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Block compression for the wallpaper
-	- ID: 2026100418225507
+- Wallpaper: optional BC7 in place of BC1
+	- ID: 2026100705511507
 	- Type: Enhancement
 	- Status: Queued
 	- Priority: Avg
-	- Opened: 20261004-182255
+	- Opened: 20261007-055115
 	- Opened by: JC
-	- Assigned to: CC
-	- Prereq IDs: 2026100418225503
+	- Parent ID: 2026100418225507
+	- Prereq IDs: 2026100418225507
 	- Target OS: All
 	- Requirements:
-		- Compress the wallpaper once it is prepared at window size and blur.
-		- Pick by blur and size: smaller and plain for a heavy blur, BC1 for little or none, BC7 only where BC1 bands.
-		- A pure Rust encoder. Weigh its cost in executable size.
-		- Keep a plain fallback for an adapter without BC support.
+		- Implement optional BC7.
 	- Notes:
-		- 20261004: lavapipe, llvmpipe and WARP all have BC support. Design in the [reducing resources design doc](design_docs/20261004-182255_reduce-resources.md#block-compression-for-the-wallpaper).
-		- 20261006: The disk cache (2026100514211603) went first, as JPEG. When this is built, the cache keeps the BC data in place of the JPEG, so a kept copy needs no decode or encode.
-		- 20261006: The smaller hold for a heavy blur is split out as 2026100619365706.
-	- Decisions:
-		- 20261006: An in-house BC1 encoder, a few hundred lines, no crate. BC7 only if a test finds BC1 banding, and that comes back as a question first.
-	- Closed:
+		- 20261007: With no blur, BC1's 4x4 blocks show as faint steps in smooth gradients. BC7 is twice BC1's size, 3.5 MiB at 2560x1440, and much better on gradients. BC1 stays the default.
+		- 20261007: Not settled yet: where the option lives and what it is called.
 
 - One VRAM readback probe for gfx.rs and bgimage.rs
 	- ID: 2026100622234832

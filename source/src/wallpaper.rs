@@ -134,6 +134,11 @@ pub struct Prepared {
 	/// `rgba` has a one pixel ring of what lies past the picture's edge
 	/// (`Sizing::bordered`), which the shader samples into but never shows.
 	pub border: bool,
+	/// `rgba` as BC1 blocks (bc1.rs), which a GPU that takes them is given
+	/// instead. None keeps it plain (`compressed`). Shared with the kept copy
+	/// rather than cloned: under `tune_heap`'s mmap threshold, every copy
+	/// stays resident in the worker's arena once freed.
+	pub bc1: Option<Arc<Vec<u8>>>,
 }
 
 /// What a scan found. Absent when the request didn't scan, or when the folder
@@ -180,6 +185,7 @@ impl Prepared {
 			summary: self.summary,
 			held: self.held,
 			border: false,
+			bc1: None,
 		}
 	}
 }
@@ -256,17 +262,22 @@ pub fn spawn(proxy: &EventLoopProxy<UserEvent>, request: Request) {
 	}
 }
 
-// A copy is kept after the result is sent, since the encode is a tenth of a
-// second at 2560x1440 and nothing on screen waits for it.
+// A copy is kept after the result is sent, since a JPEG encode is a tenth of
+// a second at 2560x1440 and nothing on screen waits for it. BC1 blocks are
+// kept as they are.
 fn answer(request: &Request, send: impl FnOnce(Loaded)) {
 	let mut loaded = run(request);
 	let keep = loaded.keep.take().and_then(|key| {
 		let image = loaded.image.as_ref()?;
-		Some((key, image.rgba.clone(), image.summary))
+		let stored = match &image.bc1 {
+			Some(blocks) => wpcache::Stored::Bc1(image.rgba.dimensions(), Arc::clone(blocks)),
+			None => wpcache::Stored::Jpeg(image.rgba.clone()),
+		};
+		Some((key, stored, image.summary))
 	});
 	send(loaded);
-	if let (Some((key, rgba, summary)), Some(dir)) = (keep, &request.kept) {
-		keep_copy(dir, &key, &rgba, &summary);
+	if let (Some((key, stored, summary)), Some(dir)) = (keep, &request.kept) {
+		keep_copy(dir, &key, &stored, &summary);
 	}
 }
 
@@ -572,7 +583,8 @@ fn kept_key(
 }
 
 // Whether `prepare` does more than decode and cut. Only then is a kept copy
-// worth reading, and only then is one made.
+// worth reading, and only then is one made. The BC1 encode a picture held by
+// the window also gets is about 40 ms at 2560x1440, so it does not count.
 fn works(settings: &Settings, sizing: Sizing, held: (u32, u32), blur: f32) -> bool {
 	let scale = held.0 as f32 / sizing.full.0.max(1) as f32;
 	held_blur(blur, scale) > 0.0 || settings.wallpaper_contrast_mask || held != sizing.full
@@ -649,6 +661,7 @@ fn prepare_keeping(
 					summary,
 					held,
 					border,
+					bc1: copy.bc1,
 				};
 				return Some((image, None));
 			}
@@ -768,6 +781,7 @@ fn prepare_keeping(
 		crate::autotheme::summarize(&img, opacity)
 	});
 	let image = Prepared {
+		bc1: compressed(&img, border),
 		rgba: img,
 		sizing,
 		opacity,
@@ -778,6 +792,15 @@ fn prepare_keeping(
 		border,
 	};
 	Some((image, keep))
+}
+
+// BC1 for a picture held by the window, an eighth of plain RGBA. One held by
+// its blur stays plain: it is already well under the window's size, and each
+// of its texels is drawn over several screen pixels, so a block's few colors
+// would show as steps that much larger. Opaque only, since a BC1 texel is
+// either opaque or black and clear.
+fn compressed(img: &image::RgbaImage, border: bool) -> Option<Arc<Vec<u8>>> {
+	(!border && img.pixels().all(|px| px[3] == u8::MAX)).then(|| Arc::new(crate::bc1::encode(img)))
 }
 
 // The texture's size for a picture held at `held`: one texel more on every
@@ -803,11 +826,14 @@ fn prepare(
 fn keep_copy(
 	dir: &Path,
 	key: &wpcache::Key,
-	rgba: &image::RgbaImage,
+	stored: &wpcache::Stored,
 	summary: &crate::autotheme::Summary,
 ) {
-	match wpcache::store(dir, key, rgba, summary, wpcache::LIMIT) {
-		Ok(true) => memdbg(&format!("stored {}x{}", rgba.width(), rgba.height())),
+	match wpcache::store(dir, key, stored, summary, wpcache::LIMIT) {
+		Ok(true) => {
+			let ((w, h), kind) = stored.describe();
+			memdbg(&format!("stored {w}x{h} {kind}"));
+		}
 		Ok(false) => {}
 		Err(e) => memdbg(&format!("not stored: {e}")),
 	}
@@ -2135,19 +2161,17 @@ mod tests {
 		assert_eq!(again.summary, first.summary);
 		assert_eq!(again.held, first.held);
 		assert_eq!(again.rgba.dimensions(), first.rgba.dimensions());
-		// High quality JPEG: under a level on average, a few at hard edges
-		// (this blur is light, so the built-in still has some)
-		let off: Vec<u8> = first
-			.rgba
-			.pixels()
-			.zip(again.rgba.pixels())
-			.flat_map(|(a, b)| (0..3).map(move |c| a[c].abs_diff(b[c])))
-			.collect();
-		let mean = off.iter().map(|&d| f64::from(d)).sum::<f64>() / off.len() as f64;
-		let worst = off.iter().max().copied().unwrap_or(0);
-		assert!(
-			mean < 1.0 && worst <= 16,
-			"off by {mean:.3} on average, {worst} at most"
+		// held by the window, so the GPU was given BC1, and the copy is those
+		// same blocks: what it shows is what the first one showed
+		let blocks = first
+			.bc1
+			.as_deref()
+			.expect("BC1 for a picture held by the window");
+		assert_eq!(again.bc1.as_deref(), Some(blocks));
+		let blocks = blocks.as_slice();
+		assert_eq!(
+			Some(&again.rgba),
+			crate::bc1::decode(blocks, first.held).as_ref()
 		);
 
 		// 2% more pixels: the copy stands in, and says what was asked for, so
@@ -2211,15 +2235,30 @@ mod tests {
 		};
 		let first = ask((1920, 993));
 		assert!(first.border);
+		assert!(first.bc1.is_none(), "held by its blur, so plain");
 		assert_eq!(first.rgba.dimensions(), (770, 399));
 		assert_eq!(copies(), 1);
 		// any window as big or bigger reads it back, border and all
 		let again = ask((2560, 1440));
 		assert_eq!(copies(), 1, "read, not made again");
 		assert!(again.border);
+		assert!(again.bc1.is_none());
 		assert_eq!(again.held, first.held);
 		assert_eq!(again.rgba.dimensions(), first.rgba.dimensions());
 		assert_eq!(again.summary, first.summary);
+		// kept as high quality JPEG: under a level on average, a few at most
+		let off: Vec<u8> = first
+			.rgba
+			.pixels()
+			.zip(again.rgba.pixels())
+			.flat_map(|(a, b)| (0..3).map(move |c| a[c].abs_diff(b[c])))
+			.collect();
+		let mean = off.iter().map(|&d| f64::from(d)).sum::<f64>() / off.len() as f64;
+		let worst = off.iter().max().copied().unwrap_or(0);
+		assert!(
+			mean < 1.0 && worst <= 16,
+			"off by {mean:.3} on average, {worst} at most"
+		);
 		// 2% fewer pixels, held by the window: prepared and kept on its own
 		let near = ask((760, 393));
 		assert_eq!(near.held, (760, 393));
