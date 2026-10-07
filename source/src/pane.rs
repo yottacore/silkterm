@@ -4277,7 +4277,7 @@ fn same_char_pair(row: &[char], col: usize, ch: char) -> Option<(usize, usize)> 
 	let pos: Vec<usize> = row
 		.iter()
 		.enumerate()
-		.filter(|&(_, &c)| c == ch)
+		.filter(|&(i, &c)| c == ch && !is_apostrophe(row, i))
 		.map(|(i, _)| i)
 		.collect();
 	let mut i = 0;
@@ -4288,6 +4288,13 @@ fn same_char_pair(row: &[char], col: usize, ch: char) -> Option<(usize, usize)> 
 		i += 2;
 	}
 	None
+}
+
+// A ' with a letter or digit on both sides is inside a word (don't, O'Brien,
+// Python's b'...') and opens or closes nothing.
+fn is_apostrophe(row: &[char], i: usize) -> bool {
+	let word = |c: Option<&char>| c.is_some_and(|c| c.is_alphanumeric());
+	row[i] == '\'' && i > 0 && word(row.get(i - 1)) && word(row.get(i + 1))
 }
 
 // Split the leaf `id` into a `dir` Split. `before` puts the new pane on the
@@ -6270,6 +6277,35 @@ mod tests {
 		assert_eq!(same_char_pair(&r, 8, '"'), Some((4, 16)));
 		let (s, e) = pair_inside(&r, 8, PAIRS).unwrap();
 		assert_eq!(r[s..=e].iter().collect::<String>(), "hello world");
+	}
+
+	// Python prints bytes as b'...', and the b' read as an opening quote, so a
+	// double-click on the last word took everything back to the link.
+	// Test ID: Es2aZeI
+	#[test]
+	fn an_apostrophe_is_not_a_quote() {
+		let text = |line: &str, word: &str| {
+			let r = row(line);
+			let (s, e) = pair_inside(&r, line.find(word).unwrap(), PAIRS)?;
+			Some(r[s..=e].iter().collect::<String>())
+		};
+		let bytes = "b'https://example.invalid/silk1007 CLIPMARK'";
+		assert_eq!(text(bytes, "CLIPMARK"), None);
+		assert_eq!(text("don't click 'here' now", "click"), None);
+		assert_eq!(
+			text("it's 'a phrase' ok", "phrase").as_deref(),
+			Some("a phrase")
+		);
+		assert_eq!(
+			text("O'Brien said 'hi there'", "there").as_deref(),
+			Some("hi there")
+		);
+		// a quote with a space on one side is still a quote
+		assert_eq!(
+			text("say 'two words' now", "two").as_deref(),
+			Some("two words")
+		);
+		assert_eq!(text("'x' and 'y z'", "z").as_deref(), Some("y z"));
 	}
 
 	// Test ID: Ei9srC8

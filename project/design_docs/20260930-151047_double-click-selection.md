@@ -101,6 +101,8 @@ A double-click in SilkTerm tries to grab the thing a person meant: a whole path 
 
 - Space runs are trimmed against the delimiters. If the inside is nothing but spaces, the whole span is taken.
 
+- A `'` with a letter or digit on both sides is an apostrophe, and is neither end of a pair. That covers `don't`, `O'Brien` and the `b'` Python prints in front of bytes.
+
 - A bracket's partner is searched at most 200 rows away, once, at the click. An unmatched bracket is selected on its own.
 
 - Outside any pair, the engine's semantic word selection runs, with `selection.word_separators` as its escape characters. The default leaves out `:`, so a drive path and a URL select whole.
