@@ -7450,21 +7450,49 @@ mod tests {
 		}
 	}
 
+	// CPU time this thread has used. The rest of the suite and whatever else the
+	// box is doing take turns on the cores, and wall time counts every turn lost.
+	#[cfg(unix)]
+	fn thread_cpu() -> std::time::Duration {
+		let mut now = libc::timespec {
+			tv_sec: 0,
+			tv_nsec: 0,
+		};
+		// SAFETY: a clock read into a local the call owns for its length.
+		unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &raw mut now) };
+		std::time::Duration::new(now.tv_sec as u64, now.tv_nsec as u32)
+	}
+
+	// Thread times on Windows move in scheduler ticks, too coarse for one run, so
+	// it gets wall time and leans on the pairing alone.
+	#[cfg(not(unix))]
+	fn thread_cpu() -> std::time::Duration {
+		static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+		EPOCH.get_or_init(std::time::Instant::now).elapsed()
+	}
+
 	// Test ID: EqHIGdO
 	#[test]
 	fn the_scroll_record_costs_a_full_screen_program_little() {
 		// tmux, vim and less scroll a screen that keeps no history, so the engine
 		// keeps the rows that leave for the slide to draw. It copied each one, and
 		// that took a third off the parse. Same flood with the rows kept and
-		// without, turn about, best of each.
+		// without.
 		let (cols, lines) = (160usize, 42usize);
+		let mut term = term_fed(cols, lines, 1000, "\x1b[?1049h");
+		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
+		let leaving = std::ptr::from_ref(&term.grid()[Line(0)][Column(0)]);
+		feed(&mut term, &format!("\x1b[{lines};1H\n"));
+		let kept = std::ptr::from_ref(&term.scroll_ledger().rows()[0][Column(0)]);
+		assert_eq!(kept, leaving, "the row that left is kept, not a copy of it");
+
 		let line = format!("{}\r\n", "0123456789".repeat(8));
 		let flood = line.repeat(4000);
 		let run = |keep: usize| {
 			let mut term = term_fed(cols, lines, 1000, "\x1b[?1049h");
 			term.set_scroll_ledger_rows(keep);
 			let mut parser: Processor = Processor::new();
-			let start = std::time::Instant::now();
+			let start = thread_cpu();
 			for chunk in flood.as_bytes().chunks(64 * 1024) {
 				parser.advance(&mut term, chunk);
 			}
@@ -7472,27 +7500,31 @@ mod tests {
 				term.scroll_ledger().rows().len(),
 				keep.min(crate::scroll::SLIDE_ROWS)
 			);
-			start.elapsed()
+			thread_cpu().saturating_sub(start).as_secs_f64()
 		};
-		// The rest of the suite runs beside this, so a slow pass gets more turns
-		// before it counts. The copy was 28% over in every one.
-		let (mut kept, mut bare) = (std::time::Duration::MAX, std::time::Duration::MAX);
-		let within = |kept: std::time::Duration, bare: std::time::Duration| {
-			kept.as_secs_f64() <= bare.as_secs_f64() * 1.10
-		};
-		for _ in 0..4 {
-			for _ in 0..7 {
-				kept = kept.min(run(crate::scroll::SLIDE_ROWS));
-				bare = bare.min(run(0));
-			}
-			if within(kept, bare) {
-				break;
-			}
-		}
-		eprintln!("rows kept {kept:?}, none {bare:?}");
+		// The rest of the suite runs beside this. The best of each side, taken at
+		// different moments, failed under load now and then (2026100714145220).
+		// Each pair runs back to back, order swapped every time, so both halves
+		// see the same box, and the median ignores the pairs some other load hit.
+		// The copy was 28% over.
+		let mut ratios: Vec<f64> = (0..15)
+			.map(|turn| {
+				if turn % 2 == 0 {
+					let kept = run(crate::scroll::SLIDE_ROWS);
+					kept / run(0)
+				} else {
+					let bare = run(0);
+					run(crate::scroll::SLIDE_ROWS) / bare
+				}
+			})
+			.collect();
+		ratios.sort_by(f64::total_cmp);
+		let median = ratios[ratios.len() / 2];
+		eprintln!("rows kept against none: {ratios:.3?}");
 		assert!(
-			within(kept, bare),
-			"keeping rows cost {kept:?} against {bare:?}"
+			median <= 1.10,
+			"keeping rows cost {:.0}% more, pairs {ratios:.3?}",
+			(median - 1.0) * 100.0
 		);
 	}
 
