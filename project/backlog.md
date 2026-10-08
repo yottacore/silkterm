@@ -277,7 +277,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs local test suite run?: No
 	- Severity: High
 	- Opened: 20261007-202804
 	- Opened by: CC
@@ -290,6 +291,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: a software launch comes up every time.
 	- Reproduced: 20261007, in 1 of 3 runs of the test alone at load 7, and once in the full pipeline at 7a032c5. No core was kept. The case that switches to software while running passed every time.
 	- Possible cause: not known. The same spot both times points away from host noise. Debug builds turn on Vulkan validation through `InstanceFlags::default()`, and the dialogs' GPU context is built on a worker thread, so two instances made at once in the loader is one suspect. Whether a release build crashes too is not known.
+	- Actual cause: The Vulkan loader on Debian 13 (1.4.309) has a threading bug. To find which device a call is for, it walks every instance's list of drivers, under a different lock than the one held while those lists change. Debug builds name every object they make, and each name does that walk. The dialogs' warm-up makes its own instance on another thread right after the window shows, and listing its adapters unloads the drivers that have none. A name given on the window thread at that moment read a list entry that had just been freed. Loader 1.4.350 fixes it upstream.
+	- Actual fix: Every thread that calls into the loader takes one lock while it does. The warm-up holds it for its whole build. The window thread holds it through each event-loop callback, but only while a window draws on Vulkan, which means software rendering or Wayland. A window on GL never waits. A wait on the warm-up lets go of the lock first, and the program lets a warm-up finish before it exits.
+	- Note: Release builds name nothing, so far less of what they do takes that walk: making a swapchain or a device still does. About 2400 devices made beside 600 warm-up builds did not crash, but the fix covers them anyway.
+	- Note: The cost is one wait, right after a window on Vulkan shows and after each idle rebuild, if the window has work while the warm-up builds. Optimized build on b23: about 130 ms with the card on Wayland, 35 ms in software, none with the card on X11.
+	- Against: the kept dialog context (2026100418225505, `WARM_DIALOG_GPU`). It is still kept and still built on a worker, but a window on Vulkan can now wait for that build once.
+	- Sweep: every thread that calls into wgpu, and every wait on one.
+	- Swept: Only the window thread and the warm-up use wgpu. No other spawned thread does. The two waits on the warm-up, opening a dialog and letting the device go, both let go of the lock. The unit tests that make devices take it as well, since they run side by side. `--about` runs before any thread starts.
+	- Branch: vkload
+	- Commit: 7d492b7
+	- Test case: `a_warm_up_never_overlaps_what_the_window_draws` (Es9NHfD) crashed 3 of 3 runs with the warm-up's hold taken out and passes with it. `a_loader_hold_nests_and_lets_go_for_a_wait` (Es9NHtj). `only_a_window_on_vulkan_holds_the_loader_through_its_callbacks` (Es9Pm5d) fails when every window holds.
+	- Verified: 20261008, the full unit suite, clippy for Linux, Windows and macOS, `cicd/tests/swnoshm/run.bash` 3 times, and 20 more software launches with no crash. Before the fix the same launches crashed 1 in 15 at load 18, at the filed spot.
 	- Notes:
 		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
 
