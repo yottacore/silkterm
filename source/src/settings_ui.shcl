@@ -154,7 +154,9 @@ icons:
 ##            rows split the control column evenly; the first keeps the label
 ##            column, and its label has to name the whole line unless each
 ##            row after it names itself. Only a toggle may do that, with its
-##            label before its box.
+##            label before its box. A line of nothing but toggles packs at its
+##            own width; in a group with other rows its first box keeps the
+##            control column.
 ## options:   the choices, in order, for radio / dropdown / pair
 ## parts:     the two settings a `pair` row carries, one per option
 ## key:       only when the row's name cannot be the setting's - because a

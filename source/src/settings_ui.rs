@@ -1030,6 +1030,23 @@ impl SettingsDialog {
 				.iter()
 				.all(|s| matches!(s.kind, Kind::Toggle))
 	}
+	// A packed line in a group with other rows keeps its first box in the control
+	// column, under theirs, and only the rest pack after it. One alone under its
+	// heading has nothing to line up with (2026100812334385).
+	fn lead_keeps_column(specs: &[Spec], i: usize) -> bool {
+		let (lead, parts, _) = Self::line_of(specs, i);
+		let heading = |s: &&Spec| matches!(s.kind, Kind::Header(_));
+		specs[..lead]
+			.iter()
+			.rev()
+			.take_while(|s| !heading(s))
+			.chain(specs[lead + parts..].iter().take_while(|s| !heading(s)))
+			.any(|s| !s.beside)
+	}
+	// Whether row `i`'s label counts toward the label column.
+	fn in_label_column(specs: &[Spec], i: usize) -> bool {
+		!Self::packs(specs, i) || (!specs[i].beside && Self::lead_keeps_column(specs, i))
+	}
 	// Where part `k` of the packed line led by `lead` puts its label and its box,
 	// in from the line's left edge. A warning mark rides with its label.
 	fn packed_at(
@@ -1330,11 +1347,13 @@ impl SettingsDialog {
 		let packed_w = (0..specs.len())
 			.filter(|&lead| !specs[lead].beside && Self::packs(specs, lead))
 			.map(|lead| {
-				lay().pad
-					+ f32::from(specs[lead].indent) * lay().indent
-					+ Self::packed_w(specs, lead, label_ws, line_h)
-					+ 6.0 + lay().revert_width
-					+ lay().pad
+				let run = Self::packed_w(specs, lead, label_ws, line_h);
+				let line = if Self::lead_keeps_column(specs, lead) {
+					label_w + run - Self::packed_at(specs, lead, 0, label_ws, line_h).1
+				} else {
+					f32::from(specs[lead].indent) * lay().indent + run
+				};
+				lay().pad + line + 6.0 + lay().revert_width + lay().pad
 			})
 			.fold(0.0f32, f32::max);
 		let w = (lay().width + (label_w - lay().label_width) + (btn_w - lay().button_width) * 3.0)
@@ -2511,8 +2530,9 @@ impl SettingsDialog {
 		self.content_x() + lay().pad + f32::from(self.specs[i].indent) * lay().indent
 	}
 	// Where row `i`'s controls start. A packed line puts each box right after its
-	// label. Any other shared line splits the control column evenly, and a part
-	// with a label of its own puts the control after it.
+	// label, bar a first box that keeps the column. Any other shared line splits
+	// the control column evenly, and a part with a label of its own puts the
+	// control after it.
 	fn control_x(&self, i: usize) -> f32 {
 		if Self::packs(self.specs, i) {
 			return self.packed_x(i).1;
@@ -2526,13 +2546,23 @@ impl SettingsDialog {
 		}
 	}
 	// Label and box of row `i` on a packed line. The line starts where its first
-	// row's label would, indent and all.
+	// row's label would, indent and all. Where the first box keeps the column,
+	// the rest move along with it.
 	fn packed_x(&self, i: usize) -> (f32, f32) {
 		let (lead, _, k) = Self::line_of(self.specs, i);
 		let start =
 			self.content_x() + lay().pad + f32::from(self.specs[lead].indent) * lay().indent;
 		let (label, ctl) = Self::packed_at(self.specs, lead, k, &self.label_ws, self.line_h);
-		(start + label, start + ctl)
+		if !Self::lead_keeps_column(self.specs, lead) {
+			return (start + label, start + ctl);
+		}
+		let column = self.content_x() + lay().pad + self.label_w;
+		if k == 0 {
+			return (start, column);
+		}
+		let first_box = Self::packed_at(self.specs, lead, 0, &self.label_ws, self.line_h).1;
+		let shift = column - (start + first_box);
+		(start + label + shift, start + ctl + shift)
 	}
 	// Top of a control `h` tall, centered in row `i`'s line.
 	fn centered_in_row(&self, i: usize, h: f32) -> f32 {
@@ -5636,8 +5666,9 @@ pub fn chrome_widths(
 	let label_w = specs
 		.iter()
 		.enumerate()
-		// a packed line's labels sit beside their own boxes, not in the column
-		.filter(|&(i, _)| !SettingsDialog::packs(specs, i))
+		// a packed line's labels sit beside their own boxes, not in the column,
+		// bar a first one that keeps it
+		.filter(|&(i, _)| SettingsDialog::in_label_column(specs, i))
 		.map(|(_, spec)| {
 			let mark = if spec.warning.is_empty() {
 				0.0
@@ -6391,19 +6422,96 @@ mod tests {
 		}
 	}
 
-	// A line of toggles packs at its natural width (2026100710173200): every
-	// label, the first one's included, sits PART_LABEL_GAP before its own box
-	// instead of across the label column, and the next label starts PACK_GAP
-	// after it. A click, the focus ring and the tip all follow the box where it
-	// is drawn. A line of anything else still splits the control column.
-	// Test ID: Es2i5CM
+	// Commented out 20261008: a packed line in a group with other rows keeps its
+	// first box in the control column (2026100812334385), so that box no longer
+	// sits PART_LABEL_GAP after its label. Replaced by
+	// `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr).
+	// // A line of toggles packs at its natural width (2026100710173200): every
+	// // label, the first one's included, sits PART_LABEL_GAP before its own box
+	// // instead of across the label column, and the next label starts PACK_GAP
+	// // after it. A click, the focus ring and the tip all follow the box where it
+	// // is drawn. A line of anything else still splits the control column.
+	// // Test ID: Es2i5CM
+	// #[test]
+	// fn a_line_of_toggles_packs_each_label_against_its_box() {
+	// 	for scale in [1.0f32, 2.0] {
+	// 		let mut d = mk_dialog_at(4000.0, scale);
+	// 		let (w, h) = d.natural;
+	// 		d.set_size(w * scale, h * scale);
+	// 		let (mut packed, mut split) = (0, 0);
+	// 		for lead in 0..d.specs.len() {
+	// 			let (_, parts, _) = SettingsDialog::line_of(d.specs, lead);
+	// 			if d.specs[lead].beside || parts < 2 {
+	// 				continue;
+	// 			}
+	// 			d.tab = d.specs[lead].tab;
+	// 			if !d.specs[lead..lead + parts]
+	// 				.iter()
+	// 				.all(|s| matches!(s.kind, Kind::Toggle))
+	// 			{
+	// 				split += 1;
+	// 				assert!(!SettingsDialog::packs(d.specs, lead));
+	// 				let column = d.rect.x + super::lay().pad + d.label_w;
+	// 				assert!((d.control_x(lead) - column).abs() < 0.01, "{scale}");
+	// 				continue;
+	// 			}
+	// 			packed += 1;
+	// 			for i in lead..lead + parts {
+	// 				let key = d.specs[i].key;
+	// 				let bx = d.checkbox(i);
+	// 				let label_end = d.label_x(i) + chars7(d.specs[i].label);
+	// 				assert!(
+	// 					(bx.x - label_end - super::PART_LABEL_GAP).abs() < 0.01,
+	// 					"{key:?}: label to box is {} ({scale})",
+	// 					bx.x - label_end
+	// 				);
+	// 				if i > lead {
+	// 					let prev = d.checkbox(i - 1);
+	// 					assert!(
+	// 						(d.label_x(i) - (prev.x + prev.w) - super::PACK_GAP).abs() < 0.01,
+	// 						"{key:?}: gap to the toggle before is {} ({scale})",
+	// 						d.label_x(i) - (prev.x + prev.w)
+	// 					);
+	// 				}
+	// 				assert_eq!(d.focus_ctl_rect(i, 0), bx, "{key:?}: focus ring");
+	// 				let mid = bx.y + bx.h / 2.0;
+	// 				for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
+	// 					let tip = d.hover_tip_dip(x, mid).map(|(t, _)| t);
+	// 					assert_eq!(tip, Some(d.specs[i].help), "{key:?} tip at {x}");
+	// 				}
+	// 				let was = d.get_toggle(key);
+	// 				d.mouse_down_dip(bx.x + bx.w / 2.0, mid, &mut chars7);
+	// 				assert_eq!(d.get_toggle(key), !was, "{key:?}: click on its box");
+	// 				assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
+	// 				d.set_toggle(key, was);
+	// 			}
+	// 			let last = d.checkbox(lead + parts - 1);
+	// 			assert!(
+	// 				last.x + last.w < d.revert_box(lead).x,
+	// 				"runs into the arrow"
+	// 			);
+	// 		}
+	// 		assert!(packed >= 2, "the tab text and re-test lines, saw {packed}");
+	// 		assert!(split >= 1, "the scrim dropdown pair, saw {split}");
+	// 	}
+	// }
+
+	// A line of toggles packs at its natural width (2026100710173200): each label
+	// sits PART_LABEL_GAP before its own box and the next label starts PACK_GAP
+	// after it. A line alone under its heading starts the first label at the
+	// label edge, Tab text's. One in a group with other rows keeps its first box
+	// in the control column, under theirs, as the hardware check line does
+	// (2026100812334385). A click, the focus ring and the tip all follow the box
+	// where it is drawn. A line of anything else still splits the control column.
+	// Test ID: Es9Zhyr
 	#[test]
-	fn a_line_of_toggles_packs_each_label_against_its_box() {
+	fn a_line_of_toggles_packs_each_label_against_its_box_off_the_column() {
 		for scale in [1.0f32, 2.0] {
 			let mut d = mk_dialog_at(4000.0, scale);
 			let (w, h) = d.natural;
 			d.set_size(w * scale, h * scale);
-			let (mut packed, mut split) = (0, 0);
+			let (mut packed, mut split, mut kept) = (0, 0, Vec::new());
+			let column = d.rect.x + super::lay().pad + d.label_w;
 			for lead in 0..d.specs.len() {
 				let (_, parts, _) = SettingsDialog::line_of(d.specs, lead);
 				if d.specs[lead].beside || parts < 2 {
@@ -6416,20 +6524,32 @@ mod tests {
 				{
 					split += 1;
 					assert!(!SettingsDialog::packs(d.specs, lead));
-					let column = d.rect.x + super::lay().pad + d.label_w;
 					assert!((d.control_x(lead) - column).abs() < 0.01, "{scale}");
 					continue;
 				}
 				packed += 1;
+				let keeps = SettingsDialog::lead_keeps_column(d.specs, lead);
+				if keeps {
+					kept.push(d.specs[lead].key);
+				}
+				let indent = f32::from(d.specs[lead].indent) * super::lay().indent;
+				assert!((d.label_x(lead) - (d.rect.x + super::lay().pad + indent)).abs() < 0.01);
 				for i in lead..lead + parts {
 					let key = d.specs[i].key;
 					let bx = d.checkbox(i);
 					let label_end = d.label_x(i) + chars7(d.specs[i].label);
-					assert!(
-						(bx.x - label_end - super::PART_LABEL_GAP).abs() < 0.01,
-						"{key:?}: label to box is {} ({scale})",
-						bx.x - label_end
-					);
+					if keeps && i == lead {
+						assert!(
+							(bx.x - column).abs() < 0.01,
+							"{key:?}: box off the column ({scale})"
+						);
+					} else {
+						assert!(
+							(bx.x - label_end - super::PART_LABEL_GAP).abs() < 0.01,
+							"{key:?}: label to box is {} ({scale})",
+							bx.x - label_end
+						);
+					}
 					if i > lead {
 						let prev = d.checkbox(i - 1);
 						assert!(
@@ -6440,7 +6560,7 @@ mod tests {
 					}
 					assert_eq!(d.focus_ctl_rect(i, 0), bx, "{key:?}: focus ring");
 					let mid = bx.y + bx.h / 2.0;
-					for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
+					for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0, label_end - 2.0] {
 						let tip = d.hover_tip_dip(x, mid).map(|(t, _)| t);
 						assert_eq!(tip, Some(d.specs[i].help), "{key:?} tip at {x}");
 					}
@@ -6458,6 +6578,19 @@ mod tests {
 			}
 			assert!(packed >= 2, "the tab text and re-test lines, saw {packed}");
 			assert!(split >= 1, "the scrim dropdown pair, saw {split}");
+			// by name, so a reshuffle of the spec cannot quietly flip either one
+			assert_eq!(kept, [Key::PerfCheckHardware], "{scale}");
+			let row = |key: Key| d.specs.iter().position(|s| s.key == key).expect("row");
+			d.tab = d.specs[row(Key::PerfAuto)].tab;
+			assert_eq!(
+				d.checkbox(row(Key::PerfCheckHardware)).x,
+				d.checkbox(row(Key::PerfAuto)).x,
+				"under Choose automatically"
+			);
+			// and only a label in the column is measured for it
+			let in_column = |key: Key| SettingsDialog::in_label_column(d.specs, row(key));
+			assert!(in_column(Key::PerfCheckHardware) && in_column(Key::PerfAuto));
+			assert!(!in_column(Key::PerfCheckNext) && !in_column(Key::TabShowsTitle));
 		}
 	}
 
