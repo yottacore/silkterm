@@ -60,6 +60,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 98a60d6
 	- Test case: `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM), which failed with packing turned off and passes with it. `a_sub_group_indents_labels_and_nothing_else` (Em3akaG) is commented out, since a packed line's first box leaves the control column. It is replaced by `a_sub_group_indents_labels_and_nothing_else_off_a_packed_line` (Es2i58B).
 
+- The wallpaper Visibility and Blur flyovers don't say that an image's own tags win over them
+	- ID: 2026100718350000
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261007-183500
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- The flyovers on the wallpaper Visibility and Blur sliders, and on the "Honor look tags" switch, say that an image's own Opacity and Blur tags win over the sliders while the switch is on, so the sliders only apply to untagged images.
+	- Decisions:
+		- 20261007: Keep the switch's default and the bundled pack's tags as they are. Only the help text changes.
+	- Progress log:
+		- 20261007: Visibility adds a third sentence, Blur gets its first tip, and the switch's tip is reworded. It also says the bundled wallpapers are all tagged, since that is why the sliders seem to do nothing out of the box.
+		- 20261007: The wallpaper design doc's open question is marked settled.
+	- Swept: the three rows in the dialog spec, the glossary's look tags entry, and the wallpaper design doc. The config template's comment on these lines already says tags win, and was left alone.
+	- Verified: the dialog unit tests, clippy, fmt, test IDs and doc checks.
+	- Branch: tiptweaks
+	- Commit: 07b5e59
+	- Test case: `the_wallpaper_look_sliders_say_a_tag_wins` (Es4N609). It failed on the old text and passes on the new.
+	- Closed:
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -265,7 +288,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Tab text: "Program title" -> "Program-defined"
 	- ID: 2026100717261689
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261007-172616
 	- Opened by: JC
@@ -275,7 +298,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Rename the "Program title" toggle under Tab text to "Program-defined".
 	- Notes:
 		- Before RC1.
-	- Closed:
+	- Related IDs: 2026100710173200
+	- Progress log:
+		- 20261007: The toggle's label is now "Program-defined". The config key `window.tab_shows_title` is unchanged.
+	- Swept: the dialog spec, tests, glossary, UI style guide, README, design docs and the config template. Only the spec had the label. The tab flyover's "Program title" row, and design.md's line about it, name the title itself, not the toggle, so they stay.
+	- Verified: the dialog unit tests, clippy, fmt, test IDs and doc checks. The dialog's natural width in the unit test layout came out the same at 1x and 2x. Not looked at in a real window.
+	- Branch: tiptweaks
+	- Commit: 07b5e59
+	- Test case: None. A test would only repeat the label text in the spec.
+	- Acceptance signoff: Self-closed: rename.
+	- Closed: 20261007-184756
 
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
@@ -4053,6 +4085,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: The clipboard and handle leak items already said so. The nano item, which the ledger test pins, now does too.
 	- Test case: None, the items are notes.
 	- Closed: 20260929-170507
+
+- Raise the build retry count in the pipeline from 3 to 5
+	- ID: 2026100718350100
+	- Type: Task
+	- Status: Done
+	- Priority: Low
+	- Opened: 20261007-183501
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Raise `BUILD_ATTEMPTS` in the cicd config from 3 to 5. 3 still aborts about 8% of full runs, and 5 would be about 2%.
+	- Progress log:
+		- 20261007: The config says 5, and so does the fallback in cicd.bash when the config leaves it unset.
+	- Swept: cicd.bash, config.bash, the engine test, design docs and memory. No other doc stated the value.
+	- Verified: the engine test script, shellcheck, and the test ID check.
+	- Branch: tiptweaks
+	- Commit: 07b5e59
+	- Test case: Er2UgY7 (`cicd/tests/engine/run.bash`) now checks for at least 5 in the shipped config and 5 tries when unset. Both checks failed on the old values.
+	- Acceptance signoff: Self-closed: mechanical.
+	- Closed: 20261007-184756
 
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082
