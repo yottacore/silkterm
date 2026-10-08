@@ -4994,6 +4994,8 @@ impl ApplicationHandler<UserEvent> for App {
 		if let Some(state) = self.state.as_mut() {
 			state.flush_window_size(true);
 		}
+		// a warm-up still building would be in the loader as the process tears it down
+		self.gpu_warm.release();
 		crate::perf::report();
 	}
 

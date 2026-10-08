@@ -227,7 +227,7 @@ fn main() -> anyhow::Result<()> {
 		})
 		.transpose()
 		.context("pprof: failed to start profiler")?;
-	event_loop.run_app(&mut app)?;
+	event_loop.run_app(&mut gfx::HoldsLoader(&mut app))?;
 	#[cfg(feature = "profiling")]
 	if let Some((guard, out)) = profile_guard {
 		let report = guard
