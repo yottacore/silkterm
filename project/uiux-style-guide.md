@@ -229,7 +229,7 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 
 ## Color roles
 
-Twelve colors are editable, and each has one job. All twelve are on the Themes tab. Ten belong to the theme and ship as a dark and light pair; the scrollbar's two do not, and stay neutral whatever the theme, so a saved theme does not carry them.
+Twelve colors are editable, and each has one job. All twelve are on the Themes tab. Ten belong to the theme and ship as a dark and light pair; the scrollbar's two do not, and stay neutral whatever the theme, so a saved theme leaves them out.
 
 Terminal:
 

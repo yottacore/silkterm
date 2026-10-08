@@ -165,9 +165,9 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Background image fit**. Stretch to fill the window, or zoom to cover it while keeping the aspect ratio.
 
-	- An image can also carry its own fit in its XMP metadata (`wallpaper:Fit`, plus a `wallpaper:Anchor` that picks which part of it a zoom crop keeps), overriding the default per image - so a photo isn't squashed while a gradient still fills the window. Read straight from the image file, and switchable off.
+	- An image can also have its own fit in its XMP metadata (`wallpaper:Fit`, plus a `wallpaper:Anchor` that picks which part of it a zoom crop keeps), overriding the default per image - so a photo isn't squashed while a gradient still fills the window. Read straight from the image file, and switchable off.
 
-	- Two more tags, `wallpaper:Opacity` and `wallpaper:Blur`, let an image carry its own visibility and blur, so a busy picture can sit quieter than the rest of a folder. Your sliders then apply to images without the tags. Also switchable off.
+	- Two more tags, `wallpaper:Opacity` and `wallpaper:Blur`, let an image set its own visibility and blur, so a busy picture can sit quieter than the rest of a folder. Your sliders then apply to images without the tags. Also switchable off.
 
 - **Split panes**: A native feature to arbitrarily split any pane in either direction. Panes can be freely drag-n-dropped to change locations. Panes split in successive directions are automatically evenly distributed, unless adjusted (with the mouse).
 
@@ -225,11 +225,11 @@ SilkTerm for Linux and Windows is free from the releases page, and one person bu
 
 ## Wallpaper pack
 
-The 102 wallpapers SilkTerm was built and tuned against are in [`filesystem/home/.config/silkterm/wallpaper/`](filesystem/home/.config/silkterm/wallpaper/). Put them next to your config and rotation picks one each launch, favoring whatever it hasn't shown lately. Next wallpaper, on the View menu and the right-click menu, moves on without waiting. Each image carries its own fit and anchor in its metadata, so a photo is cropped rather than squashed - while a gradient stretches edge to edge. Provenance for every one of them is in [wallpaper-attribution.md](filesystem/home/.config/silkterm/wallpaper-attribution.md).
+The 102 wallpapers SilkTerm was built and tuned against are in [`filesystem/home/.config/silkterm/wallpaper/`](filesystem/home/.config/silkterm/wallpaper/). Put them next to your config and rotation picks one each launch, favoring whatever it hasn't shown lately. Next wallpaper, on the View menu and the right-click menu, moves on without waiting. Each image has its own fit and anchor in its metadata, so a photo is cropped rather than squashed - while a gradient stretches edge to edge. Provenance for every one of them is in [wallpaper-attribution.md](filesystem/home/.config/silkterm/wallpaper-attribution.md).
 
 [![Wallpaper pack](assets/wallpaper-gallery.jpg)](https://yottacore.github.io/silkterm/wallpapers/)
 
-Click the sheet for the [browsable gallery](https://yottacore.github.io/silkterm/wallpapers/) - any wallpaper opens full size in place, the arrow keys page through them, and each one carries its credit and license underneath.
+Click the sheet for the [browsable gallery](https://yottacore.github.io/silkterm/wallpapers/) - any wallpaper opens full size in place, the arrow keys page through them, and each one shows its credit and license underneath.
 
 They come to 58 MiB against an 11 MiB terminal, so no package or installer includes them - fetch the folder on its own. Bash (Linux, macOS, WSL):
 
@@ -315,7 +315,7 @@ On macOS, SilkTerm is a Mac app sold through an app store. A Microsoft Store ver
 
 #### Direct stable and dev install scripts
 
-Prefer a plain binary? These one-liners work out your operating system and CPU on their own, download the release built for it, check its sha256, and install it. Once a release is signed, the checksums file has to carry a good signature from the release key or nothing is installed. Each prints what it is about to do and asks before touching anything, and does nothing at all when you are already up to date. The defaults suit most people - add `--help` for the handful of things you can change.
+Prefer a plain binary? These one-liners work out your operating system and CPU on their own, download the release built for it, check its sha256, and install it. Once a release is signed, the checksums file has to have a good signature from the release key or nothing is installed. Each prints what it is about to do and asks before touching anything, and does nothing at all when you are already up to date. The defaults suit most people - add `--help` for the handful of things you can change.
 
 Bash, written for 3.2 or newer and tested on 5 (Linux, macOS, WSL):
 
@@ -342,7 +342,7 @@ Install locations:
 | Linux   | `~/.local/bin/silkterm`             | `~/.local/share/applications/silkterm.desktop`                | `/usr/local/bin/silkterm`    | `/usr/local/share/applications/silkterm.desktop`
 | Windows | `%LOCALAPPDATA%\Programs\SilkTerm\` | Start Menu shortcut, and the install dir is added to `%PATH%` | `C:\Program Files\SilkTerm\` | Common Start Menu shortcut (needs an elevated shell)
 
-The releases page carries Linux and Windows binaries only, and the Mac app comes from its store listing. On anything else the installer says so and lists what the release does carry, so build it yourself - below.
+The releases page has Linux and Windows binaries only, and the Mac app comes from its store listing. On anything else the installer says so and lists what the release does include, so build it yourself - below.
 
 #### Build it yourself
 
@@ -394,7 +394,7 @@ Settings names are meant to read plainly, but a few of them - scrim, contrast ma
 
 To start over from the shipped defaults, run `silkterm --reset-config`. The old file is kept alongside as `config.shcl.bak` rather than deleted.
 
-When an update converts the file to a newer format, the file as it was is kept alongside, named for the local time it was converted and the format it had, such as `config_backup_20261003-142233_format-v2.shcl`. Every older version is kept, and a file named with `--config` keeps its own name in front. A line the new format can't hold stays in the file as written, and SilkTerm puts up a notice saying how many there were and where the old file is. If the file can't be converted where it is, because it isn't UTF-8 text or the new format can't read it, SilkTerm writes a new one from the defaults with every setting it can still read, and the notice says how many it couldn't carry over. A file already in the current format with lines that aren't UTF-8 text is written again without those lines, and kept alongside the same way. A notice names the lines and where the old file is.
+When an update converts the file to a newer format, the file as it was is kept alongside, named for the local time it was converted and the format it had, such as `config_backup_20261003-142233_format-v2.shcl`. Every older version is kept, and a file named with `--config` keeps its own name in front. A line the new format can't hold stays in the file as written, and SilkTerm puts up a notice saying how many there were and where the old file is. If the file can't be converted where it is, because it isn't UTF-8 text or the new format can't read it, SilkTerm writes a new one from the defaults with every setting it can still read, and the notice says how many it couldn't copy to the new file. A file already in the current format with lines that aren't UTF-8 text is written again without those lines, and kept alongside the same way. A notice names the lines and where the old file is.
 
 Drop a few images into a `wallpaper` folder next to the config and SilkTerm picks one each launch, favoring whatever it hasn't shown lately. Naming a wallpaper in the config, or passing one on the command line, takes precedence. The [wallpaper pack](#wallpaper-pack) is a ready-made folder to start from.
 
@@ -470,7 +470,7 @@ Tell other terminal nerds on various socials how this has changed your life!
 
 SilkTerm is built on the basic plumbing of [Alacritty](https://github.com/alacritty/alacritty), which is dual-licensed under the [Apache License, Version 2.0](https://github.com/alacritty/alacritty/blob/master/LICENSE-APACHE) and [MIT License](https://github.com/alacritty/alacritty/blob/master/LICENSE-MIT).
 
-It also carries a copy of [x9ps1-git](https://github.com/jim-collier/x9ps1-git), the git-aware bash prompt it can give new bash panes, under the [MIT License](https://opensource.org/licenses/MIT).
+It also includes a copy of [x9ps1-git](https://github.com/jim-collier/x9ps1-git), the git-aware bash prompt it can give new bash panes, under the [MIT License](https://opensource.org/licenses/MIT).
 
 SilkTerm's license is specifically compatible with Alacritty's:
 

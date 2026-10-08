@@ -126,7 +126,7 @@ The curve the text scrim fades along as it moves away from the glyphs. Separate 
 
 ## Fit
 
-What to do when a wallpaper image and the window are different shapes. Stretch distorts the image to fill the window; Zoom keeps its proportions and crops. An image carrying its own fit tag overrides the setting.
+What to do when a wallpaper image and the window are different shapes. Stretch distorts the image to fill the window; Zoom keeps its proportions and crops. An image with its own Fit tag overrides the setting.
 
 ## Flyover help
 
