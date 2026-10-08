@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The "Tab text" options are wonky. There's too much space between "Program title" and its checkbox.
 	- ID: 2026100710173200
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261007-101732
 	- Opened by: JC
@@ -64,7 +64,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The wallpaper Visibility and Blur flyovers don't say that an image's own tags win over them
 	- ID: 2026100718350000
 	- Type: Enhancement
-	- Status: Waiting on signoff
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261007-183500
 	- Opened by: JC
