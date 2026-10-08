@@ -262,6 +262,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
+- Settings option to "Run in a single process"
+	- ID: 2026100717261688
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261007-172616
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Settings option to "Run in a single process", with flyover text explaining the pros and cons.
+	- Notes:
+		- Before RC1.
+	- Closed:
+
+- Tab text: "Program title" -> "Program-defined"
+	- ID: 2026100717261689
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261007-172616
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Rename the "Program title" toggle under Tab text to "Program-defined".
+	- Notes:
+		- Before RC1.
+	- Closed:
+
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
 	- Type: Bug
