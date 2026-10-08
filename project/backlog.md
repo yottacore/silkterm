@@ -432,7 +432,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A failed test script's output is thrown away by the pipeline
 	- ID: 2026100720280487
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261007-202804
 	- Opened by: CC
@@ -441,6 +441,15 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Have any script test under `cicd/tests` fail during `cicd.bash`.
 	- Incorrect behavior: `fRunTest` sends the script's output to `/dev/null`, so the log says only which test failed. A one-off failure can't be diagnosed after the fact. The test run folder test (ErOj67l) failed once that way on 20261007 and passed when run alone.
 	- Expected behavior: a failed test's output ends up in the log or in a file the failure line names.
+	- Actual cause: `fRunTest` and `fRunTest_MaySkip` both sent a test's stdout to `/dev/null`. Its stderr already reached the log.
+	- Actual fix: A test's stdout goes to a file in the test run folder. A pass or a skip deletes it. A failure prints it to the log, the last 200 lines when it is longer, and the failure line names the file. The run folder is kept after a failed run, so the file is still there.
+	- Swept: `cicd-win.ps1` runs its tests through `fExec`, which shows their output, so it has no such pattern. Nothing else under `cicd` sends a test script's output to `/dev/null`, `$null` or `Out-Null`. The private runner in `silkterm-private` was not checked. Not changed: the NSIS step in both pipelines drops `makensis` output on a failure too, but that is a warning and not a test.
+	- Verified: 20261008, `cicd/tests/testout/run.bash` failed 9 of 21 checks against the old `fRunTest` and passes now. `cicd/tests/engine/run.bash`, test IDs, shellcheck and the bash style check pass.
+	- Branch: testlog
+	- Commit: e1e77b5
+	- Test case: `cicd/tests/testout/run.bash` (Es9knL6).
+	- Acceptance signoff: Self-closed: mechanical, test fails before and passes after.
+	- Closed: 20261008-165500
 
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
