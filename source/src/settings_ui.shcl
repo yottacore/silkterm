@@ -399,7 +399,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: wallpaper.opacity
-		help: "How strongly the wallpaper shows through the terminal background. Light mode mixes in more of it to reach the same visible result, so the number means the same thing in either mode."
+		help: "How strongly the wallpaper shows through the terminal background. Light mode mixes in more of it to reach the same visible result, so the number means the same thing in either mode. While Honor look tags is on, an image's own Opacity tag wins over this, so it only applies to images without one."
 
 	BgBlur:
 		label: Blur px
@@ -408,13 +408,14 @@ rows:
 		whole: true
 		indent: 1
 		setting: wallpaper.blur
+		help: "While Honor look tags is on, an image's own Blur tag wins over this, so it only applies to images without one."
 
 	BgHonorXmpLook:
 		label: Honor look tags
 		kind: toggle
 		indent: 1
 		setting: wallpaper.honor_xmp_look
-		help: "Let an image's own embedded Opacity and Blur tags take the place of the two sliders above. The sliders still apply to images without the tags."
+		help: "Let an image's own Opacity and Blur tags win over the two sliders above, so the sliders only apply to images without them. The bundled wallpapers are all tagged."
 
 	BgContrastMask:
 		label: Contrast mask
@@ -809,7 +810,7 @@ rows:
 	## The four share one line and one revert arrow. Each names itself, and each
 	## keeps its own flyover.
 	TabShowsTitle:
-		label: Program title
+		label: Program-defined
 		kind: toggle
 		setting: window.tab_shows_title
 		help: "Let a title the running program asked for name the tab. Only a name typed on the tab outranks it, and a narrow tab falls back to the other three."

@@ -51,10 +51,13 @@ fCheck "and so they are with BUILD_ATTEMPTS unset" test "${rc}" -eq 0 -a "${trie
 fRetry 99 3
 fCheck "a build that always fails stops after three attempts" test "${rc}" -ne 0 -a "${tries}" -eq 3
 fCheck "and the run dies saying so" grep -q '^DIE: test build failed 3x' <<<"${out}"
+fRetry 99
+fCheck "unset, a build that always fails stops after five" test "${rc}" -ne 0 -a "${tries}" -eq 5
 fRetry 0 3
 fCheck "a build that works runs once" test "${rc}" -eq 0 -a "${tries}" -eq 1
-fCheck "the shipped config allows at least three attempts" \
-	bash -c 'source "$1" && ((BUILD_ATTEMPTS >= 3))' _ "${cicd}/config.bash"
+## 3 still aborted about 1 full run in 12; 5 is about 1 in 50.
+fCheck "the shipped config allows at least five attempts" \
+	bash -c 'source "$1" && ((BUILD_ATTEMPTS >= 5))' _ "${cicd}/config.bash"
 fCheck "the profiler build goes through the retry" grep -q '^[[:space:]]*fRetryBuild profiler ' "${engine}"
 fCheck "the native release build does" grep -q '^fRetryBuild "native release" ' "${engine}"
 fCheck "and each cross build does" grep -q '^[[:space:]]*fRetryBuild "${localLabel}" ' "${engine}"
