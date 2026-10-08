@@ -158,14 +158,30 @@ fi
 
 ## A test script's ID, from the "Test ID:" line in its header.
 fTestId(){ sed -n '/Test ID:/{s/.*Test ID:[[:space:]]*//;s/[[:space:]].*//;p;q;}' "${root}/${1}" 2>/dev/null || true; }
-## fRunTest <script> <label> [failure]: runs a test script under the repo root
-## with its output thrown away, if it is there. OK and its test ID on a pass;
-## the failure text, by default "<label> test failed", aborts the run.
+## Where a test script's stdout goes while it runs. The test run folder outlives
+## a failed run, so a failed test's file is still there afterward.
+fTestOut(){ local name="${1//\//_}"; echo "${SILKTERM_TEST_DIR:-${TMPDIR:-/tmp}}/output_${name%.*}.txt"; }
+## fTestOut_Fail <out> <failure>: the end of a failed test's output into the log,
+## then the failure line, naming the file, aborts the run.
+fTestOut_Fail(){
+	local -r out="${1}" failure="${2}"
+	local -i lines=0
+	[[ -f "${out}" ]] && lines="$(wc -l <"${out}")"
+	if ((lines > 200)); then fEcho_Clean "last 200 of ${lines} lines of output:"; tail -n 200 "${out}"
+	elif ((lines)); then cat "${out}"; fi
+	fDie "${failure}, output kept in ${out}"
+}
+## fRunTest <script> <label> [failure]: runs a test script under the repo root,
+## if it is there. OK and its test ID on a pass, with its output dropped. The
+## failure text, by default "<label> test failed", aborts the run, after the
+## test's output.
 fRunTest(){
 	local -r script="${1}" label="${2}" failure="${3:-${2} test failed}"
 	[[ -x "${root}/${script}" ]] || return 0
 	fEcho_Clean "${label} ..."
-	"${root}/${script}" >/dev/null || fDie "${failure} ($(fTestId "${script}"))"
+	local out; out="$(fTestOut "${script}")"
+	"${root}/${script}" >"${out}" || fTestOut_Fail "${out}" "${failure} ($(fTestId "${script}"))"
+	rm -f "${out}"
 	fEcho "OK: ${label} ($(fTestId "${script}"))"
 }
 ## fRunTest_MaySkip <script> <label> [skipped]: the same, for a test whose exit 3
@@ -175,12 +191,12 @@ fRunTest_MaySkip(){
 	local -r script="${1}" label="${2}" skipped="${3:-${2} skipped}"
 	[[ -x "${root}/${script}" ]] || return 0
 	fEcho_Clean "${label} ..."
-	local rc=0
-	"${root}/${script}" >/dev/null || rc=$?
+	local rc=0 out; out="$(fTestOut "${script}")"
+	"${root}/${script}" >"${out}" || rc=$?
 	case "${rc}" in
-		0) fEcho "OK: ${label} ($(fTestId "${script}"))" ;;
-		3) fEcho "WARNING: ${skipped}" ;;
-		*) fDie "${label} test failed ($(fTestId "${script}"))" ;;
+		0) rm -f "${out}"; fEcho "OK: ${label} ($(fTestId "${script}"))" ;;
+		3) rm -f "${out}"; fEcho "WARNING: ${skipped}" ;;
+		*) fTestOut_Fail "${out}" "${label} test failed ($(fTestId "${script}"))" ;;
 	esac
 }
 ## Runs cargo test with each result line as status, test ID and name. Every other
@@ -729,6 +745,8 @@ fRunTest_MaySkip cicd/tests/swnoshm/run.bash "software rendering without shared 
 ## This script's own steps: the build retry, the dogfood tag, the options, the
 ## running-copy check, the build number and the host line.
 fRunTest cicd/tests/engine/run.bash "pipeline steps" "pipeline step test failed"
+## A failed test's output, which once went nowhere and left only its name.
+fRunTest cicd/tests/testout/run.bash "failed test output"
 ## Stage 0, which has to stop a diverged tree before anything is built.
 fRunTest cicd/tests/sync/run.bash "remote sync"
 ## The rotation that prunes run logs and flamegraphs.
@@ -1150,6 +1168,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-08: A failed test script's output goes to the log, and stays in
+##		              the test run folder.
 ##		- 2026-09-17: The run log and the flamegraph are written under a .part name
 ##		              and renamed once whole, so the startup gates cannot mark one as
 ##		              seen part way through.
