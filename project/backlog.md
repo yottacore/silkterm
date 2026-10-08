@@ -293,6 +293,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
 
+- Flyover text for the wallpaper option uses "carries"
+	- ID: 2026100812334384
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Target OS: All
+	- Incorrect behavior: The Fit flyover says "An image carrying its own tag overrides this."
+	- Expected behavior: Plain wording, such as "An image with its own tag".
+	- Notes:
+		- Before RC1.
+		- Same word in other text people see: the scrollbar colors flyover ("does not carry them") and the notice after a config is converted ("could not be carried over").
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -307,6 +321,63 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- The checkbox for "Check for hardware change" should be lined up under the checkbox for "Choose automatically"
+	- ID: 2026100812334385
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Related IDs: 2026100710173200
+	- Target OS: All
+	- Requirements:
+		- I'm guessing this got moved to the left due to the columnar exception carved out for "Tab text" single-line grouping. But for this group, it looks odd, and it looked better for the performance section, when the first checkbox was lined up the way it was before.
+	- Notes:
+		- Before RC1.
+
+- Change the GPU timeout sliders from linear to logarithmic
+	- ID: 2026100812334386
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Same min and max.
+		- Allow the user to manually type in values that exceed the slider. For these two, and anything else that doesn't have a % or an inherent limit.
+	- Notes:
+		- Before RC1.
+		- The two are "Minutes when hidden" and "Minutes otherwise" under Resource use on the Window tab, both 1 to 1440.
+
+- Flyover help text should apply to all of the relevant labels, and both controls
+	- ID: 2026100812334387
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- In this case, all of "Fit      [ ] Stretch  [ ] Zoom".
+	- Notes:
+		- Before RC1.
+
+- Flyover text for "Free resources when idle"
+	- ID: 2026100812334388
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- When not in single-process mode, this can help conserve GPU memory at little discernible cost. It helps when regularly running numerous instances open on a low-memory GPU, and/or if something else wants all the GPU memory.
+	- Notes:
+		- Before RC1.
+		- Question: SilkTerm has no single-process mode yet. Is one planned, or does this mean something else?
+		- Question: the row has a tip and a warning now. Does this replace both?
 
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
