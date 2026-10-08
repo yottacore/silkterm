@@ -282,7 +282,7 @@ fHostDescribe(){
 ## error surfaces in seconds here and the extra tries cost nothing on that path.
 fRetryBuild(){
 	local -r what="${1}"; shift
-	local -i tries="${BUILD_ATTEMPTS:-3}"
+	local -i tries="${BUILD_ATTEMPTS:-5}"
 	((tries >= 1)) || tries=1
 	local -i n=0 rc=0
 	while ((n < tries)); do

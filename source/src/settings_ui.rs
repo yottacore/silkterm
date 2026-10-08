@@ -6960,6 +6960,36 @@ mod tests {
 		assert!(with_help > 10, "only {with_help} rows carry a tip");
 	}
 
+	// With the look switch on, an image's own tags beat Visibility and Blur, and
+	// the bundled pack is all tagged, so a slider that seems to do nothing has to
+	// say why. Each slider names the switch by its label as it reads now.
+	// Test ID: Es4N609
+	#[test]
+	fn the_wallpaper_look_sliders_say_a_tag_wins() {
+		let d = mk_dialog(4000.0);
+		let spec = |key: Key| d.specs.iter().find(|s| s.key == key).unwrap();
+		let switch = spec(Key::BgHonorXmpLook);
+		assert!(
+			switch.help.contains("Opacity and Blur tags win"),
+			"{}",
+			switch.help
+		);
+		assert!(
+			switch.help.contains("only apply to images without"),
+			"{}",
+			switch.help
+		);
+		for (key, tag) in [(Key::BgOpacity, "Opacity tag"), (Key::BgBlur, "Blur tag")] {
+			let help = spec(key).help;
+			assert!(help.contains(switch.label.trim()), "{key:?}: {help}");
+			assert!(help.contains(tag), "{key:?}: {help}");
+			assert!(
+				help.contains("only applies to images without"),
+				"{key:?}: {help}"
+			);
+		}
+	}
+
 	// A control the dialog draws as inert must not act on a click. The check used
 	// to sit inside each arm of the press handler, and the color, text and radio
 	// arms never got it - so a grayed field still changed its setting, and the
