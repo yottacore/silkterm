@@ -270,7 +270,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Same word in other text people see: the scrollbar colors flyover ("does not carry them") and the notice after a config is converted ("could not be carried over").
 	- Progress log:
 		- 20261008: Fit now says "An image with its own Fit tag overrides this." The scrollbar colors tip says a saved theme "leaves them out". The converted-config notice and the matching launch message say a setting "could not be copied to the new file". The config template's comment on `dark_on_light` says a letter "has as much ink".
-	- Swept: every tip, label, option and mark in the dialog spec, the notices, the launch messages, the config template and the CLI help. Code names and comments stay. Left alone, as docs rather than on-screen text: README, glossary (its Fit entry has the same "carrying its own fit tag"), FAQ and the UI style guide.
+	- Swept: every tip, label, option and mark in the dialog spec, the notices, the launch messages, the config template and the CLI help. Code names and comments stay. Also fixed in the docs, one word or phrase each: every use in README and the FAQ, the glossary's Fit entry and the UI style guide's scrollbar colors line (commit 1dcba55). README's line on the converted-file notice and the glossary's Fit entry now match the new text.
 	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks, and the config conversion test against a fresh debug build.
 	- Branch: tipfix
 	- Commit: 368d7b8
