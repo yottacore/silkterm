@@ -281,6 +281,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- A rough edge, for shcl to look at. It is why a launch message about a bad line can name a line two short once the rating writes (2026100115322366).
 		- Stalled until a shcl beta has it.
+		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above with `set_string("performance.profile", "low")` writes `profile: low` as a new line above the commented one, and keeps the lines (5 in, 6 out). Nothing in shcl's changelog or log since b10c2009 is for it. No 3.0 beta is published; crates.io still has 2.0.0.
 
 - shcl: `migrate_unstamped` cannot say a migration did not finish
 	- ID: 2026100315553545
@@ -299,6 +300,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A missing capability, and a silent wrong answer for a caller that writes its own footer. SilkTerm asks the stamped `migrate` as well, in `upgrade` in config.rs, and writes such a file new (2026100312470546).
 		- Also missing from the library: a whole-file conversion that keeps the old file. Only the CLI's `migrate --write` does that, as `config_old_v2.shcl`.
 		- Stalled until a shcl beta has it.
+		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
+		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
