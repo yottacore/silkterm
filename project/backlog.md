@@ -236,6 +236,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 684d3a0, 754c9cb, 8624cc2
 	- Closed:
 
+- The scroll record timing test fails now and then when the box is busy
+	- ID: 2026100714145220
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: The unit suite on a Windows box, in the next full pipeline run. Windows still times by the wall clock, paired, since its thread times are too coarse for one run.
+	- Severity: Low
+	- Opened: 20261007-141452
+	- Opened by: CC
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run the full pipeline while something else keeps the box busy, load about 13 to 20.
+	- Incorrect behavior: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO) failed with "keeping rows cost 45.2ms against 40.4ms", 12% over where it allows 10%. That stopped the pipeline at stage 3.
+	- Expected behavior: a timing test doesn't fail the pipeline because of other load on the box.
+	- Reproduced: once, 20261007 at 7fdea4e. The next full run passed. Nothing in that run touched the parse or the scroll record.
+	- Possible cause: it compares two wall clock times taken while the rest of the suite runs beside it. Best of 28 turns still lost to the load.
+	- Notes:
+		- 20261007: The same round also saw one SIGSEGV of the unit test process at about load 13, with no core kept. 3 runs of the suite alone and the next 2 pipeline runs passed. Not filed apart, since there is nothing to go on yet.
+		- 20261007: One run of the whole suite at about load 70 printed no result line, which looks like the same crash. Its exit status was not kept. 9 more loaded runs passed.
+	- Progress log:
+		- 20261007: Reproduced at 47e33e6, at load 13 to 51 with the rest of the suite looping beside it. The old test failed 3 times in 320.
+	- Actual cause: the test took the best time of each side separately, at different moments. Under load, one side could get a quiet moment the other never got. The rows cost about 4% here, so there was little room under the 10% limit.
+	- Actual fix: the test now times by the thread's own CPU time, which leaves out time spent waiting for a core. It runs 15 pairs back to back, order swapped each time, and judges the median of the per-pair ratios. The limit stays at 10%. It also checks the kept row is the very row that left, not a copy, which fails at once with no timing at all.
+	- Swept: every wall clock read in the unit test modules. The rest use a fake clock or a one-sided bound with a wide margin, and none compares two timings.
+	- Verified: under load 13 to 51 with the suite looping beside it, the new test passed 380 of 380, median from 1.02 to 1.07. With the dropped row copied an extra time it failed 60 of 60 under the same load, median 1.29 to 1.35. With the copy put back in place of the swap, the pointer check failed. The whole suite took the same time with either test, 2 runs each. Pane tests, clippy on Linux, Windows and macOS targets, fmt, test IDs.
+	- Branch: scrolltime
+	- Commit: ea80be2
+	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), same ID, rewritten in place.
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -285,35 +314,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
-
-- The scroll record timing test fails now and then when the box is busy
-	- ID: 2026100714145220
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs external testing: The unit suite on a Windows box, in the next full pipeline run. Windows still times by the wall clock, paired, since its thread times are too coarse for one run.
-	- Severity: Low
-	- Opened: 20261007-141452
-	- Opened by: CC
-	- Target OS: All
-	- Test environment: b23
-	- Steps to reproduce:
-		- Run the full pipeline while something else keeps the box busy, load about 13 to 20.
-	- Incorrect behavior: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO) failed with "keeping rows cost 45.2ms against 40.4ms", 12% over where it allows 10%. That stopped the pipeline at stage 3.
-	- Expected behavior: a timing test doesn't fail the pipeline because of other load on the box.
-	- Reproduced: once, 20261007 at 7fdea4e. The next full run passed. Nothing in that run touched the parse or the scroll record.
-	- Possible cause: it compares two wall clock times taken while the rest of the suite runs beside it. Best of 28 turns still lost to the load.
-	- Notes:
-		- 20261007: The same round also saw one SIGSEGV of the unit test process at about load 13, with no core kept. 3 runs of the suite alone and the next 2 pipeline runs passed. Not filed apart, since there is nothing to go on yet.
-		- 20261007: One run of the whole suite at about load 70 printed no result line, which looks like the same crash. Its exit status was not kept. 9 more loaded runs passed.
-	- Progress log:
-		- 20261007: Reproduced at 47e33e6, at load 13 to 51 with the rest of the suite looping beside it. The old test failed 3 times in 320.
-	- Actual cause: the test took the best time of each side separately, at different moments. Under load, one side could get a quiet moment the other never got. The rows cost about 4% here, so there was little room under the 10% limit.
-	- Actual fix: the test now times by the thread's own CPU time, which leaves out time spent waiting for a core. It runs 15 pairs back to back, order swapped each time, and judges the median of the per-pair ratios. The limit stays at 10%. It also checks the kept row is the very row that left, not a copy, which fails at once with no timing at all.
-	- Swept: every wall clock read in the unit test modules. The rest use a fake clock or a one-sided bound with a wide margin, and none compares two timings.
-	- Verified: under load 13 to 51 with the suite looping beside it, the new test passed 380 of 380, median from 1.02 to 1.07. With the dropped row copied an extra time it failed 60 of 60 under the same load, median 1.29 to 1.35. With the copy put back in place of the swap, the pointer check failed. The whole suite took the same time with either test, 2 runs each. Pane tests, clippy on Linux, Windows and macOS targets, fmt, test IDs.
-	- Branch: scrolltime
-	- Commit: ea80be2
-	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), same ID, rewritten in place.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
