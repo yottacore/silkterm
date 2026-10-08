@@ -258,7 +258,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Flyover text for the wallpaper option uses "carries"
 	- ID: 2026100812334384
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Severity: Avg
 	- Opened: 20261008-123343
 	- Opened by: JC
@@ -268,6 +268,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 		- Same word in other text people see: the scrollbar colors flyover ("does not carry them") and the notice after a config is converted ("could not be carried over").
+	- Progress log:
+		- 20261008: Fit now says "An image with its own Fit tag overrides this." The scrollbar colors tip says a saved theme "leaves them out". The converted-config notice and the matching launch message say a setting "could not be copied to the new file". The config template's comment on `dark_on_light` says a letter "has as much ink".
+	- Swept: every tip, label, option and mark in the dialog spec, the notices, the launch messages, the config template and the CLI help. Code names and comments stay. Left alone, as docs rather than on-screen text: README, glossary (its Fit entry has the same "carrying its own fit tag"), FAQ and the UI style guide.
+	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks, and the config conversion test against a fresh debug build.
+	- Branch: tipfix
+	- Commit: 368d7b8
+	- Test case: `no_dialog_text_says_carry` (Es9Vugt) and `no_template_comment_says_carry` (Es9WIpt). Both failed with the old Fit tip and template comment put back, and pass now. The notice wording is pinned by the existing notice tests.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -316,7 +323,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Flyover help text should apply to all of the relevant labels, and both controls
 	- ID: 2026100812334387
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Priority: Avg
 	- Opened: 20261008-123343
 	- Opened by: JC
@@ -325,11 +332,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- In this case, all of "Fit      [ ] Stretch  [ ] Zoom".
 	- Notes:
 		- Before RC1.
+	- Decisions:
+		- 20261008: Best guess, since the scope question went unanswered. Where one setting has several labels or controls on its row, its tip shows over all of them: option labels such as Stretch and Zoom, a warning mark, and every part of the control. The revert arrow keeps its own. A packed line of separate settings, such as Tab text, keeps one tip per toggle, as signed off on 2026100710173200.
+	- Progress log:
+		- 20261008: A row's tip now answers from its label to the end of its control, up to the revert column. That covers every option of a radio row, a slider's number box, a color's hex box and the dropdowns. The tip still hangs under the row's first control.
+		- 20261008: Use system font's Face and Size are two settings under one label, so each box answers for its own. Before, Size showed no tip at all, and a desktop with no monospace font to report never got to say why only Face was grayed.
+		- 20261008: Transparency's mark now shows the row's tip too, with its warning on the end, per 2026100812334388. On Windows that tip runs to 4 sentences, one past the style guide's 3.
+		- 20261008: The UI style guide and the settings dialog design doc say so.
+	- Swept: every row kind on every tab, through the test below. The shells grid keeps its tip on the column titles, and a row of buttons keeps its tip under its buttons.
+	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks. Not looked at in a real window.
+	- Branch: tipfix
+	- Commit: 368d7b8
+	- Test case: `every_part_of_a_row_shows_the_rows_tip` (Es9VuY0), which checks the label, any mark, each option and both ends and the middle of every control part on every row, and Fit's five spots by name. It failed with the old hit span put back and passes now.
 
 - Flyover text for "Free resources when idle"
 	- ID: 2026100812334388
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Priority: Avg
 	- Opened: 20261008-123343
 	- Opened by: JC
@@ -344,6 +363,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261008: Q: The row has a tip and a warning now. Does this replace both? A: No. Drop the text first asked for, and merge the two instead, per the requirements.
 	- Decisions:
 		- 20261008: First asked-for text, dropped: "When not in single-process mode, this can help conserve GPU memory at little discernible cost. It helps when regularly running numerous instances open on a low-memory GPU, and/or if something else wants all the GPU memory."
+	- Progress log:
+		- 20261008: The row now has one tip, over the label, the mark and the checkbox: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment it is used again, without stopping anything running in it. This helps most with many windows open on a card with little memory, or next to programs that use a lot of it. Turn it off only if the graphics driver has trouble with it."
+		- 20261008: The mark stays. Its text, now the last sentence, goes on the end of the row's tip, so a mark never shows text of its own. Transparency follows the same rule.
+		- 20261008: Nothing in it mentions a single-process mode.
+	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks. Not looked at in a real window.
+	- Branch: tipfix
+	- Commit: 368d7b8
+	- Test case: `two_rows_warn_and_each_mark_shows_the_rows_tip` (Es9VucS), which replaces `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl, commented out with the reason). It failed with the mark's own tip put back and passes now. `every_part_of_a_row_shows_the_rows_tip` (Es9VuY0) covers the mark as well.
 
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
