@@ -149,6 +149,12 @@ icons:
 ## setting:   the config.shcl path the revert arrow comments out
 ## range:     slider low, high
 ## whole:     slider steps in whole numbers
+## scale:     log for a slider whose range spans orders of magnitude, so each
+##            doubling gets the same travel. Linear when left out.
+## typed_max: how far a value typed in the number box may go past the
+##            slider's end. Only for a setting with no % and no real limit of
+##            its own. The handle sits at the end and the box shows the number.
+##            The config has to read the same value back, which a test checks.
 ## indent:    sub-group depth of the label (default 0)
 ## beside:    draw this row on the line above rather than under it. A line's
 ##            rows split the control column evenly; the first keeps the label
@@ -408,6 +414,7 @@ rows:
 		label: Blur px
 		kind: slider
 		range: 0, 50
+		typed_max: 100
 		whole: true
 		indent: 1
 		setting: wallpaper.blur
@@ -501,6 +508,7 @@ rows:
 		label: Size
 		kind: slider
 		range: 6, 40
+		typed_max: 128
 		whole: true
 		setting: font.size
 
@@ -508,6 +516,7 @@ rows:
 		label: Line height
 		kind: slider
 		range: 0.8, 2
+		typed_max: 4
 		setting: font.line_height_scale
 		help: "Space between lines, as a multiple of the font's own."
 
@@ -522,6 +531,7 @@ rows:
 		label: Blink rate ms
 		kind: slider
 		range: 100, 3000
+		typed_max: 10000
 		whole: true
 		setting: cursor.blink_rate_ms
 		help: "One full animation cycle."
@@ -552,6 +562,7 @@ rows:
 		label: Inactivity timer s
 		kind: slider
 		range: 0.1, 60
+		typed_max: 3600
 		indent: 1
 		setting: cursor.animation_resume_s
 		help: "How long typing has to stop before the animation picks up again. Output does not wait this out."
@@ -583,6 +594,7 @@ rows:
 		label: Wheel lines
 		kind: slider
 		range: 1, 10
+		typed_max: 100
 		whole: true
 		setting: scroll.wheel_lines
 		help: "Lines traveled per notch of the mouse wheel."
@@ -757,6 +769,7 @@ rows:
 		label: Columns
 		kind: slider
 		range: 20, 400
+		typed_max: 1000
 		whole: true
 		indent: 1
 		setting: window.columns
@@ -765,6 +778,7 @@ rows:
 		label: Rows
 		kind: slider
 		range: 6, 120
+		typed_max: 1000
 		whole: true
 		indent: 1
 		setting: window.rows
@@ -801,6 +815,7 @@ rows:
 		label: Margin px
 		kind: slider
 		range: 0, 40
+		typed_max: 200
 		whole: true
 		setting: window.margin
 		help: "Clear space between the text and the window edge."
@@ -886,6 +901,8 @@ rows:
 		label: Minutes when hidden
 		kind: slider
 		range: 1, 1440
+		scale: log
+		typed_max: 10080  ## a week
 		whole: true
 		indent: 1
 		setting: window.idle_release_hidden_min
@@ -895,6 +912,8 @@ rows:
 		label: Minutes otherwise
 		kind: slider
 		range: 1, 1440
+		scale: log
+		typed_max: 10080  ## a week
 		whole: true
 		indent: 1
 		setting: window.idle_release_min

@@ -10818,6 +10818,39 @@ mod tests {
 		);
 	}
 
+	// A number the dialog lets through past its slider is one the file reads
+	// back as written and says nothing about. The dialog's own test saves and
+	// reloads it; this one reads it from a file written by hand.
+	// Test ID: Es9f11y
+	#[test]
+	fn a_number_typed_past_a_slider_reads_back_without_a_word() {
+		let p = std::path::Path::new("test.shcl");
+		let ui = crate::ui_spec::ui();
+		let mut checked = 0;
+		for spec in &ui.specs {
+			let crate::ui_spec::Kind::Slider { max, typed_max, .. } = spec.kind else {
+				continue;
+			};
+			if typed_max <= max {
+				continue;
+			}
+			for path in ui.settings_of(spec.key) {
+				let nest: Vec<String> = path
+					.split('.')
+					.enumerate()
+					.map(|(depth, part)| format!("{}{part}:", "\t".repeat(depth)))
+					.collect();
+				let text = format!("{} {typed_max}\n", nest.join("\n"));
+				let (raw, said) = read_config_text(&text, p);
+				assert!(said.is_empty(), "{path}: {said:?}");
+				let got = crate::settings_ui::slider_of(&resolve(raw), spec.key);
+				assert_eq!(got, typed_max, "{path} was held under {typed_max}");
+				checked += 1;
+			}
+		}
+		assert!(checked >= 11, "only {checked} checked");
+	}
+
 	// All three of these were silent, and the file looks perfectly fine while the
 	// setting does nothing. The first one also stops every future save.
 	// An unquoted color was read as empty and the theme's color used, with no word
