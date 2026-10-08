@@ -147,7 +147,7 @@ fConverts(){  ## fConverts <case> <how> <lost>
 			if [[ "${lost}" == 0 ]]; then
 				fCheck "${name}: nothing reported lost" fNotSaid 'set a list in brackets|could not be carried' "${dir}/said1.txt"
 			else
-				fCheck "${name}: ${lost} lost setting(s) reported, naming the copy" fSaid ": could not be converted in place, so a new file was written; ${lost} setting(s) could not be carried over. The old file is at ${dir}/${copy}." "${dir}/said1.txt"
+				fCheck "${name}: ${lost} lost setting(s) reported, naming the copy" fSaid ": could not be converted in place, so a new file was written; ${lost} setting(s) could not be copied to it. The old file is at ${dir}/${copy}." "${dir}/said1.txt"
 			fi
 			;;
 	esac

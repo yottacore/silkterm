@@ -141,7 +141,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - Why a row is grayed out beats what it does, so a row grayed by the machine says so in its flyover in place of its usual text. A row grayed by another setting says nothing extra, because the switch that did it is the row above. A row set by the performance profile is not grayed at all - it takes input, and its flyover says that it is showing the profile's value and that changing it switches the profile to Custom.
 
-- A row that may not work on every desktop has a warning mark after its label: a small triangle in the label's color, never red. The mark has its own flyover saying what the row depends on, and the row keeps its usual one.
+- A row that may not work on every desktop has a warning mark after its label: a small triangle in the label's color, never red. What the row depends on goes at the end of the row's flyover, which shows over the mark like the rest of the row.
 	- A row that keeps a window from giving its graphics memory back gets one too, as Transparency does on Windows. So does "Free resources when idle", since some graphics drivers have trouble with it.
 	- A mark says only what applies where it is shown. Transparency's memory note is in the Windows build alone, since only there is a window in view with Transparency on never let go.
 
@@ -184,6 +184,8 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 There are four of them: a Settings row, a menu item, a link or button in the About box, and a tab in the strip. They share the rest delay, the wrapping and the placement rules, and nothing else. Each is drawn by its own caller, in its own font.
 
 - One rest delay for every tip in the program. A menu that answered faster than the tab strip would read as a different kind of thing.
+
+- A row's tip shows wherever the pointer rests on that row: its label, a warning mark, each option's label and every part of its control. The revert control is the one part with a tip of its own. A pair, such as Use system font's Face and Size, is two settings, so each half answers for its own when one is grayed. A packed line of toggles is separate settings too, and each keeps its own tip.
 
 - Only controls whose label does not already say what they do get a tip. The test is the tip itself: if it restates the label in other words, delete it and fix the label. A dialog of rendering settings will legitimately carry one on most of its rows, because a name cannot say what a falloff curve or an easing time does to the picture.
 
