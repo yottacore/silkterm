@@ -164,6 +164,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 676dbd5
 	- Test case: `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr). It fails with the group rule turned off, and with the first box left where packing puts it. `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM) is commented out, since it expected every first box right after its label.
 
+- Change the GPU timeout sliders from linear to logarithmic
+	- ID: 2026100812334386
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Same min and max.
+		- Allow the user to manually type in values that exceed the slider. For these two, and anything else that doesn't have a % or an inherent limit.
+	- Notes:
+		- Before RC1.
+		- The two are "Minutes when hidden" and "Minutes otherwise" under Resource use on the Window tab, both 1 to 1440.
+	- Decisions:
+		- 20261008: Best guess, since the question went unanswered. A typed value can go past the slider's end, up to a cap set per row. For the two waits the cap is a week, 10080. Below the slider's start still clamps, since 0 or less means nothing for a wait. The handle parks at the end and the box shows the number.
+		- 20261008: Rows that take a typed value past the slider, with their caps: Minutes when hidden and Minutes otherwise 10080, Blur px 100, Size 128 (the largest the text is drawn at), Line height 4, Blink rate ms 10000, Inactivity timer s 3600, Wheel lines 100, Columns and Rows 1000 (what `--columns` and `--rows` take), Margin px 200.
+		- 20261008: Rows kept at their slider, besides every row with a %: Scrim radius px, since the halo can't reach past 20. Outline px, since the outline is 8 taps around each letter and should break into dots past a few px (read in the shader, not looked at). Scrollbar width px and Minimap width px, since the config holds both to the slider's range on purpose.
+		- 20261008: Only the two waits get a log track. Arrows step a hundredth of the track as a ratio, a tenth with Shift, and always at least 1. A press never takes a value further past the end than it already is, so Up stops at the end and Down from a typed number steps down from it.
+	- Progress log:
+		- 20261008: The config already read both waits up to 10080, so the file side needed no change. Every capped value saves and reads back as typed, and the launch says nothing about it.
+		- 20261008: A decimal box drops places past 100 and 1000, so 3600 seconds shows "3600" rather than a cut-off "3600.00". Values under 100 show as before.
+		- 20261008: The number box stays 56 DIP wide. "10080" fits with a few px to spare at the tested font. A larger desktop font could cut off a 5 digit number, as it could the 4 digit ones before. Measuring the widest number the way the labels are measured would fix that. Not done here.
+		- 20261008: The UI style guide, the settings dialog design doc and the spec file's field notes say so.
+	- Swept: every slider row in the spec, through the save test below. Track, drag, arrows and typing all go through one helper, and the log math is the one the Scrolling feel sliders already use. No other place clamps a typed slider value.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at 1x, 60 minutes sits a little past halfway, the defaults 1 and 240 at the left end and about three quarters, and 10080, 10000, 3600 and 1000 columns sit at the end with the number whole in the box. Not looked at with a large desktop font or at 2x.
+	- Branch: logslide
+	- Commit: 9c1404c
+	- Test case: `a_log_slider_gives_each_doubling_the_same_travel` (Es9f0qI), `a_typed_wait_can_go_past_the_slider_up_to_a_week` (Es9f0uU), `a_number_typed_past_a_slider_survives_a_save_and_a_relaunch` (Es9f0yE), `a_number_typed_past_a_slider_reads_back_without_a_word` (Es9f11y), `a_slider_scale_or_cap_that_means_nothing_is_refused` (Es9fvg9), `a_big_decimal_drops_places_to_fit_its_box` (Es9hNXm). Each failed with its part of the change taken out. `slider_numeric_field_edits_and_clamps` (Eiustaa) had its clamp-to-40 line commented out, since Size now takes up to 128.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -369,21 +400,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Change the GPU timeout sliders from linear to logarithmic
-	- ID: 2026100812334386
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261008-123343
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Same min and max.
-		- Allow the user to manually type in values that exceed the slider. For these two, and anything else that doesn't have a % or an inherent limit.
-	- Notes:
-		- Before RC1.
-		- The two are "Minutes when hidden" and "Minutes otherwise" under Resource use on the Window tab, both 1 to 1440.
-
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
 	- Type: Bug
@@ -425,6 +441,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Have any script test under `cicd/tests` fail during `cicd.bash`.
 	- Incorrect behavior: `fRunTest` sends the script's output to `/dev/null`, so the log says only which test failed. A one-off failure can't be diagnosed after the fact. The test run folder test (ErOj67l) failed once that way on 20261007 and passed when run alone.
 	- Expected behavior: a failed test's output ends up in the log or in a file the failure line names.
+
+- A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
+	- ID: 2026100816465317
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261008-164653
+	- Opened by: CC
+	- Related IDs: 2026100812334386
+	- Target OS: All
+	- Incorrect behavior: The box is 56 DIP wide whatever the font. "10080" fits at the default font with a few px to spare. A larger desktop font could cut it off, as it already could with 4 digits.
+	- Expected behavior: The box is wide enough for the widest number its row can hold, measured the way labels are.
+	- Notes:
+		- 20261008: Scaling the box with the font size was tried and dropped. It widened every box and shortened every slider at normal font sizes.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893

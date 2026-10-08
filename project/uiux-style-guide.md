@@ -129,6 +129,8 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 	- A row that cannot work on the desktop it is running on is grayed instead, with a flyover saying why. "Minutes when hidden" is grayed on Wayland, which never tells a window it is hidden.
 
 - A slider has a number field beside it, and the field is the way to enter an exact value.
+	- A slider whose range spans orders of magnitude, such as the two idle waits, has a log track, so each doubling gets the same travel.
+	- A row with no % and no limit of its own takes a typed number past the slider's end, up to a cap set per row. The handle waits at the end and the field shows the number. Below the slider's start still clamps.
 
 - A color row has a chip and a hex field, and they are two separate stops. The chip opens the picker; the hex field takes a value that is already known.
 
@@ -305,6 +307,8 @@ Rules that go with them:
 - A text, color or number box opens with its value selected as soon as focus arrives, by key or by click, so typing replaces it.
 
 - In a number box, Up and Down step the value by a hundredth of its range, or a tenth with Shift held, whether the box is open or merely focused. Left and Right move the caret while it is open, and step the value while it is not.
+	- On a log slider the step is that share of the track, so it is the same ratio anywhere along it, and never less than 1 for a whole number.
+	- A step never takes a value further past the slider's end than it already is. Up stops at the end, and Down from a typed number steps down from that number.
 
 - Every action reachable by mouse should be reachable by keyboard, and the reverse does not have to hold. Direct manipulation is the standing exception: dragging a divider, reordering a tab or a shell, dragging the minimap marker, and renaming a tab in place have no keyboard equivalent today.
 

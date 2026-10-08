@@ -405,9 +405,9 @@ macro_rules! keys_of {
 	};
 }
 
-// A slider's value in the dialog's own units, read from `settings`. One list for the
-// shown value and the default, so the two cannot disagree on a transform.
-fn slider_of(settings: &Settings, key: Key) -> f32 {
+/// A slider's value in the dialog's own units, read from `settings`. One list for the
+/// shown value and the default, so the two cannot disagree on a transform.
+pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 	match key {
 		Key::Opacity => to_percent(settings.opacity),
 		Key::BgOpacity => to_percent(settings.wallpaper_opacity),
@@ -702,6 +702,92 @@ fn slider_step(min: f32, max: f32, int: bool, shift: bool) -> f32 {
 	let span = (max - min).abs();
 	let raw = if shift { span / 10.0 } else { span / 100.0 };
 	if int { raw.round().max(1.0) } else { raw }
+}
+
+// A slider's numbers, lifted out of its `Kind` so the track mapping, the arrow
+// step and the typed clamp are one set of rules for every slider.
+#[derive(Clone, Copy, Debug)]
+struct SliderScale {
+	min: f32,
+	max: f32,
+	int: bool,
+	log: bool,
+	typed_max: f32,
+}
+
+impl SliderScale {
+	fn of(kind: &Kind) -> Option<Self> {
+		match *kind {
+			Kind::Slider {
+				min,
+				max,
+				int,
+				log,
+				typed_max,
+			} => Some(Self {
+				min,
+				max,
+				int,
+				log,
+				typed_max,
+			}),
+			_ => None,
+		}
+	}
+
+	// 0..1 along the track. A value typed past the end sits at the end.
+	fn frac(self, value: f32) -> f32 {
+		let frac = if self.log {
+			log_pos(value, self.min, self.max)
+		} else {
+			(value - self.min) / (self.max - self.min)
+		};
+		// clamp lets NaN through
+		if frac.is_nan() {
+			0.0
+		} else {
+			frac.clamp(0.0, 1.0)
+		}
+	}
+
+	fn at(self, frac: f32) -> f32 {
+		let value = if self.log {
+			log_val(frac, self.min, self.max)
+		} else {
+			self.min + frac.clamp(0.0, 1.0) * (self.max - self.min)
+		};
+		self.whole(value)
+	}
+
+	fn whole(self, value: f32) -> f32 {
+		if self.int { value.round() } else { value }
+	}
+
+	// One arrow press. On a log scale a step is a hundredth of the track (a
+	// tenth with Shift) as a ratio, so it is as big a change at 5 as at 500,
+	// and a whole-number one always moves by at least 1. A press never takes a
+	// value further past the end than it already is, so Up stops at the end,
+	// and Down from a typed number steps down from that number.
+	fn stepped(self, value: f32, dir: i32, shift: bool) -> f32 {
+		let next = if self.log {
+			let ratio = (self.max / self.min).powf(if shift { 0.1 } else { 0.01 });
+			let next = self.whole(value * ratio.powi(dir));
+			if self.int && next == value.round() {
+				next + dir as f32
+			} else {
+				next
+			}
+		} else {
+			self.whole(value + dir as f32 * slider_step(self.min, self.max, self.int, shift))
+		};
+		next.clamp(self.min, self.max.max(value).min(self.typed_max))
+	}
+
+	// What the number box takes. Below the slider still clamps; above it goes
+	// as far as `typed_max`.
+	fn typed(self, value: f32) -> f32 {
+		self.whole(value.clamp(self.min, self.typed_max))
+	}
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -2131,21 +2217,16 @@ impl SettingsDialog {
 	// the field is open for editing, its buffer is refreshed to the new value and
 	// fully selected, so continued stepping and a following commit see the number.
 	fn step_slider(&mut self, i: usize, dir: i32, shift: bool) {
-		let Kind::Slider { min, max, int } = self.specs[i].kind else {
+		let Some(scale) = SliderScale::of(&self.specs[i].kind) else {
 			return;
 		};
 		let key = self.specs[i].key;
 		if self.disabled(key) {
 			return;
 		}
-		let step = slider_step(min, max, int, shift);
-		let mut value = (self.get_f32(key) + dir as f32 * step).clamp(min, max);
-		if int {
-			value = value.round();
-		}
-		self.set_f32(key, value);
+		self.set_f32(key, scale.stepped(self.get_f32(key), dir, shift));
 		if self.edit.as_ref().is_some_and(|e| e.row == i) {
-			let buf = self.fmt_val(key, int);
+			let buf = self.fmt_val(key, scale.int);
 			if let Some(edit) = &mut self.edit {
 				edit.cur = buf.len();
 				edit.sel = (!buf.is_empty()).then_some(0);
@@ -3632,7 +3713,13 @@ impl SettingsDialog {
 		if int {
 			format!("{}", value.round() as i64)
 		} else {
-			format!("{value:.2}")
+			// fewer decimals as the whole part grows, so 3600 still fits the box
+			let places = match value.abs() {
+				v if v >= 999.95 => 0,
+				v if v >= 99.95 => 1,
+				_ => 2,
+			};
+			format!("{value:.places$}")
 		}
 	}
 
@@ -4385,17 +4472,17 @@ impl SettingsDialog {
 
 	fn drag_to(&mut self, x: f32) {
 		let Some(i) = self.drag else { return };
-		let Kind::Slider { min, max, int } = self.specs[i].kind else {
+		let Some(scale) = SliderScale::of(&self.specs[i].kind) else {
 			return;
 		};
 		let track = self.track(i);
 		let frac = ((x - track.x) / track.w).clamp(0.0, 1.0);
-		let mut value = min + frac * (max - min);
-		if int {
-			value = value.round();
-		}
 		let key = self.specs[i].key;
-		self.set_f32(key, value);
+		// a press on a handle parked at the end keeps the number typed past it
+		if frac >= 1.0 && self.get_f32(key) > scale.max {
+			return;
+		}
+		self.set_f32(key, scale.at(frac));
 	}
 
 	pub fn char_input(&mut self, c: char) {
@@ -4663,14 +4750,13 @@ impl SettingsDialog {
 				}
 			}
 			Kind::Text => self.set_text(self.specs[i].key, &buf),
-			// a valid partial number applies live, clamped to the slider range
-			Kind::Slider { min, max, int } => {
-				if let Ok(value) = buf.trim().parse::<f32>() {
-					let mut value = value.clamp(min, max);
-					if int {
-						value = value.round();
-					}
-					self.set_f32(self.specs[i].key, value);
+			// a valid partial number applies live, clamped to what the box takes
+			Kind::Slider { .. } => {
+				if let (Some(scale), Ok(value)) = (
+					SliderScale::of(&self.specs[i].kind),
+					buf.trim().parse::<f32>(),
+				) {
+					self.set_f32(self.specs[i].key, scale.typed(value));
 				}
 			}
 			_ => {}
@@ -4881,14 +4967,13 @@ impl SettingsDialog {
 				self.warning_quads(&colors, i, &mut out, &mut measure);
 			}
 			match self.specs[i].kind {
-				Kind::Slider { min, max, int } => {
+				Kind::Slider { .. } => {
 					let off = self.disabled(self.specs[i].key);
 					let track = self.track(i);
 					out.push(quad(track.x, track.y, track.w, track.h, colors.track));
 					let value = self.get_f32(self.specs[i].key);
-					let frac = ((value - min) / (max - min)).clamp(0.0, 1.0);
+					let frac = SliderScale::of(&self.specs[i].kind).map_or(0.0, |s| s.frac(value));
 					let handle_x = track.x + frac * track.w - SLIDER_HANDLE_W / 2.0;
-					let _ = int;
 					out.push(quad(
 						handle_x,
 						track.y - 6.0,
@@ -6826,7 +6911,7 @@ mod tests {
 	// Change whatever a row edits, whichever kind it is, to something it is not.
 	fn nudge(d: &mut SettingsDialog, i: usize, key: Key) {
 		match d.specs[i].kind {
-			super::Kind::Slider { min, max, int } => {
+			super::Kind::Slider { min, max, int, .. } => {
 				let far = if (d.get_f32(key) - min).abs() < (max - d.get_f32(key)).abs() {
 					max
 				} else {
@@ -7654,7 +7739,7 @@ mod tests {
 			Key::BgContrastAuto,
 		] {
 			let spec = d.specs.iter().find(|s| s.key == key).unwrap();
-			let super::Kind::Slider { min, max, int } = spec.kind else {
+			let super::Kind::Slider { min, max, int, .. } = spec.kind else {
 				panic!("{} is not a slider", spec.label)
 			};
 			assert!(
@@ -8588,6 +8673,219 @@ mod tests {
 		assert_eq!(slider_step(20.0, 400.0, true, true), 38.0); // 380/10 -> 38
 	}
 
+	// The idle waits run from a minute to a day, and a straight track put the
+	// first hour in its first 4%. A log track gives each doubling the same
+	// travel, and an arrow press is the same ratio anywhere along it.
+	// Test ID: Es9f0qI
+	#[test]
+	fn a_log_slider_gives_each_doubling_the_same_travel() {
+		use super::{Key, SliderScale};
+		let d = mk_dialog(4000.0);
+		let scale_of = |key: Key| {
+			let spec = d.specs.iter().find(|s| s.key == key).unwrap();
+			SliderScale::of(&spec.kind).unwrap()
+		};
+		for key in [Key::IdleHiddenMin, Key::IdleMin] {
+			let scale = scale_of(key);
+			assert!(scale.log && scale.int, "{key:?}");
+			assert_eq!(
+				(scale.min, scale.max),
+				(1.0, 1440.0),
+				"{key:?} kept its ends"
+			);
+			assert_eq!(scale.frac(1.0), 0.0);
+			assert_eq!(scale.frac(1440.0), 1.0);
+			let hour = scale.frac(60.0);
+			assert!(hour > 0.5 && hour < 0.6, "an hour sits at {hour}");
+			let low = scale.frac(20.0) - scale.frac(10.0);
+			let high = scale.frac(200.0) - scale.frac(100.0);
+			assert!((low - high).abs() < 1e-4, "{low} against {high}");
+			for value in [1.0, 2.0, 5.0, 30.0, 240.0, 1440.0] {
+				assert_eq!(scale.at(scale.frac(value)), value, "{key:?}");
+			}
+
+			// every press moves, even at 1 where the ratio rounds to nothing,
+			// and Up walks the whole track in about a hundred
+			let mut value = 1.0;
+			let mut presses = 0;
+			while value < scale.max {
+				let next = scale.stepped(value, 1, false);
+				assert!(next > value, "{key:?} stuck at {value}");
+				value = next;
+				presses += 1;
+				assert!(presses < 200, "{key:?} took too many presses");
+			}
+			assert_eq!(value, 1440.0);
+			assert!(presses > 60, "{key:?} steps too coarse: {presses}");
+			let shifted = scale.stepped(240.0, 1, true);
+			assert!(
+				shifted > 400.0 && shifted < 600.0,
+				"Shift+Up from 240 gave {shifted}"
+			);
+			assert_eq!(scale.stepped(1.0, -1, false), 1.0);
+			assert_eq!(
+				scale.stepped(1440.0, 1, false),
+				1440.0,
+				"Up stops at the end"
+			);
+
+			// past the end, Up keeps the typed number and Down steps down from it
+			assert_eq!(scale.stepped(5000.0, 1, false), 5000.0);
+			let down = scale.stepped(5000.0, -1, false);
+			assert!(down < 5000.0 && down > 4000.0, "Down from 5000 gave {down}");
+			assert_eq!(scale.frac(5000.0), 1.0, "the handle sits at the end");
+		}
+
+		// a straight slider steps as it did, under the same past-the-end rule
+		let columns = scale_of(Key::Columns);
+		assert!(!columns.log);
+		assert_eq!(columns.stepped(100.0, 1, false), 104.0);
+		assert_eq!(columns.stepped(400.0, 1, false), 400.0);
+		assert_eq!(columns.stepped(600.0, -1, false), 596.0);
+		assert_eq!(columns.frac(600.0), 1.0);
+	}
+
+	// A number typed past the slider's end is kept, up to the row's cap. The
+	// handle parks at the end, the box shows the number, and a press on the
+	// parked handle does not throw it away. Below the slider still clamps.
+	// Test ID: Es9f0uU
+	#[test]
+	fn a_typed_wait_can_go_past_the_slider_up_to_a_week() {
+		use super::{Focus, Key, SliderScale};
+		let mut d = mk_dialog(4000.0);
+		d.edited.idle_release = true;
+		let i = d.specs.iter().position(|s| s.key == Key::IdleMin).unwrap();
+		let key = Key::IdleMin;
+		let scale = SliderScale::of(&d.specs[i].kind).unwrap();
+		d.tab = d.specs[i].tab;
+		let type_in = |d: &mut SettingsDialog, text: &str| {
+			d.focus = Some(Focus::Row(i, 0));
+			d.key_space();
+			d.select_all();
+			d.insert_str(text);
+			d.edit = None;
+		};
+
+		type_in(&mut d, "5000");
+		assert_eq!(d.get_f32(key), 5000.0);
+		assert_eq!(d.edited.idle_release_min, 5000);
+		assert_eq!(d.fmt_val(key, true), "5000");
+		assert_eq!(scale.frac(d.get_f32(key)), 1.0);
+
+		// a press on the parked handle keeps it; one along the track moves it
+		let track = d.track(i);
+		let mut m = |s: &str| s.chars().count() as f32;
+		let y = track.y + track.h / 2.0;
+		d.mouse_down(track.x + track.w, y, &mut m);
+		d.mouse_up(track.x + track.w, y);
+		assert_eq!(d.get_f32(key), 5000.0, "a press at the end lost the number");
+		d.last_click = None;
+		d.mouse_down(track.x + track.w / 2.0, y, &mut m);
+		d.mouse_up(track.x + track.w / 2.0, y);
+		assert_eq!(d.get_f32(key), scale.at(0.5));
+		assert!(d.get_f32(key) < 60.0, "halfway is {}", d.get_f32(key));
+
+		type_in(&mut d, "20000");
+		assert_eq!(d.get_f32(key), 10080.0, "past a week holds at a week");
+		type_in(&mut d, "0");
+		assert_eq!(d.get_f32(key), 1.0, "below the slider still clamps");
+
+		// Down from a typed number steps from it rather than jumping to the end
+		type_in(&mut d, "5000");
+		d.edit = None;
+		d.focus = Some(Focus::Row(i, 0));
+		d.key_horizontal(-1);
+		let down = d.get_f32(key);
+		assert!(down > 1440.0 && down < 5000.0, "Down from 5000 gave {down}");
+
+		// a row with a % keeps the old clamp
+		let pct = d.specs.iter().position(|s| s.key == Key::Opacity).unwrap();
+		d.tab = d.specs[pct].tab;
+		d.focus = Some(Focus::Row(pct, 0));
+		d.key_space();
+		d.select_all();
+		d.insert_str("250");
+		assert_eq!(d.get_f32(Key::Opacity), 100.0);
+	}
+
+	// A number typed past a slider has to show whole in its box, so a decimal
+	// drops places as its whole part grows. 3600 seconds showed "3600.00", cut off.
+	// Test ID: Es9hNXm
+	#[test]
+	fn a_big_decimal_drops_places_to_fit_its_box() {
+		use super::Key;
+		let mut d = mk_dialog(4000.0);
+		for (value, shown) in [
+			(60.0, "60.00"),
+			(0.25, "0.25"),
+			(99.94, "99.94"),
+			(150.5, "150.5"),
+			(999.94, "999.9"),
+			(999.96, "1000"),
+			(3600.0, "3600"),
+		] {
+			d.set_f32(Key::CursorResume, value);
+			assert_eq!(d.fmt_val(Key::CursorResume, false), shown, "{value}");
+		}
+	}
+
+	// Every number a box takes past its slider has to come back from the file
+	// as typed, or the change shows and is gone at the next launch (G33). No row
+	// with a % goes past its slider, and every log row starts above 0.
+	// Test ID: Es9f0yE
+	#[test]
+	fn a_number_typed_past_a_slider_survives_a_save_and_a_relaunch() {
+		use super::SliderScale;
+		let _guard = config::test_config_lock();
+		let _ = config::settings(); // memoize before the override goes in
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_typedmax_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		config::reload_from_disk();
+		let pristine = std::fs::read_to_string(&path)
+			.unwrap()
+			.replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
+		assert!(pristine.contains("profile: \"custom\""));
+
+		let mut d = mk_dialog(4000.0);
+		let mut checked = Vec::new();
+		for i in 0..d.specs.len() {
+			let Some(scale) = SliderScale::of(&d.specs[i].kind) else {
+				continue;
+			};
+			let label = d.specs[i].label;
+			assert!(!scale.log || scale.min > 0.0, "{label}");
+			if label.contains('%') {
+				assert_eq!(scale.typed_max, scale.max, "{label} is a percent");
+				continue;
+			}
+			if scale.typed_max <= scale.max {
+				continue;
+			}
+			let key = d.specs[i].key;
+			let _ = std::fs::write(&path, &pristine);
+			let base = config::reload_from_disk();
+			d.orig = base.clone();
+			d.edited = base.clone();
+			d.set_f32(key, scale.typed(f32::MAX));
+			assert_eq!(d.get_f32(key), scale.typed_max, "{label}");
+			assert!(config::persist(&base, &d.edited), "{label} was not written");
+			let mut back = mk_dialog(4000.0);
+			back.edited = config::reload_from_disk();
+			assert_eq!(
+				back.get_f32(key),
+				scale.typed_max,
+				"{label} came back from the file clamped"
+			);
+			checked.push(label);
+		}
+		assert_eq!(checked.len(), 11, "{checked:?}");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// Test ID: EkZgQnZ
 	#[test]
 	fn up_down_step_focused_slider() {
@@ -8725,13 +9023,17 @@ mod tests {
 		d.char_input('2');
 		d.char_input('4');
 		assert_eq!(d.edited.font_size, 24.0);
-		// over-range types clamp to the slider max (40)
+		// was: over-range types clamp to the slider max (40). Size takes a typed
+		// number past its slider now, up to 128 (2026100812334386).
 		while d.edit.as_ref().is_some_and(|e| !e.buf.is_empty()) {
 			d.backspace();
 		}
 		d.char_input('9');
 		d.char_input('9');
-		assert_eq!(d.edited.font_size, 40.0);
+		// assert_eq!(d.edited.font_size, 40.0);
+		assert_eq!(d.edited.font_size, 99.0);
+		d.char_input('9');
+		assert_eq!(d.edited.font_size, 128.0);
 		// Enter commits and is the dialog's OK; the field closes on the clamped value
 		assert_eq!(d.key_enter(), super::Action::Ok);
 		assert!(d.edit.is_none());

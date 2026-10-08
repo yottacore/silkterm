@@ -83,6 +83,10 @@ pub enum Kind {
 		min: f32,
 		max: f32,
 		int: bool,
+		// even travel per doubling, for a range spanning orders of magnitude
+		log: bool,
+		// how far a typed value may go past `max`; `max` itself when it may not
+		typed_max: f32,
 	},
 	Color,
 	Text,   // free-text field (path / font family; empty = default)
@@ -500,10 +504,28 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 					problems.push(format!("rows.{name}: range must be low, high"));
 					continue;
 				}
+				let (min, max) = (range[0] as f32, range[1] as f32);
+				let log = match doc.get_string(&at("scale")).as_deref() {
+					Err(_) | Ok("linear") => false,
+					Ok("log") => true,
+					Ok(other) => {
+						problems.push(format!("rows.{name}: scale {other} is not linear or log"));
+						false
+					}
+				};
+				if log && min <= 0.0 {
+					problems.push(format!("rows.{name}: a log scale has to start above 0"));
+				}
+				let typed_max = doc.get_float(&at("typed_max")).map_or(max, |v| v as f32);
+				if typed_max < max {
+					problems.push(format!("rows.{name}: typed_max is below the range"));
+				}
 				Kind::Slider {
-					min: range[0] as f32,
-					max: range[1] as f32,
+					min,
+					max,
 					int: doc.get_bool(&at("whole")).unwrap_or(false),
+					log,
+					typed_max: typed_max.max(max),
 				}
 			}
 			"pair" => {
@@ -932,6 +954,29 @@ mod tests {
 				.any(|p| p.contains("margin") && p.contains("Windows")),
 			"{problems:?}"
 		);
+	}
+
+	// A slider's scale and typed cap are refused when they cannot mean anything,
+	// rather than quietly read as linear or as no cap.
+	// Test ID: Es9fvg9
+	#[test]
+	fn a_slider_scale_or_cap_that_means_nothing_is_refused() {
+		for (extra, want) in [
+			("scale: loggy", "linear or log"),
+			("scale: log", "above 0"),
+			("typed_max: 0.5", "below the range"),
+		] {
+			let text = format!(
+				"tabs: \"Only\"\nrows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: Only\n\tMargin:\n\t\tlabel: x\n\t\tkind: slider\n\t\trange: 0, 1\n\t\t{extra}\n\t\tsetting: margin\n"
+			);
+			let Err(problems) = parse(&text) else {
+				panic!("{extra} was taken")
+			};
+			assert!(
+				problems.iter().any(|p| p.contains(want)),
+				"{extra}: {problems:?}"
+			);
+		}
 	}
 
 	// Every hotkey the config file can bind has one row on the Keys tab, and a
