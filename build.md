@@ -118,7 +118,7 @@ wgpu uses the Metal backend automatically. No extra system packages are needed b
 
 ## Formatting
 
-`rustfmt.toml` pins the style (`hard_tabs`). The hand-formatted data tables (the `Palette`/`Dlg` color matrices in `theme.rs`/`settings_ui.rs`, the About table in `dialog.rs`) carry `#[rustfmt::skip]` so `cargo fmt` leaves them compact; everything else is rustfmt-canonical.
+`rustfmt.toml` pins the style (`hard_tabs`). The hand-formatted data tables (the `Palette`/`Dlg` color matrices in `theme.rs`/`settings_ui.rs`, the About table in `dialog.rs`) have `#[rustfmt::skip]` so `cargo fmt` leaves them compact; everything else is rustfmt-canonical.
 
 A pre-commit hook (`utility/git-hooks/pre-commit`) reformats the staged `.rs` files on every commit so they never drift. It formats what is staged, not the file on disk, so a file with only some of its changes staged still commits only those; the working copy is reformatted as well where it has nothing unstaged to lose. Activate it once per clone:
 

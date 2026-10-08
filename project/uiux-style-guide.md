@@ -74,7 +74,7 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 - On macOS the same menus go in the system menu bar, after an app menu holding About, Settings…, Hide and Quit. There is no in-window bar there at all, so View has no Menu bar row and `--hide-menu` does nothing. File gains New window. Help is left off, since About was its only row. Each row with an Apple standard shortcut takes its Command chord.
 	- A Window menu comes last, with Minimize, Zoom, Show previous tab, Show next tab and Bring all to front. macOS adds the list of open windows under them. Each window is its own process, so that list holds only the one window and its dialogs.
 
-- The right side of the menu bar carries the focused pane's two auto-copy checkboxes, so their state is visible without opening anything. It is the only thing on the bar that is not a menu. When the window narrows it sheds its lead-in, then its words, then itself, rather than overlapping the titles.
+- The right side of the menu bar has the focused pane's two auto-copy checkboxes, so their state is visible without opening anything. It is the only thing on the bar that is not a menu. When the window narrows it sheds its lead-in, then its words, then itself, rather than overlapping the titles.
 
 - On macOS the two auto-copy switches are the Copy on select and Copy on output rows in Edit, checked to follow the focused pane. The system menu bar has no place for a control that is not a menu.
 
@@ -121,16 +121,16 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - One row edits one setting, and its label names that setting in plain words.
 
-- Two rows may share a line where neither earns one of its own and the two belong together. The upper one keeps the label column, and its label has to name both halves. The lower one is declared `beside`, takes the right half of the control column, and carries its own label only if its control does not say what it is. One revert control at the end of the line answers for both.
+- Two rows may share a line where neither earns one of its own and the two belong together. The upper one keeps the label column, and its label has to name both halves. The lower one is declared `beside`, takes the right half of the control column, and has its own label only if its control does not say what it is. One revert control at the end of the line answers for both.
 	- A run of toggles may share one line the same way, as the four Tab text switches do. That line leaves the label and control columns. It starts where the first label would, each label sits right before its own box, the first one's too, and a fixed gap comes before the next label. Each toggle keeps its own flyover, and the first one's label names only itself, since the rest name themselves. The one revert control at the end of the line puts back all of them.
 
 - Row kinds are: heading, toggle, slider, color, text, radio, dropdown, pair, hotkey, buttons, and shells. The last two are one-offs. A `buttons` row holds no value and acts on the row above it; `shells` is the Shell tab's grid, one declared row that draws a line per stored shell. A new kind needs a reason no existing kind covers.
 	- A row or a whole group that only applies to one platform is declared with `windows: true` and left out of every other build. Rows are not grayed for that, since a control that can never work there is noise.
 	- A row that cannot work on the desktop it is running on is grayed instead, with a flyover saying why. "Minutes when hidden" is grayed on Wayland, which never tells a window it is hidden.
 
-- A slider carries a number field beside it, and the field is the way to enter an exact value.
+- A slider has a number field beside it, and the field is the way to enter an exact value.
 
-- A color row carries a chip and a hex field, and they are two separate stops. The chip opens the picker; the hex field takes a value that is already known.
+- A color row has a chip and a hex field, and they are two separate stops. The chip opens the picker; the hex field takes a value that is already known.
 
 - A fraction stored as 0..1 is shown as a whole percent. The file keeps the decimal.
 
@@ -199,7 +199,7 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 
 - Placement depends on what is being described. A tip for a row goes under the control and flips above it near the bottom edge. A tip for a menu row goes beside the popup, because a box under the row would cover the rows being chosen between.
 
-- A tip never carries an action, a link, or anything the pointer has to reach.
+- A tip never has an action, a link, or anything the pointer has to reach.
 
 ## Layout and measurement
 
@@ -293,7 +293,7 @@ Rules that go with them:
 
 - Every hotkey above can be changed or turned off under `keys:` in the config file, apart from Alt plus a menu title's letter. A menu row shows the chord its hotkey answers to first, so a change shows there too. The Settings dialog's Keys tab lists every one and changes them the same way.
 
-- In an open menu, arrows move, Right enters a submenu, Left leaves one or steps to the next dropdown, Enter picks, Escape closes, and a letter picks the row carrying it.
+- In an open menu, arrows move, Right enters a submenu, Left leaves one or steps to the next dropdown, Enter picks, Escape closes, and a letter picks the row with it.
 
 - Inside a dialog, Tab and Shift+Tab move focus, Ctrl+Tab and Ctrl+PgUp/PgDn change tab, Enter is OK and Escape is Cancel. That holds with a field open: Enter closes it and takes OK, Escape cancels. Neither takes a second press.
 	- A row on the Keys tab waits for a new chord after Enter, Space or a click on its box, and every key goes to it until one comes. Escape leaves the row as it was, and Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused, with what it needs held. A chord another hotkey had is said on both rows, the way the launch says it about the file.

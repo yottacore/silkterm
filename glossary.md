@@ -72,7 +72,7 @@ A second, scrollback-free screen that a full-screen program switches to while it
 
 ## Anchor
 
-Which part of a wallpaper image stays in frame when the image and the window are different shapes and the image is zoomed rather than stretched. An image can carry its own anchor as an embedded tag.
+Which part of a wallpaper image stays in frame when the image and the window are different shapes and the image is zoomed rather than stretched. An image can have its own anchor as an embedded tag.
 
 ## Automask mix
 
@@ -162,7 +162,7 @@ A launch option that holds a pane open after its shell exits, saying how it ende
 
 ## Layout tags
 
-Fit and Anchor stored inside a wallpaper image file as XMP metadata, so an image carries its own best placement instead of relying on a single global setting. *Look tags* are the same idea for Opacity and Blur.
+Fit and Anchor stored inside a wallpaper image file as XMP metadata, so an image has its own best placement instead of relying on a single global setting. *Look tags* are the same idea for Opacity and Blur.
 
 ## Look tags
 
