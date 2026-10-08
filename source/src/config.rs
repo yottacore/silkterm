@@ -6619,7 +6619,7 @@ impl ConversionLoss {
 				self.lost
 			),
 			Converted::Rewritten => format!(
-				"{APP_NAME}: {}: could not be converted in place, so a new file was written; {} setting(s) could not be carried over.{kept}",
+				"{APP_NAME}: {}: could not be converted in place, so a new file was written; {} setting(s) could not be copied to it.{kept}",
 				self.path.display(),
 				self.lost
 			),
@@ -6634,7 +6634,7 @@ impl ConversionLoss {
 				if self.lines.len() == 1 { "it" } else { "them" }
 			),
 			Converted::Dropped(Rewrite::Template) => format!(
-				"{APP_NAME}: {}: not UTF-8 text at{}, so a new file was written from the defaults; {} setting(s) could not be carried over.{kept}",
+				"{APP_NAME}: {}: not UTF-8 text at{}, so a new file was written from the defaults; {} setting(s) could not be copied to it.{kept}",
 				self.path.display(),
 				line_list(&self.lines),
 				self.lost
@@ -7296,7 +7296,7 @@ text:
 	## How much of the correction text darker than its background gets.
 	## Partly covered pixels are blended in linear light, which costs dark text
 	## on a light background most of the ink at the edge of every stroke, so a
-	## light theme reads thin and pale. At 1.0 a letter carries as much ink as
+	## light theme reads thin and pale. At 1.0 a letter has as much ink as
 	## the same letter in a dark theme; 0 turns the correction off. Above 1.0
 	## it keeps going, for a display or a font where even that reads light -
 	## expect small letters to start closing up.
@@ -11336,6 +11336,22 @@ mod tests {
 			checked > 50,
 			"only {checked} commented defaults were checked"
 		);
+	}
+
+	// A new config file is read by people, comments and all, and "carry" for
+	// "has" had crept into one of them (2026100812334384).
+	// Test ID: Es9WIpt
+	#[test]
+	fn no_template_comment_says_carry() {
+		for line in default_config().lines() {
+			let words = line.split(|c: char| !c.is_ascii_alphabetic());
+			assert!(
+				!words
+					.map(str::to_ascii_lowercase)
+					.any(|w| ["carry", "carries", "carried", "carrying"].contains(&w.as_str())),
+				"{line}"
+			);
+		}
 	}
 
 	// The template is where the footer actually reaches a new file; the const is

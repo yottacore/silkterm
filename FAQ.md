@@ -58,7 +58,7 @@ ls -l "$(command -v xfce4-terminal)"    # the binary itself
 ldd "$(command -v xfce4-terminal)" | awk '/=>/ {print $3}' | sort -u | xargs -r du -bc | tail -1    # plus every shared library it drags in
 ~~~
 
-On a typical desktop the shared-library side of a GTK terminal adds up to well over 10 MiB (VTE + GTK + Pango + Cairo + GLib together), and that's *before* the Python interpreter for `terminator`. So the effective footprint of a GTK terminal is comparable to - frequently larger than - SilkTerm's, except SilkTerm carries all of it in one file with nothing to satisfy first.
+On a typical desktop the shared-library side of a GTK terminal adds up to well over 10 MiB (VTE + GTK + Pango + Cairo + GLib together), and that's *before* the Python interpreter for `terminator`. So the effective footprint of a GTK terminal is comparable to - frequently larger than - SilkTerm's, except SilkTerm has all of it in one file with nothing to satisfy first.
 
 For reference, SilkTerm's release binary is about **11 MiB** (Linux x86_64), already built with fat LTO, `panic = "abort"`, and symbol stripping. A default `cargo build --release` of the same code comes out noticeably larger; the size-tuned release profile is what keeps it there.
 
@@ -74,5 +74,5 @@ For reference, SilkTerm's release binary is about **11 MiB** (Linux x86_64), alr
 
 - Much more resistant to bitrot over time. If you neglect to update SilkTerm, it will still run for many years into the future, even as your distro library requirements evolve out from underneath it in a way that leaves other GUI programs stranded with no viable upgrade path.
 
-That's the whole trade: the file carries everything, so it's bigger on disk than a glue binary. The program as a whole is not.
+That's the whole trade: the file includes everything, so it's bigger on disk than a glue binary. The program as a whole is not.
 

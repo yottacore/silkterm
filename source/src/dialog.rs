@@ -1215,20 +1215,13 @@ fn text_areas<'a>(
 }
 
 // The tip under the pointer, and the rect it hangs from. A frame asks once.
-fn tip_under<'a>(
-	content: &'a Content,
-	text: &mut TextCtx,
-	(mx, my): (f32, f32),
-) -> Option<(&'a str, Rect)> {
+fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(&str, Rect)> {
 	match content {
 		Content::About { links, .. } => links
 			.iter()
 			.find(|link| link.tooltip.is_some() && link.rect.contains(mx, my))
 			.and_then(|link| link.tooltip.as_deref().map(|tip| (tip, link.rect))),
-		Content::Settings(dialog) => {
-			let attrs = ui_attrs();
-			dialog.hover_tip(mx, my, &mut |s| text.measure_ui_text(s, &attrs))
-		}
+		Content::Settings(dialog) => dialog.hover_tip(mx, my),
 	}
 }
 
@@ -1256,7 +1249,7 @@ fn pointer_moved(
 			dialog.mouse_move(to.0, to.1, &mut |s| text.measure_ui_text(s, &attrs))
 		}
 	};
-	let over = tip_under(content, text, to).map(|(_, anchor)| anchor);
+	let over = tip_under(content, to).map(|(_, anchor)| anchor);
 	let tip_moved = tip.point_at(over);
 	changed || tip_moved
 }
@@ -1275,7 +1268,7 @@ fn compose(
 	now: std::time::Instant,
 	size: (u32, u32),
 ) -> (Scene, Option<Rect>) {
-	let found = tip_under(content, text, mouse);
+	let found = tip_under(content, mouse);
 	let (drawn, _) = tip_gate(dwell, found.map(|(_, anchor)| anchor), now);
 	let tip = found.filter(|(_, anchor)| drawn == Some(*anchor));
 	(scene(content, text, shaped, mouse, tip, size), drawn)
@@ -1911,11 +1904,11 @@ pub fn conversion_notice(loss: &config::ConversionLoss) -> (String, Vec<String>)
 		),
 		(config::Converted::Rewritten, 1) => (
 			"could not convert its settings file to the new format, so it wrote a new one.",
-			"One setting could not be carried over to the new file.".to_string(),
+			"One setting could not be copied to the new file.".to_string(),
 		),
 		(config::Converted::Rewritten, n) => (
 			"could not convert its settings file to the new format, so it wrote a new one.",
-			format!("{n} settings could not be carried over to the new file."),
+			format!("{n} settings could not be copied to the new file."),
 		),
 	};
 	let mut paras = vec![
@@ -1953,10 +1946,10 @@ fn dropped_notice(
 	let carried = match (rewrite, loss.lost) {
 		(config::Rewrite::Kept, _) | (config::Rewrite::Template, 0) => String::new(),
 		(config::Rewrite::Template, 1) => {
-			" One setting could not be carried over to the new file.".to_string()
+			" One setting could not be copied to the new file.".to_string()
 		}
 		(config::Rewrite::Template, n) => {
-			format!(" {n} settings could not be carried over to the new file.")
+			format!(" {n} settings could not be copied to the new file.")
 		}
 	};
 	let gone = format!("{which} {were} left out.{carried}");
@@ -2370,14 +2363,11 @@ mod tests {
 				config::APP_NAME
 			)
 		);
-		assert_eq!(
-			paras[2],
-			"3 settings could not be carried over to the new file."
-		);
+		assert_eq!(paras[2], "3 settings could not be copied to the new file.");
 		assert!(paras[3].ends_with("config_backup_20261003-142233_format-v2.shcl."));
 		assert_eq!(
 			said(1).1[2],
-			"One setting could not be carried over to the new file."
+			"One setting could not be copied to the new file."
 		);
 	}
 
@@ -2489,7 +2479,7 @@ mod tests {
 		);
 		assert_eq!(
 			paras[2],
-			"Lines 3 and 40 were left out. 2 settings could not be carried over to the new file."
+			"Lines 3 and 40 were left out. 2 settings could not be copied to the new file."
 		);
 		assert_eq!(
 			said(&[3], 0, config::Rewrite::Template).1[2],
@@ -3091,7 +3081,7 @@ mod tests {
 					!super::pointer_moved(&mut content, &mut text, &mut dwell, from, to),
 					"a move to {to:?} asked for a frame"
 				);
-				match super::tip_under(&content, &mut text, to) {
+				match super::tip_under(&content, to) {
 					Some((_, anchor)) => tipped = tipped.or(Some((to, anchor))),
 					None => bare = bare.or(Some(to)),
 				}
@@ -3129,7 +3119,7 @@ mod tests {
 		));
 		let inside = (at.0 + 1.0, at.1);
 		assert_eq!(
-			super::tip_under(&content, &mut text, inside).map(|(_, r)| r),
+			super::tip_under(&content, inside).map(|(_, r)| r),
 			Some(anchor)
 		);
 		assert!(

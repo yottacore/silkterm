@@ -138,10 +138,11 @@ pub struct Spec {
 	/// Left out of the macOS build, for a row that can never work there. Test
 	/// builds keep it, as with `windows`.
 	pub not_macos: bool,
-	/// Flyover for a warning mark after the label: a row that may not work
-	/// everywhere. Empty means no mark.
+	/// Draws a warning mark after the label, for a row that may not work
+	/// everywhere. Empty means no mark. `pick_warnings` puts the text on the
+	/// end of `help`, since the row's one tip answers over the mark too.
 	pub warning: &'static str,
-	/// The mark's flyover in the Windows build, in place of `warning`. Moved
+	/// The mark's text in the Windows build, in place of `warning`. Moved
 	/// over by `pick_warnings`, so the dialog only ever reads `warning`.
 	pub windows_warning: &'static str,
 }
@@ -290,12 +291,19 @@ fn keep_platform(specs: &mut Vec<Spec>, windows: bool, macos: bool) {
 	specs.retain(|spec| (windows || !spec.windows) && !(macos && spec.not_macos));
 }
 
+// A row has one tip, shown over its label, its mark and its controls alike, so
+// the mark's text goes on the end of it (2026100812334388).
 fn pick_warnings(specs: &mut [Spec], windows: bool) {
 	for spec in specs {
 		if windows && !spec.windows_warning.is_empty() {
 			spec.warning = spec.windows_warning;
 		}
 		spec.windows_warning = "";
+		spec.help = match (spec.help, spec.warning) {
+			(help, "") => help,
+			("", warning) => warning,
+			(help, warning) => keep(format!("{help} {warning}")),
+		};
 	}
 }
 
@@ -870,6 +878,45 @@ mod tests {
 			problems.iter().any(|p| p.contains("warning")),
 			"{problems:?}"
 		);
+	}
+
+	// "Carry" read as "has" or "keeps" is a word to avoid in what people read,
+	// and it had crept into 2 tips (2026100812334384). Every string declared
+	// for the dialog, both platforms' marks included.
+	// Test ID: Es9Vugt
+	#[test]
+	fn no_dialog_text_says_carry() {
+		let Ok(ui) = parse(SOURCE) else {
+			panic!("settings_ui.shcl does not parse")
+		};
+		let mut texts: Vec<&str> = vec![ui.help.cancel, ui.help.apply, ui.help.ok];
+		texts.extend(&ui.tabs);
+		for spec in &ui.specs {
+			texts.extend([
+				spec.label,
+				spec.help,
+				spec.revert_help,
+				spec.warning,
+				spec.windows_warning,
+			]);
+			match spec.kind {
+				Kind::Radio(options) | Kind::Dropdown(options) | Kind::Buttons(options) => {
+					texts.extend(options);
+				}
+				Kind::Dual { labels, .. } => texts.extend(labels),
+				Kind::Header(title) => texts.push(title),
+				_ => {}
+			}
+		}
+		for text in texts {
+			let words = text.split(|c: char| !c.is_ascii_alphabetic());
+			assert!(
+				!words
+					.map(str::to_ascii_lowercase)
+					.any(|w| ["carry", "carries", "carried", "carrying"].contains(&w.as_str())),
+				"{text}"
+			);
+		}
 	}
 
 	// Test ID: ErNFx0h

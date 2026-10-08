@@ -166,8 +166,9 @@ icons:
 ## windows:   true for a row that exists only on Windows. On a heading it takes
 ##            the whole group, and every row in it has to say so as well.
 ## not_macos: true for a row the macOS build can never use, left out there.
-## warning:   flyover for a warning mark drawn after the label, for a row that
-##            may not work on every desktop
+## warning:   draws a warning mark after the label, for a row that may not
+##            work on every desktop. The text goes on the end of `help:`, and
+##            that one tip shows over the label, the mark and the control
 ## windows_warning: the same in the Windows build, in place of `warning:`. A
 ##            mark that applies only there has only this one.
 
@@ -376,7 +377,7 @@ rows:
 		options: "Stretch", "Zoom"
 		indent: 1
 		setting: wallpaper.default_fit
-		help: "What to do when the image and the window are different shapes. An image carrying its own tag overrides this."
+		help: "What to do when the image and the window are different shapes. An image with its own Fit tag overrides this."
 
 	BgHonorXmp:
 		label: Honor layout tags
@@ -722,7 +723,7 @@ rows:
 		label: Scrollbar handle
 		kind: color
 		setting: colors.scrollbar_thumb
-		help: "The scrollbar and the minimap marker. These two stay neutral whatever the theme, so a saved theme does not carry them."
+		help: "The scrollbar and the minimap marker. These two stay neutral whatever the theme, so a saved theme leaves them out."
 
 	ColScrollbarTrough:
 		label: Track
@@ -876,8 +877,8 @@ rows:
 		label: Free resources when idle
 		kind: toggle
 		setting: window.idle_release
-		help: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment the window is used again. Nothing running in the window is affected."
-		warning: "Matters most on a card with little memory, or next to GPU-heavy programs, with many windows open and not all in view. Turn it off only if the graphics driver has trouble with it."
+		help: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment it is used again, without stopping anything running in it. This helps most with many windows open on a card with little memory, or next to programs that use a lot of it."
+		warning: "Turn it off only if the graphics driver has trouble with it."
 
 	IdleHiddenMin:
 		label: Minutes when hidden

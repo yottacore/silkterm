@@ -406,7 +406,7 @@ impl SettingsDialog {
 #[cfg(test)]
 mod tests {
 	use super::super::SettingsDialog;
-	use super::super::tests::{chars7, mk_dialog};
+	use super::super::tests::mk_dialog;
 	use crate::gfx::QuadMode;
 	use crate::pick;
 	use crate::ui_spec::{Key, Kind};
@@ -534,10 +534,7 @@ mod tests {
 		assert_eq!(d.scroll, 0.0, "the panel scrolled under the box");
 		assert_eq!(d.get_col(Key::ColBg), before, "the color moved on its own");
 		assert!(d.edit.is_none(), "an edit opened on a row behind the box");
-		assert_eq!(
-			d.hover_tip_dip(d.rect.x + 4.0, d.rect.y + 40.0, &mut chars7),
-			None
-		);
+		assert_eq!(d.hover_tip_dip(d.rect.x + 4.0, d.rect.y + 40.0), None);
 		// and the row it belongs to is still the one it opened on
 		assert_eq!(d.pick.as_ref().map(|p| p.row), Some(i));
 	}

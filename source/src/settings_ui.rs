@@ -1466,16 +1466,11 @@ impl SettingsDialog {
 		let s = self.scale;
 		self.animate_dip(dt, &mut |t| measure(t) / s)
 	}
-	pub fn hover_tip(
-		&self,
-		mx: f32,
-		my: f32,
-		measure: &mut impl FnMut(&str) -> f32,
-	) -> Option<(&'static str, Rect)> {
+	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(&'static str, Rect)> {
 		#[cfg(test)]
 		HOVER_TIPS.with(|n| n.set(n.get() + 1));
 		let s = self.scale;
-		self.hover_tip_dip(mx / s, my / s, &mut |t| measure(t) / s)
+		self.hover_tip_dip(mx / s, my / s)
 			.map(|(tip, anchor)| (tip, self.rect_px(anchor)))
 	}
 
@@ -2752,15 +2747,21 @@ impl SettingsDialog {
 			_ => None,
 		}
 	}
+	// What row `i` says about `key`, one of its settings. Why a control is
+	// grayed wins over what it does - that is the more urgent question when it
+	// is - and a value the profile set says so before the usual text.
+	fn row_tip(&self, i: usize, key: Key) -> Option<&'static str> {
+		if let Some(why) = self.disabled_tip(key).filter(|_| self.disabled(key)) {
+			return Some(why);
+		}
+		if self.profile_shows(key) {
+			return Some(PROFILE_TIP);
+		}
+		Some(self.specs[i].help).filter(|help| !help.is_empty())
+	}
 	// The flyover to show while the cursor rests on something that has one:
-	// (text, anchor rect to hang the tip box under). Why a control is GRAYED
-	// wins over what it does - that is the more urgent question when it is.
-	fn hover_tip_dip(
-		&self,
-		mx: f32,
-		my: f32,
-		measure: &mut impl FnMut(&str) -> f32,
-	) -> Option<(&'static str, Rect)> {
+	// (text, anchor rect to hang the tip box under).
+	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(&'static str, Rect)> {
 		if self.modal() {
 			return None; // the box covers the panel; nothing behind it answers
 		}
@@ -2790,31 +2791,11 @@ impl SettingsDialog {
 			{
 				return Some((self.specs[i].revert_help, arrow));
 			}
-			// the mark answers over the row's whole height, and before the row's
-			// own tip, whose span it sits inside
-			if !self.specs[i].warning.is_empty() {
-				let mark = self.warning_box(i, measure);
-				let hit = Rect {
-					y: self.row_y(i),
-					h: self.row_screen_h(i),
-					..mark
-				};
-				if hit.contains(mx, my) {
-					return Some((self.specs[i].warning, mark));
-				}
-			}
-			let grayed = self.disabled(self.specs[i].key);
-			let tip = match self.disabled_tip(self.specs[i].key).filter(|_| grayed) {
-				Some(why) => why,
-				None if self.profile_shows(self.specs[i].key) => PROFILE_TIP,
-				None if !self.specs[i].help.is_empty() => self.specs[i].help,
-				None => continue,
-			};
 			// hover target: the row's label + control span. The shells grid is
 			// the exception - its "row" is the whole grid, and a tip that popped
 			// up over every line of it would be in the way of the work; it hangs
 			// off the column titles instead, which is where the question is.
-			// a row of buttons answers over its buttons, not a checkbox's width
+			// a row of buttons hangs its tip under its buttons, not a checkbox
 			let ctl = match self.specs[i].kind {
 				Kind::Buttons(captions) => {
 					let first = self.row_btn_rect(i, 0);
@@ -2827,6 +2808,9 @@ impl SettingsDialog {
 				Kind::Hotkey(_) => self.textbox(i),
 				_ => self.checkbox(i),
 			};
+			// Everything on the row answers with its one tip: the label, a
+			// warning mark, each option's label and every control, up to the
+			// revert column (2026100812334387). Only the arrow has its own.
 			let hit = if matches!(self.specs[i].kind, Kind::ShellList) {
 				Rect {
 					x: self.content_x() + lay().pad,
@@ -2834,32 +2818,35 @@ impl SettingsDialog {
 					w: self.layout_w() - lay().pad * 2.0,
 					h: self.line_h,
 				}
-			} else if self.specs[i].beside {
-				// its own part of the line, label and control both
-				let x = self.label_x(i);
+			} else {
+				// part of a shared line starts at its own label
+				let x = if self.specs[i].beside {
+					self.label_x(i)
+				} else {
+					self.content_x() + lay().pad
+				};
 				Rect {
 					x,
 					y: self.row_y(i),
 					w: (self.ctl_right(i) - x).max(ctl.x + ctl.w - x),
 					h: self.row_screen_h(i),
 				}
-			} else {
-				Rect {
-					x: self.content_x() + lay().pad,
-					y: self.row_y(i),
-					w: ctl.x + ctl.w - (self.content_x() + lay().pad),
-					h: self.row_screen_h(i),
-				}
 			};
-			if hit.contains(mx, my) {
-				return Some((
-					tip,
-					if matches!(self.specs[i].kind, Kind::ShellList) {
-						hit
-					} else {
-						ctl
-					},
-				));
+			if !hit.contains(mx, my) {
+				continue;
+			}
+			// a pair is two settings under one label, and either half can be
+			// grayed by the desktop alone, so each box answers for its own
+			let (key, anchor) = match self.specs[i].kind {
+				Kind::ShellList => (self.specs[i].key, hit),
+				Kind::Dual { keys, .. } if mx >= self.dual_box(i, 1).x => {
+					(keys[1], self.dual_box(i, 1))
+				}
+				Kind::Dual { keys, .. } => (keys[0], ctl),
+				_ => (self.specs[i].key, ctl),
+			};
+			if let Some(tip) = self.row_tip(i, key) {
+				return Some((tip, anchor));
 			}
 		}
 		None
@@ -6273,9 +6260,82 @@ mod tests {
 			let bx = d.checkbox(i);
 			let mid = bx.y + bx.h / 2.0;
 			for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
-				let tip = d.hover_tip_dip(x, mid, &mut chars7).map(|(text, _)| text);
+				let tip = d.hover_tip_dip(x, mid).map(|(text, _)| text);
 				assert_eq!(tip, Some(help), "{:?} at x {x}", d.specs[i].key);
 			}
+		}
+	}
+
+	// One setting, one tip, wherever on its row the pointer rests: its label, a
+	// warning mark, each option's label and every part of its control. A pair
+	// is two settings under one label, so each half answers for its own. The
+	// revert arrow is the one part that may say something else.
+	// Test ID: Es9VuY0
+	#[test]
+	fn every_part_of_a_row_shows_the_rows_tip() {
+		let mut d = mk_dialog(4000.0);
+		let mut probed = 0;
+		for tab in 0..tab_titles().len() {
+			d.tab = tab;
+			let vp = d.viewport();
+			for i in 0..d.specs.len() {
+				let spec = &d.specs[i];
+				if spec.tab != tab || matches!(spec.kind, Kind::Header(_) | Kind::ShellList) {
+					continue;
+				}
+				let bx = d.checkbox(i);
+				let mid = bx.y + bx.h / 2.0;
+				let mut spots = vec![(d.label_x(i) + 2.0, 0u16)];
+				if !spec.warning.is_empty() {
+					let mark = d.warning_box(i, &mut chars7);
+					spots.push((mark.x + mark.w / 2.0, 0));
+				}
+				for part in 0..d.parts_of(i) {
+					let r = d.focus_ctl_rect(i, part);
+					spots.extend([
+						(r.x + 2.0, part),
+						(r.x + r.w / 2.0, part),
+						(r.x + r.w - 2.0, part),
+					]);
+				}
+				if let Kind::Radio(options) = spec.kind {
+					for (choice, option) in options.iter().enumerate() {
+						let r = d.radio_box(i, choice);
+						spots.push((r.x + r.w / 2.0, 0));
+						spots.push((r.x + r.w + 4.0 + chars7(option) / 2.0, 0));
+					}
+				}
+				for (x, part) in spots {
+					if !vp.contains(x, mid) {
+						continue;
+					}
+					let want = d.row_tip(i, d.part_key(i, part));
+					assert_eq!(
+						d.hover_tip_dip(x, mid).map(|(tip, _)| tip),
+						want,
+						"{:?} part {part} at x {x}",
+						spec.key
+					);
+					probed += 1;
+				}
+			}
+		}
+		assert!(probed > 400, "only {probed} spots probed");
+		// the row the item named: all of "Fit  ( ) Stretch  ( ) Zoom"
+		let i = d.specs.iter().position(|s| s.key == Key::BgFit).unwrap();
+		d.tab = d.specs[i].tab;
+		let Kind::Radio(options) = d.specs[i].kind else {
+			panic!("Fit is a radio row")
+		};
+		let mid = d.checkbox(i).y + d.checkbox(i).h / 2.0;
+		let mut spots = vec![d.label_x(i) + 2.0];
+		for (choice, option) in options.iter().enumerate() {
+			let r = d.radio_box(i, choice);
+			spots.extend([r.x + r.w / 2.0, r.x + r.w + 4.0 + chars7(option) / 2.0]);
+		}
+		for x in spots {
+			let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip);
+			assert_eq!(tip, Some(d.specs[i].help), "Fit at x {x}");
 		}
 	}
 
@@ -6381,7 +6441,7 @@ mod tests {
 					assert_eq!(d.focus_ctl_rect(i, 0), bx, "{key:?}: focus ring");
 					let mid = bx.y + bx.h / 2.0;
 					for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
-						let tip = d.hover_tip_dip(x, mid, &mut chars7).map(|(t, _)| t);
+						let tip = d.hover_tip_dip(x, mid).map(|(t, _)| t);
 						assert_eq!(tip, Some(d.specs[i].help), "{key:?} tip at {x}");
 					}
 					let was = d.get_toggle(key);
@@ -7092,7 +7152,7 @@ mod tests {
 		d.tab = d.specs[i].tab;
 		let ctl = d.checkbox(i);
 		let tip = d
-			.hover_tip_dip(ctl.x + 1.0, ctl.y + 1.0, &mut chars7)
+			.hover_tip_dip(ctl.x + 1.0, ctl.y + 1.0)
 			.map(|(text, _)| text);
 		assert_eq!(tip, Some(PROFILE_TIP));
 
@@ -7173,11 +7233,11 @@ mod tests {
 
 	// What dialog.rs asks of the dialog for one frame.
 	fn one_frame(d: &SettingsDialog, mx: f32, my: f32) {
-		let _ = d.hover_tip(mx, my, &mut chars7);
+		let _ = d.hover_tip(mx, my);
 		let _ = d.rects(18.0, chars7);
 		let _ = d.texts(18.0, chars7);
 		let _ = d.overlay(&mut chars7);
-		let _ = d.hover_tip(mx, my, &mut chars7);
+		let _ = d.hover_tip(mx, my);
 	}
 
 	// A frame reads every row's value, and a performance profile is chosen by
@@ -7619,10 +7679,7 @@ mod tests {
 			Key::OpenFolder,
 		] {
 			let (d, i) = mk_assoc_dialog(key, store.clone());
-			let tip = |r: crate::pane::Rect| {
-				d.hover_tip(r.x + 2.0, r.y + 2.0, &mut chars7)
-					.map(|(tip, _)| tip)
-			};
+			let tip = |r: crate::pane::Rect| d.hover_tip(r.x + 2.0, r.y + 2.0).map(|(tip, _)| tip);
 			assert!(!d.specs[i].help.is_empty() && !d.specs[i].revert_help.is_empty());
 			assert_eq!(tip(d.row_btn_rect(i, 0)), Some(d.specs[i].help), "{key:?}");
 			assert_eq!(
@@ -7985,19 +8042,17 @@ mod tests {
 			// the flyover explains WHY it is grayed, in place of the row's own
 			// help text, and only over the row
 			assert_eq!(
-				d.hover_tip(bx.x + 2.0, bx.y + 2.0, &mut chars7)
-					.map(|(tip, _)| tip),
+				d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip),
 				Some("The desktop reports no monospace font to follow.")
 			);
-			assert!(d.hover_tip(bx.x + 2.0, bx.y - 200.0, &mut chars7).is_none());
+			assert!(d.hover_tip(bx.x + 2.0, bx.y - 200.0).is_none());
 			// the family field stays editable, since it is what actually resolves
 			assert!(!d.disabled(Key::FontFamily));
 		} else {
 			assert!(!d.disabled(Key::SystemFont));
 			// live, so the row explains what it does rather than why it cannot
 			assert_ne!(
-				d.hover_tip(bx.x + 2.0, bx.y + 2.0, &mut chars7)
-					.map(|(tip, _)| tip),
+				d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip),
 				Some("The desktop reports no monospace font to follow.")
 			);
 			// following the OS grays the field it overrides
@@ -9723,7 +9778,7 @@ mod tests {
 			};
 			assert!(!want.is_empty(), "{label} has no tip declared");
 			let (tip, anchor) = d
-				.hover_tip_dip(r.x + r.w / 2.0, r.y + r.h / 2.0, &mut chars7)
+				.hover_tip_dip(r.x + r.w / 2.0, r.y + r.h / 2.0)
 				.unwrap_or_else(|| panic!("{label} shows no tip"));
 			assert_eq!(tip, want, "{label} shows the wrong tip");
 			assert!(
@@ -10234,13 +10289,113 @@ mod tests {
 	// 	}
 	// }
 
-	// Two rows carry a warning mark: Transparency on the Background tab, and
+	// Commented out 20261008: a row now has one tip, shown over its label, its
+	// mark and its control alike (2026100812334388), so a mark no longer
+	// answers with text of its own. Replaced by
+	// `two_rows_warn_and_each_mark_shows_the_rows_tip` (Es9VucS), which checks
+	// the same things with the row's tip over the mark.
+	// // Two rows carry a warning mark: Transparency on the Background tab, and
+	// // "Free resources when idle" on the Window tab. Each draws one triangle after
+	// // its label, clear of its checkbox, and answers with its own flyover, while
+	// // the label keeps the row's usual one. No other tab draws a mark.
+	// // Test ID: EryD9nl
+	// #[test]
+	// fn two_rows_warn_and_each_mark_answers_for_its_own() {
+	// 	// the label column the way `chrome_widths` measures it, marks included
+	// 	let line_h = 18.0;
+	// 	let label_w = super::ui()
+	// 		.specs
+	// 		.iter()
+	// 		.map(|s| {
+	// 			let mark = if s.warning.is_empty() {
+	// 				0.0
+	// 			} else {
+	// 				super::warning_room(line_h)
+	// 			};
+	// 			chars7(s.label) + f32::from(s.indent) * lay().indent + mark
+	// 		})
+	// 		.fold(0.0f32, f32::max)
+	// 		+ lay().label_gap;
+	// 	let mut d = SettingsDialog::new(
+	// 		0.0,
+	// 		0.0,
+	// 		line_h,
+	// 		label_w,
+	// 		80.0,
+	// 		90.0,
+	// 		vec![90.0; tab_titles().len()],
+	// 		labels7(1.0),
+	// 		f32::MAX,
+	// 		4000.0,
+	// 		1.0,
+	// 	);
+	// 	let warned: Vec<Key> = d
+	// 		.specs
+	// 		.iter()
+	// 		.filter(|s| !s.warning.is_empty())
+	// 		.map(|s| s.key)
+	// 		.collect();
+	// 	assert_eq!(warned, [Key::Transparency, Key::IdleRelease]);
+	// 	let mut marked = Vec::new();
+	// 	for key in warned {
+	// 		let i = d.specs.iter().position(|s| s.key == key).unwrap();
+	// 		d.tab = d.specs[i].tab;
+	// 		marked.push(d.tab);
+	// 		let mark = d.warning_box(i, &mut chars7);
+	// 		assert!(mark.x > d.label_x(i) + chars7(d.specs[i].label));
+	// 		assert!(
+	// 			mark.x + mark.w <= d.checkbox(i).x,
+	// 			"{}'s mark runs into the checkbox",
+	// 			key.name()
+	// 		);
+	// 		let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
+	// 		let triangles: Vec<_> = rows
+	// 			.iter()
+	// 			.filter(|r| r.mode() == QuadMode::Triangle)
+	// 			.collect();
+	// 		assert_eq!(triangles.len(), 1, "one mark on {}'s tab", key.name());
+	// 		assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
+	// 		let (cx, cy) = (mark.x + mark.w / 2.0, mark.y + mark.h / 2.0);
+	// 		assert_eq!(
+	// 			d.hover_tip_dip(cx, cy).map(|(tip, _)| tip),
+	// 			Some(d.specs[i].warning)
+	// 		);
+	// 		let label = d.label_x(i) + 2.0;
+	// 		assert_eq!(
+	// 			d.hover_tip_dip(label, cy).map(|(tip, _)| tip),
+	// 			Some(d.specs[i].help)
+	// 		);
+	// 	}
+	// 	assert_eq!(tab_titles()[marked[0]], "Background");
+	// 	assert_eq!(tab_titles()[marked[1]], "Window");
+	// 	let at = |key: Key| d.specs.iter().find(|s| s.key == key).unwrap().warning;
+	// 	assert!(at(Key::Transparency).contains("compositor"));
+	// 	assert!(at(Key::IdleRelease).contains("driver"));
+	// 	// the memory half is Windows' alone
+	// 	assert_eq!(
+	// 		at(Key::Transparency).contains("memory"),
+	// 		cfg!(windows),
+	// 		"{}",
+	// 		at(Key::Transparency)
+	// 	);
+	// 	for tab in (0..tab_titles().len()).filter(|t| !marked.contains(t)) {
+	// 		d.tab = tab;
+	// 		let (_, rows) = d.rects_dip(d.line_h, &mut chars7);
+	// 		assert!(
+	// 			!rows.iter().any(|r| r.mode() == QuadMode::Triangle),
+	// 			"a triangle on tab {tab}"
+	// 		);
+	// 	}
+	// }
+
+	// Two rows have a warning mark: Transparency on the Background tab, and
 	// "Free resources when idle" on the Window tab. Each draws one triangle after
-	// its label, clear of its checkbox, and answers with its own flyover, while
-	// the label keeps the row's usual one. No other tab draws a mark.
-	// Test ID: EryD9nl
+	// its label, clear of its checkbox. The mark's text ends the row's one tip,
+	// which shows over the label, the mark and the checkbox. No other tab draws
+	// a mark.
+	// Test ID: Es9VucS
 	#[test]
-	fn two_rows_warn_and_each_mark_answers_for_its_own() {
+	fn two_rows_warn_and_each_mark_shows_the_rows_tip() {
 		// the label column the way `chrome_widths` measures it, marks included
 		let line_h = 18.0;
 		let label_w = super::ui()
@@ -10295,16 +10450,22 @@ mod tests {
 				.collect();
 			assert_eq!(triangles.len(), 1, "one mark on {}'s tab", key.name());
 			assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
-			let (cx, cy) = (mark.x + mark.w / 2.0, mark.y + mark.h / 2.0);
-			assert_eq!(
-				d.hover_tip_dip(cx, cy, &mut chars7).map(|(tip, _)| tip),
-				Some(d.specs[i].warning)
+			let help = d.specs[i].help;
+			assert!(
+				help.ends_with(d.specs[i].warning) && help.len() > d.specs[i].warning.len(),
+				"{}: {help}",
+				key.name()
 			);
-			let label = d.label_x(i) + 2.0;
-			assert_eq!(
-				d.hover_tip_dip(label, cy, &mut chars7).map(|(tip, _)| tip),
-				Some(d.specs[i].help)
-			);
+			let bx = d.checkbox(i);
+			let cy = mark.y + mark.h / 2.0;
+			for x in [d.label_x(i) + 2.0, mark.x + mark.w / 2.0, bx.x + bx.w / 2.0] {
+				assert_eq!(
+					d.hover_tip_dip(x, cy).map(|(tip, _)| tip),
+					Some(help),
+					"{} at x {x}",
+					key.name()
+				);
+			}
 		}
 		assert_eq!(tab_titles()[marked[0]], "Background");
 		assert_eq!(tab_titles()[marked[1]], "Window");
@@ -10380,8 +10541,7 @@ mod tests {
 		let track = d.track(i);
 		let y = track.y + track.h / 2.0;
 		assert_eq!(
-			d.hover_tip_dip(d.label_x(i) + 2.0, y, &mut chars7)
-				.map(|(tip, _)| tip),
+			d.hover_tip_dip(d.label_x(i) + 2.0, y).map(|(tip, _)| tip),
 			super::hidden_wait_tip(false)
 		);
 	}
