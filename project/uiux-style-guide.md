@@ -54,10 +54,10 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 
 - An item that opens a further dialog ends in a single ellipsis character, no space before it: `Settings…`, `About…`, `Save as…`. An item that only asks for confirmation does not.
 
-- Units go on the end of the label, separated by a space, with no brackets: `Opacity %`, `Blur px`, `Blink rate ms`. The value beside the control carries the number alone.
+- Units go on the end of the label, separated by a space, with no brackets: `Opacity %`, `Blur px`, `Blink rate ms`. The value beside the control shows the number alone.
 
 - Keyboard shortcuts shown in a menu go in parentheses at the end of the item, spelled with `+` between every part and no spaces: `Copy (Ctrl+Shift+C)`, `Fullscreen (F11)`.
-	- On macOS a row with a Command chord shows that chord instead, with the modifiers in Apple's order: `Copy (Command+C)`, `Fullscreen (Control+Command+F)`. The system menu bar draws the chord itself, so its labels carry none.
+	- On macOS a row with a Command chord shows that chord instead, with the modifiers in Apple's order: `Copy (Command+C)`, `Fullscreen (Control+Command+F)`. The system menu bar draws the chord itself, so its labels have none.
 
 - Say what a thing is, not what the code calls it. "File or folder", not "Path". "Visibility", not "Alpha". "Handle" and "Track", not "Thumb" and "Trough".
 
@@ -78,7 +78,7 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 
 - On macOS the two auto-copy switches are the Copy on select and Copy on output rows in Edit, checked to follow the focused pane. The system menu bar has no place for a control that is not a menu.
 
-- The right-click menu is the pane's own menu. It is a selection from the bar, not a copy of it: the actions worth reaching without traveling, plus items that only make sense at the pointer, such as the two link actions that appear only when the click was on a link. It carries one window-chrome row, Menu bar, because with the bar hidden nothing else can bring it back.
+- The right-click menu is the pane's own menu. It is a selection from the bar, not a copy of it: the actions worth reaching without traveling, plus items that only make sense at the pointer, such as the two link actions that appear only when the click was on a link. It has one window-chrome row, Menu bar, because with the bar hidden nothing else can bring it back.
 
 - On macOS the right-click menu has no Menu bar row, since there is no in-window bar to bring back.
 
@@ -134,7 +134,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - A fraction stored as 0..1 is shown as a whole percent. The file keeps the decimal.
 
-- Every row that holds a value has a revert control at the right edge, which puts the shipped default back. A heading, a `buttons` row and the shells grid hold no single value, so none of them carries one.
+- Every row that holds a value has a revert control at the right edge, which puts the default back. A heading, a `buttons` row and the shells grid hold no single value, so none of them has one.
 	- The Windows file-type rows are the exception. Each is a `buttons` row whose Register writes the registry at once, and its revert control puts back what Register replaced. The arrow is lit while the registry names SilkTerm, and its flyover says what it puts back.
 
 - Every row must actually write what it edits. A row whose setting is never persisted is worse than no row, because the change appears to take and then vanishes at the next launch.
@@ -187,7 +187,7 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 
 - A row's tip shows wherever the pointer rests on that row: its label, a warning mark, each option's label and every part of its control. The revert control is the one part with a tip of its own. A pair, such as Use system font's Face and Size, is two settings, so each half answers for its own when one is grayed. A packed line of toggles is separate settings too, and each keeps its own tip.
 
-- Only controls whose label does not already say what they do get a tip. The test is the tip itself: if it restates the label in other words, delete it and fix the label. A dialog of rendering settings will legitimately carry one on most of its rows, because a name cannot say what a falloff curve or an easing time does to the picture.
+- Only controls whose label does not already say what they do get a tip. The test is the tip itself: if it restates the label in other words, delete it and fix the label. A dialog of rendering settings will legitimately need one on most of its rows, because a name cannot say what a falloff curve or an easing time does to the picture.
 
 - A tip that explains a control is prose: one to three complete sentences, each ending in a period. Two is usually enough, and a third has to answer the obvious follow-on question rather than pad.
 
@@ -213,7 +213,7 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 
 - Chrome sizes off the interface font, not off a constant. Changing the desktop font size must move everything together.
 
-- Text is centered on its visible ink box, not on its line box. Curated single-line labels center on ascender-to-baseline; anything that may carry descenders, such as a path, centers on ascent plus descent.
+- Text is centered on its visible ink box, not on its line box. Curated single-line labels center on ascender-to-baseline; anything that may have descenders, such as a path, centers on ascent plus descent.
 
 - A focused boxed control draws exactly one outline.
 
@@ -268,7 +268,7 @@ Rules that go with them:
 - Program shortcuts take Ctrl+Shift where the plain Ctrl form belongs to the shell. Plain Ctrl is used only where nothing sensible would want it.
 	- Ctrl+Shift+C copy, Ctrl+Shift+V paste.
 	- Ctrl+Shift+T new tab, Ctrl+Shift+W or Ctrl+F4 close tab, Ctrl+Shift+N new window.
-	- Ctrl+PageUp and Ctrl+PageDown walk the tabs; add Shift to carry the tab with you.
+	- Ctrl+PageUp and Ctrl+PageDown walk the tabs; add Shift to move the tab along.
 	- Ctrl+Plus, Ctrl+Minus and Ctrl+0 size the font for this session.
 	- Ctrl+, opens Settings. F11 is fullscreen.
 
@@ -279,7 +279,7 @@ Rules that go with them:
 - On macOS the program's chords are Command ones, Apple's standard shortcut where an action has one, as a key and on the menu row. No Ctrl chord is the program's there, so every one goes to the shell.
 	- Command+N new window, Command+T new tab, Command+W close tab.
 	- Command+C copy, Command+V paste.
-	- Command+Shift+[ and Command+Shift+] walk the tabs. So do Command+PageUp and Command+PageDown, and Shift with those two carries the tab with you.
+	- Command+Shift+[ and Command+Shift+] walk the tabs. So do Command+PageUp and Command+PageDown, and Shift with those two moves the tab along.
 	- Command+Plus, Command+Minus and Command+0 size the font.
 	- Command+, opens Settings, Control+Command+F is fullscreen, Command+Q quits. Command+H and Option+Command+H hide, and Command+M minimizes.
 	- Command+D splits right and Command+Shift+D splits down, and Command+Option+arrows move between panes, as in iTerm2. Option+Command+W closes the pane, since Command+W closes the tab.
