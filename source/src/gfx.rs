@@ -487,6 +487,7 @@ pub struct Gfx {
 	/// what the device was asked for, so a change of setting can be told
 	pub want: Want,
 	_window: Arc<Window>,
+	_vulkan: Option<OnVulkan>,
 }
 
 impl std::fmt::Debug for Gfx {
@@ -712,6 +713,7 @@ impl Gfx {
 		backend_options: wgpu::BackendOptions,
 		want: Want,
 	) -> anyhow::Result<Self> {
+		let _loader = hold_loader();
 		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
 			backends,
 			flags: wgpu::InstanceFlags::default(),
@@ -733,6 +735,7 @@ impl Gfx {
 		order: &[bool],
 		refused: Option<String>,
 	) -> anyhow::Result<Self> {
+		let _loader = hold_loader();
 		let surface = instance.create_surface(window.clone())?;
 		let picked = pick_device(&instance, Some(&surface), order, refused, "silkterm device")?;
 		let (config, format, transparent) = surface_config(&surface, &picked.adapter, &window)
@@ -743,6 +746,7 @@ impl Gfx {
 		surface.configure(&picked.device, &config);
 
 		Ok(Self {
+			_vulkan: OnVulkan::count(&picked.info),
 			instance,
 			device: picked.device,
 			queue: picked.queue,
@@ -798,6 +802,7 @@ impl Gfx {
 		log: bool,
 		refused: Option<String>,
 	) -> anyhow::Result<Self> {
+		let _loader = hold_loader();
 		let instance = route
 			.software
 			.get_or_insert_with(|| plain_instance(wgpu::Backends::PRIMARY))
@@ -813,6 +818,7 @@ impl Gfx {
 	/// for. `None` means this warm context cannot serve this window, so the caller
 	/// must fall back to a cold `with_backends`.
 	pub fn with_dialog_gpu(window: Arc<Window>, gpu: &DialogGpu) -> Option<Self> {
+		let _loader = hold_loader();
 		// The warm instance was built with no display connection, so it may not be
 		// able to make a surface for this window at all. That is the same answer as
 		// an adapter that cannot present here: fall back, rather than failing the
@@ -838,6 +844,7 @@ impl Gfx {
 			drawn: gpu.drawn,
 			want: gpu.want,
 			_window: window,
+			_vulkan: OnVulkan::count(&gpu.adapter_info),
 		})
 	}
 
@@ -1031,6 +1038,7 @@ impl Gfx {
 			drawn,
 			want: Want::Card,
 			_window: window,
+			_vulkan: None,
 		})
 	}
 
@@ -1493,6 +1501,163 @@ fn pick_alpha_mode(
 	(offered.first().copied().unwrap_or(Mode::Opaque), false)
 }
 
+// Vulkan loader 1.4.309 (Debian 13) looks a device up by walking every
+// instance's driver list under one lock, and changes those lists under another.
+// So naming an object (debug builds name them all) or making a swapchain on one
+// thread, while another makes an instance, lists adapters or makes a device,
+// reads freed memory (2026100720280486). Loaders from 1.4.350 are fixed (5ee27b3).
+// Every thread that calls into the loader holds this while it does: the winit
+// thread through `HoldsLoader`, the dialogs' warm-up for its whole build.
+static LOADER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+thread_local! {
+	// how deep this thread's holds go, and the lock while they do
+	static LOADER_HELD: std::cell::RefCell<(u32, Option<std::sync::MutexGuard<'static, ()>>)> =
+		const { std::cell::RefCell::new((0, None)) };
+}
+
+/// This thread's turn at the graphics loader (see `LOADER`), until dropped.
+/// Holds nest.
+#[derive(Debug)]
+#[must_use]
+pub struct LoaderHold(std::marker::PhantomData<*const ()>);
+
+pub fn hold_loader() -> LoaderHold {
+	LOADER_HELD.with_borrow_mut(|(depth, lock)| {
+		if *depth == 0 {
+			*lock = Some(lock_loader());
+		}
+		*depth += 1;
+	});
+	LoaderHold(std::marker::PhantomData)
+}
+
+impl Drop for LoaderHold {
+	fn drop(&mut self) {
+		LOADER_HELD.with_borrow_mut(|(depth, lock)| {
+			*depth -= 1;
+			if *depth == 0 {
+				*lock = None;
+			}
+		});
+	}
+}
+
+// Poison is ignored: a panic between loader calls leaves the loader whole.
+fn lock_loader() -> std::sync::MutexGuard<'static, ()> {
+	LOADER
+		.lock()
+		.unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+// `wait` with this thread's hold let go, since what it waits on may need it.
+fn without_loader<T>(wait: impl FnOnce() -> T) -> T {
+	let (depth, lock) = LOADER_HELD.with_borrow_mut(std::mem::take);
+	drop(lock);
+	let done = wait();
+	if depth > 0 {
+		let lock = lock_loader();
+		LOADER_HELD.with_borrow_mut(|held| *held = (depth, Some(lock)));
+	}
+	done
+}
+
+// Window contexts on the Vulkan loader, counted by `OnVulkan`. With none, the
+// winit thread draws through GL, DX12 or Metal and never waits on the warm-up.
+// Building one holds the loader itself, but the rest of that callback does not.
+// That is safe because none is built while a warm-up runs: the first comes
+// before any window shows, a rebuild while the device is gone (the warm-up
+// waits for one), a dialog's after its warm-up is joined.
+static WINDOW_VULKAN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[derive(Debug)]
+struct OnVulkan;
+
+impl OnVulkan {
+	fn count(info: &wgpu::AdapterInfo) -> Option<Self> {
+		(info.backend == wgpu::Backend::Vulkan).then(|| {
+			WINDOW_VULKAN.fetch_add(1, Ordering::SeqCst);
+			Self
+		})
+	}
+}
+
+impl Drop for OnVulkan {
+	fn drop(&mut self) {
+		WINDOW_VULKAN.fetch_sub(1, Ordering::SeqCst);
+	}
+}
+
+fn hold_for_windows() -> Option<LoaderHold> {
+	(WINDOW_VULKAN.load(Ordering::SeqCst) > 0).then(hold_loader)
+}
+
+/// The app with the loader held through every event-loop callback while a
+/// window draws on Vulkan, so nothing the winit thread does in wgpu overlaps
+/// the dialogs' warm-up. Every method is passed on; one left to the trait's
+/// default would never reach the app.
+#[derive(Debug)]
+pub struct HoldsLoader<'a, A>(pub &'a mut A);
+
+impl<A: winit::application::ApplicationHandler<T>, T: 'static>
+	winit::application::ApplicationHandler<T> for HoldsLoader<'_, A>
+{
+	fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
+		let _loader = hold_for_windows();
+		self.0.new_events(event_loop, cause);
+	}
+
+	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.resumed(event_loop);
+	}
+
+	fn user_event(&mut self, event_loop: &ActiveEventLoop, event: T) {
+		let _loader = hold_for_windows();
+		self.0.user_event(event_loop, event);
+	}
+
+	fn window_event(
+		&mut self,
+		event_loop: &ActiveEventLoop,
+		window_id: winit::window::WindowId,
+		event: winit::event::WindowEvent,
+	) {
+		let _loader = hold_for_windows();
+		self.0.window_event(event_loop, window_id, event);
+	}
+
+	fn device_event(
+		&mut self,
+		event_loop: &ActiveEventLoop,
+		device_id: winit::event::DeviceId,
+		event: winit::event::DeviceEvent,
+	) {
+		let _loader = hold_for_windows();
+		self.0.device_event(event_loop, device_id, event);
+	}
+
+	fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.about_to_wait(event_loop);
+	}
+
+	fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.suspended(event_loop);
+	}
+
+	fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.exiting(event_loop);
+	}
+
+	fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
+		let _loader = hold_for_windows();
+		self.0.memory_warning(event_loop);
+	}
+}
+
 /// A wgpu instance/adapter/device kept for the life of the process and shared by
 /// every pop-out dialog.
 ///
@@ -1581,7 +1746,10 @@ impl<T> Warm<T> {
 	fn settled(self) -> Self {
 		match self {
 			// a panicked worker reads as a failure, same as a returned None
-			Self::Building(job) => job.join().ok().flatten().map_or(Self::Failed, Self::Ready),
+			Self::Building(job) => without_loader(|| job.join())
+				.ok()
+				.flatten()
+				.map_or(Self::Failed, Self::Ready),
 			other => other,
 		}
 	}
@@ -1614,6 +1782,9 @@ impl GpuWarm {
 		let seed = self.seed.take();
 		let want = wanted();
 		self.state = Warm::Building(std::thread::spawn(move || {
+			// The whole build, failures and their drops too. A window drawing on
+			// Vulkan waits for it only if it has work before then.
+			let _loader = hold_loader();
 			let built = match seed {
 				Some(seed) => DialogGpu::on(seed, want).or_else(|_| DialogGpu::build(want)),
 				None => DialogGpu::build(want),
@@ -2578,6 +2749,7 @@ mod tests {
 	// Test ID: ErnMa8F
 	#[test]
 	fn a_card_that_refuses_a_device_falls_back_to_software() {
+		let _loader = hold_loader();
 		let instance = plain_instance(wgpu::Backends::PRIMARY);
 		let first = |software| {
 			pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -2642,6 +2814,7 @@ mod tests {
 	// Test ID: Ern7Y1J
 	#[test]
 	fn a_new_device_reserves_little_graphics_memory() {
+		let _loader = hold_loader();
 		let gpu = match DialogGpu::build(Want::Card) {
 			Ok(gpu) => gpu,
 			Err(e) => {
@@ -2678,6 +2851,7 @@ mod tests {
 	// Test ID: Erz0m6t
 	#[test]
 	fn a_bc1_wallpaper_draws_like_the_plain_one() {
+		let _loader = hold_loader();
 		let gpu = match DialogGpu::build(Want::Software) {
 			Ok(gpu) => gpu,
 			Err(e) => {
@@ -2903,6 +3077,7 @@ mod tests {
 	// Test ID: ErqRBp6
 	#[test]
 	fn every_dialog_open_takes_the_kept_context() {
+		let _loader = hold_loader();
 		let mut warm = GpuWarm::idle();
 		warm.start();
 		let Some(first) = warm.get() else {
@@ -2945,5 +3120,86 @@ mod tests {
 		assert_eq!(wsi_debug_for(Some("noshm,sw"), false), None);
 		assert_eq!(wsi_debug_for(None, true), None);
 		assert_eq!(wsi_debug_for(Some("sw"), true), None);
+	}
+
+	// The warm-up builds a whole instance, adapter and device while the window
+	// draws. On loader 1.4.309 that crashed a debug build now and then, since
+	// naming an object walks the driver lists the warm-up's new instance is
+	// still changing. Each pass here holds the loader as a winit callback does.
+	// Fresh warm-ups, since a kept seed skips the instance. Skips without a
+	// software adapter.
+	// Test ID: Es9NHfD
+	#[test]
+	fn a_warm_up_never_overlaps_what_the_window_draws() {
+		let gpu = {
+			let _loader = hold_loader();
+			match DialogGpu::build(Want::Software) {
+				Ok(gpu) => gpu,
+				Err(e) => {
+					eprintln!("skipped: no device ({e})");
+					return;
+				}
+			}
+		};
+		for _ in 0..10 {
+			let mut warm = GpuWarm::idle();
+			warm.start();
+			while matches!(&warm.state, Warm::Building(job) if !job.is_finished()) {
+				let pass = hold_loader();
+				for _ in 0..20 {
+					let encoder =
+						gpu.device
+							.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+								label: Some("pass"),
+							});
+					gpu.queue.submit([encoder.finish()]);
+				}
+				drop(pass);
+				std::thread::sleep(Duration::from_millis(1));
+			}
+			let _loader = hold_loader();
+			warm.release();
+			drop(warm);
+		}
+		let _loader = hold_loader();
+		drop(gpu);
+	}
+
+	// A window on GL, DX12 or Metal never makes a loader call between builds,
+	// so it must not wait out the warm-up: about 150 ms on b23's card, every
+	// launch. Only a window on Vulkan holds through its callbacks.
+	// Test ID: Es9Pm5d
+	#[test]
+	fn only_a_window_on_vulkan_holds_the_loader_through_its_callbacks() {
+		assert!(hold_for_windows().is_none());
+		let mut gl = test_adapter("GL", wgpu::DeviceType::DiscreteGpu);
+		gl.backend = wgpu::Backend::Gl;
+		assert!(OnVulkan::count(&gl).is_none());
+		assert!(hold_for_windows().is_none());
+		let window = OnVulkan::count(&test_adapter("lavapipe", wgpu::DeviceType::Cpu));
+		assert!(hold_for_windows().is_some());
+		drop(window);
+		assert!(hold_for_windows().is_none());
+	}
+
+	// A hold nests, and a wait inside one lets another thread have the loader.
+	// Joining the warm-up from a winit callback deadlocked otherwise.
+	// Test ID: Es9NHtj
+	#[test]
+	fn a_loader_hold_nests_and_lets_go_for_a_wait() {
+		let _outer = hold_loader();
+		let inner = hold_loader();
+		drop(inner);
+		let other = std::thread::spawn(|| {
+			let _loader = hold_loader();
+			7
+		});
+		assert_eq!(without_loader(|| other.join().unwrap()), 7);
+		assert_eq!(LOADER_HELD.with_borrow(|held| held.0), 1);
+		let blocked = std::thread::spawn(|| LOADER.try_lock().is_err());
+		assert!(
+			blocked.join().unwrap(),
+			"the outer hold came back after the wait"
+		);
 	}
 }

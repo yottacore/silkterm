@@ -34,55 +34,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- The "Tab text" options are wonky. There's too much space between "Program title" and its checkbox.
-	- ID: 2026100710173200
-	- Type: Enhancement
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261007-101732
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100614510984
-	- Target OS: All
-	- Requirements:
-		- The gap is because of the column system for labels and controls. But for a more efficient and effective dialog system, some elements need to be able to break out of that system.
+- A software rendering launch crashes now and then inside the Vulkan loader
+	- ID: 2026100720280486
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Needs local test suite run?: No
+	- Severity: High
+	- Opened: 20261007-202804
+	- Opened by: CC
+	- Related IDs: 2026100614510979
+	- Target OS: Linux
+	- Test environment: b23, the debug build, headless sway's Xwayland behind the no-shared-pixmaps proxy
+	- Steps to reproduce:
+		- Run `cicd/tests/swnoshm/run.bash` a few times. Its first case launches with software rendering on.
+	- Incorrect behavior: the program dies of SIGSEGV within about a second of launch, before a window comes up. The kernel log puts both crashes in `libvulkan.so.1.4.309` at almost the same offset, 0x2d066 and 0x2d06e. One faulting address was 0x6472616373, which is ASCII text read as a pointer.
+	- Expected behavior: a software launch comes up every time.
+	- Reproduced: 20261007, in 1 of 3 runs of the test alone at load 7, and once in the full pipeline at 7a032c5. No core was kept. The case that switches to software while running passed every time.
+	- Possible cause: not known. The same spot both times points away from host noise. Debug builds turn on Vulkan validation through `InstanceFlags::default()`, and the dialogs' GPU context is built on a worker thread, so two instances made at once in the loader is one suspect. Whether a release build crashes too is not known.
+	- Actual cause: The Vulkan loader on Debian 13 (1.4.309) has a threading bug. To find which device a call is for, it walks every instance's list of drivers, under a different lock than the one held while those lists change. Debug builds name every object they make, and each name does that walk. The dialogs' warm-up makes its own instance on another thread right after the window shows, and listing its adapters unloads the drivers that have none. A name given on the window thread at that moment read a list entry that had just been freed. Loader 1.4.350 fixes it upstream.
+	- Actual fix: Every thread that calls into the loader takes one lock while it does. The warm-up holds it for its whole build. The window thread holds it through each event-loop callback, but only while a window draws on Vulkan, which means software rendering or Wayland. A window on GL never waits. A wait on the warm-up lets go of the lock first, and the program lets a warm-up finish before it exits.
+	- Note: Release builds name nothing, so far less of what they do takes that walk: making a swapchain or a device still does. About 2400 devices made beside 600 warm-up builds did not crash, but the fix covers them anyway.
+	- Note: The cost is one wait, right after a window on Vulkan shows and after each idle rebuild, if the window has work while the warm-up builds. Optimized build on b23: about 130 ms with the card on Wayland, 35 ms in software, none with the card on X11.
+	- Against: the kept dialog context (2026100418225505, `WARM_DIALOG_GPU`). It is still kept and still built on a worker, but a window on Vulkan can now wait for that build once.
+	- Sweep: every thread that calls into wgpu, and every wait on one.
+	- Swept: Only the window thread and the warm-up use wgpu. No other spawned thread does. The two waits on the warm-up, opening a dialog and letting the device go, both let go of the lock. The unit tests that make devices take it as well, since they run side by side. `--about` runs before any thread starts.
+	- Branch: vkload
+	- Commit: 7d492b7
+	- Test case: `a_warm_up_never_overlaps_what_the_window_draws` (Es9NHfD) crashed 3 of 3 runs with the warm-up's hold taken out and passes with it. `a_loader_hold_nests_and_lets_go_for_a_wait` (Es9NHtj). `only_a_window_on_vulkan_holds_the_loader_through_its_callbacks` (Es9Pm5d) fails when every window holds.
+	- Verified: 20261008, the full unit suite, clippy for Linux, Windows and macOS, `cicd/tests/swnoshm/run.bash` 3 times, and 20 more software launches with no crash. Before the fix the same launches crashed 1 in 15 at load 18, at the filed spot.
 	- Notes:
-		- Before RC1.
-	- Progress log:
-		- 20261007: A shared line made only of toggles now packs. It starts where its first label would, each box sits a small gap after its own label, the first one's too, and the next label comes a fixed, wider gap later. The revert arrow stays at the end. A line with anything else on it, such as the scrim's two dropdowns, still splits the control column.
-		- 20261007: The "Tab text" heading stays its own row above the line. The Silk tab's "Check for hardware change" and "Re-test next run" line packs the same way and still reads well.
-		- 20261007: Labels on a packed line no longer count toward the label column. The panel is kept wide enough for the packed line instead. The width came out the same as before at 1x and 2x.
-		- 20261007: Question: the sketch at round start drew each box before its label. This keeps label first, as the written decision and the earlier signoff say.
-	- Decisions:
-		- 20261007: Pack at natural width. Only lines of `beside` toggles get it: each label right next to its own box, label first, then a fixed gap before the next toggle, then the one revert arrow at the end.
-		- 20261007: Label first stays, as built. Answers the sketch question above.
-	- Verified: unit suite, clippy, fmt and test IDs. In a real window at 1x and 2x, both packed lines draw as described and the panel width did not change. A click on a packed box flips only that setting and lights the arrow, a label shows its own tip, and Tab moves the single focus outline to the next box.
-	- Branch: tabpack
-	- Commit: 98a60d6
-	- Test case: `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM), which failed with packing turned off and passes with it. `a_sub_group_indents_labels_and_nothing_else` (Em3akaG) is commented out, since a packed line's first box leaves the control column. It is replaced by `a_sub_group_indents_labels_and_nothing_else_off_a_packed_line` (Es2i58B).
-
-- The wallpaper Visibility and Blur flyovers don't say that an image's own tags win over them
-	- ID: 2026100718350000
-	- Type: Enhancement
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261007-183500
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- The flyovers on the wallpaper Visibility and Blur sliders, and on the "Honor look tags" switch, say that an image's own Opacity and Blur tags win over the sliders while the switch is on, so the sliders only apply to untagged images.
-	- Decisions:
-		- 20261007: Keep the switch's default and the bundled pack's tags as they are. Only the help text changes.
-	- Progress log:
-		- 20261007: Visibility adds a third sentence, Blur gets its first tip, and the switch's tip is reworded. It also says the bundled wallpapers are all tagged, since that is why the sliders seem to do nothing out of the box.
-		- 20261007: The wallpaper design doc's open question is marked settled.
-	- Swept: the three rows in the dialog spec, the glossary's look tags entry, and the wallpaper design doc. The config template's comment on these lines already says tags win, and was left alone.
-	- Verified: the dialog unit tests, clippy, fmt, test IDs and doc checks.
-	- Branch: tiptweaks
-	- Commit: 07b5e59
-	- Test case: `the_wallpaper_look_sliders_say_a_tag_wins` (Es4N609). It failed on the old text and passes on the new.
-	- Closed:
+		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -273,25 +254,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
-
-- A software rendering launch crashes now and then inside the Vulkan loader
-	- ID: 2026100720280486
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261007-202804
-	- Opened by: CC
-	- Related IDs: 2026100614510979
-	- Target OS: Linux
-	- Test environment: b23, the debug build, headless sway's Xwayland behind the no-shared-pixmaps proxy
-	- Steps to reproduce:
-		- Run `cicd/tests/swnoshm/run.bash` a few times. Its first case launches with software rendering on.
-	- Incorrect behavior: the program dies of SIGSEGV within about a second of launch, before a window comes up. The kernel log puts both crashes in `libvulkan.so.1.4.309` at almost the same offset, 0x2d066 and 0x2d06e. One faulting address was 0x6472616373, which is ASCII text read as a pointer.
-	- Expected behavior: a software launch comes up every time.
-	- Reproduced: 20261007, in 1 of 3 runs of the test alone at load 7, and once in the full pipeline at 7a032c5. No core was kept. The case that switches to software while running passed every time.
-	- Possible cause: not known. The same spot both times points away from host noise. Debug builds turn on Vulkan validation through `InstanceFlags::default()`, and the dialogs' GPU context is built on a worker thread, so two instances made at once in the loader is one suspect. Whether a release build crashes too is not known.
-	- Notes:
-		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
 
 - Flyover text for the wallpaper option uses "carries"
 	- ID: 2026100812334384
@@ -2006,6 +1968,56 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- The "Tab text" options are wonky. There's too much space between "Program title" and its checkbox.
+	- ID: 2026100710173200
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261007-101732
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100614510984
+	- Target OS: All
+	- Requirements:
+		- The gap is because of the column system for labels and controls. But for a more efficient and effective dialog system, some elements need to be able to break out of that system.
+	- Notes:
+		- Before RC1.
+	- Progress log:
+		- 20261007: A shared line made only of toggles now packs. It starts where its first label would, each box sits a small gap after its own label, the first one's too, and the next label comes a fixed, wider gap later. The revert arrow stays at the end. A line with anything else on it, such as the scrim's two dropdowns, still splits the control column.
+		- 20261007: The "Tab text" heading stays its own row above the line. The Silk tab's "Check for hardware change" and "Re-test next run" line packs the same way and still reads well.
+		- 20261007: Labels on a packed line no longer count toward the label column. The panel is kept wide enough for the packed line instead. The width came out the same as before at 1x and 2x.
+		- 20261007: Question: the sketch at round start drew each box before its label. This keeps label first, as the written decision and the earlier signoff say.
+	- Decisions:
+		- 20261007: Pack at natural width. Only lines of `beside` toggles get it: each label right next to its own box, label first, then a fixed gap before the next toggle, then the one revert arrow at the end.
+		- 20261007: Label first stays, as built. Answers the sketch question above.
+	- Verified: unit suite, clippy, fmt and test IDs. In a real window at 1x and 2x, both packed lines draw as described and the panel width did not change. A click on a packed box flips only that setting and lights the arrow, a label shows its own tip, and Tab moves the single focus outline to the next box.
+	- Branch: tabpack
+	- Commit: 98a60d6
+	- Test case: `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM), which failed with packing turned off and passes with it. `a_sub_group_indents_labels_and_nothing_else` (Em3akaG) is commented out, since a packed line's first box leaves the control column. It is replaced by `a_sub_group_indents_labels_and_nothing_else_off_a_packed_line` (Es2i58B).
+
+- The wallpaper Visibility and Blur flyovers don't say that an image's own tags win over them
+	- ID: 2026100718350000
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261007-183500
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- The flyovers on the wallpaper Visibility and Blur sliders, and on the "Honor look tags" switch, say that an image's own Opacity and Blur tags win over the sliders while the switch is on, so the sliders only apply to untagged images.
+	- Decisions:
+		- 20261007: Keep the switch's default and the bundled pack's tags as they are. Only the help text changes.
+	- Progress log:
+		- 20261007: Visibility adds a third sentence, Blur gets its first tip, and the switch's tip is reworded. It also says the bundled wallpapers are all tagged, since that is why the sliders seem to do nothing out of the box.
+		- 20261007: The wallpaper design doc's open question is marked settled.
+	- Swept: the three rows in the dialog spec, the glossary's look tags entry, and the wallpaper design doc. The config template's comment on these lines already says tags win, and was left alone.
+	- Verified: the dialog unit tests, clippy, fmt, test IDs and doc checks.
+	- Branch: tiptweaks
+	- Commit: 07b5e59
+	- Test case: `the_wallpaper_look_sliders_say_a_tag_wins` (Es4N609). It failed on the old text and passes on the new.
+	- Closed:
 
 - Tab text: "Program title" -> "Program-defined"
 	- ID: 2026100717261689
