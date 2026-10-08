@@ -371,13 +371,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Priority: Avg
 	- Opened: 20261008-123343
 	- Opened by: JC
+	- Related IDs: 2026100418225510, 2026100812334387
 	- Target OS: All
 	- Requirements:
-		- When not in single-process mode, this can help conserve GPU memory at little discernible cost. It helps when regularly running numerous instances open on a low-memory GPU, and/or if something else wants all the GPU memory.
+		- Merge the row's current tip and warning into one text that reads clear.
+		- Show that one text over the label, the warning mark and the checkbox.
 	- Notes:
 		- Before RC1.
-		- Question: SilkTerm has no single-process mode yet. Is one planned, or does this mean something else?
-		- Question: the row has a tip and a warning now. Does this replace both?
+		- 20261008: Q: SilkTerm has no single-process mode yet. Is one planned, or does this mean something else? A: One is planned (2026100418225510), after the cut.
+		- 20261008: Q: The row has a tip and a warning now. Does this replace both? A: No. Drop the text first asked for, and merge the two instead, per the requirements.
+	- Decisions:
+		- 20261008: First asked-for text, dropped: "When not in single-process mode, this can help conserve GPU memory at little discernible cost. It helps when regularly running numerous instances open on a low-memory GPU, and/or if something else wants all the GPU memory."
 
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
