@@ -138,6 +138,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 368d7b8
 	- Test case: `two_rows_warn_and_each_mark_shows_the_rows_tip` (Es9VucS), which replaces `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl, commented out with the reason). It failed with the mark's own tip put back and passes now. `every_part_of_a_row_shows_the_rows_tip` (Es9VuY0) covers the mark as well.
 
+- The checkbox for "Check for hardware change" should be lined up under the checkbox for "Choose automatically"
+	- ID: 2026100812334385
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100710173200
+	- Target OS: All
+	- Requirements:
+		- I'm guessing this got moved to the left due to the columnar exception carved out for "Tab text" single-line grouping. But for this group, it looks odd, and it looked better for the performance section, when the first checkbox was lined up the way it was before.
+	- Notes:
+		- Before RC1.
+	- Decisions:
+		- 20261008: Best guess, since the question went unanswered. On the Silk tab line, "Check for hardware change" keeps its label in the label column and its box in the control column, under "Choose automatically". "Re-test next run" follows at the packed gap, label then box. The Tab text line stays as signed off.
+		- 20261008: Picked from the group, not declared. A packed line that shares its group with other rows keeps its first box in the column. One alone under its heading, like Tab text, packs from the label edge.
+	- Progress log:
+		- 20261008: The first label on such a line counts toward the label column again. It is not the widest label, so nothing else moved.
+		- 20261008: Tips, clicks and the focus ring follow the new positions. The UI style guide, the settings dialog design doc and the spec file's `beside` note say so.
+	- Swept: every packed line on every tab, through the test below. The Tab text line and the rest of the Window tab drew the same pixels as before at 1x and 2x. The scrim dropdown pair still splits the column.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at 1x and 2x, the hardware check box sits under the "Choose automatically" box, only that line changed on the Silk tab, and the panel stayed 707 wide at 1x and 1439 at 2x. Tips over the line were not looked at in a real window. The test covers them.
+	- Branch: hwline
+	- Commit: 676dbd5
+	- Test case: `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr). It fails with the group rule turned off, and with the first box left where packing puts it. `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM) is commented out, since it expected every first box right after its label.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -342,32 +368,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
-
-- The checkbox for "Check for hardware change" should be lined up under the checkbox for "Choose automatically"
-	- ID: 2026100812334385
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261008-123343
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100710173200
-	- Target OS: All
-	- Requirements:
-		- I'm guessing this got moved to the left due to the columnar exception carved out for "Tab text" single-line grouping. But for this group, it looks odd, and it looked better for the performance section, when the first checkbox was lined up the way it was before.
-	- Notes:
-		- Before RC1.
-	- Decisions:
-		- 20261008: Best guess, since the question went unanswered. On the Silk tab line, "Check for hardware change" keeps its label in the label column and its box in the control column, under "Choose automatically". "Re-test next run" follows at the packed gap, label then box. The Tab text line stays as signed off.
-		- 20261008: Picked from the group, not declared. A packed line that shares its group with other rows keeps its first box in the column. One alone under its heading, like Tab text, packs from the label edge.
-	- Progress log:
-		- 20261008: The first label on such a line counts toward the label column again. It is not the widest label, so nothing else moved.
-		- 20261008: Tips, clicks and the focus ring follow the new positions. The UI style guide, the settings dialog design doc and the spec file's `beside` note say so.
-	- Swept: every packed line on every tab, through the test below. The Tab text line and the rest of the Window tab drew the same pixels as before at 1x and 2x. The scrim dropdown pair still splits the column.
-	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at 1x and 2x, the hardware check box sits under the "Choose automatically" box, only that line changed on the Silk tab, and the panel stayed 707 wide at 1x and 1439 at 2x. Tips over the line were not looked at in a real window. The test covers them.
-	- Branch: hwline
-	- Commit: 676dbd5
-	- Test case: `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr). It fails with the group rule turned off, and with the first box left where packing puts it. `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM) is commented out, since it expected every first box right after its label.
 
 - Change the GPU timeout sliders from linear to logarithmic
 	- ID: 2026100812334386
