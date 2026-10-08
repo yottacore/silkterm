@@ -303,6 +303,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- A software rendering launch crashes now and then inside the Vulkan loader
+	- ID: 2026100720280486
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261007-202804
+	- Opened by: CC
+	- Related IDs: 2026100614510979
+	- Target OS: Linux
+	- Test environment: b23, the debug build, headless sway's Xwayland behind the no-shared-pixmaps proxy
+	- Steps to reproduce:
+		- Run `cicd/tests/swnoshm/run.bash` a few times. Its first case launches with software rendering on.
+	- Incorrect behavior: the program dies of SIGSEGV within about a second of launch, before a window comes up. The kernel log puts both crashes in `libvulkan.so.1.4.309` at almost the same offset, 0x2d066 and 0x2d06e. One faulting address was 0x6472616373, which is ASCII text read as a pointer.
+	- Expected behavior: a software launch comes up every time.
+	- Reproduced: 20261007, in 1 of 3 runs of the test alone at load 7, and once in the full pipeline at 7a032c5. No core was kept. The case that switches to software while running passed every time.
+	- Possible cause: not known. The same spot both times points away from host noise. Debug builds turn on Vulkan validation through `InstanceFlags::default()`, and the dialogs' GPU context is built on a worker thread, so two instances made at once in the loader is one suspect. Whether a release build crashes too is not known.
+	- Notes:
+		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -317,6 +336,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- A failed test script's output is thrown away by the pipeline
+	- ID: 2026100720280487
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261007-202804
+	- Opened by: CC
+	- Target OS: All
+	- Steps to reproduce:
+		- Have any script test under `cicd/tests` fail during `cicd.bash`.
+	- Incorrect behavior: `fRunTest` sends the script's output to `/dev/null`, so the log says only which test failed. A one-off failure can't be diagnosed after the fact. The test run folder test (ErOj67l) failed once that way on 20261007 and passed when run alone.
+	- Expected behavior: a failed test's output ends up in the log or in a file the failure line names.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
