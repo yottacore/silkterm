@@ -464,6 +464,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- A blink rate setting of 500 ms blinks at more like 1000 ms
+	- ID: 2026100907341815
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100907341817
+	- Target OS: All
+	- Incorrect behavior: A blink rate setting of 500ms is actually more like 1000ms.
+	- Expected behavior: The selected and actual rates match, wavecrest-to-wavecrest.
+	- Notes:
+		- Before RC1.
+		- The fix:
+			1. Change 'ms' to 'seconds', and allow fractional values. (More understandable to most humans than 'ms'.)
+			2. Make the selected and actual rates match, wavecrest-to-wavecrest.
+			- The current default actual blink rate is perfect, don't change that, just make sure the settings value is correct.
+		- The row is "Blink rate ms" on the Cursor tab, and its tip says "One full animation cycle."
+
+- After the monitors wake from power save, a SilkTerm on the portrait monitor returns to the size it uses on the landscape monitor
+	- ID: 2026100907341816
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100114435600
+	- Target OS: All
+	- Test environment: b23, one landscape and one portrait monitor
+	- Steps to reproduce:
+		- Have a SilkTerm on the portrait monitor at a different size than the one it uses on the landscape monitor.
+		- Let the monitors go into power save.
+		- Wake them and log in to the existing session.
+	- Incorrect behavior: The SilkTerm returned to its size used for the landscape monitor.
+	- Expected behavior: It keeps the size it had on the portrait monitor.
+	- Possible cause: Speculation. At some point during monitor wake, maybe the landscape was recognized first, and so everything was confined to that monitor, and SilkTerm (correctly) resized itself accordingly. Then when the portrait monitor came online moments later, the WM moved the windows back to the portrait monitor, but SilkTerm didn't register it as a "move". And it happened before either monitor's backlights even had time to light up, so the dance wasn't noticeable.
+	- Notes:
+		- Before RC1.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -478,6 +517,52 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
+	- ID: 2026100907341817
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100907341815, 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Settings/Cursor/Blink rate:
+			- Add a new boolean setting as a subsection heading, "Blink". If on, then the "Rate" slider is considered.
+	- Notes:
+		- Before RC1.
+
+- Settings that depend on a master boolean switch follow the automatic settings design
+	- ID: 2026100907341818
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100907341817
+	- Target OS: All
+	- Requirements:
+		- Update all Settings dialog code and logic to follow [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md).
+	- Notes:
+		- Before RC1.
+
+- Changes in one SilkTerm apply to all running SilkTerms using the same config file, immediately
+	- ID: 2026100907341819
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100418225510
+	- Target OS: All
+	- Requirements:
+		- Changes in one SilkTerm should apply to all running SilkTerms using the same config file, immediately.
+		- Except for randomly selected wallpaper. That should not change unless the user identified one specific file, or changed the path.
+			- In the latter case, if "random per window/tab/pane" is selected, then new wallpaper should be chosen at pseudorandom for each window/tab/pane.
+	- Notes:
+		- Before RC1.
+		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
 
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
