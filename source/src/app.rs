@@ -3651,6 +3651,7 @@ impl ApplicationHandler<UserEvent> for App {
 			moved_at: None,
 			ignore_resize_until: Instant::now(),
 			ignore_moves_until: Instant::now(),
+			layout: Vec::new(),
 			size_pinned: cli_win.columns.is_some()
 				|| cli_win.rows.is_some()
 				|| cli_win.pixel_width.is_some()

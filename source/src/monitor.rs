@@ -38,7 +38,8 @@ impl MonitorId {
 	fn find(window: &Window, at_pointer: bool) -> Option<Self> {
 		let scale = window.scale_factor();
 		#[cfg(target_os = "linux")]
-		if let Some((px, mm)) = x11_monitor_under(window, at_pointer) {
+		if let Some(under) = x11_monitor_under(window, at_pointer) {
+			let (px, mm) = under?;
 			return Self::new(px.0, px.1, scale, mm.map(|mm| upright(mm, px)));
 		}
 		let monitor = window.current_monitor()?;
@@ -69,6 +70,81 @@ impl MonitorId {
 			None => key,
 		}
 	}
+
+	/// A `key` read back.
+	pub fn from_key(key: &str) -> Option<Self> {
+		let pair = |text: &str| {
+			let (a, b) = text.split_once('x')?;
+			Some((a.parse().ok()?, b.parse().ok()?))
+		};
+		let mut parts = key.split('_');
+		let (width, height) = pair(parts.next()?)?;
+		let scale_pct = parts.next()?.strip_suffix("pct")?.parse().ok()?;
+		let size_mm = match parts.next() {
+			Some(mm) => Some(pair(mm.strip_suffix("mm")?)?),
+			None => None,
+		};
+		if parts.next().is_some() {
+			return None;
+		}
+		Some(Self {
+			width,
+			height,
+			scale_pct,
+			size_mm,
+		})
+	}
+
+	/// The same monitor, read again? An EDID gives the size twice, to the mm
+	/// and in whole cm, and the X server hands over either one. Which one can
+	/// change across a power save: b23's portrait monitor has read as both
+	/// 401x641 and 400x640 mm.
+	pub fn same_as(&self, other: &Self) -> bool {
+		let near = |a: u32, b: u32| a.abs_diff(b) < MM_SLACK;
+		self.width == other.width
+			&& self.height == other.height
+			&& self.scale_pct == other.scale_pct
+			&& match (self.size_mm, other.size_mm) {
+				(None, None) => true,
+				(Some(a), Some(b)) => near(a.0, b.0) && near(a.1, b.1),
+				_ => false,
+			}
+	}
+}
+
+// Under a cm either way, which is all the rounding to whole cm can move it.
+const MM_SLACK: u32 = 10;
+
+/// Do two monitor keys name the same monitor? See `MonitorId::same_as`.
+pub fn same_monitor(a: &str, b: &str) -> bool {
+	a == b
+		|| MonitorId::from_key(a)
+			.zip(MonitorId::from_key(b))
+			.is_some_and(|(a, b)| a.same_as(&b))
+}
+
+/// Where every monitor is. The window's own resize can make the window manager
+/// move it, but never changes these, so a move made while they changed is the
+/// window manager's.
+pub fn layout(window: &Window) -> Vec<(i64, i64, i64, i64)> {
+	// winit's list on X11 misses an output that comes back without the screen
+	// changing size
+	#[cfg(target_os = "linux")]
+	if let Some(screen) = X11Screen::of(window) {
+		return screen.crtcs.iter().map(crtc_rect).collect();
+	}
+	window
+		.available_monitors()
+		.map(|monitor| {
+			let (at, size) = (monitor.position(), monitor.size());
+			(
+				i64::from(at.x),
+				i64::from(at.y),
+				i64::from(size.width),
+				i64::from(size.height),
+			)
+		})
+		.collect()
 }
 
 // A rotated monitor reports its pixels turned and its millimeters not.
@@ -106,30 +182,85 @@ fn edid_mm(edid: &[u8]) -> Option<(u32, u32)> {
 	plausible((u32::from(edid[21]) * 10, u32::from(edid[22]) * 10))
 }
 
+// A monitor's mode, and its size in mm where the server knows it.
+#[cfg(target_os = "linux")]
+type PxMm = ((u32, u32), Option<(u32, u32)>);
+
+#[cfg(target_os = "linux")]
+struct X11Screen {
+	conn: x11rb::rust_connection::RustConnection,
+	root: u32,
+	xid: u32,
+	config_timestamp: u32,
+	// the ones lit, with an output
+	crtcs: Vec<x11rb::protocol::randr::GetCrtcInfoReply>,
+}
+
+#[cfg(target_os = "linux")]
+impl X11Screen {
+	// None when the window is not an X11 one, or the server will not say.
+	fn of(window: &Window) -> Option<Self> {
+		use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+		use x11rb::connection::Connection;
+		use x11rb::protocol::randr::ConnectionExt as _;
+
+		let xid = match window.window_handle().ok()?.as_raw() {
+			RawWindowHandle::Xlib(h) => h.window as u32,
+			RawWindowHandle::Xcb(h) => h.window.get(),
+			_ => return None,
+		};
+		let (conn, screen) = x11rb::connect(None).ok()?;
+		let root = conn.setup().roots.get(screen)?.root;
+		let resources = conn
+			.randr_get_screen_resources_current(root)
+			.ok()?
+			.reply()
+			.ok()?;
+		let crtcs = resources
+			.crtcs
+			.iter()
+			.filter_map(|&crtc| {
+				conn.randr_get_crtc_info(crtc, resources.config_timestamp)
+					.ok()
+					.and_then(|cookie| cookie.reply().ok())
+			})
+			.filter(|info| info.mode != 0 && !info.outputs.is_empty())
+			.collect();
+		Some(Self {
+			conn,
+			root,
+			xid,
+			config_timestamp: resources.config_timestamp,
+			crtcs,
+		})
+	}
+}
+
+#[cfg(target_os = "linux")]
+fn crtc_rect(info: &x11rb::protocol::randr::GetCrtcInfoReply) -> (i64, i64, i64, i64) {
+	(
+		i64::from(info.x),
+		i64::from(info.y),
+		i64::from(info.width),
+		i64::from(info.height),
+	)
+}
+
 // On X11 the server is asked which monitor the window overlaps most, or
 // for a window not shown yet which one the pointer is on, and that
 // monitor's mode and millimeters. winit keeps a list it may not have
-// refreshed since the resolution changed.
+// refreshed since the resolution changed. Some(None) is a window on no
+// monitor at all.
 #[cfg(target_os = "linux")]
-fn x11_monitor_under(
-	window: &Window,
-	at_pointer: bool,
-) -> Option<((u32, u32), Option<(u32, u32)>)> {
-	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-	use x11rb::connection::Connection;
+fn x11_monitor_under(window: &Window, at_pointer: bool) -> Option<Option<PxMm>> {
 	use x11rb::protocol::randr::ConnectionExt as _;
 	use x11rb::protocol::xproto::ConnectionExt as _;
 
-	let xid = match window.window_handle().ok()?.as_raw() {
-		RawWindowHandle::Xlib(h) => h.window as u32,
-		RawWindowHandle::Xcb(h) => h.window.get(),
-		_ => return None,
-	};
-	let (conn, screen) = x11rb::connect(None).ok()?;
-	let root = conn.setup().roots.get(screen)?.root;
-	let size = conn.get_geometry(xid).ok()?.reply().ok()?;
+	let screen = X11Screen::of(window)?;
+	let conn = &screen.conn;
+	let size = conn.get_geometry(screen.xid).ok()?.reply().ok()?;
 	let at = conn
-		.translate_coordinates(xid, root, 0, 0)
+		.translate_coordinates(screen.xid, screen.root, 0, 0)
 		.ok()?
 		.reply()
 		.ok()?;
@@ -140,46 +271,27 @@ fn x11_monitor_under(
 		i64::from(size.height),
 	);
 	let pointer = at_pointer
-		.then(|| conn.query_pointer(root).ok()?.reply().ok())
+		.then(|| conn.query_pointer(screen.root).ok()?.reply().ok())
 		.flatten()
 		.map(|reply| (i64::from(reply.root_x), i64::from(reply.root_y)));
-	let resources = conn
-		.randr_get_screen_resources_current(root)
-		.ok()?
-		.reply()
-		.ok()?;
-	let crtcs: Vec<_> = resources
-		.crtcs
-		.iter()
-		.filter_map(|&crtc| {
-			conn.randr_get_crtc_info(crtc, resources.config_timestamp)
-				.ok()
-				.and_then(|cookie| cookie.reply().ok())
-		})
-		.filter(|info| info.mode != 0 && !info.outputs.is_empty())
-		.collect();
-	let rects: Vec<_> = crtcs
-		.iter()
-		.map(|info| {
-			(
-				i64::from(info.x),
-				i64::from(info.y),
-				i64::from(info.width),
-				i64::from(info.height),
-			)
-		})
-		.collect();
-	let crtc = &crtcs[monitor_under(win, pointer, &rects)?];
+	let rects: Vec<_> = screen.crtcs.iter().map(crtc_rect).collect();
+	let Some(index) = monitor_under(win, pointer, &rects) else {
+		return Some(None);
+	};
+	let crtc = &screen.crtcs[index];
 	let mm = conn
-		.randr_get_output_info(crtc.outputs[0], resources.config_timestamp)
+		.randr_get_output_info(crtc.outputs[0], screen.config_timestamp)
 		.ok()
 		.and_then(|cookie| cookie.reply().ok())
 		.map(|out| (out.mm_width, out.mm_height));
-	Some(((u32::from(crtc.width), u32::from(crtc.height)), mm))
+	Some(Some(((u32::from(crtc.width), u32::from(crtc.height)), mm)))
 }
 
 // Which of the monitors a window is on: the one under the pointer when one
-// is given, else the one the window overlaps most, else the first.
+// is given, else the first. Without a pointer it is the one the window
+// overlaps most, and none when it overlaps none, as when the monitor it was
+// on has just gone dark. Taking the first then gave a window left in the
+// gap the size of a monitor it was never on.
 #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 fn monitor_under(
 	window: (i64, i64, i64, i64),
@@ -194,7 +306,8 @@ fn monitor_under(
 			best = Some((index, shared));
 		}
 	}
-	best.map(|(index, _)| index)
+	best.filter(|&(_, shared)| shared > 0 || pointer.is_some())
+		.map(|(index, _)| index)
 }
 
 // Shared area of two (x, y, width, height) rectangles.
@@ -474,6 +587,60 @@ mod tests {
 			"a shown window goes by overlap"
 		);
 		assert_eq!(monitor_under(hidden, Some((2500, 500)), &[]), None);
+	}
+
+	// Test ID: EsDZDBp
+	#[test]
+	fn a_monitor_read_again_to_the_cm_is_the_same_monitor() {
+		for key in [
+			"1600x2560_100pct_401x641mm",
+			"2560x1440_125pct_597x336mm",
+			"1920x1080_100pct",
+		] {
+			assert_eq!(MonitorId::from_key(key).unwrap().key(), key);
+		}
+		for odd in [
+			"",
+			"1920x1080",
+			"1920x1080_100",
+			"1920x1080_100pct_x",
+			"a_b_c_d",
+		] {
+			assert!(MonitorId::from_key(odd).is_none(), "{odd}");
+		}
+		// b23's portrait monitor, before and after a power save
+		let portrait = "1600x2560_100pct_401x641mm";
+		assert!(same_monitor(portrait, "1600x2560_100pct_400x640mm"));
+		assert!(!same_monitor(portrait, "1600x2560_100pct_411x641mm"));
+		assert!(!same_monitor(portrait, "1600x2560_125pct_401x641mm"));
+		assert!(!same_monitor(portrait, "2560x1600_100pct_641x401mm"));
+		assert!(!same_monitor(portrait, "1600x2560_100pct"), "size unknown");
+		assert!(same_monitor("1920x1080_100pct", "1920x1080_100pct"));
+		assert!(!same_monitor("1920x1080_100pct", "1920x1200_100pct"));
+		assert!(same_monitor("odd", "odd"));
+		assert!(!same_monitor("odd", portrait));
+	}
+
+	// The monitor a window was on went dark and the window was left where it
+	// was. Counting it on the first monitor gave it that one's size.
+	// Test ID: EsDZDFu
+	#[test]
+	fn a_shown_window_on_no_monitor_is_on_none() {
+		// b23 with the portrait monitor at the top left gone dark
+		let landscape = [(1600, 554, 3440, 1440)];
+		let window = (100, 100, 1300, 900);
+		assert_eq!(monitor_under(window, None, &landscape), None);
+		assert_eq!(
+			monitor_under((1500, 600, 300, 300), None, &landscape),
+			Some(0),
+			"partly on it"
+		);
+		// a window not shown yet still opens somewhere
+		assert_eq!(
+			monitor_under(window, Some((50, 50)), &landscape),
+			Some(0),
+			"pointer off every monitor"
+		);
 	}
 
 	// Test ID: EreYcuP

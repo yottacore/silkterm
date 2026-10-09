@@ -91,7 +91,11 @@ impl State {
 	/// A move starts the wait for the window to settle.
 	pub(super) fn note_moved(&mut self) {
 		let now = Instant::now();
-		if now < self.watch.ignore_moves_until {
+		if !move_counts(
+			now < self.watch.ignore_moves_until,
+			&self.watch.layout,
+			|| crate::monitor::layout(&self.window),
+		) {
 			return;
 		}
 		self.start_settle(now);
@@ -166,6 +170,7 @@ impl State {
 		let now = Instant::now();
 		self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
 		self.watch.ignore_moves_until = now + OWN_RESIZE_GRACE;
+		self.watch.layout = crate::monitor::layout(&self.window);
 		self.request_grid(kept.columns, kept.rows);
 	}
 
@@ -245,6 +250,7 @@ pub(super) struct MonitorWatch {
 	pub(super) moved_at: Option<Instant>, // when the move being waited out began
 	pub(super) ignore_resize_until: Instant,
 	pub(super) ignore_moves_until: Instant, // the window's own resize can move it, too
+	pub(super) layout: Vec<(i64, i64, i64, i64)>, // the monitors when that resize was asked for
 	// The command line set the size, or the font size, and it stays until
 	// the user resizes the window, or zooms the font.
 	pub(super) size_pinned: bool,
@@ -273,7 +279,7 @@ fn settle(
 	let Some(now_on) = now_on else {
 		return Settle::Stay;
 	};
-	if kept_for == Some(now_on) {
+	if kept_for.is_some_and(|kept| crate::monitor::same_monitor(kept, now_on)) {
 		return Settle::Stay;
 	}
 	let save_first = matches!((pending_at, moved_at), (Some(set), Some(moved)) if set < moved);
@@ -281,6 +287,20 @@ fn settle(
 		save_first,
 		take_size: pending_at.is_none() || save_first,
 	}
+}
+
+// Does a move start the wait to see where the window ended up? Not one in
+// the grace after the window's own resize, which the window manager may move
+// it for, so a window that straddles two monitors does not swap sizes back
+// and forth. Unless the monitors changed in the meantime: then the window
+// manager is herding windows as one goes dark or comes back after a power
+// save, and the window may be back where it started (2026100907341816).
+fn move_counts(
+	in_grace: bool,
+	layout_then: &[(i64, i64, i64, i64)],
+	layout_now: impl FnOnce() -> Vec<(i64, i64, i64, i64)>,
+) -> bool {
+	!in_grace || layout_now() != layout_then
 }
 
 // Is this resize the size to launch at next time? Only once a frame has been
@@ -323,8 +343,8 @@ fn size_taken(
 #[cfg(test)]
 mod tests {
 	use super::{
-		Settle, fit_px, launch_maximized, remember_resize, resize_is_current, settle, size_taken,
-		window_px,
+		Settle, fit_px, launch_maximized, move_counts, remember_resize, resize_is_current, settle,
+		size_taken, window_px,
 	};
 	use std::time::{Duration, Instant};
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
@@ -434,6 +454,65 @@ mod tests {
 		assert_eq!(settle(a, b, Some(moved), Some(after)), arrive(false, false));
 		// the first look after launch on Wayland, where the monitor was unknown
 		assert_eq!(settle(None, b, Some(moved), None), arrive(false, true));
+	}
+
+	// The order of a wake from power save, on b23's two monitors: the portrait
+	// one goes dark, the window manager herds the window onto the landscape one,
+	// which sizes it, and the portrait one comes back about a second later and
+	// the window is put back. That move fell in the grace after the window's own
+	// resize and was dropped, so it stayed at the landscape size. The portrait
+	// monitor also read back to the cm, which named a monitor with another size.
+	// Test ID: EsDZDNJ
+	#[test]
+	fn a_window_herded_off_a_monitor_and_back_takes_its_size_again() {
+		use crate::config::{KeptWindow, MonitorSize, Settings, remembered_window};
+		let t0 = Instant::now();
+		let at = |ms| Some(t0 + Duration::from_millis(ms));
+		let (portrait, landscape) = ((0, 0, 1600, 2560), (1600, 554, 3440, 1440));
+		let (both, one) = (vec![portrait, landscape], vec![landscape]);
+		let (p_mm, p_cm) = ("1600x2560_100pct_401x641mm", "1600x2560_100pct_400x640mm");
+		let l = "3440x1440_100pct_819x346mm";
+		let s = Settings {
+			monitor_sizes: vec![
+				MonitorSize {
+					key: p_cm.to_string(),
+					columns: 152,
+					rows: 28,
+					font_zoom: -1,
+				},
+				MonitorSize {
+					key: l.to_string(),
+					columns: 172,
+					rows: 39,
+					font_zoom: 0,
+				},
+			],
+			..Settings::default()
+		};
+		let arrive = Settle::Arrive {
+			save_first: false,
+			take_size: true,
+		};
+
+		// herded onto the landscape monitor, outside any grace
+		assert!(move_counts(false, &[], || one.clone()));
+		assert_eq!(settle(Some(p_cm), Some(l), at(0), None), arrive);
+		// its own resize there may move it too, and that is not counted
+		let layout_then = one.clone();
+		assert!(!move_counts(true, &layout_then, || one.clone()));
+		// put back 1.2 s in, inside the grace, with the portrait monitor lit
+		assert!(move_counts(true, &layout_then, || both.clone()));
+		assert_eq!(settle(Some(l), Some(p_mm), at(1200), None), arrive);
+		assert_eq!(
+			remembered_window(&s, Some(p_mm)),
+			KeptWindow {
+				columns: 152,
+				rows: 28,
+				font_zoom: -1
+			}
+		);
+		// read to the cm again without a move: the same monitor, so no resize
+		assert_eq!(settle(Some(p_mm), Some(p_cm), at(5000), None), Settle::Stay);
 	}
 
 	// A window left maximized opens maximized, unless the setting is off or the
