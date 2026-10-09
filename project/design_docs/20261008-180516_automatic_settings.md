@@ -13,6 +13,10 @@
 <!-- TOC -->
 
 - [Summary](#summary)
+- [Why it is being rethought](#why-it-is-being-rethought)
+	- [What has to stay](#what-has-to-stay)
+	- [How the performance settings have worked](#how-the-performance-settings-have-worked)
+	- [What this design lost](#what-this-design-lost)
 - [Specification](#specification)
 - [Goals](#goals)
 	- [Non-goals](#non-goals)
@@ -40,11 +44,63 @@
 
 ## Summary
 
+This design is being rethought. It throws away values people expect to get back, see [Why it is being rethought](#why-it-is-being-rethought).
+
 Some settings have a value the program can work out by itself, from a preset or from a rule such as the window size. The usual way to offer that is a master switch, "Automatic layout" or a presets dropdown, that disables the group of settings under it. To change one value, a person first has to find the switch, turn it off, and then every value under it comes back at once, with whatever was stored there last time.
 
 Here there is no master state at all. Each setting that can be automatic is automatic on its own, by storing nothing. Changing it stores a value, and only that one. The group's switch or presets dropdown is worked out from the settings under it, so it always tells the truth and never has to be kept in step.
 
 This is how CSS `auto`, the "Automatic" entries in macOS and Windows settings, and the reset arrows in Firefox and VS Code already work. It needs one table and one function, and the settings store needs nothing new.
+
+## Why it is being rethought
+
+The first part of this design was built on 2026-10-09. It broke one thing people expect from settings, and the Performance settings still have the problems that led to it.
+
+### What has to stay
+
+- A switch that turns a setting off, or makes it automatic, keeps the value set by hand. Turning the switch back brings that value back.
+
+- Custom values stay remembered while a preset is in use, and come back when Custom is picked again.
+
+- Changing one setting takes one step, with nothing to unlock first.
+
+- A change doesn't set off a chain of changes to the settings above it.
+
+### How the performance settings have worked
+
+Choose automatically picks a profile. The profile sets 16 settings: Smooth scrolling and its 5 sliders, Blink, Text scrim and 4 rows under it, Outline, and on the Background tab Wallpaper, Blur and Contrast mask. Some of those are switches with rows under them that only count while the switch is on, such as Strength % under Text scrim.
+
+There have been 3 versions so far.
+
+- Version 1, 2026-09-03 to 09-20:
+	- Profile was grayed while Choose automatically was on.
+	- The 16 rows were grayed unless the profile was Custom.
+	- Rows under a switch that was off were grayed too.
+	- So changing Strength % could take 3 steps first: turn off Choose automatically, pick Custom, turn on Text scrim.
+	- The rows on the Background tab could only be unlocked from the Silk tab.
+
+- Version 2, 2026-09-20 to 10-09:
+	- Profile took input while Choose automatically was on. Picking a profile turned automatic off.
+	- The 16 rows took input. Changing one made the values on screen the person's own, set the profile to Custom, and turned Choose automatically off, all at once.
+	- Rows under a switch that was off were still grayed. So Strength % couldn't be changed while Text scrim was off, and changing it never turned Text scrim on. Turning Text scrim on was the change that set Custom and turned off Choose automatically.
+	- That step lost the Custom values from before, since the preset's values were copied over them. Picking a preset and then Custom again did bring them back, as long as no row was changed in between.
+
+- Version 3, this design, 2026-10-09:
+	- Rows under a switch no longer gray. Strength % can be changed while Text scrim is off. That doesn't turn Text scrim on, and the value is used once it is on.
+	- The Performance settings haven't moved onto this design yet. They still work as in version 2, without the graying.
+
+### What this design lost
+
+- Turning a switch off and on again still brings back the values under it. Text scrim and Strength % work that way, and so does every other switch with rows under it.
+
+- What was lost is the value behind each switch this design took away. Going automatic deletes the value set by hand, since automatic is stored as no line.
+	- The 2 "Use system font" checkboxes, for Family and Size, are gone, and so is "Remember last size" for Columns and Rows. A family typed in is lost once Family goes back to automatic.
+	- 2026100910295901 would do the same to Text colors from wallpaper, for Foreground and Cursor.
+
+- Some parts of this design are wrong, given what has to stay:
+	- The goal "Never bring back a pile of old values nobody asked for."
+	- The non-goal on remembering a hand-set value while a setting is automatic.
+	- The unconsidered idea of keeping the last hand-set value, which says nobody has asked for it.
 
 ## Specification
 
@@ -213,7 +269,7 @@ A mixed switch goes to automatic on a click, since that is the state a person re
 
 ### Open questions
 
-- None right now.
+- How a setting that a profile or a rule supplies can be changed in one step, with no chain of changes above it, while keeping everything under [What has to stay](#what-has-to-stay).
 
 ## Alternative ideas
 
