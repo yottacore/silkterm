@@ -195,6 +195,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 9c1404c
 	- Test case: `a_log_slider_gives_each_doubling_the_same_travel` (Es9f0qI), `a_typed_wait_can_go_past_the_slider_up_to_a_week` (Es9f0uU), `a_number_typed_past_a_slider_survives_a_save_and_a_relaunch` (Es9f0yE), `a_number_typed_past_a_slider_reads_back_without_a_word` (Es9f11y), `a_slider_scale_or_cap_that_means_nothing_is_refused` (Es9fvg9), `a_big_decimal_drops_places_to_fit_its_box` (Es9hNXm). Each failed with its part of the change taken out. `slider_numeric_field_edits_and_clamps` (Eiustaa) had its clamp-to-40 line commented out, since Size now takes up to 128.
 
+- A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
+	- ID: 2026100816465317
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261008-164653
+	- Opened by: CC
+	- Related IDs: 2026100812334386
+	- Target OS: All
+	- Incorrect behavior: The box is 56 DIP wide whatever the font. "10080" fits at the default font with a few px to spare. A larger desktop font could cut it off, as it already could with 4 digits.
+	- Expected behavior: The box is wide enough for the widest number its row can hold, measured the way labels are.
+	- Reproduced: 20261008, at a 24 pt interface font. Blink rate showed "000" for 10000 and Inactivity timer "999." for 999.9.
+	- Notes:
+		- 20261008: Scaling the box with the font size was tried and dropped. It widened every box and shortened every slider at normal font sizes.
+	- Decisions:
+		- 20261008: Best guess. One width for every slider in the dialog, the widest any of them needs, so the sliders still end in one column. Never narrower than the old 56 DIP, so nothing moves at an ordinary font unless a number needs more.
+		- 20261008: Best guess. The width is the number plus the field's padding on both sides. The caret margin while typing is left out, since counting it would widen every box at the default font. A 5 digit number being typed still shows whole.
+		- 20261008: Best guess. A wider box widens the panel's own floor, the way a long label does. The nine tabs usually set the panel's width, so in practice the sliders give up the room.
+	- Actual cause: The box width was a constant, and nothing measured the numbers.
+	- Actual fix: The widest number each slider can show is measured in the dialog's own font: either end, the typed cap where a row has one, and for a decimal 99.94 and 999.9. The largest plus padding sets every number box, with 56 DIP as the floor. The UI style guide, the settings dialog design doc and the spec file's note say so.
+	- Swept: every fixed width box in the dialog. The color picker's value boxes and the dropdowns already grow with the font, and the hex, text and path boxes stretch to the column.
+	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc, table and TOC checks. In a real window at the default font, 1x is unchanged, apart from the caret blink and the Shell tab, which differ between 2 runs of the old build too. The panel stayed 707 wide at 1x and 1439 at 2x. At 2x the font comes out half a px larger per DIP, "10080" needs 57 DIP, so every number box is 1 DIP wider and the sliders 1 DIP shorter. At 24 pt every number shows whole at 1x and 2x, the panel stays 1171 and 2342 wide, and the sliders are shorter by what the boxes gained.
+	- Branch: numbox
+	- Commit: d3f51da
+	- Test case: `every_slider_number_fits_its_box_at_a_large_interface_font` (Es9oaEN), `a_wider_number_box_widens_the_panel_and_leaves_the_sliders` (Es9oaYr). Both fail with the box held at 56 DIP. The first also fails with the decimal bands taken out, the second with the panel ignoring the box.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -429,19 +455,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: ea80be2
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), same ID, rewritten in place.
 
-- A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
-	- ID: 2026100816465317
+- At a large interface font, the labels on a packed line of toggles nearly touch their checkboxes
+	- ID: 2026100817172887
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261008-164653
+	- Opened: 20261008-171728
 	- Opened by: CC
-	- Related IDs: 2026100812334386
+	- Related IDs: 2026100710173200, 2026100812334385
 	- Target OS: All
-	- Incorrect behavior: The box is 56 DIP wide whatever the font. "10080" fits at the default font with a few px to spare. A larger desktop font could cut it off, as it already could with 4 digits.
-	- Expected behavior: The box is wide enough for the widest number its row can hold, measured the way labels are.
-	- Notes:
-		- 20261008: Scaling the box with the font size was tried and dropped. It widened every box and shortened every slider at normal font sizes.
+	- Steps to reproduce:
+		- Set the desktop's interface font to 24 pt and open Settings, Window tab.
+	- Incorrect behavior: On the Tab text line, each label sits almost against its own checkbox.
+	- Expected behavior: The gap between a label and its box keeps its look at any font size.
+	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893

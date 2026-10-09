@@ -131,6 +131,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 - A slider has a number field beside it, and the field is the way to enter an exact value.
 	- A slider whose range spans orders of magnitude, such as the two idle waits, has a log track, so each doubling gets the same travel.
 	- A row with no % and no limit of its own takes a typed number past the slider's end, up to a cap set per row. The handle waits at the end and the field shows the number. Below the slider's start still clamps.
+	- Every slider's field is one width, wide enough for the longest number any slider can show in the interface font, so the sliders all end in one column. At an ordinary font that is the floor, and nothing moves.
 
 - A color row has a chip and a hex field, and they are two separate stops. The chip opens the picker; the hex field takes a value that is already known.
 
