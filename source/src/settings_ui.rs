@@ -460,7 +460,7 @@ const fn hidden_wait_tip(sees_hidden: bool) -> Option<&'static str> {
 	if sees_hidden {
 		None
 	} else {
-		Some("Wayland never tells a window it is hidden, so Minutes otherwise is the wait used.")
+		Some("Wayland never says when a window is hidden, so Minutes otherwise is used.")
 	}
 }
 
@@ -551,7 +551,7 @@ const GOVERNED: &[Key] = &[
 	Key::BgContrastMask,
 ];
 const PROFILE_TIP: &str =
-	"Showing the performance profile's value. Changing it switches the profile to Custom.";
+	"Set by the performance profile. Changing it switches the profile to Custom.";
 
 // What the Theme dropdown says once a color has moved off the theme's own.
 const UNSAVED_THEME: &str = "[unsaved]";

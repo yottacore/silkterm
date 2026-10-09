@@ -72,46 +72,42 @@ impl MenuAction {
 	pub(crate) fn help(self) -> &'static str {
 		match self {
 			MenuAction::PasteSelection => {
-				"Paste what was last highlighted with the mouse, without it having been copied first."
+				"Paste the text last selected with the mouse, without copying it first."
 			}
 			MenuAction::ToggleCopySelect => {
-				"Send highlighted text straight to the clipboard, with no copy step. Per pane."
+				"Copy text to the clipboard as soon as it's selected. Only for this pane."
 			}
 			MenuAction::ToggleCopyOutput => {
-				"Copy what a command printed, once the pane settles back at the prompt. Per pane."
+				"Copy a command's output when it finishes and the prompt comes back. Only for this pane."
 			}
 			MenuAction::ToggleReadOnly => {
-				"Ignore anything typed at this pane, so a long job cannot be interrupted by accident."
+				"Ignore typing in this pane, so a long job can't be stopped by accident."
 			}
 			MenuAction::ToggleFrame => {
-				"The title bar and border. Turning it off takes the window manager's own buttons with it."
+				"The title bar and border. Off also hides the minimize, maximize and close buttons."
 			}
 			MenuAction::ToggleMenuBar => {
-				"The menu bar. Right-clicking a pane still reaches the same items with it off."
+				"The menu bar. With it off, right-click a pane for the same menu."
 			}
 			MenuAction::ToggleSingleTab => {
 				"The tab strip. Off keeps it hidden until there is a second tab."
 			}
 			MenuAction::ToggleMinimap => {
-				"Show a miniature of the whole scroll buffer beside the text. It takes the room it uses."
+				"Show a small view of the whole scrollback beside the text. It takes up columns the text would have used."
 			}
 			MenuAction::ToggleBare => {
-				"Drop the title bar, menu bar and tab strip together. Choosing it again puts back whatever was on."
+				"Hide the title bar, menu bar and tab strip at once. Choose it again to bring back what was showing."
 			}
 			MenuAction::ToggleRemote => {
-				"Run as a plain terminal while the screen is somewhere else, since no effect survives the trip. Set for you when a remote session is noticed, and forgotten at the next launch."
+				"Run as a plain terminal for a remote screen, where the effects are lost anyway. Turns on by itself when a remote session is found, and off at the next launch."
 			}
 			MenuAction::NextWallpaper => {
-				"Show the next picture from the wallpaper folder now. The rotation timer starts over from it."
+				"Show the next image from the wallpaper folder now. The rotation timer restarts."
 			}
-			MenuAction::ReloadConfig => {
-				"Re-read the config file. Anything edited by hand since launch takes effect now."
-			}
+			MenuAction::ReloadConfig => "Read the config file again, so hand edits take effect.",
 			MenuAction::NewTabShell(_) => "Open a tab running this shell instead of the usual one.",
 			MenuAction::SplitShell(..) => "Split this pane and run this shell in the new half.",
-			MenuAction::CopyLink => {
-				"Put the link's address on the clipboard rather than opening it."
-			}
+			MenuAction::CopyLink => "Copy the link's address instead of opening it.",
 			_ => "",
 		}
 	}
