@@ -788,9 +788,10 @@ wallpaper.blur: 10.0
 text.scrim.enabled: true
 cursor.size.height: 100
 cursor.size.width: 100
+cursor.blink: true
 cursor.animation: pulse_vertical
 cursor.animation_resume_s: 1
-cursor.blink_rate_ms: 500
+cursor.blink_rate_s: 1.0
 selection.word_separators: "=,|:\\"' ()[]{}<>"
 scroll.scrollback: 10000
 scroll.wheel_lines: 3.0
@@ -1120,7 +1121,7 @@ def seg_panes(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	# accelerator letter - V for vertical), all keyboard, no menu coordinates to
 	# guess at. Splitting twice is what shows the auto-sizing. Closing them again
 	# shows nothing new and took seconds, so that happens in a cut.
-	set_cfg(rec, {"cursor.animation": "none"})
+	set_cfg(rec, {"cursor.blink": False})
 	with Banner(rec, "Split panes, sized for you"):
 		rec.xdo("windowactivate", rec.win)
 		time.sleep(0.3)
@@ -1144,7 +1145,7 @@ def seg_panes(rec: Rec, typist: Typist, mouse: Mouse) -> None:
 	with Cut(rec):
 		typist.cmd("exit", settle=0.8, typos=0.0)
 		typist.cmd("exit", settle=0.8, typos=0.0)
-		set_cfg(rec, {"cursor.animation": "pulse_vertical"})
+		set_cfg(rec, {"cursor.blink": True})
 		wipe(rec, typist, settle=1.8)
 
 def seg_cursor(rec: Rec, typist: Typist, mouse: Mouse) -> None:

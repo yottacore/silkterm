@@ -527,15 +527,6 @@ rows:
 		label: Cursor
 		tab: Cursor
 
-	CursorBlink:
-		label: Blink rate ms
-		kind: slider
-		range: 100, 3000
-		typed_max: 10000
-		whole: true
-		setting: cursor.blink_rate_ms
-		help: "One full animation cycle."
-
 	CursorHeight:
 		label: Height %
 		kind: slider
@@ -552,10 +543,28 @@ rows:
 		setting: cursor.size.width
 		help: "Cursor width as a percentage of the cell, measured from the left."
 
+	## The rows under Blink only count while it is on. They stay live, so
+	## they can be set up first and come back as they were.
+	CursorBlinking:
+		label: Blink
+		kind: toggle
+		setting: cursor.blink
+		help: "Animate the cursor while it waits. It holds still while you type."
+
+	CursorBlinkRate:
+		label: Rate s
+		kind: slider
+		range: 0.2, 6
+		typed_max: 20
+		indent: 1
+		setting: cursor.blink_rate_s
+		help: "Seconds for one whole blink, from peak to peak."
+
 	CursorAnimation:
 		label: Animation
 		kind: dropdown
-		options: "None", "Phase", "Pulse vertical", "Pulse horizontal", "Pulse both"
+		options: "Phase", "Pulse vertical", "Pulse horizontal", "Pulse both"
+		indent: 1
 		setting: cursor.animation
 
 	CursorResume:

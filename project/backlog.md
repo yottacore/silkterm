@@ -86,6 +86,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 368d7b8
 	- Test case: `no_dialog_text_says_carry` (Es9Vugt) and `no_template_comment_says_carry` (Es9WIpt). Both failed with the old Fit tip and template comment put back, and pass now. The notice wording is pinned by the existing notice tests.
 
+- A blink rate setting of 500 ms blinks at more like 1000 ms
+	- ID: 2026100907341815
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. A launch now rewrites the rate line in every config, so a build has to reach the dogfood pool.
+	- Needs external testing: Windows: one launch on an old config, and a look at the Cursor tab. Built and linted for Windows only.
+	- Severity: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100907341817
+	- Target OS: All
+	- Incorrect behavior: A blink rate setting of 500ms is actually more like 1000ms.
+	- Expected behavior: The selected and actual rates match, wavecrest-to-wavecrest.
+	- Notes:
+		- Before RC1.
+		- The fix:
+			1. Change 'ms' to 'seconds', and allow fractional values. (More understandable to most humans than 'ms'.)
+			2. Make the selected and actual rates match, wavecrest-to-wavecrest.
+			- The current default actual blink rate is perfect, don't change that, just make sure the settings value is correct.
+		- The row is "Blink rate ms" on the Cursor tab, and its tip says "One full animation cycle."
+	- Reproduced: 20261009 on b23, in a window. The dev build blinked once every 1.01 s, peak to peak, at 500 ms, and every 1.99 s at 1000 ms.
+	- Actual cause: The code took the rate as half a cycle, one fade out or one fade in, which came from an older on/off blink. The docs and the tip said one full cycle.
+	- Actual fix: The setting is `cursor.blink_rate_s` now, one whole cycle in seconds, default 1.0, which is the same real speed as before. A launch renames `cursor.blink_rate_ms` and converts its value, so 500 becomes 1.0 and nothing blinks at a new speed. Commented lines convert too, and a value that is not a number keeps its text. The row is "Rate s" under Blink (2026100907341817).
+	- Decisions:
+		- 20261009: No `SUPERSEDED_DEFAULTS` entry. The old commented default converts to the new template line exactly.
+		- 20261009: The slider range and typed cap keep the same real speeds as before: 0.2 to 6 s, typed up to 20 s.
+	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc and TOC checks. In a window on b23 at about 23 frames a second: 1.00 s at the new 1.0, 1.00 s from an old file at 500 ms, 2.00 s at 2.0.
+	- Swept: both readers of the rate (each frame and a refocus), the dialog row, the save, the reader, the old flat key, the rebuild for a file that cannot be read, the template, the demo recorder, the smooth cursor design doc, the UI style guide. The dialog's own caret blink has its own constant and no setting.
+	- Note: The markdown tables check fails on dev, in the automatic settings design doc. Filed as 2026100908133033.
+	- Branch: blinksec
+	- Commit: 8add123
+	- Test case: EsDSBcQ `the_blink_rate_is_one_whole_cycle_peak_to_peak` failed with the old factor of 2 and passes now. EsDSBQ8 `an_old_blink_rate_in_ms_becomes_the_same_cycle_in_seconds` failed with the conversion removed and passes now. EldrZxZ, EpHOzrc, Er2X6Er, Es9oaEN and EpZcBUQ were changed for the new name and unit.
+
 - Flyover help text should apply to all of the relevant labels, and both controls
 	- ID: 2026100812334387
 	- Type: Enhancement
@@ -194,6 +227,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: logslide
 	- Commit: 9c1404c
 	- Test case: `a_log_slider_gives_each_doubling_the_same_travel` (Es9f0qI), `a_typed_wait_can_go_past_the_slider_up_to_a_week` (Es9f0uU), `a_number_typed_past_a_slider_survives_a_save_and_a_relaunch` (Es9f0yE), `a_number_typed_past_a_slider_reads_back_without_a_word` (Es9f11y), `a_slider_scale_or_cap_that_means_nothing_is_refused` (Es9fvg9), `a_big_decimal_drops_places_to_fit_its_box` (Es9hNXm). Each failed with its part of the change taken out. `slider_numeric_field_edits_and_clamps` (Eiustaa) had its clamp-to-40 line commented out, since Size now takes up to 128.
+
+- Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
+	- ID: 2026100907341817
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline, with 2026100907341815. A launch rewrites `animation: none`.
+	- Needs external testing: Windows: a look at the Cursor tab, and Blink switched off and on.
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100907341815, 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Settings/Cursor/Blink rate:
+			- Add a new boolean setting as a subsection heading, "Blink". If on, then the "Rate" slider is considered.
+	- Notes:
+		- Before RC1.
+	- Decisions:
+		- 20261009: `cursor.animation: none` was the one existing way to turn the blink off. The old flat `cursor_blink` was gone already, and a pre-nesting file never carried it. So the new `cursor.blink` replaces "none" rather than sitting beside it. "None" left the Animation list, and a launch rewrites an active `animation: none` as `blink: false`. Where a file also sets `blink`, "none" still reads as off, so no file starts blinking that did not before.
+		- 20261009: The performance profiles turn Blink off now, where they used to set the animation to none.
+		- 20261009: Rate s, Animation and Inactivity timer s sit under Blink. They stay live while it is off, as the automatic settings design asks for settings that only count while a switch is on, so 2026100907341818 has nothing to redo here.
+		- 20261009: The Blink group sits below Width, so the tab reads shape first, then motion.
+	- Against: the UI style guide's "Members gray out when it is off". Listed under its known deviations until 2026100907341818 moves the rule.
+	- Verified: unit suite and the lint and doc checks, as on 2026100907341815. In a window on b23, an old file with `animation: "none"` came up with Blink off and the rows under it live, and switching Blink on and pressing OK wrote `blink: true`.
+	- Note: The test rigs that write `cursor.animation: none` keep it. It still reads as off, and some bench rigs also run released builds that do not know `cursor.blink`. The demo recorder switches `cursor.blink` now, since a reload rewrites "none".
+	- Branch: blinksec
+	- Commit: 8add123
+	- Test case: EsDSBUl `animation_none_becomes_blink_off` and EsDSBYd `turning_the_blink_on_replaces_an_old_none`, both failing with the "none" reading removed. Er2X6Ep holds the Cursor tab's order and sub-group. ErstaMt, ErstamD and Erstagk lost the "none" word, and EorkTk1 and EorkTk3 read the profile's Blink, since this decision changed what they pinned.
 
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
@@ -464,25 +525,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- A blink rate setting of 500 ms blinks at more like 1000 ms
-	- ID: 2026100907341815
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Related IDs: 2026100907341817
-	- Target OS: All
-	- Incorrect behavior: A blink rate setting of 500ms is actually more like 1000ms.
-	- Expected behavior: The selected and actual rates match, wavecrest-to-wavecrest.
-	- Notes:
-		- Before RC1.
-		- The fix:
-			1. Change 'ms' to 'seconds', and allow fractional values. (More understandable to most humans than 'ms'.)
-			2. Make the selected and actual rates match, wavecrest-to-wavecrest.
-			- The current default actual blink rate is perfect, don't change that, just make sure the settings value is correct.
-		- The row is "Blink rate ms" on the Cursor tab, and its tip says "One full animation cycle."
-
 - After the monitors wake from power save, a SilkTerm on the portrait monitor returns to the size it uses on the landscape monitor
 	- ID: 2026100907341816
 	- Type: Bug
@@ -518,21 +560,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
-	- ID: 2026100907341817
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Related IDs: 2026100907341815, 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Settings/Cursor/Blink rate:
-			- Add a new boolean setting as a subsection heading, "Blink". If on, then the "Rate" slider is considered.
-	- Notes:
-		- Before RC1.
-
 - Settings that depend on a master boolean switch follow the automatic settings design
 	- ID: 2026100907341818
 	- Type: Enhancement
@@ -563,6 +590,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
+
+- The markdown tables check fails on the automatic settings design doc
+	- ID: 2026100908133033
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261009-081330
+	- Target OS: All
+	- Steps to reproduce:
+		- Run `cicd/tests/tables/run.py` on dev at f56bcfc.
+	- Incorrect behavior: It fails on both tables in `design_docs/20261008-180516_automatic_settings.md`, whose columns are not padded the canonical way. The pipeline's lint stage stops there.
+	- Expected behavior: The check passes. `run.py --fix` rewrites the two tables.
+	- Related IDs: 2026100907341818
 
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
@@ -2155,42 +2195,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
 
-- Four unit tests fail on Windows
-	- ID: 2026093010080316
-	- Type: Bug
-	- Status: Done
-	- Priority|Severity: Avg
-	- Opened: 20260930-100803
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w, `cargo test`
-	- Steps to reproduce: Run `cargo test` on Windows.
-	- Incorrect behavior:
-		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
-		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
-		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
-	- Expected behavior: They pass, as on Linux.
-	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
-	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
-	- Actual cause: All four are faults in the tests. None is timing.
-		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
-		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
-	- Progress log:
-		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
-	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
-	- Branch: wintests
-	- Commit: 731d528
-	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
-	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
-	- Swept:
-		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
-		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
-		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
-		- The Windows run this item came from named only these four. That full suite was not run again.
-	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
-	- Closed: 20260930-125357
-
 - The "Tab text" options are wonky. There's too much space between "Program title" and its checkbox.
 	- ID: 2026100710173200
 	- Type: Enhancement
@@ -3269,38 +3273,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
-
-- Windows: open scripts and folders in SilkTerm
-	- ID: 2026093009280571
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
-	- Priority|Severity: Avg
-	- Opened: 20260930-092805
-	- Opened by: JC
-	- Assigned to: JC
-	- Related IDs: 2026092810510800
-	- Target OS: Windows
-	- Test environment: vm925w, Windows 11 25H2
-	- Requirements:
-		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
-			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
-			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
-			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
-		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
-			- Windows only. Other platforms don't show them.
-		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
-		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
-	- Estimated effort: Avg
-	- Progress log:
-		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
-		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
-		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
-		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
-		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
-	- Branch: winassoc
-	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
-	- Acceptance signoff: 20260930-183819
 
 - The focus outline on the font pair row is shorter than its text
 	- ID: 2026100817355494
@@ -4509,6 +4481,74 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: Er2UgY7 (`cicd/tests/engine/run.bash`) now checks for at least 5 in the shipped config and 5 tries when unset. Both checks failed on the old values.
 	- Acceptance signoff: Self-closed: mechanical.
 	- Closed: 20261007-184756
+
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
+	- Status: Done
+	- Priority|Severity: Avg
+	- Opened: 20260930-100803
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
+	- Actual cause: All four are faults in the tests. None is timing.
+		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
+		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Progress log:
+		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
+	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
+	- Branch: wintests
+	- Commit: 731d528
+	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
+	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
+	- Swept:
+		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
+		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
+		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
+		- The Windows run this item came from named only these four. That full suite was not run again.
+	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
+	- Closed: 20260930-125357
+
+- Windows: open scripts and folders in SilkTerm
+	- ID: 2026093009280571
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
+	- Priority|Severity: Avg
+	- Opened: 20260930-092805
+	- Opened by: JC
+	- Assigned to: JC
+	- Related IDs: 2026092810510800
+	- Target OS: Windows
+	- Test environment: vm925w, Windows 11 25H2
+	- Requirements:
+		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
+			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
+			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
+			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
+		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
+			- Windows only. Other platforms don't show them.
+		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
+		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
+		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
+		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
+		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
+		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
+	- Branch: winassoc
+	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
+	- Acceptance signoff: 20260930-183819
 
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082

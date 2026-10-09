@@ -56,7 +56,7 @@ keys![
 	BgContrastMask, BgContrastSize, BgContrastStrength, BgContrastAuto,
 	TextScrim, ScrimRadius, ScrimSoftness, ScrimStrength, ScrimFunction, ScrimRamp,
 	Outline, MinContrast, CursorScrim, CursorOutline,
-	CursorBlink, CursorHeight, CursorWidth, CursorAnimation, CursorResume,
+	CursorBlinking, CursorBlinkRate, CursorHeight, CursorWidth, CursorAnimation, CursorResume,
 	SystemFont, SystemFontSize, FontFamily, FontSize, LineHeight,
 	Columns, Rows, RememberSize, RememberPerMonitor, RememberMaximized, Margin, TabRegularWidth, TabMaxWidth,
 	NewTabNextToCurrent, IdleRelease, IdleHiddenMin, IdleMin, SoftwareRendering,

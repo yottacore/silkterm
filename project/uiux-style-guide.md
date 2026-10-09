@@ -54,7 +54,7 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 
 - An item that opens a further dialog ends in a single ellipsis character, no space before it: `Settings…`, `About…`, `Save as…`. An item that only asks for confirmation does not.
 
-- Units go on the end of the label, separated by a space, with no brackets: `Opacity %`, `Blur px`, `Blink rate ms`. The value beside the control shows the number alone.
+- Units go on the end of the label, separated by a space, with no brackets: `Opacity %`, `Blur px`, `Rate s`. The value beside the control shows the number alone.
 
 - Keyboard shortcuts shown in a menu go in parentheses at the end of the item, spelled with `+` between every part and no spaces: `Copy (Ctrl+Shift+C)`, `Fullscreen (F11)`.
 	- On macOS a row with a Command chord shows that chord instead, with the modifiers in Apple's order: `Copy (Command+C)`, `Fullscreen (Control+Command+F)`. The system menu bar draws the chord itself, so its labels have none.
@@ -332,5 +332,7 @@ Things the built interface does differently from the rules above. Each is a smal
 - The About box pads its `Key: value` lines with extra spaces, which line nothing up in a proportional font. Cosmetic, and shared with the text `--about` prints.
 
 - The Silk tab makes eight, one past the ceiling above. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
+
+- The rows under Blink on the Cursor tab stay live when Blink is off, against the sub-group rule above. That is the rule [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md) sets for settings that only count while a switch is on, and the other sub-groups still gray until they move to it.
 
 - The Keys tab makes nine. No other tab's subject takes in the hotkeys. The nine tabs are now the widest thing in the dialog, so they set the panel's width on every tab.

@@ -115,7 +115,7 @@ pub struct Shadow {
 	scroll_ramp_down_ms: f32,
 	scroll_ease_out_ms: f32,
 	smooth_scroll_apps: bool,
-	cursor_animation: crate::pane::CursorAnimation,
+	cursor_blink: bool,
 	text_scrim: bool,
 	text_scrim_radius: f32,
 	text_scrim_strength: f32,
@@ -137,7 +137,7 @@ impl Shadow {
 			scroll_ramp_down_ms: settings.scroll_ramp_down_ms,
 			scroll_ease_out_ms: settings.scroll_ease_out_ms,
 			smooth_scroll_apps: settings.smooth_scroll_apps,
-			cursor_animation: settings.cursor_animation,
+			cursor_blink: settings.cursor_blink,
 			text_scrim: settings.text_scrim,
 			text_scrim_radius: settings.text_scrim_radius,
 			text_scrim_strength: settings.text_scrim_strength,
@@ -158,7 +158,7 @@ impl Shadow {
 		settings.scroll_ramp_down_ms = self.scroll_ramp_down_ms;
 		settings.scroll_ease_out_ms = self.scroll_ease_out_ms;
 		settings.smooth_scroll_apps = self.smooth_scroll_apps;
-		settings.cursor_animation = self.cursor_animation;
+		settings.cursor_blink = self.cursor_blink;
 		settings.text_scrim = self.text_scrim;
 		settings.text_scrim_radius = self.text_scrim_radius;
 		settings.text_scrim_strength = self.text_scrim_strength;
@@ -247,14 +247,14 @@ fn values(profile: Profile, settings: &mut Settings) {
 		// it and drops the halo, which is paid on every frame
 		Profile::Low => {
 			quicker(settings);
-			settings.cursor_animation = crate::pane::CursorAnimation::Off;
+			settings.cursor_blink = false;
 			settings.text_scrim = false;
 			settings.text_outline = 1.0;
 		}
 		Profile::Standard | Profile::Remote => {
 			settings.scroll_smooth = false;
 			settings.smooth_scroll_apps = false;
-			settings.cursor_animation = crate::pane::CursorAnimation::Off;
+			settings.cursor_blink = false;
 			settings.text_scrim = false;
 			settings.text_outline = 0.0;
 			settings.wallpaper_enabled = false;
@@ -894,7 +894,7 @@ mod tests {
 		Settings {
 			scroll_ease_in_ms: 300.0,
 			scroll_smooth: false,
-			cursor_animation: crate::pane::CursorAnimation::Phase,
+			cursor_blink: false,
 			text_scrim_radius: 9.0,
 			wallpaper_enabled: false,
 			..Settings::default()
@@ -909,17 +909,14 @@ mod tests {
 		apply(&mut s);
 		assert!(s.scroll_smooth, "Max is the shipped default");
 		assert_eq!(s.scroll_ease_in_ms, Settings::default().scroll_ease_in_ms);
-		assert_eq!(
-			s.cursor_animation,
-			crate::pane::CursorAnimation::PulseVertical
-		);
+		assert!(s.cursor_blink);
 		assert!(s.wallpaper_enabled);
 
 		s.performance_profile = Profile::Custom;
 		apply(&mut s);
 		assert!(!s.scroll_smooth);
 		assert_eq!(s.scroll_ease_in_ms, 300.0);
-		assert_eq!(s.cursor_animation, crate::pane::CursorAnimation::Phase);
+		assert!(!s.cursor_blink);
 		assert_eq!(s.text_scrim_radius, 9.0);
 		assert!(!s.wallpaper_enabled);
 		assert!(s.profile_shadow.is_none());
@@ -955,7 +952,7 @@ mod tests {
 		s.performance_profile = Profile::Low;
 		apply(&mut s);
 		assert!(s.scroll_smooth);
-		assert_eq!(s.cursor_animation, crate::pane::CursorAnimation::Off);
+		assert!(!s.cursor_blink);
 		assert!(s.wallpaper_enabled, "Low keeps the wallpaper");
 		assert!(!s.text_scrim, "Low drops the halo");
 		// was: assert_eq!(s.text_outline, 2.0, ...) - no built-in profile draws an

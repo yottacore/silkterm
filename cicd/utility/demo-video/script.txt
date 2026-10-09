@@ -39,7 +39,7 @@
 @ Settings the demo pins (everything else is what ships):
 @   160x48 cells, system monospace, line height 1.22, 8px margin
 @   theme SilkTerm dark, text scrim on, no transparency
-@   cursor: full block, pulse_vertical, 500ms blink
+@   cursor: full block, pulse_vertical, 1 s blink
 @   scrollback 10000, wheel 3 lines
 @   No wallpaper at the start - it arrives on camera, later
 @   Scroll feel is deliberately not pinned: the demo shows what ships.
