@@ -34,6 +34,7 @@ use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at}
 use crate::ui_spec::{self, Key, Kind, Layout, Spec, ui};
 use prompt::{Prompt, PromptFocus, PromptJob};
 use shell_grid::{ShellDrag, ShellPart, ShellStop, shell_stop};
+use std::borrow::Cow;
 use themes::ThemeBtn;
 use winit::keyboard::ModifiersState;
 
@@ -287,8 +288,6 @@ macro_rules! keys_of {
 			| Key::PerfAuto
 			| Key::PerfCheckHardware
 			| Key::PerfCheckNext
-			| Key::SystemFont
-			| Key::SystemFontSize
 			| Key::Transparency
 			| Key::BackdropBlur
 			| Key::TextScrim
@@ -425,7 +424,7 @@ pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 		Key::CursorHeight => settings.cursor_size_height,
 		Key::CursorWidth => settings.cursor_size_width,
 		Key::CursorResume => settings.cursor_animation_resume_s,
-		Key::FontSize => settings.font_size,
+		Key::FontSize => config::auto::font_size(settings),
 		Key::LineHeight => settings.line_height_scale,
 		Key::Margin => settings.margin,
 		Key::TabRegularWidth => settings.tab_regular_pct,
@@ -443,8 +442,8 @@ pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 		Key::WheelLines => settings.wheel_lines,
 		Key::ScrollbarThickness => settings.scrollbar_thickness,
 		Key::MinimapWidth => settings.minimap_width,
-		Key::Columns => settings.columns as f32,
-		Key::Rows => settings.rows as f32,
+		Key::Columns => config::auto::grid(settings, None).0 as f32,
+		Key::Rows => config::auto::grid(settings, None).1 as f32,
 		Key::IdleHiddenMin => settings.idle_release_hidden_min as f32,
 		Key::IdleMin => settings.idle_release_min as f32,
 		keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => 0.0,
@@ -465,15 +464,17 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::PerfAuto => settings.performance_automatic,
 		Key::PerfCheckHardware => settings.performance_check_hardware,
 		Key::PerfCheckNext => settings.performance_check_next_run,
-		Key::SystemFont => settings.use_system_font,
-		Key::SystemFontSize => settings.use_system_font_size,
 		Key::Transparency => settings.transparent_background,
 		Key::BackdropBlur => settings.transparent_background_blur,
 		Key::TextScrim => settings.text_scrim,
 		Key::CursorScrim => settings.cursor_scrim,
 		Key::CursorOutline => settings.cursor_outline,
 		Key::CursorBlinking => settings.cursor_blink,
-		Key::RememberSize => settings.remember_size,
+		// a group's switch is read off its members; mixed reads as off here
+		Key::RememberSize => {
+			config::auto::group_state(settings, config::auto::Group::WindowSize)
+				== config::auto::State::On
+		}
 		Key::RememberPerMonitor => settings.remember_per_monitor,
 		Key::RememberMaximized => settings.remember_maximized,
 		Key::NewTabNextToCurrent => settings.new_tab_beside,
@@ -548,6 +549,10 @@ const PROFILE_TIP: &str =
 
 // What the Theme dropdown says once a color has moved off the theme's own.
 const UNSAVED_THEME: &str = "[unsaved]";
+// The letter on the mark an automatic value carries, and the tips about it.
+const AUTO_MARK: &str = "A";
+const AUTO_TIP: &str = "Automatic. Change it to set your own value.";
+const CLEAR_TIP: &str = "Back to automatic";
 
 // A slider's handle, centered on the value, so it overhangs the track's ends.
 const SLIDER_HANDLE_W: f32 = 10.0;
@@ -941,7 +946,8 @@ pub struct TextItem {
 	pub color: [u8; 3],
 	pub clip: Option<Rect>, // when set, clip drawing to this rect (e.g. a field)
 	pub bold: bool,
-	pub scale: f32, // 1.0 normal; >1 for the prominent dialog title
+	pub italic: bool, // an automatic value, the way a placeholder reads
+	pub scale: f32,   // 1.0 normal; >1 for the prominent dialog title
 }
 
 impl TextItem {
@@ -954,6 +960,7 @@ impl TextItem {
 			color,
 			clip: None,
 			bold: false,
+			italic: false,
 			scale: 1.0,
 		}
 	}
@@ -1020,11 +1027,8 @@ pub struct SettingsDialog {
 	emenu: Option<EMenu>, // open field context menu (right-click / Menu key)
 	mouse: (f32, f32),    // last cursor pos (drag edge-autoscroll replays it)
 	row_tops: std::cell::RefCell<RowTops>,
-	// What the desktop says its monospace font is, read once when the dialog
-	// opens. Held rather than asked for at each use so a test can say what the
-	// desktop reports: that answer is the only thing that grays the system-font
-	// row, and a box whose desktop does name a font could not reach the case.
-	os_font: crate::sysfont::Monospace,
+	// The monitor the window is on, for the automatic size's rule.
+	monitor: Option<String>,
 	// Whether the desktop says when a window is minimized or covered. Wayland
 	// does not, so the hidden wait never applies there.
 	sees_hidden: bool,
@@ -1385,7 +1389,7 @@ impl SettingsDialog {
 			emenu: None,
 			mouse: (0.0, 0.0),
 			row_tops: std::cell::RefCell::default(),
-			os_font: crate::sysfont::monospace().clone(),
+			monitor: None,
 			sees_hidden: true,
 			assoc: crate::fileassoc::system(),
 			assoc_on: [false; 4],
@@ -1627,7 +1631,7 @@ impl SettingsDialog {
 		let s = self.scale;
 		self.animate_dip(dt, &mut |t| measure(t) / s)
 	}
-	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(&'static str, Rect)> {
+	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
 		#[cfg(test)]
 		HOVER_TIPS.with(|n| n.set(n.get() + 1));
 		let s = self.scale;
@@ -1910,6 +1914,52 @@ impl SettingsDialog {
 	/// Whether the desktop says when a window is minimized or covered.
 	pub fn set_sees_hidden(&mut self, sees: bool) {
 		self.sees_hidden = sees;
+	}
+	/// The main window's monitor and the size it was last given, which the
+	/// automatic size shows. Both copies take the size, as a shell scan is
+	/// folded, so it does not read as an edit. True when anything moved.
+	pub fn follow_window(&mut self, monitor: Option<&str>, live: &Settings) -> bool {
+		let kept = |s: &Settings| {
+			(
+				s.remembered_columns,
+				s.remembered_rows,
+				s.remembered_font_zoom,
+			)
+		};
+		let moved = self.monitor.as_deref() != monitor;
+		let resized =
+			kept(&self.edited) != kept(live) || self.edited.monitor_sizes != live.monitor_sizes;
+		if moved {
+			self.monitor = monitor.map(str::to_string);
+		}
+		if resized {
+			for settings in [&mut self.orig, &mut self.edited] {
+				settings.remembered_columns = live.remembered_columns;
+				settings.remembered_rows = live.remembered_rows;
+				settings.remembered_font_zoom = live.remembered_font_zoom;
+				settings.monitor_sizes.clone_from(&live.monitor_sizes);
+			}
+		}
+		moved || resized
+	}
+	fn place(&self) -> config::auto::Place<'_> {
+		config::auto::Place {
+			monitor: self.monitor.as_deref(),
+		}
+	}
+	// The auto setting a row edits, if it edits one.
+	fn auto_of(key: Key) -> Option<config::auto::Setting> {
+		match ui().settings_of(key) {
+			[path] => config::auto::by_path(path),
+			_ => None,
+		}
+	}
+	// What an auto setting's row shows: its value, and whether that is automatic.
+	fn auto_shown(&self, setting: config::auto::Setting) -> (config::auto::Value, bool) {
+		(
+			config::auto::value(&self.edited, setting, self.place()),
+			config::auto::automatic(&self.edited, setting),
+		)
 	}
 
 	/// A restored view comes from a dialog that no longer exists, so nothing about
@@ -2465,9 +2515,6 @@ impl SettingsDialog {
 	pub fn commit_baseline(&mut self) {
 		self.orig = self.edited.clone();
 	}
-	pub fn use_system_font(&self) -> bool {
-		self.edited.use_system_font
-	}
 
 	// Top of row `i` on the active tab (scrolled). Walks visible rows the same
 	// way tab_content_h does so heights and header gaps stay in sync.
@@ -2763,6 +2810,101 @@ impl SettingsDialog {
 			h,
 		}
 	}
+	// The field an auto setting's row shows its value in, if row `i` edits one.
+	fn auto_field(&self, i: usize) -> Option<(config::auto::Setting, Rect)> {
+		let setting = Self::auto_of(self.specs[i].key)?;
+		match self.specs[i].kind {
+			Kind::Slider { .. } => Some((setting, self.valbox(i))),
+			Kind::Text => Some((setting, self.textbox(i))),
+			_ => None,
+		}
+	}
+	// The automatic mark, or once set by hand the icon that clears it, at the
+	// right end of an auto setting's field. Not drawn while the field is open,
+	// where the caret needs the room.
+	fn auto_slot(&self, i: usize) -> Option<(config::auto::Setting, Rect)> {
+		if matches!(&self.edit, Some(edit) if edit.row == i) {
+			return None;
+		}
+		let (setting, field) = self.auto_field(i)?;
+		let side = (self.line_h * 0.6).round().max(8.0);
+		Some((
+			setting,
+			Rect {
+				x: field.x + field.w - lay().field_pad / 2.0 - side,
+				y: field.y + ((field.h - side) / 2.0).round(),
+				w: side,
+				h: side,
+			},
+		))
+	}
+	// The part of row `i`'s field its text may use: all of it, less the slot.
+	fn text_room(&self, i: usize, field: Rect) -> Rect {
+		match self.auto_slot(i) {
+			Some((_, slot)) => Rect {
+				w: (slot.x - 2.0 - field.x).max(0.0),
+				..field
+			},
+			None => field,
+		}
+	}
+	// The state of the group row `i` is the switch for, if it is one.
+	fn group_state(&self, i: usize) -> Option<config::auto::State> {
+		self.specs[i]
+			.group
+			.map(|group| config::auto::group_state(&self.edited, group))
+	}
+	// Whether row `i` shows an automatic value, read the the way a placeholder is.
+	fn shows_automatic(&self, i: usize) -> bool {
+		self.auto_slot(i)
+			.is_some_and(|(setting, _)| config::auto::automatic(&self.edited, setting))
+	}
+	// The letter on the automatic mark.
+	fn auto_mark_text(
+		&self,
+		colors: &Dlg,
+		i: usize,
+		line_h: f32,
+		vp: Rect,
+		out: &mut Vec<TextItem>,
+		measure: &mut impl FnMut(&str) -> f32,
+	) {
+		const MARK_SCALE: f32 = 0.7;
+		let Some((_, r)) = self.auto_slot(i).filter(|_| self.shows_automatic(i)) else {
+			return;
+		};
+		let w = measure(AUTO_MARK) * MARK_SCALE;
+		out.push(TextItem {
+			bold: true,
+			scale: MARK_SCALE,
+			clip: Some(vp),
+			..TextItem::plain(
+				AUTO_MARK.to_string(),
+				r.x + (r.w - w) / 2.0,
+				r.y + (r.h - line_h * MARK_SCALE) / 2.0,
+				colors.panel_bg,
+			)
+		});
+	}
+	fn auto_slot_quads(&self, colors: &Dlg, i: usize, out: &mut Vec<RectInstance>) {
+		let Some((setting, r)) = self.auto_slot(i) else {
+			return;
+		};
+		let (color, params) = if config::auto::automatic(&self.edited, setting) {
+			(colors.dim, [QuadMode::Rounded.code(), (r.w * 0.3).round()])
+		} else {
+			(
+				colors.text,
+				[QuadMode::CloseMark.code(), (r.w * 0.14).max(1.2)],
+			)
+		};
+		out.push(RectInstance {
+			pos: [r.x, r.y],
+			size: [r.w, r.h],
+			color: config::srgb_f32(color),
+			params,
+		});
+	}
 	// right-edge revert-to-default icon for row `i`
 	fn revert_box(&self, i: usize) -> Rect {
 		let h = self.check_sz();
@@ -2909,38 +3051,49 @@ impl SettingsDialog {
 		}
 	}
 	// Flyover text for a control the environment disables rather than another
-	// setting - explains why it is inert. The system-font toggles, only when the
-	// OS reports no such setting to follow: Windows has a system font size but
-	// no monospace family, a bare desktop may have neither. And the hidden wait
-	// where the desktop never says a window is hidden.
+	// setting - explains why it is inert. The hidden wait, where the desktop
+	// never says a window is hidden.
 	fn disabled_tip(&self, key: Key) -> Option<&'static str> {
-		let os = &self.os_font;
 		match key {
 			Key::IdleHiddenMin => hidden_wait_tip(self.sees_hidden),
-			Key::SystemFont if os.family.is_none() => {
-				Some("The desktop reports no monospace font to follow.")
-			}
-			Key::SystemFontSize if os.size_pt.is_none() => {
-				Some("The desktop reports no font size to follow.")
-			}
 			_ => None,
 		}
 	}
 	// What row `i` says about `key`, one of its settings. Why a control is
 	// grayed wins over what it does - that is the more urgent question when it
 	// is - and a value the profile set says so before the usual text.
-	fn row_tip(&self, i: usize, key: Key) -> Option<&'static str> {
+	fn row_tip(&self, i: usize, key: Key) -> Option<Cow<'static, str>> {
 		if let Some(why) = self.disabled_tip(key).filter(|_| self.disabled(key)) {
-			return Some(why);
+			return Some(Cow::Borrowed(why));
 		}
 		if self.profile_shows(key) {
-			return Some(PROFILE_TIP);
+			return Some(Cow::Borrowed(PROFILE_TIP));
 		}
-		Some(self.specs[i].help).filter(|help| !help.is_empty())
+		let help = self.specs[i].help;
+		// an auto setting adds a line on whether it is automatic
+		let Some(setting) = Self::auto_of(key) else {
+			return Some(Cow::Borrowed(help)).filter(|help| !help.is_empty());
+		};
+		let state = if config::auto::automatic(&self.edited, setting) {
+			Cow::Borrowed(AUTO_TIP)
+		} else {
+			let rule = config::auto::rule(&self.edited, setting, self.place());
+			// written the way the row's own box writes a number
+			let rule = match self.specs[i].kind {
+				Kind::Slider { int, .. } => fmt_number(config::auto::number(&rule), int),
+				_ => rule.to_string(),
+			};
+			Cow::Owned(format!("Set by hand. Automatic would be: {rule}."))
+		};
+		Some(if help.is_empty() {
+			state
+		} else {
+			Cow::Owned(format!("{help}\n\n{state}"))
+		})
 	}
 	// The flyover to show while the cursor rests on something that has one:
 	// (text, anchor rect to hang the tip box under).
-	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(&'static str, Rect)> {
+	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
 		if self.modal() {
 			return None; // the box covers the panel; nothing behind it answers
 		}
@@ -2948,11 +3101,11 @@ impl SettingsDialog {
 			if r.contains(mx, my) {
 				let help = &ui().help;
 				return Some((
-					match action {
+					Cow::Borrowed(match action {
 						Action::Cancel => help.cancel,
 						Action::Apply => help.apply,
 						_ => help.ok,
-					},
+					}),
 					r,
 				));
 			}
@@ -2968,7 +3121,13 @@ impl SettingsDialog {
 			let arrow = self.revert_box(i);
 			if self.has_revert(i) && !self.specs[i].revert_help.is_empty() && arrow.contains(mx, my)
 			{
-				return Some((self.specs[i].revert_help, arrow));
+				return Some((Cow::Borrowed(self.specs[i].revert_help), arrow));
+			}
+			// the icon that clears a value set by hand says what it does
+			if let Some((setting, slot)) = self.auto_slot(i) {
+				if slot.contains(mx, my) && !config::auto::automatic(&self.edited, setting) {
+					return Some((Cow::Borrowed(CLEAR_TIP), slot));
+				}
 			}
 			// hover target: the row's label + control span. The shells grid is
 			// the exception - its "row" is the whole grid, and a tip that popped
@@ -3129,6 +3288,8 @@ impl SettingsDialog {
 	// arrow puts back what Register replaced.
 	fn has_revert(&self, i: usize) -> bool {
 		!self.specs[i].beside
+			// a group's switch holds nothing; each member has its own
+			&& self.specs[i].group.is_none()
 			&& match self.specs[i].kind {
 				Kind::Header(_) | Kind::ShellList => false,
 				Kind::Buttons(_) => assoc_of(self.specs[i].key).is_some(),
@@ -3273,14 +3434,13 @@ impl SettingsDialog {
 		}
 	}
 	fn get_f32(&self, key: Key) -> f32 {
-		slider_of(self.shown(key), key)
+		match Self::auto_of(key) {
+			Some(setting) => config::auto::number(&self.auto_shown(setting).0),
+			None => slider_of(self.shown(key), key),
+		}
 	}
 	fn set_f32(&mut self, key: Key, value: f32) {
 		self.leave_profile(key);
-		// adjusting the size explicitly means we're no longer following the OS size
-		if key == Key::FontSize {
-			self.edited.use_system_font_size = false;
-		}
 		let settings = &mut self.edited;
 		match key {
 			Key::Opacity => settings.opacity = from_percent(value),
@@ -3300,7 +3460,7 @@ impl SettingsDialog {
 			Key::CursorHeight => settings.cursor_size_height = value,
 			Key::CursorWidth => settings.cursor_size_width = value,
 			Key::CursorResume => settings.cursor_animation_resume_s = value,
-			Key::FontSize => settings.font_size = value,
+			Key::FontSize => settings.font_size = config::auto::Auto::by_hand(value),
 			Key::LineHeight => settings.line_height_scale = value,
 			Key::Margin => settings.margin = value,
 			Key::TabRegularWidth => settings.tab_regular_pct = value,
@@ -3321,8 +3481,12 @@ impl SettingsDialog {
 			Key::WheelLines => settings.wheel_lines = value,
 			Key::ScrollbarThickness => settings.scrollbar_thickness = value,
 			Key::MinimapWidth => settings.minimap_width = value,
-			Key::Columns => settings.columns = value.round().max(1.0) as usize,
-			Key::Rows => settings.rows = value.round().max(1.0) as usize,
+			Key::Columns => {
+				settings.columns = config::auto::Auto::by_hand(value.round().max(1.0) as usize);
+			}
+			Key::Rows => {
+				settings.rows = config::auto::Auto::by_hand(value.round().max(1.0) as usize);
+			}
 			Key::IdleHiddenMin => {
 				settings.idle_release_hidden_min = value.round().max(1.0) as usize;
 			}
@@ -3368,7 +3532,7 @@ impl SettingsDialog {
 					self.edited.wallpaper_raw.clone()
 				}
 			}
-			Key::FontFamily => self.edited.font_family.clone().unwrap_or_default(),
+			Key::FontFamily => config::auto::font_family(&self.edited),
 			Key::LinkOpenCommand => self.edited.hyperlink_open_command.clone(),
 			Key::StartupDirectory => self.edited.startup_directory.clone(),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => String::new(),
@@ -3406,13 +3570,12 @@ impl SettingsDialog {
 					!trimmed.is_empty(),
 				);
 			}
+			// an emptied box goes back to automatic
 			Key::FontFamily => {
-				// an explicit family means we're not following the OS font
-				self.edited.use_system_font = false;
 				self.edited.font_family = if trimmed.is_empty() {
-					None
+					config::auto::Auto::automatic()
 				} else {
-					Some(trimmed.to_string())
+					config::auto::Auto::by_hand(trimmed.to_string())
 				};
 			}
 			Key::LinkOpenCommand => self.edited.hyperlink_open_command = trimmed.to_string(),
@@ -3420,13 +3583,6 @@ impl SettingsDialog {
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => {}
 		}
 	}
-	// The two system-font switches read what is STORED, like every other row.
-	// Where the desktop names no font to follow they are grayed and the flyover
-	// says why - that is how the dialog says "inert" everywhere else. Showing
-	// them unchecked instead misreported the setting: the box sat unchecked
-	// beside a dimmed revert arrow, claiming unchecked was the default when the
-	// default is on. `gate_ok` still asks the EFFECTIVE state, so the family
-	// field it overrides stays editable.
 	fn get_toggle(&self, key: Key) -> bool {
 		toggle_of(self.shown(key), key)
 	}
@@ -3443,15 +3599,24 @@ impl SettingsDialog {
 			}
 			Key::PerfCheckHardware => self.edited.performance_check_hardware = on,
 			Key::PerfCheckNext => self.edited.performance_check_next_run = on,
-			Key::SystemFont => self.edited.use_system_font = on,
-			Key::SystemFontSize => self.edited.use_system_font_size = on,
 			Key::Transparency => self.edited.transparent_background = on,
 			Key::BackdropBlur => self.edited.transparent_background_blur = on,
 			Key::TextScrim => self.edited.text_scrim = on,
 			Key::CursorScrim => self.edited.cursor_scrim = on,
 			Key::CursorOutline => self.edited.cursor_outline = on,
 			Key::CursorBlinking => self.edited.cursor_blink = on,
-			Key::RememberSize => self.edited.remember_size = on,
+			Key::RememberSize => {
+				let at = config::auto::Place {
+					monitor: self.monitor.as_deref(),
+				};
+				config::auto::set_group(&mut self.edited, config::auto::Group::WindowSize, on, at);
+				// automatic is no line, and the file only learns that through
+				// the revert list
+				if on {
+					self.queue_revert(Key::Columns);
+					self.queue_revert(Key::Rows);
+				}
+			}
 			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,
 			Key::NewTabNextToCurrent => self.edited.new_tab_beside = on,
@@ -3545,9 +3710,7 @@ impl SettingsDialog {
 			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => {}
 		}
 	}
-	// A control grayed out because a prerequisite toggle is off (the opacity
-	// slider needs Transparency; the scrim radius needs Text scrim; the explicit
-	// columns/rows are inactive when "Remember last size" is on).
+	// A control grayed out by a gate in settings_ui.shcl, or by the machine.
 	fn disabled(&self, key: Key) -> bool {
 		!ui().needs_of(key).iter().all(|need| self.gate_ok(need))
 			// nothing for the platform to do with it (the tip says so)
@@ -3569,14 +3732,12 @@ impl SettingsDialog {
 		}
 	}
 	// Is one declared prerequisite satisfied? A slider counts while it sits above
-	// zero, everything else while it is switched on - except the two system-font
-	// switches, which only bite when the desktop actually names a font to follow.
+	// zero, everything else while it is switched on.
 	fn gate_ok(&self, need: &ui_spec::Need) -> bool {
-		let on = match need.key {
-			Key::SystemFont => config::system_font_face_active(&self.edited),
-			Key::SystemFontSize => config::system_font_size_active(&self.edited),
-			_ if need.numeric => self.get_f32(need.key) > 0.0,
-			_ => self.get_toggle(need.key),
+		let on = if need.numeric {
+			self.get_f32(need.key) > 0.0
+		} else {
+			self.get_toggle(need.key)
 		};
 		on != need.invert
 	}
@@ -3647,8 +3808,21 @@ impl SettingsDialog {
 		}
 	}
 
+	// Put row `i`'s auto setting back to automatic, which at Apply comments its
+	// line out.
+	fn back_to_automatic(&mut self, i: usize) {
+		let key = self.specs[i].key;
+		if let Some(setting) = Self::auto_of(key) {
+			config::auto::set(&mut self.edited, setting, None);
+			self.queue_revert(key);
+		}
+	}
 	// Is this setting at its config default? Drives the revert icon's state.
 	fn is_default(&self, key: Key) -> bool {
+		// an auto setting's default is automatic, whatever value that gives
+		if let Some(setting) = Self::auto_of(key) {
+			return config::auto::automatic(&self.edited, setting);
+		}
 		let edited = &self.edited;
 		let defaults = &self.defaults;
 		// set in the file is not default, even to the shipped chord: a chord set
@@ -3674,7 +3848,7 @@ impl SettingsDialog {
 					&& edited.wallpaper_raw == defaults.wallpaper_raw
 					&& edited.wallpaper_folder_raw == defaults.wallpaper_folder_raw
 			}
-			Key::FontFamily => edited.font_family == defaults.font_family,
+			Key::FontFamily => edited.font_family.is_automatic(),
 			Key::LinkOpenCommand => {
 				edited.hyperlink_open_command == defaults.hyperlink_open_command
 			}
@@ -3695,6 +3869,12 @@ impl SettingsDialog {
 	// Revert a setting to its default and remember its config key(s), so Apply
 	// can comment them out in config.shcl (config::revert_keys).
 	fn revert(&mut self, key: Key) {
+		// an auto setting's default is automatic
+		if let Some(setting) = Self::auto_of(key) {
+			config::auto::set(&mut self.edited, setting, None);
+			self.queue_revert(key);
+			return;
+		}
 		if let Some(hotkey) = self.hotkey_for_key(key) {
 			self.edited.keys = self.edited.keys.with_own(hotkey, None);
 			self.moved.retain(|(from, ..)| *from != hotkey);
@@ -3733,7 +3913,6 @@ impl SettingsDialog {
 				self.edited.theme_mode = self.defaults.theme_mode;
 				self.adopt_theme();
 			}
-			Key::FontFamily => self.edited.font_family = self.defaults.font_family.clone(),
 			Key::LinkOpenCommand => {
 				self.edited.hyperlink_open_command = self.defaults.hyperlink_open_command.clone();
 			}
@@ -3744,16 +3923,12 @@ impl SettingsDialog {
 				let color = self.default_col(key);
 				self.set_col(key, color);
 			}
-			// direct for the font size: set_f32 would also clear
-			// use_system_font_size (its "explicit size" side effect), which a revert
-			// must not do
-			keys_of!(slider) if key == Key::FontSize => {
-				self.edited.font_size = self.defaults.font_size;
-			}
 			keys_of!(slider) => {
 				let value = self.default_f32(key);
 				self.set_f32(key, value);
 			}
+			// an auto setting went back above, to the same place
+			Key::FontFamily => self.edited.font_family = config::auto::Auto::automatic(),
 			// hotkeys went back above, and `row_revert` undoes a registration
 			keys_of!(valueless | assoc | hotkey) => {}
 		}
@@ -3950,6 +4125,17 @@ impl SettingsDialog {
 			) && self.disabled(self.specs[i].key)
 			{
 				continue;
+			}
+			// the icon in a field set by hand puts it back to automatic
+			if let Some((setting, slot)) = self.auto_slot(i) {
+				if slot.contains(x, y) && !config::auto::automatic(&self.edited, setting) {
+					self.focus = Some(Focus::Row(
+						i,
+						u16::from(matches!(self.specs[i].kind, Kind::Slider { .. })),
+					));
+					self.back_to_automatic(i);
+					return Action::None;
+				}
 			}
 			match self.specs[i].kind {
 				Kind::Slider { .. } => {
@@ -4819,6 +5005,12 @@ impl SettingsDialog {
 				}
 			}
 			Kind::Text => self.set_text(self.specs[i].key, &buf),
+			// an emptied box puts an auto setting back to automatic
+			Kind::Slider { .. }
+				if buf.trim().is_empty() && Self::auto_of(self.specs[i].key).is_some() =>
+			{
+				self.back_to_automatic(i);
+			}
 			// a valid partial number applies live, clamped to what the box takes
 			Kind::Slider { .. } => {
 				if let (Some(scale), Ok(value)) = (
@@ -5079,6 +5271,7 @@ impl SettingsDialog {
 					if focused && !off {
 						self.caret_quad(&colors, &mut out, val_box, &mut measure);
 					}
+					self.auto_slot_quads(&colors, i, &mut out);
 				}
 				Kind::Color => {
 					let swatch = self.swatch(i);
@@ -5142,6 +5335,7 @@ impl SettingsDialog {
 					if focused {
 						self.caret_quad(&colors, &mut out, text_box, &mut measure);
 					}
+					self.auto_slot_quads(&colors, i, &mut out);
 				}
 				Kind::Hotkey(_) => {
 					let key_box = self.textbox(i);
@@ -5188,6 +5382,16 @@ impl SettingsDialog {
 							} else {
 								colors.handle
 							},
+						));
+					} else if self.group_state(i) == Some(config::auto::State::Mixed) {
+						// a group's switch with some members set by hand: a dash
+						let bar = (check_box.h * 0.16).round().max(2.0);
+						out.push(quad(
+							check_box.x + 4.0,
+							check_box.y + ((check_box.h - bar) / 2.0).round(),
+							check_box.w - 8.0,
+							bar,
+							colors.handle,
 						));
 					}
 				}
@@ -5380,6 +5584,8 @@ impl SettingsDialog {
 		let mut out = Vec::new();
 		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - line_h) / 2.0;
+		// an automatic value: readable, and set apart from one set by hand
+		let placeholder = mix3(colors.text, colors.dim, 0.5);
 		// tab titles - the current one reads at full strength, the rest step back
 		let strip = self.tab_strip();
 		for (tab, title) in tab_titles().iter().enumerate() {
@@ -5453,15 +5659,18 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => self.fmt_val(self.specs[i].key, int),
 					};
+					let automatic = self.shows_automatic(i);
 					out.push(TextItem {
-						color: label_color,
-						clip: Some(clip_rect(val_box, vp)),
+						color: if automatic { placeholder } else { label_color },
+						italic: automatic,
+						clip: Some(clip_rect(self.text_room(i, val_box), vp)),
 						..mk(
 							txt,
 							val_box.x + lay().field_pad - view(i),
 							row_text_y(val_box.y, val_box.h),
 						)
 					});
+					self.auto_mark_text(&colors, i, line_h, vp, &mut out, &mut measure);
 				}
 				Kind::Color => {
 					let hex_box = self.hexbox(i);
@@ -5484,32 +5693,32 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => self.get_text(self.specs[i].key),
 					};
-					let placeholder = if matches!(self.specs[i].key, Key::FontFamily) {
-						"(system default)"
-					} else {
-						"(none)"
-					};
+					let automatic = self.shows_automatic(i);
 					let (txt, color) = if val.is_empty() || self.disabled(self.specs[i].key) {
 						(
 							if val.is_empty() {
-								placeholder.to_string()
+								"(none)".to_string()
 							} else {
 								val
 							},
 							colors.dim,
 						)
+					} else if automatic {
+						(val, placeholder)
 					} else {
 						(val, colors.text)
 					};
 					out.push(TextItem {
 						color,
-						clip: Some(clip_rect(text_box, vp)),
+						italic: automatic,
+						clip: Some(clip_rect(self.text_room(i, text_box), vp)),
 						..mk(
 							txt,
 							text_box.x + lay().field_pad - view(i),
 							row_text_y(text_box.y, text_box.h),
 						)
 					});
+					self.auto_mark_text(&colors, i, line_h, vp, &mut out, &mut measure);
 				}
 				Kind::Hotkey(_) => {
 					let key_box = self.textbox(i);
@@ -5771,6 +5980,7 @@ impl SettingsDialog {
 				color: if enabled { colors.text } else { colors.dim },
 				clip: None,
 				bold: false,
+				italic: false,
 				scale: 1.0,
 			});
 		}
@@ -5981,13 +6191,9 @@ fn widest_char(text: &mut crate::text::TextCtx, attrs: &glyphon::Attrs, set: &st
 /// Returns true if `old` and `new` differ in any field that needs a text-context
 /// rebuild (cell metrics change) rather than just a re-render.
 pub fn needs_text_rebuild(old: &Settings, new: &Settings) -> bool {
-	old.font_size != new.font_size
+	config::auto::font_size(old) != config::auto::font_size(new)
 		|| old.line_height_scale != new.line_height_scale
-		|| old.font_family != new.font_family
-		// the toggle alone changes the effective family/size (fields keep
-		// their values), so it must force a rebuild too
-		|| old.use_system_font != new.use_system_font
-		|| old.use_system_font_size != new.use_system_font_size
+		|| config::auto::font_family(old) != config::auto::font_family(new)
 		|| old.margin != new.margin
 }
 
@@ -6020,6 +6226,14 @@ mod tests {
 	};
 	use crate::config;
 	use crate::gfx::QuadMode;
+
+	// A tip as text a test can compare and keep.
+	pub(super) fn tip_text(tip: std::borrow::Cow<'static, str>) -> &'static str {
+		match tip {
+			std::borrow::Cow::Borrowed(text) => text,
+			std::borrow::Cow::Owned(text) => Box::leak(text.into_boxed_str()),
+		}
+	}
 
 	// A stand-in for the UI font: every character the same width.
 	pub(super) fn chars7(s: &str) -> f32 {
@@ -6207,13 +6421,13 @@ mod tests {
 		let rev = d.take_reverted();
 		assert!(rev.contains(&"transparency.opacity"));
 		assert!(d.take_reverted().is_empty(), "taking clears the list");
-		// reverting font size must not clear the system-size follow (set_f32
-		// side effect)
-		d.edited.use_system_font = true;
-		d.edited.use_system_font_size = true;
-		d.edited.font_size = 99.0;
+		// was: reverting font size must not clear the system-size follow. The
+		// follow switch went with 2026100907341818, and the size's default is
+		// automatic, which a revert puts back and the file learns as no line.
+		d.edited.font_size = config::auto::Auto::by_hand(99.0);
 		d.revert(super::Key::FontSize);
-		assert!(d.edited.use_system_font && d.edited.use_system_font_size);
+		assert!(d.edited.font_size.is_automatic());
+		assert!(d.take_reverted().contains(&"font.size"));
 	}
 
 	// Test ID: EipgKd7
@@ -6568,7 +6782,7 @@ mod tests {
 			let bx = d.checkbox(i);
 			let mid = bx.y + bx.h / 2.0;
 			for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
-				let tip = d.hover_tip_dip(x, mid).map(|(text, _)| text);
+				let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip));
 				assert_eq!(tip, Some(help), "{:?} at x {x}", d.specs[i].key);
 			}
 		}
@@ -6617,9 +6831,9 @@ mod tests {
 					if !vp.contains(x, mid) {
 						continue;
 					}
-					let want = d.row_tip(i, d.part_key(i, part));
+					let want = d.row_tip(i, d.part_key(i, part)).map(tip_text);
 					assert_eq!(
-						d.hover_tip_dip(x, mid).map(|(tip, _)| tip),
+						d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip)),
 						want,
 						"{:?} part {part} at x {x}",
 						spec.key
@@ -6642,7 +6856,7 @@ mod tests {
 			spots.extend([r.x + r.w / 2.0, r.x + r.w + 4.0 + chars7(option) / 2.0]);
 		}
 		for x in spots {
-			let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip);
+			let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip));
 			assert_eq!(tip, Some(d.specs[i].help), "Fit at x {x}");
 		}
 	}
@@ -6757,7 +6971,7 @@ mod tests {
 	// 				assert_eq!(d.focus_ctl_rect(i, 0), bx, "{key:?}: focus ring");
 	// 				let mid = bx.y + bx.h / 2.0;
 	// 				for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
-	// 					let tip = d.hover_tip_dip(x, mid).map(|(t, _)| t);
+	// 					let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip));
 	// 					assert_eq!(tip, Some(d.specs[i].help), "{key:?} tip at {x}");
 	// 				}
 	// 				let was = d.get_toggle(key);
@@ -6842,7 +7056,7 @@ mod tests {
 					assert_eq!(d.focus_ctl_rect(i, 0), bx, "{key:?}: focus ring");
 					let mid = bx.y + bx.h / 2.0;
 					for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0, label_end - 2.0] {
-						let tip = d.hover_tip_dip(x, mid).map(|(t, _)| t);
+						let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip));
 						assert_eq!(tip, Some(d.specs[i].help), "{key:?} tip at {x}");
 					}
 					let was = d.get_toggle(key);
@@ -7117,10 +7331,8 @@ mod tests {
 					rings += 1;
 				}
 			}
-			assert!(
-				rings >= 5,
-				"Fit, the font pair and Visibility, saw {rings} at {at}"
-			);
+			// the font pair went with 2026100907341818
+			assert!(rings >= 3, "Fit and Visibility, saw {rings} at {at}");
 		}
 	}
 
@@ -7717,15 +7929,218 @@ mod tests {
 	// to sit inside each arm of the press handler, and the color, text and radio
 	// arms never got it - so a grayed field still changed its setting, and the
 	// font Family field switched off "use the system font" as a side effect.
+	// Rows that only count while a switch above them is on stay live with every
+	// switch off (2026100907341818). What still grays is a switch over the rows
+	// it replaces, not yet an automatic setting, and the machine.
+	// Test ID: EsDxpmJ
+	#[test]
+	fn rows_that_only_count_while_a_switch_is_on_stay_live() {
+		let mut d = mk_dialog(4000.0);
+		d.edited.colors_from_wallpaper = false;
+		d.edited.text_outline = 0.0;
+		let toggles: Vec<Key> = d
+			.specs
+			.iter()
+			.flat_map(|spec| match spec.kind {
+				Kind::Dual { keys, .. } => keys.to_vec(),
+				Kind::Toggle if spec.group.is_none() => vec![spec.key],
+				_ => Vec::new(),
+			})
+			.collect();
+		for key in toggles {
+			d.set_toggle(key, false);
+		}
+		for i in 0..d.specs.len() {
+			if matches!(d.specs[i].kind, Kind::Header(_)) {
+				continue;
+			}
+			for part in 0..d.parts_of(i) {
+				assert!(
+					!d.part_disabled(i, part) || matches!(d.specs[i].kind, Kind::Buttons(_)),
+					"{:?} part {part} grays with its switch off",
+					d.specs[i].key
+				);
+			}
+		}
+		for key in Key::ALL {
+			assert!(
+				super::ui().needs_of(*key).iter().all(|need| need.invert),
+				"{key:?} grays while a switch is off"
+			);
+		}
+	}
+
+	// An auto setting's field shows its rule's value, set apart and with a
+	// mark, until a value is typed. Then the mark is an icon that puts it back,
+	// and so is emptying the box.
+	// Test ID: EsDxpmK
+	#[test]
+	fn an_auto_field_shows_its_rule_until_set_and_its_icon_puts_it_back() {
+		let mut m = |s: &str| s.chars().count() as f32 * 7.0;
+		let mut d = mk_dialog(4000.0);
+		let fam = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::FontFamily)
+			.unwrap();
+		d.tab = d.specs[fam].tab;
+		d.edited.font_family = config::auto::Auto::automatic();
+		let rule = config::auto::font_family(&d.edited);
+		assert!(d.shows_automatic(fam));
+		let texts = d.texts_dip(d.line_h, chars7);
+		let shown = texts
+			.iter()
+			.find(|t| t.text == rule)
+			.expect("the rule's value");
+		assert!(shown.italic, "an automatic value reads as one");
+		assert!(texts.iter().any(|t| t.text == super::AUTO_MARK));
+		let (_, slot) = d.auto_slot(fam).unwrap();
+		let at_slot = |d: &SettingsDialog, mode: QuadMode| {
+			d.rects_dip(d.line_h, chars7)
+				.1
+				.iter()
+				.any(|q| q.mode() == mode && q.pos == [slot.x, slot.y])
+		};
+		assert!(at_slot(&d, QuadMode::Rounded));
+		// a click on the mark opens the field, which keeps its value until typed in
+		d.mouse_down_dip(slot.x + 1.0, slot.y + 1.0, &mut m);
+		assert!(
+			d.edit.is_some()
+				&& config::auto::automatic(&d.edited, config::auto::Setting::FontFamily)
+		);
+		d.select_all();
+		for c in "Iosevka".chars() {
+			d.char_input(c);
+		}
+		assert_eq!(config::auto::font_family(&d.edited), "Iosevka");
+		d.commit_edit();
+		let texts = d.texts_dip(d.line_h, chars7);
+		assert!(!texts.iter().find(|t| t.text == "Iosevka").unwrap().italic);
+		assert!(at_slot(&d, QuadMode::CloseMark));
+		let _ = d.take_reverted();
+		d.mouse_down_dip(slot.x + slot.w / 2.0, slot.y + slot.h / 2.0, &mut m);
+		assert!(d.edited.font_family.is_automatic(), "the icon puts it back");
+		assert!(d.take_reverted().contains(&"font.family"));
+		assert!(d.row_is_default(fam));
+
+		// the number box: emptied, it goes back too
+		let size = d.specs.iter().position(|s| s.key == Key::FontSize).unwrap();
+		d.edited.font_size = config::auto::Auto::by_hand(20.0);
+		d.focus = Some(super::Focus::Row(size, 1));
+		d.open_edit(size, true);
+		d.backspace();
+		assert!(d.edited.font_size.is_automatic());
+		assert!(d.take_reverted().contains(&"font.size"));
+		d.commit_edit();
+		// and a drag sets it by hand again
+		d.set_f32(Key::FontSize, 12.0);
+		assert_eq!(config::auto::font_size(&d.edited), 12.0);
+		assert!(!d.row_is_default(size));
+	}
+
+	// "Remember last size" holds nothing: it reads Columns and Rows, shows a
+	// dash when they differ, and a click goes to automatic from mixed.
+	// Test ID: EsDxpmL
+	#[test]
+	fn the_size_switch_is_read_off_columns_and_rows() {
+		let mut m = |s: &str| s.chars().count() as f32 * 7.0;
+		let mut d = mk_dialog(4000.0);
+		let sw = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::RememberSize)
+			.unwrap();
+		d.tab = d.specs[sw].tab;
+		assert!(
+			!d.has_revert(sw),
+			"a group's switch has no revert of its own"
+		);
+		d.edited.columns = config::auto::Auto::automatic();
+		d.edited.rows = config::auto::Auto::automatic();
+		d.edited.remembered_columns = 150;
+		d.edited.remembered_rows = 45;
+		d.edited.remember_per_monitor = false;
+		assert!(d.get_toggle(Key::RememberSize));
+		assert_eq!(d.get_f32(Key::Columns), 150.0);
+		d.set_f32(Key::Columns, 99.0);
+		assert_eq!(d.group_state(sw), Some(config::auto::State::Mixed));
+		assert!(!d.get_toggle(Key::RememberSize));
+		let bx = d.checkbox(sw);
+		let dash = d.rects_dip(d.line_h, chars7).1.iter().any(|q| {
+			q.pos[0] > bx.x && q.pos[1] > bx.y && q.size[1] < bx.h / 3.0 && q.size[0] > bx.w / 3.0
+		});
+		assert!(dash, "a mixed switch draws a dash");
+		let _ = d.take_reverted();
+		d.mouse_down_dip(bx.x + bx.w / 2.0, bx.y + bx.h / 2.0, &mut m);
+		assert!(d.edited.columns.is_automatic() && d.edited.rows.is_automatic());
+		let reverted = d.take_reverted();
+		assert!(reverted.contains(&"window.columns") && reverted.contains(&"window.rows"));
+		d.mouse_down_dip(bx.x + bx.w / 2.0, bx.y + bx.h / 2.0, &mut m);
+		assert!(!d.get_toggle(Key::RememberSize));
+		assert_eq!(
+			config::auto::grid(&d.edited, None),
+			(150, 45),
+			"off keeps what showed"
+		);
+		assert!(!d.disabled(Key::RememberPerMonitor) && !d.disabled(Key::Columns));
+	}
+
+	// An auto setting's tip says whether it is automatic, after its own text
+	// and a blank line, and the icon that puts it back says that.
+	// Test ID: EsDxpmM
+	#[test]
+	fn an_auto_rows_tip_says_whether_it_is_automatic() {
+		let mut d = mk_dialog(4000.0);
+		let fam = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::FontFamily)
+			.unwrap();
+		d.tab = d.specs[fam].tab;
+		let tb = d.textbox(fam);
+		let tip = |d: &SettingsDialog, x: f32, y: f32| {
+			d.hover_tip_dip(x, y).map(|(tip, _)| tip_text(tip))
+		};
+		d.edited.font_family = config::auto::Auto::automatic();
+		let help = d.specs[fam].help;
+		assert!(!help.is_empty());
+		assert_eq!(
+			tip(&d, tb.x + 2.0, tb.y + 2.0),
+			Some(format!("{help}\n\n{}", super::AUTO_TIP).as_str())
+		);
+		let rule = config::auto::font_family(&d.edited);
+		d.edited.font_family = config::auto::Auto::by_hand("Iosevka".into());
+		assert_eq!(
+			tip(&d, tb.x + 2.0, tb.y + 2.0),
+			Some(format!("{help}\n\nSet by hand. Automatic would be: {rule}.").as_str())
+		);
+		let (_, slot) = d.auto_slot(fam).unwrap();
+		assert_eq!(tip(&d, slot.x + 1.0, slot.y + 1.0), Some(super::CLEAR_TIP));
+		// a row with no text of its own says only that
+		let size = d.specs.iter().position(|s| s.key == Key::FontSize).unwrap();
+		d.edited.font_size = config::auto::Auto::automatic();
+		let vb = d.valbox(size);
+		assert_eq!(tip(&d, vb.x + 2.0, vb.y + 2.0), Some(super::AUTO_TIP));
+		// a whole-number box's rule is written whole, as the box shows it
+		d.edited.font_size = config::auto::Auto::by_hand(30.0);
+		let want = format!(
+			"Set by hand. Automatic would be: {}.",
+			config::default_font_size().round()
+		);
+		assert_eq!(tip(&d, vb.x + 2.0, vb.y + 2.0), Some(want.as_str()));
+	}
+
 	// Test ID: EpHT2u8
 	#[test]
 	fn a_grayed_control_takes_no_click() {
 		let mut m = |s: &str| s.chars().count() as f32;
 		let mut d = mk_dialog(4000.0);
-		// gate a spread of rows off: the wallpaper, the scrim, the system font
-		d.edited.wallpaper_enabled = false;
-		d.edited.text_scrim = false;
-		d.edited.use_system_font = true;
+		// Gray what still grays: the text colors under Text colors from
+		// wallpaper, and the hidden wait on a desktop that never says. Rows that
+		// only count while a switch is on stay live (2026100907341818), so the
+		// wallpaper and the scrim no longer gray anything.
+		d.edited.colors_from_wallpaper = true;
+		d.set_sees_hidden(false);
 		// what every row shows, which is as good a snapshot as the values
 		let snapshot = |d: &SettingsDialog| -> Vec<(String, usize, bool)> {
 			(0..d.specs.len())
@@ -7760,7 +8175,7 @@ mod tests {
 				d.specs[i].key
 			);
 		}
-		assert!(clicked > 10, "only {clicked} grayed rows were reachable");
+		assert!(clicked >= 3, "only {clicked} grayed rows were reachable");
 	}
 
 	// While a profile is chosen, every row it governs shows the profile's value
@@ -7816,7 +8231,7 @@ mod tests {
 		let ctl = d.checkbox(i);
 		let tip = d
 			.hover_tip_dip(ctl.x + 1.0, ctl.y + 1.0)
-			.map(|(text, _)| text);
+			.map(|(tip, _)| tip_text(tip));
 		assert_eq!(tip, Some(PROFILE_TIP));
 
 		d.set_radio(Key::PerfProfile, super::Profile::Custom.index());
@@ -7827,7 +8242,9 @@ mod tests {
 		);
 		assert!(!d.get_toggle(Key::BgEnabled));
 		assert!(!d.disabled(Key::ScrollEaseIn));
-		assert!(d.disabled(Key::BgImage), "the wallpaper is off again");
+		// was: the wallpaper's rows grayed with it off. They stay live under it
+		// now (2026100907341818).
+		assert!(!d.disabled(Key::BgImage), "the wallpaper is off again");
 		// The dropdown used to follow the automatic switch. It stays live now, so
 		// a profile can be named while the machine is still choosing one:
 		//     d.set_toggle(Key::PerfAuto, true);
@@ -7876,8 +8293,7 @@ mod tests {
 		);
 		d.open = None;
 		// a dragged slider moves with the pointer, and only when its value does
-		d.edited.use_system_font_size = false;
-		d.edited.font_size = 6.0;
+		d.edited.font_size = config::auto::Auto::by_hand(6.0);
 		let i = d.specs.iter().position(|s| s.key == Key::FontSize).unwrap();
 		d.tab = d.specs[i].tab;
 		d.drag = Some(i);
@@ -8342,7 +8758,10 @@ mod tests {
 			Key::OpenFolder,
 		] {
 			let (d, i) = mk_assoc_dialog(key, store.clone());
-			let tip = |r: crate::pane::Rect| d.hover_tip(r.x + 2.0, r.y + 2.0).map(|(tip, _)| tip);
+			let tip = |r: crate::pane::Rect| {
+				d.hover_tip(r.x + 2.0, r.y + 2.0)
+					.map(|(tip, _)| tip_text(tip))
+			};
 			assert!(!d.specs[i].help.is_empty() && !d.specs[i].revert_help.is_empty());
 			assert_eq!(tip(d.row_btn_rect(i, 0)), Some(d.specs[i].help), "{key:?}");
 			assert_eq!(
@@ -8583,9 +9002,10 @@ mod tests {
 		d.focus = Some(Focus::Row(i, 1));
 		d.key_space();
 		assert_eq!(d.edited.cursor_outline, !o0);
-		// no outline -> the Outline checkbox (part 1) drops out of the focus ring
+		// was: no outline grayed the Outline checkbox. It only counts while there
+		// is an outline, so it stays live (2026100907341818).
 		d.edited.text_outline = 0.0;
-		assert!(d.part_disabled(i, 1) && !d.part_disabled(i, 0));
+		assert!(!d.part_disabled(i, 1) && !d.part_disabled(i, 0));
 		// reverting the row restores both keys
 		d.edited.text_outline = 2.0;
 		d.edited.cursor_scrim = !d.defaults.cursor_scrim;
@@ -8665,66 +9085,71 @@ mod tests {
 		assert!(d.edited.software_rendering);
 	}
 
-	// The "use system font" face toggle is inert wherever the OS reports no
-	// monospace family - always on Windows, and on a desktop with none set. That
-	// is a property of the environment, not of the platform, so the test asks the
-	// same question the code does.
-	// Test ID: ElEvh0T
-	#[test]
-	fn system_font_toggle_inert_without_an_os_family() {
-		use super::Key;
-		let mut d = mk_dialog(2000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.key, Key::SystemFont))
-			.unwrap();
-		d.tab = d.specs[i].tab;
-		let bx = d.checkbox(i);
-		if crate::sysfont::monospace().family.is_none() {
-			assert!(d.disabled(Key::SystemFont));
-			// Grayed is what says "inert"; the box still shows what is stored, both
-			// ways. It used to show off whatever was stored, which put an unchecked
-			// box beside an at-default revert arrow - the two disagreeing about a
-			// default that is on.
-			d.edited.use_system_font = true;
-			assert!(d.get_toggle(Key::SystemFont));
-			d.edited.use_system_font = false;
-			assert!(!d.get_toggle(Key::SystemFont));
-			d.edited.use_system_font = d.defaults.use_system_font;
-			assert_eq!(
-				d.get_toggle(Key::SystemFont),
-				d.defaults.use_system_font,
-				"the box must show the default it reports"
-			);
-			assert!(d.is_default(Key::SystemFont));
-			// clicking the grayed checkbox must not flip the setting
-			let mut measure = |s: &str| s.len() as f32;
-			d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
-			assert!(d.edited.use_system_font);
-			// the flyover explains WHY it is grayed, in place of the row's own
-			// help text, and only over the row
-			assert_eq!(
-				d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip),
-				Some("The desktop reports no monospace font to follow.")
-			);
-			assert!(d.hover_tip(bx.x + 2.0, bx.y - 200.0).is_none());
-			// the family field stays editable, since it is what actually resolves
-			assert!(!d.disabled(Key::FontFamily));
-		} else {
-			assert!(!d.disabled(Key::SystemFont));
-			// live, so the row explains what it does rather than why it cannot
-			assert_ne!(
-				d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip),
-				Some("The desktop reports no monospace font to follow.")
-			);
-			// following the OS grays the field it overrides
-			d.edited.use_system_font = true;
-			assert!(d.disabled(Key::FontFamily));
-			d.edited.use_system_font = false;
-			assert!(!d.disabled(Key::FontFamily));
-		}
-	}
+	// Commented out by 2026100907341818: the Use system font switches are gone.
+	// Family and Size are automatic settings whose automatic value is the
+	// desktop's font, so nothing is grayed for a desktop that names none.
+	// `the_font_rows_show_the_desktops_font_until_set_by_hand` replaces it.
+	//
+	// // The "use system font" face toggle is inert wherever the OS reports no
+	// // monospace family - always on Windows, and on a desktop with none set. That
+	// // is a property of the environment, not of the platform, so the test asks the
+	// // same question the code does.
+	// // Test ID: ElEvh0T
+	// #[test]
+	// fn system_font_toggle_inert_without_an_os_family() {
+	// 	use super::Key;
+	// 	let mut d = mk_dialog(2000.0);
+	// 	let i = d
+	// 		.specs
+	// 		.iter()
+	// 		.position(|s| matches!(s.key, Key::SystemFont))
+	// 		.unwrap();
+	// 	d.tab = d.specs[i].tab;
+	// 	let bx = d.checkbox(i);
+	// 	if crate::sysfont::monospace().family.is_none() {
+	// 		assert!(d.disabled(Key::SystemFont));
+	// 		// Grayed is what says "inert"; the box still shows what is stored, both
+	// 		// ways. It used to show off whatever was stored, which put an unchecked
+	// 		// box beside an at-default revert arrow - the two disagreeing about a
+	// 		// default that is on.
+	// 		d.edited.use_system_font = true;
+	// 		assert!(d.get_toggle(Key::SystemFont));
+	// 		d.edited.use_system_font = false;
+	// 		assert!(!d.get_toggle(Key::SystemFont));
+	// 		d.edited.use_system_font = d.defaults.use_system_font;
+	// 		assert_eq!(
+	// 			d.get_toggle(Key::SystemFont),
+	// 			d.defaults.use_system_font,
+	// 			"the box must show the default it reports"
+	// 		);
+	// 		assert!(d.is_default(Key::SystemFont));
+	// 		// clicking the grayed checkbox must not flip the setting
+	// 		let mut measure = |s: &str| s.len() as f32;
+	// 		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
+	// 		assert!(d.edited.use_system_font);
+	// 		// the flyover explains WHY it is grayed, in place of the row's own
+	// 		// help text, and only over the row
+	// 		assert_eq!(
+	// 			d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip_text(tip)),
+	// 			Some("The desktop reports no monospace font to follow.")
+	// 		);
+	// 		assert!(d.hover_tip(bx.x + 2.0, bx.y - 200.0).is_none());
+	// 		// the family field stays editable, since it is what actually resolves
+	// 		assert!(!d.disabled(Key::FontFamily));
+	// 	} else {
+	// 		assert!(!d.disabled(Key::SystemFont));
+	// 		// live, so the row explains what it does rather than why it cannot
+	// 		assert_ne!(
+	// 			d.hover_tip(bx.x + 2.0, bx.y + 2.0).map(|(tip, _)| tip_text(tip)),
+	// 			Some("The desktop reports no monospace font to follow.")
+	// 		);
+	// 		// following the OS grays the field it overrides
+	// 		d.edited.use_system_font = true;
+	// 		assert!(d.disabled(Key::FontFamily));
+	// 		d.edited.use_system_font = false;
+	// 		assert!(!d.disabled(Key::FontFamily));
+	// 	}
+	// }
 
 	// Test ID: Em2dFyi
 	#[test]
@@ -9617,7 +10042,6 @@ mod tests {
 		use super::{Focus, Key};
 		let mut d = mk_dialog(2000.0);
 		// Font size: an int slider on the Font tab, range 6..40
-		d.edited.use_system_font_size = false; // else Font size is grayed/disabled
 		let i = d.specs.iter().position(|s| s.key == Key::FontSize).unwrap();
 		d.tab = d.specs[i].tab;
 		d.focus = Some(Focus::Row(i, 0));
@@ -9630,7 +10054,7 @@ mod tests {
 		}
 		d.char_input('2');
 		d.char_input('4');
-		assert_eq!(d.edited.font_size, 24.0);
+		assert_eq!(config::auto::font_size(&d.edited), 24.0);
 		// was: over-range types clamp to the slider max (40). Size takes a typed
 		// number past its slider now, up to 128 (2026100812334386).
 		while d.edit.as_ref().is_some_and(|e| !e.buf.is_empty()) {
@@ -9639,9 +10063,9 @@ mod tests {
 		d.char_input('9');
 		d.char_input('9');
 		// assert_eq!(d.edited.font_size, 40.0);
-		assert_eq!(d.edited.font_size, 99.0);
+		assert_eq!(config::auto::font_size(&d.edited), 99.0);
 		d.char_input('9');
-		assert_eq!(d.edited.font_size, 128.0);
+		assert_eq!(config::auto::font_size(&d.edited), 128.0);
 		// Enter commits and is the dialog's OK; the field closes on the clamped value
 		assert_eq!(d.key_enter(), super::Action::Ok);
 		assert!(d.edit.is_none());
@@ -10146,54 +10570,57 @@ mod tests {
 		d
 	}
 
-	// A pair row's key is only its FIRST part, so gating the whole row on that
-	// key took the click away from a live second part. Windows always reports a
-	// size and no monospace family, so there it was every user; here the report
-	// has to be said out loud, or a desktop that does name a font never reaches
-	// the case.
-	// Test ID: Eq4Gng9
-	#[test]
-	fn a_live_half_of_a_pair_row_takes_a_click_while_the_other_half_is_grayed() {
-		use super::Key;
-		let mut m = |s: &str| s.chars().count() as f32;
-		let mut d = mk_dialog(4000.0);
-		let i = d
-			.specs
-			.iter()
-			.position(|s| matches!(s.key, Key::SystemFont))
-			.unwrap();
-		d.tab = d.specs[i].tab;
-		// the desktop names a size to follow but no family: Face grays, Size does not
-		d.os_font = crate::sysfont::Monospace {
-			family: None,
-			size_pt: Some(9.0),
-		};
-		assert!(d.disabled(Key::SystemFont), "Face should be grayed");
-		assert!(!d.disabled(Key::SystemFontSize), "Size should be live");
-
-		let was = d.get_toggle(Key::SystemFontSize);
-		let size_box = d.dual_box(i, 1);
-		d.mouse_down_dip(
-			size_box.x + size_box.w / 2.0,
-			size_box.y + size_box.h / 2.0,
-			&mut m,
-		);
-		assert_eq!(
-			d.get_toggle(Key::SystemFontSize),
-			!was,
-			"Size took no click"
-		);
-
-		// and the grayed half still takes none
-		let face = d.get_toggle(Key::SystemFont);
-		let face_box = d.dual_box(i, 0);
-		d.mouse_down_dip(
-			face_box.x + face_box.w / 2.0,
-			face_box.y + face_box.h / 2.0,
-			&mut m,
-		);
-		assert_eq!(d.get_toggle(Key::SystemFont), face, "a grayed half acted");
-	}
+	// Commented out by 2026100907341818: the Use system font pair row is gone,
+	// and with it the one pair whose halves the desktop grayed apart.
+	//
+	// // A pair row's key is only its FIRST part, so gating the whole row on that
+	// // key took the click away from a live second part. Windows always reports a
+	// // size and no monospace family, so there it was every user; here the report
+	// // has to be said out loud, or a desktop that does name a font never reaches
+	// // the case.
+	// // Test ID: Eq4Gng9
+	// #[test]
+	// fn a_live_half_of_a_pair_row_takes_a_click_while_the_other_half_is_grayed() {
+	// 	use super::Key;
+	// 	let mut m = |s: &str| s.chars().count() as f32;
+	// 	let mut d = mk_dialog(4000.0);
+	// 	let i = d
+	// 		.specs
+	// 		.iter()
+	// 		.position(|s| matches!(s.key, Key::SystemFont))
+	// 		.unwrap();
+	// 	d.tab = d.specs[i].tab;
+	// 	// the desktop names a size to follow but no family: Face grays, Size does not
+	// 	d.os_font = crate::sysfont::Monospace {
+	// 		family: None,
+	// 		size_pt: Some(9.0),
+	// 	};
+	// 	assert!(d.disabled(Key::SystemFont), "Face should be grayed");
+	// 	assert!(!d.disabled(Key::SystemFontSize), "Size should be live");
+	//
+	// 	let was = d.get_toggle(Key::SystemFontSize);
+	// 	let size_box = d.dual_box(i, 1);
+	// 	d.mouse_down_dip(
+	// 		size_box.x + size_box.w / 2.0,
+	// 		size_box.y + size_box.h / 2.0,
+	// 		&mut m,
+	// 	);
+	// 	assert_eq!(
+	// 		d.get_toggle(Key::SystemFontSize),
+	// 		!was,
+	// 		"Size took no click"
+	// 	);
+	//
+	// 	// and the grayed half still takes none
+	// 	let face = d.get_toggle(Key::SystemFont);
+	// 	let face_box = d.dual_box(i, 0);
+	// 	d.mouse_down_dip(
+	// 		face_box.x + face_box.w / 2.0,
+	// 		face_box.y + face_box.h / 2.0,
+	// 		&mut m,
+	// 	);
+	// 	assert_eq!(d.get_toggle(Key::SystemFont), face, "a grayed half acted");
+	// }
 
 	// Settings opens on the file, so a change another window saved after this
 	// one loaded is what the dialog shows, and a save from here writes only what
@@ -10217,11 +10644,12 @@ mod tests {
 		d.start_from(config::reload_from_disk());
 		assert_eq!(d.orig.margin, other.margin, "the other window's save");
 		assert_eq!(d.edited.margin, other.margin);
-		d.edited.columns = loaded.columns + 7;
+		let columns = config::auto::grid(&loaded, None).0 + 7;
+		d.edited.columns = config::auto::Auto::by_hand(columns);
 		assert!(config::persist(&d.orig, &d.edited));
 		let back = config::reload_from_disk();
 		assert_eq!(back.margin, other.margin);
-		assert_eq!(back.columns, loaded.columns + 7);
+		assert_eq!(config::auto::grid(&back, None).0, columns);
 
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -10235,11 +10663,10 @@ mod tests {
 		d.edited.text_scrim = false;
 		d.edited.text_outline = 2.0;
 		assert!(!d.disabled(Key::Outline));
-		assert!(
-			d.disabled(Key::ScrimRadius),
-			"the halo's own rows still gray"
-		);
-		assert!(d.disabled(Key::ScrimSoftness), "softness is the halo's too");
+		// was: the halo's own rows grayed with the scrim off. They only count
+		// while it is on, so they stay live (2026100907341818).
+		assert!(!d.disabled(Key::ScrimRadius));
+		assert!(!d.disabled(Key::ScrimSoftness));
 		d.edited.text_scrim = true;
 		assert!(!d.disabled(Key::ScrimSoftness));
 		d.edited.text_scrim = false;
@@ -10250,7 +10677,7 @@ mod tests {
 				|s| matches!(s.kind, super::Kind::Dual { keys, .. } if keys[0] == Key::CursorScrim),
 			)
 			.unwrap();
-		assert!(d.part_disabled(i, 0) && !d.part_disabled(i, 1));
+		assert!(!d.part_disabled(i, 0) && !d.part_disabled(i, 1));
 		// and it sits on its own, unindented, after the scrim's members
 		let outline = d.specs.iter().position(|s| s.key == Key::Outline).unwrap();
 		let contrast = d
@@ -10855,6 +11282,7 @@ mod tests {
 			not_macos: false,
 			warning: "",
 			windows_warning: "",
+			group: None,
 		};
 		let specs = [
 			row(Key::PerfCheckHardware, 0),
@@ -11325,12 +11753,12 @@ mod tests {
 	// 	// its own tip over it, the row's own over the label
 	// 	let (cx, cy) = (mark.x + mark.w / 2.0, mark.y + mark.h / 2.0);
 	// 	assert_eq!(
-	// 		d.hover_tip_dip(cx, cy, &mut chars7).map(|(tip, _)| tip),
+	// 		d.hover_tip_dip(cx, cy, &mut chars7).map(|(tip, _)| tip_text(tip)),
 	// 		Some(d.specs[i].warning)
 	// 	);
 	// 	let label = d.label_x(i) + 2.0;
 	// 	assert_eq!(
-	// 		d.hover_tip_dip(label, cy, &mut chars7).map(|(tip, _)| tip),
+	// 		d.hover_tip_dip(label, cy, &mut chars7).map(|(tip, _)| tip_text(tip)),
 	// 		Some(d.specs[i].help)
 	// 	);
 	// 	// no other tab draws one
@@ -11414,12 +11842,12 @@ mod tests {
 	// 		assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
 	// 		let (cx, cy) = (mark.x + mark.w / 2.0, mark.y + mark.h / 2.0);
 	// 		assert_eq!(
-	// 			d.hover_tip_dip(cx, cy).map(|(tip, _)| tip),
+	// 			d.hover_tip_dip(cx, cy).map(|(tip, _)| tip_text(tip)),
 	// 			Some(d.specs[i].warning)
 	// 		);
 	// 		let label = d.label_x(i) + 2.0;
 	// 		assert_eq!(
-	// 			d.hover_tip_dip(label, cy).map(|(tip, _)| tip),
+	// 			d.hover_tip_dip(label, cy).map(|(tip, _)| tip_text(tip)),
 	// 			Some(d.specs[i].help)
 	// 		);
 	// 	}
@@ -11521,7 +11949,7 @@ mod tests {
 			let cy = mark.y + mark.h / 2.0;
 			for x in [d.label_x(i) + 2.0, mark.x + mark.w / 2.0, bx.x + bx.w / 2.0] {
 				assert_eq!(
-					d.hover_tip_dip(x, cy).map(|(tip, _)| tip),
+					d.hover_tip_dip(x, cy).map(|(tip, _)| tip_text(tip)),
 					Some(help),
 					"{} at x {x}",
 					key.name()
@@ -11602,7 +12030,8 @@ mod tests {
 		let track = d.track(i);
 		let y = track.y + track.h / 2.0;
 		assert_eq!(
-			d.hover_tip_dip(d.label_x(i) + 2.0, y).map(|(tip, _)| tip),
+			d.hover_tip_dip(d.label_x(i) + 2.0, y)
+				.map(|(tip, _)| tip_text(tip)),
 			super::hidden_wait_tip(false)
 		);
 	}

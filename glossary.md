@@ -19,6 +19,7 @@ Terminal jargon that any terminal shares is left out unless SilkTerm gives it a 
 - [Alt screen](#alt-screen)
 - [Anchor](#anchor)
 - [Automask mix](#automask-mix)
+- [Automatic](#automatic)
 - [Bare window](#bare-window)
 - [Build number](#build-number)
 - [Cell](#cell)
@@ -77,6 +78,10 @@ Which part of a wallpaper image stays in frame when the image and the window are
 ## Automask mix
 
 How much of the contrast masking is left to the picture itself rather than to the Strength setting. See *contrast mask*.
+
+## Automatic
+
+The state of a setting the program works out for itself until a value is set, such as the font family, which follows the desktop's font, or the window size, which is the last one the window had. Settings shows the value in use in a lighter italic with a small "A" mark. Typing a value in sets it by hand, and the mark turns into an x that puts it back.
 
 ## Bare window
 

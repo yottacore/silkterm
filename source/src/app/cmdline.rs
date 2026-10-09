@@ -383,14 +383,14 @@ mod tests {
 		let mut live = config::Settings::default();
 		config::name_wallpaper(&mut live, Some("/socket.png".into()));
 		let from_disk = config::Settings {
-			font_size: 9.0,
+			font_size: config::auto::Auto::by_hand(9.0),
 			bg: [0, 0, 0],
 			fg: [1, 2, 3],
 			wallpaper_enabled: false,
 			..config::Settings::default()
 		};
 		let reloaded = settings_after_reload(&live, from_disk, &launch, true);
-		assert_eq!(reloaded.font_size, 21.0);
+		assert_eq!(config::auto::font_size(&reloaded), 21.0);
 		assert_eq!(reloaded.bg, [0xff, 0, 0]);
 		assert_eq!(
 			reloaded.fg,

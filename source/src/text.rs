@@ -307,39 +307,29 @@ fn resolve_ui_family(fs: &FontSystem) -> Option<String> {
 }
 
 // The family search order, in full, whether or not any of it is installed. Same
-// on every platform: the OS monospace leads while `use_system_font` is on and
-// trails the configured stack otherwise, and the built-in stack is always last.
-// A platform only shows through in what it reports - Windows has no monospace
-// setting, so it passes None and resolution simply starts at `font_family`
-// there, with no special case for it. Kept pure so the order can be tested
-// without a font db.
-fn mono_candidates(
-	os_family: Option<&str>,
-	configured: Option<&str>,
-	follow_os: bool,
-) -> Vec<String> {
-	let split = |list: Option<&str>| {
-		list.into_iter()
-			.flat_map(|l| l.split(','))
+// on every platform: `font.family` first, which is the desktop's monospace
+// while it is automatic, then the desktop's monospace if the family named
+// none of it, and the built-in stack always last. A platform only shows
+// through in what it reports - Windows has no monospace setting, so it passes
+// None and automatic gives the built-in stack there, with no special case for
+// it. Kept pure so the order can be tested without a font db.
+fn mono_candidates(os_family: Option<&str>, family: &str) -> Vec<String> {
+	let split = |list: &str| {
+		list.split(',')
 			.map(|name| name.trim().to_string())
 			.filter(|name| !name.is_empty())
 			.collect::<Vec<_>>()
 	};
-	let os = os_family.map(str::to_string);
-	let mut candidates = Vec::new();
-	if follow_os {
-		candidates.extend(os.clone());
-	}
-	candidates.extend(split(configured));
-	if !follow_os {
-		candidates.extend(os);
-	}
+	let mut candidates = split(family);
+	candidates.extend(os_family.map(str::to_string));
 	// Built-in stack as the last resort everywhere, ahead of the bare
 	// Family::Monospace query: that query is a db lottery whose winner may lack a
 	// bold face, and cosmic-text only keeps a family when a face matches the
 	// requested weight exactly - so bold runs would silently eject to an
 	// arbitrary (often proportional) fallback. Known-good families avoid that.
-	candidates.extend(split(Some(config::DEFAULT_FONT_STACK)));
+	candidates.extend(split(config::DEFAULT_FONT_STACK));
+	let mut seen = std::collections::HashSet::new();
+	candidates.retain(|name| seen.insert(name.to_ascii_lowercase()));
 	candidates
 }
 
@@ -368,8 +358,7 @@ fn resolve_mono_family(fs: &FontSystem) -> Option<String> {
 	let settings = config::settings();
 	for fam in mono_candidates(
 		crate::sysfont::monospace().family.as_deref(),
-		settings.font_family.as_deref(),
-		config::system_font_face_active(&settings),
+		&config::auto::font_family(&settings),
 	) {
 		if installed(&fam) {
 			return Some(fam);
@@ -1251,42 +1240,72 @@ mod tests {
 		assert_eq!(advance_cells(0.0, 0.0), 1);
 	}
 
-	// The search order is one list on every platform. `use_system_font` only
-	// decides where the OS family sits in it - it must never drop the configured
-	// stack, which is what made Linux and Windows resolve the same config
-	// differently, and the built-in stack always backs both up.
-	// Test ID: ElEvh0U
+	// The family is one list on every platform: `font.family` first, which is
+	// the desktop's monospace while automatic, then the desktop's monospace,
+	// then the built-in stack, each name once.
+	// Test ID: EsDsIof
 	#[test]
-	fn mono_candidates_keep_one_order_on_every_platform() {
-		let configured = Some("Alpha, Beta");
+	fn mono_candidates_put_the_family_first_and_the_built_in_stack_last() {
 		let builtin: Vec<String> = config::DEFAULT_FONT_STACK
 			.split(',')
 			.map(|name| name.trim().to_string())
 			.collect();
-
-		let following = mono_candidates(Some("OS Mono"), configured, true);
-		assert_eq!(following[..3], ["OS Mono", "Alpha", "Beta"]);
-		let not_following = mono_candidates(Some("OS Mono"), configured, false);
-		assert_eq!(not_following[..3], ["Alpha", "Beta", "OS Mono"]);
-		for order in [&following, &not_following] {
-			assert!(order.ends_with(&builtin), "built-in stack must back it up");
-		}
-
-		// Windows reports no OS family, so following it is a no-op there: the
-		// order collapses onto the same list every other platform ends up with.
+		let set = mono_candidates(Some("OS Mono"), "Alpha, Beta");
+		assert_eq!(set[..3], ["Alpha", "Beta", "OS Mono"]);
+		assert!(set.ends_with(&builtin), "built-in stack must back it up");
+		// automatic hands the desktop's own family in, and it is not tried twice
+		let automatic = mono_candidates(Some("OS Mono"), "OS Mono");
+		assert_eq!(automatic[0], "OS Mono");
 		assert_eq!(
-			mono_candidates(None, configured, true),
-			mono_candidates(None, configured, false)
+			automatic.iter().filter(|name| *name == "OS Mono").count(),
+			1
 		);
-		assert_eq!(
-			mono_candidates(None, configured, true)[..2],
-			["Alpha", "Beta"]
-		);
-
-		// An empty or absent stack leaves no blank entries behind.
-		assert_eq!(mono_candidates(None, Some(" , ,"), false), builtin);
-		assert_eq!(mono_candidates(None, None, true), builtin);
+		// Windows reports no family, so automatic is the built-in stack alone
+		assert_eq!(mono_candidates(None, config::DEFAULT_FONT_STACK), builtin);
+		// an empty stack leaves no blank entries behind
+		assert_eq!(mono_candidates(None, " , ,"), builtin);
 	}
+
+	// Commented out by 2026100907341818: "Use system font" is gone, and the
+	// family is an automatic setting whose automatic value is the desktop's
+	// font. There is no follow switch left to put the desktop's font ahead of a
+	// stack set by hand. The test above replaces it.
+	// // The search order is one list on every platform. `use_system_font` only
+	// // decides where the OS family sits in it - it must never drop the configured
+	// // stack, which is what made Linux and Windows resolve the same config
+	// // differently, and the built-in stack always backs both up.
+	// // Test ID: ElEvh0U
+	// #[test]
+	// fn mono_candidates_keep_one_order_on_every_platform() {
+	// 	let configured = Some("Alpha, Beta");
+	// 	let builtin: Vec<String> = config::DEFAULT_FONT_STACK
+	// 		.split(',')
+	// 		.map(|name| name.trim().to_string())
+	// 		.collect();
+	//
+	// 	let following = mono_candidates(Some("OS Mono"), configured, true);
+	// 	assert_eq!(following[..3], ["OS Mono", "Alpha", "Beta"]);
+	// 	let not_following = mono_candidates(Some("OS Mono"), configured, false);
+	// 	assert_eq!(not_following[..3], ["Alpha", "Beta", "OS Mono"]);
+	// 	for order in [&following, &not_following] {
+	// 		assert!(order.ends_with(&builtin), "built-in stack must back it up");
+	// 	}
+	//
+	// 	// Windows reports no OS family, so following it is a no-op there: the
+	// 	// order collapses onto the same list every other platform ends up with.
+	// 	assert_eq!(
+	// 		mono_candidates(None, configured, true),
+	// 		mono_candidates(None, configured, false)
+	// 	);
+	// 	assert_eq!(
+	// 		mono_candidates(None, configured, true)[..2],
+	// 		["Alpha", "Beta"]
+	// 	);
+	//
+	// 	// An empty or absent stack leaves no blank entries behind.
+	// 	assert_eq!(mono_candidates(None, Some(" , ,"), false), builtin);
+	// 	assert_eq!(mono_candidates(None, None, true), builtin);
+	// }
 
 	// A pinned mono family falls back to a color emoji face that rasterizes to
 	// nothing, which drew every emoji as an empty cell. The generic-monospace
