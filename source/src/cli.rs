@@ -627,7 +627,7 @@ pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
 		settings.font_size = config::auto::Auto::by_hand(size);
 	}
 	if let Some(color) = style.bg_color {
-		settings.bg = color;
+		settings.bg = config::auto::Auto::by_hand(color);
 	}
 	if let Some(color) = style.fg_color {
 		settings.fg = color;
@@ -1265,7 +1265,7 @@ mod tests {
 		fold_window_style(&mut s, &c.win.style);
 		assert_eq!(config::auto::font_family(&s), "Iosevka");
 		assert_eq!(config::auto::font_size(&s), 20.0);
-		assert_eq!(s.bg, [0x10, 0x20, 0x30]);
+		assert_eq!(s.bg, config::auto::Auto::by_hand([0x10, 0x20, 0x30]));
 		assert_eq!(s.fg, [0xab, 0xcd, 0xef]);
 		assert_eq!(s.wallpaper, Some(PathBuf::from("/x.png")));
 		assert_eq!(s.wallpaper_default_fit, config::Fit::Zoom);
@@ -1278,7 +1278,7 @@ mod tests {
 		// no style flags -> settings untouched
 		let c = p("--columns 80");
 		let mut s = config::Settings::default();
-		let before = (s.font_size.clone(), s.bg, s.fg);
+		let before = (s.font_size.clone(), s.bg.clone(), s.fg);
 		fold_window_style(&mut s, &c.win.style);
 		assert_eq!((s.font_size, s.bg, s.fg), before);
 	}

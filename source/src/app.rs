@@ -1660,8 +1660,8 @@ impl State {
 		self.last_frame = now;
 		let cfg = config::settings(); // one snapshot per frame, not per use/pane
 		// chrome colors from the same snapshot, read once a frame
-		let menu_fg_rgb = cfg.menu_fg;
-		let menu_bg_rgb = cfg.menu_bg;
+		let menu_fg_rgb = config::auto::color(&cfg, config::auto::Setting::MenuForeground);
+		let menu_bg_rgb = config::auto::color(&cfg, config::auto::Setting::MenuBackground);
 		let menu_border_rgb = config::menu_border_of(menu_bg_rgb);
 		let menu_hover_rgb = config::menu_hover_of(menu_bg_rgb);
 
@@ -1735,7 +1735,8 @@ impl State {
 		let active_pane = self.tabs.cur().focused;
 		// pane fill color is loop-invariant
 		let pane_bg = {
-			let mut c = config::srgb_f32(cfg.bg);
+			let mut c =
+				config::srgb_f32(config::auto::color(&cfg, config::auto::Setting::Background));
 			c[3] = bg_alpha;
 			c
 		};
@@ -2027,7 +2028,7 @@ impl State {
 							field.y - cb_rule,
 							field.w + 2.0 * cb_rule,
 							field.h + 2.0 * cb_rule,
-							cfg.highlight,
+							config::auto::color(&cfg, config::auto::Setting::Highlight),
 						));
 						instances.push(rect_inst(
 							field.x,
@@ -2381,7 +2382,11 @@ impl State {
 			.update_viewport(&gpu.gfx.queue, gpu.gfx.config.width, gpu.gfx.config.height);
 		self.text.set_text_blend(
 			&gpu.gfx.queue,
-			crate::text::text_blend(cfg.fg, cfg.bg, cfg.text_dark_on_light),
+			crate::text::text_blend(
+				cfg.fg,
+				config::auto::color(&cfg, config::auto::Setting::Background),
+				cfg.text_dark_on_light,
+			),
 		);
 		gpu.rects.set_resolution(&gpu.gfx.queue, frame_w, frame_h);
 		// How the picture is mixed with the background. Light mode needs a different
@@ -2841,7 +2846,7 @@ impl State {
 					&gpu.gfx.queue,
 					&mut encoder,
 					&instances[under_len as usize..ring_start as usize],
-					config::srgb_f32(cfg.bg),
+					config::srgb_f32(config::auto::color(&cfg, config::auto::Setting::Background)),
 				);
 			}
 			if cfg.cursor_scrim || cfg.cursor_outline {
@@ -3226,7 +3231,10 @@ fn minimap_insts(g: &crate::minimap::Geom, active: bool) -> Option<RectInstance>
 		pos: [handle.x, handle.y],
 		size: [g.preview.w, handle.h],
 		color: {
-			let mut c = config::srgb_f32(cfg.scrollbar_thumb);
+			let mut c = config::srgb_f32(config::auto::color(
+				&cfg,
+				config::auto::Setting::ScrollbarThumb,
+			));
 			c[3] = alpha * 0.28;
 			c
 		},
@@ -3246,10 +3254,14 @@ fn scrollbar_insts(bar: &crate::pane::Bar, fade: f32, active: bool) -> [RectInst
 	[
 		bar_inst(
 			bar.track,
-			cfg.scrollbar_trough,
+			config::auto::color(&cfg, config::auto::Setting::ScrollbarTrough),
 			fade * config::SCROLLBAR_TROUGH_A,
 		),
-		bar_inst(bar.thumb, cfg.scrollbar_thumb, fade * thumb_a),
+		bar_inst(
+			bar.thumb,
+			config::auto::color(&cfg, config::auto::Setting::ScrollbarThumb),
+			fade * thumb_a,
+		),
 	]
 }
 
@@ -3443,7 +3455,14 @@ fn open_url(url: &str) {
 // bad open_command) and is worth saying out loud once, not worth an alert.
 fn open_link(url: &str) {
 	let cfg = config::settings();
-	if let Err(e) = crate::links::open(url, &cfg.hyperlink_open_command) {
+	let command = config::auto::text(&cfg, config::auto::Setting::OpenCommand);
+	// automatic goes to the desktop's own opener, which takes the URL its own way
+	let command = if config::auto::automatic(&cfg, config::auto::Setting::OpenCommand) {
+		""
+	} else {
+		&command
+	};
+	if let Err(e) = crate::links::open(url, command) {
 		eprintln!("{}: could not open {url}: {e}", config::APP_NAME);
 	}
 }
@@ -3460,7 +3479,10 @@ fn scissor(rect: Rect, sw: u32, sh: u32) -> (u32, u32, u32, u32) {
 fn focus_ring(rect: Rect, scale: f32) -> [RectInstance; 4] {
 	// the calm one: the ring marks which pane is live, alongside the dialog's own
 	// sliders and revert arrows, rather than the single keyboard-focused control
-	let color = config::srgb_f32(config::settings().highlight);
+	let color = config::srgb_f32(config::auto::color(
+		&config::settings(),
+		config::auto::Setting::Highlight,
+	));
 	let thickness = config::dip(config::FOCUS_RING_PX, scale);
 	[
 		RectInstance {

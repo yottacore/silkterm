@@ -369,6 +369,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: ac7fbe6
 	- Test case: EsDxpmD to EsDxpmN, and EsDsIof for the font order. Each new test failed against a mutant of its part. Commented out with the reason: ElEvh0U, ElEvh0T, Eq4Gng9 and EkoQjqK, which pinned "Use system font". Assertions moved where the rule changed: EpHT2u8, Eit1amm, Ejak3Qu, Ep17Tr0, EqRTxpJ and the focus ring test.
 
+- Theme colors, Open command and File or folder show the automatic mark and a way back to automatic
+	- ID: 2026100910295903
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. A launch takes the Default mark off the commented color lines in the config file, and a folder emptied in Settings is commented out now rather than written as the usual place.
+	- Needs external testing: Windows: the Themes, Background and Window tabs, Open command showing explorer.exe, and a config with the usual folder written out in its Windows spelling.
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Each is already automatic in all but name: no line means the theme's color, the desktop's opener, or the usual folder or built-in picture. Give each the mark, the lighter italic value and the x, per the design. A color takes the x beside its picker.
+		- Their rows go in the auto settings table, with the lint check covering them.
+	- Notes:
+		- Before RC1.
+	- Progress log:
+		- 20261009: The ten theme colors, Open command, and the wallpaper's image and folder are auto settings in the first part's table. An automatic color reads the theme's palette, which is worked out again whenever the theme, the mode or the desktop's dark or light changes. The lint check covers them through the same stored type.
+	- Decisions:
+		- 20261009: A color's mark and x sit at the right end of its hex box, beside the chip, as a text box's do. Emptying the hex box puts it back too, and Cancel in the color picker leaves an automatic color automatic.
+		- 20261009: File or folder edits whichever of the two its box shows. Its x puts back only that one, and its revert arrow puts back both.
+		- 20261009: While a folder rotates, File or folder shows the folder. It used to show the picture on screen, held as the image setting, which would now read as set by hand.
+		- 20261009: The usual folder written out, or typed in Settings, reads as automatic, since that is what older builds wrote for an emptied box.
+		- 20261009: An automatic image with nothing found shows "(built-in picture)", where the box said "(none)".
+		- 20261009: A color set by hand to the theme's own value stays put when the desktop switches between dark and light. Before, a color line that matched the theme followed the switch.
+	- Against: the rotation code's note that Settings shows the picture on screen. No recorded decision names it.
+	- Swept: every reader of the 13 settings, which the type change made the compiler find: drawing in pane, minimap, palette and term, the menus and chrome in app.rs, the dialogs' colors, autotheme, visibility, `--bg`, a wallpaper named for the session, rotation, reload, load, save, the desktop's dark and light switch, and the theme pick, save, rename and delete in Settings. A grep for comparisons that still compile found none outside tests.
+	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, and the doc, TOC, table and autoread checks. In a real window against a dev build at the default font, the panel stayed 707 by 965. Silk, Text, Cursor, Movement, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Background, Themes and Window differ only in the File or folder row, the colors and the Open command row. The main window drew the same pixels on both builds for a fresh config, a light mode config, and an older config with colors set, a bad color, an empty open command and the usual folder written out. A config the dev build wrote opened the same, and the launch changed only the Default mark on its commented color lines. A typed color showed the x and its tip, OK wrote it, reopening showed it set by hand, and the x put it back, set the Theme dropdown back to the theme's name and, at OK, commented the line out.
+	- Not checked: 2x, a large interface font, Windows, macOS, a folder rotating in a window.
+	- Note: The autoread check's header failed the script header test (copyright form, no History) on dev. Fixed here, since the item names that check.
+	- Branch: autoset2
+	- Commit: 7fadb59
+	- Test case: EsEAijd, EsEAioc, EsEAitK, EsEAixa and EsEAj1i, each failing against a mutant of its part. EsDxpmD walks the whole table now. Assertions moved where the rule changed: Er1vmpQ, EqAiJBo, Em3Pif2, ElmIYG3, Elzq5VQ, ErkRECv, Eq4Yrbf, Epytxce.
+
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
 	- Type: Bug
@@ -477,6 +511,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_shells_grid_columns_fit_their_text_at_a_large_interface_font` (EsDinMD), `the_revert_arrow_and_the_pickers_text_fit_at_a_large_interface_font` (EsDinME). The first fails with the date and Active columns held at 78 and 44, with the gap held at 8, or with the name column held at 128. The second fails with the revert column held at 22, or with the picker sized the old way.
 	- Branch: shellcols
 	- Commit: 3c12a5d
+
+- Settings tips end with the current and default values where they differ
+	- ID: 2026100910295905
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline, with 2026100910295903.
+	- Needs external testing: A look at a few tips on Windows and macOS, where hotkeys read differently.
+	- Priority: Low
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Per the automatic settings design, every input control's tip ends with `Current value: ...` and `Default value: ...`, shown only when they differ. Automatic rows already have their state line.
+	- Decisions:
+		- 20261009: An auto setting's tip keeps its state line and gets no value lines, since "Automatic would be" already says what the default gives. A group's switch holds nothing, so it gets none either.
+		- 20261009: Values are written the way the row writes them: the number in its box, On or Off, the option's own words, a color's hex, a hotkey's keys or Off.
+	- Swept: every kind of row: slider, toggle, pair, radio, dropdown, color, text and hotkey. Buttons, the shells grid and headings hold no value.
+	- Verified: unit suite. In a window, "Text colors from wallpaper" switched off ended its tip with "Current value: Off" and "Default value: On", after a blank line.
+	- Branch: autoset2
+	- Commit: 7fadb59
+	- Test case: EsEAj63, failing with the value lines taken out. Ery4gAt, Es9VuY0, Es9Zhyr and Es9VucS put their row at its default first now, since a box whose own config differs would add value lines (G6).
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -761,21 +817,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Theme colors, Open command and File or folder show the automatic mark and a way back to automatic
-	- ID: 2026100910295903
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Each is already automatic in all but name: no line means the theme's color, the desktop's opener, or the usual folder or built-in picture. Give each the mark, the lighter italic value and the x, per the design. A color takes the x beside its picker.
-		- Their rows go in the auto settings table, with the lint check covering them.
-	- Notes:
-		- Before RC1.
-
 - Changes in one SilkTerm apply to all running SilkTerms using the same config file, immediately
 	- ID: 2026100907341819
 	- Type: Feature
@@ -806,18 +847,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: each test measures in the face the layout was built from.
 	- Reproduced: 20261009, by a probe run alone: "2026-10-09" measured 88.7 px that way, against 75.3 in the desktop's face. The two tests were not run alone to see whether they pass for the wrong reason.
 	- Possible cause: `ui_attrs()` reads the family a text context pins, and these tests call it once, ahead of the loop.
-
-- Settings tips end with the current and default values where they differ
-	- ID: 2026100910295905
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Low
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Per the automatic settings design, every input control's tip ends with `Current value: ...` and `Default value: ...`, shown only when they differ. Automatic rows already have their state line.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893

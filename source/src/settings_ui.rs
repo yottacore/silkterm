@@ -132,6 +132,7 @@ pub fn hover_tips() -> usize {
 // dialog_*/menu_* override). The remaining shades (border/track/handle/fields/
 // buttons) stay from the mode preset so contrast holds.
 fn dlg() -> Dlg {
+	use config::auto::Setting;
 	#[cfg(test)]
 	DLG_BUILDS.with(|n| n.set(n.get() + 1));
 	let base = if config::is_dark() {
@@ -146,13 +147,18 @@ fn dlg() -> Dlg {
 	// button fill is a dimmed version of it, mixed toward the panel so a pressed
 	// button reads as pressed rather than as the focused one. `focus` paints only
 	// the ring around whatever the keyboard is on.
+	let color = |setting| config::auto::color(&settings, setting);
 	Dlg {
-		panel_bg: settings.dialog_bg,
-		text: settings.dialog_fg,
-		gutter: settings.gutter,
-		handle: settings.highlight,
-		btn_hl: mix3(settings.dialog_bg, settings.highlight, 0.62),
-		focus_out: settings.focus,
+		panel_bg: color(Setting::DialogBackground),
+		text: color(Setting::DialogForeground),
+		gutter: color(Setting::Gutter),
+		handle: color(Setting::Highlight),
+		btn_hl: mix3(
+			color(Setting::DialogBackground),
+			color(Setting::Highlight),
+			0.62,
+		),
+		focus_out: color(Setting::Focus),
 		..base
 	}
 }
@@ -1947,10 +1953,16 @@ impl SettingsDialog {
 			monitor: self.monitor.as_deref(),
 		}
 	}
-	// The auto setting a row edits, if it edits one.
-	fn auto_of(key: Key) -> Option<config::auto::Setting> {
+	// The auto setting a row edits, if it edits one. File or folder edits the
+	// one its box shows.
+	fn auto_of(&self, key: Key) -> Option<config::auto::Setting> {
 		match ui().settings_of(key) {
 			[path] => config::auto::by_path(path),
+			_ if key == Key::BgImage => Some(if self.wallpaper_box_is_folder() {
+				config::auto::Setting::WallpaperFolder
+			} else {
+				config::auto::Setting::WallpaperImage
+			}),
 			_ => None,
 		}
 	}
@@ -2812,10 +2824,12 @@ impl SettingsDialog {
 	}
 	// The field an auto setting's row shows its value in, if row `i` edits one.
 	fn auto_field(&self, i: usize) -> Option<(config::auto::Setting, Rect)> {
-		let setting = Self::auto_of(self.specs[i].key)?;
+		let setting = self.auto_of(self.specs[i].key)?;
 		match self.specs[i].kind {
 			Kind::Slider { .. } => Some((setting, self.valbox(i))),
 			Kind::Text => Some((setting, self.textbox(i))),
+			// the hex box, beside the chip that opens the picker
+			Kind::Color => Some((setting, self.hexbox(i))),
 			_ => None,
 		}
 	}
@@ -3062,7 +3076,83 @@ impl SettingsDialog {
 	// What row `i` says about `key`, one of its settings. Why a control is
 	// grayed wins over what it does - that is the more urgent question when it
 	// is - and a value the profile set says so before the usual text.
+	// The tip ends with the value in use and the shipped one, where they differ
+	// (the automatic settings design). An auto setting's state line says that
+	// already, so it gets none.
 	fn row_tip(&self, i: usize, key: Key) -> Option<Cow<'static, str>> {
+		let text = self.row_tip_text(i, key);
+		let Some((now, default)) = self
+			.value_pair(i, key)
+			.filter(|(now, default)| now != default)
+		else {
+			return text;
+		};
+		let values = format!("Current value: {now}\nDefault value: {default}");
+		Some(Cow::Owned(match text {
+			Some(text) => format!("{text}\n\n{values}"),
+			None => values,
+		}))
+	}
+	// What row `i` shows for `key` and what it shows by default, written the
+	// way the row writes them. None for an auto setting, a group's switch, and
+	// anything that holds no value.
+	fn value_pair(&self, i: usize, key: Key) -> Option<(String, String)> {
+		if self.auto_of(key).is_some() || self.specs[i].group.is_some() {
+			return None;
+		}
+		let (now, default) = (self.shown(key), &self.defaults);
+		let on_off = |on: bool| if on { "On" } else { "Off" }.to_string();
+		Some(match self.specs[i].kind {
+			Kind::Slider { int, .. } => (
+				fmt_number(self.get_f32(key), int),
+				fmt_number(self.default_f32(key), int),
+			),
+			Kind::Toggle | Kind::Dual { .. } => {
+				(on_off(toggle_of(now, key)), on_off(toggle_of(default, key)))
+			}
+			Kind::Radio(_) | Kind::Dropdown(_) if key == Key::Theme => {
+				(self.edited.theme.clone(), default.theme.clone())
+			}
+			Kind::Radio(options) | Kind::Dropdown(options) => {
+				let option = |settings| {
+					options
+						.get(radio_of(settings, key))
+						.map_or_else(String::new, |o| (*o).to_string())
+				};
+				(option(now), option(default))
+			}
+			Kind::Color => (
+				config::format_hex(self.get_col(key)),
+				config::format_hex(self.default_col(key)),
+			),
+			Kind::Text => {
+				let text = |settings: &Settings| match key {
+					Key::StartupDirectory if !settings.startup_directory.is_empty() => {
+						settings.startup_directory.clone()
+					}
+					_ => "(none)".to_string(),
+				};
+				(text(now), text(default))
+			}
+			Kind::Hotkey(_) => {
+				let hotkey = self.hotkey_for_key(key)?;
+				let spoken = |keys: &crate::keys::Bindings| {
+					let chords = keys.chords(hotkey);
+					if chords.is_empty() {
+						return "Off".to_string();
+					}
+					chords
+						.iter()
+						.map(|chord| chord.spoken(self.mac))
+						.collect::<Vec<_>>()
+						.join(" or ")
+				};
+				(spoken(&self.edited.keys), spoken(&default.keys))
+			}
+			Kind::Header(_) | Kind::Buttons(_) | Kind::ShellList => return None,
+		})
+	}
+	fn row_tip_text(&self, i: usize, key: Key) -> Option<Cow<'static, str>> {
 		if let Some(why) = self.disabled_tip(key).filter(|_| self.disabled(key)) {
 			return Some(Cow::Borrowed(why));
 		}
@@ -3071,7 +3161,7 @@ impl SettingsDialog {
 		}
 		let help = self.specs[i].help;
 		// an auto setting adds a line on whether it is automatic
-		let Some(setting) = Self::auto_of(key) else {
+		let Some(setting) = self.auto_of(key) else {
 			return Some(Cow::Borrowed(help)).filter(|help| !help.is_empty());
 		};
 		let state = if config::auto::automatic(&self.edited, setting) {
@@ -3434,7 +3524,7 @@ impl SettingsDialog {
 		}
 	}
 	fn get_f32(&self, key: Key) -> f32 {
-		match Self::auto_of(key) {
+		match self.auto_of(key) {
 			Some(setting) => config::auto::number(&self.auto_shown(setting).0),
 			None => slider_of(self.shown(key), key),
 		}
@@ -3508,7 +3598,8 @@ impl SettingsDialog {
 				edit.wallpaper_folder
 			}
 			_ => {
-				self.edited.wallpaper_raw.trim().is_empty() && self.edited.wallpaper_rotate_enabled
+				config::auto::automatic(&self.edited, config::auto::Setting::WallpaperImage)
+					&& self.edited.wallpaper_rotate_enabled
 			}
 		}
 	}
@@ -3516,24 +3607,15 @@ impl SettingsDialog {
 	// Current value of a Text field (background image path / font family).
 	fn get_text(&self, key: Key) -> String {
 		match key {
+			// the configured text, or what automatic finds
 			Key::BgImage if self.wallpaper_box_is_folder() => {
-				self.edited.wallpaper_folder_raw.clone()
+				config::auto::text(&self.edited, config::auto::Setting::WallpaperFolder)
 			}
-			// the configured text, not the resolved path (auto-detect still shows
-			// the path it found, since there is no configured text to show)
-			Key::BgImage => {
-				if self.edited.wallpaper_raw.is_empty() {
-					self.edited
-						.wallpaper
-						.as_ref()
-						.map(|path| path.to_string_lossy().into_owned())
-						.unwrap_or_default()
-				} else {
-					self.edited.wallpaper_raw.clone()
-				}
-			}
+			Key::BgImage => config::auto::text(&self.edited, config::auto::Setting::WallpaperImage),
 			Key::FontFamily => config::auto::font_family(&self.edited),
-			Key::LinkOpenCommand => self.edited.hyperlink_open_command.clone(),
+			Key::LinkOpenCommand => {
+				config::auto::text(&self.edited, config::auto::Setting::OpenCommand)
+			}
 			Key::StartupDirectory => self.edited.startup_directory.clone(),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => String::new(),
 		}
@@ -3541,34 +3623,24 @@ impl SettingsDialog {
 	fn set_text(&mut self, key: Key, text: &str) {
 		let trimmed = text.trim();
 		match key {
+			// An emptied box goes back to the usual place, and so does the usual
+			// place typed out, since that is what the file reads it as.
 			Key::BgImage if self.wallpaper_box_is_folder() => {
-				// an emptied box goes back to the usual place
-				self.edited.wallpaper_folder_raw = if trimmed.is_empty() {
-					crate::config::WALLPAPER_DIR_TOKEN.to_string()
-				} else {
-					trimmed.to_string()
-				};
-				(
-					self.edited.wallpaper_folder,
-					self.edited.wallpaper_folder_auto,
-				) = crate::config::rotation_folder_for(&self.edited.wallpaper_folder_raw, false);
+				let usual = trimmed.is_empty() || trimmed == config::WALLPAPER_DIR_TOKEN;
+				config::auto::set(
+					&mut self.edited,
+					config::auto::Setting::WallpaperFolder,
+					(!usual).then(|| config::auto::Value::Text(trimmed.to_string())),
+				);
+				self.rewallpaper();
 			}
 			Key::BgImage => {
-				self.edited.wallpaper_raw = trimmed.to_string();
-				// resolve like the loader does (relative to the config dir),
-				// so a typed relative name live-applies instead of missing
-				self.edited.wallpaper = crate::config::resolve_wallpaper(
-					(!trimmed.is_empty()).then(|| trimmed.to_string()),
+				config::auto::set(
+					&mut self.edited,
+					config::auto::Setting::WallpaperImage,
+					Some(config::auto::Value::Text(trimmed.to_string())),
 				);
-				// a named image hides a folder found by convention, and clearing
-				// it brings that folder back
-				(
-					self.edited.wallpaper_folder,
-					self.edited.wallpaper_folder_auto,
-				) = crate::config::rotation_folder_for(
-					&self.edited.wallpaper_folder_raw,
-					!trimmed.is_empty(),
-				);
+				self.rewallpaper();
 			}
 			// an emptied box goes back to automatic
 			Key::FontFamily => {
@@ -3578,7 +3650,11 @@ impl SettingsDialog {
 					config::auto::Auto::by_hand(trimmed.to_string())
 				};
 			}
-			Key::LinkOpenCommand => self.edited.hyperlink_open_command = trimmed.to_string(),
+			Key::LinkOpenCommand => config::auto::set(
+				&mut self.edited,
+				config::auto::Setting::OpenCommand,
+				Some(config::auto::Value::Text(trimmed.to_string())),
+			),
 			Key::StartupDirectory => self.edited.startup_directory = trimmed.to_string(),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => {}
 		}
@@ -3741,52 +3817,39 @@ impl SettingsDialog {
 		};
 		on != need.invert
 	}
+	// Every color but the two the wallpaper can set is an auto setting, so the
+	// key answers through the table.
 	fn get_col(&self, key: Key) -> [u8; 3] {
-		let settings = &self.edited;
+		if let Some(setting) = self.auto_of(key) {
+			return config::auto::color(&self.edited, setting);
+		}
 		match key {
-			Key::ColBg => settings.bg,
-			Key::ColFg => settings.fg,
-			Key::ColCursor => settings.cursor,
-			Key::ColHighlight => settings.highlight,
-			Key::ColFocus => settings.focus,
-			Key::ColGutter => settings.gutter,
-			Key::ColMenuBg => settings.menu_bg,
-			Key::ColMenuFg => settings.menu_fg,
-			Key::ColDialogBg => settings.dialog_bg,
-			Key::ColDialogFg => settings.dialog_fg,
-			Key::ColScrollbarThumb => settings.scrollbar_thumb,
-			Key::ColScrollbarTrough => settings.scrollbar_trough,
-			keys_of!(slider | toggle | radio | text | hotkey | valueless | assoc) => [0, 0, 0],
+			Key::ColFg => self.edited.fg,
+			Key::ColCursor => self.edited.cursor,
+			_ => [0, 0, 0],
 		}
 	}
+	// A color chosen is set by hand, even the one automatic gives.
 	fn set_col(&mut self, key: Key, color: [u8; 3]) {
-		let settings = &mut self.edited;
+		if let Some(setting) = self.auto_of(key) {
+			config::auto::set(
+				&mut self.edited,
+				setting,
+				Some(config::auto::Value::Color(color)),
+			);
+			return;
+		}
 		match key {
-			Key::ColBg => settings.bg = color,
-			Key::ColFg => settings.fg = color,
-			Key::ColCursor => settings.cursor = color,
-			Key::ColHighlight => settings.highlight = color,
-			Key::ColFocus => settings.focus = color,
-			Key::ColGutter => settings.gutter = color,
-			Key::ColMenuBg => settings.menu_bg = color,
-			Key::ColMenuFg => settings.menu_fg = color,
-			Key::ColDialogBg => settings.dialog_bg = color,
-			Key::ColDialogFg => settings.dialog_fg = color,
-			Key::ColScrollbarThumb => settings.scrollbar_thumb = color,
-			Key::ColScrollbarTrough => settings.scrollbar_trough = color,
-			keys_of!(slider | toggle | radio | text | hotkey | valueless | assoc) => {}
+			Key::ColFg => self.edited.fg = color,
+			Key::ColCursor => self.edited.cursor = color,
+			_ => {}
 		}
 	}
 
 	// The active theme's palette - the effective default for the colors.* keys
 	// (commented-out colors fall back to the theme, not to SilkTerm-dark).
 	fn theme_palette(&self) -> crate::theme::Palette {
-		crate::theme::resolve_in(
-			&self.edited.user_themes,
-			&self.edited.theme,
-			self.edited.theme_mode,
-			config::is_dark(),
-		)
+		config::theme_palette(&self.edited)
 	}
 	fn default_col(&self, key: Key) -> [u8; 3] {
 		let palette = self.theme_palette();
@@ -3812,15 +3875,36 @@ impl SettingsDialog {
 	// line out.
 	fn back_to_automatic(&mut self, i: usize) {
 		let key = self.specs[i].key;
-		if let Some(setting) = Self::auto_of(key) {
+		if let Some(setting) = self.auto_of(key) {
 			config::auto::set(&mut self.edited, setting, None);
+			if key == Key::BgImage {
+				self.rewallpaper();
+			}
 			self.queue_revert(key);
 		}
 	}
+	// The picture and the rotation folder the image and folder settings come
+	// to, found the way the loader finds them, so a typed relative name applies
+	// at once. A named image hides a folder found by convention.
+	fn rewallpaper(&mut self) {
+		use config::auto::Setting;
+		let image = (!config::auto::automatic(&self.edited, Setting::WallpaperImage))
+			.then(|| config::auto::text(&self.edited, Setting::WallpaperImage));
+		let pinned = image.is_some();
+		self.edited.wallpaper = config::resolve_wallpaper(image);
+		(
+			self.edited.wallpaper_folder,
+			self.edited.wallpaper_folder_auto,
+		) = config::rotation_folder_for(
+			&config::auto::text(&self.edited, Setting::WallpaperFolder),
+			pinned,
+		);
+	}
 	// Is this setting at its config default? Drives the revert icon's state.
 	fn is_default(&self, key: Key) -> bool {
-		// an auto setting's default is automatic, whatever value that gives
-		if let Some(setting) = Self::auto_of(key) {
+		// An auto setting's default is automatic, whatever value that gives.
+		// File or folder is two of them, below.
+		if let Some(setting) = self.auto_of(key).filter(|_| key != Key::BgImage) {
 			return config::auto::automatic(&self.edited, setting);
 		}
 		let edited = &self.edited;
@@ -3843,20 +3927,18 @@ impl SettingsDialog {
 					&& !edited.remote_override
 					&& edited.stepped_profile.is_none()
 			}
-			Key::BgImage => {
-				edited.wallpaper == defaults.wallpaper
-					&& edited.wallpaper_raw == defaults.wallpaper_raw
-					&& edited.wallpaper_folder_raw == defaults.wallpaper_folder_raw
-			}
-			Key::FontFamily => edited.font_family.is_automatic(),
-			Key::LinkOpenCommand => {
-				edited.hyperlink_open_command == defaults.hyperlink_open_command
-			}
 			Key::StartupDirectory => edited.startup_directory == defaults.startup_directory,
 			Key::Theme => edited.theme == defaults.theme,
 			Key::ThemeMode => edited.theme_mode == defaults.theme_mode,
 			// buttons, headings and the shells list hold nothing to revert, and a
 			// hotkey with a row was answered above
+			// its arrow puts back both
+			Key::BgImage => {
+				edited.wallpaper_raw.is_automatic() && edited.wallpaper_folder_raw.is_automatic()
+			}
+			// the other auto settings were answered above
+			Key::FontFamily => edited.font_family.is_automatic(),
+			Key::LinkOpenCommand => edited.hyperlink_open_command.is_automatic(),
 			keys_of!(valueless | hotkey) => true,
 			// nothing to put back until Register has saved something
 			keys_of!(assoc) => assoc_of(key).is_none_or(|assoc| !self.assoc_on[assoc_slot(assoc)]),
@@ -3869,8 +3951,8 @@ impl SettingsDialog {
 	// Revert a setting to its default and remember its config key(s), so Apply
 	// can comment them out in config.shcl (config::revert_keys).
 	fn revert(&mut self, key: Key) {
-		// an auto setting's default is automatic
-		if let Some(setting) = Self::auto_of(key) {
+		// an auto setting's default is automatic; File or folder is two, below
+		if let Some(setting) = self.auto_of(key).filter(|_| key != Key::BgImage) {
 			config::auto::set(&mut self.edited, setting, None);
 			self.queue_revert(key);
 			return;
@@ -3894,17 +3976,6 @@ impl SettingsDialog {
 				self.edited.remote_override = false;
 				self.edited.stepped_profile = None;
 			}
-			Key::BgImage => {
-				self.edited.wallpaper = self.defaults.wallpaper.clone();
-				self.edited.wallpaper_raw = self.defaults.wallpaper_raw.clone();
-				self.edited
-					.wallpaper_folder_raw
-					.clone_from(&self.defaults.wallpaper_folder_raw);
-				(
-					self.edited.wallpaper_folder,
-					self.edited.wallpaper_folder_auto,
-				) = crate::config::rotation_folder_for(&self.edited.wallpaper_folder_raw, false);
-			}
 			Key::Theme => {
 				self.edited.theme = self.defaults.theme.clone();
 				self.adopt_theme();
@@ -3912,9 +3983,6 @@ impl SettingsDialog {
 			Key::ThemeMode => {
 				self.edited.theme_mode = self.defaults.theme_mode;
 				self.adopt_theme();
-			}
-			Key::LinkOpenCommand => {
-				self.edited.hyperlink_open_command = self.defaults.hyperlink_open_command.clone();
 			}
 			Key::StartupDirectory => {
 				self.edited.startup_directory = self.defaults.startup_directory.clone();
@@ -3927,9 +3995,19 @@ impl SettingsDialog {
 				let value = self.default_f32(key);
 				self.set_f32(key, value);
 			}
-			// an auto setting went back above, to the same place
+			// File or folder puts back both of its settings
+			Key::BgImage => {
+				use config::auto::Setting;
+				config::auto::set(&mut self.edited, Setting::WallpaperImage, None);
+				config::auto::set(&mut self.edited, Setting::WallpaperFolder, None);
+				self.rewallpaper();
+			}
+			// The other auto settings and hotkeys went back above, and
+			// `row_revert` undoes a registration.
 			Key::FontFamily => self.edited.font_family = config::auto::Auto::automatic(),
-			// hotkeys went back above, and `row_revert` undoes a registration
+			Key::LinkOpenCommand => {
+				self.edited.hyperlink_open_command = config::auto::Auto::automatic();
+			}
 			keys_of!(valueless | assoc | hotkey) => {}
 		}
 		self.queue_revert(key);
@@ -4129,9 +4207,13 @@ impl SettingsDialog {
 			// the icon in a field set by hand puts it back to automatic
 			if let Some((setting, slot)) = self.auto_slot(i) {
 				if slot.contains(x, y) && !config::auto::automatic(&self.edited, setting) {
+					// the field's own stop, which a slider and a color have second
 					self.focus = Some(Focus::Row(
 						i,
-						u16::from(matches!(self.specs[i].kind, Kind::Slider { .. })),
+						u16::from(matches!(
+							self.specs[i].kind,
+							Kind::Slider { .. } | Kind::Color
+						)),
 					));
 					self.back_to_automatic(i);
 					return Action::None;
@@ -4999,18 +5081,18 @@ impl SettingsDialog {
 			return;
 		}
 		match self.specs[i].kind {
+			// an emptied box puts an auto setting back to automatic
+			Kind::Slider { .. } | Kind::Color
+				if buf.trim().is_empty() && self.auto_of(self.specs[i].key).is_some() =>
+			{
+				self.back_to_automatic(i);
+			}
 			Kind::Color => {
 				if let Some(color) = config::parse_hex(&buf) {
 					self.set_col(self.specs[i].key, color);
 				}
 			}
 			Kind::Text => self.set_text(self.specs[i].key, &buf),
-			// an emptied box puts an auto setting back to automatic
-			Kind::Slider { .. }
-				if buf.trim().is_empty() && Self::auto_of(self.specs[i].key).is_some() =>
-			{
-				self.back_to_automatic(i);
-			}
 			// a valid partial number applies live, clamped to what the box takes
 			Kind::Slider { .. } => {
 				if let (Some(scale), Ok(value)) = (
@@ -5309,6 +5391,7 @@ impl SettingsDialog {
 					if focused {
 						self.caret_quad(&colors, &mut out, hex_box, &mut measure);
 					}
+					self.auto_slot_quads(&colors, i, &mut out);
 				}
 				Kind::Text => {
 					let text_box = self.textbox(i);
@@ -5678,14 +5761,18 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => config::format_hex(self.get_col(self.specs[i].key)),
 					};
+					let automatic = self.shows_automatic(i);
 					out.push(TextItem {
-						clip: Some(clip_rect(hex_box, vp)),
+						color: if automatic { placeholder } else { colors.text },
+						italic: automatic,
+						clip: Some(clip_rect(self.text_room(i, hex_box), vp)),
 						..mk(
 							txt,
 							hex_box.x + lay().field_pad - view(i),
 							row_text_y(hex_box.y, hex_box.h),
 						)
 					});
+					self.auto_mark_text(&colors, i, line_h, vp, &mut out, &mut measure);
 				}
 				Kind::Text => {
 					let text_box = self.textbox(i);
@@ -6226,6 +6313,15 @@ mod tests {
 	};
 	use crate::config;
 	use crate::gfx::QuadMode;
+
+	// A text auto setting as a box left with `text` in it: empty is automatic.
+	pub(super) fn hand(text: &str) -> config::auto::Auto<String> {
+		if text.trim().is_empty() {
+			config::auto::Auto::automatic()
+		} else {
+			config::auto::Auto::by_hand(text.to_string())
+		}
+	}
 
 	// A tip as text a test can compare and keep.
 	pub(super) fn tip_text(tip: std::borrow::Cow<'static, str>) -> &'static str {
@@ -6777,6 +6873,9 @@ mod tests {
 		let mut d = mk_dialog(4000.0);
 		let line = tab_text_line(&mut d);
 		for i in line {
+			// at its default, so the tip is the help alone with no value lines,
+			// whatever this box's own config holds (G6)
+			d.revert(d.specs[i].key);
 			let help = d.specs[i].help;
 			assert!(!help.is_empty(), "{:?} has a tip", d.specs[i].key);
 			let bx = d.checkbox(i);
@@ -6846,6 +6945,8 @@ mod tests {
 		// the row the item named: all of "Fit  ( ) Stretch  ( ) Zoom"
 		let i = d.specs.iter().position(|s| s.key == Key::BgFit).unwrap();
 		d.tab = d.specs[i].tab;
+		// at its default, so the tip has no value lines (G6)
+		d.revert(Key::BgFit);
 		let Kind::Radio(options) = d.specs[i].kind else {
 			panic!("Fit is a radio row")
 		};
@@ -7055,6 +7156,8 @@ mod tests {
 					}
 					assert_eq!(d.focus_ctl_rect(i, 0), bx, "{key:?}: focus ring");
 					let mid = bx.y + bx.h / 2.0;
+					// at its default, so the tip has no value lines (G6)
+					d.revert(key);
 					for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0, label_end - 2.0] {
 						let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip));
 						assert_eq!(tip, Some(d.specs[i].help), "{key:?} tip at {x}");
@@ -8128,6 +8231,249 @@ mod tests {
 			config::default_font_size().round()
 		);
 		assert_eq!(tip(&d, vb.x + 2.0, vb.y + 2.0), Some(want.as_str()));
+	}
+
+	// A theme color is automatic until chosen: its hex box shows the theme's
+	// value set apart, with the mark. A typed value or a pick sets it by hand,
+	// the x and an emptied box put it back, Cancel in the picker leaves it as it
+	// was, and picking a theme leaves it automatic under the new one.
+	// Test ID: EsEAixa
+	#[test]
+	fn a_theme_color_is_automatic_until_chosen_and_its_x_puts_it_back() {
+		use config::auto::Auto;
+		let mut m = |s: &str| s.chars().count() as f32 * 7.0;
+		let mut d = mk_dialog(4000.0);
+		let i = d.specs.iter().position(|s| s.key == Key::ColBg).unwrap();
+		d.tab = d.specs[i].tab;
+		d.edited.bg = Auto::automatic();
+		assert!(d.shows_automatic(i));
+		let hex = config::format_hex(d.edited.theme_palette.bg);
+		let texts = d.texts_dip(d.line_h, chars7);
+		assert!(
+			texts
+				.iter()
+				.find(|t| t.text == hex)
+				.expect("the theme's")
+				.italic,
+			"an automatic color reads as one"
+		);
+		assert!(texts.iter().any(|t| t.text == super::AUTO_MARK));
+		let (_, slot) = d.auto_slot(i).unwrap();
+		let hex_box = d.hexbox(i);
+		assert!(
+			slot.x > hex_box.x && slot.x + slot.w <= hex_box.x + hex_box.w,
+			"the mark sits in the hex box, beside the chip"
+		);
+
+		d.focus = Some(super::Focus::Row(i, 1));
+		d.open_edit(i, true);
+		for c in "#102030".chars() {
+			d.char_input(c);
+		}
+		assert_eq!(d.edited.bg, Auto::by_hand([0x10, 0x20, 0x30]));
+		d.commit_edit();
+		let texts = d.texts_dip(d.line_h, chars7);
+		assert!(!texts.iter().find(|t| t.text == "#102030").unwrap().italic);
+		let close = d
+			.rects_dip(d.line_h, chars7)
+			.1
+			.iter()
+			.any(|q| q.mode() == QuadMode::CloseMark && q.pos == [slot.x, slot.y]);
+		assert!(close, "set by hand, the mark is the x");
+		let _ = d.take_reverted();
+		d.mouse_down_dip(slot.x + slot.w / 2.0, slot.y + slot.h / 2.0, &mut m);
+		assert!(d.edited.bg.is_automatic(), "the x puts it back");
+		assert_eq!(d.focus, Some(super::Focus::Row(i, 1)), "on the hex box");
+		assert!(d.take_reverted().contains(&"colors.background"));
+
+		// an emptied box
+		d.set_col(Key::ColBg, [9, 9, 9]);
+		d.open_edit(i, true);
+		d.backspace();
+		assert!(d.edited.bg.is_automatic(), "an emptied box puts it back");
+		d.commit_edit();
+
+		// the picker writes through, and Cancel leaves it automatic again
+		d.pick_open(i);
+		d.pick_set(crate::pick::Hsv {
+			h: 120.0,
+			s: 1.0,
+			v: 1.0,
+		});
+		assert!(!d.edited.bg.is_automatic());
+		d.pick_cancel();
+		assert!(d.edited.bg.is_automatic(), "Cancel puts back automatic");
+
+		// a theme pick: automatic, under the theme picked
+		d.set_col(Key::ColBg, [9, 9, 9]);
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let matrix = names.iter().position(|n| n == "Matrix").unwrap();
+		d.set_radio(Key::Theme, matrix);
+		assert!(d.edited.bg.is_automatic());
+		assert_eq!(d.edited.theme_palette, config::theme_palette(&d.edited));
+		assert_eq!(d.get_col(Key::ColBg), d.edited.theme_palette.bg);
+		assert_eq!(d.edited.theme, "Matrix");
+	}
+
+	// The open command shows the desktop's opener until one is typed. File or
+	// folder shows the one setting its box edits: its x puts back only that one,
+	// and the arrow puts back both.
+	// Test ID: EsEAj1i
+	#[test]
+	fn the_open_command_and_file_or_folder_are_automatic_until_typed() {
+		use config::auto::{Auto, Setting};
+		let mut m = |s: &str| s.chars().count() as f32 * 7.0;
+		let mut d = mk_dialog(4000.0);
+		let row = |d: &SettingsDialog, key| d.specs.iter().position(|s| s.key == key).unwrap();
+		let i = row(&d, Key::LinkOpenCommand);
+		d.edited.hyperlink_open_command = Auto::automatic();
+		assert_eq!(
+			d.get_text(Key::LinkOpenCommand),
+			crate::links::desktop_opener()
+		);
+		assert!(d.shows_automatic(i));
+		d.set_text(Key::LinkOpenCommand, "firefox --new-tab");
+		assert!(!d.shows_automatic(i) && !d.is_default(Key::LinkOpenCommand));
+		d.set_text(Key::LinkOpenCommand, " ");
+		assert!(d.shows_automatic(i) && d.is_default(Key::LinkOpenCommand));
+
+		let w = row(&d, Key::BgImage);
+		d.tab = d.specs[w].tab;
+		d.edited.wallpaper_rotate_enabled = true;
+		d.edited.wallpaper_raw = Auto::automatic();
+		d.edited.wallpaper_folder_raw = hand("/pics");
+		assert!(d.wallpaper_box_is_folder() && !d.shows_automatic(w));
+		let (_, slot) = d.auto_slot(w).unwrap();
+		let mid = (slot.x + slot.w / 2.0, slot.y + slot.h / 2.0);
+		d.mouse_down_dip(mid.0, mid.1, &mut m);
+		assert!(d.edited.wallpaper_folder_raw.is_automatic());
+		assert!(d.shows_automatic(w));
+		assert_eq!(d.get_text(Key::BgImage), config::WALLPAPER_DIR_TOKEN);
+		assert!(d.is_default(Key::BgImage));
+
+		// an image set by hand shows either way, and its x leaves a folder set
+		// by hand alone
+		d.edited.wallpaper_folder_raw = hand("/pics");
+		d.edited.wallpaper_raw = hand("/a.png");
+		d.rewallpaper();
+		assert!(!d.wallpaper_box_is_folder());
+		assert_eq!(d.get_text(Key::BgImage), "/a.png");
+		d.mouse_down_dip(mid.0, mid.1, &mut m);
+		assert!(d.edited.wallpaper_raw.is_automatic());
+		assert_eq!(d.edited.wallpaper_folder_raw, hand("/pics"));
+		assert_eq!(d.edited.wallpaper, config::resolve_wallpaper(None));
+		assert_eq!(
+			d.get_text(Key::BgImage),
+			"/pics",
+			"the box is the folder again"
+		);
+		assert!(!d.is_default(Key::BgImage));
+		d.revert(Key::BgImage);
+		assert!(
+			config::auto::automatic(&d.edited, Setting::WallpaperImage)
+				&& config::auto::automatic(&d.edited, Setting::WallpaperFolder)
+		);
+		assert!(d.is_default(Key::BgImage));
+	}
+
+	// A tip ends with the value in use and the shipped one where the two
+	// differ, after a blank line, written the way the row writes them. At the
+	// default it has neither, and an auto setting keeps its state line instead.
+	// Test ID: EsEAj63
+	#[test]
+	fn a_tip_ends_with_the_current_and_default_values_where_they_differ() {
+		let mut d = mk_dialog(4000.0);
+		d.edited.colors_from_wallpaper = false;
+		let row = |d: &SettingsDialog, key| d.specs.iter().position(|s| s.key == key).unwrap();
+		let tip = |d: &SettingsDialog, i: usize, key| d.row_tip(i, key).map(tip_text);
+		let lines =
+			|now: &str, default: &str| format!("Current value: {now}\nDefault value: {default}");
+		let check = |d: &mut SettingsDialog,
+		             key: Key,
+		             change: &dyn Fn(&mut SettingsDialog),
+		             want: String| {
+			let i = row(d, key);
+			d.revert(key);
+			let help = d.specs[i].help;
+			assert_eq!(
+				tip(d, i, key),
+				(!help.is_empty()).then_some(help),
+				"{key:?} at its default"
+			);
+			change(d);
+			let want = if help.is_empty() {
+				want
+			} else {
+				format!("{help}\n\n{want}")
+			};
+			assert_eq!(tip(d, i, key), Some(want.as_str()), "{key:?}");
+		};
+		let margin = d.default_f32(Key::Margin);
+		let Kind::Slider { int, .. } = d.specs[row(&d, Key::Margin)].kind else {
+			panic!("Margin is a slider")
+		};
+		check(
+			&mut d,
+			Key::Margin,
+			&|d| d.set_f32(Key::Margin, margin + 4.0),
+			lines(
+				&super::fmt_number(margin + 4.0, int),
+				&super::fmt_number(margin, int),
+			),
+		);
+		let minimap = d.defaults.minimap;
+		let on_off = |on: bool| if on { "On" } else { "Off" };
+		check(
+			&mut d,
+			Key::Minimap,
+			&|d| d.set_toggle(Key::Minimap, !minimap),
+			lines(on_off(!minimap), on_off(minimap)),
+		);
+		check(
+			&mut d,
+			Key::BgFit,
+			&|d| d.set_radio(Key::BgFit, 1),
+			lines("Zoom", "Stretch"),
+		);
+		let fg = config::format_hex(d.default_col(Key::ColFg));
+		check(
+			&mut d,
+			Key::ColFg,
+			&|d| d.set_col(Key::ColFg, [1, 2, 3]),
+			lines("#010203", &fg),
+		);
+		let h = d
+			.specs
+			.iter()
+			.position(|s| matches!(s.kind, Kind::Hotkey(_)))
+			.unwrap();
+		let key = d.specs[h].key;
+		let hotkey = d.hotkey_of(h).unwrap();
+		let shipped = d.defaults.keys.chords(hotkey);
+		let spoken = shipped
+			.iter()
+			.map(|chord| chord.spoken(d.mac))
+			.collect::<Vec<_>>()
+			.join(" or ");
+		check(
+			&mut d,
+			key,
+			&|d| d.edited.keys = d.edited.keys.with_own(hotkey, Some(Vec::new())),
+			lines("Off", &spoken),
+		);
+
+		// an auto setting says it in its state line, and a group's switch holds
+		// nothing to compare
+		let size = row(&d, Key::FontSize);
+		d.edited.font_size = config::auto::Auto::by_hand(30.0);
+		assert!(
+			!tip(&d, size, Key::FontSize)
+				.unwrap()
+				.contains("Current value")
+		);
+		d.edited.columns = config::auto::Auto::by_hand(99);
+		let sw = row(&d, Key::RememberSize);
+		assert!(tip(&d, sw, Key::RememberSize).is_none_or(|t| !t.contains("Current value")));
 	}
 
 	// Test ID: EpHT2u8
@@ -9976,7 +10322,7 @@ mod tests {
 		// fresh single click into a text field: select all on release
 		let mut d = mk_dialog(4000.0);
 		d.tab = d.specs[i0].tab;
-		d.edited.wallpaper_raw = "foo bar.png".to_string();
+		d.edited.wallpaper_raw = hand("foo bar.png");
 		let field = d.textbox(i0);
 		let at = |k: usize| field.x + lay().field_pad + k as f32;
 		let y = field.y + field.h / 2.0;
@@ -9992,7 +10338,7 @@ mod tests {
 		// a click that drags selects the dragged range instead
 		let mut d = mk_dialog(4000.0);
 		d.tab = d.specs[i0].tab;
-		d.edited.wallpaper_raw = "foo bar.png".to_string();
+		d.edited.wallpaper_raw = hand("foo bar.png");
 		d.mouse_down(at(2), y, &mut m);
 		d.mouse_move(at(6), y, &mut m);
 		d.mouse_up(at(6), y);
@@ -10118,34 +10464,52 @@ mod tests {
 		// "/pics" is rooted but not absolute on Windows, which puts it on a drive
 		let pics = if cfg!(windows) { "C:/pics" } else { "/pics" };
 		let mut d = mk_dialog(4000.0);
-		d.edited.wallpaper_raw = String::new();
+		// automatic, both: the folder's is the usual place
+		d.edited.wallpaper_raw = hand("");
 		d.edited.wallpaper = None;
-		d.edited.wallpaper_folder_raw = token.to_string();
+		d.edited.wallpaper_folder_raw = hand("");
 		d.edited.wallpaper_rotate_enabled = true;
 		assert_eq!(d.get_text(Key::BgImage), token, "pre-filled");
 		assert!(d.is_default(Key::BgImage));
 
 		d.set_text(Key::BgImage, pics);
-		assert_eq!(d.edited.wallpaper_folder_raw, pics);
+		assert_eq!(d.edited.wallpaper_folder_raw, hand(pics));
 		assert_eq!(
 			d.edited.wallpaper_folder,
 			Some(std::path::PathBuf::from(pics))
 		);
 		assert!(!d.edited.wallpaper_folder_auto);
-		assert!(d.edited.wallpaper_raw.is_empty(), "the image is untouched");
+		assert!(
+			d.edited.wallpaper_raw.is_automatic(),
+			"the image is untouched"
+		);
 		assert!(!d.is_default(Key::BgImage));
 		d.set_text(Key::BgImage, " ");
-		assert_eq!(
-			d.edited.wallpaper_folder_raw, token,
+		assert!(
+			d.edited.wallpaper_folder_raw.is_automatic(),
 			"emptied is the usual place"
 		);
+		// and so is the usual place typed out, which is how the file reads it
+		d.set_text(Key::BgImage, token);
+		assert!(d.edited.wallpaper_folder_raw.is_automatic());
 
+		// was: off, the box was empty. It is the image, which is automatic and
+		// shows what automatic finds (2026100910295903).
 		d.edited.wallpaper_rotate_enabled = false;
-		assert_eq!(d.get_text(Key::BgImage), "", "off, it is the image");
-		d.set_text(Key::BgImage, "/a.png");
-		assert_eq!(d.edited.wallpaper_raw, "/a.png");
 		assert_eq!(
-			d.edited.wallpaper_folder_raw, token,
+			d.get_text(Key::BgImage),
+			config::auto::rule(
+				&d.edited,
+				config::auto::Setting::WallpaperImage,
+				config::auto::Place::default()
+			)
+			.to_string(),
+			"off, it is the image"
+		);
+		d.set_text(Key::BgImage, "/a.png");
+		assert_eq!(d.edited.wallpaper_raw, hand("/a.png"));
+		assert!(
+			d.edited.wallpaper_folder_raw.is_automatic(),
 			"the folder is untouched"
 		);
 		d.edited.wallpaper_rotate_enabled = true;
@@ -10155,10 +10519,10 @@ mod tests {
 			"a named image shows either way"
 		);
 
-		d.edited.wallpaper_folder_raw = pics.to_string();
+		d.edited.wallpaper_folder_raw = hand(pics);
 		d.revert(Key::BgImage);
-		assert!(d.edited.wallpaper_raw.is_empty());
-		assert_eq!(d.edited.wallpaper_folder_raw, token);
+		assert!(d.edited.wallpaper_raw.is_automatic());
+		assert!(d.edited.wallpaper_folder_raw.is_automatic());
 		assert_eq!(d.get_text(Key::BgImage), token);
 		assert!(d.is_default(Key::BgImage));
 
@@ -10166,15 +10530,15 @@ mod tests {
 		// the image, though an empty box with Rotate on would be the folder
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		d.tab = d.specs[i].tab;
-		d.edited.wallpaper_raw = "/a.png".to_string();
+		d.edited.wallpaper_raw = hand("/a.png");
 		d.focus = Some(super::Focus::Row(i, 0));
 		d.set_mods(false, false, false);
 		d.key_space();
 		d.select_all();
 		d.delete_selection();
 		d.insert_str("/b.png");
-		assert_eq!(d.edited.wallpaper_raw, "/b.png");
-		assert_eq!(d.edited.wallpaper_folder_raw, token);
+		assert_eq!(d.edited.wallpaper_raw, hand("/b.png"));
+		assert!(d.edited.wallpaper_folder_raw.is_automatic());
 	}
 
 	// open the Background image text field for editing, focused, with a value
@@ -10183,7 +10547,7 @@ mod tests {
 		let mut d = mk_dialog(4000.0);
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		d.tab = d.specs[i].tab;
-		d.edited.wallpaper_raw = value.to_string();
+		d.edited.wallpaper_raw = hand(value);
 		d.focus = Some(Focus::Row(i, 0));
 		d.set_mods(false, false, false);
 		d.key_space(); // opens with the value fully selected
@@ -10208,7 +10572,7 @@ mod tests {
 		assert_eq!(d.selected_text().as_deref(), Some("old.png"));
 		d.char_input('n');
 		assert_eq!(d.edit.as_ref().unwrap().buf, "n");
-		assert_eq!(d.edited.wallpaper_raw, "n"); // live reparse
+		assert_eq!(d.edited.wallpaper_raw, hand("n")); // live reparse
 		// plain arrows collapse; shift+arrows extend a fresh selection
 		d.char_input('e');
 		d.char_input('w');
@@ -10316,9 +10680,9 @@ mod tests {
 		assert_eq!(d.selected_text().as_deref(), Some("keep me"));
 		d.delete_selection(); // the "cut" half (clipboard handled a level up)
 		assert_eq!(d.edit.as_ref().unwrap().buf, "");
-		assert_eq!(d.edited.wallpaper_raw, "");
+		assert_eq!(d.edited.wallpaper_raw, hand(""));
 		d.insert_str("pasted.png");
-		assert_eq!(d.edited.wallpaper_raw, "pasted.png");
+		assert_eq!(d.edited.wallpaper_raw, hand("pasted.png"));
 		// pasting over a selection replaces it
 		d.select_all();
 		d.insert_str("x");
@@ -10848,7 +11212,10 @@ mod tests {
 		let (mut d, i, _) = mk_long_text_edit('y');
 		let want = d.edit.as_ref().unwrap().buf.clone();
 		d.edit = None;
-		let f = d.textbox(i);
+		// The x that puts an automatic setting back sits at the box's right end
+		// since File or folder became one (2026100910295903), so the click
+		// lands just short of it.
+		let f = d.text_room(i, d.textbox(i));
 		click(
 			&mut d,
 			f.x + f.w - lay().field_pad - 2.0,
@@ -10867,7 +11234,7 @@ mod tests {
 		let mut d = mk_dialog(2000.0);
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		d.tab = d.specs[i].tab;
-		d.edited.wallpaper_raw = "old.png".to_string();
+		d.edited.wallpaper_raw = hand("old.png");
 		d.focus = None;
 		for _ in 0..200 {
 			d.key_tab();
@@ -10878,7 +11245,7 @@ mod tests {
 		assert_eq!(d.focus, Some(Focus::Row(i, 0)), "never reached the row");
 		assert_eq!(d.selected_text().as_deref(), Some("old.png"));
 		d.char_input('n');
-		assert_eq!(d.edited.wallpaper_raw, "n");
+		assert_eq!(d.edited.wallpaper_raw, hand("n"));
 		// and walking off closes it again
 		d.key_tab();
 		assert!(d.edit.as_ref().is_none_or(|e| e.row != i));
@@ -10967,7 +11334,7 @@ mod tests {
 		d.char_input('n');
 		assert_eq!(d.key_enter(), Action::Ok);
 		assert!(d.edit.is_none());
-		assert_eq!(d.edited.wallpaper_raw, "n");
+		assert_eq!(d.edited.wallpaper_raw, hand("n"));
 
 		// same from a hex field, and from a shells-grid field
 		let mut d = mk_dialog(2000.0);
@@ -11947,6 +12314,8 @@ mod tests {
 			);
 			let bx = d.checkbox(i);
 			let cy = mark.y + mark.h / 2.0;
+			// at its default, so the tip has no value lines (G6)
+			d.revert(key);
 			for x in [d.label_x(i) + 2.0, mark.x + mark.w / 2.0, bx.x + bx.w / 2.0] {
 				assert_eq!(
 					d.hover_tip_dip(x, cy).map(|(tip, _)| tip_text(tip)),

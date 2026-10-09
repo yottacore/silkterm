@@ -141,7 +141,9 @@ fn requested_color(index: usize) -> Option<alacritty_terminal::vte::ansi::Rgb> {
 		Ok(i) => crate::palette::default_indexed(i, &s),
 		Err(_) => match index {
 			i if i == NamedColor::Foreground as usize => s.fg,
-			i if i == NamedColor::Background as usize => s.bg,
+			i if i == NamedColor::Background as usize => {
+				crate::config::auto::color(&s, crate::config::auto::Setting::Background)
+			}
 			i if i == NamedColor::Cursor as usize => s.cursor,
 			_ => return None,
 		},
@@ -1696,7 +1698,10 @@ mod tests {
 		let s = crate::config::settings();
 		for (index, want) in [
 			(NamedColor::Foreground as usize, s.fg),
-			(NamedColor::Background as usize, s.bg),
+			(
+				NamedColor::Background as usize,
+				crate::config::auto::color(&s, crate::config::auto::Setting::Background),
+			),
 			(NamedColor::Cursor as usize, s.cursor),
 		] {
 			let got = requested_color(index).expect("a named slot answers");

@@ -928,7 +928,11 @@ impl DialogWin {
 		let cfg = config::settings();
 		self.text.set_text_blend(
 			&self.gfx.queue,
-			crate::text::text_blend(cfg.dialog_fg, cfg.dialog_bg, cfg.text_dark_on_light),
+			crate::text::text_blend(
+				crate::config::auto::color(&cfg, crate::config::auto::Setting::DialogForeground),
+				crate::config::auto::color(&cfg, crate::config::auto::Setting::DialogBackground),
+				cfg.text_dark_on_light,
+			),
 		);
 
 		let areas = text_areas(&scene.texts, &self.shaped.bufs, (w, h));

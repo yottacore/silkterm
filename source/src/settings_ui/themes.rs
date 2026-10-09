@@ -82,6 +82,7 @@ impl SettingsDialog {
 	/// write ten active colors.* lines pinning this one palette, which then wins over
 	/// every later theme change and freezes one variant under `theme_mode: system`.
 	pub(super) fn adopt_theme(&mut self) {
+		config::retheme(&mut self.edited);
 		let pal = self.theme_palette();
 		for i in 0..crate::theme::PALETTE_KEYS.len() {
 			// default_col resolves through theme_palette, so this ends on pal.get(i)
@@ -136,6 +137,7 @@ impl SettingsDialog {
 			None => self.edited.user_themes.push(theme),
 		}
 		self.edited.theme = name;
+		config::retheme(&mut self.edited);
 		// the tweaks are the theme's own colors now, so the per-color overrides
 		// have nothing left to say and are commented back out on Apply
 		for i in 0..crate::theme::PALETTE_KEYS.len() {
@@ -243,6 +245,7 @@ impl SettingsDialog {
 		if let Some(theme_index) = self.user_theme_index() {
 			self.edited.user_themes[theme_index].name.clone_from(&name);
 			self.edited.theme = name;
+			config::retheme(&mut self.edited);
 		}
 	}
 
