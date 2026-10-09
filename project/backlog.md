@@ -591,19 +591,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Before RC1.
 		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
 
-- The markdown tables check fails on the automatic settings design doc
-	- ID: 2026100908133033
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261009-081330
-	- Target OS: All
-	- Steps to reproduce:
-		- Run `cicd/tests/tables/run.py` on dev at f56bcfc.
-	- Incorrect behavior: It fails on both tables in `design_docs/20261008-180516_automatic_settings.md`, whose columns are not padded the canonical way. The pipeline's lint stage stops there.
-	- Expected behavior: The check passes. `run.py --fix` rewrites the two tables.
-	- Related IDs: 2026100907341818
-
 - The scroll record timing test fails now and then when the box is busy
 	- ID: 2026100714145220
 	- Type: Bug
@@ -3273,6 +3260,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- The markdown tables check fails on the automatic settings design doc
+	- ID: 2026100908133033
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261009-081330
+	- Target OS: All
+	- Steps to reproduce:
+		- Run `cicd/tests/tables/run.py` on dev at f56bcfc.
+	- Incorrect behavior: It fails on both tables in `design_docs/20261008-180516_automatic_settings.md`, whose columns are not padded the canonical way. The pipeline's lint stage stops there.
+	- Expected behavior: The check passes. `run.py --fix` rewrites the two tables.
+	- Related IDs: 2026100907341818
+	- Actual cause: The doc was committed as written, and its two tables were laid out by hand.
+	- Actual fix: `run.py --fix` padded both tables. Only spacing and dashes changed, no text.
+	- Branch: tblfix
+	- Test case: `cicd/tests/tables/run.py` itself, which failed on dev at d1f1be6 and passes after.
+	- Acceptance signoff: Self-closed: mechanical.
+	- Closed: 20261009-083420
 
 - The focus outline on the font pair row is shorter than its text
 	- ID: 2026100817355494
