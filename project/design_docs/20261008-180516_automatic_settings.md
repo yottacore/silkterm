@@ -104,7 +104,7 @@ This is how CSS `auto`, the "Automatic" entries in macOS and Windows settings, a
 ### Words used here
 
 | Word          | Meaning
-| :---          | :---
+| :------------ | :--------------------------------------------------------------------------------------------------------------------
 | Auto setting  | A setting that can be automatic.
 | Rule          | How the program works out an auto setting's value: a preset, a computation, or a plain fixed value.
 | Automatic     | The state of an auto setting with nothing stored. It uses its rule.
@@ -148,14 +148,14 @@ Nothing reads an auto setting's stored value directly, outside this function. A 
 
 ### Changing a setting
 
-| What happens                       | Each member stores               | Group control then shows
-| :---                               | :---                             | :---
-| One member is changed              | that one stores its new value    | off, mixed, or Custom
-| One member is put back to automatic| that one stores nothing          | on, mixed, or a preset if all match
-| Switch turned on                   | nothing                          | on
-| Mixed switch clicked               | nothing                          | on
-| Switch turned off                  | the value it shows right now     | off
-| A preset picked                    | that preset's value              | the preset
+| What happens                        | Each member stores            | Group control then shows
+| :---------------------------------- | :---------------------------- | :----------------------------------
+| One member is changed               | that one stores its new value | off, mixed, or Custom
+| One member is put back to automatic | that one stores nothing       | on, mixed, or a preset if all match
+| Switch turned on                    | nothing                       | on
+| Mixed switch clicked                | nothing                       | on
+| Switch turned off                   | the value it shows right now  | off
+| A preset picked                     | that preset's value           | the preset
 
 A mixed switch goes to automatic on a click, since that is the state a person reaching for an "Automatic" switch wants, and the other way is one more click.
 
