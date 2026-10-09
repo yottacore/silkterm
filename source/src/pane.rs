@@ -382,7 +382,9 @@ fn strip_cell(
 	StripCell {
 		c: cell.c,
 		fg,
-		bg: (cell_bg != settings.bg).then_some(cell_bg),
+		bg: (cell_bg
+			!= crate::config::auto::color(settings, crate::config::auto::Setting::Background))
+		.then_some(cell_bg),
 		bold: flags.contains(Flags::BOLD)
 			|| (settings.embolden_inverse && flags.contains(Flags::INVERSE)),
 		italic: flags.contains(Flags::ITALIC),
@@ -2185,6 +2187,8 @@ impl Pane {
 			};
 		}
 
+		// the terminal's own background, which a cell left at it does not repaint
+		let paper = crate::config::auto::color(&settings, crate::config::auto::Setting::Background);
 		for screen_row in -1..(lines as i32) {
 			let grid_line = band_row_line(screen_row, display_offset, split_row, ob);
 			// off the top/bottom of real content: blank row (still emitted, so the
@@ -2233,7 +2237,7 @@ impl Pane {
 
 				let bg_color = if selected {
 					Some(config::SELECTION_BG)
-				} else if cell_bg != settings.bg {
+				} else if cell_bg != paper {
 					Some(cell_bg)
 				} else {
 					None
@@ -2993,7 +2997,7 @@ impl Pane {
 		let phase = (self.blink_t / period).fract();
 		let full = cursor_alpha(
 			settings.fg,
-			settings.bg,
+			crate::config::auto::color(&settings, crate::config::auto::Setting::Background),
 			cursor_rgb,
 			settings.min_contrast(),
 		);

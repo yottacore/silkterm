@@ -176,6 +176,11 @@ fn this_host() -> Host {
 	}
 }
 
+/// The program a link goes to when no open command is set.
+pub fn desktop_opener() -> &'static str {
+	opener_argv(this_host(), "").0
+}
+
 // The program that hands a URL to the desktop, and the URL as one plain argument.
 //
 // Windows deliberately does not go through `cmd /C start`. cmd's parser sees the

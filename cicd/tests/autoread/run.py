@@ -12,7 +12,7 @@
 ##	Exit: 0 no direct read, 1 one or more, 2 the auto module was not found.
 ##	Test ID: EsDxeGy
 
-##	Copyright © 2026 Bubbles
+##	Copyright (c) 2026 Bubbles
 ##	Licensed under The MIT License (MIT). Full text at:
 ##		https://mit-license.org/
 ##	SPDX-License-Identifier: MIT
@@ -86,3 +86,6 @@ def main() -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
+
+##	History:
+##		- 20261009: Created.

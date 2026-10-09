@@ -178,12 +178,9 @@ impl State {
 			if let Some(rot) = &loaded.rotation {
 				self.wp_count = rot.count;
 				self.wp_current = Some(rot.current.clone());
-				// live-only, like a --wallpaper-file: the dialog shows what is on
-				// screen, and nothing about the pick reaches config.shcl
-				set_live(|live| {
-					live.wallpaper_raw = rot.current.to_string_lossy().into_owned();
-					live.wallpaper = Some(rot.current.clone());
-				});
+				// live-only: nothing about the pick reaches config.shcl, and the
+				// image setting stays automatic, since the folder chose it
+				set_live(|live| live.wallpaper = Some(rot.current.clone()));
 				let ivl = config::settings().wallpaper_rotate_interval_s;
 				self.wp_next = (ivl > 0.0 && rot.count > 1)
 					.then(|| Instant::now() + Duration::from_secs_f32(ivl));

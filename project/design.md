@@ -198,7 +198,7 @@ Every measurement in the interface is written once in DIP, a ninety-sixth of an 
 
 A pop-out window with eight tabs, declared in the compiled-in `settings_ui.shcl`, drawn by SilkTerm and driven fully from the keyboard. Groups, sub-groups, the color picker, Apply and OK, and display scaling are all in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
-A setting the program can work out for itself is stored as a value set by hand or as no line at all, and no line means automatic. One table in config.rs lists them with their rules, one function reads them, and a switch over a group of them is read off the group rather than stored. The design is in [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md). The font family and size and the window size are the ones moved so far.
+A setting the program can work out for itself is stored as a value set by hand or as no line at all, and no line means automatic. One table in config.rs lists them with their rules, one function reads them, and a switch over a group of them is read off the group rather than stored. The design is in [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md). The font family and size, the window size, the theme colors, the link open command and the wallpaper's image and folder are the ones moved so far.
 
 ### The shell list and how it is filled
 

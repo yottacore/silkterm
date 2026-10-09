@@ -42,10 +42,15 @@ impl SettingsDialog {
 	pub(super) fn pick_open(&mut self, i: usize) {
 		self.commit_edit();
 		self.open = None;
-		let start = self.get_col(self.specs[i].key);
+		let key = self.specs[i].key;
+		let start = self.get_col(key);
+		let start_automatic = self
+			.auto_of(key)
+			.is_some_and(|setting| config::auto::automatic(&self.edited, setting));
 		self.pick = Some(Picker {
 			row: i,
 			start,
+			start_automatic,
 			hsv: pick::from_rgb(
 				start,
 				pick::Hsv {
@@ -64,8 +69,11 @@ impl SettingsDialog {
 	/// change ever reached.
 	pub(super) fn pick_cancel(&mut self) {
 		if let Some(picker) = self.pick.take() {
-			let key = self.specs[picker.row].key;
-			self.set_col(key, picker.start);
+			if picker.start_automatic {
+				self.back_to_automatic(picker.row);
+			} else {
+				self.set_col(self.specs[picker.row].key, picker.start);
+			}
 		}
 		self.pick_drop_edit();
 	}

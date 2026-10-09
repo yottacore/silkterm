@@ -196,6 +196,8 @@ pub struct Picker {
 	pub row: usize,
 	/// What that row held when it opened, so Cancel has something to put back.
 	pub start: [u8; 3],
+	/// And whether that was automatic, which Cancel puts back too.
+	pub start_automatic: bool,
 	pub hsv: Hsv,
 	pub focus: Focus,
 	pub drag: Option<Grab>,

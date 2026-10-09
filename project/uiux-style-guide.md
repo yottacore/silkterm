@@ -149,6 +149,8 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 	- A value typed, dragged or stepped to is set by hand. The mark turns into an x that puts it back to automatic, and emptying the box does the same. So does the revert control, since the default is automatic.
 	- A switch over a group of them is read off the group and holds nothing. It is on while all are automatic, off while none is, and shows a dash while some are. A click on it from a dash makes all of them automatic, and turning it off keeps what each one shows. It has no revert control, since each member has its own. "Remember last size" over Columns and Rows is one.
 	- A switch over one setting is pointless, so that setting takes the mark itself. Family and Size on the Text tab follow the desktop's font that way.
+	- The theme colors follow the theme the same way, Open command the desktop's opener, and File or folder the usual folder or the built-in picture. A color's mark sits in its hex box, beside the chip that opens the picker. Picking a theme puts every color back to automatic under it.
+	- File or folder edits whichever of the two its box shows, and its x puts back only that one. Its revert control puts back both.
 
 - A row that may not work on every desktop has a warning mark after its label: a small triangle in the label's color, never red. What the row depends on goes at the end of the row's flyover, which shows over the mark like the rest of the row.
 	- A row that keeps a window from giving its graphics memory back gets one too, as Transparency does on Windows. So does "Free resources when idle", since some graphics drivers have trouble with it.
@@ -197,6 +199,8 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 - A row's tip shows wherever the pointer rests on that row: its label, a warning mark, each option's label and every part of its control. The revert control is the one part with a tip of its own. A pair, such as Visibility's Scrim and Outline on the Cursor tab, is two settings, so each half answers for its own. A packed line of toggles is separate settings too, and each keeps its own tip.
 
 - An automatic setting's tip ends, after a blank line, with one line on its state: `Automatic. Change it to set your own value.` or `Set by hand. Automatic would be: 17.` The x that puts it back says `Back to automatic`.
+
+- Any other row that holds a value ends its tip with `Current value: ...` and `Default value: ...` on 2 lines, after a blank line where text comes before them, but only while the two differ. They are written the way the row writes them: the number in its box, On or Off, the option's own words, a color's hex. An automatic setting gets neither, since its state line already says what automatic would be.
 
 - Only controls whose label does not already say what they do get a tip. The test is the tip itself: if it restates the label in other words, delete it and fix the label. A dialog of rendering settings will legitimately need one on most of its rows, because a name cannot say what a falloff curve or an easing time does to the picture.
 
@@ -345,9 +349,5 @@ Things the built interface does differently from the rules above. Each is a smal
 - Foreground and Cursor on the Themes tab still gray out while "Text colors from wallpaper" is on. It is the last switch over rows it gives values of its own, and it has not moved to automatic values yet.
 
 - The performance profile still lays its values over the rows it sets, rather than being a presets dropdown read off them as the automatic settings design has it.
-
-- The theme colors, Open command and File or folder show no automatic mark yet, though each one's empty or theme value is automatic in all but name.
-
-- A tip does not yet end with `Current value:` and `Default value:` where the two differ, as the automatic settings design asks of every input control.
 
 - The Keys tab makes nine. No other tab's subject takes in the hotkeys. The nine tabs are now the widest thing in the dialog, so they set the panel's width on every tab.

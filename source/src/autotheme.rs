@@ -328,7 +328,8 @@ pub struct Derived {
 /// wallpaper gives the same answer on any box and a test needs no pixels.
 pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	let floor = settings.min_contrast().clamp(0.0, 1.0);
-	let (bg, fg, cursor) = (settings.bg, settings.fg, settings.cursor);
+	let bg = crate::config::auto::color(settings, crate::config::auto::Setting::Background);
+	let (fg, cursor) = (settings.fg, settings.cursor);
 	let mix = crate::visibility::wallpaper_mix(settings, sum.opacity, Some(sum.picture()));
 	let hi = gray_lightness(field_luma(sum, sum.luma_hi, bg, mix));
 	let lo = gray_lightness(field_luma(sum, sum.luma_lo, bg, mix));
@@ -437,7 +438,7 @@ mod tests {
 
 	fn settings(bg: [u8; 3], fg: [u8; 3], cursor: [u8; 3]) -> Settings {
 		Settings {
-			bg,
+			bg: crate::config::auto::Auto::by_hand(bg),
 			fg,
 			cursor,
 			colors_from_wallpaper: true,

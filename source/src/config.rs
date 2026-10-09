@@ -258,7 +258,7 @@ pub const MENU_LINK: [u8; 3] = [0x6c, 0x9c, 0xff]; // clickable URL
 /// separator are derived shades of the bg, so a custom menu color stays coherent
 /// in either a dark or a light direction.
 pub fn menu_fg() -> [u8; 3] {
-	settings().menu_fg
+	auto::color(&settings(), auto::Setting::MenuForeground)
 }
 pub(crate) fn menu_hover_of(menu_bg: [u8; 3]) -> [u8; 3] {
 	shade(menu_bg, 22)
@@ -542,15 +542,15 @@ pub struct Settings {
 	pub transparent_background_blur: bool, // X11: ask a KWin/picom compositor to blur the desktop behind the window
 	pub wallpaper_enabled: bool,           // master switch: false = no wallpaper at all
 	pub wallpaper: Option<PathBuf>,        // resolved path, or None
-	pub wallpaper_raw: String, // the value as configured ("" = auto-detect); what the dialog shows
-	pub wallpaper_fallback_builtin: bool, // no image/folder configured: show the built-in one
-	pub wallpaper_rotate_enabled: bool, // master switch for folder rotation
+	pub wallpaper_raw: auto::Auto<String>, // the image as configured; automatic is the one found by convention, else the built-in
+	pub wallpaper_fallback_builtin: bool,  // no image/folder configured: show the built-in one
+	pub wallpaper_rotate_enabled: bool,    // master switch for folder rotation
 	pub wallpaper_folder: Option<PathBuf>, // rotate the wallpaper through this folder's images (overrides wallpaper)
-	pub wallpaper_folder_raw: String, // the folder as configured; WALLPAPER_DIR_TOKEN is the usual place
-	pub wallpaper_folder_auto: bool,  // the folder above was found by convention, not configured
+	pub wallpaper_folder_raw: auto::Auto<String>, // the folder as configured; automatic is the usual place
+	pub wallpaper_folder_auto: bool, // the folder above was found by convention, not configured
 	pub wallpaper_rotate_random: bool, // rotate randomly instead of in filename order
 	pub wallpaper_rotate_interval_s: f32, // seconds between rotations (0 = pick one at startup only)
-	pub wallpaper_opacity: f32,       // image visibility 0..1
+	pub wallpaper_opacity: f32,      // image visibility 0..1
 	pub wallpaper_even: f32, // hold every picture to the same visibility whatever its own brightness, 0..1
 	pub wallpaper_default_fit: Fit, // used unless the image's own tags say otherwise
 	pub wallpaper_honor_xmp: bool, // let a wallpaper's own Fit/Anchor tags win
@@ -613,8 +613,8 @@ pub struct Settings {
 	pub shell_integration: bool,    // put the directory-reporting block in PowerShell profiles
 	pub bash_prompt: bool,          // give bash panes the x9ps1-git prompt (see integration.rs)
 	pub hyperlinks: bool,           // underline URLs in output on hover; Ctrl+click opens them
-	pub hyperlink_open_command: String, // opener for a clicked link (empty = the desktop's own)
-	pub bg: [u8; 3],
+	pub hyperlink_open_command: auto::Auto<String>, // opener for a clicked link; automatic is the desktop's own
+	pub bg: auto::Auto<[u8; 3]>,
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],
 	/// Take `fg` and `cursor` from the wallpaper instead (autotheme.rs). While it
@@ -624,21 +624,24 @@ pub struct Settings {
 
 	// Two attention colors (see theme.rs): `highlight` marks several things at
 	// once, `focus` marks only what the keyboard is on.
-	pub highlight: [u8; 3],
-	pub focus: [u8; 3],
+	pub highlight: auto::Auto<[u8; 3]>,
+	pub focus: auto::Auto<[u8; 3]>,
 
-	// chrome colors (menu bar / dropdowns, and pop-out dialogs), from the theme
-	// palette; colors.menu_*/colors.dialog_* keys override
-	pub menu_bg: [u8; 3],
-	pub menu_fg: [u8; 3],
-	pub dialog_bg: [u8; 3],
-	pub dialog_fg: [u8; 3],
-	pub gutter: [u8; 3], // chrome areas holding no control (the dialog's tab strip)
+	// chrome colors (menu bar / dropdowns, and pop-out dialogs); automatic is
+	// the theme palette's
+	pub menu_bg: auto::Auto<[u8; 3]>,
+	pub menu_fg: auto::Auto<[u8; 3]>,
+	pub dialog_bg: auto::Auto<[u8; 3]>,
+	pub dialog_fg: auto::Auto<[u8; 3]>,
+	pub gutter: auto::Auto<[u8; 3]>, // chrome areas holding no control (the dialog's tab strip)
 
-	// scrollbar, neutral in every theme (see `SCROLLBAR_THUMB_DEF`); the
-	// colors.scrollbar_* keys override
-	pub scrollbar_thumb: [u8; 3],
-	pub scrollbar_trough: [u8; 3],
+	// scrollbar; automatic is the same neutral in every theme (`SCROLLBAR_THUMB_DEF`)
+	pub scrollbar_thumb: auto::Auto<[u8; 3]>,
+	pub scrollbar_trough: auto::Auto<[u8; 3]>,
+	/// The theme's own colors for `theme`, `theme_mode` and the desktop's dark
+	/// bit, which the automatic colors read. Never in the file; `retheme` is its one
+	/// writer, so it cannot drift from the three it comes from.
+	pub theme_palette: crate::theme::Palette,
 	pub ansi: [[u8; 3]; 16], // 16-color ANSI palette, resolved from the active theme
 	pub theme: String,       // active theme name (see theme.rs)
 	pub theme_mode: crate::theme::Mode,
@@ -709,7 +712,11 @@ impl Settings {
 	/// The contrast floor text is held to, `text_min_contrast` in a dark theme and
 	/// a little more in a light one (`min_contrast_for`).
 	pub fn min_contrast(&self) -> f32 {
-		min_contrast_for(self.fg, self.bg, self.text_min_contrast)
+		min_contrast_for(
+			self.fg,
+			auto::color(self, auto::Setting::Background),
+			self.text_min_contrast,
+		)
 	}
 
 	/// The rotation folder, or None when either master switch is off. Both callers
@@ -760,11 +767,11 @@ impl Default for Settings {
 			transparent_background_blur: false,
 			wallpaper: None,
 			wallpaper_enabled: true,
-			wallpaper_raw: String::new(),
+			wallpaper_raw: auto::Auto::automatic(),
 			wallpaper_fallback_builtin: true,
 			wallpaper_rotate_enabled: true,
 			wallpaper_folder: None,
-			wallpaper_folder_raw: WALLPAPER_DIR_TOKEN.to_string(),
+			wallpaper_folder_raw: auto::Auto::automatic(),
 			wallpaper_folder_auto: false,
 			wallpaper_rotate_random: true,
 			wallpaper_rotate_interval_s: 0.0,
@@ -837,20 +844,21 @@ impl Default for Settings {
 			shell_integration: true,
 			bash_prompt: false,
 			hyperlinks: true,
-			hyperlink_open_command: String::new(),
-			bg: [0x00, 0x00, 0x00],
+			hyperlink_open_command: auto::Auto::automatic(),
+			bg: auto::Auto::automatic(),
 			fg: [0x88, 0xee, 0xcc],
 			cursor: [0x8a, 0x3f, 0xa4],
 			colors_from_wallpaper: true,
-			highlight: [0xc8, 0xa0, 0x5a],
-			focus: [0x40, 0x86, 0xff],
-			menu_bg: crate::theme::MENU_BG_DEF,
-			menu_fg: crate::theme::MENU_FG_DEF,
-			dialog_bg: [0x20, 0x20, 0x2a],
-			dialog_fg: [0xe2, 0xe2, 0xea],
-			gutter: [0x16, 0x16, 0x1e],
-			scrollbar_thumb: SCROLLBAR_THUMB_DEF,
-			scrollbar_trough: SCROLLBAR_TROUGH_DEF,
+			highlight: auto::Auto::automatic(),
+			focus: auto::Auto::automatic(),
+			menu_bg: auto::Auto::automatic(),
+			menu_fg: auto::Auto::automatic(),
+			dialog_bg: auto::Auto::automatic(),
+			dialog_fg: auto::Auto::automatic(),
+			gutter: auto::Auto::automatic(),
+			scrollbar_thumb: auto::Auto::automatic(),
+			scrollbar_trough: auto::Auto::automatic(),
+			theme_palette: crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true),
 			ansi: crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true).ansi,
 			theme: "SilkTerm".to_string(),
 			theme_mode: crate::theme::Mode::Dark,
@@ -908,6 +916,43 @@ pub mod auto {
 		FontSize,
 		Columns,
 		Rows,
+		Background,
+		Highlight,
+		Focus,
+		MenuBackground,
+		MenuForeground,
+		DialogBackground,
+		DialogForeground,
+		Gutter,
+		ScrollbarThumb,
+		ScrollbarTrough,
+		OpenCommand,
+		WallpaperImage,
+		WallpaperFolder,
+	}
+
+	impl Setting {
+		/// Every one, in the table's order.
+		#[cfg(test)]
+		pub const ALL: [Self; 17] = [
+			Self::FontFamily,
+			Self::FontSize,
+			Self::Columns,
+			Self::Rows,
+			Self::Background,
+			Self::Highlight,
+			Self::Focus,
+			Self::MenuBackground,
+			Self::MenuForeground,
+			Self::DialogBackground,
+			Self::DialogForeground,
+			Self::Gutter,
+			Self::ScrollbarThumb,
+			Self::ScrollbarTrough,
+			Self::OpenCommand,
+			Self::WallpaperImage,
+			Self::WallpaperFolder,
+		];
 	}
 
 	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -927,6 +972,7 @@ pub mod auto {
 		Text(String),
 		Number(f32),
 		Count(usize),
+		Color([u8; 3]),
 	}
 
 	impl std::fmt::Display for Value {
@@ -935,6 +981,7 @@ pub mod auto {
 				Self::Text(text) => f.write_str(text),
 				Self::Number(n) => write!(f, "{}", (n * 100.0).round() / 100.0),
 				Self::Count(n) => write!(f, "{n}"),
+				Self::Color(rgb) => f.write_str(&super::format_hex(*rgb)),
 			}
 		}
 	}
@@ -990,7 +1037,103 @@ pub mod auto {
 			group: Some(Group::WindowSize),
 			rule: |settings, at| Value::Count(super::remembered_window(settings, at.monitor).rows),
 		},
+		// the theme's own, and for the scrollbar the one neutral every theme shares
+		Row {
+			setting: Setting::Background,
+			path: "colors.background",
+			group: None,
+			rule: |settings, _| Value::Color(settings.theme_palette.bg),
+		},
+		Row {
+			setting: Setting::Highlight,
+			path: "colors.highlight",
+			group: None,
+			rule: |settings, _| Value::Color(settings.theme_palette.highlight),
+		},
+		Row {
+			setting: Setting::Focus,
+			path: "colors.focus",
+			group: None,
+			rule: |settings, _| Value::Color(settings.theme_palette.focus),
+		},
+		Row {
+			setting: Setting::MenuBackground,
+			path: "colors.menu_background",
+			group: None,
+			rule: |settings, _| Value::Color(settings.theme_palette.menu_bg),
+		},
+		Row {
+			setting: Setting::MenuForeground,
+			path: "colors.menu_foreground",
+			group: None,
+			rule: |settings, _| Value::Color(settings.theme_palette.menu_fg),
+		},
+		Row {
+			setting: Setting::DialogBackground,
+			path: "colors.dialog_background",
+			group: None,
+			rule: |settings, _| Value::Color(settings.theme_palette.dialog_bg),
+		},
+		Row {
+			setting: Setting::DialogForeground,
+			path: "colors.dialog_foreground",
+			group: None,
+			rule: |settings, _| Value::Color(settings.theme_palette.dialog_fg),
+		},
+		Row {
+			setting: Setting::Gutter,
+			path: "colors.gutter",
+			group: None,
+			rule: |settings, _| Value::Color(settings.theme_palette.gutter),
+		},
+		Row {
+			setting: Setting::ScrollbarThumb,
+			path: "colors.scrollbar_thumb",
+			group: None,
+			rule: |_, _| Value::Color(super::SCROLLBAR_THUMB_DEF),
+		},
+		Row {
+			setting: Setting::ScrollbarTrough,
+			path: "colors.scrollbar_trough",
+			group: None,
+			rule: |_, _| Value::Color(super::SCROLLBAR_TROUGH_DEF),
+		},
+		// the program the desktop opens a link with
+		Row {
+			setting: Setting::OpenCommand,
+			path: "hyperlinks.open_command",
+			group: None,
+			rule: |_, _| Value::Text(crate::links::desktop_opener().to_string()),
+		},
+		// a picture found by convention, else the built-in one
+		Row {
+			setting: Setting::WallpaperImage,
+			path: "wallpaper.image",
+			group: None,
+			rule: |settings, _| {
+				Value::Text(super::resolve_wallpaper(None).map_or_else(
+					|| {
+						if settings.wallpaper_fallback_builtin {
+							BUILT_IN_PICTURE.to_string()
+						} else {
+							String::new()
+						}
+					},
+					|path| path.to_string_lossy().into_owned(),
+				))
+			},
+		},
+		// the usual place, looked up rather than expanded (`rotation_folder_for`)
+		Row {
+			setting: Setting::WallpaperFolder,
+			path: "wallpaper.rotate.folder",
+			group: None,
+			rule: |_, _| Value::Text(super::WALLPAPER_DIR_TOKEN.to_string()),
+		},
 	];
+
+	/// What an automatic image shows when there is no picture to find.
+	pub const BUILT_IN_PICTURE: &str = "(built-in picture)";
 
 	#[derive(Debug)]
 	pub struct GroupRow {
@@ -1007,10 +1150,8 @@ pub mod auto {
 	}];
 
 	pub fn row(setting: Setting) -> &'static Row {
-		TABLE
-			.iter()
-			.find(|row| row.setting == setting)
-			.unwrap_or(&TABLE[0])
+		// in the enum's order, which a test holds it to: a color is read per cell
+		&TABLE[setting as usize]
 	}
 
 	pub fn by_path(path: &str) -> Option<Setting> {
@@ -1043,11 +1184,69 @@ pub mod auto {
 
 	fn stored(settings: &Settings, setting: Setting) -> Option<Value> {
 		match setting {
-			Setting::FontFamily => settings.font_family.stored().cloned().map(Value::Text),
 			Setting::FontSize => settings.font_size.stored().copied().map(Value::Number),
 			Setting::Columns => settings.columns.stored().copied().map(Value::Count),
 			Setting::Rows => settings.rows.stored().copied().map(Value::Count),
+			_ => match text_of(settings, setting) {
+				Some(text) => text.stored().cloned().map(Value::Text),
+				None => color_of(settings, setting)?
+					.stored()
+					.copied()
+					.map(Value::Color),
+			},
 		}
+	}
+
+	fn color_of(settings: &Settings, setting: Setting) -> Option<&Auto<[u8; 3]>> {
+		Some(match setting {
+			Setting::Background => &settings.bg,
+			Setting::Highlight => &settings.highlight,
+			Setting::Focus => &settings.focus,
+			Setting::MenuBackground => &settings.menu_bg,
+			Setting::MenuForeground => &settings.menu_fg,
+			Setting::DialogBackground => &settings.dialog_bg,
+			Setting::DialogForeground => &settings.dialog_fg,
+			Setting::Gutter => &settings.gutter,
+			Setting::ScrollbarThumb => &settings.scrollbar_thumb,
+			Setting::ScrollbarTrough => &settings.scrollbar_trough,
+			_ => return None,
+		})
+	}
+
+	fn color_mut(settings: &mut Settings, setting: Setting) -> Option<&mut Auto<[u8; 3]>> {
+		Some(match setting {
+			Setting::Background => &mut settings.bg,
+			Setting::Highlight => &mut settings.highlight,
+			Setting::Focus => &mut settings.focus,
+			Setting::MenuBackground => &mut settings.menu_bg,
+			Setting::MenuForeground => &mut settings.menu_fg,
+			Setting::DialogBackground => &mut settings.dialog_bg,
+			Setting::DialogForeground => &mut settings.dialog_fg,
+			Setting::Gutter => &mut settings.gutter,
+			Setting::ScrollbarThumb => &mut settings.scrollbar_thumb,
+			Setting::ScrollbarTrough => &mut settings.scrollbar_trough,
+			_ => return None,
+		})
+	}
+
+	fn text_of(settings: &Settings, setting: Setting) -> Option<&Auto<String>> {
+		Some(match setting {
+			Setting::FontFamily => &settings.font_family,
+			Setting::OpenCommand => &settings.hyperlink_open_command,
+			Setting::WallpaperImage => &settings.wallpaper_raw,
+			Setting::WallpaperFolder => &settings.wallpaper_folder_raw,
+			_ => return None,
+		})
+	}
+
+	fn text_mut(settings: &mut Settings, setting: Setting) -> Option<&mut Auto<String>> {
+		Some(match setting {
+			Setting::FontFamily => &mut settings.font_family,
+			Setting::OpenCommand => &mut settings.hyperlink_open_command,
+			Setting::WallpaperImage => &mut settings.wallpaper_raw,
+			Setting::WallpaperFolder => &mut settings.wallpaper_folder_raw,
+			_ => return None,
+		})
 	}
 
 	/// What the setting uses: the value set by hand, else what its rule gives.
@@ -1057,7 +1256,15 @@ pub mod auto {
 
 	/// True while nothing is stored, so the rule decides.
 	pub fn automatic(settings: &Settings, setting: Setting) -> bool {
-		stored(settings, setting).is_none()
+		match setting {
+			Setting::FontSize => settings.font_size.is_automatic(),
+			Setting::Columns => settings.columns.is_automatic(),
+			Setting::Rows => settings.rows.is_automatic(),
+			_ => text_of(settings, setting).map_or_else(
+				|| color_of(settings, setting).is_none_or(Auto::is_automatic),
+				Auto::is_automatic,
+			),
+		}
 	}
 
 	/// What the setting would use if it were automatic.
@@ -1066,19 +1273,31 @@ pub mod auto {
 	}
 
 	/// Store a value set by hand, or None for automatic. A value of the wrong
-	/// kind for the setting stores nothing.
+	/// kind for the setting stores nothing, and so does empty text.
 	pub fn set(settings: &mut Settings, setting: Setting, value: Option<Value>) {
+		if let Some(color) = color_mut(settings, setting) {
+			*color = match value {
+				Some(Value::Color(rgb)) => Auto::by_hand(rgb),
+				_ => Auto::automatic(),
+			};
+			return;
+		}
+		if let Some(text) = text_mut(settings, setting) {
+			*text = match value {
+				Some(Value::Text(t)) if !t.trim().is_empty() => Auto::by_hand(t),
+				_ => Auto::automatic(),
+			};
+			return;
+		}
 		match (setting, value) {
-			(Setting::FontFamily, Some(Value::Text(text))) => {
-				settings.font_family = Auto::by_hand(text);
-			}
 			(Setting::FontSize, Some(Value::Number(n))) => settings.font_size = Auto::by_hand(n),
 			(Setting::Columns, Some(Value::Count(n))) => settings.columns = Auto::by_hand(n),
 			(Setting::Rows, Some(Value::Count(n))) => settings.rows = Auto::by_hand(n),
-			(Setting::FontFamily, _) => settings.font_family = Auto::automatic(),
 			(Setting::FontSize, _) => settings.font_size = Auto::automatic(),
 			(Setting::Columns, _) => settings.columns = Auto::automatic(),
 			(Setting::Rows, _) => settings.rows = Auto::automatic(),
+			// the colors and the text went above
+			_ => {}
 		}
 	}
 
@@ -1126,6 +1345,23 @@ pub mod auto {
 		number(&value(settings, Setting::FontSize, Place::default()))
 	}
 
+	/// A color setting's value. Cheap enough per cell: the rule reads the
+	/// palette `retheme` keeps.
+	pub fn color(settings: &Settings, setting: Setting) -> [u8; 3] {
+		match value(settings, setting, Place::default()) {
+			Value::Color(rgb) => rgb,
+			_ => [0, 0, 0],
+		}
+	}
+
+	/// A text setting's value.
+	pub fn text(settings: &Settings, setting: Setting) -> String {
+		match value(settings, setting, Place::default()) {
+			Value::Text(text) => text,
+			other => other.to_string(),
+		}
+	}
+
 	/// The grid a window opens at, on `monitor` where one is known.
 	pub fn grid(settings: &Settings, monitor: Option<&str>) -> (usize, usize) {
 		let at = Place { monitor };
@@ -1142,6 +1378,7 @@ pub mod auto {
 			Value::Number(n) => *n,
 			Value::Count(n) => *n as f32,
 			Value::Text(text) => text.trim().parse().unwrap_or(0.0),
+			Value::Color(_) => 0.0,
 		}
 	}
 
@@ -1178,6 +1415,23 @@ pub fn os_dark() -> bool {
 	OS_DARK.load(Ordering::Relaxed)
 }
 
+/// The theme's own colors for `settings`' theme and mode, where System reads
+/// the desktop's dark bit.
+pub fn theme_palette(settings: &Settings) -> crate::theme::Palette {
+	crate::theme::resolve_in(
+		&settings.user_themes,
+		&settings.theme,
+		settings.theme_mode,
+		os_dark(),
+	)
+}
+
+/// Bring `theme_palette` in line with the theme, the mode and the desktop, after
+/// any of them changed. The automatic colors follow from it.
+pub fn retheme(settings: &mut Settings) {
+	settings.theme_palette = theme_palette(settings);
+}
+
 /// On an OS dark/light change (System mode only): recompute the theme palette and
 /// swap it in (no file write). Returns true if anything changed (caller redraws).
 pub fn reapply_for_os(dark: bool) -> bool {
@@ -1203,16 +1457,10 @@ pub fn reapply_for_os(dark: bool) -> bool {
 		}
 	};
 	let mut new = (*current).clone();
-	follow(&mut new.bg, was.bg, pal.bg);
 	follow(&mut new.fg, was.fg, pal.fg);
 	follow(&mut new.cursor, was.cursor, pal.cursor);
-	follow(&mut new.highlight, was.highlight, pal.highlight);
-	follow(&mut new.focus, was.focus, pal.focus);
-	follow(&mut new.menu_bg, was.menu_bg, pal.menu_bg);
-	follow(&mut new.menu_fg, was.menu_fg, pal.menu_fg);
-	follow(&mut new.dialog_bg, was.dialog_bg, pal.dialog_bg);
-	follow(&mut new.dialog_fg, was.dialog_fg, pal.dialog_fg);
-	follow(&mut new.gutter, was.gutter, pal.gutter);
+	// the automatic colors follow the palette, and ones set by hand stay put
+	retheme(&mut new);
 	new.ansi = pal.ansi;
 	update(new);
 	true
@@ -1559,6 +1807,7 @@ fn parse_pairs(text: &str) -> Vec<(char, char)> {
 /// performance profile goes on here, so what `settings()` answers is what is
 /// drawn, and `persist` takes it back off before anything reaches the file.
 pub fn update(mut new: Settings) {
+	retheme(&mut new);
 	crate::profile::apply(&mut new);
 	// After the profile: one that turns the wallpaper off leaves nothing to
 	// derive from, and the derivation reads `wallpaper_enabled`.
@@ -1595,10 +1844,9 @@ pub fn keep_session(live: &Settings, reloaded: &mut Settings, wallpaper_locked: 
 /// `update` afterwards, so a performance profile that turns the wallpaper off
 /// still wins for either one.
 pub fn name_wallpaper(settings: &mut Settings, image: Option<PathBuf>) {
-	settings.wallpaper_raw = image
-		.as_ref()
-		.map(|path| path.to_string_lossy().into_owned())
-		.unwrap_or_default();
+	settings.wallpaper_raw = image.as_ref().map_or_else(auto::Auto::automatic, |path| {
+		auto::Auto::by_hand(path.to_string_lossy().into_owned())
+	});
 	settings.wallpaper_enabled |= image.is_some();
 	settings.wallpaper = image;
 }
@@ -2528,6 +2776,9 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 			auto::Value::Count(n) if was != Some(auto::Value::Count(n)) => {
 				doc.put_int(row.path, n as i64);
 			}
+			auto::Value::Color(rgb) if was != Some(auto::Value::Color(rgb)) => {
+				doc.put_string(row.path, &format_hex(rgb));
+			}
 			_ => {}
 		}
 	}
@@ -2843,30 +3094,8 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	if edited.hyperlinks != orig.hyperlinks {
 		doc.put_bool("hyperlinks.enabled", edited.hyperlinks);
 	}
-	if edited.hyperlink_open_command != orig.hyperlink_open_command {
-		doc.put_string("hyperlinks.open_command", &edited.hyperlink_open_command);
-	}
 	if edited.keys != orig.keys {
 		write_keys(&mut doc, &orig.keys, &edited.keys);
-	}
-	if edited.wallpaper_folder_raw != orig.wallpaper_folder_raw {
-		let folder = edited.wallpaper_folder_raw.trim();
-		doc.put_string(
-			"wallpaper.rotate.folder",
-			if folder.is_empty() {
-				WALLPAPER_DIR_TOKEN
-			} else {
-				folder
-			},
-		);
-	}
-	if edited.wallpaper != orig.wallpaper || edited.wallpaper_raw != orig.wallpaper_raw {
-		// the file keeps whatever form the user wrote (bare/relative/absolute)
-		if edited.wallpaper_raw.trim().is_empty() {
-			doc.remove("wallpaper.image");
-		} else {
-			doc.put_string("wallpaper.image", edited.wallpaper_raw.trim());
-		}
 	}
 	if edited.wallpaper_fallback_builtin != orig.wallpaper_fallback_builtin {
 		doc.put_bool(
@@ -2883,28 +3112,9 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 			doc.put_string(&format!("colors.{key}"), &format_hex(color));
 		}
 	};
-	set_color("background", edited.bg, orig.bg);
+	// the other theme colors are auto settings, written with the rest above
 	set_color("foreground", edited.fg, orig.fg);
 	set_color("cursor", edited.cursor, orig.cursor);
-	set_color("highlight", edited.highlight, orig.highlight);
-	set_color("focus", edited.focus, orig.focus);
-	set_color("gutter", edited.gutter, orig.gutter);
-	set_color("menu_background", edited.menu_bg, orig.menu_bg);
-	set_color("menu_foreground", edited.menu_fg, orig.menu_fg);
-	set_color("dialog_background", edited.dialog_bg, orig.dialog_bg);
-	set_color("dialog_foreground", edited.dialog_fg, orig.dialog_fg);
-	// the two scrollbar colors have had dialog rows since the bar shipped but
-	// were never written back, so an edit lasted only as long as the session
-	set_color(
-		"scrollbar_thumb",
-		edited.scrollbar_thumb,
-		orig.scrollbar_thumb,
-	);
-	set_color(
-		"scrollbar_trough",
-		edited.scrollbar_trough,
-		orig.scrollbar_trough,
-	);
 
 	let cleared = cleared_keys(orig, edited);
 	let wrote = write_doc(&path, &doc);
@@ -3901,20 +4111,36 @@ fn resolve(raw: RawConfig) -> Settings {
 	let color = |raw: Option<String>, fallback: [u8; 3]| {
 		raw.as_deref().and_then(parse_hex).unwrap_or(fallback)
 	};
+	// a color line that does not parse is no line, so the color is automatic
+	let auto_color = |raw: Option<String>| {
+		raw.as_deref()
+			.and_then(parse_hex)
+			.map_or_else(auto::Auto::automatic, auto::Auto::by_hand)
+	};
+	let auto_text = |raw: Option<String>| {
+		raw.filter(|text| !text.trim().is_empty())
+			.map_or_else(auto::Auto::automatic, auto::Auto::by_hand)
+	};
 	// A pinned wallpaper is a deliberate choice, so it suppresses the auto-detected
 	// rotation folder; without one, a stocked wallpapers/ dir rotates by itself.
 	let pinned_wallpaper = raw
 		.wallpaper
 		.as_deref()
 		.is_some_and(|value| !value.trim().is_empty());
-	let wallpaper_folder_raw = raw
+	let folder_text = raw
 		.wallpaper_folder
 		.as_deref()
 		.map(str::trim)
 		.filter(|value| !value.is_empty())
 		.unwrap_or(WALLPAPER_DIR_TOKEN)
 		.to_string();
-	let (folder, folder_auto) = rotation_folder_for(&wallpaper_folder_raw, pinned_wallpaper);
+	let (folder, folder_auto) = rotation_folder_for(&folder_text, pinned_wallpaper);
+	// the usual place written out is the same as no line
+	let wallpaper_folder_raw = if folder_text == WALLPAPER_DIR_TOKEN {
+		auto::Auto::automatic()
+	} else {
+		auto::Auto::by_hand(folder_text)
+	};
 	let wallpaper_enabled = raw.wallpaper_enabled.unwrap_or(d.wallpaper_enabled);
 	let wallpaper_rotate_enabled = raw
 		.wallpaper_rotate_enabled
@@ -4003,7 +4229,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			.transparent_background_blur
 			.unwrap_or(d.transparent_background_blur),
 		wallpaper_enabled,
-		wallpaper_raw: raw.wallpaper.clone().unwrap_or_default(),
+		wallpaper_raw: auto_text(raw.wallpaper.clone()),
 		wallpaper,
 		wallpaper_fallback_builtin: raw
 			.wallpaper_fallback_builtin
@@ -4163,10 +4389,8 @@ fn resolve(raw: RawConfig) -> Settings {
 		shell_integration: raw.shell_integration.unwrap_or(d.shell_integration),
 		bash_prompt: raw.bash_prompt.unwrap_or(d.bash_prompt),
 		hyperlinks: raw.hyperlinks.unwrap_or(d.hyperlinks),
-		hyperlink_open_command: raw
-			.hyperlink_open_command
-			.unwrap_or(d.hyperlink_open_command),
-		bg: color(raw.colors.background, pal.bg),
+		hyperlink_open_command: auto_text(raw.hyperlink_open_command),
+		bg: auto_color(raw.colors.background),
 		colors_from_wallpaper: raw.colors.from_wallpaper.unwrap_or(d.colors_from_wallpaper),
 		// Session only: the summary arrives with a picture and the shadow holds
 		// the user's own colors while a derived pair is live.
@@ -4174,15 +4398,16 @@ fn resolve(raw: RawConfig) -> Settings {
 		wallpaper_colors: None,
 		fg: color(raw.colors.foreground, pal.fg),
 		cursor: color(raw.colors.cursor, pal.cursor),
-		highlight: color(raw.colors.highlight, pal.highlight),
-		focus: color(raw.colors.focus, pal.focus),
-		menu_bg: color(raw.colors.menu_background, pal.menu_bg),
-		menu_fg: color(raw.colors.menu_foreground, pal.menu_fg),
-		dialog_bg: color(raw.colors.dialog_background, pal.dialog_bg),
-		dialog_fg: color(raw.colors.dialog_foreground, pal.dialog_fg),
-		gutter: color(raw.colors.gutter, pal.gutter),
-		scrollbar_thumb: color(raw.colors.scrollbar_thumb, SCROLLBAR_THUMB_DEF),
-		scrollbar_trough: color(raw.colors.scrollbar_trough, SCROLLBAR_TROUGH_DEF),
+		highlight: auto_color(raw.colors.highlight),
+		focus: auto_color(raw.colors.focus),
+		menu_bg: auto_color(raw.colors.menu_background),
+		menu_fg: auto_color(raw.colors.menu_foreground),
+		dialog_bg: auto_color(raw.colors.dialog_background),
+		dialog_fg: auto_color(raw.colors.dialog_foreground),
+		gutter: auto_color(raw.colors.gutter),
+		scrollbar_thumb: auto_color(raw.colors.scrollbar_thumb),
+		scrollbar_trough: auto_color(raw.colors.scrollbar_trough),
+		theme_palette: pal,
 		ansi: pal.ansi,
 		theme: theme_name,
 		theme_mode,
@@ -4721,6 +4946,17 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	// the size is automatic now, so its commented line is an example, not the
 	// default (2026100907341818)
 	("font.size", "17.0  ## Default"),
+	// the theme colors are automatic too, and follow the theme until set
+	("colors.background", "\"#000000\"  ## Default"),
+	("colors.highlight", "\"#c8a05a\"  ## Default"),
+	("colors.focus", "\"#4086ff\"  ## Default"),
+	("colors.menu_background", "\"#36363b\"  ## Default"),
+	("colors.menu_foreground", "\"#f0f0f2\"  ## Default"),
+	("colors.dialog_background", "\"#20202a\"  ## Default"),
+	("colors.dialog_foreground", "\"#e2e2ea\"  ## Default"),
+	("colors.gutter", "\"#16161e\"  ## Default"),
+	("colors.scrollbar_thumb", "\"#8a8a92\"  ## Default"),
+	("colors.scrollbar_trough", "\"#2e2e36\"  ## Default"),
 	// copy on select shipped off
 	("shell.copy_on_select", "false  ## Default"),
 	// so did letting an idle window's GPU device go
@@ -7961,18 +8197,18 @@ colors:
 	## complementary to the picture's own. The two rows for them gray out in
 	## Settings while this is on, and nothing about the derived colors is saved.
 	# from_wallpaper: true  ## Default
-	# background: "#000000"  ## Default
+	# background: "#000000"
 	# foreground: "#88eecc"  ## Default
 	# cursor: "#8a3fa4"  ## Default
-	# highlight: "#c8a05a"  ## Default
-	# focus: "#4086ff"  ## Default
-	# menu_background: "#36363b"  ## Default
-	# menu_foreground: "#f0f0f2"  ## Default
-	# dialog_background: "#20202a"  ## Default
-	# dialog_foreground: "#e2e2ea"  ## Default
-	# gutter: "#16161e"  ## Default
-	# scrollbar_thumb: "#8a8a92"  ## Default
-	# scrollbar_trough: "#2e2e36"  ## Default
+	# highlight: "#c8a05a"
+	# focus: "#4086ff"
+	# menu_background: "#36363b"
+	# menu_foreground: "#f0f0f2"
+	# dialog_background: "#20202a"
+	# dialog_foreground: "#e2e2ea"
+	# gutter: "#16161e"
+	# scrollbar_thumb: "#8a8a92"
+	# scrollbar_trough: "#2e2e36"
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Window
@@ -8109,6 +8345,21 @@ shell:
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	// The image a test set by hand, or None while it is automatic.
+	fn image_of(s: &Settings) -> Option<String> {
+		(!auto::automatic(s, auto::Setting::WallpaperImage))
+			.then(|| auto::text(s, auto::Setting::WallpaperImage))
+	}
+
+	// A text auto setting as a file line would leave it: empty is no line.
+	fn hand(text: &str) -> auto::Auto<String> {
+		if text.trim().is_empty() {
+			auto::Auto::automatic()
+		} else {
+			auto::Auto::by_hand(text.to_string())
+		}
+	}
 
 	// The About box reports how long the session has been up, and the clock it
 	// reads runs from the mark main sets rather than from whatever first asked.
@@ -9095,11 +9346,11 @@ mod tests {
 		let mut named = off.clone();
 		name_wallpaper(&mut named, Some("/x.png".into()));
 		assert!(named.wallpaper_enabled);
-		assert_eq!(named.wallpaper_raw, "/x.png");
+		assert_eq!(image_of(&named).as_deref().unwrap_or_default(), "/x.png");
 		// a clear names nothing and leaves the switch alone
 		let mut cleared = off.clone();
 		name_wallpaper(&mut cleared, None);
-		assert!(!cleared.wallpaper_enabled && cleared.wallpaper_raw.is_empty());
+		assert!(!cleared.wallpaper_enabled && image_of(&cleared).is_none());
 		let mut remote = named.clone();
 		remote.remote_override = true;
 		crate::profile::apply(&mut remote);
@@ -9112,7 +9363,7 @@ mod tests {
 	#[test]
 	fn a_command_line_wallpaper_outlasts_a_reload_and_an_apply() {
 		let with = |raw: &str| Settings {
-			wallpaper_raw: raw.to_string(),
+			wallpaper_raw: hand(raw),
 			wallpaper: (!raw.is_empty()).then(|| std::path::PathBuf::from(raw)),
 			..Settings::default()
 		};
@@ -9123,7 +9374,8 @@ mod tests {
 		let mut reloaded = with("/file.png");
 		keep_session(&live, &mut reloaded, false);
 		assert_eq!(
-			reloaded.wallpaper_raw, "/file.png",
+			image_of(&reloaded).as_deref().unwrap_or_default(),
+			"/file.png",
 			"no lock, the file wins"
 		);
 		// a file with the wallpaper off does not hide one the session named
@@ -9138,7 +9390,7 @@ mod tests {
 		// an explicit clear on the command line is kept too
 		let mut reloaded = with("/file.png");
 		keep_session(&with(""), &mut reloaded, true);
-		assert!(reloaded.wallpaper.is_none() && reloaded.wallpaper_raw.is_empty());
+		assert!(reloaded.wallpaper.is_none() && image_of(&reloaded).is_none());
 
 		// a dialog opened before the lock, applied without touching the wallpaper
 		let (mut opened, mut edited) = (with("/old.png"), with("/old.png"));
@@ -9152,12 +9404,15 @@ mod tests {
 		// the dialog picked one itself
 		let (mut opened, mut edited) = (with("/old.png"), with("/picked.png"));
 		keep_wallpaper_on_apply(&live, true, &mut opened, &mut edited);
-		assert_eq!(edited.wallpaper_raw, "/picked.png");
-		assert_eq!(opened.wallpaper_raw, "/old.png");
+		assert_eq!(
+			image_of(&edited).as_deref().unwrap_or_default(),
+			"/picked.png"
+		);
+		assert_eq!(image_of(&opened).as_deref().unwrap_or_default(), "/old.png");
 		// no lock
 		let (mut opened, mut edited) = (with("/old.png"), with("/old.png"));
 		keep_wallpaper_on_apply(&live, false, &mut opened, &mut edited);
-		assert_eq!(edited.wallpaper_raw, "/old.png");
+		assert_eq!(image_of(&edited).as_deref().unwrap_or_default(), "/old.png");
 	}
 
 	// Every launch-time rewrite used to truncate the file before writing it, so a
@@ -11258,7 +11513,11 @@ mod tests {
 			.0,
 		);
 		assert_eq!(s.scrollback, 4242, "settings before the bad line survive");
-		assert_eq!(s.focus, [0xab, 0xcd, 0xef], "and settings after it");
+		assert_eq!(
+			auto::color(&s, auto::Setting::Focus),
+			[0xab, 0xcd, 0xef],
+			"and settings after it"
+		);
 		assert_eq!(
 			s.margin,
 			Settings::default().margin,
@@ -11289,14 +11548,13 @@ mod tests {
 	// Test ID: EsDxpmD
 	#[test]
 	fn the_auto_table_holds_each_setting_once_with_a_rule_of_its_kind() {
-		use auto::Setting;
-		let every = [
-			Setting::FontFamily,
-			Setting::FontSize,
-			Setting::Columns,
-			Setting::Rows,
-		];
+		let every = auto::Setting::ALL;
 		assert_eq!(auto::TABLE.len(), every.len());
+		// `row` indexes the table by the enum, so the two run in one order
+		for (at, setting) in every.into_iter().enumerate() {
+			assert_eq!(auto::TABLE[at].setting, setting);
+			assert_eq!(setting as usize, at);
+		}
 		let paths: std::collections::HashSet<String> = walk_settings(default_config())
 			.into_iter()
 			.filter_map(|w| match w {
@@ -11388,6 +11646,167 @@ mod tests {
 		// a value of the wrong kind stores nothing
 		auto::set(&mut s, Setting::FontSize, Some(Value::Text("big".into())));
 		assert!(auto::automatic(&s, Setting::FontSize));
+	}
+
+	// The theme colors, the open command and the wallpaper's image and folder
+	// are automatic with no line, and a line sets one by hand. A color that does
+	// not parse, an empty command and the usual folder written out read as no
+	// line, the way an older build's file meant them.
+	// Test ID: EsEAijd
+	#[test]
+	fn theme_colors_the_open_command_and_the_wallpaper_are_automatic_until_a_line_sets_them() {
+		use auto::Setting;
+		let _guard = test_config_lock();
+		let p = std::path::Path::new("test.shcl");
+		let load = |text: &str| resolve(read_raw(text, p).0);
+		let colors = [
+			Setting::Background,
+			Setting::Highlight,
+			Setting::Focus,
+			Setting::MenuBackground,
+			Setting::MenuForeground,
+			Setting::DialogBackground,
+			Setting::DialogForeground,
+			Setting::Gutter,
+			Setting::ScrollbarThumb,
+			Setting::ScrollbarTrough,
+		];
+		let light = load("theme_mode: light\n");
+		let pal = crate::theme::resolve("SilkTerm", crate::theme::Mode::Light, true);
+		for setting in colors {
+			assert!(auto::automatic(&light, setting), "{setting:?}");
+		}
+		assert_eq!(auto::color(&light, Setting::Background), pal.bg);
+		assert_eq!(
+			auto::color(&light, Setting::DialogBackground),
+			pal.dialog_bg
+		);
+		assert_eq!(auto::color(&light, Setting::Gutter), pal.gutter);
+		assert_eq!(
+			auto::color(&light, Setting::ScrollbarThumb),
+			SCROLLBAR_THUMB_DEF
+		);
+		let set = load("colors:\n\tbackground: \"#123456\"\n\tgutter: \"nope\"\n");
+		assert_eq!(set.bg, auto::Auto::by_hand([0x12, 0x34, 0x56]));
+		assert!(
+			auto::automatic(&set, Setting::Gutter),
+			"a color that does not parse is no line"
+		);
+
+		let none = load("");
+		assert!(auto::automatic(&none, Setting::OpenCommand));
+		assert_eq!(
+			auto::text(&none, Setting::OpenCommand),
+			crate::links::desktop_opener()
+		);
+		let blank = load("hyperlinks:\n\topen_command: \" \"\n");
+		assert!(auto::automatic(&blank, Setting::OpenCommand));
+
+		// the usual folder, written out the way the template and older builds wrote it
+		let usual = load(&format!(
+			"wallpaper:\n\trotate:\n\t\tfolder: \"{}\"\n",
+			wallpaper_dir_escaped()
+		));
+		assert!(auto::automatic(&usual, Setting::WallpaperFolder));
+		assert_eq!(
+			(&usual.wallpaper_folder, usual.wallpaper_folder_auto),
+			(&none.wallpaper_folder, none.wallpaper_folder_auto),
+			"the same folder, found the same way"
+		);
+		let named = load("wallpaper:\n\timage: \"/x.png\"\n");
+		assert_eq!(image_of(&named).as_deref(), Some("/x.png"));
+		assert!(image_of(&load("wallpaper:\n\timage: \"\"\n")).is_none());
+	}
+
+	// An automatic color follows the theme and mode it is read under, and one
+	// set by hand stays put. A desktop dark or light change leans on this.
+	// Test ID: EsEAioc
+	#[test]
+	fn an_automatic_color_follows_the_theme_and_a_hand_set_one_stays() {
+		use crate::theme::Mode;
+		use auto::Setting;
+		let mut s = Settings {
+			highlight: auto::Auto::by_hand([1, 2, 3]),
+			..Default::default()
+		};
+		let dark = crate::theme::resolve("SilkTerm", Mode::Dark, true);
+		assert_eq!(auto::color(&s, Setting::Background), dark.bg);
+		s.theme_mode = Mode::Light;
+		retheme(&mut s);
+		let light = crate::theme::resolve("SilkTerm", Mode::Light, true);
+		assert_ne!(light.bg, dark.bg);
+		for (setting, want) in [
+			(Setting::Background, light.bg),
+			(Setting::Focus, light.focus),
+			(Setting::MenuForeground, light.menu_fg),
+			(Setting::DialogForeground, light.dialog_fg),
+			(Setting::Highlight, [1, 2, 3]),
+		] {
+			assert_eq!(auto::color(&s, setting), want, "{setting:?}");
+		}
+		// a saved theme of the same name stands in for the built-in
+		let mine = crate::theme::UserTheme {
+			slug: "silkterm".into(),
+			name: "SilkTerm".into(),
+			dark,
+			light: dark,
+		};
+		s.user_themes.push(mine);
+		retheme(&mut s);
+		assert_eq!(auto::color(&s, Setting::Background), dark.bg);
+	}
+
+	// Set by hand, a theme color, the open command and the folder each write
+	// their line. Put back to automatic, the line is commented out, and the next
+	// launch reads automatic again.
+	// Test ID: EsEAitK
+	#[test]
+	fn an_auto_color_or_text_writes_its_line_and_going_back_comments_it_out() {
+		use auto::{Setting, Value};
+		let _guard = test_config_lock();
+		let dir = format_test_dir("auto_lines");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		let base = reload_from_disk();
+		let mut own = base.clone();
+		let folder = if cfg!(windows) { "C:\\pics" } else { "/pics" };
+		let hand = [
+			(Setting::Background, Value::Color([0x12, 0x34, 0x56])),
+			(Setting::ScrollbarTrough, Value::Color([1, 2, 3])),
+			(
+				Setting::OpenCommand,
+				Value::Text("firefox --new-tab".into()),
+			),
+			(Setting::WallpaperFolder, Value::Text(folder.into())),
+		];
+		for (setting, value) in hand.clone() {
+			auto::set(&mut own, setting, Some(value));
+		}
+		assert!(persist(&base, &own));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(text.contains("\tbackground: \"#123456\""), "{text}");
+		let loaded = reload_from_disk();
+		for (setting, value) in hand.clone() {
+			assert_eq!(
+				auto::value(&loaded, setting, auto::Place::default()),
+				value,
+				"{setting:?}"
+			);
+			assert!(!auto::automatic(&loaded, setting), "{setting:?}");
+		}
+		let mut back = loaded.clone();
+		for (setting, _) in hand.clone() {
+			auto::set(&mut back, setting, None);
+		}
+		assert!(persist(&loaded, &back));
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(!text.contains("\n\tbackground: \"#123456\""), "{text}");
+		let again = reload_from_disk();
+		for (setting, _) in hand {
+			assert!(auto::automatic(&again, setting), "{setting:?}: {text}");
+		}
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 
 	// Every row of the design's "Changing a setting" table, with the switch read
@@ -11871,9 +12290,17 @@ mod tests {
 				crate::theme::Mode::System,
 				dark,
 			);
-			assert_eq!(live.bg, [0x12, 0x34, 0x56], "dark {dark}");
+			assert_eq!(
+				auto::color(&live, auto::Setting::Background),
+				[0x12, 0x34, 0x56],
+				"dark {dark}"
+			);
 			assert_eq!(live.fg, [1, 2, 3], "dark {dark}");
-			assert_eq!(live.dialog_bg, pal.dialog_bg, "dark {dark}");
+			assert_eq!(
+				auto::color(&live, auto::Setting::DialogBackground),
+				pal.dialog_bg,
+				"dark {dark}"
+			);
 			assert_eq!(live.ansi, pal.ansi, "dark {dark}");
 		}
 		OS_DARK.store(was_dark, Ordering::Relaxed);
@@ -13352,9 +13779,10 @@ mod tests {
 		let dir = format_test_dir("deleted_save");
 		let path = dir.join("config.shcl");
 		let loaded = settled_config(&path);
-		// a rotated pick is in the live copy and never in the file
+		// a rotated pick is in the live copy and never in the file. It was in
+		// the image setting too, until the image became an auto setting
+		// (2026100910295903); the picture in use is all it touches now.
 		let mut live = loaded.clone();
-		live.wallpaper_raw = "/pics/rotated.png".to_string();
 		live.wallpaper = Some(PathBuf::from("/pics/rotated.png"));
 
 		std::fs::remove_file(&path).unwrap();
@@ -13548,7 +13976,11 @@ mod tests {
 		assert!(d.columns.is_automatic() && d.rows.is_automatic());
 		assert_eq!(auto::grid(&d, None), (160, 48));
 		assert_eq!(d.margin, 8.0);
-		assert_eq!(d.bg, [0, 0, 0], "an all-black background");
+		assert_eq!(
+			auto::color(&d, auto::Setting::Background),
+			[0, 0, 0],
+			"an all-black background"
+		);
 	}
 
 	// Scrim function + the five falloff curves resolve; unknown values fall to the
@@ -14293,7 +14725,7 @@ mod tests {
 		let d = resolve(read_raw("", p).0);
 		assert!(d.hyperlinks, "on by default");
 		assert!(
-			d.hyperlink_open_command.is_empty(),
+			auto::automatic(&d, auto::Setting::OpenCommand),
 			"opener is the desktop's"
 		);
 		let s = resolve(
@@ -14304,7 +14736,10 @@ mod tests {
 			.0,
 		);
 		assert!(!s.hyperlinks);
-		assert_eq!(s.hyperlink_open_command, "firefox --new-tab");
+		assert_eq!(
+			auto::text(&s, auto::Setting::OpenCommand),
+			"firefox --new-tab"
+		);
 	}
 
 	// An over-range output_ease_lines must clamp: scroll's backlog clamp uses it
@@ -14343,8 +14778,14 @@ mod tests {
 	fn chrome_colors_default_and_override() {
 		// theme provides the chrome; the default matches the shared menu colors
 		let d = Settings::default();
-		assert_eq!(d.menu_bg, crate::theme::MENU_BG_DEF);
-		assert_eq!(d.menu_fg, crate::theme::MENU_FG_DEF);
+		assert_eq!(
+			auto::color(&d, auto::Setting::MenuBackground),
+			crate::theme::MENU_BG_DEF
+		);
+		assert_eq!(
+			auto::color(&d, auto::Setting::MenuForeground),
+			crate::theme::MENU_FG_DEF
+		);
 		// a colors override wins; unspecified chrome stays at the theme default
 		let raw = read_raw(
 			"colors.menu_background: \"#123456\"\ncolors.dialog_foreground: \"#abcdef\"\n",
@@ -14352,9 +14793,18 @@ mod tests {
 		)
 		.0;
 		let s = resolve(raw);
-		assert_eq!(s.menu_bg, [0x12, 0x34, 0x56]);
-		assert_eq!(s.dialog_fg, [0xab, 0xcd, 0xef]);
-		assert_eq!(s.menu_fg, crate::theme::MENU_FG_DEF);
+		assert_eq!(
+			auto::color(&s, auto::Setting::MenuBackground),
+			[0x12, 0x34, 0x56]
+		);
+		assert_eq!(
+			auto::color(&s, auto::Setting::DialogForeground),
+			[0xab, 0xcd, 0xef]
+		);
+		assert_eq!(
+			auto::color(&s, auto::Setting::MenuForeground),
+			crate::theme::MENU_FG_DEF
+		);
 	}
 
 	// A pre-nesting config converts wholesale: every ACTIVE value ends at its
@@ -14574,7 +15024,8 @@ mod tests {
 			set_config_override(path.clone());
 			let check = |s: &Settings, when: &str| {
 				assert_eq!(
-					s.wallpaper_raw, "/home/x/Pictures/a.png",
+					image_of(s).as_deref().unwrap_or_default(),
+					"/home/x/Pictures/a.png",
 					"{when}, round {round}: the image"
 				);
 				assert_eq!(s.wallpaper_opacity, 0.5, "{when}, round {round}: opacity");
@@ -14715,7 +15166,11 @@ mod tests {
 			}
 			set_config_override(path.clone());
 			let s = load();
-			assert_eq!(s.wallpaper_raw, image, "{what}: the image");
+			assert_eq!(
+				image_of(&s).as_deref().unwrap_or_default(),
+				image,
+				"{what}: the image"
+			);
 			assert!(
 				matches!(s.wallpaper_default_fit, Fit::Zoom),
 				"{what}: the rest of the block"
@@ -14737,7 +15192,11 @@ mod tests {
 				if full { BACKUPS_MAX as usize } else { 0 },
 				"{what}: nothing converted"
 			);
-			assert_eq!(load().wallpaper_raw, image, "{what}: next launch");
+			assert_eq!(
+				image_of(&load()).as_deref().unwrap_or_default(),
+				image,
+				"{what}: next launch"
+			);
 			assert_eq!(
 				std::fs::read_to_string(&path).unwrap(),
 				once,
@@ -14854,7 +15313,12 @@ mod tests {
 			std::thread::sleep(std::time::Duration::from_millis(20));
 			false
 		});
-		let busy = seen.then(|| (load().wallpaper_raw, std::fs::read_to_string(&path)));
+		let busy = seen.then(|| {
+			(
+				image_of(&load()).unwrap_or_default(),
+				std::fs::read_to_string(&path),
+			)
+		});
 		let _ = child.kill();
 		let _ = child.wait();
 
@@ -14867,7 +15331,7 @@ mod tests {
 		);
 		assert_eq!(baks(), 0, "a busy launch takes no backup");
 		assert_eq!(
-			load().wallpaper_raw,
+			image_of(&load()).as_deref().unwrap_or_default(),
 			"/home/x/Pictures/a.png",
 			"the next launch repairs it"
 		);
@@ -15146,10 +15610,13 @@ mod tests {
 		let once = migrate_config_text("colors:\n\tfocus: \"#abcdef\"\n").expect("should migrate");
 		assert_eq!(once, "colors:\n\thighlight: \"#abcdef\"\n");
 		let s = resolve(read_raw(&once, std::path::Path::new("test.shcl")).0);
-		assert_eq!(s.highlight, [0xab, 0xcd, 0xef]);
 		assert_eq!(
-			s.focus,
-			Settings::default().focus,
+			auto::color(&s, auto::Setting::Highlight),
+			[0xab, 0xcd, 0xef]
+		);
+		assert_eq!(
+			auto::color(&s, auto::Setting::Focus),
+			auto::color(&Settings::default(), auto::Setting::Focus),
 			"the new one starts fresh"
 		);
 
@@ -15158,15 +15625,22 @@ mod tests {
 		let both = "colors:\n\thighlight: \"#abcdef\"\n\tfocus: \"#123456\"\n";
 		assert!(migrate_config_text(both).is_none());
 		let s = resolve(read_raw(both, std::path::Path::new("test.shcl")).0);
-		assert_eq!(s.highlight, [0xab, 0xcd, 0xef]);
-		assert_eq!(s.focus, [0x12, 0x34, 0x56]);
+		assert_eq!(
+			auto::color(&s, auto::Setting::Highlight),
+			[0xab, 0xcd, 0xef]
+		);
+		assert_eq!(auto::color(&s, auto::Setting::Focus), [0x12, 0x34, 0x56]);
 
 		// a stale line carrying the pre-theme default still refreshes, under the
 		// path it ends on rather than the one it was written under
 		let stale = migrate_config_text("colors:\n\t# focus: \"#5580c8\"  ## Default\n")
 			.expect("should refresh");
+		// The template line has no Default mark since the color became an auto
+		// setting (2026100910295903).
 		assert!(
-			stale.contains("# highlight: \"#c8a05a\"  ## Default"),
+			stale
+				.lines()
+				.any(|line| line == "\t# highlight: \"#c8a05a\""),
 			"got {stale}"
 		);
 	}
@@ -15607,12 +16081,25 @@ mod tests {
 				.into_iter()
 				.find_map(|(name, line)| (name == *path).then_some(line))
 				.unwrap_or_else(|| panic!("{path} has no template line"));
-			let out = migrate_config_text(&nest(path, &format!("# {leaf}: {stale}")))
+			// A line under a renamed key's old name, alone, is the old setting
+			// and moves (G71). Beside the new name it is the new setting, as in
+			// any file a launch has backfilled.
+			let beside = CONFIG_RENAMES
+				.iter()
+				.find(|(old, _)| old == path)
+				.map_or_else(String::new, |(_, new)| {
+					let depth = path.matches('.').count();
+					let new_leaf = new.rsplit('.').next().unwrap();
+					format!("# {new_leaf}: \"#000000\"\n{}", "\t".repeat(depth))
+				});
+			let out = migrate_config_text(&nest(path, &format!("{beside}# {leaf}: {stale}")))
 				.unwrap_or_else(|| panic!("{path}: stale default should be refreshed"));
 			assert!(out.lines().any(|l| l == current), "{path}: {out:?}");
 			// their own choice, either way they made it
-			assert!(migrate_config_text(&nest(path, &format!("{leaf}: {stale}"))).is_none());
-			let noted = nest(path, &format!("# {leaf}: {stale}  ## mine"));
+			assert!(
+				migrate_config_text(&nest(path, &format!("{beside}{leaf}: {stale}"))).is_none()
+			);
+			let noted = nest(path, &format!("{beside}# {leaf}: {stale}  ## mine"));
 			assert!(migrate_config_text(&noted).is_none(), "{path}");
 		}
 	}
@@ -15633,7 +16120,7 @@ mod tests {
 		assert_eq!(WALLPAPER_DIR_TOKEN, want);
 		assert!(WALLPAPER_DIR_TOKEN.contains(APP_DIR));
 		assert_eq!(
-			Settings::default().wallpaper_folder_raw,
+			auto::text(&Settings::default(), auto::Setting::WallpaperFolder),
 			WALLPAPER_DIR_TOKEN
 		);
 		let line = format!("folder: \"{}\"  ## Default", wallpaper_dir_escaped());
@@ -15784,7 +16271,7 @@ mod tests {
 					"{spelling}, {how}"
 				);
 				assert!(s.wallpaper_folder_auto, "{spelling}, {how}");
-				assert_eq!(s.wallpaper_folder_raw, WALLPAPER_DIR_TOKEN, "{how}");
+				assert!(s.wallpaper_folder_raw.is_automatic(), "{how}");
 			}
 			if spelling != "backgrounds" {
 				std::fs::remove_dir(&stocked).unwrap();
@@ -15805,7 +16292,7 @@ mod tests {
 		let s = load();
 		assert_eq!(s.wallpaper_folder, Some(PathBuf::from(elsewhere)));
 		assert!(!s.wallpaper_folder_auto);
-		assert_eq!(s.wallpaper_folder_raw, elsewhere);
+		assert_eq!(s.wallpaper_folder_raw, hand(elsewhere));
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -16033,7 +16520,7 @@ mod tests {
 			"blank lines before section rules survive:\n{out}"
 		);
 		assert!(
-			out.contains("\t# dialog_foreground: \"#e2e2ea\"  ## Default"),
+			out.contains("\t# dialog_foreground: \"#e2e2ea\"\n"),
 			"the trailing colors block keeps its indentation:\n{out}"
 		);
 	}
