@@ -53,7 +53,7 @@ layout:
 	slider_width: 220
 	swatch: 20                 ## color chip; also the size of every square control (checkbox, radio)
 	hex_width: 92              ## "#rrggbb" field beside a color chip
-	value_width: 56            ## numeric field beside a slider
+	value_width: 56            ## floor; every slider's field grows to the longest number one shows
 	radio_box: 16              ## radio indicator square
 	radio_pitch: 96            ## per radio option: box + label + gap
 	dual_pitch: 118            ## per checkbox + label pair on a two-part row

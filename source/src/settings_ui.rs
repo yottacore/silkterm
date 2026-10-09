@@ -788,6 +788,37 @@ impl SliderScale {
 	fn typed(self, value: f32) -> f32 {
 		self.whole(value.clamp(self.min, self.typed_max))
 	}
+
+	// The longest numbers the box can show: either end, and for a decimal the
+	// top of each band before it drops a place, since 999.9 is longer than 3600.
+	fn widest_texts(self) -> Vec<String> {
+		let bands: &[f32] = if self.int {
+			&[]
+		} else {
+			&[99.94, 999.94, -99.94, -999.94]
+		};
+		let reachable = |v: &&f32| (self.min..=self.typed_max).contains(*v);
+		[self.min, self.typed_max]
+			.iter()
+			.chain(bands.iter().filter(reachable))
+			.map(|&v| fmt_number(self.whole(v), self.int))
+			.collect()
+	}
+}
+
+// How a slider's box shows a value.
+fn fmt_number(value: f32, int: bool) -> String {
+	if int {
+		format!("{}", value.round() as i64)
+	} else {
+		// fewer decimals as the whole part grows, so 3600 still fits the box
+		let places = match value.abs() {
+			v if v >= 999.95 => 0,
+			v if v >= 99.95 => 1,
+			_ => 2,
+		};
+		format!("{value:.places$}")
+	}
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -992,6 +1023,7 @@ pub struct SettingsDialog {
 	label_w: f32,
 	btn_w: f32,
 	row_btn_w: f32, // push-buttons that sit on a row (see chrome_widths)
+	value_w: f32,   // every slider's number box, so the sliders end in one column
 	// DIP -> physical pixel factor for the window this dialog lives in. Every
 	// measurement in here is a DIP; this is applied only at the boundary.
 	scale: f32,
@@ -1263,6 +1295,7 @@ impl SettingsDialog {
 		label_w: f32,
 		btn_w: f32,
 		row_btn_w: f32,
+		value_w: f32,
 		tab_ws: Vec<f32>,
 		label_ws: Vec<f32>,
 		max_w: f32,
@@ -1278,10 +1311,13 @@ impl SettingsDialog {
 		let label_w = label_w.max(lay().label_width);
 		let btn_w = btn_w.max(lay().button_width);
 		let row_btn_w = row_btn_w.max(lay().button_width);
+		let value_w = (value_w / scale).max(lay().value_width);
 		// Natural size first, then what the screen leaves room for. Below the
 		// natural size the rows region scrolls in that direction; above it the
 		// stretchy controls spread out.
-		let natural = Self::natural_dip(line_h, label_w, btn_w, row_btn_w, &tab_ws, &label_ws);
+		let natural = Self::natural_dip(
+			line_h, label_w, btn_w, row_btn_w, value_w, &tab_ws, &label_ws,
+		);
 		let (w, natural_h) = natural;
 		let (min_w, min_h) = Self::min_size_dip(line_h, btn_w);
 		let w = w.min(max_w.max(min_w));
@@ -1344,6 +1380,7 @@ impl SettingsDialog {
 			label_w,
 			btn_w,
 			row_btn_w,
+			value_w,
 			scale,
 		};
 		dialog.assoc_refresh();
@@ -1358,6 +1395,7 @@ impl SettingsDialog {
 		label_w: f32,
 		btn_w: f32,
 		row_btn_w: f32,
+		value_w: f32,
 		tab_ws: &[f32],
 		label_ws: &[f32],
 	) -> (f32, f32) {
@@ -1442,7 +1480,11 @@ impl SettingsDialog {
 				lay().pad + line + 6.0 + lay().revert_width + lay().pad
 			})
 			.fold(0.0f32, f32::max);
-		let w = (lay().width + (label_w - lay().label_width) + (btn_w - lay().button_width) * 3.0)
+		// a wider number box widens this floor, as a longer label does
+		let w = (lay().width
+			+ (label_w - lay().label_width)
+			+ (btn_w - lay().button_width) * 3.0
+			+ (value_w - lay().value_width))
 			.max(tabs_w)
 			.max(packed_w)
 			.max(radio_w)
@@ -1464,6 +1506,7 @@ impl SettingsDialog {
 		label_w: f32,
 		btn_w: f32,
 		row_btn_w: f32,
+		value_w: f32,
 		tab_ws: Vec<f32>,
 		label_ws: Vec<f32>,
 		max_w: f32,
@@ -1479,12 +1522,14 @@ impl SettingsDialog {
 		self.label_w = label_w.max(lay().label_width);
 		self.btn_w = btn_w.max(lay().button_width);
 		self.row_btn_w = row_btn_w.max(lay().button_width);
+		self.value_w = (value_w / scale).max(lay().value_width);
 		self.scale = scale;
 		self.natural = Self::natural_dip(
 			self.line_h,
 			self.label_w,
 			self.btn_w,
 			self.row_btn_w,
+			self.value_w,
 			&self.tab_ws,
 			&self.label_ws,
 		);
@@ -2659,7 +2704,7 @@ impl SettingsDialog {
 		Rect {
 			x,
 			y: self.centered_in_row(i, 6.0),
-			w: (self.ctl_right(i) - lay().value_width - 14.0 - x).max(lay().slider_width / 4.0),
+			w: (self.ctl_right(i) - self.value_w - 14.0 - x).max(lay().slider_width / 4.0),
 			h: 6.0,
 		}
 	}
@@ -2688,9 +2733,9 @@ impl SettingsDialog {
 	fn valbox(&self, i: usize) -> Rect {
 		let h = self.field_h();
 		Rect {
-			x: self.ctl_right(i) - lay().value_width,
+			x: self.ctl_right(i) - self.value_w,
 			y: self.centered_in_row(i, h),
-			w: lay().value_width,
+			w: self.value_w,
 			h,
 		}
 	}
@@ -3709,18 +3754,7 @@ impl SettingsDialog {
 	}
 
 	fn fmt_val(&self, key: Key, int: bool) -> String {
-		let value = self.get_f32(key);
-		if int {
-			format!("{}", value.round() as i64)
-		} else {
-			// fewer decimals as the whole part grows, so 3600 still fits the box
-			let places = match value.abs() {
-				v if v >= 999.95 => 0,
-				v if v >= 99.95 => 1,
-				_ => 2,
-			};
-			format!("{value:.places$}")
-		}
+		fmt_number(self.get_f32(key), int)
 	}
 
 	// `measure` gives a string's rendered width in the UI font (for placing the
@@ -5725,9 +5759,9 @@ pub fn sane_scale(scale: f32) -> f32 {
 	}
 }
 
-/// Widest field label, button caption, and per-tab title widths at the current
-/// UI font, so the dialog sizes to the real text (a wide serif or a big desktop
-/// size never truncates).
+/// Widest field label, button caption, slider number and per-tab title widths
+/// at the current UI font, so the dialog sizes to the real text (a wide serif or
+/// a big desktop size never truncates).
 ///
 /// This measures against the text context, so it works in PHYSICAL pixels - which
 /// is why every layout constant it reads converts through `config::dip` at its use
@@ -5740,7 +5774,7 @@ pub fn sane_scale(scale: f32) -> f32 {
 pub fn chrome_widths(
 	text: &mut crate::text::TextCtx,
 	scale: f32,
-) -> (f32, f32, f32, Vec<f32>, Vec<f32>) {
+) -> (f32, f32, f32, f32, Vec<f32>, Vec<f32>) {
 	let attrs = crate::text::ui_attrs();
 	let dip = |v: f32| config::dip(v, scale);
 	// an indented label starts further right, so the column has to clear the
@@ -5784,6 +5818,14 @@ pub fn chrome_widths(
 		.map(|caption| text.measure_ui_text(caption, &attrs))
 		.fold(0.0f32, f32::max);
 	let row_btn_w = measured_plus(row_btn_w, lay().button_pad, scale);
+	// one box width for every slider, the widest any of them can show
+	let value_w = specs
+		.iter()
+		.filter_map(|spec| SliderScale::of(&spec.kind))
+		.flat_map(SliderScale::widest_texts)
+		.map(|number| text.measure_ui_text(&number, &attrs))
+		.fold(0.0f32, f32::max);
+	let value_w = measured_plus(value_w, lay().field_pad * 2.0, scale);
 	let tab_ws = tab_titles()
 		.iter()
 		.map(|title| measured_plus(text.measure_ui_text(title, &attrs), lay().tab_pad, scale))
@@ -5795,7 +5837,7 @@ pub fn chrome_widths(
 		.iter()
 		.map(|spec| text.measure_ui_text(spec.label, &attrs))
 		.collect();
-	(label_w, btn_w, row_btn_w, tab_ws, label_ws)
+	(label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws)
 }
 
 /// Returns true if `old` and `new` differ in any field that needs a text-context
@@ -5868,6 +5910,7 @@ mod tests {
 			170.0 * scale,
 			80.0 * scale,
 			90.0 * scale,
+			0.0,
 			vec![90.0 * scale; tab_titles().len()],
 			labels7(scale),
 			f32::MAX,
@@ -5900,6 +5943,7 @@ mod tests {
 			170.0 * 2.0,
 			80.0 * 2.0,
 			90.0 * 2.0,
+			0.0,
 			vec![90.0 * 2.0; tab_titles().len()],
 			labels7(2.0),
 			f32::MAX,
@@ -5941,6 +5985,7 @@ mod tests {
 			170.0 * 2.0,
 			80.0 * 2.0,
 			90.0 * 2.0,
+			0.0,
 			vec![90.0 * 2.0; tab_titles().len()],
 			labels7(2.0),
 			f32::MAX,
@@ -6476,6 +6521,7 @@ mod tests {
 					170.0 * k,
 					80.0 * k,
 					90.0 * k,
+					0.0,
 					vec![90.0 * k; tab_titles().len()],
 					labels,
 					f32::MAX,
@@ -8294,6 +8340,7 @@ mod tests {
 			340.0,
 			160.0,
 			180.0,
+			0.0,
 			vec![180.0; tab_titles().len()],
 			labels7(2.0),
 			f32::MAX,
@@ -8826,6 +8873,111 @@ mod tests {
 		] {
 			d.set_f32(Key::CursorResume, value);
 			assert_eq!(d.fmt_val(Key::CursorResume, false), shown, "{value}");
+		}
+	}
+
+	// The number box was a fixed 56 DIP, so a big desktop font cut off "10080"
+	// and "999.9". Measured in the real UI font at 1x and 2x, and at 2.5 times
+	// its size.
+	// Test ID: Es9oaEN
+	#[test]
+	fn every_slider_number_fits_its_box_at_a_large_interface_font() {
+		use super::SliderScale;
+		let texts: Vec<String> = super::ui()
+			.specs
+			.iter()
+			.filter_map(|spec| SliderScale::of(&spec.kind))
+			.flat_map(SliderScale::widest_texts)
+			.collect();
+		for want in ["10080", "999.9", "10000", "4.00"] {
+			assert!(texts.iter().any(|t| t == want), "{want} is never measured");
+		}
+		let attrs = crate::text::ui_attrs();
+		// (font size, display scale)
+		for (big, scale) in [(1.0, 1.0), (2.0, 2.0), (2.5, 1.0)] {
+			let mut text = crate::text::TextCtx::new_cpu(big);
+			let (label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws) =
+				super::chrome_widths(&mut text, scale);
+			let d = SettingsDialog::new(
+				0.0,
+				0.0,
+				text.ui_line_h,
+				label_w,
+				btn_w,
+				row_btn_w,
+				value_w,
+				tab_ws,
+				label_ws,
+				f32::MAX,
+				4000.0,
+				scale,
+			);
+			for (i, spec) in d.specs.iter().enumerate() {
+				let Some(slider) = SliderScale::of(&spec.kind) else {
+					continue;
+				};
+				let room = d.valbox(i).w - 2.0 * super::lay().field_pad;
+				for number in slider.widest_texts() {
+					let w = text.measure_ui_text(&number, &attrs) / scale;
+					assert!(
+						w <= room + 0.01,
+						"{} at {big}x the font, {scale}x: {number} is {w} wide, room for {room}",
+						spec.label
+					);
+				}
+			}
+		}
+	}
+
+	// A box wider than the floor comes out of the panel, so the sliders keep their
+	// length, and the floor holds when every number fits. Wide footer buttons make
+	// the panel's own floor the widest thing, as a wide font's labels can.
+	// Test ID: Es9oaYr
+	#[test]
+	fn a_wider_number_box_widens_the_panel_and_leaves_the_sliders() {
+		let row = super::ui()
+			.specs
+			.iter()
+			.position(|spec| matches!(spec.kind, Kind::Slider { .. }))
+			.expect("a slider row");
+		let floor = super::lay().value_width;
+		for scale in [1.0, 2.0] {
+			let at = |value_w: f32| {
+				let mut d = SettingsDialog::new(
+					0.0,
+					0.0,
+					18.0 * scale,
+					170.0 * scale,
+					300.0 * scale,
+					90.0 * scale,
+					value_w * scale,
+					vec![40.0 * scale; tab_titles().len()],
+					labels7(scale),
+					f32::MAX,
+					4000.0 * scale,
+					scale,
+				);
+				let (w, h) = d.size();
+				d.set_size(w, h);
+				d
+			};
+			let (narrow, wide) = (at(floor - 20.0), at(floor + 30.0));
+			assert!((narrow.valbox(row).w - floor).abs() < 0.01, "at {scale}x");
+			assert!(
+				(wide.valbox(row).w - (floor + 30.0)).abs() < 0.01,
+				"at {scale}x"
+			);
+			assert!(
+				(wide.natural.0 - narrow.natural.0 - 30.0).abs() < 0.01,
+				"at {scale}x the panel grew {} for a box 30 wider",
+				wide.natural.0 - narrow.natural.0
+			);
+			assert!(
+				(wide.track(row).w - narrow.track(row).w).abs() < 0.01,
+				"at {scale}x the slider went from {} to {}",
+				narrow.track(row).w,
+				wide.track(row).w
+			);
 		}
 	}
 
@@ -10034,6 +10186,7 @@ mod tests {
 			170.0 * k,
 			80.0 * k,
 			90.0 * k,
+			0.0,
 			vec![90.0 * k; tab_titles().len()],
 			labels7(k),
 			f32::MAX,
@@ -10758,6 +10911,7 @@ mod tests {
 	// 		label_w,
 	// 		80.0,
 	// 		90.0,
+	// 		0.0,
 	// 		vec![90.0; tab_titles().len()],
 	// 		labels7(1.0),
 	// 		f32::MAX,
@@ -10853,6 +11007,7 @@ mod tests {
 			label_w,
 			80.0,
 			90.0,
+			0.0,
 			vec![90.0; tab_titles().len()],
 			labels7(1.0),
 			f32::MAX,
