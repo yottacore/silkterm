@@ -13,10 +13,10 @@
 <!-- TOC -->
 
 - [Summary](#summary)
-- [Why it is being rethought](#why-it-is-being-rethought)
+- [Background](#background)
 	- [What has to stay](#what-has-to-stay)
 	- [How the performance settings have worked](#how-the-performance-settings-have-worked)
-	- [What this design lost](#what-this-design-lost)
+	- [What the first version of this design lost](#what-the-first-version-of-this-design-lost)
 - [Specification](#specification)
 - [Goals](#goals)
 	- [Non-goals](#non-goals)
@@ -26,7 +26,9 @@
 	- [The table](#the-table)
 	- [Reading a setting](#reading-a-setting)
 	- [Changing a setting](#changing-a-setting)
-	- [The group control](#the-group-control)
+	- [Switches](#switches)
+	- [Profiles](#profiles)
+	- [Rows under a switch](#rows-under-a-switch)
 	- [The settings store](#the-settings-store)
 	- [The settings screen](#the-settings-screen)
 	- [Tests](#tests)
@@ -44,23 +46,23 @@
 
 ## Summary
 
-This design is being rethought. It throws away values people expect to get back, see [Why it is being rethought](#why-it-is-being-rethought).
+Status: draft, 2026-10-09. The second version of this design, waiting for signoff.
 
-Some settings have a value the program can work out by itself, from a preset or from a rule such as the window size. The usual way to offer that is a master switch, "Automatic layout" or a presets dropdown, that disables the group of settings under it. To change one value, a person first has to find the switch, turn it off, and then every value under it comes back at once, with whatever was stored there last time.
+Some settings have a value the program can work out by itself, from a performance profile or from a rule such as the desktop's font. A person can still set any of them by hand, and a switch can put one back to automatic.
 
-Here there is no master state at all. Each setting that can be automatic is automatic on its own, by storing nothing. Changing it stores a value, and only that one. The group's switch or presets dropdown is worked out from the settings under it, so it always tells the truth and never has to be kept in step.
+Each such setting keeps 2 things: the value in use, if it was set by hand, and a value put aside for later. Turning a switch to automatic puts the hand-set value aside. Turning it back brings that value back. Picking a profile puts aside every value set by hand under it, and one switch brings them all back.
 
-This is how CSS `auto`, the "Automatic" entries in macOS and Windows settings, and the reset arrows in Firefox and VS Code already work. It needs one table and one function, and the settings store needs nothing new.
+A change only ever flows down. Changing a setting changes that setting, and a switch or profile changes the settings under it. Nothing changes a setting above it, with one exception: changing a row under a switch that is off turns that switch on.
 
-## Why it is being rethought
+## Background
 
-The first part of this design was built on 2026-10-09. It broke one thing people expect from settings, and the Performance settings still have the problems that led to it.
+The first version of this design was built in part on 2026-10-09. It broke one thing people expect from settings, and the Performance settings still had the problems that led to it.
 
 ### What has to stay
 
 - A switch that turns a setting off, or makes it automatic, keeps the value set by hand. Turning the switch back brings that value back.
 
-- Custom values stay remembered while a preset is in use, and come back when Custom is picked again.
+- Custom values stay remembered while a preset is in use, and come back later.
 
 - Changing one setting takes one step, with nothing to unlock first.
 
@@ -85,97 +87,90 @@ There have been 3 versions so far.
 	- Rows under a switch that was off were still grayed. So Strength % couldn't be changed while Text scrim was off, and changing it never turned Text scrim on. Turning Text scrim on was the change that set Custom and turned off Choose automatically.
 	- That step lost the Custom values from before, since the preset's values were copied over them. Picking a preset and then Custom again did bring them back, as long as no row was changed in between.
 
-- Version 3, this design, 2026-10-09:
+- Version 3, the first version of this design, 2026-10-09:
 	- Rows under a switch no longer gray. Strength % can be changed while Text scrim is off. That doesn't turn Text scrim on, and the value is used once it is on.
-	- The Performance settings haven't moved onto this design yet. They still work as in version 2, without the graying.
+	- The Performance settings didn't move onto it. They still work as in version 2, without the graying.
 
-### What this design lost
+### What the first version of this design lost
 
-- Turning a switch off and on again still brings back the values under it. Text scrim and Strength % work that way, and so does every other switch with rows under it.
+- It stored automatic as no line in the file. So going automatic deleted the value set by hand.
 
-- What was lost is the value behind each switch this design took away. Going automatic deletes the value set by hand, since automatic is stored as no line.
-	- The 2 "Use system font" checkboxes, for Family and Size, are gone, and so is "Remember last size" for Columns and Rows. A family typed in is lost once Family goes back to automatic.
-	- 2026100910295901 would do the same to Text colors from wallpaper, for Foreground and Cursor.
+- The 2 "Use system font" checkboxes, for Family and Size, were taken out, and so was "Remember last size" for Columns and Rows. A family typed in was lost once Family went back to automatic.
 
-- Some parts of this design are wrong, given what has to stay:
-	- The goal "Never bring back a pile of old values nobody asked for."
-	- The non-goal on remembering a hand-set value while a setting is automatic.
-	- The unconsidered idea of keeping the last hand-set value, which says nobody has asked for it.
+- Turning a switch off and on again still brought back the rows under it. Text scrim and Strength % worked that way, and so did every other switch with rows under it.
 
 ## Specification
 
-- An auto setting is one whose value the program can supply. It is stored as either a value set by hand, or nothing.
-	- Nothing means automatic. The setting shows and uses what its rule or preset gives right now, and it keeps following that rule as the program runs.
-	- A value means set by hand. It is used as is.
+- An auto setting is one whose value the program can supply, from a profile or a rule. It is in one of 3 states:
+	- Automatic. It uses what its rule or profile gives right now, and keeps following it as the program runs.
+	- Set by hand. It uses its own value.
+	- Put aside. It has a value of its own, but is automatic for now. The value comes back when its switch or the "Use my changes" switch says so.
 
-- Changing an auto setting stores the new value. No other setting is touched.
+- Changing an auto setting sets it by hand, with the new value. Any value it had put aside is dropped, since the new one replaces it.
 
-- Every auto setting has a way back to automatic, on the setting itself. Which control that is depends on the kind of value, see [The settings screen](#the-settings-screen).
+- A switch that makes settings automatic puts their hand-set values aside when turned on, and brings them back when turned off. A setting with nothing put aside keeps the value it shows, so nothing on screen moves.
 
-- Nothing is grayed out or disabled on account of being automatic. An automatic setting looks like any other and shows the value in use. Its reset arrow is disabled, the same as any setting at its default.
+- Picking a profile by hand puts aside every hand-set value under it, so that way the screen shows exactly that profile. The "Use my changes" switch brings them back.
 
-- A group of auto settings may have a group control. It is never stored. It is read from the members every time it is drawn:
-	- An automatic switch is on when every member is automatic, off when none is, and in the mixed state when some are.
-	- A presets dropdown shows the preset whose values every member has right now, else Custom. Custom is a state the dropdown reports, not an entry anyone picks.
+- Choose automatically picking a new profile, after a hardware change or when the display can't keep up, leaves the hand-set values in use. Remote ignores them while it is on, and changes nothing stored.
 
-- Using the group control changes every member in one step:
-	- Switch to on, or a mixed switch clicked: every member goes to automatic.
-	- Switch to off: every member stores the value it is showing right now, so nothing visible changes.
-	- A preset picked: every member stores that preset's value.
+- Changing a row under a switch that is off turns the switch on. Nothing else above it changes.
 
-- A hand edit to the settings store is read the same way. A line with a value sets it; no line means automatic.
+- Nothing is grayed out on account of being automatic, set by a profile, or under a switch that is off.
 
-- The flyover tip of every input control, and of its label, has:
-	- The setting's description, if it has one.
-	- A blank line, when anything follows it.
-	- For an auto setting, one line on its state: `Automatic. Change it to set your own value.` or `Set by hand. Automatic would be: ...`.
-	- `Current value: ...` and `Default value: ...`, shown only when they differ. For an automatic setting the current value is what the rule gives right now.
+- A hand edit to the settings store is read the same way as a change on the screen.
+
+- The flyover tip of an auto setting has one line on its state, after the description:
+	- Automatic: `Automatic.`, or for a profile row, `From the High profile.`
+	- Set by hand: `Set by hand. Automatic would be: ...`, or `Set by hand. The High profile's value is ...`
+	- Put aside: the automatic line, then `Your value, ..., is kept for later.`
 
 ## Goals
 
-- Change one setting in one step, with nothing to hunt for first.
+- Change one setting in one step, with nothing to unlock first.
 
-- Never bring back a pile of old values nobody asked for.
+- Never lose a value set by hand, except to a newer value or the reset arrow.
 
-- A group control that can't disagree with the settings under it, after a restart or a hand edit to the store.
+- Never change a setting above the one changed, except a switch turned on by a row under it.
+
+- Switches that can't disagree with the settings under them, after a restart or a hand edit to the store.
 
 - One way for every such setting, so a new one needs a row in a table and no code of its own.
 
-- Nothing new in the settings store. A store that keeps only values set by hand already does all of this.
-
 ### Non-goals
-
-- A group inside another group. A group control is never itself a member of a group.
 
 - A setting in 2 groups.
 
-- Remembering a hand-set value while a setting is automatic. Going automatic throws the value away, and going manual starts from what is showing. That is what keeps old values from coming back.
+- A switch over a profile's rows that is itself a profile row.
 
 - Values locked from outside the settings, by the build or an environment variable. Those are disabled for real, with a tip saying by what.
 
-- Settings that only count while a feature is on, such as the detail choices under "Show tooltips". Those are not automatic, they are unused. They stay enabled and indented under their switch, and come back as they were when the feature is turned on again.
+- Named saved sets of changes. "Use my changes" is one set.
 
 ## Design
 
 ### Words used here
 
-| Word          | Meaning
-| :------------ | :--------------------------------------------------------------------------------------------------------------------
-| Auto setting  | A setting that can be automatic.
-| Rule          | How the program works out an auto setting's value: a preset, a computation, or a plain fixed value.
-| Automatic     | The state of an auto setting with nothing stored. It uses its rule.
-| Set by hand   | The state with a value stored. It uses that value.
-| Group         | Auto settings that share a group control.
-| Group control | A switch or presets dropdown that reads and sets a whole group. Never stored.
-| Mixed         | The switch state when some members are automatic and some set by hand. Most toolkits have one, often drawn as a dash.
+| Word         | Meaning
+| :----------- | :--------------------------------------------------------------------------------------------------------------
+| Auto setting | A setting that can be automatic.
+| Rule         | How the program works out an auto setting's value: a computation such as the desktop's font, or a fixed value.
+| Profile row  | An auto setting whose rule is the performance profile in force.
+| Automatic    | No value of its own in use. It uses its rule.
+| Set by hand  | Its own value in use.
+| Put aside    | Its own value kept, not in use. It uses its rule.
+| Switch       | A checkbox that makes a group of auto settings automatic, or brings their values back. Never stored.
+| Mixed        | The switch state when some of its settings are automatic and some set by hand. Most toolkits draw it as a dash.
 
 ### What is stored
 
-- For each auto setting, its hand-set value, or nothing.
+- For each auto setting, at most one of: its value in use, or its value put aside.
 
-- For a group, nothing.
+- Neither means automatic with nothing kept.
 
-- That is all. There is no mode, no flag per setting, and nothing to clear.
+- Switches are never stored. They are read from the settings under them.
+
+- The profile is itself an auto setting. Its rule is the machine test, and Choose automatically is its switch.
 
 ### The table
 
@@ -183,141 +178,216 @@ One table lists every auto setting. Each row has:
 
 - The setting's key.
 
-- Its rule. For a group with presets, the preset values. Otherwise a function, since most rules need the program's state.
+- Its rule. A function, since most rules need the program's state. For a profile row, the rule is the profile in force.
 
-- Its group, if any.
+- Its switch, if it has one.
 
-A second small table lists each group: its name, whether its control is a switch or a presets dropdown, and the presets with their values.
+Switches are a second small table: the label, and whether on means automatic, as for "Use system font", or set by hand, as for "Use my changes".
 
-Both sit with the types and defaults of every other setting, so there is one place to look. A setting's default, in the usual sense, is automatic.
+Both sit with the types and defaults of every other setting. A setting's default, in the usual sense, is automatic.
 
 ### Reading a setting
 
-One function answers 2 questions for an auto setting: which value it uses, and whether it is automatic.
+One function answers 2 questions for an auto setting: which value it uses, and which state it is in.
 
 ~~~text
-value(setting)     = stored value if one is stored, else rule(setting)
-automatic(setting) = nothing is stored
+value(setting) = value in use if one is stored, else rule(setting)
+state(setting) = set by hand if a value in use is stored,
+                 else put aside if a value put aside is stored,
+                 else automatic
 ~~~
 
-Nothing reads an auto setting's stored value directly, outside this function. A check in the lint stage refuses code that does.
+Nothing reads an auto setting's stored values directly, outside this function. A check in the lint stage refuses code that does.
 
 ### Changing a setting
 
-| What happens                        | Each member stores            | Group control then shows
-| :---------------------------------- | :---------------------------- | :----------------------------------
-| One member is changed               | that one stores its new value | off, mixed, or Custom
-| One member is put back to automatic | that one stores nothing       | on, mixed, or a preset if all match
-| Switch turned on                    | nothing                       | on
-| Mixed switch clicked                | nothing                       | on
-| Switch turned off                   | the value it shows right now  | off
-| A preset picked                     | that preset's value           | the preset
+| What happens                           | The setting then                             | Its switch then shows
+| :------------------------------------- | :------------------------------------------- | :--------------------
+| Changed on screen                      | set by hand, anything put aside dropped      | off, or mixed
+| Reset arrow                            | automatic, nothing kept                      | on, or mixed
+| Switch turned to automatic             | its hand-set value put aside                 | automatic
+| Switch turned back, nothing aside      | set by hand, at the value it shows           | set by hand
+| Switch turned back, a value aside      | set by hand, at that value                   | set by hand
+| Mixed switch clicked                   | as turned to automatic                       | automatic
+| Profile picked by hand                 | every profile row's hand-set value put aside | "Use my changes" off
+| Profile picked by Choose automatically | unchanged                                    | unchanged
 
-A mixed switch goes to automatic on a click, since that is the state a person reaching for an "Automatic" switch wants, and the other way is one more click.
+A mixed switch goes to automatic on a click, since that is the state a person reaching for an "Automatic" switch wants, and the other way is one more click. For "Use my changes" the same click brings every value back, since on means set by hand there.
 
-### The group control
+### Switches
 
-- It is drawn from the members and never stored. After a restart or a hand edit to the store it is right by construction.
+- A switch is read from the settings under it every time it is drawn, so after a restart or a hand edit to the store it is right by construction.
 
-- A presets dropdown lists the presets and, when nothing matches, a Custom entry that is selected and can't be picked. Picking a preset is always allowed, even the one whose values happen to match, and does the same thing.
+- One with one setting under it is that setting's own switch, such as "Use system font" for Family. One with more, such as "Remember last size" for Columns and Rows, shows mixed when they differ.
 
-- A switch with only one member is that setting's own automatic switch. One that is already on the screen stays.
+- Typing in Columns while "Remember last size" is on sets Columns by hand. Rows stays automatic, and the switch shows mixed. Nothing else on screen moves.
 
-- A group of settings whose rule is a plain "off" is usually not a group of auto settings at all, see the last non-goal.
+- The switches the first version took out come back: the 2 "Use system font" checkboxes, "Remember last size", and "Text colors from wallpaper".
+
+### Profiles
+
+- The profile is an auto setting. Automatic means Choose automatically picks it from the machine test. Picking one by hand sets it by hand, which turns Choose automatically off. Turning Choose automatically on puts the hand pick aside, and turning it off brings it back.
+
+- There is no Custom profile. Each profile row is automatic, set by hand, or put aside on its own. The hand-set rows are the person's changes, on top of whichever profile is in force.
+
+- The Profile dropdown shows the profile in force, and how many rows are set by hand, as in `High, 2 changed`.
+
+- "Use my changes" sits under Profile. It is on when every row with a value of its own has it in use, off when none does, and mixed between. It is disabled when no row has a value of its own, with the tip `Nothing changed yet.`
+
+- Picking a profile by hand puts every hand-set row aside, so the screen shows exactly that profile. Picking one with no rows set by hand puts nothing aside, and keeps what was aside before.
+
+- A new profile from Choose automatically, after a hardware change or a display step-down, leaves the rows as they are. The hand-set rows stay in use on top of it.
+
+- Remote ignores every hand-set row while it is on, since it is a plain terminal. It stores nothing and changes no row.
+
+- Changing a profile row while Choose automatically is on leaves it on. The profile stays the same.
+
+### Rows under a switch
+
+- Some rows only count while a switch above them is on, such as Strength % under Text scrim. Those are not auto settings. Each keeps its value while the switch is off.
+
+- They never gray. Changing one while its switch is off turns the switch on, so the change shows at once.
+
+- If the switch is a profile row, turning it on this way sets it by hand. Nothing above it changes: the profile and Choose automatically stay as they are.
+
+- This is the one place a change moves a setting above it. The switch is on the same tab, right above the row, so the change is in plain sight.
 
 ### The settings store
 
-- A store that keeps only values set by hand, with no line for a default, needs nothing new. Automatic is the missing line. Going back to automatic deletes the line.
+- A value in use is the setting's usual line. A store that keeps only values set by hand already reads automatic as a missing line.
 
-- A store that writes every key needs a marker for nothing. Use one word for all of them, and never a value that could be real. Keep it out of the public docs until there is such a store.
+- A value put aside goes under a `kept:` block, at the same path it would have outside it.
 
-- A hand edit while the program runs is read the same as a change in the screen. The screen redraws the group from the function.
+~~~shcl
+text:
+	scrim:
+		strength: 80
+kept:
+	font:
+		family: "Fira Code"
+~~~
 
-- A value in the store that fails the setting's checks is treated as every other bad value, and the setting falls back to automatic.
+- Here Strength % is set by hand at 80, and Family is automatic with Fira Code put aside.
+
+- A line in both places is read as set by hand, and the next save drops the one in `kept:`.
+
+- A value in either place that fails the setting's checks is treated as every other bad value. It is dropped and the setting is automatic.
+
+- A hand edit while the program runs is read the same as a change in the screen.
 
 ### The settings screen
 
 - The control for an auto setting, by kind of value:
-	- A choice from a list: a dropdown with `Automatic` as its first entry. Where it helps, the entry says what it gives right now, as in `Automatic (Compact)`.
-	- On or off: a 3-entry dropdown, `Automatic`, `On`, `Off`. A checkbox can't show automatic.
-	- A number or text: the usual field. Its reset arrow is the way back, enabled only while set by hand, tip `Back to automatic`. While automatic the field shows the rule's value like any other value, and still takes focus.
-	- A color or a file: as for text.
+	- A choice from a list: a dropdown with `Automatic` as its first entry, where the setting has no switch of its own. Where it helps, the entry says what it gives right now, as in `Automatic (Compact)`.
+	- On or off: a 3-entry dropdown, `Automatic`, `On`, `Off`, where it has no switch.
+	- A number, text, color or file: the usual field. While automatic it shows the rule's value, and still takes focus and input.
 
-- No mark, italic or lighter style says a value is automatic. Automatic is the setting's default, so a disabled reset arrow already says it, and the tip's state line says which. A mark would mean 2 things, automatic and default, and clutter every field.
+- The reset arrow is enabled while a setting is set by hand. It goes back to automatic and keeps nothing, tip `Back to automatic`. It is how a value is thrown away for good.
 
-- An automatic setting whose rule changes while the screen is open redraws at once, as does the group control.
+- No mark, italic or lighter style says a value is automatic or put aside. The switch and the tip's state line say it.
 
-- A screen reader is told the setting is automatic, through the control's accessible description.
+- An automatic setting whose rule changes while the screen is open redraws at once, as do the switches.
 
-- The group control sits above its members. It needs no tip beyond its description, since what it shows is always what the members are.
+- A screen reader is told the setting's state, through the control's accessible description.
 
 - The tip is built when it opens, so it never shows values from before a change.
 
 ### Tests
 
-- The function, for a stored value, nothing, and every kind of rule.
+- The function, for each of the 3 states, and every kind of rule.
 
-- Every row of the table under [Changing a setting](#changing-a-setting), with the group control checked after each.
+- Every row of the table under [Changing a setting](#changing-a-setting), with the switch checked after each.
 
-- A restart: the group control reads the same from the store.
+- A round trip for each switch: a value set by hand, the switch on and off, and the same value back.
 
-- Hand edits to the store, including a bad value, a deleted line, and a line for a setting with a preset group.
+- A profile picked by hand, then "Use my changes" turned on: every changed row back as it was.
 
-- The rule changing at run time while a member is automatic: the value in use follows, and a hand-set member dosn't.
+- A new profile from Choose automatically: no row changes state. Remote: the screen shows Remote's values, and nothing stored changes.
 
-- The table: every setting named in a group exists, is in one group, and every preset names every member of its group.
+- A row under a switch that is off, changed: the switch on, adn nothing else changed.
+
+- A restart: every switch and the Profile dropdown read the same from the store.
+
+- Hand edits to the store, including a bad value, a deleted line, and a line both in use and in `kept:`.
+
+- The rule changing at run time while a setting is automatic: the value in use follows, and a hand-set setting doesn't.
+
+- The table: every setting named under a switch exists, and is under one switch.
 
 ### Open questions
 
-- How a setting that a profile or a rule supplies can be changed in one step, with no chain of changes above it, while keeping everything under [What has to stay](#what-has-to-stay).
+- Whether a theme and its colors work the same way as a profile and its rows, with the theme's colors as the rule and "Use my changes" for colors changed by hand.
+
+- How "Text colors from wallpaper" fits. Foreground and Cursor already have the theme as their rule, so the wallpaper is a second rule for the same 2 settings (2026100910295901).
 
 ## Alternative ideas
 
 ### Unconsidered
 
-- Keeping the last hand-set value in the store, on a commented line or a side key, so going automatic and back is lossless. It brings the "old pile" problem back by the side door, and nobody has asked for it.
+- A "what changed" list under Profile, naming the rows set by hand. Cheap to add later from the same function.
 
-- A "what Custom changed" view on a presets group, listing the members that differ from the nearest preset. Cheap to add later from the same function.
+- More than one saved set of changes, named. Nobody has asked for it.
 
 ### Rejected
 
-- A master setting with a group mode and an override flag per member, with the members grayed but still editable. It is the [superseded](#superseded) design. It needs 2 stored things beside each master, a rule for clearing stale flags, special cases for reload and for inverted switches, and an on-then-off trick to un-gray a group. Everything it stores is derivable from "which members have a value".
+- Automatic stored as no line, with nothing kept. It is the first version of this design, and it lost the value behind every switch.
 
-- Graying an editable control. Everyone reads gray as "can't touch", and a focusable control is active, so it has to meet the normal contrast rules anyway.
+- A Custom profile, with one set of values. Any change made while a preset was in use copied the preset over it. Changes on top of whichever profile is in force replace it.
 
-- Disabling the group under a master switch, as most programs do. It is the problem being solved.
+- A change that moves the settings above it, as in version 2. Changing one row set Custom and turned Choose automatically off.
 
-- A per-member "Automatic" checkbox beside each control. It doubles the controls on the screen. The in-control forms above say the same with less.
+- A master setting with a stored group mode, and its members grayed until the mode is changed. It is version 1's unlock steps.
+
+- Keeping the hand-set rows in use when a profile is picked by hand. A picked profile then wouldn't look like that profile.
+
+- Put-aside values as commented-out lines. A save that keeps comments can still move or drop them, and a hand edit can't tell one from a note. A separate key is plain data.
+
+- A checkbox beside every auto setting. It doubles the controls on the screen. The switches and the in-control forms above say the same with less.
+
+- Graying an editable control. Everyone reads gray as "can't touch", and a focusable control has to meet the normal contrast rules anyway.
 
 ### Superseded
 
-- [Settings under a master](rejected/20261008-171206_settings_under_a_master.md), 2026-10-08, same day. Rejected at review for the reasons above before any of it was built.
+- The first version of this design, 2026-10-08 to 10-09. Automatic was stored as no line, and every switch was read from whether its settings had lines. It was built in part, for the font, window size, theme colors, open command and wallpaper (2026100907341818, 2026100910295903), before the lost values were noticed.
+
+- Settings under a master, 2026-10-08. A master switch with a stored group mode and an override flag per member, with the members grayed but still editable. Rejected at review before any of it was built.
 
 ## Research findings
 
-- Per-setting automatic with no master state is the pattern in CSS `auto`, in the "Automatic" entries of macOS System Settings and Windows "Automatic (recommended)" dropdowns, and in Firefox about:config and VS Code settings, where a changed value gets a mark and a reset arrow and the store keeps only what was changed.
+- Programs that keep a value through an on and off round trip store the switch and the value apart.
+	- Firefox's proxy settings store the mode on its own. Switching away from manual grays the host and port fields but keeps them.
+	- Unity's render volumes have an override checkbox on every property. Cleared, the property uses the default, and the value typed in stays. All and None buttons flip a whole group.
+	- Print dialogs keep a page range typed in while All is picked, and typing in the field picks Pages. That is the model for a row turning its switch on.
 
-- A derived presets dropdown that shows Custom is how game graphics menus and HandBrake work. The complaints on record are that people don't notice one slider threw the preset away, and that Custom doesn't say what changed. The enabled reset arrow on each changed member answers the first, and the "what changed" view in Unconsidered would answer the second.
+- Game graphics menus usually turn the preset to Custom when one setting changes, and overwrite every setting when a preset is picked. Player forums ask for custom settings to survive a preset pick.
 
-- A mode plus per-member flags, the rejected design, is closest to Visual Studio's per-setting "Inherit from parent or project defaults" checkbox, which is widely misunderstood.
-
-- "Enable project specific settings" in Eclipse is the disabled-group pattern. Turning it on brings back the whole set of old values, which is the pile this design avoids.
+- Per-setting automatic with no master state is the pattern in CSS `auto`, in the "Automatic" entries of macOS System Settings and Windows "Automatic (recommended)" dropdowns, and in Firefox about:config and VS Code settings, where a changed value gets a reset arrow and the store keeps only what was changed.
 
 - Accessibility writing agrees on not disabling form controls for state, since a disabled control says neither why nor what to do. WCAG exempts only inactive controls from the contrast minimum, so a control that takes focus has to meet it.
 
 ## Roadmap
 
-- Build the table, the function and the controls for each kind of value.
+- Add the `kept:` block and the 3-state function. The settings already moved onto the first version keep their table rows.
 
-- Move every existing automatic setting onto it in one go, so there is never a mix of old and new. Leave the "only counts while on" groups as they are.
+- Bring back the switches the first version took out, read from their settings.
+
+- Change the launch step that took the old switches out of the file. A switch that was on puts its settings' values aside, where it used to comment them out.
+
+- Move the Performance rows onto it: drop Custom, add "Use my changes", and make a changed row leave Profile and Choose automatically alone. A file whose profile was Custom keeps every row that differs from the default profile as set by hand, so nothing on screen changes.
+
+- Make a change to a row under a switch that is off turn the switch on.
+
+- Keep the lint check that refuses a direct read of an auto setting.
 
 - Moving a setting onto this design changes how its controls work, not which ones exist. No control is removed.
 
-- Add the lint check that refuses a direct read of an auto setting.
-
 ## Related backlog issues
 
-- A setting with an automatic value can be changed on its own, with no master switch to find first (2026100816170959). Queued.
+- A setting with an automatic value can be changed on its own, with no master switch to find first (2026100816170959).
+
+- Automatic settings, first part (2026100907341818), and theme colors, open command and wallpaper as automatic settings (2026100910295903).
+
+- Wallpaper colors (2026100910295901) and profile presets (2026100910295902).
 
 ## Copyright and license
 
