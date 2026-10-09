@@ -559,6 +559,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 	- Branch: wakesize
+	- Commit: 1b51a9b
 	- Test case: `cicd/tests/monwake/run.bash` (EsDZaHX), which fails on the old build (2 of 9 checks) and passes with the fix. Unit tests EsDZDBp, EsDZDFu, EsDZDJd and EsDZDNJ each fail with their part of the fix taken out, and pass with it.
 	- Verified:
 		- The window test both ways, and again with the fix while the unit tests loaded the cores. `startsize` still passes.
