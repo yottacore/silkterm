@@ -554,11 +554,23 @@ const CAPTURE_PROMPT: &str = "Press keys - Esc cancels, Backspace turns off";
 
 // Clear space between the parts of a line that carries several controls, DIP.
 const PAIR_GAP: f32 = 12.0;
-// Between a shared line's part label and the box after it, DIP.
+// Between a label and the box it names, either side of it, DIP. Grows with the
+// font through `font_gap`.
 const PART_LABEL_GAP: f32 = 6.0;
 // Between one toggle and the next label on a packed line, DIP. Well over
-// PART_LABEL_GAP, so each label reads with its own box.
+// PART_LABEL_GAP, so each label reads with its own box. Grows with the font too,
+// or a big font's label gap creeps up on it.
 const PACK_GAP: f32 = 24.0;
+// The UI line height, DIP, the two gaps above were drawn at: the 11 pt default
+// interface font. A taller line widens them in step and a shorter one leaves
+// them be.
+const GAPS_DRAWN_AT: f32 = 20.0;
+
+// A text gap at UI line height `line_h`, so a 24 pt label doesn't sit against
+// its box (2026100817172887).
+fn font_gap(gap: f32, line_h: f32) -> f32 {
+	gap * (line_h / GAPS_DRAWN_AT).max(1.0)
+}
 
 // The warning mark after a label, in UI line heights, so it grows with the
 // interface font. Ratios, because the label column is measured in physical
@@ -1184,12 +1196,12 @@ impl SettingsDialog {
 				} else {
 					warning_room(line_h)
 				};
-				label_ws.get(j).copied().unwrap_or(0.0) + mark + PART_LABEL_GAP
+				label_ws.get(j).copied().unwrap_or(0.0) + mark + font_gap(PART_LABEL_GAP, line_h)
 			};
 			if j == lead + k {
 				return (x, x + label);
 			}
-			x += label + lay().swatch + PACK_GAP;
+			x += label + lay().swatch + font_gap(PACK_GAP, line_h);
 		}
 		(x, x)
 	}
@@ -1201,11 +1213,12 @@ impl SettingsDialog {
 	// The control column a line led by `lead` needs, from what each part has to
 	// show: a dropdown its pair floor, a toggle its box and any label before it.
 	// The middle parts lose a whole gap to their neighbors and the end ones half.
-	fn line_need(specs: &[Spec], lead: usize, label_ws: &[f32], font_scale: f32) -> f32 {
+	fn line_need(specs: &[Spec], lead: usize, label_ws: &[f32], line_h: f32) -> f32 {
 		let (_, parts, _) = Self::line_of(specs, lead);
 		if parts < 2 || Self::packs(specs, lead) {
 			return 0.0;
 		}
+		let font_scale = (line_h / lay().base_line_height).max(1.0);
 		let n = parts as f32;
 		(0..parts)
 			.map(|k| {
@@ -1214,7 +1227,8 @@ impl SettingsDialog {
 					Kind::Dropdown(_) => lay().dropdown_pair_width * font_scale,
 					Kind::Toggle if k > 0 && !spec.label.is_empty() => {
 						label_ws.get(lead + k).copied().unwrap_or(0.0)
-							+ PART_LABEL_GAP + lay().swatch
+							+ font_gap(PART_LABEL_GAP, line_h)
+							+ lay().swatch
 					}
 					Kind::Toggle => lay().swatch,
 					_ => 0.0,
@@ -1430,7 +1444,7 @@ impl SettingsDialog {
 		// line needs every part's room in every one of its even parts
 		let dd_ctl = (0..specs.len())
 			.filter(|&i| !specs[i].beside)
-			.map(|lead| Self::line_need(specs, lead, label_ws, font_scale))
+			.map(|lead| Self::line_need(specs, lead, label_ws, line_h))
 			.chain(
 				specs
 					.iter()
@@ -2666,7 +2680,9 @@ impl SettingsDialog {
 		let (_, parts, k) = Self::line_of(self.specs, i);
 		let start = self.part_span(k, parts).0;
 		if self.specs[i].beside && !self.specs[i].label.is_empty() {
-			start + self.label_ws.get(i).copied().unwrap_or(0.0) + PART_LABEL_GAP
+			start
+				+ self.label_ws.get(i).copied().unwrap_or(0.0)
+				+ font_gap(PART_LABEL_GAP, self.line_h)
 		} else {
 			start
 		}
@@ -2789,6 +2805,10 @@ impl SettingsDialog {
 	}
 	fn radio_box_sz(&self) -> f32 {
 		lay().radio_box * self.ui_scale()
+	}
+	// Where the label after a radio or pair box starts.
+	fn label_after(&self, bx: Rect) -> f32 {
+		bx.x + bx.w + font_gap(PART_LABEL_GAP, self.line_h)
 	}
 	// indicator box for radio option `choice` in row `i`
 	fn radio_box(&self, i: usize, choice: usize) -> Rect {
@@ -5506,7 +5526,7 @@ impl SettingsDialog {
 						out.push(TextItem {
 							color,
 							clip: Some(vp),
-							..mk(labels[part as usize].into(), bx.x + bx.w + 6.0, ty)
+							..mk(labels[part as usize].into(), self.label_after(bx), ty)
 						});
 					}
 				}
@@ -5518,7 +5538,7 @@ impl SettingsDialog {
 						out.push(TextItem {
 							color,
 							clip: Some(vp),
-							..mk((*opt).into(), radio_rect.x + radio_rect.w + 6.0, ty)
+							..mk((*opt).into(), self.label_after(radio_rect), ty)
 						});
 					}
 				}
@@ -6722,6 +6742,104 @@ mod tests {
 			let in_column = |key: Key| SettingsDialog::in_label_column(d.specs, row(key));
 			assert!(in_column(Key::PerfCheckHardware) && in_column(Key::PerfAuto));
 			assert!(!in_column(Key::PerfCheckNext) && !in_column(Key::TabShowsTitle));
+		}
+	}
+
+	// At a 24 pt interface font the Tab text labels sat 6 DIP from boxes under
+	// text twice the default's size (2026100817172887). Each gap between a label
+	// and its own box, and before the next toggle, keeps its share of the line,
+	// and never drops below what it is at the default font. A radio option's and
+	// a pair's label after its box go the same way.
+	// Test ID: Es9uxSu
+	#[test]
+	fn a_large_interface_font_keeps_each_label_clear_of_its_box() {
+		use super::{GAPS_DRAWN_AT, PACK_GAP, PART_LABEL_GAP};
+		// UI line heights, DIP: the test default, the 11 pt default, 24 pt, 32 pt
+		for line in [18.0f32, GAPS_DRAWN_AT, 43.0, 58.0] {
+			let grow = (line / GAPS_DRAWN_AT).max(1.0);
+			let (label_gap, pack_gap) = (PART_LABEL_GAP * grow, PACK_GAP * grow);
+			for scale in [1.0f32, 2.0] {
+				let k = line / 18.0 * scale;
+				let mut d = SettingsDialog::new(
+					0.0,
+					0.0,
+					line * scale,
+					170.0 * k,
+					80.0 * k,
+					90.0 * k,
+					0.0,
+					vec![90.0 * k; tab_titles().len()],
+					labels7(k),
+					f32::MAX,
+					4000.0 * scale,
+					scale,
+				);
+				let (w, h) = d.natural;
+				d.set_size(w * scale, h * scale);
+				let at = format!("line {line}, {scale}x");
+				let near = |got: f32, want: f32, what: &str| {
+					assert!(
+						(got - want).abs() < 0.01,
+						"{what}: {got}, want {want} at {at}"
+					);
+				};
+				let mut packed = 0;
+				for i in 0..d.specs.len() {
+					if !SettingsDialog::packs(d.specs, i) {
+						continue;
+					}
+					d.tab = d.specs[i].tab;
+					let (lead, _, _) = SettingsDialog::line_of(d.specs, i);
+					let bx = d.checkbox(i);
+					if !(i == lead && SettingsDialog::lead_keeps_column(d.specs, i)) {
+						let mark = if d.specs[i].warning.is_empty() {
+							0.0
+						} else {
+							super::warning_room(d.line_h)
+						};
+						let label_end = d.label_x(i) + d.label_ws[i] + mark;
+						near(bx.x - label_end, label_gap, d.specs[i].label);
+						packed += 1;
+					}
+					if i > lead {
+						let prev = d.checkbox(i - 1);
+						near(d.label_x(i) - (prev.x + prev.w), pack_gap, d.specs[i].label);
+					}
+				}
+				assert!(
+					packed >= 4,
+					"the Tab text line and Re-test, saw {packed} at {at}"
+				);
+				// a label after its box, where it is drawn
+				let mut after = 0;
+				for i in 0..d.specs.len() {
+					let boxes: Vec<(&str, super::Rect)> = match d.specs[i].kind {
+						Kind::Radio(options) => options
+							.iter()
+							.enumerate()
+							.map(|(c, o)| (*o, d.radio_box(i, c)))
+							.collect(),
+						Kind::Dual { labels, .. } => {
+							vec![(labels[0], d.dual_box(i, 0)), (labels[1], d.dual_box(i, 1))]
+						}
+						_ => continue,
+					};
+					d.tab = d.specs[i].tab;
+					let texts = d.texts_dip(d.line_h, chars7);
+					for (label, bx) in boxes {
+						let item = texts
+							.iter()
+							.find(|t| t.text == label && t.x > bx.x && t.x < bx.x + 200.0 * k)
+							.unwrap_or_else(|| panic!("{label} is not drawn at {at}"));
+						near(item.x - (bx.x + bx.w), label_gap, label);
+						after += 1;
+					}
+				}
+				assert!(
+					after >= 4,
+					"Fit's two options and the font pair, saw {after} at {at}"
+				);
+			}
 		}
 	}
 
