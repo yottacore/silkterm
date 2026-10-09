@@ -528,7 +528,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - After the monitors wake from power save, a SilkTerm on the portrait monitor returns to the size it uses on the landscape monitor
 	- ID: 2026100907341816
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs local test suite run?: The full pipeline, which now runs the `monwake` window test.
+	- Needs external testing: A real power-save wake on b23.
 	- Severity: Avg
 	- Opened: 20261009-073418
 	- Opened by: JC
@@ -542,8 +544,27 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The SilkTerm returned to its size used for the landscape monitor.
 	- Expected behavior: It keeps the size it had on the portrait monitor.
 	- Possible cause: Speculation. At some point during monitor wake, maybe the landscape was recognized first, and so everything was confined to that monitor, and SilkTerm (correctly) resized itself accordingly. Then when the portrait monitor came online moments later, the WM moved the windows back to the portrait monitor, but SilkTerm didn't register it as a "move". And it happened before either monitor's backlights even had time to light up, so the dance wasn't noticeable.
+	- Reproduced: 20261009 on b23, with a landscape and a portrait output under sway. The portrait one was turned off and on again. Off for 1.2 or 1.8 s, the window ended back on it at the landscape size. Off for 0.5 or 3 s, it ended at its own size.
+	- Actual cause:
+		- The guess was close. The window manager moves the window onto the landscape monitor, the window takes that size, and the move back comes within 1.5 s of that resize. A move in that time was dropped, since the window's own resize can make the window manager move it, and a window on the edge of two monitors must not swap sizes.
+		- b23's portrait monitor reads its size from the X server as 401x641 mm one time and 400x640 mm another, the EDID's mm and whole cm. The config had an entry under each, and the reading changed overnight. So even a move back that was seen took the other entry's size.
+		- A window left on no monitor, as when its monitor goes dark and the window is not moved, was counted on the first monitor, and could take that one's size.
+	- Actual fix:
+		- A move during that time counts when the monitors have changed since the window asked for its size. A move from its own resize still does not.
+		- Two readings of a monitor with the same resolution and scale and under 1 cm apart in size are one monitor. The first entry in the file that matches is the one used, for both readings.
+		- A window on no monitor is on none, and keeps its size.
+	- Progress log:
+		- 20261009: Not covered: a layout that shifts under a window the window manager does not move gives the window no event on X11, so it is not looked at. Nothing shows that b23 does that on a wake.
+		- 20261009: b23's config keeps both portrait entries. The first one is used for both readings now, and the other stays unused.
 	- Notes:
 		- Before RC1.
+	- Branch: wakesize
+	- Test case: `cicd/tests/monwake/run.bash` (EsDZaHX), which fails on the old build (2 of 9 checks) and passes with the fix. Unit tests EsDZDBp, EsDZDFu, EsDZDJd and EsDZDNJ each fail with their part of the fix taken out, and pass with it.
+	- Verified:
+		- The window test both ways, and again with the fix while the unit tests loaded the cores. `startsize` still passes.
+		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- Not verified: a real wake on b23, and the Windows and macOS code paths, which were compiled only.
+	- Swept: every place a monitor key is compared or a monitor is picked: `settle`, `remembered_window`, `remember_window` and `monitor_under`. `write_monitor_sizes` compares an entry with its own earlier copy, so it stays exact.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720

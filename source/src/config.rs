@@ -409,7 +409,8 @@ pub fn remembered_window(settings: &Settings, monitor: Option<&str>) -> KeptWind
 	};
 	monitor
 		.filter(|_| settings.remember_per_monitor)
-		.and_then(|key| settings.monitor_sizes.iter().find(|m| m.key == key))
+		.and_then(|key| monitor_entry(&settings.monitor_sizes, key))
+		.map(|at| &settings.monitor_sizes[at])
 		.map_or(last, |m| KeptWindow {
 			columns: m.columns,
 			rows: m.rows,
@@ -440,17 +441,16 @@ pub fn remember_window(
 	if grid.is_none() && font_zoom.is_none() {
 		return;
 	}
-	if !settings.monitor_sizes.iter().any(|m| m.key == key) {
+	let at = monitor_entry(&settings.monitor_sizes, key).unwrap_or_else(|| {
 		settings.monitor_sizes.push(MonitorSize {
 			key: key.to_string(),
 			columns: settings.remembered_columns,
 			rows: settings.remembered_rows,
 			font_zoom: settings.remembered_font_zoom,
 		});
-	}
-	let Some(entry) = settings.monitor_sizes.iter_mut().find(|m| m.key == key) else {
-		return;
-	};
+		settings.monitor_sizes.len() - 1
+	});
+	let entry = &mut settings.monitor_sizes[at];
 	if let Some((columns, rows)) = grid {
 		entry.columns = columns;
 		entry.rows = rows;
@@ -458,6 +458,14 @@ pub fn remember_window(
 	if let Some(zoom) = font_zoom {
 		entry.font_zoom = zoom;
 	}
+}
+
+// The entry kept for this monitor: the first in the file that names it,
+// which is not always under the same key (`monitor::same_monitor`).
+fn monitor_entry(sizes: &[MonitorSize], key: &str) -> Option<usize> {
+	sizes
+		.iter()
+		.position(|m| crate::monitor::same_monitor(&m.key, key))
 }
 
 /// The window sizes in the file now, put into the live settings. Every
@@ -11215,6 +11223,43 @@ mod tests {
 	// A size or zoom set by hand is the last one anywhere, and with
 	// remember_size and remember_per_monitor on, that monitor's own too.
 	// Opening on a monitor with none of its own takes the last anywhere.
+	// b23's portrait monitor read as 400x640 mm one day and 401x641 the next,
+	// after a power save, and so came up as a monitor with another size.
+	// Test ID: EsDZDJd
+	#[test]
+	fn a_monitor_read_to_the_cm_finds_and_keeps_its_own_entry() {
+		let entry = |key: &str, columns, rows, font_zoom| MonitorSize {
+			key: key.to_string(),
+			columns,
+			rows,
+			font_zoom,
+		};
+		let (mm, cm) = ("1600x2560_100pct_401x641mm", "1600x2560_100pct_400x640mm");
+		let landscape = "3440x1440_100pct_819x346mm";
+		let mut s = Settings {
+			monitor_sizes: vec![entry(cm, 152, 28, -1), entry(landscape, 172, 39, 0)],
+			..Settings::default()
+		};
+		let portrait = KeptWindow {
+			columns: 152,
+			rows: 28,
+			font_zoom: -1,
+		};
+		assert_eq!(remembered_window(&s, Some(mm)), portrait);
+		assert_eq!(remembered_window(&s, Some(cm)), portrait);
+		remember_window(&mut s, Some(mm), Some((143, 30)), Some(0));
+		assert_eq!(s.monitor_sizes.len(), 2, "the entry it had, not a new one");
+		assert_eq!(s.monitor_sizes[0], entry(cm, 143, 30, 0));
+		assert_eq!(s.monitor_sizes[1], entry(landscape, 172, 39, 0));
+		// a file that already has both: the first one, whichever way it reads
+		s.monitor_sizes.push(entry(mm, 160, 48, 0));
+		assert_eq!(
+			remembered_window(&s, Some(mm)),
+			remembered_window(&s, Some(cm))
+		);
+		assert_eq!(remembered_window(&s, Some(mm)).columns, 143);
+	}
+
 	// Test ID: EreYcuQ
 	#[test]
 	fn a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there() {

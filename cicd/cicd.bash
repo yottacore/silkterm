@@ -722,6 +722,9 @@ fRunTest_MaySkip cicd/tests/config-convert/run.bash "config conversion" "config 
 ## The window shows at the size it keeps, maximized and fullscreen too, with
 ## no jump after. Exit 3 is a skip: no binary, display, window manager or python-xlib.
 fRunTest_MaySkip cicd/tests/startsize/run.bash "window size at launch"
+## A window put back on a monitor that went dark and came back takes that
+## monitor's size again. Exit 3 is a skip: no binary, sway, Xwayland or python3.
+fRunTest_MaySkip cicd/tests/monwake/run.bash "window size after a monitor wakes"
 ## A save after the config was deleted writes it again, keeping what it had.
 ## Exit 3 is a skip: no binary, display or xdotool.
 fRunTest_MaySkip cicd/tests/delcfg/run.bash "save after the config was deleted"
