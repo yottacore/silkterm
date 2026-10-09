@@ -47,7 +47,7 @@ layout:
 	indent: 16                 ## label offset per sub-group level (controls do not move)
 	label_width: 168           ## floor for the label column
 	label_gap: 14              ## clear space after the longest label
-	revert_width: 22           ## right-edge revert-to-default icon column
+	revert_width: 22           ## floor; the revert-to-default column grows to its arrow
 
 	## Controls
 	slider_width: 220
@@ -74,10 +74,11 @@ layout:
 	## Shells grid (the Shell tab: one line per stored shell). The columns are
 	## floors and the command takes whatever width is left over, so a wider panel
 	## goes to the one value that is routinely too long to read at a glance.
+	## The name and the gap grow with a UI line taller than the 11 pt default's.
 	shell_name_width: 128
 	shell_command_width: 190
-	shell_seen_width: 78       ## the read-only "Last seen" date
-	shell_active_width: 44     ## wide enough for the column title, not the checkbox
+	shell_seen_width: 78       ## floor; grows to its title, a date or "never"
+	shell_active_width: 44     ## floor; grows to its title or the checkbox
 	shell_col_gap: 8
 	shell_grip: 16             ## the drag handle that reorders a line
 	shell_button: 18           ## the remove icon box
@@ -112,8 +113,8 @@ layout:
 	## with no text in it.
 	pick_gap: 12               ## between the square, the strip and the value column
 	pick_strip: 22             ## width of the hue strip
-	pick_label_width: 96       ## the "Saturation %" column
-	pick_field_width: 58       ## the value boxes
+	pick_label_width: 96       ## the "Saturation %" column, grows to the longest label
+	pick_field_width: 58       ## the value boxes, grow to "#rrggbb"
 	pick_min_square: 80
 	pick_marker: 13            ## the ring on the square
 

@@ -551,6 +551,8 @@ const UNSAVED_THEME: &str = "[unsaved]";
 
 // A slider's handle, centered on the value, so it overhangs the track's ends.
 const SLIDER_HANDLE_W: f32 = 10.0;
+// The revert arrow's clear space either side, inside its column, DIP.
+const REVERT_INSET: f32 = 4.0;
 // What a hotkey row's box says while it waits for the new chord.
 const CAPTURE_PROMPT: &str = "Press keys - Esc cancels, Backspace turns off";
 
@@ -565,11 +567,12 @@ const PART_LABEL_GAP: f32 = 6.0;
 const PACK_GAP: f32 = 24.0;
 // The UI line height, DIP, the two gaps above were drawn at: the 11 pt default
 // interface font. A taller line widens them in step and a shorter one leaves
-// them be.
+// them be. The shells grid's name column and column gap go by it too.
 const GAPS_DRAWN_AT: f32 = 20.0;
 
-// A text gap at UI line height `line_h`, so a 24 pt label doesn't sit against
-// its box (2026100817172887).
+// A text gap, or a column sized for text nobody can measure ahead, at UI line
+// height `line_h`, so a 24 pt label doesn't sit against its box
+// (2026100817172887, 2026100818102267).
 fn font_gap(gap: f32, line_h: f32) -> f32 {
 	gap * (line_h / GAPS_DRAWN_AT).max(1.0)
 }
@@ -1046,6 +1049,11 @@ pub struct SettingsDialog {
 	btn_w: f32,
 	row_btn_w: f32, // push-buttons that sit on a row (see chrome_widths)
 	value_w: f32,   // every slider's number box, so the sliders end in one column
+	revert_w: f32,
+	seen_w: f32,
+	active_w: f32,
+	pick_label_w: f32,
+	pick_field_w: f32,
 	// DIP -> physical pixel factor for the window this dialog lives in. Every
 	// measurement in here is a DIP; this is applied only at the boundary.
 	scale: f32,
@@ -1306,10 +1314,10 @@ impl SettingsDialog {
 		}
 	}
 
-	/// `line_h` is the chrome (UI font) line height; `label_w`/`btn_w`/`tab_ws`/
-	/// `label_ws` are the measured widths in that font (see `chrome_widths`) so nothing
-	/// truncates. `max_w`/`max_h` cap the window to what the screen can show; a
-	/// tab that doesn't fit scrolls instead of clipping the buttons.
+	/// `line_h` is the chrome (UI font) line height; `chrome` is the text it has
+	/// to fit, measured in that font (see `chrome_widths`) so nothing truncates.
+	/// `max_w`/`max_h` cap the window to what the screen can show; a tab that
+	/// doesn't fit scrolls instead of clipping the buttons.
 	/// `scale` is the window's DIP -> physical factor; every other argument arrives
 	/// in physical pixels and is converted on the way in (see the module note on
 	/// the DIP boundary).
@@ -1317,12 +1325,7 @@ impl SettingsDialog {
 		screen_w: f32,
 		screen_h: f32,
 		line_h: f32,
-		label_w: f32,
-		btn_w: f32,
-		row_btn_w: f32,
-		value_w: f32,
-		tab_ws: Vec<f32>,
-		label_ws: Vec<f32>,
+		chrome: Chrome,
 		max_w: f32,
 		max_h: f32,
 		scale: f32,
@@ -1330,21 +1333,13 @@ impl SettingsDialog {
 		let scale = sane_scale(scale);
 		let (screen_w, screen_h) = (screen_w / scale, screen_h / scale);
 		let (line_h, max_w, max_h) = (line_h / scale, max_w / scale, max_h / scale);
-		let (label_w, btn_w, row_btn_w) = (label_w / scale, btn_w / scale, row_btn_w / scale);
-		let tab_ws: Vec<f32> = tab_ws.into_iter().map(|w| w / scale).collect();
-		let label_ws: Vec<f32> = label_ws.into_iter().map(|w| w / scale).collect();
-		let label_w = label_w.max(lay().label_width);
-		let btn_w = btn_w.max(lay().button_width);
-		let row_btn_w = row_btn_w.max(lay().button_width);
-		let value_w = (value_w / scale).max(lay().value_width);
+		let chrome = chrome.in_dip(scale);
 		// Natural size first, then what the screen leaves room for. Below the
 		// natural size the rows region scrolls in that direction; above it the
 		// stretchy controls spread out.
-		let natural = Self::natural_dip(
-			line_h, label_w, btn_w, row_btn_w, value_w, &tab_ws, &label_ws,
-		);
+		let natural = Self::natural_dip(line_h, &chrome);
 		let (w, natural_h) = natural;
-		let (min_w, min_h) = Self::min_size_dip(line_h, btn_w);
+		let (min_w, min_h) = Self::min_size_dip(line_h, chrome.btn_w);
 		let w = w.min(max_w.max(min_w));
 		let h = natural_h.min(max_h.max(min_h));
 		let rect = Rect {
@@ -1364,8 +1359,8 @@ impl SettingsDialog {
 			natural,
 			specs,
 			tab: 0,
-			tab_ws,
-			label_ws,
+			tab_ws: chrome.tab_ws,
+			label_ws: chrome.label_ws,
 			scroll: 0.0,
 			hscroll: 0.0,
 			drag_thumb: None,
@@ -1402,10 +1397,15 @@ impl SettingsDialog {
 			line: false,
 			types: true,
 			line_h,
-			label_w,
-			btn_w,
-			row_btn_w,
-			value_w,
+			label_w: chrome.label_w,
+			btn_w: chrome.btn_w,
+			row_btn_w: chrome.row_btn_w,
+			value_w: chrome.value_w,
+			revert_w: chrome.revert_w,
+			seen_w: chrome.seen_w,
+			active_w: chrome.active_w,
+			pick_label_w: chrome.pick_label_w,
+			pick_field_w: chrome.pick_field_w,
 			scale,
 		};
 		dialog.assoc_refresh();
@@ -1415,15 +1415,16 @@ impl SettingsDialog {
 	// The size the content wants, in DIP, from the chrome already converted at
 	// the boundary. `new` and `rescale` both solve it, and it is long enough that
 	// a second copy would drift.
-	fn natural_dip(
-		line_h: f32,
-		label_w: f32,
-		btn_w: f32,
-		row_btn_w: f32,
-		value_w: f32,
-		tab_ws: &[f32],
-		label_ws: &[f32],
-	) -> (f32, f32) {
+	fn natural_dip(line_h: f32, chrome: &Chrome) -> (f32, f32) {
+		let Chrome {
+			label_w,
+			btn_w,
+			row_btn_w,
+			value_w,
+			revert_w,
+			..
+		} = *chrome;
+		let (tab_ws, label_ws) = (&chrome.tab_ws, &chrome.label_ws);
 		let specs: &'static [Spec] = &ui().specs;
 		let btn_h = lay().button_height.max(line_h + lay().row_pad);
 		// A tab whose height moves with the data, the shell list's, scrolls
@@ -1464,7 +1465,7 @@ impl SettingsDialog {
 			)
 			.fold(0.0f32, f32::max);
 		let dd_w = if dd_ctl > 0.0 {
-			lay().pad + label_w + dd_ctl + 6.0 + lay().revert_width + lay().pad
+			lay().pad + label_w + dd_ctl + 6.0 + revert_w + lay().pad
 		} else {
 			0.0
 		};
@@ -1488,7 +1489,7 @@ impl SettingsDialog {
 		// the shells grid spans the whole content width, so its columns are a floor
 		// on the panel rather than on a column of it
 		let grid_w = if specs.iter().any(|s| matches!(s.kind, Kind::ShellList)) {
-			lay().pad + Self::shell_columns_w(font_scale) + lay().pad
+			lay().pad + Self::shell_columns_w(line_h, chrome) + lay().pad
 		} else {
 			0.0
 		};
@@ -1502,7 +1503,7 @@ impl SettingsDialog {
 				} else {
 					f32::from(specs[lead].indent) * lay().indent + run
 				};
-				lay().pad + line + 6.0 + lay().revert_width + lay().pad
+				lay().pad + line + 6.0 + revert_w + lay().pad
 			})
 			.fold(0.0f32, f32::max);
 		// a wider number box widens this floor, as a longer label does
@@ -1525,39 +1526,24 @@ impl SettingsDialog {
 	/// physical pixels at the old one are refreshed. Values, edits, focus and
 	/// scroll are deliberately untouched - a rebuild would lose every unapplied
 	/// edit the moment the window crossed a monitor edge.
-	pub fn rescale(
-		&mut self,
-		line_h: f32,
-		label_w: f32,
-		btn_w: f32,
-		row_btn_w: f32,
-		value_w: f32,
-		tab_ws: Vec<f32>,
-		label_ws: Vec<f32>,
-		max_w: f32,
-		max_h: f32,
-		scale: f32,
-	) {
+	pub fn rescale(&mut self, line_h: f32, chrome: Chrome, max_w: f32, max_h: f32, scale: f32) {
 		let scale = sane_scale(scale);
 		let (line_h, max_w, max_h) = (line_h / scale, max_w / scale, max_h / scale);
-		let (label_w, btn_w, row_btn_w) = (label_w / scale, btn_w / scale, row_btn_w / scale);
-		self.tab_ws = tab_ws.into_iter().map(|w| w / scale).collect();
-		self.label_ws = label_ws.into_iter().map(|w| w / scale).collect();
+		let chrome = chrome.in_dip(scale);
 		self.line_h = line_h;
-		self.label_w = label_w.max(lay().label_width);
-		self.btn_w = btn_w.max(lay().button_width);
-		self.row_btn_w = row_btn_w.max(lay().button_width);
-		self.value_w = (value_w / scale).max(lay().value_width);
 		self.scale = scale;
-		self.natural = Self::natural_dip(
-			self.line_h,
-			self.label_w,
-			self.btn_w,
-			self.row_btn_w,
-			self.value_w,
-			&self.tab_ws,
-			&self.label_ws,
-		);
+		self.natural = Self::natural_dip(line_h, &chrome);
+		self.label_w = chrome.label_w;
+		self.btn_w = chrome.btn_w;
+		self.row_btn_w = chrome.row_btn_w;
+		self.value_w = chrome.value_w;
+		self.revert_w = chrome.revert_w;
+		self.seen_w = chrome.seen_w;
+		self.active_w = chrome.active_w;
+		self.pick_label_w = chrome.pick_label_w;
+		self.pick_field_w = chrome.pick_field_w;
+		self.tab_ws = chrome.tab_ws;
+		self.label_ws = chrome.label_ws;
 		// The screen holds fewer DIP at a higher scale, so the window may no
 		// longer fit what it was dragged to.
 		let (min_w, min_h) = Self::min_size_dip(self.line_h, self.btn_w);
@@ -1819,7 +1805,7 @@ impl SettingsDialog {
 	// Fixed, so a value field and a revert arrow line up down the whole tab
 	// whatever the window's width.
 	fn ctl_right_full(&self) -> f32 {
-		self.content_x() + self.layout_w() - lay().pad - lay().revert_width - 6.0
+		self.content_x() + self.layout_w() - lay().pad - self.revert_w - 6.0
 	}
 	// The same, for one row: a row sharing its line stops at the end of its part.
 	fn ctl_right(&self, i: usize) -> f32 {
@@ -2779,11 +2765,12 @@ impl SettingsDialog {
 	}
 	// right-edge revert-to-default icon for row `i`
 	fn revert_box(&self, i: usize) -> Rect {
+		let h = self.check_sz();
 		Rect {
-			x: self.content_x() + self.layout_w() - lay().pad - lay().revert_width,
-			y: self.centered_in_row(i, lay().swatch),
-			w: lay().revert_width,
-			h: lay().swatch,
+			x: self.content_x() + self.layout_w() - lay().pad - self.revert_w,
+			y: self.centered_in_row(i, h),
+			w: self.revert_w,
+			h,
 		}
 	}
 	fn check_sz(&self) -> f32 {
@@ -5448,7 +5435,7 @@ impl SettingsDialog {
 						colors.handle
 					},
 					clip: Some(vp),
-					..mk(ui().icons.revert.into(), revert_rect.x + 4.0, ty)
+					..mk(ui().icons.revert.into(), revert_rect.x + REVERT_INSET, ty)
 				});
 			}
 			// horizontal view offset of row i's field while it's being edited (the
@@ -5615,8 +5602,8 @@ impl SettingsDialog {
 					for (title, tx) in [
 						("Name", cols.name),
 						("Command", cols.command),
-						("Last seen", cols.seen),
-						("Active", cols.active),
+						(shell_grid::SEEN_TITLE, cols.seen),
+						(shell_grid::ACTIVE_TITLE, cols.active),
 					] {
 						out.push(TextItem {
 							color: colors.dim,
@@ -5668,7 +5655,7 @@ impl SettingsDialog {
 						});
 						// Last seen is the program's own note, never edited here
 						let seen_text = if entry.last_seen.is_empty() {
-							"never".to_string()
+							shell_grid::NEVER_SEEN.to_string()
 						} else {
 							entry.last_seen.clone()
 						};
@@ -5807,9 +5794,53 @@ pub fn sane_scale(scale: f32) -> f32 {
 	}
 }
 
-/// Widest field label, button caption, slider number and per-tab title widths
-/// at the current UI font, so the dialog sizes to the real text (a wide serif or
-/// a big desktop size never truncates).
+/// The chrome's text, measured in the UI font. `chrome_widths` fills it in
+/// physical pixels; `new` and `rescale` take it whole and turn it into DIP once,
+/// through `in_dip`, which is also where each declared floor applies. A column
+/// that holds text belongs here, or it stays one size while its text grows
+/// (2026100818102267).
+#[derive(Debug, Clone, Default)]
+pub struct Chrome {
+	pub label_w: f32,
+	pub btn_w: f32,
+	pub row_btn_w: f32, // push-buttons that sit on a row
+	pub value_w: f32,   // every slider's number box
+	pub tab_ws: Vec<f32>,
+	pub label_ws: Vec<f32>,
+	pub revert_w: f32,     // the revert arrow's column
+	pub seen_w: f32,       // the shells grid's "Last seen": its title, a date or "never"
+	pub active_w: f32,     // the shells grid's "Active" title
+	pub pick_label_w: f32, // the color picker's label column
+	pub pick_field_w: f32, // the color picker's value boxes, "#rrggbb" the widest
+}
+
+impl Chrome {
+	fn in_dip(self, scale: f32) -> Chrome {
+		let l = lay();
+		let dip = |w: f32| w / scale;
+		// Whole DIP for the text columns, rounded down: a part pixel spills into
+		// the clear space after it rather than moving a column at the default
+		// font, where the date measures 78.3 against the 78 it was drawn for.
+		let whole = |w: f32| (w / scale).floor();
+		Chrome {
+			label_w: dip(self.label_w).max(l.label_width),
+			btn_w: dip(self.btn_w).max(l.button_width),
+			row_btn_w: dip(self.row_btn_w).max(l.button_width),
+			value_w: dip(self.value_w).max(l.value_width),
+			tab_ws: self.tab_ws.into_iter().map(dip).collect(),
+			label_ws: self.label_ws.into_iter().map(dip).collect(),
+			revert_w: whole(self.revert_w).max(l.revert_width),
+			seen_w: whole(self.seen_w).max(l.shell_seen_width),
+			active_w: whole(self.active_w).max(l.shell_active_width),
+			pick_label_w: whole(self.pick_label_w).max(l.pick_label_width),
+			pick_field_w: whole(self.pick_field_w).max(l.pick_field_width),
+		}
+	}
+}
+
+/// Widest field label, button caption, slider number, per-tab title and text
+/// column widths at the current UI font, so the dialog sizes to the real text (a
+/// wide serif or a big desktop size never truncates).
 ///
 /// This measures against the text context, so it works in PHYSICAL pixels - which
 /// is why every layout constant it reads converts through `config::dip` at its use
@@ -5819,10 +5850,7 @@ pub fn sane_scale(scale: f32) -> f32 {
 /// what put a tab's title `tab_pad/2` from its left edge inside a box only
 /// `tab_pad/scale` wider than the title - flush right at 2x, overflowing past it
 /// above that.
-pub fn chrome_widths(
-	text: &mut crate::text::TextCtx,
-	scale: f32,
-) -> (f32, f32, f32, f32, Vec<f32>, Vec<f32>) {
+pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> Chrome {
 	let attrs = crate::text::ui_attrs();
 	let dip = |v: f32| config::dip(v, scale);
 	// an indented label starts further right, so the column has to clear the
@@ -5885,7 +5913,69 @@ pub fn chrome_widths(
 		.iter()
 		.map(|spec| text.measure_ui_text(spec.label, &attrs))
 		.collect();
-	(label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws)
+	let revert_w = measured_plus(
+		widest_text(text, &attrs, &[ui().icons.revert]),
+		REVERT_INSET * 2.0,
+		scale,
+	);
+	// dates and hex values come from the data, so each is measured at its
+	// font's widest digit
+	let digit = widest_char(text, &attrs, "0123456789");
+	let date = [4, 2, 2].map(|n| digit.repeat(n)).join("-");
+	let seen_w = widest_text(
+		text,
+		&attrs,
+		&[shell_grid::SEEN_TITLE, &date, shell_grid::NEVER_SEEN],
+	);
+	let active_w = widest_text(text, &attrs, &[shell_grid::ACTIVE_TITLE]);
+	let pick_labels: Vec<&str> = crate::pick::Field::ALL.iter().map(|f| f.label()).collect();
+	let pick_label_w = measured_plus(
+		widest_text(text, &attrs, &pick_labels),
+		font_gap(PART_LABEL_GAP, line_h / scale),
+		scale,
+	);
+	let hex = format!(
+		"#{}",
+		widest_char(text, &attrs, "0123456789abcdef").repeat(6)
+	);
+	let pick_field_w = measured_plus(
+		widest_text(text, &attrs, &[&hex, &digit.repeat(3)]),
+		lay().field_pad * 2.0,
+		scale,
+	);
+	Chrome {
+		label_w,
+		btn_w,
+		row_btn_w,
+		value_w,
+		tab_ws,
+		label_ws,
+		revert_w,
+		seen_w,
+		active_w,
+		pick_label_w,
+		pick_field_w,
+	}
+}
+
+fn widest_text(text: &mut crate::text::TextCtx, attrs: &glyphon::Attrs, texts: &[&str]) -> f32 {
+	texts
+		.iter()
+		.map(|s| text.measure_ui_text(s, attrs))
+		.fold(0.0f32, f32::max)
+}
+
+// The character of `set` that draws widest in the UI font, as a string.
+fn widest_char(text: &mut crate::text::TextCtx, attrs: &glyphon::Attrs, set: &str) -> String {
+	let mut best = (String::new(), -1.0f32);
+	for c in set.chars() {
+		let s = c.to_string();
+		let w = text.measure_ui_text(&s, attrs);
+		if w > best.1 {
+			best = (s, w);
+		}
+	}
+	best.0
 }
 
 /// Returns true if `old` and `new` differ in any field that needs a text-context
@@ -5924,7 +6014,7 @@ pub fn wallpaper_changed(old: &Settings, new: &Settings) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::{
-		EASE_IN_MAX, EASE_IN_MIN, EASE_OUT_MAX, EASE_OUT_MIN, Key, Kind, RAMP_DOWN_MAX,
+		Chrome, EASE_IN_MAX, EASE_IN_MIN, EASE_OUT_MAX, EASE_OUT_MIN, Key, Kind, RAMP_DOWN_MAX,
 		RAMP_DOWN_MIN, RAMP_UP_MAX, RAMP_UP_MIN, SettingsDialog, TAU_MAX, TAU_MIN, falling_slider,
 		lay, speed_to_tau, tab_titles, tau_to_speed,
 	};
@@ -5955,12 +6045,15 @@ mod tests {
 			0.0,
 			0.0,
 			18.0 * scale,
-			170.0 * scale,
-			80.0 * scale,
-			90.0 * scale,
-			0.0,
-			vec![90.0 * scale; tab_titles().len()],
-			labels7(scale),
+			Chrome {
+				label_w: 170.0 * scale,
+				btn_w: 80.0 * scale,
+				row_btn_w: 90.0 * scale,
+				value_w: 0.0,
+				tab_ws: vec![90.0 * scale; tab_titles().len()],
+				label_ws: labels7(scale),
+				..Chrome::default()
+			},
 			f32::MAX,
 			max_h * scale,
 			scale,
@@ -5988,12 +6081,15 @@ mod tests {
 		// what a real caller hands over: the same chrome, measured at 2x
 		d.rescale(
 			18.0 * 2.0,
-			170.0 * 2.0,
-			80.0 * 2.0,
-			90.0 * 2.0,
-			0.0,
-			vec![90.0 * 2.0; tab_titles().len()],
-			labels7(2.0),
+			Chrome {
+				label_w: 170.0 * 2.0,
+				btn_w: 80.0 * 2.0,
+				row_btn_w: 90.0 * 2.0,
+				value_w: 0.0,
+				tab_ws: vec![90.0 * 2.0; tab_titles().len()],
+				label_ws: labels7(2.0),
+				..Chrome::default()
+			},
 			f32::MAX,
 			900.0 * 2.0,
 			2.0,
@@ -6030,12 +6126,15 @@ mod tests {
 		d.set_size(700.0, 600.0);
 		d.rescale(
 			18.0 * 2.0,
-			170.0 * 2.0,
-			80.0 * 2.0,
-			90.0 * 2.0,
-			0.0,
-			vec![90.0 * 2.0; tab_titles().len()],
-			labels7(2.0),
+			Chrome {
+				label_w: 170.0 * 2.0,
+				btn_w: 80.0 * 2.0,
+				row_btn_w: 90.0 * 2.0,
+				value_w: 0.0,
+				tab_ws: vec![90.0 * 2.0; tab_titles().len()],
+				label_ws: labels7(2.0),
+				..Chrome::default()
+			},
 			f32::MAX,
 			900.0 * 2.0,
 			2.0,
@@ -6566,12 +6665,15 @@ mod tests {
 					0.0,
 					0.0,
 					line_h,
-					170.0 * k,
-					80.0 * k,
-					90.0 * k,
-					0.0,
-					vec![90.0 * k; tab_titles().len()],
-					labels,
+					Chrome {
+						label_w: 170.0 * k,
+						btn_w: 80.0 * k,
+						row_btn_w: 90.0 * k,
+						value_w: 0.0,
+						tab_ws: vec![90.0 * k; tab_titles().len()],
+						label_ws: labels,
+						..Chrome::default()
+					},
 					f32::MAX,
 					4000.0,
 					1.0,
@@ -6792,12 +6894,15 @@ mod tests {
 					0.0,
 					0.0,
 					line * scale,
-					170.0 * k,
-					80.0 * k,
-					90.0 * k,
-					0.0,
-					vec![90.0 * k; tab_titles().len()],
-					labels7(k),
+					Chrome {
+						label_w: 170.0 * k,
+						btn_w: 80.0 * k,
+						row_btn_w: 90.0 * k,
+						value_w: 0.0,
+						tab_ws: vec![90.0 * k; tab_titles().len()],
+						label_ws: labels7(k),
+						..Chrome::default()
+					},
 					f32::MAX,
 					4000.0 * scale,
 					scale,
@@ -6888,12 +6993,15 @@ mod tests {
 					0.0,
 					0.0,
 					line * scale,
-					170.0 * k,
-					80.0 * k,
-					90.0 * k,
-					0.0,
-					vec![90.0 * k; tab_titles().len()],
-					labels7(k),
+					Chrome {
+						label_w: 170.0 * k,
+						btn_w: 80.0 * k,
+						row_btn_w: 90.0 * k,
+						value_w: 0.0,
+						tab_ws: vec![90.0 * k; tab_titles().len()],
+						label_ws: labels7(k),
+						..Chrome::default()
+					},
 					f32::MAX,
 					4000.0 * scale,
 					scale,
@@ -6946,18 +7054,12 @@ mod tests {
 		// (font size, display scale)
 		for (big, scale) in [(1.0, 1.0), (1.0, 2.0), (2.0, 1.0), (2.0, 2.0), (2.5, 1.0)] {
 			let mut text = crate::text::TextCtx::new_cpu(big);
-			let (label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws) =
-				super::chrome_widths(&mut text, scale);
+			let chrome = super::chrome_widths(&mut text, scale);
 			let mut d = SettingsDialog::new(
 				0.0,
 				0.0,
 				text.ui_line_h,
-				label_w,
-				btn_w,
-				row_btn_w,
-				value_w,
-				tab_ws,
-				label_ws,
+				chrome,
 				f32::MAX,
 				4000.0 * scale,
 				scale,
@@ -8634,12 +8736,15 @@ mod tests {
 			0.0,
 			0.0,
 			38.0,
-			340.0,
-			160.0,
-			180.0,
-			0.0,
-			vec![180.0; tab_titles().len()],
-			labels7(2.0),
+			Chrome {
+				label_w: 340.0,
+				btn_w: 160.0,
+				row_btn_w: 180.0,
+				value_w: 0.0,
+				tab_ws: vec![180.0; tab_titles().len()],
+				label_ws: labels7(2.0),
+				..Chrome::default()
+			},
 			f32::MAX,
 			4000.0,
 			1.0,
@@ -9192,22 +9297,8 @@ mod tests {
 		// (font size, display scale)
 		for (big, scale) in [(1.0, 1.0), (2.0, 2.0), (2.5, 1.0)] {
 			let mut text = crate::text::TextCtx::new_cpu(big);
-			let (label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws) =
-				super::chrome_widths(&mut text, scale);
-			let d = SettingsDialog::new(
-				0.0,
-				0.0,
-				text.ui_line_h,
-				label_w,
-				btn_w,
-				row_btn_w,
-				value_w,
-				tab_ws,
-				label_ws,
-				f32::MAX,
-				4000.0,
-				scale,
-			);
+			let chrome = super::chrome_widths(&mut text, scale);
+			let d = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, f32::MAX, 4000.0, scale);
 			for (i, spec) in d.specs.iter().enumerate() {
 				let Some(slider) = SliderScale::of(&spec.kind) else {
 					continue;
@@ -9221,6 +9312,72 @@ mod tests {
 						spec.label
 					);
 				}
+			}
+		}
+	}
+
+	// The revert arrow's column was a fixed 22 DIP, so at a 24 pt font the arrow
+	// ran out of it and under the scrollbar. The color picker's value boxes and
+	// labels went by a guess at the font's width, which cut "#rrggbb" short at
+	// every size. Measured in the real UI font at 1x and 2x, and at 2.2 times its
+	// size.
+	// Test ID: EsDinME
+	#[test]
+	fn the_revert_arrow_and_the_pickers_text_fit_at_a_large_interface_font() {
+		let row = super::ui()
+			.specs
+			.iter()
+			.position(|s| matches!(s.kind, Kind::Color))
+			.expect("a color row");
+		for (big, scale) in [(1.0, 1.0), (1.0, 2.0), (2.2, 1.0), (2.2, 2.0)] {
+			let mut text = crate::text::TextCtx::new_cpu(big);
+			// after the context, which is what picks the family
+			let attrs = crate::text::ui_attrs();
+			let chrome = super::chrome_widths(&mut text, scale);
+			let mut d = SettingsDialog::new(
+				0.0,
+				0.0,
+				text.ui_line_h,
+				chrome,
+				f32::MAX,
+				4000.0 * scale,
+				scale,
+			);
+			let (w, h) = d.natural;
+			d.set_size(w * scale, h * scale);
+			d.tab = d.specs[row].tab;
+			let at = format!("{big}x the font, {scale}x");
+			let mut tw = |s: &str| text.measure_ui_text(s, &attrs) / scale;
+
+			// the arrow ends inside its column, which ends where the content does
+			let arrow = d.revert_box(row);
+			let glyph_end = arrow.x + super::REVERT_INSET + tw(super::ui().icons.revert);
+			assert!(
+				glyph_end <= arrow.x + arrow.w + 0.5,
+				"{at}: the arrow ends at {glyph_end}, its column at {}",
+				arrow.x + arrow.w
+			);
+			assert!(arrow.x + arrow.w <= d.content_x() + d.layout_w() - lay().pad + 0.01);
+
+			d.pick_open(row);
+			let g = d.pick_geom();
+			let gap = super::font_gap(super::PART_LABEL_GAP, d.line_h);
+			for field in crate::pick::Field::ALL {
+				let end = g.labels_x + tw(field.label());
+				assert!(
+					end + gap <= g.fields[0].x + 1.0,
+					"{at}: {:?} runs to {end}, its box starts at {}",
+					field.label(),
+					g.fields[0].x
+				);
+			}
+			let room = g.fields[5].w - 2.0 * lay().field_pad;
+			for value in ["#20202a", "#dddddd", "#888888", "#bbbbbb", "100"] {
+				let w = tw(value);
+				assert!(
+					w <= room + 1.0,
+					"{at}: {value} is {w} wide, room for {room}"
+				);
 			}
 		}
 	}
@@ -9243,12 +9400,15 @@ mod tests {
 					0.0,
 					0.0,
 					18.0 * scale,
-					170.0 * scale,
-					300.0 * scale,
-					90.0 * scale,
-					value_w * scale,
-					vec![40.0 * scale; tab_titles().len()],
-					labels7(scale),
+					Chrome {
+						label_w: 170.0 * scale,
+						btn_w: 300.0 * scale,
+						row_btn_w: 90.0 * scale,
+						value_w: value_w * scale,
+						tab_ws: vec![40.0 * scale; tab_titles().len()],
+						label_ws: labels7(scale),
+						..Chrome::default()
+					},
 					f32::MAX,
 					4000.0 * scale,
 					scale,
@@ -10479,12 +10639,15 @@ mod tests {
 			0.0,
 			0.0,
 			line_h,
-			170.0 * k,
-			80.0 * k,
-			90.0 * k,
-			0.0,
-			vec![90.0 * k; tab_titles().len()],
-			labels7(k),
+			Chrome {
+				label_w: 170.0 * k,
+				btn_w: 80.0 * k,
+				row_btn_w: 90.0 * k,
+				value_w: 0.0,
+				tab_ws: vec![90.0 * k; tab_titles().len()],
+				label_ws: labels7(k),
+				..Chrome::default()
+			},
 			f32::MAX,
 			4000.0,
 			1.0,
@@ -11309,12 +11472,15 @@ mod tests {
 			0.0,
 			0.0,
 			line_h,
-			label_w,
-			80.0,
-			90.0,
-			0.0,
-			vec![90.0; tab_titles().len()],
-			labels7(1.0),
+			Chrome {
+				label_w,
+				btn_w: 80.0,
+				row_btn_w: 90.0,
+				value_w: 0.0,
+				tab_ws: vec![90.0; tab_titles().len()],
+				label_ws: labels7(1.0),
+				..Chrome::default()
+			},
 			f32::MAX,
 			4000.0,
 			1.0,

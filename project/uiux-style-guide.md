@@ -215,6 +215,7 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 - Measurements are floors, not fixed sizes. Content that needs more room gets it: a wide label pushes the panel wider, a taller interface font makes rows taller. A number set too small loses to the content; one set too large gives a roomier dialog. Neither can break the layout.
 
 - Chrome sizes off the interface font, not off a constant. Changing the desktop font size must move everything together.
+	- A column that holds text is measured in the interface font, with its declared width as the floor: the revert control, the Shell tab's date and Active columns, and the color picker's labels and value boxes. Where the text can't be known ahead, as with a shell's name, the column grows in step with the UI line height above the 11 pt default's, the same as the gap beside a label.
 
 - Text is centered on its visible ink box, not on its line box. Curated single-line labels center on ascender-to-baseline; anything that may have descenders, such as a path, centers on ascent plus descent.
 

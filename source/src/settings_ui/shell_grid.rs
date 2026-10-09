@@ -9,12 +9,45 @@
 //! the column that needs it.
 
 use super::{
-	Dlg, Focus, Prompt, PromptFocus, PromptJob, SettingsDialog, border, lay, quad, shell_field_row,
+	Chrome, Dlg, Focus, Prompt, PromptFocus, PromptJob, SettingsDialog, border, font_gap, lay,
+	quad, shell_field_row, square_box,
 };
 use crate::config;
 use crate::gfx::{QuadMode, RectInstance};
 use crate::pane::Rect;
 use crate::ui_spec::Kind;
+
+// The two column titles whose columns are sized to fit them, and what the date
+// column shows for a shell no scan has seen. `chrome_widths` measures all three.
+pub(super) const SEEN_TITLE: &str = "Last seen";
+pub(super) const ACTIVE_TITLE: &str = "Active";
+pub(super) const NEVER_SEEN: &str = "never";
+
+/// The fixed columns' widths and the gap between columns, in DIP, at one UI line
+/// height. Both the panel's floor and the columns themselves read this, so the
+/// two cannot disagree. The name and the gap grow with the font the way a label
+/// gap does; the date and Active columns are measured, and Active is never
+/// narrower than its checkbox.
+#[derive(Debug)]
+pub(super) struct ShellWidths {
+	pub(super) name: f32,
+	pub(super) seen: f32,
+	pub(super) active: f32,
+	pub(super) gap: f32,
+}
+
+impl ShellWidths {
+	// `seen_w` and `active_w` are the measured ones, floors already applied.
+	fn at(line_h: f32, seen_w: f32, active_w: f32) -> ShellWidths {
+		let l = lay();
+		ShellWidths {
+			name: font_gap(l.shell_name_width, line_h),
+			seen: seen_w,
+			active: active_w.max(square_box(l.swatch, line_h)),
+			gap: font_gap(l.shell_col_gap, line_h),
+		}
+	}
+}
 
 /// One shell's own controls, in Tab order - which is also left to right across
 /// its line. `Add` is the single stop past the last entry, so a grid of `n`
@@ -160,14 +193,19 @@ impl SettingsDialog {
 	/// Total width of everything except the command's own slack: what the panel
 	/// must clear for the grid to be readable at all. Static, so `new` can size
 	/// the window before Self exists.
-	pub(super) fn shell_columns_w(font_scale: f32) -> f32 {
+	pub(super) fn shell_columns_w(line_h: f32, chrome: &Chrome) -> f32 {
 		let l = lay();
-		l.shell_name_width
+		let w = ShellWidths::at(line_h, chrome.seen_w, chrome.active_w);
+		let font_scale = (line_h / l.base_line_height).max(1.0);
+		w.name
 			+ l.shell_command_width
-			+ l.shell_seen_width
-			+ l.shell_active_width
-			+ l.shell_col_gap * 5.0
+			+ w.seen + w.active
+			+ w.gap * 5.0
 			+ (l.shell_grip + l.shell_button) * font_scale
+	}
+
+	pub(super) fn shell_widths(&self) -> ShellWidths {
+		ShellWidths::at(self.line_h, self.seen_w, self.active_w)
 	}
 
 	// The two icon columns follow the UI font the way the checkboxes do, so a
@@ -186,14 +224,15 @@ impl SettingsDialog {
 	/// it is deliberately kept off the right-hand edge the pointer travels down.
 	pub(super) fn shell_cols(&self) -> ShellCols {
 		let l = lay();
+		let w = self.shell_widths();
 		let left = self.content_x() + l.pad;
 		let right = self.content_x() + self.layout_w() - l.pad;
-		let active = right - l.shell_active_width;
-		let seen = active - l.shell_col_gap - l.shell_seen_width;
-		let remove = seen - l.shell_col_gap - self.shell_button_w();
-		let name = left + self.shell_grip_w() + l.shell_col_gap;
-		let command = name + l.shell_name_width + l.shell_col_gap;
-		let command_w = (remove - l.shell_col_gap - command).max(l.shell_command_width / 2.0);
+		let active = right - w.active;
+		let seen = active - w.gap - w.seen;
+		let remove = seen - w.gap - self.shell_button_w();
+		let name = left + self.shell_grip_w() + w.gap;
+		let command = name + w.name + w.gap;
+		let command_w = (remove - w.gap - command).max(l.shell_command_width / 2.0);
 		ShellCols {
 			grip: left,
 			name,
@@ -234,7 +273,7 @@ impl SettingsDialog {
 			i,
 			shell_index,
 			self.shell_cols().name,
-			lay().shell_name_width,
+			self.shell_widths().name,
 		)
 	}
 
@@ -249,7 +288,7 @@ impl SettingsDialog {
 		let size = self.check_sz();
 		let line = self.shell_line_h();
 		Rect {
-			x: self.shell_cols().active + (lay().shell_active_width - size) / 2.0,
+			x: self.shell_cols().active + (self.shell_widths().active - size) / 2.0,
 			y: self.shell_line_y(i, shell_index) + (line - size) / 2.0,
 			w: size,
 			h: size,
@@ -828,7 +867,7 @@ mod tests {
 				"remove runs into the date"
 			);
 			assert!(
-				cols.seen + super::super::lay().shell_seen_width <= active.x + 0.01,
+				cols.seen + d.shell_widths().seen <= active.x + 0.01,
 				"the date runs into active"
 			);
 			assert!(
@@ -992,6 +1031,110 @@ mod tests {
 			"a scan never rewrites what the user typed"
 		);
 		assert_eq!(d.orig.shells.len(), d.edited.shells.len());
+	}
+
+	// At a 24 pt interface font "Last seen" and "Active" drew over each other and
+	// each date ran under its checkbox, since the columns were fixed widths. In
+	// the real UI font at 1x and 2x, and at 2.2 times its size, which is about
+	// 24 pt from the 11 pt default. A name that fits its box at the base size
+	// fits at the large one too.
+	// Test ID: EsDinMD
+	#[test]
+	fn the_shells_grid_columns_fit_their_text_at_a_large_interface_font() {
+		use super::{ACTIVE_TITLE, NEVER_SEEN, SEEN_TITLE};
+		let names = [
+			"PowerShell 7",
+			"POSIX shell",
+			"Bash (no rc)",
+			"Python 3",
+			"Nushell",
+		];
+		let mut fit_at_base: Vec<&str> = Vec::new();
+		// (font size, display scale)
+		for (big, scale) in [(1.0, 1.0), (1.0, 2.0), (2.2, 1.0), (2.2, 2.0)] {
+			let mut text = crate::text::TextCtx::new_cpu(big);
+			// after the context, which is what picks the family
+			let attrs = crate::text::ui_attrs();
+			let chrome = super::super::chrome_widths(&mut text, scale);
+			let mut d = SettingsDialog::new(
+				0.0,
+				0.0,
+				text.ui_line_h,
+				chrome,
+				f32::MAX,
+				4000.0 * scale,
+				scale,
+			);
+			let (w, h) = d.natural;
+			d.set_size(w * scale, h * scale);
+			let i = d
+				.specs
+				.iter()
+				.position(|s| matches!(s.kind, Kind::ShellList))
+				.expect("a shells grid");
+			d.tab = d.specs[i].tab;
+			d.edited.shells = vec![
+				shell_entry("Bash", "/bin/bash"),
+				shell_entry("Dash", "/bin/dash"),
+			];
+			d.edited.shells[0].last_seen = "2026-10-09".into();
+			let at = format!("{big}x the font, {scale}x");
+			let tw =
+				|text: &mut crate::text::TextCtx, s: &str| text.measure_ui_text(s, &attrs) / scale;
+			let cols = d.shell_cols();
+			let gap = d.shell_widths().gap;
+			let right = d.content_x() + d.layout_w() - lay().pad;
+			// a part pixel of text may run into the gap, never more
+			for s in [SEEN_TITLE, "2026-10-09", "8888-88-88", NEVER_SEEN] {
+				let end = cols.seen + tw(&mut text, s);
+				assert!(
+					end + gap <= cols.active + 1.0,
+					"{at}: {s:?} ends at {end}, Active starts at {}",
+					cols.active
+				);
+			}
+			let active_end = cols.active + tw(&mut text, ACTIVE_TITLE);
+			assert!(
+				active_end <= right + 1.0,
+				"{at}: Active runs to {active_end}, past the edge at {right}"
+			);
+			for k in 0..2 {
+				let tick = d.shell_active_box(i, k);
+				let date_end = cols.seen + tw(&mut text, "2026-10-09");
+				assert!(
+					date_end + gap <= tick.x + 1.0,
+					"{at}: line {k}'s date runs under its checkbox"
+				);
+				assert!(
+					tick.x + tick.w <= right + 0.01,
+					"{at}: line {k}'s checkbox overruns the panel"
+				);
+			}
+			// the gap reads as a gap, not as a word space
+			assert!(
+				gap >= lay().shell_col_gap * (d.line_h / super::super::GAPS_DRAWN_AT) - 0.01,
+				"{at}: the column gap stayed {gap} at line height {}",
+				d.line_h
+			);
+			let room = d.shell_name_box(i, 0).w - 2.0 * lay().field_pad;
+			for name in names {
+				let fits = tw(&mut text, name) <= room;
+				if big == 1.0 && scale == 1.0 {
+					if fits {
+						fit_at_base.push(name);
+					}
+				} else if fit_at_base.contains(&name) {
+					assert!(
+						fits,
+						"{at}: {name:?} fit its box at the base size and not here"
+					);
+				}
+			}
+		}
+		assert!(
+			!fit_at_base.is_empty(),
+			"no name fit at the base size, so nothing was checked"
+		);
 	}
 
 	// The Active box on a shell's line is a checkbox like any other: square, and
