@@ -670,6 +670,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc, table and TOC checks. At the 11 pt default, every tab and every overlay but the picker drew the same pixels as dev a948909 at 1x and 2x, bar a text caret's column, which also differs between 2 runs of the old build. At 24 pt nothing on any tab overlaps, at 1x and 2x.
 	- Test case: `the_shells_grid_columns_fit_their_text_at_a_large_interface_font` (EsDinMD), `the_revert_arrow_and_the_pickers_text_fit_at_a_large_interface_font` (EsDinME). The first fails with the date and Active columns held at 78 and 44, with the gap held at 8, or with the name column held at 128. The second fails with the revert column held at 22, or with the picker sized the old way.
 	- Branch: shellcols
+	- Commit: 3c12a5d
 
 - A test that measures Settings text before its first text context can measure in the wrong font
 	- ID: 2026100909162017
