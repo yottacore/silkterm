@@ -503,10 +503,10 @@ pub(crate) fn cursor_plate(cursor: [u8; 3], bg: [u8; 3], alpha: f32) -> [u8; 3] 
 	[mix(0), mix(1), mix(2)]
 }
 
-/// How the cursor moves while it is alive, `cursor.animation`.
+/// How the cursor moves while it blinks, `cursor.animation`. Not blinking at
+/// all is `cursor.blink`, so there is no "none" here.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CursorAnimation {
-	Off,
 	Phase,
 	PulseVertical,
 	PulseHorizontal,
@@ -515,7 +515,6 @@ pub enum CursorAnimation {
 
 impl config::Choice for CursorAnimation {
 	const ALL: &'static [Self] = &[
-		Self::Off,
 		Self::Phase,
 		Self::PulseVertical,
 		Self::PulseHorizontal,
@@ -524,7 +523,6 @@ impl config::Choice for CursorAnimation {
 
 	fn key(self) -> &'static str {
 		match self {
-			Self::Off => "none",
 			Self::Phase => "phase",
 			Self::PulseVertical => "pulse_vertical",
 			Self::PulseHorizontal => "pulse_horizontal",
@@ -536,9 +534,9 @@ impl config::Choice for CursorAnimation {
 // What the animation makes of the cursor at `phase` of its cycle: the (width,
 // height) fractions, the alpha, and whether each axis pulses. Phase fades
 // `full`, the plate's own alpha, on a cosine; the pulses scale an axis by
-// `pulse_env`; Off leaves the cursor as it is.
+// `pulse_env`; None, a cursor that does not blink, is left as it is.
 fn cursor_envelope(
-	anim: CursorAnimation,
+	anim: Option<CursorAnimation>,
 	phase: f32,
 	geom: (f32, f32),
 	full: f32,
@@ -546,25 +544,25 @@ fn cursor_envelope(
 	let (mut w_frac, mut h_frac) = geom;
 	let mut alpha = full;
 	let (pulsing_w, pulsing_h) = match anim {
-		CursorAnimation::Phase => {
+		Some(CursorAnimation::Phase) => {
 			alpha = full * (0.5 + 0.5 * (phase * std::f32::consts::TAU).cos());
 			(false, false)
 		}
-		CursorAnimation::PulseVertical => {
+		Some(CursorAnimation::PulseVertical) => {
 			h_frac *= pulse_env(phase);
 			(false, true)
 		}
-		CursorAnimation::PulseHorizontal => {
+		Some(CursorAnimation::PulseHorizontal) => {
 			w_frac *= pulse_env(phase);
 			(true, false)
 		}
-		CursorAnimation::PulseBoth => {
+		Some(CursorAnimation::PulseBoth) => {
 			let envelope = pulse_env(phase);
 			w_frac *= envelope;
 			h_frac *= envelope;
 			(true, true)
 		}
-		CursorAnimation::Off => (false, false),
+		None => (false, false),
 	};
 	(w_frac, h_frac, alpha, pulsing_w, pulsing_h)
 }
@@ -829,13 +827,12 @@ fn glide_to_full(blink_t: f32, dt: f32, period: f32, full_phase: f32) -> (f32, b
 // largest). That full-size phase is the only point a pause ever parks at and
 // the only point a resume ever starts from - "phase" fades from full at 0, the
 // pulses peak mid-cycle. Both the pause and the refocus resume read it here so
-// they cannot drift apart.
-fn cursor_cycle(anim: CursorAnimation, blink_rate_ms: f32) -> (f32, f32) {
-	let period = (blink_rate_ms / 1000.0 * 2.0).max(0.05); // full on->off->on
+// they cannot drift apart. The rate is the whole cycle, peak to peak.
+fn cursor_cycle(anim: CursorAnimation, blink_rate_s: f32) -> (f32, f32) {
+	let period = blink_rate_s.max(0.05);
 	let full_phase = match anim {
 		CursorAnimation::Phase => 0.0,
-		CursorAnimation::Off
-		| CursorAnimation::PulseVertical
+		CursorAnimation::PulseVertical
 		| CursorAnimation::PulseHorizontal
 		| CursorAnimation::PulseBoth => 0.5,
 	};
@@ -2575,7 +2572,7 @@ impl Pane {
 		self.cursor_active_at = std::time::Instant::now();
 		let settings = config::settings();
 		let (period, full_phase) =
-			cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_ms);
+			cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_s);
 		self.blink_t = full_phase * period;
 		self.cursor_pause.resume();
 	}
@@ -2940,7 +2937,7 @@ impl Pane {
 		if !easing {
 			self.cursor_x = target_col;
 		}
-		// Animation: "none" = steady; "phase" = smooth cosine fade; "pulse_*" =
+		// Animation: blink off = steady; "phase" = smooth cosine fade; "pulse_*" =
 		// grow/shrink a dimension over one cycle. The envelope applies whenever the
 		// animation is on - including during a horizontal slide - so the size never
 		// jumps on a keystroke. PauseState parks the cycle at full size while
@@ -2952,9 +2949,10 @@ impl Pane {
 		// cursor renders no frames - the timed resume comes from cursor_wake, and
 		// a refocus ends the park outright (poke_cursor).
 		let settings = config::settings();
-		let anim = settings.cursor_animation;
-		let (period, full_phase) = cursor_cycle(anim, settings.cursor_blink_rate_ms);
-		let anim_on = anim != CursorAnimation::Off;
+		let anim = settings.cursor_blink.then_some(settings.cursor_animation);
+		let (period, full_phase) =
+			cursor_cycle(settings.cursor_animation, settings.cursor_blink_rate_s);
+		let anim_on = anim.is_some();
 		let mut parked = false;
 		self.cursor_wake = None;
 		if anim_on && !CURSOR_ANIM_CONTINUOUS {
@@ -5842,17 +5840,60 @@ mod tests {
 		assert!((t - (0.5 * period + 0.01)).abs() < 1e-6);
 	}
 
+	// The rate is the time from one peak of the blink to the next, for every
+	// animation. It used to be half that, so 500 ms blinked once a second. The
+	// shipped rate keeps that same one second cycle.
+	// Test ID: EsDSBcQ
+	#[test]
+	fn the_blink_rate_is_one_whole_cycle_peak_to_peak() {
+		let shipped = crate::config::Settings::default();
+		assert_eq!(shipped.cursor_blink_rate_s, 1.0);
+		let anims = [
+			CursorAnimation::Phase,
+			CursorAnimation::PulseVertical,
+			CursorAnimation::PulseHorizontal,
+			CursorAnimation::PulseBoth,
+		];
+		for rate in [shipped.cursor_blink_rate_s, 0.4, 2.5] {
+			for anim in anims {
+				let (period, _) = cursor_cycle(anim, rate);
+				// how much of the cursor shows: size for a pulse, alpha for the fade
+				let shows = |t: f32| {
+					let (w, h, alpha, ..) =
+						cursor_envelope(Some(anim), (t / period).fract(), (1.0, 1.0), 1.0);
+					w * h * alpha
+				};
+				let step = 0.0005;
+				let mut crests = Vec::new();
+				let mut before = shows(0.0);
+				for i in 1..(3.5 * rate / step) as usize {
+					let t = i as f32 * step;
+					let now = shows(t);
+					if now >= 0.999 && before < 0.999 {
+						crests.push(t);
+					}
+					before = now;
+				}
+				assert!(crests.len() >= 2, "{anim:?} at {rate}: {crests:?}");
+				for pair in crests.windows(2) {
+					let gap = pair[1] - pair[0];
+					assert!((gap - rate).abs() < 0.01, "{anim:?} at {rate}: {crests:?}");
+				}
+			}
+		}
+	}
+
 	// The pause and the refocus resume must agree on where "full size" is: mid
 	// cycle for the pulses, phase 0 for the fade.
 	// Test ID: EldrZxZ
 	#[test]
 	fn cursor_cycle_full_phase_matches_the_animation() {
 		assert_eq!(
-			cursor_cycle(CursorAnimation::PulseVertical, 500.0),
+			cursor_cycle(CursorAnimation::PulseVertical, 1.0),
 			(1.0, 0.5)
 		);
-		assert_eq!(cursor_cycle(CursorAnimation::Phase, 500.0), (1.0, 0.0));
-		assert_eq!(cursor_cycle(CursorAnimation::PulseBoth, 250.0).0, 0.5);
+		assert_eq!(cursor_cycle(CursorAnimation::Phase, 1.0), (1.0, 0.0));
+		assert_eq!(cursor_cycle(CursorAnimation::PulseBoth, 0.5).0, 0.5);
 		assert_eq!(cursor_cycle(CursorAnimation::Phase, 0.0).0, 0.05); // period never reaches zero
 	}
 
@@ -5878,7 +5919,7 @@ mod tests {
 		assert!(resume_delay(false, 1.0) < 0.1);
 
 		// drive the park itself: same state machine, output's delay
-		let (period, full) = cursor_cycle(CursorAnimation::PulseVertical, 500.0);
+		let (period, full) = cursor_cycle(CursorAnimation::PulseVertical, 1.0);
 		let delay = resume_delay(false, 1.0);
 		let mut st = PauseState::default();
 		let mut blink = 0.2;
@@ -8122,20 +8163,28 @@ mod tests {
 
 		let geom = (0.8, 0.6);
 		let env = pulse_env(0.2);
-		let (w, h, alpha, pw, ph) =
-			cursor_envelope(CursorAnimation::PulseVertical, 0.2, geom, CURSOR_ALPHA);
+		let (w, h, alpha, pw, ph) = cursor_envelope(
+			Some(CursorAnimation::PulseVertical),
+			0.2,
+			geom,
+			CURSOR_ALPHA,
+		);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8, 0.6 * env, CURSOR_ALPHA, false, true)
 		);
-		let (w, h, alpha, pw, ph) =
-			cursor_envelope(CursorAnimation::PulseHorizontal, 0.2, geom, CURSOR_ALPHA);
+		let (w, h, alpha, pw, ph) = cursor_envelope(
+			Some(CursorAnimation::PulseHorizontal),
+			0.2,
+			geom,
+			CURSOR_ALPHA,
+		);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8 * env, 0.6, CURSOR_ALPHA, true, false)
 		);
 		let (w, h, alpha, pw, ph) =
-			cursor_envelope(CursorAnimation::PulseBoth, 0.2, geom, CURSOR_ALPHA);
+			cursor_envelope(Some(CursorAnimation::PulseBoth), 0.2, geom, CURSOR_ALPHA);
 		assert_eq!(
 			(w, h, alpha, pw, ph),
 			(0.8 * env, 0.6 * env, CURSOR_ALPHA, true, true)
@@ -8309,8 +8358,15 @@ mod tests {
 	// Test ID: Er2VGXA
 	#[test]
 	fn the_phase_blink_fades_instead_of_switching() {
-		let alpha =
-			|phase: f32| cursor_envelope(CursorAnimation::Phase, phase, (1.0, 1.0), CURSOR_ALPHA).2;
+		let alpha = |phase: f32| {
+			cursor_envelope(
+				Some(CursorAnimation::Phase),
+				phase,
+				(1.0, 1.0),
+				CURSOR_ALPHA,
+			)
+			.2
+		};
 		assert_eq!(alpha(0.0), CURSOR_ALPHA);
 		assert!(alpha(0.5).abs() < 1e-6, "gone at mid-cycle: {}", alpha(0.5));
 		for phase in [0.25, 0.75] {
@@ -8323,7 +8379,7 @@ mod tests {
 		assert!(alpha(0.1) > alpha(0.2) && alpha(0.2) > alpha(0.3));
 	}
 
-	// "none" leaves the cursor exactly as configured at every point of the cycle,
+	// No blink leaves the cursor exactly as configured at every point of the cycle,
 	// and "phase" only ever touches its alpha, never its size.
 	// Test ID: Er2VGXB
 	#[test]
@@ -8331,14 +8387,16 @@ mod tests {
 		let geom = (0.4, 0.6);
 		for phase in [0.0, 0.2, 0.5, 0.95] {
 			assert_eq!(
-				cursor_envelope(CursorAnimation::Off, phase, geom, CURSOR_ALPHA),
+				cursor_envelope(None, phase, geom, CURSOR_ALPHA),
 				(0.4, 0.6, CURSOR_ALPHA, false, false)
 			);
 			let (w, h, _, pw, ph) =
-				cursor_envelope(CursorAnimation::Phase, phase, geom, CURSOR_ALPHA);
+				cursor_envelope(Some(CursorAnimation::Phase), phase, geom, CURSOR_ALPHA);
 			assert_eq!((w, h, pw, ph), (0.4, 0.6, false, false));
 		}
-		assert!(cursor_envelope(CursorAnimation::Phase, 0.5, geom, CURSOR_ALPHA).2 < CURSOR_ALPHA);
+		assert!(
+			cursor_envelope(Some(CursorAnimation::Phase), 0.5, geom, CURSOR_ALPHA).2 < CURSOR_ALPHA
+		);
 	}
 
 	// Leaving the alt screen hands the normal screen's scrollback back in one

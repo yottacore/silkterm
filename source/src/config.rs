@@ -571,10 +571,11 @@ pub struct Settings {
 	pub cursor_outline: bool,   // cursor joins the text outline (default on)
 	pub cursor_size_height: f32, // cursor height, 1..100% of the cell (from the bottom)
 	pub cursor_size_width: f32, // cursor width, 1..100% of the cell (from the left)
+	pub cursor_blink: bool,     // the cursor animates at all; off holds it still
 	pub cursor_animation: crate::pane::CursorAnimation,
 	pub cursor_animation_resume_s: f32, // idle seconds after typing before the animation resumes (output does not wait this out)
 	pub cursor_animation_idle_stop_s: f32, // idle seconds until the animation stops (parked at full); 0 = never
-	pub cursor_blink_rate_ms: f32,         // one animation cycle (ms)
+	pub cursor_blink_rate_s: f32,          // one whole animation cycle, peak to peak (s)
 	pub columns: usize,                    // initial window grid size (used when !remember_size)
 	pub rows: usize,
 	pub remember_size: bool, // launch at the last window size instead of columns/rows
@@ -791,10 +792,11 @@ impl Default for Settings {
 			cursor_outline: true,
 			cursor_size_height: 100.0, // full height
 			cursor_size_width: 100.0,  // full width - a block
+			cursor_blink: true,
 			cursor_animation: crate::pane::CursorAnimation::PulseVertical,
 			cursor_animation_resume_s: 1.0,
 			cursor_animation_idle_stop_s: 60.0,
-			cursor_blink_rate_ms: 500.0,
+			cursor_blink_rate_s: 1.0,
 			columns: 160,
 			rows: 48,
 			remember_size: true,
@@ -2434,7 +2436,15 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	if !same_f32(edited.cursor_size_width, orig.cursor_size_width) {
 		doc.put_float("cursor.size.width", rounded(edited.cursor_size_width));
 	}
-	if edited.cursor_animation != orig.cursor_animation {
+	// A file can still say "none" for no blink. Turning the blink on has to
+	// replace that word, or the next load reads it as off again.
+	let animation_none = doc
+		.get_string("cursor.animation")
+		.is_ok_and(|word| animation_is_none(&word));
+	if edited.cursor_blink != orig.cursor_blink {
+		doc.put_bool("cursor.blink", edited.cursor_blink);
+	}
+	if edited.cursor_animation != orig.cursor_animation || (edited.cursor_blink && animation_none) {
 		doc.put_string("cursor.animation", edited.cursor_animation.key());
 	}
 	if !same_f32(
@@ -2446,8 +2456,8 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 			rounded(edited.cursor_animation_resume_s),
 		);
 	}
-	if !same_f32(edited.cursor_blink_rate_ms, orig.cursor_blink_rate_ms) {
-		doc.put_float("cursor.blink_rate_ms", rounded(edited.cursor_blink_rate_ms));
+	if !same_f32(edited.cursor_blink_rate_s, orig.cursor_blink_rate_s) {
+		doc.put_float("cursor.blink_rate_s", rounded(edited.cursor_blink_rate_s));
 	}
 	if edited.columns != orig.columns {
 		doc.put_int("window.columns", edited.columns as i64);
@@ -2746,10 +2756,11 @@ struct RawConfig {
 	cursor_outline: Option<bool>,
 	cursor_size_height: Option<f32>,
 	cursor_size_width: Option<f32>,
+	cursor_blink: Option<bool>,
 	cursor_animation: Option<String>,
 	cursor_animation_resume_s: Option<f32>,
 	cursor_animation_idle_stop_s: Option<f32>,
-	cursor_blink_rate_ms: Option<f32>,
+	cursor_blink_rate_s: Option<f32>,
 	columns: Option<usize>,
 	rows: Option<usize>,
 	remember_size: Option<bool>,
@@ -3204,10 +3215,11 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		cursor_outline: reader.read_bool("cursor.outline"),
 		cursor_size_height: reader.read_f32("cursor.size.height"),
 		cursor_size_width: reader.read_f32("cursor.size.width"),
+		cursor_blink: reader.read_bool("cursor.blink"),
 		cursor_animation: reader.read_string("cursor.animation"),
 		cursor_animation_resume_s: reader.read_f32("cursor.animation_resume_s"),
 		cursor_animation_idle_stop_s: reader.read_f32("cursor.animation_idle_stop_s"),
-		cursor_blink_rate_ms: reader.read_f32("cursor.blink_rate_ms"),
+		cursor_blink_rate_s: reader.read_f32("cursor.blink_rate_s"),
 		columns: reader.read_usize("window.columns"),
 		rows: reader.read_usize("window.rows"),
 		remember_size: reader.read_bool("window.remember_size"),
@@ -3570,7 +3582,7 @@ pub(crate) mod limits {
 	pub const FONT_SIZE:          (f32, f32) = (4.0, 400.0);
 	pub const LINE_HEIGHT:        (f32, f32) = (0.5, 10.0);
 	pub const EASE_MS:            (f32, f32) = (1.0, 60_000.0);
-	pub const BLINK_MS:           (f32, f32) = (50.0, 60_000.0);
+	pub const BLINK_S:            (f32, f32) = (0.1, 120.0);
 	pub const WHEEL_LINES:        (f32, f32) = (0.0, 1_000.0);
 	pub const MARGIN:             (f32, f32) = (0.0, 1_000.0);
 	pub const ROTATE_S:           (f32, f32) = (0.0, 604_800.0);
@@ -3799,6 +3811,13 @@ fn resolve(raw: RawConfig) -> Settings {
 			.cursor_size_width
 			.unwrap_or(d.cursor_size_width)
 			.clamp(1.0, 100.0),
+		// "none" was how a file said no blink before `cursor.blink`, and it still
+		// means that
+		cursor_blink: raw.cursor_blink.unwrap_or(d.cursor_blink)
+			&& !raw
+				.cursor_animation
+				.as_deref()
+				.is_some_and(animation_is_none),
 		cursor_animation: choice_or(raw.cursor_animation.as_deref(), d.cursor_animation),
 		cursor_animation_resume_s: raw
 			.cursor_animation_resume_s
@@ -3808,10 +3827,10 @@ fn resolve(raw: RawConfig) -> Settings {
 			.cursor_animation_idle_stop_s
 			.unwrap_or(d.cursor_animation_idle_stop_s)
 			.clamp(0.0, 86400.0),
-		cursor_blink_rate_ms: numf(
-			raw.cursor_blink_rate_ms,
-			d.cursor_blink_rate_ms,
-			limits::BLINK_MS,
+		cursor_blink_rate_s: numf(
+			raw.cursor_blink_rate_s,
+			d.cursor_blink_rate_s,
+			limits::BLINK_S,
 		),
 		wallpaper_default_fit: match raw.wallpaper_default_fit.as_deref() {
 			Some(word) if word.trim().eq_ignore_ascii_case("zoom") => Fit::Zoom,
@@ -4321,6 +4340,53 @@ const CONFIG_RENAMES: &[(&str, &str)] = &[
 		"scroll.minimap.tui_process_whitelist",
 	),
 ];
+// Renames that change the unit as well, so the value is converted on the way,
+// commented lines included. Otherwise the same as `CONFIG_RENAMES`. A value that
+// is not a plain number keeps its text.
+type Convert = fn(f64) -> f64;
+const CONFIG_CONVERTS: &[(&str, &str, Convert)] = &[
+	// the old rate was half a cycle, one fade out or one fade in
+	("cursor.blink_rate_ms", "cursor.blink_rate_s", |ms| {
+		ms * 2.0 / 1000.0
+	}),
+];
+
+// A renamed key's new value text, converted, or None to keep the old text.
+// Three places, as a save writes them, with at least one so it reads as a
+// fraction.
+fn converted_value(value: &str, convert: Convert) -> Option<String> {
+	let number = convert(value.trim().parse::<f64>().ok()?);
+	if !number.is_finite() {
+		return None;
+	}
+	let text = format!("{:.3}", (number * 1000.0).round() / 1000.0);
+	let text = text.trim_end_matches('0');
+	Some(if text.ends_with('.') {
+		format!("{text}0")
+	} else {
+		text.to_string()
+	})
+}
+
+// The line with its value converted, the spacing and any note after it kept.
+fn convert_line_value(line: &str, convert: Convert) -> Option<String> {
+	let (head, rest) = line.split_once(':')?;
+	let value = rest.trim_start();
+	let lead = &rest[..rest.len() - value.len()];
+	let number = strip_trailing_comment(value);
+	let tail = &value[number.len()..];
+	let new = converted_value(number, convert)?;
+	Some(format!("{head}:{lead}{new}{tail}"))
+}
+
+// `cursor.animation: none` was how a file said "do not blink" before
+// `cursor.blink` existed. Either quote, any case.
+fn animation_is_none(word: &str) -> bool {
+	strip_trailing_comment(word.trim())
+		.trim_matches(|c| c == '"' || c == '\'')
+		.eq_ignore_ascii_case("none")
+}
+
 // Paths that no longer exist and should be removed from an existing config.
 // scroll.tau_ms ("Initial scroll speed") has no successor: the speed curve now
 // leaves rest through Ease-in and the one knob that fed four mechanisms is
@@ -4855,7 +4921,26 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 				.iter()
 				.position(|(old, _)| old == p)
 				.map(|rank| (rank + 1, LEGACY_KEYS[rank].1.to_string()))
+				.or_else(|| {
+					CONFIG_CONVERTS
+						.iter()
+						.any(|(old, ..)| old == p)
+						.then(|| (LEGACY_KEYS.len() + 1, p.clone()))
+				})
 		};
+		// an old unit has a template line only under its new name, and a value
+		// that is not a number keeps its text, as a launch's rename would
+		let (target, value) = match target {
+			Some((rank, new)) => match CONFIG_CONVERTS.iter().find(|(old, ..)| *old == new) {
+				Some((_, to, convert)) => (
+					Some((rank, (*to).to_string())),
+					converted_value(value, *convert).unwrap_or_else(|| value.to_string()),
+				),
+				None => (Some((rank, new)), value.to_string()),
+			},
+			None => (None, value.to_string()),
+		};
+		let value = value.as_str();
 		if let Some((rank, new)) = target {
 			// a mapped path that has since been retired stays retired - the
 			// old value is still in the .bak, but never resurrects here
@@ -5050,6 +5135,7 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 	let mut path_of: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
 	let mut keep: std::collections::HashSet<usize> = std::collections::HashSet::new();
 	let mut active_old_name = false;
+	let mut active_blink = false;
 	for w in walk_settings(text) {
 		if let WalkLine::Setting {
 			index,
@@ -5061,7 +5147,10 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 			if keep_default_shell && active && !header && path == "shell.default" {
 				keep.insert(index);
 			}
-			active_old_name |= active && CONFIG_RENAMES.iter().any(|(old, _)| *old == path);
+			active_old_name |= active
+				&& (CONFIG_RENAMES.iter().any(|(old, _)| *old == path)
+					|| CONFIG_CONVERTS.iter().any(|(old, ..)| *old == path));
+			active_blink |= active && !header && path == "cursor.blink";
 			path_of.insert(index, path);
 		}
 	}
@@ -5092,10 +5181,16 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 		// dropping there would delete that setting's own line on every launch.
 		let renamed = CONFIG_RENAMES
 			.iter()
-			.find(|(old, _)| old == path)
-			.filter(|(_, new)| !have.contains(*new));
+			.map(|&(old, new)| (old, new, None))
+			.chain(
+				CONFIG_CONVERTS
+					.iter()
+					.map(|&(old, new, convert)| (old, new, Some(convert))),
+			)
+			.find(|(old, ..)| old == path)
+			.filter(|(_, new, _)| !have.contains(*new));
 		let mut kept = match renamed {
-			Some((_, new)) => {
+			Some((_, new, convert)) => {
 				changed = true;
 				// the line spells the leaf (nested) or the full path
 				// (dotted); rewrite whichever token is actually there
@@ -5107,13 +5202,38 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 				} else {
 					new_leaf
 				};
-				line.replacen(key, target, 1)
+				let line = line.replacen(key, target, 1);
+				convert
+					.and_then(|convert| convert_line_value(&line, convert))
+					.unwrap_or(line)
 			}
 			None => (*line).to_string(),
 		};
 		// the refreshes below key on where the line ENDS UP, not where it came
 		// from - a just-renamed line belongs to its new path now
-		let path: &str = renamed.map_or(path.as_str(), |(_, new)| new);
+		let mut path: &str = renamed.map_or(path.as_str(), |(_, new, _)| new);
+		// an active "none" becomes the switch that says it now, unless the file
+		// already sets that switch itself
+		if path == "cursor.animation"
+			&& !active_blink
+			&& !kept.trim_start().starts_with('#')
+			&& line_setting_value(&kept).is_some_and(animation_is_none)
+		{
+			let key = line_setting_key(&kept).unwrap_or("animation");
+			let target = if key.eq_ignore_ascii_case(path) {
+				"cursor.blink"
+			} else {
+				"blink"
+			};
+			let indent = &kept[..kept.len() - kept.trim_start().len()];
+			let value = kept
+				.split_once(':')
+				.map_or("", |(_, rest)| rest.trim_start());
+			let note = &value[strip_trailing_comment(value).len()..];
+			kept = format!("{indent}{target}: false{note}");
+			path = "cursor.blink";
+			changed = true;
+		}
 		if let Some(refreshed) = refresh_superseded_default(&kept, path) {
 			kept = refreshed;
 			changed = true;
@@ -7322,13 +7442,18 @@ cursor:
 		# height: 100  ## Default
 		# width: 100  ## Default
 
-	## "none", "phase" (fade), "pulse_vertical", "pulse_horizontal",
-	## "pulse_both". All of them stop after some time with no typing.
+	## false holds the cursor still.
+	# blink: true  ## Default
+
+	## Seconds for one whole blink, from peak to peak.
+	# blink_rate_s: 1.0  ## Default
+
+	## "phase" (fade), "pulse_vertical", "pulse_horizontal", "pulse_both".
+	## All of them stop after some time with no typing.
 	# animation: "pulse_vertical"  ## Default
 
 	# animation_resume_s: 1  ## Default
 	# animation_idle_stop_s: 60  ## Default
-	# blink_rate_ms: 500  ## Default
 	# scrim: false  ## Default
 	# outline: true  ## Default
 
@@ -10761,7 +10886,7 @@ mod tests {
 			("scroll.ramp_down_ms",              limits::EASE_MS.0,     limits::EASE_MS.1),
 			("scroll.ease_out_ms",               limits::EASE_MS.0,     limits::EASE_MS.1),
 			("window.margin",                    limits::MARGIN.0,      limits::MARGIN.1),
-			("cursor.blink_rate_ms",             limits::BLINK_MS.0,    limits::BLINK_MS.1),
+			("cursor.blink_rate_s",              limits::BLINK_S.0,     limits::BLINK_S.1),
 			("wallpaper.rotate.interval_s",      limits::ROTATE_S.0,    limits::ROTATE_S.1),
 		];
 		let read = |key: &str, value: &str| resolve(read_raw(&format!("{key}: {value}\n"), p).0);
@@ -10777,7 +10902,7 @@ mod tests {
 				"scroll.ramp_down_ms" => s.scroll_ramp_down_ms,
 				"scroll.ease_out_ms" => s.scroll_ease_out_ms,
 				"window.margin" => s.margin,
-				"cursor.blink_rate_ms" => s.cursor_blink_rate_ms,
+				"cursor.blink_rate_s" => s.cursor_blink_rate_s,
 				"wallpaper.rotate.interval_s" => s.wallpaper_rotate_interval_s,
 				other => panic!("{other} is not in the reader"),
 			}
@@ -12649,6 +12774,128 @@ mod tests {
 		);
 	}
 
+	// The blink rate was half a cycle in milliseconds. A launch renames it to
+	// seconds of a whole cycle, so every old value still blinks exactly as fast,
+	// the template's commented default turns into the new template line, and a
+	// note or a value that is not a number stays as written.
+	// Test ID: EsDSBQ8
+	#[test]
+	fn an_old_blink_rate_in_ms_becomes_the_same_cycle_in_seconds() {
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find(|(name, _)| name == "cursor.blink_rate_s")
+			.map(|(_, line)| line)
+			.expect("a template line for the rate");
+		for (old, new, cycle) in [
+			(
+				"cursor:\n\tblink_rate_ms: 500\n",
+				"cursor:\n\tblink_rate_s: 1.0\n",
+				1.0,
+			),
+			(
+				"cursor:\n\tblink_rate_ms: 300  # mine\n",
+				"cursor:\n\tblink_rate_s: 0.6  # mine\n",
+				0.6,
+			),
+			(
+				"cursor.blink_rate_ms: 530\n",
+				"cursor.blink_rate_s: 1.06\n",
+				1.06,
+			),
+			(
+				"cursor.blink_rate_ms: 333\n",
+				"cursor.blink_rate_s: 0.666\n",
+				0.666,
+			),
+			(
+				"cursor:\n\tblink_rate_ms: fast\n",
+				"cursor:\n\tblink_rate_s: fast\n",
+				1.0,
+			),
+			(
+				"cursor:\n\t# blink_rate_ms: 500  ## Default\n",
+				&format!("cursor:\n{template}\n"),
+				1.0,
+			),
+		] {
+			let out = migrate_config_text(old).unwrap_or_else(|| panic!("{old:?} kept"));
+			assert_eq!(out, new, "{old:?}");
+			assert_eq!(migrate_config_text(&out), None, "{out:?} settles");
+			let s = resolve(read_raw(&out, std::path::Path::new("test.shcl")).0);
+			assert!((s.cursor_blink_rate_s - cycle).abs() < 1e-6, "{old:?}");
+		}
+		// the new name already there wins, and the old line is left alone
+		let both = "cursor:\n\tblink_rate_s: 2.0\n\tblink_rate_ms: 500\n";
+		assert_eq!(migrate_config_text(both), None);
+		// a flat file from before nesting gets there too
+		let flat = converted_config_text("cursor_blink_rate_ms: 250\nfont_size: 13\n").unwrap();
+		let s = resolve(read_raw(&loaded_text(&flat), std::path::Path::new("test.shcl")).0);
+		assert!((s.cursor_blink_rate_s - 0.5).abs() < 1e-6, "{flat}");
+	}
+
+	// `cursor.animation: none` was how a file said no blink. A launch turns it
+	// into `blink: false`, and where the file sets the switch itself the word
+	// still reads as off, so no file starts blinking that did not before.
+	// Test ID: EsDSBUl
+	#[test]
+	fn animation_none_becomes_blink_off() {
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| resolve(read_raw(&loaded_text(text), p).0);
+		for (old, new) in [
+			("cursor:\n\tanimation: none\n", "cursor:\n\tblink: false\n"),
+			(
+				"cursor:\n\tanimation: \"None\"  # quiet\n",
+				"cursor:\n\tblink: false  # quiet\n",
+			),
+			("cursor.animation: NONE\n", "cursor.blink: false\n"),
+		] {
+			assert_eq!(migrate_config_text(old).as_deref(), Some(new), "{old:?}");
+			let s = read(old);
+			assert!(!s.cursor_blink, "{old:?}");
+			assert_eq!(s.cursor_animation, Settings::default().cursor_animation);
+		}
+		// a commented word sets nothing, and a file that sets the switch keeps
+		// its own lines
+		for kept in [
+			"cursor:\n\t# animation: none\n",
+			"cursor:\n\tblink: true\n\tanimation: none\n",
+		] {
+			assert_eq!(migrate_config_text(kept), None, "{kept:?}");
+		}
+		assert!(read("cursor:\n\t# animation: none\n").cursor_blink);
+		assert!(!read("cursor:\n\tblink: true\n\tanimation: none\n").cursor_blink);
+		assert!(read("cursor:\n\tanimation: phase\n").cursor_blink);
+		assert!(!read("cursor:\n\tblink: false\n").cursor_blink);
+	}
+
+	// Turning the blink on in Settings has to clear a "none" the file still has,
+	// or the next launch reads it as off again.
+	// Test ID: EsDSBYd
+	#[test]
+	fn turning_the_blink_on_replaces_an_old_none() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_blinkon_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "cursor:\n\tblink: true\n\tanimation: none\n").unwrap();
+		set_config_override(path.clone());
+		let orig = load();
+		assert!(!orig.cursor_blink);
+		let mut edited = orig.clone();
+		edited.cursor_blink = true;
+		assert!(persist(&orig, &edited));
+		let back = load();
+		assert!(
+			back.cursor_blink,
+			"{}",
+			std::fs::read_to_string(&path).unwrap()
+		);
+		assert_eq!(back.cursor_animation, orig.cursor_animation);
+	}
+
 	// The words the file uses, written out here rather than read back from
 	// `key`, so a changed spelling, or a type whose dialog order moved, fails
 	// here and not in somebody's config.
@@ -12683,8 +12930,8 @@ mod tests {
 			("dilate", F::Dilate),
 			("gaussian", F::Gaussian),
 		]);
+		// "none" left with `cursor.blink`, which says it now
 		check(&[
-			("none", C::Off),
 			("phase", C::Phase),
 			("pulse_vertical", C::PulseVertical),
 			("pulse_horizontal", C::PulseHorizontal),
@@ -12774,8 +13021,9 @@ mod tests {
 			"bogus",
 		];
 		let functions = ["sdf", "dt", "dilate", "gaussian", "Dilate", "bogus"];
+		// not "none" any more: a launch rewrites that one as `blink: false`
 		let animations = [
-			"none",
+			"Pulse_Both",
 			"Phase",
 			"pulse_vertical",
 			"pulse_horizontal",
@@ -15225,11 +15473,11 @@ mod tests {
 	// not change it a second time.
 	mod fuzz {
 		use super::super::{
-			CONFIG_REMOVED, CONFIG_RENAMES, LEGACY_KEYS, RatingLines, SUPERSEDED_FONT_STACKS,
-			adopt_default_shell, config_complaints, convert_legacy_config, default_config,
-			disabled_text, line_setting_key, migrate_config_text, next_launch_text, parse_kept,
-			read_raw, resolve, reverted_text, saved_text, setting_groups, setting_lines,
-			walk_settings, with_rating_lines, with_shcl_banner,
+			CONFIG_CONVERTS, CONFIG_REMOVED, CONFIG_RENAMES, LEGACY_KEYS, RatingLines,
+			SUPERSEDED_FONT_STACKS, adopt_default_shell, config_complaints, convert_legacy_config,
+			default_config, disabled_text, line_setting_key, migrate_config_text, next_launch_text,
+			parse_kept, read_raw, resolve, reverted_text, saved_text, setting_groups,
+			setting_lines, walk_settings, with_rating_lines, with_shcl_banner,
 		};
 		use crate::fuzz;
 
@@ -15240,6 +15488,11 @@ mod tests {
 			let mut out: Vec<String> = CONFIG_RENAMES
 				.iter()
 				.flat_map(|(old, new)| [*old, *new])
+				.chain(
+					CONFIG_CONVERTS
+						.iter()
+						.flat_map(|(old, new, _)| [*old, *new]),
+				)
 				.chain(CONFIG_REMOVED.iter().copied())
 				.chain(["font.family"])
 				.map(str::to_string)
@@ -15663,7 +15916,9 @@ mod tests {
 		// Test ID: EpZcBUQ
 		#[test]
 		fn a_flat_file_moves_every_value_to_its_path() {
-			use super::super::{CONFIG_REMOVED, LEGACY_KEYS, converted_config_text};
+			use super::super::{
+				CONFIG_CONVERTS, CONFIG_REMOVED, LEGACY_KEYS, converted_config_text,
+			};
 			use super::active_headings;
 			use std::fmt::Write;
 			let template = active_headings(default_config());
@@ -15673,7 +15928,12 @@ mod tests {
 				let mut want: std::collections::HashMap<&str, (usize, String)> =
 					std::collections::HashMap::new();
 				let mut expect = |rank: usize, value: &str| {
+					// the values here are not numbers, so a unit change keeps them
 					let new = LEGACY_KEYS[rank].1;
+					let new = CONFIG_CONVERTS
+						.iter()
+						.find(|(old, ..)| *old == new)
+						.map_or(new, |(_, to, _)| *to);
 					if CONFIG_REMOVED.contains(&new) {
 						return;
 					}
@@ -16190,10 +16450,15 @@ mod tests {
 		// Lines the launch's migration reads by how they are written as well as by
 		// value, taken from its own tables so a new rename or stack joins on its own.
 		fn migrated_shape(rng: &mut fuzz::Rng) -> String {
+			let renamed: Vec<&str> = CONFIG_RENAMES
+				.iter()
+				.map(|(old, _)| *old)
+				.chain(CONFIG_CONVERTS.iter().map(|(old, ..)| *old))
+				.collect();
 			let old = if rng.chance(4) {
 				*rng.pick(CONFIG_REMOVED)
 			} else {
-				rng.pick(CONFIG_RENAMES).0
+				*rng.pick(&renamed)
 			};
 			let (block, leaf) = old.rsplit_once('.').unwrap_or(("", old));
 			match rng.below(7) {

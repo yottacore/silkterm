@@ -259,7 +259,7 @@ macro_rules! keys_of {
 			| Key::ScrimStrength
 			| Key::Outline
 			| Key::MinContrast
-			| Key::CursorBlink
+			| Key::CursorBlinkRate
 			| Key::CursorHeight
 			| Key::CursorWidth
 			| Key::CursorResume
@@ -294,6 +294,7 @@ macro_rules! keys_of {
 			| Key::TextScrim
 			| Key::CursorScrim
 			| Key::CursorOutline
+			| Key::CursorBlinking
 			| Key::RememberSize
 			| Key::RememberPerMonitor
 			| Key::RememberMaximized
@@ -420,7 +421,7 @@ pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 		Key::ScrimStrength => settings.text_scrim_strength,
 		Key::Outline => settings.text_outline,
 		Key::MinContrast => to_percent(settings.text_min_contrast),
-		Key::CursorBlink => settings.cursor_blink_rate_ms,
+		Key::CursorBlinkRate => settings.cursor_blink_rate_s,
 		Key::CursorHeight => settings.cursor_size_height,
 		Key::CursorWidth => settings.cursor_size_width,
 		Key::CursorResume => settings.cursor_animation_resume_s,
@@ -471,6 +472,7 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::TextScrim => settings.text_scrim,
 		Key::CursorScrim => settings.cursor_scrim,
 		Key::CursorOutline => settings.cursor_outline,
+		Key::CursorBlinking => settings.cursor_blink,
 		Key::RememberSize => settings.remember_size,
 		Key::RememberPerMonitor => settings.remember_per_monitor,
 		Key::RememberMaximized => settings.remember_maximized,
@@ -530,7 +532,7 @@ const GOVERNED: &[Key] = &[
 	Key::SingleScreenTau,
 	Key::ScrollRampDown,
 	Key::ScrollEaseOut,
-	Key::CursorAnimation,
+	Key::CursorBlinking,
 	Key::TextScrim,
 	Key::ScrimRadius,
 	Key::ScrimStrength,
@@ -3307,7 +3309,7 @@ impl SettingsDialog {
 			Key::ScrimStrength => settings.text_scrim_strength = value,
 			Key::Outline => settings.text_outline = value,
 			Key::MinContrast => settings.text_min_contrast = from_percent(value),
-			Key::CursorBlink => settings.cursor_blink_rate_ms = value,
+			Key::CursorBlinkRate => settings.cursor_blink_rate_s = value,
 			Key::CursorHeight => settings.cursor_size_height = value,
 			Key::CursorWidth => settings.cursor_size_width = value,
 			Key::CursorResume => settings.cursor_animation_resume_s = value,
@@ -3461,6 +3463,7 @@ impl SettingsDialog {
 			Key::TextScrim => self.edited.text_scrim = on,
 			Key::CursorScrim => self.edited.cursor_scrim = on,
 			Key::CursorOutline => self.edited.cursor_outline = on,
+			Key::CursorBlinking => self.edited.cursor_blink = on,
 			Key::RememberSize => self.edited.remember_size = on,
 			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,
@@ -8793,7 +8796,6 @@ mod tests {
 			Key::CursorAnimation,
 			|s| &mut s.cursor_animation,
 			&[
-				(C::Off, "None"),
 				(C::Phase, "Phase"),
 				(C::PulseVertical, "Pulse vertical"),
 				(C::PulseHorizontal, "Pulse horizontal"),
@@ -9183,7 +9185,7 @@ mod tests {
 			.filter_map(|spec| SliderScale::of(&spec.kind))
 			.flat_map(SliderScale::widest_texts)
 			.collect();
-		for want in ["10080", "999.9", "10000", "4.00"] {
+		for want in ["10080", "999.9", "20.00", "4.00"] {
 			assert!(texts.iter().any(|t| t == want), "{want} is never measured");
 		}
 		let attrs = crate::text::ui_attrs();
@@ -10792,7 +10794,15 @@ mod tests {
 					Key::BgContrastAuto,
 				],
 			),
-			("Cursor", Key::CursorAnimation, &[Key::CursorResume]),
+			(
+				"Cursor",
+				Key::CursorBlinking,
+				&[
+					Key::CursorBlinkRate,
+					Key::CursorAnimation,
+					Key::CursorResume,
+				],
+			),
 			(
 				"Movement",
 				Key::Scrollbar,
@@ -10841,7 +10851,7 @@ mod tests {
 		}
 		// the whole Cursor tab, in order; the scrim and outline pair has no key
 		// of its own, so it answers by its first part
-		let cursor = specs[at(Key::CursorBlink)].tab;
+		let cursor = specs[at(Key::CursorBlinking)].tab;
 		assert_eq!(tab_titles()[cursor], "Cursor");
 		let rows: Vec<&str> = specs
 			.iter()
@@ -10854,9 +10864,10 @@ mod tests {
 		assert_eq!(
 			rows,
 			[
-				"CursorBlink",
 				"CursorHeight",
 				"CursorWidth",
+				"CursorBlinking",
+				"CursorBlinkRate",
 				"CursorAnimation",
 				"CursorResume",
 				"CursorScrim",
@@ -10907,7 +10918,7 @@ mod tests {
 			(Key::ScrollbarThickness, " px"),
 			(Key::ScrimRadius, " px"),
 			(Key::Outline, " px"),
-			(Key::CursorBlink, " ms"),
+			(Key::CursorBlinkRate, " s"),
 			(Key::CursorResume, " s"),
 		] {
 			assert!(
