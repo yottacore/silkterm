@@ -51,10 +51,10 @@ layout:
 
 	## Controls
 	slider_width: 220
-	swatch: 20                 ## color chip; also the size of every square control (checkbox, radio)
+	swatch: 20                 ## floor for a checkbox; past it, it grows with the radio box
 	hex_width: 92              ## "#rrggbb" field beside a color chip
 	value_width: 56            ## floor; every slider's field grows to the longest number one shows
-	radio_box: 16              ## radio indicator square
+	radio_box: 16              ## radio indicator square; grows with the UI line from base_line_height
 	radio_pitch: 96            ## per radio option: box + label + gap
 	dual_pitch: 118            ## per checkbox + label pair on a two-part row
 	dropdown_width: 208        ## collapsed dropdown box (fits its longest option)

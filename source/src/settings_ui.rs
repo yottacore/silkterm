@@ -572,6 +572,14 @@ fn font_gap(gap: f32, line_h: f32) -> f32 {
 	gap * (line_h / GAPS_DRAWN_AT).max(1.0)
 }
 
+// Side of a square box, checkbox or radio, at UI line height `line_h`. Both grow
+// at one rate, the radio's, so a large font draws them one size. `floor` is the
+// kind's own declared size, which is why the default font shows the checkbox a
+// bit bigger (2026100817355493).
+fn square_box(floor: f32, line_h: f32) -> f32 {
+	(lay().radio_box * (line_h / lay().base_line_height)).max(floor)
+}
+
 // The warning mark after a label, in UI line heights, so it grows with the
 // interface font. Ratios, because the label column is measured in physical
 // pixels and the layout in DIP.
@@ -1201,14 +1209,15 @@ impl SettingsDialog {
 			if j == lead + k {
 				return (x, x + label);
 			}
-			x += label + lay().swatch + font_gap(PACK_GAP, line_h);
+			x += label + square_box(lay().swatch, line_h) + font_gap(PACK_GAP, line_h);
 		}
 		(x, x)
 	}
 	// How far a packed line runs, from its first label to the end of its last box.
 	fn packed_w(specs: &[Spec], lead: usize, label_ws: &[f32], line_h: f32) -> f32 {
 		let (_, parts, _) = Self::line_of(specs, lead);
-		Self::packed_at(specs, lead, parts - 1, label_ws, line_h).1 + lay().swatch
+		Self::packed_at(specs, lead, parts - 1, label_ws, line_h).1
+			+ square_box(lay().swatch, line_h)
 	}
 	// The control column a line led by `lead` needs, from what each part has to
 	// show: a dropdown its pair floor, a toggle its box and any label before it.
@@ -1228,9 +1237,9 @@ impl SettingsDialog {
 					Kind::Toggle if k > 0 && !spec.label.is_empty() => {
 						label_ws.get(lead + k).copied().unwrap_or(0.0)
 							+ font_gap(PART_LABEL_GAP, line_h)
-							+ lay().swatch
+							+ square_box(lay().swatch, line_h)
 					}
-					Kind::Toggle => lay().swatch,
+					Kind::Toggle => square_box(lay().swatch, line_h),
 					_ => 0.0,
 				};
 				let gaps = [k > 0, k + 1 < parts].iter().filter(|&&g| g).count() as f32;
@@ -1813,7 +1822,7 @@ impl SettingsDialog {
 	// The same, for one row: a row sharing its line stops at the end of its part.
 	fn ctl_right(&self, i: usize) -> f32 {
 		if Self::packs(self.specs, i) {
-			return self.control_x(i) + lay().swatch;
+			return self.control_x(i) + self.check_sz();
 		}
 		let (_, parts, k) = Self::line_of(self.specs, i);
 		self.part_span(k, parts).1
@@ -2775,12 +2784,16 @@ impl SettingsDialog {
 			h: lay().swatch,
 		}
 	}
+	fn check_sz(&self) -> f32 {
+		square_box(lay().swatch, self.line_h)
+	}
 	fn checkbox(&self, i: usize) -> Rect {
+		let size = self.check_sz();
 		Rect {
 			x: self.control_x(i),
-			y: self.centered_in_row(i, lay().swatch),
-			w: lay().swatch,
-			h: lay().swatch,
+			y: self.centered_in_row(i, size),
+			w: size,
+			h: size,
 		}
 	}
 	fn dual_pitch(&self) -> f32 {
@@ -2788,11 +2801,12 @@ impl SettingsDialog {
 	}
 	// checkbox `part` (0/1) on a Dual row; its label sits just to the right
 	fn dual_box(&self, i: usize, part: u16) -> Rect {
+		let size = self.check_sz();
 		Rect {
 			x: self.control_x(i) + part as f32 * self.dual_pitch(),
-			y: self.centered_in_row(i, lay().swatch),
-			w: lay().swatch,
-			h: lay().swatch,
+			y: self.centered_in_row(i, size),
+			w: size,
+			h: size,
 		}
 	}
 	// Radio geometry scales with the UI font (HiDPI or a large desktop font), so
@@ -2804,7 +2818,7 @@ impl SettingsDialog {
 		lay().radio_pitch * self.ui_scale()
 	}
 	fn radio_box_sz(&self) -> f32 {
-		lay().radio_box * self.ui_scale()
+		square_box(lay().radio_box, self.line_h)
 	}
 	// Where the label after a radio or pair box starts.
 	fn label_after(&self, bx: Rect) -> f32 {
@@ -3047,11 +3061,12 @@ impl SettingsDialog {
 			}
 			Kind::Dual { .. } => {
 				let bx = self.dual_box(i, part);
+				let (y, h) = self.with_label_line(i, bx.y, bx.h);
 				Rect {
 					x: bx.x,
-					y: bx.y,
+					y,
 					w: self.dual_pitch() - 12.0,
-					h: bx.h,
+					h,
 				}
 			}
 			Kind::Toggle => self.checkbox(i),
@@ -3060,11 +3075,12 @@ impl SettingsDialog {
 			Kind::Color => self.hexbox(i),
 			Kind::Radio(opts) => {
 				let first = self.radio_box(i, 0);
+				let (y, h) = self.with_label_line(i, first.y - 2.0, first.h + 4.0);
 				Rect {
 					x: first.x,
-					y: first.y - 2.0,
+					y,
 					w: opts.len() as f32 * self.radio_pitch() - 12.0,
-					h: first.h + 4.0,
+					h,
 				}
 			}
 			Kind::Dropdown(_) => self.dd_box(i),
@@ -3072,6 +3088,15 @@ impl SettingsDialog {
 			Kind::ShellList => self.shell_stop_rect(i, part),
 			Kind::Header(_) => self.track(i), // unreachable (headers aren't focusable)
 		}
+	}
+	// A ring around a box and the labels after it, `y`/`h` from the box. Those
+	// labels are a line of text, and at a large font the line is the taller of
+	// the two (2026100817355494).
+	fn with_label_line(&self, i: usize, y: f32, h: f32) -> (f32, f32) {
+		if h >= self.line_h {
+			return (y, h);
+		}
+		(self.centered_in_row(i, self.line_h), self.line_h)
 	}
 	// Does the keyboard ring sit exactly on a control's own outline? For a boxed
 	// control it does, and then the box must not draw its border as well - a
@@ -6840,6 +6865,157 @@ mod tests {
 					"Fit's two options and the font pair, saw {after} at {at}"
 				);
 			}
+		}
+	}
+
+	// Every square box grows at the radio's rate from its own floor. At a large
+	// font a checkbox, a pair's box, a packed toggle and a radio box are one size,
+	// and at the default font each keeps the size it always had.
+	// Test ID: EsA3ceS
+	#[test]
+	fn a_checkbox_and_a_radio_box_grow_to_one_size() {
+		let lay = lay();
+		// UI line heights, DIP: the test default, 11 pt at 2x and 1x, 24 pt, 32 pt
+		for line in [18.0f32, 19.5, 20.0, 43.0, 58.0] {
+			let radio = lay.radio_box * (line / lay.base_line_height).max(1.0);
+			let check = if line < 40.0 { lay.swatch } else { radio };
+			for scale in [1.0f32, 2.0] {
+				let k = line / 18.0 * scale;
+				let mut d = SettingsDialog::new(
+					0.0,
+					0.0,
+					line * scale,
+					170.0 * k,
+					80.0 * k,
+					90.0 * k,
+					0.0,
+					vec![90.0 * k; tab_titles().len()],
+					labels7(k),
+					f32::MAX,
+					4000.0 * scale,
+					scale,
+				);
+				let (w, h) = d.natural;
+				d.set_size(w * scale, h * scale);
+				let at = format!("line {line}, {scale}x");
+				let mut seen = [0; 4];
+				for i in 0..d.specs.len() {
+					d.tab = d.specs[i].tab;
+					let (boxes, want, kind) = match d.specs[i].kind {
+						Kind::Toggle if SettingsDialog::packs(d.specs, i) => {
+							(vec![d.checkbox(i)], check, 0)
+						}
+						Kind::Toggle => (vec![d.checkbox(i)], check, 1),
+						Kind::Dual { .. } => (vec![d.dual_box(i, 0), d.dual_box(i, 1)], check, 2),
+						Kind::Radio(opts) => (
+							(0..opts.len()).map(|c| d.radio_box(i, c)).collect(),
+							radio,
+							3,
+						),
+						_ => continue,
+					};
+					for bx in boxes {
+						assert!(
+							(bx.w - want).abs() < 0.001 && (bx.h - want).abs() < 0.001,
+							"{}: {}x{}, want {want} at {at}",
+							d.specs[i].label,
+							bx.w,
+							bx.h
+						);
+					}
+					seen[kind] += 1;
+				}
+				assert!(
+					seen.iter().all(|&n| n > 0),
+					"packed, plain, pair, radio: {seen:?} at {at}"
+				);
+			}
+		}
+	}
+
+	// A ring around boxes and the labels after them, a radio group or half a
+	// pair, takes in the labels' whole line in the real UI font, at the default
+	// size and well past it.
+	// Test ID: EsA3cyd
+	#[test]
+	fn a_focus_ring_takes_in_the_line_its_labels_are_on() {
+		let attrs = crate::text::ui_attrs();
+		// (font size, display scale)
+		for (big, scale) in [(1.0, 1.0), (1.0, 2.0), (2.0, 1.0), (2.0, 2.0), (2.5, 1.0)] {
+			let mut text = crate::text::TextCtx::new_cpu(big);
+			let (label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws) =
+				super::chrome_widths(&mut text, scale);
+			let mut d = SettingsDialog::new(
+				0.0,
+				0.0,
+				text.ui_line_h,
+				label_w,
+				btn_w,
+				row_btn_w,
+				value_w,
+				tab_ws,
+				label_ws,
+				f32::MAX,
+				4000.0 * scale,
+				scale,
+			);
+			let (w, h) = d.natural;
+			d.set_size(w * scale, h * scale);
+			let at = format!("{big}x the font, {scale}x");
+			let mut rings = 0;
+			for i in 0..d.specs.len() {
+				let parts: Vec<(u16, Vec<(&str, super::Rect)>)> = match d.specs[i].kind {
+					Kind::Dual { labels, .. } => vec![
+						(0, vec![(labels[0], d.dual_box(i, 0))]),
+						(1, vec![(labels[1], d.dual_box(i, 1))]),
+					],
+					Kind::Radio(opts) => vec![(
+						0,
+						opts.iter()
+							.enumerate()
+							.map(|(c, o)| (*o, d.radio_box(i, c)))
+							.collect(),
+					)],
+					_ => continue,
+				};
+				d.tab = d.specs[i].tab;
+				let texts = d.texts_dip(d.line_h, chars7);
+				for (part, labels) in parts {
+					assert!(!d.ring_is_the_box(i, part));
+					let r = d.focus_ctl_rect(i, part);
+					let ring = super::Rect {
+						x: r.x - 2.0,
+						y: r.y - 2.0,
+						w: r.w + 4.0,
+						h: r.h + 4.0,
+					};
+					for (label, bx) in labels {
+						let item = texts
+							.iter()
+							.find(|t| t.text == label && t.x > bx.x && t.x < ring.x + ring.w)
+							.unwrap_or_else(|| panic!("{label} is not drawn at {at}"));
+						let end = item.x + text.measure_ui_text(label, &attrs) / scale;
+						assert!(
+							item.y >= ring.y - 0.01 && item.y + d.line_h <= ring.y + ring.h + 0.01,
+							"{label}: line {}..{}, ring {}..{} at {at}",
+							item.y,
+							item.y + d.line_h,
+							ring.y,
+							ring.y + ring.h
+						);
+						assert!(
+							end <= ring.x + ring.w,
+							"{label} ends at {end}, ring at {} at {at}",
+							ring.x + ring.w
+						);
+					}
+					rings += 1;
+				}
+			}
+			assert!(
+				rings >= 5,
+				"Fit, the font pair and Visibility, saw {rings} at {at}"
+			);
 		}
 	}
 
