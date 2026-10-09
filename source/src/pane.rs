@@ -7491,25 +7491,31 @@ mod tests {
 		}
 	}
 
-	// CPU time this thread has used. The rest of the suite and whatever else the
-	// box is doing take turns on the cores, and wall time counts every turn lost.
+	// CPU this thread has used, in the platform's own unit, so only good for
+	// ratios. The rest of the suite and whatever else the box is doing take turns
+	// on the cores, and wall time counts every turn lost.
 	#[cfg(unix)]
-	fn thread_cpu() -> std::time::Duration {
+	fn thread_cpu() -> u64 {
 		let mut now = libc::timespec {
 			tv_sec: 0,
 			tv_nsec: 0,
 		};
 		// SAFETY: a clock read into a local the call owns for its length.
 		unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &raw mut now) };
-		std::time::Duration::new(now.tv_sec as u64, now.tv_nsec as u32)
+		now.tv_sec as u64 * 1_000_000_000 + now.tv_nsec as u64
 	}
 
-	// Thread times on Windows move in scheduler ticks, too coarse for one run, so
-	// it gets wall time and leans on the pairing alone.
-	#[cfg(not(unix))]
-	fn thread_cpu() -> std::time::Duration {
-		static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-		EPOCH.get_or_init(std::time::Instant::now).elapsed()
+	// Cycles, since GetThreadTimes moves in scheduler ticks (15.6 ms), which is
+	// too coarse for one run. Wall time failed here under the suite's own load.
+	#[cfg(windows)]
+	fn thread_cpu() -> u64 {
+		use windows_sys::Win32::System::Threading::GetCurrentThread;
+		use windows_sys::Win32::System::WindowsProgramming::QueryThreadCycleTime;
+		let mut cycles = 0u64;
+		// SAFETY: the pseudo-handle needs no closing; the output is a local.
+		let ok = unsafe { QueryThreadCycleTime(GetCurrentThread(), &raw mut cycles) };
+		assert_ne!(ok, 0, "QueryThreadCycleTime failed");
+		cycles
 	}
 
 	// Test ID: EqHIGdO
@@ -7541,7 +7547,7 @@ mod tests {
 				term.scroll_ledger().rows().len(),
 				keep.min(crate::scroll::SLIDE_ROWS)
 			);
-			thread_cpu().saturating_sub(start).as_secs_f64()
+			thread_cpu().saturating_sub(start) as f64
 		};
 		// The rest of the suite runs beside this. The best of each side, taken at
 		// different moments, failed under load now and then (2026100714145220).
