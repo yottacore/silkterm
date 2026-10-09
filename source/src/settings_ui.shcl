@@ -169,6 +169,11 @@ icons:
 ## key:       only when the row's name cannot be the setting's - because a
 ##            heading already took that name, or because the row edits no
 ##            single setting of its own (`key: none`)
+## group:     in place of `setting:`, makes a toggle the switch for a group of
+##            auto settings (config::auto::GROUPS). It stores nothing and has
+##            no revert arrow: it reads on while every member is automatic,
+##            off while none is, and mixed in between. A setting with an
+##            automatic value is found from its `setting:` path, with no field.
 ## help:      flyover text, for a control whose label does not explain it
 ## revert_help: flyover for the revert arrow, where it does more than put the
 ##            shipped default back
@@ -492,18 +497,13 @@ rows:
 		label: Font
 		tab: Text
 
-	SystemFont:
-		label: Use system font
-		kind: pair
-		options: "Face", "Size"
-		parts: SystemFont, SystemFontSize
-		setting: font.use_system_family, font.use_system_size
-		help: "Follow the desktop's own monospace font, for the face and the size independently."
-
+	## Both are automatic until set: they follow the desktop's own monospace
+	## font, and where it names none, the shipped list and 17.
 	FontFamily:
 		label: Family
 		kind: text
 		setting: font.family
+		help: "Font names, separated by commas. The first one installed is used."
 
 	FontSize:
 		label: Size
@@ -762,11 +762,14 @@ rows:
 		label: Window
 		tab: Window
 
+	## The switch for Columns and Rows, which are automatic until set. It holds
+	## nothing: it is on while both are automatic, off while both are set by
+	## hand, and mixed in between.
 	RememberSize:
 		label: Remember last size
 		kind: toggle
-		setting: window.remember_size
-		help: "Reopen at whatever size the window was last closed at, ignoring Columns and Rows."
+		group: window.size
+		help: "Reopen at whatever size the window was last closed at. Columns and Rows show that size until one is set by hand."
 
 	RememberPerMonitor:
 		label: Per monitor
@@ -1188,63 +1191,16 @@ rows:
 ## toggle that is false, or a number sitting at zero. A leading "!" reverses
 ## it: grayed while that setting is ON. Listing several means all must hold.
 ##
-## Not listed here: the two system-font switches, which the environment grays
-## when the desktop reports no font for them to follow. That is a fact about
-## the machine, so it is answered in code.
+## Rows that only count while a switch above them is on are NOT listed: they
+## stay live and indented under it, so they can be set up first and come back
+## as they were. Nor is an auto setting, which shows the value in use and
+## takes a new one at any time. What is left is a switch whose rows it
+## replaces, not yet moved to the automatic settings design.
+##
+## Not listed here: a row the machine grays ("Minutes when hidden" on
+## Wayland). That is a fact about the desktop, so it is answered in code.
 
 gates:
 
-	PerfCheckHardware: PerfAuto
-	PerfCheckNext: PerfAuto
-
-	BgImage: BgEnabled
-	BgRotate: BgEnabled
-	BgOpacity: BgEnabled
-	BgBlur: BgEnabled
-	BgFit: BgEnabled
-	BgHonorXmp: BgEnabled
-	BgContrastMask: BgEnabled
-	BgContrastSize: BgEnabled, BgContrastMask
-	BgContrastStrength: BgEnabled, BgContrastMask
-	BgContrastAuto: BgEnabled, BgContrastMask
-	Opacity: Transparency
-	BackdropBlur: Transparency
-
-	ScrimStrength: TextScrim
-	ScrimRadius: TextScrim
-	ScrimSoftness: TextScrim
-	ScrimFunction: TextScrim
-	ScrimRamp: TextScrim
-	## MinContrast sits under the scrim but is not gated by it: the lift is
-	## applied to the text itself, halo or no halo.
-	CursorScrim: TextScrim
-	CursorOutline: Outline    ## an outline to join, before it can join one
-
 	ColFg: !ColFromWallpaper
 	ColCursor: !ColFromWallpaper
-
-	FontFamily: !SystemFont
-
-	IdleHiddenMin: IdleRelease
-	IdleMin: IdleRelease
-	FontSize: !SystemFontSize
-
-	RememberPerMonitor: RememberSize
-	Columns: !RememberSize
-	Rows: !RememberSize
-
-	ScrollEaseIn: SmoothScroll
-	ScrollRampUp: SmoothScroll
-	SingleScreenTau: SmoothScroll
-	ScrollRampDown: SmoothScroll
-	ScrollEaseOut: SmoothScroll
-
-	ScrollbarThickness: Scrollbar
-	ScrollbarAutoHide: Scrollbar
-
-	MinimapWidth: Minimap
-
-	## The two scrollbar colors are deliberately ungated: the minimap's marker and
-	## its own bar take them too, so they still do something with the scrollbar off.
-
-	LinkOpenCommand: Hyperlinks

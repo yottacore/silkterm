@@ -152,7 +152,8 @@ impl State {
 	// size, else the last size set anywhere, as a launch there would.
 	fn take_monitor_size(&mut self) {
 		let live = config::settings();
-		if !live.remember_size || !live.remember_per_monitor || self.watch.size_pinned {
+		if !config::auto::keeps_size(&live) || !live.remember_per_monitor || self.watch.size_pinned
+		{
 			return;
 		}
 		if self.window.fullscreen().is_some() || self.window.is_maximized() {

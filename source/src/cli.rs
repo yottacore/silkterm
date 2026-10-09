@@ -621,10 +621,10 @@ fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> anyhow::Resu
 /// shared `TextCtx` doesn't have). `--shell` is handled separately (`build_layout`).
 pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
 	if let Some(font) = &style.font_name {
-		settings.font_family = Some(font.clone());
+		settings.font_family = config::auto::Auto::by_hand(font.clone());
 	}
 	if let Some(size) = style.font_size {
-		settings.font_size = size;
+		settings.font_size = config::auto::Auto::by_hand(size);
 	}
 	if let Some(color) = style.bg_color {
 		settings.bg = color;
@@ -1263,8 +1263,8 @@ mod tests {
 		);
 		let mut s = config::Settings::default();
 		fold_window_style(&mut s, &c.win.style);
-		assert_eq!(s.font_family.as_deref(), Some("Iosevka"));
-		assert_eq!(s.font_size, 20.0);
+		assert_eq!(config::auto::font_family(&s), "Iosevka");
+		assert_eq!(config::auto::font_size(&s), 20.0);
 		assert_eq!(s.bg, [0x10, 0x20, 0x30]);
 		assert_eq!(s.fg, [0xab, 0xcd, 0xef]);
 		assert_eq!(s.wallpaper, Some(PathBuf::from("/x.png")));
@@ -1278,7 +1278,7 @@ mod tests {
 		// no style flags -> settings untouched
 		let c = p("--columns 80");
 		let mut s = config::Settings::default();
-		let before = (s.font_size, s.bg, s.fg);
+		let before = (s.font_size.clone(), s.bg, s.fg);
 		fold_window_style(&mut s, &c.win.style);
 		assert_eq!((s.font_size, s.bg, s.fg), before);
 	}

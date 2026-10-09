@@ -434,13 +434,13 @@ impl App {
 	fn apply_dialog_settings(&mut self) -> bool {
 		let mut wrote = true;
 		let mut refused = false;
-		if let Some((orig, edited, sys)) = self
+		if let Some((orig, edited)) = self
 			.dialog
 			.as_ref()
 			.and_then(crate::dialog::DialogWin::settings_values)
 		{
 			if let Some(state) = self.state.as_mut() {
-				wrote = state.apply_settings_values(&orig, edited, sys);
+				wrote = state.apply_settings_values(&orig, edited);
 			}
 			if let Some(refusal) = config::take_refusal() {
 				refused = true;

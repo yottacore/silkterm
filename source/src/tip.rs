@@ -34,24 +34,32 @@ const MIN_WRAP: f32 = 40.0; // a wrap budget never narrower than this
 /// Greedy word wrap, measured in whatever font the caller draws in. A single
 /// word wider than the budget still gets its own line rather than being split -
 /// breaking mid-word would be worse than a tip that overhangs by one long word.
+/// A line break in the text starts a new line, and an empty one is a blank line.
 pub fn wrap(text: &str, max_w: f32, mut measure: impl FnMut(&str) -> f32) -> Vec<String> {
 	let mut lines: Vec<String> = Vec::new();
-	let mut line = String::new();
-	for word in text.split_whitespace() {
-		let candidate = if line.is_empty() {
-			word.to_string()
-		} else {
-			format!("{line} {word}")
-		};
-		if !line.is_empty() && measure(&candidate) > max_w {
-			lines.push(std::mem::take(&mut line));
-			line = word.to_string();
-		} else {
-			line = candidate;
+	// a line break in the text is kept, so a tip can have a blank line
+	for (at, paragraph) in text.split('\n').enumerate() {
+		if at > 0 && paragraph.trim().is_empty() {
+			lines.push(String::new());
+			continue;
 		}
-	}
-	if !line.is_empty() {
-		lines.push(line);
+		let mut line = String::new();
+		for word in paragraph.split_whitespace() {
+			let candidate = if line.is_empty() {
+				word.to_string()
+			} else {
+				format!("{line} {word}")
+			};
+			if !line.is_empty() && measure(&candidate) > max_w {
+				lines.push(std::mem::take(&mut line));
+				line = word.to_string();
+			} else {
+				line = candidate;
+			}
+		}
+		if !line.is_empty() {
+			lines.push(line);
+		}
 	}
 	if lines.is_empty() {
 		lines.push(String::new());
@@ -261,6 +269,26 @@ mod tests {
 		// line rather than none
 		assert_eq!(wrap("short", 240.0, measure), vec!["short"]);
 		assert_eq!(wrap("", 100.0, measure), vec![""]);
+	}
+
+	// A tip with a line break keeps it, and a blank line stays blank, so a
+	// Settings row can put a line on its state under its description.
+	// Test ID: EsDxpmN
+	#[test]
+	fn a_tip_keeps_its_line_breaks() {
+		assert_eq!(
+			wrap("Font names.\n\nAutomatic.", 240.0, measure),
+			vec!["Font names.", "", "Automatic."]
+		);
+		assert_eq!(
+			wrap("one two\nthree", 240.0, measure),
+			vec!["one two", "three"]
+		);
+		// a paragraph still wraps within itself
+		assert_eq!(
+			wrap("one two three\n\nfour", 48.0, measure),
+			vec!["one two", "three", "", "four"]
+		);
 	}
 
 	// A tip that cannot fit below what it describes flips above it, rather than

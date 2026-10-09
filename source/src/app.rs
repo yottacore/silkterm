@@ -1403,12 +1403,7 @@ impl State {
 	// Returns false if the config file looked open elsewhere so the write was
 	// skipped - the caller (dialog OK) then keeps the dialog open instead of
 	// closing over an unsaved change. The values still apply live regardless.
-	fn apply_settings_values(
-		&mut self,
-		orig: &config::Settings,
-		edited: config::Settings,
-		_system_font: bool,
-	) -> bool {
+	fn apply_settings_values(&mut self, orig: &config::Settings, edited: config::Settings) -> bool {
 		// The Shells tab edits the list now, so this is the one path allowed to
 		// write it - and it is the dialog's copy that wins. The baseline is the
 		// LIVE list rather than the dialog's own `orig`: a scan that arrived while
@@ -1430,8 +1425,6 @@ impl State {
 		// opened, so a change to either since then must survive the Apply.
 		config::keep_session_on_apply(&live, &orig, &mut edited);
 		config::keep_wallpaper_on_apply(&live, self.wp_locked, &mut orig, &mut edited);
-		// use_system_font is a persisted setting that only reorders font_family at
-		// resolve time, so nothing special to strip - persist the diff as usual.
 		// The dialog opened on the file, so the file gets only what was edited,
 		// while this window takes everything that differs from what it runs -
 		// including what another window saved since this one loaded.
@@ -1536,7 +1529,15 @@ impl State {
 		edited: config::Settings,
 		force_bg: bool,
 	) {
-		let resize = edited.columns != orig.columns || edited.rows != orig.rows;
+		// a size set by hand, or one gone back to automatic; an automatic size
+		// that only follows the window is the size it already has
+		let size_of = |s: &config::Settings| {
+			[config::auto::Setting::Columns, config::auto::Setting::Rows].map(|setting| {
+				(!config::auto::automatic(s, setting))
+					.then(|| config::auto::value(s, setting, config::auto::Place::default()))
+			})
+		};
+		let resize = size_of(&edited) != size_of(orig);
 		// copy_on_select changed -> apply to every existing pane too, so the
 		// dialog toggle takes effect now, not only for panes spawned later
 		if edited.copy_on_select != orig.copy_on_select {
@@ -1569,8 +1570,9 @@ impl State {
 		// Nothing to do here; the bg fill picks up the new opacity on the next frame.
 		// window dimensions changed in Settings -> resize to the new cell grid
 		if resize {
-			let settings = config::settings();
-			self.request_grid(settings.columns, settings.rows);
+			let (columns, rows) =
+				config::auto::grid(&config::settings(), self.watch.key.as_deref());
+			self.request_grid(columns, rows);
 		}
 		if rebuild {
 			self.rebuild_text(config::display_scale(self.window.scale_factor()));
@@ -3618,13 +3620,13 @@ impl ApplicationHandler<UserEvent> for App {
 		// off-X11 and on compositors that don't honor the hint.
 		set_blur_behind(&window, config::settings().transparent_background_blur);
 
-		// remember_size opens at the last size and font zoom, this monitor's own
-		// where they are kept. A size or font size on the command line wins.
+		// An automatic size opens at the last size and font zoom, this monitor's
+		// own where they are kept. A size or font size on the command line wins.
 		let settings = config::settings();
 		let monitor = crate::monitor::MonitorId::of_new_window(&window).map(|m| m.key());
 		let kept = config::remembered_window(&settings, monitor.as_deref());
 		let font_pinned = cli_win.style.font_size.is_some();
-		if settings.remember_size && !font_pinned {
+		if config::auto::keeps_size(&settings) && !font_pinned {
 			config::set_font_zoom(kept.font_zoom);
 		}
 
@@ -3659,16 +3661,9 @@ impl ApplicationHandler<UserEvent> for App {
 			font_pinned,
 			positionless: window.outer_position().is_err(),
 		};
-		let cols = cli_win.columns.unwrap_or(if settings.remember_size {
-			kept.columns
-		} else {
-			settings.columns
-		});
-		let rows = cli_win.rows.unwrap_or(if settings.remember_size {
-			kept.rows
-		} else {
-			settings.rows
-		});
+		let (cols, rows) = config::auto::grid(&settings, watch.key.as_deref());
+		let cols = cli_win.columns.unwrap_or(cols);
+		let rows = cli_win.rows.unwrap_or(rows);
 		let menu_bar_h = if menu_bar {
 			text.ui_line_h + text.dip(MENU_BAR_VPAD)
 		} else {
@@ -5499,6 +5494,12 @@ impl ApplicationHandler<UserEvent> for App {
 		// Debounced remember-size: persist once the size has held; while one is
 		// pending, make sure the loop wakes up to flush it even when idle.
 		state.flush_window_size(false);
+		// Settings shows the automatic size, which is this one
+		if let Some(dialog) = self.dialog.as_mut() {
+			if dialog.follow_window(state.watch.key.as_deref(), &config::settings()) {
+				self.dialog_dirty = true;
+			}
+		}
 		let flow = if let (ControlFlow::Wait, Some(_)) = (flow, state.pending_size) {
 			let due = state.pending_size_at + SIZE_SAVE_DEBOUNCE;
 			ControlFlow::WaitUntil(state.watch.check_at.map_or(due, |check| due.max(check)))

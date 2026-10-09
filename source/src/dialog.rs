@@ -5,6 +5,7 @@
 //! dialog larger than the main window is still fully visible (the in-surface
 //! overlay was clipped by the main window). Each dialog owns its surface + text
 //! context and is sized to its content (non-resizable).
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -396,14 +397,10 @@ impl DialogWin {
 		})
 	}
 
-	/// (orig, edited, `use_system_font`) for the app to apply, if this is Settings.
-	pub fn settings_values(&self) -> Option<(config::Settings, config::Settings, bool)> {
+	/// (orig, edited) for the app to apply, if this is Settings.
+	pub fn settings_values(&self) -> Option<(config::Settings, config::Settings)> {
 		match &self.content {
-			Content::Settings(dialog) => Some((
-				dialog.orig().clone(),
-				dialog.edited().clone(),
-				dialog.use_system_font(),
-			)),
+			Content::Settings(dialog) => Some((dialog.orig().clone(), dialog.edited().clone())),
 			Content::About { .. } => None,
 		}
 	}
@@ -414,6 +411,15 @@ impl DialogWin {
 	pub fn fold_shells(&mut self, found: &[crate::shells::Found]) {
 		if let Content::Settings(dialog) = &mut self.content {
 			dialog.fold_shells(found);
+		}
+	}
+
+	/// Settings follows the main window's monitor and its last size, which the
+	/// automatic Columns and Rows show. True when that changed what it shows.
+	pub fn follow_window(&mut self, monitor: Option<&str>, live: &config::Settings) -> bool {
+		match &mut self.content {
+			Content::Settings(dialog) => dialog.follow_window(monitor, live),
+			Content::About { .. } => false,
 		}
 	}
 
@@ -1199,12 +1205,16 @@ fn text_areas<'a>(
 }
 
 // The tip under the pointer, and the rect it hangs from. A frame asks once.
-fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(&str, Rect)> {
+fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Cow<'_, str>, Rect)> {
 	match content {
 		Content::About { links, .. } => links
 			.iter()
 			.find(|link| link.tooltip.is_some() && link.rect.contains(mx, my))
-			.and_then(|link| link.tooltip.as_deref().map(|tip| (tip, link.rect))),
+			.and_then(|link| {
+				link.tooltip
+					.as_deref()
+					.map(|tip| (Cow::Borrowed(tip), link.rect))
+			}),
 		Content::Settings(dialog) => dialog.hover_tip(mx, my),
 	}
 }
@@ -1253,8 +1263,9 @@ fn compose(
 	size: (u32, u32),
 ) -> (Scene, Option<Rect>) {
 	let found = tip_under(content, mouse);
-	let (drawn, _) = tip_gate(dwell, found.map(|(_, anchor)| anchor), now);
+	let (drawn, _) = tip_gate(dwell, found.as_ref().map(|(_, anchor)| *anchor), now);
 	let tip = found.filter(|(_, anchor)| drawn == Some(*anchor));
+	let tip = tip.as_ref().map(|(tip, anchor)| (tip.as_ref(), *anchor));
 	(scene(content, text, shaped, mouse, tip, size), drawn)
 }
 
@@ -1385,11 +1396,15 @@ fn scene(
 				if item.bold {
 					attrs.weight = crate::text::ui_bold_weight();
 				}
+				if item.italic {
+					attrs.style = glyphon::Style::Italic;
+				}
 				let tall = item.scale.max(1.0);
 				let buf = shaped.buffer(text, &item.text, &attrs, w as f32, line_h * tall);
+				// the offset is the glyphs', so it scales with them either way
 				Placed {
 					x: item.x,
-					y: item.y + ink_dy * tall,
+					y: item.y + ink_dy * item.scale,
 					scale: item.scale,
 					color: item.color,
 					clip: item.clip,
@@ -2875,8 +2890,7 @@ mod tests {
 				1 => {
 					let mut s = (*config::settings()).clone();
 					s.margin += 3.0;
-					s.font_size += 1.0;
-					s.use_system_font_size = false;
+					s.font_size = config::auto::Auto::by_hand(config::auto::font_size(&s) + 1.0);
 					if let super::Content::Settings(dialog) = &mut content {
 						dialog.start_from(s);
 					}

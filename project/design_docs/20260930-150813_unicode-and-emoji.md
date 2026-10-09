@@ -48,15 +48,14 @@ A terminal is a grid of cells, and fonts do not know that. SilkTerm picks one mo
 - A glyph from another font sits on the same baseline as the text beside it.
 
 - The font is found from one search order, the same on every platform:
-	- the desktop's monospace family, when "Use system font" is on;
-	- then `font.family`, a comma-separated list;
-	- then the desktop's monospace family, when "Use system font" is off;
-	- then a built-in list, which is also what a fresh config gets;
+	- `font.family`, a comma-separated list. It is automatic until set, and automatic is the desktop's monospace family, or the built-in list where the desktop names none;
+	- then the desktop's monospace family;
+	- then a built-in list;
 	- then whatever the generic monospace name finds, only if nothing above is installed.
 
 - Every family in the built-in list has a real bold face.
 
-- The font size follows the desktop's fixed-width size unless a size is set. Ctrl+Minus, Ctrl+Plus and Ctrl+0 change it a pixel at a time. On macOS it is Command with the same keys.
+- The font size is automatic until set too, and follows the desktop's fixed-width size. Ctrl+Minus, Ctrl+Plus and Ctrl+0 change it a pixel at a time. On macOS it is Command with the same keys.
 
 - A cell takes at most nine combining marks.
 
@@ -110,9 +109,9 @@ Each fallback glyph is shaped once per pane, keyed by character, bold and italic
 
 One monospace family is pinned for every weight, because the shaper picks the best face per query and would otherwise let a bold run end up in a different family than the regular run beside it. Bold asks for the boldest weight the pinned family has, so it cannot escape into a proportional bold fallback.
 
-The search order in the Specification is the same on every platform. The setting only reorders that list and never shortens it. An earlier version dropped `font.family` entirely while following the desktop font. The same build and the same config then picked different fonts depending on the platform, and a configured list could be silently ignored. Every list is now always walked. A family that is not installed falls through to the next one, and the configured list still has effect as a fallback.
+The search order in the Specification is the same on every platform. Until 2026-10-09 a "Use system font" switch put the desktop's family ahead of `font.family`; now the family is automatic until set, and automatic is the desktop's family, so there is nothing left to reorder. An earlier version dropped `font.family` entirely while following the desktop font. The same build and the same config then picked different fonts depending on the platform, and a configured list could be silently ignored. Every list is now always walked. A family that is not installed falls through to the next one, and the configured list still has effect as a fallback.
 
-Platforms differ only in what they report, not in the rules applied to it. Windows has a system font size but no monospace family, so following the family there does nothing, and the search starts at `font.family` without a special case. A switch with nothing behind it reads as inert, so the Settings checkbox grays out and says why. The same goes for a desktop with no font setting at all, which is why the check asks what was detected rather than which platform is running.
+Platforms differ only in what they report, not in the rules applied to it. Windows has a system font size but no monospace family, so the automatic family there is the built-in list, with no special case. The same goes for a desktop with no font setting at all, which is why the rule asks what was detected rather than which platform is running.
 
 A size the desktop reports in points becomes logical pixels at 96 per inch, except on macOS. A Mac point already is a logical pixel, so it is taken as it comes. The Mac's fixed-width size comes from AppKit, which answers with its default when nobody has set one.
 
@@ -120,7 +119,7 @@ On Linux the desktop's own settings store is asked first, and the other fills in
 
 The built-in list is last for a reason. The generic monospace query below it is a lottery over installed fonts, and its winner may have no bold face. That throws bold runs into an arbitrary, often proportional, fallback whose advances cannot be snapped to the cell grid. Every entry in the built-in list has a real bold face: Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo and Courier New. When that list changes, the outgoing value is recorded, so an existing config still carrying it word for word is refreshed on the next launch. A list the user edited is theirs and is left alone.
 
-The size half of "Use system font" works on Windows too. An explicit `font.size` beats the desktop's size. The size hotkeys change the size for the window, since all panes share one set of text metrics.
+The automatic size follows the desktop's size on Windows too. A `font.size` set by hand beats it. The size hotkeys change the size for the window, since all panes share one set of text metrics.
 
 ### Color emoji
 

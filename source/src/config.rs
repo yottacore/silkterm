@@ -398,9 +398,9 @@ pub struct KeptWindow {
 	pub font_zoom: i32,
 }
 
-/// What to open at, or to take on arriving at another monitor, while
-/// `remember_size` is on: the monitor's own when it has one, else the last the
-/// window was given anywhere.
+/// What to open at, or to take on arriving at another monitor, while the size
+/// is automatic: the monitor's own when it has one, else the last the window
+/// was given anywhere. The rule behind `window.columns` and `window.rows`.
 pub fn remembered_window(settings: &Settings, monitor: Option<&str>) -> KeptWindow {
 	let last = KeptWindow {
 		columns: settings.remembered_columns,
@@ -434,7 +434,7 @@ pub fn remember_window(
 	if let Some(zoom) = font_zoom {
 		settings.remembered_font_zoom = zoom;
 	}
-	let Some(key) = monitor.filter(|_| settings.remember_size && settings.remember_per_monitor)
+	let Some(key) = monitor.filter(|_| auto::keeps_size(settings) && settings.remember_per_monitor)
 	else {
 		return;
 	};
@@ -512,10 +512,8 @@ fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Setting
 /// result; anything less would miss whichever field a bad `## Default` moved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
-	pub use_system_font: bool, // true = OS monospace FAMILY, overriding font_family
-	pub use_system_font_size: bool, // true = OS monospace SIZE, overriding font_size
-	pub font_family: Option<String>, // comma-separated fallback stack (first installed wins)
-	pub font_size: f32,
+	pub font_family: auto::Auto<String>, // comma-separated fallback stack (first installed wins); automatic follows the desktop
+	pub font_size: auto::Auto<f32>,      // automatic follows the desktop's monospace size
 	pub line_height_scale: f32,
 	pub scrollback: usize,
 	pub scroll_smooth: bool, // master switch: false = every scroll (wheel, output, app slide) happens instantly
@@ -584,15 +582,14 @@ pub struct Settings {
 	pub cursor_animation_resume_s: f32, // idle seconds after typing before the animation resumes (output does not wait this out)
 	pub cursor_animation_idle_stop_s: f32, // idle seconds until the animation stops (parked at full); 0 = never
 	pub cursor_blink_rate_s: f32,          // one whole animation cycle, peak to peak (s)
-	pub columns: usize,                    // initial window grid size (used when !remember_size)
-	pub rows: usize,
-	pub remember_size: bool, // launch at the last window size instead of columns/rows
-	pub remember_per_monitor: bool, // ...and keep one for each monitor (monitor_sizes)
-	pub remember_maximized: bool, // launch maximized if the last window closed that way
-	pub hide_single_tab: bool, // hide the tab bar while only one tab is open
-	pub new_tab_beside: bool, // a new tab opens right of the active one, else at the end
-	pub tab_shows_title: bool, // let a program's own title name the tab (tabtitle::Parts)
-	pub tab_shows_shell: bool, // parts a tab's own text is made of
+	pub columns: auto::Auto<usize>,        // initial window grid size; automatic is the last size
+	pub rows: auto::Auto<usize>,
+	pub remember_per_monitor: bool, // keep a last size for each monitor (monitor_sizes)
+	pub remember_maximized: bool,   // launch maximized if the last window closed that way
+	pub hide_single_tab: bool,      // hide the tab bar while only one tab is open
+	pub new_tab_beside: bool,       // a new tab opens right of the active one, else at the end
+	pub tab_shows_title: bool,      // let a program's own title name the tab (tabtitle::Parts)
+	pub tab_shows_shell: bool,      // parts a tab's own text is made of
 	pub tab_shows_program: bool,
 	pub tab_shows_directory: bool,
 	pub title_shows_tab: bool, // let the window title fall back to what the tab says
@@ -737,10 +734,8 @@ impl Settings {
 impl Default for Settings {
 	fn default() -> Self {
 		Self {
-			use_system_font: true,
-			use_system_font_size: true,
-			font_family: Some(DEFAULT_FONT_STACK.to_string()),
-			font_size: FALLBACK_FONT_SIZE,
+			font_family: auto::Auto::automatic(),
+			font_size: auto::Auto::automatic(),
 			line_height_scale: 1.22,
 			scrollback: 10_000,
 			scroll_smooth: true,
@@ -805,9 +800,8 @@ impl Default for Settings {
 			cursor_animation_resume_s: 1.0,
 			cursor_animation_idle_stop_s: 60.0,
 			cursor_blink_rate_s: 1.0,
-			columns: 160,
-			rows: 48,
-			remember_size: true,
+			columns: auto::Auto::automatic(),
+			rows: auto::Auto::automatic(),
 			remember_per_monitor: true,
 			remember_maximized: false,
 			hide_single_tab: false,
@@ -876,6 +870,285 @@ impl Default for Settings {
 			#[cfg(test)]
 			clone_probe: CloneProbe,
 		}
+	}
+}
+
+/// Settings the program can work out for itself. Each is stored as a value set
+/// by hand or as nothing, and nothing means automatic: it uses its rule. A
+/// group's switch is never stored either, it is read off its members. See
+/// project/design_docs/20261008-180516_automatic_settings.md.
+pub mod auto {
+	use super::Settings;
+
+	/// An auto setting as stored. Everything reads it through [`value`] and
+	/// [`automatic`]; the lint stage refuses any other use of `stored`
+	/// (cicd/tests/autoread).
+	#[derive(Clone, Debug, PartialEq, Default)]
+	pub struct Auto<T>(Option<T>);
+
+	impl<T> Auto<T> {
+		pub const fn automatic() -> Self {
+			Self(None)
+		}
+		pub const fn by_hand(value: T) -> Self {
+			Self(Some(value))
+		}
+		pub const fn is_automatic(&self) -> bool {
+			self.0.is_none()
+		}
+		/// The value set by hand. For [`value`] and the settings store only.
+		pub(crate) const fn stored(&self) -> Option<&T> {
+			self.0.as_ref()
+		}
+	}
+
+	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+	pub enum Setting {
+		FontFamily,
+		FontSize,
+		Columns,
+		Rows,
+	}
+
+	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+	pub enum Group {
+		WindowSize,
+	}
+
+	/// What a group's control is. Every group so far has a switch; the presets
+	/// dropdown comes with the first group that has presets.
+	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+	pub enum Control {
+		Switch,
+	}
+
+	#[derive(Clone, Debug, PartialEq)]
+	pub enum Value {
+		Text(String),
+		Number(f32),
+		Count(usize),
+	}
+
+	impl std::fmt::Display for Value {
+		fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+			match self {
+				Self::Text(text) => f.write_str(text),
+				Self::Number(n) => write!(f, "{}", (n * 100.0).round() / 100.0),
+				Self::Count(n) => write!(f, "{n}"),
+			}
+		}
+	}
+
+	/// Where a rule is asked from. The window size has one per monitor.
+	#[derive(Clone, Copy, Debug, Default)]
+	pub struct Place<'a> {
+		pub monitor: Option<&'a str>,
+	}
+
+	#[derive(Debug)]
+	pub struct Row {
+		pub setting: Setting,
+		pub path: &'static str,
+		pub group: Option<Group>,
+		rule: fn(&Settings, Place<'_>) -> Value,
+	}
+
+	/// Every auto setting, with its rule.
+	pub const TABLE: &[Row] = &[
+		// the desktop's monospace font, else the shipped list
+		Row {
+			setting: Setting::FontFamily,
+			path: "font.family",
+			group: None,
+			rule: |_, _| {
+				Value::Text(
+					crate::sysfont::monospace()
+						.family
+						.clone()
+						.unwrap_or_else(|| super::DEFAULT_FONT_STACK.to_string()),
+				)
+			},
+		},
+		Row {
+			setting: Setting::FontSize,
+			path: "font.size",
+			group: None,
+			rule: |_, _| Value::Number(super::default_font_size()),
+		},
+		// the size the window had last, this monitor's own where they are kept
+		Row {
+			setting: Setting::Columns,
+			path: "window.columns",
+			group: Some(Group::WindowSize),
+			rule: |settings, at| {
+				Value::Count(super::remembered_window(settings, at.monitor).columns)
+			},
+		},
+		Row {
+			setting: Setting::Rows,
+			path: "window.rows",
+			group: Some(Group::WindowSize),
+			rule: |settings, at| Value::Count(super::remembered_window(settings, at.monitor).rows),
+		},
+	];
+
+	#[derive(Debug)]
+	pub struct GroupRow {
+		pub group: Group,
+		pub name: &'static str,
+		pub control: Control,
+	}
+
+	/// Every group and its control. `name` is how the dialog's spec names it.
+	pub const GROUPS: &[GroupRow] = &[GroupRow {
+		group: Group::WindowSize,
+		name: "window.size",
+		control: Control::Switch,
+	}];
+
+	pub fn row(setting: Setting) -> &'static Row {
+		TABLE
+			.iter()
+			.find(|row| row.setting == setting)
+			.unwrap_or(&TABLE[0])
+	}
+
+	pub fn by_path(path: &str) -> Option<Setting> {
+		TABLE
+			.iter()
+			.find(|row| row.path == path)
+			.map(|row| row.setting)
+	}
+
+	pub fn group_named(name: &str) -> Option<Group> {
+		GROUPS
+			.iter()
+			.find(|row| row.name.eq_ignore_ascii_case(name))
+			.map(|row| row.group)
+	}
+
+	pub fn control(group: Group) -> Control {
+		GROUPS
+			.iter()
+			.find(|row| row.group == group)
+			.map_or(Control::Switch, |row| row.control)
+	}
+
+	pub fn members(group: Group) -> impl Iterator<Item = Setting> {
+		TABLE
+			.iter()
+			.filter(move |row| row.group == Some(group))
+			.map(|row| row.setting)
+	}
+
+	fn stored(settings: &Settings, setting: Setting) -> Option<Value> {
+		match setting {
+			Setting::FontFamily => settings.font_family.stored().cloned().map(Value::Text),
+			Setting::FontSize => settings.font_size.stored().copied().map(Value::Number),
+			Setting::Columns => settings.columns.stored().copied().map(Value::Count),
+			Setting::Rows => settings.rows.stored().copied().map(Value::Count),
+		}
+	}
+
+	/// What the setting uses: the value set by hand, else what its rule gives.
+	pub fn value(settings: &Settings, setting: Setting, at: Place<'_>) -> Value {
+		stored(settings, setting).unwrap_or_else(|| rule(settings, setting, at))
+	}
+
+	/// True while nothing is stored, so the rule decides.
+	pub fn automatic(settings: &Settings, setting: Setting) -> bool {
+		stored(settings, setting).is_none()
+	}
+
+	/// What the setting would use if it were automatic.
+	pub fn rule(settings: &Settings, setting: Setting, at: Place<'_>) -> Value {
+		(row(setting).rule)(settings, at)
+	}
+
+	/// Store a value set by hand, or None for automatic. A value of the wrong
+	/// kind for the setting stores nothing.
+	pub fn set(settings: &mut Settings, setting: Setting, value: Option<Value>) {
+		match (setting, value) {
+			(Setting::FontFamily, Some(Value::Text(text))) => {
+				settings.font_family = Auto::by_hand(text);
+			}
+			(Setting::FontSize, Some(Value::Number(n))) => settings.font_size = Auto::by_hand(n),
+			(Setting::Columns, Some(Value::Count(n))) => settings.columns = Auto::by_hand(n),
+			(Setting::Rows, Some(Value::Count(n))) => settings.rows = Auto::by_hand(n),
+			(Setting::FontFamily, _) => settings.font_family = Auto::automatic(),
+			(Setting::FontSize, _) => settings.font_size = Auto::automatic(),
+			(Setting::Columns, _) => settings.columns = Auto::automatic(),
+			(Setting::Rows, _) => settings.rows = Auto::automatic(),
+		}
+	}
+
+	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+	pub enum State {
+		On,
+		Off,
+		Mixed,
+	}
+
+	/// A switch reads on when every member is automatic, off when none is.
+	pub fn group_state(settings: &Settings, group: Group) -> State {
+		let (mut on, mut off) = (false, false);
+		for setting in members(group) {
+			if automatic(settings, setting) {
+				on = true;
+			} else {
+				off = true;
+			}
+		}
+		match (on, off) {
+			(true, true) => State::Mixed,
+			(false, true) => State::Off,
+			_ => State::On,
+		}
+	}
+
+	/// A switch turned on puts every member back to automatic. Turned off, each
+	/// stores what it shows, so nothing on screen changes.
+	pub fn set_group(settings: &mut Settings, group: Group, on: bool, at: Place<'_>) {
+		for setting in members(group).collect::<Vec<_>>() {
+			let keep = (!on).then(|| value(settings, setting, at));
+			set(settings, setting, keep);
+		}
+	}
+
+	pub fn font_family(settings: &Settings) -> String {
+		match value(settings, Setting::FontFamily, Place::default()) {
+			Value::Text(text) => text,
+			other => other.to_string(),
+		}
+	}
+
+	pub fn font_size(settings: &Settings) -> f32 {
+		number(&value(settings, Setting::FontSize, Place::default()))
+	}
+
+	/// The grid a window opens at, on `monitor` where one is known.
+	pub fn grid(settings: &Settings, monitor: Option<&str>) -> (usize, usize) {
+		let at = Place { monitor };
+		let count = |setting| match value(settings, setting, at) {
+			Value::Count(n) => n,
+			other => number(&other).round().max(1.0) as usize,
+		};
+		(count(Setting::Columns), count(Setting::Rows))
+	}
+
+	/// A value read as a number. Text that is not one reads as zero.
+	pub fn number(value: &Value) -> f32 {
+		match value {
+			Value::Number(n) => *n,
+			Value::Count(n) => *n as f32,
+			Value::Text(text) => text.trim().parse().unwrap_or(0.0),
+		}
+	}
+
+	/// Whether the last size is kept at all: true unless the size is set by hand
+	/// on both counts. The font zoom and the sizes per monitor go with it.
+	pub fn keeps_size(settings: &Settings) -> bool {
+		group_state(settings, Group::WindowSize) != State::Off
 	}
 }
 
@@ -2146,16 +2419,15 @@ fn unwritable(doc: &shcl::Document, path: &str, applied: bool) {
 	}
 }
 
-// Settings the user cleared back to "not set". These write nothing - there is no
-// value to write - so without naming them here the old line stays in the file
-// and the setting comes back next launch. One long today; anything optional
-// added to the dialog belongs on it.
+// Auto settings put back to automatic. Automatic is no line, so there is no
+// value to write, and without naming them here the old line stays in the file
+// and the hand-set value comes back next launch.
 fn cleared_keys(orig: &Settings, settings: &Settings) -> Vec<&'static str> {
-	let mut out = Vec::new();
-	if settings.font_family.is_none() && orig.font_family.is_some() {
-		out.push("font.family");
-	}
-	out
+	auto::TABLE
+		.iter()
+		.filter(|row| auto::automatic(settings, row.setting) && !auto::automatic(orig, row.setting))
+		.map(|row| row.path)
+		.collect()
 }
 
 // NaN is never equal to itself, so a plain `!=` reads a NaN on both sides as a
@@ -2235,19 +2507,29 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	write_user_themes(&mut doc, &orig.user_themes, &edited.user_themes);
 	write_shells(&mut doc, &orig.shells, &edited.shells);
 
-	if edited.use_system_font != orig.use_system_font {
-		doc.put_bool("font.use_system_family", edited.use_system_font);
-	}
-	if edited.use_system_font_size != orig.use_system_font_size {
-		doc.put_bool("font.use_system_size", edited.use_system_font_size);
-	}
-	if edited.font_family != orig.font_family {
-		if let Some(f) = &edited.font_family {
-			doc.put_string("font.family", f);
+	// an auto setting set by hand writes its value; one gone back to automatic
+	// is commented out below (cleared_keys)
+	for row in auto::TABLE {
+		if auto::automatic(edited, row.setting) {
+			continue;
 		}
-	}
-	if !same_f32(edited.font_size, orig.font_size) {
-		doc.put_float("font.size", rounded(edited.font_size));
+		let now = auto::value(edited, row.setting, auto::Place::default());
+		let was = (!auto::automatic(orig, row.setting))
+			.then(|| auto::value(orig, row.setting, auto::Place::default()));
+		match now {
+			auto::Value::Text(text) if was != Some(auto::Value::Text(text.clone())) => {
+				doc.put_string(row.path, &text);
+			}
+			auto::Value::Number(n) => {
+				if !matches!(was, Some(auto::Value::Number(old)) if same_f32(n, old)) {
+					doc.put_float(row.path, rounded(n));
+				}
+			}
+			auto::Value::Count(n) if was != Some(auto::Value::Count(n)) => {
+				doc.put_int(row.path, n as i64);
+			}
+			_ => {}
+		}
 	}
 	if !same_f32(edited.line_height_scale, orig.line_height_scale) {
 		doc.put_float("font.line_height_scale", rounded(edited.line_height_scale));
@@ -2467,15 +2749,6 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	if !same_f32(edited.cursor_blink_rate_s, orig.cursor_blink_rate_s) {
 		doc.put_float("cursor.blink_rate_s", rounded(edited.cursor_blink_rate_s));
 	}
-	if edited.columns != orig.columns {
-		doc.put_int("window.columns", edited.columns as i64);
-	}
-	if edited.rows != orig.rows {
-		doc.put_int("window.rows", edited.rows as i64);
-	}
-	if edited.remember_size != orig.remember_size {
-		doc.put_bool("window.remember_size", edited.remember_size);
-	}
 	if edited.remember_per_monitor != orig.remember_per_monitor {
 		doc.put_bool("window.remember_per_monitor", edited.remember_per_monitor);
 	}
@@ -2636,8 +2909,6 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	let cleared = cleared_keys(orig, edited);
 	let wrote = write_doc(&path, &doc);
 	if wrote && !cleared.is_empty() {
-		// commented out rather than reverted: the box was cleared, and "not set"
-		// is not the same as the value the template ships
 		disable_keys(&cleared);
 	}
 	wrote
@@ -2702,8 +2973,6 @@ pub fn luma(c: [u8; 3]) -> f32 {
 
 #[derive(Default)]
 struct RawConfig {
-	use_system_font: Option<bool>,
-	use_system_font_size: Option<bool>,
 	font_family: Option<String>,
 	font_size: Option<f32>,
 	line_height_scale: Option<f32>,
@@ -2771,7 +3040,6 @@ struct RawConfig {
 	cursor_blink_rate_s: Option<f32>,
 	columns: Option<usize>,
 	rows: Option<usize>,
-	remember_size: Option<bool>,
 	remember_per_monitor: Option<bool>,
 	remember_maximized: Option<bool>,
 	hide_single_tab: Option<bool>,
@@ -3156,8 +3424,6 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		said: std::cell::RefCell::new(said),
 	};
 	let raw = RawConfig {
-		use_system_font: reader.read_bool("font.use_system_family"),
-		use_system_font_size: reader.read_bool("font.use_system_size"),
 		font_family: reader.read_string("font.family"),
 		font_size: reader.read_f32("font.size"),
 		line_height_scale: reader.read_f32("font.line_height_scale"),
@@ -3230,7 +3496,6 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		cursor_blink_rate_s: reader.read_f32("cursor.blink_rate_s"),
 		columns: reader.read_usize("window.columns"),
 		rows: reader.read_usize("window.rows"),
-		remember_size: reader.read_bool("window.remember_size"),
 		remember_per_monitor: reader.read_bool("window.remember_per_monitor"),
 		remember_maximized: reader.read_bool("window.remember_maximized"),
 		hide_single_tab: reader.read_bool("window.hide_single_tab"),
@@ -3636,9 +3901,6 @@ fn resolve(raw: RawConfig) -> Settings {
 	let color = |raw: Option<String>, fallback: [u8; 3]| {
 		raw.as_deref().and_then(parse_hex).unwrap_or(fallback)
 	};
-	// Default enabled, but a config that predates the key and set an explicit
-	// font_family keeps that font (infer off) instead of being overridden.
-	let use_system_font = raw.use_system_font.unwrap_or(raw.font_family.is_none());
 	// A pinned wallpaper is a deliberate choice, so it suppresses the auto-detected
 	// rotation folder; without one, a stocked wallpapers/ dir rotates by itself.
 	let pinned_wallpaper = raw
@@ -3668,14 +3930,18 @@ fn resolve(raw: RawConfig) -> Settings {
 		// only the convention folder is "auto"; whether it holds anything is the
 		// scan's business, and the scan runs off this thread
 		wallpaper_folder_auto: folder_auto,
-		use_system_font,
-		// absent = follow the face toggle, so configs predating the split (and an
-		// explicit font_size, which used to imply off) keep their exact behavior
-		use_system_font_size: raw
-			.use_system_font_size
-			.unwrap_or(use_system_font && raw.font_size.is_none()),
-		font_family: raw.font_family.filter(|s| !s.trim().is_empty()),
-		font_size: numf(raw.font_size, default_font_size(), limits::FONT_SIZE),
+		// an empty or unreadable value is no value, so the setting is automatic
+		font_family: raw
+			.font_family
+			.map(|family| family.trim().to_string())
+			.filter(|family| !family.is_empty())
+			.map_or_else(auto::Auto::automatic, auto::Auto::by_hand),
+		font_size: raw
+			.font_size
+			.filter(|size| size.is_finite())
+			.map_or_else(auto::Auto::automatic, |size| {
+				auto::Auto::by_hand(size.clamp(limits::FONT_SIZE.0, limits::FONT_SIZE.1))
+			}),
 		line_height_scale: numf(
 			raw.line_height_scale,
 			d.line_height_scale,
@@ -3852,9 +4118,12 @@ fn resolve(raw: RawConfig) -> Settings {
 		wallpaper_honor_xmp_look: raw
 			.wallpaper_honor_xmp_look
 			.unwrap_or(d.wallpaper_honor_xmp_look),
-		columns: numi(raw.columns, d.columns, limits::GRID),
-		rows: numi(raw.rows, d.rows, limits::GRID),
-		remember_size: raw.remember_size.unwrap_or(d.remember_size),
+		columns: raw.columns.map_or_else(auto::Auto::automatic, |n| {
+			auto::Auto::by_hand(n.clamp(limits::GRID.0, limits::GRID.1))
+		}),
+		rows: raw.rows.map_or_else(auto::Auto::automatic, |n| {
+			auto::Auto::by_hand(n.clamp(limits::GRID.0, limits::GRID.1))
+		}),
 		remember_per_monitor: raw.remember_per_monitor.unwrap_or(d.remember_per_monitor),
 		remember_maximized: raw.remember_maximized.unwrap_or(d.remember_maximized),
 		hide_single_tab: raw.hide_single_tab.unwrap_or(d.hide_single_tab),
@@ -4001,22 +4270,8 @@ pub fn default_font_size() -> f32 {
 		.unwrap_or(FALLBACK_FONT_SIZE)
 }
 
-/// Whether "use system font" actually has an OS monospace setting to follow.
-/// Face and size follow the OS independently (the Settings dual checkboxes), and
-/// each is inert unless the OS really reports that half: Windows has a system
-/// font SIZE (the message-box font) but no monospace FAMILY, and a Linux desktop
-/// with no readable font setting reports neither. Keying on what was detected
-/// rather than on the platform keeps one rule everywhere - a toggle with nothing
-/// to follow resolves from `font_family` / `font_size` as if off, and grays out.
-pub fn system_font_face_active(settings: &Settings) -> bool {
-	settings.use_system_font && crate::sysfont::monospace().family.is_some()
-}
-pub fn system_font_size_active(settings: &Settings) -> bool {
-	settings.use_system_font_size && crate::sysfont::monospace().size_pt.is_some()
-}
-
 // Font zoom (Ctrl+-/+/= hotkeys), in logical px added to the effective size.
-// Kept with the window size while remember_size is on (remembered_window).
+// Kept with the window size while the size is automatic (remembered_window).
 // Process-wide is per-window since each window is its own process. Per-pane
 // scoping is deferred - it needs per-pane text metrics the single-TextCtx
 // architecture doesn't have.
@@ -4043,20 +4298,16 @@ pub fn reset_font_zoom() {
 	FONT_ZOOM_PX.store(0, Ordering::Relaxed);
 }
 
-/// The size the text is actually rendered at: the OS monospace size while
-/// `use_system_font_size` is on (and the OS has one), else the configured
-/// `font_size`; plus any session zoom, clamped to a renderable range.
+/// The size the text is actually rendered at: `font.size` (the desktop's
+/// monospace size while automatic), plus any session zoom, clamped to a
+/// renderable range.
 pub fn effective_font_size() -> f32 {
 	(base_font_size(&settings()) + font_zoom_px() as f32).clamp(4.0, 128.0)
 }
 
-// The size before any zoom: the OS monospace size or the configured one.
+// The size before any zoom.
 fn base_font_size(settings: &Settings) -> f32 {
-	if system_font_size_active(settings) {
-		default_font_size()
-	} else {
-		settings.font_size
-	}
+	auto::font_size(settings)
 }
 
 /// Resolve the background image: an explicit path (absolute, or a filename
@@ -4467,6 +4718,9 @@ const SUPERSEDED_DEFAULTS: &[(&str, &str)] = &[
 	("scroll.minimap.enabled", "false  ## Default"),
 	// wallpaper text colors shipped off while the measurements were being made
 	("colors.from_wallpaper", "false  ## Default"),
+	// the size is automatic now, so its commented line is an example, not the
+	// default (2026100907341818)
+	("font.size", "17.0  ## Default"),
 	// copy on select shipped off
 	("shell.copy_on_select", "false  ## Default"),
 	// so did letting an idle window's GPU device go
@@ -4881,8 +5135,6 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 	let mut carry: std::collections::HashMap<String, (usize, String)> =
 		std::collections::HashMap::new();
 	let mut extras: Vec<String> = Vec::new();
-	let mut had_font_family = false;
-	let mut had_use_system = false;
 	let mut left: std::collections::BTreeSet<usize> = unread.iter().map(|line| line - 1).collect();
 	left.extend(garbled.iter().copied().filter(|index| {
 		lines.get(*index).is_some_and(|line| {
@@ -4915,12 +5167,6 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 		let value = strip_trailing_comment(value).trim();
 		if value.is_empty() {
 			continue;
-		}
-		if p == "use_system_font" {
-			had_use_system = true;
-		}
-		if p == "font_family" {
-			had_font_family = true;
 		}
 		let target = if known_new.contains(p) {
 			Some((0, p.clone()))
@@ -4974,12 +5220,39 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 		}
 		// a shell list carries whole, below
 	}
-	// Old semantics: no use_system_font line + an explicit font_family meant
-	// "use that font" - keep meaning that, not the new template's default.
-	if had_font_family && !had_use_system {
-		carry
-			.entry("font.use_system_family".to_string())
-			.or_insert((usize::MAX, "false".to_string()));
+	// The retired switches have no line in the template, so they are read here
+	// the way a launch reads them (`absorbed_switches`): a setting a switch
+	// overrode is left out, one it left in use is carried, and one in use with
+	// no line gets the value it had. An explicit font with no switch for it was
+	// always meant as that font, and is carried as it is.
+	if carry
+		.keys()
+		.any(|path| RETIRED_SWITCHES.iter().any(|(switch, _)| switch == path))
+	{
+		let mut flat = String::new();
+		for (path, (_, value)) in &carry {
+			use std::fmt::Write as _;
+			let _ = writeln!(flat, "{path}: {value}");
+		}
+		if let Some(folded) = absorbed_switches(&flat, &|| crate::sysfont::monospace().clone()) {
+			let folded_lines: Vec<&str> = folded.lines().collect();
+			let kept: std::collections::HashMap<String, String> = walk_settings(&folded)
+				.into_iter()
+				.filter_map(|w| match w {
+					WalkLine::Setting {
+						index,
+						path,
+						active: true,
+						header: false,
+					} => line_setting_value(folded_lines[index]).map(|v| (path, v.to_string())),
+					_ => None,
+				})
+				.collect();
+			carry.retain(|path, _| kept.contains_key(path));
+			for (path, value) in kept {
+				carry.entry(path).or_insert((usize::MAX, value));
+			}
+		}
 	}
 
 	let mut out: Vec<String> = default_config().lines().map(str::to_string).collect();
@@ -5254,11 +5527,175 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 		}
 		out.push(kept);
 	}
-	changed.then(|| {
+	let joined = changed.then(|| {
 		let mut joined = out.join("\n");
 		joined.push('\n');
 		joined
+	});
+	absorbed_switches(joined.as_deref().unwrap_or(text), &|| {
+		crate::sysfont::monospace().clone()
 	})
+	.or(joined)
+}
+
+// Master switches that became the automatic state of the settings under them
+// (2026100907341818). Each is the switch, the value it had when no line said,
+// and the settings it decided, with the value each took while it was off and
+// unset.
+const RETIRED_SWITCHES: &[(&str, &[(&str, &str)])] = &[
+	("font.use_system_family", &[("font.family", "")]),
+	("font.use_system_size", &[("font.size", "")]),
+	(
+		"window.remember_size",
+		&[("window.columns", "160"), ("window.rows", "48")],
+	),
+];
+
+// A file from before the retired switches loads the same values after them. A
+// setting its switch overrode is commented out, so it is automatic and gets the
+// same value from its rule; one the switch left in use stays set by hand; and
+// one that was in use with no line is written with the value it had. The
+// switch's own lines go. A file with no line for a switch never had one
+// written, so its settings are left as they are. Whether the desktop names a
+// font decided whether the font switches overrode anything, so that way `os`
+// is asked.
+fn absorbed_switches(text: &str, os: &dyn Fn() -> crate::sysfont::Monospace) -> Option<String> {
+	// every launch and every save comes through here, and nearly every file
+	// has none of them
+	if !text.contains("use_system_") && !text.contains("remember_size") {
+		return None;
+	}
+	let lines: Vec<&str> = text.lines().collect();
+	let reads = |index: usize, as_bool: bool| -> Option<String> {
+		let value = strip_trailing_comment(line_setting_value(lines[index])?).trim();
+		let doc = shcl::Document::parse(&format!("v: {value}\n"));
+		if as_bool {
+			doc.get_bool("v").ok().map(|on| on.to_string())
+		} else {
+			doc.get_string("v").ok()
+		}
+	};
+	// per switch: every line for it, and what the last active one says
+	let mut switch_lines: Vec<Vec<usize>> = vec![Vec::new(); RETIRED_SWITCHES.len()];
+	let mut switch_on: Vec<Option<bool>> = vec![None; RETIRED_SWITCHES.len()];
+	let mut member_lines: std::collections::HashMap<&str, Vec<usize>> =
+		std::collections::HashMap::new();
+	for w in walk_settings(text) {
+		let WalkLine::Setting {
+			index,
+			path,
+			active,
+			header: false,
+		} = w
+		else {
+			continue;
+		};
+		if let Some(at) = RETIRED_SWITCHES
+			.iter()
+			.position(|(switch, _)| *switch == path)
+		{
+			switch_lines[at].push(index);
+			if active {
+				switch_on[at] = reads(index, true).map(|on| on == "true").or(switch_on[at]);
+			}
+			continue;
+		}
+		let member = RETIRED_SWITCHES
+			.iter()
+			.flat_map(|(_, members)| members.iter())
+			.find(|(member, _)| *member == path);
+		if let (Some((member, _)), true) = (member, active) {
+			member_lines.entry(member).or_default().push(index);
+		}
+	}
+	if switch_lines.iter().all(Vec::is_empty) {
+		return None;
+	}
+	let has = |member: &str| member_lines.contains_key(member);
+	// What each switch was, as the build that wrote it read a missing line. The
+	// size followed the face; either one followed an explicit value's absence.
+	let face_on = switch_on[0].unwrap_or(!has("font.family"));
+	let size_on = switch_on[1].unwrap_or(face_on && !has("font.size"));
+	let remember_on = switch_on[2].unwrap_or(true);
+	// asked once, and only of a file that has a font switch
+	let os = (!switch_lines[0].is_empty() || !switch_lines[1].is_empty()).then(os);
+	let names = |half: fn(&crate::sysfont::Monospace) -> bool| os.as_ref().is_some_and(half);
+	let shipped_stack = |index: usize| {
+		reads(index, false).is_some_and(|family| {
+			family == DEFAULT_FONT_STACK || SUPERSEDED_FONT_STACKS.contains(&family.as_str())
+		})
+	};
+	let mut comment_out: std::collections::HashSet<usize> = std::collections::HashSet::new();
+	let mut written: std::collections::HashMap<usize, Vec<String>> =
+		std::collections::HashMap::new();
+	for (at, (_, members)) in RETIRED_SWITCHES.iter().enumerate() {
+		if switch_lines[at].is_empty() {
+			continue;
+		}
+		let on = [face_on, size_on, remember_on][at];
+		for (member, unset) in *members {
+			let found = member_lines.get(member).map_or(&[][..], Vec::as_slice);
+			// the desktop's font won only where the desktop named one; a family it
+			// left in use goes too when it is the list automatic falls back to
+			let overridden = match *member {
+				"font.family" => {
+					names(|os| os.family.is_some()) || found.iter().all(|&i| shipped_stack(i))
+				}
+				"font.size" => names(|os| os.size_pt.is_some()),
+				_ => true,
+			};
+			if on && overridden {
+				comment_out.extend(found);
+			} else if !on && found.is_empty() && !unset.is_empty() {
+				// in use with no line, so it read its old default: write that
+				let Some(&switch_at) = switch_lines[at]
+					.iter()
+					.rev()
+					.find(|&&i| !lines[i].trim_start().starts_with('#'))
+				else {
+					continue;
+				};
+				let line = lines[switch_at];
+				let indent = &line[..line.len() - line.trim_start().len()];
+				let dotted = line_setting_key(line).is_some_and(|key| key.contains('.'));
+				let name = if dotted {
+					*member
+				} else {
+					member.rsplit('.').next().unwrap_or(member)
+				};
+				written
+					.entry(switch_at)
+					.or_default()
+					.push(format!("{indent}{name}: {unset}"));
+			}
+		}
+	}
+	let gone: std::collections::HashSet<usize> = switch_lines.iter().flatten().copied().collect();
+	let mut out: Vec<String> = Vec::with_capacity(lines.len());
+	for (index, line) in lines.iter().enumerate() {
+		if let Some(new) = written.get(&index) {
+			out.extend(new.iter().cloned());
+			continue;
+		}
+		if gone.contains(&index) {
+			// a blank line either side of a dropped one would leave two
+			let blank_before = out.last().is_some_and(|l| l.trim().is_empty());
+			let blank_after = lines.get(index + 1).is_none_or(|l| l.trim().is_empty());
+			if blank_before && blank_after {
+				out.pop();
+			}
+			continue;
+		}
+		if comment_out.contains(&index) {
+			let indent = &line[..line.len() - line.trim_start().len()];
+			out.push(format!("{indent}# {}", line.trim_start()));
+			continue;
+		}
+		out.push((*line).to_string());
+	}
+	let mut joined = out.join("\n");
+	joined.push('\n');
+	Some(joined)
 }
 
 // What a launch parses when its rewrites were put off because the file looked
@@ -7384,12 +7821,11 @@ wallpaper:
 
 font:
 
-	use_system_family: true
-	# use_system_size: true  ## Default
+	## Family and size follow the desktop's own monospace font until a line
+	## here sets one. Where the desktop names none, it is this list and 17.
+	# family: "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New"
+	# size: 17.0
 
-	family: "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New"
-
-	# size: 17.0  ## Default
 	line_height_scale: 1.22
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
@@ -7546,15 +7982,15 @@ window:
 
 	margin: 8.0
 
-	columns: 160
-	rows: 48
-
-	# remember_size: true  ## Default
+	## Columns and rows follow the size the window was last given until a
+	## line here sets one. Settings calls that Remember last size.
+	# columns: 160
+	# rows: 48
 	remembered_columns: 160
 	remembered_rows: 48
 	remembered_font_zoom: 0
 
-	## While remember_size is on, also keep a size and font zoom for each
+	## While the size is not set here, also keep a size and font zoom for each
 	## monitor. A window opens at its monitor's, and takes those of the one it
 	## is moved to once it stops there. They go under monitors:, one block per
 	## monitor, named for its resolution, its scale and, where the system
@@ -8099,7 +8535,7 @@ mod tests {
 				);
 			}
 			let mut moved = loaded.clone();
-			moved.font_size += 1.0;
+			moved.font_size = auto::Auto::by_hand(auto::font_size(&loaded) + 1.0);
 			let _ = persist(&loaded, &moved);
 			let _ = keep_rating(&RatingLines {
 				profile: Some("low"),
@@ -9426,11 +9862,11 @@ mod tests {
 		set_config_override(path.clone());
 
 		let orig = load();
-		assert_eq!(orig.font_size, 17.0);
+		assert_eq!(auto::font_size(&orig), 17.0);
 		// What --font-size nan folded into the live settings, standing on both
 		// sides of the diff: it is the run's own value, not a change to save.
 		let mut live = orig.clone();
-		live.font_size = f32::NAN;
+		live.font_size = auto::Auto::by_hand(f32::NAN);
 		let same = live.clone();
 		assert!(persist(&live, &same));
 		let saved = std::fs::read_to_string(&path).unwrap();
@@ -9439,13 +9875,13 @@ mod tests {
 			"NaN written over the user's size: {saved:?}"
 		);
 		assert!(!saved.to_lowercase().contains("nan"), "{saved:?}");
-		assert_eq!(load().font_size, 17.0);
+		assert_eq!(auto::font_size(&load()), 17.0);
 
 		// and a real change still reaches the file
 		let mut edited = live.clone();
-		edited.font_size = 22.0;
+		edited.font_size = auto::Auto::by_hand(22.0);
 		assert!(persist(&live, &edited));
-		assert_eq!(load().font_size, 22.0);
+		assert_eq!(auto::font_size(&load()), 22.0);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -9491,15 +9927,18 @@ mod tests {
 		// it there and the font came back next launch
 		let before = load();
 		let mut named = before.clone();
-		named.font_family = Some("Iosevka".to_string());
+		named.font_family = auto::Auto::by_hand("Iosevka".to_string());
 		assert!(persist(&before, &named));
-		assert_eq!(load().font_family.as_deref(), Some("Iosevka"));
+		assert_eq!(auto::font_family(&load()), "Iosevka");
 
 		let before = load();
 		let mut cleared = before.clone();
-		cleared.font_family = None;
+		cleared.font_family = auto::Auto::automatic();
 		assert!(persist(&before, &cleared));
-		assert_eq!(load().font_family, None, "cleared, and it stays cleared");
+		assert!(
+			load().font_family.is_automatic(),
+			"cleared, and it stays cleared"
+		);
 	}
 
 	// The /proc-based busy check: a child process holding the file open is seen as
@@ -10833,15 +11272,331 @@ mod tests {
 	#[test]
 	fn clearing_the_font_family_takes_the_old_line_out() {
 		let set = Settings {
-			font_family: Some("Iosevka".to_string()),
+			font_family: auto::Auto::by_hand("Iosevka".to_string()),
 			..Default::default()
 		};
 		let mut none = set.clone();
-		none.font_family = None;
+		none.font_family = auto::Auto::automatic();
 		assert_eq!(cleared_keys(&set, &none), vec!["font.family"]);
 		// setting one, or leaving it alone, is an ordinary write
 		assert!(cleared_keys(&none, &set).is_empty());
 		assert!(cleared_keys(&set, &set).is_empty());
+	}
+
+	// The one table: each auto setting once, at a path the template has, each
+	// group with more than one member, and each rule giving the kind of value
+	// its setting stores.
+	// Test ID: EsDxpmD
+	#[test]
+	fn the_auto_table_holds_each_setting_once_with_a_rule_of_its_kind() {
+		use auto::Setting;
+		let every = [
+			Setting::FontFamily,
+			Setting::FontSize,
+			Setting::Columns,
+			Setting::Rows,
+		];
+		assert_eq!(auto::TABLE.len(), every.len());
+		let paths: std::collections::HashSet<String> = walk_settings(default_config())
+			.into_iter()
+			.filter_map(|w| match w {
+				WalkLine::Setting { path, .. } => Some(path),
+				_ => None,
+			})
+			.collect();
+		for setting in every {
+			let rows: Vec<_> = auto::TABLE
+				.iter()
+				.filter(|r| r.setting == setting)
+				.collect();
+			assert_eq!(rows.len(), 1, "{setting:?}");
+			assert!(
+				paths.contains(rows[0].path),
+				"{} is not in the template",
+				rows[0].path
+			);
+			assert_eq!(auto::by_path(rows[0].path), Some(setting));
+			// what the rule gives can be stored, and reads back as set by hand
+			let mut s = Settings::default();
+			let rule = auto::rule(&s, setting, auto::Place::default());
+			auto::set(&mut s, setting, Some(rule.clone()));
+			assert!(
+				!auto::automatic(&s, setting),
+				"{setting:?} took no {rule:?}"
+			);
+			assert_eq!(auto::value(&s, setting, auto::Place::default()), rule);
+		}
+		for group in auto::GROUPS {
+			assert!(
+				auto::members(group.group).count() > 1,
+				"a switch over one setting belongs on the setting ({})",
+				group.name
+			);
+			assert_eq!(auto::group_named(group.name), Some(group.group));
+		}
+		for row in auto::TABLE {
+			if let Some(group) = row.group {
+				assert!(auto::GROUPS.iter().any(|g| g.group == group), "{row:?}");
+			}
+		}
+	}
+
+	// A setting with nothing stored uses its rule, one set by hand its value, and
+	// going back to automatic forgets the value.
+	// Test ID: EsDxpmE
+	#[test]
+	fn an_auto_setting_is_its_stored_value_else_its_rule() {
+		use auto::{Place, Setting, Value};
+		let mut s = Settings::default();
+		let os = crate::sysfont::monospace();
+		assert_eq!(
+			auto::value(&s, Setting::FontFamily, Place::default()),
+			Value::Text(
+				os.family
+					.clone()
+					.unwrap_or_else(|| DEFAULT_FONT_STACK.to_string())
+			)
+		);
+		assert_eq!(auto::font_size(&s), default_font_size());
+		s.remembered_columns = 133;
+		s.remembered_rows = 41;
+		assert_eq!(auto::grid(&s, None), (133, 41));
+		// per monitor, where one is kept
+		s.monitor_sizes.push(MonitorSize {
+			key: "m1".into(),
+			columns: 90,
+			rows: 25,
+			font_zoom: 0,
+		});
+		assert_eq!(auto::grid(&s, Some("m1")), (90, 25));
+		s.remember_per_monitor = false;
+		assert_eq!(auto::grid(&s, Some("m1")), (133, 41));
+
+		for setting in [Setting::FontFamily, Setting::FontSize, Setting::Columns] {
+			assert!(auto::automatic(&s, setting));
+		}
+		s.font_family = auto::Auto::by_hand("Iosevka".into());
+		s.font_size = auto::Auto::by_hand(21.0);
+		s.columns = auto::Auto::by_hand(100);
+		assert_eq!(auto::font_family(&s), "Iosevka");
+		assert_eq!(auto::font_size(&s), 21.0);
+		assert_eq!(auto::grid(&s, None), (100, 41));
+		assert!(!auto::automatic(&s, Setting::Columns));
+		auto::set(&mut s, Setting::Columns, None);
+		assert!(auto::automatic(&s, Setting::Columns));
+		assert_eq!(auto::grid(&s, None), (133, 41));
+		// a value of the wrong kind stores nothing
+		auto::set(&mut s, Setting::FontSize, Some(Value::Text("big".into())));
+		assert!(auto::automatic(&s, Setting::FontSize));
+	}
+
+	// Every row of the design's "Changing a setting" table, with the switch read
+	// after each.
+	// Test ID: EsDxpmF
+	#[test]
+	fn every_change_to_a_group_leaves_its_switch_telling_the_truth() {
+		use auto::{Group, Place, Setting, State, Value};
+		let group = Group::WindowSize;
+		let mut s = Settings {
+			remembered_columns: 150,
+			remembered_rows: 45,
+			..Default::default()
+		};
+		let state = |s: &Settings| auto::group_state(s, group);
+		assert_eq!(state(&s), State::On, "nothing stored reads as on");
+		// one member changed
+		auto::set(&mut s, Setting::Columns, Some(Value::Count(99)));
+		assert_eq!(state(&s), State::Mixed);
+		auto::set(&mut s, Setting::Rows, Some(Value::Count(30)));
+		assert_eq!(state(&s), State::Off);
+		// one member put back to automatic
+		auto::set(&mut s, Setting::Rows, None);
+		assert_eq!(state(&s), State::Mixed);
+		// a mixed switch clicked goes to automatic, like turning it on
+		let on = state(&s) != State::On;
+		auto::set_group(&mut s, group, on, Place::default());
+		assert_eq!(state(&s), State::On);
+		assert_eq!(auto::grid(&s, None), (150, 45));
+		// turned off, every member keeps what it shows, so nothing moves
+		auto::set_group(&mut s, group, false, Place::default());
+		assert_eq!(state(&s), State::Off);
+		assert_eq!(auto::grid(&s, None), (150, 45));
+		s.remembered_columns = 10;
+		assert_eq!(auto::grid(&s, None), (150, 45), "set by hand stays put");
+		// turned on again
+		auto::set_group(&mut s, group, true, Place::default());
+		assert_eq!(state(&s), State::On);
+		assert_eq!(auto::grid(&s, None), (10, 45));
+		// the size is kept for the next launch unless both are set by hand
+		assert!(auto::keeps_size(&s));
+		auto::set(&mut s, Setting::Columns, Some(Value::Count(80)));
+		assert!(auto::keeps_size(&s));
+		auto::set(&mut s, Setting::Rows, Some(Value::Count(24)));
+		assert!(!auto::keeps_size(&s));
+	}
+
+	// The switch is never stored, so a relaunch reads it off the file, and a
+	// hand edit is read the same way: a line with a value sets it, no line or a
+	// bad value is automatic.
+	// Test ID: EsDxpmG
+	#[test]
+	fn a_group_reads_the_same_after_a_relaunch_and_a_hand_edit() {
+		use auto::{Group, State};
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_autogroup_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		let loaded = load();
+		assert_eq!(auto::group_state(&loaded, Group::WindowSize), State::On);
+		let mut edited = loaded.clone();
+		edited.columns = auto::Auto::by_hand(111);
+		assert!(persist(&loaded, &edited));
+		let back = load();
+		assert_eq!(auto::group_state(&back, Group::WindowSize), State::Mixed);
+		assert_eq!(auto::grid(&back, None).0, 111);
+		// and back to automatic takes the line out
+		let mut cleared = back.clone();
+		cleared.columns = auto::Auto::automatic();
+		assert!(persist(&back, &cleared));
+		assert_eq!(auto::group_state(&load(), Group::WindowSize), State::On);
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(
+			!text.lines().any(|l| l.trim_start().starts_with("columns:")),
+			"{text}"
+		);
+
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| resolve(read_raw(text, p).0);
+		assert!(read("window:\n\tcolumns: 100\n").rows.is_automatic());
+		assert_eq!(auto::grid(&read("window:\n\tcolumns: 100\n"), None).0, 100);
+		assert!(
+			read("window:\n\tcolumns: lots\n").columns.is_automatic(),
+			"a bad value"
+		);
+		assert!(
+			read("font:\n\tfamily: \"\"\n").font_family.is_automatic(),
+			"an empty one"
+		);
+		assert!(read("font:\n\tsize: big\n").font_size.is_automatic());
+		assert_eq!(
+			auto::font_size(&read("font:\n\tsize: 900\n")),
+			limits::FONT_SIZE.1
+		);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The rule can change while the program runs. An automatic setting follows
+	// it, and one set by hand does not.
+	// Test ID: EsDxpmH
+	#[test]
+	fn an_automatic_size_follows_the_window_and_one_set_by_hand_stays() {
+		let mut s = Settings::default();
+		remember_window(&mut s, Some("m1"), Some((120, 40)), Some(0));
+		assert_eq!(auto::grid(&s, Some("m1")), (120, 40));
+		remember_window(&mut s, Some("m1"), Some((140, 44)), None);
+		assert_eq!(auto::grid(&s, Some("m1")), (140, 44));
+		s.rows = auto::Auto::by_hand(30);
+		remember_window(&mut s, Some("m1"), Some((150, 50)), None);
+		assert_eq!(auto::grid(&s, Some("m1")), (150, 30));
+	}
+
+	// A file from before the follow switches loads the same values after a
+	// launch takes them out. Each case is the file, the desktop's font, what the
+	// old build used, and that the result settles.
+	// Test ID: EsDxpmI
+	#[test]
+	fn an_old_follow_switch_loads_the_same_size_after_it_goes() {
+		let p = std::path::Path::new("test.shcl");
+		let desktop = crate::sysfont::Monospace {
+			family: Some("Desk Mono".into()),
+			size_pt: Some(10.0),
+		};
+		let bare = crate::sysfont::Monospace::default();
+		let fold = |text: &str, os: &crate::sysfont::Monospace| {
+			let ask = || os.clone();
+			let out = absorbed_switches(text, &ask).expect("a switch line was there");
+			assert_eq!(
+				absorbed_switches(&out, &ask),
+				None,
+				"settles at once:\n{out}"
+			);
+			for switch in ["use_system_family", "use_system_size", "remember_size"] {
+				assert!(!out.contains(switch), "{switch} is still there:\n{out}");
+			}
+			(resolve(read_raw(&out, p).0), out)
+		};
+
+		// the window block as shipped: remember on by default, size lines unused
+		let shipped = "window:\n\n\tmargin: 8.0\n\n\tcolumns: 160\n\trows: 48\n\n\t# remember_size: true  ## Default\n\tremembered_columns: 130\n\tremembered_rows: 40\n";
+		let (s, out) = fold(shipped, &desktop);
+		assert!(s.columns.is_automatic() && s.rows.is_automatic(), "{out}");
+		assert_eq!(auto::grid(&s, None), (130, 40), "the last size, as before");
+		assert!(
+			out.contains("\t# columns: 160\n") && !out.contains("\n\n\n"),
+			"{out}"
+		);
+		// off with a size: that size, set by hand
+		let (s, _) = fold(
+			"window:\n\tremember_size: false\n\tcolumns: 100\n\trows: 30\n",
+			&desktop,
+		);
+		assert_eq!(auto::grid(&s, None), (100, 30));
+		assert!(!auto::keeps_size(&s));
+		// off with no size: the old default, written out
+		let (s, out) = fold(
+			"window:\n\tremember_size: false\n\tremembered_columns: 130\n",
+			&desktop,
+		);
+		assert_eq!(auto::grid(&s, None), (160, 48), "{out}");
+		assert!(out.contains("\tcolumns: 160\n\trows: 48\n"), "{out}");
+		let (s, out) = fold("window.remember_size: false\n", &desktop);
+		assert_eq!(auto::grid(&s, None), (160, 48));
+		assert!(
+			out.contains("window.columns: 160"),
+			"a dotted file stays dotted:\n{out}"
+		);
+
+		// the font block as shipped: follow on, the list unused where the desktop
+		// names a font, and the list itself where it does not
+		let font = format!(
+			"font:\n\n\tuse_system_family: true\n\t# use_system_size: true  ## Default\n\n\tfamily: \"{DEFAULT_FONT_STACK}\"\n\n\t# size: 17.0  ## Default\n"
+		);
+		for os in [&desktop, &bare] {
+			let (s, out) = fold(&font, os);
+			assert!(
+				s.font_family.is_automatic() && s.font_size.is_automatic(),
+				"{out}"
+			);
+		}
+		// a list of one's own: unused where the desktop names a font, kept where not
+		let own = "font:\n\tuse_system_family: true\n\tfamily: \"Iosevka\"\n";
+		assert!(fold(own, &desktop).0.font_family.is_automatic());
+		assert_eq!(auto::font_family(&fold(own, &bare).0), "Iosevka");
+		// switched off, the list is what was used
+		let off = "font:\n\tuse_system_family: false\n\tfamily: \"Iosevka\"\n";
+		assert_eq!(auto::font_family(&fold(off, &desktop).0), "Iosevka");
+		// a size with the follow on is unused only where the desktop names one
+		let size = "font:\n\tuse_system_size: true\n\tsize: 20\n";
+		assert!(fold(size, &desktop).0.font_size.is_automatic());
+		assert_eq!(auto::font_size(&fold(size, &bare).0), 20.0);
+		let size_off = "font:\n\tuse_system_size: false\n\tsize: 20\n";
+		assert_eq!(auto::font_size(&fold(size_off, &desktop).0), 20.0);
+		// with no switch line the file never had one, and a size of its own
+		// set without one meant that size
+		let never = || -> crate::sysfont::Monospace { panic!("asked with no font switch") };
+		assert_eq!(absorbed_switches("font:\n\tsize: 20\n", &never), None);
+		assert_eq!(absorbed_switches("window:\n\tcolumns: 100\n", &never), None);
+		assert!(absorbed_switches("window:\n\tremember_size: true\n", &never).is_some());
+		// an explicit size with no size switch read as off before, so it stays
+		let inferred = "font:\n\tuse_system_family: true\n\tsize: 20\n";
+		assert_eq!(auto::font_size(&fold(inferred, &desktop).0), 20.0);
+		// and the whole launch path does it too
+		let launched = migrate_config_text(shipped).expect("a launch takes the switch out");
+		assert!(!launched.contains("remember_size"), "{launched}");
 	}
 
 	// Reverting used to remove the node, and shcl takes a node's leading comments
@@ -10900,7 +11655,7 @@ mod tests {
 		let read = |key: &str, value: &str| resolve(read_raw(&format!("{key}: {value}\n"), p).0);
 		let of = |s: &Settings, key: &str| -> f32 {
 			match key {
-				"font.size" => s.font_size,
+				"font.size" => auto::font_size(s),
 				"font.line_height_scale" => s.line_height_scale,
 				"scroll.wheel_lines" => s.wheel_lines,
 				"scroll.alt_scroll_lines" => s.alt_scroll_lines,
@@ -10935,8 +11690,8 @@ mod tests {
 		] {
 			let s = read(key, huge);
 			let got = match key {
-				"window.columns" => s.columns,
-				"window.rows" => s.rows,
+				"window.columns" => auto::grid(&s, None).0,
+				"window.rows" => auto::grid(&s, None).1,
 				"window.remembered_columns" => s.remembered_columns,
 				"window.remembered_rows" => s.remembered_rows,
 				"window.idle_release_hidden_min" => s.idle_release_hidden_min,
@@ -11145,7 +11900,7 @@ mod tests {
 			s.font_family, absent.font_family,
 			"a repeated key falls back as if it were not there"
 		);
-		assert_eq!(s.font_size, 13.0, "its siblings are unaffected");
+		assert_eq!(auto::font_size(&s), 13.0, "its siblings are unaffected");
 		// the message is what makes the fallback discoverable; both lines cited
 		assert_eq!(line_list(&[2, 4]), " lines 2, 4");
 		assert_eq!(line_list(&[7]), " line 7");
@@ -11308,8 +12063,9 @@ mod tests {
 		remember_window(&mut s, b, Some((90, 25)), Some(4));
 		s.remember_per_monitor = true;
 		assert_eq!(remembered_window(&s, b), kept(100, 30, 0));
-		// and nothing is kept per monitor while remember_size is off
-		s.remember_size = false;
+		// and nothing is kept per monitor while the size is set by hand
+		s.columns = auto::Auto::by_hand(120);
+		s.rows = auto::Auto::by_hand(40);
 		remember_window(&mut s, Some("640x480_100pct"), Some((80, 24)), Some(0));
 		assert_eq!(s.monitor_sizes.len(), 3);
 		assert_eq!(
@@ -11406,12 +12162,13 @@ mod tests {
 
 	// A file from before remember_per_monitor gets it as its own paragraph,
 	// comment and all, under the remembered size and above remember_maximized.
+	// The anchor is the paragraph's first line, reworded by 2026100907341818.
 	// Test ID: EreYcuS
 	#[test]
 	fn an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows() {
 		let old = default_config().replace(
 			&default_config()[default_config()
-				.find("\t## While remember_size is on")
+				.find("\t## While the size is not set here")
 				.unwrap()
 				..default_config().find("\t# remember_maximized").unwrap()],
 			"",
@@ -11419,11 +12176,11 @@ mod tests {
 		assert!(!old.contains("remember_per_monitor"));
 		let new = backfilled_text(&old).unwrap().unwrap();
 		let at = |text: &str| new.find(text).unwrap();
-		assert!(at("remembered_rows: 48") < at("\t## While remember_size is on"));
+		assert!(at("remembered_rows: 48") < at("\t## While the size is not set here"));
 		assert!(at("# remember_per_monitor: true  ## Default") < at("# remember_maximized"));
 		assert_eq!(new.matches("remember_per_monitor").count(), 1, "{new}");
 		assert_eq!(
-			new.matches("## While remember_size is on").count(),
+			new.matches("## While the size is not set here").count(),
 			1,
 			"{new}"
 		);
@@ -12025,7 +12782,7 @@ mod tests {
 		set_config_override(path.clone());
 		let orig = Settings::default();
 		let mut edited = orig.clone();
-		edited.font_size += 1.0;
+		edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
 
 		let text = "font:\n\tfamily:[One, Two]\n";
 		std::fs::write(&path, text).unwrap();
@@ -12096,8 +12853,12 @@ mod tests {
 		set_config_override(path.clone());
 
 		let s = load();
-		assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
-		assert_eq!(s.columns, 103);
+		assert!(
+			(auto::font_size(&s) - 19.0).abs() < f32::EPSILON,
+			"{}",
+			auto::font_size(&s)
+		);
+		assert_eq!(auto::grid(&s, None).0, 103);
 		let kept = backups_in(&dir, "config");
 		assert_eq!(kept.len(), 1, "{kept:?}");
 		assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
@@ -12159,7 +12920,7 @@ mod tests {
 		set_config_override(path.clone());
 		let orig = Settings::default();
 		let mut edited = orig.clone();
-		edited.font_size += 1.0;
+		edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
 
 		let body: &[u8] = b"window:\n\tcolumns: 103\n\tti\xe9tle: x\n";
 		std::fs::write(&path, body).unwrap();
@@ -12169,7 +12930,7 @@ mod tests {
 		assert_eq!(doc.get_int("window.columns"), Ok(103), "{now}");
 		assert_eq!(
 			doc.get_float("font.size").ok(),
-			Some(f64::from(edited.font_size)),
+			Some(f64::from(auto::font_size(&edited))),
 			"{now}"
 		);
 		let loss = take_conversion_loss().expect("a notice is owed");
@@ -12205,8 +12966,8 @@ mod tests {
 	// 	set_config_override(path.clone());
 	//
 	// 	let s = load();
-	// 	assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
-	// 	assert_eq!(s.columns, 103);
+	// 	assert!((auto::font_size(&s) - 19.0).abs() < f32::EPSILON, "{}", auto::font_size(&s));
+	// 	assert_eq!(auto::grid(&s, None).0, 103);
 	// 	assert_eq!(std::fs::read(&path).unwrap(), body, "left as it was");
 	// 	assert_eq!(dir_names(&dir), vec!["config.shcl".to_string()]);
 	// 	let said = LAUNCH_SAID.lock().unwrap().clone().expect("said").1;
@@ -12247,7 +13008,7 @@ mod tests {
 	// 	set_config_override(path.clone());
 	// 	let orig = Settings::default();
 	// 	let mut edited = orig.clone();
-	// 	edited.font_size += 1.0;
+	// 	edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
 	//
 	// 	let _ = take_refusal();
 	// 	assert!(!persist(&orig, &edited), "nothing was written");
@@ -12434,8 +13195,12 @@ mod tests {
 		set_config_override(path.clone());
 
 		let s = load();
-		assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
-		assert_eq!(s.columns, 103);
+		assert!(
+			(auto::font_size(&s) - 19.0).abs() < f32::EPSILON,
+			"{}",
+			auto::font_size(&s)
+		);
+		assert_eq!(auto::grid(&s, None).0, 103);
 		let kept = backups_in(&dir, "config");
 		assert_eq!(kept.len(), 1, "{kept:?}");
 		assert!(
@@ -12471,7 +13236,7 @@ mod tests {
 
 		let orig = Settings::default();
 		let mut edited = orig.clone();
-		edited.font_size = 21.0;
+		edited.font_size = auto::Auto::by_hand(21.0);
 		assert!(persist(&orig, &edited));
 		let saved = std::fs::read_to_string(&path).unwrap();
 		assert_eq!(
@@ -12499,7 +13264,7 @@ mod tests {
 		set_config_override(path.clone());
 		let orig = Settings::default();
 		let mut edited = orig.clone();
-		edited.font_size += 1.0;
+		edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
 
 		assert!(persist(&orig, &edited));
 		assert_eq!(take_refusal(), None);
@@ -12507,7 +13272,7 @@ mod tests {
 		let doc = shcl::Document::parse(&now);
 		assert_eq!(
 			doc.get_float("font.size").ok(),
-			Some(f64::from(edited.font_size)),
+			Some(f64::from(auto::font_size(&edited))),
 			"{now}"
 		);
 		assert_eq!(doc.get_int("window.columns"), Ok(103), "{now}");
@@ -12540,7 +13305,7 @@ mod tests {
 		set_config_override(path.to_path_buf());
 		let base = reload_from_disk();
 		let mut own = base.clone();
-		own.font_size = 15.0;
+		own.font_size = auto::Auto::by_hand(15.0);
 		own.theme_mode = crate::theme::Mode::Light;
 		own.scrollback = 5000;
 		own.remembered_columns = 101;
@@ -12570,7 +13335,7 @@ mod tests {
 		assert!(loaded.keys == own.keys && loaded.user_themes.len() == 1);
 		assert_eq!(loaded.monitor_sizes, own.monitor_sizes);
 		assert_eq!(
-			(loaded.font_size, loaded.theme_mode),
+			(auto::font_size(&loaded), loaded.theme_mode),
 			(15.0, crate::theme::Mode::Light)
 		);
 		loaded
@@ -12668,14 +13433,14 @@ mod tests {
 		let unseen = dir.join("unseen.shcl");
 		set_config_override(unseen.clone());
 		let mut edited = moved.clone();
-		edited.font_size += 1.0;
+		edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
 		assert!(persist(&moved, &edited));
 		let doc = shcl::Document::parse(&std::fs::read_to_string(&unseen).unwrap());
 		let kept: Vec<String> = read_shells(&doc).into_iter().map(|e| e.slug).collect();
 		assert_eq!(kept, ["csh", "ash", "bsh", "dsh"]);
 		assert_eq!(
 			doc.get_float("font.size").ok(),
-			Some(f64::from(edited.font_size))
+			Some(f64::from(auto::font_size(&edited)))
 		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -12780,7 +13545,8 @@ mod tests {
 			resolve(read_raw("", p).0).wallpaper_default_fit,
 			Fit::Stretch
 		);
-		assert_eq!((d.columns, d.rows), (160, 48));
+		assert!(d.columns.is_automatic() && d.rows.is_automatic());
+		assert_eq!(auto::grid(&d, None), (160, 48));
 		assert_eq!(d.margin, 8.0);
 		assert_eq!(d.bg, [0, 0, 0], "an all-black background");
 	}
@@ -13118,7 +13884,7 @@ mod tests {
 			);
 
 			let mut edited = orig.clone();
-			edited.font_size = 13.5;
+			edited.font_size = auto::Auto::by_hand(13.5);
 			assert!(persist(&orig, &edited));
 			assert_eq!(
 				std::fs::read_to_string(&path).unwrap(),
@@ -13158,8 +13924,7 @@ mod tests {
 		let _store = test_store_lock();
 		let before = settings();
 		let mut s = (*before).clone();
-		s.font_size = 12.0;
-		s.use_system_font_size = false;
+		s.font_size = auto::Auto::by_hand(12.0);
 		update(s);
 		reset_font_zoom();
 		assert_eq!(effective_font_size(), 12.0);
@@ -13177,26 +13942,30 @@ mod tests {
 		update((*before).clone());
 	}
 
-	// The face/size split's inference for configs predating use_system_font_size:
-	// absent = follow the face toggle, except an explicit font_size (which the old
-	// single toggle silently ignored) reads as intent and turns the size follow off.
-	// Test ID: EkoQjqK
-	#[test]
-	fn system_font_size_split_inference() {
-		let p = std::path::Path::new("test.shcl");
-		let s = resolve(read_raw("", p).0);
-		assert!(s.use_system_font && s.use_system_font_size, "defaults on");
-		let s = resolve(read_raw("font.use_system_family: false\n", p).0);
-		assert!(!s.use_system_font_size, "size follows the face toggle");
-		let s = resolve(read_raw("font.size: 20.0\n", p).0);
-		assert!(s.use_system_font, "explicit size keeps the system face");
-		assert!(
-			!s.use_system_font_size,
-			"explicit size wins over the OS size"
-		);
-		let s = resolve(read_raw("font.size: 20.0\nfont.use_system_size: true\n", p).0);
-		assert!(s.use_system_font_size, "explicit key beats the inference");
-	}
+	// Commented out by 2026100907341818: the two follow switches are gone, and
+	// a launch reads what they meant once, as it rewrites the file
+	// (`absorbed_switches`). `an_old_follow_switch_loads_the_same_size_after_it_goes`
+	// covers the same cases.
+	// // The face/size split's inference for configs predating use_system_font_size:
+	// // absent = follow the face toggle, except an explicit font_size (which the old
+	// // single toggle silently ignored) reads as intent and turns the size follow off.
+	// // Test ID: EkoQjqK
+	// #[test]
+	// fn system_font_size_split_inference() {
+	// 	let p = std::path::Path::new("test.shcl");
+	// 	let s = resolve(read_raw("", p).0);
+	// 	assert!(s.use_system_font && s.use_system_font_size, "defaults on");
+	// 	let s = resolve(read_raw("font.use_system_family: false\n", p).0);
+	// 	assert!(!s.use_system_font_size, "size follows the face toggle");
+	// 	let s = resolve(read_raw("font.size: 20.0\n", p).0);
+	// 	assert!(s.use_system_font, "explicit size keeps the system face");
+	// 	assert!(
+	// 		!s.use_system_font_size,
+	// 		"explicit size wins over the OS size"
+	// 	);
+	// 	let s = resolve(read_raw("font.size: 20.0\nfont.use_system_size: true\n", p).0);
+	// 	assert!(s.use_system_font_size, "explicit key beats the inference");
+	// }
 
 	// The setting ships as a literal token, so the expander is what makes it name
 	// a directory at all. Both platforms' spellings everywhere: a config file gets
@@ -13654,9 +14423,12 @@ mod tests {
 			out.contains("\tmargin: 8.0"),
 			"a commented old line just leaves the fresh default in place:\n{out}"
 		);
+		// The conversion still carries the old switch; the launch step after it
+		// folds that into the family (2026100907341818).
+		let launched = migrate_config_text(&out).unwrap_or_else(|| out.clone());
 		assert!(
-			out.contains("\tfamily: \"Iosevka\"") && out.contains("\tuse_system_family: false"),
-			"an explicit font pins the system toggle off, as it always meant:\n{out}"
+			launched.contains("\tfamily: \"Iosevka\"") && !launched.contains("use_system_family"),
+			"an explicit font stays set by hand, as it always meant:\n{launched}"
 		);
 		assert!(
 			out.contains("themes.mine.dark.background: \"#010203\""),
@@ -13819,7 +14591,7 @@ mod tests {
 			let launched = load();
 			check(&launched, "first launch");
 			let mut edited = launched.clone();
-			edited.font_size += 1.0;
+			edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
 			assert!(persist(&launched, &edited));
 			check(&load(), "after a save");
 			let baks = std::fs::read_dir(&dir)
@@ -14436,10 +15208,10 @@ mod tests {
 	#[test]
 	fn migrate_refreshes_a_superseded_default_font_stack() {
 		let stale = SUPERSEDED_FONT_STACKS[0];
-		let out = migrate_config_text(&format!(
-			"font:\n\tuse_system_family: true\n\tfamily: \"{stale}\"\n"
-		))
-		.expect("stale default should be refreshed");
+		// no follow switch here: one would take the family back to automatic
+		// (2026100907341818), which is not what this is about
+		let out = migrate_config_text(&format!("font:\n\tfamily: \"{stale}\"\n"))
+			.expect("stale default should be refreshed");
 		assert!(
 			out.contains(&format!("\tfamily: \"{DEFAULT_FONT_STACK}\"")),
 			"{out:?}"
@@ -14705,9 +15477,15 @@ mod tests {
 		};
 		let joined = |lines: &[String]| lines.join("\n") + "\n";
 
+		// The template has no active family line and no follow switch since
+		// 2026100907341818, so the old file is put back together by hand: its
+		// list set and the switch off beside it.
 		let mut nested = template.clone();
-		respell(&mut nested, "font.family", &format!("'{stale}'"));
-		respell(&mut nested, "font.use_system_family", "false");
+		let at = line_of("font.family", false);
+		let indent = nested[at][..nested[at].len() - nested[at].trim_start().len()].to_string();
+		nested[at] = format!("{indent}family: '{stale}'");
+		nested.insert(at, format!("{indent}use_system_family: false"));
+		let _ = respell;
 
 		let font: Reader = |s| format!("{:?}", s.font_family);
 		#[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
@@ -14789,7 +15567,7 @@ mod tests {
 			let before = reader(&launched);
 
 			let mut edited = launched.clone();
-			edited.font_size += 1.0;
+			edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
 			assert!(persist(&launched, &edited), "{what}: the save was refused");
 			let after = reader(&reload_from_disk());
 			if after != before {
@@ -15420,7 +16198,7 @@ mod tests {
 		);
 		// and a wholly-missing top-level section arrives as a block
 		assert!(
-			out.contains("font:") && out.contains("\tuse_system_family: true"),
+			out.contains("font:") && out.contains("\tline_height_scale: 1.22"),
 			"missing sections backfilled whole:\n{out}"
 		);
 
@@ -15477,7 +16255,7 @@ mod tests {
 			"unknown key kept"
 		);
 		assert!(
-			out.contains("\tuse_system_family: true"),
+			out.contains("\t# size: 17.0"),
 			"missing key present with its default"
 		);
 
@@ -15962,7 +16740,8 @@ mod tests {
 		#[test]
 		fn a_flat_file_moves_every_value_to_its_path() {
 			use super::super::{
-				CONFIG_CONVERTS, CONFIG_REMOVED, LEGACY_KEYS, converted_config_text,
+				CONFIG_CONVERTS, CONFIG_REMOVED, LEGACY_KEYS, RETIRED_SWITCHES,
+				converted_config_text,
 			};
 			use super::active_headings;
 			use std::fmt::Write;
@@ -15972,6 +16751,9 @@ mod tests {
 				let mut text = String::new();
 				let mut want: std::collections::HashMap<&str, (usize, String)> =
 					std::collections::HashMap::new();
+				// a retired switch decides whether the settings under it carry, so
+				// with one in the file they are not expected either way
+				let mut loose: std::collections::HashSet<&str> = std::collections::HashSet::new();
 				let mut expect = |rank: usize, value: &str| {
 					// the values here are not numbers, so a unit change keeps them
 					let new = LEGACY_KEYS[rank].1;
@@ -15980,6 +16762,12 @@ mod tests {
 						.find(|(old, ..)| *old == new)
 						.map_or(new, |(_, to, _)| *to);
 					if CONFIG_REMOVED.contains(&new) {
+						return;
+					}
+					if let Some((_, members)) =
+						RETIRED_SWITCHES.iter().find(|(switch, _)| *switch == new)
+					{
+						loose.extend(members.iter().map(|(member, _)| *member));
 						return;
 					}
 					let slot = want.entry(new).or_insert((rank, value.to_string()));
@@ -16029,6 +16817,7 @@ mod tests {
 				};
 				let out = converted_config_text(&text).expect("a flat file converts");
 				let doc = shcl::Document::parse(&out);
+				want.retain(|new, _| !loose.contains(new));
 				assert_eq!(doc.lost_count(), 0, "file:\n{text}\nconverted:\n{out}");
 				assert!(
 					super::super::read_shells(&doc) == shells,

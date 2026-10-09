@@ -57,7 +57,7 @@ keys![
 	TextScrim, ScrimRadius, ScrimSoftness, ScrimStrength, ScrimFunction, ScrimRamp,
 	Outline, MinContrast, CursorScrim, CursorOutline,
 	CursorBlinking, CursorBlinkRate, CursorHeight, CursorWidth, CursorAnimation, CursorResume,
-	SystemFont, SystemFontSize, FontFamily, FontSize, LineHeight,
+	FontFamily, FontSize, LineHeight,
 	Columns, Rows, RememberSize, RememberPerMonitor, RememberMaximized, Margin, TabRegularWidth, TabMaxWidth,
 	NewTabNextToCurrent, IdleRelease, IdleHiddenMin, IdleMin, SoftwareRendering,
 	TabShowsTitle, TabShowsShell, TabShowsProgram, TabShowsDirectory, TitleShowsTab,
@@ -149,6 +149,9 @@ pub struct Spec {
 	/// The mark's text in the Windows build, in place of `warning`. Moved
 	/// over by `pick_warnings`, so the dialog only ever reads `warning`.
 	pub windows_warning: &'static str,
+	/// The group of auto settings this row is the switch for. It holds no
+	/// value of its own; it is read off the members (`config::auto`).
+	pub group: Option<crate::config::auto::Group>,
 }
 
 /// One setting a control has to wait on, resolved from the file's gate lines.
@@ -555,9 +558,10 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			}
 		};
 		// a pair row already filed its two parts above; neither a buttons row nor
-		// the shells grid holds a value of its own
+		// the shells grid holds a value of its own, and nor does a group's switch
 		if key != Key::None
 			&& !matches!(kind, Kind::Dual { .. } | Kind::Buttons(_) | Kind::ShellList)
+			&& doc.get_string(&at("group")).is_err()
 		{
 			// A text box may stand for more than one setting, as "File or folder"
 			// does, so a revert comments out each. Anything else holds one value.
@@ -604,6 +608,20 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		{
 			problems.push(format!("rows.{name}: a warning needs a label of its own"));
 		}
+		let group = doc.get_string(&at("group")).ok().and_then(|group_name| {
+			let group = crate::config::auto::group_named(&group_name);
+			if group.is_none() {
+				problems.push(format!(
+					"rows.{name}: no group of auto settings named {group_name}"
+				));
+			}
+			group
+		});
+		let switch =
+			group.map(crate::config::auto::control) == Some(crate::config::auto::Control::Switch);
+		if switch && !matches!(kind, Kind::Toggle) {
+			problems.push(format!("rows.{name}: a group's switch is a toggle"));
+		}
 		let windows = doc.get_bool(&at("windows")).unwrap_or(false);
 		if matches!(kind, Kind::Header(_)) {
 			group_windows = windows;
@@ -625,6 +643,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			not_macos: doc.get_bool(&at("not_macos")).unwrap_or(false),
 			warning: keep(warning),
 			windows_warning: keep(windows_warning),
+			group,
 		});
 	}
 
@@ -690,13 +709,17 @@ mod tests {
 			Err(problems) => panic!("settings_ui.shcl:\n  {}", problems.join("\n  ")),
 		};
 		let mut declared: Vec<Key> = Vec::new();
-		// a buttons row and the shells grid are on the roll call but store no
-		// single value, so neither has a config path
+		// a buttons row, the shells grid and a group's switch are on the roll
+		// call but store no single value, so none has a config path
 		let mut valueless: Vec<Key> = Vec::new();
 		for spec in &ui.specs {
 			match spec.kind {
 				Kind::Dual { keys, .. } => declared.extend(keys),
 				Kind::Header(_) => {}
+				_ if spec.group.is_some() => {
+					declared.push(spec.key);
+					valueless.push(spec.key);
+				}
 				Kind::Buttons(_) | Kind::ShellList => {
 					declared.push(spec.key);
 					valueless.push(spec.key);

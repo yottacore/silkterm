@@ -34,6 +34,59 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
+	- ID: 2026100910295901
+	- Type: Enhancement
+	- Status: Waiting for answers
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Foreground and Cursor are automatic settings whose automatic value is the wallpaper's colors, and "Text colors from wallpaper" is their group's switch, read off them.
+	- Notes:
+		- Before RC1.
+		- They still gray out while the switch is on. The style guide lists it under known deviations.
+	- Progress log:
+		- 20261009: Q: A theme pick puts every color back to the theme's, which would make these two automatic and so turn the switch back on. Should a theme pick do that, or leave these two as they are?
+		- 20261009: Q: With no wallpaper up, is automatic the theme's color?
+		- 20261009: Q: An old file with the switch off and no color line used the theme's colors. Keeping that means storing the theme's colors by hand. Is that wanted?
+
+- Performance profile: the Profile dropdown is a presets group read off the rows it sets
+	- ID: 2026100910295902
+	- Type: Enhancement
+	- Status: Waiting for answers
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- The 16 rows a profile sets follow the automatic settings design, with the Profile dropdown as their presets group control. This also brings the list and on or off controls the design describes.
+	- Notes:
+		- Before RC1.
+		- Today the profile is stored, "Choose automatically" picks it from a hardware test, a slow display steps it down for the session, Remote lays itself over it for the session, and the rows keep the user's own values under it for Custom to bring back. The design stores nothing for a group and keeps no value while automatic.
+	- Progress log:
+		- 20261009: Q: Is automatic for each row the rated profile's value, so the step down and Remote still reach every row left automatic?
+		- 20261009: Q: Does picking a profile store each row's value, so a later step down no longer reaches them, or make them automatic under that profile?
+		- 20261009: Q: Where does "Choose automatically" go, given a group has one control?
+		- 20261009: Q: The values held under a profile today would be dropped, per the design's non-goal. Is that wanted for files that have them?
+
+- Theme mode: "System" becomes the automatic entry
+	- ID: 2026100910295904
+	- Type: Enhancement
+	- Status: Waiting for answers
+	- Priority: Low
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Per the design, a list with an automatic value has "Automatic" first, saying what it gives now, such as "Automatic (Dark)".
+	- Progress log:
+		- 20261009: Q: The shipped mode is Dark, not System. Should Automatic become the default, which changes what a new install shows, or stay a choice in the list?
+
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486
 	- Type: Bug
@@ -255,6 +308,66 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: blinksec
 	- Commit: 8add123
 	- Test case: EsDSBUl `animation_none_becomes_blink_off` and EsDSBYd `turning_the_blink_on_replaces_an_old_none`, both failing with the "none" reading removed. Er2X6Ep holds the Cursor tab's order and sub-group. ErstaMt, ErstamD and Erstagk lost the "none" word, and EorkTk1 and EorkTk3 read the profile's Blink, since this decision changed what they pinned.
+
+- Settings that depend on a master boolean switch follow the automatic settings design
+	- ID: 2026100907341818
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. A launch takes the old follow switches out of the config file, so a dogfood build rewrites the file.
+	- Needs external testing: Windows: the Text and Window tabs, an old config with "Use system font" on, and a window opening at its last size. Windows names no monospace font, so there the family list stays set by hand when it is not the shipped one.
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100907341817, 2026100812334385, 2026100114435600, 2026100907341819
+	- Target OS: All
+	- Requirements:
+		- Update all Settings dialog code and logic to follow [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md).
+	- Notes:
+		- Before RC1.
+	- Inventory: every Settings row with a master switch, a preset or an automatic value.
+		- Automatic settings, where the design applies:
+			- Family, under "Use system font: Face". Automatic is the desktop's monospace font, else the shipped list. Moved here.
+			- Size, under "Use system font: Size". Automatic is the desktop's monospace size. Moved here.
+			- Columns and Rows, under "Remember last size". Automatic is the last size, this monitor's own where one is kept. The switch is their group's. Moved here.
+			- Foreground and Cursor, under "Text colors from wallpaper". Automatic is the wallpaper's colors. Split out with questions, 2026100910295901.
+			- Profile, under "Choose automatically", and the 16 rows a profile sets. Profile is a presets group over those rows, and automatic is the rated profile. Split out with questions, 2026100910295902.
+			- The ten theme colors, whose automatic value is the theme's. Open command, whose empty value is the desktop's opener. File or folder, whose empty value is the usual folder or the built-in picture. Split out, 2026100910295903.
+			- Theme mode, whose "System" entry follows the desktop. Split out with a question, 2026100910295904.
+		- Rows that only count while a switch is on, which stay live and indented:
+			- Choose automatically: Check for hardware change, Re-test next run.
+			- Text scrim: Strength %, Scrim radius px, Softness %, Function and falloff, and Visibility: Scrim on the Cursor tab.
+			- Outline px above zero: Visibility: Outline on the Cursor tab.
+			- Smooth scrolling: the five feel sliders.
+			- Wallpaper: File or folder, Fit, Honor layout tags, Rotate folder, Visibility %, Blur px, Contrast mask.
+			- Contrast mask: Size %, Strength %, Automask mix %.
+			- Transparency: Opacity %, Blur-behind.
+			- Blink: Rate s, Animation, Inactivity timer s. Already live since 2026100907341817.
+			- Remember last size: Per monitor.
+			- Free resources when idle: Minutes when hidden, Minutes otherwise.
+			- Scrollbar: Width px, Hide when idle.
+			- Minimap: Width px.
+			- Hyperlinks Enabled: Open command.
+		- Neither: Honor layout tags and Honor look tags replace Fit and the two sliders for a tagged picture only, so those rows still count for the rest. Minutes when hidden still grays on Wayland, which is the machine and not a setting.
+	- Decisions:
+		- 20261009: The style guide's "Members gray out when it is off" is now "Members stay live and indented", per the design's last non-goal. Every gate of that kind is gone, and the Blink entry left the known deviations.
+		- 20261009: "Use system font" is gone. Family and Size each carry the automatic mark, since a switch over one setting is pointless.
+		- 20261009: "Remember last size" stores nothing. It reads on while Columns and Rows are both automatic, off while both are set by hand, and shows a dash in between. It has no revert arrow; each member has its own.
+		- 20261009: A launch takes `font.use_system_family`, `font.use_system_size` and `window.remember_size` out of the file. A value one of them overrode is commented out, and one still in use stays. "Remember last size" off with no size line writes 160 by 48, the old default. A file with no switch line is left alone.
+		- 20261009: Whether the desktop names a font decided whether the old font switch overrode the family list, so the launch that takes the switch out asks.
+		- 20261009: An automatic box shows its value in a lighter italic with an "A" mark at its right end. Set by hand, the mark is an x that puts it back, and emptying the box does the same.
+		- 20261009: Typing in an automatic box sets it by hand, even to the value it showed. Opening it without typing leaves it automatic.
+		- 20261009: The presets dropdown and the list and on or off controls wait for the items that need them. Nothing moved here uses them.
+	- Progress log:
+		- 20261009: Built the table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check. Moved Family, Size, Columns and Rows.
+		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It does not mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line has nothing to attach to yet, since the program has no accessibility layer. "Dosn't" in its Tests section. Its line on hand edits while running waits on 2026100907341819.
+	- Against: the Settings dialog design doc's "a font switch that follows the desktop grays the fields it overrides", and the earlier fix that grayed "Use system font" where the desktop names no font. Both went with the switch.
+	- Swept: every gate in settings_ui.shcl; every reader of the four settings, which the type change made the compiler find; load, save, the legacy and shcl 2 conversions, the launch size, sizes per monitor, the font zoom, and `--font`, `--font-size`, `--columns` and `--rows`.
+	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, doc, TOC and table checks, and the new lint check, which failed on an injected read in two files. In a real window against a dev build at the default font, the panel stayed 707 by 965, and Cursor, Movement, Themes, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Columns typed by hand showed the x and a dash in the switch; the x, and a click on the switch from a dash, put them back; OK wrote only the Size typed on the Text tab. A config the dev build wrote opened at the same window size on both builds, with the switches on and with them off.
+	- Not checked: 2x, a large interface font, Windows, macOS.
+	- Branch: autoset
+	- Commit: ac7fbe6
+	- Test case: EsDxpmD to EsDxpmN, and EsDsIof for the font order. Each new test failed against a mutant of its part. Commented out with the reason: ElEvh0U, ElEvh0T, Eq4Gng9 and EkoQjqK, which pinned "Use system font". Assertions moved where the rule changed: EpHT2u8, Eit1amm, Ejak3Qu, Ep17Tr0, EqRTxpJ and the focus ring test.
 
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
@@ -648,17 +761,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Settings that depend on a master boolean switch follow the automatic settings design
-	- ID: 2026100907341818
+- Theme colors, Open command and File or folder show the automatic mark and a way back to automatic
+	- ID: 2026100910295903
 	- Type: Enhancement
 	- Status: Queued
 	- Priority: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Related IDs: 2026100907341817
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
 	- Target OS: All
 	- Requirements:
-		- Update all Settings dialog code and logic to follow [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md).
+		- Each is already automatic in all but name: no line means the theme's color, the desktop's opener, or the usual folder or built-in picture. Give each the mark, the lighter italic value and the x, per the design. A color takes the x beside its picker.
+		- Their rows go in the auto settings table, with the lint check covering them.
 	- Notes:
 		- Before RC1.
 
@@ -692,6 +806,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: each test measures in the face the layout was built from.
 	- Reproduced: 20261009, by a probe run alone: "2026-10-09" measured 88.7 px that way, against 75.3 in the desktop's face. The two tests were not run alone to see whether they pass for the wrong reason.
 	- Possible cause: `ui_attrs()` reads the family a text context pins, and these tests call it once, ahead of the loop.
+
+- Settings tips end with the current and default values where they differ
+	- ID: 2026100910295905
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Per the automatic settings design, every input control's tip ends with `Current value: ...` and `Default value: ...`, shown only when they differ. Automatic rows already have their state line.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
