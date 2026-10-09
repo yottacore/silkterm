@@ -249,6 +249,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 8072dc4
 	- Test case: `a_large_interface_font_keeps_each_label_clear_of_its_box` (Es9uxSu). It fails with the gaps held at their fixed sizes, and separately with only the gap before the next toggle held, or only the radio and pair label gap. `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr) still pins the default sizes.
 
+- At a large interface font, a checkbox stays small while a radio box grows
+	- ID: 2026100817355493
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261008-173554
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100817172887
+	- Target OS: All
+	- Steps to reproduce:
+		- Set the desktop's interface font to 24 pt and open Settings.
+	- Incorrect behavior: A checkbox stays 20 DIP while a radio box grows to 36, so the two look mismatched beside the larger text.
+	- Expected behavior: Both kinds of box grow with the font the same way.
+	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
+	- Actual cause: The radio box grew with the UI line height, from 16 DIP at a line height of 19. The checkbox was a fixed 20 DIP. The pair boxes, the packed toggles and the Shell tab's Active box used that same constant.
+	- Decisions:
+		- 20261008: Best guess. Every square box grows at the radio's rate, and each keeps its own size as a floor. Growing the checkbox by its own share instead would have made it bigger at the default font, and growing both from the 11 pt default's line would have shrunk the radio box there.
+	- Actual fix: One rule sizes every square box. At the default font the checkbox stays 20 DIP and the radio box 17, as before. The checkbox starts to grow once the radio box would pass it, at about a 14 pt font. At 24 pt both are 36 DIP. The layout comments and the settings dialog design doc say so.
+	- Swept: every square box in the dialog: a plain toggle, a packed toggle, both pair boxes, the radio options and the Shell tab's Active box. The revert arrow's column also reads the 20 DIP size. It holds a glyph, not a box, and was left alone.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at the 11 pt default, every tab and a focused radio row drew the same pixels as before at 1x and 2x, bar a text caret's column. At 24 pt the checkboxes, pair boxes and radio boxes all measure 38 px with their outline at 1x, where the checkboxes were 22, and the window kept its size at 1x and 2x. At GentiumAlt Bold 13 nothing moved but the pair row's focus outline (2026100817355494).
+	- Branch: boxring
+	- Commit: 6457f3a
+	- Test case: `a_checkbox_and_a_radio_box_grow_to_one_size` (EsA3ceS). It fails on the old code and passes with the fix.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -482,56 +507,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: scrolltime
 	- Commit: ea80be2
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), same ID, rewritten in place.
-
-- At a large interface font, a checkbox stays small while a radio box grows
-	- ID: 2026100817355493
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261008-173554
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100817172887
-	- Target OS: All
-	- Steps to reproduce:
-		- Set the desktop's interface font to 24 pt and open Settings.
-	- Incorrect behavior: A checkbox stays 20 DIP while a radio box grows to 36, so the two look mismatched beside the larger text.
-	- Expected behavior: Both kinds of box grow with the font the same way.
-	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
-	- Actual cause: The radio box grew with the UI line height, from 16 DIP at a line height of 19. The checkbox was a fixed 20 DIP. The pair boxes, the packed toggles and the Shell tab's Active box used that same constant.
-	- Decisions:
-		- 20261008: Best guess. Every square box grows at the radio's rate, and each keeps its own size as a floor. Growing the checkbox by its own share instead would have made it bigger at the default font, and growing both from the 11 pt default's line would have shrunk the radio box there.
-	- Actual fix: One rule sizes every square box. At the default font the checkbox stays 20 DIP and the radio box 17, as before. The checkbox starts to grow once the radio box would pass it, at about a 14 pt font. At 24 pt both are 36 DIP. The layout comments and the settings dialog design doc say so.
-	- Swept: every square box in the dialog: a plain toggle, a packed toggle, both pair boxes, the radio options and the Shell tab's Active box. The revert arrow's column also reads the 20 DIP size. It holds a glyph, not a box, and was left alone.
-	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at the 11 pt default, every tab and a focused radio row drew the same pixels as before at 1x and 2x, bar a text caret's column. At 24 pt the checkboxes, pair boxes and radio boxes all measure 38 px with their outline at 1x, where the checkboxes were 22, and the window kept its size at 1x and 2x. At GentiumAlt Bold 13 nothing moved but the pair row's focus outline (2026100817355494).
-	- Branch: boxring
-	- Commit: 6457f3a
-	- Test case: `a_checkbox_and_a_radio_box_grow_to_one_size` (EsA3ceS). It fails on the old code and passes with the fix.
-
-- The focus outline on the font pair row is shorter than its text
-	- ID: 2026100817355494
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261008-173554
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100817172887
-	- Target OS: All
-	- Steps to reproduce:
-		- Open Settings and Tab to the "Use system font" Face and Size row.
-	- Incorrect behavior: The focus outline ends before the end of the row's text.
-	- Expected behavior: The outline goes around the whole control.
-	- Reproduced: 20261008, at a 24 pt interface font, at 1x and 2x. The outline was 24 DIP tall and the text line 43, so the label ran out of its bottom. At the 11 pt default the outline already took in the 20 DIP line at 1x and 2x, so nothing showed there.
-	- Actual cause: A pair half's outline was as tall as its checkbox, which stayed 20 DIP while the label after it grew with the font. A radio row's outline was its boxes plus a little, and only passed at 24 pt because the radio box grows.
-	- Actual fix: An outline that takes in the labels after its boxes, a pair half or a radio row, is at least as tall as the labels' line and centered on the row. At the default font it is unchanged. The settings dialog design doc says so.
-	- Swept: every focus outline that takes in a label: both pair rows and the radio row. A plain checkbox's outline holds only the box, since its label is in the label column, and every boxed control's outline is its own box.
-	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. With only the box fix in place the test still failed, on Face at 2x the font. In a real window at the default font every tab drew the same pixels as before at 1x and 2x. At 24 pt the pair outline now runs past the text above and below at 1x and 2x. At GentiumAlt Bold 13 it grew from 24 to 27 DIP and nothing else moved.
-	- Branch: boxring
-	- Commit: 6457f3a
-	- Test case: `a_focus_ring_takes_in_the_line_its_labels_are_on` (EsA3cyd), in the real UI font at 1x, 2x and 2.5x the size. It fails on the old code and passes with the fix.
-	- Acceptance signoff: Self-closed: reproduced, the test fails before the fix and passes after, and nothing changed at the default font.
-	- Closed: 20261008-181022
 
 - At a large interface font, the Shell tab's "Last seen" and "Active" column titles overlap
 	- ID: 2026100818102267
@@ -3241,6 +3216,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- The focus outline on the font pair row is shorter than its text
+	- ID: 2026100817355494
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261008-173554
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100817172887
+	- Target OS: All
+	- Steps to reproduce:
+		- Open Settings and Tab to the "Use system font" Face and Size row.
+	- Incorrect behavior: The focus outline ends before the end of the row's text.
+	- Expected behavior: The outline goes around the whole control.
+	- Reproduced: 20261008, at a 24 pt interface font, at 1x and 2x. The outline was 24 DIP tall and the text line 43, so the label ran out of its bottom. At the 11 pt default the outline already took in the 20 DIP line at 1x and 2x, so nothing showed there.
+	- Actual cause: A pair half's outline was as tall as its checkbox, which stayed 20 DIP while the label after it grew with the font. A radio row's outline was its boxes plus a little, and only passed at 24 pt because the radio box grows.
+	- Actual fix: An outline that takes in the labels after its boxes, a pair half or a radio row, is at least as tall as the labels' line and centered on the row. At the default font it is unchanged. The settings dialog design doc says so.
+	- Swept: every focus outline that takes in a label: both pair rows and the radio row. A plain checkbox's outline holds only the box, since its label is in the label column, and every boxed control's outline is its own box.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. With only the box fix in place the test still failed, on Face at 2x the font. In a real window at the default font every tab drew the same pixels as before at 1x and 2x. At 24 pt the pair outline now runs past the text above and below at 1x and 2x. At GentiumAlt Bold 13 it grew from 24 to 27 DIP and nothing else moved.
+	- Branch: boxring
+	- Commit: 6457f3a
+	- Test case: `a_focus_ring_takes_in_the_line_its_labels_are_on` (EsA3cyd), in the real UI font at 1x, 2x and 2.5x the size. It fails on the old code and passes with the fix.
+	- Acceptance signoff: Self-closed: reproduced, the test fails before the fix and passes after, and nothing changed at the default font.
+	- Closed: 20261008-181022
 
 - A failed test script's output is thrown away by the pipeline
 	- ID: 2026100720280487
