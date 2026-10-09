@@ -432,7 +432,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Severity: Low
 	- Opened: 20261008-164653
 	- Opened by: CC
@@ -440,8 +440,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: All
 	- Incorrect behavior: The box is 56 DIP wide whatever the font. "10080" fits at the default font with a few px to spare. A larger desktop font could cut it off, as it already could with 4 digits.
 	- Expected behavior: The box is wide enough for the widest number its row can hold, measured the way labels are.
+	- Reproduced: 20261008, at a 24 pt interface font. Blink rate showed "000" for 10000 and Inactivity timer "999." for 999.9.
 	- Notes:
 		- 20261008: Scaling the box with the font size was tried and dropped. It widened every box and shortened every slider at normal font sizes.
+	- Decisions:
+		- 20261008: Best guess. One width for every slider in the dialog, the widest any of them needs, so the sliders still end in one column. Never narrower than the old 56 DIP, so nothing moves at an ordinary font unless a number needs more.
+		- 20261008: Best guess. The width is the number plus the field's padding on both sides. The caret margin while typing is left out, since counting it would widen every box at the default font. A 5 digit number being typed still shows whole.
+		- 20261008: Best guess. A wider box widens the panel's own floor, the way a long label does. The nine tabs usually set the panel's width, so in practice the sliders give up the room.
+	- Actual cause: The box width was a constant, and nothing measured the numbers.
+	- Actual fix: The widest number each slider can show is measured in the dialog's own font: either end, the typed cap where a row has one, and for a decimal 99.94 and 999.9. The largest plus padding sets every number box, with 56 DIP as the floor. The UI style guide, the settings dialog design doc and the spec file's note say so.
+	- Swept: every fixed width box in the dialog. The color picker's value boxes and the dropdowns already grow with the font, and the hex, text and path boxes stretch to the column.
+	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc, table and TOC checks. In a real window at the default font, 1x is unchanged, apart from the caret blink and the Shell tab, which differ between 2 runs of the old build too. The panel stayed 707 wide at 1x and 1439 at 2x. At 2x the font comes out half a px larger per DIP, "10080" needs 57 DIP, so every number box is 1 DIP wider and the sliders 1 DIP shorter. At 24 pt every number shows whole at 1x and 2x, the panel stays 1171 and 2342 wide, and the sliders are shorter by what the boxes gained.
+	- Branch: numbox
+	- Commit: d3f51da
+	- Test case: `every_slider_number_fits_its_box_at_a_large_interface_font` (Es9oaEN), `a_wider_number_box_widens_the_panel_and_leaves_the_sliders` (Es9oaYr). Both fail with the box held at 56 DIP. The first also fails with the decimal bands taken out, the second with the panel ignoring the box.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
