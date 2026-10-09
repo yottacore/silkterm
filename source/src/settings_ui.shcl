@@ -203,7 +203,7 @@ rows:
 		label: Choose automatically
 		kind: toggle
 		setting: performance.automatic
-		help: "Pick the profile for this machine, and step it down when the display cannot keep up with a scroll. A step goes no lower than Low and lasts until SilkTerm restarts."
+		help: "Test how fast this machine draws, and pick the profile it can run smoothly. If the display still falls behind, the profile drops a step until SilkTerm restarts, but never below Low."
 
 	PerfProfile:
 		label: Profile
@@ -211,7 +211,7 @@ rows:
 		options: "Custom", "Max silk", "High", "Low", "Standard terminal", "Remote (temporary)"
 		indent: 1
 		setting: performance.profile
-		help: "What the look is allowed to cost, from Max silk with every effect at its shipped setting down to Standard terminal with no smooth scrolling at all; Custom uses your own values. Picking one here switches off Choose automatically, and so does changing any setting a profile governs. Remote (temporary) is the exception: it is Standard terminal for a remote screen and lasts only for this session, so it leaves that switch alone."
+		help: "Which effects to use, from Max silk with all of them to Standard terminal with none. Picking one turns off Choose automatically. Remote (temporary) doesn't, and only lasts until SilkTerm restarts."
 
 	## The label stays short because the widest one on any tab sets the panel's
 	## width, and the flyover carries what it leaves out.
@@ -219,14 +219,14 @@ rows:
 		label: Check for hardware change
 		kind: toggle
 		setting: performance.check_hardware
-		help: "Notice a different processor, graphics adapter or amount of memory, and rate the machine again. Rating is a few seconds of measuring behind a banner. Only used while the profile above is chosen automatically."
+		help: "Test the machine again when its processor, graphics card or memory changes. The test takes a few seconds. Only used with Choose automatically on."
 
 	PerfCheckNext:
 		label: Re-test next run
 		kind: toggle
 		beside: true
 		setting: performance.check_next_run
-		help: "Rate the machine again at the next launch, whether or not it changed. Clears itself once that launch has done it."
+		help: "Test the machine again at the next launch, even if nothing changed. Turns itself off after the test."
 
 	TextReadability:
 		kind: heading
@@ -237,7 +237,7 @@ rows:
 		label: Text scrim
 		kind: toggle
 		setting: text.scrim.enabled
-		help: "A soft halo behind the glyphs, so text stays readable over a busy wallpaper."
+		help: "A soft blur of the background color behind the text, so it stays readable over a busy wallpaper."
 
 	ScrimStrength:
 		## percent, where each 20% is one doubling of the finished halo's opacity
@@ -247,7 +247,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: text.scrim.strength
-		help: "How solid the halo gets. High values close the gaps between glyphs into a plate. Light mode quiets it, since a pale patch shows more against a darkened background than a dark one does."
+		help: "How solid the scrim is. High values fill in the gaps between letters. Light mode uses less of it, since it stands out more there."
 
 	ScrimRadius:
 		label: Scrim radius px
@@ -256,7 +256,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: text.scrim.radius
-		help: "How far the halo reaches out from the ink."
+		help: "How far the scrim reaches out from the text."
 
 	ScrimSoftness:
 		label: Softness %
@@ -265,7 +265,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: text.scrim.softness
-		help: "How gradually the halo fades out toward its edge."
+		help: "How gradually the scrim fades at its edge."
 
 	## The two together describe one curve, so they share a line. The label names
 	## both; each box says which of them it is by what it holds.
@@ -275,7 +275,7 @@ rows:
 		options: "Distance field", "Distance transform", "Dilate + feather", "Gaussian [ugly]"
 		indent: 1
 		setting: text.scrim.function
-		help: "How the halo's shape is computed from the glyphs."
+		help: "How the scrim's outline is worked out from the letters."
 
 	ScrimRamp:
 		label: ""
@@ -283,7 +283,7 @@ rows:
 		options: "Exponential", "Half-normal", "Logarithmic", "Sigmoid", "Linear"
 		beside: true
 		setting: text.scrim.ramp
-		help: "The curve the halo fades along."
+		help: "The curve the scrim fades along."
 
 	MinContrast:
 		## percent of the lightness range, not a WCAG ratio - see palette::readable
@@ -293,7 +293,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: text.min_contrast
-		help: "Lighten text too dark to read on a dark background, and darken it on a light one. Light themes hold text a little further off. Text set to exactly the background color stays hidden. 0 leaves every color alone."
+		help: "Lighten text that is too dark to read, or darken it on a light background. Text the same color as the background stays hidden. 0 turns this off."
 
 	## Its own one-row group under the scrim: it works with the halo or without it.
 	Outline:
@@ -302,7 +302,7 @@ rows:
 		range: 0, 4
 		whole: true
 		setting: text.outline
-		help: "A crisp outline drawn hard against the glyphs. Works on its own or on top of the halo."
+		help: "A sharp outline around each letter. Works alone or with the scrim."
 
 	Scrolling:
 		kind: heading
@@ -313,7 +313,7 @@ rows:
 		label: Smooth scrolling
 		kind: toggle
 		setting: scroll.smooth
-		help: "Ease the view instead of jumping a whole line at a time. Off makes every setting below inert."
+		help: "Scroll smoothly instead of jumping a whole line at a time."
 
 	## The five below are ordered as one output burst unfolds: it leaves rest,
 	## accelerates, tops out, winds down, stops. All five read the same way -
@@ -326,7 +326,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: scroll.ease_in_ms
-		help: "How sharply the view leaves a standstill when output starts."
+		help: "How fast scrolling starts when output begins."
 
 	ScrollRampUp:
 		label: Ramp-up %
@@ -335,7 +335,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: scroll.ramp_up_ms
-		help: "How quickly the view picks up speed once it is moving."
+		help: "How fast scrolling speeds up once it is moving."
 
 	SingleScreenTau:
 		label: Single-screen speed %
@@ -344,7 +344,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: scroll.single_screen_tau_ms
-		help: "Top speed while the output still fits on one screen."
+		help: "Top scrolling speed while new output fits on one screen."
 
 	ScrollRampDown:
 		label: Ramp-down %
@@ -353,7 +353,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: scroll.ramp_down_ms
-		help: "How hard the view brakes as the output runs out."
+		help: "How fast scrolling slows down as output stops."
 
 	ScrollEaseOut:
 		label: Ease-out %
@@ -362,7 +362,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: scroll.ease_out_ms
-		help: "How crisply the view settles on the final line."
+		help: "How sharply scrolling stops on the last line."
 
 	## ---------------------------------------------------------------- Background
 
@@ -383,7 +383,7 @@ rows:
 		kind: text
 		indent: 1
 		setting: wallpaper.image, wallpaper.rotate.folder
-		help: "An image, or with Rotate folder on, a folder of them. A named image wins over the folder."
+		help: "An image file, or a folder of images when Rotate folder is on."
 
 	BgFit:
 		label: Fit
@@ -398,14 +398,14 @@ rows:
 		kind: toggle
 		indent: 1
 		setting: wallpaper.honor_xmp
-		help: "Let an image's own embedded Fit and Anchor tags decide how it is placed."
+		help: "Use an image's own Fit and Anchor tags to place it."
 
 	BgRotate:
 		label: Rotate folder
 		kind: toggle
 		indent: 1
 		setting: wallpaper.rotate.enabled
-		help: "Treat the path above as a folder and show a different image from it each time."
+		help: "Treat the path above as a folder, and show its images in turn."
 
 	BgOpacity:
 		label: Visibility %
@@ -414,7 +414,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: wallpaper.opacity
-		help: "How strongly the wallpaper shows through the terminal background. Light mode mixes in more of it to reach the same visible result, so the number means the same thing in either mode. While Honor look tags is on, an image's own Opacity tag wins over this, so it only applies to images without one."
+		help: "How much the wallpaper shows through. With Honor look tags on, an image's own Opacity tag wins, so this only applies to images without one."
 
 	BgBlur:
 		label: Blur px
@@ -424,20 +424,20 @@ rows:
 		whole: true
 		indent: 1
 		setting: wallpaper.blur
-		help: "While Honor look tags is on, an image's own Blur tag wins over this, so it only applies to images without one."
+		help: "How much to blur the wallpaper. With Honor look tags on, an image's own Blur tag wins, so this only applies to images without one."
 
 	BgHonorXmpLook:
 		label: Honor look tags
 		kind: toggle
 		indent: 1
 		setting: wallpaper.honor_xmp_look
-		help: "Let an image's own Opacity and Blur tags win over the two sliders above, so the sliders only apply to images without them. The bundled wallpapers are all tagged."
+		help: "Let an image's own Opacity and Blur tags win over the 2 sliders above, so they only apply to images without them. The bundled wallpapers all have tags."
 
 	BgContrastMask:
 		label: Contrast mask
 		kind: toggle
 		setting: wallpaper.contrast_mask.enabled
-		help: "Quieten the wallpaper only where it would fight the text, leaving the rest alone."
+		help: "Dim the wallpaper only where it makes the text hard to read."
 
 	BgContrastSize:
 		label: Size %
@@ -446,7 +446,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: wallpaper.contrast_mask.size
-		help: "How large an area each point of the wallpaper is judged against."
+		help: "How big an area around each spot is looked at to decide how much to dim it."
 
 	BgContrastStrength:
 		label: Strength %
@@ -455,7 +455,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: wallpaper.contrast_mask.strength
-		help: "How far the mask is allowed to push the wallpaper down."
+		help: "How much the mask can dim the wallpaper."
 
 	BgContrastAuto:
 		label: Automask mix %
@@ -464,16 +464,16 @@ rows:
 		whole: true
 		indent: 1
 		setting: wallpaper.contrast_mask.auto
-		help: "How much of the masking is left to the picture itself rather than the setting above."
+		help: "How much the mask goes by the image itself instead of the 2 sliders above. 100 is all from the image."
 
 	## Last on the tab, since it is the one that depends on the desktop.
 	Transparency:
 		label: Transparency
 		kind: toggle
 		setting: transparency.enabled
-		help: "See through the terminal background. On Windows this takes effect on the next launch."
-		warning: "Transparency relies on the desktop compositor, and may not work on every desktop."
-		windows_warning: "Transparency relies on the desktop compositor, and may not work on every desktop. It also keeps a window in view from giving back its graphics memory when idle."
+		help: "See through the window to what's behind it. On Windows this takes effect at the next launch."
+		warning: "This needs a desktop compositor, so it may not work on every desktop."
+		windows_warning: "This needs a desktop compositor, so it may not work on every desktop. A window still on screen also can't free its graphics memory when idle."
 
 	Opacity:
 		label: Opacity %
@@ -488,7 +488,7 @@ rows:
 		kind: toggle
 		indent: 1
 		setting: transparency.blur_behind
-		help: "Blur whatever is behind the window, where the desktop can do it."
+		help: "Blur what's behind the window, on desktops that can."
 
 	## ---------------------------------------------------------------------- Text
 
@@ -550,7 +550,7 @@ rows:
 		label: Blink
 		kind: toggle
 		setting: cursor.blink
-		help: "Animate the cursor while it waits. It holds still while you type."
+		help: "Animate the cursor when typing stops."
 
 	CursorBlinkRate:
 		label: Rate s
@@ -575,7 +575,7 @@ rows:
 		typed_max: 3600
 		indent: 1
 		setting: cursor.animation_resume_s
-		help: "How long typing has to stop before the animation picks up again. Output does not wait this out."
+		help: "How long after the last keystroke before the cursor animates again. Program output doesn't reset it."
 
 	CursorVisibility:
 		## Two independent switches sharing one label; the row itself edits
@@ -633,7 +633,7 @@ rows:
 		label: Minimap
 		kind: toggle
 		setting: scroll.minimap.enabled
-		help: "A miniature of the whole scroll buffer beside the text. It takes the room it uses, so the grid loses columns."
+		help: "A small view of the whole scrollback beside the text. It takes up columns the text would have used."
 
 	MinimapWidth:
 		label: Width px
@@ -685,7 +685,7 @@ rows:
 		kind: toggle
 		indent: 1
 		setting: colors.from_wallpaper
-		help: "Pick the text and cursor colors from the picture behind them: as far from its brightest areas as they can get, in a hue complementary to its own. The two rows below gray out, and nothing derived this way is saved."
+		help: "Pick text and cursor colors that stand out against the wallpaper."
 
 	ColFg:
 		label: Foreground
@@ -727,27 +727,27 @@ rows:
 		kind: color
 		indent: 1
 		setting: colors.gutter
-		help: "Chrome that holds no control, such as the strip these tabs sit on."
+		help: "Empty areas around the controls, such as the strip these tabs are on."
 
 	ColHighlight:
 		label: Highlight
 		kind: color
 		indent: 1
 		setting: colors.highlight
-		help: "Marks several things at once - the live pane's ring, slider handles, revert arrows, the default button."
+		help: "Used for the active pane's border, slider handles, revert arrows and the default button."
 
 	ColFocus:
 		label: Focus
 		kind: color
 		indent: 1
 		setting: colors.focus
-		help: "Marks only the one control the keyboard is on."
+		help: "Marks the control the keyboard is on."
 
 	ColScrollbarThumb:
 		label: Scrollbar handle
 		kind: color
 		setting: colors.scrollbar_thumb
-		help: "The scrollbar and the minimap marker. These two stay neutral whatever the theme, so a saved theme leaves them out."
+		help: "Also colors the minimap marker. Themes don't change this color or Track."
 
 	ColScrollbarTrough:
 		label: Track
@@ -769,14 +769,14 @@ rows:
 		label: Remember last size
 		kind: toggle
 		group: window.size
-		help: "Reopen at whatever size the window was last closed at. Columns and Rows show that size until one is set by hand."
+		help: "Reopen at the size the window was last closed at."
 
 	RememberPerMonitor:
 		label: Per monitor
 		kind: toggle
 		indent: 1
 		setting: window.remember_per_monitor
-		help: "Keep a size for each monitor, told apart by its resolution, scale and physical size. A window moved to another monitor takes that monitor's size once it stops there."
+		help: "Remember a separate size for each monitor. A window moved to another monitor takes that monitor's size."
 
 	Columns:
 		label: Columns
@@ -808,7 +808,7 @@ rows:
 		range: 4, 100
 		whole: true
 		setting: window.tab_regular_width_pct
-		help: "How wide a tab is when nothing is pushing on it, as a percentage of the window. A crowded bar shrinks tabs below this, and the ones that no longer fit become a page."
+		help: "Normal tab width, as a percentage of the window. Tabs shrink below this when there are a lot of them."
 
 	TabMaxWidth:
 		label: Tab width max %
@@ -822,7 +822,7 @@ rows:
 		label: New tabs go next to current
 		kind: toggle
 		setting: window.new_tab_next_to_current
-		help: "Open a new tab just right of the one in front. Off puts it at the end."
+		help: "Open new tabs right after the current one, instead of at the end."
 
 	Margin:
 		label: Margin px
@@ -844,28 +844,28 @@ rows:
 		label: Program-defined
 		kind: toggle
 		setting: window.tab_shows_title
-		help: "Let a title the running program asked for name the tab. Only a name typed on the tab outranks it, and a narrow tab falls back to the other three."
+		help: "Use the title the running program sets. A name typed on the tab still comes first."
 
 	TabShowsShell:
 		label: Shell
 		kind: toggle
 		beside: true
 		setting: window.tab_shows_shell
-		help: "Name the shell the tab is running. The tab's flyover names every source whatever these say, so turning one off hides it without losing it."
+		help: "Show the shell's name. The tab's tip shows all of these either way."
 
 	TabShowsProgram:
 		label: Program
 		kind: toggle
 		beside: true
 		setting: window.tab_shows_program
-		help: "Name whatever the shell is running, or last ran."
+		help: "Show the program the shell is running, or last ran."
 
 	TabShowsDirectory:
 		label: Directory
 		kind: toggle
 		beside: true
 		setting: window.tab_shows_directory
-		help: "Name the directory the shell is sitting in. It shortens from the right as the tab gets narrower."
+		help: "Show the shell's current directory. It gets cut short on a narrow tab."
 
 	WindowTitle:
 		kind: heading
@@ -876,7 +876,7 @@ rows:
 		label: Show the tab's text
 		kind: toggle
 		setting: window.title_shows_tab
-		help: "Let the title bar fall back to what the active tab says, including a name typed on it. A title the running program asked for still comes through either way."
+		help: "Show the active tab's text in the title bar. A title set by the running program shows either way."
 
 	Hyperlinks:
 		kind: heading
@@ -894,7 +894,7 @@ rows:
 		kind: text
 		indent: 1
 		setting: hyperlinks.open_command
-		help: "What to run for a clicked link. Empty hands it to the desktop."
+		help: "The command that opens a clicked link."
 
 	## What a window costs the machine. Last on the tab, since it is the part
 	## that depends on the graphics driver.
@@ -907,7 +907,7 @@ rows:
 		label: Free resources when idle
 		kind: toggle
 		setting: window.idle_release
-		help: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment it is used again, without stopping anything running in it. This helps most with many windows open on a card with little memory, or next to programs that use a lot of it."
+		help: "Free graphics memory while the window isn't being used, and get it back when it is. Programs in it keep running. Helps most with a lot of windows open, or a card low on memory."
 		warning: "Turn it off only if the graphics driver has trouble with it."
 
 	IdleHiddenMin:
@@ -919,7 +919,7 @@ rows:
 		whole: true
 		indent: 1
 		setting: window.idle_release_hidden_min
-		help: "How long a minimized or covered window waits. On Windows, taking the graphics card back on a restore can take about a second."
+		help: "How long a minimized or covered window waits before freeing memory. On Windows, getting it back can take about a second."
 
 	IdleMin:
 		label: Minutes otherwise
@@ -930,14 +930,14 @@ rows:
 		whole: true
 		indent: 1
 		setting: window.idle_release_min
-		help: "How long a window that is only unfocused, with nothing printing, waits. Longer, since it may be on a second screen being read. On Windows with Transparency on, a window still on screen is never let go, since it would turn black."
+		help: "How long a visible window waits when it's unfocused and quiet. On Windows with Transparency on, a visible window never frees memory, since it would turn black."
 
 	SoftwareRendering:
 		label: Always use software rendering
 		kind: toggle
 		setting: window.software_rendering
 		not_macos: true
-		help: "Draw on the processor rather than the graphics card. Slower, but uses none of the card's memory. A window whose card cannot give it what it needs falls back to this on its own."
+		help: "Draw with the processor instead of the graphics card. It's slower but uses no graphics memory. SilkTerm also switches to this by itself when the card fails."
 
 	## --------------------------------------------------------------------- Shell
 
@@ -953,7 +953,7 @@ rows:
 	Shells:
 		label: ""
 		kind: shells
-		help: "The topmost switched-on shell is the default for new tabs, panes and windows."
+		help: "The top shell that's turned on is used for new tabs, panes and windows."
 
 	## The lowest-precedence answer to "where does this shell start". A new tab,
 	## pane or window inherits the directory of the pane it came from, and a
@@ -969,7 +969,7 @@ rows:
 		label: Directory
 		kind: text
 		setting: shell.startup_directory
-		help: "Where a shell starts when nothing else has said. Understands ~ and environment variables. Overridden by --directory on the command line, by an inherited directory, and by the directory SilkTerm was launched from."
+		help: "Where a new shell starts when nothing else says. Accepts ~ and environment variables. --directory, an inherited directory and the launch directory all come first."
 
 	## The two things SilkTerm sets up in a shell it starts. PowerShell is the
 	## one shell that cannot be asked where it is - it keeps its location to
@@ -985,13 +985,13 @@ rows:
 		label: "Update PowerShell profiles"
 		kind: toggle
 		setting: shell.integration
-		help: "Add a directory-reporting block to each PowerShell profile, so a new tab, pane or window opens where that shell is. Other shells need nothing. A profile that already reports is left alone, and deleting the block switches it off for good."
+		help: "Add a block to each PowerShell profile, so new tabs, panes and windows open in that shell's current directory. A profile that already does this is left alone. Delete the block to stop it for good."
 
 	BashPrompt:
 		label: "Use git-aware Bash prompt"
 		kind: toggle
 		setting: shell.bash_prompt
-		help: "Give each new bash pane the x9ps1-git prompt, which shows the branch and status of the git project you are in. It replaces a prompt set in .bashrc, and nothing is written into any file."
+		help: "Use the x9ps1-git prompt in new bash panes. It shows the git branch and status, and replaces the .bashrc prompt without changing any file."
 
 	## What Explorer opens a file type with, per user. Register writes it and
 	## saves what was there; the revert arrow puts that back. Both act at once,
@@ -1008,7 +1008,7 @@ rows:
 		kind: buttons
 		options: "Register"
 		windows: true
-		help: "Run .bat and .cmd files in SilkTerm when they are opened from Explorer. The pane stays open when the script ends, showing how it exited. Register again after moving SilkTerm."
+		help: "Open .bat and .cmd files from Explorer in SilkTerm. The pane stays open after the script ends, with its exit code. Register again if SilkTerm is moved."
 		revert_help: "Put back whatever opened .bat and .cmd files before SilkTerm was registered."
 
 	OpenPowerShell:
@@ -1016,7 +1016,7 @@ rows:
 		kind: buttons
 		options: "Register"
 		windows: true
-		help: "Run .ps1 files in SilkTerm when they are opened from Explorer, with PowerShell 7 if it is installed and Windows PowerShell if not. A script runs unless the machine allows only signed ones, the same as Windows' own Run with PowerShell."
+		help: "Open .ps1 files from Explorer in SilkTerm, with PowerShell 7 if installed, or else Windows PowerShell. Scripts follow the same signing rules as Windows' own Run with PowerShell."
 		revert_help: "Put back whatever opened .ps1 files before SilkTerm was registered."
 
 	OpenVbScript:
@@ -1024,7 +1024,7 @@ rows:
 		kind: buttons
 		options: "Register"
 		windows: true
-		help: "Run .vbs files in SilkTerm when they are opened from Explorer, through the console script host, so their messages print in the pane instead of popping up."
+		help: "Open .vbs files from Explorer in SilkTerm. Their messages print in the pane instead of popping up."
 		revert_help: "Put back whatever opened .vbs files before SilkTerm was registered."
 
 	OpenFolder:
@@ -1032,7 +1032,7 @@ rows:
 		kind: buttons
 		options: "Register"
 		windows: true
-		help: "Add Open in SilkTerm to the right-click menu of folders and drives, and of the empty space in a folder. On Windows 11 it is under Show more options."
+		help: "Add Open in SilkTerm to the right-click menu for folders, drives and folder backgrounds. On Windows 11 it's under Show more options."
 		revert_help: "Take Open in SilkTerm off the folder menu."
 
 
