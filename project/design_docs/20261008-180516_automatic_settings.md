@@ -56,7 +56,7 @@ This is how CSS `auto`, the "Automatic" entries in macOS and Windows settings, a
 
 - Every auto setting has a way back to automatic, on the setting itself. Which control that is depends on the kind of value, see [The settings screen](#the-settings-screen).
 
-- Nothing is grayed out or disabled on account of being automatic. An automatic setting looks like any other, shows the value in use, and has a small mark saying it is automatic.
+- Nothing is grayed out or disabled on account of being automatic. An automatic setting looks like any other and shows the value in use. Its reset arrow is disabled, the same as any setting at its default.
 
 - A group of auto settings may have a group control. It is never stored. It is read from the members every time it is drawn:
 	- An automatic switch is on when every member is automatic, off when none is, and in the mixed state when some are.
@@ -165,7 +165,7 @@ A mixed switch goes to automatic on a click, since that is the state a person re
 
 - A presets dropdown lists the presets and, when nothing matches, a Custom entry that is selected and can't be picked. Picking a preset is always allowed, even the one whose values happen to match, and does the same thing.
 
-- A switch that has only one member is pointless. Put the automatic mark on the setting and skip the group.
+- A switch with only one member is that setting's own automatic switch. One that is already on the screen stays.
 
 - A group of settings whose rule is a plain "off" is usually not a group of auto settings at all, see the last non-goal.
 
@@ -184,8 +184,10 @@ A mixed switch goes to automatic on a click, since that is the state a person re
 - The control for an auto setting, by kind of value:
 	- A choice from a list: a dropdown with `Automatic` as its first entry. Where it helps, the entry says what it gives right now, as in `Automatic (Compact)`.
 	- On or off: a 3-entry dropdown, `Automatic`, `On`, `Off`. A checkbox can't show automatic.
-	- A number or text: the usual field, with a small clear icon inside it that shows only while set by hand, tip `Back to automatic`. While automatic the field shows the rule's value in a lighter or italic style, the way a placeholder does, but the text is still readable and the field still takes focus.
-	- A color or a file: as for text, with the icon beside the picker.
+	- A number or text: the usual field. Its reset arrow is the way back, enabled only while set by hand, tip `Back to automatic`. While automatic the field shows the rule's value like any other value, and still takes focus.
+	- A color or a file: as for text.
+
+- No mark, italic or lighter style says a value is automatic. Automatic is the setting's default, so a disabled reset arrow already says it, and the tip's state line says which. A mark would mean 2 things, automatic and default, and clutter every field.
 
 - An automatic setting whose rule changes while the screen is open redraws at once, as does the group control.
 
@@ -239,7 +241,7 @@ A mixed switch goes to automatic on a click, since that is the state a person re
 
 - Per-setting automatic with no master state is the pattern in CSS `auto`, in the "Automatic" entries of macOS System Settings and Windows "Automatic (recommended)" dropdowns, and in Firefox about:config and VS Code settings, where a changed value gets a mark and a reset arrow and the store keeps only what was changed.
 
-- A derived presets dropdown that shows Custom is how game graphics menus and HandBrake work. The complaints on record are that people don't notice one slider threw the preset away, and that Custom doesn't say what changed. The automatic mark on each member answers the first, and the "what changed" view in Unconsidered would answer the second.
+- A derived presets dropdown that shows Custom is how game graphics menus and HandBrake work. The complaints on record are that people don't notice one slider threw the preset away, and that Custom doesn't say what changed. The enabled reset arrow on each changed member answers the first, and the "what changed" view in Unconsidered would answer the second.
 
 - A mode plus per-member flags, the rejected design, is closest to Visual Studio's per-setting "Inherit from parent or project defaults" checkbox, which is widely misunderstood.
 
@@ -252,6 +254,8 @@ A mixed switch goes to automatic on a click, since that is the state a person re
 - Build the table, the function and the controls for each kind of value.
 
 - Move every existing automatic setting onto it in one go, so there is never a mix of old and new. Leave the "only counts while on" groups as they are.
+
+- Moving a setting onto this design changes how its controls work, not which ones exist. No control is removed.
 
 - Add the lint check that refuses a direct read of an auto setting.
 

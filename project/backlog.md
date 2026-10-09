@@ -50,8 +50,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- They still gray out while the switch is on. The style guide lists it under known deviations.
 	- Progress log:
 		- 20261009: Q: A theme pick puts every color back to the theme's, which would make these two automatic and so turn the switch back on. Should a theme pick do that, or leave these two as they are?
+			- A: No.
 		- 20261009: Q: With no wallpaper up, is automatic the theme's color?
+			- A: Yes.
 		- 20261009: Q: An old file with the switch off and no color line used the theme's colors. Keeping that means storing the theme's colors by hand. Is that wanted?
+			- A: If this is about one of my existing config files rather than a general programming question, then no.
+			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
 
 - Performance profile: the Profile dropdown is a presets group read off the rows it sets
 	- ID: 2026100910295902
@@ -69,23 +73,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Today the profile is stored, "Choose automatically" picks it from a hardware test, a slow display steps it down for the session, Remote lays itself over it for the session, and the rows keep the user's own values under it for Custom to bring back. The design stores nothing for a group and keeps no value while automatic.
 	- Progress log:
 		- 20261009: Q: Is automatic for each row the rated profile's value, so the step down and Remote still reach every row left automatic?
+			- JC asked for it in plainer words.
+			- Q: A row with nothing stored needs a value to use. Should that be its value in the profile the program picks on its own: the one the hardware test rated, a step lower while the display is slow, or Standard terminal under Remote? Then the step down and Remote keep reaching every row that is still automatic. The other way is a fixed value, like the High profile's, and then the step down and Remote need another way in.
 		- 20261009: Q: Does picking a profile store each row's value, so a later step down no longer reaches them, or make them automatic under that profile?
+			- A: JC pointed to the design doc. It says so already: "A preset picked: every member stores that preset's value", in the specification and in the table under "Changing a setting". So picking Low stores Low's values in all 16 rows, and from then on the step down and Remote no longer reach them.
 		- 20261009: Q: Where does "Choose automatically" go, given a group has one control?
+			- JC asked for it in plainer words.
+			- Q: Today "Choose automatically" is its own checkbox above Profile. The design gives a group one control, here the Profile dropdown. Since no control may be removed (2026100913394948), the checkbox could stay as a second control read off the same 16 rows: on while all of them are automatic, a dash when some are, and turning it on clears them all. Is that it?
 		- 20261009: Q: The values held under a profile today would be dropped, per the design's non-goal. Is that wanted for files that have them?
-
-- Theme mode: "System" becomes the automatic entry
-	- ID: 2026100910295904
-	- Type: Enhancement
-	- Status: Waiting for answers
-	- Priority: Low
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Per the design, a list with an automatic value has "Automatic" first, saying what it gives now, such as "Automatic (Dark)".
-	- Progress log:
-		- 20261009: Q: The shipped mode is Dark, not System. Should Automatic become the default, which changes what a new install shows, or stay a choice in the list?
+			- JC asked who holds them and what "dropped" means.
+			- Q: Today, picking a named profile leaves the Custom values for the 16 rows in the config file, unused, so Custom can bring them back later. Under the design a value in the file is set by hand and in use. So on the first launch of the new build, a file like that can either have those lines deleted, and look and act as it does now, or keep them, and they take effect at once with the dropdown reading Custom. Which one?
 
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486
@@ -138,39 +135,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: tipfix
 	- Commit: 368d7b8
 	- Test case: `no_dialog_text_says_carry` (Es9Vugt) and `no_template_comment_says_carry` (Es9WIpt). Both failed with the old Fit tip and template comment put back, and pass now. The notice wording is pinned by the existing notice tests.
-
-- A blink rate setting of 500 ms blinks at more like 1000 ms
-	- ID: 2026100907341815
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline. A launch now rewrites the rate line in every config, so a build has to reach the dogfood pool.
-	- Needs external testing: Windows: one launch on an old config, and a look at the Cursor tab. Built and linted for Windows only.
-	- Severity: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Related IDs: 2026100907341817
-	- Target OS: All
-	- Incorrect behavior: A blink rate setting of 500ms is actually more like 1000ms.
-	- Expected behavior: The selected and actual rates match, wavecrest-to-wavecrest.
-	- Notes:
-		- Before RC1.
-		- The fix:
-			1. Change 'ms' to 'seconds', and allow fractional values. (More understandable to most humans than 'ms'.)
-			2. Make the selected and actual rates match, wavecrest-to-wavecrest.
-			- The current default actual blink rate is perfect, don't change that, just make sure the settings value is correct.
-		- The row is "Blink rate ms" on the Cursor tab, and its tip says "One full animation cycle."
-	- Reproduced: 20261009 on b23, in a window. The dev build blinked once every 1.01 s, peak to peak, at 500 ms, and every 1.99 s at 1000 ms.
-	- Actual cause: The code took the rate as half a cycle, one fade out or one fade in, which came from an older on/off blink. The docs and the tip said one full cycle.
-	- Actual fix: The setting is `cursor.blink_rate_s` now, one whole cycle in seconds, default 1.0, which is the same real speed as before. A launch renames `cursor.blink_rate_ms` and converts its value, so 500 becomes 1.0 and nothing blinks at a new speed. Commented lines convert too, and a value that is not a number keeps its text. The row is "Rate s" under Blink (2026100907341817).
-	- Decisions:
-		- 20261009: No `SUPERSEDED_DEFAULTS` entry. The old commented default converts to the new template line exactly.
-		- 20261009: The slider range and typed cap keep the same real speeds as before: 0.2 to 6 s, typed up to 20 s.
-	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc and TOC checks. In a window on b23 at about 23 frames a second: 1.00 s at the new 1.0, 1.00 s from an old file at 500 ms, 2.00 s at 2.0.
-	- Swept: both readers of the rate (each frame and a refocus), the dialog row, the save, the reader, the old flat key, the rebuild for a file that cannot be read, the template, the demo recorder, the smooth cursor design doc, the UI style guide. The dialog's own caret blink has its own constant and no setting.
-	- Note: The markdown tables check fails on dev, in the automatic settings design doc. Filed as 2026100908133033.
-	- Branch: blinksec
-	- Commit: 8add123
-	- Test case: EsDSBcQ `the_blink_rate_is_one_whole_cycle_peak_to_peak` failed with the old factor of 2 and passes now. EsDSBQ8 `an_old_blink_rate_in_ms_becomes_the_same_cycle_in_seconds` failed with the conversion removed and passes now. EldrZxZ, EpHOzrc, Er2X6Er, Es9oaEN and EpZcBUQ were changed for the new name and unit.
 
 - Flyover help text should apply to all of the relevant labels, and both controls
 	- ID: 2026100812334387
@@ -281,34 +245,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 9c1404c
 	- Test case: `a_log_slider_gives_each_doubling_the_same_travel` (Es9f0qI), `a_typed_wait_can_go_past_the_slider_up_to_a_week` (Es9f0uU), `a_number_typed_past_a_slider_survives_a_save_and_a_relaunch` (Es9f0yE), `a_number_typed_past_a_slider_reads_back_without_a_word` (Es9f11y), `a_slider_scale_or_cap_that_means_nothing_is_refused` (Es9fvg9), `a_big_decimal_drops_places_to_fit_its_box` (Es9hNXm). Each failed with its part of the change taken out. `slider_numeric_field_edits_and_clamps` (Eiustaa) had its clamp-to-40 line commented out, since Size now takes up to 128.
 
-- Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
-	- ID: 2026100907341817
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline, with 2026100907341815. A launch rewrites `animation: none`.
-	- Needs external testing: Windows: a look at the Cursor tab, and Blink switched off and on.
-	- Priority: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Related IDs: 2026100907341815, 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Settings/Cursor/Blink rate:
-			- Add a new boolean setting as a subsection heading, "Blink". If on, then the "Rate" slider is considered.
-	- Notes:
-		- Before RC1.
-	- Decisions:
-		- 20261009: `cursor.animation: none` was the one existing way to turn the blink off. The old flat `cursor_blink` was gone already, and a pre-nesting file never carried it. So the new `cursor.blink` replaces "none" rather than sitting beside it. "None" left the Animation list, and a launch rewrites an active `animation: none` as `blink: false`. Where a file also sets `blink`, "none" still reads as off, so no file starts blinking that did not before.
-		- 20261009: The performance profiles turn Blink off now, where they used to set the animation to none.
-		- 20261009: Rate s, Animation and Inactivity timer s sit under Blink. They stay live while it is off, as the automatic settings design asks for settings that only count while a switch is on, so 2026100907341818 has nothing to redo here.
-		- 20261009: The Blink group sits below Width, so the tab reads shape first, then motion.
-	- Against: the UI style guide's "Members gray out when it is off". Listed under its known deviations until 2026100907341818 moves the rule.
-	- Verified: unit suite and the lint and doc checks, as on 2026100907341815. In a window on b23, an old file with `animation: "none"` came up with Blink off and the rows under it live, and switching Blink on and pressing OK wrote `blink: true`.
-	- Note: The test rigs that write `cursor.animation: none` keep it. It still reads as off, and some bench rigs also run released builds that do not know `cursor.blink`. The demo recorder switches `cursor.blink` now, since a reload rewrites "none".
-	- Branch: blinksec
-	- Commit: 8add123
-	- Test case: EsDSBUl `animation_none_becomes_blink_off` and EsDSBYd `turning_the_blink_on_replaces_an_old_none`, both failing with the "none" reading removed. Er2X6Ep holds the Cursor tab's order and sub-group. ErstaMt, ErstamD and Erstagk lost the "none" word, and EorkTk1 and EorkTk3 read the profile's Blink, since this decision changed what they pinned.
-
 - Settings that depend on a master boolean switch follow the automatic settings design
 	- ID: 2026100907341818
 	- Type: Enhancement
@@ -361,6 +297,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261009: Built the table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check. Moved Family, Size, Columns and Rows.
 		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It does not mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line has nothing to attach to yet, since the program has no accessibility layer. "Dosn't" in its Tests section. Its line on hand edits while running waits on 2026100907341819.
+		- 20261009: Not signed off. Follow-ups filed: 2026100913394946, 2026100913394948, 2026100913394950, 2026100913394954.
 	- Against: the Settings dialog design doc's "a font switch that follows the desktop grays the fields it overrides", and the earlier fix that grayed "Use system font" where the desktop names no font. Both went with the switch.
 	- Swept: every gate in settings_ui.shcl; every reader of the four settings, which the type change made the compiler find; load, save, the legacy and shcl 2 conversions, the launch size, sizes per monitor, the font zoom, and `--font`, `--font-size`, `--columns` and `--rows`.
 	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, doc, TOC and table checks, and the new lint check, which failed on an injected read in two files. In a real window against a dev build at the default font, the panel stayed 707 by 965, and Cursor, Movement, Themes, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Columns typed by hand showed the x and a dash in the switch; the x, and a click on the switch from a dash, put them back; OK wrote only the Size typed on the Text tab. A config the dev build wrote opened at the same window size on both builds, with the switches on and with them off.
@@ -482,36 +419,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 6457f3a
 	- Test case: `a_checkbox_and_a_radio_box_grow_to_one_size` (EsA3ceS). It fails on the old code and passes with the fix.
 
-- At a large interface font, the Shell tab's "Last seen" and "Active" column titles overlap
-	- ID: 2026100818102267
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261008-181022
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100817355493, 2026100816465317, 2026100817172887
-	- Target OS: All
-	- Steps to reproduce:
-		- Set the desktop's interface font to 24 pt and open Settings, Shell tab.
-	- Incorrect behavior: The two titles draw over each other, and each date runs under the Active checkbox.
-	- Expected behavior: Each column is wide enough for its title and its values.
-	- Reproduced: 20261008, before and after 2026100817355493.
-	- Reproduced: 20261009 on dev a948909 at Noto Sans 24. Each date also ran past the panel's right edge.
-	- Possible cause: The two columns are fixed widths and are not measured in the UI font.
-	- Actual cause: Confirmed. "Last seen" and Active were 78 and 44 DIP at any font. At 24 pt "Last seen" needs 141 and the Active box is 36. The name column and the gap between columns were fixed too.
-	- Decisions:
-		- 20261009: Best guess. The date and Active columns are measured, with the old widths as floors. The name column and the column gap grow with the UI line height above the default's, like a label's gap, since names are user data.
-		- 20261009: Best guess. A measured column is rounded down to a whole DIP. The default font's date measures 78.3 against its 78, and rounding keeps the default layout unchanged.
-		- 20261009: Best guess. The other columns found in the sweep that hold text and stayed one size are fixed here too, in the same place: the revert arrow's column and the color picker's labels and value boxes.
-	- Actual fix: Every column that holds text is measured in the UI font where the labels and number boxes already were, and handed to the dialog as one set. At 24 pt the Shell tab's titles, dates and boxes are clear of each other. The revert arrow stays out of the scrollbar, which takes about 9 DIP more panel width at 24 pt. The picker's Hex box shows "#rrggbb" whole. The UI style guide, the settings dialog design doc, design.md and the spec file's notes say so.
-	- Note: The picker's Hex box was cut short at the default font too ("#20202" at Noto Sans 11), so the open picker is the one thing that looks different at the default font.
-	- Swept: every Settings tab at 24 pt (Noto Sans at 1x and 2x, GentiumAlt Bold at 1x) and at the 11 pt default (1x and 2x), plus the hotkey capture box, a field's right-click menu, the remove prompt, an open dropdown and the color picker. Every layout number in `settings_ui.shcl` and the fixed gaps in the dialog code. Fixed: Shell tab date, Active and name columns and the column gap, the revert column, the picker's label column and value boxes. Already follow the font: labels, number boxes, buttons, tabs, dropdowns, radio and pair pitches, the right-click menu's width, checkboxes and label gaps. Left alone, since nothing collides at 24 pt: the text inset in a field, the gaps between a slider and its box, between two dropdowns and before the revert column, the label column's 14 DIP gap (kept by 2026100817172887), and the gaps above and below the grid. Flyovers wrap to the panel and were not captured.
-	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc, table and TOC checks. At the 11 pt default, every tab and every overlay but the picker drew the same pixels as dev a948909 at 1x and 2x, bar a text caret's column, which also differs between 2 runs of the old build. At 24 pt nothing on any tab overlaps, at 1x and 2x.
-	- Test case: `the_shells_grid_columns_fit_their_text_at_a_large_interface_font` (EsDinMD), `the_revert_arrow_and_the_pickers_text_fit_at_a_large_interface_font` (EsDinME). The first fails with the date and Active columns held at 78 and 44, with the gap held at 8, or with the name column held at 128. The second fails with the revert column held at 22, or with the picker sized the old way.
-	- Branch: shellcols
-	- Commit: 3c12a5d
-
 - Settings tips end with the current and default values where they differ
 	- ID: 2026100910295905
 	- Type: Enhancement
@@ -525,6 +432,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Target OS: All
 	- Requirements:
 		- Per the automatic settings design, every input control's tip ends with `Current value: ...` and `Default value: ...`, shown only when they differ. Automatic rows already have their state line.
+	- Progress log:
+		- 20261009: JC OK'd leaving the Current and Default lines off an automatic row's tip.
 	- Decisions:
 		- 20261009: An auto setting's tip keeps its state line and gets no value lines, since "Automatic would be" already says what the default gives. A group's switch holds nothing, so it gets none either.
 		- 20261009: Values are written the way the row writes them: the number in its box, On or Off, the option's own words, a color's hex, a hotkey's keys or Off.
@@ -801,6 +710,108 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+
+- The curated default font list got replaced by just its first font
+	- ID: 2026100913394946
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818
+	- Target OS: All
+	- Incorrect behavior: The default list of fonts I had carefully curated got replaced by just the first one.
+	- Expected behavior: Bring the full list back.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+
+- "Use system font and size" checkboxes disappeared
+	- ID: 2026100913394948
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026100910295902
+	- Target OS: All
+	- Incorrect behavior: 'Use system font and size' checkboxes disappeared.
+	- Expected behavior: They shouldn't have.
+		- NONE of the previous controls should have been removed. The design covered only how they worked, not their existence.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+		- The design doc's "A switch that has only one member is pointless" line is why they went. It now says such a switch stays, as that setting's own automatic switch.
+
+- The "A" in the text boxes, and italic text
+	- ID: 2026100913394950
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026100910295903
+	- Target OS: All
+	- Incorrect behavior: The 'A' in the text boxes:
+		- It currently seems to mean two things:
+			- The value was set automatically by some master setting
+			- It's the hard-coded default value.
+	- Expected behavior: It should be removed altogether, because:
+		- The dual meaning is confusing.
+		- It's too visually cluttered.
+		- Being a default value is already knowable by the 'reset' being disabled.
+		- Italic text is unnecessary and confusing for the same reason.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+		- The automatic value is drawn in a lighter color too. The design doc now says it draws like any other value.
+		- Set by hand, the mark turns into an x that puts the setting back. The row's revert arrow already does that.
+	- Progress log:
+		- 20261009: Q: Before making these changes, does it make sense, and is it consistent with the intent behind the 'automatic_settings' design? If so, update all instances of '20261008-180516_automatic_settings.md' among sister projects, to match.
+			- A: Yes. Automatic is a setting's default under the design, so a disabled revert arrow already says it, and the tip's first line says which. Every copy of the doc now has the revert arrow as the way back and no mark.
+
+- Dropdown text gets rendered on top of flyover tip text
+	- ID: 2026100913394952
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Target OS: All
+	- Incorrect behavior: Dropdown text gets rendered on top of flyover tip text.
+	- Expected behavior: The tip draws on top.
+	- Notes:
+		- Before RC1.
+
+- Flyover tip text has tells and awkward phrasing, and some is too long
+	- ID: 2026100913394954
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026100910295905
+	- Target OS: All
+	- Incorrect behavior:
+		- Has a lot of tells and awkward phrasing. E.g. 'What the look is allowed to cost.'
+		- Some of it is way too long. Describing what happens with dependent values (and other behaviors of the new design) may be too much.
+		- The text for "Choose automatically" isn't very correct or helpful.
+	- Expected behavior: Apply my "writing style" to all tip text.
+	- Notes:
+		- Before RC1.
+
+- Font settings should be part of themes
+	- ID: 2026100913394956
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Font settings should be part of themes.
+	- Notes:
+		- Before RC1.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -1711,6 +1722,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- A blink rate setting of 500 ms blinks at more like 1000 ms
+	- ID: 2026100907341815
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: Full pipeline. A launch now rewrites the rate line in every config, so a build has to reach the dogfood pool.
+	- Needs external testing: Windows: one launch on an old config, and a look at the Cursor tab. Built and linted for Windows only.
+	- Severity: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100907341817
+	- Target OS: All
+	- Incorrect behavior: A blink rate setting of 500ms is actually more like 1000ms.
+	- Expected behavior: The selected and actual rates match, wavecrest-to-wavecrest.
+	- Notes:
+		- Before RC1.
+		- The fix:
+			1. Change 'ms' to 'seconds', and allow fractional values. (More understandable to most humans than 'ms'.)
+			2. Make the selected and actual rates match, wavecrest-to-wavecrest.
+			- The current default actual blink rate is perfect, don't change that, just make sure the settings value is correct.
+		- The row is "Blink rate ms" on the Cursor tab, and its tip says "One full animation cycle."
+	- Reproduced: 20261009 on b23, in a window. The dev build blinked once every 1.01 s, peak to peak, at 500 ms, and every 1.99 s at 1000 ms.
+	- Actual cause: The code took the rate as half a cycle, one fade out or one fade in, which came from an older on/off blink. The docs and the tip said one full cycle.
+	- Actual fix: The setting is `cursor.blink_rate_s` now, one whole cycle in seconds, default 1.0, which is the same real speed as before. A launch renames `cursor.blink_rate_ms` and converts its value, so 500 becomes 1.0 and nothing blinks at a new speed. Commented lines convert too, and a value that is not a number keeps its text. The row is "Rate s" under Blink (2026100907341817).
+	- Decisions:
+		- 20261009: No `SUPERSEDED_DEFAULTS` entry. The old commented default converts to the new template line exactly.
+		- 20261009: The slider range and typed cap keep the same real speeds as before: 0.2 to 6 s, typed up to 20 s.
+	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc and TOC checks. In a window on b23 at about 23 frames a second: 1.00 s at the new 1.0, 1.00 s from an old file at 500 ms, 2.00 s at 2.0.
+	- Swept: both readers of the rate (each frame and a refocus), the dialog row, the save, the reader, the old flat key, the rebuild for a file that cannot be read, the template, the demo recorder, the smooth cursor design doc, the UI style guide. The dialog's own caret blink has its own constant and no setting.
+	- Note: The markdown tables check fails on dev, in the automatic settings design doc. Filed as 2026100908133033.
+	- Branch: blinksec
+	- Commit: 8add123
+	- Test case: EsDSBcQ `the_blink_rate_is_one_whole_cycle_peak_to_peak` failed with the old factor of 2 and passes now. EsDSBQ8 `an_old_blink_rate_in_ms_becomes_the_same_cycle_in_seconds` failed with the conversion removed and passes now. EldrZxZ, EpHOzrc, Er2X6Er, Es9oaEN and EpZcBUQ were changed for the new name and unit.
+	- Acceptance signoff: JC, 20261009.
+	- Closed: 20261009-133949
+
 - Windows: a Git Bash tab keeps its starting folder in the title after a `cd`
 	- ID: 2026100709325306
 	- Type: Bug
@@ -2393,6 +2439,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
+
+- Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
+	- ID: 2026100907341817
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: Full pipeline, with 2026100907341815. A launch rewrites `animation: none`.
+	- Needs external testing: Windows: a look at the Cursor tab, and Blink switched off and on.
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Related IDs: 2026100907341815, 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Settings/Cursor/Blink rate:
+			- Add a new boolean setting as a subsection heading, "Blink". If on, then the "Rate" slider is considered.
+	- Notes:
+		- Before RC1.
+	- Decisions:
+		- 20261009: `cursor.animation: none` was the one existing way to turn the blink off. The old flat `cursor_blink` was gone already, and a pre-nesting file never carried it. So the new `cursor.blink` replaces "none" rather than sitting beside it. "None" left the Animation list, and a launch rewrites an active `animation: none` as `blink: false`. Where a file also sets `blink`, "none" still reads as off, so no file starts blinking that did not before.
+		- 20261009: The performance profiles turn Blink off now, where they used to set the animation to none.
+		- 20261009: Rate s, Animation and Inactivity timer s sit under Blink. They stay live while it is off, as the automatic settings design asks for settings that only count while a switch is on, so 2026100907341818 has nothing to redo here.
+		- 20261009: The Blink group sits below Width, so the tab reads shape first, then motion.
+	- Against: the UI style guide's "Members gray out when it is off". Listed under its known deviations until 2026100907341818 moves the rule.
+	- Verified: unit suite and the lint and doc checks, as on 2026100907341815. In a window on b23, an old file with `animation: "none"` came up with Blink off and the rows under it live, and switching Blink on and pressing OK wrote `blink: true`.
+	- Note: The test rigs that write `cursor.animation: none` keep it. It still reads as off, and some bench rigs also run released builds that do not know `cursor.blink`. The demo recorder switches `cursor.blink` now, since a reload rewrites "none".
+	- Branch: blinksec
+	- Commit: 8add123
+	- Test case: EsDSBUl `animation_none_becomes_blink_off` and EsDSBYd `turning_the_blink_on_replaces_an_old_none`, both failing with the "none" reading removed. Er2X6Ep holds the Cursor tab's order and sub-group. ErstaMt, ErstamD and Erstagk lost the "none" word, and EorkTk1 and EorkTk3 read the profile's Blink, since this decision changed what they pinned.
+	- Acceptance signoff: JC, 20261009.
+	- Closed: 20261009-133949
 
 - The "Tab text" options are wonky. There's too much space between "Program title" and its checkbox.
 	- ID: 2026100710173200
@@ -3472,6 +3548,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- At a large interface font, the Shell tab's "Last seen" and "Active" column titles overlap
+	- ID: 2026100818102267
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261008-181022
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100817355493, 2026100816465317, 2026100817172887
+	- Target OS: All
+	- Steps to reproduce:
+		- Set the desktop's interface font to 24 pt and open Settings, Shell tab.
+	- Incorrect behavior: The two titles draw over each other, and each date runs under the Active checkbox.
+	- Expected behavior: Each column is wide enough for its title and its values.
+	- Reproduced: 20261008, before and after 2026100817355493.
+	- Reproduced: 20261009 on dev a948909 at Noto Sans 24. Each date also ran past the panel's right edge.
+	- Possible cause: The two columns are fixed widths and are not measured in the UI font.
+	- Actual cause: Confirmed. "Last seen" and Active were 78 and 44 DIP at any font. At 24 pt "Last seen" needs 141 and the Active box is 36. The name column and the gap between columns were fixed too.
+	- Decisions:
+		- 20261009: Best guess. The date and Active columns are measured, with the old widths as floors. The name column and the column gap grow with the UI line height above the default's, like a label's gap, since names are user data.
+		- 20261009: Best guess. A measured column is rounded down to a whole DIP. The default font's date measures 78.3 against its 78, and rounding keeps the default layout unchanged.
+		- 20261009: Best guess. The other columns found in the sweep that hold text and stayed one size are fixed here too, in the same place: the revert arrow's column and the color picker's labels and value boxes.
+	- Actual fix: Every column that holds text is measured in the UI font where the labels and number boxes already were, and handed to the dialog as one set. At 24 pt the Shell tab's titles, dates and boxes are clear of each other. The revert arrow stays out of the scrollbar, which takes about 9 DIP more panel width at 24 pt. The picker's Hex box shows "#rrggbb" whole. The UI style guide, the settings dialog design doc, design.md and the spec file's notes say so.
+	- Note: The picker's Hex box was cut short at the default font too ("#20202" at Noto Sans 11), so the open picker is the one thing that looks different at the default font.
+	- Swept: every Settings tab at 24 pt (Noto Sans at 1x and 2x, GentiumAlt Bold at 1x) and at the 11 pt default (1x and 2x), plus the hotkey capture box, a field's right-click menu, the remove prompt, an open dropdown and the color picker. Every layout number in `settings_ui.shcl` and the fixed gaps in the dialog code. Fixed: Shell tab date, Active and name columns and the column gap, the revert column, the picker's label column and value boxes. Already follow the font: labels, number boxes, buttons, tabs, dropdowns, radio and pair pitches, the right-click menu's width, checkboxes and label gaps. Left alone, since nothing collides at 24 pt: the text inset in a field, the gaps between a slider and its box, between two dropdowns and before the revert column, the label column's 14 DIP gap (kept by 2026100817172887), and the gaps above and below the grid. Flyovers wrap to the panel and were not captured.
+	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc, table and TOC checks. At the 11 pt default, every tab and every overlay but the picker drew the same pixels as dev a948909 at 1x and 2x, bar a text caret's column, which also differs between 2 runs of the old build. At 24 pt nothing on any tab overlaps, at 1x and 2x.
+	- Test case: `the_shells_grid_columns_fit_their_text_at_a_large_interface_font` (EsDinMD), `the_revert_arrow_and_the_pickers_text_fit_at_a_large_interface_font` (EsDinME). The first fails with the date and Active columns held at 78 and 44, with the gap held at 8, or with the name column held at 128. The second fails with the revert column held at 22, or with the picker sized the old way.
+	- Branch: shellcols
+	- Commit: 3c12a5d
+	- Acceptance signoff: JC, 20261009.
+	- Closed: 20261009-133949
 
 - The markdown tables check fails on the automatic settings design doc
 	- ID: 2026100908133033
@@ -4879,6 +4987,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 98f2453
 	- Acceptance signoff: Self-closed: false report, fixed in the validation layer.
 	- Closed: 20261005-122352
+
+- Theme mode: "System" becomes the automatic entry
+	- ID: 2026100910295904
+	- Type: Enhancement
+	- Status: Moot
+	- Priority: Low
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Per the design, a list with an automatic value has "Automatic" first, saying what it gives now, such as "Automatic (Dark)".
+	- Progress log:
+		- 20261009: Q: The shipped mode is Dark, not System. Should Automatic become the default, which changes what a new install shows, or stay a choice in the list?
+			- A: No.
+		- 20261009: Dark stays the default. An automatic value is the default by the design, so System stays a plain entry in the list and this item has nothing left to do.
+	- Closed: 20261009-133949
 
 - Renames judge a commented line by where a whole-file save would put it, though most saves keep lines now
 	- ID: 2026100115322367
