@@ -338,8 +338,7 @@ impl DialogWin {
 		let (window, mut gfx, mut text, rects) =
 			Self::make(el, "Settings".into(), 560.0, 800.0, true, parent, warm)?;
 		let scale = config::display_scale(window.scale_factor());
-		let (label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws) =
-			crate::settings_ui::chrome_widths(&mut text, scale);
+		let chrome = crate::settings_ui::chrome_widths(&mut text, scale);
 		// Cap the window to the part of the screen it can actually occupy - the
 		// monitor minus the taskbar, minus the frame the WM puts round it - and to
 		// ~1010 DIP tall. A tab that doesn't fit scrolls instead of pushing the
@@ -347,20 +346,7 @@ impl DialogWin {
 		// factor on the way in, so every figure here is physical.
 		let (max_w, max_h) = Self::settings_caps(&window, parent, scale);
 		// laid out at the origin
-		let mut dialog = SettingsDialog::new(
-			0.0,
-			0.0,
-			text.ui_line_h,
-			label_w,
-			btn_w,
-			row_btn_w,
-			value_w,
-			tab_ws,
-			label_ws,
-			max_w,
-			max_h,
-			scale,
-		);
+		let mut dialog = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, max_w, max_h, scale);
 		dialog.start_from(base);
 		dialog.set_sees_hidden(!on_wayland(el));
 		if let Some(view) = resume {
@@ -805,17 +791,14 @@ impl DialogWin {
 	}
 
 	fn rescale_settings(&mut self, scale: f32) {
-		let (label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws) =
-			crate::settings_ui::chrome_widths(&mut self.text, scale);
+		let chrome = crate::settings_ui::chrome_widths(&mut self.text, scale);
 		let (max_w, max_h) = Self::settings_caps(&self.window, self.parent, scale);
 		self.caps = (max_w, max_h);
 		let line_h = self.text.ui_line_h;
 		let Content::Settings(dialog) = &mut self.content else {
 			return;
 		};
-		dialog.rescale(
-			line_h, label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws, max_w, max_h, scale,
-		);
+		dialog.rescale(line_h, chrome, max_w, max_h, scale);
 		// the floor is physical, so it was wrong the moment the factor moved
 		let (min_w, min_h) = dialog.min_size();
 		self.window
@@ -2792,18 +2775,12 @@ mod tests {
 	}
 
 	fn settings_content(text: &mut TextCtx) -> super::Content {
-		let (label_w, btn_w, row_btn_w, value_w, tab_ws, label_ws) =
-			crate::settings_ui::chrome_widths(text, 1.0);
+		let chrome = crate::settings_ui::chrome_widths(text, 1.0);
 		let mut dialog = crate::settings_ui::SettingsDialog::new(
 			0.0,
 			0.0,
 			text.ui_line_h,
-			label_w,
-			btn_w,
-			row_btn_w,
-			value_w,
-			tab_ws,
-			label_ws,
+			chrome,
 			f32::MAX,
 			700.0,
 			1.0,

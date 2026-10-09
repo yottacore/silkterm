@@ -335,6 +335,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 6457f3a
 	- Test case: `a_checkbox_and_a_radio_box_grow_to_one_size` (EsA3ceS). It fails on the old code and passes with the fix.
 
+- At a large interface font, the Shell tab's "Last seen" and "Active" column titles overlap
+	- ID: 2026100818102267
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261008-181022
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100817355493, 2026100816465317, 2026100817172887
+	- Target OS: All
+	- Steps to reproduce:
+		- Set the desktop's interface font to 24 pt and open Settings, Shell tab.
+	- Incorrect behavior: The two titles draw over each other, and each date runs under the Active checkbox.
+	- Expected behavior: Each column is wide enough for its title and its values.
+	- Reproduced: 20261008, before and after 2026100817355493.
+	- Reproduced: 20261009 on dev a948909 at Noto Sans 24. Each date also ran past the panel's right edge.
+	- Possible cause: The two columns are fixed widths and are not measured in the UI font.
+	- Actual cause: Confirmed. "Last seen" and Active were 78 and 44 DIP at any font. At 24 pt "Last seen" needs 141 and the Active box is 36. The name column and the gap between columns were fixed too.
+	- Decisions:
+		- 20261009: Best guess. The date and Active columns are measured, with the old widths as floors. The name column and the column gap grow with the UI line height above the default's, like a label's gap, since names are user data.
+		- 20261009: Best guess. A measured column is rounded down to a whole DIP. The default font's date measures 78.3 against its 78, and rounding keeps the default layout unchanged.
+		- 20261009: Best guess. The other columns found in the sweep that hold text and stayed one size are fixed here too, in the same place: the revert arrow's column and the color picker's labels and value boxes.
+	- Actual fix: Every column that holds text is measured in the UI font where the labels and number boxes already were, and handed to the dialog as one set. At 24 pt the Shell tab's titles, dates and boxes are clear of each other. The revert arrow stays out of the scrollbar, which takes about 9 DIP more panel width at 24 pt. The picker's Hex box shows "#rrggbb" whole. The UI style guide, the settings dialog design doc, design.md and the spec file's notes say so.
+	- Note: The picker's Hex box was cut short at the default font too ("#20202" at Noto Sans 11), so the open picker is the one thing that looks different at the default font.
+	- Swept: every Settings tab at 24 pt (Noto Sans at 1x and 2x, GentiumAlt Bold at 1x) and at the 11 pt default (1x and 2x), plus the hotkey capture box, a field's right-click menu, the remove prompt, an open dropdown and the color picker. Every layout number in `settings_ui.shcl` and the fixed gaps in the dialog code. Fixed: Shell tab date, Active and name columns and the column gap, the revert column, the picker's label column and value boxes. Already follow the font: labels, number boxes, buttons, tabs, dropdowns, radio and pair pitches, the right-click menu's width, checkboxes and label gaps. Left alone, since nothing collides at 24 pt: the text inset in a field, the gaps between a slider and its box, between two dropdowns and before the revert column, the label column's 14 DIP gap (kept by 2026100817172887), and the gaps above and below the grid. Flyovers wrap to the panel and were not captured.
+	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc, table and TOC checks. At the 11 pt default, every tab and every overlay but the picker drew the same pixels as dev a948909 at 1x and 2x, bar a text caret's column, which also differs between 2 runs of the old build. At 24 pt nothing on any tab overlaps, at 1x and 2x.
+	- Test case: `the_shells_grid_columns_fit_their_text_at_a_large_interface_font` (EsDinMD), `the_revert_arrow_and_the_pickers_text_fit_at_a_large_interface_font` (EsDinME). The first fails with the date and Active columns held at 78 and 44, with the gap held at 8, or with the name column held at 128. The second fails with the revert column held at 22, or with the picker sized the old way.
+	- Branch: shellcols
+	- Commit: 3c12a5d
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -642,21 +672,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: ea80be2
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), same ID, rewritten in place.
 
-- At a large interface font, the Shell tab's "Last seen" and "Active" column titles overlap
-	- ID: 2026100818102267
+- A test that measures Settings text before its first text context can measure in the wrong font
+	- ID: 2026100909162017
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261008-181022
+	- Opened: 20261009-091620
 	- Opened by: CC
-	- Related IDs: 2026100817355493
+	- Related IDs: 2026100818102267, 2026100816465317, 2026100817355494
 	- Target OS: All
-	- Steps to reproduce:
-		- Set the desktop's interface font to 24 pt and open Settings, Shell tab.
-	- Incorrect behavior: The two titles draw over each other, and each date runs under the Active checkbox.
-	- Expected behavior: Each column is wide enough for its title and its values.
-	- Reproduced: 20261008, before and after 2026100817355493.
-	- Possible cause: The two columns are fixed widths and are not measured in the UI font.
+	- Incorrect behavior: `every_slider_number_fits_its_box_at_a_large_interface_font` (Es9oaEN) and `a_focus_ring_takes_in_the_line_its_labels_are_on` (EsA3cyd) read the UI font's attributes before they make a text context. The family is chosen when the first context is made, so run alone, each measures its text in the fallback face while the layout uses the desktop's.
+	- Expected behavior: each test measures in the face the layout was built from.
+	- Reproduced: 20261009, by a probe run alone: "2026-10-09" measured 88.7 px that way, against 75.3 in the desktop's face. The two tests were not run alone to see whether they pass for the wrong reason.
+	- Possible cause: `ui_attrs()` reads the family a text context pins, and these tests call it once, ahead of the loop.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893

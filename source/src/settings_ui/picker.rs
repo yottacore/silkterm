@@ -12,7 +12,9 @@ use crate::pick::{self, Picker};
 impl SettingsDialog {
 	// Every measurement the box is built from. The floors come from the
 	// declarations; what each one grows with is the interface line height, so a
-	// big desktop font gets a bigger box rather than a cramped one.
+	// big desktop font gets a bigger box rather than a cramped one. The label
+	// column and the value boxes are also measured, since a guess at the font's
+	// width cut "#rrggbb" short at every size.
 	fn pick_metrics(&self) -> pick::Metrics {
 		let l = lay();
 		pick::Metrics {
@@ -24,8 +26,8 @@ impl SettingsDialog {
 			btn_h: self.btn_h(),
 			btn_gap: l.button_gap,
 			strip_w: l.pick_strip,
-			label_w: l.pick_label_width.max(self.line_h * 5.0),
-			field_w: l.pick_field_width.max(self.line_h * 3.0),
+			label_w: self.pick_label_w.max(self.line_h * 5.0),
+			field_w: self.pick_field_w.max(self.line_h * 3.0),
 			min_side: l.pick_min_square,
 		}
 	}
