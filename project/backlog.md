@@ -221,6 +221,34 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d3f51da
 	- Test case: `every_slider_number_fits_its_box_at_a_large_interface_font` (Es9oaEN), `a_wider_number_box_widens_the_panel_and_leaves_the_sliders` (Es9oaYr). Both fail with the box held at 56 DIP. The first also fails with the decimal bands taken out, the second with the panel ignoring the box.
 
+- At a large interface font, the labels on a packed line of toggles nearly touch their checkboxes
+	- ID: 2026100817172887
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261008-171728
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100710173200, 2026100812334385
+	- Target OS: All
+	- Steps to reproduce:
+		- Set the desktop's interface font to 24 pt and open Settings, Window tab.
+	- Incorrect behavior: On the Tab text line, each label sits almost against its own checkbox.
+	- Expected behavior: The gap between a label and its box keeps its look at any font size.
+	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
+	- Decisions:
+		- 20261008: Best guess. The gap before the next toggle grows with the font too, at the same rate, so it stays 4 times the label's gap. Otherwise a big enough font's label gap catches up with it and a label reads as belonging to the box before it.
+		- 20261008: Best guess. Both gaps keep their sizes up to the 11 pt default's line height and grow in step above it. A smaller font keeps them as they are.
+	- Against: 2026100710173200's decision says "a fixed gap before the next toggle". It is still the same at every font up to the default, and the same between every pair of toggles on a line.
+	- Actual cause: The label was measured and drawn the same, in the same font. The gap after it was a fixed 6 DIP, so at 24 pt it was half the share of the text it had at the default. Nothing was scaled twice or skipped.
+	- Actual fix: The label gap and the gap before the next toggle grow with the UI line height above the default's. At 24 pt that is about 13 and 52 DIP, up from 6 and 24. The label after a radio or pair box uses the same gap. The UI style guide and the settings dialog design doc say so.
+	- Swept: every fixed gap between a label and its own box in the dialog. That is the packed line, the label on any other shared line, the radio options and the font pair. The label column's 14 DIP after the longest label stays fixed. It is the least room any label in the column gets, and at 24 pt it is still about the share the packed gap had at the default.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at the default font, the Silk and Window tabs, Tab text and hardware lines included, drew the same pixels as before at 1x and 2x. The only changed pixels on any tab were a text caret's column. At 24 pt each label now ends 12 to 15 px before its box at 1x, where it was 4 to 7, and the panel kept its width at 1x and 2x.
+	- Note: At 24 pt the checkbox stays 20 DIP while a radio box grows to 36, and the pair row's focus outline is shorter than its text. Neither was changed here.
+	- Branch: packgap
+	- Commit: 8072dc4
+	- Test case: `a_large_interface_font_keeps_each_label_clear_of_its_box` (Es9uxSu). It fails with the gaps held at their fixed sizes, and separately with only the gap before the next toggle held, or only the radio and pair label gap. `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr) still pins the default sizes.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -455,20 +483,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: ea80be2
 	- Test case: `the_scroll_record_costs_a_full_screen_program_little` (EqHIGdO), same ID, rewritten in place.
 
-- At a large interface font, the labels on a packed line of toggles nearly touch their checkboxes
-	- ID: 2026100817172887
+- At a large interface font, a checkbox stays small while a radio box grows
+	- ID: 2026100817355493
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261008-171728
+	- Opened: 20261008-173554
 	- Opened by: CC
-	- Related IDs: 2026100710173200, 2026100812334385
+	- Related IDs: 2026100817172887
 	- Target OS: All
 	- Steps to reproduce:
-		- Set the desktop's interface font to 24 pt and open Settings, Window tab.
-	- Incorrect behavior: On the Tab text line, each label sits almost against its own checkbox.
-	- Expected behavior: The gap between a label and its box keeps its look at any font size.
+		- Set the desktop's interface font to 24 pt and open Settings.
+	- Incorrect behavior: A checkbox stays 20 DIP while a radio box grows to 36, so the two look mismatched beside the larger text.
+	- Expected behavior: Both kinds of box grow with the font the same way.
 	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
+
+- The focus outline on the font pair row is shorter than its text
+	- ID: 2026100817355494
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261008-173554
+	- Opened by: CC
+	- Related IDs: 2026100817172887
+	- Target OS: All
+	- Steps to reproduce:
+		- Open Settings and Tab to the "Use system font" Face and Size row.
+	- Incorrect behavior: The focus outline ends before the end of the row's text.
+	- Expected behavior: The outline goes around the whole control.
+	- Reproduced: 20261008 on Xvfb, at the default and a 24 pt interface font.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
