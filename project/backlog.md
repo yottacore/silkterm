@@ -467,7 +467,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A blink rate setting of 500 ms blinks at more like 1000 ms
 	- ID: 2026100907341815
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. A launch now rewrites the rate line in every config, so a build has to reach the dogfood pool.
+	- Needs external testing: Windows: one launch on an old config, and a look at the Cursor tab. Built and linted for Windows only.
 	- Severity: Avg
 	- Opened: 20261009-073418
 	- Opened by: JC
@@ -482,6 +484,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			2. Make the selected and actual rates match, wavecrest-to-wavecrest.
 			- The current default actual blink rate is perfect, don't change that, just make sure the settings value is correct.
 		- The row is "Blink rate ms" on the Cursor tab, and its tip says "One full animation cycle."
+	- Reproduced: 20261009 on b23, in a window. The dev build blinked once every 1.01 s, peak to peak, at 500 ms, and every 1.99 s at 1000 ms.
+	- Actual cause: The code took the rate as half a cycle, one fade out or one fade in, which came from an older on/off blink. The docs and the tip said one full cycle.
+	- Actual fix: The setting is `cursor.blink_rate_s` now, one whole cycle in seconds, default 1.0, which is the same real speed as before. A launch renames `cursor.blink_rate_ms` and converts its value, so 500 becomes 1.0 and nothing blinks at a new speed. Commented lines convert too, and a value that is not a number keeps its text. The row is "Rate s" under Blink (2026100907341817).
+	- Decisions:
+		- 20261009: No `SUPERSEDED_DEFAULTS` entry. The old commented default converts to the new template line exactly.
+		- 20261009: The slider range and typed cap keep the same real speeds as before: 0.2 to 6 s, typed up to 20 s.
+	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc and TOC checks. In a window on b23 at about 23 frames a second: 1.00 s at the new 1.0, 1.00 s from an old file at 500 ms, 2.00 s at 2.0.
+	- Swept: both readers of the rate (each frame and a refocus), the dialog row, the save, the reader, the old flat key, the rebuild for a file that cannot be read, the template, the demo recorder, the smooth cursor design doc, the UI style guide. The dialog's own caret blink has its own constant and no setting.
+	- Note: The markdown tables check fails on dev, in the automatic settings design doc. Filed as 2026100908133033.
+	- Branch: blinksec
+	- Commit: 8add123
+	- Test case: EsDSBcQ `the_blink_rate_is_one_whole_cycle_peak_to_peak` failed with the old factor of 2 and passes now. EsDSBQ8 `an_old_blink_rate_in_ms_becomes_the_same_cycle_in_seconds` failed with the conversion removed and passes now. EldrZxZ, EpHOzrc, Er2X6Er, Es9oaEN and EpZcBUQ were changed for the new name and unit.
 
 - After the monitors wake from power save, a SilkTerm on the portrait monitor returns to the size it uses on the landscape monitor
 	- ID: 2026100907341816
@@ -521,7 +535,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
 	- ID: 2026100907341817
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline, with 2026100907341815. A launch rewrites `animation: none`.
+	- Needs external testing: Windows: a look at the Cursor tab, and Blink switched off and on.
 	- Priority: Avg
 	- Opened: 20261009-073418
 	- Opened by: JC
@@ -532,6 +548,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Add a new boolean setting as a subsection heading, "Blink". If on, then the "Rate" slider is considered.
 	- Notes:
 		- Before RC1.
+	- Decisions:
+		- 20261009: `cursor.animation: none` was the one existing way to turn the blink off. The old flat `cursor_blink` was gone already, and a pre-nesting file never carried it. So the new `cursor.blink` replaces "none" rather than sitting beside it. "None" left the Animation list, and a launch rewrites an active `animation: none` as `blink: false`. Where a file also sets `blink`, "none" still reads as off, so no file starts blinking that did not before.
+		- 20261009: The performance profiles turn Blink off now, where they used to set the animation to none.
+		- 20261009: Rate s, Animation and Inactivity timer s sit under Blink. They stay live while it is off, as the automatic settings design asks for settings that only count while a switch is on, so 2026100907341818 has nothing to redo here.
+		- 20261009: The Blink group sits below Width, so the tab reads shape first, then motion.
+	- Against: the UI style guide's "Members gray out when it is off". Listed under its known deviations until 2026100907341818 moves the rule.
+	- Verified: unit suite and the lint and doc checks, as on 2026100907341815. In a window on b23, an old file with `animation: "none"` came up with Blink off and the rows under it live, and switching Blink on and pressing OK wrote `blink: true`.
+	- Note: The test rigs that write `cursor.animation: none` keep it. It still reads as off, and some bench rigs also run released builds that do not know `cursor.blink`. The demo recorder switches `cursor.blink` now, since a reload rewrites "none".
+	- Branch: blinksec
+	- Commit: 8add123
+	- Test case: EsDSBUl `animation_none_becomes_blink_off` and EsDSBYd `turning_the_blink_on_replaces_an_old_none`, both failing with the "none" reading removed. Er2X6Ep holds the Cursor tab's order and sub-group. ErstaMt, ErstamD and Erstagk lost the "none" word, and EorkTk1 and EorkTk3 read the profile's Blink, since this decision changed what they pinned.
 
 - Settings that depend on a master boolean switch follow the automatic settings design
 	- ID: 2026100907341818
@@ -546,6 +573,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Update all Settings dialog code and logic to follow [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md).
 	- Notes:
 		- Before RC1.
+
+- The markdown tables check fails on the automatic settings design doc
+	- ID: 2026100908133033
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261009-081330
+	- Target OS: All
+	- Steps to reproduce:
+		- Run `cicd/tests/tables/run.py` on dev at f56bcfc.
+	- Incorrect behavior: It fails on both tables in `design_docs/20261008-180516_automatic_settings.md`, whose columns are not padded the canonical way. The pipeline's lint stage stops there.
+	- Expected behavior: The check passes. `run.py --fix` rewrites the two tables.
+	- Related IDs: 2026100907341818
 
 - Changes in one SilkTerm apply to all running SilkTerms using the same config file, immediately
 	- ID: 2026100907341819
