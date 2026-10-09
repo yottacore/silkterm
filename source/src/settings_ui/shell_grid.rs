@@ -246,7 +246,7 @@ impl SettingsDialog {
 	// The Active checkbox, centered under its own column title. Square like
 	// every other checkbox, not field-tall like the boxes beside it.
 	fn shell_active_box(&self, i: usize, shell_index: usize) -> Rect {
-		let size = lay().swatch;
+		let size = self.check_sz();
 		let line = self.shell_line_h();
 		Rect {
 			x: self.shell_cols().active + (lay().shell_active_width - size) / 2.0,
