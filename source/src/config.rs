@@ -752,6 +752,9 @@ fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Setting
 		reader.read_i64("window.remembered_font_zoom"),
 		d.remembered_font_zoom,
 	);
+	settings.remembered_maximized = reader
+		.read_bool("window.remembered_maximized")
+		.unwrap_or(d.remembered_maximized);
 	settings.monitor_sizes = read_monitor_sizes(&reader);
 }
 
@@ -2482,35 +2485,34 @@ fn same_f32(a: f32, b: f32) -> bool {
 /// Write the values that differ from `orig` back into the config in place. The
 /// user's comments and blank-line grouping survive (see `to_text`); untouched
 /// settings keep whatever they were (commented / following the system). Returns
-/// false (writing nothing) if the file looks open in another program, so the
-/// caller can hold off - e.g. the Settings dialog stays open instead of
-/// clobbering an in-flight edit.
+/// false (writing nothing) if something in the file changed and it looks open
+/// in another program, so the caller can hold off - e.g. the Settings dialog
+/// stays open instead of clobbering an in-flight edit. The state file is the
+/// program's own, so it is written either way, and a save that changes nothing
+/// in the config, such as a window size, leaves the config alone.
 #[must_use]
 pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	let Some(path) = config_path() else {
 		return true;
 	};
-	if config_open_elsewhere(&path) {
-		note_config_busy(&path);
-		return false;
-	}
-	let mut doc = match read_doc(&path) {
-		Ok(doc) => doc,
+	persist_state(orig, edited);
+	let (mut doc, missing) = match read_doc(&path) {
+		Ok(doc) => (doc, false),
 		Err(Unread::Missing) => {
 			if let Some(dir) = path.parent().filter(|_| may_write(&path)) {
 				let _ = std::fs::create_dir_all(dir);
 			}
-			regrown_doc(&path, &orig.shells)
+			(regrown_doc(&path, &orig.shells), true)
 		}
 		Err(Unread::Failed(e)) => {
 			eprintln!("{APP_NAME}: could not read config {}: {e}", path.display());
 			return false;
 		}
 	};
+	let as_read = saved_text(&doc);
 	// round f32 -> a clean decimal so persisted floats aren't 0.2000000029...
 	let rounded = |v: f32| (v as f64 * 1000.0).round() / 1000.0;
 
-	persist_state(orig, edited);
 	write_user_themes(&mut doc, &orig.user_themes, &edited.user_themes);
 	write_shells(&mut doc, &orig.shells, &edited.shells);
 
@@ -2582,6 +2584,13 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 		);
 	}
 
+	if !missing && revert.is_empty() && disable.is_empty() && saved_text(&doc) == as_read {
+		return true;
+	}
+	if config_open_elsewhere(&path) {
+		note_config_busy(&path);
+		return false;
+	}
 	let wrote = write_doc(&path, &doc);
 	if wrote {
 		revert_keys(&revert.iter().map(String::as_str).collect::<Vec<_>>());
@@ -10637,6 +10646,61 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// The window size lives in the state file, so a resize changes nothing in the
+	// config and does not rewrite it. A config held open in another program, an
+	// editor most likely, held up the size as well, which is the program's own.
+	// A change to the config itself still waits for it.
+	// Test ID: EsGVpEO
+	#[cfg(target_os = "linux")]
+	#[test]
+	fn a_window_size_saves_past_a_config_held_open() {
+		use std::os::unix::fs::MetadataExt;
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir = format_test_dir("heldsize");
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, "").unwrap();
+		set_config_override(path.clone());
+		let base = reload_from_disk();
+		let text = std::fs::read_to_string(&path).unwrap();
+		let inode = std::fs::metadata(&path).unwrap().ino();
+
+		let mut sized = base.clone();
+		remember_window(&mut sized, None, Some((121, 33)), None);
+		assert!(persist(&base, &sized), "nothing in the config to wait for");
+		assert_eq!(
+			std::fs::metadata(&path).unwrap().ino(),
+			inode,
+			"not rewritten"
+		);
+
+		let hold = std::fs::File::open(&path).unwrap();
+		let mut child = std::process::Command::new("sleep")
+			.arg("30")
+			.stdin(std::process::Stdio::from(hold))
+			.spawn()
+			.unwrap();
+		let seen = (0..50).any(|_| {
+			std::thread::sleep(std::time::Duration::from_millis(20));
+			config_open_elsewhere(&path)
+		});
+		let mut again = sized.clone();
+		remember_window(&mut again, None, Some((122, 34)), None);
+		let size_saved = persist(&sized, &again);
+		let mut font = again.clone();
+		change(&mut font, Key::FontSize, Value::Float(15.0));
+		let font_saved = persist(&again, &font);
+		let _ = child.kill();
+		let _ = child.wait();
+		assert!(seen, "the holder never showed up");
+		assert!(size_saved && !font_saved);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+		let back = reload_from_disk();
+		assert_eq!((back.remembered_columns, back.remembered_rows), (122, 34));
+		assert_ne!(back.font_size, 15.0);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// A rename publishes a new file, so a rating written that way replaced a linked
 	// settings file with a plain copy and reset a private one's mode. The dialog's
 	// save never did either.
@@ -11471,7 +11535,7 @@ mod tests {
 		let state_file = dir.join("state.shcl");
 		let old = "performance:\n\tautomatic: true\n\tprofile: high\n\trated_hardware: 0123456789abcdef\n\
 			font:\n\tfamily: \"Some Mono\"\n\
-			window:\n\tremembered_columns: 132\n\tremembered_rows: 41\n\tremembered_font_zoom: -2\n\
+			window:\n\tremembered_columns: 132\n\tremembered_rows: 41\n\tremembered_font_zoom: -2\n\tremembered_maximized: true\n\
 			\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 1\n\
 			theme: Matrix\ncolors:\n\tbackground: \"#123456\"\n";
 		std::fs::write(&path, old).unwrap();
@@ -11540,9 +11604,10 @@ mod tests {
 			(
 				s.remembered_columns,
 				s.remembered_rows,
-				s.remembered_font_zoom
+				s.remembered_font_zoom,
+				s.remembered_maximized
 			),
-			(132, 41, -2)
+			(132, 41, -2, true)
 		);
 		assert_eq!(s.monitor_sizes.len(), 1);
 
@@ -11735,16 +11800,17 @@ mod tests {
 	#[test]
 	fn a_window_reads_back_the_sizes_another_window_kept() {
 		let p = std::path::Path::new("state.shcl");
-		let text = "window:\n\tremembered_columns: 132\n\tremembered_font_zoom: -3\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 2\n";
+		let text = "window:\n\tremembered_columns: 132\n\tremembered_font_zoom: -3\n\tremembered_maximized: true\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 2\n";
 		let mut live = Settings::default();
 		window_memory_from(text, p, &mut live);
 		assert_eq!(
 			(
 				live.remembered_columns,
 				live.remembered_rows,
-				live.remembered_font_zoom
+				live.remembered_font_zoom,
+				live.remembered_maximized
 			),
-			(132, Settings::default().remembered_rows, -3)
+			(132, Settings::default().remembered_rows, -3, true)
 		);
 		assert_eq!(
 			live.monitor_sizes,

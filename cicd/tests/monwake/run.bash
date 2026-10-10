@@ -147,6 +147,7 @@ fDance(){  ## fDance <seconds to wait after the landscape size is taken>
 	local portrait herded landscape final
 	env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET DISPLAY="${xDisplay}" XDG_RUNTIME_DIR="${runDir}" LIBGL_ALWAYS_SOFTWARE=1 \
 		HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" XDG_CACHE_HOME="${work}/home/.cache" \
+		XDG_STATE_HOME="${work}/home/.local/state" \
 		"${bin}" --shell "/bin/dash -c 'sleep 600'" >/dev/null 2>>"${work}/said.txt" &
 	appPid=$!
 	for _ in {1..100}; do [[ -n "$(fWhere)" ]] && break; sleep 0.1; done
@@ -174,9 +175,10 @@ fDance(){  ## fDance <seconds to wait after the landscape size is taken>
 fDance 0
 fDance 0.8
 
+## The launch moved the sizes from the config to the state file.
 fNoSave(){
 	local got
-	got="$(grep -oE '^(	remembered_(columns|rows)|			(columns|rows)): [0-9]+' "${cfgHome}/silkterm/config.shcl" | tr -d '\t' | paste -sd ' ' || true)"
+	got="$(grep -oE '^(	remembered_(columns|rows)|			(columns|rows)): [0-9]+' "${work}/home/.local/state/silkterm/state.shcl" | tr -d '\t' | paste -sd ' ' || true)"
 	[[ "${got}" == "remembered_columns: 70 remembered_rows: 22 columns: 110 rows: 20 columns: 50 rows: 45" ]] || { echo "    sizes now: ${got}"; return 1; }
 }
 fCheck "no size was saved" fNoSave
@@ -186,3 +188,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261009 JC: Created.
+##		- 20261009 JC: The sizes are read from the state file.

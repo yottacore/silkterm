@@ -112,6 +112,11 @@ fSetting(){  ## fSetting <case> <regex>
 	grep -Eq "^[[:space:]]*${2}" "${work}/${1}/config.shcl"
 }
 
+## The window size and zoom go to the state file beside the config.
+fState(){  ## fState <case> <regex>
+	grep -Eq "^[[:space:]]*${2}" "${work}/${1}/state.shcl"
+}
+
 fDone(){
 	fStopOurs "${appPid}"; appPid=""
 }
@@ -122,7 +127,7 @@ fCheck "resize: a window came up" test -n "${window}"
 rm -f "${work}/resize/config.shcl"
 fX xdotool windowsize "${window}" 700 400 || true
 fCheck "resize: the file was written again" fWaitFile resize
-fCheck "resize: with the new size" bash -c '! grep -Eq "^[[:space:]]*remembered_columns: 100$" "$1" && grep -Eq "^[[:space:]]*remembered_columns: [0-9]+" "$1"' _ "${work}/resize/config.shcl"
+fCheck "resize: with the new size" bash -c '! grep -Eq "^[[:space:]]*remembered_columns: 100$" "$1" && grep -Eq "^[[:space:]]*remembered_columns: [0-9]+" "$1"' _ "${work}/resize/state.shcl"
 fCheck "resize: keeping what the old file had" fSetting resize 'profile: "custom"'
 fDone
 
@@ -133,7 +138,7 @@ rm -f "${work}/zoom/config.shcl"
 fX xdotool windowfocus --sync "${window}" || true
 fX xdotool key --clearmodifiers ctrl+equal || true
 fCheck "zoom: the file was written again" fWaitFile zoom
-fCheck "zoom: with the new zoom" fSetting zoom 'remembered_font_zoom: 1$'
+fCheck "zoom: with the new zoom" fState zoom 'remembered_font_zoom: 1$'
 fCheck "zoom: keeping what the old file had" fSetting zoom 'profile: "custom"'
 fDone
 
@@ -145,3 +150,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261005 JC: Created.
+##		- 20261009 JC: The size and zoom are read from the state file.

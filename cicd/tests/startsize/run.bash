@@ -110,12 +110,12 @@ fWatch(){  ## fWatch <case> [option]...
 	sed 's/^/    /' "${dir}/seen.txt"
 }
 
-## The remembered sizes in the file are still the ones the fixture wrote. The
-## launch writes the template's own columns and rows one tab in.
+## The remembered sizes are still the ones the fixture wrote. The launch moves
+## them from the config to the state file beside it.
 fSavedNoSize(){  ## fSavedNoSize <case> <expected sizes>
 	local -r tab=$'\t'
 	local got
-	got="$(grep -oE "^(${tab}remembered_(columns|rows)|${tab}${tab}${tab}(columns|rows)): [0-9]+" "${work}/${1}/config.shcl" | tr -d '\t' | paste -sd ' ' || true)"
+	got="$(grep -oE "^(${tab}remembered_(columns|rows)|${tab}${tab}${tab}(columns|rows)): [0-9]+" "${work}/${1}/state.shcl" | tr -d '\t' | paste -sd ' ' || true)"
 	[[ "${got}" == "${2}" ]] || { echo "    sizes now: ${got}"; return 1; }
 }
 
@@ -159,3 +159,4 @@ echo "all passed"
 ##	History:
 ##		- 20261004 JC: Created.
 ##		- 20261005 JC: A launch saves no size (2026100514211602).
+##		- 20261009 JC: The sizes are read from the state file.
