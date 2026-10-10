@@ -405,3 +405,198 @@ fn turning_choose_automatically_back_on_drops_the_changes() {
 		"the reset arrow too"
 	);
 }
+
+// A spec a program builds in code: a theme group with presets of its own, and
+// an opener whose default is the desktop's.
+struct Shop {
+	dark: bool,
+}
+
+impl Env for Shop {
+	fn rule(&self, name: &str) -> Option<Value> {
+		(name == "desktop_opener").then(|| text("xdg-open"))
+	}
+	fn preset(&self, group: &str, key: &str) -> Option<Preset> {
+		if group != "theme" || !["silk", "amber"].contains(&key) {
+			return None;
+		}
+		let bg = match (key, self.dark) {
+			("silk", true) => "#101014",
+			("silk", false) => "#f4f4f0",
+			_ => "#201000",
+		};
+		Some(Preset {
+			key: key.into(),
+			label: if key == "silk" { "SilkTerm" } else { "Amber" }.into(),
+			temporary: false,
+			values: [("bg".to_string(), text(bg))].into(),
+		})
+	}
+}
+
+fn plain(id: &str, kind: Kind, path: &str, default: Value) -> Setting {
+	Setting {
+		id: id.into(),
+		label: id.into(),
+		tab: 0,
+		control: match kind {
+			Kind::Bool => Control::Checkbox,
+			Kind::Choice => Control::Dropdown,
+			Kind::Color => Control::Color,
+			_ => Control::Text,
+		},
+		kind,
+		path: path.into(),
+		store: Store::Config,
+		default,
+		min: f64::NEG_INFINITY,
+		max: f64::INFINITY,
+		scale: Scale::Linear,
+		detents: Vec::new(),
+		options: Vec::new(),
+		tip: String::new(),
+		indent: u8::MAX,
+		gate: None,
+		auto: None,
+		rule: None,
+		group: None,
+	}
+}
+
+fn shop() -> Model {
+	let mut opener = plain("opener", Kind::Text, "links.opener", text(""));
+	opener.rule = Some(Rule::Named("desktop_opener".into()));
+	let mut bg = plain("bg", Kind::Color, "colors.bg", text("#000000"));
+	bg.group = Some("theme".into());
+	let spec = Spec {
+		tabs: vec![Tab {
+			path: "Look".into(),
+			label: "Look".into(),
+			parent: None,
+		}],
+		settings: vec![
+			plain("theme", Kind::Choice, "theme", text("silk")),
+			bg,
+			opener,
+		],
+		groups: vec![Group {
+			id: "theme".into(),
+			chooser: "theme".into(),
+			noun: "theme".into(),
+			custom: Some("Custom".into()),
+			presets: Vec::new(),
+			from_program: true,
+			members: Vec::new(),
+		}],
+	};
+	Model::new(spec.finish().unwrap_or_else(|e| panic!("{e:#?}")))
+}
+
+// Test ID: EsFwIor
+#[test]
+fn a_spec_built_in_code_is_checked_like_a_parsed_one() {
+	let m = shop();
+	assert_eq!(
+		m.spec.group("theme").map(|g| g.members.clone()),
+		Some(vec!["bg".to_string()])
+	);
+	let mut broken = (*m.spec).clone();
+	broken.settings[1].gate = Some("nothing".into());
+	broken.groups[0].from_program = false;
+	let errs = broken.finish().err().unwrap_or_default().join("\n");
+	assert!(errs.contains("gate nothing"), "{errs}");
+	assert!(errs.contains("no presets"), "{errs}");
+}
+
+// Test ID: EsFwIuv
+#[test]
+fn a_rule_with_no_switch_is_the_default_and_the_arrow_puts_it_back() {
+	let mut m = shop();
+	let env = Shop { dark: true };
+	assert_eq!(m.value("opener", &env), text("xdg-open"));
+	assert!(!m.can_reset("opener", &env));
+	m.set("opener", &text("xdg-open"), &env);
+	assert!(
+		m.can_reset("opener", &env),
+		"typed in, so it no longer follows the desktop"
+	);
+	assert_eq!(
+		m.state_line("opener", &env),
+		"Set by hand. Default value: xdg-open."
+	);
+	m.reset("opener", &env);
+	assert_eq!(m.value("opener", &env), text("xdg-open"));
+	assert!(m.values.own.is_empty());
+}
+
+// Test ID: EsFwIzk
+#[test]
+fn a_group_s_presets_can_come_from_the_program() {
+	let mut m = shop();
+	let dark = Shop { dark: true };
+	let light = Shop { dark: false };
+	assert_eq!(m.value("bg", &dark), text("#101014"));
+	assert_eq!(
+		m.value("bg", &light),
+		text("#f4f4f0"),
+		"the program's answer moves"
+	);
+	m.set("bg", &text("#123456"), &dark);
+	assert_eq!(m.shown_choice("theme", &dark), "SilkTerm *");
+	assert_eq!(
+		m.value("bg", &light),
+		text("#123456"),
+		"a change holds in both"
+	);
+	let back = Model::load(Arc::clone(&m.spec), &m.save(&dark).0, "");
+	assert_eq!(back.values, m.values);
+	m.set("theme", &text("amber"), &dark);
+	assert_eq!(m.shown_choice("theme", &dark), "Amber");
+	m.set("theme", &text(CUSTOM), &dark);
+	assert_eq!(m.shown_choice("theme", &dark), "Custom");
+	assert_eq!(
+		m.value("bg", &dark),
+		text("#000000"),
+		"nothing of its own yet"
+	);
+}
+
+// Test ID: EsFwJ4B
+#[test]
+fn changes_under_a_temporary_preset_are_still_saved() {
+	let mut m = demo();
+	m.set("profile", &text("low"), &DESK);
+	m.set("radius", &int(9), &DESK);
+	m.temporary("perf", Some("remote"));
+	assert_eq!(m.shown_choice("profile", &DESK), "Remote (temporary)");
+	let (config, _) = m.save(&DESK);
+	assert!(config.contains("radius: 9"), "{config}");
+	m.temporary("perf", None);
+	assert_eq!(m.shown_choice("profile", &DESK), "Low *");
+}
+
+// Test ID: EsFwJ8T
+#[test]
+fn lines_put_set_aside_values_and_changes_under_kept() {
+	let mut m = demo();
+	m.set("family", &text("Fira Code"), &DESK);
+	m.set("use_system_family", &Value::Bool(true), &DESK);
+	m.set("strength", &int(80), &DESK);
+	let lines = m.lines(&DESK);
+	let kept: Vec<&str> = lines.kept.iter().map(|(p, _)| p.as_str()).collect();
+	assert_eq!(
+		kept,
+		[
+			"kept.set_aside.font.family",
+			"kept.changes.perf.preset",
+			"kept.changes.perf.values.text.scrim.strength"
+		]
+	);
+	assert!(
+		lines
+			.config
+			.iter()
+			.any(|(p, v)| p == "font.use_system_family" && *v == Value::Bool(true))
+	);
+	assert!(!lines.config.iter().any(|(p, _)| p == "font.family"));
+}

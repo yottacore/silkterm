@@ -10,8 +10,10 @@
 
 #![allow(clippy::must_use_candidate)]
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -152,6 +154,9 @@ pub struct Group {
 	pub noun: String,
 	pub custom: Option<String>,
 	pub presets: Vec<Preset>,
+	/// The presets are the program's, asked for through [`Env::preset`], and
+	/// `presets` is empty.
+	pub from_program: bool,
 	pub members: Vec<String>,
 }
 
@@ -252,8 +257,34 @@ impl Spec {
 				Err(e) => errs.extend(e.into_iter().map(|e| format!("group {id}: {e}"))),
 			}
 		}
+		match spec.finish() {
+			Ok(spec) if errs.is_empty() => Ok(spec),
+			Ok(_) => Err(errs),
+			Err(more) => {
+				errs.extend(more);
+				Err(errs)
+			}
+		}
+	}
+
+	/// The last step of [`Spec::parse`], for a spec a program built itself:
+	/// choosers get their presets as options, the links are checked, and indents
+	/// are worked out. A group's `members` are filled here too.
+	///
+	/// # Errors
+	///
+	/// Every broken link.
+	pub fn finish(mut self) -> Result<Spec, Vec<String>> {
+		for g in &mut self.groups {
+			g.members = self
+				.settings
+				.iter()
+				.filter(|s| s.group.as_deref() == Some(g.id.as_str()))
+				.map(|s| s.id.clone())
+				.collect();
+		}
 		// a chooser lists its presets
-		for g in &spec.groups {
+		for g in &self.groups {
 			let mut options: Vec<(String, String)> = g
 				.presets
 				.iter()
@@ -262,14 +293,14 @@ impl Spec {
 			if let Some(label) = &g.custom {
 				options.push((CUSTOM.into(), label.clone()));
 			}
-			if let Some(c) = spec.settings.iter_mut().find(|s| s.id == g.chooser) {
+			if let Some(c) = self.settings.iter_mut().find(|s| s.id == g.chooser) {
 				c.options = options;
 			}
 		}
-		errs.extend(spec.check_links());
+		let errs = self.check_links();
 		if errs.is_empty() {
-			spec.set_indents();
-			Ok(spec)
+			self.set_indents();
+			Ok(self)
 		} else {
 			Err(errs)
 		}
@@ -301,24 +332,22 @@ impl Spec {
 					errs.push(format!("{id}: gate {g} is not a checkbox"));
 				}
 			}
-			match (&s.auto, &s.rule) {
-				(Some(a), Some(rule)) => {
-					if !is_bool(a) {
-						errs.push(format!("{id}: auto {a} is not a checkbox"));
-					} else if self.at(a).auto.is_some() {
-						errs.push(format!("{id}: auto {a} is automatic itself"));
-					}
-					if let Rule::State(from) = rule {
-						if self.get(from).is_none_or(|f| f.store != Store::State) {
-							errs.push(format!(
-								"{id}: rule names {from}, which is not a state value"
-							));
-						}
-					}
+			if let Some(a) = &s.auto {
+				if s.rule.is_none() {
+					errs.push(format!("{id}: auto with no rule"));
 				}
-				(Some(_), None) => errs.push(format!("{id}: auto with no rule")),
-				(None, Some(_)) => errs.push(format!("{id}: rule with no auto")),
-				(None, None) => {}
+				if !is_bool(a) {
+					errs.push(format!("{id}: auto {a} is not a checkbox"));
+				} else if self.at(a).auto.is_some() {
+					errs.push(format!("{id}: auto {a} is automatic itself"));
+				}
+			}
+			if let Some(Rule::State(from)) = &s.rule {
+				if self.get(from).is_none_or(|f| f.store != Store::State) {
+					errs.push(format!(
+						"{id}: rule names {from}, which is not a state value"
+					));
+				}
 			}
 			if s.store == Store::State
 				&& (s.auto.is_some() || s.group.is_some() || s.gate.is_some())
@@ -360,7 +389,10 @@ impl Spec {
 		for g in &self.groups {
 			match self.get(&g.chooser) {
 				Some(c) if c.control == Control::Dropdown => {
-					if g.preset(c.default.as_text()).is_none() && c.default.as_text() != CUSTOM {
+					if !g.from_program
+						&& g.preset(c.default.as_text()).is_none()
+						&& c.default.as_text() != CUSTOM
+					{
 						errs.push(format!("group {}: chooser default is not a preset", g.id));
 					}
 				}
@@ -368,6 +400,9 @@ impl Spec {
 					"group {}: chooser {} is not a dropdown",
 					g.id, g.chooser
 				)),
+			}
+			if g.presets.is_empty() && !g.from_program {
+				errs.push(format!("group {}: no presets", g.id));
 			}
 		}
 		errs
@@ -428,8 +463,10 @@ impl Spec {
 			}
 			(Kind::Color, Value::Text(t)) if is_color(t) => Ok(Value::Text(t.to_ascii_lowercase())),
 			(Kind::Choice, Value::Text(t)) => {
+				let chooser = self.chooser_of(&s.id);
 				if s.options.iter().any(|(k, _)| k == t)
-					|| (self.chooser_of(&s.id).is_some() && t == CUSTOM)
+					|| (chooser.is_some() && t == CUSTOM)
+					|| chooser.is_some_and(|g| g.from_program && !t.is_empty())
 				{
 					Ok(v.clone())
 				} else {
@@ -589,6 +626,7 @@ fn numbers(doc: &shcl::Document, path: &str) -> Vec<f64> {
 fn read_group(doc: &shcl::Document, id: &str, settings: &[Setting]) -> Result<Group, Vec<String>> {
 	let at = |key: &str| format!("groups.{id}.{key}");
 	let mut errs = Vec::new();
+	let from_program = doc.get_bool(&at("from_program")).unwrap_or(false);
 	let members: Vec<String> = settings
 		.iter()
 		.filter(|s| s.group.as_deref() == Some(id))
@@ -636,9 +674,6 @@ fn read_group(doc: &shcl::Document, id: &str, settings: &[Setting]) -> Result<Gr
 			values,
 		});
 	}
-	if presets.is_empty() {
-		errs.push("no presets".into());
-	}
 	if !errs.is_empty() {
 		return Err(errs);
 	}
@@ -650,6 +685,7 @@ fn read_group(doc: &shcl::Document, id: &str, settings: &[Setting]) -> Result<Gr
 			.unwrap_or_else(|_| "preset".into()),
 		custom: doc.get_string(&at("custom")).ok(),
 		presets,
+		from_program,
 		members,
 	})
 }
@@ -691,10 +727,14 @@ impl Setting {
 	}
 }
 
-/// What the program answers for a named rule: the desktop's font, colors
-/// picked from the wallpaper. `None` when there is nothing to follow.
+/// What the program answers at run time: a named rule, such as the desktop's
+/// font or colors picked from the wallpaper, and the presets of a group that
+/// has the program's own. `None` when there is nothing to follow.
 pub trait Env {
 	fn rule(&self, name: &str) -> Option<Value>;
+	fn preset(&self, _group: &str, _key: &str) -> Option<Preset> {
+		None
+	}
 }
 
 /// No answers, for code that never reaches a named rule.
@@ -740,15 +780,43 @@ pub enum Source {
 	State,
 }
 
+/// What the files hold, in spec order. `kept` lines have their full path.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Lines {
+	pub config: Vec<(String, Value)>,
+	pub kept: Vec<(String, Value)>,
+	pub state: Vec<(String, Value)>,
+}
+
+#[derive(Clone, Debug)]
 pub struct Model {
-	pub spec: Spec,
+	pub spec: Arc<Spec>,
 	pub values: Values,
 }
 
+// two models of one spec are the same when they store the same
+impl PartialEq for Model {
+	fn eq(&self, other: &Self) -> bool {
+		self.values == other.values
+	}
+}
+
+// A preset by key, from the spec or from the program. Custom is none.
+fn preset_of<'a>(g: &'a Group, key: &str, env: &dyn Env) -> Option<Cow<'a, Preset>> {
+	if key == CUSTOM {
+		return None;
+	}
+	if g.from_program {
+		env.preset(&g.id, key).map(Cow::Owned)
+	} else {
+		g.preset(key).map(Cow::Borrowed)
+	}
+}
+
 impl Model {
-	pub fn new(spec: Spec) -> Model {
+	pub fn new(spec: impl Into<Arc<Spec>>) -> Model {
 		Model {
-			spec,
+			spec: spec.into(),
 			values: Values::default(),
 		}
 	}
@@ -775,6 +843,10 @@ impl Model {
 		if !self.value(sw, env).as_bool() {
 			return None;
 		}
+		self.rule_answer(s, env)
+	}
+
+	fn rule_answer(&self, s: &Setting, env: &dyn Env) -> Option<Value> {
 		let v = match s.rule.as_ref()? {
 			Rule::State(from) => self.value(from, env),
 			Rule::Named(name) => env.rule(name)?,
@@ -782,7 +854,32 @@ impl Model {
 		self.spec.valid(s, &v).ok()
 	}
 
-	// The value with no rule in play: a preset's, a change to it, or the own.
+	/// What a setting has with nothing of its own: its rule's answer where it
+	/// has a rule and no switch, else its default.
+	pub fn default_of(&self, id: &str, env: &dyn Env) -> Value {
+		self.fallback(self.spec.at(id), env)
+	}
+
+	fn fallback(&self, s: &Setting, env: &dyn Env) -> Value {
+		if s.auto.is_none() {
+			if let Some(v) = self.rule_answer(s, env) {
+				return v;
+			}
+		}
+		s.default.clone()
+	}
+
+	// A value of its own that counts as set. Where the default comes from a
+	// rule any value does, since the rule's answer can change under it.
+	fn has_own(&self, s: &Setting) -> bool {
+		match self.values.own.get(&s.id) {
+			None => false,
+			Some(_) if s.auto.is_none() && s.rule.is_some() => true,
+			Some(v) => *v != s.default,
+		}
+	}
+
+	// The value with no switch in play: a preset's, a change to it, or the own.
 	fn base(&self, s: &Setting, env: &dyn Env) -> Value {
 		if let Some((key, p)) = self.preset_for(s, env) {
 			if !p.temporary
@@ -796,37 +893,58 @@ impl Model {
 				.values
 				.get(&s.id)
 				.cloned()
-				.unwrap_or_else(|| s.default.clone());
+				.unwrap_or_else(|| self.fallback(s, env));
 		}
 		self.values
 			.own
 			.get(&s.id)
 			.cloned()
-			.unwrap_or_else(|| s.default.clone())
+			.unwrap_or_else(|| self.fallback(s, env))
 	}
 
 	// The preset a group member follows, when it isn't Custom.
-	fn preset_for<'a>(&'a self, s: &Setting, env: &dyn Env) -> Option<(String, &'a Preset)> {
+	fn preset_for<'a>(&'a self, s: &Setting, env: &dyn Env) -> Option<(String, Cow<'a, Preset>)> {
 		let g = self.spec.group(s.group.as_deref()?)?;
 		let key = self.chosen(&g.id, env);
-		g.preset(&key).map(|p| (key, p))
+		preset_of(g, &key, env).map(|p| (key, p))
 	}
 
-	/// The preset key a group is on, or [`CUSTOM`].
+	/// The preset key a group is on, or [`CUSTOM`]. A temporary one wins.
 	pub fn chosen(&self, group: &str, env: &dyn Env) -> String {
 		if let Some(t) = self.values.session.get(group) {
 			return t.clone();
 		}
+		self.stored_choice(group, env)
+	}
+
+	/// The group's pick with no temporary preset, the one a restart comes back to.
+	pub fn stored_choice(&self, group: &str, env: &dyn Env) -> String {
 		match self.spec.group(group) {
 			Some(g) => self.value(&g.chooser, env).as_text().to_string(),
 			None => String::new(),
 		}
 	}
 
+	/// Put a temporary preset in force, or take it away with `None`. It stores
+	/// nothing, and the "*" changes of the pick under it wait.
+	pub fn temporary(&mut self, group: &str, key: Option<&str>) {
+		match key {
+			Some(k) => {
+				self.values.session.insert(group.to_string(), k.to_string());
+			}
+			None => {
+				self.values.session.remove(group);
+			}
+		}
+	}
+
 	/// The settings changed on top of the group's preset, in spec order.
 	pub fn changed(&self, group: &str, env: &dyn Env) -> Vec<&str> {
-		let key = self.chosen(group, env);
-		if self.values.changed_on.get(group) != Some(&key) {
+		self.changes_on(group, &self.chosen(group, env))
+	}
+
+	fn changes_on(&self, group: &str, key: &str) -> Vec<&str> {
+		if self.values.changed_on.get(group).map(String::as_str) != Some(key) {
 			return Vec::new();
 		}
 		self.spec
@@ -843,18 +961,24 @@ impl Model {
 	/// preset, with " *" when anything was changed on top of it.
 	pub fn shown_choice(&self, id: &str, env: &dyn Env) -> String {
 		let s = self.spec.at(id);
-		let key = match self.spec.chooser_of(id) {
-			Some(g) => self.chosen(&g.id, env),
-			None => self.value(id, env).as_text().to_string(),
+		let Some(g) = self.spec.chooser_of(id) else {
+			let key = self.value(id, env).as_text().to_string();
+			return s
+				.options
+				.iter()
+				.find(|(k, _)| *k == key)
+				.map_or(key.clone(), |(_, l)| l.clone());
 		};
-		let label = s
-			.options
-			.iter()
-			.find(|(k, _)| *k == key)
-			.map_or(key.clone(), |(_, l)| l.clone());
-		match self.spec.chooser_of(id) {
-			Some(g) if !self.changed(&g.id, env).is_empty() => format!("{label} *"),
-			_ => label,
+		let key = self.chosen(&g.id, env);
+		let label = match preset_of(g, &key, env) {
+			Some(p) => p.label.clone(),
+			None if key == CUSTOM => g.custom.clone().unwrap_or(key),
+			None => key,
+		};
+		if self.changed(&g.id, env).is_empty() {
+			label
+		} else {
+			format!("{label} *")
 		}
 	}
 
@@ -887,9 +1011,10 @@ impl Model {
 			};
 		}
 		if let Some((_, p)) = self.preset_for(s, env) {
-			let g = self
+			let group = s.group.as_deref().unwrap_or("");
+			let noun = self
 				.spec
-				.group(s.group.as_deref().unwrap_or(""))
+				.group(group)
 				.map(|g| g.noun.clone())
 				.unwrap_or_default();
 			let was = p
@@ -897,24 +1022,22 @@ impl Model {
 				.get(id)
 				.cloned()
 				.unwrap_or_else(|| s.default.clone());
-			if self
-				.changed(s.group.as_deref().unwrap_or(""), env)
-				.contains(&id)
-			{
+			if self.changed(group, env).contains(&id) {
 				return Source::Changed {
 					preset: p.label.clone(),
-					noun: g,
+					noun,
 					was,
 				};
 			}
 			return Source::Preset {
 				preset: p.label.clone(),
-				noun: g,
+				noun,
 			};
 		}
-		match self.values.own.get(id) {
-			Some(v) if *v != s.default => Source::Own,
-			_ => Source::Default,
+		if self.has_own(s) {
+			Source::Own
+		} else {
+			Source::Default
 		}
 	}
 
@@ -933,17 +1056,31 @@ impl Model {
 
 	/// One line on where a setting's value comes from. Empty for a default.
 	pub fn state_line(&self, id: &str, env: &dyn Env) -> String {
+		self.state_line_shown(id, env, &|_, v| v.show())
+	}
+
+	/// [`Model::state_line`] with each value written by `show`, for a program
+	/// that shows values in other units than the file's.
+	pub fn state_line_shown(
+		&self,
+		id: &str,
+		env: &dyn Env,
+		show: &dyn Fn(&Setting, &Value) -> String,
+	) -> String {
 		let s = self.spec.at(id);
 		let mut line = match self.source(id, env) {
 			Source::Default | Source::State => String::new(),
-			Source::Own => format!("Set by hand. Default value: {}.", s.default.show()),
+			Source::Own => format!(
+				"Set by hand. Default value: {}.",
+				show(s, &self.fallback(s, env))
+			),
 			Source::Automatic { kept: None } => "Automatic.".into(),
 			Source::Automatic { kept: Some(v) } => {
-				format!("Automatic. Your value, {}, is kept for later.", v.show())
+				format!("Automatic. Your value, {}, is kept for later.", show(s, &v))
 			}
 			Source::Preset { preset, noun } => format!("From the {preset} {noun}."),
 			Source::Changed { preset, noun, was } => {
-				format!("Changed. The {preset} {noun}'s value is {}.", was.show())
+				format!("Changed. The {preset} {noun}'s value is {}.", show(s, &was))
 			}
 		};
 		if let Some(g) = self.spec.chooser_of(id) {
@@ -973,7 +1110,7 @@ impl Model {
 					.changed(s.group.as_deref().unwrap_or(""), env)
 					.contains(&id),
 				Some(_) => false,
-				None => self.values.own.get(id).is_some_and(|v| *v != s.default),
+				None => self.has_own(s),
 			},
 		}
 	}
@@ -981,12 +1118,13 @@ impl Model {
 	/// The reset arrow: a change goes back to its preset's value, anything else
 	/// to its default. It is the one way a value set by hand is thrown away.
 	pub fn reset(&mut self, id: &str, env: &dyn Env) {
-		let s = self.spec.at(id).clone();
+		let spec = Arc::clone(&self.spec);
+		let s = spec.at(id);
 		if s.store == Store::State {
 			self.values.state.remove(id);
 			return;
 		}
-		if self.preset_for(&s, env).is_some() {
+		if self.preset_for(s, env).is_some() {
 			self.values.changes.remove(id);
 			return;
 		}
@@ -997,72 +1135,69 @@ impl Model {
 	// Turning on a chooser's auto checkbox is a pick like any other, so the
 	// "*" changes go.
 	fn picking_again(&mut self, id: &str, env: &dyn Env) {
-		let group = self
-			.spec
+		let spec = Arc::clone(&self.spec);
+		let group = spec
 			.groups
 			.iter()
-			.find(|g| self.spec.at(&g.chooser).auto.as_deref() == Some(id))
-			.map(|g| g.id.clone());
+			.find(|g| spec.at(&g.chooser).auto.as_deref() == Some(id));
 		if let Some(g) = group {
 			if self.value(id, env).as_bool() {
-				self.drop_changes(&g);
+				self.drop_changes(&g.id);
 			}
 		}
 	}
 
 	/// A change made on screen, with everything it does to the settings around it.
 	pub fn set(&mut self, id: &str, v: &Value, env: &dyn Env) {
-		let s = self.spec.at(id).clone();
-		let Ok(v) = self.spec.valid(&s, v) else {
+		let spec = Arc::clone(&self.spec);
+		let s = spec.at(id);
+		let Ok(v) = spec.valid(s, v) else {
 			return;
 		};
 		if s.store == Store::State {
-			self.values.state.insert(s.id, v);
+			self.values.state.insert(s.id.clone(), v);
 			return;
 		}
-		if let Some(gr) = self.spec.chooser_of(id) {
+		if let Some(gr) = spec.chooser_of(id) {
 			// picking drops the "*" changes, and a temporary pick stores nothing
-			let g = gr.id.clone();
-			if gr.preset(v.as_text()).is_some_and(|p| p.temporary) {
-				self.values.session.insert(g, v.as_text().to_string());
+			if preset_of(gr, v.as_text(), env).is_some_and(|p| p.temporary) {
+				self.temporary(&gr.id, Some(v.as_text()));
 				return;
 			}
-			self.values.session.remove(&g);
-			self.drop_changes(&g);
+			self.temporary(&gr.id, None);
+			self.drop_changes(&gr.id);
 		}
 		if let Some(gate) = &s.gate {
 			if !self.value(gate, env).as_bool() {
 				self.set(gate, &Value::Bool(true), env);
 			}
 		}
-		if let Some(sw) = s.auto.clone() {
-			if self.value(&sw, env).as_bool() {
+		if let Some(sw) = &s.auto {
+			if self.value(sw, env).as_bool() {
 				// the others under the checkbox keep what they show
-				let others: Vec<(String, Value)> = self
-					.spec
-					.under_switch(&sw)
+				let others: Vec<(&str, Value)> = spec
+					.under_switch(sw)
 					.into_iter()
 					.filter(|m| *m != id)
-					.map(|m| (m.to_string(), self.value(m, env)))
+					.map(|m| (m, self.value(m, env)))
 					.collect();
-				self.write(&sw, Value::Bool(false), env);
+				self.write(sw, Value::Bool(false), env);
 				for (m, shown) in others {
-					self.write(&m, shown, env);
+					self.write(m, shown, env);
 				}
 			}
 		}
-		if self.spec.is_switch(id) && !v.as_bool() && self.value(id, env).as_bool() {
+		if spec.is_switch(id) && !v.as_bool() && self.value(id, env).as_bool() {
 			// one with nothing of its own to fall back on keeps what it shows
-			let keep: Vec<(String, Value)> = self
-				.spec
+			let keep: Vec<(&str, Value)> = spec
 				.under_switch(id)
 				.into_iter()
-				.filter(|m| self.spec.at(m).group.is_none() && !self.values.own.contains_key(*m))
-				.map(|m| (m.to_string(), self.value(m, env)))
+				.filter(|m| spec.at(m).group.is_none() && !self.values.own.contains_key(*m))
+				.map(|m| (m, self.value(m, env)))
 				.collect();
 			self.write(id, v, env);
 			for (m, shown) in keep {
-				self.values.own.insert(m, shown);
+				self.values.own.insert(m.to_string(), shown);
 			}
 			return;
 		}
@@ -1073,52 +1208,52 @@ impl Model {
 	// Store a value where its setting keeps one right now: as a change while
 	// a preset is in force, or as its own.
 	fn write(&mut self, id: &str, v: Value, env: &dyn Env) {
-		let s = self.spec.at(id).clone();
-		if let Some(g) = s.group.clone() {
+		let spec = Arc::clone(&self.spec);
+		let s = spec.at(id);
+		if let Some(g) = &s.group {
 			// a change ends a temporary preset, which would hide it
-			self.values.session.remove(&g);
-			if let Some((key, p)) = self.preset_for(&s, env) {
-				let same = p.values.get(id) == Some(&v);
-				self.pin_chooser(&g, env);
-				if self.values.changed_on.get(&g) != Some(&key) {
-					self.drop_changes(&g);
-					self.values.changed_on.insert(g, key);
+			self.temporary(g, None);
+			let found = self
+				.preset_for(s, env)
+				.map(|(key, p)| (key, p.values.get(id) == Some(&v)));
+			if let Some((key, same)) = found {
+				self.pin_chooser(g, env);
+				if self.values.changed_on.get(g) != Some(&key) {
+					self.drop_changes(g);
+					self.values.changed_on.insert(g.clone(), key);
 				}
 				if same {
 					self.values.changes.remove(id);
 				} else {
-					self.values.changes.insert(s.id, v);
+					self.values.changes.insert(s.id.clone(), v);
 				}
 				return;
 			}
 		}
-		self.values.own.insert(s.id, v);
+		self.values.own.insert(s.id.clone(), v);
 	}
 
 	// A change to a preset's row stops the machine choosing, and keeps the
 	// preset it had chosen, since a fresh pick would undo the change.
 	fn pin_chooser(&mut self, group: &str, env: &dyn Env) {
-		let Some(c) = self.spec.group(group).map(|g| g.chooser.clone()) else {
+		let spec = Arc::clone(&self.spec);
+		let Some(c) = spec.group(group).map(|g| g.chooser.as_str()) else {
 			return;
 		};
-		let Some(sw) = self.spec.at(&c).auto.clone() else {
+		let Some(sw) = spec.at(c).auto.as_deref() else {
 			return;
 		};
-		if self.value(&sw, env).as_bool() {
-			let shown = self.value(&c, env);
-			self.values.own.insert(c, shown);
-			self.values.own.insert(sw, Value::Bool(false));
+		if self.value(sw, env).as_bool() {
+			let shown = self.value(c, env);
+			self.values.own.insert(c.to_string(), shown);
+			self.values.own.insert(sw.to_string(), Value::Bool(false));
 		}
 	}
 
 	fn drop_changes(&mut self, group: &str) {
-		let members: Vec<String> = self
-			.spec
-			.group(group)
-			.map(|g| g.members.clone())
-			.unwrap_or_default();
-		for m in members {
-			self.values.changes.remove(&m);
+		let spec = Arc::clone(&self.spec);
+		for m in spec.group(group).map_or(&[][..], |g| g.members.as_slice()) {
+			self.values.changes.remove(m);
 		}
 		self.values.changed_on.remove(group);
 	}
@@ -1126,7 +1261,8 @@ impl Model {
 	/// Fill a group's own set from what is showing, if it has none yet. Run
 	/// once on a first launch, so Custom starts as the preset in force.
 	pub fn fill_custom(&mut self, group: &str, env: &dyn Env) {
-		let Some(members) = self.spec.group(group).map(|g| g.members.clone()) else {
+		let spec = Arc::clone(&self.spec);
+		let Some(members) = spec.group(group).map(|g| g.members.as_slice()) else {
 			return;
 		};
 		if members.iter().any(|m| self.values.own.contains_key(m)) {
@@ -1134,25 +1270,22 @@ impl Model {
 		}
 		// the preset's own values, not what a rule shows over them
 		for m in members {
-			let s = self.spec.at(&m).clone();
-			let v = self.base(&s, env);
-			self.values.own.insert(m, v);
+			let v = self.base(spec.at(m), env);
+			self.values.own.insert(m.clone(), v);
 		}
 	}
 
-	/// The config and state files. Own values go at their paths, except one
-	/// under a checkbox that is on, which goes under `kept.set_aside`. Changes
-	/// go under `kept.changes`, with the preset they were made on. A group
-	/// member's own value is its Custom one, so it always stays put.
-	pub fn save(&self, env: &dyn Env) -> (String, String) {
-		let mut config = shcl::Document::new();
-		let mut state = shcl::Document::new();
-		// kept goes last, after everything a person would look for
-		let mut kept: Vec<(String, &Value)> = Vec::new();
+	/// What the files hold. Own values go at their paths, except one under a
+	/// checkbox that is on, which goes under `kept.set_aside`. Changes go under
+	/// `kept.changes`, with the preset they were made on, and stay there while a
+	/// temporary preset hides them. A group member's own value is its Custom
+	/// one, so it always stays put.
+	pub fn lines(&self, env: &dyn Env) -> Lines {
+		let mut out = Lines::default();
 		for s in &self.spec.settings {
 			if s.store == Store::State {
 				if let Some(v) = self.values.state.get(&s.id) {
-					put(&mut state, &s.path, v);
+					out.state.push((s.path.clone(), v.clone()));
 				}
 				continue;
 			}
@@ -1164,29 +1297,42 @@ impl Model {
 					.as_deref()
 					.is_some_and(|sw| self.value(sw, env).as_bool());
 			if aside {
-				kept.push((format!("kept.set_aside.{}", s.path), v));
+				out.kept
+					.push((format!("kept.set_aside.{}", s.path), v.clone()));
 			} else {
-				put(&mut config, &s.path, v);
+				out.config.push((s.path.clone(), v.clone()));
 			}
 		}
-		for (path, v) in kept {
-			put(&mut config, &path, v);
-		}
 		for g in &self.spec.groups {
-			let changed = self.changed(&g.id, env);
+			let on = self.stored_choice(&g.id, env);
+			let changed = self.changes_on(&g.id, &on);
 			if changed.is_empty() {
 				continue;
 			}
 			let base = format!("kept.changes.{}", g.id);
-			let _ = config.set_string(&format!("{base}.preset"), &self.chosen(&g.id, env));
+			out.kept
+				.push((format!("{base}.preset"), Value::Text(on.clone())));
 			for id in changed {
 				let s = self.spec.at(id);
-				put(
-					&mut config,
-					&format!("{base}.values.{}", s.path),
-					&self.values.changes[id],
-				);
+				out.kept.push((
+					format!("{base}.values.{}", s.path),
+					self.values.changes[id].clone(),
+				));
 			}
+		}
+		out
+	}
+
+	/// The config and state files, from [`Model::lines`], with `kept` last.
+	pub fn save(&self, env: &dyn Env) -> (String, String) {
+		let lines = self.lines(env);
+		let mut config = shcl::Document::new();
+		let mut state = shcl::Document::new();
+		for (path, v) in lines.config.iter().chain(&lines.kept) {
+			put(&mut config, path, v);
+		}
+		for (path, v) in &lines.state {
+			put(&mut state, path, v);
 		}
 		if config.exists("kept") {
 			let _ = config.set_comment(
@@ -1199,48 +1345,62 @@ impl Model {
 
 	/// Read the files back. A value that fails its setting's checks is dropped,
 	/// as is a change made on a preset that is no longer the one picked.
-	pub fn load(spec: Spec, config: &str, state: &str) -> Model {
-		let config = shcl::Document::parse(config);
-		let state = shcl::Document::parse(state);
+	pub fn load(spec: impl Into<Arc<Spec>>, config: &str, state: &str) -> Model {
+		Model::load_docs(
+			spec,
+			&shcl::Document::parse(config),
+			&shcl::Document::parse(state),
+		)
+	}
+
+	/// [`Model::load`] from documents already parsed.
+	pub fn load_docs(
+		spec: impl Into<Arc<Spec>>,
+		config: &shcl::Document,
+		state: &shcl::Document,
+	) -> Model {
 		let mut m = Model::new(spec);
-		let mut own = BTreeMap::new();
-		let mut st = BTreeMap::new();
-		for s in &m.spec.settings {
+		let spec = Arc::clone(&m.spec);
+		for s in &spec.settings {
 			if s.control == Control::Heading {
 				continue;
 			}
 			let (doc, paths) = match s.store {
-				Store::State => (&state, vec![s.path.clone()]),
+				Store::State => (state, vec![s.path.clone()]),
 				Store::Config => (
-					&config,
+					config,
 					vec![s.path.clone(), format!("kept.set_aside.{}", s.path)],
 				),
 			};
 			let found = paths
 				.iter()
-				.find_map(|p| take(doc, p, s).and_then(|v| m.spec.valid(s, &v).ok()));
+				.find_map(|p| take(doc, p, s).and_then(|v| spec.valid(s, &v).ok()));
 			if let Some(v) = found {
 				if s.store == Store::State {
-					st.insert(s.id.clone(), v);
+					m.values.state.insert(s.id.clone(), v);
 				} else {
-					own.insert(s.id.clone(), v);
+					m.values.own.insert(s.id.clone(), v);
 				}
 			}
 		}
-		m.values.own = own;
-		m.values.state = st;
-		for g in m.spec.groups.clone() {
+		for g in &spec.groups {
 			let base = format!("kept.changes.{}", g.id);
 			let Ok(on) = config.get_string(&format!("{base}.preset")) else {
 				continue;
 			};
-			if m.chosen(&g.id, &NoEnv) != on || g.preset(&on).is_none_or(|p| p.temporary) {
+			// the program's presets can't be asked for yet, so only Custom is ruled out
+			let gone = if g.from_program {
+				on == CUSTOM
+			} else {
+				g.preset(&on).is_none_or(|p| p.temporary)
+			};
+			if m.stored_choice(&g.id, &NoEnv) != on || gone {
 				continue;
 			}
 			for id in &g.members {
-				let s = m.spec.at(id);
+				let s = spec.at(id);
 				let p = format!("{base}.values.{}", s.path);
-				if let Some(v) = take(&config, &p, s).and_then(|v| m.spec.valid(s, &v).ok()) {
+				if let Some(v) = take(config, &p, s).and_then(|v| spec.valid(s, &v).ok()) {
 					m.values.changes.insert(id.clone(), v);
 				}
 			}
