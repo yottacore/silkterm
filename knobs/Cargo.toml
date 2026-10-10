@@ -7,6 +7,11 @@ description = "Settings declared in shcl, and what a change to one does to the o
 license = "GPL-2.0-or-later"
 publish = false
 
+# Its docs have no examples, and the doc test run makes a temp folder of its own,
+# outside the test run's folder.
+[lib]
+doctest = false
+
 [dependencies]
 shcl = "2.0.0"
 
