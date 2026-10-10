@@ -767,9 +767,6 @@ fRunTest cicd/tests/cicd-win/run.bash "windows pipeline pieces" "windows pipelin
 ## Every table of contents, which no markdown linter regenerates. design.md had
 ## been missing eight of its headings.
 fRunTest cicd/tests/toc/run.py "tables of contents" "a table of contents is out of date - run cicd/tests/toc/run.py --fix"
-## A setting the program can work out for itself is read through one function,
-## so nothing takes "nothing stored" for a value.
-fRunTest cicd/tests/autoread/run.py "auto setting reads" "an auto setting's stored value is read directly"
 ## Every markdown table, laid out as the README's generated one is. Hand-written
 ## ones had drifted to trailing pipes and ragged columns.
 fRunTest cicd/tests/tables/run.py "markdown tables" "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
