@@ -1,0 +1,3 @@
+# Build next to SilkTerm's own, under its target folder.
+[build]
+target-dir = "../../target/knobs-demo"

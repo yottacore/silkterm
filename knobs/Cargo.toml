@@ -1,0 +1,14 @@
+[package]
+name = "knobs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+description = "Settings declared in shcl, and what a change to one does to the others"
+license = "GPL-2.0-or-later"
+publish = false
+
+[dependencies]
+shcl = "2.0.0"
+
+[lints]
+workspace = true

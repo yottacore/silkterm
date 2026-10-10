@@ -1,0 +1,43 @@
+[package]
+name = "knobs-demo"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+description = "A settings dialog with nothing behind it, for trying out knobs"
+license = "GPL-2.0-or-later"
+publish = false
+
+# Kept out of SilkTerm's workspace, so egui stays out of its lock file, lint
+# run and cross builds.
+[workspace]
+
+[dependencies]
+knobs = { path = ".." }
+eframe = { version = "0.36", default-features = false, features = ["accesskit", "default_fonts", "glow", "wayland", "x11"] }
+
+[patch.crates-io]
+shcl = { git = "https://github.com/yottacore/shcl", rev = "b10c2009" }
+
+# Same as SilkTerm's workspace, which this sits outside of.
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+collapsible_if = "allow"        # nested ifs read better than && chains here
+too_many_arguments = "allow"
+type_complexity = "allow"
+large_enum_variant = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+cast_lossless = "allow"
+float_cmp = "allow"
+too_many_lines = "allow"
+struct_excessive_bools = "allow"
+default_trait_access = "allow"
+enum_glob_use = "allow"
+similar_names = "allow"
+many_single_char_names = "allow"
+option_option = "allow"
+unwrap_used = "warn"
+expect_used = "warn"
+undocumented_unsafe_blocks = "warn"
