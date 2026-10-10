@@ -680,7 +680,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 	}
 	let groups = read_groups(&doc, &mut problems);
 
-	// one step in for each checkbox above a row, unless it says otherwise
+	// one step in from the checkbox above a row, unless it says otherwise
 	let rel_of = |key: Key| {
 		relations
 			.iter()
@@ -688,20 +688,33 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			.map(|(_, rel)| *rel)
 			.unwrap_or_default()
 	};
+	let declared: Vec<(Key, u8)> = specs.iter().map(|s| (s.key, s.indent)).collect();
+	let declared_of = |key: Key| {
+		declared
+			.iter()
+			.find(|(k, _)| *k == key)
+			.map_or(u8::MAX, |(_, indent)| *indent)
+	};
 	for spec in &mut specs {
 		if spec.indent != u8::MAX {
 			continue;
 		}
-		let mut depth = 0u8;
+		// the chain up to the first row that says its own indent, or the top
+		let mut steps = 0u8;
+		let mut base = 0u8;
 		let mut at = spec.key;
 		while let Some(up) = rel_of(at).gate.or(rel_of(at).auto) {
-			depth += 1;
-			if depth >= 4 {
+			steps += 1;
+			if steps >= 4 {
+				break;
+			}
+			if declared_of(up) != u8::MAX {
+				base = declared_of(up);
 				break;
 			}
 			at = up;
 		}
-		spec.indent = depth;
+		spec.indent = (base + steps).min(4);
 	}
 
 	if problems.is_empty() {

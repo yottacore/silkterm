@@ -11351,10 +11351,11 @@ mod tests {
 				&[Key::ScrollbarThickness, Key::ScrollbarAutoHide],
 			),
 			("Movement", Key::Minimap, &[Key::MinimapWidth]),
+			("Themes", Key::ColBg, &[Key::ColFromWallpaper]),
 			(
 				"Themes",
-				Key::ColBg,
-				&[Key::ColFromWallpaper, Key::ColFg, Key::ColCursor],
+				Key::ColFromWallpaper,
+				&[Key::ColFg, Key::ColCursor],
 			),
 			(
 				"Themes",
