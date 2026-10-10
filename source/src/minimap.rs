@@ -1214,7 +1214,7 @@ fn paint(
 	Ink {
 		fg: readable.get(fg, bg, cfg.min_contrast()),
 		bg,
-		own_bg: bg != crate::config::auto::color(cfg, crate::config::auto::Setting::Background),
+		own_bg: bg != cfg.bg,
 	}
 }
 

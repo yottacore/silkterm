@@ -1091,6 +1091,21 @@ mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::AtomicU64;
 
+	// The profile picked by hand, and Remote over it or not.
+	fn picked(profile: crate::profile::Profile, remote: bool, s: Settings) -> Settings {
+		use crate::ui_spec::Key;
+		use knobs::Value;
+		let mut s = crate::fields::owning(
+			s,
+			&[
+				(Key::PerfAuto, Value::Bool(false)),
+				(Key::PerfProfile, Value::Text(profile.key().into())),
+			],
+		);
+		crate::profile::set_remote(&mut s, remote);
+		s
+	}
+
 	// Held whole, as before the window's size was known or the blur set it.
 	const WHOLE: Hold = Hold {
 		window: (0, 0),
@@ -1250,12 +1265,7 @@ mod tests {
 			assert!(!light.bordered((2560, 1440)));
 		}
 
-		let with = |profile, remote| Settings {
-			performance_profile: profile,
-			performance_automatic: false,
-			remote_override: remote,
-			..Settings::default()
-		};
+		let with = |profile: Profile, remote: bool| picked(profile, remote, Settings::default());
 		for (profile, want) in [
 			(Profile::Low, 2.0),
 			(Profile::Standard, 2.0),
@@ -1300,9 +1310,9 @@ mod tests {
 		assert_eq!(small.rgba.dimensions(), (160, 83));
 		// Low holds it at 2 pixels a sigma
 		let low = Settings {
-			performance_profile: Profile::Low,
-			performance_automatic: false,
-			..blurred
+			wallpaper_blur: 10.0,
+			wallpaper_contrast_mask: false,
+			..picked(Profile::Low, false, blurred)
 		};
 		let prepared = run(&request(low)).image.expect("prepared");
 		assert_eq!(prepared.held, (384, 199));
@@ -2293,12 +2303,15 @@ mod tests {
 		use super::packing;
 		use crate::config::Compression;
 		use crate::profile::Profile;
-		let with = |profile, remote, compression| Settings {
-			performance_profile: profile,
-			performance_automatic: false,
-			remote_override: remote,
-			wallpaper_compression: compression,
-			..Settings::default()
+		let with = |profile: Profile, remote: bool, compression| {
+			picked(
+				profile,
+				remote,
+				Settings {
+					wallpaper_compression: compression,
+					..Settings::default()
+				},
+			)
 		};
 		assert_eq!(Settings::default().wallpaper_compression, Compression::Auto);
 		for (profile, want) in [

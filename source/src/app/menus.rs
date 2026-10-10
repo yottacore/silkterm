@@ -1108,7 +1108,7 @@ impl State {
 			tab_strip: !settings.hide_single_tab,
 			minimap: settings.minimap,
 			bare: self.bare,
-			remote: settings.remote_override,
+			remote: crate::profile::remote(&settings),
 			next_wallpaper: self.can_rotate(),
 		};
 		(
@@ -1288,7 +1288,8 @@ impl State {
 			MenuAction::ToggleRemote => self.toggle_remote(),
 			MenuAction::ToggleMinimap => {
 				save_live(|live| {
-					live.minimap = !live.minimap;
+					let on = knobs::Value::Bool(!live.minimap);
+					crate::fields::set(live, crate::ui_spec::Key::Minimap, &on, None);
 					true
 				});
 				self.relayout_all();

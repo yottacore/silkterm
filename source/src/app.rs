@@ -1529,14 +1529,9 @@ impl State {
 		edited: config::Settings,
 		force_bg: bool,
 	) {
-		// a size set by hand, or one gone back to automatic; an automatic size
-		// that only follows the window is the size it already has
-		let size_of = |s: &config::Settings| {
-			[config::auto::Setting::Columns, config::auto::Setting::Rows].map(|setting| {
-				(!config::auto::automatic(s, setting))
-					.then(|| config::auto::value(s, setting, config::auto::Place::default()))
-			})
-		};
+		// a size set by hand, or Remember last size turned back on; a size that
+		// only follows the window is the size it already has
+		let size_of = |s: &config::Settings| (!s.remember_size).then_some((s.columns, s.rows));
 		let resize = size_of(&edited) != size_of(orig);
 		// copy_on_select changed -> apply to every existing pane too, so the
 		// dialog toggle takes effect now, not only for panes spawned later
@@ -1552,6 +1547,9 @@ impl State {
 		// stored settings, so the dialog's own diff can be empty while the
 		// picture changes completely.
 		let before = config::settings();
+		let mut edited = edited;
+		// a step, a measured rung or Remote reaches the fields through the rules
+		crate::fields::fill(&mut edited, None);
 		config::update(edited);
 		let after = config::settings();
 		let rebuild = crate::settings_ui::needs_text_rebuild(&before, &after);
@@ -1571,7 +1569,7 @@ impl State {
 		// window dimensions changed in Settings -> resize to the new cell grid
 		if resize {
 			let (columns, rows) =
-				config::auto::grid(&config::settings(), self.watch.key.as_deref());
+				crate::fields::grid(&config::settings(), self.watch.key.as_deref());
 			self.request_grid(columns, rows);
 		}
 		if rebuild {
@@ -1660,8 +1658,8 @@ impl State {
 		self.last_frame = now;
 		let cfg = config::settings(); // one snapshot per frame, not per use/pane
 		// chrome colors from the same snapshot, read once a frame
-		let menu_fg_rgb = config::auto::color(&cfg, config::auto::Setting::MenuForeground);
-		let menu_bg_rgb = config::auto::color(&cfg, config::auto::Setting::MenuBackground);
+		let menu_fg_rgb = cfg.menu_fg;
+		let menu_bg_rgb = cfg.menu_bg;
 		let menu_border_rgb = config::menu_border_of(menu_bg_rgb);
 		let menu_hover_rgb = config::menu_hover_of(menu_bg_rgb);
 
@@ -1735,8 +1733,7 @@ impl State {
 		let active_pane = self.tabs.cur().focused;
 		// pane fill color is loop-invariant
 		let pane_bg = {
-			let mut c =
-				config::srgb_f32(config::auto::color(&cfg, config::auto::Setting::Background));
+			let mut c = config::srgb_f32(cfg.bg);
 			c[3] = bg_alpha;
 			c
 		};
@@ -2028,7 +2025,7 @@ impl State {
 							field.y - cb_rule,
 							field.w + 2.0 * cb_rule,
 							field.h + 2.0 * cb_rule,
-							config::auto::color(&cfg, config::auto::Setting::Highlight),
+							cfg.highlight,
 						));
 						instances.push(rect_inst(
 							field.x,
@@ -2382,11 +2379,7 @@ impl State {
 			.update_viewport(&gpu.gfx.queue, gpu.gfx.config.width, gpu.gfx.config.height);
 		self.text.set_text_blend(
 			&gpu.gfx.queue,
-			crate::text::text_blend(
-				cfg.fg,
-				config::auto::color(&cfg, config::auto::Setting::Background),
-				cfg.text_dark_on_light,
-			),
+			crate::text::text_blend(cfg.fg, cfg.bg, cfg.text_dark_on_light),
 		);
 		gpu.rects.set_resolution(&gpu.gfx.queue, frame_w, frame_h);
 		// How the picture is mixed with the background. Light mode needs a different
@@ -2846,7 +2839,7 @@ impl State {
 					&gpu.gfx.queue,
 					&mut encoder,
 					&instances[under_len as usize..ring_start as usize],
-					config::srgb_f32(config::auto::color(&cfg, config::auto::Setting::Background)),
+					config::srgb_f32(cfg.bg),
 				);
 			}
 			if cfg.cursor_scrim || cfg.cursor_outline {
@@ -3231,10 +3224,7 @@ fn minimap_insts(g: &crate::minimap::Geom, active: bool) -> Option<RectInstance>
 		pos: [handle.x, handle.y],
 		size: [g.preview.w, handle.h],
 		color: {
-			let mut c = config::srgb_f32(config::auto::color(
-				&cfg,
-				config::auto::Setting::ScrollbarThumb,
-			));
+			let mut c = config::srgb_f32(cfg.scrollbar_thumb);
 			c[3] = alpha * 0.28;
 			c
 		},
@@ -3254,14 +3244,10 @@ fn scrollbar_insts(bar: &crate::pane::Bar, fade: f32, active: bool) -> [RectInst
 	[
 		bar_inst(
 			bar.track,
-			config::auto::color(&cfg, config::auto::Setting::ScrollbarTrough),
+			cfg.scrollbar_trough,
 			fade * config::SCROLLBAR_TROUGH_A,
 		),
-		bar_inst(
-			bar.thumb,
-			config::auto::color(&cfg, config::auto::Setting::ScrollbarThumb),
-			fade * thumb_a,
-		),
+		bar_inst(bar.thumb, cfg.scrollbar_thumb, fade * thumb_a),
 	]
 }
 
@@ -3455,12 +3441,12 @@ fn open_url(url: &str) {
 // bad open_command) and is worth saying out loud once, not worth an alert.
 fn open_link(url: &str) {
 	let cfg = config::settings();
-	let command = config::auto::text(&cfg, config::auto::Setting::OpenCommand);
-	// automatic goes to the desktop's own opener, which takes the URL its own way
-	let command = if config::auto::automatic(&cfg, config::auto::Setting::OpenCommand) {
-		""
+	// with none set it goes to the desktop's own opener, which takes the URL its
+	// own way
+	let command = if crate::fields::by_hand(&cfg, crate::ui_spec::Key::LinkOpenCommand) {
+		cfg.hyperlink_open_command.as_str()
 	} else {
-		&command
+		""
 	};
 	if let Err(e) = crate::links::open(url, command) {
 		eprintln!("{}: could not open {url}: {e}", config::APP_NAME);
@@ -3479,10 +3465,7 @@ fn scissor(rect: Rect, sw: u32, sh: u32) -> (u32, u32, u32, u32) {
 fn focus_ring(rect: Rect, scale: f32) -> [RectInstance; 4] {
 	// the calm one: the ring marks which pane is live, alongside the dialog's own
 	// sliders and revert arrows, rather than the single keyboard-focused control
-	let color = config::srgb_f32(config::auto::color(
-		&config::settings(),
-		config::auto::Setting::Highlight,
-	));
+	let color = config::srgb_f32(config::settings().highlight);
 	let thickness = config::dip(config::FOCUS_RING_PX, scale);
 	[
 		RectInstance {
@@ -3624,7 +3607,10 @@ impl ApplicationHandler<UserEvent> for App {
 			let live = config::settings();
 			let step = session_step(&live, gfx.drawn, false);
 			if let Some(step) = step {
-				set_live(|live| live.stepped_profile = step);
+				set_live(|live| {
+					live.stepped_profile = step;
+					crate::fields::fill(live, None);
+				});
 			}
 			(None, step.is_some_and(|step| step.is_some()))
 		} else {
@@ -3648,7 +3634,7 @@ impl ApplicationHandler<UserEvent> for App {
 		let monitor = crate::monitor::MonitorId::of_new_window(&window).map(|m| m.key());
 		let kept = config::remembered_window(&settings, monitor.as_deref());
 		let font_pinned = cli_win.style.font_size.is_some();
-		if config::auto::keeps_size(&settings) && !font_pinned {
+		if settings.remember_size && !font_pinned {
 			config::set_font_zoom(kept.font_zoom);
 		}
 
@@ -3683,7 +3669,7 @@ impl ApplicationHandler<UserEvent> for App {
 			font_pinned,
 			positionless: window.outer_position().is_err(),
 		};
-		let (cols, rows) = config::auto::grid(&settings, watch.key.as_deref());
+		let (cols, rows) = crate::fields::grid(&settings, watch.key.as_deref());
 		let cols = cli_win.columns.unwrap_or(cols);
 		let rows = cli_win.rows.unwrap_or(rows);
 		let menu_bar_h = if menu_bar {

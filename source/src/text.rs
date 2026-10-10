@@ -358,7 +358,7 @@ fn resolve_mono_family(fs: &FontSystem) -> Option<String> {
 	let settings = config::settings();
 	for fam in mono_candidates(
 		crate::sysfont::monospace().family.as_deref(),
-		&config::auto::font_family(&settings),
+		&settings.font_family,
 	) {
 		if installed(&fam) {
 			return Some(fam);

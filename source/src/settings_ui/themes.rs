@@ -3,6 +3,7 @@
 
 use super::{EditState, PROMPT_ROW, Prompt, PromptFocus, PromptJob, SettingsDialog};
 use crate::config;
+use crate::fields;
 use crate::ui_spec::Key;
 
 /// The theme row's four buttons, in the order they are declared.
@@ -35,14 +36,10 @@ impl SettingsDialog {
 			.position(|t| t.name.eq_ignore_ascii_case(name))
 	}
 
-	/// Has the user moved a color away from what the current theme says? That IS
-	/// the unsaved-changes test, and it needs no flag of its own: an edited color
-	/// lives on as a `colors.*` line, so the answer survives a restart for free.
+	/// A color changed under the theme picked: the dropdown says `Name *`, and
+	/// the changes are saved apart from it, so the answer survives a restart.
 	pub(super) fn theme_dirty(&self) -> bool {
-		// resolve the palette once - this runs per button, per frame
-		let palette = self.theme_palette();
-		(0..crate::theme::PALETTE_KEYS.len())
-			.any(|i| self.get_col(Self::palette_key(i)) != palette.get(i))
+		!fields::changed(&self.edited, Key::Theme).is_empty()
 	}
 
 	// The dialog row key holding palette color `i` (same order as PALETTE_KEYS).
@@ -71,24 +68,10 @@ impl SettingsDialog {
 		}
 	}
 
-	/// Take on the colors of whatever theme and mode are now selected. Switching
-	/// theme adopts the new scheme rather than keeping tweaks made to the old one
-	/// on top of it - a picker that visibly changed nothing would be worse, and the
-	/// tweaks were changes to the theme being left behind.
-	///
-	/// Reverting each key rather than just setting it is what keeps the file honest:
-	/// the colors on screen are now the theme's own, so the per-color overrides have
-	/// nothing left to say and Apply comments them out. Setting them alone would
-	/// write ten active colors.* lines pinning this one palette, which then wins over
-	/// every later theme change and freezes one variant under `theme_mode: system`.
-	pub(super) fn adopt_theme(&mut self) {
-		config::retheme(&mut self.edited);
-		let pal = self.theme_palette();
-		for i in 0..crate::theme::PALETTE_KEYS.len() {
-			// default_col resolves through theme_palette, so this ends on pal.get(i)
-			self.revert(Self::palette_key(i));
-		}
-		self.edited.ansi = pal.ansi;
+	// Pick a theme by name, as the dropdown would. Its "*" changes go.
+	fn pick_theme(&mut self, name: &str) {
+		let v = knobs::Value::Text(name.to_string());
+		fields::set(&mut self.edited, Key::Theme, &v, self.monitor.as_deref());
 	}
 
 	/// Store the colors on screen under `name`, replacing a saved theme of that
@@ -136,13 +119,8 @@ impl SettingsDialog {
 			Some(k) => self.edited.user_themes[k] = theme,
 			None => self.edited.user_themes.push(theme),
 		}
-		self.edited.theme = name;
-		config::retheme(&mut self.edited);
-		// the tweaks are the theme's own colors now, so the per-color overrides
-		// have nothing left to say and are commented back out on Apply
-		for i in 0..crate::theme::PALETTE_KEYS.len() {
-			self.revert(Self::palette_key(i));
-		}
+		// the changes are the theme's own colors now
+		self.pick_theme(&name);
 	}
 
 	// A config path segment for a new theme: the name reduced to something a path
@@ -243,9 +221,10 @@ impl SettingsDialog {
 	pub(super) fn rename_theme(&mut self, name: &str) {
 		let name = name.trim().to_string();
 		if let Some(theme_index) = self.user_theme_index() {
-			self.edited.user_themes[theme_index].name.clone_from(&name);
-			self.edited.theme = name;
-			config::retheme(&mut self.edited);
+			let old =
+				std::mem::replace(&mut self.edited.user_themes[theme_index].name, name.clone());
+			// still the same theme, so its "*" changes go with it
+			fields::rename_preset(&mut self.edited, Key::Theme, &old, &name);
 		}
 	}
 
@@ -257,13 +236,15 @@ impl SettingsDialog {
 		};
 		let name = self.edited.user_themes[theme_index].name.clone();
 		self.edited.user_themes.remove(theme_index);
-		if !crate::theme::is_builtin(&name) {
-			self.edited.theme = crate::theme::all_names(&self.edited.user_themes)
+		let next = if crate::theme::is_builtin(&name) {
+			name
+		} else {
+			crate::theme::all_names(&self.edited.user_themes)
 				.first()
 				.cloned()
-				.unwrap_or_else(|| name.clone());
-		}
-		self.adopt_theme();
+				.unwrap_or(name)
+		};
+		self.pick_theme(&next);
 	}
 }
 
@@ -327,8 +308,10 @@ mod tests {
 
 		assert!(!d.theme_dirty(), "the edit is the theme's own color now");
 		assert!(
-			d.reverted.contains(&"colors.foreground"),
-			"the override is queued for removal"
+			crate::fields::lines_of(&d.edited)
+				.iter()
+				.all(|(p, _)| !p.starts_with("kept.changes.theme")),
+			"no change is left to save under it"
 		);
 	}
 
@@ -396,12 +379,12 @@ mod tests {
 			.expect("the mode row");
 
 		d.set_col(Key::ColFg, [1, 2, 3]);
-		assert_eq!(d.dd_closed_label(row), super::super::UNSAVED_THEME);
+		assert_eq!(d.dd_closed_label(row), "Matrix *");
 		// only this one box: every other dropdown still says what it is on
 		assert_eq!(d.dd_closed_label(mode), "Dark");
 		// the list itself is untouched, and the highlight still finds Matrix
 		let names = d.dd_options(row);
-		assert!(!names.iter().any(|n| n == super::super::UNSAVED_THEME));
+		assert!(!names.iter().any(|n| n.ends_with('*')));
 		assert_eq!(names[d.get_radio(Key::Theme)], "Matrix");
 
 		d.set_radio(Key::Theme, d.get_radio(Key::Theme));
@@ -437,30 +420,25 @@ mod tests {
 		assert!(!d.theme_dirty(), "a fresh theme starts unmodified");
 	}
 
-	// Picking a theme must not leave the old palette behind as colors.* overrides.
-	// Those would be written as active lines and then outrank every later theme
-	// change, which also freezes one variant when the mode follows the desktop.
+	// Picking a theme drops the changes made under the one before, so nothing of
+	// the old palette is saved over the new one.
 	// Test ID: Em430PB
 	#[test]
-	fn adopting_a_theme_clears_the_color_overrides() {
+	fn picking_a_theme_drops_the_changes_under_the_last() {
 		let mut d = on_theme("SilkTerm");
 		d.set_col(Key::ColFg, [1, 2, 3]);
 		d.set_col(Key::ColBg, [4, 5, 6]);
-		d.reverted.clear();
-
-		d.edited.theme = "Matrix".to_string();
-		d.adopt_theme();
-
-		let pending = d.take_reverted();
-		for i in 0..crate::theme::PALETTE_KEYS.len() {
-			for cfg_key in super::super::ui().settings_of(SettingsDialog::palette_key(i)) {
-				assert!(
-					pending.contains(cfg_key),
-					"{cfg_key} must be commented out on Apply"
-				);
-			}
-		}
-		assert!(!d.theme_dirty(), "the adopted palette is not an edit");
+		assert!(d.theme_dirty());
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let matrix = names.iter().position(|n| n == "Matrix").unwrap();
+		d.set_radio(Key::Theme, matrix);
+		assert!(
+			crate::fields::lines_of(&d.edited)
+				.iter()
+				.all(|(p, _)| !p.starts_with("kept.changes.theme")),
+			"the changes went with the pick"
+		);
+		assert!(!d.theme_dirty(), "the new palette is not a change");
 	}
 
 	// Renaming moves the name and the selection together; the slug behind it does
@@ -545,8 +523,9 @@ mod tests {
 		let mut d = mk_dialog(4000.0);
 		d.orig = base.clone();
 		d.edited = base.clone();
-		d.edited.theme = "Matrix".into();
-		d.adopt_theme();
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let matrix = names.iter().position(|n| n == "Matrix").unwrap();
+		d.set_radio(Key::Theme, matrix);
 		d.set_col(Key::ColFg, [0x12, 0x34, 0x56]);
 		d.save_theme_as("Saved One");
 		assert!(config::persist(&base, &d.edited));

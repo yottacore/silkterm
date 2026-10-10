@@ -4,12 +4,9 @@
 //! Performance profiles: one setting that decides how much the look is allowed
 //! to cost, and the rating that picks it on a machine that cannot keep up.
 //!
-//! A profile sits ON TOP of the stored settings rather than in them. The file
-//! and the dialog keep the user's own values; `apply` overwrites the fields a
-//! profile governs when settings go live and keeps the originals in a shadow,
-//! so any code that reads the live settings and writes them back cannot leak
-//! a profile's value into the file. Choosing Custom is then just a profile
-//! that governs nothing.
+//! A profile is a preset group in `settings_ui.shcl` (`groups: profile`), and the
+//! model in `Settings` decides which one is in force and what each row shows.
+//! Custom is the person's own values. See the automatic settings design doc.
 //!
 //! The rating watches how a scroll ease is paced. A display that keeps its
 //! refresh rate paces one frame per refresh; one that cannot stretches every
@@ -29,7 +26,7 @@ pub enum Profile {
 	Low,
 	Standard,
 	// Standard's values, chosen for a remote screen and never written down:
-	// it lives in `Settings::remote_override`, not in `performance_profile`
+	// a temporary preset in the model, not in `performance_profile`
 	Remote,
 }
 
@@ -80,6 +77,7 @@ impl Profile {
 		Profile::ALL.iter().position(|p| *p == self).unwrap_or(0)
 	}
 
+	#[cfg(test)]
 	pub fn from_index(index: usize) -> Profile {
 		Profile::ALL.get(index).copied().unwrap_or(Profile::Max)
 	}
@@ -103,9 +101,35 @@ impl Profile {
 	}
 }
 
+/// The profile in force: Remote while it is on, else the pick, which is the
+/// machine's with any step the display watch took while Choose automatically
+/// is on.
+pub fn current(settings: &Settings) -> Profile {
+	let env = crate::fields::Env::new(settings, None);
+	Profile::parse(&settings.model.chosen(crate::fields::PROFILE, &env))
+}
+
+/// Whether the Remote profile is on for this run.
+pub fn remote(settings: &Settings) -> bool {
+	settings
+		.model
+		.values
+		.session
+		.get(crate::fields::PROFILE)
+		.is_some_and(|key| key == Profile::Remote.key())
+}
+
+/// Put the Remote profile on or off for this run. Nothing is stored.
+pub fn set_remote(settings: &mut Settings, on: bool) {
+	let key = on.then_some(Profile::Remote.key());
+	settings.model.temporary(crate::fields::PROFILE, key);
+	crate::fields::fill(settings, None);
+}
+
 /// The user's own values of every field a profile governs, kept beside the
 /// live settings while a profile is in force. `put` is the whole of "choose
 /// Custom and everything comes back".
+#[cfg(test)]
 #[derive(Clone, PartialEq, Debug)]
 pub struct Shadow {
 	scroll_smooth: bool,
@@ -127,6 +151,7 @@ pub struct Shadow {
 	wallpaper_contrast_mask: bool,
 }
 
+#[cfg(test)]
 impl Shadow {
 	fn of(settings: &Settings) -> Shadow {
 		Shadow {
@@ -171,72 +196,12 @@ impl Shadow {
 	}
 }
 
-/// Put the user's own values back. Safe on settings that carry no profile.
-pub fn unapply(settings: &mut Settings) {
-	if let Some(shadow) = settings.profile_shadow.take() {
-		shadow.put(settings);
-	}
-}
-
-/// Overwrite the governed fields with the profile's, keeping the user's values
-/// in the shadow. Idempotent: a live copy that already carries a profile is
-/// unwound first, so a changed profile field is honored rather than stacked.
-pub fn apply(settings: &mut Settings) {
-	unapply(settings);
-	let profile = current(settings);
-	if profile == Profile::Custom {
-		return;
-	}
-	let shadow = Shadow::of(settings);
-	values(profile, settings);
-	settings.profile_shadow = Some(Box::new(shadow));
-}
-
-/// Keep what a profile is showing and make it the user's own, then drop to
-/// Custom. This is what editing a governed setting means: the change starts from
-/// the values on screen, not from whatever the file held before the profile went
-/// on. Also switches the automatic choice off, since a machine still picking for
-/// itself would overwrite the edit at the next launch.
-pub fn adopt(settings: &mut Settings) {
-	let profile = current(settings);
-	if profile == Profile::Custom && !settings.performance_automatic {
-		return;
-	}
-	if profile != Profile::Custom {
-		unapply(settings);
-		values(profile, settings);
-	}
-	settings.remote_override = false;
-	settings.stepped_profile = None;
-	settings.performance_profile = Profile::Custom;
-	settings.performance_automatic = false;
-}
-
-/// The profile in force: the remote override while it is on, then a step the
-/// display watch took this session, then the stored one. A step only ever makes
-/// a ladder rung cheaper, and only while automatic is on - it is the automatic
-/// choice's own correction, so a hand pick or Custom is never overridden by it.
-pub fn current(settings: &Settings) -> Profile {
-	if settings.remote_override {
-		return Profile::Remote;
-	}
-	let stored = settings.performance_profile;
-	match settings.stepped_profile {
-		Some(step)
-			if settings.performance_automatic
-				&& matches!(stored, Profile::Max | Profile::High | Profile::Low)
-				&& matches!(step, Profile::High | Profile::Low | Profile::Standard)
-				&& step.index() > stored.index() =>
-		{
-			step
-		}
-		_ => stored,
-	}
-}
-
-// What each profile sets. Every profile starts from the shipped defaults, so
+// What each profile set before the presets moved to settings_ui.shcl, kept for
+// the test that holds them equal. Every profile starts from the shipped
+// defaults, so
 // Max is exactly "the defaults for everything" and the others name only what
 // they change.
+#[cfg(test)]
 fn values(profile: Profile, settings: &mut Settings) {
 	let defaults = Settings::default();
 	Shadow::of(&defaults).put(settings);
@@ -268,6 +233,7 @@ fn values(profile: Profile, settings: &mut Settings) {
 /// those fields mean anything here. They depend on the profile alone, so each
 /// is built once, and a reader that wants a profile's value of one field needs
 /// no copy of the user's whole settings to lay the profile over.
+#[cfg(test)]
 pub fn values_of(profile: Profile) -> &'static Settings {
 	static VALUES: std::sync::OnceLock<Vec<Settings>> = std::sync::OnceLock::new();
 	let all = VALUES.get_or_init(|| {
@@ -285,6 +251,7 @@ pub fn values_of(profile: Profile) -> &'static Settings {
 
 // Shorter eases on the three stretches a slow display shows most, and a halo
 // that costs fewer taps: the square metric with a smaller reach.
+#[cfg(test)]
 fn quicker(settings: &mut Settings) {
 	settings.scroll_ease_in_ms /= 2.0;
 	settings.scroll_ease_out_ms /= 2.0;
@@ -722,10 +689,12 @@ fn median(values: &mut [f32]) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::{
-		Bench, FrameBudget, Profile, Rating, Step, WINDOW, apply, budget_ms, first_pick,
-		software_adapter, unapply,
+		Bench, FrameBudget, Profile, Rating, Step, WINDOW, budget_ms, first_pick, software_adapter,
 	};
 	use crate::config::Settings;
+	use crate::fields;
+	use crate::ui_spec::Key;
+	use knobs::Value;
 	use std::time::{Duration, Instant};
 
 	fn adapter(name: &str, device_type: wgpu::DeviceType) -> wgpu::AdapterInfo {
@@ -890,67 +859,62 @@ mod tests {
 		assert_eq!(rungs, vec![Profile::Max, Profile::High, Profile::Standard]);
 	}
 
-	fn tuned() -> Settings {
-		Settings {
-			scroll_ease_in_ms: 300.0,
-			scroll_smooth: false,
-			cursor_blink: false,
-			text_scrim_radius: 9.0,
-			wallpaper_enabled: false,
+	// Custom values of its own, and the profile picked by hand.
+	fn tuned(profile: &str) -> Settings {
+		fields::owning(
+			Settings::default(),
+			&[
+				(Key::ScrollEaseIn, Value::Float(300.0)),
+				(Key::SmoothScroll, Value::Bool(false)),
+				(Key::CursorBlinking, Value::Bool(false)),
+				(Key::ScrimRadius, Value::Float(9.0)),
+				(Key::BgEnabled, Value::Bool(false)),
+				(Key::PerfAuto, Value::Bool(false)),
+				(Key::PerfProfile, Value::Text(profile.into())),
+			],
+		)
+	}
+
+	// Choose automatically on, the machine test's pick, and a step if any.
+	fn tested(pick: Profile, step: Option<Profile>) -> Settings {
+		let mut s = Settings {
+			tested_profile: Some(pick),
+			stepped_profile: step,
 			..Settings::default()
-		}
+		};
+		fields::fill(&mut s, None);
+		s
 	}
 
 	// Test ID: EorkTk1
 	#[test]
-	fn a_profile_masks_the_stored_values_and_custom_puts_them_back() {
-		let mut s = tuned();
-		s.performance_profile = Profile::Max;
-		apply(&mut s);
+	fn a_profile_shows_its_values_and_custom_puts_back_the_own() {
+		let s = tuned("max");
 		assert!(s.scroll_smooth, "Max is the shipped default");
 		assert_eq!(s.scroll_ease_in_ms, Settings::default().scroll_ease_in_ms);
 		assert!(s.cursor_blink);
 		assert!(s.wallpaper_enabled);
 
-		s.performance_profile = Profile::Custom;
-		apply(&mut s);
+		let s = tuned("custom");
 		assert!(!s.scroll_smooth);
 		assert_eq!(s.scroll_ease_in_ms, 300.0);
 		assert!(!s.cursor_blink);
 		assert_eq!(s.text_scrim_radius, 9.0);
 		assert!(!s.wallpaper_enabled);
-		assert!(s.profile_shadow.is_none());
-	}
-
-	// Test ID: EorkTk2
-	#[test]
-	fn applying_twice_does_not_stack() {
-		let mut s = tuned();
-		s.performance_profile = Profile::Low;
-		apply(&mut s);
-		s.performance_profile = Profile::High;
-		apply(&mut s);
-		assert!(s.wallpaper_enabled, "High keeps the wallpaper");
-		unapply(&mut s);
-		assert_eq!(s.scroll_ease_in_ms, 300.0, "the user's value, not Low's");
-		assert!(!s.wallpaper_enabled, "the user's value, not High's");
 	}
 
 	// Test ID: EorkTk3
 	#[test]
 	fn each_profile_costs_less_than_the_one_above() {
-		let mut s = Settings::default();
 		let mut radius = f32::MAX;
-		for profile in [Profile::Max, Profile::High] {
-			s.performance_profile = profile;
-			apply(&mut s);
+		for profile in ["max", "high"] {
+			let s = tuned(profile);
 			assert!(s.scroll_smooth);
 			assert!(s.text_scrim);
 			assert!(s.text_scrim_radius <= radius);
 			radius = s.text_scrim_radius;
 		}
-		s.performance_profile = Profile::Low;
-		apply(&mut s);
+		let s = tuned("low");
 		assert!(s.scroll_smooth);
 		assert!(!s.cursor_blink);
 		assert!(s.wallpaper_enabled, "Low keeps the wallpaper");
@@ -958,16 +922,15 @@ mod tests {
 		// was: assert_eq!(s.text_outline, 2.0, ...) - no built-in profile draws an
 		// outline over a pixel wide any more, so Low leans on the shipped one
 		assert_eq!(s.text_outline, 1.0, "and leans on the outline");
-		for name in ["max", "high", "low", "standard", "remote"] {
-			s.performance_profile = Profile::parse(name);
-			apply(&mut s);
-			assert!(s.text_outline <= 1.0, "{name} draws a fat outline");
+		for name in ["max", "high", "low", "standard"] {
+			assert!(
+				tuned(name).text_outline <= 1.0,
+				"{name} draws a fat outline"
+			);
 		}
-		s.performance_profile = Profile::Low;
-		apply(&mut s);
-		for flat in ["standard", "remote"] {
-			s.performance_profile = Profile::parse(flat);
-			apply(&mut s);
+		let mut remote = tuned("low");
+		super::set_remote(&mut remote, true);
+		for s in [tuned("standard"), remote] {
 			assert!(!s.scroll_smooth);
 			assert!(!s.smooth_scroll_apps);
 			assert!(!s.text_scrim);
@@ -975,68 +938,99 @@ mod tests {
 		}
 	}
 
-	// The override is a profile that is never in the file: it sits over whatever
-	// the stored one says and lifts off without touching it.
+	// The presets moved from code to settings_ui.shcl. Each one there sets what
+	// the code did, field by field.
+	// Test ID: EsG4x6V
+	#[test]
+	fn the_presets_in_the_spec_are_the_profiles_the_code_had() {
+		let members: Vec<Key> = fields::FIELDS
+			.iter()
+			.map(|f| f.key)
+			.filter(|k| crate::ui_spec::ui().rel(*k).group == Some(fields::PROFILE))
+			.collect();
+		assert_eq!(members.len(), 17);
+		for profile in [
+			Profile::Max,
+			Profile::High,
+			Profile::Low,
+			Profile::Standard,
+			Profile::Remote,
+		] {
+			let s = if profile == Profile::Remote {
+				let mut s = tuned("custom");
+				super::set_remote(&mut s, true);
+				s
+			} else {
+				tuned(profile.key())
+			};
+			let old = super::values_of(profile);
+			for key in &members {
+				assert_eq!(
+					fields::get(&s, *key),
+					fields::get(old, *key),
+					"{} in {}",
+					key.name(),
+					profile.key()
+				);
+			}
+		}
+	}
+
+	// Remote is never in the file: it sits over the pick and lifts off without
+	// touching it.
 	// Test ID: Ep17Tqz
 	#[test]
-	fn the_remote_override_sits_over_the_stored_profile() {
-		let mut s = tuned();
-		s.performance_profile = Profile::Max;
-		s.remote_override = true;
-		apply(&mut s);
+	fn the_remote_profile_sits_over_the_stored_one() {
+		let mut s = tuned("max");
+		super::set_remote(&mut s, true);
 		assert_eq!(super::current(&s), Profile::Remote);
+		assert!(super::remote(&s));
 		assert!(!s.scroll_smooth);
 		assert_eq!(
 			s.performance_profile,
 			Profile::Max,
 			"the stored profile is untouched"
 		);
-		s.remote_override = false;
-		apply(&mut s);
+		assert!(
+			!fields::lines_of(&s)
+				.iter()
+				.any(|(_, v)| v.as_text() == "remote")
+		);
+		super::set_remote(&mut s, false);
 		assert_eq!(super::current(&s), Profile::Max);
 		assert!(s.scroll_smooth);
 	}
 
-	// The display watch's step is session state over the stored rung: it never
-	// makes a profile heavier, and a hand-set or Custom profile is left alone.
+	// The display watch's step is session state over the machine's pick: it never
+	// makes a profile heavier, and a pick by hand is left alone.
 	// Test ID: EpWow4h
 	#[test]
-	fn a_session_step_sits_over_the_stored_profile() {
-		let at = |stored: &str, step: Profile| {
-			let mut s = tuned();
-			s.performance_profile = Profile::parse(stored);
-			s.stepped_profile = Some(step);
-			s
-		};
-		let mut s = at("max", Profile::Low);
+	fn a_session_step_sits_over_the_tested_profile() {
+		let s = tested(Profile::Max, Some(Profile::Low));
 		assert_eq!(super::current(&s), Profile::Low);
-		apply(&mut s);
 		assert!(s.wallpaper_enabled, "Low keeps the wallpaper");
+		assert!(!s.text_scrim);
 		assert_eq!(
-			s.performance_profile,
-			Profile::Max,
-			"the stored profile is untouched"
-		);
-		assert_eq!(
-			super::current(&at("low", Profile::High)),
+			super::current(&tested(Profile::Low, Some(Profile::High))),
 			Profile::Low,
 			"never heavier"
 		);
-		assert_eq!(super::current(&at("custom", Profile::Low)), Profile::Custom);
 		assert_eq!(
-			super::current(&at("standard", Profile::Low)),
+			super::current(&tested(Profile::Standard, Some(Profile::Low))),
 			Profile::Standard
 		);
-		let mut remote = at("max", Profile::Low);
-		remote.remote_override = true;
+		let mut remote = tested(Profile::Max, Some(Profile::Low));
+		super::set_remote(&mut remote, true);
 		assert_eq!(super::current(&remote), Profile::Remote);
-		let mut by_hand = at("max", Profile::Low);
-		by_hand.performance_automatic = false;
+		let mut by_hand = tuned("max");
+		by_hand.stepped_profile = Some(Profile::Low);
+		fields::fill(&mut by_hand, None);
 		assert_eq!(
 			super::current(&by_hand),
 			Profile::Max,
 			"a hand pick is not the watch's to change"
 		);
+		assert_eq!(super::current(&tuned("custom")), Profile::Custom);
 	}
 
 	// A rating written before the version was part of the id reads as another

@@ -328,7 +328,7 @@ pub struct Derived {
 /// wallpaper gives the same answer on any box and a test needs no pixels.
 pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	let floor = settings.min_contrast().clamp(0.0, 1.0);
-	let bg = crate::config::auto::color(settings, crate::config::auto::Setting::Background);
+	let bg = settings.bg;
 	let (fg, cursor) = (settings.fg, settings.cursor);
 	let mix = crate::visibility::wallpaper_mix(settings, sum.opacity, Some(sum.picture()));
 	let hi = gray_lightness(field_luma(sum, sum.luma_hi, bg, mix));
@@ -390,44 +390,6 @@ pub fn derive(sum: &Summary, settings: &Settings) -> Derived {
 	}
 }
 
-/// The user's own text and cursor, held while the derived ones are live. Two
-/// colors, built the same way as `profile::Shadow` and for the same reason: the
-/// file and the Settings dialog must only ever see what the user chose.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Shadow {
-	fg: [u8; 3],
-	cursor: [u8; 3],
-}
-
-/// Put the user's own colors back. Safe on settings carrying no derived pair.
-pub fn unapply(settings: &mut Settings) {
-	if let Some(shadow) = settings.wallpaper_colors.take() {
-		settings.fg = shadow.fg;
-		settings.cursor = shadow.cursor;
-	}
-}
-
-/// Overwrite fg and cursor with the wallpaper's, keeping the user's in the
-/// shadow. Idempotent, so a live copy that already carries a derived pair is
-/// unwound first and the new one is derived from the user's values rather than
-/// from the last answer.
-pub fn apply(settings: &mut Settings) {
-	unapply(settings);
-	if !settings.colors_from_wallpaper || !settings.wallpaper_enabled {
-		return;
-	}
-	let Some(sum) = settings.wallpaper_summary else {
-		return; // no picture yet, or none at all
-	};
-	let out = derive(&sum, settings);
-	settings.wallpaper_colors = Some(Shadow {
-		fg: settings.fg,
-		cursor: settings.cursor,
-	});
-	settings.fg = out.fg;
-	settings.cursor = out.cursor;
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -438,7 +400,7 @@ mod tests {
 
 	fn settings(bg: [u8; 3], fg: [u8; 3], cursor: [u8; 3]) -> Settings {
 		Settings {
-			bg: crate::config::auto::Auto::by_hand(bg),
+			bg,
 			fg,
 			cursor,
 			colors_from_wallpaper: true,
@@ -750,54 +712,54 @@ mod tests {
 		assert!(s.wallpaper_enabled, "no wallpaper to read");
 		let plain_fg = s.fg;
 		s.wallpaper_summary = Some(summarize(&plain([90, 110, 160], 32, 32), 0.35));
-		apply(&mut s);
+		crate::fields::fill(&mut s, None);
 		assert_ne!(s.fg, plain_fg);
-		assert!(s.wallpaper_colors.is_some());
+		assert!(s.model.values.own.is_empty(), "nothing derived is stored");
 	}
 
 	// Test ID: EqRxese
 	#[test]
-	fn apply_is_off_unless_the_switch_and_the_wallpaper_are_both_on() {
+	fn the_wallpaper_colors_need_the_switch_the_wallpaper_and_a_picture() {
+		use crate::ui_spec::Key;
+		use knobs::Value;
 		let sum = summarize(&plain([90, 110, 160], 32, 32), 0.35);
-		let mut s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
+		let mut s = crate::fields::adopt(settings(SILK_BG, SILK_FG, SILK_CURSOR));
 		s.wallpaper_summary = Some(sum);
 
 		let mut off = s.clone();
-		off.colors_from_wallpaper = false;
-		apply(&mut off);
+		crate::fields::store(&mut off, Key::ColFromWallpaper, Value::Bool(false));
 		assert_eq!(off.fg, SILK_FG);
-		assert!(off.wallpaper_colors.is_none());
 
+		// a profile member, so this is a change on the profile picked
 		let mut no_paper = s.clone();
-		no_paper.wallpaper_enabled = false;
-		apply(&mut no_paper);
+		crate::fields::set(&mut no_paper, Key::BgEnabled, &Value::Bool(false), None);
+		assert!(!no_paper.wallpaper_enabled);
 		assert_eq!(no_paper.fg, SILK_FG);
 
 		let mut no_image = s.clone();
 		no_image.wallpaper_summary = None;
-		apply(&mut no_image);
+		crate::fields::fill(&mut no_image, None);
 		assert_eq!(no_image.fg, SILK_FG);
 
-		apply(&mut s);
+		crate::fields::fill(&mut s, None);
 		assert_ne!(s.fg, SILK_FG, "on, with an image: the text should move");
 	}
 
-	// The shadow is what keeps the file and the dialog seeing the user's colors.
+	// The colors are worked out from the theme's, never from the last answer,
+	// so filling again changes nothing and turning the switch off gives the
+	// theme's back.
 	// Test ID: EqRxesf
 	#[test]
-	fn apply_then_unapply_is_the_identity_however_many_times_it_runs() {
-		let mut s = settings(SILK_BG, SILK_FG, SILK_CURSOR);
+	fn the_wallpaper_colors_come_from_the_theme_s_every_time() {
+		use crate::ui_spec::Key;
+		let mut s = crate::fields::adopt(settings(SILK_BG, SILK_FG, SILK_CURSOR));
 		s.wallpaper_summary = Some(summarize(&plain([90, 110, 160], 32, 32), 0.35));
-		apply(&mut s);
+		crate::fields::fill(&mut s, None);
 		let once = (s.fg, s.cursor);
-		// a second apply must derive from the user's values again, not from its
-		// own last answer
-		apply(&mut s);
-		assert_eq!((s.fg, s.cursor), once, "apply stacked on itself");
-		unapply(&mut s);
+		crate::fields::fill(&mut s, None);
+		assert_eq!((s.fg, s.cursor), once, "a fill stacked on itself");
+		crate::fields::store(&mut s, Key::ColFromWallpaper, knobs::Value::Bool(false));
 		assert_eq!((s.fg, s.cursor), (SILK_FG, SILK_CURSOR));
-		unapply(&mut s);
-		assert_eq!((s.fg, s.cursor), (SILK_FG, SILK_CURSOR), "unapply twice");
 	}
 
 	// A summary is six numbers so that a theme change can re-derive with no

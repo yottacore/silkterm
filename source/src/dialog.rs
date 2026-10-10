@@ -928,11 +928,7 @@ impl DialogWin {
 		let cfg = config::settings();
 		self.text.set_text_blend(
 			&self.gfx.queue,
-			crate::text::text_blend(
-				crate::config::auto::color(&cfg, crate::config::auto::Setting::DialogForeground),
-				crate::config::auto::color(&cfg, crate::config::auto::Setting::DialogBackground),
-				cfg.text_dark_on_light,
-			),
+			crate::text::text_blend(cfg.dialog_fg, cfg.dialog_bg, cfg.text_dark_on_light),
 		);
 
 		let areas = text_areas(&scene.texts, &self.shaped.bufs, (w, h));
@@ -2892,9 +2888,18 @@ mod tests {
 			match step % 4 {
 				0 => switch_tab(&mut content),
 				1 => {
-					let mut s = (*config::settings()).clone();
-					s.margin += 3.0;
-					s.font_size = config::auto::Auto::by_hand(config::auto::font_size(&s) + 1.0);
+					use crate::ui_spec::Key;
+					use knobs::Value;
+					let s = (*config::settings()).clone();
+					let (margin, size) = (s.margin + 3.0, s.font_size + 1.0);
+					let s = crate::fields::owning(
+						s,
+						&[
+							(Key::Margin, Value::Float(f64::from(margin))),
+							(Key::SystemFontSize, Value::Bool(false)),
+							(Key::FontSize, Value::Float(f64::from(size))),
+						],
+					);
 					if let super::Content::Settings(dialog) = &mut content {
 						dialog.start_from(s);
 					}

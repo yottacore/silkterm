@@ -156,7 +156,8 @@ icons:
 ##            slider's end. Only for a setting with no % and no real limit of
 ##            its own. The handle sits at the end and the box shows the number.
 ##            The config has to read the same value back, which a test checks.
-## indent:    sub-group depth of the label (default 0)
+## indent:    sub-group depth of the label. Left out, it is worked out from
+##            `gate:` and `auto:`, else 0.
 ## beside:    draw this row on the line above rather than under it. A line's
 ##            rows split the control column evenly; the first keeps the label
 ##            column, and its label has to name the whole line unless each
@@ -169,11 +170,15 @@ icons:
 ## key:       only when the row's name cannot be the setting's - because a
 ##            heading already took that name, or because the row edits no
 ##            single setting of its own (`key: none`)
-## group:     in place of `setting:`, makes a toggle the switch for a group of
-##            auto settings (config::auto::GROUPS). It stores nothing and has
-##            no revert arrow: it reads on while every member is automatic,
-##            off while none is, and mixed in between. A setting with an
-##            automatic value is found from its `setting:` path, with no field.
+## gate:      the checkbox this row only counts under. The row never grays,
+##            and changing it turns the checkbox on.
+## auto:      the checkbox that makes this row automatic, with `rule:` for
+##            where the value then comes from, which the code answers. A value
+##            set by hand is kept for when the checkbox goes off again.
+## rule:      with no `auto:`, the rule gives the default instead.
+## group:     the profile or theme this row belongs to, from `groups:` at the
+##            end. While a preset is in force the row shows its value, and a
+##            change to it is kept apart from the person's own, as a "*" one.
 ## help:      flyover text, for a control whose label does not explain it
 ## revert_help: flyover for the revert arrow, where it does more than put the
 ##            shipped default back
@@ -190,10 +195,10 @@ rows:
 
 	## ---------------------------------------------------------------------- Silk
 
-	## One setting that governs the two sections below plus rows on the
-	## Background and Cursor tabs. While it is anything but Custom those rows
-	## show the profile's values, and their flyover says so; changing one takes
-	## the profile to Custom with the values that were on screen.
+	## The profile sets rows in the two sections below and on the Background
+	## and Cursor tabs (`group: profile`). While a preset is in force they show
+	## its values, and changing one shows the profile as "High *" and leaves
+	## the Custom values alone.
 	Performance:
 		kind: heading
 		label: Performance
@@ -208,9 +213,9 @@ rows:
 	PerfProfile:
 		label: Profile
 		kind: dropdown
-		options: "Custom", "Max silk", "High", "Low", "Standard terminal", "Remote (temporary)"
-		indent: 1
 		setting: performance.profile
+		auto: PerfAuto
+		rule: machine_profile
 		help: "Which effects to use, from Max silk with all of them to Standard terminal with none. Picking one turns off Choose automatically. Remote (temporary) doesn't, and only lasts until SilkTerm restarts."
 
 	## The label stays short because the widest one on any tab sets the panel's
@@ -219,6 +224,7 @@ rows:
 		label: Check for hardware change
 		kind: toggle
 		setting: performance.check_hardware
+		gate: PerfAuto
 		help: "Test the machine again when its processor, graphics card or memory changes. The test takes a few seconds. Only used with Choose automatically on."
 
 	PerfCheckNext:
@@ -226,6 +232,7 @@ rows:
 		kind: toggle
 		beside: true
 		setting: performance.check_next_run
+		gate: PerfAuto
 		help: "Test the machine again at the next launch, even if nothing changed. Turns itself off after the test."
 
 	TextReadability:
@@ -237,6 +244,7 @@ rows:
 		label: Text scrim
 		kind: toggle
 		setting: text.scrim.enabled
+		group: profile
 		help: "A soft blur of the background color behind the text, so it stays readable over a busy wallpaper."
 
 	ScrimStrength:
@@ -245,8 +253,9 @@ rows:
 		kind: slider
 		range: 0, 100
 		whole: true
-		indent: 1
 		setting: text.scrim.strength
+		gate: TextScrim
+		group: profile
 		help: "How solid the scrim is. High values fill in the gaps between letters. Light mode uses less of it, since it stands out more there."
 
 	ScrimRadius:
@@ -254,8 +263,9 @@ rows:
 		kind: slider
 		range: 0, 20
 		whole: true
-		indent: 1
 		setting: text.scrim.radius
+		gate: TextScrim
+		group: profile
 		help: "How far the scrim reaches out from the text."
 
 	ScrimSoftness:
@@ -263,8 +273,9 @@ rows:
 		kind: slider
 		range: 0, 100
 		whole: true
-		indent: 1
 		setting: text.scrim.softness
+		gate: TextScrim
+		group: profile
 		help: "How gradually the scrim fades at its edge."
 
 	## The two together describe one curve, so they share a line. The label names
@@ -273,8 +284,9 @@ rows:
 		label: Function, falloff
 		kind: dropdown
 		options: "Distance field", "Distance transform", "Dilate + feather", "Gaussian [ugly]"
-		indent: 1
 		setting: text.scrim.function
+		gate: TextScrim
+		group: profile
 		help: "How the scrim's outline is worked out from the letters."
 
 	ScrimRamp:
@@ -283,6 +295,7 @@ rows:
 		options: "Exponential", "Half-normal", "Logarithmic", "Sigmoid", "Linear"
 		beside: true
 		setting: text.scrim.ramp
+		gate: TextScrim
 		help: "The curve the scrim fades along."
 
 	MinContrast:
@@ -302,6 +315,7 @@ rows:
 		range: 0, 4
 		whole: true
 		setting: text.outline
+		group: profile
 		help: "A sharp outline around each letter. Works alone or with the scrim."
 
 	Scrolling:
@@ -313,6 +327,7 @@ rows:
 		label: Smooth scrolling
 		kind: toggle
 		setting: scroll.smooth
+		group: profile
 		help: "Scroll smoothly instead of jumping a whole line at a time."
 
 	## The five below are ordered as one output burst unfolds: it leaves rest,
@@ -324,8 +339,9 @@ rows:
 		kind: slider
 		range: 1, 100
 		whole: true
-		indent: 1
 		setting: scroll.ease_in_ms
+		gate: SmoothScroll
+		group: profile
 		help: "How fast scrolling starts when output begins."
 
 	ScrollRampUp:
@@ -333,8 +349,9 @@ rows:
 		kind: slider
 		range: 1, 100
 		whole: true
-		indent: 1
 		setting: scroll.ramp_up_ms
+		gate: SmoothScroll
+		group: profile
 		help: "How fast scrolling speeds up once it is moving."
 
 	SingleScreenTau:
@@ -342,8 +359,9 @@ rows:
 		kind: slider
 		range: 1, 100
 		whole: true
-		indent: 1
 		setting: scroll.single_screen_tau_ms
+		gate: SmoothScroll
+		group: profile
 		help: "Top scrolling speed while new output fits on one screen."
 
 	ScrollRampDown:
@@ -351,8 +369,9 @@ rows:
 		kind: slider
 		range: 1, 100
 		whole: true
-		indent: 1
 		setting: scroll.ramp_down_ms
+		gate: SmoothScroll
+		group: profile
 		help: "How fast scrolling slows down as output stops."
 
 	ScrollEaseOut:
@@ -360,8 +379,9 @@ rows:
 		kind: slider
 		range: 1, 100
 		whole: true
-		indent: 1
 		setting: scroll.ease_out_ms
+		gate: SmoothScroll
+		group: profile
 		help: "How sharply scrolling stops on the last line."
 
 	## ---------------------------------------------------------------- Background
@@ -377,34 +397,36 @@ rows:
 		label: Wallpaper
 		kind: toggle
 		setting: wallpaper.enabled
+		group: profile
 
 	BgImage:
 		label: File or folder
 		kind: text
-		indent: 1
-		setting: wallpaper.image, wallpaper.rotate.folder
+		setting: wallpaper.image
+		gate: BgEnabled
+		rule: found_picture
 		help: "An image file, or a folder of images when Rotate folder is on."
 
 	BgFit:
 		label: Fit
 		kind: radio
 		options: "Stretch", "Zoom"
-		indent: 1
 		setting: wallpaper.default_fit
+		gate: BgEnabled
 		help: "What to do when the image and the window are different shapes. An image with its own Fit tag overrides this."
 
 	BgHonorXmp:
 		label: Honor layout tags
 		kind: toggle
-		indent: 1
 		setting: wallpaper.honor_xmp
+		gate: BgEnabled
 		help: "Use an image's own Fit and Anchor tags to place it."
 
 	BgRotate:
 		label: Rotate folder
 		kind: toggle
-		indent: 1
 		setting: wallpaper.rotate.enabled
+		gate: BgEnabled
 		help: "Treat the path above as a folder, and show its images in turn."
 
 	BgOpacity:
@@ -412,8 +434,8 @@ rows:
 		kind: slider
 		range: 0, 100
 		whole: true
-		indent: 1
 		setting: wallpaper.opacity
+		gate: BgEnabled
 		help: "How much the wallpaper shows through. With Honor look tags on, an image's own Opacity tag wins, so this only applies to images without one."
 
 	BgBlur:
@@ -422,21 +444,24 @@ rows:
 		range: 0, 50
 		typed_max: 100
 		whole: true
-		indent: 1
 		setting: wallpaper.blur
+		gate: BgEnabled
+		group: profile
 		help: "How much to blur the wallpaper. With Honor look tags on, an image's own Blur tag wins, so this only applies to images without one."
 
 	BgHonorXmpLook:
 		label: Honor look tags
 		kind: toggle
-		indent: 1
 		setting: wallpaper.honor_xmp_look
+		gate: BgEnabled
 		help: "Let an image's own Opacity and Blur tags win over the 2 sliders above, so they only apply to images without them. The bundled wallpapers all have tags."
 
 	BgContrastMask:
 		label: Contrast mask
 		kind: toggle
 		setting: wallpaper.contrast_mask.enabled
+		gate: BgEnabled
+		group: profile
 		help: "Dim the wallpaper only where it makes the text hard to read."
 
 	BgContrastSize:
@@ -444,8 +469,8 @@ rows:
 		kind: slider
 		range: 0, 100
 		whole: true
-		indent: 1
 		setting: wallpaper.contrast_mask.size
+		gate: BgContrastMask
 		help: "How big an area around each spot is looked at to decide how much to dim it."
 
 	BgContrastStrength:
@@ -453,8 +478,8 @@ rows:
 		kind: slider
 		range: 0, 100
 		whole: true
-		indent: 1
 		setting: wallpaper.contrast_mask.strength
+		gate: BgContrastMask
 		help: "How much the mask can dim the wallpaper."
 
 	BgContrastAuto:
@@ -462,8 +487,8 @@ rows:
 		kind: slider
 		range: 0, 100
 		whole: true
-		indent: 1
 		setting: wallpaper.contrast_mask.auto
+		gate: BgContrastMask
 		help: "How much the mask goes by the image itself instead of the 2 sliders above. 100 is all from the image."
 
 	## Last on the tab, since it is the one that depends on the desktop.
@@ -480,14 +505,14 @@ rows:
 		kind: slider
 		range: 0, 100
 		whole: true
-		indent: 1
 		setting: transparency.opacity
+		gate: Transparency
 
 	BackdropBlur:
 		label: Blur-behind
 		kind: toggle
-		indent: 1
 		setting: transparency.blur_behind
+		gate: Transparency
 		help: "Blur what's behind the window, on desktops that can."
 
 	## ---------------------------------------------------------------------- Text
@@ -497,12 +522,22 @@ rows:
 		label: Font
 		tab: Text
 
-	## Both are automatic until set: they follow the desktop's own monospace
-	## font, and where it names none, the shipped list and 17.
+	## Each box switches its row below to the desktop's own monospace font.
+	## Where the desktop names none, the shipped list and 17 are used.
+	SystemFont:
+		label: Use system font
+		kind: pair
+		options: "Face", "Size"
+		parts: SystemFont, SystemFontSize
+		setting: font.use_system_family, font.use_system_size
+		help: "Follow the desktop's own monospace font, for the face and the size independently."
+
 	FontFamily:
 		label: Family
 		kind: text
 		setting: font.family
+		auto: SystemFont
+		rule: system_font_family
 		help: "Font names, separated by commas. The first one installed is used."
 
 	FontSize:
@@ -512,6 +547,8 @@ rows:
 		typed_max: 128
 		whole: true
 		setting: font.size
+		auto: SystemFontSize
+		rule: system_font_size
 
 	LineHeight:
 		label: Line height
@@ -550,6 +587,7 @@ rows:
 		label: Blink
 		kind: toggle
 		setting: cursor.blink
+		group: profile
 		help: "Animate the cursor when typing stops."
 
 	CursorBlinkRate:
@@ -557,24 +595,24 @@ rows:
 		kind: slider
 		range: 0.2, 6
 		typed_max: 20
-		indent: 1
 		setting: cursor.blink_rate_s
+		gate: CursorBlinking
 		help: "Seconds for one whole blink, from peak to peak."
 
 	CursorAnimation:
 		label: Animation
 		kind: dropdown
 		options: "Phase", "Pulse vertical", "Pulse horizontal", "Pulse both"
-		indent: 1
 		setting: cursor.animation
+		gate: CursorBlinking
 
 	CursorResume:
 		label: Inactivity timer s
 		kind: slider
 		range: 0.1, 60
 		typed_max: 3600
-		indent: 1
 		setting: cursor.animation_resume_s
+		gate: CursorBlinking
 		help: "How long after the last keystroke before the cursor animates again. Program output doesn't reset it."
 
 	CursorVisibility:
@@ -619,14 +657,14 @@ rows:
 		kind: slider
 		range: 4, 64
 		whole: true
-		indent: 1
 		setting: scroll.scrollbar.thickness
+		gate: Scrollbar
 
 	ScrollbarAutoHide:
 		label: Hide when idle
 		kind: toggle
-		indent: 1
 		setting: scroll.scrollbar.auto_hide
+		gate: Scrollbar
 		help: "Fade the scrollbar out while the view sits still at the bottom."
 
 	Minimap:
@@ -640,8 +678,8 @@ rows:
 		kind: slider
 		range: 24, 400
 		whole: true
-		indent: 1
 		setting: scroll.minimap.width
+		gate: Minimap
 
 	## -------------------------------------------------------------------- Themes
 
@@ -679,6 +717,7 @@ rows:
 		label: Terminal background
 		kind: color
 		setting: colors.background
+		group: theme
 
 	ColFromWallpaper:
 		label: Text colors from wallpaper
@@ -690,43 +729,52 @@ rows:
 	ColFg:
 		label: Foreground
 		kind: color
-		indent: 1
 		setting: colors.foreground
+		auto: ColFromWallpaper
+		rule: wallpaper_fg
+		group: theme
 
 	ColCursor:
 		label: Cursor
 		kind: color
-		indent: 1
 		setting: colors.cursor
+		auto: ColFromWallpaper
+		rule: wallpaper_cursor
+		group: theme
 
 	ColDialogBg:
 		label: Dialog background
 		kind: color
 		setting: colors.dialog_background
+		group: theme
 
 	ColDialogFg:
 		label: Dialog text
 		kind: color
 		indent: 1
 		setting: colors.dialog_foreground
+		group: theme
 
 	ColMenuBg:
 		label: Menu background
 		kind: color
 		indent: 1
 		setting: colors.menu_background
+		group: theme
 
 	ColMenuFg:
 		label: Menu text
 		kind: color
 		indent: 1
 		setting: colors.menu_foreground
+		group: theme
 
 	ColGutter:
 		label: Gutter
 		kind: color
 		indent: 1
 		setting: colors.gutter
+		group: theme
 		help: "Empty areas around the controls, such as the strip these tabs are on."
 
 	ColHighlight:
@@ -734,6 +782,7 @@ rows:
 		kind: color
 		indent: 1
 		setting: colors.highlight
+		group: theme
 		help: "Used for the active pane's border, slider handles, revert arrows and the default button."
 
 	ColFocus:
@@ -741,6 +790,7 @@ rows:
 		kind: color
 		indent: 1
 		setting: colors.focus
+		group: theme
 		help: "Marks the control the keyboard is on."
 
 	ColScrollbarThumb:
@@ -762,20 +812,19 @@ rows:
 		label: Window
 		tab: Window
 
-	## The switch for Columns and Rows, which are automatic until set. It holds
-	## nothing: it is on while both are automatic, off while both are set by
-	## hand, and mixed in between.
+	## Columns and Rows show the last size while it is on, and a size typed in
+	## turns it off.
 	RememberSize:
 		label: Remember last size
 		kind: toggle
-		group: window.size
+		setting: window.remember_size
 		help: "Reopen at the size the window was last closed at."
 
 	RememberPerMonitor:
 		label: Per monitor
 		kind: toggle
-		indent: 1
 		setting: window.remember_per_monitor
+		gate: RememberSize
 		help: "Remember a separate size for each monitor. A window moved to another monitor takes that monitor's size."
 
 	Columns:
@@ -784,8 +833,9 @@ rows:
 		range: 20, 400
 		typed_max: 1000
 		whole: true
-		indent: 1
 		setting: window.columns
+		auto: RememberSize
+		rule: remembered_columns
 
 	Rows:
 		label: Rows
@@ -793,8 +843,9 @@ rows:
 		range: 6, 120
 		typed_max: 1000
 		whole: true
-		indent: 1
 		setting: window.rows
+		auto: RememberSize
+		rule: remembered_rows
 
 	RememberMaximized:
 		label: Remember maximized
@@ -892,8 +943,9 @@ rows:
 	LinkOpenCommand:
 		label: Open command
 		kind: text
-		indent: 1
 		setting: hyperlinks.open_command
+		gate: Hyperlinks
+		rule: desktop_opener
 		help: "The command that opens a clicked link."
 
 	## What a window costs the machine. Last on the tab, since it is the part
@@ -917,8 +969,8 @@ rows:
 		scale: log
 		typed_max: 10080  ## a week
 		whole: true
-		indent: 1
 		setting: window.idle_release_hidden_min
+		gate: IdleRelease
 		help: "How long a minimized or covered window waits before freeing memory. On Windows, getting it back can take about a second."
 
 	IdleMin:
@@ -928,8 +980,8 @@ rows:
 		scale: log
 		typed_max: 10080  ## a week
 		whole: true
-		indent: 1
 		setting: window.idle_release_min
+		gate: IdleRelease
 		help: "How long a visible window waits when it's unfocused and quiet. On Windows with Transparency on, a visible window never frees memory, since it would turn black."
 
 	SoftwareRendering:
@@ -1184,23 +1236,150 @@ rows:
 		setting: keys.focus_down
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Graying
+## Values with no row
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-## A control is grayed out while any setting listed against it is off - a
-## toggle that is false, or a number sitting at zero. A leading "!" reverses
-## it: grayed while that setting is ON. Listing several means all must hold.
-##
-## Rows that only count while a switch above them is on are NOT listed: they
-## stay live and indented under it, so they can be set up first and come back
-## as they were. Nor is an auto setting, which shows the value in use and
-## takes a new one at any time. What is left is a switch whose rows it
-## replaces, not yet moved to the automatic settings design.
-##
-## Not listed here: a row the machine grays ("Minutes when hidden" on
-## Wayland). That is a fact about the desktop, so it is answered in code.
+## Settings no row edits, listed so a profile can set them or a row can stand
+## for them. Same fields as a row, less the ones that draw it.
 
-gates:
+values:
 
-	ColFg: !ColFromWallpaper
-	ColCursor: !ColFromWallpaper
+	SmoothApps:
+		label: Smooth scrolling in apps
+		setting: scroll.smooth_apps
+		gate: SmoothScroll
+		group: profile
+
+	## File or folder shows this one while Rotate folder is on
+	BgFolder:
+		label: Folder
+		setting: wallpaper.rotate.folder
+		gate: BgRotate
+		rule: usual_folder
+
+## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Groups
+## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+
+## A dropdown that picks a set of values: the performance profile and the
+## theme. Custom is the person's own values, which are the normal lines in
+## config.shcl. A temporary preset lasts until restart and stores nothing.
+## Values are in the file's units, a number of ms rather than a slider's %.
+
+groups:
+
+	profile:
+		chooser: PerfProfile
+		noun: profile
+		custom: Custom
+		presets:
+			## the shipped defaults, every one
+			max:
+				label: Max silk
+				SmoothScroll: true
+				ScrollEaseIn: 82.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 32.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 212.0
+				SmoothApps: true
+				CursorBlinking: true
+				TextScrim: true
+				ScrimRadius: 8.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: sdf
+				Outline: 1.0
+				BgEnabled: true
+				BgBlur: 10.0
+				BgContrastMask: true
+			## shorter eases on the 3 stretches a slow display shows most, and a
+			## halo that costs fewer taps
+			high:
+				label: High
+				SmoothScroll: true
+				ScrollEaseIn: 41.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 16.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 106.0
+				SmoothApps: true
+				CursorBlinking: true
+				TextScrim: true
+				ScrimRadius: 5.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: dilate
+				Outline: 1.0
+				BgEnabled: true
+				BgBlur: 10.0
+				BgContrastMask: true
+			## the wallpaper is decoded once and costs nothing per frame, so Low
+			## keeps it and drops the halo, which is paid on every frame
+			low:
+				label: Low
+				SmoothScroll: true
+				ScrollEaseIn: 41.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 16.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 106.0
+				SmoothApps: true
+				CursorBlinking: false
+				TextScrim: false
+				ScrimRadius: 5.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: dilate
+				Outline: 1.0
+				BgEnabled: true
+				BgBlur: 10.0
+				BgContrastMask: true
+			standard:
+				label: Standard terminal
+				SmoothScroll: false
+				ScrollEaseIn: 82.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 32.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 212.0
+				SmoothApps: false
+				CursorBlinking: false
+				TextScrim: false
+				ScrimRadius: 8.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: sdf
+				Outline: 0.0
+				BgEnabled: false
+				BgBlur: 0.0
+				BgContrastMask: false
+			## Standard's values, for a remote screen
+			remote:
+				label: Remote (temporary)
+				temporary: true
+				SmoothScroll: false
+				ScrollEaseIn: 82.0
+				ScrollRampUp: 96.0
+				SingleScreenTau: 32.0
+				ScrollRampDown: 144.0
+				ScrollEaseOut: 212.0
+				SmoothApps: false
+				CursorBlinking: false
+				TextScrim: false
+				ScrimRadius: 8.0
+				ScrimStrength: 20.0
+				ScrimSoftness: 0.5
+				ScrimFunction: sdf
+				Outline: 0.0
+				BgEnabled: false
+				BgBlur: 0.0
+				BgContrastMask: false
+
+	## The built-in themes, the ones saved from the Themes tab, each in the
+	## mode in force
+	theme:
+		chooser: Theme
+		noun: theme
+		custom: Custom
+		from_program: true
