@@ -16,15 +16,16 @@ ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 # Trixie is what the build box runs, so the X and Wayland tools, Mesa, mingw and the
 # fonts come from apt at the versions the box has. The window tests run on Xvfb under
 # xfwm4, or under sway and cage, all on llvmpipe. llvm-19 is for llvm-windres, which
-# puts the icon and version block into the ARM64 Windows exe; mingw's windres only
-# does x86_64. libicu and libgssapi are for pwsh. python3-xlib and Pillow are for
+# puts the icon and version block into the ARM64 Windows exe (mingw's windres only
+# does x86_64), and clang-19 is what it preprocesses the .rc with. libicu and
+# libgssapi are for pwsh. python3-xlib and Pillow are for
 # the test drivers. shellcheck comes from upstream below, since trixie's is 0.10 and
 # its warnings differ.
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		bash ca-certificates curl git xz-utils unzip zstd file procps iproute2 \
 		python3 python3-venv python3-xlib python3-pil \
-		gcc libc6-dev pkg-config gcc-mingw-w64-x86-64 llvm-19 dpkg-dev \
+		gcc libc6-dev pkg-config gcc-mingw-w64-x86-64 llvm-19 clang-19 dpkg-dev \
 		xvfb xauth x11-utils x11-apps x11-xserver-utils xdotool xfwm4 imagemagick expect \
 		sway xwayland cage grim dbus \
 		fonts-dejavu-core fonts-noto-color-emoji fonts-noto-cjk \
