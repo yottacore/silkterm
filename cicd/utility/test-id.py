@@ -76,7 +76,7 @@ def from_ms(ms: int) -> datetime:
 
 
 def rust_files() -> Iterator[Path]:
-	for top in ("source", "cicd/tests"):
+	for top in ("source", "knobs", "cicd/tests"):
 		for path in sorted((ROOT / top).rglob("*.rs")):
 			if not NOT_TEST_DIRS & set(path.relative_to(ROOT).parts):
 				yield path

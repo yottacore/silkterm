@@ -1,0 +1,464 @@
+## knobs demo - a settings dialog declared in one file.
+##
+## Compiled into the demo. Run the demo with --spec <this file> to have it
+## reread the file whenever it changes.
+##
+## tabs: every tab, in order. "A/B" is tab B nested under tab A.
+##
+## settings: one block per setting, in screen order. The block name is the
+## setting's id, which presets and relations refer to.
+##	label        what the row says
+##	tab          which tab it is on
+##	control      heading, checkbox, slider, number, dropdown, text, color,
+##	             file, or none for a value nobody edits by hand
+##	type         bool, int, float, text, color or choice. Optional, the
+##	             control implies it; whole: true makes a number an int
+##	path         where it lives in the file
+##	store        config, the default, or state for what the program works
+##	             out by itself
+##	default      the value with nothing stored
+##	range        min, max
+##	scale        linear, log or exp. log spreads out the low end, exp the
+##	             high end
+##	detents      values a slider snaps to, and the labels shown under them
+##	             ("" for no label)
+##	options      a dropdown's choices, and option_labels to show
+##	tip          the flyover text
+##	indent       only to override the one worked out from the relations
+##
+## Relations, each naming another setting's id:
+##	gate         a checkbox this only counts under. Changing this turns it on.
+##	auto, rule   a checkbox that makes this automatic, and where the value
+##	             comes from while it is on: a name the program answers, or
+##	             "state:<id>" for a stored state value. A value set by hand
+##	             is kept for when the checkbox goes off again.
+##	group        a preset group this belongs to, see groups below.
+##
+## groups: a dropdown that picks a set of values, such as a profile or a theme.
+##	chooser      the dropdown setting that picks
+##	noun         what one is called, for tips
+##	custom       the label for the person's own set, if there is one
+##	presets      one block each: label, temporary: true for one that lasts
+##	             until restart and ignores changes, then a value for every
+##	             member
+
+tabs: "Performance", "Background", "Look", "Look/Text", "Look/Colors", "Window", "Window/Size", "Window/Power"
+
+settings:
+
+	PerfHead:
+		label: Performance
+		tab: Performance
+		control: heading
+
+	choose_auto:
+		label: Choose automatically
+		tab: Performance
+		control: checkbox
+		path: performance.automatic
+		default: true
+		tip: "Test how fast this machine draws, and pick the profile it can run smoothly."
+
+	profile:
+		label: Profile
+		tab: Performance
+		control: dropdown
+		path: performance.profile
+		default: high
+		auto: choose_auto
+		rule: "state:tested_profile"
+		tip: "Which effects to use, from Max silk with all of them to Standard terminal with none."
+
+	check_hw:
+		label: Check for hardware change
+		tab: Performance
+		control: checkbox
+		path: performance.check_hardware
+		default: true
+		gate: choose_auto
+		tip: "Test the machine again when its graphics card changes."
+
+	tested_profile:
+		label: Tested profile
+		control: none
+		type: choice
+		options: max_silk, high, low, standard
+		store: state
+		path: performance.tested_profile
+		default: high
+
+	ScrollHead:
+		label: Scrolling
+		tab: Performance
+		control: heading
+
+	smooth:
+		label: Smooth scrolling
+		tab: Performance
+		control: checkbox
+		path: scroll.smooth
+		default: true
+		group: perf
+		tip: "Scroll smoothly instead of jumping a whole line at a time."
+
+	ease_in:
+		label: Ease-in %
+		tab: Performance
+		control: slider
+		whole: true
+		range: 0, 100
+		path: scroll.ease_in
+		default: 50
+		gate: smooth
+		group: perf
+		detents: 0, 50, 100
+		detent_labels: "Off", "Usual", "Most"
+		tip: "How gently a scroll starts."
+
+	ramp_down:
+		label: Ramp-down %
+		tab: Performance
+		control: slider
+		whole: true
+		range: 0, 100
+		scale: exp
+		path: scroll.ramp_down
+		default: 70
+		gate: smooth
+		group: perf
+		tip: "How hard a scroll brakes near the end. Exp scale, so the high end is spread out."
+
+	TextHead:
+		label: Text readability
+		tab: Performance
+		control: heading
+
+	scrim:
+		label: Text scrim
+		tab: Performance
+		control: checkbox
+		path: text.scrim.enabled
+		default: true
+		group: perf
+		tip: "A soft blur of the background color behind the text."
+
+	strength:
+		label: Strength %
+		tab: Performance
+		control: slider
+		whole: true
+		range: 0, 100
+		path: text.scrim.strength
+		default: 50
+		gate: scrim
+		group: perf
+		tip: "How solid the scrim is."
+
+	radius:
+		label: Scrim radius px
+		tab: Performance
+		control: slider
+		whole: true
+		range: 0, 20
+		path: text.scrim.radius
+		default: 6
+		gate: scrim
+		group: perf
+		tip: "How far the scrim reaches out from the text."
+
+	wallpaper:
+		label: Wallpaper
+		tab: Background
+		control: checkbox
+		path: wallpaper.enabled
+		default: true
+		group: perf
+		tip: "Show an image behind the text."
+
+	image:
+		label: File
+		tab: Background
+		control: file
+		path: wallpaper.image
+		default: ""
+		gate: wallpaper
+		tip: "The image to show. Empty means the built-in one."
+
+	fit:
+		label: Fit
+		tab: Background
+		control: dropdown
+		options: zoom, stretch
+		option_labels: "Zoom", "Stretch"
+		path: wallpaper.fit
+		default: zoom
+		gate: wallpaper
+		tip: "Fill the window and crop, or stretch to fit."
+
+	blur:
+		label: Blur px
+		tab: Background
+		control: slider
+		range: 0, 64
+		scale: log
+		path: wallpaper.blur
+		default: 8
+		gate: wallpaper
+		group: perf
+		detents: 0, 8, 32
+		detent_labels: "None", "Soft", "Heavy"
+		tip: "How much to blur the image. Log scale, so the low end is spread out."
+
+	blink:
+		label: Blink
+		tab: Look/Text
+		control: checkbox
+		path: cursor.blink
+		default: true
+		group: perf
+		tip: "Blink the cursor. Set by the profile, though it sits on another tab."
+
+	use_system_family:
+		label: Use system font
+		tab: Look/Text
+		control: checkbox
+		path: font.use_system_family
+		default: true
+		tip: "Use the desktop's monospace font."
+
+	family:
+		label: Family
+		tab: Look/Text
+		control: text
+		path: font.family
+		default: monospace
+		auto: use_system_family
+		rule: system_font_family
+		tip: "The font for terminal text."
+
+	use_system_size:
+		label: Use system font size
+		tab: Look/Text
+		control: checkbox
+		path: font.use_system_size
+		default: true
+		tip: "Use the desktop's monospace font size."
+
+	size:
+		label: Size
+		tab: Look/Text
+		control: number
+		range: 6, 72
+		path: font.size
+		default: 12
+		auto: use_system_size
+		rule: system_font_size
+		tip: "The font size in points."
+
+	line_height:
+		label: Line height
+		tab: Look/Text
+		control: slider
+		range: 0.8, 2
+		path: font.line_height
+		default: 1
+		detents: 1
+		detent_labels: "Normal"
+		tip: "Space between lines, as a multiple of the font's own."
+
+	theme:
+		label: Theme
+		tab: Look/Colors
+		control: dropdown
+		path: theme.name
+		default: dark
+		tip: "A set of colors."
+
+	from_wallpaper:
+		label: Text colors from wallpaper
+		tab: Look/Colors
+		control: checkbox
+		path: colors.from_wallpaper
+		default: true
+		tip: "Pick text and cursor colors that stand out against the wallpaper."
+
+	fg:
+		label: Foreground
+		tab: Look/Colors
+		control: color
+		path: colors.foreground
+		default: "#d0d0d0"
+		auto: from_wallpaper
+		rule: wallpaper_fg
+		group: theme
+		tip: "The text color."
+
+	cursor:
+		label: Cursor
+		tab: Look/Colors
+		control: color
+		path: colors.cursor
+		default: "#f0c040"
+		auto: from_wallpaper
+		rule: wallpaper_cursor
+		group: theme
+		tip: "The cursor color."
+
+	bg:
+		label: Background
+		tab: Look/Colors
+		control: color
+		path: colors.background
+		default: "#101014"
+		group: theme
+		tip: "The color behind the text."
+
+	remember_size:
+		label: Remember last size
+		tab: Window/Size
+		control: checkbox
+		path: window.remember_size
+		default: true
+		tip: "Open new windows at the size the last one closed at."
+
+	columns:
+		label: Columns
+		tab: Window/Size
+		control: number
+		whole: true
+		range: 20, 500
+		path: window.columns
+		default: 160
+		auto: remember_size
+		rule: "state:last_columns"
+		tip: "Width of a new window, in characters."
+
+	rows:
+		label: Rows
+		tab: Window/Size
+		control: number
+		whole: true
+		range: 5, 200
+		path: window.rows
+		default: 48
+		auto: remember_size
+		rule: "state:last_rows"
+		tip: "Height of a new window, in lines."
+
+	last_columns:
+		label: Last columns
+		control: none
+		type: int
+		store: state
+		path: window.last.columns
+		default: 160
+
+	last_rows:
+		label: Last rows
+		control: none
+		type: int
+		store: state
+		path: window.last.rows
+		default: 48
+
+	idle_release:
+		label: Free resources when idle
+		tab: Window/Power
+		control: checkbox
+		path: window.idle_release
+		default: true
+		tip: "Give back graphics memory after a while with nothing to draw."
+
+	idle_min:
+		label: Minutes idle
+		tab: Window/Power
+		control: slider
+		whole: true
+		range: 1, 10080
+		scale: log
+		path: window.idle_min
+		default: 5
+		gate: idle_release
+		detents: 5, 60, 1440, 10080
+		detent_labels: "5 min", "1 hour", "1 day", "1 week"
+		tip: "How long with nothing to draw before memory is given back."
+
+groups:
+
+	perf:
+		chooser: profile
+		noun: profile
+		custom: Custom
+		presets:
+			max_silk:
+				label: Max silk
+				smooth: true
+				ease_in: 60
+				ramp_down: 80
+				scrim: true
+				strength: 60
+				radius: 8
+				wallpaper: true
+				blur: 12
+				blink: true
+			high:
+				label: High
+				smooth: true
+				ease_in: 50
+				ramp_down: 70
+				scrim: true
+				strength: 50
+				radius: 6
+				wallpaper: true
+				blur: 8
+				blink: true
+			low:
+				label: Low
+				smooth: true
+				ease_in: 30
+				ramp_down: 50
+				scrim: false
+				strength: 40
+				radius: 4
+				wallpaper: true
+				blur: 0
+				blink: true
+			standard:
+				label: Standard terminal
+				smooth: false
+				ease_in: 0
+				ramp_down: 0
+				scrim: false
+				strength: 0
+				radius: 0
+				wallpaper: false
+				blur: 0
+				blink: false
+			remote:
+				label: Remote (temporary)
+				temporary: true
+				smooth: false
+				ease_in: 0
+				ramp_down: 0
+				scrim: false
+				strength: 0
+				radius: 0
+				wallpaper: false
+				blur: 0
+				blink: false
+
+	theme:
+		chooser: theme
+		noun: theme
+		custom: Custom
+		presets:
+			dark:
+				label: Dark
+				fg: "#d0d0d0"
+				cursor: "#f0c040"
+				bg: "#101014"
+			light:
+				label: Light
+				fg: "#202024"
+				cursor: "#c04020"
+				bg: "#f4f4f0"

@@ -284,6 +284,7 @@ export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/wpmix
 */target/memdbg
 */target/scrimexp
+*/target/knobs-demo
 */target/rewrite-20260915.docs-backup
 */target/repro.*
 */target/mypy
