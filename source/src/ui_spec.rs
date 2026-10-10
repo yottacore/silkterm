@@ -28,14 +28,14 @@ macro_rules! keys {
 			// and the spelling it names a missing one by.
 			#[cfg(test)]
 			pub const ALL: &'static [Key] = &[$(Key::$name),*];
-			#[cfg(test)]
+			/// Also the setting's id in the knobs spec.
 			pub fn name(self) -> &'static str {
 				match self {
 					Key::None => "none",
 					$(Key::$name => stringify!($name)),*
 				}
 			}
-			fn parse(text: &str) -> Option<Key> {
+			pub fn parse(text: &str) -> Option<Key> {
 				if text.eq_ignore_ascii_case("none") {
 					return Some(Key::None);
 				}
@@ -57,13 +57,13 @@ keys![
 	TextScrim, ScrimRadius, ScrimSoftness, ScrimStrength, ScrimFunction, ScrimRamp,
 	Outline, MinContrast, CursorScrim, CursorOutline,
 	CursorBlinking, CursorBlinkRate, CursorHeight, CursorWidth, CursorAnimation, CursorResume,
-	FontFamily, FontSize, LineHeight,
+	SystemFont, SystemFontSize, FontFamily, FontSize, LineHeight,
 	Columns, Rows, RememberSize, RememberPerMonitor, RememberMaximized, Margin, TabRegularWidth, TabMaxWidth,
 	NewTabNextToCurrent, IdleRelease, IdleHiddenMin, IdleMin, SoftwareRendering,
 	TabShowsTitle, TabShowsShell, TabShowsProgram, TabShowsDirectory, TitleShowsTab,
 	Shells, StartupDirectory, ShellIntegration, BashPrompt, CopyOnSelect, Hyperlinks, LinkOpenCommand,
 	SmoothScroll, ScrollEaseIn, ScrollRampUp, SingleScreenTau, ScrollRampDown,
-	ScrollEaseOut, WheelLines,
+	ScrollEaseOut, SmoothApps, WheelLines, BgFolder,
 	Scrollbar, ScrollbarThickness, ScrollbarAutoHide, Minimap, MinimapWidth,
 	ColScrollbarThumb, ColScrollbarTrough, ColBg, ColFromWallpaper, ColFg, ColCursor,
 	ColHighlight, ColFocus, ColGutter,
@@ -149,19 +149,40 @@ pub struct Spec {
 	/// The mark's text in the Windows build, in place of `warning`. Moved
 	/// over by `pick_warnings`, so the dialog only ever reads `warning`.
 	pub windows_warning: &'static str,
-	/// The group of auto settings this row is the switch for. It holds no
-	/// value of its own; it is read off the members (`config::auto`).
-	pub group: Option<crate::config::auto::Group>,
 }
 
-/// One setting a control has to wait on, resolved from the file's gate lines.
-/// `numeric` is decided here rather than at every check: a slider is satisfied
-/// while it sits above zero, everything else while it is switched on.
+/// How a setting relates to the others, for knobs. See the automatic settings
+/// design doc.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Rel {
+	/// The checkbox it only counts under.
+	pub gate: Option<Key>,
+	/// The switch that makes it automatic.
+	pub auto: Option<Key>,
+	/// Where an automatic value comes from. With no `auto`, it gives the default.
+	pub rule: Option<&'static str>,
+	/// The profile or theme it belongs to.
+	pub group: Option<&'static str>,
+}
+
+/// A profile or a theme: the dropdown that picks, and the presets.
 #[derive(Debug)]
-pub struct Need {
-	pub key: Key,
-	pub invert: bool,
-	pub numeric: bool,
+pub struct GroupSpec {
+	pub id: &'static str,
+	pub chooser: Key,
+	pub noun: &'static str,
+	pub custom: &'static str,
+	/// The program has the presets, as it does for the themes.
+	pub from_program: bool,
+	pub presets: Vec<PresetSpec>,
+}
+
+#[derive(Debug)]
+pub struct PresetSpec {
+	pub key: &'static str,
+	pub label: &'static str,
+	pub temporary: bool,
+	pub values: Vec<(Key, knobs::Value)>,
 }
 
 #[derive(Debug)]
@@ -250,9 +271,12 @@ pub struct Ui {
 	pub icons: Icons,
 	pub help: Help,
 	pub specs: Vec<Spec>,
+	/// Settings with no row of their own: key and the label a tip names it by.
+	pub hidden: Vec<(Key, &'static str)>,
+	pub groups: Vec<GroupSpec>,
 	// config path per addressable setting, in row order (parallel to `keys`)
 	settings: Vec<(Key, &'static [&'static str])>,
-	gates: Vec<(Key, Vec<Need>)>,
+	relations: Vec<(Key, Rel)>,
 }
 
 impl Ui {
@@ -264,11 +288,11 @@ impl Ui {
 			.find(|(k, _)| *k == key)
 			.map_or(&[][..], |(_, paths)| *paths)
 	}
-	pub fn needs_of(&self, key: Key) -> &[Need] {
-		self.gates
+	pub fn rel(&self, key: Key) -> Rel {
+		self.relations
 			.iter()
 			.find(|(k, _)| *k == key)
-			.map_or(&[][..], |(_, needs)| needs)
+			.map_or_else(Rel::default, |(_, rel)| *rel)
 	}
 }
 
@@ -435,6 +459,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 
 	let mut specs: Vec<Spec> = Vec::new();
 	let mut settings: Vec<(Key, &'static [&'static str])> = Vec::new();
+	let mut relations: Vec<(Key, Rel)> = Vec::new();
 	let mut tab = 0usize;
 	// a Windows-only heading takes its rows with it, or they would show under
 	// the group above on every other platform
@@ -456,6 +481,9 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			key
 		};
 		let paths = doc.get_string_array(&at("setting")).unwrap_or_default();
+		if key != Key::None {
+			relations.push((key, read_rel(&doc, &format!("rows.{name}"), &mut problems)));
+		}
 		let options = doc
 			.get_string_array(&at("options"))
 			.map_or(&[][..], keep_all);
@@ -557,11 +585,10 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 				continue;
 			}
 		};
-		// a pair row already filed its two parts above; neither a buttons row nor
-		// the shells grid holds a value of its own, and nor does a group's switch
+		// a pair row already filed its two parts above, and neither a buttons row
+		// nor the shells grid holds a value of its own
 		if key != Key::None
 			&& !matches!(kind, Kind::Dual { .. } | Kind::Buttons(_) | Kind::ShellList)
-			&& doc.get_string(&at("group")).is_err()
 		{
 			// A text box may stand for more than one setting, as "File or folder"
 			// does, so a revert comments out each. Anything else holds one value.
@@ -608,20 +635,6 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		{
 			problems.push(format!("rows.{name}: a warning needs a label of its own"));
 		}
-		let group = doc.get_string(&at("group")).ok().and_then(|group_name| {
-			let group = crate::config::auto::group_named(&group_name);
-			if group.is_none() {
-				problems.push(format!(
-					"rows.{name}: no group of auto settings named {group_name}"
-				));
-			}
-			group
-		});
-		let switch =
-			group.map(crate::config::auto::control) == Some(crate::config::auto::Control::Switch);
-		if switch && !matches!(kind, Kind::Toggle) {
-			problems.push(format!("rows.{name}: a group's switch is a toggle"));
-		}
 		let windows = doc.get_bool(&at("windows")).unwrap_or(false);
 		if matches!(kind, Kind::Header(_)) {
 			group_windows = windows;
@@ -636,47 +649,72 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			kind,
 			tab,
 			help: doc.get_string(&at("help")).map_or("", keep),
-			indent: doc.get_int(&at("indent")).unwrap_or(0).clamp(0, 4) as u8,
+			indent: doc
+				.get_int(&at("indent"))
+				.map_or(u8::MAX, |n| n.clamp(0, 4) as u8),
 			beside,
 			revert_help: doc.get_string(&at("revert_help")).map_or("", keep),
 			windows,
 			not_macos: doc.get_bool(&at("not_macos")).unwrap_or(false),
 			warning: keep(warning),
 			windows_warning: keep(windows_warning),
-			group,
 		});
 	}
 
-	let numeric = |key: Key| {
-		specs
-			.iter()
-			.any(|spec| spec.key == key && matches!(spec.kind, Kind::Slider { .. }))
-	};
-	let mut gates: Vec<(Key, Vec<Need>)> = Vec::new();
-	for name in doc.children("gates") {
+	let mut hidden: Vec<(Key, &'static str)> = Vec::new();
+	for name in doc.children("values") {
 		let Some(key) = Key::parse(&name) else {
-			problems.push(format!("gates.{name}: no setting by that name"));
+			problems.push(format!("values.{name}: no setting by that name"));
 			continue;
 		};
-		let mut needs = Vec::new();
-		for entry in doc
-			.get_string_array(&format!("gates.{name}"))
-			.unwrap_or_default()
-		{
-			let (invert, target) = match entry.strip_prefix('!') {
-				Some(rest) => (true, rest.trim().to_string()),
-				None => (false, entry),
-			};
-			match Key::parse(&target) {
-				Some(k) => needs.push(Need {
-					key: k,
-					invert,
-					numeric: numeric(k),
-				}),
-				None => problems.push(format!("gates.{name}: no setting named {target}")),
-			}
+		let at = |field: &str| format!("values.{name}.{field}");
+		match doc.get_string(&at("setting")) {
+			Ok(path) => settings.push((key, keep_all(vec![path]))),
+			Err(_) => problems.push(format!("values.{name}: needs a setting path")),
 		}
-		gates.push((key, needs));
+		relations.push((
+			key,
+			read_rel(&doc, &format!("values.{name}"), &mut problems),
+		));
+		hidden.push((key, doc.get_string(&at("label")).map_or("", keep)));
+	}
+	let groups = read_groups(&doc, &mut problems);
+
+	// one step in from the checkbox above a row, unless it says otherwise
+	let rel_of = |key: Key| {
+		relations
+			.iter()
+			.find(|(k, _)| *k == key)
+			.map(|(_, rel)| *rel)
+			.unwrap_or_default()
+	};
+	let declared: Vec<(Key, u8)> = specs.iter().map(|s| (s.key, s.indent)).collect();
+	let declared_of = |key: Key| {
+		declared
+			.iter()
+			.find(|(k, _)| *k == key)
+			.map_or(u8::MAX, |(_, indent)| *indent)
+	};
+	for spec in &mut specs {
+		if spec.indent != u8::MAX {
+			continue;
+		}
+		// the chain up to the first row that says its own indent, or the top
+		let mut steps = 0u8;
+		let mut base = 0u8;
+		let mut at = spec.key;
+		while let Some(up) = rel_of(at).gate.or(rel_of(at).auto) {
+			steps += 1;
+			if steps >= 4 {
+				break;
+			}
+			if declared_of(up) != u8::MAX {
+				base = declared_of(up);
+				break;
+			}
+			at = up;
+		}
+		spec.indent = (base + steps).min(4);
 	}
 
 	if problems.is_empty() {
@@ -686,12 +724,94 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			icons,
 			help,
 			specs,
+			hidden,
+			groups,
 			settings,
-			gates,
+			relations,
 		})
 	} else {
 		Err(problems)
 	}
+}
+
+fn read_rel(doc: &shcl::Document, at: &str, problems: &mut Vec<String>) -> Rel {
+	let mut key_of = |field: &str| {
+		let text = doc.get_string(&format!("{at}.{field}")).ok()?;
+		let key = Key::parse(&text);
+		if key.is_none() {
+			problems.push(format!("{at}.{field}: no setting named {text}"));
+		}
+		key
+	};
+	let gate = key_of("gate");
+	let auto = key_of("auto");
+	Rel {
+		gate,
+		auto,
+		rule: doc.get_string(&format!("{at}.rule")).ok().map(keep),
+		group: doc.get_string(&format!("{at}.group")).ok().map(keep),
+	}
+}
+
+// A preset's value as the file has it. The setting it is for decides the type,
+// and knobs turns an int into a float where one is wanted.
+fn read_value(doc: &shcl::Document, path: &str) -> Option<knobs::Value> {
+	use knobs::Value;
+	doc.get_bool(path)
+		.map(Value::Bool)
+		.or_else(|_| doc.get_int(path).map(Value::Int))
+		.or_else(|_| doc.get_float(path).map(Value::Float))
+		.or_else(|_| doc.get_string(path).map(Value::Text))
+		.ok()
+}
+
+fn read_groups(doc: &shcl::Document, problems: &mut Vec<String>) -> Vec<GroupSpec> {
+	let mut groups = Vec::new();
+	for id in doc.children("groups") {
+		let at = |field: &str| format!("groups.{id}.{field}");
+		let text = |field: &str| doc.get_string(&at(field)).unwrap_or_default();
+		let Some(chooser) = Key::parse(&text("chooser")) else {
+			problems.push(format!("groups.{id}: no chooser"));
+			continue;
+		};
+		let mut presets = Vec::new();
+		for key in doc.children(&at("presets")) {
+			let p = |field: &str| format!("groups.{id}.presets.{key}.{field}");
+			let mut values = Vec::new();
+			for name in doc.children(&at(&format!("presets.{key}"))) {
+				if name == "label" || name == "temporary" {
+					continue;
+				}
+				let Some(setting) = Key::parse(&name) else {
+					problems.push(format!(
+						"groups.{id}.presets.{key}: no setting named {name}"
+					));
+					continue;
+				};
+				match read_value(doc, &p(&name)) {
+					Some(v) => values.push((setting, v)),
+					None => problems.push(format!("{}: no value", p(&name))),
+				}
+			}
+			presets.push(PresetSpec {
+				key: keep(key.clone()),
+				label: doc
+					.get_string(&p("label"))
+					.map_or_else(|_| keep(key.clone()), keep),
+				temporary: doc.get_bool(&p("temporary")).unwrap_or(false),
+				values,
+			});
+		}
+		groups.push(GroupSpec {
+			id: keep(id.clone()),
+			chooser,
+			noun: keep(text("noun")),
+			custom: keep(text("custom")),
+			from_program: doc.get_bool(&at("from_program")).unwrap_or(false),
+			presets,
+		});
+	}
+	groups
 }
 
 #[cfg(test)]
@@ -708,18 +828,14 @@ mod tests {
 			Ok(ui) => ui,
 			Err(problems) => panic!("settings_ui.shcl:\n  {}", problems.join("\n  ")),
 		};
-		let mut declared: Vec<Key> = Vec::new();
-		// a buttons row, the shells grid and a group's switch are on the roll
-		// call but store no single value, so none has a config path
+		let mut declared: Vec<Key> = ui.hidden.iter().map(|(key, _)| *key).collect();
+		// a buttons row and the shells grid are on the roll call but store no
+		// single value, so neither has a config path
 		let mut valueless: Vec<Key> = Vec::new();
 		for spec in &ui.specs {
 			match spec.kind {
 				Kind::Dual { keys, .. } => declared.extend(keys),
 				Kind::Header(_) => {}
-				_ if spec.group.is_some() => {
-					declared.push(spec.key);
-					valueless.push(spec.key);
-				}
 				Kind::Buttons(_) | Kind::ShellList => {
 					declared.push(spec.key);
 					valueless.push(spec.key);
@@ -740,14 +856,14 @@ mod tests {
 				key.name()
 			);
 		}
-		// every gate names a setting that is actually on a row
-		for (key, needs) in &ui.gates {
-			assert!(declared.contains(key), "gate on unlisted {}", key.name());
-			for need in needs {
+		// every relation names a setting that is declared
+		for (key, rel) in &ui.relations {
+			for other in [rel.gate, rel.auto].into_iter().flatten() {
 				assert!(
-					declared.contains(&need.key),
-					"gate waits on unlisted {}",
-					need.key.name()
+					declared.contains(&other),
+					"{} names {}",
+					key.name(),
+					other.name()
 				);
 			}
 		}

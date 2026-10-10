@@ -548,7 +548,7 @@ impl Demo {
 	}
 }
 
-fn first_run(spec: Spec, desk: &Desk) -> Model {
+fn first_run(spec: impl Into<std::sync::Arc<Spec>>, desk: &Desk) -> Model {
 	let mut m = Model::new(spec);
 	let groups: Vec<String> = m.spec.groups.iter().map(|g| g.id.clone()).collect();
 	for g in groups {

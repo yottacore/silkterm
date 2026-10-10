@@ -115,7 +115,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 - Only labels indent. Every control stays in its column, whatever the depth.
 	- A shared line of toggles is the one exception, under Rows.
 
-- A sub-group's leader is usually the switch that decides whether its members do anything. Members stay live and indented when it is off, so they can be set up first and come back as they were. A switch whose members get values of the program's own while it is on is a group of automatic settings instead, below.
+- A sub-group's leader is usually the switch that decides whether its members do anything. Members stay live and indented when it is off, so they can be set up first, and changing one turns the switch on. A switch whose members get values of the program's own while it is on works the other way round, below.
 
 ### Rows
 
@@ -142,15 +142,16 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - Every row must actually write what it edits. A row whose setting is never persisted is worse than no row, because the change appears to take and then vanishes at the next launch.
 
-- Why a row is grayed out beats what it does, so a row grayed by the machine says so in its flyover in place of its usual text. A row grayed by another setting says nothing extra, because the switch that did it is the row above. A row set by the performance profile is not grayed at all - it takes input, and its flyover says that it is showing the profile's value and that changing it switches the profile to Custom.
+- Why a row is grayed out beats what it does, so a row grayed by the machine says so in its flyover in place of its usual text. A row grayed by another setting says nothing extra, because the switch that did it is the row above. A row set by a preset is not grayed at all. It takes input, and its flyover says it is showing the preset's value.
 
-- A setting the program can work out for itself is automatic until a value is set, as [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md) describes.
-	- It is never grayed for being automatic. Its box shows the value in use, in a lighter italic, with a small "A" mark at the right end of the box.
-	- A value typed, dragged or stepped to is set by hand. The mark turns into an x that puts it back to automatic, and emptying the box does the same. So does the revert control, since the default is automatic.
-	- A switch over a group of them is read off the group and holds nothing. It is on while all are automatic, off while none is, and shows a dash while some are. A click on it from a dash makes all of them automatic, and turning it off keeps what each one shows. It has no revert control, since each member has its own. "Remember last size" over Columns and Rows is one.
-	- A switch over one setting is pointless, so that setting takes the mark itself. Family and Size on the Text tab follow the desktop's font that way.
-	- The theme colors follow the theme the same way, Open command the desktop's opener, and File or folder the usual folder or the built-in picture. A color's mark sits in its hex box, beside the chip that opens the picker. Picking a theme puts every color back to automatic under it.
-	- File or folder edits whichever of the two its box shows, and its x puts back only that one. Its revert control puts back both.
+- A setting the program can work out for itself has a switch above it, as [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md) describes. "Use system font" over Family and Size is one.
+	- It is never grayed for being automatic, and has no mark or style of its own. While the switch is on, its box shows the value in use.
+	- A value typed, dragged or stepped to turns the switch off. The other rows under it keep what they show.
+	- Turning the switch on sets the values typed under it aside, and turning it off brings them back.
+	- A few settings have a rule and no switch: Open command, whose rule is the desktop's opener, and File or folder, with the usual folder or the built-in picture. With no value set, the rule's answer is the default, and the revert control puts it back.
+	- File or folder edits whichever of the two its box shows. Its revert control puts back both.
+
+- The performance profile and the theme are dropdowns of presets, with Custom beside them. A row a preset sets shows the preset's value. Changing it puts a `*` after the preset's name, and Custom stays as it was. Picking another entry drops the `*` changes.
 
 - A row that may not work on every desktop has a warning mark after its label: a small triangle in the label's color, never red. What the row depends on goes at the end of the row's flyover, which shows over the mark like the rest of the row.
 	- A row that keeps a window from giving its graphics memory back gets one too, as Transparency does on Windows. So does "Free resources when idle", since some graphics drivers have trouble with it.
@@ -198,9 +199,9 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 
 - A row's tip shows wherever the pointer rests on that row: its label, a warning mark, each option's label and every part of its control. The revert control is the one part with a tip of its own. A pair, such as Visibility's Scrim and Outline on the Cursor tab, is two settings, so each half answers for its own. A packed line of toggles is separate settings too, and each keeps its own tip.
 
-- An automatic setting's tip ends, after a blank line, with one line on its state: `Automatic. Change it to set your own value.` or `Set by hand. Automatic would be: 17.` The x that puts it back says `Back to automatic`.
+- A row whose value is automatic or comes from a preset ends its tip, after a blank line, with one line on where the value comes from: `Automatic.`, `Automatic. Your value, 14, is kept for later.`, `From the High profile.` or `Changed. The High profile's value is 50.` A dropdown with a `*` names the rows changed under it.
 
-- Any other row that holds a value ends its tip with `Current value: ...` and `Default value: ...` on 2 lines, after a blank line where text comes before them, but only while the two differ. They are written the way the row writes them: the number in its box, On or Off, the option's own words, a color's hex. An automatic setting gets neither, since its state line already says what automatic would be.
+- Any other row that holds a value ends its tip with `Current value: ...` and `Default value: ...` on 2 lines, after a blank line where text comes before them, but only while the two differ. They are written the way the row writes them: the number in its box, On or Off, the option's own words, a color's hex. A row with a line on where its value comes from gets neither.
 
 - Only controls whose label does not already say what they do get a tip. The test is the tip itself: if it restates the label in other words, delete it and fix the label. A dialog of rendering settings will legitimately need one on most of its rows, because a name cannot say what a falloff curve or an easing time does to the picture.
 
@@ -345,9 +346,5 @@ Things the built interface does differently from the rules above. Each is a smal
 - The About box pads its `Key: value` lines with extra spaces, which line nothing up in a proportional font. Cosmetic, and shared with the text `--about` prints.
 
 - The Silk tab makes eight, one past the ceiling above. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
-
-- Foreground and Cursor on the Themes tab still gray out while "Text colors from wallpaper" is on. It is the last switch over rows it gives values of its own, and it has not moved to automatic values yet.
-
-- The performance profile still lays its values over the rows it sets, rather than being a presets dropdown read off them as the automatic settings design has it.
 
 - The Keys tab makes nine. No other tab's subject takes in the hotkeys. The nine tabs are now the widest thing in the dialog, so they set the panel's width on every tab.

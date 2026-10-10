@@ -44,13 +44,9 @@ impl SettingsDialog {
 		self.open = None;
 		let key = self.specs[i].key;
 		let start = self.get_col(key);
-		let start_automatic = self
-			.auto_of(key)
-			.is_some_and(|setting| config::auto::automatic(&self.edited, setting));
 		self.pick = Some(Picker {
 			row: i,
-			start,
-			start_automatic,
+			start_values: self.edited.model.values.clone(),
 			hsv: pick::from_rgb(
 				start,
 				pick::Hsv {
@@ -64,16 +60,12 @@ impl SettingsDialog {
 		});
 	}
 
-	/// Cancel puts back what the row held when the box opened. There is nothing
-	/// else to undo: the box writes through, so the row is the only place the
-	/// change ever reached.
+	/// Cancel puts back what was stored when the box opened, which also puts
+	/// back a switch or a theme the change moved.
 	pub(super) fn pick_cancel(&mut self) {
 		if let Some(picker) = self.pick.take() {
-			if picker.start_automatic {
-				self.back_to_automatic(picker.row);
-			} else {
-				self.set_col(self.specs[picker.row].key, picker.start);
-			}
+			self.edited.model.values = picker.start_values;
+			crate::fields::fill(&mut self.edited, self.monitor.as_deref());
 		}
 		self.pick_drop_edit();
 	}

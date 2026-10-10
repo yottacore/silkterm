@@ -17,7 +17,7 @@ pub(super) fn remote_override_at_launch() {
 	if !crate::profile::remote_session() {
 		return;
 	}
-	set_live(|live| live.remote_override = true);
+	set_live(|live| crate::profile::set_remote(live, true));
 }
 
 /// What the performance watch does with a pass of the event loop.
@@ -52,7 +52,7 @@ pub(super) fn rating_step(
 /// renderer is decided here and written now, and a remote screen is left alone.
 pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	let live = config::settings();
-	if !live.performance_automatic || live.remote_override {
+	if !live.performance_automatic || crate::profile::remote(&live) {
 		return None;
 	}
 	let hardware = crate::profile::hardware_id(info);
@@ -62,12 +62,17 @@ pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	// The one-shot check counts as new hardware, and clears itself here rather
 	// than with the answer: a window closed mid-run has still had its run.
 	if live.performance_check_next_run {
-		let kept = config::keep_rating(&config::RatingLines {
+		let kept = config::keep_rating(config::RatingLines {
 			check_next_run: Some(false),
-			..config::RatingLines::default()
 		});
 		note_rating_not_kept(&kept);
-		set_live(|live| live.performance_check_next_run = false);
+		set_live(|live| {
+			crate::fields::store(
+				live,
+				crate::ui_spec::Key::PerfCheckNext,
+				knobs::Value::Bool(false),
+			);
+		});
 	}
 	if crate::profile::worth_measuring(info) {
 		// Nothing is written yet. The id goes down with the measured answer, so a
@@ -77,15 +82,11 @@ pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 	}
 	let pick = crate::profile::first_pick(info);
 	// no banner on this path, and redoing it next launch costs nothing
-	let kept = config::keep_rating(&config::RatingLines {
-		profile: Some(pick.key()),
-		rated_hardware: Some(&hardware),
-		check_next_run: None,
-	});
+	let kept = config::keep_tested(pick, Some(&hardware));
 	note_rating_not_kept(&kept);
 	set_live(|live| {
 		live.rated_hardware = hardware;
-		live.performance_profile = pick;
+		live.tested_profile = Some(pick);
 	});
 	None
 }
@@ -94,7 +95,7 @@ pub(super) fn rate_hardware(info: &wgpu::AdapterInfo) -> Option<String> {
 // re-rated when asked for; the first rating has to happen either way, or there
 // is no profile at all.
 fn rating_due(live: &config::Settings, hardware: &str) -> bool {
-	if !live.performance_automatic || live.remote_override {
+	if !live.performance_automatic || crate::profile::remote(live) {
 		return false;
 	}
 	if live.performance_check_next_run {
@@ -132,11 +133,7 @@ pub(super) fn session_step(
 // A measured answer into the settings file. Its own function so a test can run
 // the same write the banner's run does.
 fn keep_measured(pick: crate::profile::Profile, id: Option<&str>) -> config::Kept {
-	config::keep_rating(&config::RatingLines {
-		profile: Some(pick.key()),
-		rated_hardware: id,
-		check_next_run: None,
-	})
+	config::keep_tested(pick, id)
 }
 
 // Every rating write reports a failure, since a rating that is not kept is a
@@ -203,8 +200,7 @@ fn with_measured_profile(
 	profile: crate::profile::Profile,
 ) -> config::Settings {
 	let mut next = live.clone();
-	crate::profile::unapply(&mut next);
-	next.performance_profile = profile;
+	next.tested_profile = Some(profile);
 	next.stepped_profile = None;
 	next
 }
@@ -281,7 +277,8 @@ impl State {
 	pub(super) fn toggle_remote(&mut self) {
 		let before = config::settings();
 		let mut next = (*before).clone();
-		next.remote_override = !next.remote_override;
+		let on = !crate::profile::remote(&next);
+		crate::profile::set_remote(&mut next, on);
 		self.apply_new_settings(&before, next, false);
 	}
 
@@ -398,16 +395,16 @@ mod tests {
 	fn a_measured_profile_replaces_a_session_step() {
 		use crate::profile::Profile;
 		let mut live = config::Settings {
-			performance_profile: crate::profile::Profile::Max,
+			tested_profile: Some(Profile::Max),
 			stepped_profile: Some(Profile::Low),
 			..config::Settings::default()
 		};
-		crate::profile::apply(&mut live);
+		crate::fields::fill(&mut live, None);
 		assert_eq!(crate::profile::current(&live), Profile::Low);
 		let next = super::with_measured_profile(&live, Profile::High);
 		assert_eq!(next.stepped_profile, None);
-		assert_eq!(next.performance_profile, crate::profile::Profile::High);
-		assert!(next.profile_shadow.is_none(), "the user's own values");
+		assert_eq!(next.tested_profile, Some(Profile::High));
+		assert!(next.model.values.own.is_empty(), "nothing of the person's");
 		assert_eq!(crate::profile::current(&next), Profile::High);
 	}
 
@@ -439,8 +436,7 @@ mod tests {
 				format!("performance:\n\tautomatic: {automatic}\n\tprofile: \"{stored}\"\n"),
 			)
 			.unwrap();
-			let mut live = config::reload_from_disk();
-			crate::profile::apply(&mut live);
+			let live = config::reload_from_disk();
 			let before = std::fs::read_to_string(&path).unwrap();
 			let next = super::watch_step_down(&live);
 			assert_eq!(
@@ -551,7 +547,6 @@ mod tests {
 			performance_check_hardware: true,
 			performance_check_next_run: false,
 			rated_hardware: "fedcba9876543210".to_string(),
-			remote_override: false,
 			..config::Settings::default()
 		};
 		let matching = config::Settings {
@@ -569,9 +564,10 @@ mod tests {
 			),
 			(
 				"a remote screen",
-				config::Settings {
-					remote_override: true,
-					..base.clone()
+				{
+					let mut remote = base.clone();
+					crate::profile::set_remote(&mut remote, true);
+					remote
 				},
 				false,
 			),

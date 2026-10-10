@@ -52,9 +52,7 @@ fn named(n: NamedColor, colors: &Colors, settings: &Settings) -> [u8; 3] {
 	}
 	match n {
 		Foreground | DimForeground | BrightForeground => settings.fg,
-		Background => {
-			crate::config::auto::color(settings, crate::config::auto::Setting::Background)
-		}
+		Background => settings.bg,
 		Cursor => settings.cursor,
 		Black | DimBlack => settings.ansi[0],
 		Red | DimRed => settings.ansi[1],

@@ -23,15 +23,15 @@
 //! set of numbers to reason about. At scale 1 nothing changes.
 
 use crate::config::{self, Choice, Settings};
+use crate::fields;
 use crate::fileassoc::Assoc;
 use crate::gfx::{QuadMode, RectInstance};
 use crate::input::Hotkey;
 use crate::keys::Chord;
 use crate::pane::Rect;
 use crate::pick::{self, Picker};
-use crate::profile::Profile;
 use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at};
-use crate::ui_spec::{self, Key, Kind, Layout, Spec, ui};
+use crate::ui_spec::{Key, Kind, Layout, Spec, ui};
 use prompt::{Prompt, PromptFocus, PromptJob};
 use shell_grid::{ShellDrag, ShellPart, ShellStop, shell_stop};
 use std::borrow::Cow;
@@ -102,14 +102,6 @@ fn mix3(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
 	}
 	out
 }
-// The user's own values: a live copy wears the performance profile, and the
-// text and cursor it shows may be the wallpaper's rather than the user's -
-// which would otherwise be what a saved theme stored.
-fn users_own(mut settings: Settings) -> Settings {
-	crate::profile::unapply(&mut settings);
-	crate::autotheme::unapply(&mut settings);
-	settings
-}
 
 // Builds of the dialog colors on this thread. Test builds only.
 #[cfg(test)]
@@ -132,7 +124,6 @@ pub fn hover_tips() -> usize {
 // dialog_*/menu_* override). The remaining shades (border/track/handle/fields/
 // buttons) stay from the mode preset so contrast holds.
 fn dlg() -> Dlg {
-	use config::auto::Setting;
 	#[cfg(test)]
 	DLG_BUILDS.with(|n| n.set(n.get() + 1));
 	let base = if config::is_dark() {
@@ -147,18 +138,13 @@ fn dlg() -> Dlg {
 	// button fill is a dimmed version of it, mixed toward the panel so a pressed
 	// button reads as pressed rather than as the focused one. `focus` paints only
 	// the ring around whatever the keyboard is on.
-	let color = |setting| config::auto::color(&settings, setting);
 	Dlg {
-		panel_bg: color(Setting::DialogBackground),
-		text: color(Setting::DialogForeground),
-		gutter: color(Setting::Gutter),
-		handle: color(Setting::Highlight),
-		btn_hl: mix3(
-			color(Setting::DialogBackground),
-			color(Setting::Highlight),
-			0.62,
-		),
-		focus_out: color(Setting::Focus),
+		panel_bg: settings.dialog_bg,
+		text: settings.dialog_fg,
+		gutter: settings.gutter,
+		handle: settings.highlight,
+		btn_hl: mix3(settings.dialog_bg, settings.highlight, 0.62),
+		focus_out: settings.focus,
 		..base
 	}
 }
@@ -300,6 +286,8 @@ macro_rules! keys_of {
 			| Key::CursorScrim
 			| Key::CursorOutline
 			| Key::CursorBlinking
+			| Key::SystemFont
+			| Key::SystemFontSize
 			| Key::RememberSize
 			| Key::RememberPerMonitor
 			| Key::RememberMaximized
@@ -391,13 +379,15 @@ macro_rules! keys_of {
 			| Key::HotkeyFocusDown
 		] $($rest)*)
 	};
-	// headings and two-setting rows (`None`), the theme buttons, and the shells
-	// list, which is a list rather than one value
+	// headings and two-setting rows (`None`), the theme buttons, the shells
+	// list, which is a list rather than one value, and values with no row
 	(@ [$($acc:tt)*] valueless $($rest:ident)*) => {
 		keys_of!(@ [$($acc)*
 			| Key::None
 			| Key::Shells
 			| Key::ThemeActions
+			| Key::SmoothApps
+			| Key::BgFolder
 		] $($rest)*)
 	};
 	// the file-type rows, whose arrow undoes a registration
@@ -430,7 +420,7 @@ pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 		Key::CursorHeight => settings.cursor_size_height,
 		Key::CursorWidth => settings.cursor_size_width,
 		Key::CursorResume => settings.cursor_animation_resume_s,
-		Key::FontSize => config::auto::font_size(settings),
+		Key::FontSize => settings.font_size,
 		Key::LineHeight => settings.line_height_scale,
 		Key::Margin => settings.margin,
 		Key::TabRegularWidth => settings.tab_regular_pct,
@@ -448,8 +438,8 @@ pub(crate) fn slider_of(settings: &Settings, key: Key) -> f32 {
 		Key::WheelLines => settings.wheel_lines,
 		Key::ScrollbarThickness => settings.scrollbar_thickness,
 		Key::MinimapWidth => settings.minimap_width,
-		Key::Columns => config::auto::grid(settings, None).0 as f32,
-		Key::Rows => config::auto::grid(settings, None).1 as f32,
+		Key::Columns => settings.columns as f32,
+		Key::Rows => settings.rows as f32,
 		Key::IdleHiddenMin => settings.idle_release_hidden_min as f32,
 		Key::IdleMin => settings.idle_release_min as f32,
 		keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => 0.0,
@@ -476,11 +466,9 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::CursorScrim => settings.cursor_scrim,
 		Key::CursorOutline => settings.cursor_outline,
 		Key::CursorBlinking => settings.cursor_blink,
-		// a group's switch is read off its members; mixed reads as off here
-		Key::RememberSize => {
-			config::auto::group_state(settings, config::auto::Group::WindowSize)
-				== config::auto::State::On
-		}
+		Key::SystemFont => settings.use_system_font,
+		Key::SystemFontSize => settings.use_system_font_size,
+		Key::RememberSize => settings.remember_size,
 		Key::RememberPerMonitor => settings.remember_per_monitor,
 		Key::RememberMaximized => settings.remember_maximized,
 		Key::NewTabNextToCurrent => settings.new_tab_beside,
@@ -509,9 +497,29 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 	}
 }
 
+// A color row's color in `settings`.
+fn color_of(s: &Settings, key: Key) -> [u8; 3] {
+	match key {
+		Key::ColBg => s.bg,
+		Key::ColFg => s.fg,
+		Key::ColCursor => s.cursor,
+		Key::ColHighlight => s.highlight,
+		Key::ColFocus => s.focus,
+		Key::ColGutter => s.gutter,
+		Key::ColMenuBg => s.menu_bg,
+		Key::ColMenuFg => s.menu_fg,
+		Key::ColDialogBg => s.dialog_bg,
+		Key::ColDialogFg => s.dialog_fg,
+		Key::ColScrollbarThumb => s.scrollbar_thumb,
+		Key::ColScrollbarTrough => s.scrollbar_trough,
+		keys_of!(slider | toggle | radio | text | hotkey | valueless | assoc) => [0, 0, 0],
+	}
+}
+
 // The option a radio or dropdown row has chosen, read from `settings`.
 fn radio_of(settings: &Settings, key: Key) -> usize {
 	match key {
+		// in the order Profile::ALL has them, which is the dropdown's
 		Key::PerfProfile => crate::profile::current(settings).index(),
 		Key::BgFit => match settings.wallpaper_default_fit {
 			config::Fit::Zoom => 1,
@@ -521,44 +529,17 @@ fn radio_of(settings: &Settings, key: Key) -> usize {
 		Key::ScrimFunction => settings.text_scrim_function.index(),
 		Key::ScrimRamp => settings.text_scrim_ramp.index(),
 		Key::CursorAnimation => settings.cursor_animation.index(),
+		Key::ThemeMode => settings.theme_mode.index(),
 		Key::Theme => crate::theme::all_names(&settings.user_themes)
 			.iter()
 			.position(|n| n.eq_ignore_ascii_case(settings.theme.trim()))
 			.unwrap_or(0),
-		Key::ThemeMode => settings.theme_mode.index(),
 		keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => 0,
 	}
 }
 
-// The rows a performance profile sets - one list, so the dialog's display rule
-// and profile.rs's field list cannot drift apart without a test noticing.
-const GOVERNED: &[Key] = &[
-	Key::SmoothScroll,
-	Key::ScrollEaseIn,
-	Key::ScrollRampUp,
-	Key::SingleScreenTau,
-	Key::ScrollRampDown,
-	Key::ScrollEaseOut,
-	Key::CursorBlinking,
-	Key::TextScrim,
-	Key::ScrimRadius,
-	Key::ScrimStrength,
-	Key::ScrimSoftness,
-	Key::ScrimFunction,
-	Key::Outline,
-	Key::BgEnabled,
-	Key::BgBlur,
-	Key::BgContrastMask,
-];
-const PROFILE_TIP: &str =
-	"Set by the performance profile. Changing it switches the profile to Custom.";
-
-// What the Theme dropdown says once a color has moved off the theme's own.
-const UNSAVED_THEME: &str = "[unsaved]";
-// The letter on the mark an automatic value carries, and the tips about it.
-const AUTO_MARK: &str = "A";
-const AUTO_TIP: &str = "Automatic. Change it to set your own value.";
-const CLEAR_TIP: &str = "Back to automatic";
+// What the Theme dropdown's option for the person's own colors is keyed by.
+const CUSTOM: &str = knobs::CUSTOM;
 
 // A slider's handle, centered on the value, so it overhangs the track's ends.
 const SLIDER_HANDLE_W: f32 = 10.0;
@@ -991,7 +972,8 @@ thread_local! {
 pub struct SettingsDialog {
 	orig: Settings,
 	edited: Settings,
-	defaults: Settings,          // config defaults, for the revert-to-default buttons
+	#[cfg(test)]
+	defaults: Settings, // the shipped values, for the tests' own checks
 	reverted: Vec<&'static str>, // config keys reverted this session -> comment out on Apply
 	rect: Rect,
 	// What the content wants, DIP. The window can be shorter or narrower than
@@ -1359,10 +1341,11 @@ impl SettingsDialog {
 			h,
 		};
 		let specs: &'static [Spec] = &ui().specs;
-		let settings = users_own((*config::settings()).clone());
+		let settings = (*config::settings()).clone();
 		let mut dialog = Self {
 			orig: settings.clone(),
 			edited: settings,
+			#[cfg(test)]
 			defaults: Settings::default(),
 			reverted: Vec::new(),
 			rect,
@@ -1912,8 +1895,8 @@ impl SettingsDialog {
 	}
 	/// Open on these values instead of the live copy. The app hands in the file
 	/// as it is now, since another window may have saved since this one loaded.
-	pub fn start_from(&mut self, settings: Settings) {
-		let settings = users_own(settings);
+	pub fn start_from(&mut self, mut settings: Settings) {
+		fields::fill(&mut settings, self.monitor.as_deref());
 		self.orig = settings.clone();
 		self.edited = settings;
 	}
@@ -1938,42 +1921,19 @@ impl SettingsDialog {
 		if moved {
 			self.monitor = monitor.map(str::to_string);
 		}
-		if resized {
-			for settings in [&mut self.orig, &mut self.edited] {
+		for settings in [&mut self.orig, &mut self.edited] {
+			if resized {
 				settings.remembered_columns = live.remembered_columns;
 				settings.remembered_rows = live.remembered_rows;
 				settings.remembered_font_zoom = live.remembered_font_zoom;
 				settings.monitor_sizes.clone_from(&live.monitor_sizes);
 			}
+			if moved || resized {
+				fields::fill(settings, monitor);
+			}
 		}
 		moved || resized
 	}
-	fn place(&self) -> config::auto::Place<'_> {
-		config::auto::Place {
-			monitor: self.monitor.as_deref(),
-		}
-	}
-	// The auto setting a row edits, if it edits one. File or folder edits the
-	// one its box shows.
-	fn auto_of(&self, key: Key) -> Option<config::auto::Setting> {
-		match ui().settings_of(key) {
-			[path] => config::auto::by_path(path),
-			_ if key == Key::BgImage => Some(if self.wallpaper_box_is_folder() {
-				config::auto::Setting::WallpaperFolder
-			} else {
-				config::auto::Setting::WallpaperImage
-			}),
-			_ => None,
-		}
-	}
-	// What an auto setting's row shows: its value, and whether that is automatic.
-	fn auto_shown(&self, setting: config::auto::Setting) -> (config::auto::Value, bool) {
-		(
-			config::auto::value(&self.edited, setting, self.place()),
-			config::auto::automatic(&self.edited, setting),
-		)
-	}
-
 	/// A restored view comes from a dialog that no longer exists, so nothing about
 	/// its geometry can be assumed: the UI font, screen height or field set may all
 	/// have changed since. Clamp rather than trust.
@@ -2051,22 +2011,21 @@ impl SettingsDialog {
 	// declarations; that one is whatever themes exist right now, so the list has
 	// to be built per call rather than borrowed from the document.
 	fn dd_options(&self, i: usize) -> Vec<String> {
+		if let Some(choices) = self.choices(self.specs[i].key) {
+			return choices.into_iter().map(|(_, label)| label).collect();
+		}
 		match self.specs[i].kind {
-			_ if self.specs[i].key == Key::Theme => {
-				crate::theme::all_names(&self.edited.user_themes)
-			}
 			Kind::Dropdown(opts) => opts.iter().map(|o| (*o).to_string()).collect(),
 			_ => Vec::new(),
 		}
 	}
 	// What the collapsed box says. Same as the highlighted option, except that a
-	// theme carrying edits is no longer that theme, so it says so instead of
-	// naming a palette the colors below have moved away from. Display only - the
-	// dirty state is still derived from the colors themselves (nothing is stored),
-	// and the popup still highlights the theme the edits started from.
+	// profile or theme with rows changed under it says so with a `*`, as in
+	// `High *`. The popup still highlights the preset the changes were made on.
 	fn dd_closed_label(&self, i: usize) -> String {
-		if self.specs[i].key == Key::Theme && self.theme_dirty() {
-			return UNSAVED_THEME.to_string();
+		let key = self.specs[i].key;
+		if self.choices(key).is_some() {
+			return fields::shown_choice(&self.edited, key);
 		}
 		let sel = self.get_radio(self.specs[i].key);
 		self.dd_options(i).get(sel).cloned().unwrap_or_default()
@@ -2822,103 +2781,6 @@ impl SettingsDialog {
 			h,
 		}
 	}
-	// The field an auto setting's row shows its value in, if row `i` edits one.
-	fn auto_field(&self, i: usize) -> Option<(config::auto::Setting, Rect)> {
-		let setting = self.auto_of(self.specs[i].key)?;
-		match self.specs[i].kind {
-			Kind::Slider { .. } => Some((setting, self.valbox(i))),
-			Kind::Text => Some((setting, self.textbox(i))),
-			// the hex box, beside the chip that opens the picker
-			Kind::Color => Some((setting, self.hexbox(i))),
-			_ => None,
-		}
-	}
-	// The automatic mark, or once set by hand the icon that clears it, at the
-	// right end of an auto setting's field. Not drawn while the field is open,
-	// where the caret needs the room.
-	fn auto_slot(&self, i: usize) -> Option<(config::auto::Setting, Rect)> {
-		if matches!(&self.edit, Some(edit) if edit.row == i) {
-			return None;
-		}
-		let (setting, field) = self.auto_field(i)?;
-		let side = (self.line_h * 0.6).round().max(8.0);
-		Some((
-			setting,
-			Rect {
-				x: field.x + field.w - lay().field_pad / 2.0 - side,
-				y: field.y + ((field.h - side) / 2.0).round(),
-				w: side,
-				h: side,
-			},
-		))
-	}
-	// The part of row `i`'s field its text may use: all of it, less the slot.
-	fn text_room(&self, i: usize, field: Rect) -> Rect {
-		match self.auto_slot(i) {
-			Some((_, slot)) => Rect {
-				w: (slot.x - 2.0 - field.x).max(0.0),
-				..field
-			},
-			None => field,
-		}
-	}
-	// The state of the group row `i` is the switch for, if it is one.
-	fn group_state(&self, i: usize) -> Option<config::auto::State> {
-		self.specs[i]
-			.group
-			.map(|group| config::auto::group_state(&self.edited, group))
-	}
-	// Whether row `i` shows an automatic value, read the the way a placeholder is.
-	fn shows_automatic(&self, i: usize) -> bool {
-		self.auto_slot(i)
-			.is_some_and(|(setting, _)| config::auto::automatic(&self.edited, setting))
-	}
-	// The letter on the automatic mark.
-	fn auto_mark_text(
-		&self,
-		colors: &Dlg,
-		i: usize,
-		line_h: f32,
-		vp: Rect,
-		out: &mut Vec<TextItem>,
-		measure: &mut impl FnMut(&str) -> f32,
-	) {
-		const MARK_SCALE: f32 = 0.7;
-		let Some((_, r)) = self.auto_slot(i).filter(|_| self.shows_automatic(i)) else {
-			return;
-		};
-		let w = measure(AUTO_MARK) * MARK_SCALE;
-		out.push(TextItem {
-			bold: true,
-			scale: MARK_SCALE,
-			clip: Some(vp),
-			..TextItem::plain(
-				AUTO_MARK.to_string(),
-				r.x + (r.w - w) / 2.0,
-				r.y + (r.h - line_h * MARK_SCALE) / 2.0,
-				colors.panel_bg,
-			)
-		});
-	}
-	fn auto_slot_quads(&self, colors: &Dlg, i: usize, out: &mut Vec<RectInstance>) {
-		let Some((setting, r)) = self.auto_slot(i) else {
-			return;
-		};
-		let (color, params) = if config::auto::automatic(&self.edited, setting) {
-			(colors.dim, [QuadMode::Rounded.code(), (r.w * 0.3).round()])
-		} else {
-			(
-				colors.text,
-				[QuadMode::CloseMark.code(), (r.w * 0.14).max(1.2)],
-			)
-		};
-		out.push(RectInstance {
-			pos: [r.x, r.y],
-			size: [r.w, r.h],
-			color: config::srgb_f32(color),
-			params,
-		});
-	}
 	// right-edge revert-to-default icon for row `i`
 	fn revert_box(&self, i: usize) -> Rect {
 		let h = self.check_sz();
@@ -3074,66 +2936,97 @@ impl SettingsDialog {
 		}
 	}
 	// What row `i` says about `key`, one of its settings. Why a control is
-	// grayed wins over what it does - that is the more urgent question when it
-	// is - and a value the profile set says so before the usual text.
-	// The tip ends with the value in use and the shipped one, where they differ
-	// (the automatic settings design). An auto setting's state line says that
-	// already, so it gets none.
+	// grayed wins over what it does, since that is the more urgent question when
+	// it is. A value from a rule or a preset, or changed under one, ends with a
+	// line saying so (the automatic settings design). Any other value ends with
+	// the value in use and the default, where they differ.
 	fn row_tip(&self, i: usize, key: Key) -> Option<Cow<'static, str>> {
 		let text = self.row_tip_text(i, key);
-		let Some((now, default)) = self
-			.value_pair(i, key)
-			.filter(|(now, default)| now != default)
-		else {
-			return text;
+		let monitor = self.monitor.as_deref();
+		let plain = matches!(
+			fields::source(&self.edited, key, monitor),
+			None | Some(knobs::Source::Own | knobs::Source::Default)
+		) && fields::changed(&self.edited, key).is_empty();
+		let line = if plain {
+			match self
+				.value_pair(i, key)
+				.filter(|(now, default)| now != default)
+			{
+				Some((now, default)) => format!("Current value: {now}\nDefault value: {default}"),
+				None => String::new(),
+			}
+		} else {
+			fields::state_line(&self.edited, key, monitor, &|k, v| self.shown(i, k, v))
 		};
-		let values = format!("Current value: {now}\nDefault value: {default}");
+		if line.is_empty() {
+			return text;
+		}
 		Some(Cow::Owned(match text {
-			Some(text) => format!("{text}\n\n{values}"),
-			None => values,
+			Some(text) => format!("{text}\n\n{line}"),
+			None => line,
 		}))
 	}
-	// What row `i` shows for `key` and what it shows by default, written the
-	// way the row writes them. None for an auto setting, a group's switch, and
-	// anything that holds no value.
-	fn value_pair(&self, i: usize, key: Key) -> Option<(String, String)> {
-		if self.auto_of(key).is_some() || self.specs[i].group.is_some() {
-			return None;
+	// Settings to write a value in, one at a time: `v` put into `key`'s field,
+	// or the shipped one where there is none.
+	fn scratch_with<R>(key: Key, v: Option<&knobs::Value>, read: impl FnOnce(&Settings) -> R) -> R {
+		thread_local! {
+			static SCRATCH: std::cell::RefCell<Option<Settings>> =
+				const { std::cell::RefCell::new(None) };
 		}
-		let (now, default) = (self.shown(key), &self.defaults);
-		let on_off = |on: bool| if on { "On" } else { "Off" }.to_string();
-		Some(match self.specs[i].kind {
-			Kind::Slider { int, .. } => (
-				fmt_number(self.get_f32(key), int),
-				fmt_number(self.default_f32(key), int),
-			),
+		SCRATCH.with(|cell| {
+			let mut cell = cell.borrow_mut();
+			let s = cell.get_or_insert_with(Settings::bare);
+			if let Some(v) = v {
+				fields::put(s, key, v);
+			}
+			read(s)
+		})
+	}
+	// A value in the file's units, written the way row `i` writes it.
+	fn shown(&self, i: usize, key: Key, v: &knobs::Value) -> String {
+		Self::scratch_with(key, Some(v), |s| self.written(i, key, s))
+	}
+	// How row `i` writes `key`'s value in `s`: the number in its box, On or Off,
+	// the option's own words, a color's hex.
+	fn written(&self, i: usize, key: Key, s: &Settings) -> String {
+		match self.specs[i].kind {
+			Kind::Slider { int, .. } => fmt_number(slider_of(s, key), int),
 			Kind::Toggle | Kind::Dual { .. } => {
-				(on_off(toggle_of(now, key)), on_off(toggle_of(default, key)))
+				if toggle_of(s, key) { "On" } else { "Off" }.to_string()
 			}
-			Kind::Radio(_) | Kind::Dropdown(_) if key == Key::Theme => {
-				(self.edited.theme.clone(), default.theme.clone())
-			}
-			Kind::Radio(options) | Kind::Dropdown(options) => {
-				let option = |settings| {
-					options
-						.get(radio_of(settings, key))
-						.map_or_else(String::new, |o| (*o).to_string())
-				};
-				(option(now), option(default))
-			}
-			Kind::Color => (
-				config::format_hex(self.get_col(key)),
-				config::format_hex(self.default_col(key)),
-			),
+			Kind::Radio(options) | Kind::Dropdown(options) => match self.choices(key) {
+				Some(choices) => {
+					let at = fields::get(s, key)
+						.map(|v| v.as_text().to_string())
+						.unwrap_or_default();
+					choices
+						.into_iter()
+						.find(|(k, _)| k.eq_ignore_ascii_case(&at))
+						.map_or(at, |(_, label)| label)
+				}
+				None => options
+					.get(radio_of(s, key))
+					.map_or_else(String::new, |o| (*o).to_string()),
+			},
+			Kind::Color => config::format_hex(color_of(s, key)),
 			Kind::Text => {
-				let text = |settings: &Settings| match key {
-					Key::StartupDirectory if !settings.startup_directory.is_empty() => {
-						settings.startup_directory.clone()
-					}
-					_ => "(none)".to_string(),
-				};
-				(text(now), text(default))
+				let text = fields::get(s, key)
+					.map(|v| v.as_text().to_string())
+					.unwrap_or_default();
+				if text.is_empty() {
+					"(none)".to_string()
+				} else {
+					text
+				}
 			}
+			Kind::Hotkey(_) | Kind::Header(_) | Kind::Buttons(_) | Kind::ShellList => String::new(),
+		}
+	}
+	// What row `i` shows for `key` and what it shows by default, written the
+	// way the row writes them. None for anything that holds no value.
+	fn value_pair(&self, i: usize, key: Key) -> Option<(String, String)> {
+		match self.specs[i].kind {
+			Kind::Header(_) | Kind::Buttons(_) | Kind::ShellList => None,
 			Kind::Hotkey(_) => {
 				let hotkey = self.hotkey_for_key(key)?;
 				let spoken = |keys: &crate::keys::Bindings| {
@@ -3147,39 +3040,20 @@ impl SettingsDialog {
 						.collect::<Vec<_>>()
 						.join(" or ")
 				};
-				(spoken(&self.edited.keys), spoken(&default.keys))
+				let shipped = crate::keys::Bindings::defaults(self.mac);
+				Some((spoken(&self.edited.keys), spoken(&shipped)))
 			}
-			Kind::Header(_) | Kind::Buttons(_) | Kind::ShellList => return None,
-		})
+			_ => Some((
+				self.written(i, key, &self.edited),
+				self.with_default(key, |s| self.written(i, key, s)),
+			)),
+		}
 	}
 	fn row_tip_text(&self, i: usize, key: Key) -> Option<Cow<'static, str>> {
 		if let Some(why) = self.disabled_tip(key).filter(|_| self.disabled(key)) {
 			return Some(Cow::Borrowed(why));
 		}
-		if self.profile_shows(key) {
-			return Some(Cow::Borrowed(PROFILE_TIP));
-		}
-		let help = self.specs[i].help;
-		// an auto setting adds a line on whether it is automatic
-		let Some(setting) = self.auto_of(key) else {
-			return Some(Cow::Borrowed(help)).filter(|help| !help.is_empty());
-		};
-		let state = if config::auto::automatic(&self.edited, setting) {
-			Cow::Borrowed(AUTO_TIP)
-		} else {
-			let rule = config::auto::rule(&self.edited, setting, self.place());
-			// written the way the row's own box writes a number
-			let rule = match self.specs[i].kind {
-				Kind::Slider { int, .. } => fmt_number(config::auto::number(&rule), int),
-				_ => rule.to_string(),
-			};
-			Cow::Owned(format!("Set by hand. Automatic would be: {rule}."))
-		};
-		Some(if help.is_empty() {
-			state
-		} else {
-			Cow::Owned(format!("{help}\n\n{state}"))
-		})
+		Some(Cow::Borrowed(self.specs[i].help)).filter(|help| !help.is_empty())
 	}
 	// The flyover to show while the cursor rests on something that has one:
 	// (text, anchor rect to hang the tip box under).
@@ -3212,12 +3086,6 @@ impl SettingsDialog {
 			if self.has_revert(i) && !self.specs[i].revert_help.is_empty() && arrow.contains(mx, my)
 			{
 				return Some((Cow::Borrowed(self.specs[i].revert_help), arrow));
-			}
-			// the icon that clears a value set by hand says what it does
-			if let Some((setting, slot)) = self.auto_slot(i) {
-				if slot.contains(mx, my) && !config::auto::automatic(&self.edited, setting) {
-					return Some((Cow::Borrowed(CLEAR_TIP), slot));
-				}
 			}
 			// hover target: the row's label + control span. The shells grid is
 			// the exception - its "row" is the whole grid, and a tip that popped
@@ -3361,15 +3229,8 @@ impl SettingsDialog {
 	}
 	// Is this row at its config default? (drives the revert icon). A Dual row is
 	// "default" only when both its keys are.
-	// A row showing a profile's value has nothing to revert - what is on screen is
-	// not the user's value - so it is skipped rather than answering for the row.
-	// Skipping it matters on a shared line, where one half can be governed and the
-	// other not.
 	fn row_is_default(&self, i: usize) -> bool {
-		self.row_keys(i)
-			.iter()
-			.filter(|&&k| !self.profile_shows(k))
-			.all(|&k| self.is_default(k))
+		self.row_keys(i).iter().all(|&k| self.is_default(k))
 	}
 	// A row of push-buttons has no value, and the shells grid is a list rather
 	// than a setting - neither has a default to go back to. A row drawn beside
@@ -3378,8 +3239,6 @@ impl SettingsDialog {
 	// arrow puts back what Register replaced.
 	fn has_revert(&self, i: usize) -> bool {
 		!self.specs[i].beside
-			// a group's switch holds nothing; each member has its own
-			&& self.specs[i].group.is_none()
 			&& match self.specs[i].kind {
 				Kind::Header(_) | Kind::ShellList => false,
 				Kind::Buttons(_) => assoc_of(self.specs[i].key).is_some(),
@@ -3402,15 +3261,14 @@ impl SettingsDialog {
 		}
 		keys
 	}
-	// Revert a whole row to defaults - every key the row's own arrow covers, less
-	// the ones a profile is showing for.
+	// Revert a whole row - every key the row's own arrow covers.
 	fn row_revert(&mut self, i: usize) {
 		if let Some(assoc) = assoc_of(self.specs[i].key) {
 			self.assoc_set(assoc, false);
 			return;
 		}
 		for k in self.row_keys(i) {
-			if !self.profile_shows(k) && !self.is_default(k) {
+			if !self.is_default(k) {
 				self.revert(k);
 			}
 		}
@@ -3516,21 +3374,18 @@ impl SettingsDialog {
 	// and any other row reads `edited`, with nothing copied. That holds only
 	// while no row's value is read from both kinds of field;
 	// `a_shown_value_is_the_profile_laid_over_the_settings` checks every key.
-	fn shown(&self, key: Key) -> &Settings {
-		match crate::profile::current(&self.edited) {
-			Profile::Custom => &self.edited,
-			_ if !GOVERNED.contains(&key) => &self.edited,
-			profile => crate::profile::values_of(profile),
+	// A change made here. The row's field is set first, the way each accessor
+	// below sets it, then knobs takes the value from it, does what the change
+	// does to the rest, and every field is filled again.
+	fn commit(&mut self, key: Key) {
+		if let Some(v) = fields::get(&self.edited, key) {
+			fields::set(&mut self.edited, key, &v, self.monitor.as_deref());
 		}
 	}
 	fn get_f32(&self, key: Key) -> f32 {
-		match self.auto_of(key) {
-			Some(setting) => config::auto::number(&self.auto_shown(setting).0),
-			None => slider_of(self.shown(key), key),
-		}
+		slider_of(&self.edited, key)
 	}
 	fn set_f32(&mut self, key: Key, value: f32) {
-		self.leave_profile(key);
 		let settings = &mut self.edited;
 		match key {
 			Key::Opacity => settings.opacity = from_percent(value),
@@ -3550,7 +3405,7 @@ impl SettingsDialog {
 			Key::CursorHeight => settings.cursor_size_height = value,
 			Key::CursorWidth => settings.cursor_size_width = value,
 			Key::CursorResume => settings.cursor_animation_resume_s = value,
-			Key::FontSize => settings.font_size = config::auto::Auto::by_hand(value),
+			Key::FontSize => settings.font_size = value,
 			Key::LineHeight => settings.line_height_scale = value,
 			Key::Margin => settings.margin = value,
 			Key::TabRegularWidth => settings.tab_regular_pct = value,
@@ -3571,18 +3426,15 @@ impl SettingsDialog {
 			Key::WheelLines => settings.wheel_lines = value,
 			Key::ScrollbarThickness => settings.scrollbar_thickness = value,
 			Key::MinimapWidth => settings.minimap_width = value,
-			Key::Columns => {
-				settings.columns = config::auto::Auto::by_hand(value.round().max(1.0) as usize);
-			}
-			Key::Rows => {
-				settings.rows = config::auto::Auto::by_hand(value.round().max(1.0) as usize);
-			}
+			Key::Columns => settings.columns = value.round().max(1.0) as usize,
+			Key::Rows => settings.rows = value.round().max(1.0) as usize,
 			Key::IdleHiddenMin => {
 				settings.idle_release_hidden_min = value.round().max(1.0) as usize;
 			}
 			Key::IdleMin => settings.idle_release_min = value.round().max(1.0) as usize,
 			keys_of!(toggle | radio | color | text | hotkey | valueless | assoc) => {}
 		}
+		self.commit(key);
 	}
 	// "File or folder" is where the picture comes from. A named image wins at
 	// run time, so it shows whenever there is one. Otherwise the box follows the
@@ -3598,72 +3450,48 @@ impl SettingsDialog {
 				edit.wallpaper_folder
 			}
 			_ => {
-				config::auto::automatic(&self.edited, config::auto::Setting::WallpaperImage)
-					&& self.edited.wallpaper_rotate_enabled
+				!fields::by_hand(&self.edited, Key::BgImage) && self.edited.wallpaper_rotate_enabled
 			}
 		}
 	}
 
 	// Current value of a Text field (background image path / font family).
 	fn get_text(&self, key: Key) -> String {
+		let s = &self.edited;
 		match key {
-			// the configured text, or what automatic finds
-			Key::BgImage if self.wallpaper_box_is_folder() => {
-				config::auto::text(&self.edited, config::auto::Setting::WallpaperFolder)
-			}
-			Key::BgImage => config::auto::text(&self.edited, config::auto::Setting::WallpaperImage),
-			Key::FontFamily => config::auto::font_family(&self.edited),
-			Key::LinkOpenCommand => {
-				config::auto::text(&self.edited, config::auto::Setting::OpenCommand)
-			}
-			Key::StartupDirectory => self.edited.startup_directory.clone(),
+			Key::BgImage if self.wallpaper_box_is_folder() => s.wallpaper_folder_raw.clone(),
+			Key::BgImage => s.wallpaper_raw.clone(),
+			Key::FontFamily => s.font_family.clone(),
+			Key::LinkOpenCommand => s.hyperlink_open_command.clone(),
+			Key::StartupDirectory => s.startup_directory.clone(),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => String::new(),
 		}
 	}
 	fn set_text(&mut self, key: Key, text: &str) {
-		let trimmed = text.trim();
-		match key {
-			// An emptied box goes back to the usual place, and so does the usual
-			// place typed out, since that is what the file reads it as.
-			Key::BgImage if self.wallpaper_box_is_folder() => {
-				let usual = trimmed.is_empty() || trimmed == config::WALLPAPER_DIR_TOKEN;
-				config::auto::set(
-					&mut self.edited,
-					config::auto::Setting::WallpaperFolder,
-					(!usual).then(|| config::auto::Value::Text(trimmed.to_string())),
-				);
-				self.rewallpaper();
-			}
-			Key::BgImage => {
-				config::auto::set(
-					&mut self.edited,
-					config::auto::Setting::WallpaperImage,
-					Some(config::auto::Value::Text(trimmed.to_string())),
-				);
-				self.rewallpaper();
-			}
-			// an emptied box goes back to automatic
-			Key::FontFamily => {
-				self.edited.font_family = if trimmed.is_empty() {
-					config::auto::Auto::automatic()
-				} else {
-					config::auto::Auto::by_hand(trimmed.to_string())
-				};
-			}
-			Key::LinkOpenCommand => config::auto::set(
-				&mut self.edited,
-				config::auto::Setting::OpenCommand,
-				Some(config::auto::Value::Text(trimmed.to_string())),
+		let trimmed = text.trim().to_string();
+		// An emptied box goes back to the default, and so does the usual folder
+		// typed out, since that is what the file reads it as.
+		let (key, empty) = match key {
+			Key::BgImage if self.wallpaper_box_is_folder() => (
+				Key::BgFolder,
+				trimmed.is_empty() || trimmed == config::WALLPAPER_DIR_TOKEN,
 			),
-			Key::StartupDirectory => self.edited.startup_directory = trimmed.to_string(),
-			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => {}
+			Key::BgImage | Key::FontFamily | Key::LinkOpenCommand => (key, trimmed.is_empty()),
+			Key::StartupDirectory => (key, false),
+			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => return,
+		};
+		let monitor = self.monitor.clone();
+		if empty {
+			fields::reset(&mut self.edited, key, monitor.as_deref());
+		} else {
+			let v = knobs::Value::Text(trimmed);
+			fields::set(&mut self.edited, key, &v, monitor.as_deref());
 		}
 	}
 	fn get_toggle(&self, key: Key) -> bool {
-		toggle_of(self.shown(key), key)
+		toggle_of(&self.edited, key)
 	}
 	fn set_toggle(&mut self, key: Key, on: bool) {
-		self.leave_profile(key);
 		match key {
 			Key::PerfAuto => {
 				// the step belongs to the automatic choice, so it goes when that does
@@ -3681,18 +3509,9 @@ impl SettingsDialog {
 			Key::CursorScrim => self.edited.cursor_scrim = on,
 			Key::CursorOutline => self.edited.cursor_outline = on,
 			Key::CursorBlinking => self.edited.cursor_blink = on,
-			Key::RememberSize => {
-				let at = config::auto::Place {
-					monitor: self.monitor.as_deref(),
-				};
-				config::auto::set_group(&mut self.edited, config::auto::Group::WindowSize, on, at);
-				// automatic is no line, and the file only learns that through
-				// the revert list
-				if on {
-					self.queue_revert(Key::Columns);
-					self.queue_revert(Key::Rows);
-				}
-			}
+			Key::SystemFont => self.edited.use_system_font = on,
+			Key::SystemFontSize => self.edited.use_system_font_size = on,
+			Key::RememberSize => self.edited.remember_size = on,
 			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,
 			Key::NewTabNextToCurrent => self.edited.new_tab_beside = on,
@@ -3719,33 +3538,59 @@ impl SettingsDialog {
 			Key::Minimap => self.edited.minimap = on,
 			keys_of!(slider | radio | color | text | hotkey | valueless | assoc) => {}
 		}
+		self.commit(key);
 	}
 	fn get_radio(&self, key: Key) -> usize {
-		radio_of(self.shown(key), key)
+		match self.choices(key) {
+			Some(options) => {
+				let at = fields::chosen(&self.edited, key);
+				options
+					.iter()
+					.position(|(k, _)| k.eq_ignore_ascii_case(&at))
+					.unwrap_or(0)
+			}
+			None => radio_of(&self.edited, key),
+		}
+	}
+	// A dropdown that picks a profile or a theme: each option's key and label.
+	// Custom comes first for the profile, as it always has, and last for the
+	// themes, after the saved ones and the built-ins.
+	fn choices(&self, key: Key) -> Option<Vec<(String, String)>> {
+		match key {
+			Key::PerfProfile => {
+				let mut out = fields::spec().get(key.name())?.options.clone();
+				if let Some(at) = out.iter().position(|(k, _)| k == CUSTOM) {
+					let custom = out.remove(at);
+					out.insert(0, custom);
+				}
+				Some(out)
+			}
+			Key::Theme => {
+				let mut out: Vec<(String, String)> =
+					crate::theme::all_names(&self.edited.user_themes)
+						.into_iter()
+						.map(|name| (name.clone(), name))
+						.collect();
+				out.push((CUSTOM.to_string(), fields::custom_label(key).to_string()));
+				Some(out)
+			}
+			_ => None,
+		}
 	}
 	fn set_radio(&mut self, key: Key, idx: usize) {
-		self.leave_profile(key);
-		match key {
-			// Remote is never stored: picking it raises the session override and
-			// leaves the stored profile for the next launch to come back to. Any
-			// pick by hand also lifts a step the display watch took.
-			//
-			// The dropdown stays live while the profile is chosen automatically,
-			// and naming one is how that choice is taken back - otherwise the pick
-			// would be overwritten at the next launch with no sign of it. Remote is
-			// the exception, since it lasts only for this session and says nothing
-			// about what the machine should settle on.
-			Key::PerfProfile => {
+		if let Some(options) = self.choices(key) {
+			let Some((pick, _)) = options.get(idx) else {
+				return;
+			};
+			// a pick by hand lifts a step the display watch took
+			if key == Key::PerfProfile {
 				self.edited.stepped_profile = None;
-				match Profile::from_index(idx) {
-					Profile::Remote => self.edited.remote_override = true,
-					profile => {
-						self.edited.remote_override = false;
-						self.edited.performance_profile = profile;
-						self.edited.performance_automatic = false;
-					}
-				}
 			}
+			let v = knobs::Value::Text(pick.clone());
+			fields::set(&mut self.edited, key, &v, self.monitor.as_deref());
+			return;
+		}
+		match key {
 			Key::BgFit => {
 				self.edited.wallpaper_default_fit = if idx == 1 {
 					config::Fit::Zoom
@@ -3768,249 +3613,108 @@ impl SettingsDialog {
 					self.edited.cursor_animation = animation;
 				}
 			}
-			// picking a theme or a mode re-reads the whole palette, so the color
-			// rows below follow the selection instead of describing the last one
-			Key::Theme => {
-				let names = crate::theme::all_names(&self.edited.user_themes);
-				if let Some(name) = names.get(idx) {
-					self.edited.theme.clone_from(name);
-					self.adopt_theme();
-				}
-			}
+			// the theme's colors follow the mode, through its preset
 			Key::ThemeMode => {
 				if let Some(mode) = Choice::from_index(idx) {
 					self.edited.theme_mode = mode;
 				}
-				self.adopt_theme();
 			}
 			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => {}
+			// answered by `choices` above
+			Key::PerfProfile | Key::Theme => return,
 		}
+		self.commit(key);
 	}
-	// A control grayed out by a gate in settings_ui.shcl, or by the machine.
+	// Grayed only for what the machine can't do (the tip says so). A setting
+	// above a row never grays it.
 	fn disabled(&self, key: Key) -> bool {
-		!ui().needs_of(key).iter().all(|need| self.gate_ok(need))
-			// nothing for the platform to do with it (the tip says so)
-			|| self.disabled_tip(key).is_some()
+		self.disabled_tip(key).is_some()
 	}
-	// A row the chosen performance profile sets. It shows the profile's value
-	// rather than the user's own, and still takes input - see `leave_profile`.
-	fn profile_shows(&self, key: Key) -> bool {
-		crate::profile::current(&self.edited) != Profile::Custom && GOVERNED.contains(&key)
-	}
-	// Changing a row a profile governs is the user taking the settings back.
-	// The values on screen become their own and the profile drops to Custom, so
-	// the edit is a change to what was visible rather than to values the profile
-	// had been hiding. Cheap to call on every drag step: it does nothing once
-	// Custom is in force.
-	fn leave_profile(&mut self, key: Key) {
-		if GOVERNED.contains(&key) {
-			crate::profile::adopt(&mut self.edited);
-		}
-	}
-	// Is one declared prerequisite satisfied? A slider counts while it sits above
-	// zero, everything else while it is switched on.
-	fn gate_ok(&self, need: &ui_spec::Need) -> bool {
-		let on = if need.numeric {
-			self.get_f32(need.key) > 0.0
-		} else {
-			self.get_toggle(need.key)
-		};
-		on != need.invert
-	}
-	// Every color but the two the wallpaper can set is an auto setting, so the
-	// key answers through the table.
 	fn get_col(&self, key: Key) -> [u8; 3] {
-		if let Some(setting) = self.auto_of(key) {
-			return config::auto::color(&self.edited, setting);
-		}
-		match key {
-			Key::ColFg => self.edited.fg,
-			Key::ColCursor => self.edited.cursor,
-			_ => [0, 0, 0],
-		}
+		color_of(&self.edited, key)
 	}
-	// A color chosen is set by hand, even the one automatic gives.
 	fn set_col(&mut self, key: Key, color: [u8; 3]) {
-		if let Some(setting) = self.auto_of(key) {
-			config::auto::set(
-				&mut self.edited,
-				setting,
-				Some(config::auto::Value::Color(color)),
-			);
-			return;
-		}
+		let s = &mut self.edited;
 		match key {
-			Key::ColFg => self.edited.fg = color,
-			Key::ColCursor => self.edited.cursor = color,
-			_ => {}
+			Key::ColBg => s.bg = color,
+			Key::ColFg => s.fg = color,
+			Key::ColCursor => s.cursor = color,
+			Key::ColHighlight => s.highlight = color,
+			Key::ColFocus => s.focus = color,
+			Key::ColGutter => s.gutter = color,
+			Key::ColMenuBg => s.menu_bg = color,
+			Key::ColMenuFg => s.menu_fg = color,
+			Key::ColDialogBg => s.dialog_bg = color,
+			Key::ColDialogFg => s.dialog_fg = color,
+			Key::ColScrollbarThumb => s.scrollbar_thumb = color,
+			Key::ColScrollbarTrough => s.scrollbar_trough = color,
+			keys_of!(slider | toggle | radio | text | hotkey | valueless | assoc) => return,
 		}
+		self.commit(key);
 	}
 
-	// The active theme's palette - the effective default for the colors.* keys
-	// (commented-out colors fall back to the theme, not to SilkTerm-dark).
-	fn theme_palette(&self) -> crate::theme::Palette {
-		config::theme_palette(&self.edited)
+	// What `read` makes of the settings with row `key` at its default, in the
+	// row's own units: the default a tip names.
+	fn with_default<R>(&self, key: Key, read: impl FnOnce(&Settings) -> R) -> R {
+		let v = fields::default_of(&self.edited, key, self.monitor.as_deref());
+		Self::scratch_with(key, v.as_ref(), read)
 	}
+	#[cfg(test)]
 	fn default_col(&self, key: Key) -> [u8; 3] {
-		let palette = self.theme_palette();
-		match key {
-			Key::ColBg => palette.bg,
-			Key::ColFg => palette.fg,
-			Key::ColCursor => palette.cursor,
-			Key::ColHighlight => palette.highlight,
-			Key::ColFocus => palette.focus,
-			Key::ColGutter => palette.gutter,
-			Key::ColMenuBg => palette.menu_bg,
-			Key::ColMenuFg => palette.menu_fg,
-			Key::ColDialogBg => palette.dialog_bg,
-			Key::ColDialogFg => palette.dialog_fg,
-			// chrome, not a palette color - the same neutral under every theme
-			Key::ColScrollbarThumb => config::SCROLLBAR_THUMB_DEF,
-			Key::ColScrollbarTrough => config::SCROLLBAR_TROUGH_DEF,
-			keys_of!(slider | toggle | radio | text | hotkey | valueless | assoc) => [0, 0, 0],
-		}
+		self.with_default(key, |s| color_of(s, key))
 	}
-
-	// Put row `i`'s auto setting back to automatic, which at Apply comments its
-	// line out.
-	fn back_to_automatic(&mut self, i: usize) {
-		let key = self.specs[i].key;
-		if let Some(setting) = self.auto_of(key) {
-			config::auto::set(&mut self.edited, setting, None);
-			if key == Key::BgImage {
-				self.rewallpaper();
-			}
-			self.queue_revert(key);
-		}
+	// Whether the revert arrow has anything to put back.
+	fn can_reset(&self, key: Key) -> bool {
+		fields::can_reset(&self.edited, key, self.monitor.as_deref())
 	}
-	// The picture and the rotation folder the image and folder settings come
-	// to, found the way the loader finds them, so a typed relative name applies
-	// at once. A named image hides a folder found by convention.
-	fn rewallpaper(&mut self) {
-		use config::auto::Setting;
-		let image = (!config::auto::automatic(&self.edited, Setting::WallpaperImage))
-			.then(|| config::auto::text(&self.edited, Setting::WallpaperImage));
-		let pinned = image.is_some();
-		self.edited.wallpaper = config::resolve_wallpaper(image);
-		(
-			self.edited.wallpaper_folder,
-			self.edited.wallpaper_folder_auto,
-		) = config::rotation_folder_for(
-			&config::auto::text(&self.edited, Setting::WallpaperFolder),
-			pinned,
-		);
-	}
-	// Is this setting at its config default? Drives the revert icon's state.
+	// Is this setting at its default? Drives the revert icon's state.
 	fn is_default(&self, key: Key) -> bool {
-		// An auto setting's default is automatic, whatever value that gives.
-		// File or folder is two of them, below.
-		if let Some(setting) = self.auto_of(key).filter(|_| key != Key::BgImage) {
-			return config::auto::automatic(&self.edited, setting);
-		}
-		let edited = &self.edited;
-		let defaults = &self.defaults;
 		// set in the file is not default, even to the shipped chord: a chord set
 		// there takes priority over one a hotkey has by default
 		if let Some(hotkey) = self.hotkey_for_key(key) {
-			return edited.keys.own(hotkey).is_none();
+			return self.edited.keys.own(hotkey).is_none();
 		}
 		match key {
-			keys_of!(toggle) => toggle_of(edited, key) == toggle_of(defaults, key),
-			keys_of!(slider) => self.get_f32(key) == self.default_f32(key),
-			keys_of!(color) => self.get_col(key) == self.default_col(key),
-			Key::BgFit => edited.wallpaper_default_fit == defaults.wallpaper_default_fit,
-			Key::ScrimRamp => edited.text_scrim_ramp == defaults.text_scrim_ramp,
-			Key::ScrimFunction => edited.text_scrim_function == defaults.text_scrim_function,
-			Key::CursorAnimation => edited.cursor_animation == defaults.cursor_animation,
-			Key::PerfProfile => {
-				edited.performance_profile == defaults.performance_profile
-					&& !edited.remote_override
-					&& edited.stepped_profile.is_none()
-			}
-			Key::StartupDirectory => edited.startup_directory == defaults.startup_directory,
-			Key::Theme => edited.theme == defaults.theme,
-			Key::ThemeMode => edited.theme_mode == defaults.theme_mode,
-			// buttons, headings and the shells list hold nothing to revert, and a
-			// hotkey with a row was answered above
 			// its arrow puts back both
-			Key::BgImage => {
-				edited.wallpaper_raw.is_automatic() && edited.wallpaper_folder_raw.is_automatic()
-			}
-			// the other auto settings were answered above
-			Key::FontFamily => edited.font_family.is_automatic(),
-			Key::LinkOpenCommand => edited.hyperlink_open_command.is_automatic(),
-			keys_of!(valueless | hotkey) => true,
+			Key::BgImage => !self.can_reset(Key::BgImage) && !self.can_reset(Key::BgFolder),
+			// a step the display watch took is a change the arrow takes back
+			Key::PerfProfile => self.edited.stepped_profile.is_none() && !self.can_reset(key),
 			// nothing to put back until Register has saved something
 			keys_of!(assoc) => assoc_of(key).is_none_or(|assoc| !self.assoc_on[assoc_slot(assoc)]),
+			_ if fields::field(key).is_some() => !self.can_reset(key),
+			// buttons, headings and the shells list hold nothing to revert
+			_ => true,
 		}
 	}
 	// Default for a slider key, in get_f32's own units (speed for SingleScreenTau).
+	#[cfg(test)]
 	fn default_f32(&self, key: Key) -> f32 {
-		slider_of(&self.defaults, key)
+		self.with_default(key, |s| slider_of(s, key))
 	}
-	// Revert a setting to its default and remember its config key(s), so Apply
-	// can comment them out in config.shcl (config::revert_keys).
+	// The revert arrow. A hotkey's line goes back to the template's at Apply;
+	// everything else is knobs', which knows what the arrow does to a row under
+	// a preset or a switch.
 	fn revert(&mut self, key: Key) {
-		// an auto setting's default is automatic; File or folder is two, below
-		if let Some(setting) = self.auto_of(key).filter(|_| key != Key::BgImage) {
-			config::auto::set(&mut self.edited, setting, None);
-			self.queue_revert(key);
-			return;
-		}
 		if let Some(hotkey) = self.hotkey_for_key(key) {
 			self.edited.keys = self.edited.keys.with_own(hotkey, None);
 			self.moved.retain(|(from, ..)| *from != hotkey);
 			self.queue_revert(key);
 			return;
 		}
-		match key {
-			keys_of!(toggle) => self.set_toggle(key, toggle_of(&self.defaults, key)),
-			Key::BgFit => self.edited.wallpaper_default_fit = self.defaults.wallpaper_default_fit,
-			Key::ScrimRamp => self.edited.text_scrim_ramp = self.defaults.text_scrim_ramp,
-			Key::ScrimFunction => {
-				self.edited.text_scrim_function = self.defaults.text_scrim_function;
-			}
-			Key::CursorAnimation => self.edited.cursor_animation = self.defaults.cursor_animation,
-			Key::PerfProfile => {
-				self.edited.performance_profile = self.defaults.performance_profile;
-				self.edited.remote_override = false;
-				self.edited.stepped_profile = None;
-			}
-			Key::Theme => {
-				self.edited.theme = self.defaults.theme.clone();
-				self.adopt_theme();
-			}
-			Key::ThemeMode => {
-				self.edited.theme_mode = self.defaults.theme_mode;
-				self.adopt_theme();
-			}
-			Key::StartupDirectory => {
-				self.edited.startup_directory = self.defaults.startup_directory.clone();
-			}
-			keys_of!(color) => {
-				let color = self.default_col(key);
-				self.set_col(key, color);
-			}
-			keys_of!(slider) => {
-				let value = self.default_f32(key);
-				self.set_f32(key, value);
-			}
-			// File or folder puts back both of its settings
-			Key::BgImage => {
-				use config::auto::Setting;
-				config::auto::set(&mut self.edited, Setting::WallpaperImage, None);
-				config::auto::set(&mut self.edited, Setting::WallpaperFolder, None);
-				self.rewallpaper();
-			}
-			// The other auto settings and hotkeys went back above, and
-			// `row_revert` undoes a registration.
-			Key::FontFamily => self.edited.font_family = config::auto::Auto::automatic(),
-			Key::LinkOpenCommand => {
-				self.edited.hyperlink_open_command = config::auto::Auto::automatic();
-			}
-			keys_of!(valueless | assoc | hotkey) => {}
+		if key == Key::PerfProfile {
+			self.edited.stepped_profile = None;
 		}
-		self.queue_revert(key);
+		let monitor = self.monitor.clone();
+		let keys: &[Key] = if key == Key::BgImage {
+			&[Key::BgImage, Key::BgFolder]
+		} else {
+			&[key]
+		};
+		for k in keys {
+			if fields::field(*k).is_some() {
+				fields::reset(&mut self.edited, *k, monitor.as_deref());
+			}
+		}
 	}
 	// The row's line goes back to the template's at Apply.
 	fn queue_revert(&mut self, key: Key) {
@@ -4203,21 +3907,6 @@ impl SettingsDialog {
 			) && self.disabled(self.specs[i].key)
 			{
 				continue;
-			}
-			// the icon in a field set by hand puts it back to automatic
-			if let Some((setting, slot)) = self.auto_slot(i) {
-				if slot.contains(x, y) && !config::auto::automatic(&self.edited, setting) {
-					// the field's own stop, which a slider and a color have second
-					self.focus = Some(Focus::Row(
-						i,
-						u16::from(matches!(
-							self.specs[i].kind,
-							Kind::Slider { .. } | Kind::Color
-						)),
-					));
-					self.back_to_automatic(i);
-					return Action::None;
-				}
 			}
 			match self.specs[i].kind {
 				Kind::Slider { .. } => {
@@ -5081,12 +4770,6 @@ impl SettingsDialog {
 			return;
 		}
 		match self.specs[i].kind {
-			// an emptied box puts an auto setting back to automatic
-			Kind::Slider { .. } | Kind::Color
-				if buf.trim().is_empty() && self.auto_of(self.specs[i].key).is_some() =>
-			{
-				self.back_to_automatic(i);
-			}
 			Kind::Color => {
 				if let Some(color) = config::parse_hex(&buf) {
 					self.set_col(self.specs[i].key, color);
@@ -5353,7 +5036,6 @@ impl SettingsDialog {
 					if focused && !off {
 						self.caret_quad(&colors, &mut out, val_box, &mut measure);
 					}
-					self.auto_slot_quads(&colors, i, &mut out);
 				}
 				Kind::Color => {
 					let swatch = self.swatch(i);
@@ -5391,7 +5073,6 @@ impl SettingsDialog {
 					if focused {
 						self.caret_quad(&colors, &mut out, hex_box, &mut measure);
 					}
-					self.auto_slot_quads(&colors, i, &mut out);
 				}
 				Kind::Text => {
 					let text_box = self.textbox(i);
@@ -5418,7 +5099,6 @@ impl SettingsDialog {
 					if focused {
 						self.caret_quad(&colors, &mut out, text_box, &mut measure);
 					}
-					self.auto_slot_quads(&colors, i, &mut out);
 				}
 				Kind::Hotkey(_) => {
 					let key_box = self.textbox(i);
@@ -5465,16 +5145,6 @@ impl SettingsDialog {
 							} else {
 								colors.handle
 							},
-						));
-					} else if self.group_state(i) == Some(config::auto::State::Mixed) {
-						// a group's switch with some members set by hand: a dash
-						let bar = (check_box.h * 0.16).round().max(2.0);
-						out.push(quad(
-							check_box.x + 4.0,
-							check_box.y + ((check_box.h - bar) / 2.0).round(),
-							check_box.w - 8.0,
-							bar,
-							colors.handle,
 						));
 					}
 				}
@@ -5667,8 +5337,6 @@ impl SettingsDialog {
 		let mut out = Vec::new();
 		let mk = |text: String, x: f32, y: f32| TextItem::plain(text, x, y, colors.text);
 		let row_text_y = |y: f32, h: f32| y + (h - line_h) / 2.0;
-		// an automatic value: readable, and set apart from one set by hand
-		let placeholder = mix3(colors.text, colors.dim, 0.5);
 		// tab titles - the current one reads at full strength, the rest step back
 		let strip = self.tab_strip();
 		for (tab, title) in tab_titles().iter().enumerate() {
@@ -5742,18 +5410,15 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => self.fmt_val(self.specs[i].key, int),
 					};
-					let automatic = self.shows_automatic(i);
 					out.push(TextItem {
-						color: if automatic { placeholder } else { label_color },
-						italic: automatic,
-						clip: Some(clip_rect(self.text_room(i, val_box), vp)),
+						color: label_color,
+						clip: Some(clip_rect(val_box, vp)),
 						..mk(
 							txt,
 							val_box.x + lay().field_pad - view(i),
 							row_text_y(val_box.y, val_box.h),
 						)
 					});
-					self.auto_mark_text(&colors, i, line_h, vp, &mut out, &mut measure);
 				}
 				Kind::Color => {
 					let hex_box = self.hexbox(i);
@@ -5761,18 +5426,15 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => config::format_hex(self.get_col(self.specs[i].key)),
 					};
-					let automatic = self.shows_automatic(i);
 					out.push(TextItem {
-						color: if automatic { placeholder } else { colors.text },
-						italic: automatic,
-						clip: Some(clip_rect(self.text_room(i, hex_box), vp)),
+						color: colors.text,
+						clip: Some(clip_rect(hex_box, vp)),
 						..mk(
 							txt,
 							hex_box.x + lay().field_pad - view(i),
 							row_text_y(hex_box.y, hex_box.h),
 						)
 					});
-					self.auto_mark_text(&colors, i, line_h, vp, &mut out, &mut measure);
 				}
 				Kind::Text => {
 					let text_box = self.textbox(i);
@@ -5780,7 +5442,6 @@ impl SettingsDialog {
 						Some(edit) if edit.row == i => edit.buf.clone(),
 						_ => self.get_text(self.specs[i].key),
 					};
-					let automatic = self.shows_automatic(i);
 					let (txt, color) = if val.is_empty() || self.disabled(self.specs[i].key) {
 						(
 							if val.is_empty() {
@@ -5790,22 +5451,18 @@ impl SettingsDialog {
 							},
 							colors.dim,
 						)
-					} else if automatic {
-						(val, placeholder)
 					} else {
 						(val, colors.text)
 					};
 					out.push(TextItem {
 						color,
-						italic: automatic,
-						clip: Some(clip_rect(self.text_room(i, text_box), vp)),
+						clip: Some(clip_rect(text_box, vp)),
 						..mk(
 							txt,
 							text_box.x + lay().field_pad - view(i),
 							row_text_y(text_box.y, text_box.h),
 						)
 					});
-					self.auto_mark_text(&colors, i, line_h, vp, &mut out, &mut measure);
 				}
 				Kind::Hotkey(_) => {
 					let key_box = self.textbox(i);
@@ -6278,9 +5935,9 @@ fn widest_char(text: &mut crate::text::TextCtx, attrs: &glyphon::Attrs, set: &st
 /// Returns true if `old` and `new` differ in any field that needs a text-context
 /// rebuild (cell metrics change) rather than just a re-render.
 pub fn needs_text_rebuild(old: &Settings, new: &Settings) -> bool {
-	config::auto::font_size(old) != config::auto::font_size(new)
+	old.font_size != new.font_size
 		|| old.line_height_scale != new.line_height_scale
-		|| config::auto::font_family(old) != config::auto::font_family(new)
+		|| old.font_family != new.font_family
 		|| old.margin != new.margin
 }
 
@@ -6314,13 +5971,22 @@ mod tests {
 	use crate::config;
 	use crate::gfx::QuadMode;
 
-	// A text auto setting as a box left with `text` in it: empty is automatic.
-	pub(super) fn hand(text: &str) -> config::auto::Auto<String> {
-		if text.trim().is_empty() {
-			config::auto::Auto::automatic()
-		} else {
-			config::auto::Auto::by_hand(text.to_string())
-		}
+	// The dialog's copy with these stored as the person's own, as a file with
+	// those lines would load.
+	pub(super) fn own(d: &mut SettingsDialog, values: &[(Key, knobs::Value)]) {
+		d.edited = crate::fields::owning(d.edited.clone(), values);
+	}
+
+	// On Custom with Choose automatically off, so a profile's rows show their own.
+	pub(super) fn custom(d: &mut SettingsDialog) {
+		use knobs::Value;
+		own(
+			d,
+			&[
+				(Key::PerfAuto, Value::Bool(false)),
+				(Key::PerfProfile, Value::Text(knobs::CUSTOM.into())),
+			],
+		);
 	}
 
 	// A tip as text a test can compare and keep.
@@ -6508,22 +6174,32 @@ mod tests {
 	#[test]
 	fn revert_restores_default_and_records_key() {
 		let mut d = mk_dialog(2000.0);
-		let def = d.defaults.opacity; // edited may start off-default (loaded config)
-		d.edited.opacity = def + 0.5;
-		assert!(!d.is_default(super::Key::Opacity));
-		d.revert(super::Key::Opacity);
-		assert!(d.is_default(super::Key::Opacity));
-		assert_eq!(d.edited.opacity, def);
-		let rev = d.take_reverted();
-		assert!(rev.contains(&"transparency.opacity"));
+		d.edited = d.defaults.clone(); // a loaded config may start off-default
+		let def = d.get_f32(Key::Opacity);
+		d.set_f32(Key::Opacity, def - 20.0);
+		assert!(!d.is_default(Key::Opacity));
+		d.revert(Key::Opacity);
+		assert!(d.is_default(Key::Opacity));
+		assert_eq!(d.get_f32(Key::Opacity), def);
+		// a knobs row's line is the save's to write, so only a hotkey's is queued
+		assert!(d.take_reverted().is_empty());
+		// reverting the size keeps the switch where the change put it
+		d.set_f32(Key::FontSize, 99.0);
+		assert!(
+			!d.edited.use_system_font_size,
+			"typing a size turned it off"
+		);
+		d.revert(Key::FontSize);
+		assert!(!crate::fields::by_hand(&d.edited, Key::FontSize));
+		assert!(!d.edited.use_system_font_size);
+		// a hotkey's line is put back at Apply, so it is queued
+		d.edited.keys = d
+			.edited
+			.keys
+			.with_own(crate::input::Hotkey::Copy, Some(Vec::new()));
+		d.revert(Key::HotkeyCopy);
+		assert!(d.take_reverted().contains(&"keys.copy"));
 		assert!(d.take_reverted().is_empty(), "taking clears the list");
-		// was: reverting font size must not clear the system-size follow. The
-		// follow switch went with 2026100907341818, and the size's default is
-		// automatic, which a revert puts back and the file learns as no line.
-		d.edited.font_size = config::auto::Auto::by_hand(99.0);
-		d.revert(super::Key::FontSize);
-		assert!(d.edited.font_size.is_automatic());
-		assert!(d.take_reverted().contains(&"font.size"));
 	}
 
 	// Test ID: EipgKd7
@@ -6807,8 +6483,8 @@ mod tests {
 			assert!(d.is_default(k), "{k:?} was not put back");
 		}
 		assert!(d.row_is_default(lead));
-		// and all four lines go back to the template's at Apply
-		let reverted = d.take_reverted();
+		// and the save at Apply has no line for any of the four
+		let lines = crate::fields::lines_of(&d.edited);
 		for path in [
 			"window.tab_shows_title",
 			"window.tab_shows_shell",
@@ -6816,8 +6492,8 @@ mod tests {
 			"window.tab_shows_directory",
 		] {
 			assert!(
-				reverted.contains(&path),
-				"{path} stays in force: {reverted:?}"
+				!lines.iter().any(|(p, _)| p == path),
+				"{path} stays in force: {lines:?}"
 			);
 		}
 	}
@@ -7453,14 +7129,10 @@ mod tests {
 			.expect("the scrim function row");
 		d.tab = d.specs[lead].tab;
 		let follow = SettingsDialog::paired_with(d.specs, lead, d.tab).expect("a row beside it");
-		d.set_radio(Key::PerfProfile, super::Profile::Max.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Max.index());
 		assert!(
-			d.profile_shows(Key::ScrimFunction),
-			"the first half is governed"
-		);
-		assert!(
-			!d.profile_shows(d.specs[follow].key),
-			"the second half is not"
+			d.is_default(Key::ScrimFunction),
+			"the first half shows the profile's"
 		);
 
 		// take the ungoverned half off its default
@@ -7747,6 +7419,7 @@ mod tests {
 		// file the rows are read back from says so
 		let pristine = std::fs::read_to_string(&path)
 			.unwrap()
+			.replace("# automatic: true  ## Default", "automatic: false")
 			.replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
 		assert!(pristine.contains("profile: \"custom\""));
 
@@ -7807,6 +7480,7 @@ mod tests {
 		config::reload_from_disk();
 		let pristine = std::fs::read_to_string(&path)
 			.unwrap()
+			.replace("# automatic: true  ## Default", "automatic: false")
 			.replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
 		assert!(pristine.contains("profile: \"custom\""));
 
@@ -7851,7 +7525,8 @@ mod tests {
 		let _ = std::fs::write(&path, &pristine);
 		let base = config::reload_from_disk();
 		let mut moved = base.clone();
-		moved.margin = d.defaults.margin + 3.0;
+		let margin = knobs::Value::Float(f64::from(d.defaults.margin + 3.0));
+		crate::fields::set(&mut moved, Key::Margin, &margin, None);
 		assert!(config::persist(&base, &moved));
 		let base = config::reload_from_disk();
 		assert_eq!(base.margin, d.defaults.margin + 3.0);
@@ -7873,8 +7548,7 @@ mod tests {
 	fn every_revert_arrow_puts_its_row_back_to_the_default() {
 		let mut d = mk_dialog(4000.0);
 		d.edited = d.defaults.clone();
-		d.edited.performance_profile = crate::profile::Profile::Custom;
-		d.adopt_theme();
+		custom(&mut d);
 		let base = d.edited.clone();
 		let spec_of = |d: &SettingsDialog, key: Key| {
 			d.specs
@@ -7898,17 +7572,19 @@ mod tests {
 				d.moved.clear();
 				d.reverted.clear();
 				let want = row_value(&d, at, key);
-				nudge(&mut d, at, key);
-				// one step from Custom can be the default profile
-				if key == Key::PerfProfile && d.is_default(key) {
+				// picking Custom by hand moved the profile's two rows already
+				let at_default = d.is_default(key);
+				if at_default {
 					nudge(&mut d, at, key);
+					assert_ne!(row_value(&d, at, key), want, "{key:?} did not budge");
+					assert!(!d.is_default(key), "{key:?} moved but reads as default");
 				}
-				assert_ne!(row_value(&d, at, key), want, "{key:?} did not budge");
-				assert!(!d.is_default(key), "{key:?} moved but reads as default");
 				d.row_revert(i);
 				assert!(d.is_default(key), "{key:?} is not default after its revert");
-				// the base is Custom on purpose, so the rows show their own values
-				if key != Key::PerfProfile {
+				// The base is Custom on purpose, so the rows show their own values.
+				// An edit under a switch turned it off, and the arrow leaves it
+				// off, so that row shows the shipped value.
+				if at_default && super::ui().rel(key).auto.is_none() {
 					assert_eq!(row_value(&d, at, key), want, "{key:?} did not go back");
 				}
 				checked += 1;
@@ -8039,18 +7715,18 @@ mod tests {
 	#[test]
 	fn rows_that_only_count_while_a_switch_is_on_stay_live() {
 		let mut d = mk_dialog(4000.0);
-		d.edited.colors_from_wallpaper = false;
-		d.edited.text_outline = 0.0;
+		custom(&mut d);
 		let toggles: Vec<Key> = d
 			.specs
 			.iter()
 			.flat_map(|spec| match spec.kind {
 				Kind::Dual { keys, .. } => keys.to_vec(),
-				Kind::Toggle if spec.group.is_none() => vec![spec.key],
+				Kind::Toggle => vec![spec.key],
 				_ => Vec::new(),
 			})
 			.collect();
-		for key in toggles {
+		// a change under a switch turns it on, so the rows under one go first
+		for key in toggles.into_iter().rev() {
 			d.set_toggle(key, false);
 		}
 		for i in 0..d.specs.len() {
@@ -8065,21 +7741,21 @@ mod tests {
 				);
 			}
 		}
-		for key in Key::ALL {
-			assert!(
-				super::ui().needs_of(*key).iter().all(|need| need.invert),
-				"{key:?} grays while a switch is off"
-			);
-		}
+		// and changing one turns its checkbox on, all the way up
+		assert!(!d.edited.text_scrim);
+		d.set_f32(Key::ScrimStrength, 50.0);
+		assert!(d.edited.text_scrim, "Text scrim came on");
+		assert!(!d.edited.wallpaper_enabled && !d.edited.wallpaper_contrast_mask);
+		d.set_f32(Key::BgContrastSize, 30.0);
+		assert!(d.edited.wallpaper_contrast_mask && d.edited.wallpaper_enabled);
 	}
 
-	// An auto setting's field shows its rule's value, set apart and with a
-	// mark, until a value is typed. Then the mark is an icon that puts it back,
-	// and so is emptying the box.
+	// A row under a switch shows its rule's value with the switch on, with no
+	// mark or style of its own. Typing in it turns the switch off; turning the
+	// switch on again sets the value aside, and off brings it back.
 	// Test ID: EsDxpmK
 	#[test]
-	fn an_auto_field_shows_its_rule_until_set_and_its_icon_puts_it_back() {
-		let mut m = |s: &str| s.chars().count() as f32 * 7.0;
+	fn a_switch_s_row_follows_its_rule_and_keeps_a_value_set_by_hand() {
 		let mut d = mk_dialog(4000.0);
 		let fam = d
 			.specs
@@ -8087,66 +7763,36 @@ mod tests {
 			.position(|s| s.key == Key::FontFamily)
 			.unwrap();
 		d.tab = d.specs[fam].tab;
-		d.edited.font_family = config::auto::Auto::automatic();
-		let rule = config::auto::font_family(&d.edited);
-		assert!(d.shows_automatic(fam));
+		assert!(d.get_toggle(Key::SystemFont));
+		let rule = d.get_text(Key::FontFamily);
 		let texts = d.texts_dip(d.line_h, chars7);
 		let shown = texts
 			.iter()
 			.find(|t| t.text == rule)
 			.expect("the rule's value");
-		assert!(shown.italic, "an automatic value reads as one");
-		assert!(texts.iter().any(|t| t.text == super::AUTO_MARK));
-		let (_, slot) = d.auto_slot(fam).unwrap();
-		let at_slot = |d: &SettingsDialog, mode: QuadMode| {
-			d.rects_dip(d.line_h, chars7)
-				.1
-				.iter()
-				.any(|q| q.mode() == mode && q.pos == [slot.x, slot.y])
-		};
-		assert!(at_slot(&d, QuadMode::Rounded));
-		// a click on the mark opens the field, which keeps its value until typed in
-		d.mouse_down_dip(slot.x + 1.0, slot.y + 1.0, &mut m);
+		assert!(!shown.italic, "an automatic value looks like any other");
+		d.set_text(Key::FontFamily, "Iosevka");
 		assert!(
-			d.edit.is_some()
-				&& config::auto::automatic(&d.edited, config::auto::Setting::FontFamily)
+			!d.get_toggle(Key::SystemFont),
+			"typing turned the switch off"
 		);
-		d.select_all();
-		for c in "Iosevka".chars() {
-			d.char_input(c);
-		}
-		assert_eq!(config::auto::font_family(&d.edited), "Iosevka");
-		d.commit_edit();
-		let texts = d.texts_dip(d.line_h, chars7);
-		assert!(!texts.iter().find(|t| t.text == "Iosevka").unwrap().italic);
-		assert!(at_slot(&d, QuadMode::CloseMark));
-		let _ = d.take_reverted();
-		d.mouse_down_dip(slot.x + slot.w / 2.0, slot.y + slot.h / 2.0, &mut m);
-		assert!(d.edited.font_family.is_automatic(), "the icon puts it back");
-		assert!(d.take_reverted().contains(&"font.family"));
-		assert!(d.row_is_default(fam));
-
-		// the number box: emptied, it goes back too
-		let size = d.specs.iter().position(|s| s.key == Key::FontSize).unwrap();
-		d.edited.font_size = config::auto::Auto::by_hand(20.0);
-		d.focus = Some(super::Focus::Row(size, 1));
-		d.open_edit(size, true);
-		d.backspace();
-		assert!(d.edited.font_size.is_automatic());
-		assert!(d.take_reverted().contains(&"font.size"));
-		d.commit_edit();
-		// and a drag sets it by hand again
-		d.set_f32(Key::FontSize, 12.0);
-		assert_eq!(config::auto::font_size(&d.edited), 12.0);
-		assert!(!d.row_is_default(size));
+		assert_eq!(d.get_text(Key::FontFamily), "Iosevka");
+		d.set_toggle(Key::SystemFont, true);
+		assert_eq!(d.get_text(Key::FontFamily), rule);
+		d.set_toggle(Key::SystemFont, false);
+		assert_eq!(d.get_text(Key::FontFamily), "Iosevka", "and back it comes");
+		// the size the same way, through its number box
+		d.set_f32(Key::FontSize, 20.0);
+		assert!(!d.get_toggle(Key::SystemFontSize));
+		assert_eq!(d.get_f32(Key::FontSize), 20.0);
+		assert!(!d.row_is_default(d.specs.iter().position(|s| s.key == Key::FontSize).unwrap()));
 	}
 
-	// "Remember last size" holds nothing: it reads Columns and Rows, shows a
-	// dash when they differ, and a click goes to automatic from mixed.
+	// "Remember last size" is stored like any other switch, with its own revert
+	// arrow. A size typed in turns it off, and the other keeps what it showed.
 	// Test ID: EsDxpmL
 	#[test]
-	fn the_size_switch_is_read_off_columns_and_rows() {
-		let mut m = |s: &str| s.chars().count() as f32 * 7.0;
+	fn remember_last_size_is_stored_and_a_size_typed_turns_it_off() {
 		let mut d = mk_dialog(4000.0);
 		let sw = d
 			.specs
@@ -8154,214 +7800,184 @@ mod tests {
 			.position(|s| s.key == Key::RememberSize)
 			.unwrap();
 		d.tab = d.specs[sw].tab;
-		assert!(
-			!d.has_revert(sw),
-			"a group's switch has no revert of its own"
-		);
-		d.edited.columns = config::auto::Auto::automatic();
-		d.edited.rows = config::auto::Auto::automatic();
+		assert!(d.has_revert(sw));
 		d.edited.remembered_columns = 150;
 		d.edited.remembered_rows = 45;
-		d.edited.remember_per_monitor = false;
+		own(
+			&mut d,
+			&[(Key::RememberPerMonitor, knobs::Value::Bool(false))],
+		);
 		assert!(d.get_toggle(Key::RememberSize));
 		assert_eq!(d.get_f32(Key::Columns), 150.0);
 		d.set_f32(Key::Columns, 99.0);
-		assert_eq!(d.group_state(sw), Some(config::auto::State::Mixed));
 		assert!(!d.get_toggle(Key::RememberSize));
-		let bx = d.checkbox(sw);
-		let dash = d.rects_dip(d.line_h, chars7).1.iter().any(|q| {
-			q.pos[0] > bx.x && q.pos[1] > bx.y && q.size[1] < bx.h / 3.0 && q.size[0] > bx.w / 3.0
-		});
-		assert!(dash, "a mixed switch draws a dash");
-		let _ = d.take_reverted();
-		d.mouse_down_dip(bx.x + bx.w / 2.0, bx.y + bx.h / 2.0, &mut m);
-		assert!(d.edited.columns.is_automatic() && d.edited.rows.is_automatic());
-		let reverted = d.take_reverted();
-		assert!(reverted.contains(&"window.columns") && reverted.contains(&"window.rows"));
-		d.mouse_down_dip(bx.x + bx.w / 2.0, bx.y + bx.h / 2.0, &mut m);
-		assert!(!d.get_toggle(Key::RememberSize));
+		assert_eq!(d.get_f32(Key::Rows), 45.0, "rows kept what it showed");
+		assert!(!d.row_is_default(sw));
+		d.set_toggle(Key::RememberSize, true);
+		assert_eq!(d.get_f32(Key::Columns), 150.0);
+		d.set_toggle(Key::RememberSize, false);
 		assert_eq!(
-			config::auto::grid(&d.edited, None),
-			(150, 45),
-			"off keeps what showed"
+			crate::fields::grid(&d.edited, None),
+			(99, 45),
+			"off brings back what was set"
 		);
 		assert!(!d.disabled(Key::RememberPerMonitor) && !d.disabled(Key::Columns));
 	}
 
-	// An auto setting's tip says whether it is automatic, after its own text
-	// and a blank line, and the icon that puts it back says that.
+	// A tip ends with a line on where the value comes from: the rule, a value
+	// set aside, the profile, or a change under it. The dropdown names the rows
+	// changed under it.
 	// Test ID: EsDxpmM
 	#[test]
-	fn an_auto_rows_tip_says_whether_it_is_automatic() {
+	fn a_tip_says_where_the_value_comes_from() {
 		let mut d = mk_dialog(4000.0);
-		let fam = d
-			.specs
-			.iter()
-			.position(|s| s.key == Key::FontFamily)
-			.unwrap();
-		d.tab = d.specs[fam].tab;
-		let tb = d.textbox(fam);
-		let tip = |d: &SettingsDialog, x: f32, y: f32| {
-			d.hover_tip_dip(x, y).map(|(tip, _)| tip_text(tip))
+		d.edited = d.defaults.clone();
+		let tip = |d: &SettingsDialog, key| {
+			let i = d
+				.specs
+				.iter()
+				.position(|s| match s.kind {
+					Kind::Dual { keys, .. } => keys.contains(&key),
+					_ => s.key == key,
+				})
+				.unwrap();
+			d.row_tip(i, key).map(tip_text).unwrap_or_default()
 		};
-		d.edited.font_family = config::auto::Auto::automatic();
-		let help = d.specs[fam].help;
-		assert!(!help.is_empty());
-		assert_eq!(
-			tip(&d, tb.x + 2.0, tb.y + 2.0),
-			Some(format!("{help}\n\n{}", super::AUTO_TIP).as_str())
+		assert!(tip(&d, Key::FontFamily).ends_with("\n\nAutomatic."));
+		d.set_text(Key::FontFamily, "Iosevka");
+		d.set_toggle(Key::SystemFont, true);
+		assert!(
+			tip(&d, Key::FontFamily)
+				.ends_with("Automatic. Your value, Iosevka, is kept for later."),
+			"{}",
+			tip(&d, Key::FontFamily)
 		);
-		let rule = config::auto::font_family(&d.edited);
-		d.edited.font_family = config::auto::Auto::by_hand("Iosevka".into());
-		assert_eq!(
-			tip(&d, tb.x + 2.0, tb.y + 2.0),
-			Some(format!("{help}\n\nSet by hand. Automatic would be: {rule}.").as_str())
-		);
-		let (_, slot) = d.auto_slot(fam).unwrap();
-		assert_eq!(tip(&d, slot.x + 1.0, slot.y + 1.0), Some(super::CLEAR_TIP));
-		// a row with no text of its own says only that
-		let size = d.specs.iter().position(|s| s.key == Key::FontSize).unwrap();
-		d.edited.font_size = config::auto::Auto::automatic();
-		let vb = d.valbox(size);
-		assert_eq!(tip(&d, vb.x + 2.0, vb.y + 2.0), Some(super::AUTO_TIP));
-		// a whole-number box's rule is written whole, as the box shows it
-		d.edited.font_size = config::auto::Auto::by_hand(30.0);
+		// the profile's rows, written in the row's own units
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
+		assert!(tip(&d, Key::ScrimRadius).ends_with("From the High profile."));
+		let high = d.get_f32(Key::ScrimRadius);
+		d.set_f32(Key::ScrimRadius, high + 3.0);
 		let want = format!(
-			"Set by hand. Automatic would be: {}.",
-			config::default_font_size().round()
+			"Changed. The High profile's value is {}.",
+			super::fmt_number(high, true)
 		);
-		assert_eq!(tip(&d, vb.x + 2.0, vb.y + 2.0), Some(want.as_str()));
+		assert!(
+			tip(&d, Key::ScrimRadius).ends_with(&want),
+			"{}",
+			tip(&d, Key::ScrimRadius)
+		);
+		let profile_tip = tip(&d, Key::PerfProfile);
+		assert!(
+			profile_tip.ends_with(
+				"Changed here: Scrim radius px. Picking another profile drops these changes."
+			),
+			"{profile_tip}"
+		);
+		assert_eq!(
+			d.dd_closed_label(
+				d.specs
+					.iter()
+					.position(|s| s.key == Key::PerfProfile)
+					.unwrap()
+			),
+			"High *"
+		);
 	}
 
-	// A theme color is automatic until chosen: its hex box shows the theme's
-	// value set apart, with the mark. A typed value or a pick sets it by hand,
-	// the x and an emptied box put it back, Cancel in the picker leaves it as it
-	// was, and picking a theme leaves it automatic under the new one.
+	// A theme's colors show the theme's own. A color changed marks the theme
+	// with a `*`, the arrow puts the theme's back, Cancel in the picker leaves
+	// it as it was, and picking a theme drops the change.
 	// Test ID: EsEAixa
 	#[test]
-	fn a_theme_color_is_automatic_until_chosen_and_its_x_puts_it_back() {
-		use config::auto::Auto;
-		let mut m = |s: &str| s.chars().count() as f32 * 7.0;
-		let mut d = mk_dialog(4000.0);
+	fn a_theme_color_changed_marks_the_theme_and_its_arrow_puts_the_theme_s_back() {
+		let mut d = on_theme("Matrix");
 		let i = d.specs.iter().position(|s| s.key == Key::ColBg).unwrap();
+		let theme_row = d.specs.iter().position(|s| s.key == Key::Theme).unwrap();
 		d.tab = d.specs[i].tab;
-		d.edited.bg = Auto::automatic();
-		assert!(d.shows_automatic(i));
-		let hex = config::format_hex(d.edited.theme_palette.bg);
-		let texts = d.texts_dip(d.line_h, chars7);
-		assert!(
-			texts
-				.iter()
-				.find(|t| t.text == hex)
-				.expect("the theme's")
-				.italic,
-			"an automatic color reads as one"
-		);
-		assert!(texts.iter().any(|t| t.text == super::AUTO_MARK));
-		let (_, slot) = d.auto_slot(i).unwrap();
-		let hex_box = d.hexbox(i);
-		assert!(
-			slot.x > hex_box.x && slot.x + slot.w <= hex_box.x + hex_box.w,
-			"the mark sits in the hex box, beside the chip"
-		);
-
+		let matrix = d.get_col(Key::ColBg);
+		assert!(d.is_default(Key::ColBg));
 		d.focus = Some(super::Focus::Row(i, 1));
 		d.open_edit(i, true);
 		for c in "#102030".chars() {
 			d.char_input(c);
 		}
-		assert_eq!(d.edited.bg, Auto::by_hand([0x10, 0x20, 0x30]));
 		d.commit_edit();
-		let texts = d.texts_dip(d.line_h, chars7);
-		assert!(!texts.iter().find(|t| t.text == "#102030").unwrap().italic);
-		let close = d
-			.rects_dip(d.line_h, chars7)
-			.1
-			.iter()
-			.any(|q| q.mode() == QuadMode::CloseMark && q.pos == [slot.x, slot.y]);
-		assert!(close, "set by hand, the mark is the x");
-		let _ = d.take_reverted();
-		d.mouse_down_dip(slot.x + slot.w / 2.0, slot.y + slot.h / 2.0, &mut m);
-		assert!(d.edited.bg.is_automatic(), "the x puts it back");
-		assert_eq!(d.focus, Some(super::Focus::Row(i, 1)), "on the hex box");
-		assert!(d.take_reverted().contains(&"colors.background"));
+		assert_eq!(d.edited.bg, [0x10, 0x20, 0x30]);
+		assert_eq!(d.dd_closed_label(theme_row), "Matrix *");
+		assert!(!d.is_default(Key::ColBg));
+		d.revert(Key::ColBg);
+		assert_eq!(d.edited.bg, matrix, "the arrow puts the theme's back");
+		assert_eq!(d.dd_closed_label(theme_row), "Matrix");
 
-		// an emptied box
-		d.set_col(Key::ColBg, [9, 9, 9]);
-		d.open_edit(i, true);
-		d.backspace();
-		assert!(d.edited.bg.is_automatic(), "an emptied box puts it back");
-		d.commit_edit();
-
-		// the picker writes through, and Cancel leaves it automatic again
+		// the picker writes through, and Cancel puts back what was stored
 		d.pick_open(i);
 		d.pick_set(crate::pick::Hsv {
 			h: 120.0,
 			s: 1.0,
 			v: 1.0,
 		});
-		assert!(!d.edited.bg.is_automatic());
+		assert_ne!(d.edited.bg, matrix);
 		d.pick_cancel();
-		assert!(d.edited.bg.is_automatic(), "Cancel puts back automatic");
+		assert_eq!(d.edited.bg, matrix, "Cancel puts it back");
+		assert_eq!(d.dd_closed_label(theme_row), "Matrix");
 
-		// a theme pick: automatic, under the theme picked
+		// a theme pick drops the change, and the colors are that theme's
 		d.set_col(Key::ColBg, [9, 9, 9]);
 		let names = crate::theme::all_names(&d.edited.user_themes);
-		let matrix = names.iter().position(|n| n == "Matrix").unwrap();
-		d.set_radio(Key::Theme, matrix);
-		assert!(d.edited.bg.is_automatic());
-		assert_eq!(d.edited.theme_palette, config::theme_palette(&d.edited));
+		let pastel = names.iter().position(|n| n == "Pastel").unwrap();
+		d.set_radio(Key::Theme, pastel);
+		assert_eq!(d.edited.theme, "Pastel");
 		assert_eq!(d.get_col(Key::ColBg), d.edited.theme_palette.bg);
-		assert_eq!(d.edited.theme, "Matrix");
+		assert_eq!(d.edited.theme_palette, config::theme_palette(&d.edited));
+		// Custom is the file's own colors
+		let custom = d.dd_options(theme_row).len() - 1;
+		d.set_radio(Key::Theme, custom);
+		assert_eq!(d.dd_closed_label(theme_row), "Custom");
 	}
 
 	// The open command shows the desktop's opener until one is typed. File or
-	// folder shows the one setting its box edits: its x puts back only that one,
-	// and the arrow puts back both.
+	// folder shows the one setting its box edits, an emptied box puts back that
+	// one, and the arrow puts back both.
 	// Test ID: EsEAj1i
 	#[test]
-	fn the_open_command_and_file_or_folder_are_automatic_until_typed() {
-		use config::auto::{Auto, Setting};
-		let mut m = |s: &str| s.chars().count() as f32 * 7.0;
+	fn the_open_command_and_file_or_folder_take_their_default_until_typed() {
 		let mut d = mk_dialog(4000.0);
+		d.edited = d.defaults.clone();
 		let row = |d: &SettingsDialog, key| d.specs.iter().position(|s| s.key == key).unwrap();
-		let i = row(&d, Key::LinkOpenCommand);
-		d.edited.hyperlink_open_command = Auto::automatic();
 		assert_eq!(
 			d.get_text(Key::LinkOpenCommand),
 			crate::links::desktop_opener()
 		);
-		assert!(d.shows_automatic(i));
+		assert!(d.is_default(Key::LinkOpenCommand));
 		d.set_text(Key::LinkOpenCommand, "firefox --new-tab");
-		assert!(!d.shows_automatic(i) && !d.is_default(Key::LinkOpenCommand));
+		assert!(!d.is_default(Key::LinkOpenCommand));
 		d.set_text(Key::LinkOpenCommand, " ");
-		assert!(d.shows_automatic(i) && d.is_default(Key::LinkOpenCommand));
+		assert!(d.is_default(Key::LinkOpenCommand));
+		assert_eq!(
+			d.get_text(Key::LinkOpenCommand),
+			crate::links::desktop_opener()
+		);
 
 		let w = row(&d, Key::BgImage);
 		d.tab = d.specs[w].tab;
-		d.edited.wallpaper_rotate_enabled = true;
-		d.edited.wallpaper_raw = Auto::automatic();
-		d.edited.wallpaper_folder_raw = hand("/pics");
-		assert!(d.wallpaper_box_is_folder() && !d.shows_automatic(w));
-		let (_, slot) = d.auto_slot(w).unwrap();
-		let mid = (slot.x + slot.w / 2.0, slot.y + slot.h / 2.0);
-		d.mouse_down_dip(mid.0, mid.1, &mut m);
-		assert!(d.edited.wallpaper_folder_raw.is_automatic());
-		assert!(d.shows_automatic(w));
+		d.set_toggle(Key::BgRotate, true);
+		d.set_text(Key::BgImage, "/pics");
+		assert!(d.wallpaper_box_is_folder());
+		assert_eq!(d.edited.wallpaper_folder_raw, "/pics");
+		d.set_text(Key::BgImage, "");
 		assert_eq!(d.get_text(Key::BgImage), config::WALLPAPER_DIR_TOKEN);
 		assert!(d.is_default(Key::BgImage));
 
-		// an image set by hand shows either way, and its x leaves a folder set
-		// by hand alone
-		d.edited.wallpaper_folder_raw = hand("/pics");
-		d.edited.wallpaper_raw = hand("/a.png");
-		d.rewallpaper();
+		// an image set by hand shows either way, and an emptied box leaves a
+		// folder set by hand alone
+		d.set_text(Key::BgImage, "/pics");
+		d.set_toggle(Key::BgRotate, false);
+		d.set_text(Key::BgImage, "/a.png");
+		d.set_toggle(Key::BgRotate, true);
 		assert!(!d.wallpaper_box_is_folder());
 		assert_eq!(d.get_text(Key::BgImage), "/a.png");
-		d.mouse_down_dip(mid.0, mid.1, &mut m);
-		assert!(d.edited.wallpaper_raw.is_automatic());
-		assert_eq!(d.edited.wallpaper_folder_raw, hand("/pics"));
-		assert_eq!(d.edited.wallpaper, config::resolve_wallpaper(None));
+		d.set_text(Key::BgImage, "");
+		assert_eq!(d.edited.wallpaper_folder_raw, "/pics");
 		assert_eq!(
 			d.get_text(Key::BgImage),
 			"/pics",
@@ -8370,8 +7986,8 @@ mod tests {
 		assert!(!d.is_default(Key::BgImage));
 		d.revert(Key::BgImage);
 		assert!(
-			config::auto::automatic(&d.edited, Setting::WallpaperImage)
-				&& config::auto::automatic(&d.edited, Setting::WallpaperFolder)
+			!crate::fields::by_hand(&d.edited, Key::BgImage)
+				&& !crate::fields::by_hand(&d.edited, Key::BgFolder)
 		);
 		assert!(d.is_default(Key::BgImage));
 	}
@@ -8383,7 +7999,15 @@ mod tests {
 	#[test]
 	fn a_tip_ends_with_the_current_and_default_values_where_they_differ() {
 		let mut d = mk_dialog(4000.0);
-		d.edited.colors_from_wallpaper = false;
+		d.edited = d.defaults.clone();
+		// on the custom theme a color changed is the file's own, not a change to a theme
+		own(
+			&mut d,
+			&[
+				(Key::Theme, knobs::Value::Text(knobs::CUSTOM.into())),
+				(Key::ColFromWallpaper, knobs::Value::Bool(false)),
+			],
+		);
 		let row = |d: &SettingsDialog, key| d.specs.iter().position(|s| s.key == key).unwrap();
 		let tip = |d: &SettingsDialog, i: usize, key| d.row_tip(i, key).map(tip_text);
 		let lines =
@@ -8462,18 +8086,17 @@ mod tests {
 			lines("Off", &spoken),
 		);
 
-		// an auto setting says it in its state line, and a group's switch holds
-		// nothing to compare
+		// an automatic value says so in its state line instead
 		let size = row(&d, Key::FontSize);
-		d.edited.font_size = config::auto::Auto::by_hand(30.0);
+		let auto = tip(&d, size, Key::FontSize).unwrap();
 		assert!(
-			!tip(&d, size, Key::FontSize)
-				.unwrap()
-				.contains("Current value")
+			auto.ends_with("Automatic.") && !auto.contains("Current value"),
+			"{auto}"
 		);
-		d.edited.columns = config::auto::Auto::by_hand(99);
+		// and a switch is a value like any other
+		d.set_f32(Key::Columns, 99.0);
 		let sw = row(&d, Key::RememberSize);
-		assert!(tip(&d, sw, Key::RememberSize).is_none_or(|t| !t.contains("Current value")));
+		assert!(tip(&d, sw, Key::RememberSize).is_some_and(|t| t.ends_with(&lines("Off", "On"))));
 	}
 
 	// Test ID: EpHT2u8
@@ -8481,11 +8104,8 @@ mod tests {
 	fn a_grayed_control_takes_no_click() {
 		let mut m = |s: &str| s.chars().count() as f32;
 		let mut d = mk_dialog(4000.0);
-		// Gray what still grays: the text colors under Text colors from
-		// wallpaper, and the hidden wait on a desktop that never says. Rows that
-		// only count while a switch is on stay live (2026100907341818), so the
-		// wallpaper and the scrim no longer gray anything.
-		d.edited.colors_from_wallpaper = true;
+		// Gray what still grays: the hidden wait on a desktop that never says.
+		// Nothing grays for a setting above it (the automatic settings design).
 		d.set_sees_hidden(false);
 		// what every row shows, which is as good a snapshot as the values
 		let snapshot = |d: &SettingsDialog| -> Vec<(String, usize, bool)> {
@@ -8521,7 +8141,7 @@ mod tests {
 				d.specs[i].key
 			);
 		}
-		assert!(clicked >= 3, "only {clicked} grayed rows were reachable");
+		assert!(clicked >= 1, "no grayed row was reachable");
 	}
 
 	// While a profile is chosen, every row it governs shows the profile's value
@@ -8530,15 +8150,20 @@ mod tests {
 	// Test ID: EqRTxpJ
 	#[test]
 	fn a_profile_shows_its_values_in_its_rows() {
-		use super::{GOVERNED, PROFILE_TIP};
+		use knobs::Value;
 		let mut d = mk_dialog(4000.0);
-		d.edited.scroll_ease_in_ms = 300.0;
-		d.edited.wallpaper_enabled = false;
-		d.edited.margin = 7.0;
-		let own = d.get_f32(Key::ScrollEaseIn);
-		assert!(!d.disabled(Key::ScrollEaseIn));
+		d.edited = d.defaults.clone();
+		own(
+			&mut d,
+			&[
+				(Key::ScrollEaseIn, Value::Float(300.0)),
+				(Key::BgEnabled, Value::Bool(false)),
+				(Key::Margin, Value::Float(7.0)),
+			],
+		);
+		let mine = super::falling_slider(300.0, EASE_IN_MIN, EASE_IN_MAX);
 
-		d.set_radio(Key::PerfProfile, super::Profile::Max.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Max.index());
 		assert_eq!(
 			d.get_f32(Key::ScrollEaseIn),
 			d.default_f32(Key::ScrollEaseIn)
@@ -8550,51 +8175,39 @@ mod tests {
 		assert_eq!(
 			d.get_f32(Key::Margin),
 			7.0,
-			"an ungoverned row is untouched"
+			"a row it doesn't set is the file's"
 		);
-		// Governed rows used to be grayed. They take input now, and the edit is
-		// what switches the profile off:
-		//     assert!(d.disabled(*key), "{key:?} should be locked");
-		for key in GOVERNED {
-			assert!(!d.disabled(*key), "{key:?} should still take input");
+		// a profile's rows take input like any other
+		for key in Key::ALL {
+			if super::ui().rel(*key).group == Some(crate::fields::PROFILE) {
+				assert!(!d.disabled(*key), "{key:?} should take input");
+			}
 		}
-		assert!(!d.disabled(Key::Margin));
 		let outline = d.specs.iter().position(|s| s.key == Key::Outline).unwrap();
-		d.edited.text_outline = 3.0;
 		assert!(
 			d.row_is_default(outline),
-			"a row showing a profile's value offers no revert"
+			"nothing changed under the profile"
 		);
-		// a member of a locked switch is grayed by the shown value, not the stored one
-		assert!(!d.disabled(Key::BgImage), "the wallpaper is on under Max");
-		// and the flyover says why, in place of the row's own help
+		// the flyover says where the value comes from, after the row's own help
 		let i = d
 			.specs
 			.iter()
 			.position(|s| s.key == Key::ScrollEaseIn)
 			.unwrap();
-		d.tab = d.specs[i].tab;
-		let ctl = d.checkbox(i);
 		let tip = d
-			.hover_tip_dip(ctl.x + 1.0, ctl.y + 1.0)
-			.map(|(tip, _)| tip_text(tip));
-		assert_eq!(tip, Some(PROFILE_TIP));
+			.row_tip(i, Key::ScrollEaseIn)
+			.map(tip_text)
+			.unwrap_or_default();
+		assert!(tip.ends_with("\n\nFrom the Max silk profile."), "{tip}");
 
-		d.set_radio(Key::PerfProfile, super::Profile::Custom.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Custom.index());
 		assert_eq!(
 			d.get_f32(Key::ScrollEaseIn),
-			own,
+			mine,
 			"Custom puts the value back"
 		);
 		assert!(!d.get_toggle(Key::BgEnabled));
-		assert!(!d.disabled(Key::ScrollEaseIn));
-		// was: the wallpaper's rows grayed with it off. They stay live under it
-		// now (2026100907341818).
-		assert!(!d.disabled(Key::BgImage), "the wallpaper is off again");
-		// The dropdown used to follow the automatic switch. It stays live now, so
-		// a profile can be named while the machine is still choosing one:
-		//     d.set_toggle(Key::PerfAuto, true);
-		//     assert!(d.disabled(Key::PerfProfile));
+		assert!(!d.disabled(Key::BgImage), "the wallpaper's rows stay live");
 		d.set_toggle(Key::PerfAuto, true);
 		assert!(!d.disabled(Key::PerfProfile));
 		d.set_toggle(Key::PerfAuto, false);
@@ -8639,7 +8252,7 @@ mod tests {
 		);
 		d.open = None;
 		// a dragged slider moves with the pointer, and only when its value does
-		d.edited.font_size = config::auto::Auto::by_hand(6.0);
+		d.set_f32(Key::FontSize, 6.0);
 		let i = d.specs.iter().position(|s| s.key == Key::FontSize).unwrap();
 		d.tab = d.specs[i].tab;
 		d.drag = Some(i);
@@ -8671,10 +8284,19 @@ mod tests {
 	// Test ID: ErleXuV
 	#[test]
 	fn a_dialog_frame_copies_the_settings_at_most_once() {
-		for profile in super::Profile::ALL {
+		for profile in crate::profile::Profile::ALL {
 			let mut d = mk_dialog(4000.0);
-			d.edited.performance_profile = profile;
-			d.edited.remote_override = profile == super::Profile::Remote;
+			if profile == crate::profile::Profile::Remote {
+				crate::profile::set_remote(&mut d.edited, true);
+			} else {
+				own(
+					&mut d,
+					&[
+						(Key::PerfAuto, knobs::Value::Bool(false)),
+						(Key::PerfProfile, knobs::Value::Text(profile.key().into())),
+					],
+				);
+			}
 			for tab in 0..tab_titles().len() {
 				d.tab = tab;
 				let mid = d.rect.y + d.rect.h / 2.0;
@@ -8773,62 +8395,6 @@ mod tests {
 		}
 	}
 
-	// A governed row reads the profile's values and every other row reads the
-	// user's. That answers what laying the profile over a copy did only while no
-	// row's value comes from both kinds of field, so every reader is asked for
-	// every row under every profile, on the defaults and on settings moved off
-	// them.
-	// Test ID: ErleYKw
-	#[test]
-	fn a_shown_value_is_the_profile_laid_over_the_settings() {
-		use super::Profile;
-		// every value a row holds, moved once: the far end of a slider, the other
-		// state of a checkbox, the next option
-		fn moved(d: &mut SettingsDialog) {
-			for i in 0..d.specs.len() {
-				let key = d.specs[i].key;
-				if let super::Kind::Dual { keys, .. } = d.specs[i].kind {
-					for part in keys {
-						let was = d.get_toggle(part);
-						d.set_toggle(part, !was);
-					}
-				} else if !matches!(key, Key::PerfProfile | Key::PerfAuto) {
-					nudge(d, i, key);
-				}
-			}
-		}
-		let base = mk_dialog(4000.0);
-		let mut once = mk_dialog(4000.0);
-		moved(&mut once);
-		let mut twice = mk_dialog(4000.0);
-		twice.edited = once.edited.clone();
-		moved(&mut twice);
-		for start in [&base.edited, &once.edited, &twice.edited] {
-			for profile in Profile::ALL {
-				for stepped in [None, Some(Profile::Low), Some(Profile::Standard)] {
-					let mut d = mk_dialog(4000.0);
-					d.edited = start.clone();
-					d.edited.performance_profile = profile;
-					d.edited.remote_override = profile == Profile::Remote;
-					d.edited.performance_automatic = stepped.is_some();
-					d.edited.stepped_profile = stepped;
-					let mut laid = d.edited.clone();
-					crate::profile::apply(&mut laid);
-					for &key in Key::ALL {
-						let case = format!("{key:?} under {profile:?}, stepped {stepped:?}");
-						assert_eq!(
-							d.get_f32(key).to_bits(),
-							super::slider_of(&laid, key).to_bits(),
-							"{case}"
-						);
-						assert_eq!(d.get_toggle(key), super::toggle_of(&laid, key), "{case}");
-						assert_eq!(d.get_radio(key), super::radio_of(&laid, key), "{case}");
-					}
-				}
-			}
-		}
-	}
-
 	// A row's shown value, whichever kind it is, as something comparable.
 	fn shown_of(d: &SettingsDialog, i: usize, key: Key) -> String {
 		match d.specs[i].kind {
@@ -8838,22 +8404,34 @@ mod tests {
 		}
 	}
 
-	// Changing a row a profile governs is how the profile is taken back. The
-	// values on screen become the user's own, the profile drops to Custom and
-	// the machine stops choosing - and every other governed row keeps what it
-	// was showing, so only the row that was touched moves.
+	// Changing a row under a profile changes that profile, shown as "Low *". The
+	// machine stops choosing, Custom is left as it was, and every other row
+	// keeps what it showed, bar a checkbox the row sits under.
 	// Test ID: EqRTxpK
 	#[test]
-	fn changing_a_governed_row_takes_the_profile_to_custom() {
-		use super::GOVERNED;
-		for &key in GOVERNED {
+	fn changing_a_profile_s_row_marks_it_and_leaves_custom_alone() {
+		let members: Vec<Key> = Key::ALL
+			.iter()
+			.copied()
+			.filter(|k| super::ui().rel(*k).group == Some(crate::fields::PROFILE))
+			.filter(|k| *k != Key::SmoothApps)
+			.collect();
+		for &key in &members {
 			let mut d = mk_dialog(4000.0);
-			d.set_radio(Key::PerfProfile, super::Profile::Low.index());
-			d.edited.performance_automatic = true; // the pick above switched it off
+			d.edited = d.defaults.clone();
+			d.edited.tested_profile = Some(crate::profile::Profile::Low);
+			crate::fields::fill(&mut d.edited, None);
+			assert!(d.get_toggle(Key::PerfAuto));
+			assert_eq!(
+				crate::profile::current(&d.edited),
+				crate::profile::Profile::Low
+			);
+			let custom_before = d.edited.model.values.own.clone();
 			let i = d.specs.iter().position(|s| s.key == key).unwrap();
-			let others: Vec<(usize, Key, String)> = GOVERNED
+			let above = super::ui().rel(key).gate;
+			let others: Vec<(usize, Key, String)> = members
 				.iter()
-				.filter(|&&k| k != key)
+				.filter(|&&k| k != key && Some(k) != above)
 				.map(|&k| {
 					let j = d.specs.iter().position(|s| s.key == k).unwrap();
 					(j, k, shown_of(&d, j, k))
@@ -8865,41 +8443,55 @@ mod tests {
 
 			assert_eq!(
 				crate::profile::current(&d.edited),
-				super::Profile::Custom,
-				"{key:?} should take the profile to Custom"
+				crate::profile::Profile::Low,
+				"{key:?}"
+			);
+			assert_eq!(
+				crate::fields::shown_choice(&d.edited, Key::PerfProfile),
+				"Low *"
 			);
 			assert!(
-				!d.edited.performance_automatic,
-				"{key:?} should switch the automatic choice off"
+				!d.get_toggle(Key::PerfAuto),
+				"{key:?} should stop the machine choosing"
 			);
 			assert_ne!(
 				shown_of(&d, i, key),
 				before,
-				"{key:?} should hold what was typed into it"
+				"{key:?} should hold what was set"
 			);
 			for (j, k, was) in others {
 				assert_eq!(shown_of(&d, j, k), was, "{k:?} should keep what it showed");
 			}
+			for k in &members {
+				assert_eq!(
+					d.edited.model.values.own.get(k.name()),
+					custom_before.get(k.name()),
+					"{key:?} changed Custom's {k:?}"
+				);
+			}
 		}
 	}
 
-	// Remote lasts the session only and normally leaves the stored profile alone.
-	// A change to a setting it governs is the one thing that has to move it: the
-	// override would otherwise go on covering the new value, and so would the
-	// stored profile underneath it.
+	// Remote lasts the run and stores nothing. A change to one of its rows ends
+	// it, and the change goes on the stored pick, as a change under it.
 	// Test ID: EqRTxpL
 	#[test]
-	fn changing_a_governed_row_under_remote_drops_the_override() {
+	fn changing_a_row_under_remote_ends_it() {
 		let mut d = mk_dialog(900.0);
-		d.edited.performance_profile = crate::profile::Profile::High;
-		d.set_radio(Key::PerfProfile, super::Profile::Remote.index());
-		assert!(d.edited.remote_override);
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Remote.index());
+		assert!(crate::profile::remote(&d.edited));
+		assert_eq!(d.get_f32(Key::Outline), 0.0, "Remote's");
 
 		d.set_f32(Key::Outline, 3.0);
-		assert!(!d.edited.remote_override, "the override has to go");
+		assert!(!crate::profile::remote(&d.edited), "Remote has to go");
 		assert_eq!(
-			d.edited.performance_profile,
-			crate::profile::Profile::Custom
+			crate::profile::current(&d.edited),
+			crate::profile::Profile::High
+		);
+		assert_eq!(
+			crate::fields::shown_choice(&d.edited, Key::PerfProfile),
+			"High *"
 		);
 		assert_eq!(d.get_f32(Key::Outline), 3.0);
 	}
@@ -8913,7 +8505,7 @@ mod tests {
 	fn naming_a_profile_switches_off_the_automatic_choice_except_remote() {
 		let mut d = mk_dialog(900.0);
 		d.set_toggle(Key::PerfAuto, true);
-		d.set_radio(Key::PerfProfile, super::Profile::High.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
 		assert!(
 			!d.get_toggle(Key::PerfAuto),
 			"a named profile leaves the machine still choosing"
@@ -8921,12 +8513,12 @@ mod tests {
 		assert_eq!(d.edited.performance_profile, crate::profile::Profile::High);
 
 		d.set_toggle(Key::PerfAuto, true);
-		d.set_radio(Key::PerfProfile, super::Profile::Remote.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Remote.index());
 		assert!(
 			d.get_toggle(Key::PerfAuto),
 			"a temporary remote pick should leave the switch alone"
 		);
-		assert!(d.edited.remote_override);
+		assert!(crate::profile::remote(&d.edited));
 	}
 
 	// A 0..1 fraction reads as a whole percent and is stored as the decimal. The
@@ -9186,7 +8778,7 @@ mod tests {
 	// Test ID: EnQUIKp
 	#[test]
 	fn the_shells_grid_has_a_tab_to_itself() {
-		let ui = super::ui_spec::ui();
+		let ui = crate::ui_spec::ui();
 		let grid = ui
 			.specs
 			.iter()
@@ -9361,7 +8953,8 @@ mod tests {
 		assert_eq!(d.edited.cursor_scrim, d.defaults.cursor_scrim);
 		assert_eq!(d.edited.cursor_outline, d.defaults.cursor_outline);
 		assert!(d.row_is_default(i));
-		assert!(d.take_reverted().contains(&"cursor.scrim"));
+		// the save writes the model's lines, so nothing waits to be taken out
+		assert!(d.take_reverted().is_empty());
 	}
 
 	// // Software rendering is grayed, with its reason, only where the platform
@@ -10226,6 +9819,7 @@ mod tests {
 		config::reload_from_disk();
 		let pristine = std::fs::read_to_string(&path)
 			.unwrap()
+			.replace("# automatic: true  ## Default", "automatic: false")
 			.replace("# profile: \"max\"  ## Default", "profile: \"custom\"");
 		assert!(pristine.contains("profile: \"custom\""));
 
@@ -10322,7 +9916,10 @@ mod tests {
 		// fresh single click into a text field: select all on release
 		let mut d = mk_dialog(4000.0);
 		d.tab = d.specs[i0].tab;
-		d.edited.wallpaper_raw = hand("foo bar.png");
+		own(
+			&mut d,
+			&[(Key::BgImage, knobs::Value::Text("foo bar.png".into()))],
+		);
 		let field = d.textbox(i0);
 		let at = |k: usize| field.x + lay().field_pad + k as f32;
 		let y = field.y + field.h / 2.0;
@@ -10338,7 +9935,10 @@ mod tests {
 		// a click that drags selects the dragged range instead
 		let mut d = mk_dialog(4000.0);
 		d.tab = d.specs[i0].tab;
-		d.edited.wallpaper_raw = hand("foo bar.png");
+		own(
+			&mut d,
+			&[(Key::BgImage, knobs::Value::Text("foo bar.png".into()))],
+		);
 		d.mouse_down(at(2), y, &mut m);
 		d.mouse_move(at(6), y, &mut m);
 		d.mouse_up(at(6), y);
@@ -10400,7 +10000,7 @@ mod tests {
 		}
 		d.char_input('2');
 		d.char_input('4');
-		assert_eq!(config::auto::font_size(&d.edited), 24.0);
+		assert_eq!(d.edited.font_size, 24.0);
 		// was: over-range types clamp to the slider max (40). Size takes a typed
 		// number past its slider now, up to 128 (2026100812334386).
 		while d.edit.as_ref().is_some_and(|e| !e.buf.is_empty()) {
@@ -10409,9 +10009,9 @@ mod tests {
 		d.char_input('9');
 		d.char_input('9');
 		// assert_eq!(d.edited.font_size, 40.0);
-		assert_eq!(config::auto::font_size(&d.edited), 99.0);
+		assert_eq!(d.edited.font_size, 99.0);
 		d.char_input('9');
-		assert_eq!(config::auto::font_size(&d.edited), 128.0);
+		assert_eq!(d.edited.font_size, 128.0);
 		// Enter commits and is the dialog's OK; the field closes on the clamped value
 		assert_eq!(d.key_enter(), super::Action::Ok);
 		assert!(d.edit.is_none());
@@ -10463,66 +10063,49 @@ mod tests {
 		let token = crate::config::WALLPAPER_DIR_TOKEN;
 		// "/pics" is rooted but not absolute on Windows, which puts it on a drive
 		let pics = if cfg!(windows) { "C:/pics" } else { "/pics" };
+		let by_hand = |d: &SettingsDialog, key| crate::fields::by_hand(&d.edited, key);
 		let mut d = mk_dialog(4000.0);
-		// automatic, both: the folder's is the usual place
-		d.edited.wallpaper_raw = hand("");
-		d.edited.wallpaper = None;
-		d.edited.wallpaper_folder_raw = hand("");
-		d.edited.wallpaper_rotate_enabled = true;
+		d.edited = d.defaults.clone();
+		// both at their default: the folder's is the usual place
+		assert!(d.edited.wallpaper_rotate_enabled);
 		assert_eq!(d.get_text(Key::BgImage), token, "pre-filled");
 		assert!(d.is_default(Key::BgImage));
 
 		d.set_text(Key::BgImage, pics);
-		assert_eq!(d.edited.wallpaper_folder_raw, hand(pics));
+		assert_eq!(d.edited.wallpaper_folder_raw, pics);
 		assert_eq!(
 			d.edited.wallpaper_folder,
 			Some(std::path::PathBuf::from(pics))
 		);
 		assert!(!d.edited.wallpaper_folder_auto);
-		assert!(
-			d.edited.wallpaper_raw.is_automatic(),
-			"the image is untouched"
-		);
+		assert!(!by_hand(&d, Key::BgImage), "the image is untouched");
 		assert!(!d.is_default(Key::BgImage));
 		d.set_text(Key::BgImage, " ");
-		assert!(
-			d.edited.wallpaper_folder_raw.is_automatic(),
-			"emptied is the usual place"
-		);
+		assert!(!by_hand(&d, Key::BgFolder), "emptied is the usual place");
 		// and so is the usual place typed out, which is how the file reads it
 		d.set_text(Key::BgImage, token);
-		assert!(d.edited.wallpaper_folder_raw.is_automatic());
+		assert!(!by_hand(&d, Key::BgFolder));
 
-		// was: off, the box was empty. It is the image, which is automatic and
-		// shows what automatic finds (2026100910295903).
-		d.edited.wallpaper_rotate_enabled = false;
+		// off, it is the image, which shows its default until named
+		d.set_toggle(Key::BgRotate, false);
 		assert_eq!(
 			d.get_text(Key::BgImage),
-			config::auto::rule(
-				&d.edited,
-				config::auto::Setting::WallpaperImage,
-				config::auto::Place::default()
-			)
-			.to_string(),
+			d.edited.found_picture,
 			"off, it is the image"
 		);
 		d.set_text(Key::BgImage, "/a.png");
-		assert_eq!(d.edited.wallpaper_raw, hand("/a.png"));
-		assert!(
-			d.edited.wallpaper_folder_raw.is_automatic(),
-			"the folder is untouched"
-		);
-		d.edited.wallpaper_rotate_enabled = true;
+		assert_eq!(d.edited.wallpaper_raw, "/a.png");
+		assert!(!by_hand(&d, Key::BgFolder), "the folder is untouched");
+		d.set_toggle(Key::BgRotate, true);
 		assert_eq!(
 			d.get_text(Key::BgImage),
 			"/a.png",
 			"a named image shows either way"
 		);
 
-		d.edited.wallpaper_folder_raw = hand(pics);
+		own(&mut d, &[(Key::BgFolder, knobs::Value::Text(pics.into()))]);
 		d.revert(Key::BgImage);
-		assert!(d.edited.wallpaper_raw.is_automatic());
-		assert!(d.edited.wallpaper_folder_raw.is_automatic());
+		assert!(!by_hand(&d, Key::BgImage) && !by_hand(&d, Key::BgFolder));
 		assert_eq!(d.get_text(Key::BgImage), token);
 		assert!(d.is_default(Key::BgImage));
 
@@ -10530,15 +10113,18 @@ mod tests {
 		// the image, though an empty box with Rotate on would be the folder
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		d.tab = d.specs[i].tab;
-		d.edited.wallpaper_raw = hand("/a.png");
+		own(
+			&mut d,
+			&[(Key::BgImage, knobs::Value::Text("/a.png".into()))],
+		);
 		d.focus = Some(super::Focus::Row(i, 0));
 		d.set_mods(false, false, false);
 		d.key_space();
 		d.select_all();
 		d.delete_selection();
 		d.insert_str("/b.png");
-		assert_eq!(d.edited.wallpaper_raw, hand("/b.png"));
-		assert!(d.edited.wallpaper_folder_raw.is_automatic());
+		assert_eq!(d.edited.wallpaper_raw, "/b.png");
+		assert!(!by_hand(&d, Key::BgFolder));
 	}
 
 	// open the Background image text field for editing, focused, with a value
@@ -10547,7 +10133,7 @@ mod tests {
 		let mut d = mk_dialog(4000.0);
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		d.tab = d.specs[i].tab;
-		d.edited.wallpaper_raw = hand(value);
+		own(&mut d, &[(Key::BgImage, knobs::Value::Text(value.into()))]);
 		d.focus = Some(Focus::Row(i, 0));
 		d.set_mods(false, false, false);
 		d.key_space(); // opens with the value fully selected
@@ -10572,7 +10158,7 @@ mod tests {
 		assert_eq!(d.selected_text().as_deref(), Some("old.png"));
 		d.char_input('n');
 		assert_eq!(d.edit.as_ref().unwrap().buf, "n");
-		assert_eq!(d.edited.wallpaper_raw, hand("n")); // live reparse
+		assert_eq!(d.edited.wallpaper_raw, "n"); // live reparse
 		// plain arrows collapse; shift+arrows extend a fresh selection
 		d.char_input('e');
 		d.char_input('w');
@@ -10680,9 +10266,9 @@ mod tests {
 		assert_eq!(d.selected_text().as_deref(), Some("keep me"));
 		d.delete_selection(); // the "cut" half (clipboard handled a level up)
 		assert_eq!(d.edit.as_ref().unwrap().buf, "");
-		assert_eq!(d.edited.wallpaper_raw, hand(""));
+		assert!(!crate::fields::by_hand(&d.edited, Key::BgImage), "emptied");
 		d.insert_str("pasted.png");
-		assert_eq!(d.edited.wallpaper_raw, hand("pasted.png"));
+		assert_eq!(d.edited.wallpaper_raw, "pasted.png");
 		// pasting over a selection replaces it
 		d.select_all();
 		d.insert_str("x");
@@ -10927,10 +10513,8 @@ mod tests {
 	pub(super) fn on_theme(name: &str) -> SettingsDialog {
 		let mut d = mk_dialog(4000.0);
 		d.edited = config::Settings::default();
-		d.edited.theme = name.to_string();
-		d.adopt_theme();
+		own(&mut d, &[(Key::Theme, knobs::Value::Text(name.into()))]);
 		d.orig = d.edited.clone();
-		d.reverted.clear(); // adopting queues them; start each test from nothing pending
 		d
 	}
 
@@ -11001,19 +10585,20 @@ mod tests {
 		config::set_config_override(path.clone());
 		let loaded = config::reload_from_disk();
 		let mut other = loaded.clone();
-		other.margin = loaded.margin + 5.0;
+		let margin = knobs::Value::Float(f64::from(loaded.margin + 5.0));
+		crate::fields::set(&mut other, Key::Margin, &margin, None);
 		assert!(config::persist(&loaded, &other));
 
 		let mut d = mk_dialog(4000.0);
 		d.start_from(config::reload_from_disk());
 		assert_eq!(d.orig.margin, other.margin, "the other window's save");
 		assert_eq!(d.edited.margin, other.margin);
-		let columns = config::auto::grid(&loaded, None).0 + 7;
-		d.edited.columns = config::auto::Auto::by_hand(columns);
+		let columns = crate::fields::grid(&loaded, None).0 + 7;
+		d.set_f32(Key::Columns, columns as f32);
 		assert!(config::persist(&d.orig, &d.edited));
 		let back = config::reload_from_disk();
 		assert_eq!(back.margin, other.margin);
-		assert_eq!(config::auto::grid(&back, None).0, columns);
+		assert_eq!(crate::fields::grid(&back, None).0, columns);
 
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -11064,25 +10649,23 @@ mod tests {
 	#[test]
 	fn picking_remote_never_reaches_the_stored_profile() {
 		let mut d = mk_dialog(4000.0);
-		d.edited.performance_profile = crate::profile::Profile::High;
-		d.set_radio(Key::PerfProfile, super::Profile::Remote.index());
-		assert!(d.edited.remote_override);
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Remote.index());
+		assert!(crate::profile::remote(&d.edited));
 		assert_eq!(d.edited.performance_profile, crate::profile::Profile::High);
 		assert_eq!(
 			d.get_radio(Key::PerfProfile),
-			super::Profile::Remote.index()
+			crate::profile::Profile::Remote.index()
 		);
-		// governing used to mean graying, so this read `d.disabled`:
-		//     assert!(d.disabled(Key::SmoothScroll), "Remote governs like Standard");
 		assert!(
-			d.profile_shows(Key::SmoothScroll),
-			"Remote governs like Standard"
+			!d.get_toggle(Key::SmoothScroll),
+			"Remote sets the rows like Standard"
 		);
-		d.set_radio(Key::PerfProfile, super::Profile::Low.index());
-		assert!(!d.edited.remote_override);
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Low.index());
+		assert!(!crate::profile::remote(&d.edited));
 		assert_eq!(d.edited.performance_profile, crate::profile::Profile::Low);
 		// the revert arrow drops the override too
-		d.set_radio(Key::PerfProfile, super::Profile::Remote.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Remote.index());
 		let row = d
 			.specs
 			.iter()
@@ -11090,7 +10673,7 @@ mod tests {
 			.unwrap();
 		assert!(!d.row_is_default(row));
 		d.row_revert(row);
-		assert!(!d.edited.remote_override);
+		assert!(!crate::profile::remote(&d.edited));
 		assert!(d.row_is_default(row));
 	}
 
@@ -11113,7 +10696,7 @@ mod tests {
 		.unwrap();
 		config::set_config_override(path.clone());
 		let mut stored = config::reload_from_disk();
-		stored.stepped_profile = Some(super::Profile::Low);
+		stored.stepped_profile = Some(crate::profile::Profile::Low);
 		let before = std::fs::read_to_string(&path).unwrap();
 
 		let mut d = mk_dialog(4000.0);
@@ -11124,12 +10707,18 @@ mod tests {
 			.iter()
 			.position(|s| s.key == Key::PerfProfile)
 			.unwrap();
-		assert_eq!(d.get_radio(Key::PerfProfile), super::Profile::Low.index());
+		assert_eq!(
+			d.get_radio(Key::PerfProfile),
+			crate::profile::Profile::Low.index()
+		);
 		assert!(!d.row_is_default(row), "the arrow offers the way back");
 
-		d.set_radio(Key::PerfProfile, super::Profile::Max.index());
+		d.set_radio(Key::PerfProfile, crate::profile::Profile::Max.index());
 		assert!(d.edited.stepped_profile.is_none());
-		assert_eq!(d.get_radio(Key::PerfProfile), super::Profile::Max.index());
+		assert_eq!(
+			d.get_radio(Key::PerfProfile),
+			crate::profile::Profile::Max.index()
+		);
 		assert!(d.row_is_default(row));
 		assert!(config::persist(&d.orig, &d.edited));
 		// The file already held Max, so its profile line is left alone. Until
@@ -11141,14 +10730,14 @@ mod tests {
 			"only the automatic switch should have moved"
 		);
 
-		d.edited.stepped_profile = Some(super::Profile::Low);
+		d.edited.stepped_profile = Some(crate::profile::Profile::Low);
 		d.row_revert(row);
 		assert!(d.edited.stepped_profile.is_none(), "a revert lifts it");
 
 		// the pick above already switched it off, so put it back to have
 		// something for the toggle to change
-		d.edited.performance_automatic = true;
-		d.edited.stepped_profile = Some(super::Profile::Low);
+		own(&mut d, &[(Key::PerfAuto, knobs::Value::Bool(true))]);
+		d.edited.stepped_profile = Some(crate::profile::Profile::Low);
 		d.set_toggle(Key::PerfAuto, false);
 		assert!(
 			d.edited.stepped_profile.is_none(),
@@ -11215,7 +10804,7 @@ mod tests {
 		// The x that puts an automatic setting back sits at the box's right end
 		// since File or folder became one (2026100910295903), so the click
 		// lands just short of it.
-		let f = d.text_room(i, d.textbox(i));
+		let f = d.textbox(i);
 		click(
 			&mut d,
 			f.x + f.w - lay().field_pad - 2.0,
@@ -11234,7 +10823,10 @@ mod tests {
 		let mut d = mk_dialog(2000.0);
 		let i = d.specs.iter().position(|s| s.key == Key::BgImage).unwrap();
 		d.tab = d.specs[i].tab;
-		d.edited.wallpaper_raw = hand("old.png");
+		own(
+			&mut d,
+			&[(Key::BgImage, knobs::Value::Text("old.png".into()))],
+		);
 		d.focus = None;
 		for _ in 0..200 {
 			d.key_tab();
@@ -11245,7 +10837,7 @@ mod tests {
 		assert_eq!(d.focus, Some(Focus::Row(i, 0)), "never reached the row");
 		assert_eq!(d.selected_text().as_deref(), Some("old.png"));
 		d.char_input('n');
-		assert_eq!(d.edited.wallpaper_raw, hand("n"));
+		assert_eq!(d.edited.wallpaper_raw, "n");
 		// and walking off closes it again
 		d.key_tab();
 		assert!(d.edit.as_ref().is_none_or(|e| e.row != i));
@@ -11334,7 +10926,7 @@ mod tests {
 		d.char_input('n');
 		assert_eq!(d.key_enter(), Action::Ok);
 		assert!(d.edit.is_none());
-		assert_eq!(d.edited.wallpaper_raw, hand("n"));
+		assert_eq!(d.edited.wallpaper_raw, "n");
 
 		// same from a hex field, and from a shells-grid field
 		let mut d = mk_dialog(2000.0);
@@ -11354,27 +10946,30 @@ mod tests {
 		assert_eq!(d.key_enter(), Action::Ok);
 	}
 
-	// While the wallpaper is picking the text colors, the two rows for them gray
-	// out and still read the USER's own values rather than the derived pair. The
-	// live copy wears the derived one, and a dialog that took it as the baseline
-	// would write it to the file and store it in the next saved theme.
+	// While the wallpaper picks the text colors, the two rows show them like any
+	// automatic value and stay live. What is stored stays the person's own, so
+	// a save writes nothing of the derived pair.
 	// Test ID: EqRxesm
 	#[test]
-	fn the_wallpaper_switch_grays_its_two_rows_and_leaves_their_values_the_users() {
+	fn the_wallpaper_colors_show_in_their_rows_and_the_own_ones_stay() {
+		use knobs::Value;
 		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
 		let _store = config::test_store_lock();
 		let saved = config::settings();
 
-		let mut live = (*saved).clone();
-		crate::profile::unapply(&mut live);
-		crate::autotheme::unapply(&mut live);
-		// Custom, so nothing about the wallpaper is governed out from under this
-		live.performance_profile = crate::profile::Profile::Custom;
-		live.performance_automatic = false;
-		live.wallpaper_enabled = true;
-		live.colors_from_wallpaper = true;
-		live.fg = mine.0;
-		live.cursor = mine.1;
+		// Custom, so nothing about the wallpaper is set by a profile
+		let mut live = crate::fields::owning(
+			(*saved).clone(),
+			&[
+				(Key::PerfAuto, Value::Bool(false)),
+				(Key::PerfProfile, Value::Text(knobs::CUSTOM.into())),
+				(Key::Theme, Value::Text(knobs::CUSTOM.into())),
+				(Key::BgEnabled, Value::Bool(true)),
+				(Key::ColFromWallpaper, Value::Bool(true)),
+				(Key::ColFg, Value::Text(config::format_hex(mine.0))),
+				(Key::ColCursor, Value::Text(config::format_hex(mine.1))),
+			],
+		);
 		live.wallpaper_summary = Some(crate::autotheme::Summary {
 			luma_hi: 0.3,
 			luma_lo: 0.02,
@@ -11385,45 +10980,31 @@ mod tests {
 			chroma: 0.08,
 			opacity: 0.35,
 		});
+		// a new picture is a new answer for the rule, so whoever sets it fills
+		crate::fields::fill(&mut live, None);
 		config::update(live);
-		assert_ne!(
-			config::settings().fg,
-			mine.0,
-			"the derived text color should be live"
-		);
+		let derived = config::settings().fg;
+		assert_ne!(derived, mine.0, "the derived text color should be live");
 
-		let d = mk_dialog(4000.0);
-		assert_eq!(
-			d.edited.fg, mine.0,
-			"the row shows the user's own text color"
-		);
-		assert_eq!(d.edited.cursor, mine.1, "and their own cursor");
-		assert!(d.disabled(Key::ColFg), "Foreground should gray out");
-		assert!(d.disabled(Key::ColCursor), "Cursor should gray out");
-		assert!(
-			!d.disabled(Key::ColBg),
-			"the background is not one of the two"
-		);
-		assert!(
-			!d.disabled(Key::ColFromWallpaper),
-			"the switch itself stays live"
-		);
+		let mut d = mk_dialog(4000.0);
+		assert_eq!(d.edited.fg, derived, "the row shows the color in use");
+		assert!(!d.disabled(Key::ColFg) && !d.disabled(Key::ColCursor));
+		let i = d.specs.iter().position(|s| s.key == Key::ColFg).unwrap();
+		let tip = d.row_tip(i, Key::ColFg).map(tip_text).unwrap_or_default();
+		// a color row has no description, so the tip is its state line alone
+		assert_eq!(tip, "Automatic.");
+		assert!(crate::fields::lines_of(&d.edited).iter().any(
+			|(p, v)| p == "colors.foreground" && *v == Value::Text(config::format_hex(mine.0))
+		));
+		// off, the own colors are back, and a color changed turns it off again
+		d.set_toggle(Key::ColFromWallpaper, false);
+		assert_eq!((d.edited.fg, d.edited.cursor), mine);
+		d.set_toggle(Key::ColFromWallpaper, true);
+		d.set_col(Key::ColCursor, [1, 2, 3]);
+		assert!(!d.get_toggle(Key::ColFromWallpaper));
+		assert_eq!(d.edited.fg, derived, "the other keeps what it showed");
 
 		config::update((*saved).clone());
-	}
-
-	// Switching it off in the dialog ungrays them in the same pass, since the
-	// gates read the edited copy rather than the live one.
-	// Test ID: EqRxesn
-	#[test]
-	fn switching_it_off_ungrays_the_two_rows_at_once() {
-		let mut d = mk_dialog(4000.0);
-		d.edited.wallpaper_enabled = true;
-		d.set_toggle(Key::ColFromWallpaper, true);
-		assert!(d.disabled(Key::ColFg));
-		d.set_toggle(Key::ColFromWallpaper, false);
-		assert!(!d.disabled(Key::ColFg));
-		assert!(!d.disabled(Key::ColCursor));
 	}
 
 	// A dialog at a given UI line height, the other chrome measured to match.
@@ -11649,7 +11230,6 @@ mod tests {
 			not_macos: false,
 			warning: "",
 			windows_warning: "",
-			group: None,
 		};
 		let specs = [
 			row(Key::PerfCheckHardware, 0),
@@ -11688,17 +11268,20 @@ mod tests {
 				.position(|s| s.key == key)
 				.unwrap_or_else(|| panic!("no {} row", key.name()))
 		};
-		// the rows under a leader, down to the first one back at its depth; half
-		// a line's indent means nothing, so those are stepped over
+		// the rows one step under a leader, down to the first one back at its
+		// depth; half a line's indent means nothing, so those are stepped over.
+		// A row deeper still belongs to a group of its own, listed below.
 		let members = |lead: usize| -> Vec<Key> {
 			let top = &specs[lead];
+			let mut last = top.indent;
 			specs[lead + 1..]
 				.iter()
 				.filter(|s| !s.beside)
 				.take_while(|s| s.tab == top.tab && s.indent > top.indent)
-				.map(|s| {
-					assert_eq!(s.indent, top.indent + 1, "{} is nested too deep", s.label);
-					s.key
+				.filter_map(|s| {
+					assert!(s.indent <= last + 1, "{} is nested too deep", s.label);
+					last = s.indent;
+					(s.indent == top.indent + 1).then_some(s.key)
 				})
 				.collect()
 		};
@@ -11741,6 +11324,7 @@ mod tests {
 					Key::BgOpacity,
 					Key::BgBlur,
 					Key::BgHonorXmpLook,
+					Key::BgContrastMask,
 				],
 			),
 			(
@@ -11767,10 +11351,11 @@ mod tests {
 				&[Key::ScrollbarThickness, Key::ScrollbarAutoHide],
 			),
 			("Movement", Key::Minimap, &[Key::MinimapWidth]),
+			("Themes", Key::ColBg, &[Key::ColFromWallpaper]),
 			(
 				"Themes",
-				Key::ColBg,
-				&[Key::ColFromWallpaper, Key::ColFg, Key::ColCursor],
+				Key::ColFromWallpaper,
+				&[Key::ColFg, Key::ColCursor],
 			),
 			(
 				"Themes",

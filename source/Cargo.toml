@@ -83,6 +83,7 @@ anyhow = "1"
 # bad line yields a diagnostic instead of sinking the whole file, so the config
 # layer needs no hand-rolled error recovery of its own.
 shcl = "2.0.0"
+knobs = { path = "../knobs" }
 copypasta = "0.10"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # X11 per-pixel transparency: wgpu's GLES surface can't bind the window's ARGB

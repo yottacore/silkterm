@@ -172,10 +172,7 @@ impl Mix {
 /// bright it is - its overall level and its bright end - and None leaves the
 /// ramp out, for a caller with no picture summarized yet.
 pub fn wallpaper_mix(settings: &Settings, slider: f32, picture: Option<(f32, f32)>) -> Mix {
-	let bg = config::luma(crate::config::auto::color(
-		settings,
-		crate::config::auto::Setting::Background,
-	));
+	let bg = config::luma(settings.bg);
 	let even = |amount: f32| match picture {
 		Some(p) => evened(amount, slider, p, bg, settings.wallpaper_even),
 		None => amount,
@@ -263,13 +260,7 @@ pub fn halo_match(
 	let gray = [[picture.0; 3]];
 	let spread = if spread.is_empty() { &gray[..] } else { spread };
 	let linear = |c: [u8; 3]| c.map(config::to_linear);
-	let (dark_bg, light_bg) = (
-		linear(paired_dark_bg(settings)),
-		linear(crate::config::auto::color(
-			settings,
-			crate::config::auto::Setting::Background,
-		)),
-	);
+	let (dark_bg, light_bg) = (linear(paired_dark_bg(settings)), linear(settings.bg));
 	// each mode's own blend, the visibility ramp included
 	let dark_mix = Mix {
 		amount: evened(
@@ -331,7 +322,7 @@ impl HaloMemo {
 	) -> Option<HaloMatch> {
 		let key = &mut self.next;
 		key.clear();
-		let bg = crate::config::auto::color(settings, crate::config::auto::Setting::Background);
+		let bg = settings.bg;
 		let dark_bg = paired_dark_bg(settings);
 		key.extend([
 			u32::from(dark(settings)),
@@ -366,15 +357,13 @@ mod tests {
 	}
 
 	fn themed(name: &str, mode: &str) -> Settings {
-		let pal = crate::theme::resolve(name, mode_of(mode), true);
-		Settings {
-			theme: name.to_string(),
-			theme_mode: mode_of(mode),
-			theme_palette: pal,
-			fg: pal.fg,
-			cursor: pal.cursor,
-			..Settings::default()
-		}
+		use crate::ui_spec::Key;
+		use knobs::Value;
+		let mut s = Settings::default();
+		crate::fields::set(&mut s, Key::Theme, &Value::Text(name.into()), None);
+		crate::fields::set(&mut s, Key::ThemeMode, &Value::Text(mode.into()), None);
+		assert_eq!(s.theme_mode, mode_of(mode));
+		s
 	}
 
 	fn bg_luma(name: &str, mode: &str) -> f32 {

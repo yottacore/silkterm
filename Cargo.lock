@@ -2468,6 +2468,7 @@ dependencies = [
  "glutin-winit",
  "glyphon",
  "image",
+ "knobs",
  "libc",
  "log",
  "objc2 0.6.4",

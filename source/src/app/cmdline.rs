@@ -382,16 +382,25 @@ mod tests {
 		// the socket changed the wallpaper since launch
 		let mut live = config::Settings::default();
 		config::name_wallpaper(&mut live, Some("/socket.png".into()));
-		let from_disk = config::Settings {
-			font_size: config::auto::Auto::by_hand(9.0),
-			bg: config::auto::Auto::by_hand([0, 0, 0]),
-			fg: [1, 2, 3],
-			wallpaper_enabled: false,
-			..config::Settings::default()
+		let from_disk = {
+			use crate::ui_spec::Key;
+			use knobs::Value;
+			crate::fields::owning(
+				config::Settings::default(),
+				&[
+					(Key::SystemFontSize, Value::Bool(false)),
+					(Key::FontSize, Value::Float(9.0)),
+					(Key::Theme, Value::Text(knobs::CUSTOM.into())),
+					(Key::ColBg, Value::Text("#000000".into())),
+					(Key::ColFg, Value::Text("#010203".into())),
+					(Key::ColFromWallpaper, Value::Bool(false)),
+					(Key::BgEnabled, Value::Bool(false)),
+				],
+			)
 		};
 		let reloaded = settings_after_reload(&live, from_disk, &launch, true);
-		assert_eq!(config::auto::font_size(&reloaded), 21.0);
-		assert_eq!(reloaded.bg, config::auto::Auto::by_hand([0xff, 0, 0]));
+		assert_eq!(reloaded.font_size, 21.0);
+		assert_eq!(reloaded.bg, [0xff, 0, 0]);
 		assert_eq!(
 			reloaded.fg,
 			[1, 2, 3],

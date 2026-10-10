@@ -620,26 +620,32 @@ fn set_dir(pane: &mut PaneSpec, dir: Dir4, on: bool, flag: &str) -> anyhow::Resu
 /// per-pane visual style is deferred (it needs a per-pane renderer the single
 /// shared `TextCtx` doesn't have). `--shell` is handled separately (`build_layout`).
 pub fn fold_window_style(settings: &mut config::Settings, style: &Style) {
+	use crate::ui_spec::Key;
+	use knobs::Value;
+	// held for the run, so a save never writes them
+	let model = &mut settings.model;
 	if let Some(font) = &style.font_name {
-		settings.font_family = config::auto::Auto::by_hand(font.clone());
+		model.hold(Key::FontFamily.name(), &Value::Text(font.clone()));
 	}
 	if let Some(size) = style.font_size {
-		settings.font_size = config::auto::Auto::by_hand(size);
+		model.hold(Key::FontSize.name(), &Value::Float(f64::from(size)));
 	}
 	if let Some(color) = style.bg_color {
-		settings.bg = config::auto::Auto::by_hand(color);
+		model.hold(Key::ColBg.name(), &Value::Text(config::format_hex(color)));
 	}
 	if let Some(color) = style.fg_color {
-		settings.fg = color;
-	}
-	if let Some(img) = &style.wallpaper_img {
-		config::name_wallpaper(settings, img.as_ref().map(PathBuf::from));
+		model.hold(Key::ColFg.name(), &Value::Text(config::format_hex(color)));
 	}
 	if let Some(fit) = style.wallpaper_default_fit {
-		settings.wallpaper_default_fit = fit;
+		let word = if fit == Fit::Zoom { "zoom" } else { "stretch" };
+		model.hold(Key::BgFit.name(), &Value::Text(word.into()));
 	}
 	if let Some(opacity) = style.wallpaper_opacity {
-		settings.wallpaper_opacity = opacity;
+		model.hold(Key::BgOpacity.name(), &Value::Float(f64::from(opacity)));
+	}
+	crate::fields::fill(settings, None);
+	if let Some(img) = &style.wallpaper_img {
+		config::name_wallpaper(settings, img.as_ref().map(PathBuf::from));
 	}
 }
 
@@ -1263,9 +1269,13 @@ mod tests {
 		);
 		let mut s = config::Settings::default();
 		fold_window_style(&mut s, &c.win.style);
-		assert_eq!(config::auto::font_family(&s), "Iosevka");
-		assert_eq!(config::auto::font_size(&s), 20.0);
-		assert_eq!(s.bg, config::auto::Auto::by_hand([0x10, 0x20, 0x30]));
+		assert_eq!(s.font_family, "Iosevka");
+		assert_eq!(s.font_size, 20.0);
+		assert_eq!(s.bg, [0x10, 0x20, 0x30]);
+		assert!(
+			crate::fields::lines_of(&s).is_empty(),
+			"held for the run, so nothing to save"
+		);
 		assert_eq!(s.fg, [0xab, 0xcd, 0xef]);
 		assert_eq!(s.wallpaper, Some(PathBuf::from("/x.png")));
 		assert_eq!(s.wallpaper_default_fit, config::Fit::Zoom);
@@ -1278,7 +1288,7 @@ mod tests {
 		// no style flags -> settings untouched
 		let c = p("--columns 80");
 		let mut s = config::Settings::default();
-		let before = (s.font_size.clone(), s.bg.clone(), s.fg);
+		let before = (s.font_size, s.bg, s.fg);
 		fold_window_style(&mut s, &c.win.style);
 		assert_eq!((s.font_size, s.bg, s.fg), before);
 	}

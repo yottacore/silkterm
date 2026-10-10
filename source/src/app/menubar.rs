@@ -226,7 +226,8 @@ impl State {
 		if kind == CopyKind::Select {
 			save_live(|live| {
 				let changed = live.copy_on_select != now;
-				live.copy_on_select = now;
+				let on = knobs::Value::Bool(now);
+				crate::fields::set(live, crate::ui_spec::Key::CopyOnSelect, &on, None);
 				changed
 			});
 		}

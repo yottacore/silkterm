@@ -269,6 +269,33 @@ fn a_temporary_preset_ignores_changes_stores_nothing_and_ends_on_an_edit() {
 	assert_eq!(m.shown_choice("profile", &DESK), "Low *");
 }
 
+// Config words never care about case, and a choice is stored the way the
+// spec spells it, so a save writes the usual word back.
+// Test ID: EsGFVZe
+#[test]
+fn a_choice_matches_without_case_and_keeps_the_spec_s_word() {
+	let m = demo();
+	let s = m.spec.get("profile").unwrap();
+	assert_eq!(m.spec.valid(s, &text("HIGH")), Ok(text("high")));
+	assert_eq!(m.spec.valid(s, &text(" Custom ")), Ok(text(CUSTOM)));
+	assert!(m.spec.valid(s, &text("bogus")).is_err());
+}
+
+// A file that names a temporary preset was not written by a save, and loads
+// as if it named nothing.
+// Test ID: EsGFIt0
+#[test]
+fn a_file_naming_a_temporary_preset_loads_as_no_pick() {
+	let mut m = demo();
+	m.set("profile", &text("remote"), &DESK);
+	let (config, state) = m.save(&DESK);
+	let path = &m.spec.get("profile").unwrap().path;
+	let named = format!("{config}{path}: remote\n");
+	let back = Model::load(Arc::clone(&m.spec), &named, &state);
+	assert_eq!(back.values.own.get("profile"), None, "{named}");
+	assert_eq!(back.chosen("perf", &DESK), demo().chosen("perf", &DESK));
+}
+
 // Test ID: EsFc30N
 #[test]
 fn wallpaper_colors_beat_the_theme_and_an_edit_turns_them_off() {
@@ -403,5 +430,257 @@ fn turning_choose_automatically_back_on_drops_the_changes() {
 		m.shown_choice("profile", &DESK),
 		"High",
 		"the reset arrow too"
+	);
+}
+
+// A spec a program builds in code: a theme group with presets of its own, and
+// an opener whose default is the desktop's.
+struct Shop {
+	dark: bool,
+}
+
+impl Env for Shop {
+	fn rule(&self, name: &str) -> Option<Value> {
+		(name == "desktop_opener").then(|| text("xdg-open"))
+	}
+	fn preset(&self, group: &str, key: &str) -> Option<Preset> {
+		if group != "theme" || !["silk", "amber"].contains(&key) {
+			return None;
+		}
+		let bg = match (key, self.dark) {
+			("silk", true) => "#101014",
+			("silk", false) => "#f4f4f0",
+			_ => "#201000",
+		};
+		Some(Preset {
+			key: key.into(),
+			label: if key == "silk" { "SilkTerm" } else { "Amber" }.into(),
+			temporary: false,
+			values: [("bg".to_string(), text(bg))].into(),
+		})
+	}
+}
+
+fn plain(id: &str, kind: Kind, path: &str, default: Value) -> Setting {
+	Setting {
+		id: id.into(),
+		label: id.into(),
+		tab: 0,
+		control: match kind {
+			Kind::Bool => Control::Checkbox,
+			Kind::Choice => Control::Dropdown,
+			Kind::Color => Control::Color,
+			_ => Control::Text,
+		},
+		kind,
+		path: path.into(),
+		store: Store::Config,
+		default,
+		min: f64::NEG_INFINITY,
+		max: f64::INFINITY,
+		scale: Scale::Linear,
+		detents: Vec::new(),
+		options: Vec::new(),
+		tip: String::new(),
+		indent: u8::MAX,
+		gate: None,
+		auto: None,
+		rule: None,
+		group: None,
+	}
+}
+
+fn shop() -> Model {
+	let mut opener = plain("opener", Kind::Text, "links.opener", text(""));
+	opener.rule = Some(Rule::Named("desktop_opener".into()));
+	let mut bg = plain("bg", Kind::Color, "colors.bg", text("#000000"));
+	bg.group = Some("theme".into());
+	let spec = Spec {
+		tabs: vec![Tab {
+			path: "Look".into(),
+			label: "Look".into(),
+			parent: None,
+		}],
+		settings: vec![
+			plain("theme", Kind::Choice, "theme", text("silk")),
+			bg,
+			opener,
+		],
+		groups: vec![Group {
+			id: "theme".into(),
+			chooser: "theme".into(),
+			noun: "theme".into(),
+			custom: Some("Custom".into()),
+			presets: Vec::new(),
+			from_program: true,
+			members: Vec::new(),
+		}],
+	};
+	Model::new(spec.finish().unwrap_or_else(|e| panic!("{e:#?}")))
+}
+
+// Test ID: EsFwIor
+#[test]
+fn a_spec_built_in_code_is_checked_like_a_parsed_one() {
+	let m = shop();
+	assert_eq!(
+		m.spec.group("theme").map(|g| g.members.clone()),
+		Some(vec!["bg".to_string()])
+	);
+	let mut broken = (*m.spec).clone();
+	broken.settings[1].gate = Some("nothing".into());
+	broken.groups[0].from_program = false;
+	let errs = broken.finish().err().unwrap_or_default().join("\n");
+	assert!(errs.contains("gate nothing"), "{errs}");
+	assert!(errs.contains("no presets"), "{errs}");
+}
+
+// Test ID: EsFwIuv
+#[test]
+fn a_rule_with_no_switch_is_the_default_and_the_arrow_puts_it_back() {
+	let mut m = shop();
+	let env = Shop { dark: true };
+	assert_eq!(m.value("opener", &env), text("xdg-open"));
+	assert!(!m.can_reset("opener", &env));
+	m.set("opener", &text("xdg-open"), &env);
+	assert!(
+		m.can_reset("opener", &env),
+		"typed in, so it no longer follows the desktop"
+	);
+	assert_eq!(
+		m.state_line("opener", &env),
+		"Set by hand. Default value: xdg-open."
+	);
+	m.reset("opener", &env);
+	assert_eq!(m.value("opener", &env), text("xdg-open"));
+	assert!(m.values.own.is_empty());
+}
+
+// Test ID: EsFwIzk
+#[test]
+fn a_group_s_presets_can_come_from_the_program() {
+	let mut m = shop();
+	let dark = Shop { dark: true };
+	let light = Shop { dark: false };
+	assert_eq!(m.value("bg", &dark), text("#101014"));
+	assert_eq!(
+		m.value("bg", &light),
+		text("#f4f4f0"),
+		"the program's answer moves"
+	);
+	m.set("bg", &text("#123456"), &dark);
+	assert_eq!(m.shown_choice("theme", &dark), "SilkTerm *");
+	assert_eq!(
+		m.value("bg", &light),
+		text("#123456"),
+		"a change holds in both"
+	);
+	let back = Model::load(Arc::clone(&m.spec), &m.save(&dark).0, "");
+	assert_eq!(back.values, m.values);
+	m.set("theme", &text("amber"), &dark);
+	assert_eq!(m.shown_choice("theme", &dark), "Amber");
+	m.set("theme", &text(CUSTOM), &dark);
+	assert_eq!(m.shown_choice("theme", &dark), "Custom");
+	assert_eq!(
+		m.value("bg", &dark),
+		text("#000000"),
+		"nothing of its own yet"
+	);
+}
+
+// Test ID: EsFwJ4B
+#[test]
+fn changes_under_a_temporary_preset_are_still_saved() {
+	let mut m = demo();
+	m.set("profile", &text("low"), &DESK);
+	m.set("radius", &int(9), &DESK);
+	m.temporary("perf", Some("remote"));
+	assert_eq!(m.shown_choice("profile", &DESK), "Remote (temporary)");
+	let (config, _) = m.save(&DESK);
+	assert!(config.contains("radius: 9"), "{config}");
+	m.temporary("perf", None);
+	assert_eq!(m.shown_choice("profile", &DESK), "Low *");
+}
+
+// Test ID: EsFwJ8T
+#[test]
+fn lines_put_set_aside_values_and_changes_under_kept() {
+	let mut m = demo();
+	m.set("family", &text("Fira Code"), &DESK);
+	m.set("use_system_family", &Value::Bool(true), &DESK);
+	m.set("strength", &int(80), &DESK);
+	let lines = m.lines(&DESK);
+	let kept: Vec<&str> = lines.kept.iter().map(|(p, _)| p.as_str()).collect();
+	assert_eq!(
+		kept,
+		[
+			"kept.set_aside.font.family",
+			"kept.changes.perf.preset",
+			"kept.changes.perf.values.text.scrim.strength"
+		]
+	);
+	assert!(
+		lines
+			.config
+			.iter()
+			.any(|(p, v)| p == "font.use_system_family" && *v == Value::Bool(true))
+	);
+	assert!(!lines.config.iter().any(|(p, _)| p == "font.family"));
+}
+
+// Test ID: EsG0DsQ
+#[test]
+fn a_held_value_wins_for_the_run_and_is_never_saved() {
+	let mut m = demo();
+	m.hold("family", &text("Iosevka"));
+	assert_eq!(
+		m.value("family", &DESK),
+		text("Iosevka"),
+		"over the desktop's"
+	);
+	m.hold("blur", &int(3));
+	assert_eq!(
+		m.value("blur", &DESK),
+		Value::Float(3.0),
+		"over the profile's"
+	);
+	assert_eq!(
+		m.shown_choice("profile", &DESK),
+		"High",
+		"and no change to it"
+	);
+	assert_eq!(m.state_line("blur", &DESK), "Set for this run only.");
+	let (config, _) = m.save(&DESK);
+	assert!(
+		!config.contains("Iosevka") && !config.contains("blur"),
+		"{config}"
+	);
+	m.set("family", &text("Fira Code"), &DESK);
+	assert!(
+		!m.values.held.contains_key("family"),
+		"a change takes its place"
+	);
+	assert_eq!(m.value("family", &DESK), text("Fira Code"));
+}
+
+// Test ID: EsG8XbQ
+#[test]
+fn the_chooser_s_arrow_ends_a_temporary_preset_and_drops_the_changes() {
+	let mut m = demo();
+	m.set("profile", &text("low"), &DESK);
+	m.set("radius", &int(9), &DESK);
+	m.set("profile", &text("remote"), &DESK);
+	assert!(m.can_reset("profile", &DESK));
+	m.reset("profile", &DESK);
+	assert!(m.values.session.is_empty(), "Remote is gone");
+	assert!(
+		m.changed("perf", &DESK).is_empty(),
+		"and so are the changes"
+	);
+	let mut plain = demo();
+	plain.set("profile", &text("remote"), &DESK);
+	assert!(
+		plain.can_reset("profile", &DESK),
+		"with nothing of its own, Remote is still something to undo"
 	);
 }

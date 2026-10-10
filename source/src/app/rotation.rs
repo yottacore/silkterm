@@ -191,7 +191,10 @@ impl State {
 		// reaches the file, the same as a rotated pick.
 		let summary = loaded.image.as_ref().map(|img| img.summary);
 		if config::settings().wallpaper_summary != summary {
-			set_live(|live| live.wallpaper_summary = summary);
+			set_live(|live| {
+				live.wallpaper_summary = summary;
+				crate::fields::fill(live, None);
+			});
 			// the text is a different color now, so nothing retained is good
 			self.invalidate_prepared();
 			self.chrome = None;

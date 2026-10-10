@@ -229,7 +229,7 @@ pub const TAB_BAR_BG: [u8; 3] = [0x2c, 0x2c, 0x31];
 pub const TAB_ACTIVE: [u8; 3] = [0x47, 0x47, 0x4f];
 pub const TAB_INACTIVE: [u8; 3] = [0x36, 0x36, 0x3b];
 
-// Used only when the system monospace size can't be read (see default_font_size).
+// The size when the desktop names none and nothing is set (`fields.rs`).
 const FALLBACK_FONT_SIZE: f32 = 17.0;
 
 /// Cross-platform monospace fallback stack (first installed wins): the
@@ -258,7 +258,7 @@ pub const MENU_LINK: [u8; 3] = [0x6c, 0x9c, 0xff]; // clickable URL
 /// separator are derived shades of the bg, so a custom menu color stays coherent
 /// in either a dark or a light direction.
 pub fn menu_fg() -> [u8; 3] {
-	auto::color(&settings(), auto::Setting::MenuForeground)
+	settings().menu_fg
 }
 pub(crate) fn menu_hover_of(menu_bg: [u8; 3]) -> [u8; 3] {
 	shade(menu_bg, 22)
@@ -402,13 +402,23 @@ pub struct KeptWindow {
 /// is automatic: the monitor's own when it has one, else the last the window
 /// was given anywhere. The rule behind `window.columns` and `window.rows`.
 pub fn remembered_window(settings: &Settings, monitor: Option<&str>) -> KeptWindow {
+	remembered_window_at(settings, monitor, settings.remember_per_monitor)
+}
+
+/// The same with "Per monitor" given, for the rule, which may run before the
+/// field is filled.
+pub fn remembered_window_at(
+	settings: &Settings,
+	monitor: Option<&str>,
+	per_monitor: bool,
+) -> KeptWindow {
 	let last = KeptWindow {
 		columns: settings.remembered_columns,
 		rows: settings.remembered_rows,
 		font_zoom: settings.remembered_font_zoom,
 	};
 	monitor
-		.filter(|_| settings.remember_per_monitor)
+		.filter(|_| per_monitor)
 		.and_then(|key| monitor_entry(&settings.monitor_sizes, key))
 		.map(|at| &settings.monitor_sizes[at])
 		.map_or(last, |m| KeptWindow {
@@ -427,6 +437,17 @@ pub fn remember_window(
 	grid: Option<(usize, usize)>,
 	font_zoom: Option<i32>,
 ) {
+	keep_window(settings, monitor, grid, font_zoom);
+	// the size the settings show is read off the remembered one
+	crate::fields::fill(settings, monitor);
+}
+
+fn keep_window(
+	settings: &mut Settings,
+	monitor: Option<&str>,
+	grid: Option<(usize, usize)>,
+	font_zoom: Option<i32>,
+) {
 	if let Some((columns, rows)) = grid {
 		settings.remembered_columns = columns;
 		settings.remembered_rows = rows;
@@ -434,7 +455,7 @@ pub fn remember_window(
 	if let Some(zoom) = font_zoom {
 		settings.remembered_font_zoom = zoom;
 	}
-	let Some(key) = monitor.filter(|_| auto::keeps_size(settings) && settings.remember_per_monitor)
+	let Some(key) = monitor.filter(|_| settings.remember_size && settings.remember_per_monitor)
 	else {
 		return;
 	};
@@ -472,15 +493,242 @@ fn monitor_entry(sizes: &[MonitorSize], key: &str) -> Option<usize> {
 /// window is its own process, so another may have kept a size since this one
 /// loaded. Nothing is written.
 pub fn refresh_window_memory() {
-	let Some(path) = config_path() else {
+	let Some(path) = state_path() else {
 		return;
 	};
 	let Some(text) = read_settings_text(&path) else {
 		return;
 	};
 	let mut live = (*settings()).clone();
-	window_memory_from(&loaded_text(&text), &path, &mut live);
+	window_memory_from(&text, &path, &mut live);
+	crate::fields::fill(&mut live, None);
 	update(live);
+}
+
+/// The state file's values put into `settings`. A missing file leaves the
+/// shipped ones.
+fn read_state(settings: &mut Settings) {
+	let Some(path) = state_path() else {
+		return;
+	};
+	let Some(text) = read_settings_text(&path) else {
+		return;
+	};
+	window_memory_from(&text, &path, settings);
+	let doc = shcl::Document::parse(&text);
+	settings.rated_hardware = doc
+		.get_string("performance.rated_hardware")
+		.unwrap_or_default();
+	settings.tested_profile = doc
+		.get_string("performance.tested_profile")
+		.ok()
+		.map(|word| crate::profile::Profile::parse(&word))
+		.filter(|p| {
+			!matches!(
+				p,
+				crate::profile::Profile::Custom | crate::profile::Profile::Remote
+			)
+		});
+}
+
+// What a state value changed to, written to the state file. Another window's
+// changes since this one loaded stay, since only what differs is written. A
+// file that is gone gets every value again, since nothing else holds them.
+fn persist_state(orig: &Settings, edited: &Settings) {
+	let same = edited.remembered_columns == orig.remembered_columns
+		&& edited.remembered_rows == orig.remembered_rows
+		&& edited.remembered_maximized == orig.remembered_maximized
+		&& edited.remembered_font_zoom == orig.remembered_font_zoom
+		&& edited.monitor_sizes == orig.monitor_sizes
+		&& edited.rated_hardware == orig.rated_hardware
+		&& edited.tested_profile == orig.tested_profile;
+	if same {
+		return;
+	}
+	let Some(path) = state_path().filter(|p| may_write(p)) else {
+		return;
+	};
+	let text = read_settings_text(&path);
+	let gone = text.is_none();
+	let mut doc = text.map_or_else(shcl::Document::new, |text| shcl::Document::parse(&text));
+	if gone || edited.remembered_columns != orig.remembered_columns {
+		doc.put_int(
+			"window.remembered_columns",
+			edited.remembered_columns as i64,
+		);
+	}
+	if gone || edited.remembered_rows != orig.remembered_rows {
+		doc.put_int("window.remembered_rows", edited.remembered_rows as i64);
+	}
+	if gone || edited.remembered_maximized != orig.remembered_maximized {
+		doc.put_bool("window.remembered_maximized", edited.remembered_maximized);
+	}
+	if gone || edited.remembered_font_zoom != orig.remembered_font_zoom {
+		doc.put_int(
+			"window.remembered_font_zoom",
+			i64::from(edited.remembered_font_zoom),
+		);
+	}
+	let had: &[MonitorSize] = if gone { &[] } else { &orig.monitor_sizes };
+	write_monitor_sizes(&mut doc, had, &edited.monitor_sizes);
+	if (gone && !edited.rated_hardware.is_empty()) || edited.rated_hardware != orig.rated_hardware {
+		doc.put_string("performance.rated_hardware", &edited.rated_hardware);
+	}
+	if (gone && edited.tested_profile.is_some()) || edited.tested_profile != orig.tested_profile {
+		match edited.tested_profile {
+			Some(p) => doc.put_string("performance.tested_profile", p.key()),
+			None => {
+				doc.remove("performance.tested_profile");
+			}
+		}
+	}
+	if let Some(dir) = path.parent() {
+		let _ = std::fs::create_dir_all(dir);
+	}
+	if let Err(e) = write_config_atomic(&path, &doc.to_canonical()) {
+		eprintln!("{APP_NAME}: could not save {}: {e:#}", path.display());
+	}
+}
+
+/// Write the machine test's pick, and the hardware it ran on, to the state file.
+#[must_use]
+pub fn keep_tested(profile: crate::profile::Profile, hardware: Option<&str>) -> Kept {
+	let Some(path) = state_path() else {
+		return Kept::Unwritable("no state file location".to_string());
+	};
+	if !may_write(&path) {
+		return Kept::Written;
+	}
+	let mut doc = read_settings_text(&path)
+		.map_or_else(shcl::Document::new, |text| shcl::Document::parse(&text));
+	doc.put_string("performance.tested_profile", profile.key());
+	if let Some(id) = hardware {
+		doc.put_string("performance.rated_hardware", id);
+	}
+	if let Some(dir) = path.parent() {
+		let _ = std::fs::create_dir_all(dir);
+	}
+	match write_config_atomic(&path, &doc.to_canonical()) {
+		Ok(()) => Kept::Written,
+		Err(e) => Kept::Unwritable(format!("could not write {e:#}")),
+	}
+}
+
+// The old config kept the machine's state with the settings. A file that still
+// does, with no state file yet, has those lines moved there before the launch
+// migration drops them. A theme's colors set in the same file move to the
+// theme's "*" changes, which is what they were: colors over a theme.
+fn move_state_out(path: &std::path::Path) {
+	let Some(text) = read_settings_text(path) else {
+		return;
+	};
+	// the launch's migration drops these lines, so they are read before it
+	let raw = shcl::Document::parse(&rewritten_by(&text, &[from_shcl2_text]));
+	let old = shcl::Document::parse(&loaded_text(&text));
+	let ints = [
+		"window.remembered_columns",
+		"window.remembered_rows",
+		"window.remembered_font_zoom",
+	];
+	let (maximized, monitors, hardware) = (
+		"window.remembered_maximized",
+		"window.monitors",
+		"performance.rated_hardware",
+	);
+	if !ints
+		.iter()
+		.chain(&[maximized, monitors, hardware])
+		.any(|p| raw.exists(p))
+	{
+		return;
+	}
+	if let Some(state) = state_path().filter(|p| !p.exists() && may_write(p)) {
+		let mut doc = shcl::Document::new();
+		for p in ints {
+			if let Ok(v) = raw.get_int(p) {
+				doc.put_int(p, v);
+			}
+		}
+		if let Ok(v) = raw.get_bool(maximized) {
+			doc.put_bool(maximized, v);
+		}
+		// an id that is all digits is still an id
+		if let Ok(v) = raw.get_string(hardware) {
+			doc.put_string(hardware, &v);
+		}
+		for key in raw.children(monitors) {
+			for leaf in ["columns", "rows", "font_zoom"] {
+				let at = format!("{monitors}.{key}.{leaf}");
+				if let Ok(v) = raw.get_int(&at) {
+					doc.put_int(&at, v);
+				}
+			}
+		}
+		// with Choose automatically on, the profile line was the machine's pick
+		let automatic = old.get_bool("performance.automatic").unwrap_or(true);
+		if let (true, Ok(word)) = (automatic, old.get_string("performance.profile")) {
+			let p = crate::profile::Profile::parse(&word);
+			if !matches!(
+				p,
+				crate::profile::Profile::Custom | crate::profile::Profile::Remote
+			) {
+				doc.put_string("performance.tested_profile", p.key());
+			}
+		}
+		if let Some(dir) = state.parent() {
+			let _ = std::fs::create_dir_all(dir);
+		}
+		if let Err(e) = write_config_atomic(&state, &doc.to_canonical()) {
+			eprintln!("{APP_NAME}: could not save {}: {e:#}", state.display());
+		}
+	}
+	move_theme_colors(path, &text, &old);
+}
+
+// Colors set over a built-in or saved theme become that theme's "*" changes,
+// so nothing on screen changes. Their lines stay, as Custom's colors.
+fn move_theme_colors(path: &std::path::Path, text: &str, old: &shcl::Document) {
+	let theme = old
+		.get_string("theme")
+		.unwrap_or_else(|_| "SilkTerm".into());
+	if theme.eq_ignore_ascii_case(knobs::CUSTOM) || old.exists("kept.changes.theme") {
+		return;
+	}
+	let user = read_user_themes(old);
+	let mode = old
+		.get_string("theme_mode")
+		.ok()
+		.and_then(|w| crate::theme::Mode::parse(&w))
+		.unwrap_or(crate::theme::Mode::Dark);
+	let pal = crate::theme::resolve_in(&user, &theme, mode, os_dark());
+	let mut changes = Vec::new();
+	for (i, key) in crate::theme::PALETTE_KEYS.iter().enumerate() {
+		let at = format!("colors.{key}");
+		if let Some(rgb) = old.get_string(&at).ok().as_deref().and_then(parse_hex) {
+			if rgb != pal.get(i) {
+				changes.push((at, rgb));
+			}
+		}
+	}
+	if changes.is_empty() {
+		return;
+	}
+	let mut doc = shcl::Document::parse(text);
+	let base = format!("kept.changes.{}", crate::fields::THEME);
+	doc.put_string(&format!("{base}.preset"), &theme);
+	for (at, rgb) in &changes {
+		doc.put_string(&format!("{base}.values.{at}"), &format_hex(*rgb));
+	}
+	let _ = doc.set_comment("kept", KEPT_NOTE);
+	if save_refused(&doc) || config_open_elsewhere(path) {
+		return;
+	}
+	if let Err(e) = write_config_atomic(path, &saved_text(&doc)) {
+		eprintln!(
+			"{APP_NAME}: could not update config {}: {e:#}",
+			path.display()
+		);
+	}
 }
 
 fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Settings) {
@@ -512,8 +760,10 @@ fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Setting
 /// result; anything less would miss whichever field a bad `## Default` moved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
-	pub font_family: auto::Auto<String>, // comma-separated fallback stack (first installed wins); automatic follows the desktop
-	pub font_size: auto::Auto<f32>,      // automatic follows the desktop's monospace size
+	pub use_system_font: bool, // follow the desktop's monospace family (font_family is then its)
+	pub use_system_font_size: bool, // and its size
+	pub font_family: String,   // comma-separated fallback stack (first installed wins)
+	pub font_size: f32,
 	pub line_height_scale: f32,
 	pub scrollback: usize,
 	pub scroll_smooth: bool, // master switch: false = every scroll (wheel, output, app slide) happens instantly
@@ -542,15 +792,15 @@ pub struct Settings {
 	pub transparent_background_blur: bool, // X11: ask a KWin/picom compositor to blur the desktop behind the window
 	pub wallpaper_enabled: bool,           // master switch: false = no wallpaper at all
 	pub wallpaper: Option<PathBuf>,        // resolved path, or None
-	pub wallpaper_raw: auto::Auto<String>, // the image as configured; automatic is the one found by convention, else the built-in
-	pub wallpaper_fallback_builtin: bool,  // no image/folder configured: show the built-in one
-	pub wallpaper_rotate_enabled: bool,    // master switch for folder rotation
+	pub wallpaper_raw: String, // the image as shown in Settings; its default is the one found by convention, else the built-in
+	pub wallpaper_fallback_builtin: bool, // no image/folder configured: show the built-in one
+	pub wallpaper_rotate_enabled: bool, // master switch for folder rotation
 	pub wallpaper_folder: Option<PathBuf>, // rotate the wallpaper through this folder's images (overrides wallpaper)
-	pub wallpaper_folder_raw: auto::Auto<String>, // the folder as configured; automatic is the usual place
-	pub wallpaper_folder_auto: bool, // the folder above was found by convention, not configured
+	pub wallpaper_folder_raw: String, // the folder as shown in Settings; its default is the usual place
+	pub wallpaper_folder_auto: bool,  // the folder above was found by convention, not configured
 	pub wallpaper_rotate_random: bool, // rotate randomly instead of in filename order
 	pub wallpaper_rotate_interval_s: f32, // seconds between rotations (0 = pick one at startup only)
-	pub wallpaper_opacity: f32,      // image visibility 0..1
+	pub wallpaper_opacity: f32,       // image visibility 0..1
 	pub wallpaper_even: f32, // hold every picture to the same visibility whatever its own brightness, 0..1
 	pub wallpaper_default_fit: Fit, // used unless the image's own tags say otherwise
 	pub wallpaper_honor_xmp: bool, // let a wallpaper's own Fit/Anchor tags win
@@ -582,8 +832,9 @@ pub struct Settings {
 	pub cursor_animation_resume_s: f32, // idle seconds after typing before the animation resumes (output does not wait this out)
 	pub cursor_animation_idle_stop_s: f32, // idle seconds until the animation stops (parked at full); 0 = never
 	pub cursor_blink_rate_s: f32,          // one whole animation cycle, peak to peak (s)
-	pub columns: auto::Auto<usize>,        // initial window grid size; automatic is the last size
-	pub rows: auto::Auto<usize>,
+	pub remember_size: bool, // open at the last size; columns and rows are then that size
+	pub columns: usize,      // initial window grid size
+	pub rows: usize,
 	pub remember_per_monitor: bool, // keep a last size for each monitor (monitor_sizes)
 	pub remember_maximized: bool,   // launch maximized if the last window closed that way
 	pub hide_single_tab: bool,      // hide the tab bar while only one tab is open
@@ -613,61 +864,59 @@ pub struct Settings {
 	pub shell_integration: bool,    // put the directory-reporting block in PowerShell profiles
 	pub bash_prompt: bool,          // give bash panes the x9ps1-git prompt (see integration.rs)
 	pub hyperlinks: bool,           // underline URLs in output on hover; Ctrl+click opens them
-	pub hyperlink_open_command: auto::Auto<String>, // opener for a clicked link; automatic is the desktop's own
-	pub bg: auto::Auto<[u8; 3]>,
+	pub hyperlink_open_command: String, // opener for a clicked link; its default is the desktop's own
+	pub bg: [u8; 3],
 	pub fg: [u8; 3],
 	pub cursor: [u8; 3],
-	/// Take `fg` and `cursor` from the wallpaper instead (autotheme.rs). While it
-	/// is on those two hold the derived colors and the user's own sit in
-	/// `wallpaper_colors`, the same arrangement `profile_shadow` uses.
+	/// Take `fg` and `cursor` from the wallpaper instead (autotheme.rs).
 	pub colors_from_wallpaper: bool,
 
 	// Two attention colors (see theme.rs): `highlight` marks several things at
 	// once, `focus` marks only what the keyboard is on.
-	pub highlight: auto::Auto<[u8; 3]>,
-	pub focus: auto::Auto<[u8; 3]>,
+	pub highlight: [u8; 3],
+	pub focus: [u8; 3],
 
-	// chrome colors (menu bar / dropdowns, and pop-out dialogs); automatic is
-	// the theme palette's
-	pub menu_bg: auto::Auto<[u8; 3]>,
-	pub menu_fg: auto::Auto<[u8; 3]>,
-	pub dialog_bg: auto::Auto<[u8; 3]>,
-	pub dialog_fg: auto::Auto<[u8; 3]>,
-	pub gutter: auto::Auto<[u8; 3]>, // chrome areas holding no control (the dialog's tab strip)
+	// chrome colors (menu bar / dropdowns, and pop-out dialogs)
+	pub menu_bg: [u8; 3],
+	pub menu_fg: [u8; 3],
+	pub dialog_bg: [u8; 3],
+	pub dialog_fg: [u8; 3],
+	pub gutter: [u8; 3], // chrome areas holding no control (the dialog's tab strip)
 
-	// scrollbar; automatic is the same neutral in every theme (`SCROLLBAR_THUMB_DEF`)
-	pub scrollbar_thumb: auto::Auto<[u8; 3]>,
-	pub scrollbar_trough: auto::Auto<[u8; 3]>,
-	/// The theme's own colors for `theme`, `theme_mode` and the desktop's dark
-	/// bit, which the automatic colors read. Never in the file; `retheme` is its one
-	/// writer, so it cannot drift from the three it comes from.
+	// scrollbar; the same neutral in every theme (`SCROLLBAR_THUMB_DEF`)
+	pub scrollbar_thumb: [u8; 3],
+	pub scrollbar_trough: [u8; 3],
+	/// The palette of the theme picked, in the mode in force, for the 16 ANSI
+	/// colors and what reads the palette whole. Never in the file; `retheme`
+	/// is its one writer.
 	pub theme_palette: crate::theme::Palette,
 	pub ansi: [[u8; 3]; 16], // 16-color ANSI palette, resolved from the active theme
 	pub theme: String,       // active theme name (see theme.rs)
 	pub theme_mode: crate::theme::Mode,
-	/// The performance profile (profile.rs): what the look may cost. While one
-	/// is live the fields it governs hold ITS values and the user's own sit in
-	/// `profile_shadow`, which is how Custom puts them back.
+	/// The performance profile (profile.rs): what the look may cost. The model
+	/// below decides which one is in force; `profile::current` answers it.
 	pub performance_automatic: bool, // pick the profile for this machine, and step it down when the display cannot keep up
-	pub performance_profile: crate::profile::Profile,
-	pub performance_check_hardware: bool, // re-rate when the machine underneath changes
-	pub performance_check_next_run: bool, // re-rate once at the next launch, then clear
-	pub rated_hardware: String,           // hardware id the profile was last picked for ("" = never)
-	pub profile_shadow: Option<Box<crate::profile::Shadow>>,
-	/// The Remote profile in force, over whatever `performance_profile` says. Never
-	/// written: it is set for a remote screen (or by hand from the View menu) and
-	/// lasts the session.
-	pub remote_override: bool,
+	pub performance_profile: crate::profile::Profile, // the pick, the machine's while automatic
+	pub performance_check_hardware: bool,             // re-rate when the machine underneath changes
+	pub performance_check_next_run: bool,             // re-rate once at the next launch, then clear
+	pub rated_hardware: String, // hardware id the profile was last picked for ("" = never)
+	pub tested_profile: Option<crate::profile::Profile>, // the machine test's pick
 	/// Where the display watch stepped the profile down to, for this session only.
 	/// Never written: one stall used to become every later launch's profile, with
 	/// no way back while automatic was on. Cleared by a hand pick or a measured one.
 	pub stepped_profile: Option<crate::profile::Profile>,
 
-	// What the wallpaper on screen is worth to the derivation, and the user's own
-	// text and cursor while the derived pair is live. Neither is ever written:
-	// the summary comes from whatever picture arrived, and a rotation replaces it.
+	/// What the wallpaper on screen is worth to the derivation. Never written:
+	/// the summary comes from whatever picture arrived, and a rotation replaces it.
 	pub wallpaper_summary: Option<crate::autotheme::Summary>,
-	pub wallpaper_colors: Option<crate::autotheme::Shadow>,
+	/// The text and cursor colors worked out from it, by `fields::fill`.
+	pub wallpaper_derived: Option<crate::autotheme::Derived>,
+	/// What File or folder gives with nothing set: the picture found by
+	/// convention, else the built-in one. Looked up at load, since it stats paths.
+	pub found_picture: String,
+	/// Every value the Settings dialog edits as stored, with what a change does
+	/// to the rest (fields.rs). The setting fields above are filled from it.
+	pub model: knobs::Model,
 	/// Themes saved from the Settings dialog, whole, in file order. They resolve
 	/// ahead of the built-ins, so one may carry a built-in's name.
 	pub user_themes: Vec<crate::theme::UserTheme>,
@@ -712,11 +961,7 @@ impl Settings {
 	/// The contrast floor text is held to, `text_min_contrast` in a dark theme and
 	/// a little more in a light one (`min_contrast_for`).
 	pub fn min_contrast(&self) -> f32 {
-		min_contrast_for(
-			self.fg,
-			auto::color(self, auto::Setting::Background),
-			self.text_min_contrast,
-		)
+		min_contrast_for(self.fg, self.bg, self.text_min_contrast)
 	}
 
 	/// The rotation folder, or None when either master switch is off. Both callers
@@ -740,9 +985,25 @@ impl Settings {
 
 impl Default for Settings {
 	fn default() -> Self {
+		let mut s = Self {
+			model: crate::fields::model(),
+			..Self::bare()
+		};
+		crate::fields::fill(&mut s, None);
+		s
+	}
+}
+
+impl Settings {
+	/// The shipped values with no model behind them, which the model's spec
+	/// takes its defaults from.
+	pub(crate) fn bare() -> Self {
+		let pal = crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true);
 		Self {
-			font_family: auto::Auto::automatic(),
-			font_size: auto::Auto::automatic(),
+			use_system_font: true,
+			use_system_font_size: true,
+			font_family: DEFAULT_FONT_STACK.to_string(),
+			font_size: FALLBACK_FONT_SIZE,
 			line_height_scale: 1.22,
 			scrollback: 10_000,
 			scroll_smooth: true,
@@ -767,11 +1028,12 @@ impl Default for Settings {
 			transparent_background_blur: false,
 			wallpaper: None,
 			wallpaper_enabled: true,
-			wallpaper_raw: auto::Auto::automatic(),
+			wallpaper_raw: String::new(),
 			wallpaper_fallback_builtin: true,
 			wallpaper_rotate_enabled: true,
 			wallpaper_folder: None,
-			wallpaper_folder_raw: auto::Auto::automatic(),
+			// the model's own default, so a default never looks on disk for a folder
+			wallpaper_folder_raw: WALLPAPER_DIR_TOKEN.to_string(),
 			wallpaper_folder_auto: false,
 			wallpaper_rotate_random: true,
 			wallpaper_rotate_interval_s: 0.0,
@@ -807,8 +1069,9 @@ impl Default for Settings {
 			cursor_animation_resume_s: 1.0,
 			cursor_animation_idle_stop_s: 60.0,
 			cursor_blink_rate_s: 1.0,
-			columns: auto::Auto::automatic(),
-			rows: auto::Auto::automatic(),
+			remember_size: true,
+			columns: 160,
+			rows: 48,
 			remember_per_monitor: true,
 			remember_maximized: false,
 			hide_single_tab: false,
@@ -844,22 +1107,22 @@ impl Default for Settings {
 			shell_integration: true,
 			bash_prompt: false,
 			hyperlinks: true,
-			hyperlink_open_command: auto::Auto::automatic(),
-			bg: auto::Auto::automatic(),
-			fg: [0x88, 0xee, 0xcc],
-			cursor: [0x8a, 0x3f, 0xa4],
+			hyperlink_open_command: String::new(),
+			bg: pal.bg,
+			fg: pal.fg,
+			cursor: pal.cursor,
 			colors_from_wallpaper: true,
-			highlight: auto::Auto::automatic(),
-			focus: auto::Auto::automatic(),
-			menu_bg: auto::Auto::automatic(),
-			menu_fg: auto::Auto::automatic(),
-			dialog_bg: auto::Auto::automatic(),
-			dialog_fg: auto::Auto::automatic(),
-			gutter: auto::Auto::automatic(),
-			scrollbar_thumb: auto::Auto::automatic(),
-			scrollbar_trough: auto::Auto::automatic(),
-			theme_palette: crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true),
-			ansi: crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true).ansi,
+			highlight: pal.highlight,
+			focus: pal.focus,
+			menu_bg: pal.menu_bg,
+			menu_fg: pal.menu_fg,
+			dialog_bg: pal.dialog_bg,
+			dialog_fg: pal.dialog_fg,
+			gutter: pal.gutter,
+			scrollbar_thumb: SCROLLBAR_THUMB_DEF,
+			scrollbar_trough: SCROLLBAR_TROUGH_DEF,
+			theme_palette: pal,
+			ansi: pal.ansi,
 			theme: "SilkTerm".to_string(),
 			theme_mode: crate::theme::Mode::Dark,
 			performance_automatic: true,
@@ -867,11 +1130,12 @@ impl Default for Settings {
 			performance_check_hardware: true,
 			performance_check_next_run: false,
 			rated_hardware: String::new(),
-			profile_shadow: None,
-			remote_override: false,
+			tested_profile: None,
 			stepped_profile: None,
 			wallpaper_summary: None,
-			wallpaper_colors: None,
+			wallpaper_derived: None,
+			found_picture: String::new(),
+			model: knobs::Model::new(knobs::Spec::default()),
 			user_themes: Vec::new(),
 			shells: Vec::new(),
 			keys: crate::keys::Bindings::defaults(cfg!(target_os = "macos")),
@@ -881,522 +1145,12 @@ impl Default for Settings {
 	}
 }
 
-/// Settings the program can work out for itself. Each is stored as a value set
-/// by hand or as nothing, and nothing means automatic: it uses its rule. A
-/// group's switch is never stored either, it is read off its members. See
-/// project/design_docs/20261008-180516_automatic_settings.md.
-pub mod auto {
-	use super::Settings;
-
-	/// An auto setting as stored. Everything reads it through [`value`] and
-	/// [`automatic`]; the lint stage refuses any other use of `stored`
-	/// (cicd/tests/autoread).
-	#[derive(Clone, Debug, PartialEq, Default)]
-	pub struct Auto<T>(Option<T>);
-
-	impl<T> Auto<T> {
-		pub const fn automatic() -> Self {
-			Self(None)
-		}
-		pub const fn by_hand(value: T) -> Self {
-			Self(Some(value))
-		}
-		pub const fn is_automatic(&self) -> bool {
-			self.0.is_none()
-		}
-		/// The value set by hand. For [`value`] and the settings store only.
-		pub(crate) const fn stored(&self) -> Option<&T> {
-			self.0.as_ref()
-		}
-	}
-
-	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-	pub enum Setting {
-		FontFamily,
-		FontSize,
-		Columns,
-		Rows,
-		Background,
-		Highlight,
-		Focus,
-		MenuBackground,
-		MenuForeground,
-		DialogBackground,
-		DialogForeground,
-		Gutter,
-		ScrollbarThumb,
-		ScrollbarTrough,
-		OpenCommand,
-		WallpaperImage,
-		WallpaperFolder,
-	}
-
-	impl Setting {
-		/// Every one, in the table's order.
-		#[cfg(test)]
-		pub const ALL: [Self; 17] = [
-			Self::FontFamily,
-			Self::FontSize,
-			Self::Columns,
-			Self::Rows,
-			Self::Background,
-			Self::Highlight,
-			Self::Focus,
-			Self::MenuBackground,
-			Self::MenuForeground,
-			Self::DialogBackground,
-			Self::DialogForeground,
-			Self::Gutter,
-			Self::ScrollbarThumb,
-			Self::ScrollbarTrough,
-			Self::OpenCommand,
-			Self::WallpaperImage,
-			Self::WallpaperFolder,
-		];
-	}
-
-	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-	pub enum Group {
-		WindowSize,
-	}
-
-	/// What a group's control is. Every group so far has a switch; the presets
-	/// dropdown comes with the first group that has presets.
-	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-	pub enum Control {
-		Switch,
-	}
-
-	#[derive(Clone, Debug, PartialEq)]
-	pub enum Value {
-		Text(String),
-		Number(f32),
-		Count(usize),
-		Color([u8; 3]),
-	}
-
-	impl std::fmt::Display for Value {
-		fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-			match self {
-				Self::Text(text) => f.write_str(text),
-				Self::Number(n) => write!(f, "{}", (n * 100.0).round() / 100.0),
-				Self::Count(n) => write!(f, "{n}"),
-				Self::Color(rgb) => f.write_str(&super::format_hex(*rgb)),
-			}
-		}
-	}
-
-	/// Where a rule is asked from. The window size has one per monitor.
-	#[derive(Clone, Copy, Debug, Default)]
-	pub struct Place<'a> {
-		pub monitor: Option<&'a str>,
-	}
-
-	#[derive(Debug)]
-	pub struct Row {
-		pub setting: Setting,
-		pub path: &'static str,
-		pub group: Option<Group>,
-		rule: fn(&Settings, Place<'_>) -> Value,
-	}
-
-	/// Every auto setting, with its rule.
-	pub const TABLE: &[Row] = &[
-		// the desktop's monospace font, else the shipped list
-		Row {
-			setting: Setting::FontFamily,
-			path: "font.family",
-			group: None,
-			rule: |_, _| {
-				Value::Text(
-					crate::sysfont::monospace()
-						.family
-						.clone()
-						.unwrap_or_else(|| super::DEFAULT_FONT_STACK.to_string()),
-				)
-			},
-		},
-		Row {
-			setting: Setting::FontSize,
-			path: "font.size",
-			group: None,
-			rule: |_, _| Value::Number(super::default_font_size()),
-		},
-		// the size the window had last, this monitor's own where they are kept
-		Row {
-			setting: Setting::Columns,
-			path: "window.columns",
-			group: Some(Group::WindowSize),
-			rule: |settings, at| {
-				Value::Count(super::remembered_window(settings, at.monitor).columns)
-			},
-		},
-		Row {
-			setting: Setting::Rows,
-			path: "window.rows",
-			group: Some(Group::WindowSize),
-			rule: |settings, at| Value::Count(super::remembered_window(settings, at.monitor).rows),
-		},
-		// the theme's own, and for the scrollbar the one neutral every theme shares
-		Row {
-			setting: Setting::Background,
-			path: "colors.background",
-			group: None,
-			rule: |settings, _| Value::Color(settings.theme_palette.bg),
-		},
-		Row {
-			setting: Setting::Highlight,
-			path: "colors.highlight",
-			group: None,
-			rule: |settings, _| Value::Color(settings.theme_palette.highlight),
-		},
-		Row {
-			setting: Setting::Focus,
-			path: "colors.focus",
-			group: None,
-			rule: |settings, _| Value::Color(settings.theme_palette.focus),
-		},
-		Row {
-			setting: Setting::MenuBackground,
-			path: "colors.menu_background",
-			group: None,
-			rule: |settings, _| Value::Color(settings.theme_palette.menu_bg),
-		},
-		Row {
-			setting: Setting::MenuForeground,
-			path: "colors.menu_foreground",
-			group: None,
-			rule: |settings, _| Value::Color(settings.theme_palette.menu_fg),
-		},
-		Row {
-			setting: Setting::DialogBackground,
-			path: "colors.dialog_background",
-			group: None,
-			rule: |settings, _| Value::Color(settings.theme_palette.dialog_bg),
-		},
-		Row {
-			setting: Setting::DialogForeground,
-			path: "colors.dialog_foreground",
-			group: None,
-			rule: |settings, _| Value::Color(settings.theme_palette.dialog_fg),
-		},
-		Row {
-			setting: Setting::Gutter,
-			path: "colors.gutter",
-			group: None,
-			rule: |settings, _| Value::Color(settings.theme_palette.gutter),
-		},
-		Row {
-			setting: Setting::ScrollbarThumb,
-			path: "colors.scrollbar_thumb",
-			group: None,
-			rule: |_, _| Value::Color(super::SCROLLBAR_THUMB_DEF),
-		},
-		Row {
-			setting: Setting::ScrollbarTrough,
-			path: "colors.scrollbar_trough",
-			group: None,
-			rule: |_, _| Value::Color(super::SCROLLBAR_TROUGH_DEF),
-		},
-		// the program the desktop opens a link with
-		Row {
-			setting: Setting::OpenCommand,
-			path: "hyperlinks.open_command",
-			group: None,
-			rule: |_, _| Value::Text(crate::links::desktop_opener().to_string()),
-		},
-		// a picture found by convention, else the built-in one
-		Row {
-			setting: Setting::WallpaperImage,
-			path: "wallpaper.image",
-			group: None,
-			rule: |settings, _| {
-				Value::Text(super::resolve_wallpaper(None).map_or_else(
-					|| {
-						if settings.wallpaper_fallback_builtin {
-							BUILT_IN_PICTURE.to_string()
-						} else {
-							String::new()
-						}
-					},
-					|path| path.to_string_lossy().into_owned(),
-				))
-			},
-		},
-		// the usual place, looked up rather than expanded (`rotation_folder_for`)
-		Row {
-			setting: Setting::WallpaperFolder,
-			path: "wallpaper.rotate.folder",
-			group: None,
-			rule: |_, _| Value::Text(super::WALLPAPER_DIR_TOKEN.to_string()),
-		},
-	];
-
-	/// What an automatic image shows when there is no picture to find.
-	pub const BUILT_IN_PICTURE: &str = "(built-in picture)";
-
-	#[derive(Debug)]
-	pub struct GroupRow {
-		pub group: Group,
-		pub name: &'static str,
-		pub control: Control,
-	}
-
-	/// Every group and its control. `name` is how the dialog's spec names it.
-	pub const GROUPS: &[GroupRow] = &[GroupRow {
-		group: Group::WindowSize,
-		name: "window.size",
-		control: Control::Switch,
-	}];
-
-	pub fn row(setting: Setting) -> &'static Row {
-		// in the enum's order, which a test holds it to: a color is read per cell
-		&TABLE[setting as usize]
-	}
-
-	pub fn by_path(path: &str) -> Option<Setting> {
-		TABLE
-			.iter()
-			.find(|row| row.path == path)
-			.map(|row| row.setting)
-	}
-
-	pub fn group_named(name: &str) -> Option<Group> {
-		GROUPS
-			.iter()
-			.find(|row| row.name.eq_ignore_ascii_case(name))
-			.map(|row| row.group)
-	}
-
-	pub fn control(group: Group) -> Control {
-		GROUPS
-			.iter()
-			.find(|row| row.group == group)
-			.map_or(Control::Switch, |row| row.control)
-	}
-
-	pub fn members(group: Group) -> impl Iterator<Item = Setting> {
-		TABLE
-			.iter()
-			.filter(move |row| row.group == Some(group))
-			.map(|row| row.setting)
-	}
-
-	fn stored(settings: &Settings, setting: Setting) -> Option<Value> {
-		match setting {
-			Setting::FontSize => settings.font_size.stored().copied().map(Value::Number),
-			Setting::Columns => settings.columns.stored().copied().map(Value::Count),
-			Setting::Rows => settings.rows.stored().copied().map(Value::Count),
-			_ => match text_of(settings, setting) {
-				Some(text) => text.stored().cloned().map(Value::Text),
-				None => color_of(settings, setting)?
-					.stored()
-					.copied()
-					.map(Value::Color),
-			},
-		}
-	}
-
-	fn color_of(settings: &Settings, setting: Setting) -> Option<&Auto<[u8; 3]>> {
-		Some(match setting {
-			Setting::Background => &settings.bg,
-			Setting::Highlight => &settings.highlight,
-			Setting::Focus => &settings.focus,
-			Setting::MenuBackground => &settings.menu_bg,
-			Setting::MenuForeground => &settings.menu_fg,
-			Setting::DialogBackground => &settings.dialog_bg,
-			Setting::DialogForeground => &settings.dialog_fg,
-			Setting::Gutter => &settings.gutter,
-			Setting::ScrollbarThumb => &settings.scrollbar_thumb,
-			Setting::ScrollbarTrough => &settings.scrollbar_trough,
-			_ => return None,
-		})
-	}
-
-	fn color_mut(settings: &mut Settings, setting: Setting) -> Option<&mut Auto<[u8; 3]>> {
-		Some(match setting {
-			Setting::Background => &mut settings.bg,
-			Setting::Highlight => &mut settings.highlight,
-			Setting::Focus => &mut settings.focus,
-			Setting::MenuBackground => &mut settings.menu_bg,
-			Setting::MenuForeground => &mut settings.menu_fg,
-			Setting::DialogBackground => &mut settings.dialog_bg,
-			Setting::DialogForeground => &mut settings.dialog_fg,
-			Setting::Gutter => &mut settings.gutter,
-			Setting::ScrollbarThumb => &mut settings.scrollbar_thumb,
-			Setting::ScrollbarTrough => &mut settings.scrollbar_trough,
-			_ => return None,
-		})
-	}
-
-	fn text_of(settings: &Settings, setting: Setting) -> Option<&Auto<String>> {
-		Some(match setting {
-			Setting::FontFamily => &settings.font_family,
-			Setting::OpenCommand => &settings.hyperlink_open_command,
-			Setting::WallpaperImage => &settings.wallpaper_raw,
-			Setting::WallpaperFolder => &settings.wallpaper_folder_raw,
-			_ => return None,
-		})
-	}
-
-	fn text_mut(settings: &mut Settings, setting: Setting) -> Option<&mut Auto<String>> {
-		Some(match setting {
-			Setting::FontFamily => &mut settings.font_family,
-			Setting::OpenCommand => &mut settings.hyperlink_open_command,
-			Setting::WallpaperImage => &mut settings.wallpaper_raw,
-			Setting::WallpaperFolder => &mut settings.wallpaper_folder_raw,
-			_ => return None,
-		})
-	}
-
-	/// What the setting uses: the value set by hand, else what its rule gives.
-	pub fn value(settings: &Settings, setting: Setting, at: Place<'_>) -> Value {
-		stored(settings, setting).unwrap_or_else(|| rule(settings, setting, at))
-	}
-
-	/// True while nothing is stored, so the rule decides.
-	pub fn automatic(settings: &Settings, setting: Setting) -> bool {
-		match setting {
-			Setting::FontSize => settings.font_size.is_automatic(),
-			Setting::Columns => settings.columns.is_automatic(),
-			Setting::Rows => settings.rows.is_automatic(),
-			_ => text_of(settings, setting).map_or_else(
-				|| color_of(settings, setting).is_none_or(Auto::is_automatic),
-				Auto::is_automatic,
-			),
-		}
-	}
-
-	/// What the setting would use if it were automatic.
-	pub fn rule(settings: &Settings, setting: Setting, at: Place<'_>) -> Value {
-		(row(setting).rule)(settings, at)
-	}
-
-	/// Store a value set by hand, or None for automatic. A value of the wrong
-	/// kind for the setting stores nothing, and so does empty text.
-	pub fn set(settings: &mut Settings, setting: Setting, value: Option<Value>) {
-		if let Some(color) = color_mut(settings, setting) {
-			*color = match value {
-				Some(Value::Color(rgb)) => Auto::by_hand(rgb),
-				_ => Auto::automatic(),
-			};
-			return;
-		}
-		if let Some(text) = text_mut(settings, setting) {
-			*text = match value {
-				Some(Value::Text(t)) if !t.trim().is_empty() => Auto::by_hand(t),
-				_ => Auto::automatic(),
-			};
-			return;
-		}
-		match (setting, value) {
-			(Setting::FontSize, Some(Value::Number(n))) => settings.font_size = Auto::by_hand(n),
-			(Setting::Columns, Some(Value::Count(n))) => settings.columns = Auto::by_hand(n),
-			(Setting::Rows, Some(Value::Count(n))) => settings.rows = Auto::by_hand(n),
-			(Setting::FontSize, _) => settings.font_size = Auto::automatic(),
-			(Setting::Columns, _) => settings.columns = Auto::automatic(),
-			(Setting::Rows, _) => settings.rows = Auto::automatic(),
-			// the colors and the text went above
-			_ => {}
-		}
-	}
-
-	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-	pub enum State {
-		On,
-		Off,
-		Mixed,
-	}
-
-	/// A switch reads on when every member is automatic, off when none is.
-	pub fn group_state(settings: &Settings, group: Group) -> State {
-		let (mut on, mut off) = (false, false);
-		for setting in members(group) {
-			if automatic(settings, setting) {
-				on = true;
-			} else {
-				off = true;
-			}
-		}
-		match (on, off) {
-			(true, true) => State::Mixed,
-			(false, true) => State::Off,
-			_ => State::On,
-		}
-	}
-
-	/// A switch turned on puts every member back to automatic. Turned off, each
-	/// stores what it shows, so nothing on screen changes.
-	pub fn set_group(settings: &mut Settings, group: Group, on: bool, at: Place<'_>) {
-		for setting in members(group).collect::<Vec<_>>() {
-			let keep = (!on).then(|| value(settings, setting, at));
-			set(settings, setting, keep);
-		}
-	}
-
-	pub fn font_family(settings: &Settings) -> String {
-		match value(settings, Setting::FontFamily, Place::default()) {
-			Value::Text(text) => text,
-			other => other.to_string(),
-		}
-	}
-
-	pub fn font_size(settings: &Settings) -> f32 {
-		number(&value(settings, Setting::FontSize, Place::default()))
-	}
-
-	/// A color setting's value. Cheap enough per cell: the rule reads the
-	/// palette `retheme` keeps.
-	pub fn color(settings: &Settings, setting: Setting) -> [u8; 3] {
-		match value(settings, setting, Place::default()) {
-			Value::Color(rgb) => rgb,
-			_ => [0, 0, 0],
-		}
-	}
-
-	/// A text setting's value.
-	pub fn text(settings: &Settings, setting: Setting) -> String {
-		match value(settings, setting, Place::default()) {
-			Value::Text(text) => text,
-			other => other.to_string(),
-		}
-	}
-
-	/// The grid a window opens at, on `monitor` where one is known.
-	pub fn grid(settings: &Settings, monitor: Option<&str>) -> (usize, usize) {
-		let at = Place { monitor };
-		let count = |setting| match value(settings, setting, at) {
-			Value::Count(n) => n,
-			other => number(&other).round().max(1.0) as usize,
-		};
-		(count(Setting::Columns), count(Setting::Rows))
-	}
-
-	/// A value read as a number. Text that is not one reads as zero.
-	pub fn number(value: &Value) -> f32 {
-		match value {
-			Value::Number(n) => *n,
-			Value::Count(n) => *n as f32,
-			Value::Text(text) => text.trim().parse().unwrap_or(0.0),
-			Value::Color(_) => 0.0,
-		}
-	}
-
-	/// Whether the last size is kept at all: true unless the size is set by hand
-	/// on both counts. The font zoom and the sizes per monitor go with it.
-	pub fn keeps_size(settings: &Settings) -> bool {
-		group_state(settings, Group::WindowSize) != State::Off
-	}
-}
+/// What File or folder shows when there is no picture to find.
+pub const BUILT_IN_PICTURE: &str = "(built-in picture)";
 
 fn store() -> &'static RwLock<Arc<Settings>> {
 	static S: OnceLock<RwLock<Arc<Settings>>> = OnceLock::new();
-	S.get_or_init(|| {
-		let mut settings = load();
-		crate::profile::apply(&mut settings);
-		crate::autotheme::apply(&mut settings);
-		RwLock::new(Arc::new(settings))
-	})
+	S.get_or_init(|| RwLock::new(Arc::new(load())))
 }
 
 // Live OS dark/light bit (winit `Window::theme()`), used only when theme_mode = "system".
@@ -1426,10 +1180,54 @@ pub fn theme_palette(settings: &Settings) -> crate::theme::Palette {
 	)
 }
 
-/// Bring `theme_palette` in line with the theme, the mode and the desktop, after
-/// any of them changed. The automatic colors follow from it.
+/// Bring `theme_palette` and the ANSI colors in line with the theme, the mode
+/// and the desktop. Custom has no palette of its own, so it takes the first
+/// built-in's ANSI colors.
 pub fn retheme(settings: &mut Settings) {
 	settings.theme_palette = theme_palette(settings);
+	settings.ansi = settings.theme_palette.ansi;
+}
+
+/// The picture and the rotation folder that the image and folder settings come
+/// to, found the way the loader finds them. Only when either setting changed,
+/// since a rotation sets the picture on screen and a fill must not undo it.
+pub fn rewallpaper(settings: &mut Settings, was: (&str, &str)) {
+	if was
+		!= (
+			settings.wallpaper_raw.as_str(),
+			settings.wallpaper_folder_raw.as_str(),
+		) {
+		find_wallpaper(settings);
+	}
+}
+
+// The same with nothing to compare against, as a load needs.
+fn find_wallpaper(settings: &mut Settings) {
+	// A pinned wallpaper is a deliberate choice, so it suppresses the
+	// auto-detected rotation folder; without one, a stocked wallpapers/ dir
+	// rotates by itself.
+	let pinned = picture_pinned(settings);
+	(settings.wallpaper_folder, settings.wallpaper_folder_auto) =
+		rotation_folder_for(&settings.wallpaper_folder_raw, pinned);
+	let rotating = settings.wallpaper_enabled
+		&& settings.wallpaper_rotate_enabled
+		&& settings.wallpaper_folder.is_some();
+	settings.wallpaper = if pinned {
+		resolve_wallpaper(Some(settings.wallpaper_raw.clone()))
+	} else if rotating {
+		// the first rotation pick goes on screen
+		None
+	} else {
+		Some(PathBuf::from(&settings.found_picture)).filter(|_| {
+			!settings.found_picture.is_empty() && settings.found_picture != BUILT_IN_PICTURE
+		})
+	};
+}
+
+/// File or folder names a picture, by hand or on the command line.
+pub fn picture_pinned(settings: &Settings) -> bool {
+	let id = crate::ui_spec::Key::BgImage.name();
+	settings.model.values.own.contains_key(id) || settings.model.values.held.contains_key(id)
 }
 
 /// On an OS dark/light change (System mode only): recompute the theme palette and
@@ -1440,28 +1238,10 @@ pub fn reapply_for_os(dark: bool) -> bool {
 	if prev == dark || current.theme_mode != crate::theme::Mode::System {
 		return false;
 	}
-	let palette = |dark| {
-		crate::theme::resolve_in(
-			&current.user_themes,
-			&current.theme,
-			current.theme_mode,
-			dark,
-		)
-	};
-	let (was, pal) = (palette(prev), palette(dark));
-	// A color that is not the theme's own is an override, from the file, the
-	// command line or the dialog, so it stays put.
-	let follow = |live: &mut [u8; 3], was: [u8; 3], now: [u8; 3]| {
-		if *live == was {
-			*live = now;
-		}
-	};
+	// a theme's colors follow the mode through its preset, and a color changed
+	// by hand stays put
 	let mut new = (*current).clone();
-	follow(&mut new.fg, was.fg, pal.fg);
-	follow(&mut new.cursor, was.cursor, pal.cursor);
-	// the automatic colors follow the palette, and ones set by hand stay put
-	retheme(&mut new);
-	new.ansi = pal.ansi;
+	crate::fields::fill(&mut new, None);
 	update(new);
 	true
 }
@@ -1803,15 +1583,10 @@ fn parse_pairs(text: &str) -> Vec<(char, char)> {
 		.collect()
 }
 
-/// Replace the live settings (used by the settings dialog's Apply/OK). The
-/// performance profile goes on here, so what `settings()` answers is what is
-/// drawn, and `persist` takes it back off before anything reaches the file.
-pub fn update(mut new: Settings) {
-	retheme(&mut new);
-	crate::profile::apply(&mut new);
-	// After the profile: one that turns the wallpaper off leaves nothing to
-	// derive from, and the derivation reads `wallpaper_enabled`.
-	crate::autotheme::apply(&mut new);
+/// Replace the live settings (used by the settings dialog's Apply/OK). A change
+/// to the model, or to what a rule reads such as a display step or a new
+/// wallpaper, is filled in by whoever made it (`fields::fill`).
+pub fn update(new: Settings) {
 	*crate::locks::write(store()) = Arc::new(new);
 }
 
@@ -1825,17 +1600,19 @@ pub fn reload_from_disk() -> Settings {
 /// The live state a reload has to carry across: what is never in the file and
 /// lasts the session. A reload re-reads the file, and the file never held these,
 /// so taking the fresh copy as-is would lift a remote screen's profile or the
-/// display watch's step on a menu command.
+/// display watch's step on a menu command. The command line's own values are
+/// put back by the caller, and a wallpaper named since launch only while the
+/// session holds it.
 pub fn keep_session(live: &Settings, reloaded: &mut Settings, wallpaper_locked: bool) {
-	reloaded.remote_override = live.remote_override;
+	reloaded.model.values.session = live.model.values.session.clone();
 	reloaded.stepped_profile = live.stepped_profile;
 	// The picture on screen did not change, so what it is worth to a derived
 	// text color did not either.
 	reloaded.wallpaper_summary = live.wallpaper_summary;
 	if wallpaper_locked {
 		take_wallpaper(live, reloaded);
-		reloaded.wallpaper_enabled |= reloaded.wallpaper.is_some();
 	}
+	crate::fields::fill(reloaded, None);
 }
 
 /// A wallpaper named for the session, at launch (`--wallpaper-file`) or while
@@ -1844,10 +1621,21 @@ pub fn keep_session(live: &Settings, reloaded: &mut Settings, wallpaper_locked: 
 /// `update` afterwards, so a performance profile that turns the wallpaper off
 /// still wins for either one.
 pub fn name_wallpaper(settings: &mut Settings, image: Option<PathBuf>) {
-	settings.wallpaper_raw = image.as_ref().map_or_else(auto::Auto::automatic, |path| {
-		auto::Auto::by_hand(path.to_string_lossy().into_owned())
-	});
-	settings.wallpaper_enabled |= image.is_some();
+	use crate::ui_spec::Key;
+	// a profile's own wallpaper switch still wins, so only Custom's is held
+	let custom = crate::profile::current(settings) == crate::profile::Profile::Custom;
+	let model = &mut settings.model;
+	match &image {
+		Some(path) => {
+			let text = path.to_string_lossy().into_owned();
+			model.hold(Key::BgImage.name(), &knobs::Value::Text(text));
+			if custom && !settings.wallpaper_enabled {
+				model.hold(Key::BgEnabled.name(), &knobs::Value::Bool(true));
+			}
+		}
+		None => model.release(Key::BgImage.name()),
+	}
+	crate::fields::fill(settings, None);
 	settings.wallpaper = image;
 }
 
@@ -1863,14 +1651,29 @@ pub fn keep_wallpaper_on_apply(
 	if wallpaper_locked
 		&& edited.wallpaper_raw == opened.wallpaper_raw
 		&& edited.wallpaper == opened.wallpaper
+		&& edited.wallpaper_enabled == opened.wallpaper_enabled
 	{
 		take_wallpaper(live, opened);
 		take_wallpaper(live, edited);
 	}
 }
 
+// The picture the session named, and the switch the way `name_wallpaper`
+// holds it: on where Custom decides it, so a file with it off does not hide it.
 fn take_wallpaper(live: &Settings, settings: &mut Settings) {
-	settings.wallpaper_raw.clone_from(&live.wallpaper_raw);
+	use crate::ui_spec::Key;
+	let (image, on) = (Key::BgImage.name(), Key::BgEnabled.name());
+	match live.model.values.held.get(image) {
+		Some(v) => settings.model.hold(image, v),
+		None => settings.model.release(image),
+	}
+	settings.model.release(on);
+	crate::fields::fill(settings, None);
+	let custom = crate::profile::current(settings) == crate::profile::Profile::Custom;
+	if live.model.values.held.contains_key(image) && custom && !settings.wallpaper_enabled {
+		settings.model.hold(on, &knobs::Value::Bool(true));
+		crate::fields::fill(settings, None);
+	}
 	settings.wallpaper.clone_from(&live.wallpaper);
 }
 
@@ -1881,9 +1684,9 @@ fn take_wallpaper(live: &Settings, settings: &mut Settings) {
 /// from what those write too.
 pub fn keep_session_on_apply(live: &Settings, opened: &Settings, edited: &mut Settings) {
 	let picked = edited.performance_profile != opened.performance_profile
-		|| edited.remote_override != opened.remote_override;
+		|| edited.model.values.session != opened.model.values.session;
 	if !picked {
-		edited.remote_override = live.remote_override;
+		edited.model.values.session = live.model.values.session.clone();
 	}
 	if !picked
 		&& edited.performance_automatic == opened.performance_automatic
@@ -1894,6 +1697,7 @@ pub fn keep_session_on_apply(live: &Settings, opened: &Settings, edited: &mut Se
 	// The dialog's copy dates from when it opened, and a rotation since then has
 	// changed the picture. The summary is never something the dialog edits.
 	edited.wallpaper_summary = live.wallpaper_summary;
+	crate::fields::fill(edited, None);
 }
 
 // Read the config as an editable document. The parser is forgiving (a bad line
@@ -2667,17 +2471,6 @@ fn unwritable(doc: &shcl::Document, path: &str, applied: bool) {
 	}
 }
 
-// Auto settings put back to automatic. Automatic is no line, so there is no
-// value to write, and without naming them here the old line stays in the file
-// and the hand-set value comes back next launch.
-fn cleared_keys(orig: &Settings, settings: &Settings) -> Vec<&'static str> {
-	auto::TABLE
-		.iter()
-		.filter(|row| auto::automatic(settings, row.setting) && !auto::automatic(orig, row.setting))
-		.map(|row| row.path)
-		.collect()
-}
-
 // NaN is never equal to itself, so a plain `!=` reads a NaN on both sides as a
 // change and writes it over the value in the file. Every float setting is
 // compared through this. A NaN only ever arrived from the command line, which
@@ -2714,106 +2507,16 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 			return false;
 		}
 	};
-	// Both sides diff as the user's own values. A live copy carries a profile's
-	// values over them, and those must never reach the file.
-	let mut own = (orig.clone(), edited.clone());
-	crate::profile::unapply(&mut own.0);
-	crate::profile::unapply(&mut own.1);
-	crate::autotheme::unapply(&mut own.0);
-	crate::autotheme::unapply(&mut own.1);
-	let (orig, edited) = (&own.0, &own.1);
 	// round f32 -> a clean decimal so persisted floats aren't 0.2000000029...
 	let rounded = |v: f32| (v as f64 * 1000.0).round() / 1000.0;
 
-	if edited.theme != orig.theme {
-		doc.put_string("theme", edited.theme.as_str());
-	}
-	if edited.theme_mode != orig.theme_mode {
-		doc.put_string("theme_mode", edited.theme_mode.key());
-	}
-	if edited.performance_automatic != orig.performance_automatic {
-		doc.put_bool("performance.automatic", edited.performance_automatic);
-	}
-	if edited.performance_profile != orig.performance_profile {
-		doc.put_string("performance.profile", edited.performance_profile.key());
-	}
-	if edited.performance_check_hardware != orig.performance_check_hardware {
-		doc.put_bool(
-			"performance.check_hardware",
-			edited.performance_check_hardware,
-		);
-	}
-	if edited.performance_check_next_run != orig.performance_check_next_run {
-		doc.put_bool(
-			"performance.check_next_run",
-			edited.performance_check_next_run,
-		);
-	}
-	if edited.rated_hardware != orig.rated_hardware {
-		doc.put_string("performance.rated_hardware", edited.rated_hardware.as_str());
-	}
+	persist_state(orig, edited);
 	write_user_themes(&mut doc, &orig.user_themes, &edited.user_themes);
 	write_shells(&mut doc, &orig.shells, &edited.shells);
 
-	// an auto setting set by hand writes its value; one gone back to automatic
-	// is commented out below (cleared_keys)
-	for row in auto::TABLE {
-		if auto::automatic(edited, row.setting) {
-			continue;
-		}
-		let now = auto::value(edited, row.setting, auto::Place::default());
-		let was = (!auto::automatic(orig, row.setting))
-			.then(|| auto::value(orig, row.setting, auto::Place::default()));
-		match now {
-			auto::Value::Text(text) if was != Some(auto::Value::Text(text.clone())) => {
-				doc.put_string(row.path, &text);
-			}
-			auto::Value::Number(n) => {
-				if !matches!(was, Some(auto::Value::Number(old)) if same_f32(n, old)) {
-					doc.put_float(row.path, rounded(n));
-				}
-			}
-			auto::Value::Count(n) if was != Some(auto::Value::Count(n)) => {
-				doc.put_int(row.path, n as i64);
-			}
-			auto::Value::Color(rgb) if was != Some(auto::Value::Color(rgb)) => {
-				doc.put_string(row.path, &format_hex(rgb));
-			}
-			_ => {}
-		}
-	}
-	if !same_f32(edited.line_height_scale, orig.line_height_scale) {
-		doc.put_float("font.line_height_scale", rounded(edited.line_height_scale));
-	}
+	let (revert, disable) = write_model(&mut doc, orig, edited);
 	if edited.scrollback != orig.scrollback {
 		doc.put_int("scroll.scrollback", edited.scrollback as i64);
-	}
-	if edited.scroll_smooth != orig.scroll_smooth {
-		doc.put_bool("scroll.smooth", edited.scroll_smooth);
-	}
-	if !same_f32(edited.scroll_ease_in_ms, orig.scroll_ease_in_ms) {
-		doc.put_float("scroll.ease_in_ms", rounded(edited.scroll_ease_in_ms));
-	}
-	if !same_f32(edited.scroll_ramp_up_ms, orig.scroll_ramp_up_ms) {
-		doc.put_float("scroll.ramp_up_ms", rounded(edited.scroll_ramp_up_ms));
-	}
-	if !same_f32(
-		edited.scroll_single_screen_tau_ms,
-		orig.scroll_single_screen_tau_ms,
-	) {
-		doc.put_float(
-			"scroll.single_screen_tau_ms",
-			rounded(edited.scroll_single_screen_tau_ms),
-		);
-	}
-	if !same_f32(edited.scroll_ramp_down_ms, orig.scroll_ramp_down_ms) {
-		doc.put_float("scroll.ramp_down_ms", rounded(edited.scroll_ramp_down_ms));
-	}
-	if !same_f32(edited.scroll_ease_out_ms, orig.scroll_ease_out_ms) {
-		doc.put_float("scroll.ease_out_ms", rounded(edited.scroll_ease_out_ms));
-	}
-	if !same_f32(edited.wheel_lines, orig.wheel_lines) {
-		doc.put_float("scroll.wheel_lines", rounded(edited.wheel_lines));
 	}
 	if !same_f32(edited.alt_scroll_lines, orig.alt_scroll_lines) {
 		doc.put_float("scroll.alt_scroll_lines", rounded(edited.alt_scroll_lines));
@@ -2824,131 +2527,17 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 			rounded(edited.output_ease_lines),
 		);
 	}
-	if edited.scrollbar != orig.scrollbar {
-		doc.put_bool("scroll.scrollbar.enabled", edited.scrollbar);
-	}
-	if !same_f32(edited.scrollbar_thickness, orig.scrollbar_thickness) {
-		doc.put_float(
-			"scroll.scrollbar.thickness",
-			rounded(edited.scrollbar_thickness),
-		);
-	}
-	if edited.scrollbar_auto_hide != orig.scrollbar_auto_hide {
-		doc.put_bool("scroll.scrollbar.auto_hide", edited.scrollbar_auto_hide);
-	}
-	if edited.minimap != orig.minimap {
-		doc.put_bool("scroll.minimap.enabled", edited.minimap);
-	}
-	if !same_f32(edited.minimap_width, orig.minimap_width) {
-		doc.put_float("scroll.minimap.width", rounded(edited.minimap_width));
-	}
 	if edited.minimap_tui_whitelist != orig.minimap_tui_whitelist {
 		doc.put_string(
 			"scroll.minimap.tui_process_whitelist",
 			&edited.minimap_tui_whitelist,
 		);
 	}
-	if !same_f32(edited.margin, orig.margin) {
-		doc.put_float("window.margin", rounded(edited.margin));
-	}
-	if !same_f32(edited.opacity, orig.opacity) {
-		doc.put_float("transparency.opacity", rounded(edited.opacity));
-	}
-	if edited.transparent_background != orig.transparent_background {
-		doc.put_bool("transparency.enabled", edited.transparent_background);
-	}
-	if edited.transparent_background_blur != orig.transparent_background_blur {
-		doc.put_bool(
-			"transparency.blur_behind",
-			edited.transparent_background_blur,
-		);
-	}
-	if !same_f32(edited.wallpaper_opacity, orig.wallpaper_opacity) {
-		doc.put_float("wallpaper.opacity", rounded(edited.wallpaper_opacity));
-	}
 	if !same_f32(edited.wallpaper_even, orig.wallpaper_even) {
 		doc.put_float("wallpaper.even_visibility", rounded(edited.wallpaper_even));
 	}
-	if edited.wallpaper_enabled != orig.wallpaper_enabled {
-		doc.put_bool("wallpaper.enabled", edited.wallpaper_enabled);
-	}
-	if edited.wallpaper_rotate_enabled != orig.wallpaper_rotate_enabled {
-		doc.put_bool("wallpaper.rotate.enabled", edited.wallpaper_rotate_enabled);
-	}
-	if edited.wallpaper_default_fit != orig.wallpaper_default_fit {
-		doc.put_string(
-			"wallpaper.default_fit",
-			match edited.wallpaper_default_fit {
-				Fit::Zoom => "zoom",
-				Fit::Stretch => "stretch",
-			},
-		);
-	}
-	if edited.wallpaper_honor_xmp != orig.wallpaper_honor_xmp {
-		doc.put_bool("wallpaper.honor_xmp", edited.wallpaper_honor_xmp);
-	}
-	if edited.wallpaper_honor_xmp_look != orig.wallpaper_honor_xmp_look {
-		doc.put_bool("wallpaper.honor_xmp_look", edited.wallpaper_honor_xmp_look);
-	}
-	if !same_f32(edited.wallpaper_blur, orig.wallpaper_blur) {
-		doc.put_float("wallpaper.blur", rounded(edited.wallpaper_blur));
-	}
-	if edited.wallpaper_contrast_mask != orig.wallpaper_contrast_mask {
-		doc.put_bool(
-			"wallpaper.contrast_mask.enabled",
-			edited.wallpaper_contrast_mask,
-		);
-	}
-	if !same_f32(
-		edited.wallpaper_contrast_mask_size,
-		orig.wallpaper_contrast_mask_size,
-	) {
-		doc.put_float(
-			"wallpaper.contrast_mask.size",
-			rounded(edited.wallpaper_contrast_mask_size),
-		);
-	}
-	if !same_f32(
-		edited.wallpaper_contrast_mask_strength,
-		orig.wallpaper_contrast_mask_strength,
-	) {
-		doc.put_float(
-			"wallpaper.contrast_mask.strength",
-			rounded(edited.wallpaper_contrast_mask_strength),
-		);
-	}
-	if !same_f32(
-		edited.wallpaper_contrast_mask_auto,
-		orig.wallpaper_contrast_mask_auto,
-	) {
-		doc.put_float(
-			"wallpaper.contrast_mask.auto",
-			rounded(edited.wallpaper_contrast_mask_auto),
-		);
-	}
-	if edited.text_scrim != orig.text_scrim {
-		doc.put_bool("text.scrim.enabled", edited.text_scrim);
-	}
-	if !same_f32(edited.text_scrim_radius, orig.text_scrim_radius) {
-		doc.put_float("text.scrim.radius", rounded(edited.text_scrim_radius));
-	}
-	if !same_f32(edited.text_scrim_softness, orig.text_scrim_softness) {
-		doc.put_float("text.scrim.softness", rounded(edited.text_scrim_softness));
-	}
-	if !same_f32(edited.text_scrim_strength, orig.text_scrim_strength) {
-		doc.put_float("text.scrim.strength", rounded(edited.text_scrim_strength));
-	}
-	if !same_f32(edited.text_outline, orig.text_outline) {
-		doc.put_float("text.outline", rounded(edited.text_outline));
-	}
 	if !same_f32(edited.text_dark_on_light, orig.text_dark_on_light) {
 		doc.put_float("text.dark_on_light", rounded(edited.text_dark_on_light));
-	}
-	if edited.text_scrim_ramp != orig.text_scrim_ramp {
-		doc.put_string("text.scrim.ramp", edited.text_scrim_ramp.key());
-	}
-	if edited.text_scrim_function != orig.text_scrim_function {
-		doc.put_string("text.scrim.function", edited.text_scrim_function.key());
 	}
 	if edited.text_scrim_regular_weight != orig.text_scrim_regular_weight {
 		doc.put_bool(
@@ -2956,120 +2545,24 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 			edited.text_scrim_regular_weight,
 		);
 	}
-	if !same_f32(edited.text_min_contrast, orig.text_min_contrast) {
-		doc.put_float("text.min_contrast", rounded(edited.text_min_contrast));
-	}
 	if edited.color_emoji != orig.color_emoji {
 		doc.put_bool("text.color_emoji", edited.color_emoji);
 	}
 	if edited.embolden_inverse != orig.embolden_inverse {
 		doc.put_bool("text.embolden_inverse", edited.embolden_inverse);
 	}
-	if edited.cursor_scrim != orig.cursor_scrim {
-		doc.put_bool("cursor.scrim", edited.cursor_scrim);
-	}
-	if edited.cursor_outline != orig.cursor_outline {
-		doc.put_bool("cursor.outline", edited.cursor_outline);
-	}
-	if !same_f32(edited.cursor_size_height, orig.cursor_size_height) {
-		doc.put_float("cursor.size.height", rounded(edited.cursor_size_height));
-	}
-	if !same_f32(edited.cursor_size_width, orig.cursor_size_width) {
-		doc.put_float("cursor.size.width", rounded(edited.cursor_size_width));
-	}
 	// A file can still say "none" for no blink. Turning the blink on has to
 	// replace that word, or the next load reads it as off again.
-	let animation_none = doc
-		.get_string("cursor.animation")
-		.is_ok_and(|word| animation_is_none(&word));
-	if edited.cursor_blink != orig.cursor_blink {
-		doc.put_bool("cursor.blink", edited.cursor_blink);
-	}
-	if edited.cursor_animation != orig.cursor_animation || (edited.cursor_blink && animation_none) {
+	if edited.cursor_blink
+		&& doc
+			.get_string("cursor.animation")
+			.is_ok_and(|word| animation_is_none(&word))
+	{
 		doc.put_string("cursor.animation", edited.cursor_animation.key());
-	}
-	if !same_f32(
-		edited.cursor_animation_resume_s,
-		orig.cursor_animation_resume_s,
-	) {
-		doc.put_float(
-			"cursor.animation_resume_s",
-			rounded(edited.cursor_animation_resume_s),
-		);
-	}
-	if !same_f32(edited.cursor_blink_rate_s, orig.cursor_blink_rate_s) {
-		doc.put_float("cursor.blink_rate_s", rounded(edited.cursor_blink_rate_s));
-	}
-	if edited.remember_per_monitor != orig.remember_per_monitor {
-		doc.put_bool("window.remember_per_monitor", edited.remember_per_monitor);
-	}
-	if edited.remember_maximized != orig.remember_maximized {
-		doc.put_bool("window.remember_maximized", edited.remember_maximized);
 	}
 	if edited.hide_single_tab != orig.hide_single_tab {
 		doc.put_bool("window.hide_single_tab", edited.hide_single_tab);
 	}
-	if edited.new_tab_beside != orig.new_tab_beside {
-		doc.put_bool("window.new_tab_next_to_current", edited.new_tab_beside);
-	}
-	if edited.tab_shows_shell != orig.tab_shows_shell {
-		doc.put_bool("window.tab_shows_shell", edited.tab_shows_shell);
-	}
-	if edited.tab_shows_program != orig.tab_shows_program {
-		doc.put_bool("window.tab_shows_program", edited.tab_shows_program);
-	}
-	if edited.tab_shows_title != orig.tab_shows_title {
-		doc.put_bool("window.tab_shows_title", edited.tab_shows_title);
-	}
-	if edited.tab_shows_directory != orig.tab_shows_directory {
-		doc.put_bool("window.tab_shows_directory", edited.tab_shows_directory);
-	}
-	if edited.title_shows_tab != orig.title_shows_tab {
-		doc.put_bool("window.title_shows_tab", edited.title_shows_tab);
-	}
-	if edited.idle_release != orig.idle_release {
-		doc.put_bool("window.idle_release", edited.idle_release);
-	}
-	if edited.idle_release_hidden_min != orig.idle_release_hidden_min {
-		doc.put_int(
-			"window.idle_release_hidden_min",
-			edited.idle_release_hidden_min as i64,
-		);
-	}
-	if edited.idle_release_min != orig.idle_release_min {
-		doc.put_int("window.idle_release_min", edited.idle_release_min as i64);
-	}
-	if edited.software_rendering != orig.software_rendering {
-		doc.put_bool("window.software_rendering", edited.software_rendering);
-	}
-	if !same_f32(edited.tab_regular_pct, orig.tab_regular_pct) {
-		doc.put_float(
-			"window.tab_regular_width_pct",
-			rounded(edited.tab_regular_pct),
-		);
-	}
-	if !same_f32(edited.tab_max_pct, orig.tab_max_pct) {
-		doc.put_float("window.tab_max_width_pct", rounded(edited.tab_max_pct));
-	}
-	if edited.remembered_columns != orig.remembered_columns {
-		doc.put_int(
-			"window.remembered_columns",
-			edited.remembered_columns as i64,
-		);
-	}
-	if edited.remembered_rows != orig.remembered_rows {
-		doc.put_int("window.remembered_rows", edited.remembered_rows as i64);
-	}
-	if edited.remembered_maximized != orig.remembered_maximized {
-		doc.put_bool("window.remembered_maximized", edited.remembered_maximized);
-	}
-	if edited.remembered_font_zoom != orig.remembered_font_zoom {
-		doc.put_int(
-			"window.remembered_font_zoom",
-			i64::from(edited.remembered_font_zoom),
-		);
-	}
-	write_monitor_sizes(&mut doc, &orig.monitor_sizes, &edited.monitor_sizes);
 	if edited.word_separators != orig.word_separators {
 		doc.put_string("selection.word_separators", &edited.word_separators);
 	}
@@ -3078,21 +2571,6 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	}
 	if edited.command_line != orig.command_line {
 		doc.put_string("shell.command_line", &edited.command_line);
-	}
-	if edited.startup_directory != orig.startup_directory {
-		doc.put_string("shell.startup_directory", &edited.startup_directory);
-	}
-	if edited.shell_integration != orig.shell_integration {
-		doc.put_bool("shell.integration", edited.shell_integration);
-	}
-	if edited.bash_prompt != orig.bash_prompt {
-		doc.put_bool("shell.bash_prompt", edited.bash_prompt);
-	}
-	if edited.copy_on_select != orig.copy_on_select {
-		doc.put_bool("shell.copy_on_select", edited.copy_on_select);
-	}
-	if edited.hyperlinks != orig.hyperlinks {
-		doc.put_bool("hyperlinks.enabled", edited.hyperlinks);
 	}
 	if edited.keys != orig.keys {
 		write_keys(&mut doc, &orig.keys, &edited.keys);
@@ -3104,24 +2582,91 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 		);
 	}
 
-	if edited.colors_from_wallpaper != orig.colors_from_wallpaper {
-		doc.put_bool("colors.from_wallpaper", edited.colors_from_wallpaper);
-	}
-	let mut set_color = |key: &str, color: [u8; 3], orig_color: [u8; 3]| {
-		if color != orig_color {
-			doc.put_string(&format!("colors.{key}"), &format_hex(color));
-		}
-	};
-	// the other theme colors are auto settings, written with the rest above
-	set_color("foreground", edited.fg, orig.fg);
-	set_color("cursor", edited.cursor, orig.cursor);
-
-	let cleared = cleared_keys(orig, edited);
 	let wrote = write_doc(&path, &doc);
-	if wrote && !cleared.is_empty() {
-		disable_keys(&cleared);
+	if wrote {
+		revert_keys(&revert.iter().map(String::as_str).collect::<Vec<_>>());
+		disable_keys(&disable.iter().map(String::as_str).collect::<Vec<_>>());
 	}
 	wrote
+}
+
+const KEPT_NOTE: &str = "Kept by SilkTerm, so values can come back later. See Settings.";
+
+// The settings knobs keeps, from the model's lines. A line whose value
+// changed is written, one whose value went is answered to put back the way the
+// template has it, and the `kept` block is written whole when it differs. A
+// value set aside under a switch lives in `kept`, so its normal line is
+// answered to comment out, even one the file had before the switch went on.
+fn write_model(
+	doc: &mut shcl::Document,
+	orig: &Settings,
+	edited: &Settings,
+) -> (Vec<String>, Vec<String>) {
+	let was = orig.model.lines(&crate::fields::Env::new(orig, None));
+	let now = edited.model.lines(&crate::fields::Env::new(edited, None));
+	let find = |lines: &[(String, knobs::Value)], path: &str| {
+		lines
+			.iter()
+			.find(|(p, _)| p == path)
+			.map(|(_, v)| v.clone())
+	};
+	let aside = |lines: &knobs::Lines, path: &str| {
+		lines
+			.kept
+			.iter()
+			.any(|(p, _)| p.strip_prefix("kept.set_aside.") == Some(path))
+	};
+	let (mut revert, mut disable) = (Vec::new(), Vec::new());
+	let rewrite_kept = was.kept != now.kept;
+	for s in &crate::fields::spec().settings {
+		let path = s.path.as_str();
+		match (find(&was.config, path), find(&now.config, path)) {
+			// a line that already says it is left as typed
+			(before, Some(v)) => {
+				if before.as_ref() != Some(&v) && !holds_value(doc, path, &v) {
+					put_value(doc, path, &v);
+				}
+			}
+			(Some(_), None) if aside(&now, path) => disable.push(path.to_string()),
+			(Some(_), None) => revert.push(path.to_string()),
+			// A line loads ahead of its set-aside copy, so it goes once the kept
+			// block is written. Where that block stays as it is, the line is how
+			// the file holds the value, and it reads back the same.
+			(None, None) => {
+				if rewrite_kept && (aside(&now, path) || aside(&was, path)) && doc.exists(path) {
+					disable.push(path.to_string());
+				}
+			}
+		}
+	}
+	if rewrite_kept {
+		doc.remove("kept");
+		for (path, v) in &now.kept {
+			put_value(doc, path, v);
+		}
+		if !now.kept.is_empty() {
+			let _ = doc.set_comment("kept", KEPT_NOTE);
+		}
+	}
+	(revert, disable)
+}
+
+fn holds_value(doc: &shcl::Document, path: &str, v: &knobs::Value) -> bool {
+	match v {
+		knobs::Value::Bool(b) => doc.get_bool(path) == Ok(*b),
+		knobs::Value::Int(i) => doc.get_int(path) == Ok(*i),
+		knobs::Value::Float(f) => doc.get_float(path).is_ok_and(|x| (x - f).abs() < 1e-9),
+		knobs::Value::Text(text) => doc.get_string(path).is_ok_and(|s| s == *text),
+	}
+}
+
+fn put_value(doc: &mut shcl::Document, path: &str, v: &knobs::Value) {
+	match v {
+		knobs::Value::Bool(b) => doc.put_bool(path, *b),
+		knobs::Value::Int(i) => doc.put_int(path, *i),
+		knobs::Value::Float(f) => doc.put_float(path, (f * 1000.0).round() / 1000.0),
+		knobs::Value::Text(text) => doc.put_string(path, text),
+	}
 }
 
 pub fn format_hex(c: [u8; 3]) -> String {
@@ -3183,6 +2728,8 @@ pub fn luma(c: [u8; 3]) -> f32 {
 
 #[derive(Default)]
 struct RawConfig {
+	use_system_font: Option<bool>,
+	use_system_font_size: Option<bool>,
 	font_family: Option<String>,
 	font_size: Option<f32>,
 	line_height_scale: Option<f32>,
@@ -3248,6 +2795,7 @@ struct RawConfig {
 	cursor_animation_resume_s: Option<f32>,
 	cursor_animation_idle_stop_s: Option<f32>,
 	cursor_blink_rate_s: Option<f32>,
+	remember_size: Option<bool>,
 	columns: Option<usize>,
 	rows: Option<usize>,
 	remember_per_monitor: Option<bool>,
@@ -3344,25 +2892,47 @@ fn load() -> Settings {
 	repair_wallpaper_heading(&path);
 	convert_legacy_config(&path);
 	adopt_default_shell(&path);
+	move_state_out(&path);
 	migrate_config(&path);
 	backfill_config(&path);
 	refresh_shcl_banner(&path);
-	let raw = match read_settings(&path) {
+	let (raw, doc) = match read_settings(&path) {
 		// The writes above defer when the file looks open elsewhere, so parse the
 		// migrated text rather than what is on disk: a renamed key must never be
 		// read under its old spelling, which matters most where a rename hands an
 		// old name to a new setting (colors.focus).
 		Ok(text) => {
-			let (raw, said) = read_config_text(&loaded_text(&text), &path);
+			let text = loaded_text(&text);
+			let (raw, said) = read_config_text(&text, &path);
 			for line in &said {
 				eprintln!("{line}");
 			}
 			remember_launch_messages(&path, said);
-			raw
+			(raw, shcl::Document::parse(&text))
 		}
-		Err(_) => RawConfig::default(),
+		Err(_) => (RawConfig::default(), shcl::Document::new()),
 	};
-	resolve(raw)
+	settled(resolve(raw), &doc)
+}
+
+// Settings read from a file, with the model read from the same document and
+// every setting field filled from it.
+fn settled(mut settings: Settings, doc: &shcl::Document) -> Settings {
+	read_state(&mut settings);
+	settings.model = crate::fields::load(doc);
+	settings.found_picture = resolve_wallpaper(None).map_or_else(
+		|| {
+			if settings.wallpaper_fallback_builtin {
+				BUILT_IN_PICTURE.to_string()
+			} else {
+				String::new()
+			}
+		},
+		|path| path.to_string_lossy().into_owned(),
+	);
+	crate::fields::fill(&mut settings, None);
+	find_wallpaper(&mut settings);
+	settings
 }
 
 // The values in a config text, and everything a launch prints about it.
@@ -3508,6 +3078,8 @@ fn config_complaints(text: &str) -> Vec<String> {
 			!known.contains(path)
 				&& !path.starts_with("shells.")
 				&& !path.starts_with("themes.")
+				// the program's own block, read by the settings model
+				&& !path.starts_with("kept.")
 				&& !is_monitor_size_path(path)
 		})
 		.cloned()
@@ -3634,6 +3206,8 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		said: std::cell::RefCell::new(said),
 	};
 	let raw = RawConfig {
+		use_system_font: reader.read_bool("font.use_system_family"),
+		use_system_font_size: reader.read_bool("font.use_system_size"),
 		font_family: reader.read_string("font.family"),
 		font_size: reader.read_f32("font.size"),
 		line_height_scale: reader.read_f32("font.line_height_scale"),
@@ -3704,6 +3278,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		cursor_animation_resume_s: reader.read_f32("cursor.animation_resume_s"),
 		cursor_animation_idle_stop_s: reader.read_f32("cursor.animation_idle_stop_s"),
 		cursor_blink_rate_s: reader.read_f32("cursor.blink_rate_s"),
+		remember_size: reader.read_bool("window.remember_size"),
 		columns: reader.read_usize("window.columns"),
 		rows: reader.read_usize("window.rows"),
 		remember_per_monitor: reader.read_bool("window.remember_per_monitor"),
@@ -4111,62 +3686,27 @@ fn resolve(raw: RawConfig) -> Settings {
 	let color = |raw: Option<String>, fallback: [u8; 3]| {
 		raw.as_deref().and_then(parse_hex).unwrap_or(fallback)
 	};
-	// a color line that does not parse is no line, so the color is automatic
-	let auto_color = |raw: Option<String>| {
-		raw.as_deref()
-			.and_then(parse_hex)
-			.map_or_else(auto::Auto::automatic, auto::Auto::by_hand)
-	};
-	let auto_text = |raw: Option<String>| {
-		raw.filter(|text| !text.trim().is_empty())
-			.map_or_else(auto::Auto::automatic, auto::Auto::by_hand)
-	};
-	// A pinned wallpaper is a deliberate choice, so it suppresses the auto-detected
-	// rotation folder; without one, a stocked wallpapers/ dir rotates by itself.
-	let pinned_wallpaper = raw
-		.wallpaper
-		.as_deref()
-		.is_some_and(|value| !value.trim().is_empty());
-	let folder_text = raw
-		.wallpaper_folder
-		.as_deref()
-		.map(str::trim)
-		.filter(|value| !value.is_empty())
-		.unwrap_or(WALLPAPER_DIR_TOKEN)
-		.to_string();
-	let (folder, folder_auto) = rotation_folder_for(&folder_text, pinned_wallpaper);
-	// the usual place written out is the same as no line
-	let wallpaper_folder_raw = if folder_text == WALLPAPER_DIR_TOKEN {
-		auto::Auto::automatic()
-	} else {
-		auto::Auto::by_hand(folder_text)
-	};
 	let wallpaper_enabled = raw.wallpaper_enabled.unwrap_or(d.wallpaper_enabled);
 	let wallpaper_rotate_enabled = raw
 		.wallpaper_rotate_enabled
 		.unwrap_or(d.wallpaper_rotate_enabled);
-	// With rotation live, don't also hunt for a conventional wallpaper file: that
-	// is a run of stats on paths which may be a slow mount, and the first rotation
-	// pick replaces whatever it found anyway.
-	let rotating = wallpaper_enabled && wallpaper_rotate_enabled && folder.is_some();
-	let wallpaper = (pinned_wallpaper || !rotating)
-		.then(|| resolve_wallpaper(raw.wallpaper.clone()))
-		.flatten();
+	// The settings the dialog edits are read again by the model (`fields::load`)
+	// and filled from it, which also works out the picture and the folder. The
+	// reads here are the values the model has to agree with.
 	Settings {
-		// only the convention folder is "auto"; whether it holds anything is the
-		// scan's business, and the scan runs off this thread
-		wallpaper_folder_auto: folder_auto,
-		// an empty or unreadable value is no value, so the setting is automatic
+		wallpaper_folder_auto: false,
+		use_system_font: raw.use_system_font.unwrap_or(d.use_system_font),
+		use_system_font_size: raw.use_system_font_size.unwrap_or(d.use_system_font_size),
 		font_family: raw
 			.font_family
 			.map(|family| family.trim().to_string())
 			.filter(|family| !family.is_empty())
-			.map_or_else(auto::Auto::automatic, auto::Auto::by_hand),
+			.unwrap_or(d.font_family),
 		font_size: raw
 			.font_size
 			.filter(|size| size.is_finite())
-			.map_or_else(auto::Auto::automatic, |size| {
-				auto::Auto::by_hand(size.clamp(limits::FONT_SIZE.0, limits::FONT_SIZE.1))
+			.map_or(d.font_size, |size| {
+				size.clamp(limits::FONT_SIZE.0, limits::FONT_SIZE.1)
 			}),
 		line_height_scale: numf(
 			raw.line_height_scale,
@@ -4229,14 +3769,14 @@ fn resolve(raw: RawConfig) -> Settings {
 			.transparent_background_blur
 			.unwrap_or(d.transparent_background_blur),
 		wallpaper_enabled,
-		wallpaper_raw: auto_text(raw.wallpaper.clone()),
-		wallpaper,
+		wallpaper_raw: raw.wallpaper.unwrap_or_default(),
+		wallpaper: None,
 		wallpaper_fallback_builtin: raw
 			.wallpaper_fallback_builtin
 			.unwrap_or(d.wallpaper_fallback_builtin),
 		wallpaper_rotate_enabled,
-		wallpaper_folder: folder,
-		wallpaper_folder_raw,
+		wallpaper_folder: None,
+		wallpaper_folder_raw: raw.wallpaper_folder.unwrap_or_default(),
 		wallpaper_rotate_random: raw
 			.wallpaper_rotate_random
 			.unwrap_or(d.wallpaper_rotate_random),
@@ -4344,12 +3884,13 @@ fn resolve(raw: RawConfig) -> Settings {
 		wallpaper_honor_xmp_look: raw
 			.wallpaper_honor_xmp_look
 			.unwrap_or(d.wallpaper_honor_xmp_look),
-		columns: raw.columns.map_or_else(auto::Auto::automatic, |n| {
-			auto::Auto::by_hand(n.clamp(limits::GRID.0, limits::GRID.1))
-		}),
-		rows: raw.rows.map_or_else(auto::Auto::automatic, |n| {
-			auto::Auto::by_hand(n.clamp(limits::GRID.0, limits::GRID.1))
-		}),
+		remember_size: raw.remember_size.unwrap_or(d.remember_size),
+		columns: raw
+			.columns
+			.map_or(d.columns, |n| n.clamp(limits::GRID.0, limits::GRID.1)),
+		rows: raw
+			.rows
+			.map_or(d.rows, |n| n.clamp(limits::GRID.0, limits::GRID.1)),
 		remember_per_monitor: raw.remember_per_monitor.unwrap_or(d.remember_per_monitor),
 		remember_maximized: raw.remember_maximized.unwrap_or(d.remember_maximized),
 		hide_single_tab: raw.hide_single_tab.unwrap_or(d.hide_single_tab),
@@ -4389,24 +3930,25 @@ fn resolve(raw: RawConfig) -> Settings {
 		shell_integration: raw.shell_integration.unwrap_or(d.shell_integration),
 		bash_prompt: raw.bash_prompt.unwrap_or(d.bash_prompt),
 		hyperlinks: raw.hyperlinks.unwrap_or(d.hyperlinks),
-		hyperlink_open_command: auto_text(raw.hyperlink_open_command),
-		bg: auto_color(raw.colors.background),
+		hyperlink_open_command: raw.hyperlink_open_command.unwrap_or_default(),
+		bg: color(raw.colors.background, pal.bg),
 		colors_from_wallpaper: raw.colors.from_wallpaper.unwrap_or(d.colors_from_wallpaper),
-		// Session only: the summary arrives with a picture and the shadow holds
-		// the user's own colors while a derived pair is live.
+		// session only: the summary arrives with a picture
 		wallpaper_summary: None,
-		wallpaper_colors: None,
+		wallpaper_derived: None,
+		found_picture: String::new(),
+		model: knobs::Model::new(knobs::Spec::default()),
 		fg: color(raw.colors.foreground, pal.fg),
 		cursor: color(raw.colors.cursor, pal.cursor),
-		highlight: auto_color(raw.colors.highlight),
-		focus: auto_color(raw.colors.focus),
-		menu_bg: auto_color(raw.colors.menu_background),
-		menu_fg: auto_color(raw.colors.menu_foreground),
-		dialog_bg: auto_color(raw.colors.dialog_background),
-		dialog_fg: auto_color(raw.colors.dialog_foreground),
-		gutter: auto_color(raw.colors.gutter),
-		scrollbar_thumb: auto_color(raw.colors.scrollbar_thumb),
-		scrollbar_trough: auto_color(raw.colors.scrollbar_trough),
+		highlight: color(raw.colors.highlight, pal.highlight),
+		focus: color(raw.colors.focus, pal.focus),
+		menu_bg: color(raw.colors.menu_background, pal.menu_bg),
+		menu_fg: color(raw.colors.menu_foreground, pal.menu_fg),
+		dialog_bg: color(raw.colors.dialog_background, pal.dialog_bg),
+		dialog_fg: color(raw.colors.dialog_foreground, pal.dialog_fg),
+		gutter: color(raw.colors.gutter, pal.gutter),
+		scrollbar_thumb: color(raw.colors.scrollbar_thumb, SCROLLBAR_THUMB_DEF),
+		scrollbar_trough: color(raw.colors.scrollbar_trough, SCROLLBAR_TROUGH_DEF),
 		theme_palette: pal,
 		ansi: pal.ansi,
 		theme: theme_name,
@@ -4423,8 +3965,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			.performance_check_next_run
 			.unwrap_or(d.performance_check_next_run),
 		rated_hardware: raw.rated_hardware.unwrap_or_default(),
-		profile_shadow: None,
-		remote_override: false,
+		tested_profile: None,
 		stepped_profile: None,
 		user_themes: raw.user_themes,
 		shells: raw.shells,
@@ -4485,16 +4026,6 @@ pub fn parse_hex(s: &str) -> Option<[u8; 3]> {
 	])
 }
 
-/// Default font size (logical px) when the user hasn't set one: follow the OS's
-/// monospace size if we can detect it, else `FALLBACK_FONT_SIZE`.
-pub fn default_font_size() -> f32 {
-	crate::sysfont::monospace()
-		.size_pt
-		.map(crate::sysfont::px_from_pt)
-		.filter(|px| *px >= 4.0)
-		.unwrap_or(FALLBACK_FONT_SIZE)
-}
-
 // Font zoom (Ctrl+-/+/= hotkeys), in logical px added to the effective size.
 // Kept with the window size while the size is automatic (remembered_window).
 // Process-wide is per-window since each window is its own process. Per-pane
@@ -4532,7 +4063,7 @@ pub fn effective_font_size() -> f32 {
 
 // The size before any zoom.
 fn base_font_size(settings: &Settings) -> f32 {
-	auto::font_size(settings)
+	settings.font_size
 }
 
 /// Resolve the background image: an explicit path (absolute, or a filename
@@ -4891,6 +4422,13 @@ const CONFIG_REMOVED: &[&str] = &[
 	"shell.default",
 	"text.dark_on_light_gamma",
 	"window.idle_release_minimized_min",
+	// in state.shcl since the automatic settings design
+	"window.remembered_columns",
+	"window.remembered_rows",
+	"window.remembered_maximized",
+	"window.remembered_font_zoom",
+	"window.monitors",
+	"performance.rated_hardware",
 ];
 
 // Defaults that changed, as (path, the value that used to be the default). An
@@ -5456,41 +4994,6 @@ fn rebuilt_config_text(text: &str, garbled: &[usize]) -> (String, usize) {
 		}
 		// a shell list carries whole, below
 	}
-	// The retired switches have no line in the template, so they are read here
-	// the way a launch reads them (`absorbed_switches`): a setting a switch
-	// overrode is left out, one it left in use is carried, and one in use with
-	// no line gets the value it had. An explicit font with no switch for it was
-	// always meant as that font, and is carried as it is.
-	if carry
-		.keys()
-		.any(|path| RETIRED_SWITCHES.iter().any(|(switch, _)| switch == path))
-	{
-		let mut flat = String::new();
-		for (path, (_, value)) in &carry {
-			use std::fmt::Write as _;
-			let _ = writeln!(flat, "{path}: {value}");
-		}
-		if let Some(folded) = absorbed_switches(&flat, &|| crate::sysfont::monospace().clone()) {
-			let folded_lines: Vec<&str> = folded.lines().collect();
-			let kept: std::collections::HashMap<String, String> = walk_settings(&folded)
-				.into_iter()
-				.filter_map(|w| match w {
-					WalkLine::Setting {
-						index,
-						path,
-						active: true,
-						header: false,
-					} => line_setting_value(folded_lines[index]).map(|v| (path, v.to_string())),
-					_ => None,
-				})
-				.collect();
-			carry.retain(|path, _| kept.contains_key(path));
-			for (path, value) in kept {
-				carry.entry(path).or_insert((usize::MAX, value));
-			}
-		}
-	}
-
 	let mut out: Vec<String> = default_config().lines().map(str::to_string).collect();
 	for (new_path, (_, value)) in &carry {
 		if !activate_line(&mut out, new_path, value) {
@@ -5688,7 +5191,13 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 			out.push((*line).to_string());
 			continue;
 		};
-		if CONFIG_REMOVED.contains(&path.as_str()) && !keep.contains(&index) {
+		let gone = CONFIG_REMOVED.iter().any(|removed| {
+			path == removed
+				|| path
+					.strip_prefix(removed)
+					.is_some_and(|rest| rest.starts_with('.'))
+		});
+		if gone && !keep.contains(&index) {
 			changed = true;
 			continue; // drop
 		}
@@ -5763,175 +5272,11 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 		}
 		out.push(kept);
 	}
-	let joined = changed.then(|| {
+	changed.then(|| {
 		let mut joined = out.join("\n");
 		joined.push('\n');
 		joined
-	});
-	absorbed_switches(joined.as_deref().unwrap_or(text), &|| {
-		crate::sysfont::monospace().clone()
 	})
-	.or(joined)
-}
-
-// Master switches that became the automatic state of the settings under them
-// (2026100907341818). Each is the switch, the value it had when no line said,
-// and the settings it decided, with the value each took while it was off and
-// unset.
-const RETIRED_SWITCHES: &[(&str, &[(&str, &str)])] = &[
-	("font.use_system_family", &[("font.family", "")]),
-	("font.use_system_size", &[("font.size", "")]),
-	(
-		"window.remember_size",
-		&[("window.columns", "160"), ("window.rows", "48")],
-	),
-];
-
-// A file from before the retired switches loads the same values after them. A
-// setting its switch overrode is commented out, so it is automatic and gets the
-// same value from its rule; one the switch left in use stays set by hand; and
-// one that was in use with no line is written with the value it had. The
-// switch's own lines go. A file with no line for a switch never had one
-// written, so its settings are left as they are. Whether the desktop names a
-// font decided whether the font switches overrode anything, so that way `os`
-// is asked.
-fn absorbed_switches(text: &str, os: &dyn Fn() -> crate::sysfont::Monospace) -> Option<String> {
-	// every launch and every save comes through here, and nearly every file
-	// has none of them
-	if !text.contains("use_system_") && !text.contains("remember_size") {
-		return None;
-	}
-	let lines: Vec<&str> = text.lines().collect();
-	let reads = |index: usize, as_bool: bool| -> Option<String> {
-		let value = strip_trailing_comment(line_setting_value(lines[index])?).trim();
-		let doc = shcl::Document::parse(&format!("v: {value}\n"));
-		if as_bool {
-			doc.get_bool("v").ok().map(|on| on.to_string())
-		} else {
-			doc.get_string("v").ok()
-		}
-	};
-	// per switch: every line for it, and what the last active one says
-	let mut switch_lines: Vec<Vec<usize>> = vec![Vec::new(); RETIRED_SWITCHES.len()];
-	let mut switch_on: Vec<Option<bool>> = vec![None; RETIRED_SWITCHES.len()];
-	let mut member_lines: std::collections::HashMap<&str, Vec<usize>> =
-		std::collections::HashMap::new();
-	for w in walk_settings(text) {
-		let WalkLine::Setting {
-			index,
-			path,
-			active,
-			header: false,
-		} = w
-		else {
-			continue;
-		};
-		if let Some(at) = RETIRED_SWITCHES
-			.iter()
-			.position(|(switch, _)| *switch == path)
-		{
-			switch_lines[at].push(index);
-			if active {
-				switch_on[at] = reads(index, true).map(|on| on == "true").or(switch_on[at]);
-			}
-			continue;
-		}
-		let member = RETIRED_SWITCHES
-			.iter()
-			.flat_map(|(_, members)| members.iter())
-			.find(|(member, _)| *member == path);
-		if let (Some((member, _)), true) = (member, active) {
-			member_lines.entry(member).or_default().push(index);
-		}
-	}
-	if switch_lines.iter().all(Vec::is_empty) {
-		return None;
-	}
-	let has = |member: &str| member_lines.contains_key(member);
-	// What each switch was, as the build that wrote it read a missing line. The
-	// size followed the face; either one followed an explicit value's absence.
-	let face_on = switch_on[0].unwrap_or(!has("font.family"));
-	let size_on = switch_on[1].unwrap_or(face_on && !has("font.size"));
-	let remember_on = switch_on[2].unwrap_or(true);
-	// asked once, and only of a file that has a font switch
-	let os = (!switch_lines[0].is_empty() || !switch_lines[1].is_empty()).then(os);
-	let names = |half: fn(&crate::sysfont::Monospace) -> bool| os.as_ref().is_some_and(half);
-	let shipped_stack = |index: usize| {
-		reads(index, false).is_some_and(|family| {
-			family == DEFAULT_FONT_STACK || SUPERSEDED_FONT_STACKS.contains(&family.as_str())
-		})
-	};
-	let mut comment_out: std::collections::HashSet<usize> = std::collections::HashSet::new();
-	let mut written: std::collections::HashMap<usize, Vec<String>> =
-		std::collections::HashMap::new();
-	for (at, (_, members)) in RETIRED_SWITCHES.iter().enumerate() {
-		if switch_lines[at].is_empty() {
-			continue;
-		}
-		let on = [face_on, size_on, remember_on][at];
-		for (member, unset) in *members {
-			let found = member_lines.get(member).map_or(&[][..], Vec::as_slice);
-			// the desktop's font won only where the desktop named one; a family it
-			// left in use goes too when it is the list automatic falls back to
-			let overridden = match *member {
-				"font.family" => {
-					names(|os| os.family.is_some()) || found.iter().all(|&i| shipped_stack(i))
-				}
-				"font.size" => names(|os| os.size_pt.is_some()),
-				_ => true,
-			};
-			if on && overridden {
-				comment_out.extend(found);
-			} else if !on && found.is_empty() && !unset.is_empty() {
-				// in use with no line, so it read its old default: write that
-				let Some(&switch_at) = switch_lines[at]
-					.iter()
-					.rev()
-					.find(|&&i| !lines[i].trim_start().starts_with('#'))
-				else {
-					continue;
-				};
-				let line = lines[switch_at];
-				let indent = &line[..line.len() - line.trim_start().len()];
-				let dotted = line_setting_key(line).is_some_and(|key| key.contains('.'));
-				let name = if dotted {
-					*member
-				} else {
-					member.rsplit('.').next().unwrap_or(member)
-				};
-				written
-					.entry(switch_at)
-					.or_default()
-					.push(format!("{indent}{name}: {unset}"));
-			}
-		}
-	}
-	let gone: std::collections::HashSet<usize> = switch_lines.iter().flatten().copied().collect();
-	let mut out: Vec<String> = Vec::with_capacity(lines.len());
-	for (index, line) in lines.iter().enumerate() {
-		if let Some(new) = written.get(&index) {
-			out.extend(new.iter().cloned());
-			continue;
-		}
-		if gone.contains(&index) {
-			// a blank line either side of a dropped one would leave two
-			let blank_before = out.last().is_some_and(|l| l.trim().is_empty());
-			let blank_after = lines.get(index + 1).is_none_or(|l| l.trim().is_empty());
-			if blank_before && blank_after {
-				out.pop();
-			}
-			continue;
-		}
-		if comment_out.contains(&index) {
-			let indent = &line[..line.len() - line.trim_start().len()];
-			out.push(format!("{indent}# {}", line.trim_start()));
-			continue;
-		}
-		out.push((*line).to_string());
-	}
-	let mut joined = out.join("\n");
-	joined.push('\n');
-	Some(joined)
 }
 
 // What a launch parses when its rewrites were put off because the file looked
@@ -6603,19 +5948,12 @@ pub enum Kept {
 	Unwritable(String),
 }
 
-/// The only lines a rating writes. The keys are fixed here, so no caller can
-/// hand the writer a path.
+/// The only line a rating writes in the settings file. The tested profile and
+/// the hardware id go to the state file. The key is fixed here, so no caller
+/// can hand the writer a path.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RatingLines<'a> {
-	pub profile: Option<&'a str>,        // Profile::key() of a measured rung
-	pub rated_hardware: Option<&'a str>, // profile::hardware_id()
+pub struct RatingLines {
 	pub check_next_run: Option<bool>,
-}
-
-#[derive(Clone, Copy)]
-enum RatingValue<'a> {
-	Word(&'a str),
-	Flag(bool),
 }
 
 /// Write a finished rating into the settings file line by line, the way migrate
@@ -6626,7 +5964,7 @@ enum RatingValue<'a> {
 /// that reads clean and still has nowhere to put them, which gets what the
 /// dialog's save would write.
 #[must_use]
-pub fn keep_rating(lines: &RatingLines) -> Kept {
+pub fn keep_rating(lines: RatingLines) -> Kept {
 	let Some(path) = config_path() else {
 		return Kept::Unwritable("no settings file location".to_string());
 	};
@@ -6696,7 +6034,7 @@ fn settings_besides(
 // byte stays as it was. Where that fails on a file that reads clean, the text is
 // what the dialog's save would write, since that save kept a rating in any such
 // file. Either result is parsed back before it is offered.
-fn with_rating_lines(text: &str, lines: &RatingLines) -> Result<String, Kept> {
+fn with_rating_lines(text: &str, lines: RatingLines) -> Result<String, Kept> {
 	with_rating_lines_through(text, lines, &LAUNCH_STEPS)
 }
 
@@ -6705,20 +6043,10 @@ fn with_rating_lines(text: &str, lines: &RatingLines) -> Result<String, Kept> {
 // still has to catch the next one that does.
 fn with_rating_lines_through(
 	text: &str,
-	lines: &RatingLines,
+	lines: RatingLines,
 	steps: &[LaunchStep],
 ) -> Result<String, Kept> {
-	let wanted = [
-		("profile", lines.profile.map(RatingValue::Word)),
-		(
-			"rated_hardware",
-			lines.rated_hardware.map(RatingValue::Word),
-		),
-		(
-			"check_next_run",
-			lines.check_next_run.map(RatingValue::Flag),
-		),
-	];
+	let wanted = [("check_next_run", lines.check_next_run)];
 	let before = parse_kept(text);
 	let migrated = migrated_parse(text, steps);
 	let loaded = migrated.as_ref().unwrap_or(&before);
@@ -6763,14 +6091,13 @@ fn placed_rating_lines(text: &str, spelled: &[(&str, String)]) -> Option<String>
 // What the dialog's save leaves: shcl's own setters over the parse, then the
 // text its save writes. Only for a file that lost nothing, since that save falls
 // back to the canonical text there, which deletes the line it lost.
-fn saved_rating(before: &shcl::Document, wanted: &[(&str, Option<RatingValue>)]) -> Option<String> {
+fn saved_rating(before: &shcl::Document, wanted: &[(&str, Option<bool>)]) -> Option<String> {
 	let mut doc = before.clone();
 	for (leaf, value) in wanted {
 		let path = format!("performance.{leaf}");
 		let applied = match value {
 			None => true,
-			Some(RatingValue::Word(word)) => doc.set_string(&path, word),
-			Some(RatingValue::Flag(flag)) => doc.set_bool(&path, *flag),
+			Some(flag) => doc.set_bool(&path, *flag),
 		};
 		if !applied {
 			return None;
@@ -6799,7 +6126,7 @@ fn reads_as_asked(
 	before: &shcl::Document,
 	loaded: &shcl::Document,
 	out: &str,
-	wanted: &[(&str, Option<RatingValue>)],
+	wanted: &[(&str, Option<bool>)],
 	steps: &[LaunchStep],
 ) -> bool {
 	let raw_after = shcl::Document::parse(out);
@@ -6817,35 +6144,18 @@ fn reads_as_asked(
 		&& [&raw_after, after].into_iter().all(|doc| {
 			wanted.iter().all(|(leaf, value)| {
 				let path = format!("performance.{leaf}");
-				match value {
-					None => true,
-					Some(RatingValue::Word(word)) => {
-						doc.get_string(&path).is_ok_and(|got| got == *word)
-					}
-					Some(RatingValue::Flag(flag)) => doc.get_bool(&path) == Ok(*flag),
-				}
+				value.is_none_or(|flag| doc.get_bool(&path) == Ok(flag))
 			})
 		})
 }
 
 // The value as a canonical save spells it, taken from shcl rather than written
 // by hand, so a rating line never differs from what the dialog's save would
-// leave (G68, G69). A word is program-made; the guard only stops a later caller
-// from putting a quote or a line break into the file.
-fn rating_spelling(leaf: &str, value: RatingValue) -> Option<String> {
+// leave (G68, G69).
+fn rating_spelling(leaf: &str, flag: bool) -> Option<String> {
 	let path = format!("performance.{leaf}");
 	let mut doc = shcl::Document::new();
-	let applied = match value {
-		RatingValue::Word(word) => {
-			let plain = (1..=32).contains(&word.len())
-				&& word
-					.bytes()
-					.all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
-			plain && doc.set_string(&path, word)
-		}
-		RatingValue::Flag(flag) => doc.set_bool(&path, flag),
-	};
-	if !applied {
+	if !doc.set_bool(&path, flag) {
 		return None;
 	}
 	doc.to_canonical().lines().find_map(|line| {
@@ -6883,7 +6193,7 @@ fn place_rating_line(lines: &mut Vec<String>, leaf: &str, spelled: &str) -> Opti
 			.find(|(index, ..)| *index > at)
 			.is_some_and(|(index, ..)| depth(&lines[*index]) > depth(&lines[at]))
 	};
-	// A value cleared by hand leaves `rated_hardware:`, which the walk takes for
+	// A value cleared by hand leaves `check_next_run:`, which the walk takes for
 	// a header. With nothing under it, it is still the key's own line.
 	let own: Vec<usize> = active
 		.iter()
@@ -7746,6 +7056,15 @@ pub(crate) fn may_write(path: &std::path::Path) -> bool {
 		env_path("LOCALAPPDATA").as_deref(),
 		None,
 	));
+	dirs.extend(state_dir_for(
+		host_layout(),
+		false,
+		env_path("XDG_STATE_HOME").as_deref(),
+		env_path("XDG_CONFIG_HOME").is_some(),
+		home_dir().as_deref(),
+		env_path("LOCALAPPDATA").as_deref(),
+		None,
+	));
 	let real: Vec<PathBuf> = dirs.iter().flat_map(std::fs::canonicalize).collect();
 	dirs.extend(real);
 	// a link into the box's folder, or a name not made yet
@@ -7794,6 +7113,56 @@ fn data_dir_for(
 		Layout::Windows if !one_tree => local_appdata.map(|dir| dir.join(APP_DIR)).or(config_dir),
 		_ => config_dir,
 	}
+}
+
+/// Where the program keeps what it works out on this machine: the machine
+/// test's pick and the last window size (`state.shcl`). Not for hand edits, and
+/// safe to lose. A `--config` override or an explicit `XDG_CONFIG_HOME` keeps it
+/// beside that config, as `cache_dir` does.
+pub fn state_dir() -> Option<PathBuf> {
+	state_dir_for(
+		host_layout(),
+		CONFIG_OVERRIDE.get().is_some(),
+		env_path("XDG_STATE_HOME").as_deref(),
+		env_path("XDG_CONFIG_HOME").is_some(),
+		home_dir().as_deref(),
+		env_path("LOCALAPPDATA").as_deref(),
+		config_dir(),
+	)
+}
+
+// The decision above with its inputs passed in (G15).
+fn state_dir_for(
+	layout: Layout,
+	overridden: bool,
+	xdg_state: Option<&std::path::Path>,
+	xdg_config: bool,
+	home: Option<&std::path::Path>,
+	local_appdata: Option<&std::path::Path>,
+	config_dir: Option<PathBuf>,
+) -> Option<PathBuf> {
+	if overridden || (xdg_config && xdg_state.is_none()) {
+		return config_dir;
+	}
+	if let Some(dir) = xdg_state {
+		return Some(dir.join(APP_DIR));
+	}
+	match layout {
+		Layout::Windows => local_appdata.map(|dir| dir.join(APP_DIR)),
+		Layout::MacOs => home.map(|h| h.join("Library").join("Application Support").join(APP_DIR)),
+		Layout::Xdg => home.map(|h| h.join(".local").join("state").join(APP_DIR)),
+	}
+}
+
+// A test's state file sits beside the config it points at, so one test's never
+// reaches another's or the box's.
+fn state_path() -> Option<PathBuf> {
+	let dir = if cfg!(test) {
+		config_dir()
+	} else {
+		state_dir()
+	};
+	Some(dir?.join("state.shcl"))
 }
 
 /// Where copies that can always be made again go, such as prepared wallpapers.
@@ -7980,13 +7349,14 @@ performance:
 
 	# automatic: true  ## Default
 
-	## Visual effects level. "max", "high", "low", "standard" (no effects),
-	## or "custom" (use the values in this file).
+	## Visual effects level, picked by hand. Used while automatic is off.
+	## "max", "high", "low", "standard" (no effects), or "custom" (use the
+	## values in this file). A value changed in Settings under any but custom
+	## is kept at the end of this file, as a change to that profile.
 	# profile: "max"  ## Default
 
 	# check_hardware: true  ## Default
 	# check_next_run: false  ## Default
-	# rated_hardware: ""  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Background and transparency
@@ -8057,8 +7427,11 @@ wallpaper:
 
 font:
 
-	## Family and size follow the desktop's own monospace font until a line
-	## here sets one. Where the desktop names none, it is this list and 17.
+	## Follow the desktop's own monospace font, for the face and the size
+	## each. Off uses family and size below. Where the desktop names none, it
+	## is this list and 17 either way.
+	# use_system_family: true  ## Default
+	# use_system_size: true  ## Default
 	# family: "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New"
 	# size: 17.0
 
@@ -8186,16 +7559,18 @@ scroll:
 ## Theme and colors
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
+## A built-in theme, one saved in Settings, or "custom" for the colors below.
 theme: SilkTerm
 theme_mode: dark
 
-## Overrides for the current theme. The two scrollbar colors are not part
-## of any theme.
+## The custom theme's colors. A color changed in Settings under any other
+## theme is kept at the end of this file, as a change to that theme. The two
+## scrollbar colors are not part of any theme.
 colors:
 	## Take the text and cursor colors from the wallpaper instead: the text is
 	## placed as far as it can get from the picture's brightest areas, in a hue
-	## complementary to the picture's own. The two rows for them gray out in
-	## Settings while this is on, and nothing about the derived colors is saved.
+	## complementary to the picture's own. Changing either color in Settings
+	## turns this off, and nothing about the derived colors is saved.
 	# from_wallpaper: true  ## Default
 	# background: "#000000"
 	# foreground: "#88eecc"  ## Default
@@ -8218,23 +7593,19 @@ window:
 
 	margin: 8.0
 
-	## Columns and rows follow the size the window was last given until a
-	## line here sets one. Settings calls that Remember last size.
+	## Open at the size the window was last given, and at its font zoom. Off
+	## uses columns and rows below.
+	# remember_size: true  ## Default
 	# columns: 160
 	# rows: 48
-	remembered_columns: 160
-	remembered_rows: 48
-	remembered_font_zoom: 0
 
-	## While the size is not set here, also keep a size and font zoom for each
+	## While remember_size is on, also keep a size and font zoom for each
 	## monitor. A window opens at its monitor's, and takes those of the one it
-	## is moved to once it stops there. They go under monitors:, one block per
-	## monitor, named for its resolution, its scale and, where the system
-	## reports it, its physical size in millimeters.
+	## is moved to once it stops there. The sizes are kept with what else
+	## SilkTerm works out on this machine, not in this file.
 	# remember_per_monitor: true  ## Default
 
 	# remember_maximized: false  ## Default
-	remembered_maximized: false
 
 	# hide_single_tab: false  ## Default
 
@@ -8346,19 +7717,28 @@ shell:
 mod tests {
 	use super::*;
 
-	// The image a test set by hand, or None while it is automatic.
+	use crate::ui_spec::Key;
+	use knobs::Value;
+
+	// The image named by hand or for the run, or None while it is the default.
 	fn image_of(s: &Settings) -> Option<String> {
-		(!auto::automatic(s, auto::Setting::WallpaperImage))
-			.then(|| auto::text(s, auto::Setting::WallpaperImage))
+		crate::fields::by_hand(s, Key::BgImage).then(|| s.wallpaper_raw.clone())
 	}
 
-	// A text auto setting as a file line would leave it: empty is no line.
-	fn hand(text: &str) -> auto::Auto<String> {
-		if text.trim().is_empty() {
-			auto::Auto::automatic()
-		} else {
-			auto::Auto::by_hand(text.to_string())
-		}
+	// The person's own value, whether it shows or is kept for later.
+	fn own_of(s: &Settings, key: Key) -> Option<Value> {
+		s.model.values.own.get(key.name()).cloned()
+	}
+
+	// A change made in Settings, as the dialog makes it.
+	fn change(s: &mut Settings, key: Key, v: impl Into<Value>) {
+		crate::fields::set(s, key, &v.into(), None);
+	}
+
+	// A config text read the way a launch reads it, the model and all.
+	fn read_text(text: &str) -> Settings {
+		let p = std::path::Path::new("test.shcl");
+		settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text))
 	}
 
 	// The About box reports how long the session has been up, and the clock it
@@ -8786,12 +8166,14 @@ mod tests {
 				);
 			}
 			let mut moved = loaded.clone();
-			moved.font_size = auto::Auto::by_hand(auto::font_size(&loaded) + 1.0);
+			change(
+				&mut moved,
+				Key::FontSize,
+				Value::Float(f64::from(loaded.font_size + 1.0)),
+			);
 			let _ = persist(&loaded, &moved);
-			let _ = keep_rating(&RatingLines {
-				profile: Some("low"),
-				rated_hardware: Some("0123456789abcdef"),
-				check_next_run: Some(false),
+			let _ = keep_rating(RatingLines {
+				check_next_run: Some(true),
 			});
 			disable_keys(&["font.size"]);
 			let _ = reset_config();
@@ -9113,24 +8495,28 @@ mod tests {
 		.unwrap();
 		set_config_override(path.clone());
 
-		let stored = load();
-		assert_eq!(stored.performance_profile, crate::profile::Profile::Low);
+		let live = load();
+		assert_eq!(live.performance_profile, crate::profile::Profile::Low);
+		assert!(!live.text_scrim, "Low drops the halo");
+		assert_ne!(live.scroll_ease_in_ms, 300.0, "and shows its own value");
+		let own = |s: &Settings, key: Key| s.model.values.own.get(key.name()).cloned();
 		assert_eq!(
-			stored.scroll_ease_in_ms, 300.0,
+			own(&live, Key::ScrollEaseIn),
+			Some(Value::Float(300.0)),
 			"the file is read as written"
 		);
-		let mut live = stored.clone();
-		crate::profile::apply(&mut live);
-		assert!(!live.text_scrim, "Low drops the halo");
-		assert_ne!(live.scroll_ease_in_ms, 300.0);
 
 		let mut new = live.clone();
-		new.minimap = !new.minimap;
+		change(&mut new, Key::Minimap, Value::Bool(!live.minimap));
 		assert!(persist(&live, &new));
 		let back = load();
 		assert_eq!(back.minimap, new.minimap, "the change itself is written");
-		assert_eq!(back.scroll_ease_in_ms, 300.0, "the profile's value was not");
-		assert!(back.wallpaper_enabled, "nor its wallpaper switch");
+		assert_eq!(
+			own(&back, Key::ScrollEaseIn),
+			Some(Value::Float(300.0)),
+			"the profile's value was not"
+		);
+		assert_eq!(own(&back, Key::TextScrim), None, "nor its halo switch");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -9147,16 +8533,20 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
-		std::fs::write(&path, "colors:\n\tfrom_wallpaper: true\n").unwrap();
+		std::fs::write(
+			&path,
+			format!(
+				"theme: custom\ncolors:\n\tfrom_wallpaper: true\n\tforeground: \"{}\"\n\tcursor: \"{}\"\n",
+				format_hex(mine.0),
+				format_hex(mine.1)
+			),
+		)
+		.unwrap();
 		set_config_override(path.clone());
 
 		let mut stored = load();
 		assert!(stored.colors_from_wallpaper, "the file is read as written");
-		stored.performance_profile = crate::profile::Profile::Custom;
-		stored.performance_automatic = false;
-		stored.wallpaper_enabled = true;
-		stored.fg = mine.0;
-		stored.cursor = mine.1;
+		assert!(stored.wallpaper_enabled);
 		stored.wallpaper_summary = Some(crate::autotheme::Summary {
 			luma_hi: 0.3,
 			luma_lo: 0.02,
@@ -9168,31 +8558,28 @@ mod tests {
 			opacity: 0.35,
 		});
 		let mut live = stored.clone();
-		crate::autotheme::apply(&mut live);
+		crate::fields::fill(&mut live, None);
 		assert_ne!(live.fg, mine.0, "the derived text colour is what is drawn");
 
-		// A save that changes something else must not take the derived pair with it.
-		// The two sides have to differ for the diff to see it at all: the file's
-		// own colours on one, and the live copy wearing the derived pair on the
-		// other, which is what a save outside the dialog hands over.
+		// a save that changes something else takes nothing of the derived pair
 		let mut new = live.clone();
-		new.minimap = !new.minimap;
-		assert!(persist(&stored, &new));
-		let text = std::fs::read_to_string(&path).unwrap();
-		assert!(
-			!text.contains("\n\tforeground:") && !text.contains("\n\tcursor:"),
-			"the derived colours were written:\n{text}"
+		change(&mut new, Key::Minimap, Value::Bool(!live.minimap));
+		assert!(persist(&live, &new));
+		let back = load();
+		assert_eq!(
+			back.model.values.own.get(Key::ColFg.name()),
+			Some(&Value::Text(format_hex(mine.0))),
+			"the file's own colour stays"
 		);
 
-		// the user's own colour still saves while the switch is on, since the row
-		// is only grayed - the value under it is still theirs to change by hand
+		// a colour changed by hand turns the switch off, and is saved
 		let mut edited = live.clone();
-		crate::autotheme::unapply(&mut edited);
-		edited.fg = [0x0au8, 0x0b, 0x0c];
-		let mut base = live.clone();
-		crate::autotheme::unapply(&mut base);
-		assert!(persist(&base, &edited));
-		assert_eq!(load().fg, [0x0a, 0x0b, 0x0c]);
+		change(&mut edited, Key::ColFg, Value::Text("#0a0b0c".into()));
+		assert!(!edited.colors_from_wallpaper);
+		assert!(persist(&live, &edited));
+		let back = load();
+		assert!(!back.colors_from_wallpaper);
+		assert_eq!(back.fg, [0x0a, 0x0b, 0x0c]);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -9216,12 +8603,11 @@ mod tests {
 		.unwrap();
 		set_config_override(path.clone());
 
-		let mut live = load();
-		crate::profile::apply(&mut live);
+		let live = load();
 		let before = std::fs::read_to_string(&path).unwrap();
 		let mut stepped = live.clone();
 		stepped.stepped_profile = Some(crate::profile::Profile::Low);
-		crate::profile::apply(&mut stepped);
+		crate::fields::fill(&mut stepped, None);
 		assert!(!stepped.text_scrim, "the step is in force live");
 		assert!(persist(&live, &stepped));
 		assert_eq!(
@@ -9231,7 +8617,7 @@ mod tests {
 		);
 
 		let mut changed = stepped.clone();
-		changed.minimap = !changed.minimap;
+		change(&mut changed, Key::Minimap, Value::Bool(!stepped.minimap));
 		assert!(persist(&stepped, &changed));
 		let after = std::fs::read_to_string(&path).unwrap();
 		let new_lines: Vec<&str> = after.lines().filter(|l| !before.contains(l)).collect();
@@ -9253,14 +8639,14 @@ mod tests {
 	// Test ID: EpWow4g
 	#[test]
 	fn a_reload_keeps_what_the_file_never_held() {
-		let live = Settings {
-			remote_override: true,
+		let mut live = Settings {
 			stepped_profile: Some(crate::profile::Profile::High),
 			..Settings::default()
 		};
+		crate::profile::set_remote(&mut live, true);
 		let mut reloaded = Settings::default();
 		keep_session(&live, &mut reloaded, false);
-		assert!(reloaded.remote_override);
+		assert!(crate::profile::remote(&reloaded));
 		assert_eq!(
 			reloaded.stepped_profile,
 			Some(crate::profile::Profile::High)
@@ -9277,33 +8663,24 @@ mod tests {
 		let apply = |live: &Settings, opened: &Settings, edited: &Settings| {
 			let mut out = edited.clone();
 			keep_session_on_apply(live, opened, &mut out);
-			(out.stepped_profile, out.remote_override)
+			(out.stepped_profile, crate::profile::remote(&out))
 		};
 		let base = Settings {
-			performance_automatic: true,
-			performance_profile: crate::profile::Profile::Max,
+			tested_profile: Some(Profile::Max),
 			..Settings::default()
 		};
 		let stepped = Settings {
 			stepped_profile: Some(Profile::Low),
 			..base.clone()
 		};
-		let remote = Settings {
-			remote_override: true,
-			..base.clone()
-		};
-		let other_row = Settings {
-			minimap: !base.minimap,
-			..base.clone()
-		};
-		let picked = Settings {
-			performance_profile: crate::profile::Profile::High,
-			..base.clone()
-		};
-		let manual = Settings {
-			performance_automatic: false,
-			..base.clone()
-		};
+		let mut remote = base.clone();
+		crate::profile::set_remote(&mut remote, true);
+		let mut other_row = base.clone();
+		change(&mut other_row, Key::Minimap, Value::Bool(!base.minimap));
+		let mut picked = base.clone();
+		change(&mut picked, Key::PerfProfile, Value::Text("high".into()));
+		let mut manual = base.clone();
+		change(&mut manual, Key::PerfAuto, Value::Bool(false));
 
 		// taken after the dialog opened: an Apply of an unrelated row keeps it
 		assert_eq!(apply(&stepped, &base, &base), (Some(Profile::Low), false));
@@ -9338,23 +8715,35 @@ mod tests {
 	// Test ID: Eq4Yrbf
 	#[test]
 	fn naming_a_wallpaper_turns_it_on_unless_the_profile_says_off() {
-		let off = Settings {
-			wallpaper_enabled: false,
-			performance_profile: crate::profile::Profile::Custom,
-			..Settings::default()
+		let picked = |profile: &str| {
+			crate::fields::owning(
+				Settings::default(),
+				&[
+					(Key::PerfAuto, Value::Bool(false)),
+					(Key::PerfProfile, Value::Text(profile.into())),
+					(Key::BgEnabled, Value::Bool(false)),
+				],
+			)
 		};
+		let off = picked("custom");
+		assert!(!off.wallpaper_enabled);
 		let mut named = off.clone();
 		name_wallpaper(&mut named, Some("/x.png".into()));
 		assert!(named.wallpaper_enabled);
 		assert_eq!(image_of(&named).as_deref().unwrap_or_default(), "/x.png");
+		assert!(
+			crate::fields::lines_of(&named)
+				.iter()
+				.all(|(p, _)| p != "wallpaper.image"),
+			"held for the run, never saved"
+		);
 		// a clear names nothing and leaves the switch alone
 		let mut cleared = off.clone();
 		name_wallpaper(&mut cleared, None);
 		assert!(!cleared.wallpaper_enabled && image_of(&cleared).is_none());
-		let mut remote = named.clone();
-		remote.remote_override = true;
-		crate::profile::apply(&mut remote);
-		assert!(!remote.wallpaper_enabled, "the Remote profile keeps it off");
+		let mut flat = picked("standard");
+		name_wallpaper(&mut flat, Some("/x.png".into()));
+		assert!(!flat.wallpaper_enabled, "the Standard profile keeps it off");
 	}
 
 	// A wallpaper given on the command line lasts the session: a reload keeps it
@@ -9362,15 +8751,24 @@ mod tests {
 	// Test ID: Epytxce
 	#[test]
 	fn a_command_line_wallpaper_outlasts_a_reload_and_an_apply() {
-		let with = |raw: &str| Settings {
-			wallpaper_raw: hand(raw),
-			wallpaper: (!raw.is_empty()).then(|| std::path::PathBuf::from(raw)),
-			..Settings::default()
+		let with = |raw: &str| {
+			let mut s = if raw.is_empty() {
+				Settings::default()
+			} else {
+				crate::fields::owning(
+					Settings::default(),
+					&[(Key::BgImage, Value::Text(raw.into()))],
+				)
+			};
+			s.wallpaper = (!raw.is_empty()).then(|| std::path::PathBuf::from(raw));
+			s
 		};
-		let live = with("/cli.png");
+		let mut live = Settings::default();
+		name_wallpaper(&mut live, Some("/cli.png".into()));
 		let mut reloaded = with("/file.png");
 		keep_session(&live, &mut reloaded, true);
 		assert_eq!(reloaded.wallpaper, live.wallpaper);
+		assert_eq!(image_of(&reloaded).as_deref(), Some("/cli.png"));
 		let mut reloaded = with("/file.png");
 		keep_session(&live, &mut reloaded, false);
 		assert_eq!(
@@ -9379,18 +8777,27 @@ mod tests {
 			"no lock, the file wins"
 		);
 		// a file with the wallpaper off does not hide one the session named
-		let mut named = Settings::default();
-		name_wallpaper(&mut named, Some("/cli.png".into()));
-		let mut reloaded = Settings {
-			wallpaper_enabled: false,
-			..with("/file.png")
+		let custom_off = |s: Settings| {
+			crate::fields::owning(
+				s,
+				&[
+					(Key::PerfAuto, Value::Bool(false)),
+					(Key::PerfProfile, Value::Text("custom".into())),
+					(Key::BgEnabled, Value::Bool(false)),
+				],
+			)
 		};
+		let mut named = custom_off(Settings::default());
+		name_wallpaper(&mut named, Some("/cli.png".into()));
+		let mut reloaded = custom_off(with("/file.png"));
 		keep_session(&named, &mut reloaded, true);
 		assert!(reloaded.wallpaper_enabled);
-		// an explicit clear on the command line is kept too
+		// a clear on the command line hands the file's back
+		let mut cleared = live.clone();
+		name_wallpaper(&mut cleared, None);
 		let mut reloaded = with("/file.png");
-		keep_session(&with(""), &mut reloaded, true);
-		assert!(reloaded.wallpaper.is_none() && image_of(&reloaded).is_none());
+		keep_session(&cleared, &mut reloaded, true);
+		assert_eq!(image_of(&reloaded).as_deref(), Some("/file.png"));
 
 		// a dialog opened before the lock, applied without touching the wallpaper
 		let (mut opened, mut edited) = (with("/old.png"), with("/old.png"));
@@ -10047,7 +9454,8 @@ mod tests {
 
 	// A save can add a value as a new line above the template's commented one.
 	// The revert has to find the value, not the comment, and leave the file as
-	// it shipped rather than with a second copy of the commented line.
+	// it shipped rather than with a second copy of the commented line. A row's
+	// arrow is a save of the default, and a hotkey is taken out by name.
 	// Test ID: Erekiyk
 	#[test]
 	fn a_revert_takes_out_a_value_saved_beside_its_default() {
@@ -10061,27 +9469,36 @@ mod tests {
 		set_config_override(path.clone());
 		reload_from_disk(); // lays the template down
 		let pristine = std::fs::read_to_string(&path).unwrap();
-		let flips: [(&str, fn(&mut Settings)); 3] = [
-			("performance.automatic", |s| {
-				s.performance_automatic = !s.performance_automatic;
-			}),
-			("scroll.smooth", |s| s.scroll_smooth = !s.scroll_smooth),
-			("keys.close_pane", |s| {
-				s.keys = s
-					.keys
-					.with_own(crate::input::Hotkey::ClosePane, Some(Vec::new()));
-			}),
-		];
-		for (key, flip) in flips {
+		// rows outside the profile, whose change under a preset picks it by hand
+		for key in [Key::CopyOnSelect, Key::CursorOutline, Key::Hyperlinks] {
 			let base = reload_from_disk();
 			let mut changed = base.clone();
-			flip(&mut changed);
+			let on = crate::fields::get(&changed, key).unwrap().as_bool();
+			change(&mut changed, key, Value::Bool(!on));
 			assert!(persist(&base, &changed));
-			assert!(reload_from_disk() == changed, "{key} was saved");
-			revert_keys(&[key]);
-			assert!(reload_from_disk() == base, "{key} went back to its default");
-			assert_eq!(std::fs::read_to_string(&path).unwrap(), pristine, "{key}");
+			assert!(reload_from_disk() == changed, "{key:?} was saved");
+			let mut back = changed.clone();
+			crate::fields::reset(&mut back, key, None);
+			assert!(persist(&changed, &back));
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), pristine, "{key:?}");
+			assert!(
+				reload_from_disk() == base,
+				"{key:?} went back to its default"
+			);
 		}
+		let base = reload_from_disk();
+		let mut changed = base.clone();
+		changed.keys = changed
+			.keys
+			.with_own(crate::input::Hotkey::ClosePane, Some(Vec::new()));
+		assert!(persist(&base, &changed));
+		assert!(reload_from_disk() == changed, "the hotkey was saved");
+		revert_keys(&["keys.close_pane"]);
+		assert!(
+			reload_from_disk() == base,
+			"the hotkey went back to its default"
+		);
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), pristine);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -10117,11 +9534,13 @@ mod tests {
 		set_config_override(path.clone());
 
 		let orig = load();
-		assert_eq!(auto::font_size(&orig), 17.0);
+		assert_eq!(orig.font_size, 17.0);
 		// What --font-size nan folded into the live settings, standing on both
 		// sides of the diff: it is the run's own value, not a change to save.
 		let mut live = orig.clone();
-		live.font_size = auto::Auto::by_hand(f32::NAN);
+		live.model
+			.hold(Key::FontSize.name(), &Value::Float(f64::NAN));
+		crate::fields::fill(&mut live, None);
 		let same = live.clone();
 		assert!(persist(&live, &same));
 		let saved = std::fs::read_to_string(&path).unwrap();
@@ -10130,13 +9549,13 @@ mod tests {
 			"NaN written over the user's size: {saved:?}"
 		);
 		assert!(!saved.to_lowercase().contains("nan"), "{saved:?}");
-		assert_eq!(auto::font_size(&load()), 17.0);
+		assert_eq!(load().font_size, 17.0);
 
 		// and a real change still reaches the file
 		let mut edited = live.clone();
-		edited.font_size = auto::Auto::by_hand(22.0);
+		change(&mut edited, Key::FontSize, Value::Float(22.0));
 		assert!(persist(&live, &edited));
-		assert_eq!(auto::font_size(&load()), 22.0);
+		assert_eq!(load().font_size, 22.0);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -10159,7 +9578,7 @@ mod tests {
 		let orig = load();
 		assert_eq!(orig.text_scrim_ramp, crate::scrim::Ramp::Sigmoid); // the file's older spelling
 		let mut edited = orig.clone();
-		edited.text_scrim_ramp = crate::scrim::Ramp::Log;
+		change(&mut edited, Key::ScrimRamp, Value::Text("log".into()));
 		assert!(
 			persist(&orig, &edited),
 			"persist should write to our temp file"
@@ -10182,16 +9601,16 @@ mod tests {
 		// it there and the font came back next launch
 		let before = load();
 		let mut named = before.clone();
-		named.font_family = auto::Auto::by_hand("Iosevka".to_string());
+		change(&mut named, Key::FontFamily, Value::Text("Iosevka".into()));
 		assert!(persist(&before, &named));
-		assert_eq!(auto::font_family(&load()), "Iosevka");
+		assert_eq!(load().font_family, "Iosevka");
 
 		let before = load();
 		let mut cleared = before.clone();
-		cleared.font_family = auto::Auto::automatic();
+		crate::fields::reset(&mut cleared, Key::FontFamily, None);
 		assert!(persist(&before, &cleared));
 		assert!(
-			load().font_family.is_automatic(),
+			!crate::fields::by_hand(&load(), Key::FontFamily),
 			"cleared, and it stays cleared"
 		);
 	}
@@ -10231,81 +9650,62 @@ mod tests {
 		assert!(seen, "a process holding the file open should read as busy");
 	}
 
-	// Where a rating's lines go, and that nothing else in the file moves.
+	// Where a rating's line goes, and that nothing else in the file moves.
 	// Test ID: EpXN9p5
 	#[test]
 	fn rating_lines_replace_insert_and_collapse() {
-		const ID: &str = "0123456789abcdef";
-		let id_only = RatingLines {
-			rated_hardware: Some(ID),
-			..RatingLines::default()
+		let clear = RatingLines {
+			check_next_run: Some(false),
 		};
 		let cases = [
 			(
 				"an active line is replaced in place, its indent kept",
-				"theme_mode: dark\nperformance:\n    automatic: true\n    rated_hardware: 0000000000000000\n    profile: high\n\nwindow:\n\tmargin: 4\n",
-				"theme_mode: dark\nperformance:\n    automatic: true\n    rated_hardware: 0123456789abcdef\n    profile: high\n\nwindow:\n\tmargin: 4\n",
+				"theme_mode: dark\nperformance:\n    automatic: true\n    check_next_run: true\n    profile: high\n\nwindow:\n\tmargin: 4\n",
+				"theme_mode: dark\nperformance:\n    automatic: true\n    check_next_run: false\n    profile: high\n\nwindow:\n\tmargin: 4\n",
 			),
 			(
 				"a trailing note is kept",
-				"performance:\n\trated_hardware: 0000000000000000  ## note\n",
-				"performance:\n\trated_hardware: 0123456789abcdef  ## note\n",
+				"performance:\n\tcheck_next_run: true  ## note\n",
+				"performance:\n\tcheck_next_run: false  ## note\n",
 			),
 			(
 				"only the commented default: directly after it",
-				"performance:\n\n\t# automatic: true  ## Default\n\t# rated_hardware: \"\"  ## Default\n\t# profile: \"max\"  ## Default\n\n## next\n",
-				"performance:\n\n\t# automatic: true  ## Default\n\t# rated_hardware: \"\"  ## Default\n\trated_hardware: 0123456789abcdef\n\t# profile: \"max\"  ## Default\n\n## next\n",
+				"performance:\n\n\t# automatic: true  ## Default\n\t# check_next_run: false  ## Default\n\t# profile: \"max\"  ## Default\n\n## next\n",
+				"performance:\n\n\t# automatic: true  ## Default\n\t# check_next_run: false  ## Default\n\tcheck_next_run: false\n\t# profile: \"max\"  ## Default\n\n## next\n",
 			),
 			(
 				"only the header: first in the block, at its children's depth",
 				"performance:\n\tautomatic: true\n",
-				"performance:\n\trated_hardware: 0123456789abcdef\n\tautomatic: true\n",
+				"performance:\n\tcheck_next_run: false\n\tautomatic: true\n",
 			),
 			(
 				"a header with no child: one tab deeper",
 				"performance:\nwindow:\n\tmargin: 4\n",
-				"performance:\n\trated_hardware: 0123456789abcdef\nwindow:\n\tmargin: 4\n",
+				"performance:\n\tcheck_next_run: false\nwindow:\n\tmargin: 4\n",
 			),
 			(
 				"two active lines: one is left, holding the new value",
-				"performance:\n\trated_hardware: 0000000000000000\n\tautomatic: true\n\trated_hardware: 1111111111111111\n",
-				"performance:\n\trated_hardware: 0123456789abcdef\n\tautomatic: true\n",
+				"performance:\n\tcheck_next_run: true\n\tautomatic: true\n\tcheck_next_run: true\n",
+				"performance:\n\tcheck_next_run: false\n\tautomatic: true\n",
 			),
 		];
 		for (what, text, want) in cases {
 			assert_eq!(
-				with_rating_lines(text, &id_only).as_deref(),
+				with_rating_lines(text, clear).as_deref(),
 				Ok(want),
 				"{what}"
 			);
 		}
 
-		let both = RatingLines {
-			profile: Some("high"),
-			check_next_run: Some(false),
-			..RatingLines::default()
-		};
-		assert_eq!(
-			with_rating_lines(
-				"performance:\n\t# profile: \"max\"  ## Default\n\t# check_next_run: false  ## Default\n\tcheck_next_run: true\n",
-				&both
-			)
-			.as_deref(),
-			Ok(
-				"performance:\n\t# profile: \"max\"  ## Default\n\tprofile: high\n\t# check_next_run: false  ## Default\n\tcheck_next_run: false\n"
-			),
-			"a word and a flag together"
-		);
-
 		// A block written twice reads as one, so the first takes the line.
 		assert_eq!(
 			with_rating_lines(
 				"performance:\n\tautomatic: true\nperformance:\n\tprofile: high\n",
-				&id_only
+				clear
 			)
 			.as_deref(),
 			Ok(
-				"performance:\n\trated_hardware: 0123456789abcdef\n\tautomatic: true\nperformance:\n\tprofile: high\n"
+				"performance:\n\tcheck_next_run: false\n\tautomatic: true\nperformance:\n\tprofile: high\n"
 			),
 			"two performance headers"
 		);
@@ -10313,58 +9713,27 @@ mod tests {
 		// dialog's save would write.
 		let bare = "window:\n\tmargin: 4\n";
 		let mut saved = shcl::Document::parse(bare);
-		assert!(saved.set_string("performance.rated_hardware", ID));
+		assert!(saved.set_bool("performance.check_next_run", false));
 		assert_eq!(
-			with_rating_lines(bare, &id_only).as_deref(),
+			with_rating_lines(bare, clear).as_deref(),
 			Ok(saved.to_canonical().as_str()),
 			"no performance header"
 		);
-		// A word no rating writes is refused, and the reason is true of the file:
-		// it reads clean, or it has a line the parse drops.
-		let clean = "performance:\n\trated_hardware: 0000000000000000\n";
-		let lossy = "performance:\n\t\trated_hardware: 0000000000000000\n\tautomatic: true\n";
-		assert_eq!(shcl::Document::parse(lossy).lost_count(), 1);
-		for word in [
-			"a\"b",
-			"a b",
-			"Max",
-			"",
-			"a\nb",
-			"0123456789abcdef0123456789abcdef0",
-		] {
-			let lines = RatingLines {
-				rated_hardware: Some(word),
-				..RatingLines::default()
-			};
-			assert_eq!(
-				with_rating_lines(clean, &lines),
-				Err(Kept::Unplaced),
-				"{word:?} is not a program-made word"
-			);
-			assert_eq!(
-				with_rating_lines(lossy, &lines),
-				Err(Kept::Unreadable),
-				"{word:?}, beside a line that cannot be read"
-			);
-		}
 	}
 
 	// The template is a save fixed point (G69), and a rating written into it must
-	// not be the thing that makes the next save rewrite it. An all-digit id is the
-	// spelling most likely to come out differently.
+	// not be the thing that makes the next save rewrite it.
 	// Test ID: EpXN9p6
 	#[test]
 	fn a_rating_leaves_a_canonical_file_canonical() {
-		for id in ["0123456789abcdef", "1234567890123456"] {
+		for flag in [false, true] {
 			let lines = RatingLines {
-				profile: Some("max"),
-				rated_hardware: Some(id),
-				check_next_run: Some(false),
+				check_next_run: Some(flag),
 			};
-			let out = with_rating_lines(default_config(), &lines)
-				.unwrap_or_else(|kept| panic!("id {id}: {kept:?}"));
-			assert_ne!(out, default_config(), "id {id}: the values are in it");
-			assert_eq!(shcl::Document::parse(&out).to_canonical(), out, "id {id}");
+			let out = with_rating_lines(default_config(), lines)
+				.unwrap_or_else(|kept| panic!("{flag}: {kept:?}"));
+			assert_ne!(out, default_config(), "{flag}: the value is in it");
+			assert_eq!(shcl::Document::parse(&out).to_canonical(), out, "{flag}");
 		}
 	}
 
@@ -10373,7 +9742,10 @@ mod tests {
 	// Test ID: EpXeZQW
 	#[test]
 	fn a_rating_changes_no_other_setting() {
-		let text = "performance:\n\t\t# rated_hardware: \"\"  ## Default\n\t\t\tautomatic: false\n\t\tcheck_hardware: false\n";
+		let clear = RatingLines {
+			check_next_run: Some(false),
+		};
+		let text = "performance:\n\t\t# check_next_run: false  ## Default\n\t\t\tautomatic: false\n\t\tcheck_hardware: false\n";
 		let before = shcl::Document::parse(text);
 		assert_eq!(before.lost_count(), 1);
 		assert_eq!(before.get_bool("performance.automatic"), Ok(false));
@@ -10381,11 +9753,7 @@ mod tests {
 			before.get_bool("performance.check_hardware"),
 			Err(shcl::Status::NotFound)
 		);
-		let lines = RatingLines {
-			rated_hardware: Some("0123456789abcdef"),
-			..RatingLines::default()
-		};
-		if let Ok(out) = with_rating_lines(text, &lines) {
+		if let Ok(out) = with_rating_lines(text, clear) {
 			let after = shcl::Document::parse(&out);
 			assert_eq!(
 				after.get_bool("performance.automatic"),
@@ -10399,58 +9767,49 @@ mod tests {
 			);
 		}
 
-		// A rating key this write leaves alone is another setting too: a new
-		// `profile:` line above a deeper `check_next_run:` takes it in as a child.
-		let text = "performance:\n\t# check_hardware: \"\"  ## Default\n\t\tcheck_next_run: true\n";
+		// A new `check_next_run:` line above a deeper line takes that line in as a
+		// child.
+		let text =
+			"performance:\n\t# check_next_run: false  ## Default\n\t\tcheck_hardware: false\n";
 		assert_eq!(
-			shcl::Document::parse(text).get_bool("performance.check_next_run"),
-			Ok(true)
+			shcl::Document::parse(text).get_bool("performance.check_hardware"),
+			Ok(false)
 		);
-		let lines = RatingLines {
-			profile: Some("high"),
-			..RatingLines::default()
-		};
-		if let Ok(out) = with_rating_lines(text, &lines) {
+		if let Ok(out) = with_rating_lines(text, clear) {
 			assert_eq!(
-				shcl::Document::parse(&out).get_bool("performance.check_next_run"),
-				Ok(true),
-				"check_next_run loads as before:\n{out}"
+				shcl::Document::parse(&out).get_bool("performance.check_hardware"),
+				Ok(false),
+				"check_hardware loads as before:\n{out}"
 			);
 		}
 
 		// Every later line for the key is deleted, and what sat under one moves up to
-		// the line above. Here that is "Re-test next run", which this write does not
-		// touch. Placement alone loses no line and reads the profile back, so the
-		// comparison is the only thing that refuses it.
-		let text =
-			"performance:\n\tprofile: max\nperformance.profile: low\n\tcheck_next_run: true\n";
+		// the line above. Placement alone loses no line and reads the value back, so
+		// the comparison is the only thing that refuses it.
+		let text = "performance:\n\tcheck_next_run: true\nperformance.check_next_run: true\n\tcheck_hardware: false\n";
 		assert!(
 			migrate_config_text(text).is_none(),
 			"a launch parses this text as it is"
 		);
 		let before = shcl::Document::parse(text);
 		assert_eq!(
-			before.get_bool("performance.check_next_run"),
+			before.get_bool("performance.check_hardware"),
 			Err(shcl::Status::NotFound)
 		);
-		let placed = placed_rating_lines(text, &[("profile", "high".to_string())])
+		let placed = placed_rating_lines(text, &[("check_next_run", "false".to_string())])
 			.expect("a performance block to place into");
 		let placed = shcl::Document::parse(&placed);
 		assert!(
 			placed.lost_count() <= before.lost_count()
-				&& placed.get_string("performance.profile").as_deref() == Ok("high")
-				&& placed.get_bool("performance.check_next_run") == Ok(true),
-			"placement no longer moves check_next_run, so the case proves nothing"
+				&& placed.get_bool("performance.check_next_run") == Ok(false)
+				&& placed.get_bool("performance.check_hardware") == Ok(false),
+			"placement no longer moves check_hardware, so the case proves nothing"
 		);
-		let lines = RatingLines {
-			profile: Some("high"),
-			..RatingLines::default()
-		};
-		if let Ok(out) = with_rating_lines(text, &lines) {
+		if let Ok(out) = with_rating_lines(text, clear) {
 			assert_eq!(
-				shcl::Document::parse(&out).get_bool("performance.check_next_run"),
+				shcl::Document::parse(&out).get_bool("performance.check_hardware"),
 				Err(shcl::Status::NotFound),
-				"check_next_run loads as before:\n{out}"
+				"check_hardware loads as before:\n{out}"
 			);
 		}
 	}
@@ -10460,7 +9819,7 @@ mod tests {
 	// indented deeper than the block.
 	fn clean_rating_shapes() -> Vec<(&'static str, String)> {
 		let template = default_config();
-		let default_line = "\t# rated_hardware: \"\"  ## Default\n";
+		let default_line = "\t# check_next_run: false  ## Default\n";
 		let shapes = [
 			(
 				"a line typed with spaces first in the block",
@@ -10479,14 +9838,14 @@ mod tests {
 				),
 			),
 			(
-				"rated_hardware cleared by hand",
-				template.replacen(default_line, "\trated_hardware:\n", 1),
+				"check_next_run cleared by hand",
+				template.replacen(default_line, "\tcheck_next_run:\n", 1),
 			),
 			(
 				"the commented default deeper than the block",
 				template.replacen(
 					default_line,
-					"\t\t# rated_hardware: \"\"  ## Default\n\tautomatic: true\n",
+					"\t\t# check_next_run: false  ## Default\n\tautomatic: true\n",
 					1,
 				),
 			),
@@ -10507,11 +9866,11 @@ mod tests {
 
 	// Each of these kept a rating through the dialog's save, and the line writer
 	// answered that it had a line that could not be read, so the test ran at
-	// every launch.
+	// every launch. The value written is the one the template does not have, so
+	// a reload shows the write.
 	// Test ID: EpXiS3s
 	#[test]
 	fn a_rating_reaches_a_clean_file_wherever_its_lines_sit() {
-		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
 		let dir =
@@ -10521,40 +9880,30 @@ mod tests {
 		let path = dir.join("config.shcl");
 		set_config_override(path.clone());
 		let lines = RatingLines {
-			profile: Some("high"),
-			rated_hardware: Some(ID),
-			check_next_run: None,
+			check_next_run: Some(true),
 		};
 		for (what, text) in clean_rating_shapes() {
 			std::fs::write(&path, &text).unwrap();
-			let _ = reload_from_disk();
-			assert_eq!(keep_rating(&lines), Kept::Written, "{what}");
-			let reloaded = reload_from_disk();
-			assert_eq!(reloaded.rated_hardware, ID, "{what}");
-			assert_eq!(
-				reloaded.performance_profile,
-				crate::profile::Profile::High,
-				"{what}"
-			);
+			assert!(!reload_from_disk().performance_check_next_run, "{what}");
+			assert_eq!(keep_rating(lines), Kept::Written, "{what}");
+			assert!(reload_from_disk().performance_check_next_run, "{what}");
 		}
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// On those files the lines go in one by one: every line already there stays,
+	// On those files the line goes in on its own: every line already there stays,
 	// byte for byte and in order, apart from the cleared value that gets one.
 	// Test ID: EpXiS3t
 	#[test]
 	fn a_rating_in_a_clean_file_moves_no_other_line() {
 		let lines = RatingLines {
-			profile: Some("high"),
-			rated_hardware: Some("0123456789abcdef"),
-			check_next_run: None,
+			check_next_run: Some(true),
 		};
 		for (what, text) in clean_rating_shapes() {
 			let out =
-				with_rating_lines(&text, &lines).unwrap_or_else(|kept| panic!("{what}: {kept:?}"));
+				with_rating_lines(&text, lines).unwrap_or_else(|kept| panic!("{what}: {kept:?}"));
 			let mut rest = out.lines();
-			for line in text.lines().filter(|line| line.trim() != "rated_hardware:") {
+			for line in text.lines().filter(|line| line.trim() != "check_next_run:") {
 				assert!(
 					rest.any(|kept| kept == line),
 					"{what}: {line:?} is not where it was"
@@ -10563,7 +9912,7 @@ mod tests {
 		}
 	}
 
-	// A value cleared by hand leaves `rated_hardware:` with nothing under it, and
+	// A value cleared by hand leaves `check_next_run:` with nothing under it, and
 	// that line takes the rating. Beside a line the parse drops there is no save's
 	// text to fall back on, so a second line for the key leaves the rating unread
 	// and the test runs at every launch.
@@ -10571,20 +9920,19 @@ mod tests {
 	#[test]
 	fn a_value_cleared_by_hand_takes_the_rating_on_its_own_line() {
 		let lines = RatingLines {
-			rated_hardware: Some("0123456789abcdef"),
-			..RatingLines::default()
+			check_next_run: Some(true),
 		};
 		let lost = "window:\n\t\tmargin: 4\n\tstray: 1\n";
 		for (what, block, want) in [
 			(
 				"first in the block",
-				"performance:\n\trated_hardware:\n\tautomatic: true\n",
-				"performance:\n\trated_hardware: 0123456789abcdef\n\tautomatic: true\n",
+				"performance:\n\tcheck_next_run:\n\tautomatic: true\n",
+				"performance:\n\tcheck_next_run: true\n\tautomatic: true\n",
 			),
 			(
 				"last in the block",
-				"performance:\n\tautomatic: true\n\trated_hardware:\n",
-				"performance:\n\tautomatic: true\n\trated_hardware: 0123456789abcdef\n",
+				"performance:\n\tautomatic: true\n\tcheck_next_run:\n",
+				"performance:\n\tautomatic: true\n\tcheck_next_run: true\n",
 			),
 		] {
 			let text = format!("{block}{lost}");
@@ -10594,7 +9942,7 @@ mod tests {
 				"{what}: the line stepping back to no level is the one the parse drops"
 			);
 			assert_eq!(
-				with_rating_lines(&text, &lines),
+				with_rating_lines(&text, lines),
 				Ok(format!("{want}{lost}")),
 				"{what}"
 			);
@@ -10609,17 +9957,15 @@ mod tests {
 	// Test ID: EpYhM4m
 	#[test]
 	fn a_rating_loses_no_line_the_file_did_not_already_lose() {
-		const ID: &str = "0123456789abcdef";
 		let lines = RatingLines {
-			rated_hardware: Some(ID),
-			..RatingLines::default()
+			check_next_run: Some(true),
 		};
 		let spelled = [(
-			"rated_hardware",
-			rating_spelling("rated_hardware", RatingValue::Word(ID)).expect("a plain id"),
+			"check_next_run",
+			rating_spelling("check_next_run", true).expect("a flag"),
 		)];
-		let written = ["performance.rated_hardware".to_string()];
-		let block = "performance:\n\t\trated_hardware: 0000000000000000\nperformance.rated_hardware: 1111111111111111\n\tcheck_hardware: true\n";
+		let written = ["performance.check_next_run".to_string()];
+		let block = "performance:\n\t\tcheck_next_run: false\nperformance.check_next_run: false\n\tcheck_hardware: false\n";
 		let lost = "window:\n\t\tmargin: 4\n\tstray: 1\n";
 		for (what, text, had) in [
 			("a file that reads clean", block.to_string(), 0),
@@ -10640,7 +9986,7 @@ mod tests {
 			let placed = shcl::Document::parse(&placed);
 			assert!(
 				placed.lost_count() > had
-					&& placed.get_string("performance.rated_hardware").as_deref() == Ok(ID),
+					&& placed.get_bool("performance.check_next_run") == Ok(true),
 				"{what}: placement no longer drops check_hardware, so the case proves nothing"
 			);
 			assert_eq!(
@@ -10648,7 +9994,7 @@ mod tests {
 				settings_besides(&before, &written),
 				"{what}: the comparison refuses this text as well, so the case proves nothing"
 			);
-			if let Ok(out) = with_rating_lines(&text, &lines) {
+			if let Ok(out) = with_rating_lines(&text, lines) {
 				assert!(
 					shcl::Document::parse(&out).lost_count() <= had,
 					"{what}: a line was lost, and the next Settings save refuses the file:\n{out}"
@@ -10662,7 +10008,6 @@ mod tests {
 	// Test ID: EpXiS3u
 	#[test]
 	fn a_rating_is_kept_wherever_the_dialogs_save_kept_it() {
-		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
 		let dir =
@@ -10672,27 +10017,21 @@ mod tests {
 		let path = dir.join("config.shcl");
 		set_config_override(path.clone());
 		let lines = RatingLines {
-			profile: Some("high"),
-			rated_hardware: Some(ID),
-			check_next_run: None,
+			check_next_run: Some(true),
 		};
-		let holds = || {
-			let s = reload_from_disk();
-			s.rated_hardware == ID && s.performance_profile == crate::profile::Profile::High
-		};
+		let holds = || reload_from_disk().performance_check_next_run;
 		let mut files = vec![("the template", default_config().to_string())];
 		files.extend(clean_rating_shapes());
 		for (what, text) in files {
 			std::fs::write(&path, &text).unwrap();
 			let orig = reload_from_disk();
 			let mut new = orig.clone();
-			new.rated_hardware = ID.to_string();
-			new.performance_profile = crate::profile::Profile::High;
+			change(&mut new, Key::PerfCheckNext, Value::Bool(true));
 			let saved = persist(&orig, &new) && holds();
 
 			std::fs::write(&path, &text).unwrap();
 			let _ = reload_from_disk();
-			let kept = keep_rating(&lines);
+			let kept = keep_rating(lines);
 			let written = kept == Kept::Written && holds();
 			assert!(
 				!saved || written,
@@ -10711,48 +10050,29 @@ mod tests {
 	// Test ID: EpXiS3v
 	#[test]
 	fn a_clean_file_is_never_called_unreadable() {
-		let id_only = RatingLines {
-			rated_hardware: Some("0123456789abcdef"),
-			..RatingLines::default()
+		let clear = RatingLines {
+			check_next_run: Some(false),
 		};
-		let mut cases: Vec<(&str, String, RatingLines)> = vec![
-			(
-				"no performance block",
-				"window:\n\tmargin: 4\n".to_string(),
-				id_only,
-			),
+		let mut cases: Vec<(&str, String)> = vec![
+			("no performance block", "window:\n\tmargin: 4\n".to_string()),
 			(
 				"a dotted performance setting only",
 				"performance.automatic: true\n".to_string(),
-				id_only,
 			),
 			(
 				"two performance blocks",
 				"performance:\n\tautomatic: true\nperformance:\n\tprofile: high\n".to_string(),
-				id_only,
-			),
-			(
-				"a word the program would not write",
-				"performance:\n\trated_hardware: 0000000000000000\n".to_string(),
-				RatingLines {
-					rated_hardware: Some("Max"),
-					..RatingLines::default()
-				},
 			),
 		];
-		cases.extend(
-			clean_rating_shapes()
-				.into_iter()
-				.map(|(what, text)| (what, text, id_only)),
-		);
-		for (what, text, lines) in cases {
+		cases.extend(clean_rating_shapes());
+		for (what, text) in cases {
 			assert_eq!(
 				shcl::Document::parse(&text).lost_count(),
 				0,
 				"{what}: reads clean"
 			);
 			assert_ne!(
-				with_rating_lines(&text, &lines),
+				with_rating_lines(&text, clear),
 				Err(Kept::Unreadable),
 				"{what}"
 			);
@@ -10846,7 +10166,6 @@ mod tests {
 	// Test ID: EpXyGI5
 	#[test]
 	fn a_rating_is_kept_where_a_save_only_requotes() {
-		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
 		let dir = crate::testdir::run_dir()
@@ -10856,9 +10175,7 @@ mod tests {
 		let path = dir.join("config.shcl");
 		set_config_override(path.clone());
 		let lines = RatingLines {
-			profile: Some("high"),
-			rated_hardware: Some(ID),
-			check_next_run: None,
+			check_next_run: Some(true),
 		};
 		let files: [(&str, &str, fn(&Settings) -> String); 4] = [
 			(
@@ -10884,10 +10201,9 @@ mod tests {
 		];
 		for (what, text, other) in files {
 			let mut saved = parse_kept(text);
-			assert!(saved.set_string("performance.profile", "high"), "{what}");
-			assert!(saved.set_string("performance.rated_hardware", ID), "{what}");
+			assert!(saved.set_bool("performance.check_next_run", true), "{what}");
 			assert_eq!(
-				with_rating_lines(text, &lines).as_deref(),
+				with_rating_lines(text, lines).as_deref(),
 				Ok(saved_text(&saved).as_str()),
 				"{what}"
 			);
@@ -10900,14 +10216,9 @@ mod tests {
 				"{what}: the value is the default, so the case proves nothing"
 			);
 			std::fs::write(&path, text).unwrap();
-			assert_eq!(keep_rating(&lines), Kept::Written, "{what}");
+			assert_eq!(keep_rating(lines), Kept::Written, "{what}");
 			let reloaded = reload_from_disk();
-			assert_eq!(reloaded.rated_hardware, ID, "{what}");
-			assert_eq!(
-				reloaded.performance_profile,
-				crate::profile::Profile::High,
-				"{what}"
-			);
+			assert!(reloaded.performance_check_next_run, "{what}");
 			assert_eq!(
 				other(&reloaded),
 				loaded,
@@ -11144,31 +10455,29 @@ mod tests {
 				.then(|| text.replace("'Old Mono'", "\"New Mono\""))
 		}
 		let lines = RatingLines {
-			profile: Some("high"),
-			rated_hardware: Some("0123456789abcdef"),
-			check_next_run: None,
+			check_next_run: Some(true),
 		};
 		// the save keeps the quotes of a file it can keep line by line
 		let single = "font:\n\tfamily: 'Old Mono'\n";
-		let out = with_rating_lines_through(single, &lines, &[reads_quotes]).expect("kept");
+		let out = with_rating_lines_through(single, lines, &[reads_quotes]).expect("kept");
 		assert!(out.contains("'Old Mono'"), "{out}");
 		// `font` twice is folded into one block, so the save falls back to the
 		// canonical form
 		let text = "font:\n\tfamily: 'Old Mono'\nwindow:\n\tcolumns: 90\nfont:\n\tsize: 13\n";
-		let plain = with_rating_lines_through(text, &lines, &[]).expect("no step, so it is kept");
+		let plain = with_rating_lines_through(text, lines, &[]).expect("no step, so it is kept");
 		assert!(
 			plain.contains("\"Old Mono\""),
 			"the save respells the value:\n{plain}"
 		);
 		assert_eq!(
-			with_rating_lines_through(text, &lines, &[reads_quotes]),
+			with_rating_lines_through(text, lines, &[reads_quotes]),
 			Err(Kept::Unplaced),
 			"the next launch would load another font"
 		);
 		// a file with somewhere to put the lines is written line by line, the value
 		// keeps its quotes, and the step fires on both sides
 		let blocked = format!("{text}performance:\n\tautomatic: true\n");
-		let out = with_rating_lines_through(&blocked, &lines, &[reads_quotes]).expect("kept");
+		let out = with_rating_lines_through(&blocked, lines, &[reads_quotes]).expect("kept");
 		assert!(out.contains("'Old Mono'"), "{out}");
 	}
 
@@ -11180,7 +10489,6 @@ mod tests {
 		tag: &str,
 		files: Vec<(&str, String, fn(&Settings) -> String)>,
 	) {
-		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
 		let dir = crate::testdir::run_dir().join(format!("silkterm_{tag}_{}", std::process::id()));
@@ -11189,15 +10497,13 @@ mod tests {
 		let path = dir.join("config.shcl");
 		set_config_override(path.clone());
 		let lines = RatingLines {
-			profile: Some("high"),
-			rated_hardware: Some(ID),
-			check_next_run: None,
+			check_next_run: Some(true),
 		};
 		for (what, text, other) in files {
 			std::fs::write(&path, &text).unwrap();
 			let loaded = other(&reload_from_disk());
 			std::fs::write(&path, &text).unwrap();
-			let kept = keep_rating(&lines);
+			let kept = keep_rating(lines);
 			let disk = std::fs::read_to_string(&path).unwrap();
 			if kept == Kept::Written {
 				assert_eq!(
@@ -11210,9 +10516,9 @@ mod tests {
 				assert_eq!(disk, text, "{what}: nothing written");
 				// a launch that is not busy migrates the file, and the rating goes in then
 				let _ = reload_from_disk();
-				assert_eq!(keep_rating(&lines), Kept::Written, "{what}: next launch");
+				assert_eq!(keep_rating(lines), Kept::Written, "{what}: next launch");
 				let reloaded = reload_from_disk();
-				assert_eq!(reloaded.rated_hardware, ID, "{what}");
+				assert!(reloaded.performance_check_next_run, "{what}");
 				assert_eq!(
 					other(&reloaded),
 					loaded,
@@ -11227,8 +10533,7 @@ mod tests {
 			// the check to account instead, with a step of its own.
 			//   assert_ne!(other(&reload_from_disk()), loaded, "... proves nothing");
 			let mut saved = shcl::Document::parse(&text);
-			assert!(saved.set_string("performance.profile", "high"), "{what}");
-			assert!(saved.set_string("performance.rated_hardware", ID), "{what}");
+			assert!(saved.set_bool("performance.check_next_run", true), "{what}");
 			std::fs::write(&path, saved.to_canonical()).unwrap();
 			assert_eq!(
 				other(&reload_from_disk()),
@@ -11246,7 +10551,6 @@ mod tests {
 	// Test ID: EpXN9p7
 	#[test]
 	fn a_rating_is_kept_beside_an_unreadable_line() {
-		const ID: &str = "0123456789abcdef";
 		let _guard = super::test_config_lock();
 		let _ = settings();
 		let dir =
@@ -11254,7 +10558,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
-		let text = "themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n\nperformance:\n\t# profile: \"max\"  ## Default\n\t# rated_hardware: \"\"  ## Default\n";
+		let text = "themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n\nperformance:\n\t# profile: \"max\"  ## Default\n\t# check_next_run: false  ## Default\n";
 		assert_eq!(
 			shcl::Document::parse(text).lost_count(),
 			1,
@@ -11264,29 +10568,26 @@ mod tests {
 		set_config_override(path.clone());
 
 		let lines = RatingLines {
-			profile: Some("high"),
-			rated_hardware: Some(ID),
-			check_next_run: None,
+			check_next_run: Some(true),
 		};
-		assert_eq!(keep_rating(&lines), Kept::Written);
+		assert_eq!(keep_rating(lines), Kept::Written);
 		assert_eq!(
 			std::fs::read_to_string(&path).unwrap(),
-			"themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n\nperformance:\n\t# profile: \"max\"  ## Default\n\tprofile: high\n\t# rated_hardware: \"\"  ## Default\n\trated_hardware: 0123456789abcdef\n",
+			"themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n\nperformance:\n\t# profile: \"max\"  ## Default\n\t# check_next_run: false  ## Default\n\tcheck_next_run: true\n",
 			"the unreadable line and its neighbours are as they were"
 		);
 		let reloaded = reload_from_disk();
-		assert_eq!(reloaded.rated_hardware, ID);
-		assert_eq!(reloaded.performance_profile, crate::profile::Profile::High);
+		assert!(reloaded.performance_check_next_run);
 
 		let mut next = reloaded.clone();
-		next.rated_hardware = "fedcba9876543210".to_string();
+		change(&mut next, Key::PerfCheckNext, Value::Bool(false));
 		assert!(persist(&reloaded, &next), "the dialog's save goes through");
 		let after = std::fs::read_to_string(&path).unwrap();
 		assert!(
 			after.starts_with("themes:\n\tone:\n\t\t\tname: One\n\t\tstray: 1\n"),
 			"the unreadable line is as it was\n{after}"
 		);
-		assert_eq!(reload_from_disk().rated_hardware, "fedcba9876543210");
+		assert!(!reload_from_disk().performance_check_next_run);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -11303,12 +10604,11 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
-		let text = "performance:\n\trated_hardware: 0000000000000000\n";
+		let text = "performance:\n\tcheck_next_run: true\n";
 		std::fs::write(&path, text).unwrap();
 		set_config_override(path.clone());
 		let lines = RatingLines {
-			rated_hardware: Some("0123456789abcdef"),
-			..RatingLines::default()
+			check_next_run: Some(false),
 		};
 
 		let hold = std::fs::File::open(&path).unwrap();
@@ -11321,7 +10621,7 @@ mod tests {
 			std::thread::sleep(std::time::Duration::from_millis(20));
 			config_open_elsewhere(&path)
 		});
-		let held = keep_rating(&lines);
+		let held = keep_rating(lines);
 		let bytes = std::fs::read_to_string(&path).unwrap();
 		let _ = child.kill();
 		let _ = child.wait();
@@ -11329,10 +10629,10 @@ mod tests {
 		assert_eq!(held, Kept::Busy);
 		assert_eq!(bytes, text, "nothing is written while it is held");
 
-		assert_eq!(keep_rating(&lines), Kept::Written);
+		assert_eq!(keep_rating(lines), Kept::Written);
 		assert_eq!(
 			std::fs::read_to_string(&path).unwrap(),
-			"performance:\n\trated_hardware: 0123456789abcdef\n"
+			"performance:\n\tcheck_next_run: false\n"
 		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -11352,17 +10652,16 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let real = dir.join("real.shcl");
-		std::fs::write(&real, "performance:\n\trated_hardware: 0000000000000000\n").unwrap();
+		std::fs::write(&real, "performance:\n\tcheck_next_run: true\n").unwrap();
 		std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o600)).unwrap();
 		let link = dir.join("config.shcl");
 		std::os::unix::fs::symlink(&real, &link).unwrap();
 		set_config_override(link.clone());
 
 		let lines = RatingLines {
-			rated_hardware: Some("0123456789abcdef"),
-			..RatingLines::default()
+			check_next_run: Some(false),
 		};
-		assert_eq!(keep_rating(&lines), Kept::Written);
+		assert_eq!(keep_rating(lines), Kept::Written);
 		let meta = std::fs::symlink_metadata(&link).unwrap();
 		assert!(
 			meta.file_type().is_symlink(),
@@ -11371,7 +10670,7 @@ mod tests {
 		assert_eq!(std::fs::read_link(&link).unwrap(), real);
 		assert_eq!(
 			std::fs::read_to_string(&real).unwrap(),
-			"performance:\n\trated_hardware: 0123456789abcdef\n",
+			"performance:\n\tcheck_next_run: false\n",
 			"the linked file holds the rating"
 		);
 		let mode = std::fs::metadata(&real).unwrap().permissions().mode() & 0o777;
@@ -11464,7 +10763,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
-		std::fs::write(&path, "performance:\n\trated_hardware: 0000000000000000\n").unwrap();
+		std::fs::write(&path, "performance:\n\tcheck_next_run: true\n").unwrap();
 		let victim = dir.join("victim.txt");
 		std::fs::write(&victim, "untouched\n").unwrap();
 		// the name the rating used to write, and the first one shcl's writer tries
@@ -11477,10 +10776,9 @@ mod tests {
 		set_config_override(path.clone());
 
 		let lines = RatingLines {
-			rated_hardware: Some("0123456789abcdef"),
-			..RatingLines::default()
+			check_next_run: Some(false),
 		};
-		assert_eq!(keep_rating(&lines), Kept::Written);
+		assert_eq!(keep_rating(lines), Kept::Written);
 		assert_eq!(
 			std::fs::read_to_string(&victim).unwrap(),
 			"untouched\n",
@@ -11493,7 +10791,7 @@ mod tests {
 		);
 		assert_eq!(
 			std::fs::read_to_string(&path).unwrap(),
-			"performance:\n\trated_hardware: 0123456789abcdef\n"
+			"performance:\n\tcheck_next_run: false\n"
 		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -11513,11 +10811,7 @@ mod tests {
 			.0,
 		);
 		assert_eq!(s.scrollback, 4242, "settings before the bad line survive");
-		assert_eq!(
-			auto::color(&s, auto::Setting::Focus),
-			[0xab, 0xcd, 0xef],
-			"and settings after it"
-		);
+		assert_eq!(s.focus, [0xab, 0xcd, 0xef], "and settings after it");
 		assert_eq!(
 			s.margin,
 			Settings::default().margin,
@@ -11525,36 +10819,11 @@ mod tests {
 		);
 	}
 
-	// Clearing the Family box wrote nothing at all, so the old line survived and
-	// the font came back next launch.
-	// Test ID: EpHR81A
-	#[test]
-	fn clearing_the_font_family_takes_the_old_line_out() {
-		let set = Settings {
-			font_family: auto::Auto::by_hand("Iosevka".to_string()),
-			..Default::default()
-		};
-		let mut none = set.clone();
-		none.font_family = auto::Auto::automatic();
-		assert_eq!(cleared_keys(&set, &none), vec!["font.family"]);
-		// setting one, or leaving it alone, is an ordinary write
-		assert!(cleared_keys(&none, &set).is_empty());
-		assert!(cleared_keys(&set, &set).is_empty());
-	}
-
-	// The one table: each auto setting once, at a path the template has, each
-	// group with more than one member, and each rule giving the kind of value
-	// its setting stores.
+	// Every setting knobs keeps has a field that takes back what it gives, and
+	// a line in the shipped template.
 	// Test ID: EsDxpmD
 	#[test]
-	fn the_auto_table_holds_each_setting_once_with_a_rule_of_its_kind() {
-		let every = auto::Setting::ALL;
-		assert_eq!(auto::TABLE.len(), every.len());
-		// `row` indexes the table by the enum, so the two run in one order
-		for (at, setting) in every.into_iter().enumerate() {
-			assert_eq!(auto::TABLE[at].setting, setting);
-			assert_eq!(setting as usize, at);
-		}
+	fn every_setting_knobs_keeps_has_a_field_and_a_template_line() {
 		let paths: std::collections::HashSet<String> = walk_settings(default_config())
 			.into_iter()
 			.filter_map(|w| match w {
@@ -11562,63 +10831,38 @@ mod tests {
 				_ => None,
 			})
 			.collect();
-		for setting in every {
-			let rows: Vec<_> = auto::TABLE
-				.iter()
-				.filter(|r| r.setting == setting)
-				.collect();
-			assert_eq!(rows.len(), 1, "{setting:?}");
+		let mut s = Settings::default();
+		for setting in &crate::fields::spec().settings {
 			assert!(
-				paths.contains(rows[0].path),
+				paths.contains(&setting.path),
 				"{} is not in the template",
-				rows[0].path
+				setting.path
 			);
-			assert_eq!(auto::by_path(rows[0].path), Some(setting));
-			// what the rule gives can be stored, and reads back as set by hand
-			let mut s = Settings::default();
-			let rule = auto::rule(&s, setting, auto::Place::default());
-			auto::set(&mut s, setting, Some(rule.clone()));
-			assert!(
-				!auto::automatic(&s, setting),
-				"{setting:?} took no {rule:?}"
-			);
-			assert_eq!(auto::value(&s, setting, auto::Place::default()), rule);
-		}
-		for group in auto::GROUPS {
-			assert!(
-				auto::members(group.group).count() > 1,
-				"a switch over one setting belongs on the setting ({})",
-				group.name
-			);
-			assert_eq!(auto::group_named(group.name), Some(group.group));
-		}
-		for row in auto::TABLE {
-			if let Some(group) = row.group {
-				assert!(auto::GROUPS.iter().any(|g| g.group == group), "{row:?}");
-			}
+			let key = Key::parse(&setting.id).expect("a key");
+			let v = crate::fields::get(&s, key).expect("a field");
+			assert!(crate::fields::put(&mut s, key, &v), "{}", setting.id);
+			assert_eq!(crate::fields::get(&s, key), Some(v), "{}", setting.id);
 		}
 	}
 
-	// A setting with nothing stored uses its rule, one set by hand its value, and
-	// going back to automatic forgets the value.
+	// A setting under a switch follows its rule while the switch is on. Set by
+	// hand it turns the switch off, and turning the switch back on sets the
+	// value aside rather than dropping it.
 	// Test ID: EsDxpmE
 	#[test]
-	fn an_auto_setting_is_its_stored_value_else_its_rule() {
-		use auto::{Place, Setting, Value};
+	fn a_switch_s_rule_gives_the_value_and_one_set_by_hand_comes_back() {
 		let mut s = Settings::default();
 		let os = crate::sysfont::monospace();
+		assert!(s.use_system_font);
 		assert_eq!(
-			auto::value(&s, Setting::FontFamily, Place::default()),
-			Value::Text(
-				os.family
-					.clone()
-					.unwrap_or_else(|| DEFAULT_FONT_STACK.to_string())
-			)
+			s.font_family,
+			os.family
+				.clone()
+				.unwrap_or_else(|| DEFAULT_FONT_STACK.to_string())
 		);
-		assert_eq!(auto::font_size(&s), default_font_size());
 		s.remembered_columns = 133;
 		s.remembered_rows = 41;
-		assert_eq!(auto::grid(&s, None), (133, 41));
+		assert_eq!(crate::fields::grid(&s, None), (133, 41));
 		// per monitor, where one is kept
 		s.monitor_sizes.push(MonitorSize {
 			key: "m1".into(),
@@ -11626,396 +10870,255 @@ mod tests {
 			rows: 25,
 			font_zoom: 0,
 		});
-		assert_eq!(auto::grid(&s, Some("m1")), (90, 25));
-		s.remember_per_monitor = false;
-		assert_eq!(auto::grid(&s, Some("m1")), (133, 41));
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (90, 25));
+		change(&mut s, Key::RememberPerMonitor, Value::Bool(false));
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (133, 41));
 
-		for setting in [Setting::FontFamily, Setting::FontSize, Setting::Columns] {
-			assert!(auto::automatic(&s, setting));
-		}
-		s.font_family = auto::Auto::by_hand("Iosevka".into());
-		s.font_size = auto::Auto::by_hand(21.0);
-		s.columns = auto::Auto::by_hand(100);
-		assert_eq!(auto::font_family(&s), "Iosevka");
-		assert_eq!(auto::font_size(&s), 21.0);
-		assert_eq!(auto::grid(&s, None), (100, 41));
-		assert!(!auto::automatic(&s, Setting::Columns));
-		auto::set(&mut s, Setting::Columns, None);
-		assert!(auto::automatic(&s, Setting::Columns));
-		assert_eq!(auto::grid(&s, None), (133, 41));
-		// a value of the wrong kind stores nothing
-		auto::set(&mut s, Setting::FontSize, Some(Value::Text("big".into())));
-		assert!(auto::automatic(&s, Setting::FontSize));
+		change(&mut s, Key::FontFamily, Value::Text("Iosevka".into()));
+		assert!(!s.use_system_font, "set by hand turns the switch off");
+		assert_eq!(s.font_family, "Iosevka");
+		change(&mut s, Key::Columns, Value::Int(100));
+		assert!(!s.remember_size);
+		assert_eq!(
+			crate::fields::grid(&s, None),
+			(100, 41),
+			"rows kept what it showed"
+		);
+		change(&mut s, Key::RememberSize, Value::Bool(true));
+		assert_eq!(crate::fields::grid(&s, None), (133, 41));
+		let lines = crate::fields::lines_of(&s);
+		assert!(
+			lines
+				.iter()
+				.any(|(p, v)| p == "kept.set_aside.window.columns" && *v == Value::Int(100)),
+			"{lines:?}"
+		);
+		change(&mut s, Key::RememberSize, Value::Bool(false));
+		assert_eq!(
+			crate::fields::grid(&s, None),
+			(100, 41),
+			"and back it comes"
+		);
 	}
 
-	// The theme colors, the open command and the wallpaper's image and folder
-	// are automatic with no line, and a line sets one by hand. A color that does
-	// not parse, an empty command and the usual folder written out read as no
-	// line, the way an older build's file meant them.
+	// The theme's colors come from the theme in force, in the mode in force. A
+	// color changed under it stays through a mode change, and Custom is the
+	// file's own lines.
 	// Test ID: EsEAijd
 	#[test]
-	fn theme_colors_the_open_command_and_the_wallpaper_are_automatic_until_a_line_sets_them() {
-		use auto::Setting;
+	fn the_theme_colors_follow_the_theme_and_a_change_stays() {
 		let _guard = test_config_lock();
 		let p = std::path::Path::new("test.shcl");
-		let load = |text: &str| resolve(read_raw(text, p).0);
-		let colors = [
-			Setting::Background,
-			Setting::Highlight,
-			Setting::Focus,
-			Setting::MenuBackground,
-			Setting::MenuForeground,
-			Setting::DialogBackground,
-			Setting::DialogForeground,
-			Setting::Gutter,
-			Setting::ScrollbarThumb,
-			Setting::ScrollbarTrough,
-		];
-		let light = load("theme_mode: light\n");
+		let read = |text: &str| settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text));
 		let pal = crate::theme::resolve("SilkTerm", crate::theme::Mode::Light, true);
-		for setting in colors {
-			assert!(auto::automatic(&light, setting), "{setting:?}");
-		}
-		assert_eq!(auto::color(&light, Setting::Background), pal.bg);
+		let light = read("theme_mode: light\n");
+		assert_eq!(light.bg, pal.bg);
+		assert_eq!(light.dialog_bg, pal.dialog_bg);
+		assert_eq!(light.gutter, pal.gutter);
+		assert_eq!(light.scrollbar_thumb, SCROLLBAR_THUMB_DEF, "in no theme");
+
+		let mut s = read("theme_mode: dark\n");
+		change(&mut s, Key::ColHighlight, Value::Text("#010203".into()));
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "SilkTerm *");
+		change(&mut s, Key::ThemeMode, Value::Text("light".into()));
+		assert_eq!(s.bg, pal.bg);
+		assert_eq!(s.highlight, [1, 2, 3], "the change holds in both modes");
+
+		let custom =
+			read("theme: custom\ncolors:\n\tbackground: \"#123456\"\n\tgutter: \"nope\"\n");
+		assert_eq!(custom.bg, [0x12, 0x34, 0x56]);
 		assert_eq!(
-			auto::color(&light, Setting::DialogBackground),
-			pal.dialog_bg
-		);
-		assert_eq!(auto::color(&light, Setting::Gutter), pal.gutter);
-		assert_eq!(
-			auto::color(&light, Setting::ScrollbarThumb),
-			SCROLLBAR_THUMB_DEF
-		);
-		let set = load("colors:\n\tbackground: \"#123456\"\n\tgutter: \"nope\"\n");
-		assert_eq!(set.bg, auto::Auto::by_hand([0x12, 0x34, 0x56]));
-		assert!(
-			auto::automatic(&set, Setting::Gutter),
+			custom.gutter,
+			Settings::bare().gutter,
 			"a color that does not parse is no line"
 		);
-
-		let none = load("");
-		assert!(auto::automatic(&none, Setting::OpenCommand));
+		let preset = read("colors:\n\tbackground: \"#123456\"\n");
 		assert_eq!(
-			auto::text(&none, Setting::OpenCommand),
-			crate::links::desktop_opener()
+			preset.bg,
+			crate::theme::resolve("SilkTerm", crate::theme::Mode::Dark, true).bg,
+			"a Custom line, under a theme"
 		);
-		let blank = load("hyperlinks:\n\topen_command: \" \"\n");
-		assert!(auto::automatic(&blank, Setting::OpenCommand));
+	}
 
-		// the usual folder, written out the way the template and older builds wrote it
-		let usual = load(&format!(
+	// The open command, File or folder and its folder have a rule that gives the
+	// default. Empty text and the usual folder written out read as no line, the
+	// way an older build's file meant them.
+	// Test ID: EsG6IFN
+	#[test]
+	fn the_open_command_and_the_wallpaper_default_to_their_rules() {
+		let _guard = test_config_lock();
+		let p = std::path::Path::new("test.shcl");
+		let read = |text: &str| settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text));
+		let none = read("");
+		assert!(!crate::fields::by_hand(&none, Key::LinkOpenCommand));
+		assert_eq!(none.hyperlink_open_command, crate::links::desktop_opener());
+		let blank = read("hyperlinks:\n\topen_command: \" \"\n");
+		assert!(!crate::fields::by_hand(&blank, Key::LinkOpenCommand));
+		let usual = read(&format!(
 			"wallpaper:\n\trotate:\n\t\tfolder: \"{}\"\n",
 			wallpaper_dir_escaped()
 		));
-		assert!(auto::automatic(&usual, Setting::WallpaperFolder));
+		assert!(!crate::fields::by_hand(&usual, Key::BgFolder));
 		assert_eq!(
 			(&usual.wallpaper_folder, usual.wallpaper_folder_auto),
 			(&none.wallpaper_folder, none.wallpaper_folder_auto),
 			"the same folder, found the same way"
 		);
-		let named = load("wallpaper:\n\timage: \"/x.png\"\n");
+		let named = read("wallpaper:\n\timage: \"/x.png\"\n");
 		assert_eq!(image_of(&named).as_deref(), Some("/x.png"));
-		assert!(image_of(&load("wallpaper:\n\timage: \"\"\n")).is_none());
+		assert!(image_of(&read("wallpaper:\n\timage: \"\"\n")).is_none());
 	}
 
-	// An automatic color follows the theme and mode it is read under, and one
-	// set by hand stays put. A desktop dark or light change leans on this.
-	// Test ID: EsEAioc
-	#[test]
-	fn an_automatic_color_follows_the_theme_and_a_hand_set_one_stays() {
-		use crate::theme::Mode;
-		use auto::Setting;
-		let mut s = Settings {
-			highlight: auto::Auto::by_hand([1, 2, 3]),
-			..Default::default()
-		};
-		let dark = crate::theme::resolve("SilkTerm", Mode::Dark, true);
-		assert_eq!(auto::color(&s, Setting::Background), dark.bg);
-		s.theme_mode = Mode::Light;
-		retheme(&mut s);
-		let light = crate::theme::resolve("SilkTerm", Mode::Light, true);
-		assert_ne!(light.bg, dark.bg);
-		for (setting, want) in [
-			(Setting::Background, light.bg),
-			(Setting::Focus, light.focus),
-			(Setting::MenuForeground, light.menu_fg),
-			(Setting::DialogForeground, light.dialog_fg),
-			(Setting::Highlight, [1, 2, 3]),
-		] {
-			assert_eq!(auto::color(&s, setting), want, "{setting:?}");
-		}
-		// a saved theme of the same name stands in for the built-in
-		let mine = crate::theme::UserTheme {
-			slug: "silkterm".into(),
-			name: "SilkTerm".into(),
-			dark,
-			light: dark,
-		};
-		s.user_themes.push(mine);
-		retheme(&mut s);
-		assert_eq!(auto::color(&s, Setting::Background), dark.bg);
-	}
-
-	// Set by hand, a theme color, the open command and the folder each write
-	// their line. Put back to automatic, the line is commented out, and the next
-	// launch reads automatic again.
+	// Set by hand, a color, the open command and the folder each write their
+	// line. The reset arrow takes it out, and the next launch reads the default.
 	// Test ID: EsEAitK
 	#[test]
-	fn an_auto_color_or_text_writes_its_line_and_going_back_comments_it_out() {
-		use auto::{Setting, Value};
+	fn a_value_writes_its_line_and_the_arrow_takes_it_out() {
 		let _guard = test_config_lock();
 		let dir = format_test_dir("auto_lines");
 		let path = dir.join("config.shcl");
-		std::fs::write(&path, "").unwrap();
+		std::fs::write(&path, "theme: custom\n").unwrap();
 		set_config_override(path.clone());
 		let base = reload_from_disk();
 		let mut own = base.clone();
 		let folder = if cfg!(windows) { "C:\\pics" } else { "/pics" };
 		let hand = [
-			(Setting::Background, Value::Color([0x12, 0x34, 0x56])),
-			(Setting::ScrollbarTrough, Value::Color([1, 2, 3])),
+			(Key::ColBg, Value::Text("#123456".into())),
+			(Key::ColScrollbarTrough, Value::Text("#010203".into())),
 			(
-				Setting::OpenCommand,
+				Key::LinkOpenCommand,
 				Value::Text("firefox --new-tab".into()),
 			),
-			(Setting::WallpaperFolder, Value::Text(folder.into())),
+			(Key::BgFolder, Value::Text(folder.into())),
 		];
-		for (setting, value) in hand.clone() {
-			auto::set(&mut own, setting, Some(value));
+		for (key, v) in hand.clone() {
+			change(&mut own, key, v);
 		}
 		assert!(persist(&base, &own));
 		let text = std::fs::read_to_string(&path).unwrap();
 		assert!(text.contains("\tbackground: \"#123456\""), "{text}");
 		let loaded = reload_from_disk();
-		for (setting, value) in hand.clone() {
-			assert_eq!(
-				auto::value(&loaded, setting, auto::Place::default()),
-				value,
-				"{setting:?}"
-			);
-			assert!(!auto::automatic(&loaded, setting), "{setting:?}");
+		for (key, v) in hand.clone() {
+			assert_eq!(crate::fields::get(&loaded, key), Some(v), "{}", key.name());
+			assert!(crate::fields::by_hand(&loaded, key), "{}", key.name());
 		}
 		let mut back = loaded.clone();
-		for (setting, _) in hand.clone() {
-			auto::set(&mut back, setting, None);
+		for (key, _) in hand.clone() {
+			crate::fields::reset(&mut back, key, None);
 		}
 		assert!(persist(&loaded, &back));
 		let text = std::fs::read_to_string(&path).unwrap();
 		assert!(!text.contains("\n\tbackground: \"#123456\""), "{text}");
 		let again = reload_from_disk();
-		for (setting, _) in hand {
-			assert!(auto::automatic(&again, setting), "{setting:?}: {text}");
+		for (key, _) in hand {
+			assert!(
+				!crate::fields::by_hand(&again, key),
+				"{}: {text}",
+				key.name()
+			);
 		}
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// Every row of the design's "Changing a setting" table, with the switch read
-	// after each.
-	// Test ID: EsDxpmF
-	#[test]
-	fn every_change_to_a_group_leaves_its_switch_telling_the_truth() {
-		use auto::{Group, Place, Setting, State, Value};
-		let group = Group::WindowSize;
-		let mut s = Settings {
-			remembered_columns: 150,
-			remembered_rows: 45,
-			..Default::default()
-		};
-		let state = |s: &Settings| auto::group_state(s, group);
-		assert_eq!(state(&s), State::On, "nothing stored reads as on");
-		// one member changed
-		auto::set(&mut s, Setting::Columns, Some(Value::Count(99)));
-		assert_eq!(state(&s), State::Mixed);
-		auto::set(&mut s, Setting::Rows, Some(Value::Count(30)));
-		assert_eq!(state(&s), State::Off);
-		// one member put back to automatic
-		auto::set(&mut s, Setting::Rows, None);
-		assert_eq!(state(&s), State::Mixed);
-		// a mixed switch clicked goes to automatic, like turning it on
-		let on = state(&s) != State::On;
-		auto::set_group(&mut s, group, on, Place::default());
-		assert_eq!(state(&s), State::On);
-		assert_eq!(auto::grid(&s, None), (150, 45));
-		// turned off, every member keeps what it shows, so nothing moves
-		auto::set_group(&mut s, group, false, Place::default());
-		assert_eq!(state(&s), State::Off);
-		assert_eq!(auto::grid(&s, None), (150, 45));
-		s.remembered_columns = 10;
-		assert_eq!(auto::grid(&s, None), (150, 45), "set by hand stays put");
-		// turned on again
-		auto::set_group(&mut s, group, true, Place::default());
-		assert_eq!(state(&s), State::On);
-		assert_eq!(auto::grid(&s, None), (10, 45));
-		// the size is kept for the next launch unless both are set by hand
-		assert!(auto::keeps_size(&s));
-		auto::set(&mut s, Setting::Columns, Some(Value::Count(80)));
-		assert!(auto::keeps_size(&s));
-		auto::set(&mut s, Setting::Rows, Some(Value::Count(24)));
-		assert!(!auto::keeps_size(&s));
-	}
-
-	// The switch is never stored, so a relaunch reads it off the file, and a
-	// hand edit is read the same way: a line with a value sets it, no line or a
-	// bad value is automatic.
+	// The switches are stored, so a relaunch reads them back as they were, and a
+	// value set aside under one comes back with it.
 	// Test ID: EsDxpmG
 	#[test]
-	fn a_group_reads_the_same_after_a_relaunch_and_a_hand_edit() {
-		use auto::{Group, State};
+	fn a_switch_and_what_it_set_aside_read_the_same_after_a_relaunch() {
 		let _guard = super::test_config_lock();
 		let _ = settings();
-		let dir =
-			crate::testdir::run_dir().join(format!("silkterm_autogroup_{}", std::process::id()));
-		let _ = std::fs::create_dir_all(&dir);
+		let dir = format_test_dir("switch_relaunch");
 		let path = dir.join("config.shcl");
 		std::fs::write(&path, "").unwrap();
 		set_config_override(path.clone());
 		let loaded = load();
-		assert_eq!(auto::group_state(&loaded, Group::WindowSize), State::On);
+		assert!(loaded.remember_size);
 		let mut edited = loaded.clone();
-		edited.columns = auto::Auto::by_hand(111);
+		change(&mut edited, Key::Columns, Value::Int(111));
 		assert!(persist(&loaded, &edited));
 		let back = load();
-		assert_eq!(auto::group_state(&back, Group::WindowSize), State::Mixed);
-		assert_eq!(auto::grid(&back, None).0, 111);
-		// and back to automatic takes the line out
-		let mut cleared = back.clone();
-		cleared.columns = auto::Auto::automatic();
-		assert!(persist(&back, &cleared));
-		assert_eq!(auto::group_state(&load(), Group::WindowSize), State::On);
+		assert!(!back.remember_size);
+		assert_eq!(crate::fields::grid(&back, None).0, 111);
+		// on again: 111 goes aside, and comes back off
+		let mut on = back.clone();
+		change(&mut on, Key::RememberSize, Value::Bool(true));
+		assert!(persist(&back, &on));
 		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(text.contains("\nkept:"), "{text}");
 		assert!(
-			!text.lines().any(|l| l.trim_start().starts_with("columns:")),
+			!text
+				.lines()
+				.any(|l| l.trim_start().starts_with("columns:") && !l.contains("111")),
 			"{text}"
 		);
+		let again = load();
+		assert!(again.remember_size);
+		let mut off = again.clone();
+		change(&mut off, Key::RememberSize, Value::Bool(false));
+		assert_eq!(crate::fields::grid(&off, None).0, 111);
 
 		let p = std::path::Path::new("test.shcl");
-		let read = |text: &str| resolve(read_raw(text, p).0);
-		assert!(read("window:\n\tcolumns: 100\n").rows.is_automatic());
-		assert_eq!(auto::grid(&read("window:\n\tcolumns: 100\n"), None).0, 100);
-		assert!(
-			read("window:\n\tcolumns: lots\n").columns.is_automatic(),
-			"a bad value"
-		);
-		assert!(
-			read("font:\n\tfamily: \"\"\n").font_family.is_automatic(),
-			"an empty one"
-		);
-		assert!(read("font:\n\tsize: big\n").font_size.is_automatic());
+		let read = |text: &str| settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text));
+		let off = "window:\n\tremember_size: false\n\tcolumns: lots\n";
 		assert_eq!(
-			auto::font_size(&read("font:\n\tsize: 900\n")),
+			crate::fields::grid(&read(off), None).0,
+			160,
+			"a bad value is no line"
+		);
+		assert_eq!(
+			read("font:\n\tuse_system_size: false\n\tsize: 900\n").font_size,
 			limits::FONT_SIZE.1
 		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
-	// The rule can change while the program runs. An automatic setting follows
-	// it, and one set by hand does not.
+	// The size remembered can change while the program runs. With Remember last
+	// size on, Columns and Rows follow it, and with it off they stay.
 	// Test ID: EsDxpmH
 	#[test]
-	fn an_automatic_size_follows_the_window_and_one_set_by_hand_stays() {
+	fn a_remembered_size_follows_the_window_and_one_set_by_hand_stays() {
 		let mut s = Settings::default();
 		remember_window(&mut s, Some("m1"), Some((120, 40)), Some(0));
-		assert_eq!(auto::grid(&s, Some("m1")), (120, 40));
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (120, 40));
 		remember_window(&mut s, Some("m1"), Some((140, 44)), None);
-		assert_eq!(auto::grid(&s, Some("m1")), (140, 44));
-		s.rows = auto::Auto::by_hand(30);
+		assert_eq!(crate::fields::grid(&s, Some("m1")), (140, 44));
+		change(&mut s, Key::Rows, Value::Int(30));
 		remember_window(&mut s, Some("m1"), Some((150, 50)), None);
-		assert_eq!(auto::grid(&s, Some("m1")), (150, 30));
+		assert_eq!(
+			crate::fields::grid(&s, Some("m1")),
+			(140, 30),
+			"set by hand"
+		);
 	}
 
-	// A file from before the follow switches loads the same values after a
-	// launch takes them out. Each case is the file, the desktop's font, what the
-	// old build used, and that the result settles.
+	// The switches came back under their old names, so a file from before they
+	// went loads with no conversion.
 	// Test ID: EsDxpmI
 	#[test]
-	fn an_old_follow_switch_loads_the_same_size_after_it_goes() {
+	fn an_old_file_s_switches_are_read_as_they_are() {
 		let p = std::path::Path::new("test.shcl");
-		let desktop = crate::sysfont::Monospace {
-			family: Some("Desk Mono".into()),
-			size_pt: Some(10.0),
+		let read = |text: &str| {
+			let text = migrate_config_text(text).unwrap_or_else(|| text.to_string());
+			settled(resolve(read_raw(&text, p).0), &shcl::Document::parse(&text))
 		};
-		let bare = crate::sysfont::Monospace::default();
-		let fold = |text: &str, os: &crate::sysfont::Monospace| {
-			let ask = || os.clone();
-			let out = absorbed_switches(text, &ask).expect("a switch line was there");
-			assert_eq!(
-				absorbed_switches(&out, &ask),
-				None,
-				"settles at once:\n{out}"
-			);
-			for switch in ["use_system_family", "use_system_size", "remember_size"] {
-				assert!(!out.contains(switch), "{switch} is still there:\n{out}");
-			}
-			(resolve(read_raw(&out, p).0), out)
-		};
-
-		// the window block as shipped: remember on by default, size lines unused
-		let shipped = "window:\n\n\tmargin: 8.0\n\n\tcolumns: 160\n\trows: 48\n\n\t# remember_size: true  ## Default\n\tremembered_columns: 130\n\tremembered_rows: 40\n";
-		let (s, out) = fold(shipped, &desktop);
-		assert!(s.columns.is_automatic() && s.rows.is_automatic(), "{out}");
-		assert_eq!(auto::grid(&s, None), (130, 40), "the last size, as before");
-		assert!(
-			out.contains("\t# columns: 160\n") && !out.contains("\n\n\n"),
-			"{out}"
+		let s = read("window:\n\tremember_size: false\n\tcolumns: 100\n\trows: 30\n");
+		assert!(!s.remember_size);
+		assert_eq!(crate::fields::grid(&s, None), (100, 30));
+		let s = read("font:\n\tuse_system_family: false\n\tfamily: \"Iosevka\"\n");
+		assert!(!s.use_system_font);
+		assert_eq!(s.font_family, "Iosevka");
+		// the font block as an old template shipped it: the switch on and the list
+		// set, which is now the list set aside
+		let shipped = format!(
+			"font:\n\n\tuse_system_family: true\n\t# use_system_size: true  ## Default\n\n\tfamily: \"{DEFAULT_FONT_STACK}\"\n"
 		);
-		// off with a size: that size, set by hand
-		let (s, _) = fold(
-			"window:\n\tremember_size: false\n\tcolumns: 100\n\trows: 30\n",
-			&desktop,
+		let s = read(&shipped);
+		assert!(s.use_system_font && s.use_system_font_size);
+		assert_eq!(
+			migrate_config_text(&shipped),
+			None,
+			"a launch leaves the switches alone"
 		);
-		assert_eq!(auto::grid(&s, None), (100, 30));
-		assert!(!auto::keeps_size(&s));
-		// off with no size: the old default, written out
-		let (s, out) = fold(
-			"window:\n\tremember_size: false\n\tremembered_columns: 130\n",
-			&desktop,
-		);
-		assert_eq!(auto::grid(&s, None), (160, 48), "{out}");
-		assert!(out.contains("\tcolumns: 160\n\trows: 48\n"), "{out}");
-		let (s, out) = fold("window.remember_size: false\n", &desktop);
-		assert_eq!(auto::grid(&s, None), (160, 48));
-		assert!(
-			out.contains("window.columns: 160"),
-			"a dotted file stays dotted:\n{out}"
-		);
-
-		// the font block as shipped: follow on, the list unused where the desktop
-		// names a font, and the list itself where it does not
-		let font = format!(
-			"font:\n\n\tuse_system_family: true\n\t# use_system_size: true  ## Default\n\n\tfamily: \"{DEFAULT_FONT_STACK}\"\n\n\t# size: 17.0  ## Default\n"
-		);
-		for os in [&desktop, &bare] {
-			let (s, out) = fold(&font, os);
-			assert!(
-				s.font_family.is_automatic() && s.font_size.is_automatic(),
-				"{out}"
-			);
-		}
-		// a list of one's own: unused where the desktop names a font, kept where not
-		let own = "font:\n\tuse_system_family: true\n\tfamily: \"Iosevka\"\n";
-		assert!(fold(own, &desktop).0.font_family.is_automatic());
-		assert_eq!(auto::font_family(&fold(own, &bare).0), "Iosevka");
-		// switched off, the list is what was used
-		let off = "font:\n\tuse_system_family: false\n\tfamily: \"Iosevka\"\n";
-		assert_eq!(auto::font_family(&fold(off, &desktop).0), "Iosevka");
-		// a size with the follow on is unused only where the desktop names one
-		let size = "font:\n\tuse_system_size: true\n\tsize: 20\n";
-		assert!(fold(size, &desktop).0.font_size.is_automatic());
-		assert_eq!(auto::font_size(&fold(size, &bare).0), 20.0);
-		let size_off = "font:\n\tuse_system_size: false\n\tsize: 20\n";
-		assert_eq!(auto::font_size(&fold(size_off, &desktop).0), 20.0);
-		// with no switch line the file never had one, and a size of its own
-		// set without one meant that size
-		let never = || -> crate::sysfont::Monospace { panic!("asked with no font switch") };
-		assert_eq!(absorbed_switches("font:\n\tsize: 20\n", &never), None);
-		assert_eq!(absorbed_switches("window:\n\tcolumns: 100\n", &never), None);
-		assert!(absorbed_switches("window:\n\tremember_size: true\n", &never).is_some());
-		// an explicit size with no size switch read as off before, so it stays
-		let inferred = "font:\n\tuse_system_family: true\n\tsize: 20\n";
-		assert_eq!(auto::font_size(&fold(inferred, &desktop).0), 20.0);
-		// and the whole launch path does it too
-		let launched = migrate_config_text(shipped).expect("a launch takes the switch out");
-		assert!(!launched.contains("remember_size"), "{launched}");
 	}
 
 	// Reverting used to remove the node, and shcl takes a node's leading comments
@@ -12055,7 +11158,6 @@ mod tests {
 	// Test ID: EpHOzrc
 	#[test]
 	fn every_numeric_setting_has_a_floor_and_a_ceiling() {
-		let p = std::path::Path::new("test.shcl");
 		#[rustfmt::skip]
 		let keys: &[(&str, f32, f32)] = &[
 			("font.size",                        limits::FONT_SIZE.0,   limits::FONT_SIZE.1),
@@ -12071,10 +11173,10 @@ mod tests {
 			("cursor.blink_rate_s",              limits::BLINK_S.0,     limits::BLINK_S.1),
 			("wallpaper.rotate.interval_s",      limits::ROTATE_S.0,    limits::ROTATE_S.1),
 		];
-		let read = |key: &str, value: &str| resolve(read_raw(&format!("{key}: {value}\n"), p).0);
+		let read = |key: &str, value: &str| read_text(&format!("{key}: {value}\n"));
 		let of = |s: &Settings, key: &str| -> f32 {
 			match key {
-				"font.size" => auto::font_size(s),
+				"font.size" => s.font_size,
 				"font.line_height_scale" => s.line_height_scale,
 				"scroll.wheel_lines" => s.wheel_lines,
 				"scroll.alt_scroll_lines" => s.alt_scroll_lines,
@@ -12109,8 +11211,8 @@ mod tests {
 		] {
 			let s = read(key, huge);
 			let got = match key {
-				"window.columns" => auto::grid(&s, None).0,
-				"window.rows" => auto::grid(&s, None).1,
+				"window.columns" => crate::fields::grid(&s, None).0,
+				"window.rows" => crate::fields::grid(&s, None).1,
 				"window.remembered_columns" => s.remembered_columns,
 				"window.remembered_rows" => s.remembered_rows,
 				"window.idle_release_hidden_min" => s.idle_release_hidden_min,
@@ -12262,8 +11364,8 @@ mod tests {
 		);
 	}
 
-	// A color that is not the theme's own is an override, wherever it came from,
-	// and the system switching between dark and light must not take it away.
+	// A color changed under a theme, or given on the command line, stays put when
+	// the system switches between dark and light.
 	// Test ID: Epz2LOT
 	#[test]
 	fn a_color_override_survives_the_system_switching_modes() {
@@ -12271,15 +11373,13 @@ mod tests {
 		let before = settings();
 		let was_dark = OS_DARK.load(Ordering::Relaxed);
 		OS_DARK.store(true, Ordering::Relaxed);
-		let mut s = resolve(
-			read_raw(
-				"theme_mode: system\ncolors.background: \"#123456\"\n",
-				std::path::Path::new("test.shcl"),
-			)
-			.0,
-		);
-		// one from the command line, which the file never holds
-		s.fg = [1, 2, 3];
+		let mut s = read_text("theme_mode: system\n");
+		// a change made under the theme, and one from the command line, which the
+		// file never holds
+		change(&mut s, Key::ColBg, Value::Text("#123456".into()));
+		s.model
+			.hold(Key::ColFg.name(), &Value::Text("#010203".into()));
+		crate::fields::fill(&mut s, None);
 		update(s);
 		for dark in [false, true, false] {
 			assert!(reapply_for_os(dark));
@@ -12290,17 +11390,9 @@ mod tests {
 				crate::theme::Mode::System,
 				dark,
 			);
-			assert_eq!(
-				auto::color(&live, auto::Setting::Background),
-				[0x12, 0x34, 0x56],
-				"dark {dark}"
-			);
+			assert_eq!(live.bg, [0x12, 0x34, 0x56], "dark {dark}");
 			assert_eq!(live.fg, [1, 2, 3], "dark {dark}");
-			assert_eq!(
-				auto::color(&live, auto::Setting::DialogBackground),
-				pal.dialog_bg,
-				"dark {dark}"
-			);
+			assert_eq!(live.dialog_bg, pal.dialog_bg, "dark {dark}");
 			assert_eq!(live.ansi, pal.ansi, "dark {dark}");
 		}
 		OS_DARK.store(was_dark, Ordering::Relaxed);
@@ -12327,7 +11419,7 @@ mod tests {
 			s.font_family, absent.font_family,
 			"a repeated key falls back as if it were not there"
 		);
-		assert_eq!(auto::font_size(&s), 13.0, "its siblings are unaffected");
+		assert_eq!(s.font_size, 13.0, "its siblings are unaffected");
 		// the message is what makes the fallback discoverable; both lines cited
 		assert_eq!(line_list(&[2, 4]), " lines 2, 4");
 		assert_eq!(line_list(&[7]), " line 7");
@@ -12365,41 +11457,128 @@ mod tests {
 		);
 	}
 
-	// The remembered size is live from the first write, never a commented
-	// default, since the window rewrites it on every resize.
-	// Test ID: Er2UFeN
+	// A file from before 10-09 kept the machine's state with the settings, and
+	// colors over a theme as plain lines. Its first launch moves the state to the
+	// state file and makes those colors the theme's "*" changes, so nothing on
+	// screen changes, and the next launch changes nothing. A newer file's colors
+	// under a theme are Custom's, and stay that way.
+	// Test ID: EsGMVgc
 	#[test]
-	fn the_template_has_the_remembered_size_as_live_lines() {
-		for want in [
+	fn an_old_file_moves_its_state_out_and_shows_the_same() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("oldfile");
+		let path = dir.join("config.shcl");
+		let state_file = dir.join("state.shcl");
+		let old = "performance:\n\tautomatic: true\n\tprofile: high\n\trated_hardware: 0123456789abcdef\n\
+			font:\n\tfamily: \"Some Mono\"\n\
+			window:\n\tremembered_columns: 132\n\tremembered_rows: 41\n\tremembered_font_zoom: -2\n\
+			\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 1\n\
+			theme: Matrix\ncolors:\n\tbackground: \"#123456\"\n";
+		std::fs::write(&path, old).unwrap();
+		set_config_override(path.clone());
+		let s = load();
+
+		let state = std::fs::read_to_string(&state_file).unwrap_or_else(|_| {
+			panic!(
+				"no state file: {:?}\n{}",
+				dir_names(&dir),
+				std::fs::read_to_string(&path).unwrap()
+			)
+		});
+		let kept = shcl::Document::parse(&state);
+		assert_eq!(
+			kept.get_int("window.remembered_columns"),
+			Ok(132),
+			"{state}"
+		);
+		assert_eq!(
+			kept.get_int("window.monitors.1920x1080_100pct.columns"),
+			Ok(90),
+			"{state}"
+		);
+		assert_eq!(
+			kept.get_string("performance.rated_hardware").as_deref(),
+			Ok("0123456789abcdef")
+		);
+		assert_eq!(
+			kept.get_string("performance.tested_profile").as_deref(),
+			Ok("high"),
+			"automatic was on, so the profile line was the test's pick"
+		);
+		let text = std::fs::read_to_string(&path).unwrap();
+		let doc = shcl::Document::parse(&text);
+		for gone in [
 			"window.remembered_columns",
-			"window.remembered_rows",
-			"window.remembered_font_zoom",
-			"window.remembered_maximized",
+			"window.monitors",
+			"performance.rated_hardware",
 		] {
-			let active = walk_settings(default_config())
-				.into_iter()
-				.find_map(|w| match w {
-					WalkLine::Setting { path, active, .. } if path == want => Some(active),
-					_ => None,
-				});
-			assert_eq!(active, Some(true), "{want} is not a live line");
+			assert!(!doc.exists(gone), "{gone} is still in the file:\n{text}");
 		}
-		let s = resolve(read_raw(default_config(), std::path::Path::new("test.shcl")).0);
-		let d = Settings::default();
+		assert_eq!(
+			doc.get_string("kept.changes.theme.preset").as_deref(),
+			Ok("Matrix"),
+			"{text}"
+		);
+		assert_eq!(
+			doc.get_string("kept.changes.theme.values.colors.background")
+				.as_deref(),
+			Ok("#123456")
+		);
+		assert_eq!(
+			doc.get_string("colors.background").as_deref(),
+			Ok("#123456"),
+			"the line stays, as Custom's"
+		);
+		assert_eq!(config_complaints(&text), Vec::<String>::new());
+
+		// what shows is what the old build showed
+		assert_eq!(s.bg, [0x12, 0x34, 0x56]);
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Matrix *");
+		assert_eq!(s.performance_profile, crate::profile::Profile::High);
+		assert!(!s.use_system_font && s.font_family == "Some Mono");
 		assert_eq!(
 			(
 				s.remembered_columns,
 				s.remembered_rows,
-				s.remembered_font_zoom,
-				s.remembered_maximized
+				s.remembered_font_zoom
 			),
-			(
-				d.remembered_columns,
-				d.remembered_rows,
-				d.remembered_font_zoom,
-				d.remembered_maximized
-			)
+			(132, 41, -2)
 		);
+		assert_eq!(s.monitor_sizes.len(), 1);
+
+		let again = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "settled");
+		assert_eq!(std::fs::read_to_string(&state_file).unwrap(), state);
+		assert!(again == s);
+
+		// no state lines, so a file this build wrote: Custom's colors stay Custom's
+		let new = "theme: Matrix\ncolors:\n\tbackground: \"#123456\"\n";
+		std::fs::write(&path, new).unwrap();
+		let s = load();
+		let text = std::fs::read_to_string(&path).unwrap();
+		assert!(!shcl::Document::parse(&text).exists("kept"), "{text}");
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Matrix");
+		assert_ne!(s.bg, [0x12, 0x34, 0x56]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// The remembered size is kept in the state file, so the template has no line
+	// for it and a resize never rewrites the config.
+	// Test ID: Er2UFeN
+	#[test]
+	fn the_template_has_no_remembered_size() {
+		for path in [
+			"window.remembered_columns",
+			"window.remembered_rows",
+			"window.remembered_font_zoom",
+			"window.remembered_maximized",
+			"window.monitors",
+		] {
+			let found = walk_settings(default_config()).into_iter().any(|w| {
+				matches!(w, WalkLine::Setting { path: p, .. } if p == path || p.starts_with(&format!("{path}.")))
+			});
+			assert!(!found, "{path} is in the template");
+		}
 	}
 
 	// A size or zoom set by hand is the last one anywhere, and with
@@ -12491,8 +11670,8 @@ mod tests {
 		s.remember_per_monitor = true;
 		assert_eq!(remembered_window(&s, b), kept(100, 30, 0));
 		// and nothing is kept per monitor while the size is set by hand
-		s.columns = auto::Auto::by_hand(120);
-		s.rows = auto::Auto::by_hand(40);
+		change(&mut s, Key::Columns, Value::Int(120));
+		change(&mut s, Key::Rows, Value::Int(40));
 		remember_window(&mut s, Some("640x480_100pct"), Some((80, 24)), Some(0));
 		assert_eq!(s.monitor_sizes.len(), 3);
 		assert_eq!(
@@ -12555,62 +11734,48 @@ mod tests {
 	// Test ID: EreYcuT
 	#[test]
 	fn a_window_reads_back_the_sizes_another_window_kept() {
-		let p = std::path::Path::new("test.shcl");
-		let text = default_config()
-			.replace("remembered_columns: 160", "remembered_columns: 132")
-			.replace("remembered_font_zoom: 0", "remembered_font_zoom: -3")
-			.replace(
-				"\t# remember_maximized:",
-				"\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 2\n\n\t# remember_maximized:",
-			);
-		let launch = resolve(read_raw(&text, p).0);
+		let p = std::path::Path::new("state.shcl");
+		let text = "window:\n\tremembered_columns: 132\n\tremembered_font_zoom: -3\n\tmonitors:\n\t\t1920x1080_100pct:\n\t\t\tcolumns: 90\n\t\t\trows: 30\n\t\t\tfont_zoom: 2\n";
 		let mut live = Settings::default();
-		window_memory_from(&text, p, &mut live);
-		assert_eq!(
-			(live.remembered_columns, live.remembered_font_zoom),
-			(132, -3)
-		);
-		assert_eq!(live.monitor_sizes.len(), 1);
+		window_memory_from(text, p, &mut live);
 		assert_eq!(
 			(
 				live.remembered_columns,
 				live.remembered_rows,
-				live.remembered_font_zoom,
-				&live.monitor_sizes
+				live.remembered_font_zoom
 			),
-			(
-				launch.remembered_columns,
-				launch.remembered_rows,
-				launch.remembered_font_zoom,
-				&launch.monitor_sizes
-			)
+			(132, Settings::default().remembered_rows, -3)
+		);
+		assert_eq!(
+			live.monitor_sizes,
+			vec![MonitorSize {
+				key: "1920x1080_100pct".to_string(),
+				columns: 90,
+				rows: 30,
+				font_zoom: 2,
+			}]
 		);
 	}
 
 	// A file from before remember_per_monitor gets it as its own paragraph,
-	// comment and all, under the remembered size and above remember_maximized.
-	// The anchor is the paragraph's first line, reworded by 2026100907341818.
+	// comment and all, under the size it follows and above remember_maximized.
 	// Test ID: EreYcuS
 	#[test]
 	fn an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows() {
-		let old = default_config().replace(
-			&default_config()[default_config()
-				.find("\t## While the size is not set here")
-				.unwrap()
-				..default_config().find("\t# remember_maximized").unwrap()],
+		let template = default_config();
+		let paragraph = "\t## While remember_size is on";
+		let old = template.replace(
+			&template[template.find(paragraph).unwrap()
+				..template.find("\t# remember_maximized").unwrap()],
 			"",
 		);
 		assert!(!old.contains("remember_per_monitor"));
 		let new = backfilled_text(&old).unwrap().unwrap();
 		let at = |text: &str| new.find(text).unwrap();
-		assert!(at("remembered_rows: 48") < at("\t## While the size is not set here"));
+		assert!(at("# rows: 48") < at(paragraph));
 		assert!(at("# remember_per_monitor: true  ## Default") < at("# remember_maximized"));
 		assert_eq!(new.matches("remember_per_monitor").count(), 1, "{new}");
-		assert_eq!(
-			new.matches("## While the size is not set here").count(),
-			1,
-			"{new}"
-		);
+		assert_eq!(new.matches(paragraph).count(), 1, "{new}");
 	}
 
 	// A new file follows the Settings dialog's tabs: Background, Text, Cursor,
@@ -12665,8 +11830,7 @@ mod tests {
 		// so a test that points those elsewhere mid-loop would move the answer
 		// between the two loads being compared.
 		let _guard = super::test_config_lock();
-		let path = std::path::Path::new("test.shcl");
-		let base = resolve(read_raw(default_config(), path).0);
+		let base = read_text(default_config());
 		let lines: Vec<&str> = default_config().lines().collect();
 		let mut checked = 0;
 		for w in walk_settings(default_config()) {
@@ -12699,7 +11863,21 @@ mod tests {
 			let mut edited = lines.clone();
 			edited[index] = &bare;
 			let text = edited.join("\n") + "\n";
-			let mut loaded = resolve(read_raw(&text, path).0);
+			let mut loaded = read_text(&text);
+			// the line is now the person's own value, and it is the default
+			for (id, v) in &loaded.model.values.own {
+				if base.model.values.own.get(id) == Some(v) {
+					continue;
+				}
+				let key = Key::parse(id).expect("a dialog key");
+				assert_eq!(
+					crate::fields::default_of(&base, key, None).as_ref(),
+					Some(v),
+					"`{}` is not the default",
+					lines[index].trim()
+				);
+			}
+			loaded.model = base.model.clone();
 			// A hotkey uncommented is set in the file, which Settings shows on its
 			// Keys tab, but it answers to the same chords.
 			for (hotkey, _) in crate::keys::config_paths() {
@@ -13209,7 +12387,8 @@ mod tests {
 		set_config_override(path.clone());
 		let orig = Settings::default();
 		let mut edited = orig.clone();
-		edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
+		let size = f64::from(edited.font_size.round() + 1.0);
+		change(&mut edited, Key::FontSize, Value::Float(size));
 
 		let text = "font:\n\tfamily:[One, Two]\n";
 		std::fs::write(&path, text).unwrap();
@@ -13280,12 +12459,9 @@ mod tests {
 		set_config_override(path.clone());
 
 		let s = load();
-		assert!(
-			(auto::font_size(&s) - 19.0).abs() < f32::EPSILON,
-			"{}",
-			auto::font_size(&s)
-		);
-		assert_eq!(auto::grid(&s, None).0, 103);
+		assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
+		// kept for later, since the window opens at the remembered size
+		assert_eq!(own_of(&s, Key::Columns), Some(Value::Int(103)));
 		let kept = backups_in(&dir, "config");
 		assert_eq!(kept.len(), 1, "{kept:?}");
 		assert!(is_backup_name(&kept[0], "config", 2), "{kept:?}");
@@ -13347,7 +12523,8 @@ mod tests {
 		set_config_override(path.clone());
 		let orig = Settings::default();
 		let mut edited = orig.clone();
-		edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
+		let size = f64::from(edited.font_size.round() + 1.0);
+		change(&mut edited, Key::FontSize, Value::Float(size));
 
 		let body: &[u8] = b"window:\n\tcolumns: 103\n\tti\xe9tle: x\n";
 		std::fs::write(&path, body).unwrap();
@@ -13357,7 +12534,7 @@ mod tests {
 		assert_eq!(doc.get_int("window.columns"), Ok(103), "{now}");
 		assert_eq!(
 			doc.get_float("font.size").ok(),
-			Some(f64::from(auto::font_size(&edited))),
+			Some(f64::from(edited.font_size)),
 			"{now}"
 		);
 		let loss = take_conversion_loss().expect("a notice is owed");
@@ -13393,8 +12570,8 @@ mod tests {
 	// 	set_config_override(path.clone());
 	//
 	// 	let s = load();
-	// 	assert!((auto::font_size(&s) - 19.0).abs() < f32::EPSILON, "{}", auto::font_size(&s));
-	// 	assert_eq!(auto::grid(&s, None).0, 103);
+	// 	assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s).font_size;
+	// 	assert_eq!(crate::fields::grid(&s, None).0, 103);
 	// 	assert_eq!(std::fs::read(&path).unwrap(), body, "left as it was");
 	// 	assert_eq!(dir_names(&dir), vec!["config.shcl".to_string()]);
 	// 	let said = LAUNCH_SAID.lock().unwrap().clone().expect("said").1;
@@ -13435,7 +12612,7 @@ mod tests {
 	// 	set_config_override(path.clone());
 	// 	let orig = Settings::default();
 	// 	let mut edited = orig.clone();
-	// 	edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
+	// 	change(&mut edited, Key::FontSize, Value::Float(f64::from(edited.font_size.round() + 1.0)));
 	//
 	// 	let _ = take_refusal();
 	// 	assert!(!persist(&orig, &edited), "nothing was written");
@@ -13451,7 +12628,7 @@ mod tests {
 	// 	assert_eq!(std::fs::read(&path).unwrap(), body);
 	//
 	// 	// the rating's own writer says it could not keep the result
-	// 	let kept = keep_rating(&RatingLines {
+	// 	let kept = keep_rating(RatingLines {
 	// 		profile: Some("high"),
 	// 		..RatingLines::default()
 	// 	});
@@ -13622,12 +12799,9 @@ mod tests {
 		set_config_override(path.clone());
 
 		let s = load();
-		assert!(
-			(auto::font_size(&s) - 19.0).abs() < f32::EPSILON,
-			"{}",
-			auto::font_size(&s)
-		);
-		assert_eq!(auto::grid(&s, None).0, 103);
+		assert!((s.font_size - 19.0).abs() < f32::EPSILON, "{}", s.font_size);
+		// kept for later, since the window opens at the remembered size
+		assert_eq!(own_of(&s, Key::Columns), Some(Value::Int(103)));
 		let kept = backups_in(&dir, "config");
 		assert_eq!(kept.len(), 1, "{kept:?}");
 		assert!(
@@ -13663,7 +12837,7 @@ mod tests {
 
 		let orig = Settings::default();
 		let mut edited = orig.clone();
-		edited.font_size = auto::Auto::by_hand(21.0);
+		change(&mut edited, Key::FontSize, Value::Float(21.0));
 		assert!(persist(&orig, &edited));
 		let saved = std::fs::read_to_string(&path).unwrap();
 		assert_eq!(
@@ -13691,7 +12865,8 @@ mod tests {
 		set_config_override(path.clone());
 		let orig = Settings::default();
 		let mut edited = orig.clone();
-		edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
+		let size = f64::from(edited.font_size.round() + 1.0);
+		change(&mut edited, Key::FontSize, Value::Float(size));
 
 		assert!(persist(&orig, &edited));
 		assert_eq!(take_refusal(), None);
@@ -13699,7 +12874,7 @@ mod tests {
 		let doc = shcl::Document::parse(&now);
 		assert_eq!(
 			doc.get_float("font.size").ok(),
-			Some(f64::from(auto::font_size(&edited))),
+			Some(f64::from(edited.font_size)),
 			"{now}"
 		);
 		assert_eq!(doc.get_int("window.columns"), Ok(103), "{now}");
@@ -13709,15 +12884,14 @@ mod tests {
 		assert_eq!(std::fs::read(&copy).unwrap(), body);
 
 		std::fs::write(&path, &body).unwrap();
-		let kept = keep_rating(&RatingLines {
-			profile: Some("high"),
-			..RatingLines::default()
+		let kept = keep_rating(RatingLines {
+			check_next_run: Some(true),
 		});
 		assert_eq!(kept, Kept::Written);
 		let now = std::fs::read_to_string(&path).expect("UTF-8 now");
 		assert_eq!(
-			shcl::Document::parse(&now).get_string("performance.profile"),
-			Ok("high".to_string()),
+			shcl::Document::parse(&now).get_bool("performance.check_next_run"),
+			Ok(true),
 			"{now}"
 		);
 		let loss = take_conversion_loss().expect("a notice is owed");
@@ -13732,8 +12906,8 @@ mod tests {
 		set_config_override(path.to_path_buf());
 		let base = reload_from_disk();
 		let mut own = base.clone();
-		own.font_size = auto::Auto::by_hand(15.0);
-		own.theme_mode = crate::theme::Mode::Light;
+		change(&mut own, Key::FontSize, Value::Float(15.0));
+		change(&mut own, Key::ThemeMode, Value::Text("light".into()));
 		own.scrollback = 5000;
 		own.remembered_columns = 101;
 		own.shells = vec![
@@ -13762,7 +12936,7 @@ mod tests {
 		assert!(loaded.keys == own.keys && loaded.user_themes.len() == 1);
 		assert_eq!(loaded.monitor_sizes, own.monitor_sizes);
 		assert_eq!(
-			(auto::font_size(&loaded), loaded.theme_mode),
+			(loaded.font_size, loaded.theme_mode),
 			(15.0, crate::theme::Mode::Light)
 		);
 		loaded
@@ -13786,8 +12960,9 @@ mod tests {
 		live.wallpaper = Some(PathBuf::from("/pics/rotated.png"));
 
 		std::fs::remove_file(&path).unwrap();
+		let flipped = Value::Bool(!live.copy_on_select);
 		let mut edited = live.clone();
-		edited.scroll_smooth = !edited.scroll_smooth;
+		change(&mut edited, Key::CopyOnSelect, flipped.clone());
 		assert!(persist(&live, &edited), "the Settings save");
 		let text = std::fs::read_to_string(&path).expect("the save wrote the file");
 		assert_eq!(
@@ -13796,7 +12971,7 @@ mod tests {
 			"{text}"
 		);
 		let mut want = loaded.clone();
-		want.scroll_smooth = edited.scroll_smooth;
+		change(&mut want, Key::CopyOnSelect, flipped);
 		assert!(reload_from_disk() == want, "{text}");
 		assert!(!text.contains("rotated"), "{text}");
 
@@ -13824,6 +12999,8 @@ mod tests {
 		std::fs::remove_file(&path).unwrap();
 		let mut sized = loaded.clone();
 		sized.remembered_columns += 1;
+		// the shown size is read off the remembered one
+		crate::fields::fill(&mut sized, None);
 		assert!(persist(&loaded, &sized));
 		let text = std::fs::read_to_string(&path).unwrap();
 		assert!(reload_from_disk() == sized, "{text}");
@@ -13846,6 +13023,8 @@ mod tests {
 		std::fs::remove_file(&path).unwrap();
 		let mut sized = loaded.clone();
 		sized.remembered_columns += 1;
+		// the shown size is read off the remembered one
+		crate::fields::fill(&mut sized, None);
 		assert!(persist(&loaded, &sized));
 		assert_eq!(slugs(&reload_from_disk()), ["ash", "bsh", "csh"]);
 
@@ -13861,14 +13040,15 @@ mod tests {
 		let unseen = dir.join("unseen.shcl");
 		set_config_override(unseen.clone());
 		let mut edited = moved.clone();
-		edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
+		let size = f64::from(edited.font_size.round() + 1.0);
+		change(&mut edited, Key::FontSize, Value::Float(size));
 		assert!(persist(&moved, &edited));
 		let doc = shcl::Document::parse(&std::fs::read_to_string(&unseen).unwrap());
 		let kept: Vec<String> = read_shells(&doc).into_iter().map(|e| e.slug).collect();
 		assert_eq!(kept, ["csh", "ash", "bsh", "dsh"]);
 		assert_eq!(
 			doc.get_float("font.size").ok(),
-			Some(f64::from(auto::font_size(&edited)))
+			Some(f64::from(edited.font_size))
 		);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -13973,14 +13153,10 @@ mod tests {
 			resolve(read_raw("", p).0).wallpaper_default_fit,
 			Fit::Stretch
 		);
-		assert!(d.columns.is_automatic() && d.rows.is_automatic());
-		assert_eq!(auto::grid(&d, None), (160, 48));
+		assert!(d.remember_size);
+		assert_eq!(crate::fields::grid(&d, None), (160, 48));
 		assert_eq!(d.margin, 8.0);
-		assert_eq!(
-			auto::color(&d, auto::Setting::Background),
-			[0, 0, 0],
-			"an all-black background"
-		);
+		assert_eq!(d.bg, [0, 0, 0], "an all-black background");
 	}
 
 	// Scrim function + the five falloff curves resolve; unknown values fall to the
@@ -14123,12 +13299,17 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let path = dir.join("config.shcl");
-		std::fs::write(&path, "cursor:\n\tblink: true\n\tanimation: none\n").unwrap();
+		// the blink is a profile row, so Custom's is the file's
+		std::fs::write(
+			&path,
+			"performance:\n\tautomatic: false\n\tprofile: custom\ncursor:\n\tblink: true\n\tanimation: none\n",
+		)
+		.unwrap();
 		set_config_override(path.clone());
 		let orig = load();
 		assert!(!orig.cursor_blink);
 		let mut edited = orig.clone();
-		edited.cursor_blink = true;
+		change(&mut edited, Key::CursorBlinking, Value::Bool(true));
 		assert!(persist(&orig, &edited));
 		let back = load();
 		assert!(
@@ -14226,14 +13407,16 @@ mod tests {
 		fn writes<T: Choice>(
 			path: &std::path::Path,
 			leaf: &str,
+			key: Key,
 			field: fn(&mut Settings) -> &mut T,
 		) {
+			let word = |c: T| Value::Text(c.key().to_string());
 			for (k, &choice) in T::ALL.iter().enumerate() {
 				// a save writes only what changed, so it starts from another value
 				let mut orig = load();
-				*field(&mut orig) = T::ALL[(k + 1) % T::ALL.len()];
+				change(&mut orig, key, word(T::ALL[(k + 1) % T::ALL.len()]));
 				let mut edited = orig.clone();
-				*field(&mut edited) = choice;
+				change(&mut edited, key, word(choice));
 				assert!(persist(&orig, &edited));
 				let text = std::fs::read_to_string(path).unwrap();
 				let want = format!("{leaf}: {}\n", choice.key());
@@ -14291,7 +13474,7 @@ mod tests {
 				format!("\tanimation: {animation}\n"),
 			];
 			let file = format!(
-				"{}performance:\n{}font:\n\tsize: 12.5\ntext:\n\tscrim:\n{}{}cursor:\n{}",
+				"{}performance:\n\tautomatic: false\n{}font:\n\tsize: 12.5\ntext:\n\tscrim:\n{}{}cursor:\n{}",
 				lines[0], lines[1], lines[2], lines[3], lines[4]
 			);
 			std::fs::write(&path, &file).unwrap();
@@ -14301,14 +13484,22 @@ mod tests {
 				assert!(launched.contains(line.as_str()), "{line:?} in {launched}");
 			}
 			assert_eq!(orig.theme_mode, Mode::parse(mode).unwrap_or(d.theme_mode));
-			assert_eq!(orig.performance_profile, Profile::parse(profile));
+			// Remote is never stored, so the file's word is no choice at all
+			let picked = match Profile::parse(profile) {
+				Profile::Remote => Profile::Max,
+				picked => picked,
+			};
+			assert_eq!(orig.performance_profile, picked);
+			// the scrim's words are Custom's, whichever profile shows
+			let own = |key: Key| orig.model.values.own.get(key.name()).cloned();
+			let word = |key: Option<&str>| key.map(|k| Value::Text(k.to_string()));
 			assert_eq!(
-				orig.text_scrim_ramp,
-				Ramp::parse(ramp).unwrap_or(d.text_scrim_ramp)
+				own(Key::ScrimRamp),
+				word(Ramp::parse(ramp).map(Choice::key))
 			);
 			assert_eq!(
-				orig.text_scrim_function,
-				Function::parse(function).unwrap_or(d.text_scrim_function)
+				own(Key::ScrimFunction),
+				word(Function::parse(function).map(Choice::key))
 			);
 			assert_eq!(
 				orig.cursor_animation,
@@ -14316,7 +13507,7 @@ mod tests {
 			);
 
 			let mut edited = orig.clone();
-			edited.font_size = auto::Auto::by_hand(13.5);
+			change(&mut edited, Key::FontSize, Value::Float(13.5));
 			assert!(persist(&orig, &edited));
 			assert_eq!(
 				std::fs::read_to_string(&path).unwrap(),
@@ -14326,16 +13517,33 @@ mod tests {
 		}
 
 		// every value a save writes is the word the table above pins, and reads
-		// back as itself
-		writes(&path, "theme_mode", |s| &mut s.theme_mode);
-		writes(&path, "ramp", |s| &mut s.text_scrim_ramp);
-		writes(&path, "function", |s| &mut s.text_scrim_function);
-		writes(&path, "animation", |s| &mut s.cursor_animation);
-		for (k, profile) in Profile::ALL.into_iter().enumerate() {
+		// back as itself, on the profile whose values are the file's own
+		std::fs::write(
+			&path,
+			"performance:\n\tautomatic: false\n\tprofile: custom\n",
+		)
+		.unwrap();
+		writes(&path, "theme_mode", Key::ThemeMode, |s| &mut s.theme_mode);
+		writes(&path, "ramp", Key::ScrimRamp, |s| &mut s.text_scrim_ramp);
+		writes(&path, "function", Key::ScrimFunction, |s| {
+			&mut s.text_scrim_function
+		});
+		writes(&path, "animation", Key::CursorAnimation, |s| {
+			&mut s.cursor_animation
+		});
+		// Remote is for the run only, so no save writes it
+		let kept = Profile::ALL.into_iter().filter(|p| *p != Profile::Remote);
+		let word = |p: Profile| Value::Text(p.key().to_string());
+		for (k, profile) in kept.clone().enumerate() {
+			let others: Vec<Profile> = kept.clone().collect();
 			let mut orig = load();
-			orig.performance_profile = Profile::ALL[(k + 1) % Profile::ALL.len()];
+			change(
+				&mut orig,
+				Key::PerfProfile,
+				word(others[(k + 1) % others.len()]),
+			);
 			let mut edited = orig.clone();
-			edited.performance_profile = profile;
+			change(&mut edited, Key::PerfProfile, word(profile));
 			assert!(persist(&orig, &edited));
 			let text = std::fs::read_to_string(&path).unwrap();
 			assert!(
@@ -14356,7 +13564,7 @@ mod tests {
 		let _store = test_store_lock();
 		let before = settings();
 		let mut s = (*before).clone();
-		s.font_size = auto::Auto::by_hand(12.0);
+		change(&mut s, Key::FontSize, Value::Float(12.0));
 		update(s);
 		reset_font_zoom();
 		assert_eq!(effective_font_size(), 12.0);
@@ -14374,30 +13582,33 @@ mod tests {
 		update((*before).clone());
 	}
 
-	// Commented out by 2026100907341818: the two follow switches are gone, and
-	// a launch reads what they meant once, as it rewrites the file
-	// (`absorbed_switches`). `an_old_follow_switch_loads_the_same_size_after_it_goes`
-	// covers the same cases.
-	// // The face/size split's inference for configs predating use_system_font_size:
-	// // absent = follow the face toggle, except an explicit font_size (which the old
-	// // single toggle silently ignored) reads as intent and turns the size follow off.
-	// // Test ID: EkoQjqK
-	// #[test]
-	// fn system_font_size_split_inference() {
-	// 	let p = std::path::Path::new("test.shcl");
-	// 	let s = resolve(read_raw("", p).0);
-	// 	assert!(s.use_system_font && s.use_system_font_size, "defaults on");
-	// 	let s = resolve(read_raw("font.use_system_family: false\n", p).0);
-	// 	assert!(!s.use_system_font_size, "size follows the face toggle");
-	// 	let s = resolve(read_raw("font.size: 20.0\n", p).0);
-	// 	assert!(s.use_system_font, "explicit size keeps the system face");
-	// 	assert!(
-	// 		!s.use_system_font_size,
-	// 		"explicit size wins over the OS size"
-	// 	);
-	// 	let s = resolve(read_raw("font.size: 20.0\nfont.use_system_size: true\n", p).0);
-	// 	assert!(s.use_system_font_size, "explicit key beats the inference");
-	// }
+	// The face/size split's inference for configs predating use_system_font_size:
+	// absent = follow the face toggle, except an explicit font_size (which the old
+	// single toggle silently ignored) reads as intent and turns the size follow off.
+	// A family of its own with no face line turns the face off the same way.
+	// Test ID: EkoQjqK
+	#[test]
+	fn system_font_size_split_inference() {
+		let s = read_text("");
+		assert!(s.use_system_font && s.use_system_font_size, "defaults on");
+		let s = read_text("font.use_system_family: false\n");
+		assert!(!s.use_system_font_size, "size follows the face toggle");
+		let s = read_text("font.size: 20.0\n");
+		assert!(s.use_system_font, "explicit size keeps the system face");
+		assert!(
+			!s.use_system_font_size,
+			"explicit size wins over the OS size"
+		);
+		assert_eq!(s.font_size, 20.0);
+		let s = read_text("font.size: 20.0\nfont.use_system_size: true\n");
+		assert!(s.use_system_font_size, "explicit key beats the inference");
+		let s = read_text("font.family: \"Some Mono\"\n");
+		assert!(!s.use_system_font && !s.use_system_font_size);
+		assert_eq!(s.font_family, "Some Mono");
+		// a value set aside under a switch that is on is no reason to turn it off
+		let s = read_text("kept:\n\tset_aside:\n\t\tfont:\n\t\t\tsize: 20.0\n");
+		assert!(s.use_system_font && s.use_system_font_size);
+	}
 
 	// The setting ships as a literal token, so the expander is what makes it name
 	// a directory at all. Both platforms' spellings everywhere: a config file gets
@@ -14721,25 +13932,15 @@ mod tests {
 	// Test ID: Em1S9yq
 	#[test]
 	fn hyperlink_keys_parse_in_their_block() {
-		let p = std::path::Path::new("test.shcl");
-		let d = resolve(read_raw("", p).0);
+		let d = read_text("");
 		assert!(d.hyperlinks, "on by default");
 		assert!(
-			auto::automatic(&d, auto::Setting::OpenCommand),
+			!crate::fields::by_hand(&d, Key::LinkOpenCommand),
 			"opener is the desktop's"
 		);
-		let s = resolve(
-			read_raw(
-				"hyperlinks:\n\tenabled: false\n\topen_command: \"firefox --new-tab\"\n",
-				p,
-			)
-			.0,
-		);
+		let s = read_text("hyperlinks:\n\tenabled: false\n\topen_command: \"firefox --new-tab\"\n");
 		assert!(!s.hyperlinks);
-		assert_eq!(
-			auto::text(&s, auto::Setting::OpenCommand),
-			"firefox --new-tab"
-		);
+		assert_eq!(s.hyperlink_open_command, "firefox --new-tab");
 	}
 
 	// An over-range output_ease_lines must clamp: scroll's backlog clamp uses it
@@ -14778,14 +13979,8 @@ mod tests {
 	fn chrome_colors_default_and_override() {
 		// theme provides the chrome; the default matches the shared menu colors
 		let d = Settings::default();
-		assert_eq!(
-			auto::color(&d, auto::Setting::MenuBackground),
-			crate::theme::MENU_BG_DEF
-		);
-		assert_eq!(
-			auto::color(&d, auto::Setting::MenuForeground),
-			crate::theme::MENU_FG_DEF
-		);
+		assert_eq!(d.menu_bg, crate::theme::MENU_BG_DEF);
+		assert_eq!(d.menu_fg, crate::theme::MENU_FG_DEF);
 		// a colors override wins; unspecified chrome stays at the theme default
 		let raw = read_raw(
 			"colors.menu_background: \"#123456\"\ncolors.dialog_foreground: \"#abcdef\"\n",
@@ -14793,18 +13988,9 @@ mod tests {
 		)
 		.0;
 		let s = resolve(raw);
-		assert_eq!(
-			auto::color(&s, auto::Setting::MenuBackground),
-			[0x12, 0x34, 0x56]
-		);
-		assert_eq!(
-			auto::color(&s, auto::Setting::DialogForeground),
-			[0xab, 0xcd, 0xef]
-		);
-		assert_eq!(
-			auto::color(&s, auto::Setting::MenuForeground),
-			crate::theme::MENU_FG_DEF
-		);
+		assert_eq!(s.menu_bg, [0x12, 0x34, 0x56]);
+		assert_eq!(s.dialog_fg, [0xab, 0xcd, 0xef]);
+		assert_eq!(s.menu_fg, crate::theme::MENU_FG_DEF);
 	}
 
 	// A pre-nesting config converts wholesale: every ACTIVE value ends at its
@@ -14873,11 +14059,13 @@ mod tests {
 			out.contains("\tmargin: 8.0"),
 			"a commented old line just leaves the fresh default in place:\n{out}"
 		);
-		// The conversion still carries the old switch; the launch step after it
-		// folds that into the family (2026100907341818).
+		// A family with no switch line turns the system face off on load.
 		let launched = migrate_config_text(&out).unwrap_or_else(|| out.clone());
+		let s = read_text(&launched);
 		assert!(
-			launched.contains("\tfamily: \"Iosevka\"") && !launched.contains("use_system_family"),
+			launched.contains("\tfamily: \"Iosevka\"")
+				&& !s.use_system_font
+				&& s.font_family == "Iosevka",
 			"an explicit font stays set by hand, as it always meant:\n{launched}"
 		);
 		assert!(
@@ -15033,7 +14221,12 @@ mod tests {
 					matches!(s.wallpaper_default_fit, Fit::Zoom),
 					"{when}, round {round}: fit"
 				);
-				assert_eq!(s.wallpaper_blur, 3.0, "{when}, round {round}: blur");
+				// a profile row, so the file's value is Custom's
+				assert_eq!(
+					own_of(s, Key::BgBlur),
+					Some(Value::Float(3.0)),
+					"{when}, round {round}: blur"
+				);
 				assert_eq!(
 					s.wallpaper_contrast_mask_auto, 0.8,
 					"{when}, round {round}: contrast mask"
@@ -15042,7 +14235,8 @@ mod tests {
 			let launched = load();
 			check(&launched, "first launch");
 			let mut edited = launched.clone();
-			edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
+			let size = f64::from(edited.font_size.round() + 1.0);
+			change(&mut edited, Key::FontSize, Value::Float(size));
 			assert!(persist(&launched, &edited));
 			check(&load(), "after a save");
 			let baks = std::fs::read_dir(&dir)
@@ -15610,13 +14804,10 @@ mod tests {
 		let once = migrate_config_text("colors:\n\tfocus: \"#abcdef\"\n").expect("should migrate");
 		assert_eq!(once, "colors:\n\thighlight: \"#abcdef\"\n");
 		let s = resolve(read_raw(&once, std::path::Path::new("test.shcl")).0);
+		assert_eq!(s.highlight, [0xab, 0xcd, 0xef]);
 		assert_eq!(
-			auto::color(&s, auto::Setting::Highlight),
-			[0xab, 0xcd, 0xef]
-		);
-		assert_eq!(
-			auto::color(&s, auto::Setting::Focus),
-			auto::color(&Settings::default(), auto::Setting::Focus),
+			s.focus,
+			Settings::default().focus,
 			"the new one starts fresh"
 		);
 
@@ -15625,11 +14816,8 @@ mod tests {
 		let both = "colors:\n\thighlight: \"#abcdef\"\n\tfocus: \"#123456\"\n";
 		assert!(migrate_config_text(both).is_none());
 		let s = resolve(read_raw(both, std::path::Path::new("test.shcl")).0);
-		assert_eq!(
-			auto::color(&s, auto::Setting::Highlight),
-			[0xab, 0xcd, 0xef]
-		);
-		assert_eq!(auto::color(&s, auto::Setting::Focus), [0x12, 0x34, 0x56]);
+		assert_eq!(s.highlight, [0xab, 0xcd, 0xef]);
+		assert_eq!(s.focus, [0x12, 0x34, 0x56]);
 
 		// a stale line carrying the pre-theme default still refreshes, under the
 		// path it ends on rather than the one it was written under
@@ -16041,7 +15229,8 @@ mod tests {
 			let before = reader(&launched);
 
 			let mut edited = launched.clone();
-			edited.font_size = auto::Auto::by_hand(auto::font_size(&edited).round() + 1.0);
+			let size = f64::from(edited.font_size.round() + 1.0);
+			change(&mut edited, Key::FontSize, Value::Float(size));
 			assert!(persist(&launched, &edited), "{what}: the save was refused");
 			let after = reader(&reload_from_disk());
 			if after != before {
@@ -16120,7 +15309,7 @@ mod tests {
 		assert_eq!(WALLPAPER_DIR_TOKEN, want);
 		assert!(WALLPAPER_DIR_TOKEN.contains(APP_DIR));
 		assert_eq!(
-			auto::text(&Settings::default(), auto::Setting::WallpaperFolder),
+			Settings::default().wallpaper_folder_raw,
 			WALLPAPER_DIR_TOKEN
 		);
 		let line = format!("folder: \"{}\"  ## Default", wallpaper_dir_escaped());
@@ -16271,7 +15460,7 @@ mod tests {
 					"{spelling}, {how}"
 				);
 				assert!(s.wallpaper_folder_auto, "{spelling}, {how}");
-				assert!(s.wallpaper_folder_raw.is_automatic(), "{how}");
+				assert!(!crate::fields::by_hand(&s, Key::BgFolder), "{how}");
 			}
 			if spelling != "backgrounds" {
 				std::fs::remove_dir(&stocked).unwrap();
@@ -16292,7 +15481,8 @@ mod tests {
 		let s = load();
 		assert_eq!(s.wallpaper_folder, Some(PathBuf::from(elsewhere)));
 		assert!(!s.wallpaper_folder_auto);
-		assert_eq!(s.wallpaper_folder_raw, hand(elsewhere));
+		assert_eq!(s.wallpaper_folder_raw, elsewhere);
+		assert!(crate::fields::by_hand(&s, Key::BgFolder));
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -16586,10 +15776,8 @@ mod tests {
 			said()
 		);
 
-		let kept = keep_rating(&RatingLines {
-			profile: Some("low"),
-			rated_hardware: Some("0123456789abcdef"),
-			check_next_run: None,
+		let kept = keep_rating(RatingLines {
+			check_next_run: Some(true),
 		});
 		assert_eq!(kept, Kept::Written);
 		let now = at(&std::fs::read_to_string(&path).unwrap());
@@ -17227,8 +16415,7 @@ mod tests {
 		#[test]
 		fn a_flat_file_moves_every_value_to_its_path() {
 			use super::super::{
-				CONFIG_CONVERTS, CONFIG_REMOVED, LEGACY_KEYS, RETIRED_SWITCHES,
-				converted_config_text,
+				CONFIG_CONVERTS, CONFIG_REMOVED, LEGACY_KEYS, converted_config_text,
 			};
 			use super::active_headings;
 			use std::fmt::Write;
@@ -17238,9 +16425,6 @@ mod tests {
 				let mut text = String::new();
 				let mut want: std::collections::HashMap<&str, (usize, String)> =
 					std::collections::HashMap::new();
-				// a retired switch decides whether the settings under it carry, so
-				// with one in the file they are not expected either way
-				let mut loose: std::collections::HashSet<&str> = std::collections::HashSet::new();
 				let mut expect = |rank: usize, value: &str| {
 					// the values here are not numbers, so a unit change keeps them
 					let new = LEGACY_KEYS[rank].1;
@@ -17249,12 +16433,6 @@ mod tests {
 						.find(|(old, ..)| *old == new)
 						.map_or(new, |(_, to, _)| *to);
 					if CONFIG_REMOVED.contains(&new) {
-						return;
-					}
-					if let Some((_, members)) =
-						RETIRED_SWITCHES.iter().find(|(switch, _)| *switch == new)
-					{
-						loose.extend(members.iter().map(|(member, _)| *member));
 						return;
 					}
 					let slot = want.entry(new).or_insert((rank, value.to_string()));
@@ -17304,7 +16482,6 @@ mod tests {
 				};
 				let out = converted_config_text(&text).expect("a flat file converts");
 				let doc = shcl::Document::parse(&out);
-				want.retain(|new, _| !loose.contains(new));
 				assert_eq!(doc.lost_count(), 0, "file:\n{text}\nconverted:\n{out}");
 				assert!(
 					super::super::read_shells(&doc) == shells,
@@ -17694,8 +16871,8 @@ mod tests {
 		}
 
 		// Children for a performance block the way hand edits leave them: mixed
-		// depths, the rating's own keys commented, bare, dotted or with children
-		// under them, and values with a comment or a list in them.
+		// depths, the rating's own key and its neighbors commented, bare, dotted or
+		// with children under them, and values with a comment or a list in them.
 		fn rating_children(rng: &mut fuzz::Rng) -> String {
 			use std::fmt::Write;
 			const INDENTS: [&str; 5] = ["\t", "\t", "    ", "\t\t", "  "];
@@ -17808,22 +16985,15 @@ mod tests {
 		// it. A file that reads clean is never called unreadable, and wherever
 		// shcl's own setters would keep the rating, the writer keeps it too.
 		fn rating_check(case: &[u8], rng: &mut fuzz::Rng) {
-			const PROFILES: [&str; 4] = ["max", "high", "low", "standard"];
-			const IDS: [&str; 3] = ["0123456789abcdef", "1234567890123456", "ffffffffffffffff"];
 			let text = String::from_utf8_lossy(case).into_owned();
 			let lines = RatingLines {
-				profile: (!rng.chance(4)).then(|| *rng.pick(&PROFILES)),
-				rated_hardware: (!rng.chance(4)).then(|| *rng.pick(&IDS)),
-				check_next_run: rng.chance(3).then(|| rng.chance(2)),
+				check_next_run: (!rng.chance(8)).then(|| rng.chance(2)),
 			};
-			let written: Vec<&str> = [
-				("performance.profile", lines.profile.is_some()),
-				("performance.rated_hardware", lines.rated_hardware.is_some()),
-				("performance.check_next_run", lines.check_next_run.is_some()),
-			]
-			.into_iter()
-			.filter_map(|(key, on)| on.then_some(key))
-			.collect();
+			let written: Vec<&str> = lines
+				.check_next_run
+				.map(|_| "performance.check_next_run")
+				.into_iter()
+				.collect();
 			// Each setting the rating does not write, as it reads in two parses.
 			let reads = |a: &shcl::Document, b: &shcl::Document| {
 				let mut paths = a.paths();
@@ -17866,7 +17036,7 @@ mod tests {
 			let before = shcl::Document::parse(&text);
 			let before_migrated = migrated(&text);
 			let before_loads = before_migrated.as_ref().unwrap_or(&before);
-			let answer = with_rating_lines(&text, &lines);
+			let answer = with_rating_lines(&text, lines);
 
 			if before.lost_count() == 0 {
 				assert_ne!(
@@ -17877,14 +17047,8 @@ mod tests {
 				// what the dialog's save would leave: shcl's setters, then canonical text
 				let mut saved = before.clone();
 				let set = lines
-					.profile
-					.is_none_or(|word| saved.set_string("performance.profile", word))
-					&& lines
-						.rated_hardware
-						.is_none_or(|word| saved.set_string("performance.rated_hardware", word))
-					&& lines
-						.check_next_run
-						.is_none_or(|flag| saved.set_bool("performance.check_next_run", flag));
+					.check_next_run
+					.is_none_or(|flag| saved.set_bool("performance.check_next_run", flag));
 				let saved_text = saved.to_canonical();
 				let saved = shcl::Document::parse(&saved_text);
 				let saved_migrated = migrated(&saved_text);
@@ -17893,11 +17057,7 @@ mod tests {
 				// which carries no rating over, so a write into one keeps nothing.
 				let saved_loads = saved_migrated.as_ref().unwrap_or(&saved);
 				let kept_in = |doc: &shcl::Document| {
-					lines.profile.is_none_or(|word| {
-						doc.get_string("performance.profile").as_deref() == Ok(word)
-					}) && lines.rated_hardware.is_none_or(|word| {
-						doc.get_string("performance.rated_hardware").as_deref() == Ok(word)
-					}) && lines
+					lines
 						.check_next_run
 						.is_none_or(|flag| doc.get_bool("performance.check_next_run") == Ok(flag))
 				};
@@ -17925,14 +17085,6 @@ mod tests {
 				after.lost_count() <= before.lost_count(),
 				"a line was lost\n{shown}"
 			);
-			for (key, word) in [
-				("performance.profile", lines.profile),
-				("performance.rated_hardware", lines.rated_hardware),
-			] {
-				if let Some(word) = word {
-					assert_eq!(after.get_string(key).as_deref(), Ok(word), "{key}\n{shown}");
-				}
-			}
 			if let Some(flag) = lines.check_next_run {
 				assert_eq!(
 					after.get_bool("performance.check_next_run"),
