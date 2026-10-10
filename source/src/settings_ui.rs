@@ -50,8 +50,8 @@ fn lay() -> &'static Layout {
 pub fn tab_titles() -> &'static [&'static str] {
 	&ui().tabs
 }
-// Every tab in strip order, parents included; a test may stand in a tree of
-// its own, as long as its leaves are the real ones.
+/// Every tab in strip order, parents included; a test may stand in a tree of
+/// its own, as long as its leaves are the real ones.
 pub fn tab_nodes() -> &'static [TabNode] {
 	#[cfg(test)]
 	if let Some(tree) = TAB_TREE.with(std::cell::Cell::get) {

@@ -831,6 +831,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Seen in the allocations test: a compose frame and a drag frame both cost about 335 allocations against 166 for a cursor frame, since both panes are shaped again. The minimap half is what let 2026101007274798 go on for good.
 		- After RC1 unless a profile shows compose frames.
 
+- Settings dialog: tabs can go down the left side, and a tab can hold tabs
+	- ID: 2026101008023943
+	- Type: Feature
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261010-080239
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- The dialog code can put the tabs across the top or down the left. Down the left they are a list, every tab in it, sub-tabs stepped in under their parent. Across the top a tab's sub-tabs show only while it is current.
+		- A sub-tab open under a parent reads as current along with it.
+		- Ctrl+PgUp/PgDn and Ctrl+Tab/Shift+Tab walk a tab's sub-tabs, then move on to the next tab. The macOS chords do the same.
+		- Tabs take no focus. A click changes tab and nothing else.
+	- Progress log:
+		- 20261010: Done on `tabside`. `tabs_side: top|left` and `A/B` paths in `settings_ui.shcl`, with the design doc and style guide updated. SilkTerm stays on top with flat tabs; both looks were checked on a build with its tabs nested.
+
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
 	- Type: Bug
