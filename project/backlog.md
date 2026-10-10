@@ -57,33 +57,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- A: If this is about one of my existing config files rather than a general programming question, then no.
 			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
 
-- Performance profile: the Profile dropdown is a presets group read off the rows it sets
-	- ID: 2026100910295902
-	- Type: Enhancement
-	- Status: Waiting for answers
-	- Priority: Avg
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- The 16 rows a profile sets follow the automatic settings design, with the Profile dropdown as their presets group control. This also brings the list and on or off controls the design describes.
-	- Notes:
-		- Before RC1.
-		- Today the profile is stored, "Choose automatically" picks it from a hardware test, a slow display steps it down for the session, Remote lays itself over it for the session, and the rows keep the user's own values under it for Custom to bring back. The design stores nothing for a group and keeps no value while automatic.
-	- Progress log:
-		- 20261009: Q: Is automatic for each row the rated profile's value, so the step down and Remote still reach every row left automatic?
-			- JC asked for it in plainer words.
-			- Q: A row with nothing stored needs a value to use. Should that be its value in the profile the program picks on its own: the one the hardware test rated, a step lower while the display is slow, or Standard terminal under Remote? Then the step down and Remote keep reaching every row that is still automatic. The other way is a fixed value, like the High profile's, and then the step down and Remote need another way in.
-		- 20261009: Q: Does picking a profile store each row's value, so a later step down no longer reaches them, or make them automatic under that profile?
-			- A: JC pointed to the design doc. It says so already: "A preset picked: every member stores that preset's value", in the specification and in the table under "Changing a setting". So picking Low stores Low's values in all 16 rows, and from then on the step down and Remote no longer reach them.
-		- 20261009: Q: Where does "Choose automatically" go, given a group has one control?
-			- JC asked for it in plainer words.
-			- Q: Today "Choose automatically" is its own checkbox above Profile. The design gives a group one control, here the Profile dropdown. Since no control may be removed (2026100913394948), the checkbox could stay as a second control read off the same 16 rows: on while all of them are automatic, a dash when some are, and turning it on clears them all. Is that it?
-		- 20261009: Q: The values held under a profile today would be dropped, per the design's non-goal. Is that wanted for files that have them?
-			- JC asked who holds them and what "dropped" means.
-			- Q: Today, picking a named profile leaves the Custom values for the 16 rows in the config file, unused, so Custom can bring them back later. Under the design a value in the file is set by hand and in use. So on the first launch of the new build, a file like that can either have those lines deleted, and look and act as it does now, or keep them, and they take effect at once with the dropdown reading Custom. Which one?
-
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486
 	- Type: Bug
@@ -297,7 +270,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261009: Built the table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check. Moved Family, Size, Columns and Rows.
 		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It does not mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line has nothing to attach to yet, since the program has no accessibility layer. "Dosn't" in its Tests section. Its line on hand edits while running waits on 2026100907341819.
-		- 20261009: Not signed off. Follow-ups filed: 2026100913394946, 2026100913394948, 2026100913394950, 2026100913394954.
+		- 20261009: Not signed off. Follow-ups filed: 2026100913394946, 2026100913394948, 2026100913394950.
 	- Against: the Settings dialog design doc's "a font switch that follows the desktop grays the fields it overrides", and the earlier fix that grayed "Use system font" where the desktop names no font. Both went with the switch.
 	- Swept: every gate in settings_ui.shcl; every reader of the four settings, which the type change made the compiler find; load, save, the legacy and shcl 2 conversions, the launch size, sizes per monitor, the font zoom, and `--font`, `--font-size`, `--columns` and `--rows`.
 	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, doc, TOC and table checks, and the new lint check, which failed on an injected read in two files. In a real window against a dev build at the default font, the panel stayed 707 by 965, and Cursor, Movement, Themes, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Columns typed by hand showed the x and a dash in the switch; the x, and a click on the switch from a dash, put them back; OK wrote only the Size typed on the Text tab. A config the dev build wrote opened at the same window size on both builds, with the switches on and with them off.
@@ -783,23 +756,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 
-- Flyover tip text has tells and awkward phrasing, and some is too long
-	- ID: 2026100913394954
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Related IDs: 2026100907341818, 2026100910295905
-	- Target OS: All
-	- Incorrect behavior:
-		- Has a lot of tells and awkward phrasing. E.g. 'What the look is allowed to cost.'
-		- Some of it is way too long. Describing what happens with dependent values (and other behaviors of the new design) may be too much.
-		- The text for "Choose automatically" isn't very correct or helpful.
-	- Expected behavior: Apply my "writing style" to all tip text.
-	- Notes:
-		- Before RC1.
-
 - Font settings should be part of themes
 	- ID: 2026100913394956
 	- Type: Enhancement
@@ -858,6 +814,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: each test measures in the face the layout was built from.
 	- Reproduced: 20261009, by a probe run alone: "2026-10-09" measured 88.7 px that way, against 75.3 in the desktop's face. The two tests were not run alone to see whether they pass for the wrong reason.
 	- Possible cause: `ui_attrs()` reads the family a text context pins, and these tests call it once, ahead of the loop.
+
+- A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
+	- ID: 2026101007285827
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261010-072858
+	- Opened by: CC
+	- Related IDs: 2026101007274798
+	- Target OS: All
+	- Requirements:
+		- A minimap wake asks for a frame without marking the window dirty. The build gate already runs the map's update on its own pending flag, so the pane's text can take the cursor fast path.
+		- A pointer move during a selection drag rebuilds the pane under the pointer, not its siblings.
+	- Notes:
+		- Seen in the allocations test: a compose frame and a drag frame both cost about 335 allocations against 166 for a cursor frame, since both panes are shaped again. The minimap half is what let 2026101007274798 go on for good.
+		- After RC1 unless a profile shows compose frames.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
@@ -1721,6 +1693,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- The allocations-per-frame test fails at rest now and then: every frame rebuilds both panes
+	- ID: 2026101007274798
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261010-072747
+	- Opened by: CC
+	- Assigned to: CC
+	- Target OS: All
+	- Test environment: b23, the pipeline's headless display
+	- Steps to reproduce:
+		- Open a window with two panes and the minimap on. A few seconds after the window is up, have both shells print a few hundred lines.
+	- Incorrect behavior: Once the output ease has settled, every frame shapes both panes again, at rest, for as long as the window is up. The test read 338 allocations a frame against a limit of 178. The pipeline run of 20261010 06:38 failed on it; the run the evening before passed on the same tree.
+	- Expected behavior: A frame at rest is a cursor frame, about 166 allocations.
+	- Reproduced: 20261010 on b23, about one run in four with the shells' output held back 3 seconds.
+	- Actual cause:
+		- A minimap compose that comes due marks the window dirty, which rebuilds every pane. The other pane's minimap is then updated inside its own 90 ms throttle gap, and that branch marked a compose owed whether or not the build had folded anything. Its wake came about half a gap later, rebuilt the first pane inside its gap, and so on. It starts whenever the two panes' compose clocks end up about half a gap apart, which output arriving after the window is up can do.
+	- Actual fix:
+		- A build inside the gap owes a compose only for what it folded: new history, a rebuild, stand-ins left, or a lag still draining. The end of a compose already used that rule.
+		- The test's drag check held the frame plus what came before it to one limit. On a slow box more pointer moves fold into each frame, so that share rose with the load and failed at 361 against 360 right after the fix. The frame is now held on its own, and what came before it per pointer move.
+	- Branch: allocsflake
+	- Test case: `a_build_inside_the_gap_owes_nothing_new` (EsJ8TzU), seen failing without the fix. The window test is ErzCQC2.
+	- Closed: 20261010-072747
 
 - A blink rate setting of 500 ms blinks at more like 1000 ms
 	- ID: 2026100907341815
@@ -4900,6 +4896,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Unresolved: SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
 	- Estimated effort: Avg
 	- Closed:
+
+- Performance profile: the Profile dropdown is a presets group read off the rows it sets
+	- ID: 2026100910295902
+	- Type: Enhancement
+	- Status: Deferred
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- The 16 rows a profile sets follow the automatic settings design, with the Profile dropdown as their presets group control. This also brings the list and on or off controls the design describes.
+	- Notes:
+		- Before RC1.
+		- Today the profile is stored, "Choose automatically" picks it from a hardware test, a slow display steps it down for the session, Remote lays itself over it for the session, and the rows keep the user's own values under it for Custom to bring back. The design stores nothing for a group and keeps no value while automatic.
+	- Progress log:
+		- 20261009: Q: Is automatic for each row the rated profile's value, so the step down and Remote still reach every row left automatic?
+			- JC asked for it in plainer words.
+			- Q: A row with nothing stored needs a value to use. Should that be its value in the profile the program picks on its own: the one the hardware test rated, a step lower while the display is slow, or Standard terminal under Remote? Then the step down and Remote keep reaching every row that is still automatic. The other way is a fixed value, like the High profile's, and then the step down and Remote need another way in.
+		- 20261009: Q: Does picking a profile store each row's value, so a later step down no longer reaches them, or make them automatic under that profile?
+			- A: JC pointed to the design doc. It says so already: "A preset picked: every member stores that preset's value", in the specification and in the table under "Changing a setting". So picking Low stores Low's values in all 16 rows, and from then on the step down and Remote no longer reach them.
+		- 20261009: Q: Where does "Choose automatically" go, given a group has one control?
+			- JC asked for it in plainer words.
+			- Q: Today "Choose automatically" is its own checkbox above Profile. The design gives a group one control, here the Profile dropdown. Since no control may be removed (2026100913394948), the checkbox could stay as a second control read off the same 16 rows: on while all of them are automatic, a dash when some are, and turning it on clears them all. Is that it?
+		- 20261009: Q: The values held under a profile today would be dropped, per the design's non-goal. Is that wanted for files that have them?
+			- JC asked who holds them and what "dropped" means.
+			- Q: Today, picking a named profile leaves the Custom values for the 16 rows in the config file, unused, so Custom can bring them back later. Under the design a value in the file is set by hand and in use. So on the first launch of the new build, a file like that can either have those lines deleted, and look and act as it does now, or keep them, and they take effect at once with the dropdown reading Custom. Which one?
+				- A: Keep them.
+		- 20261009: Held. The Settings dialog is going to be rethought again, so the first 3 questions wait for that.
 
 - Windows Terminal handoff
 	- ID: 2026092810510800

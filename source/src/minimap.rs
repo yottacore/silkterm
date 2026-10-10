@@ -640,20 +640,25 @@ impl Minimap {
 				self.spent = began.elapsed();
 			}
 		} else if !collected {
-			self.pending = true;
+			// Inside the throttle: a compose is owed only for what this build
+			// folded. Owing one regardless had two panes trading wakes for
+			// good, each one's compose frame putting the other inside its gap.
+			self.pending = self.owed(draining);
 			return;
 		}
-		// Short of the bottom AND the lag is still falling, so another
-		// compose is owed even if no more output arrives: the ease drains
-		// on its own and the map has to follow it down. `pending` drives
-		// the build gate and the timed wake, so this is the whole
-		// mechanism - and it is why the drain half matters. A view parked
-		// in the scrollback freezes the lag, and owing a compose there
-		// asked for a frame and a full recompose several times a second
-		// for as long as the pane sat there (F155). Stand-ins left to
-		// replace owe one too, and that runs out.
-		self.pending =
-			(draining && self.shown < self.hist + self.lines) || self.rough_n > 0 || self.moved;
+		self.pending = self.owed(draining);
+	}
+
+	// Whether another compose is owed once this one is drawn. Short of the
+	// bottom AND the lag is still falling, so the ease drains on its own and
+	// the map has to follow it down even if no more output arrives. `pending`
+	// drives the build gate and the timed wake, so this is the whole
+	// mechanism - and it is why the drain half matters. A view parked in the
+	// scrollback freezes the lag, and owing a compose there asked for a frame
+	// and a full recompose several times a second for as long as the pane sat
+	// there (F155). Stand-ins left to replace owe one too, and that runs out.
+	fn owed(&self, draining: bool) -> bool {
+		(draining && self.shown < self.hist + self.lines) || self.rough_n > 0 || self.moved
 	}
 
 	/// A compose is owed. The build gate reads this so the next pass pays it,
@@ -2894,6 +2899,55 @@ mod tests {
 		drive(&mut draining, true, 0);
 		assert!(draining.pending(), "a draining lag owes a compose");
 		assert!(draining.wake().is_some(), "a draining lag asks for a frame");
+	}
+
+	// A build that lands inside the throttle with nothing new owes nothing.
+	// Marking one owed anyway gave two panes a wake each about half a gap
+	// apart: each one's compose frame rebuilt the other inside its gap, which
+	// owed a compose, which woke the window, which rebuilt the first inside
+	// its gap. Every frame had both panes shaped again, at rest, for good.
+	// Test ID: EsJ8TzU
+	#[test]
+	fn a_build_inside_the_gap_owes_nothing_new() {
+		let settings = config::Settings::default();
+		let (cols, lines) = (40, 24);
+		let (width, img_h) = (16, 300);
+		let (mut term, mut parser) = live_term(cols, lines, 1000);
+		parser.advance(&mut term, "x\r\n".repeat(400).as_bytes());
+		let start = Instant::now();
+		let drive = |map: &mut Minimap, advanced: usize, at_ms: u64| {
+			map.update(
+				term.grid(),
+				term.colors(),
+				&settings,
+				width,
+				img_h,
+				1.0,
+				lines,
+				cols,
+				advanced,
+				0,
+				false,
+				false,
+				start + Duration::from_millis(at_ms),
+			);
+		};
+
+		let mut map = Minimap::default();
+		drive(&mut map, 0, 0);
+		assert!(!map.pending(), "the first compose left one owed");
+		// the other pane's compose frame: a rebuild with nothing of its own
+		drive(&mut map, 0, 40);
+		assert!(!map.pending(), "a build inside the gap owed a compose");
+		assert!(map.wake().is_none(), "and asked for a frame");
+
+		// the control: output folded inside the gap does owe the compose that
+		// will draw it
+		let mut fed = Minimap::default();
+		drive(&mut fed, 0, 0);
+		drive(&mut fed, 3, 40);
+		assert!(fed.pending(), "folded output owes no compose");
+		assert!(fed.wake().is_some(), "folded output asks for no frame");
 	}
 
 	// Test ID: EqLzJNa

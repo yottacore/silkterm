@@ -22,14 +22,19 @@ meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "${meDir}/../../.." && pwd)"
 headless="${root}/cicd/utility/gui-headless.bash"
 
-## Mean allocations per frame, the frame itself plus the events and loop
-## passes before it. The count is the whole window thread's, so the graphics
-## driver's share is in it: about 130 of them on llvmpipe, the software GL.
-## Measured 20261006: at rest 189 before the frame lists were kept, 167 after;
-## drag 382 and 340. A driver update can move the floor, so read the figures
-## with --report before moving a limit.
+## Mean allocations per frame. At rest that is the frame itself plus the
+## events and loop passes before it, a timer wake or two. In the drag the
+## frame is held to its limit on its own, and what came before it is held per
+## pointer move instead: a slow box folds more moves into each frame, so a
+## per-frame count there rises with the load, not the code. The count is the
+## whole window thread's, so the graphics driver's share is in it: about 130
+## of them on llvmpipe, the software GL. Measured 20261006: at rest 189 before
+## the frame lists were kept, 167 after; drag 382 and 340. Between frames in
+## a drag, about 2.5 per move (20261010). A driver update can move the floor,
+## so read the figures with --report before moving a limit.
 idleLimit="${ALLOCS_IDLE_LIMIT:-178}"
 dragLimit="${ALLOCS_DRAG_LIMIT:-360}"
+moveLimit="${ALLOCS_MOVE_LIMIT:-6}"
 
 bin=""; report=0
 while (($#)); do case "${1}" in
@@ -121,11 +126,12 @@ window="$(fX timeout 30 xdotool search --sync --onlyvisible --pid "${appPid}" 2>
 fCheck "a window came up" test -n "${window}"
 if [[ -z "${window}" ]]; then echo "${failures} failed"; exit 1; fi
 
-## Mean of frame plus between over the lines after line $1 up to line $2.
+## Over the lines after line $1 up to line $2: frames, the mean frame, the
+## mean of frame plus between, and the between total.
 fMean(){
 	sed -n "$((${1} + 1)),${2}p" "${said}" | awk '
-		/^\[allocs\] frame [0-9]+ between [0-9]+$/ { n++; f += $3; t += $3 + $5 }
-		END { if (n) printf "%d %.0f %.0f\n", n, f / n, t / n; else print "0 0 0" }'
+		/^\[allocs\] frame [0-9]+ between [0-9]+$/ { n++; f += $3; b += $5; t += $3 + $5 }
+		END { if (n) printf "%d %.0f %.0f %d\n", n, f / n, t / n, b; else print "0 0 0 0" }'
 }
 fLines(){ wc -l <"${said}"; }
 
@@ -135,26 +141,30 @@ fX xdotool windowactivate --sync "${window}" 2>/dev/null || true
 fX xdotool mousemove --window "${window}" 120 200
 sleep 6
 from="$(fLines)"; sleep 4; to="$(fLines)"
-read -r idleFrames idleFrame idleTotal < <(fMean "${from}" "${to}")
+read -r idleFrames idleFrame idleTotal _ < <(fMean "${from}" "${to}")
 echo "    at rest: ${idleFrames} frames, ${idleFrame} allocations drawing each, ${idleTotal} with what came before"
 
+moves=80
 from="$(fLines)"
 fX xdotool mousedown 1
-for step in $(seq 0 79); do
+for step in $(seq 0 $((moves - 1))); do
 	fX xdotool mousemove --window "${window}" $((60 + step * 4)) $((140 + step * 4))
 	sleep 0.03
 done
 fX xdotool mouseup 1
 to="$(fLines)"
-read -r dragFrames dragFrame dragTotal < <(fMean "${from}" "${to}")
-echo "    drag: ${dragFrames} frames, ${dragFrame} allocations drawing each, ${dragTotal} with what came before"
+read -r dragFrames dragFrame dragTotal dragBetween < <(fMean "${from}" "${to}")
+dragPerMove="$(awk -v b="${dragBetween}" -v m="${moves}" 'BEGIN { printf "%.1f", b / m }')"
+echo "    drag: ${dragFrames} frames, ${dragFrame} allocations drawing each, ${dragTotal} with what came before, ${dragPerMove} per pointer move between frames"
 
 if ((idleFrames > 0 && idleTotal == 0)); then echo "  skip: this build counts no allocations (a release build?)"; exit 3; fi
 if ((!report)); then
 	fCheck "frames counted at rest" test "${idleFrames}" -gt 5
 	fCheck "frames counted in the drag" test "${dragFrames}" -gt 5
 	fCheck "at rest: ${idleTotal} per frame, limit ${idleLimit}" test "${idleTotal}" -le "${idleLimit}"
-	fCheck "drag: ${dragTotal} per frame, limit ${dragLimit}" test "${dragTotal}" -le "${dragLimit}"
+	fCheck "drag: ${dragFrame} per frame, limit ${dragLimit}" test "${dragFrame}" -le "${dragLimit}"
+	fCheck "drag: ${dragPerMove} per move between frames, limit ${moveLimit}" \
+		awk -v a="${dragPerMove}" -v l="${moveLimit}" 'BEGIN { exit !(a <= l) }'
 fi
 
 if ((failures)); then
@@ -165,3 +175,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261006 JC: Created.
+##		- 20261010 JC: The drag holds its frame and its pointer moves apart.
