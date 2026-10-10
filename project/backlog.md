@@ -57,6 +57,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- A: If this is about one of my existing config files rather than a general programming question, then no.
 			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
 
+- Move local CICD steps into a local container, and on the other boxes too?
+	- ID: 2026101009221201
+	- Type: Task
+	- Status: Waiting for answers
+	- Priority: Avg
+	- Opened: 20261010-092212
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- What would you think of moving (or recreating) local CICD steps into a local container (in the regular docker location)? A minimal container, maybe something as close to the current host OS as possible? (E.g. Debian Trixie)? Ditto on foreign boxes?
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261010: A: Yes for the Linux stages that need no card and no desktop: lint, unit tests, the 4 builds, the deb and NSIS packages, and the Xvfb and headless sway window tests. They gain a pinned toolchain (rustup 1.96, zig 0.16, mingw, makensis 3.12 instead of the box's 3.11), no live user config under the unit tests (G6), and no writes to the box's cache or dogfood config. Debian Trixie matches the host kernel. The repo, `target/` and the cargo registry go in as volumes, so build time stays the same.
+			- Keep on the host: anything that reads the real card (GPU memory, frame times, the profiler), the dogfood install into the synced app dir, the demo render, and the stages that talk to the other boxes over ssh with the host lock.
+			- Not on the other boxes. vm925w has its hypervisor off, so no WSL2 and no Windows containers, and the Windows tests need a logged-on desktop anyway. On b26 a Linux container gives nothing for a macOS build, and the Windows and Mac builds are already made here.
+			- Suggested first step: `cicd.bash --gate` inside the container, as an opt-in flag, until it has run clean a few times. Then the package stages.
+
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486
 	- Type: Bug
@@ -800,6 +818,63 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
+
+- Don't show any flyover tip text when the app or Settings dialog doesn't have the focus
+	- ID: 2026101009220760
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261010-092207
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Don't show any flyover tip text when the app - e.g. for tabs - or settings dialog doesn't have the focus.
+	- Notes:
+		- Pre-next-cut.
+
+- Settings: move tabs to the left, including nested tabs
+	- ID: 2026101009220870
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261010-092208
+	- Opened by: JC
+	- Related IDs: 2026101008023943
+	- Target OS: All
+	- Requirements:
+		- Move tabs to the left, including nested tabs.
+	- Notes:
+		- Pre-next-cut.
+		- The dialog code can do both since 2026101008023943. SilkTerm's own spec in `settings_ui.shcl` is still flat and across the top.
+
+- Settings: restore the old font list
+	- ID: 2026101009220980
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261010-092209
+	- Opened by: JC
+	- Related IDs: 2026100913394946
+	- Target OS: All
+	- Requirements:
+		- Restore my old font list that started with 'Monaspace Argon' (as now), but also included a long list that included Fira Code, Jetbrains, etc.
+	- Notes:
+		- Pre-next-cut.
+		- `DEFAULT_FONT_STACK` in config.rs still lists all 9 fonts.
+
+- Add or change a "Copyright and license" section in the design docs
+	- ID: 2026101009221091
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261010-092210
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Add or change a "Copyright and license" section to design docs. All 'CC BY 4.0' (the longer text though). Don't change copyright holder if one already exists.
+	- Notes:
+		- Pre-next-cut.
+		- Only `design_docs/20261008-180516_automatic_settings.md` has one now, with Yottacore as the holder and a one-line license text. `design.md`, the uiux style guide and the other 15 design docs have none.
 
 - A test that measures Settings text before its first text context can measure in the wrong font
 	- ID: 2026100909162017
