@@ -284,14 +284,18 @@ impl Demo {
 		}
 		let tip = self.model.tip(id, &self.desk);
 		let v = self.model.value(id, &self.desk);
-		ui.horizontal(|ui| {
-			ui.set_min_width(label_w);
-			ui.add_space(f32::from(s.indent) * INDENT);
-			ui.label(&s.label).on_hover_text(&tip);
-		});
+		let label_cell = ui
+			.horizontal(|ui| {
+				ui.set_min_width(label_w);
+				ui.add_space(f32::from(s.indent) * INDENT);
+				ui.add(egui::Label::new(&s.label).selectable(false));
+			})
+			.response
+			.rect;
 		let mut new: Option<Value> = None;
-		ui.vertical(|ui| {
-			let r = match s.control {
+		let control_cell = ui.vertical(|ui| {
+			// the control's response isn't needed, the row's tip is below
+			let _ = match s.control {
 				Control::Checkbox => {
 					let mut b = v.as_bool();
 					let r = ui.checkbox(&mut b, "");
@@ -350,7 +354,6 @@ impl Demo {
 				}
 				Control::Heading | Control::None => return,
 			};
-			r.on_hover_text(&tip);
 		});
 		let can = self.model.can_reset(id, &self.desk);
 		let reset_tip = match self.model.source(id, &self.desk) {
@@ -361,6 +364,11 @@ impl Demo {
 		let reset = ui
 			.add_enabled(can, egui::Button::new("\u{21ba}").small())
 			.on_hover_text(reset_tip);
+		// one tip for the whole row, from the label up to the reset arrow
+		let mut tip_rect = label_cell.union(control_cell.response.rect);
+		tip_rect.max.x = reset.rect.left() - 2.0;
+		ui.interact(tip_rect, ui.id().with(("tip", id)), egui::Sense::hover())
+			.on_hover_text(&tip);
 		if reset.clicked() {
 			self.change(&format!("reset {id}"), |m, d| m.reset(id, d));
 		}
