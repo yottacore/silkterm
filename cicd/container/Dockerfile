@@ -119,10 +119,11 @@ RUN : "${VER_cargo_deny:?}${VER_cargo_zigbuild:?}${VER_cargo_deb:?}${VER_cargo_g
 FROM base
 COPY --from=tools /opt/tools/bin/ /opt/cargo/bin/
 
-# Runs as the caller's uid, which has no passwd entry here. /cache takes the named
-# volume, which copies this dir's mode when new, so anyone can write. The crate
-# registry goes there, so the toolchain under /opt stays as the image built it, and
-# rustup is told not to fetch a toolchain the image lacks.
+# The run drops to the caller's uid once it has a passwd entry (cicd.bash writes
+# one on the way in). /cache takes the named volume, which copies this dir's mode
+# when new, so anyone can write. The crate registry goes there, so the toolchain
+# under /opt stays as the image built it, and rustup is told not to fetch a
+# toolchain the image lacks.
 RUN mkdir -m 1777 /cache /cache/home /cache/cargo
 ENV PATH=/opt/cargo/bin:/opt/zig:/opt/venv/bin:${PATH} \
 	HOME=/cache/home \

@@ -141,9 +141,9 @@ git -C "${repo}" add -A; git -C "${repo}" commit -qm first
 fake="${work}/bin"; mkdir -p "${fake}"
 cat >"${fake}/docker" <<'EOF'
 #!/usr/bin/env bash
-## A stand-in: records every call, says whether the image is there, and on 'run'
-## makes the native binary where the engine inside would have.
-printf '%s\n' "${*}" >>"${FAKE_LOG}"
+## A stand-in: records every call on one line, says whether the image is there, and
+## on 'run' makes the native binary where the engine inside would have.
+printf '%s\n' "${*//$'\n'/ }" >>"${FAKE_LOG}"
 case "${1}" in
 	image) if [[ "${2}" == inspect ]]; then exit "${FAKE_IMAGE_MISSING:-0}"; fi; exit 0 ;;
 	run)
@@ -164,7 +164,7 @@ fRun full.log --container -y --no-sync --no-dogfood --no-publish --no-private --
 fCheck "a run with --container passes with the stand-in" test "${rc}" -eq 0
 runLine="$(grep '^run ' "${work}/full.log" || true)"
 fCheck "it started one container" test "$(grep -c '^run ' "${work}/full.log")" -eq 1
-fCheck "as this user" bash -c '[[ "$1" == *" --user $(id -u):$(id -g) "* ]]' _ "${runLine}"
+fCheck "dropping to this user once it has a passwd entry" bash -c '[[ "$1" == *"/etc/passwd"* && "$1" == *"exec setpriv --reuid="* && "$1" == *" _ $(id -u) $(id -g) "* ]]' _ "${runLine}"
 fCheck "with the tree at its own path" bash -c '[[ "$1" == *" -v $2:$2 "* && "$1" == *" -w $2 "* ]]' _ "${runLine}" "${repo}"
 fCheck "the cache volume" bash -c '[[ "$1" == *" -v silkterm-cicd-cache:/cache "* ]]' _ "${runLine}"
 fCheck "its /tmp under the target dir" bash -c '[[ "$1" == *" -v $2/target/container/tmp:/tmp "* ]]' _ "${runLine}" "${repo}"
@@ -172,6 +172,7 @@ fCheck "the target dir for both sides" bash -c '[[ "$1" == *" CARGO_TARGET_DIR=$
 fCheck "the build number pinned here" bash -c '[[ "$1" == *" SILK_BUILD_MINUTES="[0-9]* ]]' _ "${runLine}"
 fCheck "the engine inside gets the stage options and the host stages off" \
 	bash -c '[[ "$1" == *" $2/cicd/cicd.bash -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz" ]]' _ "${runLine}" "${repo}"
+fCheck "and nothing of this box but the tree, the target dir and the cache" bash -c '[[ "$1" != *" -v /"[!m]* && "$1" != *" -v $HOME"* ]]' _ "${runLine}"
 fCheck "the image was there, so nothing was built" fNot grep -q '^build ' "${work}/full.log"
 fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
