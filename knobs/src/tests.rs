@@ -269,6 +269,33 @@ fn a_temporary_preset_ignores_changes_stores_nothing_and_ends_on_an_edit() {
 	assert_eq!(m.shown_choice("profile", &DESK), "Low *");
 }
 
+// Config words never care about case, and a choice is stored the way the
+// spec spells it, so a save writes the usual word back.
+// Test ID: EsGFVZe
+#[test]
+fn a_choice_matches_without_case_and_keeps_the_spec_s_word() {
+	let m = demo();
+	let s = m.spec.get("profile").unwrap();
+	assert_eq!(m.spec.valid(s, &text("HIGH")), Ok(text("high")));
+	assert_eq!(m.spec.valid(s, &text(" Custom ")), Ok(text(CUSTOM)));
+	assert!(m.spec.valid(s, &text("bogus")).is_err());
+}
+
+// A file that names a temporary preset was not written by a save, and loads
+// as if it named nothing.
+// Test ID: EsGFIt0
+#[test]
+fn a_file_naming_a_temporary_preset_loads_as_no_pick() {
+	let mut m = demo();
+	m.set("profile", &text("remote"), &DESK);
+	let (config, state) = m.save(&DESK);
+	let path = &m.spec.get("profile").unwrap().path;
+	let named = format!("{config}{path}: remote\n");
+	let back = Model::load(Arc::clone(&m.spec), &named, &state);
+	assert_eq!(back.values.own.get("profile"), None, "{named}");
+	assert_eq!(back.chosen("perf", &DESK), demo().chosen("perf", &DESK));
+}
+
 // Test ID: EsFc30N
 #[test]
 fn wallpaper_colors_beat_the_theme_and_an_edit_turns_them_off() {
@@ -599,4 +626,61 @@ fn lines_put_set_aside_values_and_changes_under_kept() {
 			.any(|(p, v)| p == "font.use_system_family" && *v == Value::Bool(true))
 	);
 	assert!(!lines.config.iter().any(|(p, _)| p == "font.family"));
+}
+
+// Test ID: EsG0DsQ
+#[test]
+fn a_held_value_wins_for_the_run_and_is_never_saved() {
+	let mut m = demo();
+	m.hold("family", &text("Iosevka"));
+	assert_eq!(
+		m.value("family", &DESK),
+		text("Iosevka"),
+		"over the desktop's"
+	);
+	m.hold("blur", &int(3));
+	assert_eq!(
+		m.value("blur", &DESK),
+		Value::Float(3.0),
+		"over the profile's"
+	);
+	assert_eq!(
+		m.shown_choice("profile", &DESK),
+		"High",
+		"and no change to it"
+	);
+	assert_eq!(m.state_line("blur", &DESK), "Set for this run only.");
+	let (config, _) = m.save(&DESK);
+	assert!(
+		!config.contains("Iosevka") && !config.contains("blur"),
+		"{config}"
+	);
+	m.set("family", &text("Fira Code"), &DESK);
+	assert!(
+		!m.values.held.contains_key("family"),
+		"a change takes its place"
+	);
+	assert_eq!(m.value("family", &DESK), text("Fira Code"));
+}
+
+// Test ID: EsG8XbQ
+#[test]
+fn the_chooser_s_arrow_ends_a_temporary_preset_and_drops_the_changes() {
+	let mut m = demo();
+	m.set("profile", &text("low"), &DESK);
+	m.set("radius", &int(9), &DESK);
+	m.set("profile", &text("remote"), &DESK);
+	assert!(m.can_reset("profile", &DESK));
+	m.reset("profile", &DESK);
+	assert!(m.values.session.is_empty(), "Remote is gone");
+	assert!(
+		m.changed("perf", &DESK).is_empty(),
+		"and so are the changes"
+	);
+	let mut plain = demo();
+	plain.set("profile", &text("remote"), &DESK);
+	assert!(
+		plain.can_reset("profile", &DESK),
+		"with nothing of its own, Remote is still something to undo"
+	);
 }

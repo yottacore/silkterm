@@ -462,12 +462,15 @@ impl Spec {
 				Ok(Value::Float(v.as_f64()))
 			}
 			(Kind::Color, Value::Text(t)) if is_color(t) => Ok(Value::Text(t.to_ascii_lowercase())),
+			// a choice is matched without case, and stored as the spec spells it
 			(Kind::Choice, Value::Text(t)) => {
 				let chooser = self.chooser_of(&s.id);
-				if s.options.iter().any(|(k, _)| k == t)
-					|| (chooser.is_some() && t == CUSTOM)
-					|| chooser.is_some_and(|g| g.from_program && !t.is_empty())
-				{
+				let word = t.trim();
+				if let Some((k, _)) = s.options.iter().find(|(k, _)| k.eq_ignore_ascii_case(word)) {
+					Ok(Value::Text(k.clone()))
+				} else if chooser.is_some() && word.eq_ignore_ascii_case(CUSTOM) {
+					Ok(Value::Text(CUSTOM.to_string()))
+				} else if chooser.is_some_and(|g| g.from_program && !t.is_empty()) {
 					Ok(v.clone())
 				} else {
 					Err(format!("{t} is not one of the choices"))
@@ -757,6 +760,9 @@ pub struct Values {
 	pub state: BTreeMap<String, Value>,
 	/// Group id to a temporary preset. Never saved.
 	pub session: BTreeMap<String, String>,
+	/// Values for this run only, over everything else, such as one given on a
+	/// command line. Never saved.
+	pub held: BTreeMap<String, Value>,
 }
 
 /// Where a setting's value comes from right now, for its tip.
@@ -778,6 +784,8 @@ pub enum Source {
 		was: Value,
 	},
 	State,
+	/// Held for this run.
+	Held,
 }
 
 /// What the files hold, in spec order. `kept` lines have their full path.
@@ -823,6 +831,9 @@ impl Model {
 
 	pub fn value(&self, id: &str, env: &dyn Env) -> Value {
 		let s = self.spec.at(id);
+		if let Some(v) = self.values.held.get(id) {
+			return v.clone();
+		}
 		if s.store == Store::State {
 			return self
 				.values
@@ -938,6 +949,19 @@ impl Model {
 		}
 	}
 
+	/// Hold a value for this run, over everything else. Nothing is stored, and a
+	/// change on screen takes its place.
+	pub fn hold(&mut self, id: &str, v: &Value) {
+		let spec = Arc::clone(&self.spec);
+		if let Some(v) = spec.get(id).and_then(|s| spec.valid(s, v).ok()) {
+			self.values.held.insert(id.to_string(), v);
+		}
+	}
+
+	pub fn release(&mut self, id: &str) {
+		self.values.held.remove(id);
+	}
+
 	/// The settings changed on top of the group's preset, in spec order.
 	pub fn changed(&self, group: &str, env: &dyn Env) -> Vec<&str> {
 		self.changes_on(group, &self.chosen(group, env))
@@ -996,6 +1020,9 @@ impl Model {
 
 	pub fn source(&self, id: &str, env: &dyn Env) -> Source {
 		let s = self.spec.at(id);
+		if self.values.held.contains_key(id) {
+			return Source::Held;
+		}
 		if s.store == Store::State {
 			return Source::State;
 		}
@@ -1070,6 +1097,7 @@ impl Model {
 		let s = self.spec.at(id);
 		let mut line = match self.source(id, env) {
 			Source::Default | Source::State => String::new(),
+			Source::Held => "Set for this run only.".into(),
 			Source::Own => format!(
 				"Set by hand. Default value: {}.",
 				show(s, &self.fallback(s, env))
@@ -1103,6 +1131,17 @@ impl Model {
 	/// Whether the reset arrow has anything to do.
 	pub fn can_reset(&self, id: &str, env: &dyn Env) -> bool {
 		let s = self.spec.at(id);
+		if self.values.held.contains_key(id) {
+			return true;
+		}
+		// a temporary preset is something the chooser's arrow takes away
+		if self
+			.spec
+			.chooser_of(id)
+			.is_some_and(|g| self.values.session.contains_key(&g.id))
+		{
+			return true;
+		}
 		match s.store {
 			Store::State => self.values.state.contains_key(id),
 			Store::Config => match self.preset_for(s, env) {
@@ -1120,6 +1159,15 @@ impl Model {
 	pub fn reset(&mut self, id: &str, env: &dyn Env) {
 		let spec = Arc::clone(&self.spec);
 		let s = spec.at(id);
+		if self.values.held.remove(id).is_some() {
+			return;
+		}
+		// the chooser's arrow is a pick of the default, so its "*" changes and a
+		// temporary preset go too
+		if let Some(g) = spec.chooser_of(id) {
+			self.temporary(&g.id, None);
+			self.drop_changes(&g.id);
+		}
 		if s.store == Store::State {
 			self.values.state.remove(id);
 			return;
@@ -1154,6 +1202,7 @@ impl Model {
 		let Ok(v) = spec.valid(s, v) else {
 			return;
 		};
+		self.values.held.remove(id);
 		if s.store == Store::State {
 			self.values.state.insert(s.id.clone(), v);
 			return;
@@ -1375,10 +1424,16 @@ impl Model {
 			let found = paths
 				.iter()
 				.find_map(|p| take(doc, p, s).and_then(|v| spec.valid(s, &v).ok()));
+			// a temporary pick is never stored, so a file that names one names nothing
+			let temporary = |v: &Value| {
+				spec.chooser_of(&s.id)
+					.and_then(|g| g.preset(v.as_text()))
+					.is_some_and(|p| p.temporary)
+			};
 			if let Some(v) = found {
 				if s.store == Store::State {
 					m.values.state.insert(s.id.clone(), v);
-				} else {
+				} else if !temporary(&v) {
 					m.values.own.insert(s.id.clone(), v);
 				}
 			}
