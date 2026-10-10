@@ -158,7 +158,8 @@ export SILK_DOCKER="${fake}/docker"
 fRun(){  ## fRun <log name> <options...>: the engine from the copy; sets rc and out, and the stand-in's log is ${work}/<log name>
 	local -r log="${work}/${1}"; shift
 	rm -f "${log}"; export FAKE_LOG="${log}"
-	rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER bash cicd/cicd.bash "${@}" 2>&1)" || rc=$?
+	## Unset: inside the container both are set, and this is a run from outside.
+	rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR bash cicd/cicd.bash "${@}" 2>&1)" || rc=$?
 }
 fRun full.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz
 fCheck "a run with --container passes with the stand-in" test "${rc}" -eq 0
@@ -172,7 +173,7 @@ fCheck "the target dir for both sides" bash -c '[[ "$1" == *" CARGO_TARGET_DIR=$
 fCheck "the build number pinned here" bash -c '[[ "$1" == *" SILK_BUILD_MINUTES="[0-9]* ]]' _ "${runLine}"
 fCheck "the engine inside gets the stage options and the host stages off" \
 	bash -c '[[ "$1" == *" $2/cicd/cicd.bash -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz" ]]' _ "${runLine}" "${repo}"
-fCheck "and nothing of this box but the tree, the target dir and the cache" bash -c '[[ "$1" != *" -v /"[!m]* && "$1" != *" -v $HOME"* ]]' _ "${runLine}"
+fCheck "and nothing else of this box" test "$(grep -o ' -v ' <<<"${runLine}" | wc -l)" -eq 3
 fCheck "the image was there, so nothing was built" fNot grep -q '^build ' "${work}/full.log"
 fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
@@ -201,7 +202,7 @@ fCheck "inside the container, --container is refused" test "${rc}" -ne 0
 fCheck "by name" grep -q 'already in the container' <<<"${out}"
 fCheck "before docker is asked anything" test ! -e "${work}/nested.log"
 
-rc=0; out="$(cd "${repo}" && SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --container -y 2>&1)" || rc=$?
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --container -y 2>&1)" || rc=$?
 fCheck "with no docker the run stops at once" test "${rc}" -ne 0
 fCheck "and says what it needs" grep -q -- '--container needs docker' <<<"${out}"
 
