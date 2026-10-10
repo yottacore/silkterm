@@ -31,7 +31,7 @@ use crate::keys::Chord;
 use crate::pane::Rect;
 use crate::pick::{self, Picker};
 use crate::textedit::{Reach, caret_from_click, reach_left, reach_right, word_at};
-use crate::ui_spec::{Key, Kind, Layout, Spec, ui};
+use crate::ui_spec::{Key, Kind, Layout, Spec, TabNode, TabsSide, ui};
 use prompt::{Prompt, PromptFocus, PromptJob};
 use shell_grid::{ShellDrag, ShellPart, ShellStop, shell_stop};
 use std::borrow::Cow;
@@ -49,6 +49,44 @@ fn lay() -> &'static Layout {
 }
 pub fn tab_titles() -> &'static [&'static str] {
 	&ui().tabs
+}
+/// Every tab in strip order, parents included; a test may stand in a tree of
+/// its own, as long as its leaves are the real ones.
+pub fn tab_nodes() -> &'static [TabNode] {
+	#[cfg(test)]
+	if let Some(tree) = TAB_TREE.with(std::cell::Cell::get) {
+		return tree;
+	}
+	&ui().tab_tree
+}
+fn tabs_side() -> TabsSide {
+	#[cfg(test)]
+	if let Some(side) = TABS_SIDE.with(std::cell::Cell::get) {
+		return side;
+	}
+	ui().tabs_side
+}
+#[cfg(test)]
+thread_local! {
+	static TAB_TREE: std::cell::Cell<Option<&'static [TabNode]>> = const { std::cell::Cell::new(None) };
+	static TABS_SIDE: std::cell::Cell<Option<TabsSide>> = const { std::cell::Cell::new(None) };
+}
+// The node a leaf tab is.
+fn leaf_node(nodes: &[TabNode], leaf: usize) -> usize {
+	nodes.iter().position(|n| n.leaf == Some(leaf)).unwrap_or(0)
+}
+// Top-level tab down to the leaf, by node.
+fn path_to(nodes: &[TabNode], leaf: usize) -> Vec<usize> {
+	let mut path = vec![leaf_node(nodes, leaf)];
+	while let Some(up) = nodes[path[0]].parent {
+		path.insert(0, up);
+	}
+	path
+}
+// A tab with tabs under it shows its first leaf. In strip order a parent's
+// subtree follows it at once, so that is the next leaf along.
+fn first_leaf_under(nodes: &[TabNode], node: usize) -> usize {
+	nodes[node..].iter().find_map(|n| n.leaf).unwrap_or(0)
 }
 
 // Dialog colors adapt to the active mode (dark-gray for dark, light-gray for
@@ -981,8 +1019,8 @@ pub struct SettingsDialog {
 	// scrolls; wider, and the stretchy controls take up the slack.
 	natural: (f32, f32),
 	specs: &'static [Spec],
-	tab: usize,                        // active tab
-	tab_ws: Vec<f32>,                  // measured tab-button widths (UI font)
+	tab: usize,                        // active tab, a leaf
+	tab_ws: Vec<f32>,                  // measured tab-button widths (UI font), per node
 	label_ws: Vec<f32>,                // each row's measured label, by spec index
 	scroll: f32,                       // rows-region scroll offset (0 when everything fits)
 	hscroll: f32,                      // sideways offset, when the window is narrower than `natural`
@@ -1331,7 +1369,8 @@ impl SettingsDialog {
 		// stretchy controls spread out.
 		let natural = Self::natural_dip(line_h, &chrome);
 		let (w, natural_h) = natural;
-		let (min_w, min_h) = Self::min_size_dip(line_h, chrome.btn_w);
+		let (min_w, min_h) =
+			Self::min_size_dip(line_h, chrome.btn_w, Self::side_off_for(&chrome.tab_ws));
 		let w = w.min(max_w.max(min_w));
 		let h = natural_h.min(max_h.max(min_h));
 		let rect = Rect {
@@ -1422,16 +1461,19 @@ impl SettingsDialog {
 		let btn_h = lay().button_height.max(line_h + lay().row_pad);
 		// A tab whose height moves with the data, the shell list's, scrolls
 		// instead. Otherwise a long list of shells makes every tab tall.
+		// Across the top the strip is a row deeper for a tab under another, so
+		// each tab is measured with its own strip. Down the side the list has
+		// to fit as well.
+		let nodes = tab_nodes();
 		let tallest = Self::fixed_tabs(specs)
-			.map(|t| Self::tab_content_h(specs, t, line_h, 0))
+			.map(|t| Self::above_rows_for(line_h, t) + Self::tab_content_h(specs, t, line_h, 0))
 			.fold(0.0f32, f32::max);
-		let natural_h = Self::gutter_h_for(line_h)
-			+ 1.0 + lay().tabs_gap
-			+ tallest + lay().buttons_gap
-			+ btn_h + lay().pad;
-		let tabs_w = lay().pad * 2.0
-			+ tab_ws.iter().sum::<f32>()
-			+ lay().tab_gap * tab_ws.len().saturating_sub(1) as f32;
+		let natural_h = (tallest + lay().buttons_gap + btn_h + lay().pad)
+			.max(Self::side_list_h(line_h, nodes.len()) + 1.0);
+		let (tabs_w, side_off) = match tabs_side() {
+			TabsSide::Top => (Self::strip_w_for(tab_ws), 0.0),
+			TabsSide::Left => (0.0, Self::side_off_for(tab_ws)),
+		};
 		// widest radio row (scaled pitch at HiDPI / large fonts) must fit the panel,
 		// or the last option overflows the right edge
 		let font_scale = (line_h / lay().base_line_height).max(1.0);
@@ -1509,7 +1551,8 @@ impl SettingsDialog {
 			.max(radio_w)
 			.max(dd_w)
 			.max(btns_w)
-			.max(grid_w);
+			.max(grid_w)
+			+ side_off;
 		(w, natural_h)
 	}
 
@@ -1539,7 +1582,7 @@ impl SettingsDialog {
 		self.label_ws = chrome.label_ws;
 		// The screen holds fewer DIP at a higher scale, so the window may no
 		// longer fit what it was dragged to.
-		let (min_w, min_h) = Self::min_size_dip(self.line_h, self.btn_w);
+		let (min_w, min_h) = Self::min_size_dip(self.line_h, self.btn_w, self.side_off());
 		self.rect.w = self.rect.w.min(max_w.max(min_w)).max(min_w);
 		self.rect.h = self.rect.h.min(max_h.max(min_h)).max(min_h);
 		self.scroll = self.scroll.clamp(0.0, self.max_scroll());
@@ -1664,72 +1707,219 @@ impl SettingsDialog {
 	// The tabs stand on a gutter strip that runs the panel's full width, and the
 	// line closing that strip is what they stand ON - so a tab is shorter than a
 	// footer button (it is chrome, not a control) and the strip's height is
-	// simply the drop from the panel edge plus that tab.
+	// simply the drop from the panel edge plus that tab. A tab under another
+	// adds a row to the strip while its parent is current. Down the left side
+	// the same gutter is a list instead, every tab in it, each as wide as the
+	// list, with sub-tabs stepped in under their parent.
 	fn tab_h(&self) -> f32 {
 		Self::tab_h_for(self.line_h)
 	}
 	fn tab_h_for(line_h: f32) -> f32 {
 		lay().tab_height.max(line_h + lay().tab_pad_v)
 	}
-	fn gutter_h_for(line_h: f32) -> f32 {
-		lay().tab_top + Self::tab_h_for(line_h)
+	fn gutter_h_for(line_h: f32, rows: usize) -> f32 {
+		(Self::tab_h_for(line_h) + lay().tab_top) * rows as f32
 	}
-	fn tab_bar_y(&self) -> f32 {
-		self.rect.y + lay().tab_top
-	}
-	// The strip, and the 1px rule closing it off from the rows below.
-	fn gutter_rect(&self) -> Rect {
-		Rect {
-			x: self.rect.x,
-			y: self.rect.y,
-			w: self.rect.w,
-			h: Self::gutter_h_for(self.line_h),
+	// What sits above a tab's first row: its strip across the top, or only
+	// the panel's padding beside a list.
+	fn above_rows_for(line_h: f32, leaf: usize) -> f32 {
+		match tabs_side() {
+			TabsSide::Top => {
+				Self::gutter_h_for(line_h, path_to(tab_nodes(), leaf).len()) + 1.0 + lay().tabs_gap
+			}
+			TabsSide::Left => lay().pad,
 		}
+	}
+	// The list's own height, top to bottom, every tab in it.
+	fn side_list_h(line_h: f32, count: usize) -> f32 {
+		if tabs_side() != TabsSide::Left {
+			return 0.0;
+		}
+		lay().tab_top * 2.0 + (Self::tab_h_for(line_h) + lay().tab_gap) * count as f32
+			- lay().tab_gap
+	}
+	// The list's width: its widest entry at its depth, with a gap either side.
+	fn side_w_for(tab_ws: &[f32]) -> f32 {
+		if tabs_side() != TabsSide::Left {
+			return 0.0;
+		}
+		let widest = tab_nodes()
+			.iter()
+			.zip(tab_ws)
+			.map(|(n, w)| f32::from(n.depth) * lay().tab_indent + w)
+			.fold(0.0f32, f32::max);
+		lay().tab_gap * 2.0 + widest
+	}
+	// What the list and the rule beside it take off the rows' left edge.
+	fn side_off_for(tab_ws: &[f32]) -> f32 {
+		let w = Self::side_w_for(tab_ws);
+		if w > 0.0 { w + 1.0 } else { 0.0 }
+	}
+	fn side_w(&self) -> f32 {
+		Self::side_w_for(&self.tab_ws)
+	}
+	fn side_off(&self) -> f32 {
+		Self::side_off_for(&self.tab_ws)
+	}
+	// The widest row the strip can show: the top level, or any tab's sub-tabs.
+	fn strip_w_for(tab_ws: &[f32]) -> f32 {
+		let nodes = tab_nodes();
+		let row_w = |parent: Option<usize>| {
+			let ws: Vec<f32> = (0..nodes.len())
+				.filter(|&i| nodes[i].parent == parent)
+				.map(|i| tab_ws.get(i).copied().unwrap_or(0.0))
+				.collect();
+			lay().pad * 2.0
+				+ ws.iter().sum::<f32>()
+				+ lay().tab_gap * ws.len().saturating_sub(1) as f32
+		};
+		std::iter::once(None)
+			.chain((0..nodes.len()).filter(|&i| !nodes[i].is_leaf()).map(Some))
+			.map(row_w)
+			.fold(0.0f32, f32::max)
+	}
+	fn tab_bar_y(&self, row: usize) -> f32 {
+		self.rect.y + lay().tab_top + (self.tab_h() + lay().tab_top) * row as f32
+	}
+	// The current tab and every tab it sits under, top down. All of them draw
+	// as current, so a sub-tab says which parent it belongs to.
+	fn active_path(&self) -> Vec<usize> {
+		path_to(tab_nodes(), self.tab)
+	}
+	// The strip, and the 1px rule closing it off from the rows below. Down the
+	// side it is the list, the rule along its right.
+	fn gutter_rect(&self) -> Rect {
+		match tabs_side() {
+			TabsSide::Top => Rect {
+				x: self.rect.x,
+				y: self.rect.y,
+				w: self.rect.w,
+				h: Self::gutter_h_for(self.line_h, self.active_path().len()),
+			},
+			TabsSide::Left => Rect {
+				x: self.rect.x,
+				y: self.rect.y,
+				w: self.side_w(),
+				h: self.rect.h,
+			},
+		}
+	}
+	// The tabs shown in strip row `row` across the top: the top level, then the
+	// sub-tabs of the tab the current one sits under at that depth.
+	fn shown_in_row(&self, row: usize) -> Vec<usize> {
+		let nodes = tab_nodes();
+		let parent = if row == 0 {
+			None
+		} else {
+			match self.active_path().get(row - 1) {
+				Some(&up) => Some(up),
+				None => return Vec::new(),
+			}
+		};
+		(0..nodes.len())
+			.filter(|&i| nodes[i].parent == parent)
+			.collect()
+	}
+	fn row_w(&self, shown: &[usize]) -> f32 {
+		lay().pad * 2.0
+			+ shown.iter().map(|&i| self.tab_ws[i]).sum::<f32>()
+			+ lay().tab_gap * shown.len().saturating_sub(1) as f32
 	}
 	// Where a tab sits, and where the whole strip does. The strip has an offset of
 	// its own rather than riding the rows' sideways scroll: a tab panned off the
 	// window could not be clicked at all, and the tabs are how you leave a tab
 	// that will not fit. It moves only far enough to keep the current one in view.
-	fn tabs_w(&self) -> f32 {
-		lay().pad * 2.0
-			+ self.tab_ws.iter().sum::<f32>()
-			+ lay().tab_gap * self.tab_ws.len().saturating_sub(1) as f32
-	}
-	fn tab_scroll(&self) -> f32 {
-		let over = (self.tabs_w() - self.rect.w).max(0.0);
-		if over <= 0.0 || self.tab >= self.tab_ws.len() {
+	fn tab_scroll(&self, row: usize) -> f32 {
+		let shown = self.shown_in_row(row);
+		let over = (self.row_w(&shown) - self.rect.w).max(0.0);
+		let Some(&cur) = self.active_path().get(row) else {
+			return 0.0;
+		};
+		let Some(k) = shown.iter().position(|&i| i == cur) else {
+			return 0.0;
+		};
+		if over <= 0.0 {
 			return 0.0;
 		}
 		let right = lay().pad
-			+ self.tab_ws[..=self.tab].iter().sum::<f32>()
-			+ lay().tab_gap * self.tab as f32
+			+ shown[..=k].iter().map(|&i| self.tab_ws[i]).sum::<f32>()
+			+ lay().tab_gap * k as f32
 			+ lay().pad;
 		(right - self.rect.w).clamp(0.0, over)
 	}
-	fn tab_rect(&self, tab: usize) -> Rect {
-		let x = self.rect.x - self.tab_scroll()
-			+ lay().pad
-			+ self.tab_ws[..tab].iter().sum::<f32>()
-			+ lay().tab_gap * tab as f32;
-		Rect {
-			x,
-			y: self.tab_bar_y(),
-			w: self.tab_ws[tab],
-			h: self.tab_h(),
+	// The list, when taller than the panel, slides the same way.
+	fn side_scroll(&self) -> f32 {
+		let nodes = tab_nodes();
+		let over = (Self::side_list_h(self.line_h, nodes.len()) - self.rect.h).max(0.0);
+		if over <= 0.0 {
+			return 0.0;
+		}
+		let cur = leaf_node(nodes, self.tab);
+		let bottom =
+			lay().tab_top * 2.0 + (self.tab_h() + lay().tab_gap) * (cur + 1) as f32 - lay().tab_gap;
+		(bottom - self.rect.h).clamp(0.0, over)
+	}
+	// Where tab `node` sits. Empty when it is not on show, which across the top
+	// is every sub-tab of a tab that is not current.
+	fn tab_rect(&self, node: usize) -> Rect {
+		let n = &tab_nodes()[node];
+		let none = Rect {
+			x: 0.0,
+			y: 0.0,
+			w: 0.0,
+			h: 0.0,
+		};
+		match tabs_side() {
+			TabsSide::Top => {
+				let row = usize::from(n.depth);
+				let shown = self.shown_in_row(row);
+				let Some(k) = shown.iter().position(|&i| i == node) else {
+					return none;
+				};
+				let x = self.rect.x - self.tab_scroll(row)
+					+ lay().pad + shown[..k].iter().map(|&i| self.tab_ws[i]).sum::<f32>()
+					+ lay().tab_gap * k as f32;
+				Rect {
+					x,
+					y: self.tab_bar_y(row),
+					w: self.tab_ws[node],
+					h: self.tab_h(),
+				}
+			}
+			TabsSide::Left => {
+				let step = f32::from(n.depth) * lay().tab_indent;
+				Rect {
+					x: self.rect.x + lay().tab_gap + step,
+					y: self.rect.y + lay().tab_top + (self.tab_h() + lay().tab_gap) * node as f32
+						- self.side_scroll(),
+					w: (self.side_w() - lay().tab_gap * 2.0 - step).max(0.0),
+					h: self.tab_h(),
+				}
+			}
 		}
 	}
 	// The strip's own clip: the gutter, less the panel's border on either side.
 	fn tab_strip(&self) -> Rect {
 		let gut = self.gutter_rect();
-		Rect {
-			x: gut.x + 1.0,
-			w: (gut.w - 2.0).max(0.0),
-			..gut
+		match tabs_side() {
+			TabsSide::Top => Rect {
+				x: gut.x + 1.0,
+				w: (gut.w - 2.0).max(0.0),
+				..gut
+			},
+			TabsSide::Left => Rect {
+				y: gut.y + 1.0,
+				h: (gut.h - 2.0).max(0.0),
+				..gut
+			},
 		}
 	}
 	fn rows_y0(&self) -> f32 {
-		let g = self.gutter_rect();
-		g.y + g.h + 1.0 + lay().tabs_gap
+		self.rect.y + Self::above_rows_for(self.line_h, self.tab)
+	}
+	// The rows' left edge: the panel's, or past the list and its rule.
+	fn rows_x0(&self) -> f32 {
+		self.rect.x + self.side_off()
 	}
 	/// The scroll viewport in physical pixels (the render pass scissors to it).
 	pub fn viewport_px(&self) -> Rect {
@@ -1738,9 +1928,9 @@ impl SettingsDialog {
 	fn viewport(&self) -> Rect {
 		let y0 = self.rows_y0();
 		Rect {
-			x: self.rect.x,
+			x: self.rows_x0(),
 			y: y0,
-			w: self.rect.w,
+			w: (self.rect.w - self.side_off()).max(0.0),
 			h: (self.rect.y + self.rect.h
 				- lay().pad - self.btn_h()
 				- lay().buttons_gap
@@ -1768,28 +1958,28 @@ impl SettingsDialog {
 
 	// The smallest useful window: the three footer buttons have to fit across it,
 	// and a couple of rows have to be left above them to be worth scrolling.
-	fn min_size_dip(line_h: f32, btn_w: f32) -> (f32, f32) {
+	fn min_size_dip(line_h: f32, btn_w: f32, side_off: f32) -> (f32, f32) {
 		let l = lay();
 		let row = l.row_height.max(line_h + l.row_pad);
+		let above = match tabs_side() {
+			TabsSide::Top => Self::gutter_h_for(line_h, 1) + 1.0 + l.tabs_gap,
+			TabsSide::Left => l.pad,
+		};
 		(
-			l.pad * 2.0 + btn_w.max(l.button_width) * 3.0 + l.button_gap * 2.0,
-			Self::gutter_h_for(line_h)
-				+ 1.0 + l.tabs_gap
-				+ row * 2.0 + l.buttons_gap
-				+ l.button_height.max(line_h + l.row_pad)
-				+ l.pad,
+			side_off + l.pad * 2.0 + btn_w.max(l.button_width) * 3.0 + l.button_gap * 2.0,
+			above + row * 2.0 + l.buttons_gap + l.button_height.max(line_h + l.row_pad) + l.pad,
 		)
 	}
 	// Rows are laid out at the natural width or the window's, whichever is
 	// larger: a narrower window scrolls sideways rather than truncating, a wider
 	// one hands the slack to the stretchy controls.
 	fn layout_w(&self) -> f32 {
-		self.rect.w.max(self.natural.0)
+		(self.rect.w - self.side_off()).max(self.natural.0 - self.side_off())
 	}
-	// Left edge of the laid-out content, which is the panel's own left edge until
+	// Left edge of the laid-out content, which is the rows' own left edge until
 	// the window is too narrow to hold it.
 	fn content_x(&self) -> f32 {
-		self.rect.x - self.hscroll
+		self.rows_x0() - self.hscroll
 	}
 	fn max_hscroll(&self) -> f32 {
 		(self.natural.0 - self.rect.w).max(0.0)
@@ -1832,7 +2022,8 @@ impl SettingsDialog {
 			return None;
 		}
 		let track = self.htrack();
-		let thumb_w = (track.w * self.rect.w / self.layout_w()).max(lay().scrollbar_thumb_min);
+		let thumb_w =
+			(track.w * self.viewport().w / self.layout_w()).max(lay().scrollbar_thumb_min);
 		Some(Rect {
 			x: track.x + (self.hscroll / scroll_max) * (track.w - thumb_w).max(0.0),
 			w: thumb_w,
@@ -1864,7 +2055,7 @@ impl SettingsDialog {
 		(self.to_px(self.natural.0), self.to_px(self.natural.1))
 	}
 	pub fn min_size(&self) -> (f32, f32) {
-		let (w, h) = Self::min_size_dip(self.line_h, self.btn_w);
+		let (w, h) = Self::min_size_dip(self.line_h, self.btn_w, self.side_off());
 		(self.to_px(w), self.to_px(h))
 	}
 	/// The window was resized. Everything is laid out from `rect`, so this is all
@@ -2186,12 +2377,31 @@ impl SettingsDialog {
 			self.hscroll = self.hscroll.clamp(0.0, self.max_hscroll());
 		}
 	}
+	// A click on a tab, which takes no focus of its own. One with tabs under it
+	// opens its first, unless the current tab is already one of them.
+	fn go_to_tab(&mut self, node: usize) {
+		let nodes = tab_nodes();
+		let leaf = match nodes[node].leaf {
+			Some(leaf) => leaf,
+			None if self.active_path().contains(&node) => return,
+			None => first_leaf_under(nodes, node),
+		};
+		if leaf != self.tab {
+			self.tab = leaf;
+			self.scroll = 0.0;
+			self.hscroll = 0.0;
+			self.drag = None;
+			self.focus = None; // mouse mode; Tab re-establishes focus
+		}
+	}
 	// Ctrl+Tab / Ctrl+Shift+Tab: cycle the active tab, focusing its first control.
+	// The tabs are the leaves in strip order, so the walk runs through a tab's
+	// sub-tabs and on to the next tab after the last of them.
 	fn tab_switch(&mut self, forward: bool) {
 		self.commit_edit();
 		self.capture_end();
 		self.open = None;
-		let n = self.tab_ws.len();
+		let n = tab_titles().len();
 		if n == 0 {
 			return;
 		}
@@ -3831,15 +4041,9 @@ impl SettingsDialog {
 			self.commit_edit();
 		}
 		// tab bar
-		for tab in 0..self.tab_ws.len() {
-			if self.tab_rect(tab).contains(x, y) {
-				if tab != self.tab {
-					self.tab = tab;
-					self.scroll = 0.0;
-					self.hscroll = 0.0;
-					self.drag = None;
-					self.focus = None; // mouse mode; Tab re-establishes focus
-				}
+		for node in 0..self.tab_ws.len() {
+			if self.tab_rect(node).contains(x, y) {
+				self.go_to_tab(node);
 				return Action::None;
 			}
 		}
@@ -4956,14 +5160,22 @@ impl SettingsDialog {
 		// highlight color's "look at this".
 		let gut = self.gutter_rect();
 		fixed.push(quad(gut.x, gut.y, gut.w, gut.h, colors.gutter));
-		fixed.push(quad(gut.x, gut.y + gut.h, gut.w, 1.0, colors.panel_border));
+		match tabs_side() {
+			TabsSide::Top => {
+				fixed.push(quad(gut.x, gut.y + gut.h, gut.w, 1.0, colors.panel_border));
+			}
+			TabsSide::Left => {
+				fixed.push(quad(gut.x + gut.w, gut.y, 1.0, gut.h, colors.panel_border));
+			}
+		}
 		let strip = self.tab_strip();
+		let path = self.active_path();
 		for tab in 0..self.tab_ws.len() {
 			let r = clip_rect(self.tab_rect(tab), strip);
-			if r.w <= 0.0 {
-				continue; // scrolled right out of the strip
+			if r.w <= 0.0 || r.h <= 0.0 {
+				continue; // scrolled right out of the strip, or not on show
 			}
-			let active = tab == self.tab;
+			let active = path.contains(&tab);
 			fixed.push(quad(
 				r.x,
 				r.y,
@@ -5339,17 +5551,21 @@ impl SettingsDialog {
 		let row_text_y = |y: f32, h: f32| y + (h - line_h) / 2.0;
 		// tab titles - the current one reads at full strength, the rest step back
 		let strip = self.tab_strip();
-		for (tab, title) in tab_titles().iter().enumerate() {
+		let path = self.active_path();
+		for (tab, node) in tab_nodes().iter().enumerate() {
 			let r = self.tab_rect(tab);
+			if r.w <= 0.0 {
+				continue;
+			}
 			out.push(TextItem {
-				color: if tab == self.tab {
+				color: if path.contains(&tab) {
 					colors.text
 				} else {
 					colors.dim
 				},
 				clip: Some(strip),
 				..mk(
-					(*title).into(),
+					node.title.into(),
 					r.x + lay().tab_pad / 2.0,
 					row_text_y(r.y, r.h),
 				)
@@ -5856,9 +6072,15 @@ pub fn chrome_widths(text: &mut crate::text::TextCtx, scale: f32) -> Chrome {
 		.map(|number| text.measure_ui_text(&number, &attrs))
 		.fold(0.0f32, f32::max);
 	let value_w = measured_plus(value_w, lay().field_pad * 2.0, scale);
-	let tab_ws = tab_titles()
+	let tab_ws = tab_nodes()
 		.iter()
-		.map(|title| measured_plus(text.measure_ui_text(title, &attrs), lay().tab_pad, scale))
+		.map(|node| {
+			measured_plus(
+				text.measure_ui_text(node.title, &attrs),
+				lay().tab_pad,
+				scale,
+			)
+		})
 		.collect();
 	// a label on a shared line sits in its own part, before its box, so the part
 	// has to know how long it is
@@ -5966,10 +6188,11 @@ mod tests {
 	use super::{
 		Chrome, EASE_IN_MAX, EASE_IN_MIN, EASE_OUT_MAX, EASE_OUT_MIN, Key, Kind, RAMP_DOWN_MAX,
 		RAMP_DOWN_MIN, RAMP_UP_MAX, RAMP_UP_MIN, SettingsDialog, TAU_MAX, TAU_MIN, falling_slider,
-		lay, speed_to_tau, tab_titles, tau_to_speed,
+		lay, speed_to_tau, tab_nodes, tab_titles, tau_to_speed,
 	};
 	use crate::config;
 	use crate::gfx::QuadMode;
+	use crate::ui_spec::TabsSide;
 
 	// The dialog's copy with these stored as the person's own, as a file with
 	// those lines would load.
@@ -6026,7 +6249,7 @@ mod tests {
 				btn_w: 80.0 * scale,
 				row_btn_w: 90.0 * scale,
 				value_w: 0.0,
-				tab_ws: vec![90.0 * scale; tab_titles().len()],
+				tab_ws: vec![90.0 * scale; tab_nodes().len()],
 				label_ws: labels7(scale),
 				..Chrome::default()
 			},
@@ -6062,7 +6285,7 @@ mod tests {
 				btn_w: 80.0 * 2.0,
 				row_btn_w: 90.0 * 2.0,
 				value_w: 0.0,
-				tab_ws: vec![90.0 * 2.0; tab_titles().len()],
+				tab_ws: vec![90.0 * 2.0; tab_nodes().len()],
 				label_ws: labels7(2.0),
 				..Chrome::default()
 			},
@@ -6107,7 +6330,7 @@ mod tests {
 				btn_w: 80.0 * 2.0,
 				row_btn_w: 90.0 * 2.0,
 				value_w: 0.0,
-				tab_ws: vec![90.0 * 2.0; tab_titles().len()],
+				tab_ws: vec![90.0 * 2.0; tab_nodes().len()],
 				label_ws: labels7(2.0),
 				..Chrome::default()
 			},
@@ -6661,7 +6884,7 @@ mod tests {
 						btn_w: 80.0 * k,
 						row_btn_w: 90.0 * k,
 						value_w: 0.0,
-						tab_ws: vec![90.0 * k; tab_titles().len()],
+						tab_ws: vec![90.0 * k; tab_nodes().len()],
 						label_ws: labels,
 						..Chrome::default()
 					},
@@ -6892,7 +7115,7 @@ mod tests {
 						btn_w: 80.0 * k,
 						row_btn_w: 90.0 * k,
 						value_w: 0.0,
-						tab_ws: vec![90.0 * k; tab_titles().len()],
+						tab_ws: vec![90.0 * k; tab_nodes().len()],
 						label_ws: labels7(k),
 						..Chrome::default()
 					},
@@ -6991,7 +7214,7 @@ mod tests {
 						btn_w: 80.0 * k,
 						row_btn_w: 90.0 * k,
 						value_w: 0.0,
-						tab_ws: vec![90.0 * k; tab_titles().len()],
+						tab_ws: vec![90.0 * k; tab_nodes().len()],
 						label_ws: labels7(k),
 						..Chrome::default()
 					},
@@ -9109,7 +9332,7 @@ mod tests {
 				btn_w: 160.0,
 				row_btn_w: 180.0,
 				value_w: 0.0,
-				tab_ws: vec![180.0; tab_titles().len()],
+				tab_ws: vec![180.0; tab_nodes().len()],
 				label_ws: labels7(2.0),
 				..Chrome::default()
 			},
@@ -9773,7 +9996,7 @@ mod tests {
 						btn_w: 300.0 * scale,
 						row_btn_w: 90.0 * scale,
 						value_w: value_w * scale,
-						tab_ws: vec![40.0 * scale; tab_titles().len()],
+						tab_ws: vec![40.0 * scale; tab_nodes().len()],
 						label_ws: labels7(scale),
 						..Chrome::default()
 					},
@@ -11023,7 +11246,7 @@ mod tests {
 				btn_w: 80.0 * k,
 				row_btn_w: 90.0 * k,
 				value_w: 0.0,
-				tab_ws: vec![90.0 * k; tab_titles().len()],
+				tab_ws: vec![90.0 * k; tab_nodes().len()],
 				label_ws: labels7(k),
 				..Chrome::default()
 			},
@@ -11861,7 +12084,7 @@ mod tests {
 				btn_w: 80.0,
 				row_btn_w: 90.0,
 				value_w: 0.0,
-				tab_ws: vec![90.0; tab_titles().len()],
+				tab_ws: vec![90.0; tab_nodes().len()],
 				label_ws: labels7(1.0),
 				..Chrome::default()
 			},
@@ -12341,5 +12564,181 @@ mod tests {
 			config::reload_from_disk();
 		}
 		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A tree of the test's own over the real leaves, on the side asked for; both
+	// go back when the guard drops.
+	const NESTED: &[&str] = &[
+		"Silk",
+		"Look",
+		"Look/Background",
+		"Look/Text",
+		"Look/Cursor",
+		"Movement",
+		"Themes",
+		"Window",
+		"More",
+		"More/Shell",
+		"More/Keys",
+	];
+	struct TabsStandIn;
+	fn stand_in_tabs(paths: &[&str], side: TabsSide) -> TabsStandIn {
+		let (nodes, leaves) = crate::ui_spec::tab_tree(paths).expect("a valid tree");
+		assert_eq!(
+			leaves.as_slice(),
+			tab_titles(),
+			"the stand-in's leaves are the real tabs"
+		);
+		super::TAB_TREE.with(|t| t.set(Some(Vec::leak(nodes))));
+		super::TABS_SIDE.with(|t| t.set(Some(side)));
+		TabsStandIn
+	}
+	impl Drop for TabsStandIn {
+		fn drop(&mut self) {
+			super::TAB_TREE.with(|t| t.set(None));
+			super::TABS_SIDE.with(|t| t.set(None));
+		}
+	}
+	fn tap(d: &mut SettingsDialog, node: usize) {
+		let r = d.tab_rect(node);
+		let mut measure = |s: &str| s.len() as f32;
+		d.mouse_down(r.x + 1.0, r.y + 1.0, &mut measure);
+		d.mouse_up(r.x + 1.0, r.y + 1.0);
+	}
+
+	// Across the top, a tab's sub-tabs show in a row under the strip only while
+	// it is current, and it reads as current along with the one under it.
+	// Test ID: EsJDU1P
+	#[test]
+	fn sub_tabs_show_in_a_second_row_only_under_their_parent() {
+		let _tabs = stand_in_tabs(NESTED, TabsSide::Top);
+		let mut d = mk_dialog(2000.0);
+		let one_row = SettingsDialog::gutter_h_for(d.line_h, 1);
+		assert!((d.gutter_rect().h - one_row).abs() < 0.01);
+		for node in [2, 3, 4, 9, 10] {
+			assert_eq!(d.tab_rect(node).w, 0.0, "sub-tab {node} is not on show");
+		}
+		let look = d.tab_rect(1);
+		assert!(look.w > 0.0, "its parent is");
+		tap(&mut d, 1);
+		assert_eq!(d.tab, 1, "Look opens Background, its first");
+		assert_eq!(d.active_path(), vec![1, 2]);
+		assert!((d.gutter_rect().h - SettingsDialog::gutter_h_for(d.line_h, 2)).abs() < 0.01);
+		let bg = d.tab_rect(2);
+		assert!(
+			bg.w > 0.0 && bg.y > look.y + look.h - 0.01,
+			"the sub-tabs sit in a row under the first"
+		);
+		assert!(d.rows_y0() > bg.y + bg.h, "and the rows begin below them");
+		assert_eq!(d.tab_rect(9).w, 0.0, "another tab's sub-tabs stay hidden");
+		tap(&mut d, 1);
+		assert_eq!(
+			d.tab, 1,
+			"a click on the parent already open changes nothing"
+		);
+		d.tab = 8;
+		tap(&mut d, 8);
+		assert_eq!(d.tab, 8, "Keys stays when More is clicked from under it");
+		d.tab = 0;
+		tap(&mut d, 8);
+		assert_eq!(d.tab, 7, "from outside, More opens Shell");
+		assert_eq!(d.focus, None, "a tab takes no focus");
+	}
+
+	// Ctrl+Tab and Ctrl+PgDn run through a tab's sub-tabs, then on to the next
+	// tab; the macOS menu's rows take the same walk.
+	// Test ID: EsJDU6y
+	#[test]
+	fn the_tab_walk_runs_through_the_sub_tabs_and_on_to_the_next_tab() {
+		let _tabs = stand_in_tabs(NESTED, TabsSide::Top);
+		let mut d = mk_dialog(2000.0);
+		d.set_mods(false, false, true);
+		d.tab = 3; // Cursor, the last under Look
+		d.key_tab();
+		assert_eq!(d.tab, 4, "on to Movement");
+		d.set_mods(false, true, true);
+		d.key_tab();
+		assert_eq!(d.tab, 3, "and back to Cursor");
+		d.tab = 0;
+		d.set_mods(false, false, true);
+		d.key_page(true);
+		assert_eq!(d.tab, 1, "Silk steps into Look at Background");
+		d.tab = 8;
+		d.switch_tab(true);
+		assert_eq!(d.tab, 0, "Keys, the last under More, wraps to Silk");
+		d.switch_tab(false);
+		assert_eq!(d.tab, 8);
+	}
+
+	// Down the side every tab is listed, sub-tabs stepped in under their
+	// parent, and the rows begin beside the list.
+	// Test ID: EsJDUBS
+	#[test]
+	fn down_the_side_every_tab_is_listed_and_the_rows_start_beside_them() {
+		let _tabs = stand_in_tabs(NESTED, TabsSide::Left);
+		let mut d = mk_dialog(2000.0);
+		let list = d.gutter_rect();
+		assert!(
+			(list.h - d.rect.h).abs() < 0.01,
+			"the list runs the panel's height"
+		);
+		let vp = d.viewport();
+		assert!(
+			vp.x >= list.x + list.w + 1.0 - 0.01,
+			"rows start past the list and its rule"
+		);
+		assert!((d.rows_y0() - (d.rect.y + lay().pad)).abs() < 0.01);
+		let mut last_bottom = d.rect.y;
+		for (node, n) in tab_nodes().iter().enumerate() {
+			let r = d.tab_rect(node);
+			assert!(
+				r.w > 0.0 && r.y >= last_bottom - 0.01,
+				"tab {node} is listed, in order"
+			);
+			assert!(r.x + r.w <= list.x + list.w + 0.01, "and fits the list");
+			let step = f32::from(n.depth) * lay().tab_indent;
+			assert!(
+				(r.x - (list.x + lay().tab_gap + step)).abs() < 0.01,
+				"stepped in by depth"
+			);
+			last_bottom = r.y + r.h;
+		}
+		assert!(
+			d.natural.0 > list.w + lay().width,
+			"the panel is wider by the list"
+		);
+		for (i, _) in SettingsDialog::visible(d.specs, 0) {
+			assert!(d.label_x(i) >= vp.x, "row {i} is clear of the list");
+		}
+		d.tab = 2;
+		assert_eq!(
+			d.active_path(),
+			vec![1, 3],
+			"Text and Look both read as current"
+		);
+		// a short window slides the list only far enough to keep the current tab in it
+		d.tab = 8;
+		d.set_size(d.size().0, 200.0);
+		assert!(d.side_scroll() > 0.0);
+		let r = d.tab_rect(10);
+		assert!(r.y >= d.rect.y && r.y + r.h <= d.rect.y + d.rect.h + 0.01);
+	}
+
+	// The whole focus ring walked from the keyboard never leaves the tab: tabs
+	// are mouse-only and say where you are.
+	// Test ID: EsJDUFr
+	#[test]
+	fn tabs_take_no_focus() {
+		let mut d = mk_dialog(2000.0);
+		d.set_mods(false, false, false);
+		let ring = d.focus_ring().len();
+		for _ in 0..=ring {
+			d.key_tab();
+		}
+		assert_eq!(d.tab, 0);
+		d.focus = d.first_focus();
+		tap(&mut d, 1);
+		assert_eq!(d.tab, 1);
+		assert_eq!(d.focus, None);
 	}
 }

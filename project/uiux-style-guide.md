@@ -100,7 +100,11 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 ### Tabs
 
-- Tabs run left to right along the top, on the gutter strip, standing on the line that divides that strip from the rows below.
+- Tabs run left to right along the top, on the gutter strip, standing on the line that divides that strip from the rows below. The dialog code can list them down the left side instead, on the same strip, each as wide as the list. SilkTerm keeps them on top.
+
+- A tab may hold tabs. Across the top its sub-tabs show in a row under the strip only while it is current. Down the side they are always listed, stepped in under it. The current tab and the tab it sits under both read as current. Any depth works, though more than two levels is poor design.
+
+- Tabs take no keyboard focus. They are clicked, or changed with the tab chords, and otherwise say where you are.
 
 - A tab holds one subject. Seven is about the ceiling; past that, the subject is probably two subjects.
 
@@ -313,6 +317,7 @@ Rules that go with them:
 - In an open menu, arrows move, Right enters a submenu, Left leaves one or steps to the next dropdown, Enter picks, Escape closes, and a letter picks the row with it.
 
 - Inside a dialog, Tab and Shift+Tab move focus, Ctrl+Tab and Ctrl+PgUp/PgDn change tab, Enter is OK and Escape is Cancel. That holds with a field open: Enter closes it and takes OK, Escape cancels. Neither takes a second press.
+	- A tab's sub-tabs are walked before the next tab, and the macOS chords below take the same walk.
 	- A row on the Keys tab waits for a new chord after Enter, Space or a click on its box, and every key goes to it until one comes. Escape leaves the row as it was, and Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused, with what it needs held. A chord another hotkey had is said on both rows, the way the launch says it about the file.
 	- On macOS Command+Shift+[ and ] change tab, and so do Command+PgUp/PgDn. Ctrl+Tab moves focus like Tab, since Command+Tab belongs to the system.
 	- A text box on macOS takes the Mac's own keys: Command+C, X, V and A, Option to move or erase by words, Command+Left and Right for either end, and Command+Backspace to erase to the start.
