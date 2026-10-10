@@ -18,9 +18,15 @@
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - nothing can be typed or grabbed" }
 
-$cfg = Join-Path $OutDir "newwin-config.shcl"
+##	A folder of its own, since the state file sits beside the config. The
+##	launch moves the size there.
+$dir = Join-Path $OutDir "newwin"
+Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+[void](New-Item -ItemType Directory -Path $dir -Force)
+$cfg = Join-Path $dir "config.shcl"
+$state = Join-Path $dir "state.shcl"
 fFreshConfig $cfg @("window:", "`tremembered_columns: 100", "`tremembered_rows: 30")
-function fKept { "$((fSetting $cfg 'window.remembered_columns').value)x$((fSetting $cfg 'window.remembered_rows').value)" }
+function fKept { "$((fSetting $state 'window.remembered_columns').value)x$((fSetting $state 'window.remembered_rows').value)" }
 
 $p = fStartSilk -Exe $Exe -SilkArgs @("--config=$cfg") -EnvVars @{}
 $h = fWaitWindow $p 40
@@ -64,3 +70,4 @@ fStop $p
 ##	History:
 ##		- 20261005 JC: Created.
 ##		- 20261006 JC: Help block, named arguments.
+##		- 20261009 JC: The size is read from the state file.

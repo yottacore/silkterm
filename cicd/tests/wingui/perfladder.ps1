@@ -16,8 +16,12 @@
 
 if (-not (fSessionUsable)) { fSkip "console session is locked - the banner cannot be grabbed" }
 
-$cfg = Join-Path $OutDir "perf-config.shcl"
-Remove-Item $cfg -ErrorAction SilentlyContinue
+##	A folder of its own, since the state file sits beside the config.
+$dir = Join-Path $OutDir "perf"
+Remove-Item $dir -Recurse -ErrorAction SilentlyContinue
+[void](New-Item -ItemType Directory -Path $dir -Force)
+$cfg = Join-Path $dir "config.shcl"
+$state = Join-Path $dir "state.shcl"
 
 $adapter = (Get-CimInstance Win32_VideoController | Select-Object -First 1)
 fNote "adapter $($adapter.Name) at $($adapter.CurrentRefreshRate)Hz"
@@ -41,15 +45,15 @@ $moved = fDiff $during $after
 fNote "banner frame differs from settled by $moved"
 [void](fCheck "the banner went up and came down again" ($moved -gt 0.01))
 
-##	Nothing is written until the run answers, so the file appearing with a rating in
-##	it IS the result - there is no separate 'did it finish' to ask.
+##	Nothing is written until the run answers, so the state file appearing with a
+##	rating in it IS the result - there is no separate 'did it finish' to ask.
 $rated = @{ value = $null }
 for ($i = 0; $i -lt 60; $i++) {
-	$rated = fSetting $cfg "performance.rated_hardware"
+	$rated = fSetting $state "performance.rated_hardware"
 	if ($rated.source -eq "set" -and $rated.value) { break }
 	Start-Sleep -Milliseconds 500
 }
-$chosen = fSetting $cfg "performance.profile"
+$chosen = fSetting $state "performance.tested_profile"
 $auto   = fSetting $cfg "performance.automatic"
 
 [void](fCheck "a rating was written" ($rated.source -eq "set" -and $rated.value))
@@ -74,10 +78,11 @@ $settled2 = fShot $h2 "perf-second-settled"
 $moved2 = fDiff $early2 $settled2
 fNote "second launch early frame differs from settled by $moved2"
 [void](fCheck "the second launch showed no banner" ($moved2 -lt ($moved / 3)))
-[void](fCheck "the second launch did not re-rate" ((fSetting $cfg "performance.rated_hardware").value -eq $rated.value))
+[void](fCheck "the second launch did not re-rate" ((fSetting $state "performance.rated_hardware").value -eq $rated.value))
 fNote "config rewritten on second launch: $((Get-Item $cfg).LastWriteTime -ne $stamp)"
 fStop $p2
 
 ##	History:
 ##		- 20260908 JC: Created.
 ##		- 20261006 JC: Help block, named arguments.
+##		- 20261009 JC: The rating is read from the state file.
