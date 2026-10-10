@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
 const SPEC: &str = include_str!("../demo.shcl");
+const INDENT: f32 = 18.0;
 
 // What the desktop would answer, set by hand in the side panel.
 struct Desk {
@@ -241,18 +242,36 @@ impl Demo {
 			.filter(|s| s.tab == tab && s.control != Control::None)
 			.map(|s| s.id.clone())
 			.collect();
+		// widest label on any tab, so the controls stay put between tabs
+		let font = egui::TextStyle::Body.resolve(ui.style());
+		let label_w = self
+			.model
+			.spec
+			.settings
+			.iter()
+			.filter(|s| !matches!(s.control, Control::None | Control::Heading))
+			.map(|s| {
+				let w = ui
+					.painter()
+					.layout_no_wrap(s.label.clone(), font.clone(), egui::Color32::WHITE)
+					.size()
+					.x;
+				w + f32::from(s.indent) * INDENT
+			})
+			.fold(0.0, f32::max);
+		ui.spacing_mut().slider_width = 220.0;
 		egui::Grid::new(("rows", tab))
 			.num_columns(3)
 			.spacing([12.0, 8.0])
 			.show(ui, |ui| {
 				for id in ids {
-					self.row(ui, &id);
+					self.row(ui, &id, label_w);
 					ui.end_row();
 				}
 			});
 	}
 
-	fn row(&mut self, ui: &mut egui::Ui, id: &str) {
+	fn row(&mut self, ui: &mut egui::Ui, id: &str, label_w: f32) {
 		let Some(s) = self.model.spec.get(id).cloned() else {
 			return;
 		};
@@ -266,7 +285,8 @@ impl Demo {
 		let tip = self.model.tip(id, &self.desk);
 		let v = self.model.value(id, &self.desk);
 		ui.horizontal(|ui| {
-			ui.add_space(f32::from(s.indent) * 18.0);
+			ui.set_min_width(label_w);
+			ui.add_space(f32::from(s.indent) * INDENT);
 			ui.label(&s.label).on_hover_text(&tip);
 		});
 		let mut new: Option<Value> = None;
@@ -359,7 +379,11 @@ impl Demo {
 		let r = ui
 			.horizontal(|ui| {
 				let r = ui.add(egui::Slider::new(&mut t, 0.0..=1.0).show_value(false));
-				ui.monospace(v.show());
+				// one width for every slider's number, so the reset arrows line up
+				ui.add_sized(
+					[44.0, r.rect.height()],
+					egui::Label::new(egui::RichText::new(v.show()).monospace()),
+				);
 				r
 			})
 			.inner;
@@ -374,21 +398,28 @@ impl Demo {
 			let pad = r.rect.height() / 2.0;
 			let painter = ui.painter();
 			let color = ui.visuals().weak_text_color();
+			// a label that would run into the one before it is left off
+			let mut free_from = f32::MIN;
 			for d in &s.detents {
 				let x = r.rect.left() + pad + s.to_t(d.value) as f32 * (r.rect.width() - 2.0 * pad);
 				painter.line_segment(
 					[egui::pos2(x, rect.top()), egui::pos2(x, rect.top() + 3.0)],
 					egui::Stroke::new(1.0, color),
 				);
-				if !d.label.is_empty() {
-					painter.text(
-						egui::pos2(x, rect.top() + 3.0),
-						egui::Align2::CENTER_TOP,
-						&d.label,
-						egui::FontId::proportional(10.0),
-						color,
-					);
+				if d.label.is_empty() {
+					continue;
 				}
+				let g = painter.layout_no_wrap(
+					d.label.clone(),
+					egui::FontId::proportional(10.0),
+					color,
+				);
+				let left = x - g.size().x / 2.0;
+				if left < free_from {
+					continue;
+				}
+				free_from = left + g.size().x + 4.0;
+				painter.galley(egui::pos2(left, rect.top() + 3.0), g, color);
 			}
 		}
 		r
