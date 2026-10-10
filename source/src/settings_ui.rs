@@ -7778,7 +7778,11 @@ mod tests {
 		);
 		assert_eq!(d.get_text(Key::FontFamily), "Iosevka");
 		d.set_toggle(Key::SystemFont, true);
-		assert_eq!(d.get_text(Key::FontFamily), rule);
+		// a desktop that names no font, as on macOS, leaves nothing to follow,
+		// so the value set by hand stays in use
+		let named = crate::sysfont::monospace().family.is_some();
+		let want = if named { rule.as_str() } else { "Iosevka" };
+		assert_eq!(d.get_text(Key::FontFamily), want);
 		d.set_toggle(Key::SystemFont, false);
 		assert_eq!(d.get_text(Key::FontFamily), "Iosevka", "and back it comes");
 		// the size the same way, through its number box
@@ -7843,14 +7847,14 @@ mod tests {
 				.unwrap();
 			d.row_tip(i, key).map(tip_text).unwrap_or_default()
 		};
-		assert!(tip(&d, Key::FontFamily).ends_with("\n\nAutomatic."));
-		d.set_text(Key::FontFamily, "Iosevka");
-		d.set_toggle(Key::SystemFont, true);
+		// the remembered size has an answer on any desktop, where the font may not
+		assert!(tip(&d, Key::Columns).ends_with("Automatic."));
+		d.set_f32(Key::Columns, 99.0);
+		d.set_toggle(Key::RememberSize, true);
 		assert!(
-			tip(&d, Key::FontFamily)
-				.ends_with("Automatic. Your value, Iosevka, is kept for later."),
+			tip(&d, Key::Columns).ends_with("Automatic. Your value, 99, is kept for later."),
 			"{}",
-			tip(&d, Key::FontFamily)
+			tip(&d, Key::Columns)
 		);
 		// the profile's rows, written in the row's own units
 		d.set_radio(Key::PerfProfile, crate::profile::Profile::High.index());
