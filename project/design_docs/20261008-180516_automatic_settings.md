@@ -16,21 +16,25 @@
 - [Background](#background)
 	- [What has to stay](#what-has-to-stay)
 	- [How the performance settings have worked](#how-the-performance-settings-have-worked)
-	- [What the first version of this design lost](#what-the-first-version-of-this-design-lost)
+	- [What the first 2 versions of this design got wrong](#what-the-first-2-versions-of-this-design-got-wrong)
 - [Specification](#specification)
+	- [Switches](#switches)
+	- [Rows under a checkbox](#rows-under-a-checkbox)
+	- [Profiles and themes](#profiles-and-themes)
+	- [Choose automatically, Remote and the step-down](#choose-automatically-remote-and-the-step-down)
+	- [Text colors from wallpaper](#text-colors-from-wallpaper)
+	- [A rule with no switch](#a-rule-with-no-switch)
+	- [The reset arrow](#the-reset-arrow)
+	- [Tips](#tips)
 - [Goals](#goals)
 	- [Non-goals](#non-goals)
 - [Design](#design)
 	- [Words used here](#words-used-here)
-	- [What is stored](#what-is-stored)
-	- [The table](#the-table)
-	- [Reading a setting](#reading-a-setting)
-	- [Changing a setting](#changing-a-setting)
-	- [Switches](#switches)
-	- [Profiles](#profiles)
-	- [Rows under a switch](#rows-under-a-switch)
-	- [The settings store](#the-settings-store)
-	- [The settings screen](#the-settings-screen)
+	- [The knobs crate](#the-knobs-crate)
+	- [The spec](#the-spec)
+	- [SilkTerm's side](#silkterms-side)
+	- [The files](#the-files)
+	- [Old files](#old-files)
 	- [Tests](#tests)
 	- [Open questions](#open-questions)
 - [Alternative ideas](#alternative-ideas)
@@ -46,17 +50,17 @@
 
 ## Summary
 
-Status: draft, 2026-10-09. The second version of this design, waiting for signoff.
+Status: agreed 2026-10-09, after a demo app. The third version of this design. Being built into SilkTerm.
 
-Some settings have a value the program can work out by itself, from a performance profile or from a rule such as the desktop's font. A person can still set any of them by hand, and a switch can put one back to automatic.
+Some settings have a value the program can work out by itself, such as the desktop's font, or the performance profile the machine test picked. Some only count while a checkbox above them is on. And some get their values from a preset, such as a performance profile or a theme.
 
-Each such setting keeps 2 things: the value in use, if it was set by hand, and a value put aside for later. Turning a switch to automatic puts the hand-set value aside. Turning it back brings that value back. Picking a profile puts aside every value set by hand under it, and one switch brings them all back.
+Every switch is a plain stored checkbox. Turning one on sets aside the values under it that were set by hand, and turning it off brings them back. A change to a row under a preset is kept apart from the person's own values, and the dropdown shows the preset with a `*`. Nothing is grayed out to make a row read-only, and nothing has to be unlocked first.
 
-A change only ever flows down. Changing a setting changes that setting, and a switch or profile changes the settings under it. Nothing changes a setting above it, with one exception: changing a row under a switch that is off turns that switch on.
+The rules live in a small crate, `knobs`, with no drawing in it. SilkTerm's dialog keeps its own look and asks knobs what each row shows and what a change does.
 
 ## Background
 
-The first version of this design was built in part on 2026-10-09. It broke one thing people expect from settings, and the Performance settings still had the problems that led to it.
+The first version of this design was built in part on 2026-10-09. It lost values set by hand, and the second version that was written to fix it was never built. A demo app tried the model below, and it was agreed the same day.
 
 ### What has to stay
 
@@ -70,316 +74,320 @@ The first version of this design was built in part on 2026-10-09. It broke one t
 
 ### How the performance settings have worked
 
-Choose automatically picks a profile. The profile sets 16 settings: Smooth scrolling and its 5 sliders, Blink, Text scrim and 4 rows under it, Outline, and on the Background tab Wallpaper, Blur and Contrast mask. Some of those are switches with rows under them that only count while the switch is on, such as Strength % under Text scrim.
-
-There have been 3 versions so far.
+Choose automatically picks a profile. The profile sets 17 settings: Smooth scrolling and its 5 sliders, smooth scrolling in apps, Blink, Text scrim and 4 rows under it, Outline, and on the Background tab Wallpaper, Blur and Contrast mask.
 
 - Version 1, 2026-09-03 to 09-20:
 	- Profile was grayed while Choose automatically was on.
-	- The 16 rows were grayed unless the profile was Custom.
+	- The profile's rows were grayed unless the profile was Custom.
 	- Rows under a switch that was off were grayed too.
 	- So changing Strength % could take 3 steps first: turn off Choose automatically, pick Custom, turn on Text scrim.
-	- The rows on the Background tab could only be unlocked from the Silk tab.
 
 - Version 2, 2026-09-20 to 10-09:
-	- Profile took input while Choose automatically was on. Picking a profile turned automatic off.
-	- The 16 rows took input. Changing one made the values on screen the person's own, set the profile to Custom, and turned Choose automatically off, all at once.
-	- Rows under a switch that was off were still grayed. So Strength % couldn't be changed while Text scrim was off, and changing it never turned Text scrim on. Turning Text scrim on was the change that set Custom and turned off Choose automatically.
-	- That step lost the Custom values from before, since the preset's values were copied over them. Picking a preset and then Custom again did bring them back, as long as no row was changed in between.
+	- The rows took input. Changing one copied the profile's values over the person's own, set the profile to Custom, and turned Choose automatically off, all at once.
+	- So the Custom values from before were lost on the first change made under a preset.
+	- Rows under a switch that was off were still grayed.
 
-- Version 3, the first version of this design, 2026-10-09:
-	- Rows under a switch no longer gray. Strength % can be changed while Text scrim is off. That doesn't turn Text scrim on, and the value is used once it is on.
-	- The Performance settings didn't move onto it. They still work as in version 2, without the graying.
+### What the first 2 versions of this design got wrong
 
-### What the first version of this design lost
+- The first version stored automatic as no line in the file, so going automatic deleted the value set by hand. It also took out the 2 "Use system font" checkboxes and "Remember last size".
 
-- It stored automatic as no line in the file. So going automatic deleted the value set by hand.
-
-- The 2 "Use system font" checkboxes, for Family and Size, were taken out, and so was "Remember last size" for Columns and Rows. A family typed in was lost once Family went back to automatic.
-
-- Turning a switch off and on again still brought back the rows under it. Text scrim and Strength % worked that way, and so did every other switch with rows under it.
+- The second version kept a value put aside, but read every switch off the settings under it. A switch over 2 settings could then be half on, adn a "Use my changes" switch stood in for Custom. It was hard to follow in the demo, and was dropped before any of it was built.
 
 ## Specification
 
-- An auto setting is one whose value the program can supply, from a profile or a rule. It is in one of 3 states:
-	- Automatic. It uses what its rule or profile gives right now, and keeps following it as the program runs.
-	- Set by hand. It uses its own value.
-	- Put aside. It has a value of its own, but is automatic for now. The value comes back when its switch or the "Use my changes" switch says so.
+### Switches
 
-- Changing an auto setting sets it by hand, with the new value. Any value it had put aside is dropped, since the new one replaces it.
+A switch is a checkbox that makes the settings under it automatic, such as "Use system font" over Family. It is stored like any other setting.
 
-- A switch that makes settings automatic puts their hand-set values aside when turned on, and brings them back when turned off. A setting with nothing put aside keeps the value it shows, so nothing on screen moves.
+- On, the settings under it use their rule. A value set by hand is set aside.
 
-- Picking a profile by hand puts aside every hand-set value under it, so that way the screen shows exactly that profile. The "Use my changes" switch brings them back.
+- Off, a value set aside comes back. With nothing set aside, a setting keeps the value it shows, so nothing on screen moves.
 
-- Choose automatically picking a new profile, after a hardware change or when the display can't keep up, leaves the hand-set values in use. Remote ignores them while it is on, and changes nothing stored.
+- Changing a setting under a switch that is on turns the switch off. The other settings under it keep what they show.
 
-- Changing a row under a switch that is off turns the switch on. Nothing else above it changes.
+- When the rule has no answer, such as no desktop font, the setting uses its own value as if the switch were off.
 
-- Nothing is grayed out on account of being automatic, set by a profile, or under a switch that is off.
+The switches are "Use system font" over Family, "Use system font size" over Size, "Remember last size" over Columns and Rows, "Text colors from wallpaper" over Foreground and Cursor, and Choose automatically over Profile.
 
-- A hand edit to the settings store is read the same way as a change on the screen.
+### Rows under a checkbox
 
-- The flyover tip of an auto setting has one line on its state, after the description:
-	- Automatic: `Automatic.`, or for a profile row, `From the High profile.`
-	- Set by hand: `Set by hand. Automatic would be: ...`, or `Set by hand. The High profile's value is ...`
-	- Put aside: the automatic line, then `Your value, ..., is kept for later.`
+Some rows only count while a checkbox above them is on, such as Strength % under Text scrim.
+
+- They never gray, and they keep their value while it is off.
+
+- Changing one turns the checkbox on, so the change shows at once. Nothing else above it changes.
+
+### Profiles and themes
+
+A dropdown picks a preset, or Custom. The performance profile and the theme both work this way.
+
+- Custom is the person's own values. They are the normal lines in the file.
+
+- While a preset is in force, the rows it sets show the preset's values.
+
+- Changing one of those rows changes the preset in force, and leaves Custom alone. The dropdown then shows the preset with a `*`, as in `High *`, and its tip names the changed rows. The changes are saved, so they survive a restart.
+
+- For the profile, that change also turns Choose automatically off, since a new pick at the next launch would undo it.
+
+- Picking another entry, Custom included, drops the `*` changes. So does turning Choose automatically back on. It is the one exception to "only the reset arrow throws a value away", picked as the lesser evil. It also fits a "Save as" later.
+
+- Custom is filled on the first run from the preset in force, so picking Custom changes nothing on screen at first.
+
+### Choose automatically, Remote and the step-down
+
+- Choose automatically is the profile's own switch, and its rule is the machine test's pick. A pick by hand turns it off. Turning it on sets the hand pick aside, and turning it off brings it back.
+
+- While it is on, a display that can't keep up steps the profile down for the session, never below Low. Nothing is stored.
+
+- Remote is a temporary profile. It is picked by hand, or at launch on a remote screen.
+	- It lasts until restart and stores nothing.
+	- The `*` changes of the stored pick are ignored while it is on, and kept.
+	- Changing one of its rows ends it. The change goes on the stored pick as a `*` change.
+
+### Text colors from wallpaper
+
+It is the switch over Foreground and Cursor, with the wallpaper as their rule.
+
+- On, the 2 colors come from the wallpaper, over the theme.
+
+- Changing either color turns it off.
+
+- With no wallpaper, the theme's colors are used.
+
+### A rule with no switch
+
+A few settings have a rule but no switch, such as Open command, whose rule is the desktop's opener. With no value set, the rule's answer is the default. The reset arrow puts it back. File or folder works the same way, with the usual folder or the built-in picture.
+
+### The reset arrow
+
+- On a row changed under a preset, it puts the preset's value back. With every changed row put back, the `*` goes.
+
+- On any other row, it puts back the default, which is the rule's answer where there is one.
+
+- On Choose automatically it also drops the `*` changes, the same as turning it on.
+
+- It is the one way a value set by hand is thrown away.
+
+### Tips
+
+A row's tip is its description, a blank line, then one line on where the value comes from.
+
+- `Automatic.`, or `Automatic. Your value, 14, is kept for later.`
+
+- `From the High profile.`
+
+- `Changed. The High profile's value is 50.`
+
+- On the dropdown: `Changed here: Strength %, Text scrim. Picking another profile drops these changes.`
+
+- A plain row keeps the `Current value` and `Default value` lines it has now.
+
+Nothing is grayed for being automatic, set by a preset, or under a checkbox that is off. A row is grayed only for something the machine can't do, with a tip that says why.
+
+A hand edit to the file is read the same as the dialog would have left it. A value that fails its checks is dropped. So is a `*` change for a preset that isn't the one picked.
 
 ## Goals
 
-- Change one setting in one step, with nothing to unlock first.
+- Change any setting in one step, with nothing to unlock first.
 
-- Never lose a value set by hand, except to a newer value or the reset arrow.
+- Never lose a value set by hand, except to a newer value, the reset arrow, or a new pick dropping `*` changes.
 
-- Never change a setting above the one changed, except a switch turned on by a row under it.
+- Custom stays as it was while presets are tried.
 
-- Switches that can't disagree with the settings under them, after a restart or a hand edit to the store.
+- A change moves nothing above it, except the checkbox a row sits under, and Choose automatically for a change under a profile.
 
-- One way for every such setting, so a new one needs a row in a table and no code of its own.
+- Switches that are plain stored values, so a restart or a hand edit can't make one disagree with what the dialog shows.
+
+- One way for every setting. A new one is a row in the dialog's spec with its relations, and a line in the field table.
 
 ### Non-goals
 
 - A setting in 2 groups.
 
-- A switch over a profile's rows that is itself a profile row.
+- Named sets of profile changes. Custom is the first such slot, and "Save as" may come later.
 
-- Values locked from outside the settings, by the build or an environment variable. Those are disabled for real, with a tip saying by what.
-
-- Named saved sets of changes. "Use my changes" is one set.
+- Values locked from outside the settings, by the build or an environment variable. Those gray for real, with a tip saying by what.
 
 ## Design
 
 ### Words used here
 
-| Word         | Meaning
-| :----------- | :--------------------------------------------------------------------------------------------------------------
-| Auto setting | A setting that can be automatic.
-| Rule         | How the program works out an auto setting's value: a computation such as the desktop's font, or a fixed value.
-| Profile row  | An auto setting whose rule is the performance profile in force.
-| Automatic    | No value of its own in use. It uses its rule.
-| Set by hand  | Its own value in use.
-| Put aside    | Its own value kept, not in use. It uses its rule.
-| Switch       | A checkbox that makes a group of auto settings automatic, or brings their values back. Never stored.
-| Mixed        | The switch state when some of its settings are automatic and some set by hand. Most toolkits draw it as a dash.
+| Word      | Meaning
+| :-------- | :---------------------------------------------------------------------------------
+| Switch    | A checkbox that makes the settings under it automatic.
+| Rule      | Where an automatic value comes from: the desktop, the wallpaper, the machine test.
+| Gate      | A checkbox a row only counts under. Changing the row turns it on.
+| Group     | A dropdown, its presets, and the settings they set. The profile and the theme.
+| Preset    | One named set of values in a group.
+| Custom    | The group entry that uses the person's own values.
+| Change    | A value changed while a preset is in force, shown by the `*`.
+| Set aside | A value set by hand, kept while its switch is on.
+| Temporary | A preset that lasts until restart and stores nothing, such as Remote.
+| State     | What the program works out and remembers on one machine.
 
-### What is stored
+### The knobs crate
 
-- For each auto setting, at most one of: its value in use, or its value put aside.
+`knobs/` is a crate in the workspace with no drawing in it, and a demo app beside it that draws with egui. Only the demo depends on egui.
 
-- Neither means automatic with nothing kept.
+- The spec: every setting, its path, type and default, and its relations. A group lists its presets.
 
-- Switches are never stored. They are read from the settings under them.
+- The values: own values, `*` changes and which preset they were made on, state values, and any temporary preset.
 
-- The profile is itself an auto setting. Its rule is the machine test, and Choose automatically is its switch.
+- Reading. A setting uses its rule while its switch is on and the rule has an answer. Otherwise it uses the `*` change or the preset's value while a preset is in force, else its own value, else the default.
 
-### The table
+- Changing. One call does everything a change does to the settings around it, so the dialog never works that out itself.
 
-One table lists every auto setting. Each row has:
+- It also answers where a value comes from, the tip's line, whether the reset arrow has anything to do, and what the dropdown shows.
 
-- The setting's key.
+The rules were tried in the demo first, since it rebuilds in seconds and the dialog doesn't.
 
-- Its rule. A function, since most rules need the program's state. For a profile row, the rule is the profile in force.
+### The spec
 
-- Its switch, if it has one.
+`settings_ui.shcl` stays the one file that declares the dialog. Its rows get a few more fields:
 
-Switches are a second small table: the label, and whether on means automatic, as for "Use system font", or set by hand, as for "Use my changes".
+- `gate:` names the checkbox a row only counts under.
 
-Both sit with the types and defaults of every other setting. A setting's default, in the usual sense, is automatic.
+- `auto:` and `rule:` name the row's switch and its rule. A `rule:` with no `auto:` gives the default.
 
-### Reading a setting
+- `group:` names the profile or theme a row belongs to.
 
-One function answers 2 questions for an auto setting: which value it uses, and which state it is in.
+- `store: state` marks a value the program works out, such as the tested profile. `kind: none` is a value with no row.
 
-~~~text
-value(setting) = value in use if one is stored, else rule(setting)
-state(setting) = set by hand if a value in use is stored,
-                 else put aside if a value put aside is stored,
-                 else automatic
-~~~
+A `groups:` block lists each group's dropdown, what Custom is called, and its presets, with a value for every member. The profiles are data there now. The themes come from the program, since they depend on the mode, the desktop, and the themes saved from the dialog.
 
-Nothing reads an auto setting's stored values directly, outside this function. A check in the lint stage refuses code that does.
+Indents are worked out from the relations, unless a row sets `indent:`. The graying block goes.
 
-### Changing a setting
+### SilkTerm's side
 
-| What happens                           | The setting then                             | Its switch then shows
-| :------------------------------------- | :------------------------------------------- | :--------------------
-| Changed on screen                      | set by hand, anything put aside dropped      | off, or mixed
-| Reset arrow                            | automatic, nothing kept                      | on, or mixed
-| Switch turned to automatic             | its hand-set value put aside                 | automatic
-| Switch turned back, nothing aside      | set by hand, at the value it shows           | set by hand
-| Switch turned back, a value aside      | set by hand, at that value                   | set by hand
-| Mixed switch clicked                   | as turned to automatic                       | automatic
-| Profile picked by hand                 | every profile row's hand-set value put aside | "Use my changes" off
-| Profile picked by Choose automatically | unchanged                                    | unchanged
+- A table maps each setting to its field in `Settings`, in the file's units. Each line says how to read the field into a value and how to put one back. The defaults come from `Settings::default()` through it, so no new place holds a default.
 
-A mixed switch goes to automatic on a click, since that is the state a person reaching for an "Automatic" switch wants, and the other way is one more click. For "Use my changes" the same click brings every value back, since on means set by hand there.
+- `Settings` keeps the stored values, and every setting field is filled from them. That happens at load, after every change in the dialog, and when a rule's answer changes: the desktop's dark mode, a new wallpaper, a step-down.
 
-### Switches
+- The rest of the program reads `Settings` as before.
 
-- A switch is read from the settings under it every time it is drawn, so after a restart or a hand edit to the store it is right by construction.
+- The program answers the rules: the desktop's font and size, the size last used on a monitor, the wallpaper's colors, the machine test's pick with any step-down, the theme's colors, and the usual wallpaper and opener.
 
-- One with one setting under it is that setting's own switch, such as "Use system font" for Family. One with more, such as "Remember last size" for Columns and Rows, shows mixed when they differ.
+- The dialog keeps its look and its controls. A row reads its value from `Settings`, and a change goes to knobs as a value in the file's units. The reset arrow, the tip's line and the `*` come from knobs.
 
-- Typing in Columns while "Remember last size" is on sets Columns by hand. Rows stays automatic, and the switch shows mixed. Nothing else on screen moves.
+The dialog was kept over the demo's widgets, since it has a lot the demo lacks: typed values past a slider's end, warning marks, rows for one platform, packed lines of checkboxes, the shells grid, hotkeys. Putting the relations in `settings_ui.shcl` was chosen over a second spec beside it, since 2 lists of the same rows drift.
 
-- The switches the first version took out come back: the 2 "Use system font" checkboxes, "Remember last size", and "Text colors from wallpaper".
+### The files
 
-### Profiles
-
-- The profile is an auto setting. Automatic means Choose automatically picks it from the machine test. Picking one by hand sets it by hand, which turns Choose automatically off. Turning Choose automatically on puts the hand pick aside, and turning it off brings it back.
-
-- There is no Custom profile. Each profile row is automatic, set by hand, or put aside on its own. The hand-set rows are the person's changes, on top of whichever profile is in force.
-
-- The Profile dropdown shows the profile in force, and how many rows are set by hand, as in `High, 2 changed`.
-
-- "Use my changes" sits under Profile. It is on when every row with a value of its own has it in use, off when none does, and mixed between. It is disabled when no row has a value of its own, with the tip `Nothing changed yet.`
-
-- Picking a profile by hand puts every hand-set row aside, so the screen shows exactly that profile. Picking one with no rows set by hand puts nothing aside, and keeps what was aside before.
-
-- A new profile from Choose automatically, after a hardware change or a display step-down, leaves the rows as they are. The hand-set rows stay in use on top of it.
-
-- Remote ignores every hand-set row while it is on, since it is a plain terminal. It stores nothing and changes no row.
-
-- Changing a profile row while Choose automatically is on leaves it on. The profile stays the same.
-
-### Rows under a switch
-
-- Some rows only count while a switch above them is on, such as Strength % under Text scrim. Those are not auto settings. Each keeps its value while the switch is off.
-
-- They never gray. Changing one while its switch is off turns the switch on, so the change shows at once.
-
-- If the switch is a profile row, turning it on this way sets it by hand. Nothing above it changes: the profile and Choose automatically stay as they are.
-
-- This is the one place a change moves a setting above it. The switch is on the same tab, right above the row, so the change is in plain sight.
-
-### The settings store
-
-- A value in use is the setting's usual line. A store that keeps only values set by hand already reads automatic as a missing line.
-
-- A value put aside goes under a `kept:` block, at the same path it would have outside it.
+`config.shcl` keeps the settings the person set, then a `kept:` block at the end for what the program saves on their behalf.
 
 ~~~shcl
 text:
 	scrim:
 		strength: 80
 kept:
-	font:
-		family: "Fira Code"
+	set_aside:
+		font:
+			family: "Fira Code"
+	changes:
+		profile:
+			preset: high
+			values:
+				text:
+					scrim:
+						radius: 9
 ~~~
 
-- Here Strength % is set by hand at 80, and Family is automatic with Fira Code put aside.
+- Here Strength % is 80 in Custom, Family has Fira Code set aside under "Use system font", and the High profile has one `*` change.
 
-- A line in both places is read as set by hand, and the next save drops the one in `kept:`.
+- A group member's normal line is its Custom value, even under a switch that is on.
 
-- A value in either place that fails the setting's checks is treated as every other bad value. It is dropped and the setting is automatic.
+- The file is written in place. Only the lines that changed are touched, and comments stay.
 
-- A hand edit while the program runs is read the same as a change in the screen.
+`state.shcl` is a second file, per machine, not meant for hand edits, and safe to lose. It holds the tested profile and the hardware it was tested on, the last window size and font zoom, the sizes per monitor, and whether the window was maximized. It lives in the state folder: `XDG_STATE_HOME` on Linux, `%LOCALAPPDATA%` on Windows, Application Support on macOS. A section in the config would still be copied to other machines, and would still rewrite the config on every exit.
 
-### The settings screen
+### Old files
 
-- The control for an auto setting, by kind of value:
-	- A choice from a list: a dropdown with `Automatic` as its first entry, where the setting has no switch of its own. Where it helps, the entry says what it gives right now, as in `Automatic (Compact)`.
-	- On or off: a 3-entry dropdown, `Automatic`, `On`, `Off`, where it has no switch.
-	- A number, text, color or file: the usual field. While automatic it shows the rule's value, and still takes focus and input.
+- The old switch keys are read as they are, so a file from before 10-09 needs no conversion. The launch step that took them out of the file goes.
 
-- The reset arrow is enabled while a setting is set by hand. It goes back to automatic and keeps nothing, tip `Back to automatic`. It is how a value is thrown away for good.
+- `performance.profile: custom` loads as Custom. Under any other profile, the lines for its rows were already the person's own values kept under the profile, so they become Custom's.
 
-- No mark, italic or lighter style says a value is automatic or put aside. The switch and the tip's state line say it.
+- The tested hardware, the last size and the sizes per monitor move to `state.shcl` at the first launch. With Choose automatically on, `performance.profile` was the machine test's pick, so it is copied there too.
 
-- An automatic setting whose rule changes while the screen is open redraws at once, as do the switches.
-
-- A screen reader is told the setting's state, through the control's accessible description.
-
-- The tip is built when it opens, so it never shows values from before a change.
+- A theme with `colors.*` lines that differ from it gets those as its `*` changes, so nothing on screen changes. The lines stay as Custom's values.
 
 ### Tests
 
-- The function, for each of the 3 states, and every kind of rule.
+- knobs: one test per rule, and the files round trip.
 
-- Every row of the table under [Changing a setting](#changing-a-setting), with the switch checked after each.
+- Every row of the dialog: a change, a save and a load give the same value.
 
-- A round trip for each switch: a value set by hand, the switch on and off, and the same value back.
+- Each profile's values in the spec match what `profile.rs` sets, before that code goes.
 
-- A profile picked by hand, then "Use my changes" turned on: every changed row back as it was.
+- Old files: a set of real config files loads to the same settings as before, except for where this design changes them on purpose.
 
-- A new profile from Choose automatically: no row changes state. Remote: the screen shows Remote's values, and nothing stored changes.
-
-- A row under a switch that is off, changed: the switch on, adn nothing else changed.
-
-- A restart: every switch and the Profile dropdown read the same from the store.
-
-- Hand edits to the store, including a bad value, a deleted line, and a line both in use and in `kept:`.
-
-- The rule changing at run time while a setting is automatic: the value in use follows, and a hand-set setting doesn't.
-
-- The table: every setting named under a switch exists, and is under one switch.
+- A step-down, Remote at launch, a dark mode flip, and a new wallpaper, each with the dialog open and closed.
 
 ### Open questions
 
-- Whether a theme and its colors work the same way as a profile and its rows, with the theme's colors as the rule and "Use my changes" for colors changed by hand.
+- What Save does to a theme with `*` changes. The likely answer: Save puts them into a saved theme, and Save as makes a new theme from what shows.
 
-- How "Text colors from wallpaper" fits. Foreground and Cursor already have the theme as their rule, so the wallpaper is a second rule for the same 2 settings (2026100910295901).
+- Fonts in themes (2026100913394956).
 
 ## Alternative ideas
 
 ### Unconsidered
 
-- A "what changed" list under Profile, naming the rows set by hand. Cheap to add later from the same function.
+- A "what changed" list under Profile. The tip on the dropdown names the rows for now.
 
-- More than one saved set of changes, named. Nobody has asked for it.
+- More than one Custom, named. Nobody has asked for it.
 
 ### Rejected
 
-- Automatic stored as no line, with nothing kept. It is the first version of this design, and it lost the value behind every switch.
+- Automatic stored as no line, with nothing kept. It lost the value behind every switch.
 
-- A Custom profile, with one set of values. Any change made while a preset was in use copied the preset over it. Changes on top of whichever profile is in force replace it.
+- Switches read off the settings under them, with a half-on state and a "Use my changes" switch. Stored switches are easier to follow, and can't disagree with the rows after a hand edit.
 
-- A change that moves the settings above it, as in version 2. Changing one row set Custom and turned Choose automatically off.
+- A change under a preset that copies the preset over Custom, as in version 2 of the profiles.
 
-- A master setting with a stored group mode, and its members grayed until the mode is changed. It is version 1's unlock steps.
+- Graying a row until something above it is changed, as in version 1. Everyone reads gray as "can't touch", and the person has to find what unlocks it.
 
-- Keeping the hand-set rows in use when a profile is picked by hand. A picked profile then wouldn't look like that profile.
+- Keeping the `*` changes across a pick. They would pile up for every preset, with no way to see them all.
 
-- Put-aside values as commented-out lines. A save that keeps comments can still move or drop them, and a hand edit can't tell one from a note. A separate key is plain data.
+- Values set aside as commented-out lines. A save that keeps comments can still move them, and a hand edit can't tell one from a note.
 
-- A checkbox beside every auto setting. It doubles the controls on the screen. The switches and the in-control forms above say the same with less.
+- State in `config.shcl`. It would be copied between machines and rewrite the config on exit.
 
-- Graying an editable control. Everyone reads gray as "can't touch", and a focusable control has to meet the normal contrast rules anyway.
+- Moving SilkTerm onto the demo's widgets. See [SilkTerm's side](#silkterms-side).
 
 ### Superseded
 
-- The first version of this design, 2026-10-08 to 10-09. Automatic was stored as no line, and every switch was read from whether its settings had lines. It was built in part, for the font, window size, theme colors, open command and wallpaper (2026100907341818, 2026100910295903), before the lost values were noticed.
+- The first version of this design, 2026-10-08 to 10-09: automatic as no line. Built for the font, window size, theme colors, open command and wallpaper (2026100907341818, 2026100910295903) before the lost values were noticed.
 
-- Settings under a master, 2026-10-08. A master switch with a stored group mode and an override flag per member, with the members grayed but still editable. Rejected at review before any of it was built.
+- The second version, 2026-10-09: "Use my changes", switches read off their settings, and a half-on state. Not built.
+
+- Settings under a master, 2026-10-08. A master switch with a stored mode and an override flag per member. Rejected at review before any of it was built.
 
 ## Research findings
 
 - Programs that keep a value through an on and off round trip store the switch and the value apart.
 	- Firefox's proxy settings store the mode on its own. Switching away from manual grays the host and port fields but keeps them.
-	- Unity's render volumes have an override checkbox on every property. Cleared, the property uses the default, and the value typed in stays. All and None buttons flip a whole group.
-	- Print dialogs keep a page range typed in while All is picked, and typing in the field picks Pages. That is the model for a row turning its switch on.
+	- Unity's render volumes have an override checkbox on every property. Cleared, the property uses the default, and the value typed in stays.
+	- Print dialogs keep a page range typed in while All is picked, and typing in the field picks Pages. That is the model for a row turning its checkbox on.
 
 - Game graphics menus usually turn the preset to Custom when one setting changes, and overwrite every setting when a preset is picked. Player forums ask for custom settings to survive a preset pick.
 
-- Per-setting automatic with no master state is the pattern in CSS `auto`, in the "Automatic" entries of macOS System Settings and Windows "Automatic (recommended)" dropdowns, and in Firefox about:config and VS Code settings, where a changed value gets a reset arrow and the store keeps only what was changed.
+- Firefox about:config and VS Code settings give a changed value a reset arrow, and store only what was changed.
 
 - Accessibility writing agrees on not disabling form controls for state, since a disabled control says neither why nor what to do. WCAG exempts only inactive controls from the contrast minimum, so a control that takes focus has to meet it.
 
 ## Roadmap
 
-- Add the `kept:` block and the 3-state function. The settings already moved onto the first version keep their table rows.
+- Done: the knobs crate and its demo, 2026-10-09.
 
-- Bring back the switches the first version took out, read from their settings.
+- knobs: a spec built from code, a rule that gives a default, presets from the program, a temporary preset set by the program, and saving into a file that keeps its comments.
 
-- Change the launch step that took the old switches out of the file. A switch that was on puts its settings' values aside, where it used to comment them out.
+- SilkTerm: the relations and groups in `settings_ui.shcl`, the field table, the stored values in `Settings`, `state.shcl`, and old files.
 
-- Move the Performance rows onto it: drop Custom, add "Use my changes", and make a changed row leave Profile and Choose automatically alone. A file whose profile was Custom keeps every row that differs from the default profile as set by hand, so nothing on screen changes.
+- The dialog through knobs: the switches back, the `*`, the reset arrow and the tip lines.
 
-- Make a change to a row under a switch that is off turn the switch on.
+- Prove the old and new paths agree on old files and on each profile's values, then remove the old code in one go: the profile's shadow and values, the wallpaper colors' shadow, `config::auto` and its lint check, the graying block, and the launch step that took the switches out.
 
-- Keep the lint check that refuses a direct read of an auto setting.
-
-- Moving a setting onto this design changes how its controls work, not which ones exist. No control is removed.
+- No control is removed. This design changes how controls work, not which ones exist.
 
 ## Related backlog issues
 
@@ -388,6 +396,8 @@ kept:
 - Automatic settings, first part (2026100907341818), and theme colors, open command and wallpaper as automatic settings (2026100910295903).
 
 - Wallpaper colors (2026100910295901) and profile presets (2026100910295902).
+
+- The removed "Use system font" checkboxes (2026100913394948), and the "A" mark and italic style (2026100913394950).
 
 ## Copyright and license
 
