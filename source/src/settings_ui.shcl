@@ -17,8 +17,14 @@
 ## Tabs
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
-## Left to right along the top. Every heading below names one of these.
+## In order. "A/B" is tab B under tab A; a tab with tabs under it holds no
+## rows of its own, and a heading below names the tab it is on by that path.
 tabs: "Silk", "Background", "Text", "Cursor", "Movement", "Themes", "Window", "Shell", "Keys"
+
+## top: a row of tabs across the top, where a tab's sub-tabs show in a second
+## row only while it is the current one. left: a list down the left side with
+## every tab in it, sub-tabs indented under their parent.
+tabs_side: top
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Layout
@@ -91,14 +97,16 @@ layout:
 	button_width: 76           ## floor
 	button_gap: 10
 
-	## Tabs. They sit on the gutter strip at the top of the panel, standing on
-	## the line that separates it from the rows below - so they are shorter than
-	## a footer button and start a little below the panel's own edge.
+	## Tabs. Across the top they sit on the gutter strip, standing on the line
+	## that separates it from the rows below - so they are shorter than a footer
+	## button and start a little below the panel's own edge. Down the left they
+	## are a list on the same strip, each as wide as the list.
 	tab_pad: 22                ## clear space either side of a tab's title
 	tab_height: 24             ## floor
 	tab_pad_v: 6               ## tab grows to the UI line height plus this
-	tab_top: 5                 ## panel edge -> top of the tabs
+	tab_top: 5                 ## panel edge -> top of the tabs; between tab rows too
 	tab_gap: 4                 ## between tab buttons
+	tab_indent: 16             ## a sub-tab's step in, per level, in the left list
 
 	## Scrollbar (shown only when a tab is taller than the panel)
 	scrollbar_width: 8

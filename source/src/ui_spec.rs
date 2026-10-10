@@ -185,6 +185,85 @@ pub struct PresetSpec {
 	pub values: Vec<(Key, knobs::Value)>,
 }
 
+/// Where the tab strip goes: a row along the top, or a list down the left.
+/// The top row shows a tab's sub-tabs only while it is the current one; the
+/// list shows every tab at once, sub-tabs indented under their parent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabsSide {
+	Top,
+	Left,
+}
+
+/// One tab in the strip, in the order declared. `tabs:` lists paths, "A/B"
+/// being B under A, so the tree is a flat list where a child follows its
+/// parent. Rows live on the leaves only: `leaf` is the index among them, the
+/// one a `Spec::tab` holds, and None for a tab that only holds other tabs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TabNode {
+	pub title: &'static str,
+	pub path: &'static str,
+	pub depth: u8,
+	pub parent: Option<usize>,
+	pub leaf: Option<usize>,
+}
+
+impl TabNode {
+	pub fn is_leaf(&self) -> bool {
+		self.leaf.is_some()
+	}
+}
+
+/// The tree behind a `tabs:` list. Leaves come back as titles, in order, since
+/// that is the list a row's tab indexes.
+///
+/// # Errors
+///
+/// A child declared before its parent, or a path declared twice.
+pub fn tab_tree(paths: &[&str]) -> Result<(Vec<TabNode>, Vec<&'static str>), Vec<String>> {
+	let mut nodes: Vec<TabNode> = Vec::new();
+	let mut problems = Vec::new();
+	for path in paths {
+		if nodes.iter().any(|n| n.path == *path) {
+			problems.push(format!("tabs: {path} is declared twice"));
+			continue;
+		}
+		let (parent, title) = match path.rsplit_once('/') {
+			Some((up, title)) => {
+				let Some(p) = nodes.iter().position(|n| n.path == up) else {
+					problems.push(format!("tabs: {path} comes before {up}"));
+					continue;
+				};
+				(Some(p), title)
+			}
+			None => (None, *path),
+		};
+		if title.is_empty() {
+			problems.push(format!("tabs: {path} has no title"));
+			continue;
+		}
+		nodes.push(TabNode {
+			title: keep(title.to_string()),
+			path: keep((*path).to_string()),
+			depth: parent.map_or(0, |p| nodes[p].depth + 1),
+			parent,
+			leaf: None,
+		});
+	}
+	// a tab nothing sits under holds the rows
+	let mut leaves = Vec::new();
+	for i in 0..nodes.len() {
+		if !nodes.iter().any(|n| n.parent == Some(i)) {
+			nodes[i].leaf = Some(leaves.len());
+			leaves.push(nodes[i].title);
+		}
+	}
+	if problems.is_empty() {
+		Ok((nodes, leaves))
+	} else {
+		Err(problems)
+	}
+}
+
 #[derive(Debug)]
 pub struct Layout {
 	pub width: f32,
@@ -237,6 +316,7 @@ pub struct Layout {
 	pub tab_pad_v: f32,
 	pub tab_top: f32,
 	pub tab_gap: f32,
+	pub tab_indent: f32,
 	pub scrollbar_width: f32,
 	pub scrollbar_inset: f32,
 	pub scrollbar_thumb_min: f32,
@@ -266,7 +346,11 @@ pub struct Icons {
 
 #[derive(Debug)]
 pub struct Ui {
+	/// The leaf tabs' titles, in order: what `Spec::tab` indexes.
 	pub tabs: Vec<&'static str>,
+	/// Every tab, parents included, in strip order.
+	pub tab_tree: Vec<TabNode>,
+	pub tabs_side: TabsSide,
 	pub layout: Layout,
 	pub icons: Icons,
 	pub help: Help,
@@ -418,6 +502,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		tab_pad_v: float("layout.tab_pad_v", &mut problems),
 		tab_top: float("layout.tab_top", &mut problems),
 		tab_gap: float("layout.tab_gap", &mut problems),
+		tab_indent: float("layout.tab_indent", &mut problems),
 		scrollbar_width: float("layout.scrollbar_width", &mut problems),
 		scrollbar_inset: float("layout.scrollbar_inset", &mut problems),
 		scrollbar_thumb_min: float("layout.scrollbar_thumb_min", &mut problems),
@@ -448,14 +533,31 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		revert: glyph("icons.revert", &mut problems),
 	};
 
-	let tabs: Vec<&'static str> = doc
-		.get_string_array("tabs")
-		.map(keep_all)
-		.unwrap_or_default()
-		.to_vec();
+	let paths = doc.get_string_array("tabs").unwrap_or_default();
+	let (tab_tree, tabs) = match tab_tree(&paths.iter().map(String::as_str).collect::<Vec<_>>()) {
+		Ok(tree) => tree,
+		Err(more) => {
+			problems.extend(more);
+			(Vec::new(), Vec::new())
+		}
+	};
 	if tabs.is_empty() {
 		problems.push("tabs: no tab titles".into());
 	}
+	// the leaves' full paths, which is what a heading names its tab by
+	let leaf_paths: Vec<&str> = tab_tree
+		.iter()
+		.filter(|n| n.is_leaf())
+		.map(|n| n.path)
+		.collect();
+	let tabs_side = match doc.get_string("tabs_side").as_deref() {
+		Ok("left") => TabsSide::Left,
+		Ok("top") | Err(_) => TabsSide::Top,
+		Ok(other) => {
+			problems.push(format!("tabs_side: {other} is not top or left"));
+			TabsSide::Top
+		}
+	};
 
 	let mut specs: Vec<Spec> = Vec::new();
 	let mut settings: Vec<(Key, &'static [&'static str])> = Vec::new();
@@ -489,12 +591,12 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			.map_or(&[][..], keep_all);
 		let kind = match kind_text.as_str() {
 			"heading" => {
-				match doc
-					.get_string(&at("tab"))
-					.ok()
-					.and_then(|t| tabs.iter().position(|title| *title == t))
-				{
+				let named = doc.get_string(&at("tab")).unwrap_or_default();
+				match leaf_paths.iter().position(|path| *path == named) {
 					Some(index) => tab = index,
+					None if tab_tree.iter().any(|n| n.path == named) => problems.push(format!(
+						"rows.{name}: {named} has tabs under it; name one of them"
+					)),
 					None => problems.push(format!("rows.{name}: not one of the tabs")),
 				}
 				Kind::Header(keep(label.clone()))
@@ -720,6 +822,8 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 	if problems.is_empty() {
 		Ok(Ui {
 			tabs,
+			tab_tree,
+			tabs_side,
 			layout,
 			icons,
 			help,
@@ -816,7 +920,7 @@ fn read_groups(doc: &shcl::Document, problems: &mut Vec<String>) -> Vec<GroupSpe
 
 #[cfg(test)]
 mod tests {
-	use super::{Key, Kind, SOURCE, Spec, keep_platform, parse, pick_warnings, ui};
+	use super::{Key, Kind, SOURCE, Spec, keep_platform, parse, pick_warnings, tab_tree, ui};
 
 	// The one check no parser strictness can make: a setting the code knows but
 	// the document never mentions is a perfectly valid document, and a setting
@@ -1154,6 +1258,51 @@ mod tests {
 			problems
 				.iter()
 				.any(|p| p.contains("hotkeycopy") && p.contains("keys.")),
+			"{problems:?}"
+		);
+	}
+
+	// "A/B" is B under A. Rows go on the leaves, which a heading names by path.
+	// Test ID: EsJDUK4
+	#[test]
+	fn a_tab_under_another_is_a_path_and_rows_go_on_the_leaves() {
+		let (nodes, leaves) = tab_tree(&["A", "B", "B/C", "B/D", "E"]).unwrap();
+		assert_eq!(leaves, ["A", "C", "D", "E"]);
+		assert_eq!(nodes[1].leaf, None, "B only holds tabs");
+		assert_eq!(
+			(nodes[2].parent, nodes[2].depth, nodes[2].title),
+			(Some(1), 1, "C")
+		);
+		assert_eq!(nodes[3].leaf, Some(2));
+		assert!(
+			tab_tree(&["B/C", "B"]).is_err(),
+			"a child before its parent"
+		);
+		assert!(tab_tree(&["A", "A"]).is_err(), "a tab twice");
+		let head = "rows:\n\tHead:\n\t\tkind: heading\n\t\tlabel: Head\n\t\ttab: ";
+		let Err(problems) = parse(&format!("tabs: \"B\", \"B/C\"\n{head}B\n")) else {
+			panic!("a heading on a tab that holds tabs must be reported")
+		};
+		assert!(
+			problems.iter().any(|p| p.contains("has tabs under it")),
+			"{problems:?}"
+		);
+		let Err(problems) = parse(&format!(
+			"tabs: \"B\", \"B/C\"\ntabs_side: left\n{head}B/C\n"
+		)) else {
+			panic!("the layout is missing")
+		};
+		assert!(
+			!problems
+				.iter()
+				.any(|p| p.contains("of the tabs") || p.contains("under it")),
+			"{problems:?}"
+		);
+		let Err(problems) = parse(&format!("tabs: \"B\"\ntabs_side: sideways\n{head}B\n")) else {
+			panic!("the layout is missing")
+		};
+		assert!(
+			problems.iter().any(|p| p.contains("tabs_side")),
 			"{problems:?}"
 		);
 	}
