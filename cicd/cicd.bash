@@ -404,7 +404,8 @@ fContainerBuild(){
 ## this tree. Its /tmp is a folder under the target dir, so a failed test's files are
 ## still there afterward, and the X sockets inside never meet this box's. The
 ## container starts as root only long enough to give this uid a passwd entry, since
-## the terminal looks its user up (a bare --user has none), then drops to it.
+## the terminal looks its user up (a bare --user has none), and the X socket folder,
+## then drops to it. The run gets a session bus of its own, which xfwm4 needs.
 fContainerRun(){
 	local -r image="${1}"; shift
 	local gitCommon
@@ -417,8 +418,8 @@ fContainerRun(){
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" \
 		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
-			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" \
-			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- bash "${@:3}"' _ "$(id -u)" "$(id -g)" "${root}/cicd/cicd.bash" "${@}"
+			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
+			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:3}"' _ "$(id -u)" "$(id -g)" "${root}/cicd/cicd.bash" "${@}"
 }
 ## What the run in the container made, named as stage 5 names them, for the stages
 ## here. Every binary this configuration builds has to be there: the run inside made
