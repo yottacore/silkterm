@@ -47,7 +47,8 @@ fWait(){ for _ in {1..100}; do [[ -e "${1}" ]] && return 0; sleep 0.05; done; re
 for rc in 0 1; do
 	dir="${work}/run${rc}"
 	fMakeRun "${dir}" "${rc}"
-	bash "${dir}/run.bash" >/dev/null 2>&1 &
+	## The block writes no log inside the container, and this is a test of the log.
+	env -u SILK_CICD_IN_CONTAINER bash "${dir}/run.bash" >/dev/null 2>&1 &
 	pid=$!
 	fWait "${dir}/ready" || { echo "  FAIL the lifted run never started"; failures=$((failures + 1)); kill "${pid}"; continue; }
 	sleep 0.2

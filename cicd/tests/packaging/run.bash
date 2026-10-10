@@ -103,7 +103,7 @@ trap 'rc=$?; rm -rf "${work:-}" "${pkgWork}"; fTestDir_End "${rc}"' EXIT
 	fDie(){ echo "DIE: ${*}"; exit 1; }
 	fWriteBuiltFrom(){ :; }
 	eval "$(sed -n '/^fReleaseExpects(){/,/^}/p; /^fWriteSums(){/,/^}/p; /^fBuildPackages(){/,/^}/p' "${engine}")"
-	collect="$(sed -n '/^if \[\[ -n "\${RELEASE_ARTIFACT_DIR:-}" \]\]; then$/,/^fi$/p' "${engine}")"
+	collect="$(sed -n '/^\tif \[\[ -n "\${RELEASE_ARTIFACT_DIR:-}" \]\]; then$/,/^\tfi$/p' "${engine}")"
 	noArmBlock="$(sed -n '/^if ((noArm)) && declare -p CROSS_TARGETS/,/^fi$/p' "${engine}")"
 	mapfile -t shippedCross < <(bash -c 'source "$1" && printf "%s\n" "${CROSS_TARGETS[@]}"' _ "${realRoot}/cicd/config.bash")
 

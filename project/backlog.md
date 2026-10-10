@@ -60,7 +60,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Move local CICD steps into a local container, and on the other boxes too?
 	- ID: 2026101009221201
 	- Type: Task
-	- Status: Waiting for answers
+	- Status: Testing
 	- Priority: Avg
 	- Opened: 20261010-092212
 	- Opened by: JC
@@ -74,6 +74,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Keep on the host: anything that reads the real card (GPU memory, frame times, the profiler), the dogfood install into the synced app dir, the demo render, and the stages that talk to the other boxes over ssh with the host lock.
 			- Not on the other boxes. vm925w has its hypervisor off, so no WSL2 and no Windows containers, and the Windows tests need a logged-on desktop anyway. On b26 a Linux container gives nothing for a macOS build, and the Windows and Mac builds are already made here.
 			- Suggested first step: `cicd.bash --gate` inside the container, as an opt-in flag, until it has run clean a few times. Then the package stages.
+		- 20261010: Built, after "ok do the container work" in chat. `cicd.bash --container` runs stages 1 to 6 in the image from `cicd/container/Dockerfile`, with `--gate --container` for the gate alone. Debian trixie, the pinned rustc with its 3 cross targets, the 4 cargo helpers, zig, makensis 3.12 from the snapshot archive, pwsh with PSScriptAnalyzer, ruff, mypy, shellcheck 0.11, Xvfb, xfwm4, sway, cage and Mesa. Versions come from `tool-pins.txt` and `rust-toolchain.toml` as build args, and the tag hashes the recipe plus those, so a pin bump is a new image. The run inside has its own target dir, `target/container`, and a named cache volume. Outside, this box runs the sync first and the private runner, dogfood, demo and publish after, plus the content scrub and the Windows scenarios, which the run inside steps over. shellcheck, ruff and mypy joined the pin list, and the pin probe reads the first version anywhere in a tool's output, since shellcheck's is on its second line.
+	- Branch: container
+	- Test case: `cicd/tests/container/run.bash` (EsJg9EF): the tag, the recipe against the pins, the option split, the artifacts picked up, and the engine against a stand-in docker.
 
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486

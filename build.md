@@ -116,6 +116,18 @@ cargo build --release
 
 wgpu uses the Metal backend automatically. No extra system packages are needed beyond the Xcode command-line tools (`xcode-select --install`).
 
+## The pipeline in a container
+
+`cicd/cicd.bash --container` runs the build, lint, test, profiler, release and package stages in a Debian trixie image built from `cicd/container/Dockerfile`, with every tool at the version `rust-toolchain.toml` and `cicd/tool-pins.txt` pin. It needs docker and nothing else from this page. The first run builds the image, which takes a while. After that the image is reused until the recipe or a pin changes.
+
+- The repo is mounted at its own path, and the run inside builds into `target/container`, so the builds here are left alone. Count on about as much disk again as `target/` takes.
+
+- The crate cache and the run's home are a named volume, `silkterm-cicd-cache`. `docker volume rm silkterm-cicd-cache` starts it fresh.
+
+- Everything that needs this machine stays outside and runs once the container is done: the remote sync, the Windows boxes, the private runner, dogfood, the demo and publish. The window tests inside run on software rendering, so the few that need a render node skip there.
+
+- `cicd/cicd.bash --gate --container` runs the merge gate inside.
+
 ## Formatting
 
 `rustfmt.toml` pins the style (`hard_tabs`). The hand-formatted data tables (the `Palette`/`Dlg` color matrices in `theme.rs`/`settings_ui.rs`, the About table in `dialog.rs`) have `#[rustfmt::skip]` so `cargo fmt` leaves them compact; everything else is rustfmt-canonical.
