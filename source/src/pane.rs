@@ -1395,10 +1395,12 @@ pub struct Pane {
 	/// read it lock-free (at worst one frame stale) instead of taking the term
 	/// lock the PTY reader may hold across a whole read cycle.
 	pub mode: TermMode,
-	/// Is the minimap column showing? A full-screen program can take it (see
-	/// `minimap::wanted`), and that changes the text width, so it is layout state
-	/// rather than something the draw decides.
+	/// Is the minimap column showing? A program drawing its own screen can take
+	/// it (see `minimap::wanted`), and that changes the text width, so it is
+	/// layout state rather than something the draw decides.
 	pub map_on: bool,
+	/// Keeps `map_on` from flapping while a program toggles what it asks for.
+	pub map_hold: minimap::Hold,
 	/// This pane's PTY produced output since the last successful build. Set by
 	/// the Wakeup(id) event, cleared in `build()` once the term lock is acquired
 	/// (a busy-term frame keeps it, so the rebuild retries next frame). Scopes
@@ -2842,9 +2844,13 @@ impl Pane {
 		&self.map
 	}
 
-	/// When a compose the throttle deferred comes due.
+	/// When a compose the throttle deferred comes due, or the column's hold
+	/// runs out.
 	pub fn map_wake(&self) -> Option<std::time::Instant> {
-		self.map.wake()
+		match (self.map.wake(), self.map_hold.wake()) {
+			(Some(a), Some(b)) => Some(a.min(b)),
+			(a, b) => a.or(b),
+		}
 	}
 
 	/// Start a marker drag, remembering the pointer and what the view sat at.
@@ -3812,12 +3818,16 @@ impl PaneManager {
 	pub fn sync_minimap(&mut self, cfg: &config::Settings) -> bool {
 		let mut moved = false;
 		for pane in self.panes.values_mut() {
-			let alt = pane.mode.contains(TermMode::ALT_SCREEN);
 			let running = match pane.term.task() {
 				crate::term::Task::Running(name) => Some(name),
 				crate::term::Task::Last(_) | crate::term::Task::Idle => None,
 			};
-			let want = minimap::wanted(cfg, alt, running.as_deref());
+			let own = pane.map_hold.update(
+				minimap::draws_own_screen(pane.mode, running.is_some()),
+				running.as_deref(),
+				std::time::Instant::now(),
+			);
+			let want = minimap::wanted(cfg, own, running.as_deref());
 			if want != pane.map_on {
 				pane.map_on = want;
 				moved = true;
@@ -4075,6 +4085,7 @@ fn spawn_pane(
 		shape_rev: 0,
 		mode: TermMode::empty(),
 		map_on: true,
+		map_hold: minimap::Hold::default(),
 		content_dirty: true,
 		copy_select: config::settings().copy_on_select,
 		copy_output: false,
