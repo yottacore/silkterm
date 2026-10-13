@@ -153,7 +153,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100910295901
 	- Type: Enhancement
 	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline. Saving a theme with the switch on now stores the theme's text colors rather than the picture's.
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
 	- Needs external testing: A look at Save as on the Themes tab with a wallpaper up.
 	- Priority: Avg
 	- Opened: 20261009-102959
@@ -301,7 +301,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100907341818
 	- Type: Enhancement
 	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline. A launch takes the old follow switches out of the config file, so a dogfood build rewrites the file.
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
 	- Needs external testing: Windows: the Text and Window tabs, an old config with "Use system font" on, and a window opening at its last size. Windows names no monospace font, so there the family list stays set by hand when it is not the shipped one.
 	- Priority: Avg
 	- Opened: 20261009-073418
@@ -362,7 +362,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100910295903
 	- Type: Enhancement
 	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline. A launch takes the Default mark off the commented color lines in the config file, and a folder emptied in Settings is commented out now rather than written as the usual place.
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
 	- Needs external testing: Windows: the Themes, Background and Window tabs, Open command showing explorer.exe, and a config with the usual folder written out in its Windows spelling.
 	- Priority: Avg
 	- Opened: 20261009-102959
@@ -421,7 +421,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026101009220870
 	- Type: Enhancement
 	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline. The config template's order changed, which reaches a new config file.
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
 	- Needs external testing: Windows and macOS: a look at the list, at the default interface font and a large one.
 	- Priority: Avg
 	- Opened: 20261010-092208
@@ -450,7 +450,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100913394956
 	- Type: Enhancement
 	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline. Saved themes now write font lines, and a launch backfills the new switch's commented line into the config file.
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
 	- Priority: Avg
 	- Opened: 20261009-133949
 	- Opened by: JC
@@ -593,7 +593,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100910295905
 	- Type: Enhancement
 	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline, with 2026100910295903.
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
 	- Needs external testing: A look at a few tips on Windows and macOS, where hotkeys read differently.
 	- Priority: Low
 	- Opened: 20261009-102959
@@ -710,7 +710,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100907341816
 	- Type: Bug
 	- Status: Waiting for testing
-	- Needs local test suite run?: The full pipeline, which now runs the `monwake` window test.
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
 	- Needs external testing: A real power-save wake on b23.
 	- Severity: Avg
 	- Opened: 20261009-073418
