@@ -400,6 +400,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Consider making the minimap whitelist-only for TUI apps, e.g. `less`, `tail`, etc.
 		- The minimap already steps aside for a full-screen program that is not in `scroll.minimap.tui_process_whitelist`, default `less tmux screen`, per the old-format Done item "Auto-disable the minimap when in a TUI that has no buffer that can be reached via minimap".
 
+- Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
+	- ID: 2026101313381123
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261013-133811
+	- Opened by: JC
+	- Related IDs: 2026100307115829
+	- Target OS: All
+	- Requirements:
+		- Copy on select should be a persistent setting that new starts take up, but changes *not* shared between currently running sessions.
+			- Ditto minimap.
+			- Ditto tab strip, menu bar. Other settings that also observe this are OK.
+	- Notes:
+		- Pre-next-cut.
+
+- Add "Bare window" back to the right-click menu, under "Menu bar"
+	- ID: 2026101313381124
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261013-133811
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Add "Bare window" back to right-click menu, under "Menu bar".
+	- Notes:
+		- Pre-next-cut.
+	- Against: the old-format Done item "Second pass over the UI/UX style guide, reconciling it against what is built" took it off that menu. The UI/UX style guide's known deviations list it too, and needs the same change.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
