@@ -34,45 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
-	- ID: 2026100910295901
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline. Saving a theme with the switch on now stores the theme's text colors rather than the picture's.
-	- Needs external testing: A look at Save as on the Themes tab with a wallpaper up.
-	- Priority: Avg
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Foreground and Cursor are automatic settings whose automatic value is the wallpaper's colors, and "Text colors from wallpaper" is their group's switch, read off them.
-			- 20261013: The switch is a stored setting rather than read off them. The third version of the automatic settings design dropped switches read off their settings.
-	- Notes:
-		- Before RC1.
-		- They still gray out while the switch is on. The style guide lists it under known deviations.
-			- 20261013: No longer true. Nothing grays for a switch since the knobs model (36ef959), and the known deviations no longer list it.
-	- Progress log:
-		- 20261009: Q: A theme pick puts every color back to the theme's, which would make these two automatic and so turn the switch back on. Should a theme pick do that, or leave these two as they are?
-			- A: No.
-		- 20261009: Q: With no wallpaper up, is automatic the theme's color?
-			- A: Yes.
-		- 20261009: Q: An old file with the switch off and no color line used the theme's colors. Keeping that means storing the theme's colors by hand. Is that wanted?
-			- A: If this is about one of my existing config files rather than a general programming question, then no.
-			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
-				- A: No. Keep theme colors: a file with the switch off and no color lines gets the theme's Foreground and Cursor written in on first load, so nothing changes on screen for those people.
-		- 20261013: The knobs model (36ef959) already does what the item asks. Foreground and Cursor show the wallpaper's colors while the switch is on and a picture is up, and the theme's otherwise. Nothing grays, a color changed by hand turns the switch off, and a theme pick leaves the switch where it was.
-			- No color lines are written for the answer above. The switch is stored now, so a file with it off keeps it off and shows the theme's colors with no write. The question dates from when the switch was going to be read off the colors.
-			- Writing the theme's 2 colors in would make them Custom's colors, so picking Custom later would show the old theme's text colors. If the write is still wanted, it goes in the one-time theme color move at the first launch (`move_theme_colors`).
-			- Fixed on the way: Save and Save as stored the picture's text colors in the theme while the switch was on. A saved theme takes the colors under them now, the theme's with any change made by hand. The wallpaper design doc said the derived pair never reaches a saved theme, and the knobs model had lost that.
-			- Found on the way: an old file with colors over a built-in theme and no machine test lines shows the theme's colors after the update. Filed as 2026101304551668.
-	- Swept: every reader of the 2 colors that stores them: the config save, Save and Save as on a theme, and the picker, which sets a color by hand. Every row with an `auto:` switch in `settings_ui.shcl`; only these 2 are palette colors.
-	- Verified: the unit suite, clippy, fmt and the test ID check. Each new test failed against a mutant: Esa43ID with the switch read off the color lines, Esa43cc with a theme pick that turns the switch on, both with the picture's colors used while the switch is off, and Esa59zb before the fix.
-	- Not checked: a real window.
-	- Branch: wallcolors
-	- Commit: 8bce254
-	- Test case: `a_file_with_the_wallpaper_colors_off_keeps_the_theme_s` (Esa43ID), `a_theme_pick_leaves_the_wallpaper_colors_switch_alone` (Esa43cc), `a_saved_theme_never_takes_the_wallpaper_s_text_colors` (Esa59zb). Already there: EqRxesl, EqRxesm, EqRxese, EsFc30N.
-
 - Move local CICD steps into a local container, and on the other boxes too?
 	- ID: 2026101009221201
 	- Type: Task
@@ -176,6 +137,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: tipfix
 	- Commit: 368d7b8
 	- Test case: `no_dialog_text_says_carry` (Es9Vugt) and `no_template_comment_says_carry` (Es9WIpt). Both failed with the old Fit tip and template comment put back, and pass now. The notice wording is pinned by the existing notice tests.
+
+- Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
+	- ID: 2026100910295901
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. Saving a theme with the switch on now stores the theme's text colors rather than the picture's.
+	- Needs external testing: A look at Save as on the Themes tab with a wallpaper up.
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Foreground and Cursor are automatic settings whose automatic value is the wallpaper's colors, and "Text colors from wallpaper" is their group's switch, read off them.
+			- 20261013: The switch is a stored setting rather than read off them. The third version of the automatic settings design dropped switches read off their settings.
+	- Notes:
+		- Before RC1.
+		- They still gray out while the switch is on. The style guide lists it under known deviations.
+			- 20261013: No longer true. Nothing grays for a switch since the knobs model (36ef959), and the known deviations no longer list it.
+	- Progress log:
+		- 20261009: Q: A theme pick puts every color back to the theme's, which would make these two automatic and so turn the switch back on. Should a theme pick do that, or leave these two as they are?
+			- A: No.
+		- 20261009: Q: With no wallpaper up, is automatic the theme's color?
+			- A: Yes.
+		- 20261009: Q: An old file with the switch off and no color line used the theme's colors. Keeping that means storing the theme's colors by hand. Is that wanted?
+			- A: If this is about one of my existing config files rather than a general programming question, then no.
+			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
+				- A: No. Keep theme colors: a file with the switch off and no color lines gets the theme's Foreground and Cursor written in on first load, so nothing changes on screen for those people.
+		- 20261013: The knobs model (36ef959) already does what the item asks. Foreground and Cursor show the wallpaper's colors while the switch is on and a picture is up, and the theme's otherwise. Nothing grays, a color changed by hand turns the switch off, and a theme pick leaves the switch where it was.
+			- No color lines are written for the answer above. The switch is stored now, so a file with it off keeps it off and shows the theme's colors with no write. The question dates from when the switch was going to be read off the colors.
+			- Writing the theme's 2 colors in would make them Custom's colors, so picking Custom later would show the old theme's text colors. If the write is still wanted, it goes in the one-time theme color move at the first launch (`move_theme_colors`).
+			- Fixed on the way: Save and Save as stored the picture's text colors in the theme while the switch was on. A saved theme takes the colors under them now, the theme's with any change made by hand. The wallpaper design doc said the derived pair never reaches a saved theme, and the knobs model had lost that.
+			- Found on the way: an old file with colors over a built-in theme and no machine test lines shows the theme's colors after the update. Filed as 2026101304551668.
+	- Swept: every reader of the 2 colors that stores them: the config save, Save and Save as on a theme, and the picker, which sets a color by hand. Every row with an `auto:` switch in `settings_ui.shcl`; only these 2 are palette colors.
+	- Verified: the unit suite, clippy, fmt and the test ID check. Each new test failed against a mutant: Esa43ID with the switch read off the color lines, Esa43cc with a theme pick that turns the switch on, both with the picture's colors used while the switch is off, and Esa59zb before the fix.
+	- Not checked: a real window.
+	- Branch: wallcolors
+	- Commit: 8bce254
+	- Test case: `a_file_with_the_wallpaper_colors_off_keeps_the_theme_s` (Esa43ID), `a_theme_pick_leaves_the_wallpaper_colors_switch_alone` (Esa43cc), `a_saved_theme_never_takes_the_wallpaper_s_text_colors` (Esa59zb). Already there: EqRxesl, EqRxesm, EqRxese, EsFc30N.
 
 - Flyover help text should apply to all of the relevant labels, and both controls
 	- ID: 2026100812334387
