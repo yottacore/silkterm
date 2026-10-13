@@ -33,6 +33,7 @@
 - [Research findings](#research-findings)
 - [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
+- [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
 
@@ -540,3 +541,9 @@ What a window already gives back while unused is in the [Releasing resources](20
 - "The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends" (ID 2026100312470535)
 
 - "Release the GPU device after a long idle." (Opened 20260905-181131). Its open point, "figure out a way to reduce CPU and memory usage", moved here.
+
+## Copyright and license
+
+> Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.

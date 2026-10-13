@@ -357,3 +357,9 @@ Things the built interface does differently from the rules above. Each is a smal
 - The Silk tab made eight, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
 
 - The Keys tab makes nine. No other tab's subject takes in the hotkeys. Down the left, the list adds its own width to the panel, set by its widest entry.
+
+## Copyright and license
+
+> Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.

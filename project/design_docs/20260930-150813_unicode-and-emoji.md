@@ -26,6 +26,7 @@
 - [Research findings](#research-findings)
 - [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
+- [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
 
@@ -202,3 +203,9 @@ The two glyph caches, text and color, are cleared together, and a missing raster
 - "Font size should be able to be increased, even when using system font" (Opened 20260722-100516)
 
 - "Windows fonts look too small even at 100% scale" (canceled 20260817-120024)
+
+## Copyright and license
+
+> Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.
