@@ -106,6 +106,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
 
+- The curated default font list got replaced by just its first font
+	- ID: 2026100913394946
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: High
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026101009220980
+	- Target OS: All
+	- Incorrect behavior: The default list of fonts I had carefully curated got replaced by just the first one.
+	- Expected behavior: Bring the full list back.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+	- Reproduced: 20261013 on b23. With "Use system font" on, Family showed "Monaspace Argon" alone, and turning Face off kept and saved that one name. Test EsZk42X failed before the fix.
+	- Actual cause:
+		- The built-in list was never cut. Since 10-09, Family's automatic value is the desktop's monospace font, and on b23 the desktop's font is Monaspace Argon, which is also the list's first entry. So the box showed one name.
+		- Turning the switch off keeps what the box shows, so it saved that one name as the family.
+		- The live config on b23 was not cut. The 10-09 launch only commented out its family line, which held the full list and still reads the same.
+	- Actual fix: Following the desktop, Family is now the desktop's font followed by the built-in list, each name once. On b23 that is the old list exactly, and turning the switch off keeps and saves all of it.
+	- Decisions:
+		- 20261013: The automatic list is the desktop's font and then the built-in list, not the desktop's font and a list set by hand. A list set by hand is set aside while the switch is on, as for every other switch.
+		- 20261013: No launch repair for a file holding just `family: "Monaspace Argon"`. It is not the old default, it can't be told apart from a pick made by hand, and it renders the same while that font is installed. No such file was found. b23's is fine, Windows names no desktop font, and a Mac names one only when somebody picked it, so the bug could not happen on the Windows boxes or b26.
+	- Swept:
+		- Every reader of the rule, `system_font_family` in fields.rs, which is its one answer.
+		- The font search in text.rs takes the longer list as it is, since it drops repeats.
+		- The size rule gives one number, so it has no list to lose.
+		- Glossary, the Unicode design doc and code comments that said the automatic family is the desktop's font alone.
+	- Verified: unit suite, the merge gate (fmt, clippy, tests), test IDs, doc, TOC and table checks.
+	- Not checked: a real window, Windows, macOS.
+	- Branch: fontlist
+	- Commit: 5f3623b
+	- Test case: EsZk42X `the_family_keeps_the_whole_list_when_the_switch_goes_off` failed before the fix and passes after. EsZk4LL `the_desktop_s_font_leads_the_built_in_list` pins the list on any desktop. EsDxpmE's family assertion moved to the new rule.
+
 - Flyover text for the wallpaper option uses "carries"
 	- ID: 2026100812334384
 	- Type: Bug
@@ -702,100 +736,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- The curated default font list got replaced by just its first font
-	- ID: 2026100913394946
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: High
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Related IDs: 2026100907341818, 2026101009220980
-	- Target OS: All
-	- Incorrect behavior: The default list of fonts I had carefully curated got replaced by just the first one.
-	- Expected behavior: Bring the full list back.
-	- Notes:
-		- Before RC1.
-		- From the Settings UI update.
-	- Reproduced: 20261013 on b23. With "Use system font" on, Family showed "Monaspace Argon" alone, and turning Face off kept and saved that one name. Test EsZk42X failed before the fix.
-	- Actual cause:
-		- The built-in list was never cut. Since 10-09, Family's automatic value is the desktop's monospace font, and on b23 the desktop's font is Monaspace Argon, which is also the list's first entry. So the box showed one name.
-		- Turning the switch off keeps what the box shows, so it saved that one name as the family.
-		- The live config on b23 was not cut. The 10-09 launch only commented out its family line, which held the full list and still reads the same.
-	- Actual fix: Following the desktop, Family is now the desktop's font followed by the built-in list, each name once. On b23 that is the old list exactly, and turning the switch off keeps and saves all of it.
-	- Decisions:
-		- 20261013: The automatic list is the desktop's font and then the built-in list, not the desktop's font and a list set by hand. A list set by hand is set aside while the switch is on, as for every other switch.
-		- 20261013: No launch repair for a file holding just `family: "Monaspace Argon"`. It is not the old default, it can't be told apart from a pick made by hand, and it renders the same while that font is installed. No such file was found. b23's is fine, Windows names no desktop font, and a Mac names one only when somebody picked it, so the bug could not happen on the Windows boxes or b26.
-	- Swept:
-		- Every reader of the rule, `system_font_family` in fields.rs, which is its one answer.
-		- The font search in text.rs takes the longer list as it is, since it drops repeats.
-		- The size rule gives one number, so it has no list to lose.
-		- Glossary, the Unicode design doc and code comments that said the automatic family is the desktop's font alone.
-	- Verified: unit suite, the merge gate (fmt, clippy, tests), test IDs, doc, TOC and table checks.
-	- Not checked: a real window, Windows, macOS.
-	- Branch: fontlist
-	- Commit: 5f3623b
-	- Test case: EsZk42X `the_family_keeps_the_whole_list_when_the_switch_goes_off` failed before the fix and passes after. EsZk4LL `the_desktop_s_font_leads_the_built_in_list` pins the list on any desktop. EsDxpmE's family assertion moved to the new rule.
-
-- "Use system font and size" checkboxes disappeared
-	- ID: 2026100913394948
-	- Type: Bug
-	- Status: Done
-	- Severity: High
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Related IDs: 2026100907341818, 2026100910295902
-	- Target OS: All
-	- Incorrect behavior: 'Use system font and size' checkboxes disappeared.
-	- Expected behavior: They shouldn't have.
-		- NONE of the previous controls should have been removed. The design covered only how they worked, not their existence.
-	- Notes:
-		- Before RC1.
-		- From the Settings UI update.
-		- The design doc's "A switch that has only one member is pointless" line is why they went. It now says such a switch stays, as that setting's own automatic switch.
-	- Actual fix: Already fixed by b043ccb "settings on knobs" (merged 36ef959). The "Use system font" row is back with its Face and Size boxes, both stored and both live.
-	- Swept: the dialog's 141 rows on dev match the 141 from before 10-09 (5af2c4a), so no other control is missing. "Remember last size", "Text colors from wallpaper" and "Choose automatically" are there too.
-	- Verified: unit suite and the merge gate.
-	- Branch: fontlist
-	- Commit: 5f3623b (test only)
-	- Test case: EsZk4Qs `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. The row exists with both halves, neither grays, and each takes a click both ways.
-	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
-	- Closed: 20261013-034224
-
-- The "A" in the text boxes, and italic text
-	- ID: 2026100913394950
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Related IDs: 2026100907341818, 2026100910295903
-	- Target OS: All
-	- Incorrect behavior: The 'A' in the text boxes:
-		- It currently seems to mean two things:
-			- The value was set automatically by some master setting
-			- It's the hard-coded default value.
-	- Expected behavior: It should be removed altogether, because:
-		- The dual meaning is confusing.
-		- It's too visually cluttered.
-		- Being a default value is already knowable by the 'reset' being disabled.
-		- Italic text is unnecessary and confusing for the same reason.
-	- Notes:
-		- Before RC1.
-		- From the Settings UI update.
-		- The automatic value is drawn in a lighter color too. The design doc now says it draws like any other value.
-		- Set by hand, the mark turns into an x that puts the setting back. The row's revert arrow already does that.
-	- Progress log:
-		- 20261009: Q: Before making these changes, does it make sense, and is it consistent with the intent behind the 'automatic_settings' design? If so, update all instances of '20261008-180516_automatic_settings.md' among sister projects, to match.
-			- A: Yes. Automatic is a setting's default under the design, so a disabled revert arrow already says it, and the tip's first line says which. Every copy of the doc now has the revert arrow as the way back and no mark.
-	- Actual fix: Already fixed by b043ccb "settings on knobs" (merged 36ef959), which took out the "A" mark, the italic, the lighter color and the x. The glossary still described the mark, and now doesn't.
-	- Swept: every text field, number box and their drawing code; no mark or style is left that depends on where a value comes from. Stale comments about the x and the italic in settings_ui.rs were brought up to date.
-	- Verified: unit suite and the merge gate. The test failed against a build that drew an automatic Family in italic, and against one that drew an automatic Size dimmer.
-	- Branch: fontlist
-	- Commit: 5f3623b (test, glossary)
-	- Test case: EsZk4Qs `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. Family and Size each draw only their value in the box, in the normal color and not italic, and set by hand to the same value they draw exactly the same, with no x.
-	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
-	- Closed: 20261013-034224
-
 - Dropdown text gets rendered on top of flyover tip text
 	- ID: 2026100913394952
 	- Type: Bug
@@ -882,28 +822,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 		- The dialog code can do both since 2026101008023943. SilkTerm's own spec in `settings_ui.shcl` is still flat and across the top.
 
-- Settings: restore the old font list
-	- ID: 2026101009220980
-	- Type: Enhancement
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261010-092209
-	- Opened by: JC
-	- Related IDs: 2026100913394946
-	- Target OS: All
-	- Requirements:
-		- Restore my old font list that started with 'Monaspace Argon' (as now), but also included a long list that included Fira Code, Jetbrains, etc.
-	- Notes:
-		- Pre-next-cut.
-		- `DEFAULT_FONT_STACK` in config.rs still lists all 9 fonts.
-	- Superseded by ID: 2026100913394946
-	- Actual fix: Duplicate of 2026100913394946, fixed there. On b23 Family now shows the old list in full, starting with Monaspace Argon.
-	- Branch: fontlist
-	- Commit: 5f3623b
-	- Test case: EsZk42X and EsZk4LL, under 2026100913394946.
-	- Acceptance signoff: Self-closed: duplicate of 2026100913394946.
-	- Closed: 20261013-034224
-
 - Add or change a "Copyright and license" section in the design docs
 	- ID: 2026101009221091
 	- Type: Task
@@ -948,22 +866,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Seen in the allocations test: a compose frame and a drag frame both cost about 335 allocations against 166 for a cursor frame, since both panes are shaped again. The minimap half is what let 2026101007274798 go on for good.
 		- After RC1 unless a profile shows compose frames.
 
-- Settings dialog: tabs can go down the left side, and a tab can hold tabs
-	- ID: 2026101008023943
-	- Type: Feature
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261010-080239
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- The dialog code can put the tabs across the top or down the left. Down the left they are a list, every tab in it, sub-tabs stepped in under their parent. Across the top a tab's sub-tabs show only while it is current.
-		- A sub-tab open under a parent reads as current along with it.
-		- Ctrl+PgUp/PgDn and Ctrl+Tab/Shift+Tab walk a tab's sub-tabs, then move on to the next tab. The macOS chords do the same.
-		- Tabs take no focus. A click changes tab and nothing else.
-	- Progress log:
-		- 20261010: Done on `tabside`. `tabs_side: top|left` and `A/B` paths in `settings_ui.shcl`, with the design doc and style guide updated. SilkTerm stays on top with flat tabs; both looks were checked on a build with its tabs nested.
-
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
 	- Type: Bug
@@ -991,6 +893,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- "Use system font and size" checkboxes disappeared
+	- ID: 2026100913394948
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026100910295902
+	- Target OS: All
+	- Incorrect behavior: 'Use system font and size' checkboxes disappeared.
+	- Expected behavior: They shouldn't have.
+		- NONE of the previous controls should have been removed. The design covered only how they worked, not their existence.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+		- The design doc's "A switch that has only one member is pointless" line is why they went. It now says such a switch stays, as that setting's own automatic switch.
+	- Actual fix: Already fixed by b043ccb "settings on knobs" (merged 36ef959). The "Use system font" row is back with its Face and Size boxes, both stored and both live.
+	- Swept: the dialog's 141 rows on dev match the 141 from before 10-09 (5af2c4a), so no other control is missing. "Remember last size", "Text colors from wallpaper" and "Choose automatically" are there too.
+	- Verified: unit suite and the merge gate.
+	- Branch: fontlist
+	- Commit: 5f3623b (test only)
+	- Test case: EsZk4Qs `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. The row exists with both halves, neither grays, and each takes a click both ways.
+	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
+	- Closed: 20261013-034224
 
 - vm925w: The silkterm launcher in the taskbar doesn't work.
 	- ID: 2026100710173170
@@ -1827,6 +1754,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- The "A" in the text boxes, and italic text
+	- ID: 2026100913394950
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026100910295903
+	- Target OS: All
+	- Incorrect behavior: The 'A' in the text boxes:
+		- It currently seems to mean two things:
+			- The value was set automatically by some master setting
+			- It's the hard-coded default value.
+	- Expected behavior: It should be removed altogether, because:
+		- The dual meaning is confusing.
+		- It's too visually cluttered.
+		- Being a default value is already knowable by the 'reset' being disabled.
+		- Italic text is unnecessary and confusing for the same reason.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+		- The automatic value is drawn in a lighter color too. The design doc now says it draws like any other value.
+		- Set by hand, the mark turns into an x that puts the setting back. The row's revert arrow already does that.
+	- Progress log:
+		- 20261009: Q: Before making these changes, does it make sense, and is it consistent with the intent behind the 'automatic_settings' design? If so, update all instances of '20261008-180516_automatic_settings.md' among sister projects, to match.
+			- A: Yes. Automatic is a setting's default under the design, so a disabled revert arrow already says it, and the tip's first line says which. Every copy of the doc now has the revert arrow as the way back and no mark.
+	- Actual fix: Already fixed by b043ccb "settings on knobs" (merged 36ef959), which took out the "A" mark, the italic, the lighter color and the x. The glossary still described the mark, and now doesn't.
+	- Swept: every text field, number box and their drawing code; no mark or style is left that depends on where a value comes from. Stale comments about the x and the italic in settings_ui.rs were brought up to date.
+	- Verified: unit suite and the merge gate. The test failed against a build that drew an automatic Family in italic, and against one that drew an automatic Size dimmer.
+	- Branch: fontlist
+	- Commit: 5f3623b (test, glossary)
+	- Test case: EsZk4Qs `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. Family and Size each draw only their value in the box, in the normal color and not italic, and set by hand to the same value they draw exactly the same, with no x.
+	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
+	- Closed: 20261013-034224
+
 - The allocations-per-frame test fails at rest now and then: every frame rebuilds both panes
 	- ID: 2026101007274798
 	- Type: Bug
@@ -2568,6 +2530,44 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
+
+- Settings: restore the old font list
+	- ID: 2026101009220980
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261010-092209
+	- Opened by: JC
+	- Related IDs: 2026100913394946
+	- Target OS: All
+	- Requirements:
+		- Restore my old font list that started with 'Monaspace Argon' (as now), but also included a long list that included Fira Code, Jetbrains, etc.
+	- Notes:
+		- Pre-next-cut.
+		- `DEFAULT_FONT_STACK` in config.rs still lists all 9 fonts.
+	- Superseded by ID: 2026100913394946
+	- Actual fix: Duplicate of 2026100913394946, fixed there. On b23 Family now shows the old list in full, starting with Monaspace Argon.
+	- Branch: fontlist
+	- Commit: 5f3623b
+	- Test case: EsZk42X and EsZk4LL, under 2026100913394946.
+	- Acceptance signoff: Self-closed: duplicate of 2026100913394946.
+	- Closed: 20261013-034224
+
+- Settings dialog: tabs can go down the left side, and a tab can hold tabs
+	- ID: 2026101008023943
+	- Type: Feature
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261010-080239
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- The dialog code can put the tabs across the top or down the left. Down the left they are a list, every tab in it, sub-tabs stepped in under their parent. Across the top a tab's sub-tabs show only while it is current.
+		- A sub-tab open under a parent reads as current along with it.
+		- Ctrl+PgUp/PgDn and Ctrl+Tab/Shift+Tab walk a tab's sub-tabs, then move on to the next tab. The macOS chords do the same.
+		- Tabs take no focus. A click changes tab and nothing else.
+	- Progress log:
+		- 20261010: Done on `tabside`. `tabs_side: top|left` and `A/B` paths in `settings_ui.shcl`, with the design doc and style guide updated. SilkTerm stays on top with flat tabs; both looks were checked on a build with its tabs nested.
 
 - Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
 	- ID: 2026100907341817
