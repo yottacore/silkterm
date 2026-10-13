@@ -835,30 +835,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Before RC1.
 		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
 
-- Add or change a "Copyright and license" section in the design docs
-	- ID: 2026101009221091
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261010-092210
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Add or change a "Copyright and license" section to design docs. All 'CC BY 4.0' (the longer text though). Don't change copyright holder if one already exists.
-	- Notes:
-		- Pre-next-cut.
-		- Only `design_docs/20261008-180516_automatic_settings.md` has one now, with Yottacore as the holder and a one-line license text. `design.md`, the uiux style guide and the other 15 design docs have none.
-	- Progress log:
-		- 20261013: Q: Where a doc has no holder yet, who is it?
-			- A: Jim Collier, with the same ID marker as the README footer.
-		- 20261013: Scope is `design.md`, `uiux-style-guide.md` and the 16 files in `design_docs/`. The repo's style guide, glossary and `build.md` are reference docs, not design docs, so they were left out.
-		- 20261013: Every one now ends with the same section: the copyright line, the CC BY 4.0 license by its full name with a link, and a no-warranty line. The year is the year each doc was first committed, 2026 for all. The automatic settings doc keeps Yottacore and got the longer text. Each TOC lists the new heading.
-	- Branch: doclicense
-	- Commit: f254710
-	- Test case: `cicd/tests/docs/run.py`, `cicd/tests/toc/run.py` and `cicd/tests/tables/run.py` pass. The TOC check fails on a copy with the new entry removed.
-	- Acceptance signoff: Self-closed: mechanical, same text in every doc.
-	- Closed: 20261013-042810
-
 - A test that measures Settings text before its first text context can measure in the wrong font
 	- ID: 2026100909162017
 	- Type: Bug
@@ -2578,6 +2554,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
+
+- Add or change a "Copyright and license" section in the design docs
+	- ID: 2026101009221091
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261010-092210
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Add or change a "Copyright and license" section to design docs. All 'CC BY 4.0' (the longer text though). Don't change copyright holder if one already exists.
+	- Notes:
+		- Pre-next-cut.
+		- Only `design_docs/20261008-180516_automatic_settings.md` has one now, with Yottacore as the holder and a one-line license text. `design.md`, the uiux style guide and the other 15 design docs have none.
+	- Progress log:
+		- 20261013: Q: Where a doc has no holder yet, who is it?
+			- A: Jim Collier, with the same ID marker as the README footer.
+		- 20261013: Scope is `design.md`, `uiux-style-guide.md` and the 16 files in `design_docs/`. The repo's style guide, glossary and `build.md` are reference docs, not design docs, so they were left out.
+		- 20261013: Every one now ends with the same section: the copyright line, the CC BY 4.0 license by its full name with a link, and a no-warranty line. The year is the year each doc was first committed, 2026 for all. The automatic settings doc keeps Yottacore and got the longer text. Each TOC lists the new heading.
+	- Branch: doclicense
+	- Commit: f254710
+	- Test case: `cicd/tests/docs/run.py`, `cicd/tests/toc/run.py` and `cicd/tests/tables/run.py` pass. The TOC check fails on a copy with the new entry removed.
+	- Acceptance signoff: Self-closed: mechanical, same text in every doc.
+	- Closed: 20261013-042810
 
 - Settings: restore the old font list
 	- ID: 2026101009220980
