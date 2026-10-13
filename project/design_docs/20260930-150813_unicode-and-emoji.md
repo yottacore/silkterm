@@ -48,7 +48,7 @@ A terminal is a grid of cells, and fonts do not know that. SilkTerm picks one mo
 - A glyph from another font sits on the same baseline as the text beside it.
 
 - The font is found from one search order, the same on every platform:
-	- `font.family`, a comma-separated list. It is automatic until set, and automatic is the desktop's monospace family, or the built-in list where the desktop names none;
+	- `font.family`, a comma-separated list. While "Use system font" is on it is the desktop's monospace family followed by the built-in list, or the built-in list alone where the desktop names none;
 	- then the desktop's monospace family;
 	- then a built-in list;
 	- then whatever the generic monospace name finds, only if nothing above is installed.
@@ -109,7 +109,7 @@ Each fallback glyph is shaped once per pane, keyed by character, bold and italic
 
 One monospace family is pinned for every weight, because the shaper picks the best face per query and would otherwise let a bold run end up in a different family than the regular run beside it. Bold asks for the boldest weight the pinned family has, so it cannot escape into a proportional bold fallback.
 
-The search order in the Specification is the same on every platform. Until 2026-10-09 a "Use system font" switch put the desktop's family ahead of `font.family`; now the family is automatic until set, and automatic is the desktop's family, so there is nothing left to reorder. An earlier version dropped `font.family` entirely while following the desktop font. The same build and the same config then picked different fonts depending on the platform, and a configured list could be silently ignored. Every list is now always walked. A family that is not installed falls through to the next one, and the configured list still has effect as a fallback.
+The search order in the Specification is the same on every platform. Until 2026-10-09 the "Use system font" switch put the desktop's family ahead of `font.family`. Now the switch makes `font.family` itself the desktop's family followed by the built-in list, and a list set by hand is set aside until the switch goes off, so there is nothing left to reorder. An earlier version dropped `font.family` entirely while following the desktop font. The same build and the same config then picked different fonts depending on the platform, and a configured list could be silently ignored. Every list is now always walked. A family that is not installed falls through to the next one, and the configured list still has effect as a fallback.
 
 Platforms differ only in what they report, not in the rules applied to it. Windows has a system font size but no monospace family, so the automatic family there is the built-in list, with no special case. The same goes for a desktop with no font setting at all, which is why the rule asks what was detected rather than which platform is running.
 

@@ -531,7 +531,8 @@ rows:
 		tab: Text
 
 	## Each box switches its row below to the desktop's own monospace font.
-	## Where the desktop names none, the shipped list and 17 are used.
+	## Family keeps the built-in list behind it. Where the desktop names none,
+	## the built-in list and 17 are used.
 	SystemFont:
 		label: Use system font
 		kind: pair
