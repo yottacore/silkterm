@@ -59,22 +59,30 @@ fn join_peers() -> Option<crate::peers::Marker> {
 // One connection: a line in, the event to the loop, a reply out. False once
 // the loop is gone.
 fn answer(stream: impl std::io::Read + Write, proxy: &EventLoopProxy<UserEvent>) -> bool {
+	respond(stream, |line| match parse(line, crate::peers::own_key()) {
+		// event loop gone; the process is exiting
+		Ok(event) => proxy.send_event(event).is_ok().then(|| "ok".to_string()),
+		Err(e) => Some(format!("err {e:#}")),
+	})
+}
+
+// A line in, the reply `handle` gives it out. False when it gives none.
+fn respond(
+	stream: impl std::io::Read + Write,
+	handle: impl FnOnce(&str) -> Option<String>,
+) -> bool {
 	let mut reader = BufReader::new(stream);
 	let mut line = String::new();
 	if reader.read_line(&mut line).is_err() {
 		return true;
 	}
-	let reply = match parse(line.trim_end(), crate::peers::own_key()) {
-		Ok(event) => {
-			if proxy.send_event(event).is_err() {
-				return false; // event loop gone; the process is exiting
-			}
-			"ok\n".to_string()
-		}
-		Err(e) => format!("err {e:#}\n"),
+	let Some(reply) = handle(line.trim_end()) else {
+		return false;
 	};
 	// a window telling of a save does not wait for this
-	let _ = reader.into_inner().write_all(reply.as_bytes());
+	let _ = reader
+		.into_inner()
+		.write_all(format!("{reply}\n").as_bytes());
 	true
 }
 
@@ -129,22 +137,30 @@ pub fn serve(proxy: EventLoopProxy<UserEvent>) -> Option<CtlServer> {
 	// SAFETY: no PTY or render thread exists yet (set_var is unsafe under
 	// edition 2024 because of concurrent readers).
 	unsafe { std::env::set_var(ENV_SOCK, &name) };
-	std::thread::spawn(move || {
-		let mut waiting = first;
-		loop {
-			let connected = pipe::wait_for_client(&waiting);
-			let Some(next) = pipe::make(&wide, false) else {
-				return;
-			};
-			let current = std::mem::replace(&mut waiting, next);
-			if connected && !answer(pipe::Served(current), &proxy) {
-				return;
-			}
-		}
-	});
+	std::thread::spawn(move || serve_pipe(&wide, first, |served| answer(served, &proxy)));
 	Some(CtlServer {
 		_marker: join_peers(),
 	})
+}
+
+// Connections one at a time, until `answer` says to stop.
+#[cfg(windows)]
+fn serve_pipe(
+	wide: &[u16],
+	first: std::os::windows::io::OwnedHandle,
+	mut answer: impl FnMut(pipe::Served) -> bool,
+) {
+	let mut waiting = first;
+	loop {
+		let connected = pipe::wait_for_client(&waiting);
+		let Some(next) = pipe::make(wide, false) else {
+			return;
+		};
+		let current = std::mem::replace(&mut waiting, next);
+		if connected && !answer(pipe::Served(current)) {
+			return;
+		}
+	}
 }
 
 #[cfg(windows)]
@@ -369,23 +385,30 @@ fn open_pipe(path: &std::path::Path) -> std::io::Result<std::fs::File> {
 /// Client side: deliver one command to the window this shell runs inside.
 #[cfg(any(unix, windows))]
 pub fn send(cmd: &str) -> anyhow::Result<()> {
-	use anyhow::Context as _;
-	use std::io::Read;
-
 	let sock = std::env::var(ENV_SOCK)
 		.map_err(|_| anyhow::anyhow!("not inside a running SilkTerm window"))?;
+	send_at(std::path::Path::new(&sock), cmd)
+}
+
+#[cfg(any(unix, windows))]
+fn send_at(path: &std::path::Path, cmd: &str) -> anyhow::Result<()> {
+	use anyhow::Context as _;
+
 	#[cfg(unix)]
-	let mut stream = std::os::unix::net::UnixStream::connect(&sock).with_context(|| sock.clone())?;
+	let mut stream = std::os::unix::net::UnixStream::connect(path)
+		.with_context(|| path.display().to_string())?;
 	#[cfg(windows)]
-	let mut stream = open_pipe(std::path::Path::new(&sock)).with_context(|| sock.clone())?;
+	let mut stream = open_pipe(path).with_context(|| path.display().to_string())?;
 	stream
 		.write_all(cmd.as_bytes())
 		.and_then(|()| stream.write_all(b"\n"))?;
 	#[cfg(unix)]
 	let _ = stream.shutdown(std::net::Shutdown::Write);
-	// The server reads one line, so the pipe needs no half close.
+	// The server reads one line, so the pipe needs no half close. The reply is
+	// one line too, and read no further: a pipe's server disconnects once the
+	// reply is read, and a read after that fails rather than ending.
 	let mut reply = String::new();
-	stream.read_to_string(&mut reply)?;
+	BufReader::new(&mut stream).read_line(&mut reply)?;
 	let reply = reply.trim();
 	match reply.strip_prefix("err ") {
 		Some(e) => Err(anyhow::anyhow!("{e}")),
@@ -435,8 +458,8 @@ mod tests {
 		assert!(parse("saved\tabc", None).is_err());
 	}
 
-	// What a save sends reaches a listening window, and a socket nobody listens
-	// on any more reads as gone. Driven in a child copy of this test binary
+	// What a save sends reaches a listening window, a socket nobody listens on
+	// any more reads as gone, and a command from a shell gets its reply. Driven in a child copy of this test binary
 	// (`poke_child` below) started inside the folder, which binds and pokes by
 	// bare name: a full path under the run folder can pass the limit on a Unix
 	// socket path, 103 bytes on a Mac and 107 on Linux.
@@ -491,7 +514,50 @@ mod tests {
 			poke_at(std::path::Path::new("c.sock"), "saved\tabc"),
 			Told::Gone
 		);
+		let asked = std::path::Path::new("d.sock");
+		let listener = std::os::unix::net::UnixListener::bind(asked).unwrap();
+		let served = std::thread::spawn(move || {
+			for reply in ["ok", "err no such thing"] {
+				let (stream, _) = listener.accept().unwrap();
+				respond(stream, |_| Some(reply.to_string()));
+			}
+		});
+		if let Err(e) = send_at(asked, "reload") {
+			panic!("{e:#}");
+		}
+		let refused = send_at(asked, "reload").unwrap_err();
+		assert_eq!(refused.to_string(), "no such thing");
+		served.join().unwrap();
 		std::fs::write("done", "").unwrap();
+	}
+
+	// A command from a shell gets its reply over a window's pipe. The window
+	// disconnects once the reply is read, and reading on past it once made
+	// every command fail with exit 2 after the window had done it.
+	// Test ID: Esc2EAG
+	#[cfg(windows)]
+	#[test]
+	fn a_command_gets_its_reply_over_the_pipe() {
+		use std::os::windows::ffi::OsStrExt;
+		let name = PathBuf::from(format!(
+			r"\\.\pipe\silkterm-ctl-test-{}",
+			std::process::id()
+		));
+		let wide: Vec<u16> = name.as_os_str().encode_wide().chain(Some(0)).collect();
+		let first = pipe::make(&wide, true).unwrap();
+		let served = std::thread::spawn(move || {
+			let mut replies = ["ok", "err no such thing"].into_iter();
+			serve_pipe(&wide, first, |served| {
+				let reply = replies.next().map(str::to_string);
+				respond(served, |_| reply) && replies.len() > 0
+			});
+		});
+		if let Err(e) = send_at(&name, "reload") {
+			panic!("{e:#}");
+		}
+		let refused = send_at(&name, "reload").unwrap_err();
+		assert_eq!(refused.to_string(), "no such thing");
+		served.join().unwrap();
 	}
 
 	// Each way out a window can take, driven in a child copy of this test binary
