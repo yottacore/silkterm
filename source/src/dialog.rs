@@ -410,6 +410,29 @@ impl DialogWin {
 		}
 	}
 
+	/// Another window saved the settings file (`SettingsDialog::follow_file`).
+	pub fn follow_file(&mut self, base: config::Settings) {
+		if let Content::Settings(dialog) = &mut self.content {
+			dialog.follow_file(base);
+		}
+	}
+
+	/// Whether an Apply has to read the file back, since another window saved
+	/// while this one held changes.
+	pub fn take_behind(&mut self) -> bool {
+		match &mut self.content {
+			Content::Settings(dialog) => dialog.take_behind(),
+			Content::About { .. } => false,
+		}
+	}
+
+	/// Show these values with nothing changed, as at open.
+	pub fn start_from(&mut self, base: config::Settings) {
+		if let Content::Settings(dialog) = &mut self.content {
+			dialog.start_from(base);
+		}
+	}
+
 	/// A background shell scan arrived while this dialog was open. Fold it into the
 	/// settings BOTH copies hold: the edited one so the user sees what turned up,
 	/// and the baseline so the fold does not read as an edit they made.

@@ -606,6 +606,7 @@ fn persist_state(orig: &Settings, edited: &Settings) {
 /// Write the machine test's pick, and the hardware it ran on, to the state file.
 #[must_use]
 pub fn keep_tested(profile: crate::profile::Profile, hardware: Option<&str>) -> Kept {
+	let _lock = crate::peers::save_lock();
 	let Some(path) = state_path() else {
 		return Kept::Unwritable("no state file location".to_string());
 	};
@@ -1633,6 +1634,29 @@ pub fn keep_session(live: &Settings, reloaded: &mut Settings, wallpaper_locked: 
 	crate::fields::fill(reloaded, None);
 }
 
+/// What a reload after another window's save keeps of this window's own: what
+/// the state file holds, which follows this window's size and this machine,
+/// and the picture rotation chose, unless the save moved the image or the
+/// folder.
+pub fn keep_window_state(live: &Settings, reloaded: &mut Settings) {
+	reloaded.remembered_columns = live.remembered_columns;
+	reloaded.remembered_rows = live.remembered_rows;
+	reloaded.remembered_maximized = live.remembered_maximized;
+	reloaded.remembered_font_zoom = live.remembered_font_zoom;
+	reloaded.monitor_sizes.clone_from(&live.monitor_sizes);
+	reloaded.rated_hardware.clone_from(&live.rated_hardware);
+	reloaded.tested_profile = live.tested_profile;
+	crate::fields::fill(reloaded, None);
+	// the pick is a field only, as rotation leaves it (`set_live`)
+	let picked = reloaded.wallpaper.is_none()
+		&& reloaded.wallpaper_raw == live.wallpaper_raw
+		&& reloaded.rotation_folder().is_some()
+		&& reloaded.rotation_folder() == live.rotation_folder();
+	if picked {
+		reloaded.wallpaper.clone_from(&live.wallpaper);
+	}
+}
+
 /// A wallpaper named for the session, at launch (`--wallpaper-file`) or while
 /// running (`--wallpaper`). Naming one is a deliberate choice for the run, so a
 /// file with the wallpaper switched off does not swallow it. Both go through
@@ -1735,6 +1759,21 @@ fn read_doc(path: &std::path::Path) -> Result<shcl::Document, Unread> {
 enum Unread {
 	Missing,
 	Failed(std::io::Error),
+}
+
+// Writes to the settings file, by this process, since it started. The window
+// tells the others when this moves (`saves`).
+static SAVES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many times this process has written the settings file. The state file
+/// and the shell profiles are not counted.
+pub fn saves() -> u64 {
+	SAVES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The settings file this process runs on: `--config`, else the box's own.
+pub fn settings_file() -> Option<PathBuf> {
+	config_path()
 }
 
 // The settings file as this process last read or wrote it.
@@ -1940,6 +1979,9 @@ pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> anyhow:
 fn write_config_keeping(path: &std::path::Path, text: &str) -> anyhow::Result<Option<PathBuf>> {
 	let kept = publish_keeping(path, text, shcl::write_file_atomic)?;
 	note_seen(path, text);
+	if may_write(path) && config_path().as_deref() == Some(path) {
+		SAVES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+	}
 	for line in restated_launch_messages(path, text) {
 		eprintln!("{line}");
 	}
@@ -2510,6 +2552,8 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	let Some(path) = config_path() else {
 		return true;
 	};
+	// another window's save between this read and this write would be lost
+	let _lock = crate::peers::save_lock();
 	persist_state(orig, edited);
 	let (mut doc, missing) = match read_doc(&path) {
 		Ok(doc) => (doc, false),
@@ -2888,6 +2932,9 @@ fn load() -> Settings {
 	let Some(path) = config_path() else {
 		return Settings::default();
 	};
+	// a launch rewrites the file in steps, and a save in another window must
+	// not land between them
+	let _lock = crate::peers::save_lock();
 	if !path.exists() && may_write(&path) {
 		if let Some(dir) = path.parent() {
 			let _ = std::fs::create_dir_all(dir);
@@ -5493,6 +5540,7 @@ pub fn revert_keys(keys: &[&str]) {
 	if keys.is_empty() {
 		return;
 	}
+	let _lock = crate::peers::save_lock();
 	let Some(path) = config_path() else { return };
 	if config_open_elsewhere(&path) {
 		note_config_busy(&path);
@@ -5521,6 +5569,7 @@ pub fn disable_keys(keys: &[&str]) {
 	if keys.is_empty() {
 		return;
 	}
+	let _lock = crate::peers::save_lock();
 	let Some(path) = config_path() else { return };
 	if config_open_elsewhere(&path) {
 		note_config_busy(&path);
@@ -6027,6 +6076,7 @@ pub struct RatingLines {
 /// dialog's save would write.
 #[must_use]
 pub fn keep_rating(lines: RatingLines) -> Kept {
+	let _lock = crate::peers::save_lock();
 	let Some(path) = config_path() else {
 		return Kept::Unwritable("no settings file location".to_string());
 	};
@@ -17416,5 +17466,135 @@ mod tests {
 				rating_check(&case, &mut rng);
 			});
 		}
+	}
+}
+
+// Two windows on one settings file (peers.rs).
+#[cfg(test)]
+mod peer_tests {
+	use super::*;
+	use crate::ui_spec::Key;
+	use knobs::Value;
+
+	// as a launch reads it
+	fn read_text(text: &str) -> Settings {
+		let p = std::path::Path::new("test.shcl");
+		settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text))
+	}
+
+	fn own(s: &Settings, key: Key) -> Option<Value> {
+		s.model.values.own.get(key.name()).cloned()
+	}
+
+	fn scratch_config(name: &str, text: &str) -> PathBuf {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{name}_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, text).unwrap();
+		set_config_override(path.clone());
+		let _ = load(); // the launch's own writes, out of the way
+		path
+	}
+
+	// Every window saves what it changed over what it loaded, at the same
+	// moment as the others, and each change is in the file after.
+	// Test ID: EsaCcC6
+	#[test]
+	fn saves_at_the_same_moment_keep_each_others_change() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let path = scratch_config("peersaves", "performance:\n\tautomatic: false\n");
+		// each in its slider's range for every round
+		let keys = [
+			(Key::Margin, 1.0, 5.0),
+			(Key::WheelLines, 1.0, 1.0),
+			(Key::MinimapWidth, 100.0, 10.0),
+			(Key::ScrollbarThickness, 10.0, 7.0),
+		];
+		for round in 1..=6u32 {
+			let start = std::sync::Arc::new(std::sync::Barrier::new(keys.len()));
+			let windows: Vec<_> = keys
+				.iter()
+				.map(|&(key, base, step)| {
+					let start = start.clone();
+					std::thread::spawn(move || {
+						let loaded = load();
+						let mut edited = loaded.clone();
+						let v = base + step * f64::from(round);
+						crate::fields::set(&mut edited, key, &Value::Float(v), None);
+						start.wait();
+						assert!(persist(&loaded, &edited));
+						v
+					})
+				})
+				.collect();
+			let wanted: Vec<f64> = windows.into_iter().map(|w| w.join().unwrap()).collect();
+			let back = load();
+			for ((key, ..), v) in keys.iter().zip(wanted) {
+				let got = own(&back, *key).map(|got| got.as_f64());
+				assert_eq!(got, Some(v), "round {round}: {key:?} was lost");
+			}
+		}
+		let _ = std::fs::remove_dir_all(path.parent().unwrap());
+	}
+
+	// The others hear of a write to the settings file, and never of the state
+	// file, which holds this window's size.
+	// Test ID: EsaCcC7
+	#[test]
+	fn only_a_settings_write_is_news() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let path = scratch_config("peersaid", "");
+		let loaded = load();
+		let before = saves();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 7;
+		assert!(persist(&loaded, &sized));
+		assert_eq!(saves(), before, "a size is not a setting");
+		let mut edited = sized.clone();
+		crate::fields::set(
+			&mut edited,
+			Key::Minimap,
+			&Value::Bool(!sized.minimap),
+			None,
+		);
+		assert!(persist(&sized, &edited));
+		assert_eq!(saves(), before + 1);
+		let _ = std::fs::remove_dir_all(path.parent().unwrap());
+	}
+
+	// What another window's save leaves of this one: its size and the state
+	// file's lines, and the picture rotation chose, until the save names
+	// another picture or folder.
+	// Test ID: EsaCcC8
+	#[test]
+	fn a_reload_for_another_window_keeps_this_windows_own() {
+		let folder = |dir: &str| format!("wallpaper:\n\trotate:\n\t\tfolder: \"{dir}\"\n");
+		let mut live = read_text(&folder("/pics/a"));
+		live.remembered_columns = 111;
+		live.remembered_rows = 33;
+		live.remembered_font_zoom = 2;
+		live.rated_hardware = "this box".into();
+		live.wallpaper = Some(PathBuf::from("/pics/a/3.png"));
+
+		let mut same = read_text(&format!("{}font:\n\tsize: 20\n", folder("/pics/a")));
+		keep_window_state(&live, &mut same);
+		assert_eq!((same.remembered_columns, same.remembered_rows), (111, 33));
+		assert_eq!(same.remembered_font_zoom, 2);
+		assert_eq!(same.rated_hardware, "this box");
+		assert_eq!(same.wallpaper, live.wallpaper, "the pick stays");
+
+		let mut moved = read_text(&folder("/pics/b"));
+		keep_window_state(&live, &mut moved);
+		assert_eq!(moved.wallpaper, None, "another folder picks again");
+
+		let mut named = read_text(&format!(
+			"{}\timage: \"/pics/one.png\"\n",
+			folder("/pics/a")
+		));
+		keep_window_state(&live, &mut named);
+		assert_eq!(named.wallpaper, Some(PathBuf::from("/pics/one.png")));
 	}
 }
