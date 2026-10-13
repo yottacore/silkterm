@@ -155,7 +155,7 @@ A titled section within a tab of the Settings dialog, separated by a rule and cl
 
 ## Gutter
 
-Chrome that holds no interactive element - the strip the Settings dialog's tabs stand on. It is a theme color of its own, recessed against the panel in both dark and light mode.
+Chrome that holds no interactive element - the strip the Settings dialog's tabs sit on. It is a theme color of its own, recessed against the panel in both dark and light mode.
 
 ## Highlight
 

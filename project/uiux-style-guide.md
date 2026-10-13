@@ -100,9 +100,9 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 ### Tabs
 
-- Tabs run left to right along the top, on the gutter strip, standing on the line that divides that strip from the rows below. The dialog code can list them down the left side instead, on the same strip, each as wide as the list. SilkTerm keeps them on top.
+- Tabs run down the left side, on the gutter strip, each as wide as the list, with a line along its right dividing it from the rows. SilkTerm's are Silk, Appearance, Movement, Window, Shell and Keys, with Themes, Background, Text and Cursor under Appearance. The dialog code can put them left to right along the top instead, standing on the line that divides the strip from the rows below.
 
-- A tab may hold tabs. Across the top its sub-tabs show in a row under the strip only while it is current. Down the side they are always listed, stepped in under it. The current tab and the tab it sits under both read as current. Any depth works, though more than two levels is poor design.
+- A tab may hold tabs. Down the side they are always listed, stepped in under it. Across the top its sub-tabs show in a row under the strip only while it is current. The current tab and the tab it sits under both read as current. A click on the parent opens its first sub-tab, and does nothing while one of them is already open. Any depth works, though more than two levels is poor design.
 
 - Tabs take no keyboard focus. They are clicked, or changed with the tab chords, and otherwise say where you are.
 
@@ -354,6 +354,6 @@ Things the built interface does differently from the rules above. Each is a smal
 
 - The About box pads its `Key: value` lines with extra spaces, which line nothing up in a proportional font. Cosmetic, and shared with the text `--about` prints.
 
-- The Silk tab makes eight, one past the ceiling above. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
+- The Silk tab made eight, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
 
-- The Keys tab makes nine. No other tab's subject takes in the hotkeys. The nine tabs are now the widest thing in the dialog, so they set the panel's width on every tab.
+- The Keys tab makes nine. No other tab's subject takes in the hotkeys. Down the left, the list adds its own width to the panel, set by its widest entry.

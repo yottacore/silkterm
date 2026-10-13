@@ -7381,6 +7381,36 @@ performance:
 	# check_next_run: false  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Theme and colors
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+
+## A built-in theme, one saved in Settings, or "custom" for the colors below.
+theme: SilkTerm
+theme_mode: dark
+
+## The custom theme's colors. A color changed in Settings under any other
+## theme is kept at the end of this file, as a change to that theme. The two
+## scrollbar colors are not part of any theme.
+colors:
+	## Take the text and cursor colors from the wallpaper instead: the text is
+	## placed as far as it can get from the picture's brightest areas, in a hue
+	## complementary to the picture's own. Changing either color in Settings
+	## turns this off, and nothing about the derived colors is saved.
+	# from_wallpaper: true  ## Default
+	# background: "#000000"
+	# foreground: "#88eecc"  ## Default
+	# cursor: "#8a3fa4"  ## Default
+	# highlight: "#c8a05a"
+	# focus: "#4086ff"
+	# menu_background: "#36363b"
+	# menu_foreground: "#f0f0f2"
+	# dialog_background: "#20202a"
+	# dialog_foreground: "#e2e2ea"
+	# gutter: "#16161e"
+	# scrollbar_thumb: "#8a8a92"
+	# scrollbar_trough: "#2e2e36"
+
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Background and transparency
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
@@ -7576,36 +7606,6 @@ scroll:
 		# enabled: true  ## Default
 		# width: 100.0  ## Default
 		# tui_process_whitelist: "less tmux screen"  ## Default
-
-## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Theme and colors
-## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-
-## A built-in theme, one saved in Settings, or "custom" for the colors below.
-theme: SilkTerm
-theme_mode: dark
-
-## The custom theme's colors. A color changed in Settings under any other
-## theme is kept at the end of this file, as a change to that theme. The two
-## scrollbar colors are not part of any theme.
-colors:
-	## Take the text and cursor colors from the wallpaper instead: the text is
-	## placed as far as it can get from the picture's brightest areas, in a hue
-	## complementary to the picture's own. Changing either color in Settings
-	## turns this off, and nothing about the derived colors is saved.
-	# from_wallpaper: true  ## Default
-	# background: "#000000"
-	# foreground: "#88eecc"  ## Default
-	# cursor: "#8a3fa4"  ## Default
-	# highlight: "#c8a05a"
-	# focus: "#4086ff"
-	# menu_background: "#36363b"
-	# menu_foreground: "#f0f0f2"
-	# dialog_background: "#20202a"
-	# dialog_foreground: "#e2e2ea"
-	# gutter: "#16161e"
-	# scrollbar_thumb: "#8a8a92"
-	# scrollbar_trough: "#2e2e36"
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Window
@@ -11903,10 +11903,10 @@ mod tests {
 		assert_eq!(new.matches(paragraph).count(), 1, "{new}");
 	}
 
-	// A new file follows the Settings dialog's tabs: Background, Text, Cursor,
-	// Movement, Themes, Window, Shell. The Silk tab borrows rows from the others,
+	// A new file follows the Settings dialog's tabs: Themes, Background, Text,
+	// Cursor, Movement, Window, Shell. The Silk tab borrows rows from the others,
 	// so its performance block leads and the rest keep their home tab's place.
-	// The hotkeys have no tab yet (2026100307252506) and sit before Shell.
+	// The hotkeys sit before Shell, though their tab comes after it.
 	// Test ID: Er2UFeO
 	#[test]
 	fn the_template_blocks_follow_the_dialog() {
@@ -11926,6 +11926,9 @@ mod tests {
 			roots,
 			[
 				"performance",
+				"theme",
+				"theme_mode",
+				"colors",
 				"transparency",
 				"wallpaper",
 				"font",
@@ -11933,9 +11936,6 @@ mod tests {
 				"cursor",
 				"selection",
 				"scroll",
-				"theme",
-				"theme_mode",
-				"colors",
 				"window",
 				"hyperlinks",
 				"keys",

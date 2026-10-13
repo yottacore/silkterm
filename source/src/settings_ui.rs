@@ -670,8 +670,8 @@ enum Focus {
 }
 
 /// Where the user was looking when the dialog closed, so reopening it shortly
-/// after opens on the same tab and scroll position instead of the top of
-/// Appearance. Only the view - edits are discarded on close as before.
+/// after opens on the same tab and scroll position instead of the top of the
+/// first tab. Only the view - edits are discarded on close as before.
 #[derive(Debug, Clone, Copy)]
 pub struct View {
 	tab: usize,
@@ -6251,6 +6251,13 @@ mod tests {
 	pub(super) fn mk_dialog(max_h: f32) -> SettingsDialog {
 		mk_dialog_at(max_h, 1.0)
 	}
+	// A tab by its title, since moving a tab moves every number after it.
+	fn tab_named(title: &str) -> usize {
+		tab_titles()
+			.iter()
+			.position(|t| *t == title)
+			.unwrap_or_else(|| panic!("no {title} tab"))
+	}
 	// Everything a real dialog is handed arrives in physical pixels, so a scale
 	// of 2 means twice the line height, label width, tab widths and height cap.
 	fn mk_dialog_at(max_h: f32, scale: f32) -> SettingsDialog {
@@ -6449,7 +6456,7 @@ mod tests {
 		assert!(d.thumb().is_none());
 		// tight cap: window clamps, the (tallest) appearance tab overflows
 		let mut d = mk_dialog(400.0);
-		d.tab = 1; // Background
+		d.tab = tab_named("Background");
 		assert!(d.size().1 <= 400.0);
 		assert!(d.max_scroll() > 0.0);
 		assert!(d.thumb().is_some());
@@ -7020,7 +7027,7 @@ mod tests {
 			let (w, h) = d.natural;
 			d.set_size(w * scale, h * scale);
 			let (mut packed, mut split, mut kept) = (0, 0, Vec::new());
-			let column = d.rect.x + super::lay().pad + d.label_w;
+			let column = d.content_x() + super::lay().pad + d.label_w;
 			for lead in 0..d.specs.len() {
 				let (_, parts, _) = SettingsDialog::line_of(d.specs, lead);
 				if d.specs[lead].beside || parts < 2 {
@@ -7042,7 +7049,9 @@ mod tests {
 					kept.push(d.specs[lead].key);
 				}
 				let indent = f32::from(d.specs[lead].indent) * super::lay().indent;
-				assert!((d.label_x(lead) - (d.rect.x + super::lay().pad + indent)).abs() < 0.01);
+				assert!(
+					(d.label_x(lead) - (d.content_x() + super::lay().pad + indent)).abs() < 0.01
+				);
 				for i in lead..lead + parts {
 					let key = d.specs[i].key;
 					let bx = d.checkbox(i);
@@ -7390,24 +7399,32 @@ mod tests {
 	// The tab strip is chrome. It travels only far enough to keep the current tab
 	// in view, and never with the rows' sideways scroll - a tab panned off the
 	// window edge could not be clicked, which is how you leave a tab that will
-	// not fit.
+	// not fit. Both sides, over SilkTerm's own tabs.
 	// Test ID: EpOZLYG
 	#[test]
 	fn the_tab_strip_keeps_the_current_tab_in_the_window() {
-		let mut d = mk_dialog(4000.0);
-		d.set_size(d.size().0 - 300.0, d.size().1);
-		assert!(d.max_hscroll() > 0.0);
-		for tab in 0..tab_titles().len() {
-			d.tab = tab;
-			for hscroll in [0.0, d.max_hscroll() / 2.0, d.max_hscroll()] {
-				d.hscroll = hscroll;
-				let r = d.tab_rect(tab);
-				assert!(
-					r.x >= d.rect.x - 0.01 && r.x + r.w <= d.rect.x + d.rect.w + 0.01,
-					"tab {tab} at hscroll {hscroll} runs from {} to {}",
-					r.x,
-					r.x + r.w
-				);
+		let paths: Vec<&str> = tab_nodes().iter().map(|n| n.path).collect();
+		for side in [TabsSide::Top, TabsSide::Left] {
+			let _tabs = stand_in_tabs(&paths, side);
+			let mut d = mk_dialog(4000.0);
+			d.set_size(d.size().0 - 300.0, d.size().1);
+			assert!(d.max_hscroll() > 0.0);
+			for tab in 0..tab_titles().len() {
+				d.tab = tab;
+				for hscroll in [0.0, d.max_hscroll() / 2.0, d.max_hscroll()] {
+					d.hscroll = hscroll;
+					for node in d.active_path() {
+						let r = d.tab_rect(node);
+						assert!(
+							r.w > 0.0
+								&& r.x >= d.rect.x - 0.01
+								&& r.x + r.w <= d.rect.x + d.rect.w + 0.01,
+							"{side:?}: tab {node} at hscroll {hscroll} runs from {} to {}",
+							r.x,
+							r.x + r.w
+						);
+					}
+				}
 			}
 		}
 	}
@@ -7434,10 +7451,13 @@ mod tests {
 	}
 
 	// The strip is chrome: shorter than a footer button, dropped clear of the
-	// panel edge, and closed off by a rule the rows start below.
+	// panel edge, and closed off by a rule the rows start below. That is the
+	// look across the top, so SilkTerm's own tabs are put there for it.
 	// Test ID: Em3Pif3
 	#[test]
 	fn the_tabs_stand_on_the_line_that_closes_their_strip() {
+		let paths: Vec<&str> = tab_nodes().iter().map(|n| n.path).collect();
+		let _tabs = stand_in_tabs(&paths, TabsSide::Top);
 		let d = mk_dialog(2000.0);
 		let gut = d.gutter_rect();
 		let tab = d.tab_rect(0);
@@ -7523,15 +7543,18 @@ mod tests {
 				let indent = f32::from(d.specs[i].indent);
 				seen_indented |= indent > 0.0;
 				assert!(
-					(d.label_x(i) - (d.rect.x + super::lay().pad + indent * super::lay().indent))
+					(d.label_x(i)
+						- (d.content_x() + super::lay().pad + indent * super::lay().indent))
 						.abs() < 0.01
 				);
 				assert!(
-					d.label_x(i) >= d.rect.x + super::lay().pad,
+					d.label_x(i) >= d.content_x() + super::lay().pad,
 					"a label never steps left of the panel pad"
 				);
 				// every control on the tab starts in the same column
-				assert!((d.control_x(i) - (d.rect.x + super::lay().pad + d.label_w)).abs() < 0.01);
+				assert!(
+					(d.control_x(i) - (d.content_x() + super::lay().pad + d.label_w)).abs() < 0.01
+				);
 				assert!(
 					d.label_x(i) + super::lay().indent <= d.control_x(i),
 					"the label column still clears the deepest indent"
@@ -9457,8 +9480,8 @@ mod tests {
 	fn the_scale_factor_only_multiplies_the_layout() {
 		let mut base = mk_dialog(4000.0);
 		let mut hidpi = mk_dialog_at(4000.0, 2.0);
-		base.tab = 1; // Background, where the Transparency checkbox is
-		hidpi.tab = 1;
+		base.tab = tab_named("Background"); // where the Transparency checkbox is
+		hidpi.tab = base.tab;
 		let ((bw, bh), (hw, hh)) = (base.size(), hidpi.size());
 		assert!(
 			(hw - bw * 2.0).abs() < 0.01 && (hh - bh * 2.0).abs() < 0.01,
@@ -9742,7 +9765,7 @@ mod tests {
 	#[test]
 	fn keyboard_skips_headers_and_disabled() {
 		let mut d = mk_dialog(2000.0);
-		d.tab = 1; // Background
+		d.tab = tab_named("Background");
 		// with transparency + scrim off, the opacity/blur/scrim rows are disabled
 		d.edited.transparent_background = false;
 		d.edited.text_scrim = false;
@@ -9756,7 +9779,7 @@ mod tests {
 	#[test]
 	fn space_toggles_focused_boolean() {
 		let mut d = mk_dialog(2000.0);
-		d.tab = 1;
+		d.tab = tab_named("Background");
 		d.key_tab(); // first focusable = Wallpaper (a toggle)
 		let before = d.get_toggle(super::Key::BgEnabled);
 		d.key_space();
@@ -9769,15 +9792,21 @@ mod tests {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
 		// slider: focus the scroll-speed slider, nudge it both ways
-		d.tab = 5;
-		d.key_tab();
+		let i = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::SingleScreenTau)
+			.unwrap();
+		d.tab = d.specs[i].tab;
+		d.focus = Some(super::Focus::Row(i, 0));
+		d.set_f32(Key::SingleScreenTau, 50.0);
 		let base = d.get_f32(Key::SingleScreenTau);
 		d.key_horizontal(-1);
 		let lower = d.get_f32(Key::SingleScreenTau);
-		assert!(lower <= base);
+		assert!(lower < base);
 		d.key_horizontal(1);
 		d.key_horizontal(1);
-		assert!(d.get_f32(Key::SingleScreenTau) >= lower);
+		assert!(d.get_f32(Key::SingleScreenTau) > lower);
 		// radio: focus the (always-enabled) bg-fit radio and move its selection
 		let i = d.specs.iter().position(|s| s.key == Key::BgFit).unwrap();
 		d.tab = d.specs[i].tab;
@@ -12709,15 +12738,15 @@ mod tests {
 	}
 
 	// A tree of the test's own over the real leaves, on the side asked for; both
-	// go back when the guard drops.
+	// go back when the guard drops. Two parents, where SilkTerm's own has one.
 	const NESTED: &[&str] = &[
 		"Silk",
 		"Look",
+		"Look/Themes",
 		"Look/Background",
 		"Look/Text",
 		"Look/Cursor",
 		"Movement",
-		"Themes",
 		"Window",
 		"More",
 		"More/Shell",
@@ -12757,21 +12786,24 @@ mod tests {
 		let mut d = mk_dialog(2000.0);
 		let one_row = SettingsDialog::gutter_h_for(d.line_h, 1);
 		assert!((d.gutter_rect().h - one_row).abs() < 0.01);
-		for node in [2, 3, 4, 9, 10] {
+		for node in [2, 3, 4, 5, 9, 10] {
 			assert_eq!(d.tab_rect(node).w, 0.0, "sub-tab {node} is not on show");
 		}
 		let look = d.tab_rect(1);
 		assert!(look.w > 0.0, "its parent is");
 		tap(&mut d, 1);
-		assert_eq!(d.tab, 1, "Look opens Background, its first");
+		assert_eq!(d.tab, 1, "Look opens Themes, its first");
 		assert_eq!(d.active_path(), vec![1, 2]);
 		assert!((d.gutter_rect().h - SettingsDialog::gutter_h_for(d.line_h, 2)).abs() < 0.01);
-		let bg = d.tab_rect(2);
+		let themes = d.tab_rect(2);
 		assert!(
-			bg.w > 0.0 && bg.y > look.y + look.h - 0.01,
+			themes.w > 0.0 && themes.y > look.y + look.h - 0.01,
 			"the sub-tabs sit in a row under the first"
 		);
-		assert!(d.rows_y0() > bg.y + bg.h, "and the rows begin below them");
+		assert!(
+			d.rows_y0() > themes.y + themes.h,
+			"and the rows begin below them"
+		);
 		assert_eq!(d.tab_rect(9).w, 0.0, "another tab's sub-tabs stay hidden");
 		tap(&mut d, 1);
 		assert_eq!(
@@ -12795,16 +12827,16 @@ mod tests {
 		let _tabs = stand_in_tabs(NESTED, TabsSide::Top);
 		let mut d = mk_dialog(2000.0);
 		d.set_mods(false, false, true);
-		d.tab = 3; // Cursor, the last under Look
+		d.tab = 4; // Cursor, the last under Look
 		d.key_tab();
-		assert_eq!(d.tab, 4, "on to Movement");
+		assert_eq!(d.tab, 5, "on to Movement");
 		d.set_mods(false, true, true);
 		d.key_tab();
-		assert_eq!(d.tab, 3, "and back to Cursor");
+		assert_eq!(d.tab, 4, "and back to Cursor");
 		d.tab = 0;
 		d.set_mods(false, false, true);
 		d.key_page(true);
-		assert_eq!(d.tab, 1, "Silk steps into Look at Background");
+		assert_eq!(d.tab, 1, "Silk steps into Look at Themes");
 		d.tab = 8;
 		d.switch_tab(true);
 		assert_eq!(d.tab, 0, "Keys, the last under More, wraps to Silk");
@@ -12856,7 +12888,7 @@ mod tests {
 		assert_eq!(
 			d.active_path(),
 			vec![1, 3],
-			"Text and Look both read as current"
+			"Background and Look both read as current"
 		);
 		// a short window slides the list only far enough to keep the current tab in it
 		d.tab = 8;
@@ -12882,5 +12914,43 @@ mod tests {
 		tap(&mut d, 1);
 		assert_eq!(d.tab, 1);
 		assert_eq!(d.focus, None);
+	}
+
+	// SilkTerm's own tabs: a list down the left, with Appearance over the four
+	// that change how the text and its backdrop look.
+	// Test ID: EsZuaQv
+	#[test]
+	fn silkterms_tabs_go_down_the_left_with_appearance_over_four() {
+		assert_eq!(super::ui().tabs_side, TabsSide::Left);
+		let tree: Vec<(&str, u8)> = super::ui()
+			.tab_tree
+			.iter()
+			.map(|n| (n.title, n.depth))
+			.collect();
+		assert_eq!(
+			tree,
+			[
+				("Silk", 0),
+				("Appearance", 0),
+				("Themes", 1),
+				("Background", 1),
+				("Text", 1),
+				("Cursor", 1),
+				("Movement", 0),
+				("Window", 0),
+				("Shell", 0),
+				("Keys", 0),
+			]
+		);
+		// Appearance holds no rows; a click on it opens Themes, its first,
+		// and from under it stays put, since it already reads as current
+		let mut d = mk_dialog(2000.0);
+		assert_eq!(d.tab, 0);
+		tap(&mut d, 1);
+		assert_eq!(d.tab, tab_named("Themes"));
+		d.tab = tab_named("Cursor");
+		tap(&mut d, 1);
+		assert_eq!(d.tab, tab_named("Cursor"));
+		assert_eq!(d.active_path(), vec![1, 5]);
 	}
 }

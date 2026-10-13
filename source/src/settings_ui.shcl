@@ -19,12 +19,12 @@
 
 ## In order. "A/B" is tab B under tab A; a tab with tabs under it holds no
 ## rows of its own, and a heading below names the tab it is on by that path.
-tabs: "Silk", "Background", "Text", "Cursor", "Movement", "Themes", "Window", "Shell", "Keys"
+tabs: "Silk", "Appearance", "Appearance/Themes", "Appearance/Background", "Appearance/Text", "Appearance/Cursor", "Movement", "Window", "Shell", "Keys"
 
 ## top: a row of tabs across the top, where a tab's sub-tabs show in a second
 ## row only while it is the current one. left: a list down the left side with
 ## every tab in it, sub-tabs indented under their parent.
-tabs_side: top
+tabs_side: left
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Layout
@@ -38,7 +38,7 @@ tabs_side: top
 layout:
 
 	## Panel
-	width: 540                 ## floor; the widest label, button row or tab strip wins
+	width: 540                 ## floor; the widest label, button row or top tab strip wins
 	pad: 18                    ## margin inside all four panel edges
 	tabs_gap: 10               ## tab strip -> first row
 	buttons_gap: 28            ## last row -> footer buttons
@@ -100,7 +100,8 @@ layout:
 	## Tabs. Across the top they sit on the gutter strip, standing on the line
 	## that separates it from the rows below - so they are shorter than a footer
 	## button and start a little below the panel's own edge. Down the left they
-	## are a list on the same strip, each as wide as the list.
+	## are a list on the same strip, each as wide as the list, and the list's
+	## width goes on top of the panel's.
 	tab_pad: 22                ## clear space either side of a tab's title
 	tab_height: 24             ## floor
 	tab_pad_v: 6               ## tab grows to the UI line height plus this
@@ -392,14 +393,138 @@ rows:
 		group: profile
 		help: "How sharply scrolling stops on the last line."
 
-	## ---------------------------------------------------------------- Background
+	## -------------------------------------------------------------------- Themes
 
 	## A heading whose label is its own tab's title says nothing the tab strip
 	## has not, so it draws nothing - but it still assigns the rows below it.
+	Themes:
+		kind: heading
+		label: Themes
+		tab: Appearance/Themes
+
+	Theme:
+		label: Theme
+		kind: dropdown
+		setting: theme
+		help: "The color scheme the terminal and this dialog follow."
+
+	ThemeMode:
+		label: Mode
+		kind: dropdown
+		options: "Dark", "Light", "System"
+		indent: 1
+		setting: theme_mode
+		help: "Which variant of the theme to use. System follows the desktop."
+
+	ThemeActions:
+		label: ""
+		kind: buttons
+		options: "Save", "Save as…", "Rename…", "Delete"
+		help: "Save keeps the colors below under this theme's name. Only a saved theme can be renamed or deleted."
+
+	Colors:
+		kind: heading
+		label: Colors
+		tab: Appearance/Themes
+
+	ColBg:
+		label: Terminal background
+		kind: color
+		setting: colors.background
+		group: theme
+
+	ColFromWallpaper:
+		label: Text colors from wallpaper
+		kind: toggle
+		indent: 1
+		setting: colors.from_wallpaper
+		help: "Pick text and cursor colors that stand out against the wallpaper."
+
+	ColFg:
+		label: Foreground
+		kind: color
+		setting: colors.foreground
+		auto: ColFromWallpaper
+		rule: wallpaper_fg
+		group: theme
+
+	ColCursor:
+		label: Cursor
+		kind: color
+		setting: colors.cursor
+		auto: ColFromWallpaper
+		rule: wallpaper_cursor
+		group: theme
+
+	ColDialogBg:
+		label: Dialog background
+		kind: color
+		setting: colors.dialog_background
+		group: theme
+
+	ColDialogFg:
+		label: Dialog text
+		kind: color
+		indent: 1
+		setting: colors.dialog_foreground
+		group: theme
+
+	ColMenuBg:
+		label: Menu background
+		kind: color
+		indent: 1
+		setting: colors.menu_background
+		group: theme
+
+	ColMenuFg:
+		label: Menu text
+		kind: color
+		indent: 1
+		setting: colors.menu_foreground
+		group: theme
+
+	ColGutter:
+		label: Gutter
+		kind: color
+		indent: 1
+		setting: colors.gutter
+		group: theme
+		help: "Empty areas around the controls, such as the strip these tabs are on."
+
+	ColHighlight:
+		label: Highlight
+		kind: color
+		indent: 1
+		setting: colors.highlight
+		group: theme
+		help: "Used for the active pane's border, slider handles, revert arrows and the default button."
+
+	ColFocus:
+		label: Focus
+		kind: color
+		indent: 1
+		setting: colors.focus
+		group: theme
+		help: "Marks the control the keyboard is on."
+
+	ColScrollbarThumb:
+		label: Scrollbar handle
+		kind: color
+		setting: colors.scrollbar_thumb
+		help: "Also colors the minimap marker. Themes don't change this color or Track."
+
+	ColScrollbarTrough:
+		label: Track
+		kind: color
+		indent: 1
+		setting: colors.scrollbar_trough
+
+	## ---------------------------------------------------------------- Background
+
 	Background:
 		kind: heading
 		label: Background
-		tab: Background
+		tab: Appearance/Background
 
 	BgEnabled:
 		label: Wallpaper
@@ -528,7 +653,7 @@ rows:
 	Font:
 		kind: heading
 		label: Font
-		tab: Text
+		tab: Appearance/Text
 
 	## Each box switches its row below to the desktop's own monospace font.
 	## Family keeps the built-in list behind it. Where the desktop names none,
@@ -572,7 +697,7 @@ rows:
 	Cursor:
 		kind: heading
 		label: Cursor
-		tab: Cursor
+		tab: Appearance/Cursor
 
 	CursorHeight:
 		label: Height %
@@ -689,130 +814,6 @@ rows:
 		whole: true
 		setting: scroll.minimap.width
 		gate: Minimap
-
-	## -------------------------------------------------------------------- Themes
-
-	Themes:
-		kind: heading
-		label: Themes
-		tab: Themes
-
-	Theme:
-		label: Theme
-		kind: dropdown
-		setting: theme
-		help: "The color scheme the terminal and this dialog follow."
-
-	ThemeMode:
-		label: Mode
-		kind: dropdown
-		options: "Dark", "Light", "System"
-		indent: 1
-		setting: theme_mode
-		help: "Which variant of the theme to use. System follows the desktop."
-
-	ThemeActions:
-		label: ""
-		kind: buttons
-		options: "Save", "Save as…", "Rename…", "Delete"
-		help: "Save keeps the colors below under this theme's name. Only a saved theme can be renamed or deleted."
-
-	Colors:
-		kind: heading
-		label: Colors
-		tab: Themes
-
-	ColBg:
-		label: Terminal background
-		kind: color
-		setting: colors.background
-		group: theme
-
-	ColFromWallpaper:
-		label: Text colors from wallpaper
-		kind: toggle
-		indent: 1
-		setting: colors.from_wallpaper
-		help: "Pick text and cursor colors that stand out against the wallpaper."
-
-	ColFg:
-		label: Foreground
-		kind: color
-		setting: colors.foreground
-		auto: ColFromWallpaper
-		rule: wallpaper_fg
-		group: theme
-
-	ColCursor:
-		label: Cursor
-		kind: color
-		setting: colors.cursor
-		auto: ColFromWallpaper
-		rule: wallpaper_cursor
-		group: theme
-
-	ColDialogBg:
-		label: Dialog background
-		kind: color
-		setting: colors.dialog_background
-		group: theme
-
-	ColDialogFg:
-		label: Dialog text
-		kind: color
-		indent: 1
-		setting: colors.dialog_foreground
-		group: theme
-
-	ColMenuBg:
-		label: Menu background
-		kind: color
-		indent: 1
-		setting: colors.menu_background
-		group: theme
-
-	ColMenuFg:
-		label: Menu text
-		kind: color
-		indent: 1
-		setting: colors.menu_foreground
-		group: theme
-
-	ColGutter:
-		label: Gutter
-		kind: color
-		indent: 1
-		setting: colors.gutter
-		group: theme
-		help: "Empty areas around the controls, such as the strip these tabs are on."
-
-	ColHighlight:
-		label: Highlight
-		kind: color
-		indent: 1
-		setting: colors.highlight
-		group: theme
-		help: "Used for the active pane's border, slider handles, revert arrows and the default button."
-
-	ColFocus:
-		label: Focus
-		kind: color
-		indent: 1
-		setting: colors.focus
-		group: theme
-		help: "Marks the control the keyboard is on."
-
-	ColScrollbarThumb:
-		label: Scrollbar handle
-		kind: color
-		setting: colors.scrollbar_thumb
-		help: "Also colors the minimap marker. Themes don't change this color or Track."
-
-	ColScrollbarTrough:
-		label: Track
-		kind: color
-		indent: 1
-		setting: colors.scrollbar_trough
 
 	## -------------------------------------------------------------------- Window
 
