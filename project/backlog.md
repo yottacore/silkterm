@@ -390,6 +390,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 
+- Settings: move tabs to the left, including nested tabs
+	- ID: 2026101009220870
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. The config template's order changed, which reaches a new config file.
+	- Needs external testing: Windows and macOS: a look at the list, at the default interface font and a large one.
+	- Priority: Avg
+	- Opened: 20261010-092208
+	- Opened by: JC
+	- Related IDs: 2026101008023943
+	- Target OS: All
+	- Requirements:
+		- Move tabs to the left, including nested tabs.
+	- Notes:
+		- Pre-next-cut.
+		- The dialog code can do both since 2026101008023943. SilkTerm's own spec in `settings_ui.shcl` is still flat and across the top.
+	- Progress log:
+		- 20261013: Q: How do the tabs nest?
+			- A: Down the left: Silk, Appearance (Themes, Background, Text, Cursor), Movement, Window, Shell, Keys.
+		- 20261013: Done on `tabsleft`. The tabs are a list down the left, in that order, so Themes now comes before Background. The config template's theme and colors section moved ahead of the background one too, since the template follows the tabs. That reaches a new file only.
+		- 20261013: A click on Appearance opens Themes. From one of its 4 tabs it changes nothing, since Appearance already reads as current there.
+		- 20261013: Looked at on Linux at the default interface font and at 24 pt. Every tab fits the list, and nothing overlaps. At 24 pt the Silk tab scrolls, as it did before.
+	- Decisions:
+		- A click on Appearance opens its first tab, and does nothing while one of its tabs is open. That is how the dialog code already worked.
+	- Swept: tests that set a tab by its number (now by its title), tests that measured rows from the panel edge (now from where the rows start), the top-strip tests (now run with the tabs put across the top), the template order test, the UI style guide, design.md, the Settings dialog design doc, the glossary's Gutter entry, and every tip and doc that says "the X tab". Those still read right, since every tab kept its name.
+	- Test case: `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv), failed on the old spec and passes now. `the_template_blocks_follow_the_dialog` (Er2UFeO) has the new order.
+	- Branch: tabsleft
+	- Commit: e5b2b87
+
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
 	- Type: Bug
@@ -805,35 +834,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
-
-- Settings: move tabs to the left, including nested tabs
-	- ID: 2026101009220870
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: Full pipeline. The config template's order changed, which reaches a new config file.
-	- Needs external testing: Windows and macOS: a look at the list, at the default interface font and a large one.
-	- Priority: Avg
-	- Opened: 20261010-092208
-	- Opened by: JC
-	- Related IDs: 2026101008023943
-	- Target OS: All
-	- Requirements:
-		- Move tabs to the left, including nested tabs.
-	- Notes:
-		- Pre-next-cut.
-		- The dialog code can do both since 2026101008023943. SilkTerm's own spec in `settings_ui.shcl` is still flat and across the top.
-	- Progress log:
-		- 20261013: Q: How do the tabs nest?
-			- A: Down the left: Silk, Appearance (Themes, Background, Text, Cursor), Movement, Window, Shell, Keys.
-		- 20261013: Done on `tabsleft`. The tabs are a list down the left, in that order, so Themes now comes before Background. The config template's theme and colors section moved ahead of the background one too, since the template follows the tabs. That reaches a new file only.
-		- 20261013: A click on Appearance opens Themes. From one of its 4 tabs it changes nothing, since Appearance already reads as current there.
-		- 20261013: Looked at on Linux at the default interface font and at 24 pt. Every tab fits the list, and nothing overlaps. At 24 pt the Silk tab scrolls, as it did before.
-	- Decisions:
-		- A click on Appearance opens its first tab, and does nothing while one of its tabs is open. That is how the dialog code already worked.
-	- Swept: tests that set a tab by its number (now by its title), tests that measured rows from the panel edge (now from where the rows start), the top-strip tests (now run with the tabs put across the top), the template order test, the UI style guide, design.md, the Settings dialog design doc, the glossary's Gutter entry, and every tip and doc that says "the X tab". Those still read right, since every tab kept its name.
-	- Test case: `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv), failed on the old spec and passes now. `the_template_blocks_follow_the_dialog` (Er2UFeO) has the new order.
-	- Branch: tabsleft
-	- Commit: e5b2b87
 
 - Add or change a "Copyright and license" section in the design docs
 	- ID: 2026101009221091
