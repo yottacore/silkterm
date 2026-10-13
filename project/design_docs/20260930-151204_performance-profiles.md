@@ -29,6 +29,7 @@
 - [Research findings](#research-findings)
 - [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
+- [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
 
@@ -246,3 +247,9 @@ This reverses an earlier rule, that the step was written down. A written step ma
 - "Wallpaper disappears from the background." (Opened 20260910-071431)
 
 - "When other settings are changed automatically based on a user action to a different setting" (Opened 20260919-154614)
+
+## Copyright and license
+
+> Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.

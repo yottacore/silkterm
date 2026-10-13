@@ -401,5 +401,6 @@ kept:
 
 ## Copyright and license
 
-> Copyright © 2026 Yottacore<br>
-> Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) license. No warranty.
+> Copyright © 2026 Yottacore\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.

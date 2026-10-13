@@ -38,6 +38,7 @@
 - [Research findings](#research-findings)
 - [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
+- [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
 
@@ -464,3 +465,9 @@ The wheel sends cursor keys only on the alt screen, with alternate-scroll on and
 - "With two tmux panes stacked and both printing, only one pane slides at a time" (deferred, Opened 20260911-113647)
 
 - "Config file: For each feature listed below, allow user to list programs" (deferred, Opened 20260708-115155)
+
+## Copyright and license
+
+> Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.
