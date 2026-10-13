@@ -895,6 +895,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
+- The scroll harness's altenter scene fails now and then when the box is busy
+	- ID: 2026101307482605
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261013-074826
+	- Opened by: CC
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Run the full pipeline while another build has the load average above 20.
+	- Incorrect behavior: the X11 arm fails with "no output was easing when the alt screen took over, so nothing was tested", and the pipeline stops there.
+	- Expected behavior: a timing miss is a skip, or the scene waits until the ease is running before it swaps the alt screen in.
+	- Reproduced: 20261013, once in the full pipeline at load 15 to 23. A rerun of the harness alone right after, at the same load, passed every scene.
+	- Notes:
+		- The harness README calls this case a failure on purpose, since the scene tested nothing. Its short gap before the alt screen is fixed, so a slow frame can let the ease finish first.
+
 - An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
 	- ID: 2026101304551668
 	- Type: Bug
