@@ -439,7 +439,7 @@ mod tests {
 	// on any more reads as gone. Driven in a child copy of this test binary
 	// (`poke_child` below) started inside the folder, which binds and pokes by
 	// bare name: a full path under the run folder can pass the limit on a Unix
-	// socket path, 104 bytes on a Mac and 107 on Linux.
+	// socket path, 103 bytes on a Mac and 107 on Linux.
 	// Test ID: EsaCcC5
 	#[cfg(unix)]
 	#[test]
