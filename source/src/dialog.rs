@@ -100,6 +100,8 @@ pub struct DialogWin {
 	tip: crate::tip::Dwell<Rect>,
 	// the tip the last frame drew, so a dwell that ripens between frames is owed one
 	tip_drawn: Option<Rect>,
+	// no tips while the window is in the background
+	focus: crate::tip::Focus,
 	shaped: ShapedText,
 	// the terminal window this dialog belongs to, so we can restack it beneath
 	// us when we're activated (see raise_parent).
@@ -270,6 +272,7 @@ impl DialogWin {
 			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
 			tip_drawn: None,
+			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
 			parent,
 			snapped: false,
@@ -314,6 +317,7 @@ impl DialogWin {
 			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
 			tip_drawn: None,
+			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
 			parent,
 			snapped: false,
@@ -389,6 +393,7 @@ impl DialogWin {
 			refused: Retry::default(),
 			tip: crate::tip::Dwell::default(),
 			tip_drawn: None,
+			focus: crate::tip::Focus::default(),
 			shaped: ShapedText::default(),
 			parent,
 			snapped: false,
@@ -402,6 +407,22 @@ impl DialogWin {
 		match &self.content {
 			Content::Settings(dialog) => Some((dialog.orig().clone(), dialog.edited().clone())),
 			Content::About { .. } => None,
+		}
+	}
+
+	/// Another window saved the settings file (`SettingsDialog::follow_file`).
+	pub fn follow_file(&mut self, base: config::Settings) {
+		if let Content::Settings(dialog) = &mut self.content {
+			dialog.follow_file(base);
+		}
+	}
+
+	/// Whether an Apply has to read the file back, since another window saved
+	/// while this one held changes.
+	pub fn take_behind(&mut self) -> bool {
+		match &mut self.content {
+			Content::Settings(dialog) => dialog.take_behind(),
+			Content::About { .. } => false,
 		}
 	}
 
@@ -467,13 +488,28 @@ impl DialogWin {
 	/// True when the move changed what the window shows, so it is owed a frame.
 	pub fn set_cursor(&mut self, x: f32, y: f32) -> bool {
 		let from = std::mem::replace(&mut self.mouse, (x, y));
+		// some platforms report the pointer where it was as focus changes
+		if from != (x, y) {
+			self.focus = self.focus.moved();
+		}
 		pointer_moved(
 			&mut self.content,
 			&mut self.text,
 			&mut self.tip,
+			self.focus.tips(),
 			from,
 			(x, y),
 		)
+	}
+
+	/// The window gained or lost the focus. True when a tip it had up has to go.
+	pub fn set_focus(&mut self, focused: bool) -> bool {
+		self.focus = self.focus.changed(focused);
+		if self.focus.tips() {
+			return false;
+		}
+		self.tip.point_at(None);
+		self.tip_drawn.is_some()
 	}
 
 	pub fn mouse_down(
@@ -912,6 +948,7 @@ impl DialogWin {
 			&mut self.text,
 			&mut self.shaped,
 			&mut self.tip,
+			self.focus.tips(),
 			self.mouse,
 			now,
 			(w, h),
@@ -950,6 +987,19 @@ impl DialogWin {
 			{
 				eprintln!(
 					"{}: dialog overlay prepare failed; trimming atlas: {err:?}",
+					config::APP_NAME
+				);
+				self.text.trim_atlas();
+			}
+		}
+		if scene.tip_range.is_some() {
+			let tip_areas = text_areas(&scene.tip_texts, &self.shaped.bufs, (w, h));
+			if let Err(err) = self
+				.text
+				.prepare_tip(&self.gfx.device, &self.gfx.queue, tip_areas)
+			{
+				eprintln!(
+					"{}: dialog tip prepare failed; trimming atlas: {err:?}",
 					config::APP_NAME
 				);
 				self.text.trim_atlas();
@@ -1013,8 +1063,10 @@ impl DialogWin {
 			}
 			let _ = self.text.render(&mut pass);
 		}
-		// second pass: the open dropdown popup on top (preserves the first pass)
-		if let Some((start, end)) = scene.overlay_range {
+		// second pass: the open dropdown popup on top (preserves the first pass),
+		// then the tip over that. Each layer's text draws before the next layer's
+		// rects, which is what keeps one layer's text off the next one's box.
+		if scene.overlay_range.is_some() || scene.tip_range.is_some() {
 			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				label: Some("dialog overlay pass"),
 				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1031,8 +1083,14 @@ impl DialogWin {
 				occlusion_query_set: None,
 				multiview_mask: None,
 			});
-			self.rects.draw(&mut pass, start..end);
-			let _ = self.text.render_overlay(&mut pass);
+			if let Some((start, end)) = scene.overlay_range {
+				self.rects.draw(&mut pass, start..end);
+				let _ = self.text.render_overlay(&mut pass);
+			}
+			if let Some((start, end)) = scene.tip_range {
+				self.rects.draw(&mut pass, start..end);
+				let _ = self.text.render_tip(&mut pass);
+			}
 		}
 		self.gfx.queue.submit(Some(encoder.finish()));
 		if self.gfx.end_frame(frame).is_ok() {
@@ -1064,10 +1122,13 @@ struct Scene {
 	rect_split: usize,
 	rows_end: usize,
 	scissor_vp: Option<Rect>,
-	// an open dropdown, field menu or tip, drawn on top in a second pass
+	// an open dropdown, field menu, prompt or picker, drawn on top in a second pass
 	overlay_range: Option<(u32, u32)>,
+	// a tip, drawn last of all, over the overlay too
+	tip_range: Option<(u32, u32)>,
 	texts: Vec<Placed>,
 	overlay_texts: Vec<Placed>,
+	tip_texts: Vec<Placed>,
 }
 
 // Shaped dialog text, kept from one frame to the next. Shaping is most of what
@@ -1222,10 +1283,12 @@ fn tip_under(content: &Content, (mx, my): (f32, f32)) -> Option<(Cow<'_, str>, R
 // A pointer move: true when what the window shows moved with it. Settings draws
 // nothing from the pointer itself, only from what a move changes (a drag, the
 // item lit in a dropdown or menu) and the tip. About lights a button under it.
+// `tips` is false while the window may not raise one (`tip::Focus`).
 fn pointer_moved(
 	content: &mut Content,
 	text: &mut TextCtx,
 	tip: &mut crate::tip::Dwell<Rect>,
+	tips: bool,
 	from: (f32, f32),
 	to: (f32, f32),
 ) -> bool {
@@ -1243,7 +1306,11 @@ fn pointer_moved(
 			dialog.mouse_move(to.0, to.1, &mut |s| text.measure_ui_text(s, &attrs))
 		}
 	};
-	let over = tip_under(content, to).map(|(_, anchor)| anchor);
+	let over = if tips {
+		tip_under(content, to).map(|(_, anchor)| anchor)
+	} else {
+		None
+	};
 	let tip_moved = tip.point_at(over);
 	changed || tip_moved
 }
@@ -1258,11 +1325,16 @@ fn compose(
 	text: &mut TextCtx,
 	shaped: &mut ShapedText,
 	dwell: &mut crate::tip::Dwell<Rect>,
+	tips: bool,
 	mouse: (f32, f32),
 	now: std::time::Instant,
 	size: (u32, u32),
 ) -> (Scene, Option<Rect>) {
-	let found = tip_under(content, mouse);
+	let found = if tips {
+		tip_under(content, mouse)
+	} else {
+		None
+	};
 	let (drawn, _) = tip_gate(dwell, found.as_ref().map(|(_, anchor)| *anchor), now);
 	let tip = found.filter(|(_, anchor)| drawn == Some(*anchor));
 	let tip = tip.as_ref().map(|(tip, anchor)| (tip.as_ref(), *anchor));
@@ -1295,6 +1367,8 @@ fn scene(
 	let mut texts: Vec<Placed> = Vec::new();
 	let mut overlay_texts: Vec<Placed> = Vec::new();
 	let mut overlay_range: Option<(u32, u32)> = None;
+	let mut tip_texts: Vec<Placed> = Vec::new();
+	let mut tip_range: Option<(u32, u32)> = None;
 	let line_h = text.ui_line_h;
 	let border_col = crate::settings_ui::dialog_border();
 	match content {
@@ -1345,21 +1419,25 @@ fn scene(
 					buf,
 				});
 			}
+			let rect_split = rects.len();
 			// flyover: show the destination URL of the hovered link in a small
 			// box under it (the Support label hides its URL; this reveals it).
+			// It goes in the tip layer, or the lines below the link draw over it.
 			if let Some((tip, anchor)) = tip {
 				let attrs = ui_attrs();
 				let tip_w = text.measure_ui_text(tip, &attrs);
 				let at =
 					crate::tip::lay_out(anchor, 1, tip_w, line_h, (w as f32, h as f32), text.scale);
 				let (b, f) = (at.border, at.fill);
+				let start = rects.len() as u32;
 				rects.push(quad(b.x, b.y, b.w, b.h, border_col));
 				rects.push(quad(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
+				tip_range = Some((start, rects.len() as u32));
 				let dim = crate::settings_ui::dialog_dim();
 				let mut a = ui_attrs();
 				a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
 				let buf = shaped.buffer(text, tip, &a, w as f32, line_h);
-				texts.push(Placed {
+				tip_texts.push(Placed {
 					x: at.text_x,
 					y: at.text_y,
 					scale: 1.0,
@@ -1368,7 +1446,6 @@ fn scene(
 					buf,
 				});
 			}
-			let rect_split = rects.len();
 			Scene {
 				clear: crate::settings_ui::dialog_bg(),
 				rects,
@@ -1376,8 +1453,10 @@ fn scene(
 				rows_end: 0,
 				scissor_vp: None,
 				overlay_range,
+				tip_range,
 				texts,
 				overlay_texts,
+				tip_texts,
 			}
 		}
 		Content::Settings(dialog) => {
@@ -1428,8 +1507,8 @@ fn scene(
 				}
 			}
 			// flyover: what a control does, or why it is grayed out. A small box
-			// under it, drawn in the overlay pass so it can't bleed with the row
-			// text (same as the About URL tip). It WRAPS - a sentence long enough
+			// under it, in a layer of its own drawn after everything else, so no
+			// row, list or picker text lands on it. It WRAPS - a sentence long enough
 			// to outrun the panel would otherwise be clamped to the edge and run
 			// off it, and the panel's width is not ours to grow.
 			if let Some((tip, anchor)) = tip {
@@ -1449,16 +1528,16 @@ fn scene(
 					scale,
 				);
 				let (b, f) = (at.border, at.fill);
-				let start = overlay_range.map_or(rects.len() as u32, |(s, _)| s);
+				let start = rects.len() as u32;
 				rects.push(quad(b.x, b.y, b.w, b.h, border_col));
 				rects.push(quad(f.x, f.y, f.w, f.h, crate::settings_ui::dialog_btn()));
-				overlay_range = Some((start, rects.len() as u32));
+				tip_range = Some((start, rects.len() as u32));
 				let dim = crate::settings_ui::dialog_dim();
 				let mut a = ui_attrs();
 				a.color_opt = Some(GColor::rgb(dim[0], dim[1], dim[2]));
 				for (n, line) in lines.iter().enumerate() {
 					let buf = shaped.buffer(text, line, &a, w as f32, line_h);
-					overlay_texts.push(Placed {
+					tip_texts.push(Placed {
 						x: at.text_x,
 						y: at.text_y + line_h * n as f32,
 						scale: 1.0,
@@ -1475,8 +1554,10 @@ fn scene(
 				rows_end,
 				scissor_vp: Some(dialog.viewport_px()),
 				overlay_range,
+				tip_range,
 				texts,
 				overlay_texts,
+				tip_texts,
 			}
 		}
 	}
@@ -2775,6 +2856,7 @@ mod tests {
 			.texts
 			.iter()
 			.chain(&scene.overlay_texts)
+			.chain(&scene.tip_texts)
 			.map(|p| {
 				let said: String = shaped.bufs[p.buf]
 					.lines
@@ -2822,6 +2904,7 @@ mod tests {
 			text,
 			shaped,
 			&mut dwell,
+			true,
 			(-1.0, -1.0),
 			Instant::now(),
 			size,
@@ -2920,7 +3003,12 @@ mod tests {
 				shapes, new,
 				"step {step} shaped {shapes} for {new} new pieces of text"
 			);
-			for p in scene.texts.iter().chain(&scene.overlay_texts) {
+			for p in scene
+				.texts
+				.iter()
+				.chain(&scene.overlay_texts)
+				.chain(&scene.tip_texts)
+			{
 				assert_eq!(
 					shaped.bufs[p.buf].size().0,
 					Some(width as f32),
@@ -3024,6 +3112,184 @@ mod tests {
 		);
 	}
 
+	// The layers render draws, in order: the rects each one draws and the text
+	// drawn over them. A layer's text lands on top of every rect in it, whatever
+	// order the rects come in.
+	fn passes(scene: &super::Scene) -> Vec<(std::ops::Range<u32>, Vec<&super::Placed>)> {
+		let first = scene.rect_split.max(scene.rows_end) as u32;
+		let mut out = vec![(0..first, scene.texts.iter().collect())];
+		if let Some((start, end)) = scene.overlay_range {
+			out.push((start..end, scene.overlay_texts.iter().collect()));
+		}
+		if let Some((start, end)) = scene.tip_range {
+			out.push((start..end, scene.tip_texts.iter().collect()));
+		}
+		out
+	}
+
+	fn said(shaped: &super::ShapedText, placed: &super::Placed) -> String {
+		shaped.bufs[placed.buf]
+			.lines
+			.iter()
+			.map(glyphon::BufferLine::text)
+			.collect()
+	}
+
+	// Asserts a tip is the last thing a frame draws, alone in its pass, so no
+	// other text can land on top of its box.
+	fn assert_tip_on_top(scene: &super::Scene, shaped: &super::ShapedText, tip: &str, what: &str) {
+		let passes = passes(scene);
+		let (rects, texts) = passes.last().unwrap();
+		assert_eq!(
+			rects.end as usize,
+			scene.rects.len(),
+			"{what}: something draws after the tip's pass"
+		);
+		assert_eq!(rects.len(), 2, "{what}: the tip's pass draws other rects");
+		assert!(
+			!texts.is_empty(),
+			"{what}: the tip's text is not in the last pass"
+		);
+		for placed in texts {
+			let line = said(shaped, placed);
+			assert!(
+				tip.contains(line.trim()),
+				"{what}: {line:?} draws in the tip's pass, on top of the tip"
+			);
+		}
+		for (_, texts) in &passes[..passes.len() - 1] {
+			assert!(
+				texts.iter().all(|p| said(shaped, p) != tip),
+				"{what}: the tip's text draws under the last pass"
+			);
+		}
+	}
+
+	// A tip draws over everything a dialog shows: an open dropdown's list, a
+	// field menu, the color picker and the About text alike. The list's text once
+	// shared the tip's pass and landed on top of its box (2026100913394952).
+	// Test ID: EsZp4RG
+	#[test]
+	fn a_tip_draws_over_everything_else_in_a_dialog() {
+		let tip = "A tip";
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut content = settings_content(&mut text);
+		let mut opened = false;
+		for _ in 0..crate::settings_ui::tab_titles().len() {
+			if let super::Content::Settings(dialog) = &mut content {
+				opened = dialog.open_a_dropdown();
+			}
+			if opened {
+				break;
+			}
+			switch_tab(&mut content);
+		}
+		assert!(opened, "no tab has a dropdown");
+		let anchor = Rect {
+			x: 40.0,
+			y: 40.0,
+			w: 300.0,
+			h: 20.0,
+		};
+		let mut shaped = super::ShapedText::default();
+		let size = (800, 700);
+		let open = super::scene(
+			&content,
+			&mut text,
+			&mut shaped,
+			(-1.0, -1.0),
+			Some((tip, anchor)),
+			size,
+		);
+		assert!(open.overlay_range.is_some());
+		assert_tip_on_top(&open, &shaped, tip, "an open dropdown");
+		let plain = settings_content(&mut text);
+		let rows = super::scene(
+			&plain,
+			&mut text,
+			&mut shaped,
+			(-1.0, -1.0),
+			Some((tip, anchor)),
+			size,
+		);
+		assert_tip_on_top(&rows, &shaped, tip, "the rows");
+		let (lines, links, _) = layout_about(&mut text, &adapter());
+		let link = links.iter().find(|l| l.tooltip.is_some()).unwrap();
+		let url = link.tooltip.clone().unwrap();
+		let anchor = link.rect;
+		let about = super::Content::About {
+			lines,
+			links,
+			source: AboutSource::About(Box::new(adapter())),
+		};
+		let drawn = super::scene(
+			&about,
+			&mut text,
+			&mut shaped,
+			(-1.0, -1.0),
+			Some((&url, anchor)),
+			size,
+		);
+		assert_tip_on_top(&drawn, &shaped, &url, "About");
+	}
+
+	// A dialog in the background draws no tip: one that was up goes, and a
+	// pointer resting or moving there starts no clock (2026101009220760).
+	// Test ID: EsZp4ah
+	#[test]
+	fn a_dialog_without_the_focus_draws_no_tip() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut content = settings_content(&mut text);
+		let mut shaped = super::ShapedText::default();
+		let mut dwell = crate::tip::Dwell::default();
+		let (w, h) = match &content {
+			super::Content::Settings(dialog) => dialog.size(),
+			super::Content::About { .. } => unreachable!(),
+		};
+		let at = (0..400)
+			.map(|k| {
+				(
+					w * ((k % 20) as f32 + 0.5) / 20.0,
+					h * ((k / 20) as f32 + 0.5) / 20.0,
+				)
+			})
+			.find(|&to| super::tip_under(&content, to).is_some())
+			.expect("no point on the dialog has a tip");
+		let mut frame = |dwell: &mut crate::tip::Dwell<Rect>, tips: bool| {
+			super::compose(
+				&content,
+				&mut text,
+				&mut shaped,
+				dwell,
+				tips,
+				at,
+				Instant::now(),
+				(800, 700),
+			)
+			.1
+		};
+		let _ = frame(&mut dwell, true);
+		std::thread::sleep(crate::tip::DELAY);
+		assert!(
+			frame(&mut dwell, true).is_some(),
+			"a rested pointer got no tip"
+		);
+		assert_eq!(
+			frame(&mut dwell, false),
+			None,
+			"the tip stayed up in the background"
+		);
+		assert_eq!(dwell.ripe(), None);
+		let near = (at.0 + 1.0, at.1);
+		let mut text = TextCtx::new_cpu(1.0);
+		let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, false, at, near);
+		assert_eq!(
+			dwell.wake(),
+			None,
+			"a move in the background started a tip's clock"
+		);
+	}
+
 	// A frame used to look up the tip under the pointer twice, once to time it
 	// and once to draw it.
 	// Test ID: Erlkwvi
@@ -3048,6 +3314,7 @@ mod tests {
 				&mut text,
 				&mut shaped,
 				&mut dwell,
+				true,
 				at,
 				Instant::now(),
 				(800, 700),
@@ -3080,7 +3347,7 @@ mod tests {
 			for col in 0..12 {
 				let to = (w * (col as f32 + 0.5) / 12.0, h * (row as f32 + 0.5) / 30.0);
 				assert!(
-					!super::pointer_moved(&mut content, &mut text, &mut dwell, from, to),
+					!super::pointer_moved(&mut content, &mut text, &mut dwell, true, from, to),
 					"a move to {to:?} asked for a frame"
 				);
 				match super::tip_under(&content, to) {
@@ -3091,7 +3358,7 @@ mod tests {
 			}
 		}
 		let ((at, anchor), bare) = (tipped.unwrap(), bare.unwrap());
-		let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, from, at);
+		let _ = super::pointer_moved(&mut content, &mut text, &mut dwell, true, from, at);
 		let now = Instant::now();
 		assert!(
 			!super::frame_due(dwell.wake(), &dwell, None, now),
@@ -3108,6 +3375,7 @@ mod tests {
 			&mut text,
 			&mut shaped,
 			&mut dwell,
+			true,
 			at,
 			Instant::now(),
 			(800, 700),
@@ -3125,11 +3393,11 @@ mod tests {
 			Some(anchor)
 		);
 		assert!(
-			!super::pointer_moved(&mut content, &mut text, &mut dwell, at, inside),
+			!super::pointer_moved(&mut content, &mut text, &mut dwell, true, at, inside),
 			"a move inside the tip's control asked for a frame"
 		);
 		assert!(
-			super::pointer_moved(&mut content, &mut text, &mut dwell, inside, bare),
+			super::pointer_moved(&mut content, &mut text, &mut dwell, true, inside, bare),
 			"leaving a tip up drew nothing"
 		);
 		// About lights its button under the pointer
@@ -3144,17 +3412,18 @@ mod tests {
 		let on = (button.x + 2.0, button.y + 2.0);
 		let off = (button.x - 5.0, button.y - 5.0);
 		assert!(super::pointer_moved(
-			&mut about, &mut text, &mut dwell, off, on
+			&mut about, &mut text, &mut dwell, true, off, on
 		));
 		assert!(!super::pointer_moved(
 			&mut about,
 			&mut text,
 			&mut dwell,
+			true,
 			on,
 			(on.0 + 1.0, on.1)
 		));
 		assert!(super::pointer_moved(
-			&mut about, &mut text, &mut dwell, on, off
+			&mut about, &mut text, &mut dwell, true, on, off
 		));
 	}
 }

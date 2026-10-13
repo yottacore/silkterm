@@ -34,29 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
-	- ID: 2026100910295901
-	- Type: Enhancement
-	- Status: Waiting for answers
-	- Priority: Avg
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Foreground and Cursor are automatic settings whose automatic value is the wallpaper's colors, and "Text colors from wallpaper" is their group's switch, read off them.
-	- Notes:
-		- Before RC1.
-		- They still gray out while the switch is on. The style guide lists it under known deviations.
-	- Progress log:
-		- 20261009: Q: A theme pick puts every color back to the theme's, which would make these two automatic and so turn the switch back on. Should a theme pick do that, or leave these two as they are?
-			- A: No.
-		- 20261009: Q: With no wallpaper up, is automatic the theme's color?
-			- A: Yes.
-		- 20261009: Q: An old file with the switch off and no color line used the theme's colors. Keeping that means storing the theme's colors by hand. Is that wanted?
-			- A: If this is about one of my existing config files rather than a general programming question, then no.
-			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
-
 - Move local CICD steps into a local container, and on the other boxes too?
 	- ID: 2026101009221201
 	- Type: Task
@@ -111,6 +88,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
 
+- The curated default font list got replaced by just its first font
+	- ID: 2026100913394946
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: High
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026101009220980
+	- Target OS: All
+	- Incorrect behavior: The default list of fonts I had carefully curated got replaced by just the first one.
+	- Expected behavior: Bring the full list back.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+	- Reproduced: 20261013 on b23. With "Use system font" on, Family showed "Monaspace Argon" alone, and turning Face off kept and saved that one name. Test EsZk42X failed before the fix.
+	- Actual cause:
+		- The built-in list was never cut. Since 10-09, Family's automatic value is the desktop's monospace font, and on b23 the desktop's font is Monaspace Argon, which is also the list's first entry. So the box showed one name.
+		- Turning the switch off keeps what the box shows, so it saved that one name as the family.
+		- The live config on b23 was not cut. The 10-09 launch only commented out its family line, which held the full list and still reads the same.
+	- Actual fix: Following the desktop, Family is now the desktop's font followed by the built-in list, each name once. On b23 that is the old list exactly, and turning the switch off keeps and saves all of it.
+	- Decisions:
+		- 20261013: The automatic list is the desktop's font and then the built-in list, not the desktop's font and a list set by hand. A list set by hand is set aside while the switch is on, as for every other switch.
+		- 20261013: No launch repair for a file holding just `family: "Monaspace Argon"`. It is not the old default, it can't be told apart from a pick made by hand, and it renders the same while that font is installed. No such file was found. b23's is fine, Windows names no desktop font, and a Mac names one only when somebody picked it, so the bug could not happen on the Windows boxes or b26.
+	- Swept:
+		- Every reader of the rule, `system_font_family` in fields.rs, which is its one answer.
+		- The font search in text.rs takes the longer list as it is, since it drops repeats.
+		- The size rule gives one number, so it has no list to lose.
+		- Glossary, the Unicode design doc and code comments that said the automatic family is the desktop's font alone.
+	- Verified: unit suite, the merge gate (fmt, clippy, tests), test IDs, doc, TOC and table checks.
+	- Not checked: a real window, Windows, macOS.
+	- Branch: fontlist
+	- Commit: 5f3623b
+	- Test case: EsZk42X `the_family_keeps_the_whole_list_when_the_switch_goes_off` failed before the fix and passes after. EsZk4LL `the_desktop_s_font_leads_the_built_in_list` pins the list on any desktop. EsDxpmE's family assertion moved to the new rule.
+
 - Flyover text for the wallpaper option uses "carries"
 	- ID: 2026100812334384
 	- Type: Bug
@@ -131,6 +142,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: tipfix
 	- Commit: 368d7b8
 	- Test case: `no_dialog_text_says_carry` (Es9Vugt) and `no_template_comment_says_carry` (Es9WIpt). Both failed with the old Fit tip and template comment put back, and pass now. The notice wording is pinned by the existing notice tests.
+
+- Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
+	- ID: 2026100910295901
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. Saving a theme with the switch on now stores the theme's text colors rather than the picture's.
+	- Needs external testing: A look at Save as on the Themes tab with a wallpaper up.
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Foreground and Cursor are automatic settings whose automatic value is the wallpaper's colors, and "Text colors from wallpaper" is their group's switch, read off them.
+			- 20261013: The switch is a stored setting rather than read off them. The third version of the automatic settings design dropped switches read off their settings.
+	- Notes:
+		- Before RC1.
+		- They still gray out while the switch is on. The style guide lists it under known deviations.
+			- 20261013: No longer true. Nothing grays for a switch since the knobs model (36ef959), and the known deviations no longer list it.
+	- Progress log:
+		- 20261009: Q: A theme pick puts every color back to the theme's, which would make these two automatic and so turn the switch back on. Should a theme pick do that, or leave these two as they are?
+			- A: No.
+		- 20261009: Q: With no wallpaper up, is automatic the theme's color?
+			- A: Yes.
+		- 20261009: Q: An old file with the switch off and no color line used the theme's colors. Keeping that means storing the theme's colors by hand. Is that wanted?
+			- A: If this is about one of my existing config files rather than a general programming question, then no.
+			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
+				- A: No. Keep theme colors: a file with the switch off and no color lines gets the theme's Foreground and Cursor written in on first load, so nothing changes on screen for those people.
+		- 20261013: The knobs model (36ef959) already does what the item asks. Foreground and Cursor show the wallpaper's colors while the switch is on and a picture is up, and the theme's otherwise. Nothing grays, a color changed by hand turns the switch off, and a theme pick leaves the switch where it was.
+			- No color lines are written for the answer above. The switch is stored now, so a file with it off keeps it off and shows the theme's colors with no write. The question dates from when the switch was going to be read off the colors.
+			- Writing the theme's 2 colors in would make them Custom's colors, so picking Custom later would show the old theme's text colors. If the write is still wanted, it goes in the one-time theme color move at the first launch (`move_theme_colors`).
+			- Fixed on the way: Save and Save as stored the picture's text colors in the theme while the switch was on. A saved theme takes the colors under them now, the theme's with any change made by hand. The wallpaper design doc said the derived pair never reaches a saved theme, and the knobs model had lost that.
+			- Found on the way: an old file with colors over a built-in theme and no machine test lines shows the theme's colors after the update. Filed as 2026101304551668.
+	- Swept: every reader of the 2 colors that stores them: the config save, Save and Save as on a theme, and the picker, which sets a color by hand. Every row with an `auto:` switch in `settings_ui.shcl`; only these 2 are palette colors.
+	- Verified: the unit suite, clippy, fmt and the test ID check. Each new test failed against a mutant: Esa43ID with the switch read off the color lines, Esa43cc with a theme pick that turns the switch on, both with the picture's colors used while the switch is off, and Esa59zb before the fix.
+	- Not checked: a real window.
+	- Branch: wallcolors
+	- Commit: 8bce254
+	- Test case: `a_file_with_the_wallpaper_colors_off_keeps_the_theme_s` (Esa43ID), `a_theme_pick_leaves_the_wallpaper_colors_switch_alone` (Esa43cc), `a_saved_theme_never_takes_the_wallpaper_s_text_colors` (Esa59zb). Already there: EqRxesl, EqRxesm, EqRxese, EsFc30N.
 
 - Flyover help text should apply to all of the relevant labels, and both controls
 	- ID: 2026100812334387
@@ -335,6 +385,123 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: autoset2
 	- Commit: 7fadb59
 	- Test case: EsEAijd, EsEAioc, EsEAitK, EsEAixa and EsEAj1i, each failing against a mutant of its part. EsDxpmD walks the whole table now. Assertions moved where the rule changed: Er1vmpQ, EqAiJBo, Em3Pif2, ElmIYG3, Elzq5VQ, ErkRECv, Eq4Yrbf, Epytxce.
+
+- Don't show any flyover tip text when the app or Settings dialog doesn't have the focus
+	- ID: 2026101009220760
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: No
+	- Needs external testing: A look on Windows, where Settings is an owned window (G36), and on macOS.
+	- Priority: Avg
+	- Opened: 20261010-092207
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Don't show any flyover tip text when the app - e.g. for tabs - or settings dialog doesn't have the focus.
+	- Progress log:
+		- 20261013: Built. Each window follows its own focus: the main window, Settings, About and the notice. A tip already up goes when the focus leaves. Settings open over the terminal has the focus, so the terminal shows no tab tip while it is up.
+	- Decisions:
+		- 20261013: When the focus comes back, tips wait for the pointer to move, so none pops up under a pointer left resting on a control. A move while the window is in the background counts for nothing. A pointer report at the same spot, which some platforms send as focus changes, is not a move.
+	- Sweep: the tab tip, menu tips, Settings rows, buttons and revert arrows, the About and notice links.
+	- Swept: The tab and menu tips both check the main window's focus, in `note_tab_hover` and `menu_tip_target`. Every dialog tip goes through `pointer_moved` and `compose`, which both take it. About and the notice are the same window type as Settings, and the notice's events now include focus.
+	- Branch: tipfix
+	- Commit: d33977d
+	- Test case: `a_window_without_the_focus_shows_no_tips` (EsZp4Va) and `a_dialog_without_the_focus_draws_no_tip` (EsZp4ah). The second fails with the focus check taken out of a frame.
+	- Verified: 20261013, the gate. In real windows on b23 under xfwm4, for a Settings row and for the tab strip: a tip that was up went when another window took the focus, stayed down 5 s after the focus came back, and came back after a 1 px move. Dev kept the Settings tip up in the background.
+	- Notes:
+		- Pre-next-cut.
+
+- Settings: move tabs to the left, including nested tabs
+	- ID: 2026101009220870
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. The config template's order changed, which reaches a new config file.
+	- Needs external testing: Windows and macOS: a look at the list, at the default interface font and a large one.
+	- Priority: Avg
+	- Opened: 20261010-092208
+	- Opened by: JC
+	- Related IDs: 2026101008023943
+	- Target OS: All
+	- Requirements:
+		- Move tabs to the left, including nested tabs.
+	- Notes:
+		- Pre-next-cut.
+		- The dialog code can do both since 2026101008023943. SilkTerm's own spec in `settings_ui.shcl` is still flat and across the top.
+	- Progress log:
+		- 20261013: Q: How do the tabs nest?
+			- A: Down the left: Silk, Appearance (Themes, Background, Text, Cursor), Movement, Window, Shell, Keys.
+		- 20261013: Done on `tabsleft`. The tabs are a list down the left, in that order, so Themes now comes before Background. The config template's theme and colors section moved ahead of the background one too, since the template follows the tabs. That reaches a new file only.
+		- 20261013: A click on Appearance opens Themes. From one of its 4 tabs it changes nothing, since Appearance already reads as current there.
+		- 20261013: Looked at on Linux at the default interface font and at 24 pt. Every tab fits the list, and nothing overlaps. At 24 pt the Silk tab scrolls, as it did before.
+	- Decisions:
+		- A click on Appearance opens its first tab, and does nothing while one of its tabs is open. That is how the dialog code already worked.
+	- Swept: tests that set a tab by its number (now by its title), tests that measured rows from the panel edge (now from where the rows start), the top-strip tests (now run with the tabs put across the top), the template order test, the UI style guide, design.md, the Settings dialog design doc, the glossary's Gutter entry, and every tip and doc that says "the X tab". Those still read right, since every tab kept its name.
+	- Test case: `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv), failed on the old spec and passes now. `the_template_blocks_follow_the_dialog` (Er2UFeO) has the new order.
+	- Branch: tabsleft
+	- Commit: e5b2b87
+
+- Font settings should be part of themes
+	- ID: 2026100913394956
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. Saved themes now write font lines, and a launch backfills the new switch's commented line into the config file.
+	- Priority: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Font settings should be part of themes.
+	- Notes:
+		- Before RC1.
+	- Progress log:
+		- 20261013: Q: Which font settings does a theme hold, and does picking a theme change them? A: Font family, size and line height (`font.family`, `font.size`, `font.line_height_scale`), picked up like the colors. Plus a new switch, on by default: "Font settings ignore themes". While it is on, a theme pick leaves the fonts alone.
+		- 20261013: Built. A saved theme keeps the 3 values under `themes.<slug>.font`, and a pick sets them while the new switch is off.
+	- Decisions:
+		- 20261013: The font rows stay out of the theme's preset group. As members they would show the default font under any built-in theme, and the person's own font only under Custom.
+		- 20261013: A pick sets each theme value that differs from what shows, the way typing it in would, so "Use system font" turns off for that value and the theme's font wins. A value already showing is left alone, so Save, which picks the theme again, turns nothing off.
+		- 20261013: Built-in themes have no font. Picking one, or Custom, never changes the font.
+		- 20261013: Save and Save as always keep the font on screen, switch on or off, since a theme is stored whole.
+		- 20261013: With the switch off, a font that differs from the saved theme's makes the box read `Name *`, wakes Save and is named in the tip, like a color. Nothing records it. Turning the switch off sets no font until the next pick.
+		- 20261013: The switch is `font.ignore_themes`, one row on the Themes tab under Mode, not repeated on the Text tab.
+		- 20261013: Theme files from before this have no font lines. They load as before, and picking one changes no font.
+	- Swept: every theme pick goes through `fields::set` or `fields::reset` on the Theme row: the dropdown, Save, Save as, Delete and the reset arrow. Rename is not a pick. Nothing outside the dialog picks a theme. `read_user_themes` and `write_user_themes` are the only theme file reader and writer, and all 4 places that build a `UserTheme` set its font.
+	- Branch: themefonts
+	- Commit: d69279d
+	- Test case: Esa0ndg (switch default and template line), Esa0nip (font round trip, an old theme file loads), Esa0nnU (save keeps the font), Esa0ns8 (pick with the switch on and off, built-in changes nothing), Esa0nwo (theme font beats the system font), Esa0o1c (save turns no switch off), Esa0o6M (font change reads as `*`), Esa0oBV (font survives a relaunch). Esa0nip, Esa0ns8, Esa0nwo, Esa0o6M and Esa0oBV fail with the font pick and the font write taken out, and Esa0o1c fails with the already-showing check taken out.
+	- Verified: 20261013, the merge gate (fmt, clippy, all 1267 unit tests), the doc, TOC, table and test ID checks. The shipped config is still a save fixed point, and a config from before backfills to the new template exactly and then changes nothing. The new row was looked at on the Themes tab at the default interface font.
+	- Acceptance signoff: Changes what the dialog shows, what a theme pick does and what a saved theme writes to disk.
+
+- Changes in one SilkTerm apply to all running SilkTerms using the same config file, immediately
+	- ID: 2026100907341819
+	- Type: Feature
+	- Status: Waiting on signoff
+	- Needs external testing: Windows on vm925w: two windows on one settings file, a change in Settings shows in the other at once; `--reload-settings` and `--wallpaper` from a shell inside a window; a window ended in Task Manager, then a save in the other. macOS on b26: the two-window check. Both are compiled and linted only.
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225510
+	- Target OS: All
+	- Requirements:
+		- Changes in one SilkTerm should apply to all running SilkTerms using the same config file, immediately.
+		- Except for randomly selected wallpaper. That should not change unless the user identified one specific file, or changed the path.
+			- In the latter case, if "random per window/tab/pane" is selected, then new wallpaper should be chosen at pseudorandom for each window/tab/pane.
+	- Notes:
+		- Before RC1.
+		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
+	- Progress log:
+		- 20261013: Built. A save in one window, or Reload config, tells the other windows on the same settings file over each window's control socket, a named pipe on Windows. Windows on another file never hear. How it works is in design.md, "Settings across windows".
+		- 20261013: Verified: unit tests and a window test with 3 windows, 2 on one file. The save test fails with the lock taken out, and the window test fails with the telling taken out, or with every window picking a new wallpaper on each save.
+	- Decisions:
+		- 20261013: Local IPC, and hand edits are not picked up live (answered 20261009). Reload config in one window has the others read the file too, so one reload covers a hand edit.
+		- 20261013: A window size set in Settings resizes only the window it was set in. In the others it is the size new windows open at.
+		- 20261013: An open Settings dialog with nothing changed shows the other window's save at once. One with changes in hand keeps them, and shows the other save after Apply, which keeps both.
+		- 20261013: There is no per tab or per pane wallpaper today, only per window. A new folder has each window pick on its own.
+		- 20261013: Named pipes on Windows, not AF_UNIX. Nothing new linked, nothing left behind by a crash, and the control commands work on Windows now too.
+	- Swept: every write of the settings file goes through one writer, which counts it, and every read and write of the settings and state files holds the lock (the launch, Settings saves, menu switches, reverts, the rating, the machine test).
+	- Branch: livecfg
+	- Commit: 435f7fc, 853853f
+	- Test case: `cicd/tests/livecfg/run.bash` (EsaF4Qe); `saves_at_the_same_moment_keep_each_others_change`, `only_a_settings_write_is_news`, `a_reload_for_another_window_keeps_this_windows_own`, `an_open_dialog_follows_another_windows_save`, `only_a_new_folder_picks_a_new_picture`, `a_save_reaches_the_others_and_clears_the_dead`, `a_second_save_waits_for_the_first`, `one_file_is_one_key_however_it_is_named`, `a_marker_goes_with_its_window`, `a_save_on_another_file_is_not_heard`, `a_poke_reaches_a_listener_and_finds_the_dead`.
 
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
@@ -707,91 +874,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- The curated default font list got replaced by just its first font
-	- ID: 2026100913394946
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Related IDs: 2026100907341818
-	- Target OS: All
-	- Incorrect behavior: The default list of fonts I had carefully curated got replaced by just the first one.
-	- Expected behavior: Bring the full list back.
-	- Notes:
-		- Before RC1.
-		- From the Settings UI update.
-
-- "Use system font and size" checkboxes disappeared
-	- ID: 2026100913394948
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Related IDs: 2026100907341818, 2026100910295902
-	- Target OS: All
-	- Incorrect behavior: 'Use system font and size' checkboxes disappeared.
-	- Expected behavior: They shouldn't have.
-		- NONE of the previous controls should have been removed. The design covered only how they worked, not their existence.
-	- Notes:
-		- Before RC1.
-		- From the Settings UI update.
-		- The design doc's "A switch that has only one member is pointless" line is why they went. It now says such a switch stays, as that setting's own automatic switch.
-
-- The "A" in the text boxes, and italic text
-	- ID: 2026100913394950
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Related IDs: 2026100907341818, 2026100910295903
-	- Target OS: All
-	- Incorrect behavior: The 'A' in the text boxes:
-		- It currently seems to mean two things:
-			- The value was set automatically by some master setting
-			- It's the hard-coded default value.
-	- Expected behavior: It should be removed altogether, because:
-		- The dual meaning is confusing.
-		- It's too visually cluttered.
-		- Being a default value is already knowable by the 'reset' being disabled.
-		- Italic text is unnecessary and confusing for the same reason.
-	- Notes:
-		- Before RC1.
-		- From the Settings UI update.
-		- The automatic value is drawn in a lighter color too. The design doc now says it draws like any other value.
-		- Set by hand, the mark turns into an x that puts the setting back. The row's revert arrow already does that.
-	- Progress log:
-		- 20261009: Q: Before making these changes, does it make sense, and is it consistent with the intent behind the 'automatic_settings' design? If so, update all instances of '20261008-180516_automatic_settings.md' among sister projects, to match.
-			- A: Yes. Automatic is a setting's default under the design, so a disabled revert arrow already says it, and the tip's first line says which. Every copy of the doc now has the revert arrow as the way back and no mark.
-
-- Dropdown text gets rendered on top of flyover tip text
-	- ID: 2026100913394952
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Target OS: All
-	- Incorrect behavior: Dropdown text gets rendered on top of flyover tip text.
-	- Expected behavior: The tip draws on top.
-	- Notes:
-		- Before RC1.
-
-- Font settings should be part of themes
-	- ID: 2026100913394956
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Font settings should be part of themes.
-	- Notes:
-		- Before RC1.
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -807,93 +889,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Changes in one SilkTerm apply to all running SilkTerms using the same config file, immediately
-	- ID: 2026100907341819
-	- Type: Feature
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Related IDs: 2026100418225510
-	- Target OS: All
-	- Requirements:
-		- Changes in one SilkTerm should apply to all running SilkTerms using the same config file, immediately.
-		- Except for randomly selected wallpaper. That should not change unless the user identified one specific file, or changed the path.
-			- In the latter case, if "random per window/tab/pane" is selected, then new wallpaper should be chosen at pseudorandom for each window/tab/pane.
-	- Notes:
-		- Before RC1.
-		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
-
-- Don't show any flyover tip text when the app or Settings dialog doesn't have the focus
-	- ID: 2026101009220760
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261010-092207
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Don't show any flyover tip text when the app - e.g. for tabs - or settings dialog doesn't have the focus.
-	- Notes:
-		- Pre-next-cut.
-
-- Settings: move tabs to the left, including nested tabs
-	- ID: 2026101009220870
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261010-092208
-	- Opened by: JC
-	- Related IDs: 2026101008023943
-	- Target OS: All
-	- Requirements:
-		- Move tabs to the left, including nested tabs.
-	- Notes:
-		- Pre-next-cut.
-		- The dialog code can do both since 2026101008023943. SilkTerm's own spec in `settings_ui.shcl` is still flat and across the top.
-
-- Settings: restore the old font list
-	- ID: 2026101009220980
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261010-092209
-	- Opened by: JC
-	- Related IDs: 2026100913394946
-	- Target OS: All
-	- Requirements:
-		- Restore my old font list that started with 'Monaspace Argon' (as now), but also included a long list that included Fira Code, Jetbrains, etc.
-	- Notes:
-		- Pre-next-cut.
-		- `DEFAULT_FONT_STACK` in config.rs still lists all 9 fonts.
-
-- Add or change a "Copyright and license" section in the design docs
-	- ID: 2026101009221091
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261010-092210
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Add or change a "Copyright and license" section to design docs. All 'CC BY 4.0' (the longer text though). Don't change copyright holder if one already exists.
-	- Notes:
-		- Pre-next-cut.
-		- Only `design_docs/20261008-180516_automatic_settings.md` has one now, with Yottacore as the holder and a one-line license text. `design.md`, the uiux style guide and the other 15 design docs have none.
-
-- A test that measures Settings text before its first text context can measure in the wrong font
-	- ID: 2026100909162017
+- An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
+	- ID: 2026101304551668
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261009-091620
+	- Opened: 20261013-045516
 	- Opened by: CC
-	- Related IDs: 2026100818102267, 2026100816465317, 2026100817355494
+	- Related IDs: 2026100910295901, 2026100907341818
 	- Target OS: All
-	- Incorrect behavior: `every_slider_number_fits_its_box_at_a_large_interface_font` (Es9oaEN) and `a_focus_ring_takes_in_the_line_its_labels_are_on` (EsA3cyd) read the UI font's attributes before they make a text context. The family is chosen when the first context is made, so run alone, each measures its text in the fallback face while the layout uses the desktop's.
-	- Expected behavior: each test measures in the face the layout was built from.
-	- Reproduced: 20261009, by a probe run alone: "2026-10-09" measured 88.7 px that way, against 75.3 in the desktop's face. The two tests were not run alone to see whether they pass for the wrong reason.
-	- Possible cause: `ui_attrs()` reads the family a text context pins, and these tests call it once, ahead of the loop.
+	- Steps to reproduce:
+		- A config from before 10-09 with `theme: "Matrix"`, `colors.foreground` and `colors.cursor` set, and no `performance.rated_hardware` or remembered window lines.
+		- Launch.
+	- Incorrect behavior: the text shows Matrix's colors. The file's colors count as Custom's and show only when Custom is picked.
+	- Expected behavior: the file's colors show over Matrix as its `*` changes, as they do for a file with those lines.
+	- Reproduced: 20261013, a unit test with the file above. Adding a `rated_hardware` line makes the colors show.
+	- Possible cause: `move_theme_colors` only runs from `move_state_out`, after its early return for a file with no state lines. The state lines are what mark a file from before 10-09, so moving it out needs another mark.
+	- Notes:
+		- Nearly every real file has the machine test's lines, so this is mostly a hand-written file.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
@@ -910,22 +923,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Seen in the allocations test: a compose frame and a drag frame both cost about 335 allocations against 166 for a cursor frame, since both panes are shaped again. The minimap half is what let 2026101007274798 go on for good.
 		- After RC1 unless a profile shows compose frames.
-
-- Settings dialog: tabs can go down the left side, and a tab can hold tabs
-	- ID: 2026101008023943
-	- Type: Feature
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261010-080239
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- The dialog code can put the tabs across the top or down the left. Down the left they are a list, every tab in it, sub-tabs stepped in under their parent. Across the top a tab's sub-tabs show only while it is current.
-		- A sub-tab open under a parent reads as current along with it.
-		- Ctrl+PgUp/PgDn and Ctrl+Tab/Shift+Tab walk a tab's sub-tabs, then move on to the next tab. The macOS chords do the same.
-		- Tabs take no focus. A click changes tab and nothing else.
-	- Progress log:
-		- 20261010: Done on `tabside`. `tabs_side: top|left` and `A/B` paths in `settings_ui.shcl`, with the design doc and style guide updated. SilkTerm stays on top with flat tabs; both looks were checked on a build with its tabs nested.
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
@@ -954,6 +951,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- "Use system font and size" checkboxes disappeared
+	- ID: 2026100913394948
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026100910295902
+	- Target OS: All
+	- Incorrect behavior: 'Use system font and size' checkboxes disappeared.
+	- Expected behavior: They shouldn't have.
+		- NONE of the previous controls should have been removed. The design covered only how they worked, not their existence.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+		- The design doc's "A switch that has only one member is pointless" line is why they went. It now says such a switch stays, as that setting's own automatic switch.
+	- Actual fix: Already fixed by b043ccb "settings on knobs" (merged 36ef959). The "Use system font" row is back with its Face and Size boxes, both stored and both live.
+	- Swept: the dialog's 141 rows on dev match the 141 from before 10-09 (5af2c4a), so no other control is missing. "Remember last size", "Text colors from wallpaper" and "Choose automatically" are there too.
+	- Verified: unit suite and the merge gate.
+	- Branch: fontlist
+	- Commit: 5f3623b (test only)
+	- Test case: EsZk4Qs `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. The row exists with both halves, neither grays, and each takes a click both ways.
+	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
+	- Closed: 20261013-034224
 
 - vm925w: The silkterm launcher in the taskbar doesn't work.
 	- ID: 2026100710173170
@@ -1790,6 +1812,66 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- Dropdown text gets rendered on top of flyover tip text
+	- ID: 2026100913394952
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: No
+	- Severity: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Target OS: All
+	- Incorrect behavior: Dropdown text gets rendered on top of flyover tip text.
+	- Expected behavior: The tip draws on top.
+	- Reproduced: 20261013 on b23, in Settings on dev. With the scrim Function dropdown open, the pointer resting on its list brought up the tip of the row under the list, and the list's text drew over the tip's box.
+	- Actual cause: Two faults. An open dropdown or field menu takes every click until it closes, but the rows under it still answered with their tips. And the tip shared the popup's text renderer, which draws all of its text after all of the boxes, so the list's text landed on the tip. The About link tip shared the main text the same way. In the main window a menu tip shared the menus' renderer, and a menu tip that flips left of a submenu sits over the parent menu.
+	- Actual fix: Every tip draws last, in a layer of its own with its own text renderer, in Settings, About, the notice and the main window. Nothing behind an open dropdown or field menu shows a tip.
+	- Sweep: every tip, over every layer a window draws. Tips: Settings rows, footer buttons and revert arrows, the About and notice links, the tab tip, menu tips, and the benchmark banner that draws with them. Layers: rows, an open list, the field menu, the prompt and the color picker.
+	- Swept: All Settings and About tips go through the one tip layer in `scene`. The prompt and picker already hid every tip behind them. The tab tip, menu tips and banner moved off the menus' renderer. `prepare_overlay` and `render_overlay` have no other callers.
+	- Branch: tipfix
+	- Commit: d33977d
+	- Test case: `an_open_popup_hides_every_tip_behind_it` (EsZp4L4) and `a_tip_draws_over_everything_else_in_a_dialog` (EsZp4RG) both failed before the fix and pass after. The second also fails with only the About tip put back in the main text. The main window's draw order has no test, since it needs a GPU.
+	- Verified: 20261013, the gate. In a real Settings window on b23 the fixed build shows no tip over the open list, where dev showed the covered row's tip under the list's text.
+	- Acceptance signoff: Self-closed: reproduced, tests failed before and pass after, swept.
+	- Closed: 20261013-040658
+	- Notes:
+		- Before RC1.
+
+- The "A" in the text boxes, and italic text
+	- ID: 2026100913394950
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026100910295903
+	- Target OS: All
+	- Incorrect behavior: The 'A' in the text boxes:
+		- It currently seems to mean two things:
+			- The value was set automatically by some master setting
+			- It's the hard-coded default value.
+	- Expected behavior: It should be removed altogether, because:
+		- The dual meaning is confusing.
+		- It's too visually cluttered.
+		- Being a default value is already knowable by the 'reset' being disabled.
+		- Italic text is unnecessary and confusing for the same reason.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+		- The automatic value is drawn in a lighter color too. The design doc now says it draws like any other value.
+		- Set by hand, the mark turns into an x that puts the setting back. The row's revert arrow already does that.
+	- Progress log:
+		- 20261009: Q: Before making these changes, does it make sense, and is it consistent with the intent behind the 'automatic_settings' design? If so, update all instances of '20261008-180516_automatic_settings.md' among sister projects, to match.
+			- A: Yes. Automatic is a setting's default under the design, so a disabled revert arrow already says it, and the tip's first line says which. Every copy of the doc now has the revert arrow as the way back and no mark.
+	- Actual fix: Already fixed by b043ccb "settings on knobs" (merged 36ef959), which took out the "A" mark, the italic, the lighter color and the x. The glossary still described the mark, and now doesn't.
+	- Swept: every text field, number box and their drawing code; no mark or style is left that depends on where a value comes from. Stale comments about the x and the italic in settings_ui.rs were brought up to date.
+	- Verified: unit suite and the merge gate. The test failed against a build that drew an automatic Family in italic, and against one that drew an automatic Size dimmer.
+	- Branch: fontlist
+	- Commit: 5f3623b (test, glossary)
+	- Test case: EsZk4Qs `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. Family and Size each draw only their value in the box, in the normal color and not italic, and set by hand to the same value they draw exactly the same, with no x.
+	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
+	- Closed: 20261013-034224
+
 - The allocations-per-frame test fails at rest now and then: every frame rebuilds both panes
 	- ID: 2026101007274798
 	- Type: Bug
@@ -2531,6 +2613,68 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
+
+- Add or change a "Copyright and license" section in the design docs
+	- ID: 2026101009221091
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261010-092210
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Add or change a "Copyright and license" section to design docs. All 'CC BY 4.0' (the longer text though). Don't change copyright holder if one already exists.
+	- Notes:
+		- Pre-next-cut.
+		- Only `design_docs/20261008-180516_automatic_settings.md` has one now, with Yottacore as the holder and a one-line license text. `design.md`, the uiux style guide and the other 15 design docs have none.
+	- Progress log:
+		- 20261013: Q: Where a doc has no holder yet, who is it?
+			- A: Jim Collier, with the same ID marker as the README footer.
+		- 20261013: Scope is `design.md`, `uiux-style-guide.md` and the 16 files in `design_docs/`. The repo's style guide, glossary and `build.md` are reference docs, not design docs, so they were left out.
+		- 20261013: Every one now ends with the same section: the copyright line, the CC BY 4.0 license by its full name with a link, and a no-warranty line. The year is the year each doc was first committed, 2026 for all. The automatic settings doc keeps Yottacore and got the longer text. Each TOC lists the new heading.
+	- Branch: doclicense
+	- Commit: f254710
+	- Test case: `cicd/tests/docs/run.py`, `cicd/tests/toc/run.py` and `cicd/tests/tables/run.py` pass. The TOC check fails on a copy with the new entry removed.
+	- Acceptance signoff: Self-closed: mechanical, same text in every doc.
+	- Closed: 20261013-042810
+
+- Settings: restore the old font list
+	- ID: 2026101009220980
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261010-092209
+	- Opened by: JC
+	- Related IDs: 2026100913394946
+	- Target OS: All
+	- Requirements:
+		- Restore my old font list that started with 'Monaspace Argon' (as now), but also included a long list that included Fira Code, Jetbrains, etc.
+	- Notes:
+		- Pre-next-cut.
+		- `DEFAULT_FONT_STACK` in config.rs still lists all 9 fonts.
+	- Superseded by ID: 2026100913394946
+	- Actual fix: Duplicate of 2026100913394946, fixed there. On b23 Family now shows the old list in full, starting with Monaspace Argon.
+	- Branch: fontlist
+	- Commit: 5f3623b
+	- Test case: EsZk42X and EsZk4LL, under 2026100913394946.
+	- Acceptance signoff: Self-closed: duplicate of 2026100913394946.
+	- Closed: 20261013-034224
+
+- Settings dialog: tabs can go down the left side, and a tab can hold tabs
+	- ID: 2026101008023943
+	- Type: Feature
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261010-080239
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- The dialog code can put the tabs across the top or down the left. Down the left they are a list, every tab in it, sub-tabs stepped in under their parent. Across the top a tab's sub-tabs show only while it is current.
+		- A sub-tab open under a parent reads as current along with it.
+		- Ctrl+PgUp/PgDn and Ctrl+Tab/Shift+Tab walk a tab's sub-tabs, then move on to the next tab. The macOS chords do the same.
+		- Tabs take no focus. A click changes tab and nothing else.
+	- Progress log:
+		- 20261010: Done on `tabside`. `tabs_side: top|left` and `A/B` paths in `settings_ui.shcl`, with the design doc and style guide updated. SilkTerm stays on top with flat tabs; both looks were checked on a build with its tabs nested.
 
 - Settings, Cursor: a "Blink" switch as a subsection heading over the blink rate
 	- ID: 2026100907341817
@@ -3640,6 +3784,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- A test that measures Settings text before its first text context can measure in the wrong font
+	- ID: 2026100909162017
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261009-091620
+	- Opened by: CC
+	- Related IDs: 2026100818102267, 2026100816465317, 2026100817355494
+	- Target OS: All
+	- Incorrect behavior: `every_slider_number_fits_its_box_at_a_large_interface_font` (Es9oaEN) and `a_focus_ring_takes_in_the_line_its_labels_are_on` (EsA3cyd) read the UI font's attributes before they make a text context. The family is chosen when the first context is made, so run alone, each measures its text in the fallback face while the layout uses the desktop's.
+	- Expected behavior: each test measures in the face the layout was built from.
+	- Reproduced: 20261009, by a probe run alone: "2026-10-09" measured 88.7 px that way, against 75.3 in the desktop's face. The two tests were not run alone to see whether they pass for the wrong reason.
+	- Possible cause: `ui_attrs()` reads the family a text context pins, and these tests call it once, ahead of the loop.
+	- Reproduced: 20261013, each test run alone, here with GentiumAlt as the desktop font. Both passed. The slider test measured right only because the context's width memo, keyed by text alone, already held each number from the layout. The focus ring test measured the pair and radio labels ("Face", "Outline", "Scrim", "Stretch", "Zoom") in the fallback face at every size. The fallback is wider here, so it passed on a stricter number; a box with a narrower fallback could pass it wrongly. The probe string measured 222 px in the fallback against 191 in GentiumAlt.
+	- Actual cause: The UI and terminal families, and their weights, are set only when a text context is built. Before the first one, `ui_attrs()`, `ui_bold_weight()`, `mono_attrs()` and `mono_bold_weight()` answer with the generic family and default weights. The app always builds a context before it draws or measures, so only tests hit it.
+	- Actual fix: The first of those four asked for before any context sets the families itself, from a font system of its own, the same way a context does. After that they read what the last context set, as before. Fixed in the one place, so the two tests and any later one get the right face whatever order they read in.
+	- Swept: every caller of the four functions. Tests that read them before a context: Es9oaEN and EsA3cyd (the two named), Er2VGXH (`mono_attrs`, checks weights, measures nothing). Tests that read them after one: EsDinMD, EsDinME, Er2UJeZ, ErlkwsK, Er2VGXJ. The text.rs tests that build their own font system set the family first. Every app caller is handed a text context, and `TextCtx::new_cpu` is the only place the app makes a font system. Nothing outside the code calls them.
+	- Note: The fallback is still used where nothing resolves at all, as before. b26 names no desktop monospace font; the terminal family then comes from the built-in stack the same way for both paths. Not run there.
+	- Verified: 20261013, the new test fails with the fix taken out (the early attrs carry the generic family) and passes with it. Es9oaEN, EsA3cyd and the new test pass run alone. The merge gate (fmt, clippy, all 1272 unit tests), clippy for the Windows target, and the test ID check pass.
+	- Branch: uifontmeasure
+	- Commit: 140985b
+	- Test case: `attrs_read_before_the_first_context_match_the_context` (Esa77JI), which runs `attrs_before_context_child` (Esa77dv) in a fresh copy of the test binary so no other test has set the families first.
+	- Acceptance signoff: Self-closed: reproduced, the test fails before the fix and passes after, and only tests change behavior.
+	- Closed: 20261013-050551
 
 - At a large interface font, the Shell tab's "Last seen" and "Active" column titles overlap
 	- ID: 2026100818102267

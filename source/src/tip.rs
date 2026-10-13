@@ -163,6 +163,45 @@ pub fn beside(anchor: Rect, size: (f32, f32), win: (f32, f32), gap: f32, edge: f
 	(x, y)
 }
 
+/// Whether a window may raise a tip, by where its focus is. A window in the
+/// background shows none. One that just got the focus back shows none until
+/// the pointer moves: a tip popping up under a pointer left resting there,
+/// while the person's mind is on the keyboard or on another window, would
+/// come out of nowhere (2026101009220760).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum Focus {
+	#[default]
+	Here,
+	Away,
+	Back,
+}
+
+impl Focus {
+	/// The window gained or lost the focus.
+	#[must_use]
+	pub fn changed(self, focused: bool) -> Self {
+		match (self, focused) {
+			(_, false) => Self::Away,
+			(Self::Away, true) => Self::Back,
+			(other, true) => other,
+		}
+	}
+
+	/// The pointer moved to somewhere new. A move while away counts for
+	/// nothing, since the focus coming back is what has to be followed by one.
+	#[must_use]
+	pub fn moved(self) -> Self {
+		match self {
+			Self::Back => Self::Here,
+			other => other,
+		}
+	}
+
+	pub fn tips(self) -> bool {
+		self == Self::Here
+	}
+}
+
 /// What the pointer is resting on, and since when. `T` names the thing in
 /// whatever terms the caller thinks in - a tab index, a menu row - so the timing
 /// rule is written once and the identity stays the caller's business.
@@ -230,7 +269,7 @@ impl<T: Copy + PartialEq> Dwell<T> {
 
 #[cfg(test)]
 mod tests {
-	use super::{DELAY, Dwell, beside, lay_out, place, wrap, wrap_budget};
+	use super::{DELAY, Dwell, Focus, beside, lay_out, place, wrap, wrap_budget};
 	use crate::pane::Rect;
 	use std::time::Duration;
 
@@ -408,6 +447,34 @@ mod tests {
 			dwell.ripe_at(back + DELAY + Duration::from_secs(1), limit),
 			Some(1)
 		);
+	}
+
+	// No tips while the window is in the background, and none after it comes
+	// back until the pointer moves. Duplicate focus events, which some window
+	// managers send, change nothing.
+	// Test ID: EsZp4Va
+	#[test]
+	fn a_window_without_the_focus_shows_no_tips() {
+		let here = Focus::default();
+		assert!(here.tips(), "a window starts with tips allowed");
+		assert_eq!(here.changed(true), Focus::Here);
+		let away = here.changed(false);
+		assert!(!away.tips());
+		assert_eq!(
+			away.moved(),
+			Focus::Away,
+			"a move in the background raised tips"
+		);
+		assert_eq!(away.changed(false), Focus::Away);
+		let back = away.changed(true);
+		assert!(
+			!back.tips(),
+			"a tip could pop up the moment the focus came back"
+		);
+		assert_eq!(back.changed(true), Focus::Back);
+		assert!(back.moved().tips(), "a move after coming back allows tips");
+		// focus dropped and handed back before any move, as one WM's animation does
+		assert!(!back.changed(false).changed(true).tips());
 	}
 
 	// The clock runs on while the pointer stays put, and restarts when it moves

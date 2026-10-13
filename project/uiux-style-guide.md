@@ -100,9 +100,9 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 ### Tabs
 
-- Tabs run left to right along the top, on the gutter strip, standing on the line that divides that strip from the rows below. The dialog code can list them down the left side instead, on the same strip, each as wide as the list. SilkTerm keeps them on top.
+- Tabs run down the left side, on the gutter strip, each as wide as the list, with a line along its right dividing it from the rows. SilkTerm's are Silk, Appearance, Movement, Window, Shell and Keys, with Themes, Background, Text and Cursor under Appearance. The dialog code can put them left to right along the top instead, standing on the line that divides the strip from the rows below.
 
-- A tab may hold tabs. Across the top its sub-tabs show in a row under the strip only while it is current. Down the side they are always listed, stepped in under it. The current tab and the tab it sits under both read as current. Any depth works, though more than two levels is poor design.
+- A tab may hold tabs. Down the side they are always listed, stepped in under it. Across the top its sub-tabs show in a row under the strip only while it is current. The current tab and the tab it sits under both read as current. A click on the parent opens its first sub-tab, and does nothing while one of them is already open. Any depth works, though more than two levels is poor design.
 
 - Tabs take no keyboard focus. They are clicked, or changed with the tab chords, and otherwise say where you are.
 
@@ -156,6 +156,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 	- File or folder edits whichever of the two its box shows. Its revert control puts back both.
 
 - The performance profile and the theme are dropdowns of presets, with Custom beside them. A row a preset sets shows the preset's value. Changing it puts a `*` after the preset's name, and Custom stays as it was. Picking another entry drops the `*` changes.
+	- A saved theme keeps a font as well. A pick sets it only while "Font settings ignore themes", under Mode on the Themes tab, is off, and then a font that differs from the theme's also puts a `*` after its name.
 
 - A row that may not work on every desktop has a warning mark after its label: a small triangle in the label's color, never red. What the row depends on goes at the end of the row's flyover, which shows over the mark like the rest of the row.
 	- A row that keeps a window from giving its graphics memory back gets one too, as Transparency does on Windows. So does "Free resources when idle", since some graphics drivers have trouble with it.
@@ -220,6 +221,10 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 - Placement depends on what is being described. A tip for a row goes under the control and flips above it near the bottom edge. A tip for a menu row goes beside the popup, because a box under the row would cover the rows being chosen between.
 
 - A tip never has an action, a link, or anything the pointer has to reach.
+
+- A tip sits on top of everything else in its window, an open list or menu included. While a dropdown or a field menu is open, nothing behind it shows a tip.
+
+- A window without the focus shows no tips, and a tip already up goes away. When the focus comes back, tips wait for the pointer to move.
 
 ## Layout and measurement
 
@@ -350,6 +355,12 @@ Things the built interface does differently from the rules above. Each is a smal
 
 - The About box pads its `Key: value` lines with extra spaces, which line nothing up in a proportional font. Cosmetic, and shared with the text `--about` prints.
 
-- The Silk tab makes eight, one past the ceiling above. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
+- The Silk tab made eight, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
 
-- The Keys tab makes nine. No other tab's subject takes in the hotkeys. The nine tabs are now the widest thing in the dialog, so they set the panel's width on every tab.
+- The Keys tab makes nine. No other tab's subject takes in the hotkeys. Down the left, the list adds its own width to the panel, set by its widest entry.
+
+## Copyright and license
+
+> Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.

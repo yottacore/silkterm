@@ -998,6 +998,10 @@ fBuildTestRelease(){
 	## A prepared wallpaper is kept on disk and the next launch reads it back.
 	## Exit 3 is a skip: no binary, display or xdotool.
 	fRunTest_MaySkip cicd/tests/wpkept/run.bash "prepared wallpaper kept on disk"
+	## A save in one window shows in another on the same settings file, and in
+	## no window on another file. Exit 3 is a skip: no binary, display, xdotool,
+	## xwd or ImageMagick.
+	fRunTest_MaySkip cicd/tests/livecfg/run.bash "settings shared between windows"
 	## Heap allocations per frame at rest and in a drag select, against a limit.
 	## Exit 3 is a skip: no debug binary, display, window manager or xdotool.
 	fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"

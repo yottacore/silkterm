@@ -326,6 +326,7 @@ macro_rules! keys_of {
 			| Key::CursorBlinking
 			| Key::SystemFont
 			| Key::SystemFontSize
+			| Key::FontIgnoresThemes
 			| Key::RememberSize
 			| Key::RememberPerMonitor
 			| Key::RememberMaximized
@@ -506,6 +507,7 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::CursorBlinking => settings.cursor_blink,
 		Key::SystemFont => settings.use_system_font,
 		Key::SystemFontSize => settings.use_system_font_size,
+		Key::FontIgnoresThemes => settings.font_ignores_themes,
 		Key::RememberSize => settings.remember_size,
 		Key::RememberPerMonitor => settings.remember_per_monitor,
 		Key::RememberMaximized => settings.remember_maximized,
@@ -670,8 +672,8 @@ enum Focus {
 }
 
 /// Where the user was looking when the dialog closed, so reopening it shortly
-/// after opens on the same tab and scroll position instead of the top of
-/// Appearance. Only the view - edits are discarded on close as before.
+/// after opens on the same tab and scroll position instead of the top of the
+/// first tab. Only the view - edits are discarded on close as before.
 #[derive(Debug, Clone, Copy)]
 pub struct View {
 	tab: usize,
@@ -971,7 +973,7 @@ pub struct TextItem {
 	pub color: [u8; 3],
 	pub clip: Option<Rect>, // when set, clip drawing to this rect (e.g. a field)
 	pub bold: bool,
-	pub italic: bool, // an automatic value, the way a placeholder reads
+	pub italic: bool, // unused since an automatic value lost its italic (2026100913394950)
 	pub scale: f32,   // 1.0 normal; >1 for the prominent dialog title
 }
 
@@ -1010,6 +1012,8 @@ thread_local! {
 pub struct SettingsDialog {
 	orig: Settings,
 	edited: Settings,
+	// another window saved while this one held changes (`follow_file`)
+	behind: bool,
 	#[cfg(test)]
 	defaults: Settings, // the shipped values, for the tests' own checks
 	reverted: Vec<&'static str>, // config keys reverted this session -> comment out on Apply
@@ -1384,6 +1388,7 @@ impl SettingsDialog {
 		let mut dialog = Self {
 			orig: settings.clone(),
 			edited: settings,
+			behind: false,
 			#[cfg(test)]
 			defaults: Settings::default(),
 			reverted: Vec::new(),
@@ -1662,6 +1667,18 @@ impl SettingsDialog {
 	pub fn animate(&mut self, dt: f32, measure: &mut impl FnMut(&str) -> f32) -> Option<u64> {
 		let s = self.scale;
 		self.animate_dip(dt, &mut |t| measure(t) / s)
+	}
+	/// Open the first dropdown on the tab in view, for a test that needs a popup
+	/// up. False when the tab has none.
+	#[cfg(test)]
+	pub fn open_a_dropdown(&mut self) -> bool {
+		let Some(i) = (0..self.specs.len()).find(|&i| {
+			self.specs[i].tab == self.tab && matches!(self.specs[i].kind, Kind::Dropdown(_))
+		}) else {
+			return false;
+		};
+		self.dd_open(i);
+		!self.dd_options(i).is_empty()
 	}
 	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
 		#[cfg(test)]
@@ -2090,6 +2107,33 @@ impl SettingsDialog {
 		fields::fill(&mut settings, self.monitor.as_deref());
 		self.orig = settings.clone();
 		self.edited = settings;
+	}
+	/// Another window saved the settings file. With nothing changed here the
+	/// dialog shows the file as it is now. With changes in hand it keeps them,
+	/// and the Apply that writes them reads the file back (`take_behind`), so
+	/// neither window's change is lost.
+	pub fn follow_file(&mut self, mut base: Settings) {
+		if self.holds_changes() {
+			self.behind = true;
+			return;
+		}
+		config::keep_window_state(&self.orig, &mut base);
+		self.start_from(base);
+	}
+	// Anything begun counts, a value half typed or a color half picked included.
+	fn holds_changes(&self) -> bool {
+		self.orig != self.edited
+			|| !self.reverted.is_empty()
+			|| self.edit.is_some()
+			|| self.pick.is_some()
+			|| self.prompt.is_some()
+			|| self.capture.is_some()
+			|| self.drag.is_some()
+			|| self.shell_drag.is_some()
+	}
+	/// Whether another window saved while this one held changes, cleared.
+	pub fn take_behind(&mut self) -> bool {
+		std::mem::take(&mut self.behind)
 	}
 	/// Whether the desktop says when a window is minimized or covered.
 	pub fn set_sees_hidden(&mut self, sees: bool) {
@@ -3268,8 +3312,10 @@ impl SettingsDialog {
 	// The flyover to show while the cursor rests on something that has one:
 	// (text, anchor rect to hang the tip box under).
 	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
-		if self.modal() {
-			return None; // the box covers the panel; nothing behind it answers
+		// A box covers the panel, or a popup owns the pointer until it closes, so
+		// nothing behind either answers.
+		if self.overlay_open() {
+			return None;
 		}
 		for (action, r, _) in self.buttons() {
 			if r.contains(mx, my) {
@@ -3721,6 +3767,7 @@ impl SettingsDialog {
 			Key::CursorBlinking => self.edited.cursor_blink = on,
 			Key::SystemFont => self.edited.use_system_font = on,
 			Key::SystemFontSize => self.edited.use_system_font_size = on,
+			Key::FontIgnoresThemes => self.edited.font_ignores_themes = on,
 			Key::RememberSize => self.edited.remember_size = on,
 			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,
@@ -6237,6 +6284,13 @@ mod tests {
 	pub(super) fn mk_dialog(max_h: f32) -> SettingsDialog {
 		mk_dialog_at(max_h, 1.0)
 	}
+	// A tab by its title, since moving a tab moves every number after it.
+	fn tab_named(title: &str) -> usize {
+		tab_titles()
+			.iter()
+			.position(|t| *t == title)
+			.unwrap_or_else(|| panic!("no {title} tab"))
+	}
 	// Everything a real dialog is handed arrives in physical pixels, so a scale
 	// of 2 means twice the line height, label width, tab widths and height cap.
 	fn mk_dialog_at(max_h: f32, scale: f32) -> SettingsDialog {
@@ -6435,7 +6489,7 @@ mod tests {
 		assert!(d.thumb().is_none());
 		// tight cap: window clamps, the (tallest) appearance tab overflows
 		let mut d = mk_dialog(400.0);
-		d.tab = 1; // Background
+		d.tab = tab_named("Background");
 		assert!(d.size().1 <= 400.0);
 		assert!(d.max_scroll() > 0.0);
 		assert!(d.thumb().is_some());
@@ -7006,7 +7060,7 @@ mod tests {
 			let (w, h) = d.natural;
 			d.set_size(w * scale, h * scale);
 			let (mut packed, mut split, mut kept) = (0, 0, Vec::new());
-			let column = d.rect.x + super::lay().pad + d.label_w;
+			let column = d.content_x() + super::lay().pad + d.label_w;
 			for lead in 0..d.specs.len() {
 				let (_, parts, _) = SettingsDialog::line_of(d.specs, lead);
 				if d.specs[lead].beside || parts < 2 {
@@ -7028,7 +7082,9 @@ mod tests {
 					kept.push(d.specs[lead].key);
 				}
 				let indent = f32::from(d.specs[lead].indent) * super::lay().indent;
-				assert!((d.label_x(lead) - (d.rect.x + super::lay().pad + indent)).abs() < 0.01);
+				assert!(
+					(d.label_x(lead) - (d.content_x() + super::lay().pad + indent)).abs() < 0.01
+				);
 				for i in lead..lead + parts {
 					let key = d.specs[i].key;
 					let bx = d.checkbox(i);
@@ -7376,24 +7432,32 @@ mod tests {
 	// The tab strip is chrome. It travels only far enough to keep the current tab
 	// in view, and never with the rows' sideways scroll - a tab panned off the
 	// window edge could not be clicked, which is how you leave a tab that will
-	// not fit.
+	// not fit. Both sides, over SilkTerm's own tabs.
 	// Test ID: EpOZLYG
 	#[test]
 	fn the_tab_strip_keeps_the_current_tab_in_the_window() {
-		let mut d = mk_dialog(4000.0);
-		d.set_size(d.size().0 - 300.0, d.size().1);
-		assert!(d.max_hscroll() > 0.0);
-		for tab in 0..tab_titles().len() {
-			d.tab = tab;
-			for hscroll in [0.0, d.max_hscroll() / 2.0, d.max_hscroll()] {
-				d.hscroll = hscroll;
-				let r = d.tab_rect(tab);
-				assert!(
-					r.x >= d.rect.x - 0.01 && r.x + r.w <= d.rect.x + d.rect.w + 0.01,
-					"tab {tab} at hscroll {hscroll} runs from {} to {}",
-					r.x,
-					r.x + r.w
-				);
+		let paths: Vec<&str> = tab_nodes().iter().map(|n| n.path).collect();
+		for side in [TabsSide::Top, TabsSide::Left] {
+			let _tabs = stand_in_tabs(&paths, side);
+			let mut d = mk_dialog(4000.0);
+			d.set_size(d.size().0 - 300.0, d.size().1);
+			assert!(d.max_hscroll() > 0.0);
+			for tab in 0..tab_titles().len() {
+				d.tab = tab;
+				for hscroll in [0.0, d.max_hscroll() / 2.0, d.max_hscroll()] {
+					d.hscroll = hscroll;
+					for node in d.active_path() {
+						let r = d.tab_rect(node);
+						assert!(
+							r.w > 0.0
+								&& r.x >= d.rect.x - 0.01
+								&& r.x + r.w <= d.rect.x + d.rect.w + 0.01,
+							"{side:?}: tab {node} at hscroll {hscroll} runs from {} to {}",
+							r.x,
+							r.x + r.w
+						);
+					}
+				}
 			}
 		}
 	}
@@ -7420,10 +7484,13 @@ mod tests {
 	}
 
 	// The strip is chrome: shorter than a footer button, dropped clear of the
-	// panel edge, and closed off by a rule the rows start below.
+	// panel edge, and closed off by a rule the rows start below. That is the
+	// look across the top, so SilkTerm's own tabs are put there for it.
 	// Test ID: Em3Pif3
 	#[test]
 	fn the_tabs_stand_on_the_line_that_closes_their_strip() {
+		let paths: Vec<&str> = tab_nodes().iter().map(|n| n.path).collect();
+		let _tabs = stand_in_tabs(&paths, TabsSide::Top);
 		let d = mk_dialog(2000.0);
 		let gut = d.gutter_rect();
 		let tab = d.tab_rect(0);
@@ -7509,15 +7576,18 @@ mod tests {
 				let indent = f32::from(d.specs[i].indent);
 				seen_indented |= indent > 0.0;
 				assert!(
-					(d.label_x(i) - (d.rect.x + super::lay().pad + indent * super::lay().indent))
+					(d.label_x(i)
+						- (d.content_x() + super::lay().pad + indent * super::lay().indent))
 						.abs() < 0.01
 				);
 				assert!(
-					d.label_x(i) >= d.rect.x + super::lay().pad,
+					d.label_x(i) >= d.content_x() + super::lay().pad,
 					"a label never steps left of the panel pad"
 				);
 				// every control on the tab starts in the same column
-				assert!((d.control_x(i) - (d.rect.x + super::lay().pad + d.label_w)).abs() < 0.01);
+				assert!(
+					(d.control_x(i) - (d.content_x() + super::lay().pad + d.label_w)).abs() < 0.01
+				);
 				assert!(
 					d.label_x(i) + super::lay().indent <= d.control_x(i),
 					"the label column still clears the deepest indent"
@@ -8015,6 +8085,83 @@ mod tests {
 		assert!(!d.row_is_default(d.specs.iter().position(|s| s.key == Key::FontSize).unwrap()));
 	}
 
+	// The Use system font pair is a row with both halves live, and the value it
+	// makes automatic draws in its box exactly as the same value set by hand: no
+	// mark, no italic, no other color (2026100913394948, 2026100913394950).
+	// Test ID: EsZk4Qs
+	#[test]
+	fn the_font_switches_are_there_and_an_automatic_value_draws_like_any_other() {
+		let mut m = chars7;
+		let mut d = mk_dialog(4000.0);
+		let pair = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::SystemFont)
+			.unwrap();
+		assert_eq!(d.specs[pair].label, "Use system font");
+		assert!(matches!(
+			d.specs[pair].kind,
+			Kind::Dual {
+				keys: [Key::SystemFont, Key::SystemFontSize],
+				..
+			}
+		));
+		d.tab = d.specs[pair].tab;
+		for (part, key) in [(0, Key::SystemFont), (1, Key::SystemFontSize)] {
+			assert!(d.get_toggle(key), "{key:?} is on by default");
+			assert!(!d.part_disabled(pair, part), "{key:?} grays");
+			let b = d.dual_box(pair, part);
+			d.mouse_down_dip(b.x + b.w / 2.0, b.y + b.h / 2.0, &mut m);
+			assert!(!d.get_toggle(key), "{key:?} took no click");
+			d.mouse_down_dip(b.x + b.w / 2.0, b.y + b.h / 2.0, &mut m);
+			assert!(d.get_toggle(key), "{key:?} took no second click");
+		}
+		// everything drawn inside a value's box
+		let inside = |r: &super::Rect, x: f32, y: f32| {
+			x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h
+		};
+		let drawn = |d: &SettingsDialog, r: super::Rect| {
+			let texts: Vec<String> = d
+				.texts_dip(d.line_h, chars7)
+				.into_iter()
+				.filter(|t| inside(&r, t.x, t.y + d.line_h / 2.0))
+				.map(|t| format!("{} {:?} {} {}", t.text, t.color, t.italic, t.bold))
+				.collect();
+			let (_, rows) = d.rects_dip(d.line_h, chars7);
+			let rects: Vec<String> = rows
+				.into_iter()
+				.filter(|q| inside(&r, q.pos[0] + q.size[0] / 2.0, q.pos[1] + q.size[1] / 2.0))
+				.map(|q| format!("{q:?}"))
+				.collect();
+			(texts, rects)
+		};
+		let at = |d: &SettingsDialog, key: Key| d.specs.iter().position(|s| s.key == key).unwrap();
+		let fam = at(&d, Key::FontFamily);
+		let shown = d.get_text(Key::FontFamily);
+		let auto = drawn(&d, d.textbox(fam));
+		assert_eq!(auto.0.len(), 1, "only the value in the box: {:?}", auto.0);
+		assert!(auto.0[0].starts_with(&format!("{shown} {:?} false", super::dlg().text)));
+		d.set_text(Key::FontFamily, &shown);
+		assert!(!d.get_toggle(Key::SystemFont));
+		assert_eq!(
+			drawn(&d, d.textbox(fam)),
+			auto,
+			"set by hand draws the same"
+		);
+
+		let size = at(&d, Key::FontSize);
+		let shown = d.get_f32(Key::FontSize);
+		let auto = drawn(&d, d.valbox(size));
+		assert_eq!(auto.0.len(), 1, "only the value in the box: {:?}", auto.0);
+		d.set_f32(Key::FontSize, shown);
+		assert!(!d.get_toggle(Key::SystemFontSize));
+		assert_eq!(
+			drawn(&d, d.valbox(size)),
+			auto,
+			"set by hand draws the same"
+		);
+	}
+
 	// "Remember last size" is stored like any other switch, with its own revert
 	// arrow. A size typed in turns it off, and the other keeps what it showed.
 	// Test ID: EsDxpmL
@@ -8160,6 +8307,65 @@ mod tests {
 		let custom = d.dd_options(theme_row).len() - 1;
 		d.set_radio(Key::Theme, custom);
 		assert_eq!(d.dd_closed_label(theme_row), "Custom");
+	}
+
+	// A theme pick leaves "Text colors from wallpaper" where it was. On, the
+	// picture still picks the text colors; off, they are the new theme's.
+	// Test ID: Esa43cc
+	#[test]
+	fn a_theme_pick_leaves_the_wallpaper_colors_switch_alone() {
+		use knobs::Value;
+		let mut d = on_theme("Matrix");
+		custom(&mut d);
+		own(
+			&mut d,
+			&[
+				(Key::BgEnabled, Value::Bool(true)),
+				(Key::ColFromWallpaper, Value::Bool(true)),
+			],
+		);
+		d.edited.wallpaper_summary = Some(crate::autotheme::Summary {
+			luma_hi: 0.3,
+			luma_lo: 0.02,
+			luma_mean: 0.13,
+			spread: [[0.13; 3]; crate::autotheme::SPREAD],
+			alpha: 1.0,
+			hue: 250.0,
+			chroma: 0.08,
+			opacity: 0.35,
+		});
+		crate::fields::fill(&mut d.edited, None);
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let at = |name: &str| names.iter().position(|n| n == name).unwrap();
+		let pal = |name: &str| crate::theme::resolve(name, crate::theme::Mode::Dark, true);
+
+		d.set_radio(Key::Theme, at("Pastel"));
+		assert_eq!(d.edited.theme, "Pastel");
+		assert!(d.get_toggle(Key::ColFromWallpaper), "on stays on");
+		assert_ne!(d.edited.fg, pal("Pastel").fg, "the picture still picks it");
+		assert!(!d.disabled(Key::ColFg) && !d.disabled(Key::ColCursor));
+
+		d.set_toggle(Key::ColFromWallpaper, false);
+		assert_eq!(
+			(d.edited.fg, d.edited.cursor),
+			(pal("Pastel").fg, pal("Pastel").cursor)
+		);
+		d.set_radio(Key::Theme, at("Matrix"));
+		assert!(!d.get_toggle(Key::ColFromWallpaper), "off stays off");
+		assert_eq!(
+			(d.edited.fg, d.edited.cursor),
+			(pal("Matrix").fg, pal("Matrix").cursor)
+		);
+
+		// with no picture up, on is the theme's colors too
+		d.set_toggle(Key::ColFromWallpaper, true);
+		d.edited.wallpaper_summary = None;
+		crate::fields::fill(&mut d.edited, None);
+		assert!(d.get_toggle(Key::ColFromWallpaper));
+		assert_eq!(
+			(d.edited.fg, d.edited.cursor),
+			(pal("Matrix").fg, pal("Matrix").cursor)
+		);
 	}
 
 	// The open command shows the desktop's opener until one is typed. File or
@@ -9251,10 +9457,9 @@ mod tests {
 		assert!(d.edited.software_rendering);
 	}
 
-	// Commented out by 2026100907341818: the Use system font switches are gone.
-	// Family and Size are automatic settings whose automatic value is the
-	// desktop's font, so nothing is grayed for a desktop that names none.
-	// `the_font_rows_show_the_desktops_font_until_set_by_hand` replaces it.
+	// Commented out by 2026100907341818: nothing grays for a desktop that names
+	// no font. The switch stays live, and Family uses its own value (the
+	// automatic settings design). EsDxpmK replaces it.
 	//
 	// // The "use system font" face toggle is inert wherever the OS reports no
 	// // monospace family - always on Windows, and on a desktop with none set. That
@@ -9367,8 +9572,8 @@ mod tests {
 	fn the_scale_factor_only_multiplies_the_layout() {
 		let mut base = mk_dialog(4000.0);
 		let mut hidpi = mk_dialog_at(4000.0, 2.0);
-		base.tab = 1; // Background, where the Transparency checkbox is
-		hidpi.tab = 1;
+		base.tab = tab_named("Background"); // where the Transparency checkbox is
+		hidpi.tab = base.tab;
 		let ((bw, bh), (hw, hh)) = (base.size(), hidpi.size());
 		assert!(
 			(hw - bw * 2.0).abs() < 0.01 && (hh - bh * 2.0).abs() < 0.01,
@@ -9652,7 +9857,7 @@ mod tests {
 	#[test]
 	fn keyboard_skips_headers_and_disabled() {
 		let mut d = mk_dialog(2000.0);
-		d.tab = 1; // Background
+		d.tab = tab_named("Background");
 		// with transparency + scrim off, the opacity/blur/scrim rows are disabled
 		d.edited.transparent_background = false;
 		d.edited.text_scrim = false;
@@ -9666,7 +9871,7 @@ mod tests {
 	#[test]
 	fn space_toggles_focused_boolean() {
 		let mut d = mk_dialog(2000.0);
-		d.tab = 1;
+		d.tab = tab_named("Background");
 		d.key_tab(); // first focusable = Wallpaper (a toggle)
 		let before = d.get_toggle(super::Key::BgEnabled);
 		d.key_space();
@@ -9679,15 +9884,21 @@ mod tests {
 		use super::Key;
 		let mut d = mk_dialog(2000.0);
 		// slider: focus the scroll-speed slider, nudge it both ways
-		d.tab = 5;
-		d.key_tab();
+		let i = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::SingleScreenTau)
+			.unwrap();
+		d.tab = d.specs[i].tab;
+		d.focus = Some(super::Focus::Row(i, 0));
+		d.set_f32(Key::SingleScreenTau, 50.0);
 		let base = d.get_f32(Key::SingleScreenTau);
 		d.key_horizontal(-1);
 		let lower = d.get_f32(Key::SingleScreenTau);
-		assert!(lower <= base);
+		assert!(lower < base);
 		d.key_horizontal(1);
 		d.key_horizontal(1);
-		assert!(d.get_f32(Key::SingleScreenTau) >= lower);
+		assert!(d.get_f32(Key::SingleScreenTau) > lower);
 		// radio: focus the (always-enabled) bg-fit radio and move its selection
 		let i = d.specs.iter().position(|s| s.key == Key::BgFit).unwrap();
 		d.tab = d.specs[i].tab;
@@ -10745,8 +10956,8 @@ mod tests {
 		d
 	}
 
-	// Commented out by 2026100907341818: the Use system font pair row is gone,
-	// and with it the one pair whose halves the desktop grayed apart.
+	// Commented out by 2026100907341818: the desktop no longer grays either
+	// half of the Use system font pair, so no pair has one half grayed.
 	//
 	// // A pair row's key is only its FIRST part, so gating the whole row on that
 	// // key took the click away from a live second part. Windows always reports a
@@ -10826,6 +11037,70 @@ mod tests {
 		let back = config::reload_from_disk();
 		assert_eq!(back.margin, other.margin);
 		assert_eq!(crate::fields::grid(&back, None).0, columns);
+
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Another window saves while Settings is open here. With nothing changed
+	// here the dialog shows the save; with a change in hand it keeps it, and
+	// the Apply's save keeps both.
+	// Test ID: EsaCcC9
+	#[test]
+	fn an_open_dialog_follows_another_windows_save() {
+		let _guard = config::test_config_lock();
+		let _ = config::settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_follow_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		let loaded = config::reload_from_disk();
+		let save_margin = |by: f32| {
+			let disk = config::reload_from_disk();
+			let mut other = disk.clone();
+			let margin = knobs::Value::Float(f64::from(loaded.margin + by));
+			crate::fields::set(&mut other, Key::Margin, &margin, None);
+			assert!(config::persist(&disk, &other));
+		};
+
+		let mut d = mk_dialog(4000.0);
+		d.start_from(config::reload_from_disk());
+		d.edited.remembered_columns = 123;
+		d.orig.remembered_columns = 123;
+		save_margin(5.0);
+		d.follow_file(config::reload_from_disk());
+		assert_eq!(d.edited.margin, loaded.margin + 5.0, "shows the save");
+		assert_eq!(d.orig, d.edited, "and has nothing changed");
+		assert_eq!(d.edited.remembered_columns, 123, "this window's own size");
+		assert!(!d.take_behind());
+
+		let columns = crate::fields::grid(&loaded, None).0 + 7;
+		d.set_f32(Key::Columns, columns as f32);
+		save_margin(9.0);
+		d.follow_file(config::reload_from_disk());
+		assert_eq!(
+			crate::fields::grid(&d.edited, None).0,
+			columns,
+			"the edit stays"
+		);
+		assert_eq!(d.edited.margin, loaded.margin + 5.0, "not under the edit");
+		assert!(config::persist(&d.orig, &d.edited));
+		assert!(d.take_behind(), "the Apply reads the file back");
+		d.commit_baseline();
+		d.follow_file(config::reload_from_disk());
+		assert_eq!(
+			d.edited.margin,
+			loaded.margin + 9.0,
+			"the dialog shows both"
+		);
+		assert_eq!(crate::fields::grid(&d.edited, None).0, columns);
+		let back = config::reload_from_disk();
+		assert_eq!(back.margin, loaded.margin + 9.0, "the other window's save");
+		assert_eq!(
+			crate::fields::grid(&back, None).0,
+			columns,
+			"and this one's"
+		);
 
 		let _ = std::fs::remove_dir_all(&dir);
 	}
@@ -11028,9 +11303,8 @@ mod tests {
 		let (mut d, i, _) = mk_long_text_edit('y');
 		let want = d.edit.as_ref().unwrap().buf.clone();
 		d.edit = None;
-		// The x that puts an automatic setting back sits at the box's right end
-		// since File or folder became one (2026100910295903), so the click
-		// lands just short of it.
+		// just inside the box's right end, which held an x for an automatic
+		// value until 2026100913394950
 		let f = d.textbox(i);
 		click(
 			&mut d,
@@ -11105,8 +11379,8 @@ mod tests {
 		// clearing itself the way a plain text box would. Part 1, since part 0 is
 		// the chip that opens the picker and opens no field.
 		// was: Focus::Row(i, 0), when a Color row had one part
-		// ColBg rather than ColFg: the live config the test process reads can
-		// have `colors.from_wallpaper` on, which grays ColFg out of the ring
+		// ColBg rather than ColFg, from when `colors.from_wallpaper` grayed
+		// ColFg out of the ring. Nothing grays for it now.
 		let mut d = mk_dialog(2000.0);
 		let i = d.specs.iter().position(|s| s.key == Key::ColBg).unwrap();
 		let want = {
@@ -11437,6 +11711,59 @@ mod tests {
 		}
 		let (c, a, o) = (help.cancel, help.apply, help.ok);
 		assert!(c != a && a != o && c != o, "two buttons share a tip");
+	}
+
+	// An open dropdown or field menu owns the pointer: a click anywhere only
+	// closes it. So the rows it lies over don't answer with their tips from
+	// under it, and neither does anything else while it's up (2026100913394952).
+	// Test ID: EsZp4L4
+	#[test]
+	fn an_open_popup_hides_every_tip_behind_it() {
+		let mut d = mk_dialog(4000.0);
+		let mut probed = 0;
+		for tab in 0..tab_titles().len() {
+			d.tab = tab;
+			let drops: Vec<usize> = (0..d.specs.len())
+				.filter(|&i| d.specs[i].tab == tab && matches!(d.specs[i].kind, Kind::Dropdown(_)))
+				.collect();
+			for i in drops {
+				d.dd_open(i);
+				let n = d.dd_options(i).len();
+				let mut points: Vec<(f32, f32)> = (0..n)
+					.map(|choice| {
+						let r = d.dd_item_rect(i, n, choice);
+						(r.x + r.w / 2.0, r.y + r.h / 2.0)
+					})
+					.collect();
+				let bx = d.dd_box(i);
+				points.push((bx.x + 2.0, bx.y + bx.h / 2.0));
+				points.push((d.label_x(i) + 2.0, bx.y + bx.h / 2.0));
+				for (x, y) in points {
+					assert!(
+						d.hover_tip_dip(x, y).is_none(),
+						"{:?}'s open list shows a tip at ({x}, {y})",
+						d.specs[i].key
+					);
+					probed += 1;
+				}
+				d.open = None;
+			}
+		}
+		assert!(probed > 10, "only {probed} points probed");
+		// the field menu is the other popup
+		let (mut d, i) = mk_text_edit("hello world");
+		let mut m = |s: &str| s.chars().count() as f32;
+		let field = d.textbox(i);
+		let y = field.y + field.h / 2.0;
+		assert!(
+			d.hover_tip_dip(field.x + 2.0, y).is_some(),
+			"the field has no tip"
+		);
+		d.mouse_right(field.x + lay().field_pad + 3.0, y, true, &mut m);
+		assert!(d.emenu.is_some());
+		let item = d.em_item_rect(0);
+		assert!(d.hover_tip_dip(item.x + 2.0, item.y + 2.0).is_none());
+		assert!(d.hover_tip_dip(field.x + 2.0, y).is_none());
 	}
 
 	// A sub-group needs no heading above it: an unindented control followed by
@@ -12567,15 +12894,15 @@ mod tests {
 	}
 
 	// A tree of the test's own over the real leaves, on the side asked for; both
-	// go back when the guard drops.
+	// go back when the guard drops. Two parents, where SilkTerm's own has one.
 	const NESTED: &[&str] = &[
 		"Silk",
 		"Look",
+		"Look/Themes",
 		"Look/Background",
 		"Look/Text",
 		"Look/Cursor",
 		"Movement",
-		"Themes",
 		"Window",
 		"More",
 		"More/Shell",
@@ -12615,21 +12942,24 @@ mod tests {
 		let mut d = mk_dialog(2000.0);
 		let one_row = SettingsDialog::gutter_h_for(d.line_h, 1);
 		assert!((d.gutter_rect().h - one_row).abs() < 0.01);
-		for node in [2, 3, 4, 9, 10] {
+		for node in [2, 3, 4, 5, 9, 10] {
 			assert_eq!(d.tab_rect(node).w, 0.0, "sub-tab {node} is not on show");
 		}
 		let look = d.tab_rect(1);
 		assert!(look.w > 0.0, "its parent is");
 		tap(&mut d, 1);
-		assert_eq!(d.tab, 1, "Look opens Background, its first");
+		assert_eq!(d.tab, 1, "Look opens Themes, its first");
 		assert_eq!(d.active_path(), vec![1, 2]);
 		assert!((d.gutter_rect().h - SettingsDialog::gutter_h_for(d.line_h, 2)).abs() < 0.01);
-		let bg = d.tab_rect(2);
+		let themes = d.tab_rect(2);
 		assert!(
-			bg.w > 0.0 && bg.y > look.y + look.h - 0.01,
+			themes.w > 0.0 && themes.y > look.y + look.h - 0.01,
 			"the sub-tabs sit in a row under the first"
 		);
-		assert!(d.rows_y0() > bg.y + bg.h, "and the rows begin below them");
+		assert!(
+			d.rows_y0() > themes.y + themes.h,
+			"and the rows begin below them"
+		);
 		assert_eq!(d.tab_rect(9).w, 0.0, "another tab's sub-tabs stay hidden");
 		tap(&mut d, 1);
 		assert_eq!(
@@ -12653,16 +12983,16 @@ mod tests {
 		let _tabs = stand_in_tabs(NESTED, TabsSide::Top);
 		let mut d = mk_dialog(2000.0);
 		d.set_mods(false, false, true);
-		d.tab = 3; // Cursor, the last under Look
+		d.tab = 4; // Cursor, the last under Look
 		d.key_tab();
-		assert_eq!(d.tab, 4, "on to Movement");
+		assert_eq!(d.tab, 5, "on to Movement");
 		d.set_mods(false, true, true);
 		d.key_tab();
-		assert_eq!(d.tab, 3, "and back to Cursor");
+		assert_eq!(d.tab, 4, "and back to Cursor");
 		d.tab = 0;
 		d.set_mods(false, false, true);
 		d.key_page(true);
-		assert_eq!(d.tab, 1, "Silk steps into Look at Background");
+		assert_eq!(d.tab, 1, "Silk steps into Look at Themes");
 		d.tab = 8;
 		d.switch_tab(true);
 		assert_eq!(d.tab, 0, "Keys, the last under More, wraps to Silk");
@@ -12714,7 +13044,7 @@ mod tests {
 		assert_eq!(
 			d.active_path(),
 			vec![1, 3],
-			"Text and Look both read as current"
+			"Background and Look both read as current"
 		);
 		// a short window slides the list only far enough to keep the current tab in it
 		d.tab = 8;
@@ -12740,5 +13070,43 @@ mod tests {
 		tap(&mut d, 1);
 		assert_eq!(d.tab, 1);
 		assert_eq!(d.focus, None);
+	}
+
+	// SilkTerm's own tabs: a list down the left, with Appearance over the four
+	// that change how the text and its backdrop look.
+	// Test ID: EsZuaQv
+	#[test]
+	fn silkterms_tabs_go_down_the_left_with_appearance_over_four() {
+		assert_eq!(super::ui().tabs_side, TabsSide::Left);
+		let tree: Vec<(&str, u8)> = super::ui()
+			.tab_tree
+			.iter()
+			.map(|n| (n.title, n.depth))
+			.collect();
+		assert_eq!(
+			tree,
+			[
+				("Silk", 0),
+				("Appearance", 0),
+				("Themes", 1),
+				("Background", 1),
+				("Text", 1),
+				("Cursor", 1),
+				("Movement", 0),
+				("Window", 0),
+				("Shell", 0),
+				("Keys", 0),
+			]
+		);
+		// Appearance holds no rows; a click on it opens Themes, its first,
+		// and from under it stays put, since it already reads as current
+		let mut d = mk_dialog(2000.0);
+		assert_eq!(d.tab, 0);
+		tap(&mut d, 1);
+		assert_eq!(d.tab, tab_named("Themes"));
+		d.tab = tab_named("Cursor");
+		tap(&mut d, 1);
+		assert_eq!(d.tab, tab_named("Cursor"));
+		assert_eq!(d.active_path(), vec![1, 5]);
 	}
 }

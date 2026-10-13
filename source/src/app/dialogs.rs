@@ -41,7 +41,15 @@ impl App {
 				self.close_dialog();
 				return;
 			}
+			WindowEvent::Focused(false) => {
+				if self.dialog.as_mut().is_some_and(|d| d.set_focus(false)) {
+					self.dialog_dirty = true;
+				}
+			}
 			WindowEvent::Focused(true) => {
+				if let Some(d) = &mut self.dialog {
+					d.set_focus(true);
+				}
 				// keep the terminal directly beneath us when we're activated, so
 				// nothing stays wedged between the two (Compiz doesn't do this). Do
 				// it now and arm delayed retries - the WM's own raise/animation of
@@ -302,6 +310,11 @@ impl App {
 				self.notice_dirty = true;
 			}
 			WindowEvent::RedrawRequested => n.render(),
+			WindowEvent::Focused(focused) => {
+				if n.set_focus(focused) {
+					self.notice_dirty = true;
+				}
+			}
 			WindowEvent::CursorMoved { position, .. } => {
 				if n.set_cursor(position.x as f32, position.y as f32) {
 					self.notice_dirty = true;
@@ -463,8 +476,15 @@ impl App {
 			// The applied values are the new baseline, so a later Apply diffs against
 			// the live state (without this, re-selecting the open-time value - e.g.
 			// Bg fit back to Stretch - reads as "no change" and isn't re-applied).
+			// When another window saved while these changes were in hand, the file
+			// now holds both, and both the window and the dialog take it from there.
 			if let Some(d) = self.dialog.as_mut() {
+				let behind = wrote && d.take_behind();
 				d.commit_baseline();
+				if let Some(state) = self.state.as_mut().filter(|_| behind) {
+					state.follow_peer();
+					d.follow_file(state.settings_for_dialog());
+				}
 			}
 			self.dialog_dirty = true;
 		}

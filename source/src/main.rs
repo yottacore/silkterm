@@ -40,6 +40,7 @@ mod minimap;
 mod monitor;
 mod palette;
 mod pane;
+mod peers;
 mod perf;
 mod pick;
 mod profile;

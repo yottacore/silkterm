@@ -81,7 +81,7 @@ How much of the contrast masking is left to the picture itself rather than to th
 
 ## Automatic
 
-The state of a setting the program works out for itself until a value is set, such as the font family, which follows the desktop's font, or the window size, which is the last one the window had. Settings shows the value in use in a lighter italic with a small "A" mark. Typing a value in sets it by hand, and the mark turns into an x that puts it back.
+The state of a setting the program works out for itself while the switch above it is on, such as the font family, which follows the desktop's font, or the window size, which is the last one the window had. Settings shows the value in use like any other value. Typing a value in sets it by hand and turns the switch off. Turning the switch back on makes it automatic again.
 
 ## Bare window
 
@@ -155,7 +155,7 @@ A titled section within a tab of the Settings dialog, separated by a rule and cl
 
 ## Gutter
 
-Chrome that holds no interactive element - the strip the Settings dialog's tabs stand on. It is a theme color of its own, recessed against the panel in both dark and light mode.
+Chrome that holds no interactive element - the strip the Settings dialog's tabs sit on. It is a theme color of its own, recessed against the panel in both dark and light mode.
 
 ## Highlight
 

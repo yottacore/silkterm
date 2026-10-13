@@ -44,6 +44,7 @@
 	- [Startup and slow external resources](#startup-and-slow-external-resources)
 	- [Releasing resources](#releasing-resources)
 	- [Configuration format](#configuration-format)
+	- [Settings across windows (2026-10-13)](#settings-across-windows-2026-10-13)
 	- [Variables in a setting (2026-08-30)](#variables-in-a-setting-2026-08-30)
 	- [Command-line options](#command-line-options)
 - [Delivery (CI/CD, branches, releases)](#delivery-cicd-branches-releases)
@@ -52,6 +53,7 @@
 	- [Tabs report what they are running, and where (2026-08-21)](#tabs-report-what-they-are-running-and-where-2026-08-21)
 	- [A tab is as wide as its own label needs (2026-08-23)](#a-tab-is-as-wide-as-its-own-label-needs-2026-08-23)
 	- [PowerShell gets the same prompt bash does (2026-08-21, reworked 2026-08-30)](#powershell-gets-the-same-prompt-bash-does-2026-08-21-reworked-2026-08-30)
+- [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
 
@@ -196,7 +198,7 @@ Every measurement in the interface is written once in DIP, a ninety-sixth of an 
 
 ### The Settings dialog
 
-A pop-out window with eight tabs, declared in the compiled-in `settings_ui.shcl`, drawn by SilkTerm and driven fully from the keyboard. Groups, sub-groups, the color picker, Apply and OK, and display scaling are all in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
+A pop-out window with its tabs in a list down the left side, Themes, Background, Text and Cursor under Appearance, declared in the compiled-in `settings_ui.shcl`, drawn by SilkTerm and driven fully from the keyboard. Groups, sub-groups, the color picker, Apply and OK, and display scaling are all in the [Settings dialog](design_docs/20260930-145721_settings-dialog.md) design doc.
 
 A setting the program can work out for itself is stored as a value set by hand or as no line at all, and no line means automatic. One table in config.rs lists them with their rules, one function reads them, and a switch over a group of them is read off the group rather than stored. The design is in [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md). The font family and size, the window size, the theme colors, the link open command and the wallpaper's image and folder are the ones moved so far.
 
@@ -305,7 +307,11 @@ A setting the program can work out for itself is stored as a value set by hand o
 
 - A tip's box is its own color, derived from the chrome it hangs off rather than taken from it (2026-09-20). The shipped menu background is the inactive tab's own bytes, so a tab tip filled with it drew as a tab that had grown downward, and a menu row's tip had the same fault against the popup beside it. Both now fill with the menu background lifted by the step the strip puts between an inactive and an active tab, then warmed, since every tab color leans faintly blue. The border and the text come off the same two colors. The dialogs already did this with the button shade against their panel.
 	- Not two more colors on the Themes tab, which is what the request suggested. Twelve colors are editable and each has one job, and the chrome already answers this kind of question with derived shades - menu hover, border and separator are all shades of the menu color, so a custom menu color stays coherent. A tip that could be set apart from its own menu would be one more pair to keep readable.
-	- The benchmark banner draws in the same overlay pass and keeps the menu colors. It is a modal notice over a dimmed window, not flyover help.
+	- The benchmark banner draws with the tips, over the menus, and keeps the menu colors. It is a modal notice over a dimmed window, not flyover help.
+
+- A tip draws last, over everything else in its window, menus and an open dropdown list included (2026-10-13). It has a text renderer of its own, drawn after the menus' one, because a renderer draws all of its text in one go. A list that shared the tip's renderer put its text on top of the tip's box. An open dropdown or field menu also takes every click until it closes, so nothing behind it shows a tip.
+
+- A window without the focus shows no tips, and one that is up goes when the focus leaves (2026-10-13). When the focus comes back, tips wait for the pointer to move. A tip popping up under a pointer left resting on a control, the moment the window came back, would come out of nowhere.
 
 ### Render Loop Sketch
 
@@ -437,6 +443,31 @@ What a window costs while in use is planned in [Reducing resources](design_docs/
 	- Wayland tells a window neither where it is nor that it moved. It looks once just after it opens, on a scale change, and when the pointer comes back after a drag.
 
 - A number given on the command line is held to the range of the setting it stands for, the same range the file's copy of that setting is held to. A count of rows or columns is also held to what the graphics device can draw, since the window is a texture and a refusal there ends the launch rather than the setting.
+
+### Settings across windows (2026-10-13)
+
+- Every window is its own process with its own copy of the settings. A save in one window shows in every other window on the same settings file at once. A window on another file, such as one started with `--config` for a test, never hears of it.
+
+- The file itself is not watched, so a hand edit shows nowhere until Reload config. Reload config in one window tells the other windows on that file to read it too.
+
+- Finding each other. A settings file gets a key, a hash of its real path, lowercased on Windows. The windows on one file meet in a folder named `silkterm-<key>` in the runtime folder (`XDG_RUNTIME_DIR`, else the temp folder). Each leaves an empty file there named by its pid. A window that writes the settings file tells every other pid in the folder, through the endpoint it already listens on for `--reload-settings`.
+	- The message names the key, and a window on another key ignores it. A recycled pid can sit behind an old marker until that is cleared.
+	- A window that crashed leaves its marker. The next save that finds nothing listening behind one deletes it.
+	- With one window open this costs a folder read per save, and nothing at all otherwise.
+	- On a shared `/tmp` the folder has to be this user's own, and private, or the window saves and listens alone.
+
+- The endpoint is a Unix socket on Linux and macOS, and a named pipe on Windows.
+	- Why a pipe and not AF_UNIX on Windows: both come with the system and need nothing linked beyond the `windows-sys` bindings already in use, but a pipe has no file to leave behind. It goes with its process, so a pipe that is not there always means a window that is gone. One instance is always waiting, made before the last one is served, so the name never vanishes between two clients.
+	- That also makes `--reload-settings` and `--wallpaper` work on Windows, which they did not before.
+
+- What a window does when it hears. It reads the file the way Reload config does, keeping what belongs to the session (the command line, Remote, a display step), and then keeps what is its own:
+	- Its size. A size set in Settings is the size new windows open at. The window it was set in takes it; the others stay as they are.
+	- What the state file holds: remembered sizes, zoom, monitor sizes, the machine test. These follow one window or one machine and are not settings.
+	- The picture rotation chose. A change to another wallpaper setting redraws the same picture. Naming one picture shows that picture in every window. A new folder has each window pick from it on its own, at random when random is on. The window it was changed in picks again too, which it did not before.
+
+- Two windows saving at the same moment. A save only ever writes what it changed, over the file as it is at that moment, never over what the window loaded, which is how the shell list was already saved. Every read and write of the settings or state file holds a lock file in the meeting folder (`std::fs::File::lock`), so two saves cannot interleave. A save waits up to 2 seconds for the lock and then goes ahead without it, rather than freeze the window behind one stopped in a debugger.
+
+- An open Settings dialog. With nothing changed in it, it shows the other window's save at once. With changes in hand it keeps them, and the other window's value shows after Apply: the Apply writes only its own changes, then reads the file back, so the window and the dialog both end up with both.
 
 ### Variables in a setting (2026-08-30)
 
@@ -672,3 +703,9 @@ Two decisions came out of the port.
 Cost was the other thing the port had to answer, since three `git` calls per prompt is invisible on unix and not on Windows. The search for the working tree is done in the shell rather than by asking git, so a directory outside a repository costs no process at all, and inside one a single `git status --porcelain=v2 --branch` answers branch, clean and upstream together. The remote URL is read once per repository and remembered.
 
 The block is also kept up to date in place from then on, between its two markers. It gains things over time, and an install that only ever appended would leave everyone who already had it on the first version forever. That edit is safe only because the region is delimited by markers we wrote - which is exactly the signal the stored shell list lacks, and why that list may still only ever be added to.
+
+## Copyright and license
+
+> Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.

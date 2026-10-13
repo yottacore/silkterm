@@ -241,6 +241,19 @@ const FALLBACK_FONT_SIZE: f32 = 17.0;
 /// arbitrary (often proportional) fallback.
 pub const DEFAULT_FONT_STACK: &str = "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New";
 
+/// The family list while it follows the desktop: the desktop's font, then the
+/// built-in stack, each name once. The desktop's name alone was what turning
+/// the switch off kept (2026100913394946).
+pub fn desktop_font_stack(desktop: &str) -> String {
+	let mut seen = std::collections::HashSet::new();
+	std::iter::once(desktop)
+		.chain(DEFAULT_FONT_STACK.split(','))
+		.map(str::trim)
+		.filter(|name| !name.is_empty() && seen.insert(name.to_lowercase()))
+		.collect::<Vec<_>>()
+		.join(", ")
+}
+
 // Stacks that shipped as the font_family default in an earlier version. Backfill
 // only ever adds a missing key, so a config written back then still carries its
 // stack forever; migration rewrites one to the current default. Matched whole
@@ -593,6 +606,7 @@ fn persist_state(orig: &Settings, edited: &Settings) {
 /// Write the machine test's pick, and the hardware it ran on, to the state file.
 #[must_use]
 pub fn keep_tested(profile: crate::profile::Profile, hardware: Option<&str>) -> Kept {
+	let _lock = crate::peers::save_lock();
 	let Some(path) = state_path() else {
 		return Kept::Unwritable("no state file location".to_string());
 	};
@@ -763,11 +777,12 @@ fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Setting
 /// result; anything less would miss whichever field a bad `## Default` moved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
-	pub use_system_font: bool, // follow the desktop's monospace family (font_family is then its)
+	pub use_system_font: bool, // follow the desktop's monospace family (font_family then leads with it)
 	pub use_system_font_size: bool, // and its size
 	pub font_family: String,   // comma-separated fallback stack (first installed wins)
 	pub font_size: f32,
 	pub line_height_scale: f32,
+	pub font_ignores_themes: bool, // a theme pick leaves the three above alone
 	pub scrollback: usize,
 	pub scroll_smooth: bool, // master switch: false = every scroll (wheel, output, app slide) happens instantly
 	/// The five knobs below are the named segments of the output-scroll speed
@@ -1008,6 +1023,7 @@ impl Settings {
 			font_family: DEFAULT_FONT_STACK.to_string(),
 			font_size: FALLBACK_FONT_SIZE,
 			line_height_scale: 1.22,
+			font_ignores_themes: true,
 			scrollback: 10_000,
 			scroll_smooth: true,
 			scroll_ease_in_ms: 82.0, // ~ "Ease-in" 50 (motion builds over the first ~tenth of a second)
@@ -1618,6 +1634,29 @@ pub fn keep_session(live: &Settings, reloaded: &mut Settings, wallpaper_locked: 
 	crate::fields::fill(reloaded, None);
 }
 
+/// What a reload after another window's save keeps of this window's own: what
+/// the state file holds, which follows this window's size and this machine,
+/// and the picture rotation chose, unless the save moved the image or the
+/// folder.
+pub fn keep_window_state(live: &Settings, reloaded: &mut Settings) {
+	reloaded.remembered_columns = live.remembered_columns;
+	reloaded.remembered_rows = live.remembered_rows;
+	reloaded.remembered_maximized = live.remembered_maximized;
+	reloaded.remembered_font_zoom = live.remembered_font_zoom;
+	reloaded.monitor_sizes.clone_from(&live.monitor_sizes);
+	reloaded.rated_hardware.clone_from(&live.rated_hardware);
+	reloaded.tested_profile = live.tested_profile;
+	crate::fields::fill(reloaded, None);
+	// the pick is a field only, as rotation leaves it (`set_live`)
+	let picked = reloaded.wallpaper.is_none()
+		&& reloaded.wallpaper_raw == live.wallpaper_raw
+		&& reloaded.rotation_folder().is_some()
+		&& reloaded.rotation_folder() == live.rotation_folder();
+	if picked {
+		reloaded.wallpaper.clone_from(&live.wallpaper);
+	}
+}
+
 /// A wallpaper named for the session, at launch (`--wallpaper-file`) or while
 /// running (`--wallpaper`). Naming one is a deliberate choice for the run, so a
 /// file with the wallpaper switched off does not swallow it. Both go through
@@ -1720,6 +1759,21 @@ fn read_doc(path: &std::path::Path) -> Result<shcl::Document, Unread> {
 enum Unread {
 	Missing,
 	Failed(std::io::Error),
+}
+
+// Writes to the settings file, by this process, since it started. The window
+// tells the others when this moves (`saves`).
+static SAVES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many times this process has written the settings file. The state file
+/// and the shell profiles are not counted.
+pub fn saves() -> u64 {
+	SAVES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The settings file this process runs on: `--config`, else the box's own.
+pub fn settings_file() -> Option<PathBuf> {
+	config_path()
 }
 
 // The settings file as this process last read or wrote it.
@@ -1925,6 +1979,9 @@ pub(crate) fn write_config_atomic(path: &std::path::Path, text: &str) -> anyhow:
 fn write_config_keeping(path: &std::path::Path, text: &str) -> anyhow::Result<Option<PathBuf>> {
 	let kept = publish_keeping(path, text, shcl::write_file_atomic)?;
 	note_seen(path, text);
+	if may_write(path) && config_path().as_deref() == Some(path) {
+		SAVES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+	}
 	for line in restated_launch_messages(path, text) {
 		eprintln!("{line}");
 	}
@@ -2495,6 +2552,8 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	let Some(path) = config_path() else {
 		return true;
 	};
+	// another window's save between this read and this write would be lost
+	let _lock = crate::peers::save_lock();
 	persist_state(orig, edited);
 	let (mut doc, missing) = match read_doc(&path) {
 		Ok(doc) => (doc, false),
@@ -2742,6 +2801,7 @@ struct RawConfig {
 	font_family: Option<String>,
 	font_size: Option<f32>,
 	line_height_scale: Option<f32>,
+	font_ignores_themes: Option<bool>,
 	scrollback: Option<usize>,
 	scroll_smooth: Option<bool>,
 	scroll_ease_in_ms: Option<f32>,
@@ -2872,6 +2932,9 @@ fn load() -> Settings {
 	let Some(path) = config_path() else {
 		return Settings::default();
 	};
+	// a launch rewrites the file in steps, and a save in another window must
+	// not land between them
+	let _lock = crate::peers::save_lock();
 	if !path.exists() && may_write(&path) {
 		if let Some(dir) = path.parent() {
 			let _ = std::fs::create_dir_all(dir);
@@ -3220,6 +3283,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		font_family: reader.read_string("font.family"),
 		font_size: reader.read_f32("font.size"),
 		line_height_scale: reader.read_f32("font.line_height_scale"),
+		font_ignores_themes: reader.read_bool("font.ignore_themes"),
 		scrollback: reader.read_usize("scroll.scrollback"),
 		scroll_smooth: reader.read_bool("scroll.smooth"),
 		scroll_ease_in_ms: reader.read_f32("scroll.ease_in_ms"),
@@ -3383,14 +3447,38 @@ fn read_user_themes(doc: &shcl::Document) -> Vec<crate::theme::UserTheme> {
 			.ok()
 			.filter(|n| !n.trim().is_empty())
 			.unwrap_or_else(|| slug.clone());
+		let font = read_theme_font(doc, &slug);
 		out.push(crate::theme::UserTheme {
 			slug,
 			name,
 			dark,
 			light,
+			font,
 		});
 	}
 	out
+}
+
+// A theme's font, each value as the font rows would take it. A theme saved
+// before themes had fonts has no lines here, and none is fine.
+fn read_theme_font(doc: &shcl::Document, slug: &str) -> crate::theme::ThemeFont {
+	let at = format!("themes.{slug}.font");
+	let number = |key: &str, (lo, hi): (f32, f32)| {
+		doc.get_float(&format!("{at}.{key}"))
+			.ok()
+			.map(|v| v as f32)
+			.filter(|v| v.is_finite())
+			.map(|v| v.clamp(lo, hi))
+	};
+	crate::theme::ThemeFont {
+		family: doc
+			.get_string(&format!("{at}.family"))
+			.ok()
+			.map(|f| f.trim().to_string())
+			.filter(|f| !f.is_empty()),
+		size: number("size", limits::FONT_SIZE),
+		line_height_scale: number("line_height_scale", limits::LINE_HEIGHT),
+	}
 }
 
 // Bring the file's `themes.*` subtrees in line with the dialog's list. A theme
@@ -3421,6 +3509,17 @@ fn write_user_themes(
 			let ansi: Vec<String> = pal.ansi.iter().map(|c| format_hex(*c)).collect();
 			let ansi: Vec<&str> = ansi.iter().map(String::as_str).collect();
 			doc.put_string_array(&format!("{at}.{mode}.ansi"), &ansi);
+		}
+		let font = &theme.font;
+		if let Some(family) = &font.family {
+			doc.put_string(&format!("{at}.font.family"), family);
+		}
+		let rounded = |v: f32| (f64::from(v) * 1000.0).round() / 1000.0;
+		if let Some(size) = font.size {
+			doc.put_float(&format!("{at}.font.size"), rounded(size));
+		}
+		if let Some(scale) = font.line_height_scale {
+			doc.put_float(&format!("{at}.font.line_height_scale"), rounded(scale));
 		}
 	}
 }
@@ -3722,6 +3821,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			d.line_height_scale,
 			limits::LINE_HEIGHT,
 		),
+		font_ignores_themes: raw.font_ignores_themes.unwrap_or(d.font_ignores_themes),
 		scrollback: numi(raw.scrollback, d.scrollback, limits::SCROLLBACK),
 		scroll_smooth: raw.scroll_smooth.unwrap_or(d.scroll_smooth),
 		scroll_ease_in_ms: numf(raw.scroll_ease_in_ms, d.scroll_ease_in_ms, limits::EASE_MS),
@@ -5440,6 +5540,7 @@ pub fn revert_keys(keys: &[&str]) {
 	if keys.is_empty() {
 		return;
 	}
+	let _lock = crate::peers::save_lock();
 	let Some(path) = config_path() else { return };
 	if config_open_elsewhere(&path) {
 		note_config_busy(&path);
@@ -5468,6 +5569,7 @@ pub fn disable_keys(keys: &[&str]) {
 	if keys.is_empty() {
 		return;
 	}
+	let _lock = crate::peers::save_lock();
 	let Some(path) = config_path() else { return };
 	if config_open_elsewhere(&path) {
 		note_config_busy(&path);
@@ -5974,6 +6076,7 @@ pub struct RatingLines {
 /// dialog's save would write.
 #[must_use]
 pub fn keep_rating(lines: RatingLines) -> Kept {
+	let _lock = crate::peers::save_lock();
 	let Some(path) = config_path() else {
 		return Kept::Unwritable("no settings file location".to_string());
 	};
@@ -7368,6 +7471,36 @@ performance:
 	# check_next_run: false  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+## Theme and colors
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+
+## A built-in theme, one saved in Settings, or "custom" for the colors below.
+theme: SilkTerm
+theme_mode: dark
+
+## The custom theme's colors. A color changed in Settings under any other
+## theme is kept at the end of this file, as a change to that theme. The two
+## scrollbar colors are not part of any theme.
+colors:
+	## Take the text and cursor colors from the wallpaper instead: the text is
+	## placed as far as it can get from the picture's brightest areas, in a hue
+	## complementary to the picture's own. Changing either color in Settings
+	## turns this off, and nothing about the derived colors is saved.
+	# from_wallpaper: true  ## Default
+	# background: "#000000"
+	# foreground: "#88eecc"  ## Default
+	# cursor: "#8a3fa4"  ## Default
+	# highlight: "#c8a05a"
+	# focus: "#4086ff"
+	# menu_background: "#36363b"
+	# menu_foreground: "#f0f0f2"
+	# dialog_background: "#20202a"
+	# dialog_foreground: "#e2e2ea"
+	# gutter: "#16161e"
+	# scrollbar_thumb: "#8a8a92"
+	# scrollbar_trough: "#2e2e36"
+
+## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Background and transparency
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
@@ -7445,6 +7578,12 @@ font:
 	# size: 17.0
 
 	line_height_scale: 1.22
+
+	## A theme saved in Settings keeps the family, size and line height too.
+	## While this is on, picking a theme leaves the font as it is. Off, picking
+	## a saved theme sets its font as if typed in, so it wins over the system
+	## font. The built-in themes have no font, and change nothing here.
+	# ignore_themes: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Text
@@ -7563,36 +7702,6 @@ scroll:
 		# enabled: true  ## Default
 		# width: 100.0  ## Default
 		# tui_process_whitelist: "less tmux screen"  ## Default
-
-## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-## Theme and colors
-## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-
-## A built-in theme, one saved in Settings, or "custom" for the colors below.
-theme: SilkTerm
-theme_mode: dark
-
-## The custom theme's colors. A color changed in Settings under any other
-## theme is kept at the end of this file, as a change to that theme. The two
-## scrollbar colors are not part of any theme.
-colors:
-	## Take the text and cursor colors from the wallpaper instead: the text is
-	## placed as far as it can get from the picture's brightest areas, in a hue
-	## complementary to the picture's own. Changing either color in Settings
-	## turns this off, and nothing about the derived colors is saved.
-	# from_wallpaper: true  ## Default
-	# background: "#000000"
-	# foreground: "#88eecc"  ## Default
-	# cursor: "#8a3fa4"  ## Default
-	# highlight: "#c8a05a"
-	# focus: "#4086ff"
-	# menu_background: "#36363b"
-	# menu_foreground: "#f0f0f2"
-	# dialog_background: "#20202a"
-	# dialog_foreground: "#e2e2ea"
-	# gutter: "#16161e"
-	# scrollbar_thumb: "#8a8a92"
-	# scrollbar_trough: "#2e2e36"
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Window
@@ -8589,6 +8698,70 @@ mod tests {
 		let back = load();
 		assert!(!back.colors_from_wallpaper);
 		assert_eq!(back.fg, [0x0a, 0x0b, 0x0c]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// 2026100910295901: an old file with "Text colors from wallpaper" off keeps
+	// the theme's text colors with a picture up. The switch is stored, so no
+	// color line has to be written for it, and one written by hand stays.
+	// Test ID: Esa43ID
+	#[test]
+	fn a_file_with_the_wallpaper_colors_off_keeps_the_theme_s() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgwpoff_{}", std::process::id()));
+		let pal = crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true);
+		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
+		let plain = "theme: \"Matrix\"\ntheme_mode: dark\ncolors:\n\tfrom_wallpaper: false\n";
+		// a launch before 10-09 left the machine test's lines, which is what
+		// marks an old file
+		let rated = format!("performance:\n\trated_hardware: \"cfgwpoff\"\n{plain}");
+		let own = format!(
+			"{rated}\tforeground: \"{}\"\n\tcursor: \"{}\"\n",
+			format_hex(mine.0),
+			format_hex(mine.1)
+		);
+		let lines = |text: &str| {
+			let doc = shcl::Document::parse(text);
+			[
+				"colors.foreground",
+				"colors.cursor",
+				"colors.from_wallpaper",
+			]
+			.map(|p| doc.get_string(p).ok())
+		};
+		let theme_s = (pal.fg, pal.cursor);
+		for (file, want) in [(plain.to_string(), theme_s), (rated, theme_s), (own, mine)] {
+			let _ = std::fs::remove_dir_all(&dir);
+			std::fs::create_dir_all(&dir).unwrap();
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, &file).unwrap();
+			set_config_override(path.clone());
+
+			let mut live = load();
+			let once = std::fs::read_to_string(&path).unwrap();
+			assert!(!live.colors_from_wallpaper, "the switch reads off");
+			live.wallpaper_summary = Some(crate::autotheme::Summary {
+				luma_hi: 0.3,
+				luma_lo: 0.02,
+				luma_mean: 0.13,
+				spread: [[0.13; 3]; crate::autotheme::SPREAD],
+				alpha: 1.0,
+				hue: 250.0,
+				chroma: 0.08,
+				opacity: 0.35,
+			});
+			crate::fields::fill(&mut live, None);
+			assert_eq!((live.fg, live.cursor), want, "{file}");
+			assert!(!live.colors_from_wallpaper);
+			assert_eq!(lines(&once), lines(&file), "the launch left them: {once}");
+
+			// a second launch writes nothing more
+			let again = load();
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), once);
+			assert!(!again.colors_from_wallpaper);
+		}
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
@@ -10921,8 +11094,8 @@ mod tests {
 		assert_eq!(
 			s.font_family,
 			os.family
-				.clone()
-				.unwrap_or_else(|| DEFAULT_FONT_STACK.to_string())
+				.as_deref()
+				.map_or_else(|| DEFAULT_FONT_STACK.to_string(), desktop_font_stack)
 		);
 		s.remembered_columns = 133;
 		s.remembered_rows = 41;
@@ -10963,6 +11136,52 @@ mod tests {
 			(100, 41),
 			"and back it comes"
 		);
+	}
+
+	// Following the desktop shows its font ahead of the whole built-in list, and
+	// turning the switch off keeps and saves that list. It kept the desktop's
+	// one name, which on a desktop set to Monaspace Argon read as the list cut
+	// to its first font (2026100913394946).
+	// Test ID: EsZk42X
+	#[test]
+	fn the_family_keeps_the_whole_list_when_the_switch_goes_off() {
+		let mut s = Settings::default();
+		assert!(s.use_system_font);
+		let shown = s.font_family.clone();
+		for name in DEFAULT_FONT_STACK.split(',') {
+			assert!(shown.contains(name.trim()), "{name} is not in {shown:?}");
+		}
+		change(&mut s, Key::SystemFont, Value::Bool(false));
+		assert!(!s.use_system_font);
+		assert_eq!(s.font_family, shown, "off keeps what it showed");
+		let lines = crate::fields::lines_of(&s);
+		assert!(
+			lines
+				.iter()
+				.any(|(p, v)| p == "font.family" && v.as_text() == shown),
+			"{lines:?}"
+		);
+	}
+
+	// Test ID: EsZk4LL
+	#[test]
+	fn the_desktop_s_font_leads_the_built_in_list() {
+		assert_eq!(desktop_font_stack("Monaspace Argon"), DEFAULT_FONT_STACK);
+		assert_eq!(
+			desktop_font_stack(" DejaVu Sans Mono "),
+			format!("DejaVu Sans Mono, {DEFAULT_FONT_STACK}")
+		);
+		// one already in the list moves to the front and is not named twice
+		let fira = desktop_font_stack("fira code");
+		assert!(
+			fira.starts_with("fira code, Monaspace Argon, JetBrains Mono"),
+			"{fira}"
+		);
+		assert_eq!(
+			fira.split(", ").count(),
+			DEFAULT_FONT_STACK.split(", ").count()
+		);
+		assert_eq!(desktop_font_stack(""), DEFAULT_FONT_STACK);
 	}
 
 	// The theme's colors come from the theme in force, in the mode in force. A
@@ -11408,6 +11627,7 @@ mod tests {
 			name: "Mine".to_string(),
 			dark: pal,
 			light: pal,
+			font: crate::theme::ThemeFont::default(),
 		};
 		let mut doc = shcl::Document::parse(default_config());
 		write_user_themes(&mut doc, &[], &[theme]);
@@ -11844,10 +12064,10 @@ mod tests {
 		assert_eq!(new.matches(paragraph).count(), 1, "{new}");
 	}
 
-	// A new file follows the Settings dialog's tabs: Background, Text, Cursor,
-	// Movement, Themes, Window, Shell. The Silk tab borrows rows from the others,
+	// A new file follows the Settings dialog's tabs: Themes, Background, Text,
+	// Cursor, Movement, Window, Shell. The Silk tab borrows rows from the others,
 	// so its performance block leads and the rest keep their home tab's place.
-	// The hotkeys have no tab yet (2026100307252506) and sit before Shell.
+	// The hotkeys sit before Shell, though their tab comes after it.
 	// Test ID: Er2UFeO
 	#[test]
 	fn the_template_blocks_follow_the_dialog() {
@@ -11867,6 +12087,9 @@ mod tests {
 			roots,
 			[
 				"performance",
+				"theme",
+				"theme_mode",
+				"colors",
 				"transparency",
 				"wallpaper",
 				"font",
@@ -11874,9 +12097,6 @@ mod tests {
 				"cursor",
 				"selection",
 				"scroll",
-				"theme",
-				"theme_mode",
-				"colors",
 				"window",
 				"hyperlinks",
 				"keys",
@@ -12996,6 +13216,7 @@ mod tests {
 			name: "Mine".to_string(),
 			dark: pal,
 			light: pal,
+			font: crate::theme::ThemeFont::default(),
 		});
 		assert!(persist(&base, &own));
 		let loaded = reload_from_disk();
@@ -13993,6 +14214,76 @@ mod tests {
 		);
 		let off = "window:\n\tnew_tab_next_to_current: false\n";
 		assert!(!resolve(read_raw(off, p).0).new_tab_beside);
+	}
+
+	// Test ID: Esa0ndg
+	#[test]
+	fn a_theme_pick_leaves_the_font_alone_unless_turned_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(
+			resolve(read_raw("", p).0).font_ignores_themes,
+			"on by default"
+		);
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "font.ignore_themes").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# ignore_themes: true  ## Default")
+		);
+		assert!(read_text("").font_ignores_themes);
+		assert!(!read_text("font:\n\tignore_themes: false\n").font_ignores_themes);
+	}
+
+	// A saved theme keeps a font beside its colors. One saved before themes had
+	// fonts has no font lines and still loads whole, and picking it changes no
+	// font even with fonts following themes.
+	// Test ID: Esa0nip
+	#[test]
+	fn a_saved_theme_keeps_its_font_and_an_old_one_still_loads() {
+		let old = "theme: Mine\n\
+			font:\n\
+			\tignore_themes: false\n\
+			themes:\n\
+			\tmine:\n\
+			\t\tname: Mine\n\
+			\t\tdark:\n\
+			\t\t\tbackground: \"#010203\"\n";
+		let themes = read_user_themes(&shcl::Document::parse(old));
+		assert_eq!(themes.len(), 1);
+		assert_eq!(themes[0].dark.bg, [1, 2, 3]);
+		assert_eq!(themes[0].font, crate::theme::ThemeFont::default());
+		let s = read_text(old);
+		assert_eq!(s.theme, "Mine");
+		assert!(crate::fields::font_changed(&s).is_empty());
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Mine");
+
+		let mut theme = themes[0].clone();
+		theme.font = crate::theme::ThemeFont {
+			family: Some("Mono One, Mono Two".into()),
+			size: Some(21.0),
+			line_height_scale: Some(1.5),
+		};
+		let mut doc = shcl::Document::parse(default_config());
+		write_user_themes(&mut doc, &themes, std::slice::from_ref(&theme));
+		let text = doc.to_canonical();
+		let back = read_user_themes(&shcl::Document::parse(&text));
+		assert_eq!(back.len(), 1);
+		assert_eq!(back[0].font, theme.font);
+		assert!(
+			config_complaints(&text).is_empty(),
+			"{:?}",
+			config_complaints(&text)
+		);
+
+		// a hand-edited theme may set only some, and out of range is held in range
+		let some = "themes:\n\tmine:\n\t\tname: Mine\n\t\tdark:\n\t\t\tbackground: \"#010203\"\n\t\tfont:\n\t\t\tsize: 900\n";
+		let font = &read_user_themes(&shcl::Document::parse(some))[0].font;
+		assert_eq!(font.size, Some(limits::FONT_SIZE.1));
+		assert_eq!(
+			(font.family.as_deref(), font.line_height_scale),
+			(None, None)
+		);
 	}
 
 	// Test ID: Em1S9yq
@@ -17175,5 +17466,135 @@ mod tests {
 				rating_check(&case, &mut rng);
 			});
 		}
+	}
+}
+
+// Two windows on one settings file (peers.rs).
+#[cfg(test)]
+mod peer_tests {
+	use super::*;
+	use crate::ui_spec::Key;
+	use knobs::Value;
+
+	// as a launch reads it
+	fn read_text(text: &str) -> Settings {
+		let p = std::path::Path::new("test.shcl");
+		settled(resolve(read_raw(text, p).0), &shcl::Document::parse(text))
+	}
+
+	fn own(s: &Settings, key: Key) -> Option<Value> {
+		s.model.values.own.get(key.name()).cloned()
+	}
+
+	fn scratch_config(name: &str, text: &str) -> PathBuf {
+		let dir = crate::testdir::run_dir().join(format!("silkterm_{name}_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, text).unwrap();
+		set_config_override(path.clone());
+		let _ = load(); // the launch's own writes, out of the way
+		path
+	}
+
+	// Every window saves what it changed over what it loaded, at the same
+	// moment as the others, and each change is in the file after.
+	// Test ID: EsaCcC6
+	#[test]
+	fn saves_at_the_same_moment_keep_each_others_change() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let path = scratch_config("peersaves", "performance:\n\tautomatic: false\n");
+		// each in its slider's range for every round
+		let keys = [
+			(Key::Margin, 1.0, 5.0),
+			(Key::WheelLines, 1.0, 1.0),
+			(Key::MinimapWidth, 100.0, 10.0),
+			(Key::ScrollbarThickness, 10.0, 7.0),
+		];
+		for round in 1..=6u32 {
+			let start = std::sync::Arc::new(std::sync::Barrier::new(keys.len()));
+			let windows: Vec<_> = keys
+				.iter()
+				.map(|&(key, base, step)| {
+					let start = start.clone();
+					std::thread::spawn(move || {
+						let loaded = load();
+						let mut edited = loaded.clone();
+						let v = base + step * f64::from(round);
+						crate::fields::set(&mut edited, key, &Value::Float(v), None);
+						start.wait();
+						assert!(persist(&loaded, &edited));
+						v
+					})
+				})
+				.collect();
+			let wanted: Vec<f64> = windows.into_iter().map(|w| w.join().unwrap()).collect();
+			let back = load();
+			for ((key, ..), v) in keys.iter().zip(wanted) {
+				let got = own(&back, *key).map(|got| got.as_f64());
+				assert_eq!(got, Some(v), "round {round}: {key:?} was lost");
+			}
+		}
+		let _ = std::fs::remove_dir_all(path.parent().unwrap());
+	}
+
+	// The others hear of a write to the settings file, and never of the state
+	// file, which holds this window's size.
+	// Test ID: EsaCcC7
+	#[test]
+	fn only_a_settings_write_is_news() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let path = scratch_config("peersaid", "");
+		let loaded = load();
+		let before = saves();
+		let mut sized = loaded.clone();
+		sized.remembered_columns += 7;
+		assert!(persist(&loaded, &sized));
+		assert_eq!(saves(), before, "a size is not a setting");
+		let mut edited = sized.clone();
+		crate::fields::set(
+			&mut edited,
+			Key::Minimap,
+			&Value::Bool(!sized.minimap),
+			None,
+		);
+		assert!(persist(&sized, &edited));
+		assert_eq!(saves(), before + 1);
+		let _ = std::fs::remove_dir_all(path.parent().unwrap());
+	}
+
+	// What another window's save leaves of this one: its size and the state
+	// file's lines, and the picture rotation chose, until the save names
+	// another picture or folder.
+	// Test ID: EsaCcC8
+	#[test]
+	fn a_reload_for_another_window_keeps_this_windows_own() {
+		let folder = |dir: &str| format!("wallpaper:\n\trotate:\n\t\tfolder: \"{dir}\"\n");
+		let mut live = read_text(&folder("/pics/a"));
+		live.remembered_columns = 111;
+		live.remembered_rows = 33;
+		live.remembered_font_zoom = 2;
+		live.rated_hardware = "this box".into();
+		live.wallpaper = Some(PathBuf::from("/pics/a/3.png"));
+
+		let mut same = read_text(&format!("{}font:\n\tsize: 20\n", folder("/pics/a")));
+		keep_window_state(&live, &mut same);
+		assert_eq!((same.remembered_columns, same.remembered_rows), (111, 33));
+		assert_eq!(same.remembered_font_zoom, 2);
+		assert_eq!(same.rated_hardware, "this box");
+		assert_eq!(same.wallpaper, live.wallpaper, "the pick stays");
+
+		let mut moved = read_text(&folder("/pics/b"));
+		keep_window_state(&live, &mut moved);
+		assert_eq!(moved.wallpaper, None, "another folder picks again");
+
+		let mut named = read_text(&format!(
+			"{}\timage: \"/pics/one.png\"\n",
+			folder("/pics/a")
+		));
+		keep_window_state(&live, &mut named);
+		assert_eq!(named.wallpaper, Some(PathBuf::from("/pics/one.png")));
 	}
 }

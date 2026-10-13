@@ -27,6 +27,7 @@
 - [Research findings](#research-findings)
 - [Roadmap](#roadmap)
 - [Related backlog issues](#related-backlog-issues)
+- [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
 
@@ -216,3 +217,9 @@ On X11, owning the selection has one more trap. When another program takes the s
 - "Ability to select text with in a grid-aligned rectangle, with CTRL+left mouse button"
 
 - "Copy & paste selected text to current cursor location, via middle mouse button"
+
+## Copyright and license
+
+> Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]\
+> Licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).\
+> This document is provided as is, without warranty of any kind.

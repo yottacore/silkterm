@@ -26,8 +26,26 @@ static MONO_FAMILY: RwLock<Option<&'static str>> = RwLock::new(None);
 // muffer startup screen, box-drawing, etc.). Mirrors chrome's UI_WEIGHT_BOLD.
 static MONO_WEIGHT_BOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(700);
 
+static MONO_PINNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn mono_family() -> Option<&'static str> {
 	*crate::locks::read(&MONO_FAMILY)
+}
+
+// The families are pinned when a TextCtx is built. Asked for before the first
+// one, the generic family would come back while the layout later measures in the
+// pinned one, so the first ask pins from a font system of its own. The app always
+// builds a context first; this is for tests that read attrs before theirs.
+fn pin_before_first_context(pinned: &std::sync::atomic::AtomicBool, pin: fn(&FontSystem)) {
+	use std::sync::atomic::Ordering;
+	static FIRST: std::sync::Mutex<()> = std::sync::Mutex::new(());
+	if pinned.load(Ordering::Acquire) {
+		return;
+	}
+	let _first = crate::locks::lock(&FIRST);
+	if !pinned.load(Ordering::Acquire) {
+		pin(&FontSystem::new());
+	}
 }
 
 // Re-resolve and pin the monospace family for the current config + font system.
@@ -42,6 +60,7 @@ fn pin_mono_family(fs: &FontSystem) {
 		None => 700,
 	};
 	MONO_WEIGHT_BOLD.store(bold, Ordering::Relaxed);
+	MONO_PINNED.store(true, Ordering::Release);
 }
 
 /// What the text pass needs to blend glyph coverage the way an sRGB blend would,
@@ -91,10 +110,12 @@ fn gray_of(c: [u8; 3]) -> f32 {
 /// kicks the family out (into a proportional fallback) when it has no bold face.
 pub fn mono_bold_weight() -> glyphon::Weight {
 	use std::sync::atomic::Ordering;
+	pin_before_first_context(&MONO_PINNED, pin_mono_family);
 	glyphon::Weight(MONO_WEIGHT_BOLD.load(Ordering::Relaxed))
 }
 
 pub fn mono_attrs() -> Attrs<'static> {
+	pin_before_first_context(&MONO_PINNED, pin_mono_family);
 	let mut attrs = Attrs::new();
 	attrs.family = match mono_family() {
 		Some(name) => Family::Name(name),
@@ -118,6 +139,7 @@ static UI_FAMILY: RwLock<Option<&'static str>> = RwLock::new(None);
 static UI_WEIGHT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(400);
 static UI_WEIGHT_BOLD: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(700);
 static UI_ITALIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static UI_PINNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn ui_family() -> Option<&'static str> {
 	*crate::locks::read(&UI_FAMILY)
@@ -186,6 +208,7 @@ fn pin_ui_family(fs: &FontSystem) {
 	UI_WEIGHT.store(body_weight, Ordering::Relaxed);
 	UI_WEIGHT_BOLD.store(title_weight, Ordering::Relaxed);
 	UI_ITALIC.store(body_italic, Ordering::Relaxed);
+	UI_PINNED.store(true, Ordering::Release);
 }
 
 // Chrome ascent/descent scaled to `ui_px`, read the SAME way cosmic-text does
@@ -244,6 +267,7 @@ fn ui_ink_center_top(ui_line_h: f32, vmetrics: (f32, f32), bar_top: f32, bar_h: 
 /// `Weight::BOLD`, which kicks the whole family out when no 700 face exists.
 pub fn ui_bold_weight() -> glyphon::Weight {
 	use std::sync::atomic::Ordering;
+	pin_before_first_context(&UI_PINNED, pin_ui_family);
 	glyphon::Weight(UI_WEIGHT_BOLD.load(Ordering::Relaxed))
 }
 
@@ -252,6 +276,7 @@ pub fn ui_bold_weight() -> glyphon::Weight {
 /// of the user's desktop rather than terminal text.
 pub fn ui_attrs() -> Attrs<'static> {
 	use std::sync::atomic::Ordering;
+	pin_before_first_context(&UI_PINNED, pin_ui_family);
 	let mut attrs = Attrs::new();
 	attrs.family = match ui_family() {
 		Some(name) => Family::Name(name),
@@ -307,9 +332,9 @@ fn resolve_ui_family(fs: &FontSystem) -> Option<String> {
 }
 
 // The family search order, in full, whether or not any of it is installed. Same
-// on every platform: `font.family` first, which is the desktop's monospace
-// while it is automatic, then the desktop's monospace if the family named
-// none of it, and the built-in stack always last. A platform only shows
+// on every platform: `font.family` first, which leads with the desktop's
+// monospace while it is automatic, then the desktop's monospace if the family
+// named none of it, and the built-in stack always last. A platform only shows
 // through in what it reports - Windows has no monospace setting, so it passes
 // None and automatic gives the built-in stack there, with no special case for
 // it. Kept pure so the order can be tested without a font db.
@@ -452,6 +477,9 @@ struct TextGpu {
 	renderer: TextRenderer,
 	// separate renderer for the context-menu overlay (second pass, on top)
 	overlay: TextRenderer,
+	// and one for flyover tips, drawn last of all, so no menu or list text can
+	// land on a tip's box
+	tip: TextRenderer,
 	// separate renderer for the scrim source pass: pane text only (no chrome), and
 	// panes may substitute a de-bolded buffer (text_scrim_regular_weight)
 	scrim: TextRenderer,
@@ -492,6 +520,7 @@ impl TextGpu {
 			TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
 		let overlay =
 			TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
+		let tip = TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
 		let scrim = TextRenderer::new(
 			&mut scrim_atlas,
 			device,
@@ -505,6 +534,7 @@ impl TextGpu {
 			viewport_size: (0, 0),
 			renderer,
 			overlay,
+			tip,
 			scrim,
 		}
 	}
@@ -984,6 +1014,35 @@ impl TextCtx {
 		gpu.overlay.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
+	pub fn prepare_tip(
+		&mut self,
+		device: &wgpu::Device,
+		queue: &wgpu::Queue,
+		areas: Vec<TextArea<'_>>,
+	) -> Result<(), glyphon::PrepareError> {
+		let Self {
+			gpu,
+			font_system,
+			swash_cache,
+			..
+		} = self;
+		let gpu = attached(gpu);
+		gpu.tip.prepare(
+			device,
+			queue,
+			font_system,
+			&mut gpu.atlas,
+			&gpu.viewport,
+			areas,
+			swash_cache,
+		)
+	}
+
+	pub fn render_tip(&self, pass: &mut wgpu::RenderPass<'_>) -> Result<(), glyphon::RenderError> {
+		let gpu = attached_ref(self.gpu.as_ref());
+		gpu.tip.render(&gpu.atlas, &gpu.viewport, pass)
+	}
+
 	pub fn prepare_scrim(
 		&mut self,
 		device: &wgpu::Device,
@@ -1240,8 +1299,8 @@ mod tests {
 		assert_eq!(advance_cells(0.0, 0.0), 1);
 	}
 
-	// The family is one list on every platform: `font.family` first, which is
-	// the desktop's monospace while automatic, then the desktop's monospace,
+	// The family is one list on every platform: `font.family` first, which leads
+	// with the desktop's monospace while automatic, then the desktop's monospace,
 	// then the built-in stack, each name once.
 	// Test ID: EsDsIof
 	#[test]
@@ -1266,10 +1325,10 @@ mod tests {
 		assert_eq!(mono_candidates(None, " , ,"), builtin);
 	}
 
-	// Commented out by 2026100907341818: "Use system font" is gone, and the
-	// family is an automatic setting whose automatic value is the desktop's
-	// font. There is no follow switch left to put the desktop's font ahead of a
-	// stack set by hand. The test above replaces it.
+	// Commented out by 2026100907341818. "Use system font" is back, but on it
+	// makes the family itself the desktop's font ahead of the built-in list,
+	// with a list set by hand set aside, so there is no order left to pick.
+	// The test above and EsZk4LL replace it.
 	// // The search order is one list on every platform. `use_system_font` only
 	// // decides where the OS family sits in it - it must never drop the configured
 	// // stack, which is what made Linux and Windows resolve the same config
@@ -1537,5 +1596,60 @@ mod tests {
 			!ctx.covered_at(ch, 2),
 			"{ch:?} at one cell must not fill the grid's two"
 		);
+	}
+
+	// Attrs read before the first text context used to carry the generic family
+	// and default weights, so a test that took them first measured dialog text in
+	// a fallback face while the layout used the desktop's. Checked in a child copy
+	// of this test binary, where no other test has built a context yet.
+	// Test ID: Esa77JI
+	#[test]
+	fn attrs_read_before_the_first_context_match_the_context() {
+		let out = std::process::Command::new(std::env::current_exe().unwrap())
+			.args([
+				"--exact",
+				"text::tests::attrs_before_context_child",
+				"--nocapture",
+			])
+			.env("SILK_ATTRS_FIRST", "1")
+			.output()
+			.unwrap();
+		let text = String::from_utf8_lossy(&out.stdout);
+		assert!(
+			out.status.success(),
+			"{text}{}",
+			String::from_utf8_lossy(&out.stderr)
+		);
+		assert!(
+			text.contains("attrs_child_ran"),
+			"the child did nothing: {text}"
+		);
+	}
+
+	// Test ID: Esa77dv
+	#[test]
+	fn attrs_before_context_child() {
+		if std::env::var_os("SILK_ATTRS_FIRST").is_none() {
+			return; // only does anything when the test above starts it
+		}
+		let ui_first = ui_attrs();
+		let ui_bold_first = ui_bold_weight();
+		let mono_first = mono_attrs();
+		let mono_bold_first = mono_bold_weight();
+		let mut ctx = TextCtx::new_cpu(1.0);
+		let probe = "2026-10-09 Blink rate 10080";
+		// measured past the context's memo, which is keyed by text alone
+		let metrics = ctx.ui_metrics;
+		let (early, late) = (
+			ctx.measure_at(probe, &ui_first, metrics),
+			ctx.measure_at(probe, &ui_attrs(), metrics),
+		);
+		println!("ui {:?} {early} vs {late}", ui_attrs().family);
+		assert_eq!(ui_first, ui_attrs());
+		assert_eq!(ui_bold_first, ui_bold_weight());
+		assert!((early - late).abs() < 0.01, "{early} against {late}");
+		assert_eq!(mono_first, mono_attrs());
+		assert_eq!(mono_bold_first, mono_bold_weight());
+		println!("attrs_child_ran");
 	}
 }
