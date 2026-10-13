@@ -631,13 +631,17 @@ pub fn keep_tested(profile: crate::profile::Profile, hardware: Option<&str>) -> 
 // The old config kept the machine's state with the settings. A file that still
 // does, with no state file yet, has those lines moved there before the launch
 // migration drops them. A theme's colors set in the same file move to the
-// theme's "*" changes, which is what they were: colors over a theme.
-fn move_state_out(path: &std::path::Path) {
+// theme's "*" changes, which is what they were: colors over a theme. A state
+// line, even the old template's commented one, marks a file from before 10-09,
+// and so does no Format line (`unstamped`, read before the launch stamps it),
+// since shcl 3.0 came first. That is how a file written by hand looks.
+fn move_state_out(path: &std::path::Path, unstamped: bool) {
 	let Some(text) = read_settings_text(path) else {
 		return;
 	};
 	// the launch's migration drops these lines, so they are read before it
-	let raw = shcl::Document::parse(&rewritten_by(&text, &[from_shcl2_text]));
+	let respelled = rewritten_by(&text, &[from_shcl2_text]);
+	let raw = shcl::Document::parse(&respelled);
 	let old = shcl::Document::parse(&loaded_text(&text));
 	let ints = [
 		"window.remembered_columns",
@@ -649,14 +653,24 @@ fn move_state_out(path: &std::path::Path) {
 		"window.monitors",
 		"performance.rated_hardware",
 	);
-	if !ints
-		.iter()
-		.chain(&[maximized, monitors, hardware])
-		.any(|p| raw.exists(p))
-	{
+	let others = [maximized, monitors, hardware];
+	let state_paths = || ints.iter().chain(&others);
+	let has_state = state_paths().any(|p| raw.exists(p));
+	let named = |path: &str| {
+		state_paths().any(|p| {
+			path.strip_prefix(p)
+				.is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+		})
+	};
+	let old_file = unstamped
+		|| has_state
+		|| walk_settings(&respelled)
+			.iter()
+			.any(|w| matches!(w, WalkLine::Setting { path, .. } if named(path)));
+	if !old_file {
 		return;
 	}
-	if let Some(state) = state_path().filter(|p| !p.exists() && may_write(p)) {
+	if let Some(state) = state_path().filter(|p| has_state && !p.exists() && may_write(p)) {
 		let mut doc = shcl::Document::new();
 		for p in ints {
 			if let Ok(v) = raw.get_int(p) {
@@ -2960,11 +2974,13 @@ fn load() -> Settings {
 	// A current file with lines that are not UTF-8 is written again without
 	// them here too, kept the same way, so the launch that finds it says so once
 	// and every later save works as usual.
+	let unstamped = std::fs::read(&path)
+		.is_ok_and(|body| shcl::format_version(&String::from_utf8_lossy(&body)).is_none());
 	convert_shcl2_config(&path);
 	repair_wallpaper_heading(&path);
 	convert_legacy_config(&path);
 	adopt_default_shell(&path);
-	move_state_out(&path);
+	move_state_out(&path, unstamped);
 	migrate_config(&path);
 	backfill_config(&path);
 	refresh_shcl_banner(&path);
@@ -11836,14 +11852,95 @@ mod tests {
 		assert_eq!(std::fs::read_to_string(&state_file).unwrap(), state);
 		assert!(again == s);
 
-		// no state lines, so a file this build wrote: Custom's colors stay Custom's
-		let new = "theme: Matrix\ncolors:\n\tbackground: \"#123456\"\n";
-		std::fs::write(&path, new).unwrap();
-		let s = load();
-		let text = std::fs::read_to_string(&path).unwrap();
+		// Commented out: this file has no Format line, so it is from before 10-09
+		// or written by hand, and its colors are over Matrix (2026101304551668).
+		// A file this build wrote is checked in EscrdlY instead.
+		// // no state lines, so a file this build wrote: Custom's colors stay Custom's
+		// let new = "theme: Matrix\ncolors:\n\tbackground: \"#123456\"\n";
+		// std::fs::write(&path, new).unwrap();
+		// let s = load();
+		// let text = std::fs::read_to_string(&path).unwrap();
+		// assert!(!shcl::Document::parse(&text).exists("kept"), "{text}");
+		// assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Matrix");
+		// assert_ne!(s.bg, [0x12, 0x34, 0x56]);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// An old file with no state lines had its colors over its theme too. A file
+	// written by hand has none, and no Format line either, which is the mark. A
+	// file from the old template with only the commented state line is old as
+	// well. Both get the move a file with state lines gets, once. A file this
+	// build wrote keeps Custom's colors as Custom's, however many launches.
+	// Test ID: EscrdlY
+	#[test]
+	fn an_old_file_with_no_state_lines_still_shows_its_colors_over_the_theme() {
+		let _guard = test_config_lock();
+		let dir = format_test_dir("oldcolors");
+		let path = dir.join("config.shcl");
+		let state_file = dir.join("state.shcl");
+		let launch = |text: Option<&str>| {
+			let _ = std::fs::remove_file(&state_file);
+			match text {
+				Some(text) => std::fs::write(&path, text).unwrap(),
+				None => {
+					let _ = std::fs::remove_file(&path);
+				}
+			}
+			set_config_override(path.clone());
+			let s = load();
+			(s, std::fs::read_to_string(&path).unwrap())
+		};
+		let colors = "theme: Matrix\ncolors:\n\tforeground: \"#a0b0c0\"\n\tcursor: \"#c0b0a0\"\n\tbackground: \"#123456\"\n";
+		let (want, _) = launch(Some(&format!(
+			"window:\n\tremembered_columns: 100\n{colors}"
+		)));
+		assert_eq!(crate::fields::shown_choice(&want, Key::Theme), "Matrix *");
+		assert_eq!(want.bg, [0x12, 0x34, 0x56]);
+
+		let by_hand = colors.to_string();
+		let old_template = format!(
+			"performance:\n\tautomatic: true\n\t# rated_hardware: \"\"  ## Default\n{colors}\n{SHCL_BANNER}"
+		);
+		for (what, old) in [("by hand", by_hand), ("old template", old_template)] {
+			let (s, text) = launch(Some(&old));
+			let doc = shcl::Document::parse(&text);
+			for key in ["foreground", "cursor", "background"] {
+				assert_eq!(
+					doc.get_string(&format!("kept.changes.theme.values.colors.{key}")),
+					shcl::Document::parse(colors).get_string(&format!("colors.{key}")),
+					"{what}: {key}\n{text}"
+				);
+			}
+			assert_eq!(
+				crate::fields::shown_choice(&s, Key::Theme),
+				"Matrix *",
+				"{what}"
+			);
+			assert_eq!(
+				(s.fg, s.cursor, s.bg),
+				(want.fg, want.cursor, want.bg),
+				"{what}"
+			);
+			let again = load();
+			assert_eq!(
+				std::fs::read_to_string(&path).unwrap(),
+				text,
+				"{what}: settled"
+			);
+			assert!(again == s, "{what}");
+		}
+
+		// a file this build wrote, with Custom's colors and Matrix up
+		let (_, fresh) = launch(None);
+		let mut doc = shcl::Document::parse(&fresh);
+		doc.put_string("theme", "Matrix");
+		doc.put_string("colors.background", "#123456");
+		let (s, text) = launch(Some(&saved_text(&doc)));
 		assert!(!shcl::Document::parse(&text).exists("kept"), "{text}");
 		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Matrix");
 		assert_ne!(s.bg, [0x12, 0x34, 0x56]);
+		let _ = load();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "settled");
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
