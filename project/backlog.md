@@ -34,121 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- A software rendering launch crashes now and then inside the Vulkan loader
-	- ID: 2026100720280486
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No
-	- Severity: High
-	- Opened: 20261007-202804
-	- Opened by: CC
-	- Related IDs: 2026100614510979
-	- Target OS: Linux
-	- Test environment: b23, the debug build, headless sway's Xwayland behind the no-shared-pixmaps proxy
-	- Steps to reproduce:
-		- Run `cicd/tests/swnoshm/run.bash` a few times. Its first case launches with software rendering on.
-	- Incorrect behavior: the program dies of SIGSEGV within about a second of launch, before a window comes up. The kernel log puts both crashes in `libvulkan.so.1.4.309` at almost the same offset, 0x2d066 and 0x2d06e. One faulting address was 0x6472616373, which is ASCII text read as a pointer.
-	- Expected behavior: a software launch comes up every time.
-	- Reproduced: 20261007, in 1 of 3 runs of the test alone at load 7, and once in the full pipeline at 7a032c5. No core was kept. The case that switches to software while running passed every time.
-	- Possible cause: not known. The same spot both times points away from host noise. Debug builds turn on Vulkan validation through `InstanceFlags::default()`, and the dialogs' GPU context is built on a worker thread, so two instances made at once in the loader is one suspect. Whether a release build crashes too is not known.
-	- Actual cause: The Vulkan loader on Debian 13 (1.4.309) has a threading bug. To find which device a call is for, it walks every instance's list of drivers, under a different lock than the one held while those lists change. Debug builds name every object they make, and each name does that walk. The dialogs' warm-up makes its own instance on another thread right after the window shows, and listing its adapters unloads the drivers that have none. A name given on the window thread at that moment read a list entry that had just been freed. Loader 1.4.350 fixes it upstream.
-	- Actual fix: Every thread that calls into the loader takes one lock while it does. The warm-up holds it for its whole build. The window thread holds it through each event-loop callback, but only while a window draws on Vulkan, which means software rendering or Wayland. A window on GL never waits. A wait on the warm-up lets go of the lock first, and the program lets a warm-up finish before it exits.
-	- Note: Release builds name nothing, so far less of what they do takes that walk: making a swapchain or a device still does. About 2400 devices made beside 600 warm-up builds did not crash, but the fix covers them anyway.
-	- Note: The cost is one wait, right after a window on Vulkan shows and after each idle rebuild, if the window has work while the warm-up builds. Optimized build on b23: about 130 ms with the card on Wayland, 35 ms in software, none with the card on X11.
-	- Against: the kept dialog context (2026100418225505, `WARM_DIALOG_GPU`). It is still kept and still built on a worker, but a window on Vulkan can now wait for that build once.
-	- Sweep: every thread that calls into wgpu, and every wait on one.
-	- Swept: Only the window thread and the warm-up use wgpu. No other spawned thread does. The two waits on the warm-up, opening a dialog and letting the device go, both let go of the lock. The unit tests that make devices take it as well, since they run side by side. `--about` runs before any thread starts.
-	- Branch: vkload
-	- Commit: 7d492b7
-	- Test case: `a_warm_up_never_overlaps_what_the_window_draws` (Es9NHfD) crashed 3 of 3 runs with the warm-up's hold taken out and passes with it. `a_loader_hold_nests_and_lets_go_for_a_wait` (Es9NHtj). `only_a_window_on_vulkan_holds_the_loader_through_its_callbacks` (Es9Pm5d) fails when every window holds.
-	- Verified: 20261008, the full unit suite, clippy for Linux, Windows and macOS, `cicd/tests/swnoshm/run.bash` 3 times, and 20 more software launches with no crash. Before the fix the same launches crashed 1 in 15 at load 18, at the filed spot.
-	- Notes:
-		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
-
-- The curated default font list got replaced by just its first font
-	- ID: 2026100913394946
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: High
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Related IDs: 2026100907341818, 2026101009220980
-	- Target OS: All
-	- Incorrect behavior: The default list of fonts I had carefully curated got replaced by just the first one.
-	- Expected behavior: Bring the full list back.
-	- Notes:
-		- Before RC1.
-		- From the Settings UI update.
-	- Reproduced: 20261013 on b23. With "Use system font" on, Family showed "Monaspace Argon" alone, and turning Face off kept and saved that one name. Test EsZk42X failed before the fix.
-	- Actual cause:
-		- The built-in list was never cut. Since 10-09, Family's automatic value is the desktop's monospace font, and on b23 the desktop's font is Monaspace Argon, which is also the list's first entry. So the box showed one name.
-		- Turning the switch off keeps what the box shows, so it saved that one name as the family.
-		- The live config on b23 was not cut. The 10-09 launch only commented out its family line, which held the full list and still reads the same.
-	- Actual fix: Following the desktop, Family is now the desktop's font followed by the built-in list, each name once. On b23 that is the old list exactly, and turning the switch off keeps and saves all of it.
-	- Decisions:
-		- 20261013: The automatic list is the desktop's font and then the built-in list, not the desktop's font and a list set by hand. A list set by hand is set aside while the switch is on, as for every other switch.
-		- 20261013: No launch repair for a file holding just `family: "Monaspace Argon"`. It is not the old default, it can't be told apart from a pick made by hand, and it renders the same while that font is installed. No such file was found. b23's is fine, Windows names no desktop font, and a Mac names one only when somebody picked it, so the bug could not happen on the Windows boxes or b26.
-	- Swept:
-		- Every reader of the rule, `system_font_family` in fields.rs, which is its one answer.
-		- The font search in text.rs takes the longer list as it is, since it drops repeats.
-		- The size rule gives one number, so it has no list to lose.
-		- Glossary, the Unicode design doc and code comments that said the automatic family is the desktop's font alone.
-	- Verified: unit suite, the merge gate (fmt, clippy, tests), test IDs, doc, TOC and table checks.
-	- Not checked: a real window, Windows, macOS.
-	- Branch: fontlist
-	- Commit: 5f3623b
-	- Test case: EsZk42X `the_family_keeps_the_whole_list_when_the_switch_goes_off` failed before the fix and passes after. EsZk4LL `the_desktop_s_font_leads_the_built_in_list` pins the list on any desktop. EsDxpmE's family assertion moved to the new rule.
-
-- Flyover text for the wallpaper option uses "carries"
-	- ID: 2026100812334384
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20261008-123343
-	- Opened by: JC
-	- Target OS: All
-	- Incorrect behavior: The Fit flyover says "An image carrying its own tag overrides this."
-	- Expected behavior: Plain wording, such as "An image with its own tag".
-	- Notes:
-		- Before RC1.
-		- Same word in other text people see: the scrollbar colors flyover ("does not carry them") and the notice after a config is converted ("could not be carried over").
-	- Progress log:
-		- 20261008: Fit now says "An image with its own Fit tag overrides this." The scrollbar colors tip says a saved theme "leaves them out". The converted-config notice and the matching launch message say a setting "could not be copied to the new file". The config template's comment on `dark_on_light` says a letter "has as much ink".
-	- Swept: every tip, label, option and mark in the dialog spec, the notices, the launch messages, the config template and the CLI help. Code names and comments stay. Also fixed in the docs, one word or phrase each: every use in README and the FAQ, the glossary's Fit entry and the UI style guide's scrollbar colors line (commit 1dcba55). README's line on the converted-file notice and the glossary's Fit entry now match the new text.
-	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks, and the config conversion test against a fresh debug build.
-	- Branch: tipfix
-	- Commit: 368d7b8
-	- Test case: `no_dialog_text_says_carry` (Es9Vugt) and `no_template_comment_says_carry` (Es9WIpt). Both failed with the old Fit tip and template comment put back, and pass now. The notice wording is pinned by the existing notice tests.
-
-- Move local CICD steps into a local container, and on the other boxes too?
-	- ID: 2026101009221201
-	- Type: Task
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261010-092212
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- What would you think of moving (or recreating) local CICD steps into a local container (in the regular docker location)? A minimal container, maybe something as close to the current host OS as possible? (E.g. Debian Trixie)? Ditto on foreign boxes?
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261010: A: Yes for the Linux stages that need no card and no desktop: lint, unit tests, the 4 builds, the deb and NSIS packages, and the Xvfb and headless sway window tests. They gain a pinned toolchain (rustup 1.96, zig 0.16, mingw, makensis 3.12 instead of the box's 3.11), no live user config under the unit tests (G6), and no writes to the box's cache or dogfood config. Debian Trixie matches the host kernel. The repo, `target/` and the cargo registry go in as volumes, so build time stays the same.
-			- Keep on the host: anything that reads the real card (GPU memory, frame times, the profiler), the dogfood install into the synced app dir, the demo render, and the stages that talk to the other boxes over ssh with the host lock.
-			- Not on the other boxes. vm925w has its hypervisor off, so no WSL2 and no Windows containers, and the Windows tests need a logged-on desktop anyway. On b26 a Linux container gives nothing for a macOS build, and the Windows and Mac builds are already made here.
-			- Suggested first step: `cicd.bash --gate` inside the container, as an opt-in flag, until it has run clean a few times. Then the package stages.
-		- 20261010: Built, after "ok do the container work" in chat. `cicd.bash --container` runs stages 1 to 6 in the image from `cicd/container/Dockerfile`, with `--gate --container` for the gate alone. Debian trixie, the pinned rustc with its 3 cross targets, the 4 cargo helpers, zig, makensis 3.12 from the snapshot archive, pwsh with PSScriptAnalyzer, ruff, mypy, shellcheck 0.11, Xvfb, xfwm4, sway, cage and Mesa. Versions come from `tool-pins.txt` and `rust-toolchain.toml` as build args, and the tag hashes the recipe plus those, so a pin bump is a new image. The run inside has its own target dir, `target/container`, and a named cache volume. Outside, this box runs the sync first and the private runner, dogfood, demo and publish after, plus the content scrub and the Windows scenarios, which the run inside steps over. shellcheck, ruff and mypy joined the pin list, and the pin probe reads the first version anywhere in a tool's output, since shellcheck's is on its second line.
-		- 20261010: First runs. The gate passed inside once the run got a passwd entry for its uid, since the terminal looks its user up. A full run then found 3 more gaps, fixed in turn: the publish test wanted rar on PATH even with the backup off (its own stub rar is on PATH now), xfwm4 needs a session bus (the run inside gets one from dbus-run-session), and the ARM64 Windows exe needs llvm-windres for its icon (llvm-19 is in the image). Inside, every window test but the one that needs a render node runs. That one skips, as on any box without a GPU. The image is 5 GB and takes about 20 minutes to build the first time.
-		- 20261010: Run 4 got to the Windows resource check and stopped there again: llvm-windres preprocesses the .rc with clang, so clang-19 joined the recipe. Everything before that passed inside, both scroll harness arms and the 4 release builds included. Not yet run again. Stopped at noon.
-		- 20261013: Merged dev in. The full run `cicd.bash --container -y --no-publish --no-dogfood --no-private` passes at a2d83b1. Its log is `target/container/run7_20261013-064920.log`, and the copy the run keeps is `cicd/artifacts/lint/run_20261013-064920.log`. The image with clang-19 built in about 9 minutes, with docker's cache warm.
-			- Run 5 stopped in the test run folder test, on 2 checks the live settings work broke, not the container. The socket test bound a path past the 107-byte limit, and the check for code asking for the temp dir did not know that code moved to `peers.rs`. Both fixed; the socket test failed before the fix and passes after, with the long folder name.
-			- The run inside now gets this box's time zone. Names it stamped, such as test folders and flamegraphs, were in UTC and sorted after the ones made here.
-			- Inside, every window test passes, the new live settings one too, except the one that needs a render node, which skips as before. The Windows scenarios ran here after the container and skipped, since the console session was locked.
-			- The packages stage makes the same 12 files as the 10-09 run on this box: 4 binaries, 2 deb, 2 rpm, 2 installers, the sums and built-from.txt. Each is about 1% bigger, in line with the code added since. makensis inside is 3.12. Each package holds the exact binary that run built.
-			- Waiting on signoff, since it changes how the pipeline runs. Not merged into dev.
-	- Branch: container
-	- Test case: `cicd/tests/container/run.bash` (EsJg9EF): the tag, the recipe against the pins, the option split, the artifacts picked up, and the engine against a stand-in docker, the time zone included. The full run above.
-
 - Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
 	- ID: 2026100910295901
 	- Type: Enhancement
@@ -181,121 +66,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Writing the theme's 2 colors in would make them Custom's colors, so picking Custom later would show the old theme's text colors. If the write is still wanted, it goes in the one-time theme color move at the first launch (`move_theme_colors`).
 			- Fixed on the way: Save and Save as stored the picture's text colors in the theme while the switch was on. A saved theme takes the colors under them now, the theme's with any change made by hand. The wallpaper design doc said the derived pair never reaches a saved theme, and the knobs model had lost that.
 			- Found on the way: an old file with colors over a built-in theme and no machine test lines shows the theme's colors after the update. Filed as 2026101304551668.
+		- 20261013: Not self-closed. The 20261009 answer asked for the theme's 2 colors to be written into a file with the switch off. Nothing is written, though the screen stays the same, as the entry above explains. That needs JC's OK.
 	- Swept: every reader of the 2 colors that stores them: the config save, Save and Save as on a theme, and the picker, which sets a color by hand. Every row with an `auto:` switch in `settings_ui.shcl`; only these 2 are palette colors.
 	- Verified: the unit suite, clippy, fmt and the test ID check. Each new test failed against a mutant: Esa43ID with the switch read off the color lines, Esa43cc with a theme pick that turns the switch on, both with the picture's colors used while the switch is off, and Esa59zb before the fix.
 	- Not checked: a real window.
 	- Branch: wallcolors
 	- Commit: 8bce254
 	- Test case: `a_file_with_the_wallpaper_colors_off_keeps_the_theme_s` (Esa43ID), `a_theme_pick_leaves_the_wallpaper_colors_switch_alone` (Esa43cc), `a_saved_theme_never_takes_the_wallpaper_s_text_colors` (Esa59zb). Already there: EqRxesl, EqRxesm, EqRxese, EsFc30N.
-
-- Flyover help text should apply to all of the relevant labels, and both controls
-	- ID: 2026100812334387
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261008-123343
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- In this case, all of "Fit      [ ] Stretch  [ ] Zoom".
-	- Notes:
-		- Before RC1.
-	- Decisions:
-		- 20261008: Best guess, since the scope question went unanswered. Where one setting has several labels or controls on its row, its tip shows over all of them: option labels such as Stretch and Zoom, a warning mark, and every part of the control. The revert arrow keeps its own. A packed line of separate settings, such as Tab text, keeps one tip per toggle, as signed off on 2026100710173200.
-	- Progress log:
-		- 20261008: A row's tip now answers from its label to the end of its control, up to the revert column. That covers every option of a radio row, a slider's number box, a color's hex box and the dropdowns. The tip still hangs under the row's first control.
-		- 20261008: Use system font's Face and Size are two settings under one label, so each box answers for its own. Before, Size showed no tip at all, and a desktop with no monospace font to report never got to say why only Face was grayed.
-		- 20261008: Transparency's mark now shows the row's tip too, with its warning on the end, per 2026100812334388. On Windows that tip runs to 4 sentences, one past the style guide's 3.
-		- 20261008: The UI style guide and the settings dialog design doc say so.
-	- Swept: every row kind on every tab, through the test below. The shells grid keeps its tip on the column titles, and a row of buttons keeps its tip under its buttons.
-	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks. Not looked at in a real window.
-	- Branch: tipfix
-	- Commit: 368d7b8
-	- Test case: `every_part_of_a_row_shows_the_rows_tip` (Es9VuY0), which checks the label, any mark, each option and both ends and the middle of every control part on every row, and Fit's five spots by name. It failed with the old hit span put back and passes now.
-
-- Flyover text for "Free resources when idle"
-	- ID: 2026100812334388
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261008-123343
-	- Opened by: JC
-	- Related IDs: 2026100418225510, 2026100812334387
-	- Target OS: All
-	- Requirements:
-		- Merge the row's current tip and warning into one text that reads clear.
-		- Show that one text over the label, the warning mark and the checkbox.
-	- Notes:
-		- Before RC1.
-		- 20261008: Q: SilkTerm has no single-process mode yet. Is one planned, or does this mean something else? A: One is planned (2026100418225510), after the cut.
-		- 20261008: Q: The row has a tip and a warning now. Does this replace both? A: No. Drop the text first asked for, and merge the two instead, per the requirements.
-	- Decisions:
-		- 20261008: First asked-for text, dropped: "When not in single-process mode, this can help conserve GPU memory at little discernible cost. It helps when regularly running numerous instances open on a low-memory GPU, and/or if something else wants all the GPU memory."
-	- Progress log:
-		- 20261008: The row now has one tip, over the label, the mark and the checkbox: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment it is used again, without stopping anything running in it. This helps most with many windows open on a card with little memory, or next to programs that use a lot of it. Turn it off only if the graphics driver has trouble with it."
-		- 20261008: The mark stays. Its text, now the last sentence, goes on the end of the row's tip, so a mark never shows text of its own. Transparency follows the same rule.
-		- 20261008: Nothing in it mentions a single-process mode.
-	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks. Not looked at in a real window.
-	- Branch: tipfix
-	- Commit: 368d7b8
-	- Test case: `two_rows_warn_and_each_mark_shows_the_rows_tip` (Es9VucS), which replaces `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl, commented out with the reason). It failed with the mark's own tip put back and passes now. `every_part_of_a_row_shows_the_rows_tip` (Es9VuY0) covers the mark as well.
-
-- The checkbox for "Check for hardware change" should be lined up under the checkbox for "Choose automatically"
-	- ID: 2026100812334385
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261008-123343
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100710173200
-	- Target OS: All
-	- Requirements:
-		- I'm guessing this got moved to the left due to the columnar exception carved out for "Tab text" single-line grouping. But for this group, it looks odd, and it looked better for the performance section, when the first checkbox was lined up the way it was before.
-	- Notes:
-		- Before RC1.
-	- Decisions:
-		- 20261008: Best guess, since the question went unanswered. On the Silk tab line, "Check for hardware change" keeps its label in the label column and its box in the control column, under "Choose automatically". "Re-test next run" follows at the packed gap, label then box. The Tab text line stays as signed off.
-		- 20261008: Picked from the group, not declared. A packed line that shares its group with other rows keeps its first box in the column. One alone under its heading, like Tab text, packs from the label edge.
-	- Progress log:
-		- 20261008: The first label on such a line counts toward the label column again. It is not the widest label, so nothing else moved.
-		- 20261008: Tips, clicks and the focus ring follow the new positions. The UI style guide, the settings dialog design doc and the spec file's `beside` note say so.
-	- Swept: every packed line on every tab, through the test below. The Tab text line and the rest of the Window tab drew the same pixels as before at 1x and 2x. The scrim dropdown pair still splits the column.
-	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at 1x and 2x, the hardware check box sits under the "Choose automatically" box, only that line changed on the Silk tab, and the panel stayed 707 wide at 1x and 1439 at 2x. Tips over the line were not looked at in a real window. The test covers them.
-	- Branch: hwline
-	- Commit: 676dbd5
-	- Test case: `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr). It fails with the group rule turned off, and with the first box left where packing puts it. `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM) is commented out, since it expected every first box right after its label.
-
-- Change the GPU timeout sliders from linear to logarithmic
-	- ID: 2026100812334386
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261008-123343
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Same min and max.
-		- Allow the user to manually type in values that exceed the slider. For these two, and anything else that doesn't have a % or an inherent limit.
-	- Notes:
-		- Before RC1.
-		- The two are "Minutes when hidden" and "Minutes otherwise" under Resource use on the Window tab, both 1 to 1440.
-	- Decisions:
-		- 20261008: Best guess, since the question went unanswered. A typed value can go past the slider's end, up to a cap set per row. For the two waits the cap is a week, 10080. Below the slider's start still clamps, since 0 or less means nothing for a wait. The handle parks at the end and the box shows the number.
-		- 20261008: Rows that take a typed value past the slider, with their caps: Minutes when hidden and Minutes otherwise 10080, Blur px 100, Size 128 (the largest the text is drawn at), Line height 4, Blink rate ms 10000, Inactivity timer s 3600, Wheel lines 100, Columns and Rows 1000 (what `--columns` and `--rows` take), Margin px 200.
-		- 20261008: Rows kept at their slider, besides every row with a %: Scrim radius px, since the halo can't reach past 20. Outline px, since the outline is 8 taps around each letter and should break into dots past a few px (read in the shader, not looked at). Scrollbar width px and Minimap width px, since the config holds both to the slider's range on purpose.
-		- 20261008: Only the two waits get a log track. Arrows step a hundredth of the track as a ratio, a tenth with Shift, and always at least 1. A press never takes a value further past the end than it already is, so Up stops at the end and Down from a typed number steps down from it.
-	- Progress log:
-		- 20261008: The config already read both waits up to 10080, so the file side needed no change. Every capped value saves and reads back as typed, and the launch says nothing about it.
-		- 20261008: A decimal box drops places past 100 and 1000, so 3600 seconds shows "3600" rather than a cut-off "3600.00". Values under 100 show as before.
-		- 20261008: The number box stays 56 DIP wide. "10080" fits with a few px to spare at the tested font. A larger desktop font could cut off a 5 digit number, as it could the 4 digit ones before. Measuring the widest number the way the labels are measured would fix that. Not done here.
-		- 20261008: The UI style guide, the settings dialog design doc and the spec file's field notes say so.
-	- Swept: every slider row in the spec, through the save test below. Track, drag, arrows and typing all go through one helper, and the log math is the one the Scrolling feel sliders already use. No other place clamps a typed slider value.
-	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at 1x, 60 minutes sits a little past halfway, the defaults 1 and 240 at the left end and about three quarters, and 10080, 10000, 3600 and 1000 columns sit at the end with the number whole in the box. Not looked at with a large desktop font or at 2x.
-	- Branch: logslide
-	- Commit: 9c1404c
-	- Test case: `a_log_slider_gives_each_doubling_the_same_travel` (Es9f0qI), `a_typed_wait_can_go_past_the_slider_up_to_a_week` (Es9f0uU), `a_number_typed_past_a_slider_survives_a_save_and_a_relaunch` (Es9f0yE), `a_number_typed_past_a_slider_reads_back_without_a_word` (Es9f11y), `a_slider_scale_or_cap_that_means_nothing_is_refused` (Es9fvg9), `a_big_decimal_drops_places_to_fit_its_box` (Es9hNXm). Each failed with its part of the change taken out. `slider_numeric_field_edits_and_clamps` (Eiustaa) had its clamp-to-40 line commented out, since Size now takes up to 128.
 
 - Settings that depend on a master boolean switch follow the automatic settings design
 	- ID: 2026100907341818
@@ -350,6 +127,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261009: Built the table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check. Moved Family, Size, Columns and Rows.
 		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It does not mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line has nothing to attach to yet, since the program has no accessibility layer. "Dosn't" in its Tests section. Its line on hand edits while running waits on 2026100907341819.
 		- 20261009: Not signed off. Follow-ups filed: 2026100913394946, 2026100913394948, 2026100913394950.
+		- 20261013: Not self-closed. The knobs model replaced most of what this asked for, and JC plans to rethink the Settings dialog again. It may be Moot now. That call is JC's.
 	- Against: the Settings dialog design doc's "a font switch that follows the desktop grays the fields it overrides", and the earlier fix that grayed "Use system font" where the desktop names no font. Both went with the switch.
 	- Swept: every gate in settings_ui.shcl; every reader of the four settings, which the type change made the compiler find; load, save, the legacy and shcl 2 conversions, the launch size, sizes per monitor, the font zoom, and `--font`, `--font-size`, `--columns` and `--rows`.
 	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, doc, TOC and table checks, and the new lint check, which failed on an injected read in two files. In a real window against a dev build at the default font, the panel stayed 707 by 965, and Cursor, Movement, Themes, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Columns typed by hand showed the x and a dash in the switch; the x, and a click on the switch from a dash, put them back; OK wrote only the Size typed on the Text tab. A config the dev build wrote opened at the same window size on both builds, with the switches on and with them off.
@@ -376,6 +154,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Before RC1.
 	- Progress log:
 		- 20261009: The ten theme colors, Open command, and the wallpaper's image and folder are auto settings in the first part's table. An automatic color reads the theme's palette, which is worked out again whenever the theme, the mode or the desktop's dark or light changes. The lint check covers them through the same stored type.
+		- 20261013: Not self-closed. The knobs model took the mark out, per 2026100913394950, and the revert arrow is the way back. Test EsEAioc went with it. It may be Moot now. That call is JC's.
 	- Decisions:
 		- 20261009: A color's mark and x sit at the right end of its hex box, beside the chip, as a text box's do. Emptying the hex box puts it back too, and Cancel in the color picker leaves an automatic color automatic.
 		- 20261009: File or folder edits whichever of the two its box shows. Its x puts back only that one, and its revert arrow puts back both.
@@ -391,227 +170,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: autoset2
 	- Commit: 7fadb59
 	- Test case: EsEAijd, EsEAioc, EsEAitK, EsEAixa and EsEAj1i, each failing against a mutant of its part. EsDxpmD walks the whole table now. Assertions moved where the rule changed: Er1vmpQ, EqAiJBo, Em3Pif2, ElmIYG3, Elzq5VQ, ErkRECv, Eq4Yrbf, Epytxce.
-
-- Don't show any flyover tip text when the app or Settings dialog doesn't have the focus
-	- ID: 2026101009220760
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No
-	- Needs external testing: A look on Windows, where Settings is an owned window (G36), and on macOS.
-	- Priority: Avg
-	- Opened: 20261010-092207
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Don't show any flyover tip text when the app - e.g. for tabs - or settings dialog doesn't have the focus.
-	- Progress log:
-		- 20261013: Built. Each window follows its own focus: the main window, Settings, About and the notice. A tip already up goes when the focus leaves. Settings open over the terminal has the focus, so the terminal shows no tab tip while it is up.
-	- Decisions:
-		- 20261013: When the focus comes back, tips wait for the pointer to move, so none pops up under a pointer left resting on a control. A move while the window is in the background counts for nothing. A pointer report at the same spot, which some platforms send as focus changes, is not a move.
-	- Sweep: the tab tip, menu tips, Settings rows, buttons and revert arrows, the About and notice links.
-	- Swept: The tab and menu tips both check the main window's focus, in `note_tab_hover` and `menu_tip_target`. Every dialog tip goes through `pointer_moved` and `compose`, which both take it. About and the notice are the same window type as Settings, and the notice's events now include focus.
-	- Branch: tipfix
-	- Commit: d33977d
-	- Test case: `a_window_without_the_focus_shows_no_tips` (EsZp4Va) and `a_dialog_without_the_focus_draws_no_tip` (EsZp4ah). The second fails with the focus check taken out of a frame.
-	- Verified: 20261013, the gate. In real windows on b23 under xfwm4, for a Settings row and for the tab strip: a tip that was up went when another window took the focus, stayed down 5 s after the focus came back, and came back after a 1 px move. Dev kept the Settings tip up in the background.
-	- Notes:
-		- Pre-next-cut.
-
-- Settings: move tabs to the left, including nested tabs
-	- ID: 2026101009220870
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
-	- Needs external testing: Windows and macOS: a look at the list, at the default interface font and a large one.
-	- Priority: Avg
-	- Opened: 20261010-092208
-	- Opened by: JC
-	- Related IDs: 2026101008023943
-	- Target OS: All
-	- Requirements:
-		- Move tabs to the left, including nested tabs.
-	- Notes:
-		- Pre-next-cut.
-		- The dialog code can do both since 2026101008023943. SilkTerm's own spec in `settings_ui.shcl` is still flat and across the top.
-	- Progress log:
-		- 20261013: Q: How do the tabs nest?
-			- A: Down the left: Silk, Appearance (Themes, Background, Text, Cursor), Movement, Window, Shell, Keys.
-		- 20261013: Done on `tabsleft`. The tabs are a list down the left, in that order, so Themes now comes before Background. The config template's theme and colors section moved ahead of the background one too, since the template follows the tabs. That reaches a new file only.
-		- 20261013: A click on Appearance opens Themes. From one of its 4 tabs it changes nothing, since Appearance already reads as current there.
-		- 20261013: Looked at on Linux at the default interface font and at 24 pt. Every tab fits the list, and nothing overlaps. At 24 pt the Silk tab scrolls, as it did before.
-	- Decisions:
-		- A click on Appearance opens its first tab, and does nothing while one of its tabs is open. That is how the dialog code already worked.
-	- Swept: tests that set a tab by its number (now by its title), tests that measured rows from the panel edge (now from where the rows start), the top-strip tests (now run with the tabs put across the top), the template order test, the UI style guide, design.md, the Settings dialog design doc, the glossary's Gutter entry, and every tip and doc that says "the X tab". Those still read right, since every tab kept its name.
-	- Test case: `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv), failed on the old spec and passes now. `the_template_blocks_follow_the_dialog` (Er2UFeO) has the new order.
-	- Branch: tabsleft
-	- Commit: e5b2b87
-
-- Font settings should be part of themes
-	- ID: 2026100913394956
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
-	- Priority: Avg
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Font settings should be part of themes.
-	- Notes:
-		- Before RC1.
-	- Progress log:
-		- 20261013: Q: Which font settings does a theme hold, and does picking a theme change them? A: Font family, size and line height (`font.family`, `font.size`, `font.line_height_scale`), picked up like the colors. Plus a new switch, on by default: "Font settings ignore themes". While it is on, a theme pick leaves the fonts alone.
-		- 20261013: Built. A saved theme keeps the 3 values under `themes.<slug>.font`, and a pick sets them while the new switch is off.
-	- Decisions:
-		- 20261013: The font rows stay out of the theme's preset group. As members they would show the default font under any built-in theme, and the person's own font only under Custom.
-		- 20261013: A pick sets each theme value that differs from what shows, the way typing it in would, so "Use system font" turns off for that value and the theme's font wins. A value already showing is left alone, so Save, which picks the theme again, turns nothing off.
-		- 20261013: Built-in themes have no font. Picking one, or Custom, never changes the font.
-		- 20261013: Save and Save as always keep the font on screen, switch on or off, since a theme is stored whole.
-		- 20261013: With the switch off, a font that differs from the saved theme's makes the box read `Name *`, wakes Save and is named in the tip, like a color. Nothing records it. Turning the switch off sets no font until the next pick.
-		- 20261013: The switch is `font.ignore_themes`, one row on the Themes tab under Mode, not repeated on the Text tab.
-		- 20261013: Theme files from before this have no font lines. They load as before, and picking one changes no font.
-	- Swept: every theme pick goes through `fields::set` or `fields::reset` on the Theme row: the dropdown, Save, Save as, Delete and the reset arrow. Rename is not a pick. Nothing outside the dialog picks a theme. `read_user_themes` and `write_user_themes` are the only theme file reader and writer, and all 4 places that build a `UserTheme` set its font.
-	- Branch: themefonts
-	- Commit: d69279d
-	- Test case: Esa0ndg (switch default and template line), Esa0nip (font round trip, an old theme file loads), Esa0nnU (save keeps the font), Esa0ns8 (pick with the switch on and off, built-in changes nothing), Esa0nwo (theme font beats the system font), Esa0o1c (save turns no switch off), Esa0o6M (font change reads as `*`), Esa0oBV (font survives a relaunch). Esa0nip, Esa0ns8, Esa0nwo, Esa0o6M and Esa0oBV fail with the font pick and the font write taken out, and Esa0o1c fails with the already-showing check taken out.
-	- Verified: 20261013, the merge gate (fmt, clippy, all 1267 unit tests), the doc, TOC, table and test ID checks. The shipped config is still a save fixed point, and a config from before backfills to the new template exactly and then changes nothing. The new row was looked at on the Themes tab at the default interface font.
-	- Acceptance signoff: Changes what the dialog shows, what a theme pick does and what a saved theme writes to disk.
-
-- Changes in one SilkTerm apply to all running SilkTerms using the same config file, immediately
-	- ID: 2026100907341819
-	- Type: Feature
-	- Status: Waiting on signoff
-	- Needs external testing: Windows on vm925w: two windows on one settings file, a change in Settings shows in the other at once; `--reload-settings` and `--wallpaper` from a shell inside a window; a window ended in Task Manager, then a save in the other. macOS on b26: the two-window check. Both are compiled and linted only.
-	- Priority: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225510
-	- Target OS: All
-	- Requirements:
-		- Changes in one SilkTerm should apply to all running SilkTerms using the same config file, immediately.
-		- Except for randomly selected wallpaper. That should not change unless the user identified one specific file, or changed the path.
-			- In the latter case, if "random per window/tab/pane" is selected, then new wallpaper should be chosen at pseudorandom for each window/tab/pane.
-	- Notes:
-		- Before RC1.
-		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
-	- Progress log:
-		- 20261013: Built. A save in one window, or Reload config, tells the other windows on the same settings file over each window's control socket, a named pipe on Windows. Windows on another file never hear. How it works is in design.md, "Settings across windows".
-		- 20261013: Verified: unit tests and a window test with 3 windows, 2 on one file. The save test fails with the lock taken out, and the window test fails with the telling taken out, or with every window picking a new wallpaper on each save.
-		- 20261013: `a_poke_reaches_a_listener_and_finds_the_dead` failed on b26, since a socket path under the Mac's test folder passed its 103-byte limit. The test now binds and pokes by bare name, from a child copy of the test binary started in the folder, the same on every Unix. Verified: it fails before and passes after on b26, and passes on Linux, also under a 120-character temp dir. A window's own socket is `$TMPDIR/silkterm-ctl-<pid>.sock`, 72 bytes on b26, and the peer folders hold plain files, which the limit does not cover. Branch macfix.
-	- Decisions:
-		- 20261013: Local IPC, and hand edits are not picked up live (answered 20261009). Reload config in one window has the others read the file too, so one reload covers a hand edit.
-		- 20261013: A window size set in Settings resizes only the window it was set in. In the others it is the size new windows open at.
-		- 20261013: An open Settings dialog with nothing changed shows the other window's save at once. One with changes in hand keeps them, and shows the other save after Apply, which keeps both.
-		- 20261013: There is no per tab or per pane wallpaper today, only per window. A new folder has each window pick on its own.
-		- 20261013: Named pipes on Windows, not AF_UNIX. Nothing new linked, nothing left behind by a crash, and the control commands work on Windows now too.
-	- Swept: every write of the settings file goes through one writer, which counts it, and every read and write of the settings and state files holds the lock (the launch, Settings saves, menu switches, reverts, the rating, the machine test).
-	- Branch: livecfg
-	- Commit: 435f7fc, 853853f
-	- Test case: `cicd/tests/livecfg/run.bash` (EsaF4Qe); `saves_at_the_same_moment_keep_each_others_change`, `only_a_settings_write_is_news`, `a_reload_for_another_window_keeps_this_windows_own`, `an_open_dialog_follows_another_windows_save`, `only_a_new_folder_picks_a_new_picture`, `a_save_reaches_the_others_and_clears_the_dead`, `a_second_save_waits_for_the_first`, `one_file_is_one_key_however_it_is_named`, `a_marker_goes_with_its_window`, `a_save_on_another_file_is_not_heard`, `a_poke_reaches_a_listener_and_finds_the_dead`.
-
-- A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
-	- ID: 2026100816465317
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261008-164653
-	- Opened by: CC
-	- Related IDs: 2026100812334386
-	- Target OS: All
-	- Incorrect behavior: The box is 56 DIP wide whatever the font. "10080" fits at the default font with a few px to spare. A larger desktop font could cut it off, as it already could with 4 digits.
-	- Expected behavior: The box is wide enough for the widest number its row can hold, measured the way labels are.
-	- Reproduced: 20261008, at a 24 pt interface font. Blink rate showed "000" for 10000 and Inactivity timer "999." for 999.9.
-	- Notes:
-		- 20261008: Scaling the box with the font size was tried and dropped. It widened every box and shortened every slider at normal font sizes.
-	- Decisions:
-		- 20261008: Best guess. One width for every slider in the dialog, the widest any of them needs, so the sliders still end in one column. Never narrower than the old 56 DIP, so nothing moves at an ordinary font unless a number needs more.
-		- 20261008: Best guess. The width is the number plus the field's padding on both sides. The caret margin while typing is left out, since counting it would widen every box at the default font. A 5 digit number being typed still shows whole.
-		- 20261008: Best guess. A wider box widens the panel's own floor, the way a long label does. The nine tabs usually set the panel's width, so in practice the sliders give up the room.
-	- Actual cause: The box width was a constant, and nothing measured the numbers.
-	- Actual fix: The widest number each slider can show is measured in the dialog's own font: either end, the typed cap where a row has one, and for a decimal 99.94 and 999.9. The largest plus padding sets every number box, with 56 DIP as the floor. The UI style guide, the settings dialog design doc and the spec file's note say so.
-	- Swept: every fixed width box in the dialog. The color picker's value boxes and the dropdowns already grow with the font, and the hex, text and path boxes stretch to the column.
-	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc, table and TOC checks. In a real window at the default font, 1x is unchanged, apart from the caret blink and the Shell tab, which differ between 2 runs of the old build too. The panel stayed 707 wide at 1x and 1439 at 2x. At 2x the font comes out half a px larger per DIP, "10080" needs 57 DIP, so every number box is 1 DIP wider and the sliders 1 DIP shorter. At 24 pt every number shows whole at 1x and 2x, the panel stays 1171 and 2342 wide, and the sliders are shorter by what the boxes gained.
-	- Branch: numbox
-	- Commit: d3f51da
-	- Test case: `every_slider_number_fits_its_box_at_a_large_interface_font` (Es9oaEN), `a_wider_number_box_widens_the_panel_and_leaves_the_sliders` (Es9oaYr). Both fail with the box held at 56 DIP. The first also fails with the decimal bands taken out, the second with the panel ignoring the box.
-
-- At a large interface font, the labels on a packed line of toggles nearly touch their checkboxes
-	- ID: 2026100817172887
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261008-171728
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100710173200, 2026100812334385
-	- Target OS: All
-	- Steps to reproduce:
-		- Set the desktop's interface font to 24 pt and open Settings, Window tab.
-	- Incorrect behavior: On the Tab text line, each label sits almost against its own checkbox.
-	- Expected behavior: The gap between a label and its box keeps its look at any font size.
-	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
-	- Decisions:
-		- 20261008: Best guess. The gap before the next toggle grows with the font too, at the same rate, so it stays 4 times the label's gap. Otherwise a big enough font's label gap catches up with it and a label reads as belonging to the box before it.
-		- 20261008: Best guess. Both gaps keep their sizes up to the 11 pt default's line height and grow in step above it. A smaller font keeps them as they are.
-	- Against: 2026100710173200's decision says "a fixed gap before the next toggle". It is still the same at every font up to the default, and the same between every pair of toggles on a line.
-	- Actual cause: The label was measured and drawn the same, in the same font. The gap after it was a fixed 6 DIP, so at 24 pt it was half the share of the text it had at the default. Nothing was scaled twice or skipped.
-	- Actual fix: The label gap and the gap before the next toggle grow with the UI line height above the default's. At 24 pt that is about 13 and 52 DIP, up from 6 and 24. The label after a radio or pair box uses the same gap. The UI style guide and the settings dialog design doc say so.
-	- Swept: every fixed gap between a label and its own box in the dialog. That is the packed line, the label on any other shared line, the radio options and the font pair. The label column's 14 DIP after the longest label stays fixed. It is the least room any label in the column gets, and at 24 pt it is still about the share the packed gap had at the default.
-	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at the default font, the Silk and Window tabs, Tab text and hardware lines included, drew the same pixels as before at 1x and 2x. The only changed pixels on any tab were a text caret's column. At 24 pt each label now ends 12 to 15 px before its box at 1x, where it was 4 to 7, and the panel kept its width at 1x and 2x.
-	- Note: At 24 pt the checkbox stays 20 DIP while a radio box grows to 36, and the pair row's focus outline is shorter than its text. Neither was changed here.
-	- Branch: packgap
-	- Commit: 8072dc4
-	- Test case: `a_large_interface_font_keeps_each_label_clear_of_its_box` (Es9uxSu). It fails with the gaps held at their fixed sizes, and separately with only the gap before the next toggle held, or only the radio and pair label gap. `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr) still pins the default sizes.
-
-- At a large interface font, a checkbox stays small while a radio box grows
-	- ID: 2026100817355493
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261008-173554
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026100817172887
-	- Target OS: All
-	- Steps to reproduce:
-		- Set the desktop's interface font to 24 pt and open Settings.
-	- Incorrect behavior: A checkbox stays 20 DIP while a radio box grows to 36, so the two look mismatched beside the larger text.
-	- Expected behavior: Both kinds of box grow with the font the same way.
-	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
-	- Actual cause: The radio box grew with the UI line height, from 16 DIP at a line height of 19. The checkbox was a fixed 20 DIP. The pair boxes, the packed toggles and the Shell tab's Active box used that same constant.
-	- Decisions:
-		- 20261008: Best guess. Every square box grows at the radio's rate, and each keeps its own size as a floor. Growing the checkbox by its own share instead would have made it bigger at the default font, and growing both from the 11 pt default's line would have shrunk the radio box there.
-	- Actual fix: One rule sizes every square box. At the default font the checkbox stays 20 DIP and the radio box 17, as before. The checkbox starts to grow once the radio box would pass it, at about a 14 pt font. At 24 pt both are 36 DIP. The layout comments and the settings dialog design doc say so.
-	- Swept: every square box in the dialog: a plain toggle, a packed toggle, both pair boxes, the radio options and the Shell tab's Active box. The revert arrow's column also reads the 20 DIP size. It holds a glyph, not a box, and was left alone.
-	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at the 11 pt default, every tab and a focused radio row drew the same pixels as before at 1x and 2x, bar a text caret's column. At 24 pt the checkboxes, pair boxes and radio boxes all measure 38 px with their outline at 1x, where the checkboxes were 22, and the window kept its size at 1x and 2x. At GentiumAlt Bold 13 nothing moved but the pair row's focus outline (2026100817355494).
-	- Branch: boxring
-	- Commit: 6457f3a
-	- Test case: `a_checkbox_and_a_radio_box_grow_to_one_size` (EsA3ceS). It fails on the old code and passes with the fix.
-
-- Settings tips end with the current and default values where they differ
-	- ID: 2026100910295905
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
-	- Needs external testing: A look at a few tips on Windows and macOS, where hotkeys read differently.
-	- Priority: Low
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Per the automatic settings design, every input control's tip ends with `Current value: ...` and `Default value: ...`, shown only when they differ. Automatic rows already have their state line.
-	- Progress log:
-		- 20261009: JC OK'd leaving the Current and Default lines off an automatic row's tip.
-	- Decisions:
-		- 20261009: An auto setting's tip keeps its state line and gets no value lines, since "Automatic would be" already says what the default gives. A group's switch holds nothing, so it gets none either.
-		- 20261009: Values are written the way the row writes them: the number in its box, On or Off, the option's own words, a color's hex, a hotkey's keys or Off.
-	- Swept: every kind of row: slider, toggle, pair, radio, dropdown, color, text and hotkey. Buttons, the shells grid and headings hold no value.
-	- Verified: unit suite. In a window, "Text colors from wallpaper" switched off ended its tip with "Current value: Off" and "Default value: On", after a blank line.
-	- Branch: autoset2
-	- Commit: 7fadb59
-	- Test case: EsEAj63, failing with the value lines taken out. Ery4gAt, Es9VuY0, Es9Zhyr and Es9VucS put their row at its default first now, since a box whose own config differs would add value lines (G6).
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -748,6 +306,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Not verified: a real wake on b23, and the Windows and macOS code paths, which were compiled only.
 	- Swept: every place a monitor key is compared or a monitor is picked: `settle`, `remembered_window`, `remember_window` and `monitor_under`. `write_monitor_sizes` compares an entry with its own earlier copy, so it stays exact.
 
+- Changes in one SilkTerm apply to all running SilkTerms using the same config file, immediately
+	- ID: 2026100907341819
+	- Type: Feature
+	- Status: Waiting for testing
+	- Needs external testing: Windows on vm925w: two windows on one settings file, a change in Settings shows in the other at once; `--reload-settings` and `--wallpaper` from a shell inside a window; a window ended in Task Manager, then a save in the other. macOS on b26: the two-window check. Both are compiled and linted only.
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225510
+	- Target OS: All
+	- Requirements:
+		- Changes in one SilkTerm should apply to all running SilkTerms using the same config file, immediately.
+		- Except for randomly selected wallpaper. That should not change unless the user identified one specific file, or changed the path.
+			- In the latter case, if "random per window/tab/pane" is selected, then new wallpaper should be chosen at pseudorandom for each window/tab/pane.
+	- Notes:
+		- Before RC1.
+		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
+	- Progress log:
+		- 20261013: Built. A save in one window, or Reload config, tells the other windows on the same settings file over each window's control socket, a named pipe on Windows. Windows on another file never hear. How it works is in design.md, "Settings across windows".
+		- 20261013: Verified: unit tests and a window test with 3 windows, 2 on one file. The save test fails with the lock taken out, and the window test fails with the telling taken out, or with every window picking a new wallpaper on each save.
+		- 20261013: `a_poke_reaches_a_listener_and_finds_the_dead` failed on b26, since a socket path under the Mac's test folder passed its 103-byte limit. The test now binds and pokes by bare name, from a child copy of the test binary started in the folder, the same on every Unix. Verified: it fails before and passes after on b26, and passes on Linux, also under a 120-character temp dir. A window's own socket is `$TMPDIR/silkterm-ctl-<pid>.sock`, 72 bytes on b26, and the peer folders hold plain files, which the limit does not cover. Branch macfix.
+		- 20261013: Moved to Waiting for testing. The named pipe code for Windows is compiled only, and vm925w was down. The Linux window test passes on dev at 07f3f6a.
+	- Decisions:
+		- 20261013: Local IPC, and hand edits are not picked up live (answered 20261009). Reload config in one window has the others read the file too, so one reload covers a hand edit.
+		- 20261013: A window size set in Settings resizes only the window it was set in. In the others it is the size new windows open at.
+		- 20261013: An open Settings dialog with nothing changed shows the other window's save at once. One with changes in hand keeps them, and shows the other save after Apply, which keeps both.
+		- 20261013: There is no per tab or per pane wallpaper today, only per window. A new folder has each window pick on its own.
+		- 20261013: Named pipes on Windows, not AF_UNIX. Nothing new linked, nothing left behind by a crash, and the control commands work on Windows now too.
+	- Swept: every write of the settings file goes through one writer, which counts it, and every read and write of the settings and state files holds the lock (the launch, Settings saves, menu switches, reverts, the rating, the machine test).
+	- Branch: livecfg
+	- Commit: 435f7fc, 853853f
+	- Test case: `cicd/tests/livecfg/run.bash` (EsaF4Qe); `saves_at_the_same_moment_keep_each_others_change`, `only_a_settings_write_is_news`, `a_reload_for_another_window_keeps_this_windows_own`, `an_open_dialog_follows_another_windows_save`, `only_a_new_folder_picks_a_new_picture`, `a_save_reaches_the_others_and_clears_the_dead`, `a_second_save_waits_for_the_first`, `one_file_is_one_key_however_it_is_named`, `a_marker_goes_with_its_window`, `a_save_on_another_file_is_not_heard`, `a_poke_reaches_a_listener_and_finds_the_dead`.
+
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
@@ -881,6 +473,68 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- Smooth scroll freaked out with a long flatpak update
+	- ID: 2026101310563284
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: Linux
+	- Steps to reproduce:
+		- Run a long `flatpak update`.
+	- Incorrect behavior: Smooth scroll freaked out.
+	- Expected behavior: Smooth scroll stays steady through the whole update.
+	- Notes:
+		- Pre-next-cut.
+		- Regression, I thought we had this fixed.
+		- The old-format Done item "Severe bug: `flatpak update` output bounces wildly" fixed it before, closed 20260728.
+
+- `clear` shouldn't scroll, it should instantly clear
+	- ID: 2026101310563297
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: All
+	- Incorrect behavior: `clear` scrolls.
+	- Expected behavior: It should instantly clear.
+	- Notes:
+		- Pre-next-cut.
+	- Against: the old-format Done item "Bug: repeated `clear; ls -lA ~/` scrolled smoothly the first time and appeared instantly every time after", and the 20260914 code review's "A clear eases the same way at a full scrollback as before it". Both made a clear ease on purpose.
+
+- top quits smooth scrolling at some point
+	- ID: 2026101310563310
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: All
+	- Steps to reproduce:
+		- Run `top` and leave it running.
+	- Incorrect behavior: top quits smooth scrolling at some point.
+	- Expected behavior: Smooth scrolling keeps working however long top runs.
+	- Notes:
+		- Pre-next-cut.
+		- It should probably be excluded, but the fact that this happens could indicate a bug with longer-running stuff, so let's not exclude it.
+
+- muffer should not get a minimap
+	- ID: 2026101310563323
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: All
+	- Incorrect behavior: muffer gets a minimap.
+	- Expected behavior: No minimap while muffer runs.
+	- Notes:
+		- Pre-next-cut.
+		- Consider making the minimap whitelist-only for TUI apps, e.g. `less`, `tail`, etc.
+		- The minimap already steps aside for a full-screen program that is not in `scroll.minimap.tui_process_whitelist`, default `less tmux screen`, per the old-format Done item "Auto-disable the minimap when in a TUI that has no buffer that can be reached via minimap".
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -974,6 +628,75 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- A software rendering launch crashes now and then inside the Vulkan loader
+	- ID: 2026100720280486
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: No
+	- Severity: High
+	- Opened: 20261007-202804
+	- Opened by: CC
+	- Related IDs: 2026100614510979
+	- Target OS: Linux
+	- Test environment: b23, the debug build, headless sway's Xwayland behind the no-shared-pixmaps proxy
+	- Steps to reproduce:
+		- Run `cicd/tests/swnoshm/run.bash` a few times. Its first case launches with software rendering on.
+	- Incorrect behavior: the program dies of SIGSEGV within about a second of launch, before a window comes up. The kernel log puts both crashes in `libvulkan.so.1.4.309` at almost the same offset, 0x2d066 and 0x2d06e. One faulting address was 0x6472616373, which is ASCII text read as a pointer.
+	- Expected behavior: a software launch comes up every time.
+	- Reproduced: 20261007, in 1 of 3 runs of the test alone at load 7, and once in the full pipeline at 7a032c5. No core was kept. The case that switches to software while running passed every time.
+	- Possible cause: not known. The same spot both times points away from host noise. Debug builds turn on Vulkan validation through `InstanceFlags::default()`, and the dialogs' GPU context is built on a worker thread, so two instances made at once in the loader is one suspect. Whether a release build crashes too is not known.
+	- Actual cause: The Vulkan loader on Debian 13 (1.4.309) has a threading bug. To find which device a call is for, it walks every instance's list of drivers, under a different lock than the one held while those lists change. Debug builds name every object they make, and each name does that walk. The dialogs' warm-up makes its own instance on another thread right after the window shows, and listing its adapters unloads the drivers that have none. A name given on the window thread at that moment read a list entry that had just been freed. Loader 1.4.350 fixes it upstream.
+	- Actual fix: Every thread that calls into the loader takes one lock while it does. The warm-up holds it for its whole build. The window thread holds it through each event-loop callback, but only while a window draws on Vulkan, which means software rendering or Wayland. A window on GL never waits. A wait on the warm-up lets go of the lock first, and the program lets a warm-up finish before it exits.
+	- Note: Release builds name nothing, so far less of what they do takes that walk: making a swapchain or a device still does. About 2400 devices made beside 600 warm-up builds did not crash, but the fix covers them anyway.
+	- Note: The cost is one wait, right after a window on Vulkan shows and after each idle rebuild, if the window has work while the warm-up builds. Optimized build on b23: about 130 ms with the card on Wayland, 35 ms in software, none with the card on X11.
+	- Against: the kept dialog context (2026100418225505, `WARM_DIALOG_GPU`). It is still kept and still built on a worker, but a window on Vulkan can now wait for that build once.
+	- Sweep: every thread that calls into wgpu, and every wait on one.
+	- Swept: Only the window thread and the warm-up use wgpu. No other spawned thread does. The two waits on the warm-up, opening a dialog and letting the device go, both let go of the lock. The unit tests that make devices take it as well, since they run side by side. `--about` runs before any thread starts.
+	- Branch: vkload
+	- Commit: 7d492b7
+	- Test case: `a_warm_up_never_overlaps_what_the_window_draws` (Es9NHfD) crashed 3 of 3 runs with the warm-up's hold taken out and passes with it. `a_loader_hold_nests_and_lets_go_for_a_wait` (Es9NHtj). `only_a_window_on_vulkan_holds_the_loader_through_its_callbacks` (Es9Pm5d) fails when every window holds.
+	- Verified: 20261008, the full unit suite, clippy for Linux, Windows and macOS, `cicd/tests/swnoshm/run.bash` 3 times, and 20 more software launches with no crash. Before the fix the same launches crashed 1 in 15 at load 18, at the filed spot.
+	- Notes:
+		- 20261007: The validation layer also reports an overlapping `vkCmdCopyBufferToImage` on the minimap and wallpaper textures, in passing runs too.
+	- Acceptance signoff: Self-closed: reproduced, and the 3 tests fail without the fix. On dev at 07f3f6a the gate passed and `cicd/tests/swnoshm/run.bash` passed 4 runs in a row at load 6 to 15.
+	- Closed: 20261013-105632
+
+- The curated default font list got replaced by just its first font
+	- ID: 2026100913394946
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Related IDs: 2026100907341818, 2026101009220980
+	- Target OS: All
+	- Incorrect behavior: The default list of fonts I had carefully curated got replaced by just the first one.
+	- Expected behavior: Bring the full list back.
+	- Notes:
+		- Before RC1.
+		- From the Settings UI update.
+	- Reproduced: 20261013 on b23. With "Use system font" on, Family showed "Monaspace Argon" alone, and turning Face off kept and saved that one name. Test EsZk42X failed before the fix.
+	- Actual cause:
+		- The built-in list was never cut. Since 10-09, Family's automatic value is the desktop's monospace font, and on b23 the desktop's font is Monaspace Argon, which is also the list's first entry. So the box showed one name.
+		- Turning the switch off keeps what the box shows, so it saved that one name as the family.
+		- The live config on b23 was not cut. The 10-09 launch only commented out its family line, which held the full list and still reads the same.
+	- Actual fix: Following the desktop, Family is now the desktop's font followed by the built-in list, each name once. On b23 that is the old list exactly, and turning the switch off keeps and saves all of it.
+	- Decisions:
+		- 20261013: The automatic list is the desktop's font and then the built-in list, not the desktop's font and a list set by hand. A list set by hand is set aside while the switch is on, as for every other switch.
+		- 20261013: No launch repair for a file holding just `family: "Monaspace Argon"`. It is not the old default, it can't be told apart from a pick made by hand, and it renders the same while that font is installed. No such file was found. b23's is fine, Windows names no desktop font, and a Mac names one only when somebody picked it, so the bug could not happen on the Windows boxes or b26.
+	- Swept:
+		- Every reader of the rule, `system_font_family` in fields.rs, which is its one answer.
+		- The font search in text.rs takes the longer list as it is, since it drops repeats.
+		- The size rule gives one number, so it has no list to lose.
+		- Glossary, the Unicode design doc and code comments that said the automatic family is the desktop's font alone.
+	- Verified: unit suite, the merge gate (fmt, clippy, tests), test IDs, doc, TOC and table checks.
+	- Not checked: a real window, Windows, macOS.
+	- Branch: fontlist
+	- Commit: 5f3623b
+	- Test case: EsZk42X `the_family_keeps_the_whole_list_when_the_switch_goes_off` failed before the fix and passes after. EsZk4LL `the_desktop_s_font_leads_the_built_in_list` pins the list on any desktop. EsDxpmE's family assertion moved to the new rule.
+	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after, and the list on b23 is the old list exactly. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
 
 - "Use system font and size" checkboxes disappeared
 	- ID: 2026100913394948
@@ -1835,6 +1558,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- Flyover text for the wallpaper option uses "carries"
+	- ID: 2026100812334384
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Target OS: All
+	- Incorrect behavior: The Fit flyover says "An image carrying its own tag overrides this."
+	- Expected behavior: Plain wording, such as "An image with its own tag".
+	- Notes:
+		- Before RC1.
+		- Same word in other text people see: the scrollbar colors flyover ("does not carry them") and the notice after a config is converted ("could not be carried over").
+	- Progress log:
+		- 20261008: Fit now says "An image with its own Fit tag overrides this." The scrollbar colors tip says a saved theme "leaves them out". The converted-config notice and the matching launch message say a setting "could not be copied to the new file". The config template's comment on `dark_on_light` says a letter "has as much ink".
+	- Swept: every tip, label, option and mark in the dialog spec, the notices, the launch messages, the config template and the CLI help. Code names and comments stay. Also fixed in the docs, one word or phrase each: every use in README and the FAQ, the glossary's Fit entry and the UI style guide's scrollbar colors line (commit 1dcba55). README's line on the converted-file notice and the glossary's Fit entry now match the new text.
+	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks, and the config conversion test against a fresh debug build.
+	- Branch: tipfix
+	- Commit: 368d7b8
+	- Test case: `no_dialog_text_says_carry` (Es9Vugt) and `no_template_comment_says_carry` (Es9WIpt). Both failed with the old Fit tip and template comment put back, and pass now. The notice wording is pinned by the existing notice tests.
+	- Acceptance signoff: Self-closed: wording only, and 2 tests keep the word out of the dialog and the template. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
 - Dropdown text gets rendered on top of flyover tip text
 	- ID: 2026100913394952
 	- Type: Bug
@@ -2638,6 +2384,244 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
+
+- Move local CICD steps into a local container, and on the other boxes too?
+	- ID: 2026101009221201
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261010-092212
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- What would you think of moving (or recreating) local CICD steps into a local container (in the regular docker location)? A minimal container, maybe something as close to the current host OS as possible? (E.g. Debian Trixie)? Ditto on foreign boxes?
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261010: A: Yes for the Linux stages that need no card and no desktop: lint, unit tests, the 4 builds, the deb and NSIS packages, and the Xvfb and headless sway window tests. They gain a pinned toolchain (rustup 1.96, zig 0.16, mingw, makensis 3.12 instead of the box's 3.11), no live user config under the unit tests (G6), and no writes to the box's cache or dogfood config. Debian Trixie matches the host kernel. The repo, `target/` and the cargo registry go in as volumes, so build time stays the same.
+			- Keep on the host: anything that reads the real card (GPU memory, frame times, the profiler), the dogfood install into the synced app dir, the demo render, and the stages that talk to the other boxes over ssh with the host lock.
+			- Not on the other boxes. vm925w has its hypervisor off, so no WSL2 and no Windows containers, and the Windows tests need a logged-on desktop anyway. On b26 a Linux container gives nothing for a macOS build, and the Windows and Mac builds are already made here.
+			- Suggested first step: `cicd.bash --gate` inside the container, as an opt-in flag, until it has run clean a few times. Then the package stages.
+		- 20261010: Built, after "ok do the container work" in chat. `cicd.bash --container` runs stages 1 to 6 in the image from `cicd/container/Dockerfile`, with `--gate --container` for the gate alone. Debian trixie, the pinned rustc with its 3 cross targets, the 4 cargo helpers, zig, makensis 3.12 from the snapshot archive, pwsh with PSScriptAnalyzer, ruff, mypy, shellcheck 0.11, Xvfb, xfwm4, sway, cage and Mesa. Versions come from `tool-pins.txt` and `rust-toolchain.toml` as build args, and the tag hashes the recipe plus those, so a pin bump is a new image. The run inside has its own target dir, `target/container`, and a named cache volume. Outside, this box runs the sync first and the private runner, dogfood, demo and publish after, plus the content scrub and the Windows scenarios, which the run inside steps over. shellcheck, ruff and mypy joined the pin list, and the pin probe reads the first version anywhere in a tool's output, since shellcheck's is on its second line.
+		- 20261010: First runs. The gate passed inside once the run got a passwd entry for its uid, since the terminal looks its user up. A full run then found 3 more gaps, fixed in turn: the publish test wanted rar on PATH even with the backup off (its own stub rar is on PATH now), xfwm4 needs a session bus (the run inside gets one from dbus-run-session), and the ARM64 Windows exe needs llvm-windres for its icon (llvm-19 is in the image). Inside, every window test but the one that needs a render node runs. That one skips, as on any box without a GPU. The image is 5 GB and takes about 20 minutes to build the first time.
+		- 20261010: Run 4 got to the Windows resource check and stopped there again: llvm-windres preprocesses the .rc with clang, so clang-19 joined the recipe. Everything before that passed inside, both scroll harness arms and the 4 release builds included. Not yet run again. Stopped at noon.
+		- 20261013: Merged dev in. The full run `cicd.bash --container -y --no-publish --no-dogfood --no-private` passes at a2d83b1. Its log is `target/container/run7_20261013-064920.log`, and the copy the run keeps is `cicd/artifacts/lint/run_20261013-064920.log`. The image with clang-19 built in about 9 minutes, with docker's cache warm.
+			- Run 5 stopped in the test run folder test, on 2 checks the live settings work broke, not the container. The socket test bound a path past the 107-byte limit, and the check for code asking for the temp dir did not know that code moved to `peers.rs`. Both fixed; the socket test failed before the fix and passes after, with the long folder name.
+			- The run inside now gets this box's time zone. Names it stamped, such as test folders and flamegraphs, were in UTC and sorted after the ones made here.
+			- Inside, every window test passes, the new live settings one too, except the one that needs a render node, which skips as before. The Windows scenarios ran here after the container and skipped, since the console session was locked.
+			- The packages stage makes the same 12 files as the 10-09 run on this box: 4 binaries, 2 deb, 2 rpm, 2 installers, the sums and built-from.txt. Each is about 1% bigger, in line with the code added since. makensis inside is 3.12. Each package holds the exact binary that run built.
+			- Waiting on signoff, since it changes how the pipeline runs. Not merged into dev.
+	- Branch: container
+	- Test case: `cicd/tests/container/run.bash` (EsJg9EF): the tag, the recipe against the pins, the option split, the artifacts picked up, and the engine against a stand-in docker, the time zone included. The full run above.
+	- Acceptance signoff: Self-closed: `--container` is opt-in, so the host run is unchanged. The full run inside passed and made the same packages, and the container test passes on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
+- Flyover help text should apply to all of the relevant labels, and both controls
+	- ID: 2026100812334387
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- In this case, all of "Fit      [ ] Stretch  [ ] Zoom".
+	- Notes:
+		- Before RC1.
+	- Decisions:
+		- 20261008: Best guess, since the scope question went unanswered. Where one setting has several labels or controls on its row, its tip shows over all of them: option labels such as Stretch and Zoom, a warning mark, and every part of the control. The revert arrow keeps its own. A packed line of separate settings, such as Tab text, keeps one tip per toggle, as signed off on 2026100710173200.
+	- Progress log:
+		- 20261008: A row's tip now answers from its label to the end of its control, up to the revert column. That covers every option of a radio row, a slider's number box, a color's hex box and the dropdowns. The tip still hangs under the row's first control.
+		- 20261008: Use system font's Face and Size are two settings under one label, so each box answers for its own. Before, Size showed no tip at all, and a desktop with no monospace font to report never got to say why only Face was grayed.
+		- 20261008: Transparency's mark now shows the row's tip too, with its warning on the end, per 2026100812334388. On Windows that tip runs to 4 sentences, one past the style guide's 3.
+		- 20261008: The UI style guide and the settings dialog design doc say so.
+	- Swept: every row kind on every tab, through the test below. The shells grid keeps its tip on the column titles, and a row of buttons keeps its tip under its buttons.
+	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks. Not looked at in a real window.
+	- Branch: tipfix
+	- Commit: 368d7b8
+	- Test case: `every_part_of_a_row_shows_the_rows_tip` (Es9VuY0), which checks the label, any mark, each option and both ends and the middle of every control part on every row, and Fit's five spots by name. It failed with the old hit span put back and passes now.
+	- Acceptance signoff: Self-closed: the test checks every part of every row, and failed with the old hit span put back. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
+- Flyover text for "Free resources when idle"
+	- ID: 2026100812334388
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Related IDs: 2026100418225510, 2026100812334387
+	- Target OS: All
+	- Requirements:
+		- Merge the row's current tip and warning into one text that reads clear.
+		- Show that one text over the label, the warning mark and the checkbox.
+	- Notes:
+		- Before RC1.
+		- 20261008: Q: SilkTerm has no single-process mode yet. Is one planned, or does this mean something else? A: One is planned (2026100418225510), after the cut.
+		- 20261008: Q: The row has a tip and a warning now. Does this replace both? A: No. Drop the text first asked for, and merge the two instead, per the requirements.
+	- Decisions:
+		- 20261008: First asked-for text, dropped: "When not in single-process mode, this can help conserve GPU memory at little discernible cost. It helps when regularly running numerous instances open on a low-memory GPU, and/or if something else wants all the GPU memory."
+	- Progress log:
+		- 20261008: The row now has one tip, over the label, the mark and the checkbox: "Give the graphics card's memory back after the window has sat unused for a while, and take it back the moment it is used again, without stopping anything running in it. This helps most with many windows open on a card with little memory, or next to programs that use a lot of it. Turn it off only if the graphics driver has trouble with it."
+		- 20261008: The mark stays. Its text, now the last sentence, goes on the end of the row's tip, so a mark never shows text of its own. Transparency follows the same rule.
+		- 20261008: Nothing in it mentions a single-process mode.
+	- Verified: unit suite, clippy for Linux and Windows, fmt, test IDs, doc and table checks. Not looked at in a real window.
+	- Branch: tipfix
+	- Commit: 368d7b8
+	- Test case: `two_rows_warn_and_each_mark_shows_the_rows_tip` (Es9VucS), which replaces `two_rows_warn_and_each_mark_answers_for_its_own` (EryD9nl, commented out with the reason). It failed with the mark's own tip put back and passes now. `every_part_of_a_row_shows_the_rows_tip` (Es9VuY0) covers the mark as well.
+	- Acceptance signoff: Self-closed: one tip over the label, the mark and the box, pinned by tests. The 10-09 tip rewrite shortened the text again. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
+- The checkbox for "Check for hardware change" should be lined up under the checkbox for "Choose automatically"
+	- ID: 2026100812334385
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100710173200
+	- Target OS: All
+	- Requirements:
+		- I'm guessing this got moved to the left due to the columnar exception carved out for "Tab text" single-line grouping. But for this group, it looks odd, and it looked better for the performance section, when the first checkbox was lined up the way it was before.
+	- Notes:
+		- Before RC1.
+	- Decisions:
+		- 20261008: Best guess, since the question went unanswered. On the Silk tab line, "Check for hardware change" keeps its label in the label column and its box in the control column, under "Choose automatically". "Re-test next run" follows at the packed gap, label then box. The Tab text line stays as signed off.
+		- 20261008: Picked from the group, not declared. A packed line that shares its group with other rows keeps its first box in the column. One alone under its heading, like Tab text, packs from the label edge.
+	- Progress log:
+		- 20261008: The first label on such a line counts toward the label column again. It is not the widest label, so nothing else moved.
+		- 20261008: Tips, clicks and the focus ring follow the new positions. The UI style guide, the settings dialog design doc and the spec file's `beside` note say so.
+	- Swept: every packed line on every tab, through the test below. The Tab text line and the rest of the Window tab drew the same pixels as before at 1x and 2x. The scrim dropdown pair still splits the column.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at 1x and 2x, the hardware check box sits under the "Choose automatically" box, only that line changed on the Silk tab, and the panel stayed 707 wide at 1x and 1439 at 2x. Tips over the line were not looked at in a real window. The test covers them.
+	- Branch: hwline
+	- Commit: 676dbd5
+	- Test case: `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr). It fails with the group rule turned off, and with the first box left where packing puts it. `a_line_of_toggles_packs_each_label_against_its_box` (Es2i5CM) is commented out, since it expected every first box right after its label.
+	- Acceptance signoff: Self-closed: checked in a real window at 1x and 2x, and the test fails with the group rule off. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
+- Change the GPU timeout sliders from linear to logarithmic
+	- ID: 2026100812334386
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261008-123343
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Same min and max.
+		- Allow the user to manually type in values that exceed the slider. For these two, and anything else that doesn't have a % or an inherent limit.
+	- Notes:
+		- Before RC1.
+		- The two are "Minutes when hidden" and "Minutes otherwise" under Resource use on the Window tab, both 1 to 1440.
+	- Decisions:
+		- 20261008: Best guess, since the question went unanswered. A typed value can go past the slider's end, up to a cap set per row. For the two waits the cap is a week, 10080. Below the slider's start still clamps, since 0 or less means nothing for a wait. The handle parks at the end and the box shows the number.
+		- 20261008: Rows that take a typed value past the slider, with their caps: Minutes when hidden and Minutes otherwise 10080, Blur px 100, Size 128 (the largest the text is drawn at), Line height 4, Blink rate ms 10000, Inactivity timer s 3600, Wheel lines 100, Columns and Rows 1000 (what `--columns` and `--rows` take), Margin px 200.
+		- 20261008: Rows kept at their slider, besides every row with a %: Scrim radius px, since the halo can't reach past 20. Outline px, since the outline is 8 taps around each letter and should break into dots past a few px (read in the shader, not looked at). Scrollbar width px and Minimap width px, since the config holds both to the slider's range on purpose.
+		- 20261008: Only the two waits get a log track. Arrows step a hundredth of the track as a ratio, a tenth with Shift, and always at least 1. A press never takes a value further past the end than it already is, so Up stops at the end and Down from a typed number steps down from it.
+	- Progress log:
+		- 20261008: The config already read both waits up to 10080, so the file side needed no change. Every capped value saves and reads back as typed, and the launch says nothing about it.
+		- 20261008: A decimal box drops places past 100 and 1000, so 3600 seconds shows "3600" rather than a cut-off "3600.00". Values under 100 show as before.
+		- 20261008: The number box stays 56 DIP wide. "10080" fits with a few px to spare at the tested font. A larger desktop font could cut off a 5 digit number, as it could the 4 digit ones before. Measuring the widest number the way the labels are measured would fix that. Not done here.
+		- 20261008: The UI style guide, the settings dialog design doc and the spec file's field notes say so.
+	- Swept: every slider row in the spec, through the save test below. Track, drag, arrows and typing all go through one helper, and the log math is the one the Scrolling feel sliders already use. No other place clamps a typed slider value.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at 1x, 60 minutes sits a little past halfway, the defaults 1 and 240 at the left end and about three quarters, and 10080, 10000, 3600 and 1000 columns sit at the end with the number whole in the box. Not looked at with a large desktop font or at 2x.
+	- Branch: logslide
+	- Commit: 9c1404c
+	- Test case: `a_log_slider_gives_each_doubling_the_same_travel` (Es9f0qI), `a_typed_wait_can_go_past_the_slider_up_to_a_week` (Es9f0uU), `a_number_typed_past_a_slider_survives_a_save_and_a_relaunch` (Es9f0yE), `a_number_typed_past_a_slider_reads_back_without_a_word` (Es9f11y), `a_slider_scale_or_cap_that_means_nothing_is_refused` (Es9fvg9), `a_big_decimal_drops_places_to_fit_its_box` (Es9hNXm). Each failed with its part of the change taken out. `slider_numeric_field_edits_and_clamps` (Eiustaa) had its clamp-to-40 line commented out, since Size now takes up to 128.
+	- Acceptance signoff: Self-closed: checked in a real window, and each test failed with its part taken out. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
+- Don't show any flyover tip text when the app or Settings dialog doesn't have the focus
+	- ID: 2026101009220760
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No
+	- Needs external testing: A look on Windows, where Settings is an owned window (G36), and on macOS.
+	- Priority: Avg
+	- Opened: 20261010-092207
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Don't show any flyover tip text when the app - e.g. for tabs - or settings dialog doesn't have the focus.
+	- Progress log:
+		- 20261013: Built. Each window follows its own focus: the main window, Settings, About and the notice. A tip already up goes when the focus leaves. Settings open over the terminal has the focus, so the terminal shows no tab tip while it is up.
+	- Decisions:
+		- 20261013: When the focus comes back, tips wait for the pointer to move, so none pops up under a pointer left resting on a control. A move while the window is in the background counts for nothing. A pointer report at the same spot, which some platforms send as focus changes, is not a move.
+	- Sweep: the tab tip, menu tips, Settings rows, buttons and revert arrows, the About and notice links.
+	- Swept: The tab and menu tips both check the main window's focus, in `note_tab_hover` and `menu_tip_target`. Every dialog tip goes through `pointer_moved` and `compose`, which both take it. About and the notice are the same window type as Settings, and the notice's events now include focus.
+	- Branch: tipfix
+	- Commit: d33977d
+	- Test case: `a_window_without_the_focus_shows_no_tips` (EsZp4Va) and `a_dialog_without_the_focus_draws_no_tip` (EsZp4ah). The second fails with the focus check taken out of a frame.
+	- Verified: 20261013, the gate. In real windows on b23 under xfwm4, for a Settings row and for the tab strip: a tip that was up went when another window took the focus, stayed down 5 s after the focus came back, and came back after a 1 px move. Dev kept the Settings tip up in the background.
+	- Notes:
+		- Pre-next-cut.
+	- Acceptance signoff: Self-closed: checked in real windows on b23, and the dialog test fails without the focus check. Windows and macOS take focus through the same window code, but still need a look.
+	- Closed: 20261013-105632
+
+- Settings: move tabs to the left, including nested tabs
+	- ID: 2026101009220870
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
+	- Needs external testing: Windows and macOS: a look at the list, at the default interface font and a large one.
+	- Priority: Avg
+	- Opened: 20261010-092208
+	- Opened by: JC
+	- Related IDs: 2026101008023943
+	- Target OS: All
+	- Requirements:
+		- Move tabs to the left, including nested tabs.
+	- Notes:
+		- Pre-next-cut.
+		- The dialog code can do both since 2026101008023943. SilkTerm's own spec in `settings_ui.shcl` is still flat and across the top.
+	- Progress log:
+		- 20261013: Q: How do the tabs nest?
+			- A: Down the left: Silk, Appearance (Themes, Background, Text, Cursor), Movement, Window, Shell, Keys.
+		- 20261013: Done on `tabsleft`. The tabs are a list down the left, in that order, so Themes now comes before Background. The config template's theme and colors section moved ahead of the background one too, since the template follows the tabs. That reaches a new file only.
+		- 20261013: A click on Appearance opens Themes. From one of its 4 tabs it changes nothing, since Appearance already reads as current there.
+		- 20261013: Looked at on Linux at the default interface font and at 24 pt. Every tab fits the list, and nothing overlaps. At 24 pt the Silk tab scrolls, as it did before.
+	- Decisions:
+		- A click on Appearance opens its first tab, and does nothing while one of its tabs is open. That is how the dialog code already worked.
+	- Swept: tests that set a tab by its number (now by its title), tests that measured rows from the panel edge (now from where the rows start), the top-strip tests (now run with the tabs put across the top), the template order test, the UI style guide, design.md, the Settings dialog design doc, the glossary's Gutter entry, and every tip and doc that says "the X tab". Those still read right, since every tab kept its name.
+	- Test case: `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv), failed on the old spec and passes now. `the_template_blocks_follow_the_dialog` (Er2UFeO) has the new order.
+	- Branch: tabsleft
+	- Commit: e5b2b87
+	- Acceptance signoff: Self-closed: JC picked the nesting, it was looked at on Linux at 2 font sizes, and the test fails on the old spec. Windows and macOS draw the same dialog code.
+	- Closed: 20261013-105632
+
+- Font settings should be part of themes
+	- ID: 2026100913394956
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
+	- Priority: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Font settings should be part of themes.
+	- Notes:
+		- Before RC1.
+	- Progress log:
+		- 20261013: Q: Which font settings does a theme hold, and does picking a theme change them? A: Font family, size and line height (`font.family`, `font.size`, `font.line_height_scale`), picked up like the colors. Plus a new switch, on by default: "Font settings ignore themes". While it is on, a theme pick leaves the fonts alone.
+		- 20261013: Built. A saved theme keeps the 3 values under `themes.<slug>.font`, and a pick sets them while the new switch is off.
+	- Decisions:
+		- 20261013: The font rows stay out of the theme's preset group. As members they would show the default font under any built-in theme, and the person's own font only under Custom.
+		- 20261013: A pick sets each theme value that differs from what shows, the way typing it in would, so "Use system font" turns off for that value and the theme's font wins. A value already showing is left alone, so Save, which picks the theme again, turns nothing off.
+		- 20261013: Built-in themes have no font. Picking one, or Custom, never changes the font.
+		- 20261013: Save and Save as always keep the font on screen, switch on or off, since a theme is stored whole.
+		- 20261013: With the switch off, a font that differs from the saved theme's makes the box read `Name *`, wakes Save and is named in the tip, like a color. Nothing records it. Turning the switch off sets no font until the next pick.
+		- 20261013: The switch is `font.ignore_themes`, one row on the Themes tab under Mode, not repeated on the Text tab.
+		- 20261013: Theme files from before this have no font lines. They load as before, and picking one changes no font.
+	- Swept: every theme pick goes through `fields::set` or `fields::reset` on the Theme row: the dropdown, Save, Save as, Delete and the reset arrow. Rename is not a pick. Nothing outside the dialog picks a theme. `read_user_themes` and `write_user_themes` are the only theme file reader and writer, and all 4 places that build a `UserTheme` set its font.
+	- Branch: themefonts
+	- Commit: d69279d
+	- Test case: Esa0ndg (switch default and template line), Esa0nip (font round trip, an old theme file loads), Esa0nnU (save keeps the font), Esa0ns8 (pick with the switch on and off, built-in changes nothing), Esa0nwo (theme font beats the system font), Esa0o1c (save turns no switch off), Esa0o6M (font change reads as `*`), Esa0oBV (font survives a relaunch). Esa0nip, Esa0ns8, Esa0nwo, Esa0o6M and Esa0oBV fail with the font pick and the font write taken out, and Esa0o1c fails with the already-showing check taken out.
+	- Verified: 20261013, the merge gate (fmt, clippy, all 1267 unit tests), the doc, TOC, table and test ID checks. The shipped config is still a save fixed point, and a config from before backfills to the new template exactly and then changes nothing. The new row was looked at on the Themes tab at the default interface font.
+	- Acceptance signoff: Self-closed: JC picked the 3 values and the switch. The switch is on by default, so nothing changes until it is turned off. Each test fails against its mutant, and the gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
 
 - Add or change a "Copyright and license" section in the design docs
 	- ID: 2026101009221091
@@ -3810,6 +3794,91 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
 
+- A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
+	- ID: 2026100816465317
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261008-164653
+	- Opened by: CC
+	- Related IDs: 2026100812334386
+	- Target OS: All
+	- Incorrect behavior: The box is 56 DIP wide whatever the font. "10080" fits at the default font with a few px to spare. A larger desktop font could cut it off, as it already could with 4 digits.
+	- Expected behavior: The box is wide enough for the widest number its row can hold, measured the way labels are.
+	- Reproduced: 20261008, at a 24 pt interface font. Blink rate showed "000" for 10000 and Inactivity timer "999." for 999.9.
+	- Notes:
+		- 20261008: Scaling the box with the font size was tried and dropped. It widened every box and shortened every slider at normal font sizes.
+	- Decisions:
+		- 20261008: Best guess. One width for every slider in the dialog, the widest any of them needs, so the sliders still end in one column. Never narrower than the old 56 DIP, so nothing moves at an ordinary font unless a number needs more.
+		- 20261008: Best guess. The width is the number plus the field's padding on both sides. The caret margin while typing is left out, since counting it would widen every box at the default font. A 5 digit number being typed still shows whole.
+		- 20261008: Best guess. A wider box widens the panel's own floor, the way a long label does. The nine tabs usually set the panel's width, so in practice the sliders give up the room.
+	- Actual cause: The box width was a constant, and nothing measured the numbers.
+	- Actual fix: The widest number each slider can show is measured in the dialog's own font: either end, the typed cap where a row has one, and for a decimal 99.94 and 999.9. The largest plus padding sets every number box, with 56 DIP as the floor. The UI style guide, the settings dialog design doc and the spec file's note say so.
+	- Swept: every fixed width box in the dialog. The color picker's value boxes and the dropdowns already grow with the font, and the hex, text and path boxes stretch to the column.
+	- Verified: unit suite, clippy on Linux, Windows and macOS targets, fmt, test IDs, doc, table and TOC checks. In a real window at the default font, 1x is unchanged, apart from the caret blink and the Shell tab, which differ between 2 runs of the old build too. The panel stayed 707 wide at 1x and 1439 at 2x. At 2x the font comes out half a px larger per DIP, "10080" needs 57 DIP, so every number box is 1 DIP wider and the sliders 1 DIP shorter. At 24 pt every number shows whole at 1x and 2x, the panel stays 1171 and 2342 wide, and the sliders are shorter by what the boxes gained.
+	- Branch: numbox
+	- Commit: d3f51da
+	- Test case: `every_slider_number_fits_its_box_at_a_large_interface_font` (Es9oaEN), `a_wider_number_box_widens_the_panel_and_leaves_the_sliders` (Es9oaYr). Both fail with the box held at 56 DIP. The first also fails with the decimal bands taken out, the second with the panel ignoring the box.
+	- Acceptance signoff: Self-closed: checked in a real window at the default font and 24 pt, at 1x and 2x, and both tests fail with the box held at 56 DIP. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
+- At a large interface font, the labels on a packed line of toggles nearly touch their checkboxes
+	- ID: 2026100817172887
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261008-171728
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100710173200, 2026100812334385
+	- Target OS: All
+	- Steps to reproduce:
+		- Set the desktop's interface font to 24 pt and open Settings, Window tab.
+	- Incorrect behavior: On the Tab text line, each label sits almost against its own checkbox.
+	- Expected behavior: The gap between a label and its box keeps its look at any font size.
+	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
+	- Decisions:
+		- 20261008: Best guess. The gap before the next toggle grows with the font too, at the same rate, so it stays 4 times the label's gap. Otherwise a big enough font's label gap catches up with it and a label reads as belonging to the box before it.
+		- 20261008: Best guess. Both gaps keep their sizes up to the 11 pt default's line height and grow in step above it. A smaller font keeps them as they are.
+	- Against: 2026100710173200's decision says "a fixed gap before the next toggle". It is still the same at every font up to the default, and the same between every pair of toggles on a line.
+	- Actual cause: The label was measured and drawn the same, in the same font. The gap after it was a fixed 6 DIP, so at 24 pt it was half the share of the text it had at the default. Nothing was scaled twice or skipped.
+	- Actual fix: The label gap and the gap before the next toggle grow with the UI line height above the default's. At 24 pt that is about 13 and 52 DIP, up from 6 and 24. The label after a radio or pair box uses the same gap. The UI style guide and the settings dialog design doc say so.
+	- Swept: every fixed gap between a label and its own box in the dialog. That is the packed line, the label on any other shared line, the radio options and the font pair. The label column's 14 DIP after the longest label stays fixed. It is the least room any label in the column gets, and at 24 pt it is still about the share the packed gap had at the default.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at the default font, the Silk and Window tabs, Tab text and hardware lines included, drew the same pixels as before at 1x and 2x. The only changed pixels on any tab were a text caret's column. At 24 pt each label now ends 12 to 15 px before its box at 1x, where it was 4 to 7, and the panel kept its width at 1x and 2x.
+	- Note: At 24 pt the checkbox stays 20 DIP while a radio box grows to 36, and the pair row's focus outline is shorter than its text. Neither was changed here.
+	- Branch: packgap
+	- Commit: 8072dc4
+	- Test case: `a_large_interface_font_keeps_each_label_clear_of_its_box` (Es9uxSu). It fails with the gaps held at their fixed sizes, and separately with only the gap before the next toggle held, or only the radio and pair label gap. `a_line_of_toggles_packs_each_label_against_its_box_off_the_column` (Es9Zhyr) still pins the default sizes.
+	- Acceptance signoff: Self-closed: checked at the default font and 24 pt. The gaps are the same as before up to the default font, so tabpack's fixed gap still holds there. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
+- At a large interface font, a checkbox stays small while a radio box grows
+	- ID: 2026100817355493
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261008-173554
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026100817172887
+	- Target OS: All
+	- Steps to reproduce:
+		- Set the desktop's interface font to 24 pt and open Settings.
+	- Incorrect behavior: A checkbox stays 20 DIP while a radio box grows to 36, so the two look mismatched beside the larger text.
+	- Expected behavior: Both kinds of box grow with the font the same way.
+	- Reproduced: 20261008 on Xvfb, with a separate config folder and font setting. Not checked on a real desktop.
+	- Actual cause: The radio box grew with the UI line height, from 16 DIP at a line height of 19. The checkbox was a fixed 20 DIP. The pair boxes, the packed toggles and the Shell tab's Active box used that same constant.
+	- Decisions:
+		- 20261008: Best guess. Every square box grows at the radio's rate, and each keeps its own size as a floor. Growing the checkbox by its own share instead would have made it bigger at the default font, and growing both from the 11 pt default's line would have shrunk the radio box there.
+	- Actual fix: One rule sizes every square box. At the default font the checkbox stays 20 DIP and the radio box 17, as before. The checkbox starts to grow once the radio box would pass it, at about a 14 pt font. At 24 pt both are 36 DIP. The layout comments and the settings dialog design doc say so.
+	- Swept: every square box in the dialog: a plain toggle, a packed toggle, both pair boxes, the radio options and the Shell tab's Active box. The revert arrow's column also reads the 20 DIP size. It holds a glyph, not a box, and was left alone.
+	- Verified: unit suite, clippy, fmt, test IDs, doc and table checks. In a real window at the 11 pt default, every tab and a focused radio row drew the same pixels as before at 1x and 2x, bar a text caret's column. At 24 pt the checkboxes, pair boxes and radio boxes all measure 38 px with their outline at 1x, where the checkboxes were 22, and the window kept its size at 1x and 2x. At GentiumAlt Bold 13 nothing moved but the pair row's focus outline (2026100817355494).
+	- Branch: boxring
+	- Commit: 6457f3a
+	- Test case: `a_checkbox_and_a_radio_box_grow_to_one_size` (EsA3ceS). It fails on the old code and passes with the fix.
+	- Acceptance signoff: Self-closed: nothing moves at the default font, and the test fails on the old code. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
+
 - A test that measures Settings text before its first text context can measure in the wrong font
 	- ID: 2026100909162017
 	- Type: Bug
@@ -4779,6 +4848,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: smallfix
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
 	- Closed: 20260929-170546
+
+- Settings tips end with the current and default values where they differ
+	- ID: 2026100910295905
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
+	- Needs external testing: A look at a few tips on Windows and macOS, where hotkeys read differently.
+	- Priority: Low
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Per the automatic settings design, every input control's tip ends with `Current value: ...` and `Default value: ...`, shown only when they differ. Automatic rows already have their state line.
+	- Progress log:
+		- 20261009: JC OK'd leaving the Current and Default lines off an automatic row's tip.
+	- Decisions:
+		- 20261009: An auto setting's tip keeps its state line and gets no value lines, since "Automatic would be" already says what the default gives. A group's switch holds nothing, so it gets none either.
+		- 20261009: Values are written the way the row writes them: the number in its box, On or Off, the option's own words, a color's hex, a hotkey's keys or Off.
+	- Swept: every kind of row: slider, toggle, pair, radio, dropdown, color, text and hotkey. Buttons, the shells grid and headings hold no value.
+	- Verified: unit suite. In a window, "Text colors from wallpaper" switched off ended its tip with "Current value: Off" and "Default value: On", after a blank line.
+	- Branch: autoset2
+	- Commit: 7fadb59
+	- Test case: EsEAj63, failing with the value lines taken out. Ery4gAt, Es9VuY0, Es9Zhyr and Es9VucS put their row at its default first now, since a box whose own config differs would add value lines (G6).
+	- Acceptance signoff: Self-closed: the test fails with the value lines taken out, and the lines were looked at in a window. The gate passed on dev at 07f3f6a.
+	- Closed: 20261013-105632
 
 - The dogfood launcher makes three slow Windows queries per launch
 	- ID: 2026100314050020
