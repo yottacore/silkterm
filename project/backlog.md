@@ -167,6 +167,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_program_redrawing_the_main_screen_takes_the_column_too` (EscYyBa), red before the fix and green after. `a_program_that_toggles_as_it_starts_moves_the_column_once` (Esca2GW), red with the hold taken out.
 	- Swept: `minimap::wanted` has one caller outside tests, `sync_minimap`, which runs every frame for the shown tab's panes on every platform. The marker, the scrollbar and the alt-screen ease key on the alt screen for their own reasons and are unchanged.
 
+- An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
+	- ID: 2026101304551668
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Needs local test suite run?: No. Verified: 20261013, the unit suite, clippy, fmt and the test ID check. The full pipeline has not run, so no dogfood build has it yet.
+	- Severity: Low
+	- Opened: 20261013-045516
+	- Opened by: CC
+	- Related IDs: 2026100910295901, 2026100907341818
+	- Target OS: All
+	- Steps to reproduce:
+		- A config from before 10-09 with `theme: "Matrix"`, `colors.foreground` and `colors.cursor` set, and no `performance.rated_hardware` or remembered window lines.
+		- Launch.
+	- Incorrect behavior: the text shows Matrix's colors. The file's colors count as Custom's and show only when Custom is picked.
+	- Expected behavior: the file's colors show over Matrix as its `*` changes, as they do for a file with those lines.
+	- Reproduced: 20261013, a unit test with the file above. Adding a `rated_hardware` line makes the colors show.
+	- Possible cause: `move_theme_colors` only runs from `move_state_out`, after its early return for a file with no state lines. The state lines are what mark a file from before 10-09, so moving it out needs another mark.
+	- Actual cause: the move took an active state line as the only mark of an old file. A file written by hand has none, and neither does an old one whose state lines were deleted by hand.
+	- Actual fix: two more marks, both read off the file. A file with no shcl Format line is old, since shcl 3.0 came before 10-09. The launch reads it before the step that adds the line. A state path on a commented line is old too, such as the old template's `# rated_hardware`, since the update drops those lines as well. An active state line still marks it, and only that one moves state out. A file this build wrote has the Format line and no state lines, so it is never moved again. The `kept` check still stops a second move after one that wrote.
+	- Notes:
+		- Nearly every real file has the machine test's lines, so this is mostly a hand-written file.
+		- A file whose footer was deleted by hand reads as old, so its colors over a theme with no `*` changes would move again. A launch already reads such a file as shcl 2.x, makes its v2 backup and puts the footer back.
+		- The last part of EsGMVgc is commented out. It used a file with no Format line as a file this build wrote. EscrdlY checks a real one instead, written by a launch and saved.
+	- Swept: the one place that decides a file is old for the move (`move_state_out`). Other old-file reads go line by line, such as the font switch in `fields::load`, and need no file mark. The launch path is the only caller (`load`, which `reload_from_disk` also runs).
+	- Verified: EscrdlY failed before the fix (the hand-written file got no `*` changes) and passes after. With the Format line mark taken out it went red, with the commented line mark taken out it went red, and with the move always on it went red. 3 launches of a build with a hand-written file: the first wrote Matrix's `*` changes, the second and third changed nothing in the config.
+	- Branch: oldcolors
+	- Commit: a5e81f0
+	- Test case: `an_old_file_with_no_state_lines_still_shows_its_colors_over_the_theme` (EscrdlY). Already there: EsGMVgc.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -547,35 +576,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: 20261013, once in the full pipeline at load 15 to 23. A rerun of the harness alone right after, at the same load, passed every scene.
 	- Notes:
 		- The harness README calls this case a failure on purpose, since the scene tested nothing. Its short gap before the alt screen is fixed, so a slow frame can let the ease finish first.
-
-- An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
-	- ID: 2026101304551668
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No. Verified: 20261013, the unit suite, clippy, fmt and the test ID check. The full pipeline has not run, so no dogfood build has it yet.
-	- Severity: Low
-	- Opened: 20261013-045516
-	- Opened by: CC
-	- Related IDs: 2026100910295901, 2026100907341818
-	- Target OS: All
-	- Steps to reproduce:
-		- A config from before 10-09 with `theme: "Matrix"`, `colors.foreground` and `colors.cursor` set, and no `performance.rated_hardware` or remembered window lines.
-		- Launch.
-	- Incorrect behavior: the text shows Matrix's colors. The file's colors count as Custom's and show only when Custom is picked.
-	- Expected behavior: the file's colors show over Matrix as its `*` changes, as they do for a file with those lines.
-	- Reproduced: 20261013, a unit test with the file above. Adding a `rated_hardware` line makes the colors show.
-	- Possible cause: `move_theme_colors` only runs from `move_state_out`, after its early return for a file with no state lines. The state lines are what mark a file from before 10-09, so moving it out needs another mark.
-	- Actual cause: the move took an active state line as the only mark of an old file. A file written by hand has none, and neither does an old one whose state lines were deleted by hand.
-	- Actual fix: two more marks, both read off the file. A file with no shcl Format line is old, since shcl 3.0 came before 10-09. The launch reads it before the step that adds the line. A state path on a commented line is old too, such as the old template's `# rated_hardware`, since the update drops those lines as well. An active state line still marks it, and only that one moves state out. A file this build wrote has the Format line and no state lines, so it is never moved again. The `kept` check still stops a second move after one that wrote.
-	- Notes:
-		- Nearly every real file has the machine test's lines, so this is mostly a hand-written file.
-		- A file whose footer was deleted by hand reads as old, so its colors over a theme with no `*` changes would move again. A launch already reads such a file as shcl 2.x, makes its v2 backup and puts the footer back.
-		- The last part of EsGMVgc is commented out. It used a file with no Format line as a file this build wrote. EscrdlY checks a real one instead, written by a launch and saved.
-	- Swept: the one place that decides a file is old for the move (`move_state_out`). Other old-file reads go line by line, such as the font switch in `fields::load`, and need no file mark. The launch path is the only caller (`load`, which `reload_from_disk` also runs).
-	- Verified: EscrdlY failed before the fix (the hand-written file got no `*` changes) and passes after. With the Format line mark taken out it went red, with the commented line mark taken out it went red, and with the move always on it went red. 3 launches of a build with a hand-written file: the first wrote Matrix's `*` changes, the second and third changed nothing in the config.
-	- Branch: oldcolors
-	- Commit: a5e81f0
-	- Test case: `an_old_file_with_no_state_lines_still_shows_its_colors_over_the_theme` (EscrdlY). Already there: EsGMVgc.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
