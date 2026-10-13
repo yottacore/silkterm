@@ -2146,7 +2146,9 @@ mod tests {
 
 	// A tab names the program in the foreground: the terminal's foreground
 	// process group, looked up by its leader. On a Mac that lookup read /proc,
-	// which is not there, so no tab ever named anything.
+	// which is not there, so no tab ever named anything. Started by full path:
+	// a Mac names the file a link points to, and a `sleep` found on PATH can be
+	// a link to GNU's `gsleep`.
 	// Test ID: ErkjAN1
 	#[cfg(unix)]
 	#[test]
@@ -2154,7 +2156,7 @@ mod tests {
 		use std::os::unix::process::CommandExt;
 		use std::process::{Command, Stdio};
 
-		let mut child = Command::new("sleep")
+		let mut child = Command::new("/bin/sleep")
 			.arg("30")
 			.process_group(0)
 			.stdin(Stdio::null())
