@@ -436,43 +436,62 @@ mod tests {
 	}
 
 	// What a save sends reaches a listening window, and a socket nobody listens
-	// on any more reads as gone.
+	// on any more reads as gone. Driven in a child copy of this test binary
+	// (`poke_child` below) started inside the folder, which binds and pokes by
+	// bare name: a full path under the run folder can pass the limit on a Unix
+	// socket path, 104 bytes on a Mac and 107 on Linux.
 	// Test ID: EsaCcC5
 	#[cfg(unix)]
 	#[test]
 	fn a_poke_reaches_a_listener_and_finds_the_dead() {
-		use std::io::Read;
 		let dir =
 			crate::testdir::run_dir().join(format!("silkterm_ctl_poke_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
-		// A full path under the run folder can pass the 107-byte limit on a
-		// socket path. On Linux the folder's open handle names it short.
-		#[cfg(target_os = "linux")]
-		let (_handle, near) = {
-			use std::os::fd::AsRawFd;
-			let handle = std::fs::File::open(&dir).unwrap();
-			let near = PathBuf::from(format!("/proc/self/fd/{}", handle.as_raw_fd()));
-			(handle, near)
-		};
-		#[cfg(not(target_os = "linux"))]
-		let near = dir.clone();
-		let live = near.join("a.sock");
-		let listener = std::os::unix::net::UnixListener::bind(&live).unwrap();
+		let out = std::process::Command::new(std::env::current_exe().unwrap())
+			.args(["--exact", "ctl::tests::poke_child", "--nocapture"])
+			.current_dir(&dir)
+			.env("SILK_CTL_POKE", "1")
+			.output()
+			.unwrap();
+		assert!(
+			out.status.success(),
+			"{}{}",
+			String::from_utf8_lossy(&out.stdout),
+			String::from_utf8_lossy(&out.stderr)
+		);
+		// a filter that matched nothing passes too
+		assert!(dir.join("done").exists(), "the child never ran");
+		assert!(dir.join("b.sock").exists(), "a crash leaves the file");
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Test ID: EsaxrEv
+	#[cfg(unix)]
+	#[test]
+	fn poke_child() {
+		use std::io::Read;
+		if std::env::var_os("SILK_CTL_POKE").is_none() {
+			return; // only does anything when the test above starts it
+		}
+		let live = std::path::Path::new("a.sock");
+		let listener = std::os::unix::net::UnixListener::bind(live).unwrap();
 		let heard = std::thread::spawn(move || {
 			let (mut stream, _) = listener.accept().unwrap();
 			let mut line = String::new();
 			stream.read_to_string(&mut line).unwrap();
 			line
 		});
-		assert_eq!(poke_at(&live, "saved\tabc"), Told::Sent);
+		assert_eq!(poke_at(live, "saved\tabc"), Told::Sent);
 		assert_eq!(heard.join().unwrap(), "saved\tabc\n");
-		let dead = near.join("b.sock");
-		drop(std::os::unix::net::UnixListener::bind(&dead).unwrap());
-		assert!(dir.join("b.sock").exists(), "a crash leaves the file");
-		assert_eq!(poke_at(&dead, "saved\tabc"), Told::Gone);
-		assert_eq!(poke_at(&near.join("c.sock"), "saved\tabc"), Told::Gone);
-		let _ = std::fs::remove_dir_all(&dir);
+		let dead = std::path::Path::new("b.sock");
+		drop(std::os::unix::net::UnixListener::bind(dead).unwrap());
+		assert_eq!(poke_at(dead, "saved\tabc"), Told::Gone);
+		assert_eq!(
+			poke_at(std::path::Path::new("c.sock"), "saved\tabc"),
+			Told::Gone
+		);
+		std::fs::write("done", "").unwrap();
 	}
 
 	// Each way out a window can take, driven in a child copy of this test binary

@@ -498,6 +498,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261013: Built. A save in one window, or Reload config, tells the other windows on the same settings file over each window's control socket, a named pipe on Windows. Windows on another file never hear. How it works is in design.md, "Settings across windows".
 		- 20261013: Verified: unit tests and a window test with 3 windows, 2 on one file. The save test fails with the lock taken out, and the window test fails with the telling taken out, or with every window picking a new wallpaper on each save.
+		- 20261013: `a_poke_reaches_a_listener_and_finds_the_dead` failed on b26, since a socket path under the Mac's test folder passed its 104-byte limit. The test now binds and pokes by bare name, from a child copy of the test binary started in the folder, the same on every Unix. Verified: it fails before and passes after on b26, and passes on Linux, also under a 120-character temp dir. A window's own socket is `$TMPDIR/silkterm-ctl-<pid>.sock`, 72 bytes on b26, and the peer folders hold plain files, which the limit does not cover. Branch macfix.
 	- Decisions:
 		- 20261013: Local IPC, and hand edits are not picked up live (answered 20261009). Reload config in one window has the others read the file too, so one reload covers a hand edit.
 		- 20261013: A window size set in Settings resizes only the window it was set in. In the others it is the size new windows open at.
@@ -2434,6 +2435,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause: The running program's name is read from `/proc` (`proc_comm` in term.rs), which macOS does not have. The shell's folder had the same fault, fixed under 2026100408214204.
 	- Actual cause:
 		- The name came only from `/proc`, so on macOS every lookup came back empty. The same lookup decides the minimap's per-program switch, which never saw a program there either.
+	- Progress log:
+		- 20261013: The test failed on b26 once GNU coreutils was on PATH: there `sleep` is a link to `gsleep`, and a Mac names the file a link points to, so the code was right and the test was not. It now starts `/bin/sleep` by full path. Verified: fails before and passes after on b26, passes on Linux. Swept: the 6 other tests that start `sleep` never check its name, and nothing else reads a spawned program's name. Branch macfix.
 	- Actual fix:
 		- On macOS the name comes from the process's short BSD info, the first 16 bytes of its name, about the same as Linux's 15. That works for another user's process too. `proc_name` was tried first and gives nothing for a root process, so a `sudo` command would have stayed unnamed. Linux is unchanged.
 	- Swept: every `/proc` read in the source, and everything that names a pane's foreground program. The tab label and the minimap both go through `proc_comm`. Copy-output and the reported-folder check use the foreground process group only, which macOS answers. The config busy check, wallpaper memory test and profiler CPU name are Linux only on purpose.
