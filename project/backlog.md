@@ -705,22 +705,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The curated default font list got replaced by just its first font
 	- ID: 2026100913394946
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Severity: High
 	- Opened: 20261009-133949
 	- Opened by: JC
-	- Related IDs: 2026100907341818
+	- Related IDs: 2026100907341818, 2026101009220980
 	- Target OS: All
 	- Incorrect behavior: The default list of fonts I had carefully curated got replaced by just the first one.
 	- Expected behavior: Bring the full list back.
 	- Notes:
 		- Before RC1.
 		- From the Settings UI update.
+	- Reproduced: 20261013 on b23. With "Use system font" on, Family showed "Monaspace Argon" alone, and turning Face off kept and saved that one name. Test EsZk42X failed before the fix.
+	- Actual cause:
+		- The built-in list was never cut. Since 10-09, Family's automatic value is the desktop's monospace font, and on b23 the desktop's font is Monaspace Argon, which is also the list's first entry. So the box showed one name.
+		- Turning the switch off keeps what the box shows, so it saved that one name as the family.
+		- The live config on b23 was not cut. The 10-09 launch only commented out its family line, which held the full list and still reads the same.
+	- Actual fix: Following the desktop, Family is now the desktop's font followed by the built-in list, each name once. On b23 that is the old list exactly, and turning the switch off keeps and saves all of it.
+	- Decisions:
+		- 20261013: The automatic list is the desktop's font and then the built-in list, not the desktop's font and a list set by hand. A list set by hand is set aside while the switch is on, as for every other switch.
+		- 20261013: No launch repair for a file holding just `family: "Monaspace Argon"`. It is not the old default, it can't be told apart from a pick made by hand, and it renders the same while that font is installed. No such file was found. b23's is fine, Windows names no desktop font, and a Mac names one only when somebody picked it, so the bug could not happen on the Windows boxes or b26.
+	- Swept:
+		- Every reader of the rule, `system_font_family` in fields.rs, which is its one answer.
+		- The font search in text.rs takes the longer list as it is, since it drops repeats.
+		- The size rule gives one number, so it has no list to lose.
+		- Glossary, the Unicode design doc and code comments that said the automatic family is the desktop's font alone.
+	- Verified: unit suite, the merge gate (fmt, clippy, tests), test IDs, doc, TOC and table checks.
+	- Not checked: a real window, Windows, macOS.
+	- Branch: fontlist
+	- Commit: 5f3623b
+	- Test case: EsZk42X `the_family_keeps_the_whole_list_when_the_switch_goes_off` failed before the fix and passes after. EsZk4LL `the_desktop_s_font_leads_the_built_in_list` pins the list on any desktop. EsDxpmE's family assertion moved to the new rule.
 
 - "Use system font and size" checkboxes disappeared
 	- ID: 2026100913394948
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: High
 	- Opened: 20261009-133949
 	- Opened by: JC
@@ -733,11 +752,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Before RC1.
 		- From the Settings UI update.
 		- The design doc's "A switch that has only one member is pointless" line is why they went. It now says such a switch stays, as that setting's own automatic switch.
+	- Actual fix: Already fixed by b043ccb "settings on knobs" (merged 36ef959). The "Use system font" row is back with its Face and Size boxes, both stored and both live.
+	- Swept: the dialog's 141 rows on dev match the 141 from before 10-09 (5af2c4a), so no other control is missing. "Remember last size", "Text colors from wallpaper" and "Choose automatically" are there too.
+	- Verified: unit suite and the merge gate.
+	- Branch: fontlist
+	- Commit: 5f3623b (test only)
+	- Test case: EsZk4Qs `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. The row exists with both halves, neither grays, and each takes a click both ways.
+	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
+	- Closed: 20261013-034224
 
 - The "A" in the text boxes, and italic text
 	- ID: 2026100913394950
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261009-133949
 	- Opened by: JC
@@ -760,6 +787,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261009: Q: Before making these changes, does it make sense, and is it consistent with the intent behind the 'automatic_settings' design? If so, update all instances of '20261008-180516_automatic_settings.md' among sister projects, to match.
 			- A: Yes. Automatic is a setting's default under the design, so a disabled revert arrow already says it, and the tip's first line says which. Every copy of the doc now has the revert arrow as the way back and no mark.
+	- Actual fix: Already fixed by b043ccb "settings on knobs" (merged 36ef959), which took out the "A" mark, the italic, the lighter color and the x. The glossary still described the mark, and now doesn't.
+	- Swept: every text field, number box and their drawing code; no mark or style is left that depends on where a value comes from. Stale comments about the x and the italic in settings_ui.rs were brought up to date.
+	- Verified: unit suite and the merge gate. The test failed against a build that drew an automatic Family in italic, and against one that drew an automatic Size dimmer.
+	- Branch: fontlist
+	- Commit: 5f3623b (test, glossary)
+	- Test case: EsZk4Qs `the_font_switches_are_there_and_an_automatic_value_draws_like_any_other`. Family and Size each draw only their value in the box, in the normal color and not italic, and set by hand to the same value they draw exactly the same, with no x.
+	- Acceptance signoff: Self-closed: a commit already fixed it, b043ccb, and a test now pins it.
+	- Closed: 20261013-034224
 
 - Dropdown text gets rendered on top of flyover tip text
 	- ID: 2026100913394952
@@ -850,7 +885,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings: restore the old font list
 	- ID: 2026101009220980
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261010-092209
 	- Opened by: JC
@@ -861,6 +896,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 		- `DEFAULT_FONT_STACK` in config.rs still lists all 9 fonts.
+	- Superseded by ID: 2026100913394946
+	- Actual fix: Duplicate of 2026100913394946, fixed there. On b23 Family now shows the old list in full, starting with Monaspace Argon.
+	- Branch: fontlist
+	- Commit: 5f3623b
+	- Test case: EsZk42X and EsZk4LL, under 2026100913394946.
+	- Acceptance signoff: Self-closed: duplicate of 2026100913394946.
+	- Closed: 20261013-034224
 
 - Add or change a "Copyright and license" section in the design docs
 	- ID: 2026101009221091

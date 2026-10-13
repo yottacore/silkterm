@@ -1267,7 +1267,7 @@ mod tests {
 	}
 
 	// Commented out by 2026100907341818. "Use system font" is back, but on it
-	// makes the family itself the desktop's font ahead of the shipped list,
+	// makes the family itself the desktop's font ahead of the built-in list,
 	// with a list set by hand set aside, so there is no order left to pick.
 	// The test above and EsZk4LL replace it.
 	// // The search order is one list on every platform. `use_system_font` only

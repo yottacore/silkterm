@@ -8038,7 +8038,7 @@ mod tests {
 		));
 		d.tab = d.specs[pair].tab;
 		for (part, key) in [(0, Key::SystemFont), (1, Key::SystemFontSize)] {
-			assert!(d.get_toggle(key), "{key:?} ships on");
+			assert!(d.get_toggle(key), "{key:?} is on by default");
 			assert!(!d.part_disabled(pair, part), "{key:?} grays");
 			let b = d.dual_box(pair, part);
 			d.mouse_down_dip(b.x + b.w / 2.0, b.y + b.h / 2.0, &mut m);

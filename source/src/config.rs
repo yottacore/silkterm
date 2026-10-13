@@ -242,7 +242,7 @@ const FALLBACK_FONT_SIZE: f32 = 17.0;
 pub const DEFAULT_FONT_STACK: &str = "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New";
 
 /// The family list while it follows the desktop: the desktop's font, then the
-/// shipped stack, each name once. The desktop's name alone was what turning
+/// built-in stack, each name once. The desktop's name alone was what turning
 /// the switch off kept (2026100913394946).
 pub fn desktop_font_stack(desktop: &str) -> String {
 	let mut seen = std::collections::HashSet::new();
@@ -10978,7 +10978,7 @@ mod tests {
 		);
 	}
 
-	// Following the desktop shows its font ahead of the whole shipped list, and
+	// Following the desktop shows its font ahead of the whole built-in list, and
 	// turning the switch off keeps and saves that list. It kept the desktop's
 	// one name, which on a desktop set to Monaspace Argon read as the list cut
 	// to its first font (2026100913394946).
@@ -11005,7 +11005,7 @@ mod tests {
 
 	// Test ID: EsZk4LL
 	#[test]
-	fn the_desktop_s_font_leads_the_shipped_list() {
+	fn the_desktop_s_font_leads_the_built_in_list() {
 		assert_eq!(desktop_font_stack("Monaspace Argon"), DEFAULT_FONT_STACK);
 		assert_eq!(
 			desktop_font_stack(" DejaVu Sans Mono "),
