@@ -365,6 +365,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 7fadb59
 	- Test case: EsEAijd, EsEAioc, EsEAitK, EsEAixa and EsEAj1i, each failing against a mutant of its part. EsDxpmD walks the whole table now. Assertions moved where the rule changed: Er1vmpQ, EqAiJBo, Em3Pif2, ElmIYG3, Elzq5VQ, ErkRECv, Eq4Yrbf, Epytxce.
 
+- Don't show any flyover tip text when the app or Settings dialog doesn't have the focus
+	- ID: 2026101009220760
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: No
+	- Needs external testing: A look on Windows, where Settings is an owned window (G36), and on macOS.
+	- Priority: Avg
+	- Opened: 20261010-092207
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Don't show any flyover tip text when the app - e.g. for tabs - or settings dialog doesn't have the focus.
+	- Progress log:
+		- 20261013: Built. Each window follows its own focus: the main window, Settings, About and the notice. A tip already up goes when the focus leaves. Settings open over the terminal has the focus, so the terminal shows no tab tip while it is up.
+	- Decisions:
+		- 20261013: When the focus comes back, tips wait for the pointer to move, so none pops up under a pointer left resting on a control. A move while the window is in the background counts for nothing. A pointer report at the same spot, which some platforms send as focus changes, is not a move.
+	- Sweep: the tab tip, menu tips, Settings rows, buttons and revert arrows, the About and notice links.
+	- Swept: The tab and menu tips both check the main window's focus, in `note_tab_hover` and `menu_tip_target`. Every dialog tip goes through `pointer_moved` and `compose`, which both take it. About and the notice are the same window type as Settings, and the notice's events now include focus.
+	- Branch: tipfix
+	- Commit: d33977d
+	- Test case: `a_window_without_the_focus_shows_no_tips` (EsZp4Va) and `a_dialog_without_the_focus_draws_no_tip` (EsZp4ah). The second fails with the focus check taken out of a frame.
+	- Verified: 20261013, the gate. In real windows on b23 under xfwm4, for a Settings row and for the tab strip: a tip that was up went when another window took the focus, stayed down 5 s after the focus came back, and came back after a 1 px move. Dev kept the Settings tip up in the background.
+	- Notes:
+		- Pre-next-cut.
+
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
 	- Type: Bug
@@ -736,31 +761,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- Dropdown text gets rendered on top of flyover tip text
-	- ID: 2026100913394952
-	- Type: Bug
-	- Status: Done
-	- Needs local test suite run?: No
-	- Severity: Avg
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Target OS: All
-	- Incorrect behavior: Dropdown text gets rendered on top of flyover tip text.
-	- Expected behavior: The tip draws on top.
-	- Reproduced: 20261013 on b23, in Settings on dev. With the scrim Function dropdown open, the pointer resting on its list brought up the tip of the row under the list, and the list's text drew over the tip's box.
-	- Actual cause: Two faults. An open dropdown or field menu takes every click until it closes, but the rows under it still answered with their tips. And the tip shared the popup's text renderer, which draws all of its text after all of the boxes, so the list's text landed on the tip. The About link tip shared the main text the same way. In the main window a menu tip shared the menus' renderer, and a menu tip that flips left of a submenu sits over the parent menu.
-	- Actual fix: Every tip draws last, in a layer of its own with its own text renderer, in Settings, About, the notice and the main window. Nothing behind an open dropdown or field menu shows a tip.
-	- Sweep: every tip, over every layer a window draws. Tips: Settings rows, footer buttons and revert arrows, the About and notice links, the tab tip, menu tips, and the benchmark banner that draws with them. Layers: rows, an open list, the field menu, the prompt and the color picker.
-	- Swept: All Settings and About tips go through the one tip layer in `scene`. The prompt and picker already hid every tip behind them. The tab tip, menu tips and banner moved off the menus' renderer. `prepare_overlay` and `render_overlay` have no other callers.
-	- Branch: tipfix
-	- Commit: d33977d
-	- Test case: `an_open_popup_hides_every_tip_behind_it` (EsZp4L4) and `a_tip_draws_over_everything_else_in_a_dialog` (EsZp4RG) both failed before the fix and pass after. The second also fails with only the About tip put back in the main text. The main window's draw order has no test, since it needs a GPU.
-	- Verified: 20261013, the gate. In a real Settings window on b23 the fixed build shows no tip over the open list, where dev showed the covered row's tip under the list's text.
-	- Acceptance signoff: Self-closed: reproduced, tests failed before and pass after, swept.
-	- Closed: 20261013-040658
-	- Notes:
-		- Before RC1.
-
 - Font settings should be part of themes
 	- ID: 2026100913394956
 	- Type: Enhancement
@@ -805,31 +805,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
-
-- Don't show any flyover tip text when the app or Settings dialog doesn't have the focus
-	- ID: 2026101009220760
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No
-	- Needs external testing: A look on Windows, where Settings is an owned window (G36), and on macOS.
-	- Priority: Avg
-	- Opened: 20261010-092207
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Don't show any flyover tip text when the app - e.g. for tabs - or settings dialog doesn't have the focus.
-	- Progress log:
-		- 20261013: Built. Each window follows its own focus: the main window, Settings, About and the notice. A tip already up goes when the focus leaves. Settings open over the terminal has the focus, so the terminal shows no tab tip while it is up.
-	- Decisions:
-		- 20261013: When the focus comes back, tips wait for the pointer to move, so none pops up under a pointer left resting on a control. A move while the window is in the background counts for nothing. A pointer report at the same spot, which some platforms send as focus changes, is not a move.
-	- Sweep: the tab tip, menu tips, Settings rows, buttons and revert arrows, the About and notice links.
-	- Swept: The tab and menu tips both check the main window's focus, in `note_tab_hover` and `menu_tip_target`. Every dialog tip goes through `pointer_moved` and `compose`, which both take it. About and the notice are the same window type as Settings, and the notice's events now include focus.
-	- Branch: tipfix
-	- Commit: d33977d
-	- Test case: `a_window_without_the_focus_shows_no_tips` (EsZp4Va) and `a_dialog_without_the_focus_draws_no_tip` (EsZp4ah). The second fails with the focus check taken out of a frame.
-	- Verified: 20261013, the gate. In real windows on b23 under xfwm4, for a Settings row and for the tab strip: a tip that was up went when another window took the focus, stayed down 5 s after the focus came back, and came back after a 1 px move. Dev kept the Settings tip up in the background.
-	- Notes:
-		- Pre-next-cut.
 
 - Settings: move tabs to the left, including nested tabs
 	- ID: 2026101009220870
@@ -1777,6 +1752,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- Dropdown text gets rendered on top of flyover tip text
+	- ID: 2026100913394952
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: No
+	- Severity: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Target OS: All
+	- Incorrect behavior: Dropdown text gets rendered on top of flyover tip text.
+	- Expected behavior: The tip draws on top.
+	- Reproduced: 20261013 on b23, in Settings on dev. With the scrim Function dropdown open, the pointer resting on its list brought up the tip of the row under the list, and the list's text drew over the tip's box.
+	- Actual cause: Two faults. An open dropdown or field menu takes every click until it closes, but the rows under it still answered with their tips. And the tip shared the popup's text renderer, which draws all of its text after all of the boxes, so the list's text landed on the tip. The About link tip shared the main text the same way. In the main window a menu tip shared the menus' renderer, and a menu tip that flips left of a submenu sits over the parent menu.
+	- Actual fix: Every tip draws last, in a layer of its own with its own text renderer, in Settings, About, the notice and the main window. Nothing behind an open dropdown or field menu shows a tip.
+	- Sweep: every tip, over every layer a window draws. Tips: Settings rows, footer buttons and revert arrows, the About and notice links, the tab tip, menu tips, and the benchmark banner that draws with them. Layers: rows, an open list, the field menu, the prompt and the color picker.
+	- Swept: All Settings and About tips go through the one tip layer in `scene`. The prompt and picker already hid every tip behind them. The tab tip, menu tips and banner moved off the menus' renderer. `prepare_overlay` and `render_overlay` have no other callers.
+	- Branch: tipfix
+	- Commit: d33977d
+	- Test case: `an_open_popup_hides_every_tip_behind_it` (EsZp4L4) and `a_tip_draws_over_everything_else_in_a_dialog` (EsZp4RG) both failed before the fix and pass after. The second also fails with only the About tip put back in the main text. The main window's draw order has no test, since it needs a GPU.
+	- Verified: 20261013, the gate. In a real Settings window on b23 the fixed build shows no tip over the open list, where dev showed the covered row's tip under the list's text.
+	- Acceptance signoff: Self-closed: reproduced, tests failed before and pass after, swept.
+	- Closed: 20261013-040658
+	- Notes:
+		- Before RC1.
 
 - The "A" in the text boxes, and italic text
 	- ID: 2026100913394950
