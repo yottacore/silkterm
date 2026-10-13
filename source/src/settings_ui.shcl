@@ -416,11 +416,18 @@ rows:
 		setting: theme_mode
 		help: "Which variant of the theme to use. System follows the desktop."
 
+	FontIgnoresThemes:
+		label: Font settings ignore themes
+		kind: toggle
+		indent: 1
+		setting: font.ignore_themes
+		help: "Off, picking a saved theme also sets its font family, size and line height. The built-in themes have no font."
+
 	ThemeActions:
 		label: ""
 		kind: buttons
 		options: "Save", "Save as…", "Rename…", "Delete"
-		help: "Save keeps the colors below under this theme's name. Only a saved theme can be renamed or deleted."
+		help: "Save keeps the colors below and the font under this theme's name. Only a saved theme can be renamed or deleted."
 
 	Colors:
 		kind: heading

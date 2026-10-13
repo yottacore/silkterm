@@ -68,7 +68,7 @@ keys![
 	ColScrollbarThumb, ColScrollbarTrough, ColBg, ColFromWallpaper, ColFg, ColCursor,
 	ColHighlight, ColFocus, ColGutter,
 	ColMenuBg, ColMenuFg, ColDialogBg, ColDialogFg,
-	Theme, ThemeMode, ThemeActions,
+	Theme, ThemeMode, FontIgnoresThemes, ThemeActions,
 	OpenBatch, OpenPowerShell, OpenVbScript, OpenFolder,
 	HotkeyNewWindow, HotkeySettings, HotkeyQuit, HotkeyCopy, HotkeyPaste,
 	HotkeyFontBigger, HotkeyFontSmaller, HotkeyFontReset, HotkeyFullscreen, HotkeyContextMenu,

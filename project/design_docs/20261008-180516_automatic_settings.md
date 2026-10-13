@@ -327,6 +327,7 @@ kept:
 - What Save does to a theme with `*` changes. The likely answer: Save puts them into a saved theme, and Save as makes a new theme from what shows.
 
 - Fonts in themes (2026100913394956).
+	- Answered 2026-10-13: a saved theme keeps the family, size and line height, and a pick sets them as if typed in, only while "Font settings ignore themes" is off. The font rows stay out of the theme's group. See the [Themes](20260930-150458_themes.md) design doc.
 
 ## Alternative ideas
 

@@ -185,6 +185,7 @@ pub static FIELDS: &[Field] = &[
 	num!(CursorResume, cursor_animation_resume_s, (0.05, 3600.0)),
 	flag!(SystemFont, use_system_font),
 	flag!(SystemFontSize, use_system_font_size),
+	flag!(FontIgnoresThemes, font_ignores_themes),
 	line!(FontFamily, font_family),
 	num!(FontSize, font_size, limits::FONT_SIZE),
 	num!(LineHeight, line_height_scale, limits::LINE_HEIGHT),
@@ -270,6 +271,9 @@ pub const THEME_KEYS: [Key; 10] = [
 	Key::ColDialogFg,
 	Key::ColGutter,
 ];
+
+/// The font rows a saved theme keeps, in the order `theme::ThemeFont` has them.
+pub const THEME_FONT_KEYS: [Key; 3] = [Key::FontFamily, Key::FontSize, Key::LineHeight];
 
 /// The knobs id of the profile and the theme.
 pub const PROFILE: &str = "profile";
@@ -658,6 +662,9 @@ pub fn set(settings: &mut Settings, key: Key, v: &Value, monitor: Option<&str>) 
 	model.set(key.name(), v, &Env::new(settings, monitor));
 	settings.model = model;
 	fill(settings, monitor);
+	if key == Key::Theme {
+		follow_theme_font(settings, monitor);
+	}
 }
 
 /// The reset arrow, then every field filled again.
@@ -669,6 +676,59 @@ pub fn reset(settings: &mut Settings, key: Key, monitor: Option<&str>) {
 	model.reset(key.name(), &Env::new(settings, monitor));
 	settings.model = model;
 	fill(settings, monitor);
+	// the theme's arrow is a pick of the default theme
+	if key == Key::Theme {
+		follow_theme_font(settings, monitor);
+	}
+}
+
+// The font a saved theme keeps, as the rows' values. A built-in has none.
+fn theme_font(settings: &Settings, name: &str) -> Vec<(Key, Value)> {
+	let Some(theme) = crate::theme::find_user(&settings.user_themes, name) else {
+		return Vec::new();
+	};
+	let font = &theme.font;
+	let values = [
+		font.family.clone().map(Value::Text),
+		font.size.map(float),
+		font.line_height_scale.map(float),
+	];
+	THEME_FONT_KEYS
+		.into_iter()
+		.zip(values)
+		.filter_map(|(key, v)| v.map(|v| (key, v)))
+		.collect()
+}
+
+// A theme pick sets the saved theme's font as if it were typed in, so it
+// turns a system font switch off. A value already showing is left alone, so
+// saving a theme and picking it again turns nothing off.
+fn follow_theme_font(settings: &mut Settings, monitor: Option<&str>) {
+	if settings.font_ignores_themes {
+		return;
+	}
+	let name = chosen(settings, Key::Theme);
+	for (key, v) in theme_font(settings, &name) {
+		if get(settings, key).as_ref() != Some(&v) {
+			let mut model = settings.model.clone();
+			model.set(key.name(), &v, &Env::new(settings, monitor));
+			settings.model = model;
+			fill(settings, monitor);
+		}
+	}
+}
+
+/// The font rows that differ from the saved theme picked. None while the font
+/// ignores themes, or for a theme with no font of its own.
+pub fn font_changed(settings: &Settings) -> Vec<Key> {
+	if settings.font_ignores_themes {
+		return Vec::new();
+	}
+	theme_font(settings, &chosen(settings, Key::Theme))
+		.into_iter()
+		.filter(|(key, v)| get(settings, *key).as_ref() != Some(v))
+		.map(|(key, _)| key)
+		.collect()
 }
 
 pub fn can_reset(settings: &Settings, key: Key, monitor: Option<&str>) -> bool {
@@ -714,23 +774,33 @@ pub fn chosen(settings: &Settings, chooser: Key) -> String {
 }
 
 /// What a chooser's box says: the preset, with " *" after a change under it.
+/// A font that differs from the saved theme's counts as one.
 pub fn shown_choice(settings: &Settings, chooser: Key) -> String {
-	settings
+	let label = settings
 		.model
-		.shown_choice(chooser.name(), &Env::new(settings, None))
+		.shown_choice(chooser.name(), &Env::new(settings, None));
+	if chooser == Key::Theme && !label.ends_with(" *") && !font_changed(settings).is_empty() {
+		return format!("{label} *");
+	}
+	label
 }
 
-/// The rows changed on top of the preset a chooser is on.
+/// The rows changed on top of the preset a chooser is on. For the theme that
+/// includes a font row that differs from a saved theme's.
 pub fn changed(settings: &Settings, chooser: Key) -> Vec<Key> {
 	let Some(group) = group_of(chooser) else {
 		return Vec::new();
 	};
-	settings
+	let mut out: Vec<Key> = settings
 		.model
 		.changed(group, &Env::new(settings, None))
 		.into_iter()
 		.filter_map(Key::parse)
-		.collect()
+		.collect();
+	if chooser == Key::Theme {
+		out.extend(font_changed(settings));
+	}
+	out
 }
 
 /// What a chooser calls the person's own values.
@@ -752,11 +822,27 @@ pub fn state_line(
 	if field(key).is_none() {
 		return String::new();
 	}
-	settings
-		.model
-		.state_line_shown(key.name(), &Env::new(settings, monitor), &|s, v| {
-			Key::parse(&s.id).map_or_else(|| v.show(), |k| show(k, v))
-		})
+	let line =
+		settings
+			.model
+			.state_line_shown(key.name(), &Env::new(settings, monitor), &|s, v| {
+				Key::parse(&s.id).map_or_else(|| v.show(), |k| show(k, v))
+			});
+	let font = if key == Key::Theme {
+		font_changed(settings)
+	} else {
+		Vec::new()
+	};
+	if font.is_empty() {
+		return line;
+	}
+	let labels: Vec<&str> = font.into_iter().map(label_of).collect();
+	let font = format!("Font changed here: {}.", labels.join(", "));
+	if line.is_empty() {
+		font
+	} else {
+		format!("{line} {font}")
+	}
 }
 
 /// A preset that changed its name, such as a saved theme renamed. The chooser

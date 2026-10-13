@@ -38,6 +38,8 @@ impl SettingsDialog {
 
 	/// A color changed under the theme picked: the dropdown says `Name *`, and
 	/// the changes are saved apart from it, so the answer survives a restart.
+	/// So does a font that differs from a saved theme's, while fonts follow
+	/// themes.
 	pub(super) fn theme_dirty(&self) -> bool {
 		!fields::changed(&self.edited, Key::Theme).is_empty()
 	}
@@ -74,9 +76,10 @@ impl SettingsDialog {
 		fields::set(&mut self.edited, Key::Theme, &v, self.monitor.as_deref());
 	}
 
-	/// Store the colors on screen under `name`, replacing a saved theme of that
-	/// name or adding one. The variant the dialog is NOT showing is carried over
-	/// from whatever `name` resolves to today, so a theme is always complete.
+	/// Store the colors and the font on screen under `name`, replacing a saved
+	/// theme of that name or adding one. The variant the dialog is NOT showing
+	/// is taken from whatever `name` resolves to today, so a theme is
+	/// always complete. The font is kept whether or not fonts follow themes.
 	pub(super) fn save_theme_as(&mut self, name: &str) {
 		let name = name.trim().to_string();
 		let dark_now = self.edited.theme_mode.is_dark(config::is_dark());
@@ -109,11 +112,17 @@ impl SettingsDialog {
 			Some(theme_index) => self.edited.user_themes[theme_index].slug.clone(),
 			None => self.free_slug(&name),
 		};
+		let font = crate::theme::ThemeFont {
+			family: Some(self.edited.font_family.clone()),
+			size: Some(self.edited.font_size),
+			line_height_scale: Some(self.edited.line_height_scale),
+		};
 		let theme = crate::theme::UserTheme {
 			slug,
 			name: name.clone(),
 			dark,
 			light,
+			font,
 		};
 		match existing {
 			Some(k) => self.edited.user_themes[k] = theme,
@@ -566,6 +575,199 @@ mod tests {
 				.contains("Saved One"),
 			"and nothing of it is left behind"
 		);
+
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// A font of its own, with both system font switches off.
+	fn own_font(d: &mut SettingsDialog, family: &str, size: f64, line: f64) {
+		use knobs::Value;
+		super::super::tests::own(
+			d,
+			&[
+				(Key::SystemFont, Value::Bool(false)),
+				(Key::SystemFontSize, Value::Bool(false)),
+				(Key::FontFamily, Value::Text(family.into())),
+				(Key::FontSize, Value::Float(size)),
+				(Key::LineHeight, Value::Float(line)),
+			],
+		);
+	}
+
+	fn follow_themes(d: &mut SettingsDialog) {
+		super::super::tests::own(d, &[(Key::FontIgnoresThemes, knobs::Value::Bool(false))]);
+	}
+
+	fn font_of(d: &SettingsDialog) -> (String, f32, f32) {
+		(
+			d.edited.font_family.clone(),
+			d.edited.font_size,
+			d.edited.line_height_scale,
+		)
+	}
+
+	fn pick(d: &mut SettingsDialog, name: &str) {
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let k = names.iter().position(|n| n == name).expect("listed");
+		d.set_radio(Key::Theme, k);
+	}
+
+	// A saved theme keeps the font on screen beside its colors, whether or not
+	// fonts follow themes, since a theme is stored whole.
+	// Test ID: Esa0nnU
+	#[test]
+	fn saving_a_theme_keeps_the_font_on_screen() {
+		let mut d = on_theme("Matrix");
+		assert!(d.edited.font_ignores_themes, "on by default");
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		d.save_theme_as("Mine");
+		let saved = crate::theme::find_user(&d.edited.user_themes, "Mine").expect("saved");
+		assert_eq!(
+			saved.font,
+			crate::theme::ThemeFont {
+				family: Some("Mono One".into()),
+				size: Some(31.0),
+				line_height_scale: Some(1.5),
+			}
+		);
+	}
+
+	// Picking a theme leaves the font alone until fonts follow themes. Then a
+	// saved theme brings its font, and a built-in, which has none, changes none.
+	// Test ID: Esa0ns8
+	#[test]
+	fn a_theme_pick_takes_its_font_only_once_fonts_follow_themes() {
+		let mut d = on_theme("Matrix");
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		d.save_theme_as("Mine");
+		pick(&mut d, "Matrix");
+		own_font(&mut d, "Mono Two", 12.0, 1.1);
+		let two = ("Mono Two".to_string(), 12.0, 1.1);
+
+		pick(&mut d, "Mine");
+		assert_eq!(font_of(&d), two, "fonts ignore themes by default");
+		assert!(!d.theme_dirty());
+		pick(&mut d, "Matrix");
+
+		follow_themes(&mut d);
+		pick(&mut d, "Matrix");
+		assert_eq!(font_of(&d), two, "a built-in has no font");
+		pick(&mut d, "Mine");
+		assert_eq!(font_of(&d), ("Mono One".to_string(), 31.0, 1.5));
+		assert!(!d.theme_dirty(), "the font is the theme's own");
+		assert_eq!(d.dd_closed_label(theme_box(&d)), "Mine");
+	}
+
+	fn theme_box(d: &SettingsDialog) -> usize {
+		d.specs
+			.iter()
+			.position(|s| s.key == Key::Theme)
+			.expect("the theme row")
+	}
+
+	// A theme that sets a font wins over the system font, the way a font typed
+	// in does: the switch for each value it changes turns off.
+	// Test ID: Esa0nwo
+	#[test]
+	fn a_theme_font_wins_over_the_system_font() {
+		use knobs::Value;
+		let mut d = on_theme("Matrix");
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		d.save_theme_as("Mine");
+		pick(&mut d, "Matrix");
+		own_font(&mut d, "Mono Two", 12.0, 1.1);
+		super::super::tests::own(
+			&mut d,
+			&[
+				(Key::SystemFont, Value::Bool(true)),
+				(Key::SystemFontSize, Value::Bool(true)),
+			],
+		);
+		follow_themes(&mut d);
+		pick(&mut d, "Mine");
+		assert_eq!(font_of(&d), ("Mono One".to_string(), 31.0, 1.5));
+		assert!(!d.edited.use_system_font && !d.edited.use_system_font_size);
+	}
+
+	// Saving picks the theme again, and its font is the one showing, so no
+	// system font switch is turned off by it.
+	// Test ID: Esa0o1c
+	#[test]
+	fn saving_a_theme_turns_no_font_switch_off() {
+		let mut d = on_theme("Matrix");
+		follow_themes(&mut d);
+		assert!(d.edited.use_system_font && d.edited.use_system_font_size);
+		let before = font_of(&d);
+		d.save_theme_as("Mine");
+		assert!(d.edited.use_system_font && d.edited.use_system_font_size);
+		assert_eq!(font_of(&d), before);
+		assert!(!d.theme_dirty());
+	}
+
+	// While fonts follow themes, a font that differs from the saved theme's is a
+	// change to it like a color: the box says `*`, Save wakes up, the tip names
+	// the row, and Save keeps it. While fonts ignore themes it is none of that.
+	// Test ID: Esa0o6M
+	#[test]
+	fn a_changed_font_reads_as_a_change_once_fonts_follow_themes() {
+		let mut d = on_theme("Matrix");
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		d.save_theme_as("Mine");
+		let row = theme_row(&d);
+		super::super::tests::own(&mut d, &[(Key::FontSize, knobs::Value::Float(30.0))]);
+		assert!(!d.theme_dirty());
+		assert_eq!(d.dd_closed_label(theme_box(&d)), "Mine");
+
+		follow_themes(&mut d);
+		assert!(d.theme_dirty());
+		assert_eq!(d.dd_closed_label(theme_box(&d)), "Mine *");
+		assert!(!d.part_disabled(row, 0), "Save wakes up");
+		let line = crate::fields::state_line(&d.edited, Key::Theme, None, &|_, v| v.show());
+		assert!(line.contains("Font changed here: Size."), "{line}");
+
+		d.theme_action(super::super::ThemeBtn::Save);
+		assert!(!d.theme_dirty());
+		let saved = crate::theme::find_user(&d.edited.user_themes, "Mine").expect("saved");
+		assert_eq!(saved.font.size, Some(30.0));
+	}
+
+	// The font goes to the file with the theme and comes back, and the switch
+	// with it.
+	// Test ID: Esa0oBV
+	#[test]
+	fn a_theme_font_survives_a_relaunch() {
+		let _guard = config::test_config_lock();
+		let _ = config::settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_themefont_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		let base = config::reload_from_disk();
+
+		let mut d = mk_dialog(4000.0);
+		d.orig = base.clone();
+		d.edited = base.clone();
+		own_font(&mut d, "Mono One", 31.0, 1.5);
+		follow_themes(&mut d);
+		d.save_theme_as("Saved Font");
+		assert!(config::persist(&base, &d.edited));
+
+		let back = config::reload_from_disk();
+		assert!(!back.font_ignores_themes);
+		let saved = crate::theme::find_user(&back.user_themes, "Saved Font").expect("on disk");
+		assert_eq!(saved.font.family.as_deref(), Some("Mono One"));
+		assert_eq!(saved.font.size, Some(31.0));
+		assert_eq!(saved.font.line_height_scale, Some(1.5));
+
+		let mut d2 = mk_dialog(4000.0);
+		d2.orig = back.clone();
+		d2.edited = back.clone();
+		own_font(&mut d2, "Mono Two", 12.0, 1.1);
+		pick(&mut d2, "Matrix");
+		pick(&mut d2, "Saved Font");
+		assert_eq!(font_of(&d2), ("Mono One".to_string(), 31.0, 1.5));
 
 		let _ = std::fs::remove_dir_all(&dir);
 	}
