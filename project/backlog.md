@@ -447,11 +447,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - top quits smooth scrolling at some point
 	- ID: 2026101310563310
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for answers
 	- Severity: Avg
 	- Opened: 20261013-105632
 	- Opened by: JC
 	- Target OS: All
+	- Version and build: Seen in the 10-10 dogfood build (ddrka), with top running since the evening before.
 	- Steps to reproduce:
 		- Run `top` and leave it running.
 	- Incorrect behavior: top quits smooth scrolling at some point.
@@ -459,6 +460,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 		- It should probably be excluded, but the fact that this happens could indicate a bug with longer-running stuff, so let's not exclude it.
+	- Reproduced: No, not as something that fades with time. On dev, top in a window on b23 slid as often after 24 minutes as in its first minute, with its list moved by arrow keys every 20 s. Minimizing until the GPU was let go and restoring didn't stop it, and neither did wheel scrolling.
+	- Possible cause: The load, not SilkTerm. top runs on the normal screen and redraws every row each tick. Its list only shifts while some of the rows on screen are processes that used no CPU in the last tick, and a change in how many did moves them up or down. Once more processes use CPU than the window has rows, every visible row is re-sorted each tick, nothing on screen moves as a block, and the redraw cuts, as it should.
+		- With the load held low, then high, then low again, 24 of 43 redraws slid, then 0 of 51, then 14 of 36. A window showed the same: 32 slide steps, none, then 19.
+		- On b23 now, 24 to 39 processes use CPU in a 3 s tick. In 25 minutes of top at 40 rows, every visible row was busy in all 355 timed refreshes, and none slid. A redraw after an arrow key comes after a short tick with fewer busy rows, and 573 of 898 of those slid.
+	- Progress log:
+		- 20261013: Question: Was b23 busy when the sliding stopped, for example a build or test run going? Does top slide again once the box is quiet? If it does, it's top re-sorting its list and the item can close as Moot. If it stays stopped on a quiet box, a window started from a terminal with `SILK_SCROLLDBG=1` prints each redraw's shift, which would show what refuses it.
+		- 20261013: Today's 3 scroll changes don't reach top. It grows no history after its first clear, so the flatpak repaint check never runs for it, its first clear already snapped, and it sets no mouse or focus mode, so it keeps the minimap column.
+	- Verified: a slide eases the same after 14 hours of steps every 3 s as at the start.
+	- Branch: topslide
+	- Test case: None, since no code changed.
 
 - Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
 	- ID: 2026101313381123
