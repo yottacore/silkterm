@@ -55,7 +55,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual cause:
 		- Once flatpak's table is taller than the screen, each redraw goes to the top row, clears, and prints the whole table again. The rows that don't fit are printed with no line breaks between them, so they wrap into about a screenful that scrolls up into history. The screen ends up looking the same, but SilkTerm eased through the whole screenful on every redraw.
 		- Before 20260903, at a full scrollback the advance was read off the screen rows, and those showed nothing moving. The tmux scrolling change (c5374c3) switched that to the engine's own count of lines pushed into history, which counts flatpak's. That's the regression. Before the scrollback fills it eased on every redraw back then too.
-	- Actual fix [Bug]: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint does not ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out, so `clear` eases as before.
+	- Actual fix [Bug]: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint does not ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out here. Since 2026101310563297 a clear does not ease at all.
 	- Verified: 20261013 on b23, a real `flatpak update` of 60 apps. The frames that eased during the update went from 55 to 8 with the scrollback not full, and from 50 to 12 with it full. What is left is the first table and its first redraw. The same output fed straight into the terminal eased the first table and 1 of its 242 redraws, against all of them before. The gate and the 11 scroll scenes pass.
 	- Progress log:
 		- 20261013: Waiting on signoff for a look at a real update with downloads in a real window. Still eases once: the first redraw, when the table gets its progress column.
@@ -63,6 +63,44 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 544b01b
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
+
+- `clear` shouldn't scroll, it should instantly clear
+	- ID: 2026101310563297
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: All
+	- Test environment: b23
+	- Incorrect behavior: `clear` scrolls.
+	- Expected behavior: It should instantly clear.
+	- Notes:
+		- Pre-next-cut.
+	- Against: the old-format Done item "Bug: repeated `clear; ls -lA ~/` scrolled smoothly the first time and appeared instantly every time after", and the 20260914 code review's "A clear eases the same way at a full scrollback as before it". Both made a clear ease on purpose.
+	- Reproduced: 20261013 on b23, in a window. Bash's Ctrl+L eased the old screen up and away, with the scrollback full and not. `clear`, `tput clear` and a reset already showed at once there, since they empty the scrollback too and leave nothing to ease through. Output after a clear that ran past the screen eased every line that went up.
+	- Actual cause:
+		- Ctrl+L erases the screen but not the scrollback, so the old screen goes up into history whole. That read as new output and eased.
+		- The two decisions above made a clear ease on purpose. The flatpak fix (2026101310563284) kept it that way.
+	- Decisions:
+		- This item wins over the two on its "Against:" line, being the newer call.
+		- Best-guess reading: the clear itself shows at once, with nothing sliding, at any scrollback depth, and the same every time. The old bug's complaint was that it was not the same every time.
+		- Output after the clear that fits on the screen shows in place. Output long enough to scroll eases like any other output, but only by what went up after the clear.
+		- Covers `clear` and `tput clear` (both send home, erase the screen and erase the scrollback), Ctrl+L, and a reset (`printf '\033c'`).
+	- Actual fix [Bug]: The terminal engine notes each clear of the screen and each reset, with how many lines went up after it. On a clear the view goes straight to the bottom, and only those lines ease. The ease's minimum distance can't reach back past them into the screen that was cleared.
+	- Verified: 20261013 on b23. The full unit test suite, the engine's own tests, rustfmt and clippy pass. A new scroll scene runs all 4 clears twice, with the scrollback full and then not. It failed on the build from before (27 frames eased) and passes now. The other 11 scroll scenes still pass on X11.
+	- Note: Old tests that said a clear eases:
+		- `a_clear_eases_the_same_at_a_full_scrollback` (EqHIGdN) is inverted and renamed `a_clear_is_instant_at_a_full_scrollback_too`, with the reason in a comment. The engine count it checked still holds.
+		- `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) still passes. A clear no longer reaches the repaint check, so its comment says it pins the check alone.
+		- `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) and `a_scrollback_clear_reads_as_everything_that_refilled_it` are unchanged and still true.
+		- The flatpak item's "so `clear` eases as before" and its "pin what still eases" no longer hold. That item was left as it was.
+	- Progress log:
+		- 20261013: Waiting on signoff, since it reverses 2 recorded decisions and changes what is seen. Which `clear` was seen isn't known. Ctrl+L, or a clear followed by long output, fit what was measured. A look in a real window with the usual shell would settle it.
+		- Not checked: Windows, where ConPTY may send a clear some other way. If it repaints rather than clears, nothing here changes there.
+	- Branch: clearsnap
+	- Commit: 9c99883, engine fork 0068fdd on `scroll-ledger-0.26.0`
+	- Test case: `a_clear_shows_at_once_and_only_what_follows_it_eases` (EscSd2Y), `the_ease_floor_does_not_reach_back_past_a_clear` (EscSd7l) and the inverted EqHIGdN, each red before the fix and green after. Scroll scene `clear` (`cicd/tests/scroll/run.bash`). Engine fork test `scroll_ledger_counts_what_went_up_after_a_clear`.
+	- Swept: the engine pushes the screen into history in one place, the erase of the whole screen, and a reset empties it. Both are noted. Erasing only the scrollback is left out, since the screen stays put. The alt screen keeps no history and has its own slide. The output ease has one caller, the pane build. SilkTerm has no clear or reset command of its own.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -367,20 +405,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
-
-- `clear` shouldn't scroll, it should instantly clear
-	- ID: 2026101310563297
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Target OS: All
-	- Incorrect behavior: `clear` scrolls.
-	- Expected behavior: It should instantly clear.
-	- Notes:
-		- Pre-next-cut.
-	- Against: the old-format Done item "Bug: repeated `clear; ls -lA ~/` scrolled smoothly the first time and appeared instantly every time after", and the 20260914 code review's "A clear eases the same way at a full scrollback as before it". Both made a clear ease on purpose.
 
 - top quits smooth scrolling at some point
 	- ID: 2026101310563310

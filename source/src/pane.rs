@@ -1551,7 +1551,7 @@ impl Pane {
 		// alt screen (no scrollback to measure) eases off it, and so does a scroll
 		// region on either screen. Read here, cleared below whichever way this
 		// frame goes.
-		let (region, scrolled, pushed) = {
+		let (region, scrolled, pushed, since_clear) = {
 			let ledger = guard.scroll_ledger();
 			let clamp = |line: Line| (line.0.max(0) as usize).min(lines);
 			let r = ledger.region();
@@ -1559,6 +1559,7 @@ impl Pane {
 				clamp(r.start)..clamp(r.end),
 				ledger.lines(),
 				ledger.pushed(),
+				ledger.since_clear(),
 			)
 		};
 		if cut {
@@ -1590,8 +1591,13 @@ impl Pane {
 		}
 		let whole_screen = region == (0..lines);
 		let blank = fnv_row(std::iter::repeat_n(' ', cols));
+		let output = Output {
+			grew,
+			pushed,
+			since_clear,
+		};
 		let (follow, advanced, was_chasing) =
-			ease_output(&mut self.scroll, alt, cut, grew, pushed, lines, |k| {
+			ease_output(&mut self.scroll, alt, cut, output, lines, |k| {
 				// a scrollback clear took the rows that would show the old screen moved
 				let shift = repaint_shift(
 					guard.grid(),
@@ -4765,27 +4771,43 @@ fn repaint_shift(
 	(respaced * 2 >= inked).then_some(0)
 }
 
+// What went into history since the last build: the depth's growth
+// (`pushed_since`), the engine's count of lines sent off the top, and, when the
+// screen was cleared, how many of those came after the clear.
+#[derive(Debug, Clone, Copy, Default)]
+struct Output {
+	grew: usize,
+	pushed: usize,
+	since_clear: Option<usize>,
+}
+
 // The output ease's share of a build: whether the view follows the bottom, the
 // lines this frame advanced, and whether the ease was already chasing before
 // any nudge. A cut frame never nudges: the depth an alt-screen exit gives back,
 // or the backlog a frozen pane took while hidden, is not output to ease through.
-// A repaint (`repaint`, asked with the advance) eases only as far as its
-// picture moved, after a snap to the bottom, so no ease left over from
+// A clear shows at once, whatever the scrollback holds: the view snaps, and
+// only the lines that went up after the clear ease, never into the screen it
+// cleared. A repaint (`repaint`, asked with the advance) eases only as far as
+// its picture moved, after a snap to the bottom, so no ease left over from
 // earlier output scrolls through what the repaint pushed.
 fn ease_output(
 	scroll: &mut Scroll,
 	alt: bool,
 	cut: bool,
-	grew: usize,
-	pushed: usize,
+	output: Output,
 	lines: usize,
 	repaint: impl FnOnce(usize) -> Option<usize>,
 ) -> (bool, usize, bool) {
 	let follow = scroll.following();
-	let advanced = output_advance(alt, follow, grew, pushed);
+	let advanced = output_advance(alt, follow, output.grew, output.pushed);
 	// read before the nudge: a band is measured fresh when the ease was at rest
 	let was_chasing = scroll.chasing_output();
-	if advanced > 0 && follow && !cut {
+	if let Some(after) = output.since_clear.filter(|_| follow && !cut && !alt) {
+		scroll.snap();
+		if after > 0 {
+			scroll.nudge_output_within(after as f32, lines as f32);
+		}
+	} else if advanced > 0 && follow && !cut {
 		match repaint(advanced).filter(|_| !alt) {
 			Some(shift) => {
 				scroll.snap();
@@ -5167,8 +5189,8 @@ mod tests {
 	use super::{
 		APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA,
 		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, CursorAnimation, DepthSampler, Dir, GColor, LinkHit,
-		Node, OffStrip, PROMPT_SKEL_MIN, PauseState, Rect, SLIDE_TOP_BAND_APPS, StripCell, Style,
-		Weight, adopt_band, alloc_pane_id, band_row_line, bar_applies_to, bar_pos_to_lines,
+		Node, OffStrip, Output, PROMPT_SKEL_MIN, PauseState, Rect, SLIDE_TOP_BAND_APPS, StripCell,
+		Style, Weight, adopt_band, alloc_pane_id, band_row_line, bar_applies_to, bar_pos_to_lines,
 		bar_thumb_span, bar_track, bell_brighten, bracket_reach, capture_grid_text, capture_start,
 		child_areas, cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate,
 		cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair, divider_at,
@@ -7536,6 +7558,23 @@ mod tests {
 		assert_eq!(output_band(&cur, &last, k, lines - end, blank_row(cols)), 1);
 	}
 
+	// What a build reads of one burst of output, from a depth of `baseline`.
+	fn output_of(term: &Term<VoidListener>, baseline: usize) -> Output {
+		let ledger = term.scroll_ledger();
+		Output {
+			grew: pushed_since(term.grid().history_size(), baseline),
+			pushed: ledger.pushed(),
+			since_clear: ledger.since_clear(),
+		}
+	}
+
+	fn grew(lines: usize) -> Output {
+		Output {
+			grew: lines,
+			..Output::default()
+		}
+	}
+
 	// What a build makes of one burst of output: the lines the output ease has
 	// to cover, and the region slide if the ease does not own the motion.
 	fn advance_and_step(
@@ -7591,9 +7630,15 @@ mod tests {
 		}
 	}
 
+	// This was `a_clear_eases_the_same_at_a_full_scrollback`, from when a clear
+	// eased. It is inverted, since a clear now shows at once (2026101310563297).
+	// The engine still counts the clear's push at both depths, and the ease
+	// still does not take it as a slide.
 	// Test ID: EqHIGdN
 	#[test]
-	fn a_clear_eases_the_same_at_a_full_scrollback() {
+	fn a_clear_is_instant_at_a_full_scrollback_too() {
+		let _g = config::test_store_lock();
+		config::update(config::Settings::default());
 		let (cols, lines) = (20usize, 8usize);
 		for scrollback in [1000usize, 20] {
 			let mut term = term_fed(cols, lines, scrollback, "");
@@ -7607,7 +7652,133 @@ mod tests {
 			feed(&mut term, "\x1b[2J");
 			let (advanced, step) = advance_and_step(&term, lines, h0);
 			assert_eq!((advanced, step), (4, None), "scrollback {scrollback}");
+			let mut s = crate::scroll::Scroll::new();
+			s.set_max(term.grid().history_size() as f32);
+			ease_output(&mut s, false, false, output_of(&term, h0), lines, |_| None);
+			assert!(!s.animating(), "scrollback {scrollback}: the clear eased");
+			// what it eased before
+			//   assert!(s.chasing_output());
 		}
+	}
+
+	// A model of the builds over a run of output, one wakeup sample per write.
+	// Says how far the view sits above the bottom after the last write, and
+	// whether it is moving.
+	fn eased_after(writes: &[&str], scrollback: usize, chasing: bool, lines: usize) -> (f32, bool) {
+		let cols = 40usize;
+		let listing = (0..40)
+			.map(|i| format!("old {i:02}\r\n"))
+			.collect::<Vec<_>>()
+			.concat();
+		let mut term = term_fed(cols, lines, scrollback, &format!("{listing}$ "));
+		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
+		term.scroll_ledger_mut().clear();
+		let mut depth = DepthSampler::default();
+		depth.rebaseline(term.grid().history_size());
+		let mut s = crate::scroll::Scroll::new();
+		s.set_max(term.grid().history_size() as f32);
+		let mut build = |write: &str, s: &mut crate::scroll::Scroll| {
+			feed(&mut term, write);
+			let history = term.grid().history_size();
+			let ledger = term.scroll_ledger();
+			let output = Output {
+				grew: depth.take(history),
+				pushed: ledger.pushed(),
+				since_clear: ledger.since_clear(),
+			};
+			s.set_max(history as f32);
+			ease_output(s, false, false, output, lines, |_| None);
+			term.scroll_ledger_mut().clear();
+		};
+		if chasing {
+			// output from before the clear still easing in
+			build(&"more\r\n".repeat(6), &mut s);
+			assert!(s.chasing_output());
+		}
+		for write in writes {
+			build(write, &mut s);
+		}
+		(s.visual_lines(), s.animating())
+	}
+
+	// `clear` and `tput clear` (home, erase display, erase scrollback), bash's
+	// Ctrl+L (no scrollback erase, so the old screen goes up into history
+	// whole) and a reset all show at once. Ctrl+L used to ease the old screen
+	// up and away. Output after a clear that fits on the screen shows in place,
+	// and output that scrolls eases by what went up after the clear, the same
+	// on every run.
+	// Test ID: EscSd2Y
+	#[test]
+	fn a_clear_shows_at_once_and_only_what_follows_it_eases() {
+		let _g = config::test_store_lock();
+		config::update(config::Settings::default());
+		let lines = 10usize;
+		let short = (0..5)
+			.map(|i| format!("new {i}\r\n"))
+			.collect::<Vec<_>>()
+			.concat();
+		let long = (0..30)
+			.map(|i| format!("new {i:02}\r\n"))
+			.collect::<Vec<_>>()
+			.concat();
+		let forms = [
+			("clear", "\x1b[H\x1b[2J\x1b[3J"),
+			("ctrl-l", "\x1b[H\x1b[2J"),
+			("reset", "\x1bc"),
+		];
+		for scrollback in [1000usize, 20] {
+			for chasing in [false, true] {
+				for (name, clear) in forms {
+					let at = format!("{name}, scrollback {scrollback}, chasing {chasing}");
+					let with = |tail: &str| format!("{clear}{tail}");
+					assert_eq!(
+						eased_after(&[&with("$ ")], scrollback, chasing, lines),
+						(0.0, false),
+						"{at}"
+					);
+					assert_eq!(
+						eased_after(&[&with(&format!("{short}$ "))], scrollback, chasing, lines),
+						(0.0, false),
+						"{at}: short output"
+					);
+					// the clear and what follows in one read, then in two
+					let (visual, moving) =
+						eased_after(&[&with(&format!("{long}$ "))], scrollback, chasing, lines);
+					// 21 lines went up after the clear, as far as the scrollback keeps
+					let want = 21f32.min(scrollback as f32);
+					assert!(moving, "{at}: long output");
+					assert!((visual - want).abs() < 1e-3, "{at}: eased {visual}");
+					let (visual, moving) = eased_after(
+						&[&with(""), &format!("{long}$ ")],
+						scrollback,
+						chasing,
+						lines,
+					);
+					assert!(moving, "{at}: long output after");
+					assert!(visual <= want + 1e-3, "{at}: eased {visual}");
+				}
+			}
+		}
+	}
+
+	// The output ease's floor would reach back past a short scroll after a
+	// clear, into the screen the clear took away.
+	// Test ID: EscSd7l
+	#[test]
+	fn the_ease_floor_does_not_reach_back_past_a_clear() {
+		let _g = config::test_store_lock();
+		config::update(config::Settings {
+			output_ease_lines: 5.0,
+			..config::Settings::default()
+		});
+		let lines = 10usize;
+		let spill = (0..10)
+			.map(|i| format!("new {i}\r\n"))
+			.collect::<Vec<_>>()
+			.concat();
+		let (visual, _) = eased_after(&[&format!("\x1b[H\x1b[2J{spill}$ ")], 1000, false, lines);
+		config::update(config::Settings::default());
+		assert!((visual - 1.0).abs() < 1e-3, "eased {visual}");
 	}
 
 	// One tick of `flatpak update` with its table taller than the screen: home,
@@ -7670,9 +7841,8 @@ mod tests {
 
 			let mut s = crate::scroll::Scroll::new();
 			s.set_max(term.grid().history_size() as f32);
-			let grew = pushed_since(term.grid().history_size(), h0);
-			let pushed = term.scroll_ledger().pushed();
-			ease_output(&mut s, false, false, grew, pushed, lines, |k| {
+			let output = output_of(&term, h0);
+			ease_output(&mut s, false, false, output, lines, |k| {
 				repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank)
 			});
 			assert!(!s.animating(), "scrollback {scrollback}: the tick eased");
@@ -7694,9 +7864,8 @@ mod tests {
 				"scrollback {scrollback}"
 			);
 			s.set_max(term.grid().history_size() as f32);
-			let grew = pushed_since(term.grid().history_size(), h0);
-			let pushed = term.scroll_ledger().pushed();
-			ease_output(&mut s, false, false, grew, pushed, lines, |k| {
+			let output = output_of(&term, h0);
+			ease_output(&mut s, false, false, output, lines, |k| {
 				repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank)
 			});
 			assert!(s.chasing_output(), "scrollback {scrollback}");
@@ -7742,7 +7911,9 @@ mod tests {
 			"ls"
 		);
 
-		// a clear: the screen goes up whole and comes back blank
+		// a clear: the screen goes up whole and comes back blank. A clear no
+		// longer gets this far in a build, since the ease snaps on it first
+		// (2026101310563297), so this pins the check alone.
 		for scrollback in [1000usize, 20] {
 			let mut term = term_fed(cols, lines, scrollback, &listing);
 			let last = prints(&term, lines, cols);
@@ -8725,14 +8896,14 @@ mod tests {
 		let mut s = crate::scroll::Scroll::new();
 		s.set_max(0.0); // the alt screen has no scrollback
 		s.set_max(500.0);
-		let (follow, advanced, _) = ease_output(&mut s, false, true, 500, 0, 24, |_| None);
+		let (follow, advanced, _) = ease_output(&mut s, false, true, grew(500), 24, |_| None);
 		assert!(follow);
 		assert_eq!(advanced, 500);
 		assert!(!s.animating(), "the exit is a cut");
 		assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
 
 		s.set_max(503.0);
-		let (_, advanced, was_chasing) = ease_output(&mut s, false, false, 3, 0, 24, |_| None);
+		let (_, advanced, was_chasing) = ease_output(&mut s, false, false, grew(3), 24, |_| None);
 		assert_eq!(advanced, 3);
 		assert!(!was_chasing);
 		assert!(s.chasing_output(), "three new lines ease in");
@@ -8753,7 +8924,7 @@ mod tests {
 		assert!(s.animating());
 		s.snap();
 		s.set_max(2100.0);
-		let (_, advanced, _) = ease_output(&mut s, false, true, 2000, 0, 24, |_| None);
+		let (_, advanced, _) = ease_output(&mut s, false, true, grew(2000), 24, |_| None);
 		assert_eq!(advanced, 2000);
 		assert!(!s.animating());
 		assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));

@@ -329,6 +329,15 @@ impl Scroll {
 		}
 	}
 
+	/// A nudge that reaches back no further than the new lines, floor or not:
+	/// output after a clear, which must not ease through the screen it cleared.
+	pub fn nudge_output_within(&mut self, grown: f32, view_rows: f32) {
+		let max = self.max;
+		self.set_max(grown.min(max));
+		self.nudge_output(grown, view_rows);
+		self.max = max;
+	}
+
 	// The whole line the view comes to rest on. Rounding to NEAREST is the obvious
 	// answer and it is wrong at the end of a gesture: a scroll that stops nine
 	// tenths of a line past a boundary would go all the way forward and then hop

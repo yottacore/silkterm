@@ -127,6 +127,8 @@ The same mechanism serves output. When new output pushes content up, `visual_off
 
 - The scrollback depth is sampled once per read from the program, not once per frame. A drop in depth means a clear, so everything left is new. An alt-screen switch or a resize starts the measurement over.
 
+- A clear shows at once, whatever the scrollback holds, and the same every time. That covers `clear` and `tput clear`, bash's Ctrl+L, which erases the screen but not the scrollback, and a reset. The engine notes each clear with the lines that went up after it. The view snaps to the bottom, and only those lines ease, so output that fits on the screen shows in place and longer output eases like any other. The ease's floor can't reach back past them into the screen that was cleared.
+
 - There is one depth baseline, sampled both per read and per frame, and whichever comes first counts the growth. Two baselines let the same lines count twice, which showed as a hop down and an ease back.
 
 - Once the scrollback is full, its depth stops growing. The engine then counts the lines it sends off the top of the screen, and that count carries plain output. See the ledger below.
@@ -282,7 +284,7 @@ The engine fork records every region scroll as it happens: which rows moved, by 
 
 - This is what lets tmux ease at all, since it runs on the alt screen where there is nothing else to measure.
 
-- The engine also counts every line it sends off the top of the screen into the scrollback. That count carries plain output once the scrollback is full. It covers a whole-screen scroll, a scroll of a region that starts at the top row, and a screen clear. apt's progress bar pins the last row under a region like that. The count is summed on its own, so a region scroll in the same read does not lose it.
+- The engine also counts every line it sends off the top of the screen into the scrollback. That count carries plain output once the scrollback is full. It covers a whole-screen scroll, a scroll of a region that starts at the top row, and a screen clear. A clear's own push is kept apart from what came after it. apt's progress bar pins the last row under a region like that. The count is summed on its own, so a region scroll in the same read does not lose it.
 
 - A recorded scroll that moved only blank rows is not eased. Nothing visible moved. A line editor such as ble.sh scrolls the blank rows under the cursor to make room for its prompt, and easing that drags the prompt down from behind the rows above.
 
