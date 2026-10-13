@@ -425,17 +425,56 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - muffer should not get a minimap
 	- ID: 2026101310563323
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Severity: Avg
 	- Opened: 20261013-105632
 	- Opened by: JC
+	- Related IDs: 2026101315155800
 	- Target OS: All
+	- Test environment: b23, muffer 2.1.296
 	- Incorrect behavior: muffer gets a minimap.
 	- Expected behavior: No minimap while muffer runs.
 	- Notes:
 		- Pre-next-cut.
 		- Consider making the minimap whitelist-only for TUI apps, e.g. `less`, `tail`, etc.
 		- The minimap already steps aside for a full-screen program that is not in `scroll.minimap.tui_process_whitelist`, default `less tmux screen`, per the old-format Done item "Auto-disable the minimap when in a TUI that has no buffer that can be reached via minimap".
+	- Reproduced: 20261013 on b23, real muffer 2.1.296 in a window with the minimap on. Its default view kept the column. Its full-screen view already lost it.
+	- Actual cause:
+		- muffer has 2 views now. The default one draws on the main screen. It redraws its input box in place and its transcript goes into the scrollback. The column only stepped aside for the alt screen, so this view kept it.
+		- The full-screen view (`tui: fullscreen` in muffer's settings, which b23 uses) is on the alt screen with full mouse tracking, and lost the column before this fix too.
+		- Not the process name, since only a listed name keeps the column. Not the timing either.
+		- muffer run inside tmux keeps the column in either view, since SilkTerm only sees tmux, which is on the list. The muffer sessions on b23 run inside tmux.
+	- Actual fix [Bug]: A program that redraws itself in place on the main screen now counts as drawing its own screen, the same as one on the alt screen, and keeps the column only if listed. That is the whitelist-only rule from the notes. It shows itself by asking for mouse reports or focus changes while it runs. A shell turns both off before it runs a command. Once a program stops asking, the column waits a second before it comes back while that program still runs, since muffer turns focus reports off and on again as it starts. Back at the prompt it comes back at once.
+	- Verified: 20261013 on b23, real muffer 2.1.296 in a window. Default view: the build from before kept the column. Now the column goes once as muffer starts and comes back once as it exits. Without the hold it went, came back and went again in the first quarter second. Full-screen view: the column goes on both builds. The gate passed (fmt, clippy, 1291 tests).
+	- Note: Other programs this changes, which is why it waits on signoff:
+		- An inline picker with the mouse on, such as `fzf --height`, loses the column while it is open.
+		- A nested fish 4, or an ssh session to a host whose shell is fish, loses it for as long as it runs, since fish asks for focus changes at its own prompt. Listing `fish` or `ssh` keeps it, but then for everything run under them.
+		- bash, zsh, a Python REPL and a build keep it, as before. fish as the pane's own shell keeps it too, since it turns focus changes off before it runs a command.
+		- A program on the alt screen that leaves it while still running, as vim does for `:!`, gets the column back a second later rather than at once.
+	- Progress log:
+		- 20261013: Waiting on signoff, since it changes which programs get the column beyond muffer.
+		- Question: should tmux stay on the default list? With it there, muffer inside tmux keeps the column whatever this fix does.
+		- Found on the way: SilkTerm never sends focus reports to a program that asks for them. Filed as 2026101315155800.
+	- Branch: nomufmap
+	- Commit: f9a2426
+	- Test case: `a_program_redrawing_the_main_screen_takes_the_column_too` (EscYyBa), red before the fix and green after. `a_program_that_toggles_as_it_starts_moves_the_column_once` (Esca2GW), red with the hold taken out.
+	- Swept: `minimap::wanted` has one caller outside tests, `sync_minimap`, which runs every frame for the shown tab's panes on every platform. The marker, the scrollbar and the alt-screen ease key on the alt screen for their own reasons and are unchanged.
+
+- Programs that ask for focus reports never get them
+	- ID: 2026101315155800
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261013-151558
+	- Opened by: CC
+	- Related IDs: 2026101310563323
+	- Target OS: All
+	- Steps to reproduce:
+		- Run a program that turns on focus reports (`CSI ? 1004 h`), such as fish 4 at its prompt, vim or muffer.
+		- Click another window, then back.
+	- Incorrect behavior: the program gets nothing. The engine notes the mode, but the window's focus change never sends `CSI I` or `CSI O`.
+	- Expected behavior: focus in sends `CSI I` and focus out sends `CSI O` while the mode is on, as xterm does.
+	- Reproduced: 20261013, by reading the code. Nothing reads the mode outside the minimap, and the window's focus handler writes nothing to the shell.
 
 - Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
 	- ID: 2026101313381123
