@@ -8651,6 +8651,70 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// 2026100910295901: an old file with "Text colors from wallpaper" off keeps
+	// the theme's text colors with a picture up. The switch is stored, so no
+	// color line has to be written for it, and one written by hand stays.
+	// Test ID: Esa43ID
+	#[test]
+	fn a_file_with_the_wallpaper_colors_off_keeps_the_theme_s() {
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_cfgwpoff_{}", std::process::id()));
+		let pal = crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true);
+		let mine = ([0x12u8, 0x34, 0x56], [0x65u8, 0x43, 0x21]);
+		let plain = "theme: \"Matrix\"\ntheme_mode: dark\ncolors:\n\tfrom_wallpaper: false\n";
+		// a launch before 10-09 left the machine test's lines, which is what
+		// marks an old file
+		let rated = format!("performance:\n\trated_hardware: \"cfgwpoff\"\n{plain}");
+		let own = format!(
+			"{rated}\tforeground: \"{}\"\n\tcursor: \"{}\"\n",
+			format_hex(mine.0),
+			format_hex(mine.1)
+		);
+		let lines = |text: &str| {
+			let doc = shcl::Document::parse(text);
+			[
+				"colors.foreground",
+				"colors.cursor",
+				"colors.from_wallpaper",
+			]
+			.map(|p| doc.get_string(p).ok())
+		};
+		let theme_s = (pal.fg, pal.cursor);
+		for (file, want) in [(plain.to_string(), theme_s), (rated, theme_s), (own, mine)] {
+			let _ = std::fs::remove_dir_all(&dir);
+			std::fs::create_dir_all(&dir).unwrap();
+			let path = dir.join("config.shcl");
+			std::fs::write(&path, &file).unwrap();
+			set_config_override(path.clone());
+
+			let mut live = load();
+			let once = std::fs::read_to_string(&path).unwrap();
+			assert!(!live.colors_from_wallpaper, "the switch reads off");
+			live.wallpaper_summary = Some(crate::autotheme::Summary {
+				luma_hi: 0.3,
+				luma_lo: 0.02,
+				luma_mean: 0.13,
+				spread: [[0.13; 3]; crate::autotheme::SPREAD],
+				alpha: 1.0,
+				hue: 250.0,
+				chroma: 0.08,
+				opacity: 0.35,
+			});
+			crate::fields::fill(&mut live, None);
+			assert_eq!((live.fg, live.cursor), want, "{file}");
+			assert!(!live.colors_from_wallpaper);
+			assert_eq!(lines(&once), lines(&file), "the launch left them: {once}");
+
+			// a second launch writes nothing more
+			let again = load();
+			assert_eq!(std::fs::read_to_string(&path).unwrap(), once);
+			assert!(!again.colors_from_wallpaper);
+		}
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// A step the display watch took lasts the session. Written down, one stall
 	// became every later launch's profile, with no way back while automatic was
 	// on - that took a desktop to Standard terminal and its wallpaper with it.

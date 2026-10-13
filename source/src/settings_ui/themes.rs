@@ -70,6 +70,14 @@ impl SettingsDialog {
 		}
 	}
 
+	// The wallpaper's text colors follow the picture, so a theme keeps the
+	// ones under them.
+	fn col_to_save(&self, key: Key) -> [u8; 3] {
+		fields::without_switch(&self.edited, key)
+			.and_then(|v| config::parse_hex(v.as_text()))
+			.unwrap_or_else(|| self.get_col(key))
+	}
+
 	// Pick a theme by name, as the dropdown would. Its "*" changes go.
 	fn pick_theme(&mut self, name: &str) {
 		let v = knobs::Value::Text(name.to_string());
@@ -95,7 +103,7 @@ impl SettingsDialog {
 		);
 		let mut shown = other; // start from a full palette, then overwrite with the edits
 		for i in 0..crate::theme::PALETTE_KEYS.len() {
-			shown.set(i, self.get_col(Self::palette_key(i)));
+			shown.set(i, self.col_to_save(Self::palette_key(i)));
 		}
 		shown.ansi = self.edited.ansi;
 		let (dark, light) = if dark_now {
@@ -321,6 +329,54 @@ mod tests {
 				.iter()
 				.all(|(p, _)| !p.starts_with("kept.changes.theme")),
 			"no change is left to save under it"
+		);
+	}
+
+	// The text colors a picture picked follow the picture, so a saved theme
+	// takes the ones under them: the theme's, with any change made by hand.
+	// Test ID: Esa59zb
+	#[test]
+	fn a_saved_theme_never_takes_the_wallpaper_s_text_colors() {
+		use knobs::Value;
+		let mut d = on_theme("Matrix");
+		super::super::tests::custom(&mut d);
+		super::super::tests::own(
+			&mut d,
+			&[
+				(Key::BgEnabled, Value::Bool(true)),
+				(Key::ColFromWallpaper, Value::Bool(true)),
+			],
+		);
+		d.set_col(Key::ColBg, [4, 5, 6]);
+		d.edited.wallpaper_summary = Some(crate::autotheme::Summary {
+			luma_hi: 0.3,
+			luma_lo: 0.02,
+			luma_mean: 0.13,
+			spread: [[0.13; 3]; crate::autotheme::SPREAD],
+			alpha: 1.0,
+			hue: 250.0,
+			chroma: 0.08,
+			opacity: 0.35,
+		});
+		crate::fields::fill(&mut d.edited, None);
+		let matrix = crate::theme::resolve("Matrix", crate::theme::Mode::Dark, true);
+		let derived = (d.edited.fg, d.edited.cursor);
+		assert_ne!(
+			derived.0, matrix.fg,
+			"the picture should pick the text color"
+		);
+
+		d.save_theme_as("Mine");
+		let saved = crate::theme::find_user(&d.edited.user_themes, "Mine").expect("saved");
+		assert_eq!(
+			(saved.dark.fg, saved.dark.cursor),
+			(matrix.fg, matrix.cursor)
+		);
+		assert_eq!(saved.dark.bg, [4, 5, 6], "a change by hand is saved");
+		assert!(d.get_toggle(Key::ColFromWallpaper), "the switch stays on");
+		assert_eq!(
+			d.edited.fg, derived.0,
+			"and the picture still picks the text"
 		);
 	}
 

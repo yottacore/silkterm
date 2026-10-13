@@ -8279,6 +8279,65 @@ mod tests {
 		assert_eq!(d.dd_closed_label(theme_row), "Custom");
 	}
 
+	// A theme pick leaves "Text colors from wallpaper" where it was. On, the
+	// picture still picks the text colors; off, they are the new theme's.
+	// Test ID: Esa43cc
+	#[test]
+	fn a_theme_pick_leaves_the_wallpaper_colors_switch_alone() {
+		use knobs::Value;
+		let mut d = on_theme("Matrix");
+		custom(&mut d);
+		own(
+			&mut d,
+			&[
+				(Key::BgEnabled, Value::Bool(true)),
+				(Key::ColFromWallpaper, Value::Bool(true)),
+			],
+		);
+		d.edited.wallpaper_summary = Some(crate::autotheme::Summary {
+			luma_hi: 0.3,
+			luma_lo: 0.02,
+			luma_mean: 0.13,
+			spread: [[0.13; 3]; crate::autotheme::SPREAD],
+			alpha: 1.0,
+			hue: 250.0,
+			chroma: 0.08,
+			opacity: 0.35,
+		});
+		crate::fields::fill(&mut d.edited, None);
+		let names = crate::theme::all_names(&d.edited.user_themes);
+		let at = |name: &str| names.iter().position(|n| n == name).unwrap();
+		let pal = |name: &str| crate::theme::resolve(name, crate::theme::Mode::Dark, true);
+
+		d.set_radio(Key::Theme, at("Pastel"));
+		assert_eq!(d.edited.theme, "Pastel");
+		assert!(d.get_toggle(Key::ColFromWallpaper), "on stays on");
+		assert_ne!(d.edited.fg, pal("Pastel").fg, "the picture still picks it");
+		assert!(!d.disabled(Key::ColFg) && !d.disabled(Key::ColCursor));
+
+		d.set_toggle(Key::ColFromWallpaper, false);
+		assert_eq!(
+			(d.edited.fg, d.edited.cursor),
+			(pal("Pastel").fg, pal("Pastel").cursor)
+		);
+		d.set_radio(Key::Theme, at("Matrix"));
+		assert!(!d.get_toggle(Key::ColFromWallpaper), "off stays off");
+		assert_eq!(
+			(d.edited.fg, d.edited.cursor),
+			(pal("Matrix").fg, pal("Matrix").cursor)
+		);
+
+		// with no picture up, on is the theme's colors too
+		d.set_toggle(Key::ColFromWallpaper, true);
+		d.edited.wallpaper_summary = None;
+		crate::fields::fill(&mut d.edited, None);
+		assert!(d.get_toggle(Key::ColFromWallpaper));
+		assert_eq!(
+			(d.edited.fg, d.edited.cursor),
+			(pal("Matrix").fg, pal("Matrix").cursor)
+		);
+	}
+
 	// The open command shows the desktop's opener until one is typed. File or
 	// folder shows the one setting its box edits, an emptied box puts back that
 	// one, and the arrow puts back both.
@@ -11226,8 +11285,8 @@ mod tests {
 		// clearing itself the way a plain text box would. Part 1, since part 0 is
 		// the chip that opens the picker and opens no field.
 		// was: Focus::Row(i, 0), when a Color row had one part
-		// ColBg rather than ColFg: the live config the test process reads can
-		// have `colors.from_wallpaper` on, which grays ColFg out of the ring
+		// ColBg rather than ColFg, from when `colors.from_wallpaper` grayed
+		// ColFg out of the ring. Nothing grays for it now.
 		let mut d = mk_dialog(2000.0);
 		let i = d.specs.iter().position(|s| s.key == Key::ColBg).unwrap();
 		let want = {
