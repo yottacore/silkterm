@@ -257,12 +257,19 @@ fn pushed_since(history: usize, baseline: usize) -> usize {
 struct DepthSampler {
 	hist: usize,
 	pushed: usize,
+	cleared: bool,
 }
 
 impl DepthSampler {
 	fn sample(&mut self, depth: usize) {
+		self.cleared |= depth < self.hist;
 		self.pushed += pushed_since(depth, self.hist);
 		self.hist = depth;
+	}
+
+	// Whether a scrollback clear fell in the span the last `take` handed over.
+	fn take_cleared(&mut self) -> bool {
+		std::mem::take(&mut self.cleared)
 	}
 
 	// A build's sample: everything banked so far plus its own, handed over.
@@ -273,6 +280,7 @@ impl DepthSampler {
 
 	fn rebaseline(&mut self, depth: usize) {
 		self.pushed = 0;
+		self.cleared = false;
 		self.hist = depth;
 	}
 }
@@ -328,11 +336,7 @@ fn snapshot_rows(
 	}
 	for i in 0..lines as i32 {
 		let row = &grid[Line(i)];
-		let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-		for c in 0..cols {
-			hash = (hash ^ row[Column(c)].c as u64).wrapping_mul(0x100_0000_01b3);
-		}
-		rows.push(hash);
+		rows.push(row_print(row, cols));
 		if let Some((colors, settings, out, readable)) = &mut styled {
 			let out_row = &mut out[i as usize];
 			out_row.clear();
@@ -341,6 +345,24 @@ fn snapshot_rows(
 		}
 	}
 	rows
+}
+
+// A row's fingerprint, FNV-1a over its chars.
+fn row_print(row: &Row<Cell>, cols: usize) -> u64 {
+	let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+	for c in 0..cols {
+		hash = (hash ^ row[Column(c)].c as u64).wrapping_mul(0x100_0000_01b3);
+	}
+	hash
+}
+
+fn row_skel(row: &Row<Cell>, cols: usize) -> u64 {
+	fnv_row_skel((0..cols).map(|c| row[Column(c)].c)).0
+}
+
+fn skel_rows(grid: &Grid<Cell>, lines: usize, cols: usize, out: &mut Vec<u64>) {
+	out.clear();
+	out.extend((0..lines as i32).map(|i| row_skel(&grid[Line(i)], cols)));
 }
 
 // One styled cell for the strip. Colors resolve the way build()'s cell loop
@@ -1268,6 +1290,9 @@ pub struct Pane {
 	// On-screen row fingerprints from the last build, used to detect an app's
 	// repaint-scroll where the engine recorded none (app-scroll easing). See build().
 	last_rows: Vec<u64>,
+	// The same rows by skeleton (`fnv_row_skel`), which still match when a
+	// table's columns move over. Only `repaint_shift` reads them.
+	last_skel: Vec<u64>,
 	// Rows of static bottom band (status/input line) that must NOT slide during the
 	// current alt-screen app-scroll ease. Captured when a scroll is detected.
 	slide_static: usize,
@@ -1519,6 +1544,7 @@ impl Pane {
 		// as the view hopping down a line and easing back up. A screen swap's
 		// depth swing is banked the same way and thrown out by `!cut` below.
 		let grew = self.depth.take(history);
+		let cleared = self.depth.take_cleared();
 		self.scroll.set_max(history as f32);
 		// What the engine recorded scrolling since the last build: the region that
 		// moved, by how much, and the rows that left it. Exact and uncapped, so the
@@ -1560,10 +1586,23 @@ impl Pane {
 			} else {
 				snapshot_rows(guard.grid(), lines, cols, None)
 			};
+			skel_rows(guard.grid(), lines, cols, &mut self.last_skel);
 		}
 		let whole_screen = region == (0..lines);
+		let blank = fnv_row(std::iter::repeat_n(' ', cols));
 		let (follow, advanced, was_chasing) =
-			ease_output(&mut self.scroll, alt, cut, grew, pushed, lines);
+			ease_output(&mut self.scroll, alt, cut, grew, pushed, lines, |k| {
+				// a scrollback clear took the rows that would show the old screen moved
+				let shift = repaint_shift(
+					guard.grid(),
+					&self.last_rows,
+					&self.last_skel,
+					k,
+					cols,
+					blank,
+				);
+				shift.filter(|_| !cleared)
+			});
 		if cut || alt || !self.scroll.chasing_output() {
 			self.out_band = 0;
 		}
@@ -1813,6 +1852,7 @@ impl Pane {
 				self.out_band = adopt_band(self.out_band, measured, was_chasing);
 			}
 			self.last_rows = rows;
+			skel_rows(guard.grid(), lines, cols, &mut self.last_skel);
 			if apps {
 				self.cells_scratch = std::mem::replace(&mut self.last_cells, cur_cells);
 			} else {
@@ -3805,6 +3845,7 @@ impl PaneManager {
 				pane.out_band = 0;
 				pane.strip_dirty = false;
 				pane.last_cells.clear();
+				pane.last_skel.clear();
 			}
 		}
 	}
@@ -3986,6 +4027,7 @@ fn spawn_pane(
 		lock_misses: 0,
 		depth: DepthSampler::default(),
 		last_rows: Vec::new(),
+		last_skel: Vec::new(),
 		slide_static: 0,
 		slide_static_top: 0,
 		out_band: 0,
@@ -4660,10 +4702,76 @@ fn output_advance(alt: bool, follow: bool, grew: usize, pushed: usize) -> usize 
 	}
 }
 
+// Lines went to history, yet the screen came back as it was and none of what
+// it showed went up with them: a repaint, not a scroll. flatpak redraws its
+// table from the top every tick, and a table taller than the screen pushes
+// about a screenful of rewrapped rows into history each time. Returns how far
+// the picture moved, now and then a row. A cell that widens a column respaces
+// every row, so rows also match by skeleton, in place only. A row that dropped
+// off the history counts for neither side.
+fn repaint_shift(
+	grid: &Grid<Cell>,
+	last: &[u64],
+	last_skel: &[u64],
+	k: usize,
+	cols: usize,
+	blank: u64,
+) -> Option<usize> {
+	let n = last.len();
+	if k == 0 || n != grid.screen_lines() {
+		return None;
+	}
+	let print = |line: i32| row_print(&grid[Line(line)], cols);
+	let oldest = -(grid.history_size() as i32);
+	let (mut inked, mut checked, mut moved) = (0usize, 0usize, 0usize);
+	for (i, &was) in last.iter().enumerate() {
+		if was == blank {
+			continue;
+		}
+		inked += 1;
+		let src = i as i32 - k as i32;
+		if src >= oldest {
+			checked += 1;
+			if print(src) == was {
+				moved += 1;
+			}
+		}
+	}
+	if inked < MOVED_MIN || checked < MOVED_MIN || moved * 4 >= checked {
+		return None;
+	}
+	let same = |shift: usize| {
+		last.iter()
+			.enumerate()
+			.skip(shift)
+			.filter(|&(i, &was)| was != blank && print((i - shift) as i32) == was)
+			.count()
+	};
+	let (shift, held) = (0..k.min(APP_SCROLL_MAX + 1).min(n))
+		.map(|shift| (shift, same(shift)))
+		.fold(
+			(0, 0),
+			|best, next| if next.1 > best.1 { next } else { best },
+		);
+	if held * 2 >= inked {
+		return Some(shift);
+	}
+	if last_skel.len() != n {
+		return None;
+	}
+	let respaced = (0..n)
+		.filter(|&i| last[i] != blank && row_skel(&grid[Line(i as i32)], cols) == last_skel[i])
+		.count();
+	(respaced * 2 >= inked).then_some(0)
+}
+
 // The output ease's share of a build: whether the view follows the bottom, the
 // lines this frame advanced, and whether the ease was already chasing before
 // any nudge. A cut frame never nudges: the depth an alt-screen exit gives back,
 // or the backlog a frozen pane took while hidden, is not output to ease through.
+// A repaint (`repaint`, asked with the advance) eases only as far as its
+// picture moved, after a snap to the bottom, so no ease left over from
+// earlier output scrolls through what the repaint pushed.
 fn ease_output(
 	scroll: &mut Scroll,
 	alt: bool,
@@ -4671,13 +4779,22 @@ fn ease_output(
 	grew: usize,
 	pushed: usize,
 	lines: usize,
+	repaint: impl FnOnce(usize) -> Option<usize>,
 ) -> (bool, usize, bool) {
 	let follow = scroll.following();
 	let advanced = output_advance(alt, follow, grew, pushed);
 	// read before the nudge: a band is measured fresh when the ease was at rest
 	let was_chasing = scroll.chasing_output();
 	if advanced > 0 && follow && !cut {
-		scroll.nudge_output(advanced as f32, lines as f32);
+		match repaint(advanced).filter(|_| !alt) {
+			Some(shift) => {
+				scroll.snap();
+				if shift > 0 {
+					scroll.nudge_output(shift as f32, lines as f32);
+				}
+			}
+			None => scroll.nudge_output(advanced as f32, lines as f32),
+		}
 	}
 	(follow, advanced, was_chasing)
 }
@@ -5060,10 +5177,10 @@ mod tests {
 		layout, ledger_makes_room, ledger_step, link_at, lock_for_frame, logical_line_bounds,
 		minimap, mono_attrs, move_is_input, next_capture_poll, output_advance, output_band,
 		pair_inside, paste_payload, place_split, prompt_strip, pulse_env, pushed_since,
-		render_char, repainted_edge, resume_delay, same_char_pair, scroll_shift_signed,
-		set_buffer_rows, set_ratio, shift_makes_room, shown_cursor_shape, slide_bands,
-		slide_is_visible, snapshot_rows, static_bands, strip_cell, strip_rows, swap_leaves,
-		text_buffer_h, translate_span, vanished_range, weld_region_clip,
+		render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
+		scroll_shift_signed, set_buffer_rows, set_ratio, shift_makes_room, shown_cursor_shape,
+		skel_rows, slide_bands, slide_is_visible, snapshot_rows, static_bands, strip_cell,
+		strip_rows, swap_leaves, text_buffer_h, translate_span, vanished_range, weld_region_clip,
 	};
 	use crate::{config, palette};
 	use alacritty_terminal::event::{Event, EventListener};
@@ -7493,6 +7610,196 @@ mod tests {
 		}
 	}
 
+	// One tick of `flatpak update` with its table taller than the screen: home,
+	// clear, then the whole table again. The rows that don't fit are printed
+	// with no line breaks between them, so they wrap into about a screenful
+	// that scrolls up into history ahead of the rows that do fit, `fit` of them.
+	fn flatpak_tick(rows: usize, fit: usize, tick: usize, gap: usize) -> String {
+		use std::fmt::Write as _;
+		let gap = " ".repeat(gap);
+		let row = |i: usize| {
+			let mark = match i.cmp(&tick) {
+				std::cmp::Ordering::Less => 'x',
+				std::cmp::Ordering::Equal => '|',
+				std::cmp::Ordering::Greater => ' ',
+			};
+			format!("{:>2}. [{mark}] org.silk.App{i:02}{gap}stable{gap}u", i + 1)
+		};
+		let mut s = String::from("\x1b[1;1H\x1b[0J");
+		s.extend((0..rows - fit).map(row));
+		for i in rows - fit..rows {
+			s.push_str("\r\n");
+			s.push_str(&row(i));
+		}
+		let _ = write!(s, "\r\n\r\nUpdating {}/{rows}", tick + 1);
+		s
+	}
+
+	fn prints(term: &Term<VoidListener>, lines: usize, cols: usize) -> (Vec<u64>, Vec<u64>) {
+		let mut skel = Vec::new();
+		skel_rows(term.grid(), lines, cols, &mut skel);
+		(band_rows(term, lines, cols), skel)
+	}
+
+	// Test ID: EscGnYG
+	#[test]
+	fn a_flatpak_table_taller_than_the_screen_is_not_eased() {
+		let _g = config::test_store_lock();
+		config::update(config::Settings::default());
+		let (cols, lines, rows) = (40usize, 10usize, 30usize);
+		let blank = blank_row(cols);
+		for scrollback in [1000usize, 50] {
+			let mut term = term_fed(cols, lines, scrollback, "");
+			term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
+			for i in 0..60 {
+				feed(&mut term, &format!("fill {i}\r\n"));
+			}
+			feed(&mut term, &flatpak_tick(rows, lines - 3, 0, 2));
+			let last = prints(&term, lines, cols);
+			term.scroll_ledger_mut().clear();
+			let h0 = term.grid().history_size();
+			assert_eq!(h0 == scrollback, scrollback == 50);
+			feed(&mut term, &flatpak_tick(rows, lines - 3, 1, 2));
+			let (advanced, _) = advance_and_step(&term, lines, h0);
+			assert!(advanced >= lines, "scrollback {scrollback}: {advanced}");
+			assert_eq!(
+				repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank),
+				Some(0),
+				"scrollback {scrollback}"
+			);
+
+			let mut s = crate::scroll::Scroll::new();
+			s.set_max(term.grid().history_size() as f32);
+			let grew = pushed_since(term.grid().history_size(), h0);
+			let pushed = term.scroll_ledger().pushed();
+			ease_output(&mut s, false, false, grew, pushed, lines, |k| {
+				repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank)
+			});
+			assert!(!s.animating(), "scrollback {scrollback}: the tick eased");
+			assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
+
+			// a redraw that lands a row higher eases that one row
+			let last = prints(&term, lines, cols);
+			term.scroll_ledger_mut().clear();
+			let h0 = term.grid().history_size();
+			feed(
+				&mut term,
+				&format!("{}\r\n", flatpak_tick(rows, lines - 3, 2, 2)),
+			);
+			let (advanced, _) = advance_and_step(&term, lines, h0);
+			assert!(advanced >= lines);
+			assert_eq!(
+				repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank),
+				Some(1),
+				"scrollback {scrollback}"
+			);
+			s.set_max(term.grid().history_size() as f32);
+			let grew = pushed_since(term.grid().history_size(), h0);
+			let pushed = term.scroll_ledger().pushed();
+			ease_output(&mut s, false, false, grew, pushed, lines, |k| {
+				repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank)
+			});
+			assert!(s.chasing_output(), "scrollback {scrollback}");
+			assert!(s.visual_lines() <= 1.0, "{}", s.visual_lines());
+
+			// a column grew, so every row is respaced in place
+			let last = prints(&term, lines, cols);
+			term.scroll_ledger_mut().clear();
+			let h0 = term.grid().history_size();
+			feed(
+				&mut term,
+				&format!("{}\r\n", flatpak_tick(rows, lines - 3, 3, 3)),
+			);
+			let (advanced, _) = advance_and_step(&term, lines, h0);
+			assert!(advanced >= lines);
+			assert_eq!(
+				repaint_shift(term.grid(), &last.0, &last.1, advanced, cols, blank),
+				Some(0),
+				"scrollback {scrollback}"
+			);
+		}
+	}
+
+	// Test ID: EscGnmw
+	#[test]
+	fn output_that_moved_the_old_screen_up_is_not_a_repaint() {
+		let (cols, lines) = (20usize, 8usize);
+		let blank = blank_row(cols);
+		let listing = (0..30)
+			.map(|i| format!("file{i:02}\r\n"))
+			.collect::<Vec<_>>()
+			.concat();
+		// a listing taller than the screen, run twice: the same picture comes
+		// back, but the old one went up into history whole
+		let mut term = term_fed(cols, lines, 1000, &format!("$ ls\r\n{listing}$ ls"));
+		let last = prints(&term, lines, cols);
+		let h0 = term.grid().history_size();
+		feed(&mut term, &format!("\r\n{listing}$ "));
+		let k = term.grid().history_size() - h0;
+		assert_eq!(
+			repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
+			None,
+			"ls"
+		);
+
+		// a clear: the screen goes up whole and comes back blank
+		for scrollback in [1000usize, 20] {
+			let mut term = term_fed(cols, lines, scrollback, &listing);
+			let last = prints(&term, lines, cols);
+			let h0 = term.grid().history_size();
+			term.scroll_ledger_mut().clear();
+			feed(&mut term, "\x1b[2J");
+			let (k, _) = advance_and_step(&term, lines, h0);
+			assert!(k > 0);
+			assert_eq!(
+				repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
+				None,
+				"clear, scrollback {scrollback}"
+			);
+		}
+
+		// a live block redrawn under new output
+		let block = |n: usize| format!("+--------+\r\n| work {n} |\r\n+--------+\r\n");
+		let mut term = term_fed(cols, lines, 1000, &format!("{listing}{}", block(1)));
+		let last = prints(&term, lines, cols);
+		let h0 = term.grid().history_size();
+		feed(&mut term, &format!("\x1b[3A\r\x1b[J more\r\n{}", block(2)));
+		let k = term.grid().history_size() - h0;
+		assert!(k > 0);
+		assert_eq!(
+			repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
+			None,
+			"block"
+		);
+
+		assert_eq!(
+			repaint_shift(term.grid(), &last.0[1..], &last.1[1..], k, cols, blank),
+			None,
+			"rows"
+		);
+		assert_eq!(
+			repaint_shift(term.grid(), &last.0, &last.1, 0, cols, blank),
+			None,
+			"k == 0"
+		);
+	}
+
+	// Test ID: EscGnqt
+	#[test]
+	fn the_depth_sampler_says_when_a_clear_fell_in_its_span() {
+		let mut depth = DepthSampler::default();
+		depth.sample(100);
+		assert_eq!(depth.take(101), 101);
+		assert!(!depth.take_cleared());
+		depth.sample(0);
+		assert_eq!(depth.take(30), 30);
+		assert!(depth.take_cleared(), "the clear is reported once");
+		assert!(!depth.take_cleared());
+		depth.sample(5);
+		depth.rebaseline(40);
+		assert!(!depth.take_cleared(), "a reflow is not a clear");
+	}
+
 	// CPU this thread has used, in the platform's own unit, so only good for
 	// ratios. The rest of the suite and whatever else the box is doing take turns
 	// on the cores, and wall time counts every turn lost.
@@ -8418,14 +8725,14 @@ mod tests {
 		let mut s = crate::scroll::Scroll::new();
 		s.set_max(0.0); // the alt screen has no scrollback
 		s.set_max(500.0);
-		let (follow, advanced, _) = ease_output(&mut s, false, true, 500, 0, 24);
+		let (follow, advanced, _) = ease_output(&mut s, false, true, 500, 0, 24, |_| None);
 		assert!(follow);
 		assert_eq!(advanced, 500);
 		assert!(!s.animating(), "the exit is a cut");
 		assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
 
 		s.set_max(503.0);
-		let (_, advanced, was_chasing) = ease_output(&mut s, false, false, 3, 0, 24);
+		let (_, advanced, was_chasing) = ease_output(&mut s, false, false, 3, 0, 24, |_| None);
 		assert_eq!(advanced, 3);
 		assert!(!was_chasing);
 		assert!(s.chasing_output(), "three new lines ease in");
@@ -8446,7 +8753,7 @@ mod tests {
 		assert!(s.animating());
 		s.snap();
 		s.set_max(2100.0);
-		let (_, advanced, _) = ease_output(&mut s, false, true, 2000, 0, 24);
+		let (_, advanced, _) = ease_output(&mut s, false, true, 2000, 0, 24, |_| None);
 		assert_eq!(advanced, 2000);
 		assert!(!s.animating());
 		assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
