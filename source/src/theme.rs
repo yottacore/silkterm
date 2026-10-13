@@ -93,12 +93,22 @@ impl Palette {
 /// on one config subtree, and a saved theme is self-contained enough to hand to
 /// someone else. `slug` is its config path segment and never changes, so a rename
 /// only rewrites `name` - and `name` is what the `theme` setting stores.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct UserTheme {
 	pub slug: String,
 	pub name: String,
 	pub dark: Palette,
 	pub light: Palette,
+	pub font: ThemeFont,
+}
+
+/// The font a saved theme keeps, one for both variants. A theme saved before
+/// themes had fonts has none, and a hand-edited one may have only some.
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct ThemeFont {
+	pub family: Option<String>,
+	pub size: Option<f32>,
+	pub line_height_scale: Option<f32>,
 }
 
 // Shared chrome defaults (same for every theme). The menu keeps one neutral gray

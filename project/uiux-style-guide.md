@@ -156,6 +156,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 	- File or folder edits whichever of the two its box shows. Its revert control puts back both.
 
 - The performance profile and the theme are dropdowns of presets, with Custom beside them. A row a preset sets shows the preset's value. Changing it puts a `*` after the preset's name, and Custom stays as it was. Picking another entry drops the `*` changes.
+	- A saved theme keeps a font as well. A pick sets it only while "Font settings ignore themes", under Mode on the Themes tab, is off, and then a font that differs from the theme's also puts a `*` after its name.
 
 - A row that may not work on every desktop has a warning mark after its label: a small triangle in the label's color, never red. What the row depends on goes at the end of the row's flyover, which shows over the mark like the rest of the row.
 	- A row that keeps a window from giving its graphics memory back gets one too, as Transparency does on Windows. So does "Free resources when idle", since some graphics drivers have trouble with it.

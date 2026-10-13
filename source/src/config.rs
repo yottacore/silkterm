@@ -781,6 +781,7 @@ pub struct Settings {
 	pub font_family: String,   // comma-separated fallback stack (first installed wins)
 	pub font_size: f32,
 	pub line_height_scale: f32,
+	pub font_ignores_themes: bool, // a theme pick leaves the three above alone
 	pub scrollback: usize,
 	pub scroll_smooth: bool, // master switch: false = every scroll (wheel, output, app slide) happens instantly
 	/// The five knobs below are the named segments of the output-scroll speed
@@ -1021,6 +1022,7 @@ impl Settings {
 			font_family: DEFAULT_FONT_STACK.to_string(),
 			font_size: FALLBACK_FONT_SIZE,
 			line_height_scale: 1.22,
+			font_ignores_themes: true,
 			scrollback: 10_000,
 			scroll_smooth: true,
 			scroll_ease_in_ms: 82.0, // ~ "Ease-in" 50 (motion builds over the first ~tenth of a second)
@@ -2755,6 +2757,7 @@ struct RawConfig {
 	font_family: Option<String>,
 	font_size: Option<f32>,
 	line_height_scale: Option<f32>,
+	font_ignores_themes: Option<bool>,
 	scrollback: Option<usize>,
 	scroll_smooth: Option<bool>,
 	scroll_ease_in_ms: Option<f32>,
@@ -3233,6 +3236,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		font_family: reader.read_string("font.family"),
 		font_size: reader.read_f32("font.size"),
 		line_height_scale: reader.read_f32("font.line_height_scale"),
+		font_ignores_themes: reader.read_bool("font.ignore_themes"),
 		scrollback: reader.read_usize("scroll.scrollback"),
 		scroll_smooth: reader.read_bool("scroll.smooth"),
 		scroll_ease_in_ms: reader.read_f32("scroll.ease_in_ms"),
@@ -3396,14 +3400,38 @@ fn read_user_themes(doc: &shcl::Document) -> Vec<crate::theme::UserTheme> {
 			.ok()
 			.filter(|n| !n.trim().is_empty())
 			.unwrap_or_else(|| slug.clone());
+		let font = read_theme_font(doc, &slug);
 		out.push(crate::theme::UserTheme {
 			slug,
 			name,
 			dark,
 			light,
+			font,
 		});
 	}
 	out
+}
+
+// A theme's font, each value as the font rows would take it. A theme saved
+// before themes had fonts has no lines here, and none is fine.
+fn read_theme_font(doc: &shcl::Document, slug: &str) -> crate::theme::ThemeFont {
+	let at = format!("themes.{slug}.font");
+	let number = |key: &str, (lo, hi): (f32, f32)| {
+		doc.get_float(&format!("{at}.{key}"))
+			.ok()
+			.map(|v| v as f32)
+			.filter(|v| v.is_finite())
+			.map(|v| v.clamp(lo, hi))
+	};
+	crate::theme::ThemeFont {
+		family: doc
+			.get_string(&format!("{at}.family"))
+			.ok()
+			.map(|f| f.trim().to_string())
+			.filter(|f| !f.is_empty()),
+		size: number("size", limits::FONT_SIZE),
+		line_height_scale: number("line_height_scale", limits::LINE_HEIGHT),
+	}
 }
 
 // Bring the file's `themes.*` subtrees in line with the dialog's list. A theme
@@ -3434,6 +3462,17 @@ fn write_user_themes(
 			let ansi: Vec<String> = pal.ansi.iter().map(|c| format_hex(*c)).collect();
 			let ansi: Vec<&str> = ansi.iter().map(String::as_str).collect();
 			doc.put_string_array(&format!("{at}.{mode}.ansi"), &ansi);
+		}
+		let font = &theme.font;
+		if let Some(family) = &font.family {
+			doc.put_string(&format!("{at}.font.family"), family);
+		}
+		let rounded = |v: f32| (f64::from(v) * 1000.0).round() / 1000.0;
+		if let Some(size) = font.size {
+			doc.put_float(&format!("{at}.font.size"), rounded(size));
+		}
+		if let Some(scale) = font.line_height_scale {
+			doc.put_float(&format!("{at}.font.line_height_scale"), rounded(scale));
 		}
 	}
 }
@@ -3735,6 +3774,7 @@ fn resolve(raw: RawConfig) -> Settings {
 			d.line_height_scale,
 			limits::LINE_HEIGHT,
 		),
+		font_ignores_themes: raw.font_ignores_themes.unwrap_or(d.font_ignores_themes),
 		scrollback: numi(raw.scrollback, d.scrollback, limits::SCROLLBACK),
 		scroll_smooth: raw.scroll_smooth.unwrap_or(d.scroll_smooth),
 		scroll_ease_in_ms: numf(raw.scroll_ease_in_ms, d.scroll_ease_in_ms, limits::EASE_MS),
@@ -7488,6 +7528,12 @@ font:
 	# size: 17.0
 
 	line_height_scale: 1.22
+
+	## A theme saved in Settings keeps the family, size and line height too.
+	## While this is on, picking a theme leaves the font as it is. Off, picking
+	## a saved theme sets its font as if typed in, so it wins over the system
+	## font. The built-in themes have no font, and change nothing here.
+	# ignore_themes: true  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Text
@@ -11467,6 +11513,7 @@ mod tests {
 			name: "Mine".to_string(),
 			dark: pal,
 			light: pal,
+			font: crate::theme::ThemeFont::default(),
 		};
 		let mut doc = shcl::Document::parse(default_config());
 		write_user_themes(&mut doc, &[], &[theme]);
@@ -13055,6 +13102,7 @@ mod tests {
 			name: "Mine".to_string(),
 			dark: pal,
 			light: pal,
+			font: crate::theme::ThemeFont::default(),
 		});
 		assert!(persist(&base, &own));
 		let loaded = reload_from_disk();
@@ -14052,6 +14100,76 @@ mod tests {
 		);
 		let off = "window:\n\tnew_tab_next_to_current: false\n";
 		assert!(!resolve(read_raw(off, p).0).new_tab_beside);
+	}
+
+	// Test ID: Esa0ndg
+	#[test]
+	fn a_theme_pick_leaves_the_font_alone_unless_turned_off() {
+		let p = std::path::Path::new("test.shcl");
+		assert!(
+			resolve(read_raw("", p).0).font_ignores_themes,
+			"on by default"
+		);
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "font.ignore_themes").then_some(line));
+		assert_eq!(
+			template.as_deref(),
+			Some("\t# ignore_themes: true  ## Default")
+		);
+		assert!(read_text("").font_ignores_themes);
+		assert!(!read_text("font:\n\tignore_themes: false\n").font_ignores_themes);
+	}
+
+	// A saved theme keeps a font beside its colors. One saved before themes had
+	// fonts has no font lines and still loads whole, and picking it changes no
+	// font even with fonts following themes.
+	// Test ID: Esa0nip
+	#[test]
+	fn a_saved_theme_keeps_its_font_and_an_old_one_still_loads() {
+		let old = "theme: Mine\n\
+			font:\n\
+			\tignore_themes: false\n\
+			themes:\n\
+			\tmine:\n\
+			\t\tname: Mine\n\
+			\t\tdark:\n\
+			\t\t\tbackground: \"#010203\"\n";
+		let themes = read_user_themes(&shcl::Document::parse(old));
+		assert_eq!(themes.len(), 1);
+		assert_eq!(themes[0].dark.bg, [1, 2, 3]);
+		assert_eq!(themes[0].font, crate::theme::ThemeFont::default());
+		let s = read_text(old);
+		assert_eq!(s.theme, "Mine");
+		assert!(crate::fields::font_changed(&s).is_empty());
+		assert_eq!(crate::fields::shown_choice(&s, Key::Theme), "Mine");
+
+		let mut theme = themes[0].clone();
+		theme.font = crate::theme::ThemeFont {
+			family: Some("Mono One, Mono Two".into()),
+			size: Some(21.0),
+			line_height_scale: Some(1.5),
+		};
+		let mut doc = shcl::Document::parse(default_config());
+		write_user_themes(&mut doc, &themes, std::slice::from_ref(&theme));
+		let text = doc.to_canonical();
+		let back = read_user_themes(&shcl::Document::parse(&text));
+		assert_eq!(back.len(), 1);
+		assert_eq!(back[0].font, theme.font);
+		assert!(
+			config_complaints(&text).is_empty(),
+			"{:?}",
+			config_complaints(&text)
+		);
+
+		// a hand-edited theme may set only some, and out of range is held in range
+		let some = "themes:\n\tmine:\n\t\tname: Mine\n\t\tdark:\n\t\t\tbackground: \"#010203\"\n\t\tfont:\n\t\t\tsize: 900\n";
+		let font = &read_user_themes(&shcl::Document::parse(some))[0].font;
+		assert_eq!(font.size, Some(limits::FONT_SIZE.1));
+		assert_eq!(
+			(font.family.as_deref(), font.line_height_scale),
+			(None, None)
+		);
 	}
 
 	// Test ID: Em1S9yq

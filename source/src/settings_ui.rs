@@ -326,6 +326,7 @@ macro_rules! keys_of {
 			| Key::CursorBlinking
 			| Key::SystemFont
 			| Key::SystemFontSize
+			| Key::FontIgnoresThemes
 			| Key::RememberSize
 			| Key::RememberPerMonitor
 			| Key::RememberMaximized
@@ -506,6 +507,7 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::CursorBlinking => settings.cursor_blink,
 		Key::SystemFont => settings.use_system_font,
 		Key::SystemFontSize => settings.use_system_font_size,
+		Key::FontIgnoresThemes => settings.font_ignores_themes,
 		Key::RememberSize => settings.remember_size,
 		Key::RememberPerMonitor => settings.remember_per_monitor,
 		Key::RememberMaximized => settings.remember_maximized,
@@ -3735,6 +3737,7 @@ impl SettingsDialog {
 			Key::CursorBlinking => self.edited.cursor_blink = on,
 			Key::SystemFont => self.edited.use_system_font = on,
 			Key::SystemFontSize => self.edited.use_system_font_size = on,
+			Key::FontIgnoresThemes => self.edited.font_ignores_themes = on,
 			Key::RememberSize => self.edited.remember_size = on,
 			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,

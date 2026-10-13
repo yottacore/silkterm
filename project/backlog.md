@@ -419,6 +419,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: tabsleft
 	- Commit: e5b2b87
 
+- Font settings should be part of themes
+	- ID: 2026100913394956
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs local test suite run?: Full pipeline. Saved themes now write font lines, and a launch backfills the new switch's commented line into the config file.
+	- Priority: Avg
+	- Opened: 20261009-133949
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Font settings should be part of themes.
+	- Notes:
+		- Before RC1.
+	- Progress log:
+		- 20261013: Q: Which font settings does a theme hold, and does picking a theme change them? A: Font family, size and line height (`font.family`, `font.size`, `font.line_height_scale`), picked up like the colors. Plus a new switch, on by default: "Font settings ignore themes". While it is on, a theme pick leaves the fonts alone.
+		- 20261013: Built. A saved theme keeps the 3 values under `themes.<slug>.font`, and a pick sets them while the new switch is off.
+	- Decisions:
+		- 20261013: The font rows stay out of the theme's preset group. As members they would show the default font under any built-in theme, and the person's own font only under Custom.
+		- 20261013: A pick sets each theme value that differs from what shows, the way typing it in would, so "Use system font" turns off for that value and the theme's font wins. A value already showing is left alone, so Save, which picks the theme again, turns nothing off.
+		- 20261013: Built-in themes have no font. Picking one, or Custom, never changes the font.
+		- 20261013: Save and Save as always keep the font on screen, switch on or off, since a theme is stored whole.
+		- 20261013: With the switch off, a font that differs from the saved theme's makes the box read `Name *`, wakes Save and is named in the tip, like a color. Nothing records it. Turning the switch off sets no font until the next pick.
+		- 20261013: The switch is `font.ignore_themes`, one row on the Themes tab under Mode, not repeated on the Text tab.
+		- 20261013: Theme files from before this have no font lines. They load as before, and picking one changes no font.
+	- Swept: every theme pick goes through `fields::set` or `fields::reset` on the Theme row: the dropdown, Save, Save as, Delete and the reset arrow. Rename is not a pick. Nothing outside the dialog picks a theme. `read_user_themes` and `write_user_themes` are the only theme file reader and writer, and all 4 places that build a `UserTheme` set its font.
+	- Branch: themefonts
+	- Commit: d69279d
+	- Test case: Esa0ndg (switch default and template line), Esa0nip (font round trip, an old theme file loads), Esa0nnU (save keeps the font), Esa0ns8 (pick with the switch on and off, built-in changes nothing), Esa0nwo (theme font beats the system font), Esa0o1c (save turns no switch off), Esa0o6M (font change reads as `*`), Esa0oBV (font survives a relaunch). Esa0nip, Esa0ns8, Esa0nwo, Esa0o6M and Esa0oBV fail with the font pick and the font write taken out, and Esa0o1c fails with the already-showing check taken out.
+	- Verified: 20261013, the merge gate (fmt, clippy, all 1267 unit tests), the doc, TOC, table and test ID checks. The shipped config is still a save fixed point, and a config from before backfills to the new template exactly and then changes nothing. The new row was looked at on the Themes tab at the default interface font.
+	- Acceptance signoff: Changes what the dialog shows, what a theme pick does and what a saved theme writes to disk.
+
 - A slider's number box is a fixed width, so a large desktop font can cut off a 4 or 5 digit number
 	- ID: 2026100816465317
 	- Type: Bug
@@ -789,19 +820,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
-
-- Font settings should be part of themes
-	- ID: 2026100913394956
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261009-133949
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Font settings should be part of themes.
-	- Notes:
-		- Before RC1.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
