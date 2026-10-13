@@ -12,3 +12,6 @@ cargo-deb|3.7.0|linux|cargo-deb --version
 cargo-generate-rpm|0.21.0|linux|cargo-generate-rpm --version
 makensis|3.12|both|makensis -VERSION
 zig|0.16.0|linux|zig version
+shellcheck|0.11.0|linux|shellcheck --version
+ruff|0.15.22|linux|ruff --version
+mypy|2.3.0|linux|mypy --version

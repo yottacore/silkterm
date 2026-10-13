@@ -264,7 +264,8 @@ GIT_PUBLISH=(cicd/utility/n8git_backup-and-publish)
 ## before and after builds kept for a comparison, their captures, and a docs
 ## backup from the 09-15 history rewrite. source/target and the clipboard-race
 ## test crate's target are stray lint and test builds, and target/darwin is a
-## macOS type check. A new scratch dir under target/ needs a line here.
+## macOS type check. target/container is what a --container run builds, a second
+## copy of all of it. A new scratch dir under target/ needs a line here.
 ##
 ## The wallpaper originals (about 350 MB) and duplicates (80 MB) sit behind the
 ## private/wallpaper/source symlink, which rar follows. The originals are the
@@ -278,6 +279,7 @@ export GIT_BACKUP_AND_PUBLISH_RAR_EXCLUDES='*/forks
 */target/gpu-stress
 */target/gpuctl
 */target/darwin
+*/target/container
 */target/lightnew
 */target/lightold
 */target/mapopt

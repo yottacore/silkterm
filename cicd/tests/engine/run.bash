@@ -59,7 +59,7 @@ fCheck "a build that works runs once" test "${rc}" -eq 0 -a "${tries}" -eq 1
 fCheck "the shipped config allows at least five attempts" \
 	bash -c 'source "$1" && ((BUILD_ATTEMPTS >= 5))' _ "${cicd}/config.bash"
 fCheck "the profiler build goes through the retry" grep -q '^[[:space:]]*fRetryBuild profiler ' "${engine}"
-fCheck "the native release build does" grep -q '^fRetryBuild "native release" ' "${engine}"
+fCheck "the native release build does" grep -q '^[[:space:]]*fRetryBuild "native release" ' "${engine}"
 fCheck "and each cross build does" grep -q '^[[:space:]]*fRetryBuild "${localLabel}" ' "${engine}"
 
 ## The dogfood tag: toolchain, built on, target, arch. A cross build is tagged

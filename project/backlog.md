@@ -34,24 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Move local CICD steps into a local container, and on the other boxes too?
-	- ID: 2026101009221201
-	- Type: Task
-	- Status: Waiting for answers
-	- Priority: Avg
-	- Opened: 20261010-092212
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- What would you think of moving (or recreating) local CICD steps into a local container (in the regular docker location)? A minimal container, maybe something as close to the current host OS as possible? (E.g. Debian Trixie)? Ditto on foreign boxes?
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261010: A: Yes for the Linux stages that need no card and no desktop: lint, unit tests, the 4 builds, the deb and NSIS packages, and the Xvfb and headless sway window tests. They gain a pinned toolchain (rustup 1.96, zig 0.16, mingw, makensis 3.12 instead of the box's 3.11), no live user config under the unit tests (G6), and no writes to the box's cache or dogfood config. Debian Trixie matches the host kernel. The repo, `target/` and the cargo registry go in as volumes, so build time stays the same.
-			- Keep on the host: anything that reads the real card (GPU memory, frame times, the profiler), the dogfood install into the synced app dir, the demo render, and the stages that talk to the other boxes over ssh with the host lock.
-			- Not on the other boxes. vm925w has its hypervisor off, so no WSL2 and no Windows containers, and the Windows tests need a logged-on desktop anyway. On b26 a Linux container gives nothing for a macOS build, and the Windows and Mac builds are already made here.
-			- Suggested first step: `cicd.bash --gate` inside the container, as an opt-in flag, until it has run clean a few times. Then the package stages.
-
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486
 	- Type: Bug
@@ -137,6 +119,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: tipfix
 	- Commit: 368d7b8
 	- Test case: `no_dialog_text_says_carry` (Es9Vugt) and `no_template_comment_says_carry` (Es9WIpt). Both failed with the old Fit tip and template comment put back, and pass now. The notice wording is pinned by the existing notice tests.
+
+- Move local CICD steps into a local container, and on the other boxes too?
+	- ID: 2026101009221201
+	- Type: Task
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261010-092212
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- What would you think of moving (or recreating) local CICD steps into a local container (in the regular docker location)? A minimal container, maybe something as close to the current host OS as possible? (E.g. Debian Trixie)? Ditto on foreign boxes?
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261010: A: Yes for the Linux stages that need no card and no desktop: lint, unit tests, the 4 builds, the deb and NSIS packages, and the Xvfb and headless sway window tests. They gain a pinned toolchain (rustup 1.96, zig 0.16, mingw, makensis 3.12 instead of the box's 3.11), no live user config under the unit tests (G6), and no writes to the box's cache or dogfood config. Debian Trixie matches the host kernel. The repo, `target/` and the cargo registry go in as volumes, so build time stays the same.
+			- Keep on the host: anything that reads the real card (GPU memory, frame times, the profiler), the dogfood install into the synced app dir, the demo render, and the stages that talk to the other boxes over ssh with the host lock.
+			- Not on the other boxes. vm925w has its hypervisor off, so no WSL2 and no Windows containers, and the Windows tests need a logged-on desktop anyway. On b26 a Linux container gives nothing for a macOS build, and the Windows and Mac builds are already made here.
+			- Suggested first step: `cicd.bash --gate` inside the container, as an opt-in flag, until it has run clean a few times. Then the package stages.
+		- 20261010: Built, after "ok do the container work" in chat. `cicd.bash --container` runs stages 1 to 6 in the image from `cicd/container/Dockerfile`, with `--gate --container` for the gate alone. Debian trixie, the pinned rustc with its 3 cross targets, the 4 cargo helpers, zig, makensis 3.12 from the snapshot archive, pwsh with PSScriptAnalyzer, ruff, mypy, shellcheck 0.11, Xvfb, xfwm4, sway, cage and Mesa. Versions come from `tool-pins.txt` and `rust-toolchain.toml` as build args, and the tag hashes the recipe plus those, so a pin bump is a new image. The run inside has its own target dir, `target/container`, and a named cache volume. Outside, this box runs the sync first and the private runner, dogfood, demo and publish after, plus the content scrub and the Windows scenarios, which the run inside steps over. shellcheck, ruff and mypy joined the pin list, and the pin probe reads the first version anywhere in a tool's output, since shellcheck's is on its second line.
+		- 20261010: First runs. The gate passed inside once the run got a passwd entry for its uid, since the terminal looks its user up. A full run then found 3 more gaps, fixed in turn: the publish test wanted rar on PATH even with the backup off (its own stub rar is on PATH now), xfwm4 needs a session bus (the run inside gets one from dbus-run-session), and the ARM64 Windows exe needs llvm-windres for its icon (llvm-19 is in the image). Inside, every window test but the one that needs a render node runs. That one skips, as on any box without a GPU. The image is 5 GB and takes about 20 minutes to build the first time.
+		- 20261010: Run 4 got to the Windows resource check and stopped there again: llvm-windres preprocesses the .rc with clang, so clang-19 joined the recipe. Everything before that passed inside, both scroll harness arms and the 4 release builds included. Not yet run again. Stopped at noon.
+		- 20261013: Merged dev in. The full run `cicd.bash --container -y --no-publish --no-dogfood --no-private` passes at a2d83b1. Its log is `target/container/run7_20261013-064920.log`, and the copy the run keeps is `cicd/artifacts/lint/run_20261013-064920.log`. The image with clang-19 built in about 9 minutes, with docker's cache warm.
+			- Run 5 stopped in the test run folder test, on 2 checks the live settings work broke, not the container. The socket test bound a path past the 107-byte limit, and the check for code asking for the temp dir did not know that code moved to `peers.rs`. Both fixed; the socket test failed before the fix and passes after, with the long folder name.
+			- The run inside now gets this box's time zone. Names it stamped, such as test folders and flamegraphs, were in UTC and sorted after the ones made here.
+			- Inside, every window test passes, the new live settings one too, except the one that needs a render node, which skips as before. The Windows scenarios ran here after the container and skipped, since the console session was locked.
+			- The packages stage makes the same 12 files as the 10-09 run on this box: 4 binaries, 2 deb, 2 rpm, 2 installers, the sums and built-from.txt. Each is about 1% bigger, in line with the code added since. makensis inside is 3.12. Each package holds the exact binary that run built.
+			- Waiting on signoff, since it changes how the pipeline runs. Not merged into dev.
+	- Branch: container
+	- Test case: `cicd/tests/container/run.bash` (EsJg9EF): the tag, the recipe against the pins, the option split, the artifacts picked up, and the engine against a stand-in docker, the time zone included. The full run above.
 
 - Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
 	- ID: 2026100910295901

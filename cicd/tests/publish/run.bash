@@ -41,8 +41,10 @@ fRepo(){  ## fRepo <name>: a remote, a clone of it at <name>/proj with one commi
 	git -C "${dir}/proj" add file.txt; git -C "${dir}/proj" commit -qm first; git -C "${dir}/proj" push -q origin main 2>/dev/null
 }
 fPublish(){  ## fPublish <name> <args...>: run the publisher in that clone; sets rc and out
+	## The stub rar below is on PATH: the publisher wants one there even with the
+	## backup off, and a box without rar (the container) is still a fair test.
 	local -r dir="${work}/${1}/proj"; shift
-	rc=0; out="$(cd "${dir}" && bash "${publish}" -q "${@}" 2>&1)" || rc=$?
+	rc=0; out="$(cd "${dir}" && PATH="${stubs}:${PATH}" bash "${publish}" -q "${@}" 2>&1)" || rc=$?
 }
 fUpstream(){  ## fUpstream <name> <line1>: another clone pushes a change to line one
 	local -r dir="${work}/${1}"
@@ -147,7 +149,7 @@ fCheck "a typed answer is used as typed" test "$(fPublishMessage "" "" "typed")"
 fCheck "--message still wins" test "$(fPublishMessage "cli" "cfg" "")" = "cli"
 fRepo blank
 echo more >>"${work}/blank/proj/file.txt"
-rc=0; out="$(cd "${work}/blank/proj" && GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="$(fPublishMessage "" "" "")" bash "${publish}" --quiet 2>&1)" || rc=$?
+rc=0; out="$(cd "${work}/blank/proj" && PATH="${stubs}:${PATH}" GIT_BACKUP_AND_PUBLISH_QUIET=1 GIT_AUTO_MESSAGE="$(fPublishMessage "" "" "")" bash "${publish}" --quiet 2>&1)" || rc=$?
 fCheck "and that is the message committed" test "$(fLastMsg blank)" = "Silk CI/CD 20260101-000000"
 
 ## The commit message is the one question. A second "Proceed? [y/N]" after it
