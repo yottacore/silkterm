@@ -18,6 +18,7 @@
 ##		   chrome       - output easing under a live block redrawn in place holds the block still
 ##		   aptbar       - lines above a pinned status row still ease once the scrollback is full
 ##		   paste/pasteil - an input box growing into blank rows pops in rather than sliding down
+##		   clear        - every way a shell clears the screen shows at once, nothing eases
 ##		Plain shell-output easing is covered by the library tests (cargo test); the
 ##		"jumping / re-listing / bottom-up" symptoms map to those monotonicity checks.
 ##		Scenes self-scroll on a timer - no key injection (unreliable here), so the
@@ -260,7 +261,12 @@ fRunScene(){
 		if [[ "${mode}" == pinned ]] && ((! marked && SECONDS >= settle - 1)); then
 			lead=$(fTraceFrames "${trace}"); marked=1
 		fi
-		if [[ "${mode}" == still ]]; then
+		if [[ "${mode}" == instant ]]; then
+			## Frames at rest print nothing, so wait for the closing alt-screen
+			## scroll rather than a frame count.
+			((doneAt == 0)) && grep -qE 'sh=-([5-9]|[1-9][0-9]+) .*alt=1' "${trace}" 2>/dev/null && doneAt=$((SECONDS + 2))
+			((doneAt && SECONDS >= doneAt)) && break
+		elif [[ "${mode}" == still ]]; then
 			## A still screen builds only when something changes, so it may never
 			## reach the frame count. Stop a few seconds after the swap instead,
 			## which is past any leftover ease.
@@ -314,6 +320,9 @@ fRunScene aptbar aptbar pinned -1 1
 fRunScene paste   paste   popin -1
 fRunScene pasteil pasteil popin -1
 
+## clear, tput clear, Ctrl+L and a reset over a full screen, with the scrollback
+## full and then nearly empty: each shows at once, with nothing easing.
+fRunScene clear   clear   instant -1
 ## Best-effort real-app smoke (never fails the suite): prove the real apps render
 ## under SilkTerm (enter alt-screen, no hang) - regresses e.g. the cosmic-text hang
 ## and the alt-screen enter/exit hard-cut. No key injection, so it does not assert
@@ -358,3 +367,4 @@ exit "${rc}"
 ##		- 20260706 JC: Created.
 ##		- 20260718 JC: --wayland pass (cage kiosk) alongside the X11 Xvfb pass.
 ##		- 20260918 JC: aptbar scene, --only.
+##		- 20261013 JC: clear scene.

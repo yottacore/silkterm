@@ -29,6 +29,12 @@ supposed to hold:
                     only when something changes. The output must be seen easing
                     before the swap, or there was nothing to stop and the check
                     tested nothing.
+  --mode instant  : screen clears on the normal screen, between an alt-screen trip
+                    that scrolls down a line at a time and one that scrolls down
+                    9 lines at once. A clear shows at
+                    once, so no normal-screen frame between them carries a
+                    fraction. Output must be seen easing before the first trip,
+                    or the check tested nothing.
   --mode popin    : content growing down into blank rows on a half-empty screen
                     (an input box taking a paste). That is room, not a scroll, so
                     a step down must never slide: app_off never goes below 0.
@@ -58,7 +64,7 @@ TRACE = re.compile(
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", required=True, choices=["slide", "hardcut", "still", "pinned", "popin"])
+    ap.add_argument("--mode", required=True, choices=["slide", "hardcut", "still", "pinned", "popin", "instant"])
     ap.add_argument("--expect-st", type=int, default=-1)
     ap.add_argument("--expect-sb", type=int, default=-1)
     ap.add_argument("--label", default="scene")
@@ -108,6 +114,26 @@ def main() -> int:
             out("FAIL", f"block held on only {held} of {len(easing)} easing frames")
             return 1
         out("PASS", f"block held still on {held} of {len(easing)} easing frames")
+        return 0
+
+    if a.mode == "instant":
+        start = next((i for i, f in enumerate(frames) if f["alt"] == 1 and f["sh"] < 0), None)
+        if start is None:
+            out("SKIP", "the opening alt-screen scroll never showed (GL warmup / timing?)")
+            return 2
+        end = next((i for i in range(start, len(frames)) if frames[i]["alt"] == 1 and frames[i]["sh"] <= -5), None)
+        if end is None:
+            out("SKIP", "the closing alt-screen scroll never showed (timing?)")
+            return 2
+        if not any(f["alt"] == 0 and f["frac"] > a.eps for f in frames[:start]):
+            out("FAIL", "no output eased before the clears, so nothing was tested")
+            return 1
+        moving = [f for f in frames[start:end] if f["alt"] == 0 and f["frac"] > a.eps]
+        if moving:
+            worst = max(f["frac"] for f in moving)
+            out("FAIL", f"a clear eased: {len(moving)} frame(s) carry a fraction (max {worst:.3f})")
+            return 1
+        out("PASS", "every clear showed at once")
         return 0
 
     if a.mode == "still":
