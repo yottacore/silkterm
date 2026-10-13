@@ -305,7 +305,11 @@ A setting the program can work out for itself is stored as a value set by hand o
 
 - A tip's box is its own color, derived from the chrome it hangs off rather than taken from it (2026-09-20). The shipped menu background is the inactive tab's own bytes, so a tab tip filled with it drew as a tab that had grown downward, and a menu row's tip had the same fault against the popup beside it. Both now fill with the menu background lifted by the step the strip puts between an inactive and an active tab, then warmed, since every tab color leans faintly blue. The border and the text come off the same two colors. The dialogs already did this with the button shade against their panel.
 	- Not two more colors on the Themes tab, which is what the request suggested. Twelve colors are editable and each has one job, and the chrome already answers this kind of question with derived shades - menu hover, border and separator are all shades of the menu color, so a custom menu color stays coherent. A tip that could be set apart from its own menu would be one more pair to keep readable.
-	- The benchmark banner draws in the same overlay pass and keeps the menu colors. It is a modal notice over a dimmed window, not flyover help.
+	- The benchmark banner draws with the tips, over the menus, and keeps the menu colors. It is a modal notice over a dimmed window, not flyover help.
+
+- A tip draws last, over everything else in its window, menus and an open dropdown list included (2026-10-13). It has a text renderer of its own, drawn after the menus' one, because a renderer draws all of its text in one go. A list that shared the tip's renderer put its text on top of the tip's box. An open dropdown or field menu also takes every click until it closes, so nothing behind it shows a tip.
+
+- A window without the focus shows no tips, and one that is up goes when the focus leaves (2026-10-13). When the focus comes back, tips wait for the pointer to move. A tip popping up under a pointer left resting on a control, the moment the window came back, would come out of nowhere.
 
 ### Render Loop Sketch
 

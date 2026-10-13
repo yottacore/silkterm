@@ -577,9 +577,10 @@ impl State {
 
 	/// Which tab the pointer is over, and since when. Anything the pointer is
 	/// already busy with - a drag, an open menu - owns it instead, so no tip
-	/// appears underneath one.
+	/// appears underneath one. Nor does one in a window without the focus.
 	pub(super) fn note_tab_hover(&mut self, x: f32, y: f32) {
-		let busy = self.bar_dragging.is_some()
+		let busy = !self.tip_focus.tips()
+			|| self.bar_dragging.is_some()
 			|| self.map_dragging.is_some()
 			|| self.dragging_pane.is_some()
 			|| self.tab_edit.is_some()

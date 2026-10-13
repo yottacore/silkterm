@@ -784,8 +784,11 @@ impl State {
 	/// The menu row a tip would describe: the innermost open popup that the
 	/// pointer is actually on (a parent keeps its highlight on the row its
 	/// submenu hangs off, so the deepest hovered one is the right answer), and
-	/// only when that row has something to say.
+	/// only when that row has something to say, in a window with the focus.
 	pub(super) fn menu_tip_target(&self) -> Option<(usize, usize)> {
+		if !self.tip_focus.tips() {
+			return None;
+		}
 		let root = self.menu.as_ref()?;
 		let (depth, menu, row) = root
 			.chain()

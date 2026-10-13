@@ -686,6 +686,8 @@ struct State {
 	// rather than by an event, so "has it changed" has to be asked against what
 	// was last drawn, not against what the timer said a moment ago.
 	menu_tip_up: Option<(usize, usize)>,
+	// no tips of any kind while the window is in the background
+	tip_focus: crate::tip::Focus,
 	// The tab last opened beside the active one, and that tab, each by a pane
 	// it held then. Closing the new one goes back (see `active_after_close`).
 	tab_opener: Option<(PaneId, PaneId)>,
@@ -2173,10 +2175,11 @@ impl State {
 			None
 		};
 
-		// A tip's box, in the same overlay pass as the menus so it sits over
-		// everything - including a pane's own text, which it sits on top of. The
-		// tab strip's and a menu row's are the same two quads; only what they say
-		// and where they sit differ.
+		// A tip's box, in a layer of its own after the menus, so it sits over
+		// everything - a pane's own text and an open menu's alike. A menu tip
+		// flips to the left of a submenu at the right edge, which puts it over
+		// the parent menu. The tab strip's and a menu row's are the same two
+		// quads; only what they say and where they sit differ.
 		let tip_layout = self.tab_tip_layout();
 		let menu_tip = self.menu_tip_layout();
 		let bench_banner = self.bench_layout();
@@ -2222,10 +2225,6 @@ impl State {
 				}
 				(start, instances.len() as u32)
 			});
-		let overlay_range = match (menu_range, tip_range) {
-			(Some((start, _)), Some((_, end))) | (Some((start, end)), None) => Some((start, end)),
-			(None, other) => other,
-		};
 
 		let margin = self.text.margin;
 		let menu_fg = GColor::rgb(menu_fg_rgb[0], menu_fg_rgb[1], menu_fg_rgb[2]);
@@ -2648,8 +2647,11 @@ impl State {
 				// prepared overlay from the last frame still matches
 			} else {
 				self.overlay_sig = Some(overlay_sig);
-				// (left, top, buffer) collected first so the borrow of self.text ends
+				// (left, top, buffer) collected first so the borrow of self.text ends.
+				// Tips and the banner go to a renderer of their own, drawn after the
+				// menus, so no menu text lands on a tip's box.
 				let mut specs: Vec<(f32, f32, Buffer)> = Vec::new();
+				let mut tip_specs: Vec<(f32, f32, Buffer)> = Vec::new();
 				let mut attrs = crate::text::ui_attrs();
 				attrs.color_opt = Some(menu_fg);
 				let tip_fg = config::tip_fg_of(menu_fg_rgb);
@@ -2670,7 +2672,7 @@ impl State {
 							None,
 						);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
-						specs.push((*left, *top, buf));
+						tip_specs.push((*left, *top, buf));
 					}
 				}
 				// a menu row's tip and the benchmark banner shape in the interface
@@ -2697,7 +2699,7 @@ impl State {
 							None,
 						);
 						buf.shape_until_scroll(&mut self.text.font_system, false);
-						specs.push((*left, *top, buf));
+						tip_specs.push((*left, *top, buf));
 					}
 				}
 				for menu in self.menu.iter().flat_map(ContextMenu::chain) {
@@ -2739,26 +2741,16 @@ impl State {
 					}
 				}
 				let (sw, sh) = (gpu.gfx.config.width as i32, gpu.gfx.config.height as i32);
-				let areas: Vec<TextArea> = specs
-					.iter()
-					.map(|(left, top, buf)| TextArea {
-						buffer: buf,
-						left: *left,
-						top: *top,
-						scale: 1.0,
-						bounds: TextBounds {
-							left: 0,
-							top: 0,
-							right: sw,
-							bottom: sh,
-						},
-						default_color: menu_fg,
-						custom_glyphs: &[],
-					})
-					.collect();
-				let _ = self
-					.text
-					.prepare_overlay(&gpu.gfx.device, &gpu.gfx.queue, areas);
+				if !specs.is_empty() {
+					let menus = spec_areas(&specs, (sw, sh), menu_fg);
+					let _ = self
+						.text
+						.prepare_overlay(&gpu.gfx.device, &gpu.gfx.queue, menus);
+				}
+				if !tip_specs.is_empty() {
+					let tips = spec_areas(&tip_specs, (sw, sh), menu_fg);
+					let _ = self.text.prepare_tip(&gpu.gfx.device, &gpu.gfx.queue, tips);
+				}
 			}
 		}
 
@@ -3076,8 +3068,10 @@ impl State {
 			gpu.rects.draw(&mut pass, ring_start..ring_end);
 		}
 
-		// second pass: context menu / menu-bar dropdown on top (preserves main pass)
-		if let Some((mstart, mend)) = overlay_range {
+		// second pass: context menu / menu-bar dropdown on top (preserves main
+		// pass), then any tip over that. Each layer's text draws before the next
+		// layer's rects, which keeps menu text off a tip's box.
+		if menu_range.is_some() || tip_range.is_some() {
 			let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				label: Some("overlay pass"),
 				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -3094,8 +3088,14 @@ impl State {
 				occlusion_query_set: None,
 				multiview_mask: None,
 			});
-			gpu.rects.draw(&mut pass, mstart..mend);
-			let _ = self.text.render_overlay(&mut pass);
+			if let Some((start, end)) = menu_range {
+				gpu.rects.draw(&mut pass, start..end);
+				let _ = self.text.render_overlay(&mut pass);
+			}
+			if let Some((start, end)) = tip_range {
+				gpu.rects.draw(&mut pass, start..end);
+				let _ = self.text.render_tip(&mut pass);
+			}
 		}
 
 		gpu.minimap.end_frame();
@@ -3262,6 +3262,31 @@ fn close_x_rgb() -> [u8; 3] {
 fn mix_rgb(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
 	let mix = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
 	[mix(a[0], b[0]), mix(a[1], b[1]), mix(a[2], b[2])]
+}
+
+// Shaped overlay text as glyphon wants it, clipped to the window.
+fn spec_areas(
+	specs: &[(f32, f32, Buffer)],
+	(right, bottom): (i32, i32),
+	default_color: GColor,
+) -> Vec<TextArea<'_>> {
+	specs
+		.iter()
+		.map(|(left, top, buffer)| TextArea {
+			buffer,
+			left: *left,
+			top: *top,
+			scale: 1.0,
+			bounds: TextBounds {
+				left: 0,
+				top: 0,
+				right,
+				bottom,
+			},
+			default_color,
+			custom_glyphs: &[],
+		})
+		.collect()
 }
 
 // Dim a chrome color toward the bar background when the window isn't focused;
@@ -3794,6 +3819,7 @@ impl ApplicationHandler<UserEvent> for App {
 			tab_hover: crate::tip::Dwell::default(),
 			menu_tip: crate::tip::Dwell::default(),
 			menu_tip_up: None,
+			tip_focus: crate::tip::Focus::default(),
 			tab_first: 0,
 			tab_layout: TabLayout::default(),
 			tab_labels: TabLabels::default(),
@@ -4106,6 +4132,10 @@ impl ApplicationHandler<UserEvent> for App {
 				if !focused {
 					state.commit_tab_edit(); // a rename does not outlive the window's focus
 				}
+				state.tip_focus = state.tip_focus.changed(focused);
+				// a tab tip up now goes; the menu's follows at the next update_tips
+				let (x, y) = state.mouse;
+				state.note_tab_hover(x, y);
 				// repaint: focus-dependent chrome (copybox dim) and the refocus
 				// poke that resumes a long-idle-parked cursor both live in render
 				state.dirty = true;
@@ -4147,7 +4177,12 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 
 			WindowEvent::CursorMoved { position, .. } => {
-				state.mouse = (position.x as f32, position.y as f32);
+				let from =
+					std::mem::replace(&mut state.mouse, (position.x as f32, position.y as f32));
+				// some platforms report the pointer where it was as focus changes
+				if from != state.mouse {
+					state.tip_focus = state.tip_focus.moved();
+				}
 				let (x, y) = state.mouse;
 				// The tab bar is chrome and sits above every pane, so its tip is
 				// tracked before anything that could claim the pointer - including a
