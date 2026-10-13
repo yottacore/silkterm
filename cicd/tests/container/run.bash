@@ -174,6 +174,10 @@ fCheck "the build number pinned here" bash -c '[[ "$1" == *" SILK_BUILD_MINUTES=
 fCheck "the engine inside gets the stage options and the host stages off" \
 	bash -c '[[ "$1" == *" $2/cicd/cicd.bash -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz" ]]' _ "${runLine}" "${repo}"
 fCheck "and nothing else of this box" test "$(grep -o ' -v ' <<<"${runLine}" | wc -l)" -eq 3
+## Names stamped inside, such as test folders and flamegraphs, sort with the ones
+## made here.
+(export TZ=Pacific/Chatham; fRun tz.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz)
+fCheck "this box's time zone goes in" grep -q -- ' -e TZ=Pacific/Chatham ' "${work}/tz.log"
 fCheck "the image was there, so nothing was built" fNot grep -q '^build ' "${work}/full.log"
 fCheck "the run here went on to the end" grep -q 'CI/CD: done' <<<"${out}"
 fCheck "with the container's stages marked done" grep -q 'OK: stages 1-6 in the container' <<<"${out}"
@@ -217,3 +221,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261010 JC: Created.
+##		- 20261013 JC: The time zone goes in.

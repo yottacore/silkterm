@@ -405,18 +405,24 @@ fContainerBuild(){
 ## still there afterward, and the X sockets inside never meet this box's. The
 ## container starts as root only long enough to give this uid a passwd entry, since
 ## the terminal looks its user up (a bare --user has none), and the X socket folder,
-## then drops to it. The run gets a session bus of its own, which xfwm4 needs.
+## then drops to it. The run gets a session bus of its own, which xfwm4 needs, and
+## this box's time zone, so a name stamped inside sorts with the ones made here.
 fContainerRun(){
 	local -r image="${1}"; shift
-	local gitCommon
-	local -a mounts=(-v "${root}:${root}" -v "${EXE_NAME}-cicd-cache:/cache" -v "${containerTarget}/tmp:/tmp")
+	local gitCommon zone="${TZ:-}"
+	local -a mounts=(-v "${root}:${root}" -v "${EXE_NAME}-cicd-cache:/cache" -v "${containerTarget}/tmp:/tmp") zoneArgs=()
+	if [[ -z "${zone}" ]]; then
+		zone="$(realpath -e /etc/localtime 2>/dev/null || true)"
+		if [[ "${zone}" == */zoneinfo/* ]]; then zone="${zone#*/zoneinfo/}"; else zone=""; fi
+	fi
+	if [[ -n "${zone}" ]]; then zoneArgs=(-e "TZ=${zone}"); fi
 	mkdir -p "${containerTarget}/tmp"
 	[[ "${containerTarget}" == "${root}/"* ]] || mounts+=(-v "${containerTarget}:${containerTarget}")
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
 	"${docker}" run --rm --init --shm-size 1g "${mounts[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" \
-		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime \
+		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime "${zoneArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
 			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
 			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:3}"' _ "$(id -u)" "$(id -g)" "${root}/cicd/cicd.bash" "${@}"
@@ -1313,6 +1319,7 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-13: The run in the container takes this box's time zone.
 ##		- 2026-10-10: --container runs stages 1-6 in a pinned image.
 ##		- 2026-10-08: A failed test script's output goes to the log, and stays in
 ##		              the test run folder.
