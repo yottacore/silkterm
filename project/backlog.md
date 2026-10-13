@@ -855,10 +855,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Changes in one SilkTerm apply to all running SilkTerms using the same config file, immediately
 	- ID: 2026100907341819
 	- Type: Feature
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs external testing: Windows on vm925w: two windows on one settings file, a change in Settings shows in the other at once; `--reload-settings` and `--wallpaper` from a shell inside a window; a window ended in Task Manager, then a save in the other. macOS on b26: the two-window check. Both are compiled and linted only.
 	- Priority: Avg
 	- Opened: 20261009-073418
 	- Opened by: JC
+	- Assigned to: CC
 	- Related IDs: 2026100418225510
 	- Target OS: All
 	- Requirements:
@@ -868,6 +870,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Before RC1.
 		- Monitoring the settings file may not be the best way to go about it. In single-process mode this will be a no-brainer. In multi-process, the better route may be IPC. (E.g. the same mechanism for moving tabs, etc.)
+	- Progress log:
+		- 20261013: Built. A save in one window, or Reload config, tells the other windows on the same settings file over each window's control socket, a named pipe on Windows. Windows on another file never hear. How it works is in design.md, "Settings across windows".
+		- 20261013: Verified: unit tests and a window test with 3 windows, 2 on one file. The save test fails with the lock taken out, and the window test fails with the telling taken out, or with every window picking a new wallpaper on each save.
+	- Decisions:
+		- 20261013: Local IPC, and hand edits are not picked up live (answered 20261009). Reload config in one window has the others read the file too, so one reload covers a hand edit.
+		- 20261013: A window size set in Settings resizes only the window it was set in. In the others it is the size new windows open at.
+		- 20261013: An open Settings dialog with nothing changed shows the other window's save at once. One with changes in hand keeps them, and shows the other save after Apply, which keeps both.
+		- 20261013: There is no per tab or per pane wallpaper today, only per window. A new folder has each window pick on its own.
+		- 20261013: Named pipes on Windows, not AF_UNIX. Nothing new linked, nothing left behind by a crash, and the control commands work on Windows now too.
+	- Swept: every write of the settings file goes through one writer, which counts it, and every read and write of the settings and state files holds the lock (the launch, Settings saves, menu switches, reverts, the rating, the machine test).
+	- Branch: livecfg
+	- Commit: 435f7fc, 853853f
+	- Test case: `cicd/tests/livecfg/run.bash` (EsaF4Qe); `saves_at_the_same_moment_keep_each_others_change`, `only_a_settings_write_is_news`, `a_reload_for_another_window_keeps_this_windows_own`, `an_open_dialog_follows_another_windows_save`, `only_a_new_folder_picks_a_new_picture`, `a_save_reaches_the_others_and_clears_the_dead`, `a_second_save_waits_for_the_first`, `one_file_is_one_key_however_it_is_named`, `a_marker_goes_with_its_window`, `a_save_on_another_file_is_not_heard`, `a_poke_reaches_a_listener_and_finds_the_dead`.
 
 - An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
 	- ID: 2026101304551668
