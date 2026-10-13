@@ -13,9 +13,10 @@
 	  A and B both pick from the new folder; C picks nothing.
 	- B ended without warning, the way Task Manager does it. The next save in
 	  A finds it gone and takes its marker away.
-	A locked session takes no keys, so there each save is a hand edit read
-	again in A, and the shots come from PrintWindow. That still sends every
-	notice over the pipes, which is the part only Windows has.
+	A locked session takes no keys and draws no frames, so there each save is
+	a hand edit read again in A, and what only the screen or a wallpaper pick
+	would show goes unchecked. Every notice still goes over the pipes, which
+	is the part only Windows has.
 .NOTES
 	History: At bottom of file.
 #>
@@ -138,6 +139,11 @@ function fReload {
 	$cli.HasExited -and $cli.ExitCode -eq 0
 }
 
+##	A check that needs frames drawn, or a note where none are.
+function fSeen([string]$What, [bool]$Ok) {
+	if ($typing) { [void](fCheck $what $ok) } else { fNote "not checked while locked: $what" }
+}
+
 ##	View > Minimap in a, or the same change by hand where nothing can be typed.
 function fSave([string]$Value) {
 	if ($typing) {
@@ -184,7 +190,6 @@ $shots0 = @{}
 foreach ($name in $names) { $shots0[$name] = fSettled $wins[$name] "${name}0" }
 [void](fCheck "all 3 settled" ($null -ne $shots0.a -and $null -ne $shots0.b -and $null -ne $shots0.c))
 $histShared = fHistory $shared; $histOther = fHistory $other
-fNote ("history files: " + ((Get-ChildItem $dir, $env:LOCALAPPDATA -Recurse -Force -Filter ".wallpaper-history" -ErrorAction SilentlyContinue | ForEach-Object FullName) -join ' '))
 
 fSave "true"
 [void](fCheck "the file has the minimap on" (fWaitMinimap $shared "true"))
@@ -194,11 +199,11 @@ $moved = @{}
 foreach ($name in $names) { $moved[$name] = fDiff $shots0[$name] $shots1[$name] }
 fNote "moved: a $($moved.a), b $($moved.b), c $($moved.c)"
 ##	a is the control: the minimap shows at all
-[void](fCheck "a shows it" ($moved.a -gt 0))
-[void](fCheck "b shows it" ($moved.b -gt 0))
-[void](fCheck "c does not" ($moved.c -eq 0))
+fSeen "a shows it" ($moved.a -gt 0)
+fSeen "b shows it" ($moved.b -gt 0)
+fSeen "c does not" ($moved.c -eq 0)
 [void](fCheck "c's file is untouched" (-not (fMinimap $other "true")))
-[void](fCheck "nobody picked a new wallpaper" ((fHistory $shared) -eq $histShared))
+fSeen "nobody picked a new wallpaper" ((fHistory $shared) -eq $histShared)
 
 ##	The new folder, read again in a
 $shots2 = @{}
@@ -211,10 +216,10 @@ foreach ($name in @("b", "c")) { $shots3[$name] = fSettled $wins[$name] "${name}
 $picks = @((fHistory $shared) -split "`r?`n" | Where-Object { $_ -match 'two\d+\.png' })
 fNote "picks from the new folder: $($picks.Count)"
 ##	each window picks on its own, and two picks can land on one name
-[void](fCheck "the new folder was picked from" ($picks.Count -ge 1))
-[void](fCheck "b shows a picture from it" ((fDiff $shots2.b $shots3.b) -gt 0))
-[void](fCheck "c does not" ((fDiff $shots2.c $shots3.c) -eq 0))
-[void](fCheck "c picked nothing" ((fHistory $other) -eq $histOther))
+fSeen "the new folder was picked from" ($picks.Count -ge 1)
+fSeen "b shows a picture from it" ((fDiff $shots2.b $shots3.b) -gt 0)
+fSeen "c does not" ((fDiff $shots2.c $shots3.c) -eq 0)
+fSeen "c picked nothing" ((fHistory $other) -eq $histOther)
 
 ##	b ended without warning
 $deadB = $procs.b.Id

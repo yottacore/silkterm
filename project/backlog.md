@@ -173,7 +173,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026100907341819
 	- Type: Feature
 	- Status: Waiting for testing
-	- Needs external testing: Windows on vm925w: two windows on one settings file, a change in Settings shows in the other at once; `--reload-settings` and `--wallpaper` from a shell inside a window; a window ended in Task Manager, then a save in the other. macOS on b26: the two-window check. Both are compiled and linted only.
+	- Needs external testing: Windows, on a desktop that isn't locked: two windows on one settings file, a change in Settings shows in the other at once (`cicd/tests/wingui/run.bash livecfg` checks it); `--wallpaper` from a shell inside a window. macOS on b26: the two-window check, compiled and linted only.
 	- Priority: Avg
 	- Opened: 20261009-073418
 	- Opened by: JC
@@ -192,6 +192,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261013: Verified: unit tests and a window test with 3 windows, 2 on one file. The save test fails with the lock taken out, and the window test fails with the telling taken out, or with every window picking a new wallpaper on each save.
 		- 20261013: `a_poke_reaches_a_listener_and_finds_the_dead` failed on b26, since a socket path under the Mac's test folder passed its 103-byte limit. The test now binds and pokes by bare name, from a child copy of the test binary started in the folder, the same on every Unix. Verified: it fails before and passes after on b26, and passes on Linux, also under a 120-character temp dir. A window's own socket is `$TMPDIR/silkterm-ctl-<pid>.sock`, 72 bytes on b26, and the peer folders hold plain files, which the limit does not cover. Branch macfix.
 		- 20261013: Moved to Waiting for testing. The named pipe code for Windows is compiled only, and vm925w was down. The Linux window test passes on dev at 07f3f6a.
+		- 20261013: On b29w, `--reload-settings` did the reload but exited 2. The window drops the pipe once its reply is read, and the command read on past the reply. It reads the one line now. Test Esc2EAG fails before the fix on b29w and passes after.
+		- 20261013: New Windows scenario `livecfg` (EsbxCqL), the Linux window test's checks. It passed on b29w with the console locked, which covers the markers, `--reload-settings`, and a window ended from outside being cleared by the next notice. A locked desktop draws nothing, so the screen and wallpaper checks still need it unlocked. The gate and the Linux window test pass. Branch winlive.
 	- Decisions:
 		- 20261013: Local IPC, and hand edits are not picked up live (answered 20261009). Reload config in one window has the others read the file too, so one reload covers a hand edit.
 		- 20261013: A window size set in Settings resizes only the window it was set in. In the others it is the size new windows open at.
