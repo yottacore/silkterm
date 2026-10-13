@@ -70,6 +70,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: the unit suite, clippy, fmt and the test ID check. Each new test failed against a mutant: Esa43ID with the switch read off the color lines, Esa43cc with a theme pick that turns the switch on, both with the picture's colors used while the switch is off, and Esa59zb before the fix.
 	- Not checked: a real window.
 	- Branch: wallcolors
+	- Commit: 8bce254
 	- Test case: `a_file_with_the_wallpaper_colors_off_keeps_the_theme_s` (Esa43ID), `a_theme_pick_leaves_the_wallpaper_colors_switch_alone` (Esa43cc), `a_saved_theme_never_takes_the_wallpaper_s_text_colors` (Esa59zb). Already there: EqRxesl, EqRxesm, EqRxese, EsFc30N.
 
 - Move local CICD steps into a local container, and on the other boxes too?
