@@ -5354,7 +5354,8 @@ impl ApplicationHandler<UserEvent> for App {
 					cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
 				}
 			}
-			// a minimap compose the throttle deferred: due now, or wake for it
+			// a minimap compose the throttle deferred, or the column's hold
+			// running out: due now, or wake for it
 			if let Some(wake) = pane.map_wake() {
 				if wake_now >= wake {
 					state.dirty = true;

@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use alacritty_terminal::grid::{Dimensions, Grid};
 use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::term::TermMode;
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
@@ -104,14 +105,69 @@ pub struct Geom {
 	pub handle: Option<Rect>,
 }
 
-/// Should this pane show the column at all? A full-screen program draws on the
-/// alt screen, which has no scroll buffer behind it, so the map would be a
-/// rectangle at the top and the room is better spent on text. Some programs do
-/// their own scrolling in a way the map can still follow, and the setting names
-/// those. A program with nothing to compare against (Windows cannot always say
-/// what is running) is treated as not listed.
-pub fn wanted(cfg: &config::Settings, alt_screen: bool, program: Option<&str>) -> bool {
-	if !alt_screen {
+/// Is the program in the pane drawing its own screen, rather than printing
+/// lines? The alt screen says so outright. A program that redraws in place on
+/// the main screen says it by asking for mouse reports or focus changes, which
+/// a shell turns off before it runs a command. Some shells ask for focus
+/// changes at their own prompt, so on the main screen it counts only while a
+/// command runs.
+pub fn draws_own_screen(mode: TermMode, running: bool) -> bool {
+	mode.contains(TermMode::ALT_SCREEN)
+		|| running && mode.intersects(TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT)
+}
+
+// How long a program that drew its own screen keeps the column away once it
+// stops saying so. muffer turns focus reports off and on again as it starts,
+// and every change of mind is a resize it has to redraw for.
+const HOLD: Duration = Duration::from_secs(1);
+
+/// Holds `draws_own_screen` over a short lapse by the same program. A new
+/// program, or none, starts it over at once, so the column is back as soon as
+/// the shell is.
+#[derive(Debug, Default)]
+pub struct Hold {
+	program: Option<String>,
+	seen: Option<Instant>,
+	lapsing: bool,
+}
+
+impl Hold {
+	/// Does the program still draw its own screen, as far as the column goes?
+	/// `own` is what it asks for right now.
+	pub fn update(&mut self, own: bool, program: Option<&str>, now: Instant) -> bool {
+		if self.program.as_deref() != program {
+			self.program = program.map(str::to_owned);
+			self.seen = None;
+		}
+		if own {
+			self.seen = Some(now);
+			self.lapsing = false;
+			return true;
+		}
+		let held = self.seen.is_some_and(|seen| now < seen + HOLD);
+		if !held {
+			self.seen = None;
+		}
+		self.lapsing = held;
+		held
+	}
+
+	/// When a lapse runs out, so the column comes back with nothing else
+	/// drawing. None while the program still says so, or the column is back.
+	pub fn wake(&self) -> Option<Instant> {
+		self.seen.filter(|_| self.lapsing).map(|seen| seen + HOLD)
+	}
+}
+
+/// Should this pane show the column at all? A program that draws its own
+/// screen (`draws_own_screen`) keeps the map to a rectangle at the top on the
+/// alt screen, or a picture of its own redraws on the main one, and the room is
+/// better spent on text. Some programs do their own scrolling in a way the map
+/// can still follow, and the setting names those. A program with nothing to
+/// compare against (Windows cannot always say what is running) is treated as
+/// not listed.
+pub fn wanted(cfg: &config::Settings, own_screen: bool, program: Option<&str>) -> bool {
+	if !own_screen {
 		return true;
 	}
 	let Some(program) = program else {
@@ -1842,6 +1898,74 @@ mod tests {
 		assert!(wanted(&s, true, Some("/usr/bin/less")));
 		s.minimap_tui_whitelist = r"C:	ools\less.exe".to_string();
 		assert!(wanted(&s, true, Some("less")));
+	}
+
+	// Test ID: EscYyBa
+	#[test]
+	fn a_program_redrawing_the_main_screen_takes_the_column_too() {
+		let mut s = cfg(true, 100.0);
+		s.minimap_tui_whitelist = "less tmux screen".to_string();
+		let after = |bytes: &[u8]| {
+			let (mut term, mut parser) = fresh_term(80, 24, 1000);
+			parser.advance(&mut term, bytes);
+			*term.mode()
+		};
+		// a chat program's default view: no alt screen, focus reports on, and a
+		// block at the bottom redrawn in place
+		let chat = after(
+			b"\x1b[?2004h\x1b[?2031h\x1b[?1004h> hello\r\n  status\x1b[1A\r\x1b[2K> hello there",
+		);
+		assert!(!chat.contains(TermMode::ALT_SCREEN));
+		assert!(!wanted(&s, draws_own_screen(chat, true), Some("node")));
+		assert!(wanted(&s, draws_own_screen(chat, true), Some("less")));
+		// the same modes with nothing running are the shell's own; fish asks for
+		// focus changes at its prompt
+		assert!(wanted(&s, draws_own_screen(chat, false), None));
+		// it gets the column back on the way out
+		let gone = after(b"\x1b[?1004h\x1b[?2004h\x1b[?1004l\x1b[?2004l");
+		assert!(wanted(&s, draws_own_screen(gone, true), Some("node")));
+		// an inline picker with the mouse on
+		let picker = after(b"\x1b[?7l\x1b[?25l\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[?2004h");
+		assert!(!wanted(&s, draws_own_screen(picker, true), Some("fzf")));
+		// a REPL, a nested shell or a build: lines, so the column stays
+		let repl = after(b"\x1b[?2004h\x1b[?1h\x1b[?25l\x1b[?12l\x1b[?25h>>> ");
+		assert!(wanted(&s, draws_own_screen(repl, true), Some("python3")));
+		let build = after(b"\x1b[?25l   Compiling foo\r\x1b[K   Building [=> ] 1/9\x1b[?25h");
+		assert!(wanted(&s, draws_own_screen(build, true), Some("cargo")));
+		// the alt screen counts whether or not a program can be named
+		let pager = after(b"\x1b[?1049h");
+		assert!(!wanted(&s, draws_own_screen(pager, false), None));
+		assert!(wanted(&s, draws_own_screen(pager, true), Some("less")));
+	}
+
+	// Test ID: Esca2GW
+	#[test]
+	fn a_program_that_toggles_as_it_starts_moves_the_column_once() {
+		let t0 = Instant::now();
+		let at = |ms: u64| t0 + Duration::from_millis(ms);
+		let mut hold = Hold::default();
+		assert!(!hold.update(false, None, at(0)), "the shell at its prompt");
+		assert!(hold.update(true, Some("node"), at(10)));
+		// focus reports off and on again while it starts
+		assert!(hold.update(false, Some("node"), at(130)), "a lapse is held");
+		assert_eq!(
+			hold.wake(),
+			Some(at(10) + HOLD),
+			"and wakes when it runs out"
+		);
+		assert!(hold.update(true, Some("node"), at(240)));
+		assert_eq!(hold.wake(), None, "nothing to wake for while it says so");
+		// quiet for good, still running
+		assert!(hold.update(false, Some("node"), at(900)));
+		assert!(!hold.update(false, Some("node"), at(240) + HOLD));
+		assert_eq!(hold.wake(), None);
+		// back at the prompt is at once, lapse or not
+		assert!(hold.update(true, Some("node"), at(3000)));
+		assert!(!hold.update(false, None, at(3010)));
+		// and so is another program
+		assert!(hold.update(true, Some("node"), at(4000)));
+		assert!(!hold.update(false, Some("cargo"), at(4010)));
+		assert_eq!(hold.wake(), None);
 	}
 
 	// Test ID: EoXOeuW
