@@ -872,7 +872,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A test that measures Settings text before its first text context can measure in the wrong font
 	- ID: 2026100909162017
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261009-091620
 	- Opened by: CC
@@ -882,6 +882,17 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: each test measures in the face the layout was built from.
 	- Reproduced: 20261009, by a probe run alone: "2026-10-09" measured 88.7 px that way, against 75.3 in the desktop's face. The two tests were not run alone to see whether they pass for the wrong reason.
 	- Possible cause: `ui_attrs()` reads the family a text context pins, and these tests call it once, ahead of the loop.
+	- Reproduced: 20261013, each test run alone, here with GentiumAlt as the desktop font. Both passed. The slider test measured right only because the context's width memo, keyed by text alone, already held each number from the layout. The focus ring test measured the pair and radio labels ("Face", "Outline", "Scrim", "Stretch", "Zoom") in the fallback face at every size. The fallback is wider here, so it passed on a stricter number; a box with a narrower fallback could pass it wrongly. The probe string measured 222 px in the fallback against 191 in GentiumAlt.
+	- Actual cause: The UI and terminal families, and their weights, are set only when a text context is built. Before the first one, `ui_attrs()`, `ui_bold_weight()`, `mono_attrs()` and `mono_bold_weight()` answer with the generic family and default weights. The app always builds a context before it draws or measures, so only tests hit it.
+	- Actual fix: The first of those four asked for before any context sets the families itself, from a font system of its own, the same way a context does. After that they read what the last context set, as before. Fixed in the one place, so the two tests and any later one get the right face whatever order they read in.
+	- Swept: every caller of the four functions. Tests that read them before a context: Es9oaEN and EsA3cyd (the two named), Er2VGXH (`mono_attrs`, checks weights, measures nothing). Tests that read them after one: EsDinMD, EsDinME, Er2UJeZ, ErlkwsK, Er2VGXJ. The text.rs tests that build their own font system set the family first. Every app caller is handed a text context, and `TextCtx::new_cpu` is the only place the app makes a font system. Nothing outside the code calls them.
+	- Note: The fallback is still used where nothing resolves at all, as before. b26 names no desktop monospace font; the terminal family then comes from the built-in stack the same way for both paths. Not run there.
+	- Verified: 20261013, the new test fails with the fix taken out (the early attrs carry the generic family) and passes with it. Es9oaEN, EsA3cyd and the new test pass run alone. The merge gate (fmt, clippy, all 1272 unit tests), clippy for the Windows target, and the test ID check pass.
+	- Branch: uifontmeasure
+	- Commit: 140985b
+	- Test case: `attrs_read_before_the_first_context_match_the_context` (Esa77JI), which runs `attrs_before_context_child` (Esa77dv) in a fresh copy of the test binary so no other test has set the families first.
+	- Acceptance signoff: Self-closed: reproduced, the test fails before the fix and passes after, and only tests change behavior.
+	- Closed: 20261013-050551
 
 - An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
 	- ID: 2026101304551668
