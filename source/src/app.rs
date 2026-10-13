@@ -236,6 +236,19 @@ fn fold_shells(found: &[crate::shells::Found]) {
 	});
 }
 
+// Where a settings change came from, which decides how much of the window
+// follows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Applied {
+	// Settings in this window, or something it worked out itself
+	Here,
+	// the file read again, or a picture named: the picture is read again too,
+	// since the file may have changed under the same name (#167)
+	Reread,
+	// another window saved (`follow_peer`)
+	Peer,
+}
+
 // The live settings with `edit` made, for this session only.
 fn set_live(edit: impl FnOnce(&mut config::Settings)) {
 	let mut new = (*config::settings()).clone();
@@ -749,6 +762,10 @@ struct State {
 	wp_current: Option<PathBuf>, // image showing now, so order mode advances from it
 	wp_next: Option<Instant>, // when to rotate next (None = no timer / startup-only)
 	wp_locked: bool, // a command-line wallpaper owns this session; don't rotate
+	// Settings file writes the other windows on it have heard of (`config::saves`),
+	// and a reread they should follow too.
+	saves_told: u64,
+	reread_untold: bool,
 	// The window options the command line gave at launch, folded in again after a
 	// reload so a reread file does not drop them.
 	cli_style: crate::cli::Style,
@@ -1460,6 +1477,39 @@ impl State {
 		// Force the background image to re-read even when its path is unchanged:
 		// the user may have swapped the file contents under the same name (#167).
 		self.apply_new_settings(&orig, edited, true);
+		// a hand edit read in one window is read in all of them
+		self.reread_untold = true;
+	}
+
+	/// Tell the other windows on this settings file when this one wrote it or
+	/// read it again since they last heard.
+	pub(super) fn tell_peers_if_due(&mut self) {
+		let saves = config::saves();
+		if saves == self.saves_told && !self.reread_untold {
+			return;
+		}
+		self.saves_told = saves;
+		self.reread_untold = false;
+		crate::peers::tell_others();
+	}
+
+	/// Another window on this settings file saved it: take what it says now, as
+	/// a reload does, but leave what is this window's own. Its size, what the
+	/// state file holds, and a picture rotation chose all stay, unless the save
+	/// moved the picture or its folder.
+	pub(super) fn follow_peer(&mut self) {
+		self.tell_peers_if_due();
+		let live = config::settings().as_ref().clone();
+		let mut fresh = settings_after_reload(
+			&live,
+			config::reload_from_disk(),
+			&self.cli_style,
+			self.wp_locked,
+		);
+		config::keep_window_state(&live, &mut fresh);
+		self.apply_as(&live, fresh, Applied::Peer);
+		// what the reread itself wrote, a launch step catching up, is not news
+		self.saves_told = config::saves();
 	}
 
 	// Font zoom (hotkeys / View menu): step the zoom offset and rebuild the
@@ -1531,10 +1581,20 @@ impl State {
 		edited: config::Settings,
 		force_bg: bool,
 	) {
+		let how = if force_bg {
+			Applied::Reread
+		} else {
+			Applied::Here
+		};
+		self.apply_as(orig, edited, how);
+	}
+
+	fn apply_as(&mut self, orig: &config::Settings, edited: config::Settings, how: Applied) {
 		// a size set by hand, or Remember last size turned back on; a size that
-		// only follows the window is the size it already has
+		// only follows the window is the size it already has. Another window's
+		// save sets the size new windows open at, and leaves this one be.
 		let size_of = |s: &config::Settings| (!s.remember_size).then_some((s.columns, s.rows));
-		let resize = size_of(&edited) != size_of(orig);
+		let resize = how != Applied::Peer && size_of(&edited) != size_of(orig);
 		// copy_on_select changed -> apply to every existing pane too, so the
 		// dialog toggle takes effect now, not only for panes spawned later
 		if edited.copy_on_select != orig.copy_on_select {
@@ -1555,7 +1615,7 @@ impl State {
 		config::update(edited);
 		let after = config::settings();
 		let rebuild = crate::settings_ui::needs_text_rebuild(&before, &after);
-		let bg = force_bg || crate::settings_ui::wallpaper_changed(&before, &after);
+		let bg = how == Applied::Reread || crate::settings_ui::wallpaper_changed(&before, &after);
 		let blur_changed = after.transparent_background_blur != before.transparent_background_blur;
 		if crate::profile::current(&after) != crate::profile::current(&before) {
 			self.rating.reset();
@@ -1581,10 +1641,7 @@ impl State {
 			self.relayout_all();
 		}
 		if bg {
-			// Turning the wallpaper or its rotation back on: the folder has to be
-			// re-read, since the pick and its timer went with it on the way off.
-			let resumed = after.rotation_folder().is_some() && before.rotation_folder().is_none();
-			self.request_wallpaper(resumed);
+			self.request_wallpaper(!self.wp_locked && rotation::picks_again(&before, &after));
 		}
 		self.dirty = true;
 	}
@@ -3854,6 +3911,8 @@ impl ApplicationHandler<UserEvent> for App {
 			wp_current: None,
 			wp_next: None,
 			wp_locked: false,
+			saves_told: config::saves(),
+			reread_untold: false,
 			cli_style: self.cli.win.style.clone(),
 			wp_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
 			wp_pacing: crate::wallpaper::Pacing::default(),
@@ -3976,6 +4035,13 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 			UserEvent::SetWallpaper(image) => state.lock_wallpaper(image),
 			UserEvent::ReloadSettings => state.reload_config(),
+			UserEvent::PeerSaved => {
+				state.follow_peer();
+				if let Some(dialog) = self.dialog.as_mut() {
+					dialog.follow_file(state.settings_for_dialog());
+					self.dialog_dirty = true;
+				}
+			}
 			// a pick from the macOS menu bar, run as the in-window menu runs one
 			UserEvent::Menu(action) => {
 				// with a dialog or notice up this only brings it forward, as a
@@ -5049,6 +5115,10 @@ impl ApplicationHandler<UserEvent> for App {
 		if self.state.as_ref().is_some_and(|state| state.quit) {
 			event_loop.exit();
 			return;
+		}
+		// one telling for however many writes this pass made
+		if let Some(state) = self.state.as_mut() {
+			state.tell_peers_if_due();
 		}
 		#[cfg(target_os = "macos")]
 		if let Some(state) = self.state.as_ref() {

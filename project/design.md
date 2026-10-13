@@ -44,6 +44,7 @@
 	- [Startup and slow external resources](#startup-and-slow-external-resources)
 	- [Releasing resources](#releasing-resources)
 	- [Configuration format](#configuration-format)
+	- [Settings across windows (2026-10-13)](#settings-across-windows-2026-10-13)
 	- [Variables in a setting (2026-08-30)](#variables-in-a-setting-2026-08-30)
 	- [Command-line options](#command-line-options)
 - [Delivery (CI/CD, branches, releases)](#delivery-cicd-branches-releases)
@@ -442,6 +443,31 @@ What a window costs while in use is planned in [Reducing resources](design_docs/
 	- Wayland tells a window neither where it is nor that it moved. It looks once just after it opens, on a scale change, and when the pointer comes back after a drag.
 
 - A number given on the command line is held to the range of the setting it stands for, the same range the file's copy of that setting is held to. A count of rows or columns is also held to what the graphics device can draw, since the window is a texture and a refusal there ends the launch rather than the setting.
+
+### Settings across windows (2026-10-13)
+
+- Every window is its own process with its own copy of the settings. A save in one window shows in every other window on the same settings file at once. A window on another file, such as one started with `--config` for a test, never hears of it.
+
+- The file itself is not watched, so a hand edit shows nowhere until Reload config. Reload config in one window tells the other windows on that file to read it too.
+
+- Finding each other. A settings file gets a key, a hash of its real path, lowercased on Windows. The windows on one file meet in a folder named `silkterm-<key>` in the runtime folder (`XDG_RUNTIME_DIR`, else the temp folder). Each leaves an empty file there named by its pid. A window that writes the settings file tells every other pid in the folder, through the endpoint it already listens on for `--reload-settings`.
+	- The message names the key, and a window on another key ignores it. A recycled pid can sit behind an old marker until that is cleared.
+	- A window that crashed leaves its marker. The next save that finds nothing listening behind one deletes it.
+	- With one window open this costs a folder read per save, and nothing at all otherwise.
+	- On a shared `/tmp` the folder has to be this user's own, and private, or the window saves and listens alone.
+
+- The endpoint is a Unix socket on Linux and macOS, and a named pipe on Windows.
+	- Why a pipe and not AF_UNIX on Windows: both come with the system and need nothing linked beyond the `windows-sys` bindings already in use, but a pipe has no file to leave behind. It goes with its process, so a pipe that is not there always means a window that is gone. One instance is always waiting, made before the last one is served, so the name never vanishes between two clients.
+	- That also makes `--reload-settings` and `--wallpaper` work on Windows, which they did not before.
+
+- What a window does when it hears. It reads the file the way Reload config does, keeping what belongs to the session (the command line, Remote, a display step), and then keeps what is its own:
+	- Its size. A size set in Settings is the size new windows open at. The window it was set in takes it; the others stay as they are.
+	- What the state file holds: remembered sizes, zoom, monitor sizes, the machine test. These follow one window or one machine and are not settings.
+	- The picture rotation chose. A change to another wallpaper setting redraws the same picture. Naming one picture shows that picture in every window. A new folder has each window pick from it on its own, at random when random is on. The window it was changed in picks again too, which it did not before.
+
+- Two windows saving at the same moment. A save only ever writes what it changed, over the file as it is at that moment, never over what the window loaded, which is how the shell list was already saved. Every read and write of the settings or state file holds a lock file in the meeting folder (`std::fs::File::lock`), so two saves cannot interleave. A save waits up to 2 seconds for the lock and then goes ahead without it, rather than freeze the window behind one stopped in a debugger.
+
+- An open Settings dialog. With nothing changed in it, it shows the other window's save at once. With changes in hand it keeps them, and the other window's value shows after Apply: the Apply writes only its own changes, then reads the file back, so the window and the dialog both end up with both.
 
 ### Variables in a setting (2026-08-30)
 

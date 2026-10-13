@@ -30,12 +30,11 @@ pub enum UserEvent {
 	// terminal bell (BEL): drives a brief visual flash (text brightens, fades back)
 	Bell,
 	// control socket (ctl.rs): change the background image live (None = clear).
-	// ctl is Unix-only, so these are never constructed on non-unix.
-	#[cfg_attr(not(unix), allow(dead_code))]
 	SetWallpaper(Option<std::path::PathBuf>),
 	// control socket: re-read config.shcl and apply it (same as Menu > Reload)
-	#[cfg_attr(not(unix), allow(dead_code))]
 	ReloadSettings,
+	// control socket: another window on the same settings file saved it
+	PeerSaved,
 	// wallpaper worker (wallpaper.rs): decoded pixels, ready to upload. Boxed -
 	// it carries a whole image, and every other variant is small.
 	WallpaperReady(Box<crate::wallpaper::Loaded>),

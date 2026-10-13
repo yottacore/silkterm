@@ -1012,6 +1012,8 @@ thread_local! {
 pub struct SettingsDialog {
 	orig: Settings,
 	edited: Settings,
+	// another window saved while this one held changes (`follow_file`)
+	behind: bool,
 	#[cfg(test)]
 	defaults: Settings, // the shipped values, for the tests' own checks
 	reverted: Vec<&'static str>, // config keys reverted this session -> comment out on Apply
@@ -1386,6 +1388,7 @@ impl SettingsDialog {
 		let mut dialog = Self {
 			orig: settings.clone(),
 			edited: settings,
+			behind: false,
 			#[cfg(test)]
 			defaults: Settings::default(),
 			reverted: Vec::new(),
@@ -2104,6 +2107,33 @@ impl SettingsDialog {
 		fields::fill(&mut settings, self.monitor.as_deref());
 		self.orig = settings.clone();
 		self.edited = settings;
+	}
+	/// Another window saved the settings file. With nothing changed here the
+	/// dialog shows the file as it is now. With changes in hand it keeps them,
+	/// and the Apply that writes them reads the file back (`take_behind`), so
+	/// neither window's change is lost.
+	pub fn follow_file(&mut self, mut base: Settings) {
+		if self.holds_changes() {
+			self.behind = true;
+			return;
+		}
+		config::keep_window_state(&self.orig, &mut base);
+		self.start_from(base);
+	}
+	// Anything begun counts, a value half typed or a color half picked included.
+	fn holds_changes(&self) -> bool {
+		self.orig != self.edited
+			|| !self.reverted.is_empty()
+			|| self.edit.is_some()
+			|| self.pick.is_some()
+			|| self.prompt.is_some()
+			|| self.capture.is_some()
+			|| self.drag.is_some()
+			|| self.shell_drag.is_some()
+	}
+	/// Whether another window saved while this one held changes, cleared.
+	pub fn take_behind(&mut self) -> bool {
+		std::mem::take(&mut self.behind)
 	}
 	/// Whether the desktop says when a window is minimized or covered.
 	pub fn set_sees_hidden(&mut self, sees: bool) {
@@ -11007,6 +11037,70 @@ mod tests {
 		let back = config::reload_from_disk();
 		assert_eq!(back.margin, other.margin);
 		assert_eq!(crate::fields::grid(&back, None).0, columns);
+
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
+	// Another window saves while Settings is open here. With nothing changed
+	// here the dialog shows the save; with a change in hand it keeps it, and
+	// the Apply's save keeps both.
+	// Test ID: EsaCcC9
+	#[test]
+	fn an_open_dialog_follows_another_windows_save() {
+		let _guard = config::test_config_lock();
+		let _ = config::settings();
+		let dir = crate::testdir::run_dir().join(format!("silkterm_follow_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		let loaded = config::reload_from_disk();
+		let save_margin = |by: f32| {
+			let disk = config::reload_from_disk();
+			let mut other = disk.clone();
+			let margin = knobs::Value::Float(f64::from(loaded.margin + by));
+			crate::fields::set(&mut other, Key::Margin, &margin, None);
+			assert!(config::persist(&disk, &other));
+		};
+
+		let mut d = mk_dialog(4000.0);
+		d.start_from(config::reload_from_disk());
+		d.edited.remembered_columns = 123;
+		d.orig.remembered_columns = 123;
+		save_margin(5.0);
+		d.follow_file(config::reload_from_disk());
+		assert_eq!(d.edited.margin, loaded.margin + 5.0, "shows the save");
+		assert_eq!(d.orig, d.edited, "and has nothing changed");
+		assert_eq!(d.edited.remembered_columns, 123, "this window's own size");
+		assert!(!d.take_behind());
+
+		let columns = crate::fields::grid(&loaded, None).0 + 7;
+		d.set_f32(Key::Columns, columns as f32);
+		save_margin(9.0);
+		d.follow_file(config::reload_from_disk());
+		assert_eq!(
+			crate::fields::grid(&d.edited, None).0,
+			columns,
+			"the edit stays"
+		);
+		assert_eq!(d.edited.margin, loaded.margin + 5.0, "not under the edit");
+		assert!(config::persist(&d.orig, &d.edited));
+		assert!(d.take_behind(), "the Apply reads the file back");
+		d.commit_baseline();
+		d.follow_file(config::reload_from_disk());
+		assert_eq!(
+			d.edited.margin,
+			loaded.margin + 9.0,
+			"the dialog shows both"
+		);
+		assert_eq!(crate::fields::grid(&d.edited, None).0, columns);
+		let back = config::reload_from_disk();
+		assert_eq!(back.margin, loaded.margin + 9.0, "the other window's save");
+		assert_eq!(
+			crate::fields::grid(&back, None).0,
+			columns,
+			"and this one's"
+		);
 
 		let _ = std::fs::remove_dir_all(&dir);
 	}

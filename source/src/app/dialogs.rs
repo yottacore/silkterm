@@ -476,8 +476,15 @@ impl App {
 			// The applied values are the new baseline, so a later Apply diffs against
 			// the live state (without this, re-selecting the open-time value - e.g.
 			// Bg fit back to Stretch - reads as "no change" and isn't re-applied).
+			// When another window saved while these changes were in hand, the file
+			// now holds both, and both the window and the dialog take it from there.
 			if let Some(d) = self.dialog.as_mut() {
+				let behind = wrote && d.take_behind();
 				d.commit_baseline();
+				if let Some(state) = self.state.as_mut().filter(|_| behind) {
+					state.follow_peer();
+					d.follow_file(state.settings_for_dialog());
+				}
 			}
 			self.dialog_dirty = true;
 		}

@@ -22,6 +22,13 @@ fn needs_folder_read(
 	!locked && showing.is_none() && folder.is_some()
 }
 
+/// Whether a settings change picks a new picture from the folder: rotation
+/// turned back on, since the pick and its timer went with it on the way off,
+/// or another folder. The same folder keeps what it showed.
+pub(super) fn picks_again(before: &config::Settings, after: &config::Settings) -> bool {
+	after.rotation_folder().is_some() && after.rotation_folder() != before.rotation_folder()
+}
+
 /// Whether rotation has anywhere to go: not held by a command-line wallpaper,
 /// and the last scan found more than the one image showing.
 pub(super) fn rotation_live(locked: bool, count: usize, folder: bool) -> bool {
@@ -235,8 +242,30 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-	use super::{needs_folder_read, rotation_next};
+	use super::{needs_folder_read, picks_again, rotation_next};
 	use std::time::Instant;
+
+	// Another folder picks again; the same folder, or a setting beside it, keeps
+	// the picture on screen. Rotation turned back on picks too.
+	// Test ID: EsaCcCA
+	#[test]
+	fn only_a_new_folder_picks_a_new_picture() {
+		let at = |folder: &str| crate::config::Settings {
+			wallpaper_enabled: true,
+			wallpaper_rotate_enabled: true,
+			wallpaper_folder: Some(std::path::PathBuf::from(folder)),
+			..Default::default()
+		};
+		let a = at("/w/a");
+		let mut dimmer = a.clone();
+		dimmer.wallpaper_opacity /= 2.0;
+		assert!(!picks_again(&a, &dimmer));
+		assert!(picks_again(&a, &at("/w/b")));
+		let mut off = a.clone();
+		off.wallpaper_rotate_enabled = false;
+		assert!(picks_again(&off, &a));
+		assert!(!picks_again(&a, &off), "nothing to pick from");
+	}
 	// Switching the wallpaper off and on again drops the rotation pick, and a
 	// request that does not re-read the folder then answers with nothing at all:
 	// the folder suppresses the built-in, and there is no pick to fall back on.
