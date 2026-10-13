@@ -971,7 +971,7 @@ pub struct TextItem {
 	pub color: [u8; 3],
 	pub clip: Option<Rect>, // when set, clip drawing to this rect (e.g. a field)
 	pub bold: bool,
-	pub italic: bool, // an automatic value, the way a placeholder reads
+	pub italic: bool, // unused since an automatic value lost its italic (2026100913394950)
 	pub scale: f32,   // 1.0 normal; >1 for the prominent dialog title
 }
 
@@ -8015,6 +8015,83 @@ mod tests {
 		assert!(!d.row_is_default(d.specs.iter().position(|s| s.key == Key::FontSize).unwrap()));
 	}
 
+	// The Use system font pair is a row with both halves live, and the value it
+	// makes automatic draws in its box exactly as the same value set by hand: no
+	// mark, no italic, no other color (2026100913394948, 2026100913394950).
+	// Test ID: EsZk4Qs
+	#[test]
+	fn the_font_switches_are_there_and_an_automatic_value_draws_like_any_other() {
+		let mut m = chars7;
+		let mut d = mk_dialog(4000.0);
+		let pair = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::SystemFont)
+			.unwrap();
+		assert_eq!(d.specs[pair].label, "Use system font");
+		assert!(matches!(
+			d.specs[pair].kind,
+			Kind::Dual {
+				keys: [Key::SystemFont, Key::SystemFontSize],
+				..
+			}
+		));
+		d.tab = d.specs[pair].tab;
+		for (part, key) in [(0, Key::SystemFont), (1, Key::SystemFontSize)] {
+			assert!(d.get_toggle(key), "{key:?} ships on");
+			assert!(!d.part_disabled(pair, part), "{key:?} grays");
+			let b = d.dual_box(pair, part);
+			d.mouse_down_dip(b.x + b.w / 2.0, b.y + b.h / 2.0, &mut m);
+			assert!(!d.get_toggle(key), "{key:?} took no click");
+			d.mouse_down_dip(b.x + b.w / 2.0, b.y + b.h / 2.0, &mut m);
+			assert!(d.get_toggle(key), "{key:?} took no second click");
+		}
+		// everything drawn inside a value's box
+		let inside = |r: &super::Rect, x: f32, y: f32| {
+			x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h
+		};
+		let drawn = |d: &SettingsDialog, r: super::Rect| {
+			let texts: Vec<String> = d
+				.texts_dip(d.line_h, chars7)
+				.into_iter()
+				.filter(|t| inside(&r, t.x, t.y + d.line_h / 2.0))
+				.map(|t| format!("{} {:?} {} {}", t.text, t.color, t.italic, t.bold))
+				.collect();
+			let (_, rows) = d.rects_dip(d.line_h, chars7);
+			let rects: Vec<String> = rows
+				.into_iter()
+				.filter(|q| inside(&r, q.pos[0] + q.size[0] / 2.0, q.pos[1] + q.size[1] / 2.0))
+				.map(|q| format!("{q:?}"))
+				.collect();
+			(texts, rects)
+		};
+		let at = |d: &SettingsDialog, key: Key| d.specs.iter().position(|s| s.key == key).unwrap();
+		let fam = at(&d, Key::FontFamily);
+		let shown = d.get_text(Key::FontFamily);
+		let auto = drawn(&d, d.textbox(fam));
+		assert_eq!(auto.0.len(), 1, "only the value in the box: {:?}", auto.0);
+		assert!(auto.0[0].starts_with(&format!("{shown} {:?} false", super::dlg().text)));
+		d.set_text(Key::FontFamily, &shown);
+		assert!(!d.get_toggle(Key::SystemFont));
+		assert_eq!(
+			drawn(&d, d.textbox(fam)),
+			auto,
+			"set by hand draws the same"
+		);
+
+		let size = at(&d, Key::FontSize);
+		let shown = d.get_f32(Key::FontSize);
+		let auto = drawn(&d, d.valbox(size));
+		assert_eq!(auto.0.len(), 1, "only the value in the box: {:?}", auto.0);
+		d.set_f32(Key::FontSize, shown);
+		assert!(!d.get_toggle(Key::SystemFontSize));
+		assert_eq!(
+			drawn(&d, d.valbox(size)),
+			auto,
+			"set by hand draws the same"
+		);
+	}
+
 	// "Remember last size" is stored like any other switch, with its own revert
 	// arrow. A size typed in turns it off, and the other keeps what it showed.
 	// Test ID: EsDxpmL
@@ -9251,10 +9328,9 @@ mod tests {
 		assert!(d.edited.software_rendering);
 	}
 
-	// Commented out by 2026100907341818: the Use system font switches are gone.
-	// Family and Size are automatic settings whose automatic value is the
-	// desktop's font, so nothing is grayed for a desktop that names none.
-	// `the_font_rows_show_the_desktops_font_until_set_by_hand` replaces it.
+	// Commented out by 2026100907341818: nothing grays for a desktop that names
+	// no font. The switch stays live, and Family uses its own value (the
+	// automatic settings design). EsDxpmK replaces it.
 	//
 	// // The "use system font" face toggle is inert wherever the OS reports no
 	// // monospace family - always on Windows, and on a desktop with none set. That
@@ -10745,8 +10821,8 @@ mod tests {
 		d
 	}
 
-	// Commented out by 2026100907341818: the Use system font pair row is gone,
-	// and with it the one pair whose halves the desktop grayed apart.
+	// Commented out by 2026100907341818: the desktop no longer grays either
+	// half of the Use system font pair, so no pair has one half grayed.
 	//
 	// // A pair row's key is only its FIRST part, so gating the whole row on that
 	// // key took the click away from a live second part. Windows always reports a
@@ -11028,9 +11104,8 @@ mod tests {
 		let (mut d, i, _) = mk_long_text_edit('y');
 		let want = d.edit.as_ref().unwrap().buf.clone();
 		d.edit = None;
-		// The x that puts an automatic setting back sits at the box's right end
-		// since File or folder became one (2026100910295903), so the click
-		// lands just short of it.
+		// just inside the box's right end, which held an x for an automatic
+		// value until 2026100913394950
 		let f = d.textbox(i);
 		click(
 			&mut d,

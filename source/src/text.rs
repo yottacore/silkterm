@@ -307,9 +307,9 @@ fn resolve_ui_family(fs: &FontSystem) -> Option<String> {
 }
 
 // The family search order, in full, whether or not any of it is installed. Same
-// on every platform: `font.family` first, which is the desktop's monospace
-// while it is automatic, then the desktop's monospace if the family named
-// none of it, and the built-in stack always last. A platform only shows
+// on every platform: `font.family` first, which leads with the desktop's
+// monospace while it is automatic, then the desktop's monospace if the family
+// named none of it, and the built-in stack always last. A platform only shows
 // through in what it reports - Windows has no monospace setting, so it passes
 // None and automatic gives the built-in stack there, with no special case for
 // it. Kept pure so the order can be tested without a font db.
@@ -1240,8 +1240,8 @@ mod tests {
 		assert_eq!(advance_cells(0.0, 0.0), 1);
 	}
 
-	// The family is one list on every platform: `font.family` first, which is
-	// the desktop's monospace while automatic, then the desktop's monospace,
+	// The family is one list on every platform: `font.family` first, which leads
+	// with the desktop's monospace while automatic, then the desktop's monospace,
 	// then the built-in stack, each name once.
 	// Test ID: EsDsIof
 	#[test]
@@ -1266,10 +1266,10 @@ mod tests {
 		assert_eq!(mono_candidates(None, " , ,"), builtin);
 	}
 
-	// Commented out by 2026100907341818: "Use system font" is gone, and the
-	// family is an automatic setting whose automatic value is the desktop's
-	// font. There is no follow switch left to put the desktop's font ahead of a
-	// stack set by hand. The test above replaces it.
+	// Commented out by 2026100907341818. "Use system font" is back, but on it
+	// makes the family itself the desktop's font ahead of the shipped list,
+	// with a list set by hand set aside, so there is no order left to pick.
+	// The test above and EsZk4LL replace it.
 	// // The search order is one list on every platform. `use_system_font` only
 	// // decides where the OS family sits in it - it must never drop the configured
 	// // stack, which is what made Linux and Windows resolve the same config

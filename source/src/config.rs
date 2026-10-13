@@ -241,6 +241,19 @@ const FALLBACK_FONT_SIZE: f32 = 17.0;
 /// arbitrary (often proportional) fallback.
 pub const DEFAULT_FONT_STACK: &str = "Monaspace Argon, Fira Code, JetBrains Mono, Cascadia Mono, Consolas, Ubuntu Mono, SF Mono, Menlo, Courier New";
 
+/// The family list while it follows the desktop: the desktop's font, then the
+/// shipped stack, each name once. The desktop's name alone was what turning
+/// the switch off kept (2026100913394946).
+pub fn desktop_font_stack(desktop: &str) -> String {
+	let mut seen = std::collections::HashSet::new();
+	std::iter::once(desktop)
+		.chain(DEFAULT_FONT_STACK.split(','))
+		.map(str::trim)
+		.filter(|name| !name.is_empty() && seen.insert(name.to_lowercase()))
+		.collect::<Vec<_>>()
+		.join(", ")
+}
+
 // Stacks that shipped as the font_family default in an earlier version. Backfill
 // only ever adds a missing key, so a config written back then still carries its
 // stack forever; migration rewrites one to the current default. Matched whole
@@ -763,7 +776,7 @@ fn window_memory_from(text: &str, path: &std::path::Path, settings: &mut Setting
 /// result; anything less would miss whichever field a bad `## Default` moved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
-	pub use_system_font: bool, // follow the desktop's monospace family (font_family is then its)
+	pub use_system_font: bool, // follow the desktop's monospace family (font_family then leads with it)
 	pub use_system_font_size: bool, // and its size
 	pub font_family: String,   // comma-separated fallback stack (first installed wins)
 	pub font_size: f32,
@@ -10921,8 +10934,8 @@ mod tests {
 		assert_eq!(
 			s.font_family,
 			os.family
-				.clone()
-				.unwrap_or_else(|| DEFAULT_FONT_STACK.to_string())
+				.as_deref()
+				.map_or_else(|| DEFAULT_FONT_STACK.to_string(), desktop_font_stack)
 		);
 		s.remembered_columns = 133;
 		s.remembered_rows = 41;
@@ -10963,6 +10976,52 @@ mod tests {
 			(100, 41),
 			"and back it comes"
 		);
+	}
+
+	// Following the desktop shows its font ahead of the whole shipped list, and
+	// turning the switch off keeps and saves that list. It kept the desktop's
+	// one name, which on a desktop set to Monaspace Argon read as the list cut
+	// to its first font (2026100913394946).
+	// Test ID: EsZk42X
+	#[test]
+	fn the_family_keeps_the_whole_list_when_the_switch_goes_off() {
+		let mut s = Settings::default();
+		assert!(s.use_system_font);
+		let shown = s.font_family.clone();
+		for name in DEFAULT_FONT_STACK.split(',') {
+			assert!(shown.contains(name.trim()), "{name} is not in {shown:?}");
+		}
+		change(&mut s, Key::SystemFont, Value::Bool(false));
+		assert!(!s.use_system_font);
+		assert_eq!(s.font_family, shown, "off keeps what it showed");
+		let lines = crate::fields::lines_of(&s);
+		assert!(
+			lines
+				.iter()
+				.any(|(p, v)| p == "font.family" && v.as_text() == shown),
+			"{lines:?}"
+		);
+	}
+
+	// Test ID: EsZk4LL
+	#[test]
+	fn the_desktop_s_font_leads_the_shipped_list() {
+		assert_eq!(desktop_font_stack("Monaspace Argon"), DEFAULT_FONT_STACK);
+		assert_eq!(
+			desktop_font_stack(" DejaVu Sans Mono "),
+			format!("DejaVu Sans Mono, {DEFAULT_FONT_STACK}")
+		);
+		// one already in the list moves to the front and is not named twice
+		let fira = desktop_font_stack("fira code");
+		assert!(
+			fira.starts_with("fira code, Monaspace Argon, JetBrains Mono"),
+			"{fira}"
+		);
+		assert_eq!(
+			fira.split(", ").count(),
+			DEFAULT_FONT_STACK.split(", ").count()
+		);
+		assert_eq!(desktop_font_stack(""), DEFAULT_FONT_STACK);
 	}
 
 	// The theme's colors come from the theme in force, in the mode in force. A

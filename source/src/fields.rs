@@ -527,7 +527,10 @@ impl knobs::Env for Env<'_> {
 	fn rule(&self, name: &str) -> Option<Value> {
 		let s = self.settings;
 		match name {
-			"system_font_family" => crate::sysfont::monospace().family.clone().map(Value::Text),
+			"system_font_family" => crate::sysfont::monospace()
+				.family
+				.as_deref()
+				.map(|desktop| Value::Text(config::desktop_font_stack(desktop))),
 			"system_font_size" => crate::sysfont::monospace()
 				.size_pt
 				.map(crate::sysfont::px_from_pt)
