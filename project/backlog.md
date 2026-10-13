@@ -833,6 +833,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: tests that set a tab by its number (now by its title), tests that measured rows from the panel edge (now from where the rows start), the top-strip tests (now run with the tabs put across the top), the template order test, the UI style guide, design.md, the Settings dialog design doc, the glossary's Gutter entry, and every tip and doc that says "the X tab". Those still read right, since every tab kept its name.
 	- Test case: `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv), failed on the old spec and passes now. `the_template_blocks_follow_the_dialog` (Er2UFeO) has the new order.
 	- Branch: tabsleft
+	- Commit: e5b2b87
 
 - Add or change a "Copyright and license" section in the design docs
 	- ID: 2026101009221091
