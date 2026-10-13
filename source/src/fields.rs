@@ -731,6 +731,20 @@ pub fn font_changed(settings: &Settings) -> Vec<Key> {
 		.collect()
 }
 
+/// What a setting under a switch would show with the switch off: a preset's
+/// value, a change to it, or its own. None for one with no switch.
+pub fn without_switch(settings: &Settings, key: Key) -> Option<Value> {
+	field(key)?;
+	let switch = ui().rel(key).auto?;
+	// a what-if, so the stored values stay as they are
+	let mut model = settings.model.clone();
+	model
+		.values
+		.own
+		.insert(switch.name().to_string(), Value::Bool(false));
+	Some(model.value(key.name(), &Env::new(settings, None)))
+}
+
 pub fn can_reset(settings: &Settings, key: Key, monitor: Option<&str>) -> bool {
 	field(key).is_some()
 		&& settings
