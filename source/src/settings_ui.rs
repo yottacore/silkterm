@@ -1663,6 +1663,18 @@ impl SettingsDialog {
 		let s = self.scale;
 		self.animate_dip(dt, &mut |t| measure(t) / s)
 	}
+	/// Open the first dropdown on the tab in view, for a test that needs a popup
+	/// up. False when the tab has none.
+	#[cfg(test)]
+	pub fn open_a_dropdown(&mut self) -> bool {
+		let Some(i) = (0..self.specs.len()).find(|&i| {
+			self.specs[i].tab == self.tab && matches!(self.specs[i].kind, Kind::Dropdown(_))
+		}) else {
+			return false;
+		};
+		self.dd_open(i);
+		!self.dd_options(i).is_empty()
+	}
 	pub fn hover_tip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
 		#[cfg(test)]
 		HOVER_TIPS.with(|n| n.set(n.get() + 1));
@@ -3268,8 +3280,10 @@ impl SettingsDialog {
 	// The flyover to show while the cursor rests on something that has one:
 	// (text, anchor rect to hang the tip box under).
 	fn hover_tip_dip(&self, mx: f32, my: f32) -> Option<(Cow<'static, str>, Rect)> {
-		if self.modal() {
-			return None; // the box covers the panel; nothing behind it answers
+		// A box covers the panel, or a popup owns the pointer until it closes, so
+		// nothing behind either answers.
+		if self.overlay_open() {
+			return None;
 		}
 		for (action, r, _) in self.buttons() {
 			if r.contains(mx, my) {
@@ -11512,6 +11526,59 @@ mod tests {
 		}
 		let (c, a, o) = (help.cancel, help.apply, help.ok);
 		assert!(c != a && a != o && c != o, "two buttons share a tip");
+	}
+
+	// An open dropdown or field menu owns the pointer: a click anywhere only
+	// closes it. So the rows it lies over don't answer with their tips from
+	// under it, and neither does anything else while it's up (2026100913394952).
+	// Test ID: EsZp4L4
+	#[test]
+	fn an_open_popup_hides_every_tip_behind_it() {
+		let mut d = mk_dialog(4000.0);
+		let mut probed = 0;
+		for tab in 0..tab_titles().len() {
+			d.tab = tab;
+			let drops: Vec<usize> = (0..d.specs.len())
+				.filter(|&i| d.specs[i].tab == tab && matches!(d.specs[i].kind, Kind::Dropdown(_)))
+				.collect();
+			for i in drops {
+				d.dd_open(i);
+				let n = d.dd_options(i).len();
+				let mut points: Vec<(f32, f32)> = (0..n)
+					.map(|choice| {
+						let r = d.dd_item_rect(i, n, choice);
+						(r.x + r.w / 2.0, r.y + r.h / 2.0)
+					})
+					.collect();
+				let bx = d.dd_box(i);
+				points.push((bx.x + 2.0, bx.y + bx.h / 2.0));
+				points.push((d.label_x(i) + 2.0, bx.y + bx.h / 2.0));
+				for (x, y) in points {
+					assert!(
+						d.hover_tip_dip(x, y).is_none(),
+						"{:?}'s open list shows a tip at ({x}, {y})",
+						d.specs[i].key
+					);
+					probed += 1;
+				}
+				d.open = None;
+			}
+		}
+		assert!(probed > 10, "only {probed} points probed");
+		// the field menu is the other popup
+		let (mut d, i) = mk_text_edit("hello world");
+		let mut m = |s: &str| s.chars().count() as f32;
+		let field = d.textbox(i);
+		let y = field.y + field.h / 2.0;
+		assert!(
+			d.hover_tip_dip(field.x + 2.0, y).is_some(),
+			"the field has no tip"
+		);
+		d.mouse_right(field.x + lay().field_pad + 3.0, y, true, &mut m);
+		assert!(d.emenu.is_some());
+		let item = d.em_item_rect(0);
+		assert!(d.hover_tip_dip(item.x + 2.0, item.y + 2.0).is_none());
+		assert!(d.hover_tip_dip(field.x + 2.0, y).is_none());
 	}
 
 	// A sub-group needs no heading above it: an unindented control followed by

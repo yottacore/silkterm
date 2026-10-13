@@ -452,6 +452,9 @@ struct TextGpu {
 	renderer: TextRenderer,
 	// separate renderer for the context-menu overlay (second pass, on top)
 	overlay: TextRenderer,
+	// and one for flyover tips, drawn last of all, so no menu or list text can
+	// land on a tip's box
+	tip: TextRenderer,
 	// separate renderer for the scrim source pass: pane text only (no chrome), and
 	// panes may substitute a de-bolded buffer (text_scrim_regular_weight)
 	scrim: TextRenderer,
@@ -492,6 +495,7 @@ impl TextGpu {
 			TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
 		let overlay =
 			TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
+		let tip = TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
 		let scrim = TextRenderer::new(
 			&mut scrim_atlas,
 			device,
@@ -505,6 +509,7 @@ impl TextGpu {
 			viewport_size: (0, 0),
 			renderer,
 			overlay,
+			tip,
 			scrim,
 		}
 	}
@@ -982,6 +987,35 @@ impl TextCtx {
 	) -> Result<(), glyphon::RenderError> {
 		let gpu = attached_ref(self.gpu.as_ref());
 		gpu.overlay.render(&gpu.atlas, &gpu.viewport, pass)
+	}
+
+	pub fn prepare_tip(
+		&mut self,
+		device: &wgpu::Device,
+		queue: &wgpu::Queue,
+		areas: Vec<TextArea<'_>>,
+	) -> Result<(), glyphon::PrepareError> {
+		let Self {
+			gpu,
+			font_system,
+			swash_cache,
+			..
+		} = self;
+		let gpu = attached(gpu);
+		gpu.tip.prepare(
+			device,
+			queue,
+			font_system,
+			&mut gpu.atlas,
+			&gpu.viewport,
+			areas,
+			swash_cache,
+		)
+	}
+
+	pub fn render_tip(&self, pass: &mut wgpu::RenderPass<'_>) -> Result<(), glyphon::RenderError> {
+		let gpu = attached_ref(self.gpu.as_ref());
+		gpu.tip.render(&gpu.atlas, &gpu.viewport, pass)
 	}
 
 	pub fn prepare_scrim(

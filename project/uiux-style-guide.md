@@ -221,6 +221,10 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 
 - A tip never has an action, a link, or anything the pointer has to reach.
 
+- A tip sits on top of everything else in its window, an open list or menu included. While a dropdown or a field menu is open, nothing behind it shows a tip.
+
+- A window without the focus shows no tips, and a tip already up goes away. When the focus comes back, tips wait for the pointer to move.
+
 ## Layout and measurement
 
 - Every measurement is in DIP, a CSS pixel at 1/96 inch, multiplied by the display's scale factor on its way to the screen. Nothing is scaled twice.
