@@ -112,8 +112,8 @@ impl Key {
 	}
 }
 
-// FNV-1a. Stable across builds, which std's hasher does not promise; the whole
-// key is checked on read, so a collision costs a miss and nothing more.
+/// FNV-1a. Stable across builds, which std's hasher does not promise; the whole
+/// key is checked on read, so a collision costs a miss and nothing more.
 pub(crate) fn fnv(bytes: &[u8]) -> u64 {
 	bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| {
 		(hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)

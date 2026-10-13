@@ -161,7 +161,7 @@ mod pipe {
 		PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 	};
 
-	// `first` refuses a name some other process already serves.
+	/// `first` refuses a name some other process already serves.
 	pub(super) fn make(wide: &[u16], first: bool) -> Option<OwnedHandle> {
 		let open = PIPE_ACCESS_DUPLEX
 			| if first {
@@ -188,7 +188,7 @@ mod pipe {
 		(handle != INVALID_HANDLE_VALUE).then(|| unsafe { OwnedHandle::from_raw_handle(handle) })
 	}
 
-	// A client that came and went before the wait is still a client.
+	/// A client that came and went before the wait is still a client.
 	pub(super) fn wait_for_client(pipe: &OwnedHandle) -> bool {
 		// SAFETY: a live pipe handle, and no overlapped I/O.
 		unsafe {

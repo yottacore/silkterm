@@ -479,12 +479,11 @@ impl App {
 			// When another window saved while these changes were in hand, the file
 			// now holds both, and both the window and the dialog take it from there.
 			if let Some(d) = self.dialog.as_mut() {
-				match self.state.as_mut() {
-					Some(state) if wrote && d.take_behind() => {
-						state.follow_peer();
-						d.start_from(state.settings_for_dialog());
-					}
-					_ => d.commit_baseline(),
+				let behind = wrote && d.take_behind();
+				d.commit_baseline();
+				if let Some(state) = self.state.as_mut().filter(|_| behind) {
+					state.follow_peer();
+					d.follow_file(state.settings_for_dialog());
 				}
 			}
 			self.dialog_dirty = true;

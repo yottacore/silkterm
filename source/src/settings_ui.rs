@@ -11086,6 +11086,14 @@ mod tests {
 		assert_eq!(d.edited.margin, loaded.margin + 5.0, "not under the edit");
 		assert!(config::persist(&d.orig, &d.edited));
 		assert!(d.take_behind(), "the Apply reads the file back");
+		d.commit_baseline();
+		d.follow_file(config::reload_from_disk());
+		assert_eq!(
+			d.edited.margin,
+			loaded.margin + 9.0,
+			"the dialog shows both"
+		);
+		assert_eq!(crate::fields::grid(&d.edited, None).0, columns);
 		let back = config::reload_from_disk();
 		assert_eq!(back.margin, loaded.margin + 9.0, "the other window's save");
 		assert_eq!(

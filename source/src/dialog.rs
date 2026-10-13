@@ -426,13 +426,6 @@ impl DialogWin {
 		}
 	}
 
-	/// Show these values with nothing changed, as at open.
-	pub fn start_from(&mut self, base: config::Settings) {
-		if let Content::Settings(dialog) = &mut self.content {
-			dialog.start_from(base);
-		}
-	}
-
 	/// A background shell scan arrived while this dialog was open. Fold it into the
 	/// settings BOTH copies hold: the edited one so the user sees what turned up,
 	/// and the baseline so the fold does not read as an edit they made.
