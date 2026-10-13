@@ -34,6 +34,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Smooth scroll freaked out with a long flatpak update
+	- ID: 2026101310563284
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: High
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: Linux
+	- Test environment: b23, flatpak 1.16.6
+	- Steps to reproduce:
+		- Run a long `flatpak update`.
+	- Incorrect behavior: Smooth scroll freaked out.
+	- Expected behavior: Smooth scroll stays steady through the whole update.
+	- Notes:
+		- Pre-next-cut.
+		- Regression, I thought we had this fixed.
+		- The old-format Done item "Severe bug: `flatpak update` output bounces wildly" fixed it before, closed 20260728.
+	- Reproduced: 20261013 on b23, with a real `flatpak update` of 60 small apps. Every redraw of the update table eased about a screenful, both before and after the scrollback was full.
+	- Actual cause:
+		- Once flatpak's table is taller than the screen, each redraw goes to the top row, clears, and prints the whole table again. The rows that don't fit are printed with no line breaks between them, so they wrap into about a screenful that scrolls up into history. The screen ends up looking the same, but SilkTerm eased through the whole screenful on every redraw.
+		- Before 20260903, at a full scrollback the advance was read off the screen rows, and those showed nothing moving. The tmux scrolling change (c5374c3) switched that to the engine's own count of lines pushed into history, which counts flatpak's. That's the regression. Before the scrollback fills it eased on every redraw back then too.
+	- Actual fix [Bug]: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint does not ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out, so `clear` eases as before.
+	- Verified: 20261013 on b23, a real `flatpak update` of 60 apps. The frames that eased during the update went from 55 to 8 with the scrollback not full, and from 50 to 12 with it full. What is left is the first table and its first redraw. The same output fed straight into the terminal eased the first table and 1 of its 242 redraws, against all of them before. The gate and the 11 scroll scenes pass.
+	- Progress log:
+		- 20261013: Waiting on signoff for a look at a real update with downloads in a real window. Still eases once: the first redraw, when the table gets its progress column.
+	- Branch: fpaksnap
+	- Commit: 544b01b
+	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
+	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -337,36 +367,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
-
-- Smooth scroll freaked out with a long flatpak update
-	- ID: 2026101310563284
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: High
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Target OS: Linux
-	- Test environment: b23, flatpak 1.16.6
-	- Steps to reproduce:
-		- Run a long `flatpak update`.
-	- Incorrect behavior: Smooth scroll freaked out.
-	- Expected behavior: Smooth scroll stays steady through the whole update.
-	- Notes:
-		- Pre-next-cut.
-		- Regression, I thought we had this fixed.
-		- The old-format Done item "Severe bug: `flatpak update` output bounces wildly" fixed it before, closed 20260728.
-	- Reproduced: 20261013 on b23, with a real `flatpak update` of 60 small apps. Every redraw of the update table eased about a screenful, both before and after the scrollback was full.
-	- Actual cause:
-		- Once flatpak's table is taller than the screen, each redraw goes to the top row, clears, and prints the whole table again. The rows that don't fit are printed with no line breaks between them, so they wrap into about a screenful that scrolls up into history. The screen ends up looking the same, but SilkTerm eased through the whole screenful on every redraw.
-		- Before 20260903, at a full scrollback the advance was read off the screen rows, and those showed nothing moving. The tmux scrolling change (c5374c3) switched that to the engine's own count of lines pushed into history, which counts flatpak's. That's the regression. Before the scrollback fills it eased on every redraw back then too.
-	- Actual fix [Bug]: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint does not ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out, so `clear` eases as before.
-	- Verified: 20261013 on b23, a real `flatpak update` of 60 apps. The frames that eased during the update went from 55 to 8 with the scrollback not full, and from 50 to 12 with it full. What is left is the first table and its first redraw. The same output fed straight into the terminal eased the first table and 1 of its 242 redraws, against all of them before. The gate and the 11 scroll scenes pass.
-	- Progress log:
-		- 20261013: Waiting on signoff for a look at a real update with downloads in a real window. Still eases once: the first redraw, when the table gets its progress column.
-	- Branch: fpaksnap
-	- Commit: 544b01b
-	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
-	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
 
 - `clear` shouldn't scroll, it should instantly clear
 	- ID: 2026101310563297
