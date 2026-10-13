@@ -34,143 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
-	- ID: 2026100910295901
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
-	- Needs external testing: A look at Save as on the Themes tab with a wallpaper up.
-	- Priority: Avg
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Foreground and Cursor are automatic settings whose automatic value is the wallpaper's colors, and "Text colors from wallpaper" is their group's switch, read off them.
-			- 20261013: The switch is a stored setting rather than read off them. The third version of the automatic settings design dropped switches read off their settings.
-	- Notes:
-		- Before RC1.
-		- They still gray out while the switch is on. The style guide lists it under known deviations.
-			- 20261013: No longer true. Nothing grays for a switch since the knobs model (36ef959), and the known deviations no longer list it.
-	- Progress log:
-		- 20261009: Q: A theme pick puts every color back to the theme's, which would make these two automatic and so turn the switch back on. Should a theme pick do that, or leave these two as they are?
-			- A: No.
-		- 20261009: Q: With no wallpaper up, is automatic the theme's color?
-			- A: Yes.
-		- 20261009: Q: An old file with the switch off and no color line used the theme's colors. Keeping that means storing the theme's colors by hand. Is that wanted?
-			- A: If this is about one of my existing config files rather than a general programming question, then no.
-			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
-				- A: No. Keep theme colors: a file with the switch off and no color lines gets the theme's Foreground and Cursor written in on first load, so nothing changes on screen for those people.
-		- 20261013: The knobs model (36ef959) already does what the item asks. Foreground and Cursor show the wallpaper's colors while the switch is on and a picture is up, and the theme's otherwise. Nothing grays, a color changed by hand turns the switch off, and a theme pick leaves the switch where it was.
-			- No color lines are written for the answer above. The switch is stored now, so a file with it off keeps it off and shows the theme's colors with no write. The question dates from when the switch was going to be read off the colors.
-			- Writing the theme's 2 colors in would make them Custom's colors, so picking Custom later would show the old theme's text colors. If the write is still wanted, it goes in the one-time theme color move at the first launch (`move_theme_colors`).
-			- Fixed on the way: Save and Save as stored the picture's text colors in the theme while the switch was on. A saved theme takes the colors under them now, the theme's with any change made by hand. The wallpaper design doc said the derived pair never reaches a saved theme, and the knobs model had lost that.
-			- Found on the way: an old file with colors over a built-in theme and no machine test lines shows the theme's colors after the update. Filed as 2026101304551668.
-		- 20261013: Not self-closed. The 20261009 answer asked for the theme's 2 colors to be written into a file with the switch off. Nothing is written, though the screen stays the same, as the entry above explains. That needs JC's OK.
-	- Swept: every reader of the 2 colors that stores them: the config save, Save and Save as on a theme, and the picker, which sets a color by hand. Every row with an `auto:` switch in `settings_ui.shcl`; only these 2 are palette colors.
-	- Verified: the unit suite, clippy, fmt and the test ID check. Each new test failed against a mutant: Esa43ID with the switch read off the color lines, Esa43cc with a theme pick that turns the switch on, both with the picture's colors used while the switch is off, and Esa59zb before the fix.
-	- Not checked: a real window.
-	- Branch: wallcolors
-	- Commit: 8bce254
-	- Test case: `a_file_with_the_wallpaper_colors_off_keeps_the_theme_s` (Esa43ID), `a_theme_pick_leaves_the_wallpaper_colors_switch_alone` (Esa43cc), `a_saved_theme_never_takes_the_wallpaper_s_text_colors` (Esa59zb). Already there: EqRxesl, EqRxesm, EqRxese, EsFc30N.
-
-- Settings that depend on a master boolean switch follow the automatic settings design
-	- ID: 2026100907341818
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
-	- Needs external testing: Windows: the Text and Window tabs, an old config with "Use system font" on, and a window opening at its last size. Windows names no monospace font, so there the family list stays set by hand when it is not the shipped one.
-	- Priority: Avg
-	- Opened: 20261009-073418
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100907341817, 2026100812334385, 2026100114435600, 2026100907341819
-	- Target OS: All
-	- Requirements:
-		- Update all Settings dialog code and logic to follow [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md).
-	- Notes:
-		- Before RC1.
-	- Inventory: every Settings row with a master switch, a preset or an automatic value.
-		- Automatic settings, where the design applies:
-			- Family, under "Use system font: Face". Automatic is the desktop's monospace font, else the shipped list. Moved here.
-			- Size, under "Use system font: Size". Automatic is the desktop's monospace size. Moved here.
-			- Columns and Rows, under "Remember last size". Automatic is the last size, this monitor's own where one is kept. The switch is their group's. Moved here.
-			- Foreground and Cursor, under "Text colors from wallpaper". Automatic is the wallpaper's colors. Split out with questions, 2026100910295901.
-			- Profile, under "Choose automatically", and the 16 rows a profile sets. Profile is a presets group over those rows, and automatic is the rated profile. Split out with questions, 2026100910295902.
-			- The ten theme colors, whose automatic value is the theme's. Open command, whose empty value is the desktop's opener. File or folder, whose empty value is the usual folder or the built-in picture. Split out, 2026100910295903.
-			- Theme mode, whose "System" entry follows the desktop. Split out with a question, 2026100910295904.
-		- Rows that only count while a switch is on, which stay live and indented:
-			- Choose automatically: Check for hardware change, Re-test next run.
-			- Text scrim: Strength %, Scrim radius px, Softness %, Function and falloff, and Visibility: Scrim on the Cursor tab.
-			- Outline px above zero: Visibility: Outline on the Cursor tab.
-			- Smooth scrolling: the five feel sliders.
-			- Wallpaper: File or folder, Fit, Honor layout tags, Rotate folder, Visibility %, Blur px, Contrast mask.
-			- Contrast mask: Size %, Strength %, Automask mix %.
-			- Transparency: Opacity %, Blur-behind.
-			- Blink: Rate s, Animation, Inactivity timer s. Already live since 2026100907341817.
-			- Remember last size: Per monitor.
-			- Free resources when idle: Minutes when hidden, Minutes otherwise.
-			- Scrollbar: Width px, Hide when idle.
-			- Minimap: Width px.
-			- Hyperlinks Enabled: Open command.
-		- Neither: Honor layout tags and Honor look tags replace Fit and the two sliders for a tagged picture only, so those rows still count for the rest. Minutes when hidden still grays on Wayland, which is the machine and not a setting.
-	- Decisions:
-		- 20261009: The style guide's "Members gray out when it is off" is now "Members stay live and indented", per the design's last non-goal. Every gate of that kind is gone, and the Blink entry left the known deviations.
-		- 20261009: "Use system font" is gone. Family and Size each carry the automatic mark, since a switch over one setting is pointless.
-		- 20261009: "Remember last size" stores nothing. It reads on while Columns and Rows are both automatic, off while both are set by hand, and shows a dash in between. It has no revert arrow; each member has its own.
-		- 20261009: A launch takes `font.use_system_family`, `font.use_system_size` and `window.remember_size` out of the file. A value one of them overrode is commented out, and one still in use stays. "Remember last size" off with no size line writes 160 by 48, the old default. A file with no switch line is left alone.
-		- 20261009: Whether the desktop names a font decided whether the old font switch overrode the family list, so the launch that takes the switch out asks.
-		- 20261009: An automatic box shows its value in a lighter italic with an "A" mark at its right end. Set by hand, the mark is an x that puts it back, and emptying the box does the same.
-		- 20261009: Typing in an automatic box sets it by hand, even to the value it showed. Opening it without typing leaves it automatic.
-		- 20261009: The presets dropdown and the list and on or off controls wait for the items that need them. Nothing moved here uses them.
-	- Progress log:
-		- 20261009: Built the table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check. Moved Family, Size, Columns and Rows.
-		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It does not mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line has nothing to attach to yet, since the program has no accessibility layer. "Dosn't" in its Tests section. Its line on hand edits while running waits on 2026100907341819.
-		- 20261009: Not signed off. Follow-ups filed: 2026100913394946, 2026100913394948, 2026100913394950.
-		- 20261013: Not self-closed. The knobs model replaced most of what this asked for, and JC plans to rethink the Settings dialog again. It may be Moot now. That call is JC's.
-	- Against: the Settings dialog design doc's "a font switch that follows the desktop grays the fields it overrides", and the earlier fix that grayed "Use system font" where the desktop names no font. Both went with the switch.
-	- Swept: every gate in settings_ui.shcl; every reader of the four settings, which the type change made the compiler find; load, save, the legacy and shcl 2 conversions, the launch size, sizes per monitor, the font zoom, and `--font`, `--font-size`, `--columns` and `--rows`.
-	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, doc, TOC and table checks, and the new lint check, which failed on an injected read in two files. In a real window against a dev build at the default font, the panel stayed 707 by 965, and Cursor, Movement, Themes, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Columns typed by hand showed the x and a dash in the switch; the x, and a click on the switch from a dash, put them back; OK wrote only the Size typed on the Text tab. A config the dev build wrote opened at the same window size on both builds, with the switches on and with them off.
-	- Not checked: 2x, a large interface font, Windows, macOS.
-	- Branch: autoset
-	- Commit: ac7fbe6
-	- Test case: EsDxpmD to EsDxpmN, and EsDsIof for the font order. Each new test failed against a mutant of its part. Commented out with the reason: ElEvh0U, ElEvh0T, Eq4Gng9 and EkoQjqK, which pinned "Use system font". Assertions moved where the rule changed: EpHT2u8, Eit1amm, Ejak3Qu, Ep17Tr0, EqRTxpJ and the focus ring test.
-
-- Theme colors, Open command and File or folder show the automatic mark and a way back to automatic
-	- ID: 2026100910295903
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
-	- Needs external testing: Windows: the Themes, Background and Window tabs, Open command showing explorer.exe, and a config with the usual folder written out in its Windows spelling.
-	- Priority: Avg
-	- Opened: 20261009-102959
-	- Opened by: CC
-	- Parent ID: 2026100907341818
-	- Target OS: All
-	- Requirements:
-		- Each is already automatic in all but name: no line means the theme's color, the desktop's opener, or the usual folder or built-in picture. Give each the mark, the lighter italic value and the x, per the design. A color takes the x beside its picker.
-		- Their rows go in the auto settings table, with the lint check covering them.
-	- Notes:
-		- Before RC1.
-	- Progress log:
-		- 20261009: The ten theme colors, Open command, and the wallpaper's image and folder are auto settings in the first part's table. An automatic color reads the theme's palette, which is worked out again whenever the theme, the mode or the desktop's dark or light changes. The lint check covers them through the same stored type.
-		- 20261013: Not self-closed. The knobs model took the mark out, per 2026100913394950, and the revert arrow is the way back. Test EsEAioc went with it. It may be Moot now. That call is JC's.
-	- Decisions:
-		- 20261009: A color's mark and x sit at the right end of its hex box, beside the chip, as a text box's do. Emptying the hex box puts it back too, and Cancel in the color picker leaves an automatic color automatic.
-		- 20261009: File or folder edits whichever of the two its box shows. Its x puts back only that one, and its revert arrow puts back both.
-		- 20261009: While a folder rotates, File or folder shows the folder. It used to show the picture on screen, held as the image setting, which would now read as set by hand.
-		- 20261009: The usual folder written out, or typed in Settings, reads as automatic, since that is what older builds wrote for an emptied box.
-		- 20261009: An automatic image with nothing found shows "(built-in picture)", where the box said "(none)".
-		- 20261009: A color set by hand to the theme's own value stays put when the desktop switches between dark and light. Before, a color line that matched the theme followed the switch.
-	- Against: the rotation code's note that Settings shows the picture on screen. No recorded decision names it.
-	- Swept: every reader of the 13 settings, which the type change made the compiler find: drawing in pane, minimap, palette and term, the menus and chrome in app.rs, the dialogs' colors, autotheme, visibility, `--bg`, a wallpaper named for the session, rotation, reload, load, save, the desktop's dark and light switch, and the theme pick, save, rename and delete in Settings. A grep for comparisons that still compile found none outside tests.
-	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, and the doc, TOC, table and autoread checks. In a real window against a dev build at the default font, the panel stayed 707 by 965. Silk, Text, Cursor, Movement, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Background, Themes and Window differ only in the File or folder row, the colors and the Open command row. The main window drew the same pixels on both builds for a fresh config, a light mode config, and an older config with colors set, a bad color, an empty open command and the usual folder written out. A config the dev build wrote opened the same, and the launch changed only the Default mark on its commented color lines. A typed color showed the x and its tip, OK wrote it, reopening showed it set by hand, and the x put it back, set the Theme dropdown back to the theme's name and, at OK, commented the line out.
-	- Not checked: 2x, a large interface font, Windows, macOS, a folder rotating in a window.
-	- Note: The autoread check's header failed the script header test (copyright form, no History) on dev. Fixed here, since the item names that check.
-	- Branch: autoset2
-	- Commit: 7fadb59
-	- Test case: EsEAijd, EsEAioc, EsEAitK, EsEAixa and EsEAj1i, each failing against a mutant of its part. EsDxpmD walks the whole table now. Assertions moved where the rule changed: Er1vmpQ, EqAiJBo, Em3Pif2, ElmIYG3, Elzq5VQ, ErkRECv, Eq4Yrbf, Epytxce.
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -2384,6 +2247,49 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
+
+- Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
+	- ID: 2026100910295901
+	- Type: Enhancement
+	- Status: Done
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
+	- Needs external testing: A look at Save as on the Themes tab with a wallpaper up.
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Foreground and Cursor are automatic settings whose automatic value is the wallpaper's colors, and "Text colors from wallpaper" is their group's switch, read off them.
+			- 20261013: The switch is a stored setting rather than read off them. The third version of the automatic settings design dropped switches read off their settings.
+	- Notes:
+		- Before RC1.
+		- They still gray out while the switch is on. The style guide lists it under known deviations.
+			- 20261013: No longer true. Nothing grays for a switch since the knobs model (36ef959), and the known deviations no longer list it.
+	- Progress log:
+		- 20261009: Q: A theme pick puts every color back to the theme's, which would make these two automatic and so turn the switch back on. Should a theme pick do that, or leave these two as they are?
+			- A: No.
+		- 20261009: Q: With no wallpaper up, is automatic the theme's color?
+			- A: Yes.
+		- 20261009: Q: An old file with the switch off and no color line used the theme's colors. Keeping that means storing the theme's colors by hand. Is that wanted?
+			- A: If this is about one of my existing config files rather than a general programming question, then no.
+			- Q: It is the general rule, for every existing file. "No" means that anyone who switched "Text colors from wallpaper" off gets the wallpaper's colors back after the update, and the switch reads on. Is that OK?
+				- A: No. Keep theme colors: a file with the switch off and no color lines gets the theme's Foreground and Cursor written in on first load, so nothing changes on screen for those people.
+		- 20261013: The knobs model (36ef959) already does what the item asks. Foreground and Cursor show the wallpaper's colors while the switch is on and a picture is up, and the theme's otherwise. Nothing grays, a color changed by hand turns the switch off, and a theme pick leaves the switch where it was.
+			- No color lines are written for the answer above. The switch is stored now, so a file with it off keeps it off and shows the theme's colors with no write. The question dates from when the switch was going to be read off the colors.
+			- Writing the theme's 2 colors in would make them Custom's colors, so picking Custom later would show the old theme's text colors. If the write is still wanted, it goes in the one-time theme color move at the first launch (`move_theme_colors`).
+			- Fixed on the way: Save and Save as stored the picture's text colors in the theme while the switch was on. A saved theme takes the colors under them now, the theme's with any change made by hand. The wallpaper design doc said the derived pair never reaches a saved theme, and the knobs model had lost that.
+			- Found on the way: an old file with colors over a built-in theme and no machine test lines shows the theme's colors after the update. Filed as 2026101304551668.
+		- 20261013: Not self-closed. The 20261009 answer asked for the theme's 2 colors to be written into a file with the switch off. Nothing is written, though the screen stays the same, as the entry above explains. That needs JC's OK.
+		- 20261013: JC OK'd leaving the 2 colors unwritten.
+	- Swept: every reader of the 2 colors that stores them: the config save, Save and Save as on a theme, and the picker, which sets a color by hand. Every row with an `auto:` switch in `settings_ui.shcl`; only these 2 are palette colors.
+	- Verified: the unit suite, clippy, fmt and the test ID check. Each new test failed against a mutant: Esa43ID with the switch read off the color lines, Esa43cc with a theme pick that turns the switch on, both with the picture's colors used while the switch is off, and Esa59zb before the fix.
+	- Not checked: a real window.
+	- Branch: wallcolors
+	- Commit: 8bce254
+	- Test case: `a_file_with_the_wallpaper_colors_off_keeps_the_theme_s` (Esa43ID), `a_theme_pick_leaves_the_wallpaper_colors_switch_alone` (Esa43cc), `a_saved_theme_never_takes_the_wallpaper_s_text_colors` (Esa59zb). Already there: EqRxesl, EqRxesm, EqRxese, EsFc30N.
+	- Acceptance signoff: JC, 20261013.
+	- Closed: 20261013-123307
 
 - Move local CICD steps into a local container, and on the other boxes too?
 	- ID: 2026101009221201
@@ -5369,6 +5275,107 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff:
 	- Superseded by ID: 2026093009280571
 	- Closed: 20260930-092805
+
+- Settings that depend on a master boolean switch follow the automatic settings design
+	- ID: 2026100907341818
+	- Type: Enhancement
+	- Status: Moot
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
+	- Needs external testing: Windows: the Text and Window tabs, an old config with "Use system font" on, and a window opening at its last size. Windows names no monospace font, so there the family list stays set by hand when it is not the shipped one.
+	- Priority: Avg
+	- Opened: 20261009-073418
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100907341817, 2026100812334385, 2026100114435600, 2026100907341819
+	- Target OS: All
+	- Requirements:
+		- Update all Settings dialog code and logic to follow [Settings with an automatic value](design_docs/20261008-180516_automatic_settings.md).
+	- Notes:
+		- Before RC1.
+	- Inventory: every Settings row with a master switch, a preset or an automatic value.
+		- Automatic settings, where the design applies:
+			- Family, under "Use system font: Face". Automatic is the desktop's monospace font, else the shipped list. Moved here.
+			- Size, under "Use system font: Size". Automatic is the desktop's monospace size. Moved here.
+			- Columns and Rows, under "Remember last size". Automatic is the last size, this monitor's own where one is kept. The switch is their group's. Moved here.
+			- Foreground and Cursor, under "Text colors from wallpaper". Automatic is the wallpaper's colors. Split out with questions, 2026100910295901.
+			- Profile, under "Choose automatically", and the 16 rows a profile sets. Profile is a presets group over those rows, and automatic is the rated profile. Split out with questions, 2026100910295902.
+			- The ten theme colors, whose automatic value is the theme's. Open command, whose empty value is the desktop's opener. File or folder, whose empty value is the usual folder or the built-in picture. Split out, 2026100910295903.
+			- Theme mode, whose "System" entry follows the desktop. Split out with a question, 2026100910295904.
+		- Rows that only count while a switch is on, which stay live and indented:
+			- Choose automatically: Check for hardware change, Re-test next run.
+			- Text scrim: Strength %, Scrim radius px, Softness %, Function and falloff, and Visibility: Scrim on the Cursor tab.
+			- Outline px above zero: Visibility: Outline on the Cursor tab.
+			- Smooth scrolling: the five feel sliders.
+			- Wallpaper: File or folder, Fit, Honor layout tags, Rotate folder, Visibility %, Blur px, Contrast mask.
+			- Contrast mask: Size %, Strength %, Automask mix %.
+			- Transparency: Opacity %, Blur-behind.
+			- Blink: Rate s, Animation, Inactivity timer s. Already live since 2026100907341817.
+			- Remember last size: Per monitor.
+			- Free resources when idle: Minutes when hidden, Minutes otherwise.
+			- Scrollbar: Width px, Hide when idle.
+			- Minimap: Width px.
+			- Hyperlinks Enabled: Open command.
+		- Neither: Honor layout tags and Honor look tags replace Fit and the two sliders for a tagged picture only, so those rows still count for the rest. Minutes when hidden still grays on Wayland, which is the machine and not a setting.
+	- Decisions:
+		- 20261009: The style guide's "Members gray out when it is off" is now "Members stay live and indented", per the design's last non-goal. Every gate of that kind is gone, and the Blink entry left the known deviations.
+		- 20261009: "Use system font" is gone. Family and Size each carry the automatic mark, since a switch over one setting is pointless.
+		- 20261009: "Remember last size" stores nothing. It reads on while Columns and Rows are both automatic, off while both are set by hand, and shows a dash in between. It has no revert arrow; each member has its own.
+		- 20261009: A launch takes `font.use_system_family`, `font.use_system_size` and `window.remember_size` out of the file. A value one of them overrode is commented out, and one still in use stays. "Remember last size" off with no size line writes 160 by 48, the old default. A file with no switch line is left alone.
+		- 20261009: Whether the desktop names a font decided whether the old font switch overrode the family list, so the launch that takes the switch out asks.
+		- 20261009: An automatic box shows its value in a lighter italic with an "A" mark at its right end. Set by hand, the mark is an x that puts it back, and emptying the box does the same.
+		- 20261009: Typing in an automatic box sets it by hand, even to the value it showed. Opening it without typing leaves it automatic.
+		- 20261009: The presets dropdown and the list and on or off controls wait for the items that need them. Nothing moved here uses them.
+	- Progress log:
+		- 20261009: Built the table, the one read function, the number and text controls, the group switch with its mixed state, the tip line on automatic rows, and the lint check. Moved Family, Size, Columns and Rows.
+		- 20261009: Notes on the design doc, left as written. Its "Related backlog issues" still names 2026100816170959. It does not mention the revert arrow every row has, which on an automatic setting does what the clear icon does. Its screen reader line has nothing to attach to yet, since the program has no accessibility layer. "Dosn't" in its Tests section. Its line on hand edits while running waits on 2026100907341819.
+		- 20261009: Not signed off. Follow-ups filed: 2026100913394946, 2026100913394948, 2026100913394950.
+		- 20261013: Not self-closed. The knobs model replaced most of what this asked for, and JC plans to rethink the Settings dialog again. It may be Moot now. That call is JC's.
+		- 20261013: Moot, per JC. The knobs model replaced it.
+	- Against: the Settings dialog design doc's "a font switch that follows the desktop grays the fields it overrides", and the earlier fix that grayed "Use system font" where the desktop names no font. Both went with the switch.
+	- Swept: every gate in settings_ui.shcl; every reader of the four settings, which the type change made the compiler find; load, save, the legacy and shcl 2 conversions, the launch size, sizes per monitor, the font zoom, and `--font`, `--font-size`, `--columns` and `--rows`.
+	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, doc, TOC and table checks, and the new lint check, which failed on an injected read in two files. In a real window against a dev build at the default font, the panel stayed 707 by 965, and Cursor, Movement, Themes, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Columns typed by hand showed the x and a dash in the switch; the x, and a click on the switch from a dash, put them back; OK wrote only the Size typed on the Text tab. A config the dev build wrote opened at the same window size on both builds, with the switches on and with them off.
+	- Not checked: 2x, a large interface font, Windows, macOS.
+	- Branch: autoset
+	- Commit: ac7fbe6
+	- Test case: EsDxpmD to EsDxpmN, and EsDsIof for the font order. Each new test failed against a mutant of its part. Commented out with the reason: ElEvh0U, ElEvh0T, Eq4Gng9 and EkoQjqK, which pinned "Use system font". Assertions moved where the rule changed: EpHT2u8, Eit1amm, Ejak3Qu, Ep17Tr0, EqRTxpJ and the focus ring test.
+	- Closed: 20261013-123307
+
+- Theme colors, Open command and File or folder show the automatic mark and a way back to automatic
+	- ID: 2026100910295903
+	- Type: Enhancement
+	- Status: Moot
+	- Needs local test suite run?: No. Verified: 20261013, the full pipeline passed at 41789fe, and its builds went to the dogfood pool.
+	- Needs external testing: Windows: the Themes, Background and Window tabs, Open command showing explorer.exe, and a config with the usual folder written out in its Windows spelling.
+	- Priority: Avg
+	- Opened: 20261009-102959
+	- Opened by: CC
+	- Parent ID: 2026100907341818
+	- Target OS: All
+	- Requirements:
+		- Each is already automatic in all but name: no line means the theme's color, the desktop's opener, or the usual folder or built-in picture. Give each the mark, the lighter italic value and the x, per the design. A color takes the x beside its picker.
+		- Their rows go in the auto settings table, with the lint check covering them.
+	- Notes:
+		- Before RC1.
+	- Progress log:
+		- 20261009: The ten theme colors, Open command, and the wallpaper's image and folder are auto settings in the first part's table. An automatic color reads the theme's palette, which is worked out again whenever the theme, the mode or the desktop's dark or light changes. The lint check covers them through the same stored type.
+		- 20261013: Not self-closed. The knobs model took the mark out, per 2026100913394950, and the revert arrow is the way back. Test EsEAioc went with it. It may be Moot now. That call is JC's.
+		- 20261013: Moot, per JC. The knobs model replaced it.
+	- Decisions:
+		- 20261009: A color's mark and x sit at the right end of its hex box, beside the chip, as a text box's do. Emptying the hex box puts it back too, and Cancel in the color picker leaves an automatic color automatic.
+		- 20261009: File or folder edits whichever of the two its box shows. Its x puts back only that one, and its revert arrow puts back both.
+		- 20261009: While a folder rotates, File or folder shows the folder. It used to show the picture on screen, held as the image setting, which would now read as set by hand.
+		- 20261009: The usual folder written out, or typed in Settings, reads as automatic, since that is what older builds wrote for an emptied box.
+		- 20261009: An automatic image with nothing found shows "(built-in picture)", where the box said "(none)".
+		- 20261009: A color set by hand to the theme's own value stays put when the desktop switches between dark and light. Before, a color line that matched the theme followed the switch.
+	- Against: the rotation code's note that Settings shows the picture on screen. No recorded decision names it.
+	- Swept: every reader of the 13 settings, which the type change made the compiler find: drawing in pane, minimap, palette and term, the menus and chrome in app.rs, the dialogs' colors, autotheme, visibility, `--bg`, a wallpaper named for the session, rotation, reload, load, save, the desktop's dark and light switch, and the theme pick, save, rename and delete in Settings. A grep for comparisons that still compile found none outside tests.
+	- Verified: unit suite, clippy for Linux, Windows and macOS, fmt, test IDs, and the doc, TOC, table and autoread checks. In a real window against a dev build at the default font, the panel stayed 707 by 965. Silk, Text, Cursor, Movement, Shell and Keys drew the same pixels apart from the caret, which differs between two runs of the dev build too. Background, Themes and Window differ only in the File or folder row, the colors and the Open command row. The main window drew the same pixels on both builds for a fresh config, a light mode config, and an older config with colors set, a bad color, an empty open command and the usual folder written out. A config the dev build wrote opened the same, and the launch changed only the Default mark on its commented color lines. A typed color showed the x and its tip, OK wrote it, reopening showed it set by hand, and the x put it back, set the Theme dropdown back to the theme's name and, at OK, commented the line out.
+	- Not checked: 2x, a large interface font, Windows, macOS, a folder rotating in a window.
+	- Note: The autoread check's header failed the script header test (copyright form, no History) on dev. Fixed here, since the item names that check.
+	- Branch: autoset2
+	- Commit: 7fadb59
+	- Test case: EsEAijd, EsEAioc, EsEAitK, EsEAixa and EsEAj1i, each failing against a mutant of its part. EsDxpmD walks the whole table now. Assertions moved where the rule changed: Er1vmpQ, EqAiJBo, Em3Pif2, ElmIYG3, Elzq5VQ, ErkRECv, Eq4Yrbf, Epytxce.
+	- Closed: 20261013-123307
 
 - Debug builds on lavapipe report a Vulkan validation error for the minimap upload
 	- ID: 2026100421153746
