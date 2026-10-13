@@ -446,9 +446,18 @@ mod tests {
 			crate::testdir::run_dir().join(format!("silkterm_ctl_poke_{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
-		// bound by name from inside the folder, as the exit test does, then
-		// reached by its full path when that fits
-		let live = dir.join("a.sock");
+		// A full path under the run folder can pass the 107-byte limit on a
+		// socket path. On Linux the folder's open handle names it short.
+		#[cfg(target_os = "linux")]
+		let (_handle, near) = {
+			use std::os::fd::AsRawFd;
+			let handle = std::fs::File::open(&dir).unwrap();
+			let near = PathBuf::from(format!("/proc/self/fd/{}", handle.as_raw_fd()));
+			(handle, near)
+		};
+		#[cfg(not(target_os = "linux"))]
+		let near = dir.clone();
+		let live = near.join("a.sock");
 		let listener = std::os::unix::net::UnixListener::bind(&live).unwrap();
 		let heard = std::thread::spawn(move || {
 			let (mut stream, _) = listener.accept().unwrap();
@@ -458,11 +467,11 @@ mod tests {
 		});
 		assert_eq!(poke_at(&live, "saved\tabc"), Told::Sent);
 		assert_eq!(heard.join().unwrap(), "saved\tabc\n");
-		let dead = dir.join("b.sock");
+		let dead = near.join("b.sock");
 		drop(std::os::unix::net::UnixListener::bind(&dead).unwrap());
-		assert!(dead.exists(), "a crash leaves the file");
+		assert!(dir.join("b.sock").exists(), "a crash leaves the file");
 		assert_eq!(poke_at(&dead, "saved\tabc"), Told::Gone);
-		assert_eq!(poke_at(&dir.join("c.sock"), "saved\tabc"), Told::Gone);
+		assert_eq!(poke_at(&near.join("c.sock"), "saved\tabc"), Told::Gone);
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
