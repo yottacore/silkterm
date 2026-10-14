@@ -454,7 +454,7 @@ class Rig:
 			lines.append(f"output HEADLESS-{i + 1} resolution {out.mode[0]}x{out.mode[1]} position {out.at[0]} {out.at[1]} scale {out.scale:g}")
 			lines.append(f"workspace {i + 1} output HEADLESS-{i + 1}")
 		lines += [f"xwayland {'enable' if self.plan.arm == 'x11' else 'disable'}", "default_floating_border normal",
-			"for_window [all] floating enable", "focus_follows_mouse no"]
+			"for_window [all] floating enable", "focus_follows_mouse no", "mouse_warping none"]
 		conf.write_text("\n".join(lines) + "\n")
 		env = dict(self.base, WLR_BACKENDS="headless", WLR_HEADLESS_OUTPUTS=str(len(self.plan.outs)), WLR_RENDERER="pixman", WLR_LIBINPUT_NO_DEVICES="1")
 		with (self.work / "sway.log").open("w") as log:
@@ -698,6 +698,8 @@ class Case:
 		self.model = Model({}, plan.last, plan.remember, plan.per_monitor, plan.fixed)
 		self.scale = 1.0
 		self.drag_scales: set[float] = set()
+		self.drag_touched: set[str] = set()
+		self.drag_primaries: set[str] = set()
 		self.drag_names: dict[str | None, str] = {}
 		self.font: int | None = None
 		self.stale: str | None = None
@@ -990,6 +992,9 @@ class Case:
 				grid = None if trace_field(t, "grid") == "-" else back_to
 				zoom = None if trace_field(t, "zoom") == "-" else int(trace_field(t, "zoom"))
 				self.model.save(None if key == "-" else key, grid, zoom)
+				## taken for the user's, it ends a size from the command line too
+				if grid:
+					self.model.size_pinned = False
 		return took
 
 	def held_still(self, what: str, mark: int, start: Grid) -> None:
@@ -1023,6 +1028,18 @@ class Case:
 			return
 		raise CheckError(f"{what}: resized while still held: {sorted(grids)}, trace {trace}")
 
+	## Out of the window's way for a step that leaves the pointer be: a corner of
+	## the layout away from the window and the output's top left, where a resize
+	## puts it.
+	def park_pointer(self) -> None:
+		win, outs, _, primary = self.where()
+		w, h = self.rig.extent()
+		r = outs[primary[0]]["rect"] if primary else outs[win.output]["rect"]
+		keep_off = [win.rect, (r["x"], r["y"], r["width"], r["height"])]
+		corners = [(5, 5), (w - 5, 5), (5, h - 5), (w - 5, h - 5)]
+		far = max(corners, key=lambda c: min(abs(c[0] - k[0] - k[2] // 2) + abs(c[1] - k[1] - k[3] // 2) for k in keep_off))
+		self.rig.pointer("move", *far)
+
 	def pointer_back(self) -> None:
 		win = self.rig.window()
 		if not win:
@@ -1044,9 +1061,25 @@ class Case:
 			self.track_entered(touched)
 			if primary:
 				self.drag_scales.add(outs[primary[0]]["scale"])
+			self.drag_touched |= set(touched)
+			self.drag_primaries |= set(primary)
 			reason = HELD_WAYLAND if self.plan.arm == "wayland" else HELD_XWAYLAND
 			for key, why in self.names(outs, primary).items():
 				self.drag_names.setdefault(key, reason if why == "requirement" else why)
+
+	## A look may come between two places the glide was seen at, so any output
+	## the window touched on the way may have been its first, against any it
+	## was mostly on.
+	def drag_mixes(self, outs: dict[str, dict[str, Any]]) -> None:
+		if self.plan.arm != "wayland":
+			return
+		for p in self.drag_primaries & outs.keys():
+			scale = outs[p]["scale"]
+			for f in self.drag_touched & outs.keys() - {p}:
+				if outs[f]["scale"] == scale:
+					self.drag_names.setdefault(key_of("wayland", outs[f], scale), "same-scale outputs look alike to a Wayland window")
+				elif at_scale(int(-(-outs[f]["scale"] // 1)), scale):
+					self.drag_names.setdefault(key_of("wayland", outs[f], scale), ROUNDED_ALIKE)
 
 	## Where the window's top left goes for a drop on output `to`.
 	def drop_point(self, step: Step, win: Win, outs: dict[str, dict[str, Any]]) -> tuple[int, int]:
@@ -1098,6 +1131,10 @@ class Case:
 			before_scale = self.scale
 			self.drag_names = {}
 			self.drag_scales = set()
+			self.drag_touched = set()
+			self.drag_primaries = set()
+			if not step.pointer and step.kind != "drag":
+				self.park_pointer()
 			if step.kind == "move":
 				rig.msg(f"[pid={rig.app.pid if rig.app else 0}] move container to output HEADLESS-{step.to + 1}")
 				time.sleep(0.3)
@@ -1194,6 +1231,7 @@ class Case:
 		rig.pointer("up")
 		time.sleep(0.3)
 		_, outs, touched, primary = self.where()
+		self.drag_mixes(outs)
 		self.track_entered(touched)
 		after_scale = outs[primary[0]]["scale"] if primary else before_scale
 		looks = plan.arm == "x11" or step.pointer or after_scale != before_scale
