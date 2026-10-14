@@ -368,46 +368,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- `clear` shouldn't scroll, it should instantly clear
-	- ID: 2026101310563297
-	- Type: Bug
-	- Status: Started
-	- Severity: Avg
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Target OS: All
-	- Test environment: b23
-	- Incorrect behavior: `clear` scrolls.
-	- Expected behavior: It should instantly clear.
-	- Notes:
-		- Pre-next-cut.
-	- Against: the old-format Done item "Bug: repeated `clear; ls -lA ~/` scrolled smoothly the first time and appeared instantly every time after", and the 20260914 code review's "A clear eases the same way at a full scrollback as before it". Both made a clear ease on purpose.
-	- Reproduced: 20261013 on b23, in a window. Bash's Ctrl+L eased the old screen up and away, with the scrollback full and not. `clear`, `tput clear` and a reset already showed at once there, since they empty the scrollback too and leave nothing to ease through. Output after a clear that ran past the screen eased every line that went up.
-	- Actual cause:
-		- Ctrl+L erases the screen but not the scrollback, so the old screen goes up into history whole. That read as new output and eased.
-		- The two decisions above made a clear ease on purpose. The flatpak fix (2026101310563284) kept it that way.
-	- Decisions:
-		- This item wins over the two on its "Against:" line, being the newer call.
-		- Best-guess reading: the clear itself shows at once, with nothing sliding, at any scrollback depth, and the same every time. The old bug's complaint was that it was not the same every time.
-		- Output after the clear that fits on the screen shows in place. Output long enough to scroll eases like any other output, but only by what went up after the clear.
-		- Covers `clear` and `tput clear` (both send home, erase the screen and erase the scrollback), Ctrl+L, and a reset (`printf '\033c'`).
-	- Actual fix [Bug]: The terminal engine notes each clear of the screen and each reset, with how many lines went up after it. On a clear the view goes straight to the bottom, and only those lines ease. The ease's minimum distance can't reach back past them into the screen that was cleared.
-	- Verified: 20261013 on b23. The full unit test suite, the engine's own tests, rustfmt and clippy pass. A new scroll scene runs all 4 clears twice, with the scrollback full and then not. It failed on the build from before (27 frames eased) and passes now. The other 11 scroll scenes still pass on X11.
-	- Note: Old tests that said a clear eases:
-		- `a_clear_eases_the_same_at_a_full_scrollback` (EqHIGdN) is inverted and renamed `a_clear_is_instant_at_a_full_scrollback_too`, with the reason in a comment. The engine count it checked still holds.
-		- `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) still passes. A clear no longer reaches the repaint check, so its comment says it pins the check alone.
-		- `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) and `a_scrollback_clear_reads_as_everything_that_refilled_it` are unchanged and still true.
-		- The flatpak item's "so `clear` eases as before" and its "pin what still eases" no longer hold. That item was left as it was.
-	- Progress log:
-		- 20261013: Waiting on signoff, since it reverses 2 recorded decisions and changes what is seen. Which `clear` was seen isn't known. Ctrl+L, or a clear followed by long output, fit what was measured. A look in a real window with the usual shell would settle it.
-		- Not checked: Windows, where ConPTY may send a clear some other way. If it repaints rather than clears, nothing here changes there.
-		- 20261013: Answer (JC): `clear` command, after e.g. a directory listing.
-		- 20261013: That isn't what was measured. `clear` here sends home, erase screen and erase scrollback, and showed at once on the build from before. b23's login shell moved to n8env with ble.sh the same day, so next is a retry of `ls` then `clear` under that shell, on the build from before and on this one.
-	- Branch: clearsnap
-	- Commit: 9c99883, engine fork 0068fdd on `scroll-ledger-0.26.0`
-	- Test case: `a_clear_shows_at_once_and_only_what_follows_it_eases` (EscSd2Y), `the_ease_floor_does_not_reach_back_past_a_clear` (EscSd7l) and the inverted EqHIGdN, each red before the fix and green after. Scroll scene `clear` (`cicd/tests/scroll/run.bash`). Engine fork test `scroll_ledger_counts_what_went_up_after_a_clear`.
-	- Swept: the engine pushes the screen into history in one place, the erase of the whole screen, and a reset empties it. Both are noted. Erasing only the scrollback is left out, since the screen stays put. The alt screen keeps no history and has its own slide. The output ease has one caller, the pane build. SilkTerm has no clear or reset command of its own.
-
 - muffer should not get a minimap
 	- ID: 2026101310563323
 	- Type: Bug
@@ -1497,6 +1457,53 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- `clear` shouldn't scroll, it should instantly clear
+	- ID: 2026101310563297
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: All
+	- Test environment: b23
+	- Incorrect behavior: `clear` scrolls.
+	- Expected behavior: It should instantly clear.
+	- Notes:
+		- Pre-next-cut.
+	- Against: the old-format Done item "Bug: repeated `clear; ls -lA ~/` scrolled smoothly the first time and appeared instantly every time after", and the 20260914 code review's "A clear eases the same way at a full scrollback as before it". Both made a clear ease on purpose.
+	- Reproduced: 20261013 on b23, in a window. Bash's Ctrl+L eased the old screen up and away, with the scrollback full and not. `clear`, `tput clear` and a reset already showed at once there, since they empty the scrollback too and leave nothing to ease through. Output after a clear that ran past the screen eased every line that went up.
+	- Reproduced again: 20261013 on b23, in a window with the login shell and ble.sh. `ls` then `clear` eased the new prompt up about 2 rows, after a listing that scrolled and after one that fit, on the build from before 9c99883 and on 9c99883 alike. It happened whenever the prompt was too long for one row. With a prompt that fit, `clear` showed at once on both.
+	- Actual cause:
+		- Ctrl+L erases the screen but not the scrollback, so the old screen goes up into history whole. That read as new output and eased.
+		- The two decisions above made a clear ease on purpose. The flatpak fix (2026101310563284) kept it that way.
+		- ble.sh draws a prompt too long for one row at the top of the screen with insert-line and delete-line. The engine sends the rows a delete at the top row takes into the scrollback, so 2 blank lines went up right after the clear, and they eased like output.
+	- Decisions:
+		- This item wins over the two on its "Against:" line, being the newer call.
+		- Best-guess reading: the clear itself shows at once, with nothing sliding, at any scrollback depth, and the same every time. The old bug's complaint was that it was not the same every time.
+		- Output after the clear that fits on the screen shows in place. Output long enough to scroll eases like any other output, but only by what went up after the clear.
+		- Covers `clear` and `tput clear` (both send home, erase the screen and erase the scrollback), Ctrl+L, and a reset (`printf '\033c'`).
+	- Actual fix [Bug]: The terminal engine notes each clear of the screen and each reset, with how many lines went up after it. On a clear the view goes straight to the bottom, and only those lines ease. The ease's minimum distance can't reach back past them into the screen that was cleared. Blank lines that go up from a blank screen don't ease, since nothing seen moved. After a clear that holds for the lines that went up after it.
+	- Verified: 20261013 on b23. The full unit test suite, the engine's own tests, rustfmt and clippy pass. A new scroll scene runs all 4 clears twice, with the scrollback full and then not. It failed on the build from before (27 frames eased) and passes now. The other 11 scroll scenes still pass on X11.
+	- Verified: 20261013 on b23, in a window with ble.sh and a prompt that wraps. Frames that eased after `clear`: 64 on the build from before 9c99883 and 66 on 9c99883 after a long listing, 78 and 59 after a short one, 0 and 0 now. With a prompt that fits, 1 frame on all three, the typed command's own line going up before the clear arrives. The full unit suite, clippy and all 12 scroll scenes pass. The `clear` scene now includes ble.sh's redraw, and it failed on 9c99883 (72 frames eased) and passes now.
+	- Note: Old tests that said a clear eases:
+		- `a_clear_eases_the_same_at_a_full_scrollback` (EqHIGdN) is inverted and renamed `a_clear_is_instant_at_a_full_scrollback_too`, with the reason in a comment. The engine count it checked still holds.
+		- `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) still passes. A clear no longer reaches the repaint check, so its comment says it pins the check alone.
+		- `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) and `a_scrollback_clear_reads_as_everything_that_refilled_it` are unchanged and still true.
+		- The flatpak item's "so `clear` eases as before" and its "pin what still eases" no longer hold. That item was left as it was.
+	- Progress log:
+		- 20261013: Waiting on signoff, since it reverses 2 recorded decisions and changes what is seen. Which `clear` was seen isn't known. Ctrl+L, or a clear followed by long output, fit what was measured. A look in a real window with the usual shell would settle it.
+		- Not checked: Windows, where ConPTY may send a clear some other way. If it repaints rather than clears, nothing here changes there.
+		- 20261013: Answer (JC): `clear` command, after e.g. a directory listing.
+		- 20261013: That isn't what was measured. `clear` here sends home, erase screen and erase scrollback, and showed at once on the build from before. b23's login shell moved to n8env with ble.sh the same day, so next is a retry of `ls` then `clear` under that shell, on the build from before and on this one.
+		- 20261013: Retried. It eased on both builds when the prompt was too long for one row, from ble.sh's redraw. Fixed on `bleclear` and closed.
+	- Acceptance signoff: Self-closed: the case JC named was reproduced with the real shell, fixed, and the test is red before and green after.
+	- Closed: 20261013-192628
+	- Branch: clearsnap, bleclear
+	- Commit: 9c99883, engine fork 0068fdd on `scroll-ledger-0.26.0`; 8ed1a1b
+	- Test case: `a_clear_shows_at_once_and_only_what_follows_it_eases` (EscSd2Y), `the_ease_floor_does_not_reach_back_past_a_clear` (EscSd7l) and the inverted EqHIGdN, each red before the fix and green after. Scroll scene `clear` (`cicd/tests/scroll/run.bash`). Engine fork test `scroll_ledger_counts_what_went_up_after_a_clear`. For ble.sh: `a_prompt_ble_redraws_after_a_clear_shows_at_once` (EsdYO1M), red before and green after. `blank_lines_that_move_ink_still_ease` (EsdYO5h) pins what still eases. Scroll scene `clear`, with ble.sh's redraw.
+	- Swept: the engine pushes the screen into history in one place, the erase of the whole screen, and a reset empties it. Both are noted. Erasing only the scrollback is left out, since the screen stays put. The alt screen keeps no history and has its own slide. The output ease has one caller, the pane build. SilkTerm has no clear or reset command of its own. The blank line rule covers both output ease paths, with a clear in the span and without one. A recorded region scroll already had its own rule for blank rows. The minimap's line count is unchanged.
+	- Note: the 2 blank lines stay in the scrollback above the prompt, since the engine sends any rows a delete at the top row takes into the scrollback. Left as is.
 
 - Flyover text for the wallpaper option uses "carries"
 	- ID: 2026100812334384
