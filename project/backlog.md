@@ -548,21 +548,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Programs that ask for focus reports never get them
-	- ID: 2026101315155800
+- Windows 11: every pane may count as a full-screen program while a command runs
+	- ID: 2026101321365912
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261013-151558
+	- Opened: 20261013-213659
 	- Opened by: CC
-	- Related IDs: 2026101310563323
-	- Target OS: All
+	- Related IDs: 2026101315155800, 2026101310563323
+	- Target OS: Windows
 	- Steps to reproduce:
-		- Run a program that turns on focus reports (`CSI ? 1004 h`), such as fish 4 at its prompt, vim or muffer.
-		- Click another window, then back.
-	- Incorrect behavior: the program gets nothing. The engine notes the mode, but the window's focus change never sends `CSI I` or `CSI O`.
-	- Expected behavior: focus in sends `CSI I` and focus out sends `CSI O` while the mode is on, as xterm does.
-	- Reproduced: 20261013, by reading the code. Nothing reads the mode outside the minimap, and the window's focus handler writes nothing to the shell.
+		- Turn the minimap on in Windows 11 and run a long plain command, such as `ping -t localhost`.
+	- Incorrect behavior: Unconfirmed. ConPTY on Windows 11 is said to send `CSI ? 1004 h` itself at start. The engine would then show focus reports on in every pane, and the minimap rule reads that, while a command runs, as a program that draws its own screen.
+	- Expected behavior: A plain command keeps the column.
+	- Reproduced: No. Read only, from a Cygwin change that strips that sequence from ConPTY output.
 
 - macOS: a TUI run inside tmux keeps the minimap column
 	- ID: 2026101320425888
@@ -4001,6 +4000,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Programs that ask for focus reports never get them
+	- ID: 2026101315155800
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261013-151558
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026101310563323
+	- Target OS: All
+	- Steps to reproduce:
+		- Run a program that turns on focus reports (`CSI ? 1004 h`), such as fish 4 at its prompt, vim or muffer.
+		- Click another window, then back.
+	- Incorrect behavior: the program gets nothing. The engine notes the mode, but the window's focus change never sends `CSI I` or `CSI O`.
+	- Expected behavior: focus in sends `CSI I` and focus out sends `CSI O` while the mode is on, as xterm does.
+	- Reproduced: 20261013, by reading the code. Nothing reads the mode outside the minimap, and the window's focus handler writes nothing to the shell.
+	- Decisions:
+		- 20261013: The pane that has the keyboard is the one told. A pane or tab switch sends `CSI O` to the program leaving and `CSI I` to the one coming in, as kitty, wezterm and tmux with focus-events do. Losing the window sends `CSI O` to that pane only.
+		- 20261013: Nothing is sent when a program first turns the mode on, as in xterm.
+		- 20261013: A read-only pane gets no reports, the same as mouse reports.
+	- Actual cause: Nothing sent focus reports. The engine only records the mode.
+	- Actual fix:
+		- Each pass works out which pane holds the keyboard, or none while the window is unfocused. When that changes, the old pane gets `CSI O` and the new one `CSI I`, each only if its program has the mode on. The mode is read live.
+		- Windows: the same bytes go to ConPTY. Since Windows 11 ConPTY turns the mode on itself and hands focus on to the console program. Not checked on a Windows box.
+	- Note: The minimap rule (G95) only reads the mode. Nothing there reads focus reports, so it is unchanged.
+	- Verified:
+		- Unit suite, clippy and fmt pass.
+		- In a window with 2 panes, each running a program that turns the mode on and logs what it reads: window out and back, a click into the other pane, then window out. Each program got `CSI I` and `CSI O` at the right moments, and a click on the pane that already had focus sent nothing.
+	- Swept: every place that moves pane focus (click, keyboard move, split, close, tab switch, menu, command line) is covered, since the holder is worked out in one place each pass rather than at those sites.
+	- Branch: focusrep
+	- Commit: 3d7e090
+	- Test case: `a_program_that_asks_for_focus_changes_is_told` (Ese7i9o) and `focus_goes_out_of_one_pane_and_into_the_next` (Ese7iTi), both seen failing before the fix.
+	- Acceptance signoff: Self-closed: standard xterm behavior, tested.
+	- Closed: 20261013-213659
 
 - An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
 	- ID: 2026101304551668

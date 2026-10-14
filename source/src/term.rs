@@ -7,7 +7,7 @@ use alacritty_terminal::event::{Event, EventListener, WindowSize};
 use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Msg};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::sync::FairMutex;
-use alacritty_terminal::term::{ClipboardType, Config, Osc52, Term};
+use alacritty_terminal::term::{ClipboardType, Config, Osc52, Term, TermMode};
 use alacritty_terminal::tty;
 use winit::event_loop::EventLoopProxy;
 
@@ -114,6 +114,15 @@ impl EventProxy {
 // A bigger OSC 52 store is dropped whole. A clipped one would paste something the
 // program never sent, and the parser sets no limit of its own.
 const CLIPBOARD_STORE_MAX: usize = 1 << 20;
+
+/// What a program that asked for focus changes (`CSI ? 1004 h`) is sent as its
+/// pane gains or loses the keyboard, the same as xterm.
+pub fn focus_report(mode: TermMode, gained: bool) -> Option<&'static [u8]> {
+	if !mode.contains(TermMode::FOCUS_IN_OUT) {
+		return None;
+	}
+	Some(if gained { b"\x1b[I" } else { b"\x1b[O" })
+}
 
 // The bytes a query event owes the program, or None where there is no answer.
 // The event carries its own formatter; all this supplies is the value.
@@ -1508,6 +1517,34 @@ mod tests {
 			*seen.0.lock().expect("seen lock"),
 			["Clipboard hello", "Selection hello"]
 		);
+	}
+
+	// fish, vim and muffer ask for focus changes, and got nothing.
+	// Test ID: Ese7i9o
+	#[test]
+	fn a_program_that_asks_for_focus_changes_is_told() {
+		use alacritty_terminal::event::VoidListener;
+		use alacritty_terminal::term::Term;
+		use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
+
+		let mut term = Term::new(super::engine_config(), &grid_dims(20, 4), VoidListener);
+		let mut parser = Processor::<StdSyncHandler>::default();
+		assert_eq!(
+			super::focus_report(*term.mode(), true),
+			None,
+			"not asked yet"
+		);
+		parser.advance(&mut term, b"\x1b[?1004h");
+		assert_eq!(
+			super::focus_report(*term.mode(), true),
+			Some(&b"\x1b[I"[..])
+		);
+		assert_eq!(
+			super::focus_report(*term.mode(), false),
+			Some(&b"\x1b[O"[..])
+		);
+		parser.advance(&mut term, b"\x1b[?1004l");
+		assert_eq!(super::focus_report(*term.mode(), false), None, "turned off");
 	}
 
 	// The configured word separators are what the engine splits words on.
