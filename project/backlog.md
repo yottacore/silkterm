@@ -316,6 +316,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261014: Wayland tried with 3 outputs, 2 at 100% and 1 at 200%. Opening on the second output, then a move or a title bar drag to each of the others and back, all ended at that output's own size and font zoom and stayed there. Held astride 2 outputs, the window kept its size. Nothing was saved.
 		- 20261014: Fails on Wayland: a window dropped mostly on the 200% output, with a sliver still on a 100% one, takes the last size anywhere instead of the 200% output's own. It did so 3 times out of 3. A clean drop onto the 200% output showed that wrong size for 4 s, until the pointer came back, once in 5 runs.
 			- Cause: the monitor's name mixes 2 outputs. The resolution comes from the first output the window entered and still touches, and the scale from the window, which follows the other one. So it reads `1920x1080_200pct`, which no monitor is.
+			- Filed as 2026101409220514. The monwl test goes into the pipeline once that's fixed.
 		- Choices made here, still open:
 			- The font zoom is remembered under Remember last size, with no switch of its own, as px on the font size. Zooming saves the grid too, so the window reopens at the same pixel size.
 			- A monitor with no entry of its own gets the last size anywhere, at launch and after a move, as the requirements say.
@@ -369,6 +370,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+
+- Wayland: a window dropped across a 100% and a 200% output takes the last size anywhere, not its monitor's own
+	- ID: 2026101409220514
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261014-092205
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway with outputs at 100% and 200%
+	- Steps to reproduce:
+		- Save a size for each output, then drop a window mostly on the 200% output with a sliver still on a 100% one.
+	- Incorrect behavior: The window takes the last size anywhere. Once in 5 runs a clean drop on the 200% output did the same for about 4 s, until the pointer came back.
+	- Expected behavior: It takes the size saved for the output most of it is on.
+	- Reproduced: 20261014, 3 of 3 sliver drops, with `cicd/tests/monwl/run.bash` (Esgxleh).
+	- Possible cause: The monitor's name mixes 2 outputs. In `MonitorId::find` the resolution comes from the first output the window entered and still touches, and the scale from the window, which follows the other one. So it reads `1920x1080_200pct`, which no monitor is.
 
 - Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
 	- ID: 2026101408384488
