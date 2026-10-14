@@ -4011,6 +4011,13 @@ impl ApplicationHandler<UserEvent> for App {
 				});
 				state.note_output(); // a shell that prints is not idle, if seen
 			}
+			UserEvent::ChildGone(id) => {
+				if let Some(p) = state.tabs.find_pane_mut(id) {
+					p.term.note_activity();
+					p.term.retask();
+					state.dirty = true;
+				}
+			}
 			UserEvent::PtyWrite(id, bytes) => {
 				// a reply the terminal owes the program (cursor position, device
 				// attributes), not something the user sent - so read-only does not

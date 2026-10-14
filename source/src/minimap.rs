@@ -110,16 +110,43 @@ pub struct Geom {
 /// the main screen says it by asking for mouse reports or focus changes, which
 /// a shell turns off before it runs a command. Some shells ask for focus
 /// changes at their own prompt, so on the main screen it counts only while a
-/// command runs.
+/// command runs. Hand it `screen_modes`, which knows what the program asked.
 pub fn draws_own_screen(mode: TermMode, running: bool) -> bool {
 	mode.contains(TermMode::ALT_SCREEN)
 		|| running && mode.intersects(TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT)
 }
 
-/// The part of the mode `draws_own_screen` reads. When it moves, the column
-/// may have to as well.
+/// What sits on the far side of the PTY, as far as the modes go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PtyHost {
+	/// A unix PTY passes on what the program asked for.
+	Plain,
+	/// Windows' own console host asks for focus reports as it starts, for
+	/// every pane, and keeps a program's own ask to itself. A conpty.dll found
+	/// on PATH is used ahead of it, and an older one asks for nothing.
+	ConPty,
+}
+
+impl PtyHost {
+	pub const HERE: Self = if cfg!(windows) {
+		Self::ConPty
+	} else {
+		Self::Plain
+	};
+}
+
+/// The part of the mode `draws_own_screen` reads, less what the console host
+/// set for itself. When it moves, the column may have to as well.
 pub fn screen_modes(mode: TermMode) -> TermMode {
-	mode & (TermMode::ALT_SCREEN | TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT)
+	screen_modes_from(PtyHost::HERE, mode)
+}
+
+pub fn screen_modes_from(host: PtyHost, mode: TermMode) -> TermMode {
+	let asked = match host {
+		PtyHost::Plain => TermMode::ALT_SCREEN | TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT,
+		PtyHost::ConPty => TermMode::ALT_SCREEN | TermMode::MOUSE_MODE,
+	};
+	mode & asked
 }
 
 // How long a program that drew its own screen keeps the column away once it
@@ -1942,6 +1969,37 @@ mod tests {
 		let pager = after(b"\x1b[?1049h");
 		assert!(!wanted(&s, draws_own_screen(pager, false), None));
 		assert!(wanted(&s, draws_own_screen(pager, true), Some("less")));
+	}
+
+	// What Windows' own console host sends as a pane starts, before the shell
+	// prints anything, seen on Windows 11 26200. The focus ask is its own.
+	// Test ID: EsgiG0N
+	#[test]
+	fn a_plain_command_keeps_the_column_under_the_windows_console_host() {
+		let mut s = cfg(true, 100.0);
+		s.minimap_tui_whitelist = "less tmux screen".to_string();
+		let (mut term, mut parser) = fresh_term(80, 24, 1000);
+		parser.advance(
+			&mut term,
+			b"\x1b[?9001h\x1b[?1004h\x1b[?25l\x1b[2J\x1b[m\x1b[H\x1b]0;C:\\WINDOWS\\system32\\cmd.exe\x07\
+			  \x1b[?25hC:\\>ping -t localhost\r\n\r\nPinging ::1 with 32 bytes of data:\r\n",
+		);
+		let mode = *term.mode();
+		assert!(
+			mode.contains(TermMode::FOCUS_IN_OUT),
+			"the engine sees the host's ask"
+		);
+		let own = |host, mode| draws_own_screen(screen_modes_from(host, mode), true);
+		assert!(wanted(&s, own(PtyHost::ConPty, mode), Some("PING")));
+		// the same ask from a program on a unix PTY is the program's
+		assert!(!wanted(&s, own(PtyHost::Plain, mode), Some("ping")));
+		// a pager still takes it there
+		parser.advance(&mut term, b"\x1b[?1049h");
+		assert!(!wanted(
+			&s,
+			own(PtyHost::ConPty, *term.mode()),
+			Some("more")
+		));
 	}
 
 	// A nested fish, or one at the far end of an ssh, is the program running,

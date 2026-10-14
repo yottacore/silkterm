@@ -3860,7 +3860,7 @@ impl PaneManager {
 			};
 			let now = std::time::Instant::now();
 			let own = pane.map_hold.update(
-				minimap::draws_own_screen(mode, running.is_some()),
+				minimap::draws_own_screen(screen, running.is_some()),
 				running.as_deref(),
 				now,
 			);

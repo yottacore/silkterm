@@ -45,6 +45,10 @@ pub enum UserEvent {
 	// Linux GL path only; never constructed elsewhere.
 	#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 	VtSwitched,
+	// windows: the command a pane's probe named has ended, which may print
+	// nothing (see ChildWatch). Never constructed elsewhere.
+	#[cfg_attr(not(windows), allow(dead_code))]
+	ChildGone(PaneId),
 	// a pick from the macOS menu bar (macmenu.rs); never constructed elsewhere
 	#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 	Menu(crate::app::MenuAction),
@@ -323,6 +327,10 @@ pub struct TermInstance {
 	shell: ShellProc,
 	#[cfg(windows)]
 	child_probe: std::cell::RefCell<Option<Option<String>>>,
+	// windows: a wait on the child that answer names, since its end may print
+	// nothing (see ChildWatch)
+	#[cfg(windows)]
+	child_watch: std::cell::RefCell<Option<ChildWatch>>,
 	#[allow(clippy::type_complexity)]
 	cwd_cache: std::cell::RefCell<Option<(std::time::Instant, Option<std::path::PathBuf>)>>,
 }
@@ -436,6 +444,8 @@ impl TermInstance {
 			shell: ShellProc::new(shell_pid),
 			#[cfg(windows)]
 			child_probe: std::cell::RefCell::new(None),
+			#[cfg(windows)]
+			child_watch: std::cell::RefCell::new(None),
 			cwd_cache: std::cell::RefCell::new(None),
 		})
 	}
@@ -628,15 +638,34 @@ impl TermInstance {
 		if let Some(answer) = self.child_probe.borrow().as_ref() {
 			return answer.clone();
 		}
-		let answer = command_child_name(pid, started);
+		let answer = find_child(pid, started, |_| true).and_then(|(child, exe, at)| {
+			let mut watch = self.child_watch.borrow_mut();
+			if watch.as_ref().is_some_and(|w| w.is((child, at))) {
+				return Some(exe_display_name(&exe));
+			}
+			let id = self.notifier.id;
+			let proxy = self.notifier.proxy.clone();
+			match ChildWatch::start(child, at, move || {
+				let _ = proxy.send_event(UserEvent::ChildGone(id));
+			}) {
+				Watched::Yes(new) => *watch = Some(new),
+				Watched::Gone => return None,
+				Watched::Blind => *watch = None,
+			}
+			Some(exe_display_name(&exe))
+		});
+		if answer.is_none() {
+			*self.child_watch.borrow_mut() = None;
+		}
 		*self.child_probe.borrow_mut() = Some(answer.clone());
 		answer
 	}
 
 	/// Windows: the cached at-prompt answer holds only until the terminal next
 	/// stirs. Both halves matter - anything typed can start a command, and a
-	/// command that ends always brings the prompt back with it, so its own last
-	/// act is PTY output.
+	/// command that ends brings the prompt back with it, so its own last act is
+	/// PTY output. One that cmd doesn't wait for ends after the prompt, so the
+	/// child named is watched too (`ChildWatch`), and its end counts.
 	#[cfg(windows)]
 	pub fn note_activity(&self) {
 		*self.child_probe.borrow_mut() = None;
@@ -1063,8 +1092,9 @@ fn is_command_child(child_started: Option<u64>, shell_started: u64) -> bool {
 
 // Windows: the name of `shell_pid`'s live child process, if it has one. The
 // name is the executable's, without its extension, which is the same shape
-// unix reports through /proc comm.
-#[cfg(windows)]
+// unix reports through /proc comm. The probe itself goes through find_child,
+// since it watches what it found.
+#[cfg(all(windows, test))]
 fn command_child_name(shell_pid: u32, shell_started: u64) -> Option<String> {
 	find_child(shell_pid, shell_started, |_| true).map(|(_, exe, _)| exe_display_name(&exe))
 }
@@ -1128,6 +1158,124 @@ fn launcher_target(image: &std::path::Path) -> Option<String> {
 	target
 		.is_file()
 		.then(|| name.to_string_lossy().into_owned())
+}
+
+// Windows: a wait on the command a probe named. cmd doesn't wait for a program
+// with no console, so its prompt is back while that program still runs, and
+// nothing is printed when it ends - the stir the cached answer waits for never
+// comes. The thread pool's wait thread watches the handle, so this costs no
+// polling: a handle and a registration per command, and one call on its end.
+#[cfg(windows)]
+struct ChildWatch {
+	pid: u32,
+	started: u64,
+	process: windows_sys::Win32::Foundation::HANDLE,
+	wait: windows_sys::Win32::Foundation::HANDLE,
+	on_end: *mut OnEnd,
+}
+
+#[cfg(windows)]
+type OnEnd = Box<dyn Fn() + Send>;
+
+#[cfg(windows)]
+enum Watched {
+	Yes(ChildWatch),
+	// it ended before it could be opened, or its pid is already someone else's
+	Gone,
+	// it can't be opened to wait on, which is no news either way
+	Blind,
+}
+
+#[cfg(windows)]
+impl ChildWatch {
+	fn start(pid: u32, started: u64, on_end: impl Fn() + Send + 'static) -> Watched {
+		use windows_sys::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, GetLastError};
+		use windows_sys::Win32::System::Threading::{
+			INFINITE, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+			RegisterWaitForSingleObject, WT_EXECUTEONLYONCE,
+		};
+
+		// SAFETY: takes no pointer.
+		let process = unsafe {
+			OpenProcess(
+				PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+				0,
+				pid,
+			)
+		};
+		if process.is_null() {
+			// SAFETY: takes no pointer.
+			return if unsafe { GetLastError() } == ERROR_INVALID_PARAMETER {
+				Watched::Gone
+			} else {
+				Watched::Blind
+			};
+		}
+		if started != 0 && handle_start_time(process) != Some(started) {
+			// SAFETY: closed once, and not used after.
+			unsafe { CloseHandle(process) };
+			return Watched::Gone;
+		}
+		let on_end: *mut OnEnd = Box::into_raw(Box::new(Box::new(on_end)));
+		let mut wait = std::ptr::null_mut();
+		// SAFETY: a live process handle and a context that lives until Drop has
+		// unregistered the wait and waited out its callback.
+		let ok = unsafe {
+			RegisterWaitForSingleObject(
+				&raw mut wait,
+				process,
+				Some(child_ended),
+				on_end.cast(),
+				INFINITE,
+				WT_EXECUTEONLYONCE,
+			)
+		};
+		if ok == 0 {
+			// SAFETY: never registered, so nothing else holds either.
+			unsafe {
+				drop(Box::from_raw(on_end));
+				CloseHandle(process);
+			}
+			return Watched::Blind;
+		}
+		Watched::Yes(Self {
+			pid,
+			started,
+			process,
+			wait,
+			on_end,
+		})
+	}
+
+	fn is(&self, (pid, started): (u32, u64)) -> bool {
+		self.pid == pid && self.started == started
+	}
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn child_ended(
+	context: *mut std::ffi::c_void,
+	_timed_out: windows_sys::Win32::Foundation::BOOLEAN,
+) {
+	// SAFETY: the OnEnd ChildWatch made, freed only once this has returned.
+	let on_end = unsafe { &*context.cast::<OnEnd>() };
+	on_end();
+}
+
+#[cfg(windows)]
+impl Drop for ChildWatch {
+	fn drop(&mut self) {
+		use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+		use windows_sys::Win32::System::Threading::UnregisterWaitEx;
+
+		// SAFETY: a registered wait, unregistered once; INVALID_HANDLE_VALUE makes
+		// this wait for a callback already running, so the context outlives it.
+		unsafe {
+			UnregisterWaitEx(self.wait, INVALID_HANDLE_VALUE);
+			drop(Box::from_raw(self.on_end));
+			CloseHandle(self.process);
+		}
+	}
 }
 
 // The pane's shell process, read past a launcher when it is one. The real
@@ -1252,10 +1400,25 @@ fn exe_display_name(raw: &[u16]) -> String {
 // which is never a command our shell started).
 #[cfg(windows)]
 fn process_start_time(pid: u32) -> Option<u64> {
-	use windows_sys::Win32::Foundation::{CloseHandle, FILETIME};
-	use windows_sys::Win32::System::Threading::{
-		GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-	};
+	use windows_sys::Win32::Foundation::CloseHandle;
+	use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+	// SAFETY: takes no pointer.
+	let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+	if process.is_null() {
+		return None;
+	}
+	let created = handle_start_time(process);
+	// SAFETY: closed once, and not used after.
+	unsafe { CloseHandle(process) };
+	created
+}
+
+// Windows: process_start_time for a handle already open.
+#[cfg(windows)]
+fn handle_start_time(process: windows_sys::Win32::Foundation::HANDLE) -> Option<u64> {
+	use windows_sys::Win32::Foundation::FILETIME;
+	use windows_sys::Win32::System::Threading::GetProcessTimes;
 
 	let mut created = FILETIME {
 		dwLowDateTime: 0,
@@ -1265,11 +1428,6 @@ fn process_start_time(pid: u32) -> Option<u64> {
 		dwLowDateTime: 0,
 		dwHighDateTime: 0,
 	}; 3];
-	// SAFETY: takes no pointer.
-	let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-	if process.is_null() {
-		return None;
-	}
 	// SAFETY: an open process handle and four live FILETIMEs to write.
 	let ok = unsafe {
 		GetProcessTimes(
@@ -1280,8 +1438,6 @@ fn process_start_time(pid: u32) -> Option<u64> {
 			&raw mut ignored[2],
 		)
 	};
-	// SAFETY: closed once, and not used after.
-	unsafe { CloseHandle(process) };
 	(ok != 0).then(|| u64::from(created.dwHighDateTime) << 32 | u64::from(created.dwLowDateTime))
 }
 
@@ -2059,6 +2215,42 @@ mod tests {
 			Some(real(&moved_to)),
 			"the directory the shell moved to never came back"
 		);
+	}
+
+	// cmd doesn't wait for a program with no console, so a tab kept naming one
+	// after it ended: nothing was printed to say so. The wait on it says so.
+	// Test ID: Esgn52X
+	#[cfg(windows)]
+	#[test]
+	fn a_watched_command_says_when_it_ends() {
+		use std::process::{Command, Stdio};
+
+		use super::{ChildWatch, Watched, process_start_time};
+		let mut child = Command::new("cmd")
+			.args(["/c", "ping -n 3 127.0.0.1 >nul"])
+			.stdin(Stdio::null())
+			.stdout(Stdio::null())
+			.spawn()
+			.expect("spawn cmd");
+		let started = process_start_time(child.id()).unwrap_or(0);
+		let (tx, rx) = std::sync::mpsc::channel();
+		let Watched::Yes(watch) = ChildWatch::start(child.id(), started, move || {
+			let _ = tx.send(());
+		}) else {
+			panic!("a child of our own can be watched");
+		};
+		assert!(watch.is((child.id(), started)));
+		let early = rx.recv_timeout(std::time::Duration::from_millis(300));
+		let _ = child.wait();
+		let late = rx.recv_timeout(std::time::Duration::from_secs(10));
+		drop(watch);
+		assert!(early.is_err(), "nothing while it runs");
+		assert!(late.is_ok(), "news once it ends");
+		// a pid now somebody else's is no command of ours
+		assert!(matches!(
+			ChildWatch::start(std::process::id(), 1, || {}),
+			Watched::Gone
+		));
 	}
 
 	// Git Bash's bin\bash.exe starts the real bash as its child and waits, so a
