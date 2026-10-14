@@ -64,38 +64,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
 
-- Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
-	- ID: 2026101408384488
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20261014-083844
-	- Opened by: CC
-	- Related IDs: 2026101321365912
-	- Target OS: Windows
-	- Test environment: b29w
-	- Steps to reproduce:
-		- Install WezTerm, which puts its folder with a `conpty.dll` on PATH.
-		- Start SilkTerm.
-	- Incorrect behavior: The engine loads `conpty.dll` by bare name, so the DLL search order finds WezTerm's, or one in the working folder, before falling back to the one Windows has. Each copy behaves a little differently, so SilkTerm does too, from box to box. A planted `conpty.dll` in the working folder or a folder on the user's PATH loads into SilkTerm.
-	- Expected behavior: Only a `conpty.dll` shipped beside the program, if any, or the one Windows has.
-	- Reproduced: 20261014 on b29w. With WezTerm's folder on PATH no focus-report ask came through; with it taken off, the one Windows has sent it.
-		- 20261014 on b29w and vm925w, both with WezTerm's folder on the machine PATH: dev loaded WezTerm's copy, and a planted copy on PATH or in the working folder.
-	- Notes:
-		- The load is in the engine fork's `tty/windows/conpty.rs`.
-		- A `dxcompiler.dll` on PATH should no longer be used either, so DX12 would compile its shaders with the compiler Windows has. Read from wgpu's code, not checked on a box.
-	- Actual cause: The engine loaded `conpty.dll` by bare name. Windows has none, so the search went on to the working folder and every folder on PATH, and took the first copy it found.
-	- Actual fix: The engine fork loads `conpty.dll` only from the program's folder or System32. SilkTerm also keeps every later load by bare name to those 2 folders, from the first line of `main`, which covers the libraries it uses too.
-	- Verified:
-		- New Windows scenario `conload`: failed on dev on b29w and vm925w, with WezTerm's copy and both planted copies loaded. Passes on the branch on both, with the one Windows has.
-		- `conmap`, `cmdgui` and `quiettab` pass on both boxes with the same build.
-		- Unit tests on b29w: the engine test failed with the old engine and passes with the new one. The bare-name test failed with the rule taken out and passes with it.
-		- Gate, clippy for Linux and Windows, and the docs check pass.
-	- Swept: The fork has no other load by name, and SilkTerm had none. In the libraries, wgpu's DX12 loads `dxcompiler.dll` by name and looks on PATH for it; the rule in `main` covers it. The other loads by name are DLLs Windows has in System32, which is searched first.
-	- Branch: conload
-	- Commit: af9559d, engine fork 09f24ebe on `scroll-ledger-0.26.0`
-	- Test case: wingui scenario `conload` (EshQpKD), seen failing on dev; `the_engine_takes_no_conpty_dll_from_path_or_the_working_folder` (EshQYPc) and `a_dll_on_path_or_in_the_working_folder_is_not_loaded` (EshQYN6), each seen failing.
-
 - Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
 	- ID: 2026101410442550
 	- Type: Task
@@ -380,6 +348,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- The bash prompt returning after program output slides out downward from under a seam of the higher content, again
+	- ID: 2026101415085143
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261014-150851
+	- Opened by: JC
+	- Related IDs: 2026101310563284
+	- Target OS: All
+	- Incorrect behavior: The bash prompt returning after program output slides out downward from under a seam of the higher content.
+	- Expected behavior: The prompt shows up in place.
+	- Notes:
+		- Pre-next-cut.
+		- The bug is back. We need to lock this down with a regression test. Including all similar smooth-scroll-related bugs we've fixed in the past, including nano bounce, nano scroll jumping of static content, muffer's similar bug involving "Jump to bottom" message, etc.
+		- Earlier fixes, all in the old-format Done list: "A prompt coming back after a command slides in oddly", "Repeating a command scrolled its output down out from under the prompt above it", "The dreaded 'Nano Bounce Bug' is back", and "Bug: scrolling back in muffer with the mouse wheel made its '1 new message' indicator smear and bounce".
+
 - A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
 	- ID: 2026101411555009
 	- Type: Bug
@@ -434,6 +418,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- README.md: move the long sections out to their own docs
+	- ID: 2026101415085144
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261014-150851
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Move detailed comparisons to something like a "compared to other terminals" md, and link to it. Keep the brief feature comparison table.
+		- Move installation instructions, including development, to one or more .mds, and link to it/them.
+		- Move CLI usage and other examples to its own .md, and link to it. Leave a small snippet of example shcl contents.
+	- Notes:
+		- Pre-next-cut.
 
 - Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
 	- ID: 2026101411554909
@@ -1539,6 +1538,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
+	- ID: 2026101408384488
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261014-083844
+	- Opened by: CC
+	- Related IDs: 2026101321365912
+	- Target OS: Windows
+	- Test environment: b29w
+	- Steps to reproduce:
+		- Install WezTerm, which puts its folder with a `conpty.dll` on PATH.
+		- Start SilkTerm.
+	- Incorrect behavior: The engine loads `conpty.dll` by bare name, so the DLL search order finds WezTerm's, or one in the working folder, before falling back to the one Windows has. Each copy behaves a little differently, so SilkTerm does too, from box to box. A planted `conpty.dll` in the working folder or a folder on the user's PATH loads into SilkTerm.
+	- Expected behavior: Only a `conpty.dll` shipped beside the program, if any, or the one Windows has.
+	- Reproduced: 20261014 on b29w. With WezTerm's folder on PATH no focus-report ask came through; with it taken off, the one Windows has sent it.
+		- 20261014 on b29w and vm925w, both with WezTerm's folder on the machine PATH: dev loaded WezTerm's copy, and a planted copy on PATH or in the working folder.
+	- Notes:
+		- The load is in the engine fork's `tty/windows/conpty.rs`.
+		- A `dxcompiler.dll` on PATH should no longer be used either, so DX12 would compile its shaders with the compiler Windows has. Read from wgpu's code, not checked on a box.
+	- Actual cause: The engine loaded `conpty.dll` by bare name. Windows has none, so the search went on to the working folder and every folder on PATH, and took the first copy it found.
+	- Actual fix: The engine fork loads `conpty.dll` only from the program's folder or System32. SilkTerm also keeps every later load by bare name to those 2 folders, from the first line of `main`, which covers the libraries it uses too.
+	- Verified:
+		- New Windows scenario `conload`: failed on dev on b29w and vm925w, with WezTerm's copy and both planted copies loaded. Passes on the branch on both, with the one Windows has.
+		- `conmap`, `cmdgui` and `quiettab` pass on both boxes with the same build.
+		- Unit tests on b29w: the engine test failed with the old engine and passes with the new one. The bare-name test failed with the rule taken out and passes with it.
+		- Gate, clippy for Linux and Windows, and the docs check pass.
+	- Decisions:
+		- 20261014: Asked whether the DLLs could be linked statically instead. They can't. Microsoft publishes `conpty.dll` only as a DLL, and its job is to start `OpenConsole.exe`, a separate program, so that would still be a file beside SilkTerm. Without it SilkTerm uses the pseudoconsole calls in `kernel32`, which has nothing to link. `dxcompiler.dll` is the same, a DLL that wgpu loads at run time. So the fix stands.
+	- Swept: The fork has no other load by name, and SilkTerm had none. In the libraries, wgpu's DX12 loads `dxcompiler.dll` by name and looks on PATH for it; the rule in `main` covers it. The other loads by name are DLLs Windows has in System32, which is searched first.
+	- Branch: conload
+	- Commit: af9559d, engine fork 09f24ebe on `scroll-ledger-0.26.0`
+	- Test case: wingui scenario `conload` (EshQpKD), seen failing on dev; `the_engine_takes_no_conpty_dll_from_path_or_the_working_folder` (EshQYPc) and `a_dll_on_path_or_in_the_working_folder_is_not_loaded` (EshQYN6), each seen failing.
+	- Acceptance signoff: 20261014-150851
+	- Closed: 20261014-150851
 
 - Wayland: a window dropped across a 100% and a 200% output takes the last size anywhere, not its monitor's own
 	- ID: 2026101409220514
