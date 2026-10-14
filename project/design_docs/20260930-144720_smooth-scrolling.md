@@ -129,6 +129,8 @@ The same mechanism serves output. When new output pushes content up, `visual_off
 
 - A clear shows at once, whatever the scrollback holds, and the same every time. That covers `clear` and `tput clear`, bash's Ctrl+L, which erases the screen but not the scrollback, and a reset. The engine notes each clear with the lines that went up after it. The view snaps to the bottom, and only those lines ease, so output that fits on the screen shows in place and longer output eases like any other. The ease's floor can't reach back past them into the screen that was cleared.
 
+- Blank lines that go up from a blank screen don't ease either, since nothing anyone saw moved. ble.sh draws a prompt too long for one row at the top of the screen with insert-line and delete-line, and the engine sends the rows a delete at the top row takes into the scrollback. After `clear` that eased the new prompt up from 2 rows down.
+
 - There is one depth baseline, sampled both per read and per frame, and whichever comes first counts the growth. Two baselines let the same lines count twice, which showed as a hop down and an ease back.
 
 - Once the scrollback is full, its depth stops growing. The engine then counts the lines it sends off the top of the screen, and that count carries plain output. See the ledger below.

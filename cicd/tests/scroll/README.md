@@ -21,18 +21,18 @@ The trace is read from stderr, not from pixels, so both engines run the exact sa
 
 Scenes self-scroll on a timer (no key injection - unreliable here), so the trace is deterministic. `analyze.py` reads it and checks:
 
-| Scene           | shape (static bands)                                                                               | expected now
-| :-------------- | :------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------
-| less            | none top, 1 bottom                                                                                 | slide, monotone (0 bounces)
-| vim             | none top, 2 bottom                                                                                 | slide, monotone (0 bounces)
-| nano            | 1 top (title), 2 bottom                                                                            | slide, monotone (0 bounces)
-| muffer          | 2 top (header), 1 bottom                                                                           | slide, monotone (0 bounces)
-| tmux            | region above 1 status row, real linefeeds                                                          | slide off the engine's scroll count, sb 1, monotone
-| altenter        | nano shape, entered mid-ease                                                                       | still: frac 0 on every alt frame
-| chrome          | transcript with a live block redrawn under it, normal screen                                       | pinned: the block holds still while output eases, ob 4
-| aptbar          | region over all but the last row on the normal screen, scrollback already full                     | pinned: the lines still ease and the bar's row holds still, ob 1
-| paste / pasteil | input box on a half-empty normal screen growing a line a step, repainted / insert-line             | popin: no step down ever slides (app_off never below 0)
-| clear           | `clear`, `tput clear`, Ctrl+L's bytes and a reset over a full screen, scrollback full and then not | instant: no normal-screen frame between the two alt-screen marks carries a fraction
+| Scene           | shape (static bands)                                                                                                                                | expected now
+| :-------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------
+| less            | none top, 1 bottom                                                                                                                                  | slide, monotone (0 bounces)
+| vim             | none top, 2 bottom                                                                                                                                  | slide, monotone (0 bounces)
+| nano            | 1 top (title), 2 bottom                                                                                                                             | slide, monotone (0 bounces)
+| muffer          | 2 top (header), 1 bottom                                                                                                                            | slide, monotone (0 bounces)
+| tmux            | region above 1 status row, real linefeeds                                                                                                           | slide off the engine's scroll count, sb 1, monotone
+| altenter        | nano shape, entered mid-ease                                                                                                                        | still: frac 0 on every alt frame
+| chrome          | transcript with a live block redrawn under it, normal screen                                                                                        | pinned: the block holds still while output eases, ob 4
+| aptbar          | region over all but the last row on the normal screen, scrollback already full                                                                      | pinned: the lines still ease and the bar's row holds still, ob 1
+| paste / pasteil | input box on a half-empty normal screen growing a line a step, repainted / insert-line                                                              | popin: no step down ever slides (app_off never below 0)
+| clear           | `clear`, `tput clear`, Ctrl+L's bytes, a reset and ble.sh's redraw of a long prompt after `clear`, over a full screen, scrollback full and then not | instant: no normal-screen frame between the two alt-screen marks carries a fraction
 
 `altenter` is a different check: 400 lines of plain output, then the alt screen as soon as the trace shows them easing, so the ease is mid-flight. The scene reads its own trace for that, since a fixed gap missed the ease on a busy box. The alt grid has no scrollback, so the view has to be at rest the moment it swaps in; a leftover ease renders as the fraction wrapping through a whole cell once per line of backlog, which is the nano wobble. One frame is enough, since a still screen only builds when something changes. The scene is `scenes/altenter.bash`; a scene with a script of its own under `scenes/` runs that instead of `scene.bash`.
 
