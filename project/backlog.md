@@ -34,33 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- top quits smooth scrolling at some point
-	- ID: 2026101310563310
-	- Type: Bug
-	- Status: Waiting for answers
-	- Severity: Avg
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Target OS: All
-	- Version and build: Seen in the 10-10 dogfood build (ddrka), with top running since the evening before.
-	- Steps to reproduce:
-		- Run `top` and leave it running.
-	- Incorrect behavior: top quits smooth scrolling at some point.
-	- Expected behavior: Smooth scrolling keeps working however long top runs.
-	- Notes:
-		- Pre-next-cut.
-		- It should probably be excluded, but the fact that this happens could indicate a bug with longer-running stuff, so let's not exclude it.
-	- Reproduced: No, not as something that fades with time. On dev, top in a window on b23 slid as often after 24 minutes as in its first minute, with its list moved by arrow keys every 20 s. Minimizing until the GPU was let go and restoring didn't stop it, and neither did wheel scrolling.
-	- Possible cause: The load, not SilkTerm. top runs on the normal screen and redraws every row each tick. Its list only shifts while some of the rows on screen are processes that used no CPU in the last tick, and a change in how many did moves them up or down. Once more processes use CPU than the window has rows, every visible row is re-sorted each tick, nothing on screen moves as a block, and the redraw cuts, as it should.
-		- With the load held low, then high, then low again, 24 of 43 redraws slid, then 0 of 51, then 14 of 36. A window showed the same: 32 slide steps, none, then 19.
-		- On b23 now, 24 to 39 processes use CPU in a 3 s tick. In 25 minutes of top at 40 rows, every visible row was busy in all 355 timed refreshes, and none slid. A redraw after an arrow key comes after a short tick with fewer busy rows, and 573 of 898 of those slid.
-	- Progress log:
-		- 20261013: Question: Was b23 busy when the sliding stopped, for example a build or test run going? Does top slide again once the box is quiet? If it does, it's top re-sorting its list and the item can close as Moot. If it stays stopped on a quiet box, a window started from a terminal with `SILK_SCROLLDBG=1` prints each redraw's shift, which would show what refuses it.
-		- 20261013: Today's 3 scroll changes don't reach top. It grows no history after its first clear, so the flatpak repaint check never runs for it, its first clear already snapped, and it sets no mouse or focus mode, so it keeps the minimap column.
-	- Verified: a slide eases the same after 14 hours of steps every 3 s as at the start.
-	- Branch: topslide
-	- Test case: None, since no code changed.
-
 - Smooth scroll freaked out with a long flatpak update
 	- ID: 2026101310563284
 	- Type: Bug
@@ -90,111 +63,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 544b01b
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
-
-- `clear` shouldn't scroll, it should instantly clear
-	- ID: 2026101310563297
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Target OS: All
-	- Test environment: b23
-	- Incorrect behavior: `clear` scrolls.
-	- Expected behavior: It should instantly clear.
-	- Notes:
-		- Pre-next-cut.
-	- Against: the old-format Done item "Bug: repeated `clear; ls -lA ~/` scrolled smoothly the first time and appeared instantly every time after", and the 20260914 code review's "A clear eases the same way at a full scrollback as before it". Both made a clear ease on purpose.
-	- Reproduced: 20261013 on b23, in a window. Bash's Ctrl+L eased the old screen up and away, with the scrollback full and not. `clear`, `tput clear` and a reset already showed at once there, since they empty the scrollback too and leave nothing to ease through. Output after a clear that ran past the screen eased every line that went up.
-	- Actual cause:
-		- Ctrl+L erases the screen but not the scrollback, so the old screen goes up into history whole. That read as new output and eased.
-		- The two decisions above made a clear ease on purpose. The flatpak fix (2026101310563284) kept it that way.
-	- Decisions:
-		- This item wins over the two on its "Against:" line, being the newer call.
-		- Best-guess reading: the clear itself shows at once, with nothing sliding, at any scrollback depth, and the same every time. The old bug's complaint was that it was not the same every time.
-		- Output after the clear that fits on the screen shows in place. Output long enough to scroll eases like any other output, but only by what went up after the clear.
-		- Covers `clear` and `tput clear` (both send home, erase the screen and erase the scrollback), Ctrl+L, and a reset (`printf '\033c'`).
-	- Actual fix [Bug]: The terminal engine notes each clear of the screen and each reset, with how many lines went up after it. On a clear the view goes straight to the bottom, and only those lines ease. The ease's minimum distance can't reach back past them into the screen that was cleared.
-	- Verified: 20261013 on b23. The full unit test suite, the engine's own tests, rustfmt and clippy pass. A new scroll scene runs all 4 clears twice, with the scrollback full and then not. It failed on the build from before (27 frames eased) and passes now. The other 11 scroll scenes still pass on X11.
-	- Note: Old tests that said a clear eases:
-		- `a_clear_eases_the_same_at_a_full_scrollback` (EqHIGdN) is inverted and renamed `a_clear_is_instant_at_a_full_scrollback_too`, with the reason in a comment. The engine count it checked still holds.
-		- `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) still passes. A clear no longer reaches the repaint check, so its comment says it pins the check alone.
-		- `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) and `a_scrollback_clear_reads_as_everything_that_refilled_it` are unchanged and still true.
-		- The flatpak item's "so `clear` eases as before" and its "pin what still eases" no longer hold. That item was left as it was.
-	- Progress log:
-		- 20261013: Waiting on signoff, since it reverses 2 recorded decisions and changes what is seen. Which `clear` was seen isn't known. Ctrl+L, or a clear followed by long output, fit what was measured. A look in a real window with the usual shell would settle it.
-		- Not checked: Windows, where ConPTY may send a clear some other way. If it repaints rather than clears, nothing here changes there.
-	- Branch: clearsnap
-	- Commit: 9c99883, engine fork 0068fdd on `scroll-ledger-0.26.0`
-	- Test case: `a_clear_shows_at_once_and_only_what_follows_it_eases` (EscSd2Y), `the_ease_floor_does_not_reach_back_past_a_clear` (EscSd7l) and the inverted EqHIGdN, each red before the fix and green after. Scroll scene `clear` (`cicd/tests/scroll/run.bash`). Engine fork test `scroll_ledger_counts_what_went_up_after_a_clear`.
-	- Swept: the engine pushes the screen into history in one place, the erase of the whole screen, and a reset empties it. Both are noted. Erasing only the scrollback is left out, since the screen stays put. The alt screen keeps no history and has its own slide. The output ease has one caller, the pane build. SilkTerm has no clear or reset command of its own.
-
-- muffer should not get a minimap
-	- ID: 2026101310563323
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Related IDs: 2026101315155800
-	- Target OS: All
-	- Test environment: b23, muffer 2.1.296
-	- Incorrect behavior: muffer gets a minimap.
-	- Expected behavior: No minimap while muffer runs.
-	- Notes:
-		- Pre-next-cut.
-		- Consider making the minimap whitelist-only for TUI apps, e.g. `less`, `tail`, etc.
-		- The minimap already steps aside for a full-screen program that is not in `scroll.minimap.tui_process_whitelist`, default `less tmux screen`, per the old-format Done item "Auto-disable the minimap when in a TUI that has no buffer that can be reached via minimap".
-	- Reproduced: 20261013 on b23, real muffer 2.1.296 in a window with the minimap on. Its default view kept the column. Its full-screen view already lost it.
-	- Actual cause:
-		- muffer has 2 views now. The default one draws on the main screen. It redraws its input box in place and its transcript goes into the scrollback. The column only stepped aside for the alt screen, so this view kept it.
-		- The full-screen view (`tui: fullscreen` in muffer's settings, which b23 uses) is on the alt screen with full mouse tracking, and lost the column before this fix too.
-		- Not the process name, since only a listed name keeps the column. Not the timing either.
-		- muffer run inside tmux keeps the column in either view, since SilkTerm only sees tmux, which is on the list. The muffer sessions on b23 run inside tmux.
-	- Actual fix [Bug]: A program that redraws itself in place on the main screen now counts as drawing its own screen, the same as one on the alt screen, and keeps the column only if listed. That is the whitelist-only rule from the notes. It shows itself by asking for mouse reports or focus changes while it runs. A shell turns both off before it runs a command. Once a program stops asking, the column waits a second before it comes back while that program still runs, since muffer turns focus reports off and on again as it starts. Back at the prompt it comes back at once.
-	- Verified: 20261013 on b23, real muffer 2.1.296 in a window. Default view: the build from before kept the column. Now the column goes once as muffer starts and comes back once as it exits. Without the hold it went, came back and went again in the first quarter second. Full-screen view: the column goes on both builds. The gate passed (fmt, clippy, 1291 tests).
-	- Note: Other programs this changes, which is why it waits on signoff:
-		- An inline picker with the mouse on, such as `fzf --height`, loses the column while it is open.
-		- A nested fish 4, or an ssh session to a host whose shell is fish, loses it for as long as it runs, since fish asks for focus changes at its own prompt. Listing `fish` or `ssh` keeps it, but then for everything run under them.
-		- bash, zsh, a Python REPL and a build keep it, as before. fish as the pane's own shell keeps it too, since it turns focus changes off before it runs a command.
-		- A program on the alt screen that leaves it while still running, as vim does for `:!`, gets the column back a second later rather than at once.
-	- Progress log:
-		- 20261013: Waiting on signoff, since it changes which programs get the column beyond muffer.
-		- Question: should tmux stay on the default list? With it there, muffer inside tmux keeps the column whatever this fix does.
-		- Found on the way: SilkTerm never sends focus reports to a program that asks for them. Filed as 2026101315155800.
-	- Branch: nomufmap
-	- Commit: f9a2426
-	- Test case: `a_program_redrawing_the_main_screen_takes_the_column_too` (EscYyBa), red before the fix and green after. `a_program_that_toggles_as_it_starts_moves_the_column_once` (Esca2GW), red with the hold taken out.
-	- Swept: `minimap::wanted` has one caller outside tests, `sync_minimap`, which runs every frame for the shown tab's panes on every platform. The marker, the scrollbar and the alt-screen ease key on the alt screen for their own reasons and are unchanged.
-
-- An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
-	- ID: 2026101304551668
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Needs local test suite run?: No. Verified: 20261013, the unit suite, clippy, fmt and the test ID check. The full pipeline has not run, so no dogfood build has it yet.
-	- Severity: Low
-	- Opened: 20261013-045516
-	- Opened by: CC
-	- Related IDs: 2026100910295901, 2026100907341818
-	- Target OS: All
-	- Steps to reproduce:
-		- A config from before 10-09 with `theme: "Matrix"`, `colors.foreground` and `colors.cursor` set, and no `performance.rated_hardware` or remembered window lines.
-		- Launch.
-	- Incorrect behavior: the text shows Matrix's colors. The file's colors count as Custom's and show only when Custom is picked.
-	- Expected behavior: the file's colors show over Matrix as its `*` changes, as they do for a file with those lines.
-	- Reproduced: 20261013, a unit test with the file above. Adding a `rated_hardware` line makes the colors show.
-	- Possible cause: `move_theme_colors` only runs from `move_state_out`, after its early return for a file with no state lines. The state lines are what mark a file from before 10-09, so moving it out needs another mark.
-	- Actual cause: the move took an active state line as the only mark of an old file. A file written by hand has none, and neither does an old one whose state lines were deleted by hand.
-	- Actual fix: two more marks, both read off the file. A file with no shcl Format line is old, since shcl 3.0 came before 10-09. The launch reads it before the step that adds the line. A state path on a commented line is old too, such as the old template's `# rated_hardware`, since the update drops those lines as well. An active state line still marks it, and only that one moves state out. A file this build wrote has the Format line and no state lines, so it is never moved again. The `kept` check still stops a second move after one that wrote.
-	- Notes:
-		- Nearly every real file has the machine test's lines, so this is mostly a hand-written file.
-		- A file whose footer was deleted by hand reads as old, so its colors over a theme with no `*` changes would move again. A launch already reads such a file as shcl 2.x, makes its v2 backup and puts the footer back.
-		- The last part of EsGMVgc is commented out. It used a file with no Format line as a file this build wrote. EscrdlY checks a real one instead, written by a launch and saved.
-	- Swept: the one place that decides a file is old for the move (`move_state_out`). Other old-file reads go line by line, such as the font switch in `fields::load`, and need no file mark. The launch path is the only caller (`load`, which `reload_from_disk` also runs).
-	- Verified: EscrdlY failed before the fix (the hand-written file got no `*` changes) and passes after. With the Format line mark taken out it went red, with the commented line mark taken out it went red, and with the move always on it went red. 3 launches of a build with a hand-written file: the first wrote Matrix's `*` changes, the second and third changed nothing in the config.
-	- Branch: oldcolors
-	- Commit: a5e81f0
-	- Test case: `an_old_file_with_no_state_lines_still_shows_its_colors_over_the_theme` (EscrdlY). Already there: EsGMVgc.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -499,6 +367,102 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+
+- `clear` shouldn't scroll, it should instantly clear
+	- ID: 2026101310563297
+	- Type: Bug
+	- Status: Started
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: All
+	- Test environment: b23
+	- Incorrect behavior: `clear` scrolls.
+	- Expected behavior: It should instantly clear.
+	- Notes:
+		- Pre-next-cut.
+	- Against: the old-format Done item "Bug: repeated `clear; ls -lA ~/` scrolled smoothly the first time and appeared instantly every time after", and the 20260914 code review's "A clear eases the same way at a full scrollback as before it". Both made a clear ease on purpose.
+	- Reproduced: 20261013 on b23, in a window. Bash's Ctrl+L eased the old screen up and away, with the scrollback full and not. `clear`, `tput clear` and a reset already showed at once there, since they empty the scrollback too and leave nothing to ease through. Output after a clear that ran past the screen eased every line that went up.
+	- Actual cause:
+		- Ctrl+L erases the screen but not the scrollback, so the old screen goes up into history whole. That read as new output and eased.
+		- The two decisions above made a clear ease on purpose. The flatpak fix (2026101310563284) kept it that way.
+	- Decisions:
+		- This item wins over the two on its "Against:" line, being the newer call.
+		- Best-guess reading: the clear itself shows at once, with nothing sliding, at any scrollback depth, and the same every time. The old bug's complaint was that it was not the same every time.
+		- Output after the clear that fits on the screen shows in place. Output long enough to scroll eases like any other output, but only by what went up after the clear.
+		- Covers `clear` and `tput clear` (both send home, erase the screen and erase the scrollback), Ctrl+L, and a reset (`printf '\033c'`).
+	- Actual fix [Bug]: The terminal engine notes each clear of the screen and each reset, with how many lines went up after it. On a clear the view goes straight to the bottom, and only those lines ease. The ease's minimum distance can't reach back past them into the screen that was cleared.
+	- Verified: 20261013 on b23. The full unit test suite, the engine's own tests, rustfmt and clippy pass. A new scroll scene runs all 4 clears twice, with the scrollback full and then not. It failed on the build from before (27 frames eased) and passes now. The other 11 scroll scenes still pass on X11.
+	- Note: Old tests that said a clear eases:
+		- `a_clear_eases_the_same_at_a_full_scrollback` (EqHIGdN) is inverted and renamed `a_clear_is_instant_at_a_full_scrollback_too`, with the reason in a comment. The engine count it checked still holds.
+		- `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) still passes. A clear no longer reaches the repaint check, so its comment says it pins the check alone.
+		- `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) and `a_scrollback_clear_reads_as_everything_that_refilled_it` are unchanged and still true.
+		- The flatpak item's "so `clear` eases as before" and its "pin what still eases" no longer hold. That item was left as it was.
+	- Progress log:
+		- 20261013: Waiting on signoff, since it reverses 2 recorded decisions and changes what is seen. Which `clear` was seen isn't known. Ctrl+L, or a clear followed by long output, fit what was measured. A look in a real window with the usual shell would settle it.
+		- Not checked: Windows, where ConPTY may send a clear some other way. If it repaints rather than clears, nothing here changes there.
+		- 20261013: Answer (JC): `clear` command, after e.g. a directory listing.
+		- 20261013: That isn't what was measured. `clear` here sends home, erase screen and erase scrollback, and showed at once on the build from before. b23's login shell moved to n8env with ble.sh the same day, so next is a retry of `ls` then `clear` under that shell, on the build from before and on this one.
+	- Branch: clearsnap
+	- Commit: 9c99883, engine fork 0068fdd on `scroll-ledger-0.26.0`
+	- Test case: `a_clear_shows_at_once_and_only_what_follows_it_eases` (EscSd2Y), `the_ease_floor_does_not_reach_back_past_a_clear` (EscSd7l) and the inverted EqHIGdN, each red before the fix and green after. Scroll scene `clear` (`cicd/tests/scroll/run.bash`). Engine fork test `scroll_ledger_counts_what_went_up_after_a_clear`.
+	- Swept: the engine pushes the screen into history in one place, the erase of the whole screen, and a reset empties it. Both are noted. Erasing only the scrollback is left out, since the screen stays put. The alt screen keeps no history and has its own slide. The output ease has one caller, the pane build. SilkTerm has no clear or reset command of its own.
+
+- muffer should not get a minimap
+	- ID: 2026101310563323
+	- Type: Bug
+	- Status: Started
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Related IDs: 2026101315155800
+	- Target OS: All
+	- Test environment: b23, muffer 2.1.296
+	- Incorrect behavior: muffer gets a minimap.
+	- Expected behavior: No minimap while muffer runs.
+	- Notes:
+		- Pre-next-cut.
+		- Consider making the minimap whitelist-only for TUI apps, e.g. `less`, `tail`, etc.
+		- The minimap already steps aside for a full-screen program that is not in `scroll.minimap.tui_process_whitelist`, default `less tmux screen`, per the old-format Done item "Auto-disable the minimap when in a TUI that has no buffer that can be reached via minimap".
+	- Reproduced: 20261013 on b23, real muffer 2.1.296 in a window with the minimap on. Its default view kept the column. Its full-screen view already lost it.
+	- Actual cause:
+		- muffer has 2 views now. The default one draws on the main screen. It redraws its input box in place and its transcript goes into the scrollback. The column only stepped aside for the alt screen, so this view kept it.
+		- The full-screen view (`tui: fullscreen` in muffer's settings, which b23 uses) is on the alt screen with full mouse tracking, and lost the column before this fix too.
+		- Not the process name, since only a listed name keeps the column. Not the timing either.
+		- muffer run inside tmux keeps the column in either view, since SilkTerm only sees tmux, which is on the list. The muffer sessions on b23 run inside tmux.
+	- Actual fix [Bug]: A program that redraws itself in place on the main screen now counts as drawing its own screen, the same as one on the alt screen, and keeps the column only if listed. That is the whitelist-only rule from the notes. It shows itself by asking for mouse reports or focus changes while it runs. A shell turns both off before it runs a command. Once a program stops asking, the column waits a second before it comes back while that program still runs, since muffer turns focus reports off and on again as it starts. Back at the prompt it comes back at once.
+	- Verified: 20261013 on b23, real muffer 2.1.296 in a window. Default view: the build from before kept the column. Now the column goes once as muffer starts and comes back once as it exits. Without the hold it went, came back and went again in the first quarter second. Full-screen view: the column goes on both builds. The gate passed (fmt, clippy, 1291 tests).
+	- Note: Other programs this changes, which is why it waits on signoff:
+		- An inline picker with the mouse on, such as `fzf --height`, loses the column while it is open.
+		- A nested fish 4, or an ssh session to a host whose shell is fish, loses it for as long as it runs, since fish asks for focus changes at its own prompt. Listing `fish` or `ssh` keeps it, but then for everything run under them.
+		- bash, zsh, a Python REPL and a build keep it, as before. fish as the pane's own shell keeps it too, since it turns focus changes off before it runs a command.
+		- A program on the alt screen that leaves it while still running, as vim does for `:!`, gets the column back a second later rather than at once.
+	- Progress log:
+		- 20261013: Waiting on signoff, since it changes which programs get the column beyond muffer.
+		- Question: should tmux stay on the default list? With it there, muffer inside tmux keeps the column whatever this fix does.
+		- Found on the way: SilkTerm never sends focus reports to a program that asks for them. Filed as 2026101315155800.
+		- 20261013: Answer (JC): Fish and ssh (and tmux and `screen`) should smooth-scroll, except for nested TUI apps that aren't whitelisted.
+		- 20261013: So the nested fish and ssh cases in the note above are wrong, and tmux stays on the list. Next: fish, ssh, tmux and screen keep the column and smooth scroll, while a TUI run inside one of them that isn't listed still loses it. Listing them by name doesn't do that, since what runs under them would keep it too.
+	- Decisions:
+		- tmux and screen stay on the default list.
+	- Branch: nomufmap
+	- Commit: f9a2426
+	- Test case: `a_program_redrawing_the_main_screen_takes_the_column_too` (EscYyBa), red before the fix and green after. `a_program_that_toggles_as_it_starts_moves_the_column_once` (Esca2GW), red with the hold taken out.
+	- Swept: `minimap::wanted` has one caller outside tests, `sync_minimap`, which runs every frame for the shown tab's panes on every platform. The marker, the scrollbar and the alt-screen ease key on the alt screen for their own reasons and are unchanged.
+
+- Why can muffer not have a minimap?
+	- ID: 2026101318475899
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261013-184758
+	- Opened by: JC
+	- Related IDs: 2026101310563323
+	- Target OS: All
+	- Requirements:
+		- Question: Why can muffer not have a minimap? A user can scroll up in muffer. I get the technical limitations, but we have the complete ability to observe and pattern-match everything that comes through our buffers. So why can we not build a *virtual* buffer based on pattern matching, with not crazy CPU or GPU use, that allows for scrollback even for TUI apps such as muffer?
+	- Notes:
+		- Pre-next-cut.
 
 - Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
 	- ID: 2026101313381123
@@ -3813,6 +3777,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
 
+- An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
+	- ID: 2026101304551668
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: No. Verified: 20261013, the unit suite, clippy, fmt and the test ID check. The full pipeline has not run, so no dogfood build has it yet.
+	- Severity: Low
+	- Opened: 20261013-045516
+	- Opened by: CC
+	- Related IDs: 2026100910295901, 2026100907341818
+	- Target OS: All
+	- Steps to reproduce:
+		- A config from before 10-09 with `theme: "Matrix"`, `colors.foreground` and `colors.cursor` set, and no `performance.rated_hardware` or remembered window lines.
+		- Launch.
+	- Incorrect behavior: the text shows Matrix's colors. The file's colors count as Custom's and show only when Custom is picked.
+	- Expected behavior: the file's colors show over Matrix as its `*` changes, as they do for a file with those lines.
+	- Reproduced: 20261013, a unit test with the file above. Adding a `rated_hardware` line makes the colors show.
+	- Possible cause: `move_theme_colors` only runs from `move_state_out`, after its early return for a file with no state lines. The state lines are what mark a file from before 10-09, so moving it out needs another mark.
+	- Actual cause: the move took an active state line as the only mark of an old file. A file written by hand has none, and neither does an old one whose state lines were deleted by hand.
+	- Actual fix: two more marks, both read off the file. A file with no shcl Format line is old, since shcl 3.0 came before 10-09. The launch reads it before the step that adds the line. A state path on a commented line is old too, such as the old template's `# rated_hardware`, since the update drops those lines as well. An active state line still marks it, and only that one moves state out. A file this build wrote has the Format line and no state lines, so it is never moved again. The `kept` check still stops a second move after one that wrote.
+	- Notes:
+		- Nearly every real file has the machine test's lines, so this is mostly a hand-written file.
+		- A file whose footer was deleted by hand reads as old, so its colors over a theme with no `*` changes would move again. A launch already reads such a file as shcl 2.x, makes its v2 backup and puts the footer back.
+		- The last part of EsGMVgc is commented out. It used a file with no Format line as a file this build wrote. EscrdlY checks a real one instead, written by a launch and saved.
+	- Swept: the one place that decides a file is old for the move (`move_state_out`). Other old-file reads go line by line, such as the font switch in `fields::load`, and need no file mark. The launch path is the only caller (`load`, which `reload_from_disk` also runs).
+	- Verified: EscrdlY failed before the fix (the hand-written file got no `*` changes) and passes after. With the Format line mark taken out it went red, with the commented line mark taken out it went red, and with the move always on it went red. 3 launches of a build with a hand-written file: the first wrote Matrix's `*` changes, the second and third changed nothing in the config.
+	- Progress log:
+		- 20261013: Question: is it OK that a hand-written file with no Format line counts as old? Answer (JC): yes.
+	- Branch: oldcolors
+	- Commit: a5e81f0
+	- Test case: `an_old_file_with_no_state_lines_still_shows_its_colors_over_the_theme` (EscrdlY). Already there: EsGMVgc.
+	- Acceptance signoff: JC, 20261013.
+	- Closed: 20261013
+
 - The scroll harness's altenter scene fails now and then when the box is busy
 	- ID: 2026101307482605
 	- Type: Bug
@@ -5415,6 +5412,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff:
 	- Superseded by ID: 2026093009280571
 	- Closed: 20260930-092805
+
+- top quits smooth scrolling at some point
+	- ID: 2026101310563310
+	- Type: Bug
+	- Status: Moot
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: All
+	- Version and build: Seen in the 10-10 dogfood build (ddrka), with top running since the evening before.
+	- Steps to reproduce:
+		- Run `top` and leave it running.
+	- Incorrect behavior: top quits smooth scrolling at some point.
+	- Expected behavior: Smooth scrolling keeps working however long top runs.
+	- Notes:
+		- Pre-next-cut.
+		- It should probably be excluded, but the fact that this happens could indicate a bug with longer-running stuff, so let's not exclude it.
+	- Reproduced: No, not as something that fades with time. On dev, top in a window on b23 slid as often after 24 minutes as in its first minute, with its list moved by arrow keys every 20 s. Minimizing until the GPU was let go and restoring didn't stop it, and neither did wheel scrolling.
+	- Possible cause: The load, not SilkTerm. top runs on the normal screen and redraws every row each tick. Its list only shifts while some of the rows on screen are processes that used no CPU in the last tick, and a change in how many did moves them up or down. Once more processes use CPU than the window has rows, every visible row is re-sorted each tick, nothing on screen moves as a block, and the redraw cuts, as it should.
+		- With the load held low, then high, then low again, 24 of 43 redraws slid, then 0 of 51, then 14 of 36. A window showed the same: 32 slide steps, none, then 19.
+		- On b23 now, 24 to 39 processes use CPU in a 3 s tick. In 25 minutes of top at 40 rows, every visible row was busy in all 355 timed refreshes, and none slid. A redraw after an arrow key comes after a short tick with fewer busy rows, and 573 of 898 of those slid.
+	- Progress log:
+		- 20261013: Question: Was b23 busy when the sliding stopped, for example a build or test run going? Does top slide again once the box is quiet? If it does, it's top re-sorting its list and the item can close as Moot. If it stays stopped on a quiet box, a window started from a terminal with `SILK_SCROLLDBG=1` prints each redraw's shift, which would show what refuses it.
+		- 20261013: Today's 3 scroll changes don't reach top. It grows no history after its first clear, so the flatpak repaint check never runs for it, its first clear already snapped, and it sets no mouse or focus mode, so it keeps the minimap column.
+		- 20261013: Answer (JC): A new instance also isn't smooth. So it must have been a quiet box. Which I guess is OK. Even the sliding on a quiet box.
+	- Verified: a slide eases the same after 14 hours of steps every 3 s as at the start.
+	- Branch: topslide
+	- Test case: None, since no code changed.
+	- Acceptance signoff: JC, 20261013.
+	- Closed: 20261013
 
 - Settings that depend on a master boolean switch follow the automatic settings design
 	- ID: 2026100907341818
