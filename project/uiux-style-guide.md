@@ -78,7 +78,7 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 
 - On macOS the two auto-copy switches are the Copy on select and Copy on output rows in Edit, checked to follow the focused pane. The system menu bar has no place for a control that is not a menu.
 
-- The right-click menu is the pane's own menu. It is a selection from the bar, not a copy of it: the actions worth reaching without traveling, plus items that only make sense at the pointer, such as the two link actions that appear only when the click was on a link. It has one window-chrome row, Menu bar, because with the bar hidden nothing else can bring it back.
+- The right-click menu is the pane's own menu. It is a selection from the bar, not a copy of it: the actions worth reaching without traveling, plus items that only make sense at the pointer, such as the two link actions that appear only when the click was on a link. It has two window-chrome rows, Menu bar and Bare window under it, because with the bar hidden nothing else can bring it back or leave a bare window.
 
 - On macOS the right-click menu has no Menu bar row, since there is no in-window bar to bring back.
 
@@ -349,7 +349,7 @@ Things the built interface does differently from the rules above. Each is a smal
 
 - On macOS the auto-copy switches show their state only in the Edit menu, not at a glance as the in-window bar shows them elsewhere. The bar's dimming of them while the window is in the background has no counterpart there either.
 
-- The right-click menu no longer offers Fullscreen, Window frame or Bare window, so with the menu bar hidden they are reachable only by F11 or by putting the bar back. Acceptable while Menu bar stays on that menu, but worth another look if the bar is ever hidden by default.
+- The right-click menu no longer offers Fullscreen or Window frame, so with the menu bar hidden they are reachable only by F11 or by putting the bar back. Acceptable while Menu bar stays on that menu, but worth another look if the bar is ever hidden by default. A hidden bar is saved now, so new windows open without it too.
 
 - `Gaussian [ugly]` says out loud that it is the worse option, which no other control does. It is the baseline the other three scrim functions are compared against, and the label was asked for.
 

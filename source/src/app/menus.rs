@@ -607,6 +607,7 @@ struct CtxState {
 	copy_select: bool,
 	copy_output: bool,
 	menu_bar: bool,
+	bare: bool,
 	next_wallpaper: bool,
 }
 
@@ -654,10 +655,12 @@ fn context_menu_items(on: CtxState, shells: &[ShellEntry]) -> Vec<Entry> {
 	entries.extend([
 		Entry::Sep,
 		entry_item("Close pane", MenuAction::Close),
-		// The one window-chrome row worth repeating here: with the bar hidden
-		// this menu is the only way back to it. The rest live on View.
+		// The window-chrome rows worth repeating here: with the bar hidden this
+		// menu is the only way back to it, or out of a bare window. The rest
+		// live on View.
 		Entry::Sep,
 		entry_check_accel('M', on.menu_bar, "Menu bar", MenuAction::ToggleMenuBar),
+		entry_check_accel('B', on.bare, "Bare window", MenuAction::ToggleBare),
 	]);
 	if on.next_wallpaper {
 		entries.push(next_wallpaper_row());
@@ -857,6 +860,7 @@ impl State {
 			copy_select,
 			copy_output,
 			menu_bar: self.menu_bar,
+			bare: self.bare,
 			next_wallpaper: self.can_rotate(),
 		};
 		let settings = config::settings();
@@ -1285,6 +1289,14 @@ impl State {
 			// a Mac has no in-window bar to bring back (`menu_bar_at_launch`)
 			MenuAction::ToggleMenuBar => {
 				self.menu_bar = !self.menu_bar && !cfg!(target_os = "macos");
+				// what windows opened after start with; the others keep theirs
+				let shown = self.menu_bar;
+				if !cfg!(target_os = "macos") {
+					save_live(|live| {
+						live.menu_bar = shown;
+						true
+					});
+				}
 				self.relayout_all();
 			}
 			MenuAction::ToggleBare => self.toggle_bare(),
@@ -1682,6 +1694,7 @@ mod tests {
 			copy_select: true,
 			copy_output: true,
 			menu_bar: true,
+			bare: false,
 			next_wallpaper: true,
 		};
 		let keys = crate::keys::Bindings::defaults(false);
@@ -1808,6 +1821,7 @@ mod tests {
 			copy_select: false,
 			copy_output: false,
 			menu_bar: true,
+			bare: false,
 			next_wallpaper: false,
 		};
 		for shells in [three_shells(), Vec::new()] {
@@ -1858,11 +1872,13 @@ mod tests {
 		use super::super::menubar::menu_bar_at_launch;
 		use super::mac_entries;
 		for hide_menu in [None, Some(false), Some(true)] {
-			assert!(!menu_bar_at_launch(hide_menu, true), "{hide_menu:?}");
+			for saved in [false, true] {
+				assert!(!menu_bar_at_launch(hide_menu, saved, true), "{hide_menu:?}");
+			}
 		}
-		assert!(menu_bar_at_launch(None, false));
-		assert!(menu_bar_at_launch(Some(false), false));
-		assert!(!menu_bar_at_launch(Some(true), false));
+		assert!(menu_bar_at_launch(None, true, false));
+		assert!(menu_bar_at_launch(Some(false), true, false));
+		assert!(!menu_bar_at_launch(Some(true), true, false));
 		let shells = [shell("bash", true)];
 		for next_wallpaper in [false, true] {
 			let ctx = CtxState {
@@ -1871,6 +1887,7 @@ mod tests {
 				copy_select: false,
 				copy_output: false,
 				menu_bar: false,
+				bare: false,
 				next_wallpaper,
 			};
 			let window = context_menu_items(ctx, &shells);
@@ -1884,6 +1901,60 @@ mod tests {
 					.any(|pair| matches!(pair, [Entry::Sep, Entry::Sep]))
 			);
 		}
+	}
+
+	// Bare window sits under Menu bar on the right-click menu, since with the
+	// bar hidden there is no View menu to leave a bare window from. A Mac keeps
+	// it, less the Menu bar row.
+	// Test ID: Esdy2n3
+	#[test]
+	fn bare_window_is_on_the_right_click_menu_under_menu_bar() {
+		use super::mac_entries;
+		let shells = [shell("bash", true)];
+		for bare in [false, true] {
+			let ctx = CtxState {
+				link: false,
+				read_only: false,
+				copy_select: false,
+				copy_output: false,
+				menu_bar: !bare,
+				bare,
+				next_wallpaper: false,
+			};
+			let items = context_menu_items(ctx, &shells);
+			let actions = actions_in(&items);
+			let menu_bar = actions
+				.iter()
+				.position(|a| *a == MenuAction::ToggleMenuBar)
+				.expect("Menu bar");
+			assert_eq!(actions.get(menu_bar + 1), Some(&MenuAction::ToggleBare));
+			let row = items.iter().find_map(|entry| match entry {
+				Entry::Item {
+					label,
+					action: MenuAction::ToggleBare,
+					check,
+					..
+				} => Some((label.as_str(), *check)),
+				_ => None,
+			});
+			assert_eq!(row, Some(("Bare window", Some(bare))));
+			assert_eq!(accel_clash(&items), None);
+			let mac = actions_in(&mac_entries(items));
+			assert!(mac.contains(&MenuAction::ToggleBare));
+			assert!(!mac.contains(&MenuAction::ToggleMenuBar));
+		}
+	}
+
+	// A new window opens with the menu bar as last saved, and --hide-menu
+	// outranks that either way.
+	// Test ID: Esdy2rb
+	#[test]
+	fn a_new_window_opens_with_the_saved_menu_bar() {
+		use super::super::menubar::menu_bar_at_launch;
+		assert!(menu_bar_at_launch(None, true, false));
+		assert!(!menu_bar_at_launch(None, false, false));
+		assert!(menu_bar_at_launch(Some(false), false, false));
+		assert!(!menu_bar_at_launch(Some(true), true, false));
 	}
 
 	// A row that does what a hotkey does shows the chord that hotkey answers to,
@@ -1902,6 +1973,7 @@ mod tests {
 			copy_select: false,
 			copy_output: false,
 			menu_bar: true,
+			bare: false,
 			next_wallpaper: false,
 		};
 		let label = |entries: &[Entry], want: MenuAction| {
@@ -1981,6 +2053,7 @@ mod tests {
 			copy_select: false,
 			copy_output: false,
 			menu_bar: false,
+			bare: false,
 			next_wallpaper: true,
 		};
 		let window = context_menu_items(ctx, &shells);
@@ -2053,6 +2126,7 @@ mod tests {
 					copy_select: false,
 					copy_output: false,
 					menu_bar: on,
+					bare: on,
 					next_wallpaper: false,
 				},
 				&[],
@@ -2082,6 +2156,10 @@ mod tests {
 				check_of(&items, |a| matches!(a, MenuAction::ToggleMenuBar)),
 				Some(Some(on))
 			);
+			assert_eq!(
+				check_of(&items, |a| matches!(a, MenuAction::ToggleBare)),
+				Some(Some(on))
+			);
 			assert_eq!(accel_clash(&items), None);
 		}
 	}
@@ -2095,6 +2173,7 @@ mod tests {
 			copy_select: false,
 			copy_output: false,
 			menu_bar: true,
+			bare: false,
 			next_wallpaper: false,
 		};
 		let shells = three_shells();

@@ -4,12 +4,13 @@
 ##		Three windows on the private display, two on one settings file and one
 ##		on another. A save in the first has to show in the second at once, and
 ##		never in the third.
-##			- View > Minimap in window A saves. B's minimap comes on, C's does
-##			  not, and nobody picks a new wallpaper.
+##			- View > Minimap in window A saves. A's minimap comes on, B keeps
+##			  its own, C's does not change, and nobody picks a new wallpaper.
 ##			- A new wallpaper folder written by hand, then Reload config in A.
 ##			  A and B both pick from the new folder; C picks nothing.
 ##			- B killed without warning. The next save in A finds it gone and
 ##			  takes its marker away.
+##			- A window D opened after a save starts with what was saved.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
 ##	  xdotool, xwd or ImageMagick).
@@ -197,7 +198,9 @@ fCheck "the file has the minimap on" fWaitMinimap "${shared}" true
 for name in a b c; do fSettled "${name}" "${work}/${name}1.png" || true; done
 ## a is the control: the strip shows the minimap at all
 fCheck "a shows it" fDiffers "${work}/a0.png" "${work}/a1.png"
-fCheck "b shows it" fDiffers "${work}/b0.png" "${work}/b1.png"
+## A view switch is for new windows now, and the others keep theirs (2026101313381123).
+# fCheck "b shows it" fDiffers "${work}/b0.png" "${work}/b1.png"
+fCheck "b keeps its own" fSame "${work}/b0.png" "${work}/b1.png"
 fCheck "c does not" fSame "${work}/c0.png" "${work}/c1.png"
 fCheck "c's file is untouched" fNoMinimap "${other}"
 fCheck "nobody picked a new wallpaper" test "$(fHistory "${work}/shared")" == "${histShared}"
@@ -230,6 +233,22 @@ fCheck "a's marker stays" test -e "${dirA}${pids[a]}"
 fCheck "a still runs" kill -0 "${pids[a]}"
 fCheck "c still runs" kill -0 "${pids[c]}"
 
+echo "a window opened after a save"
+fX xdotool windowactivate --sync "${windows[a]}" 2>/dev/null || true
+fX xdotool key --clearmodifiers alt+v 2>/dev/null || true
+sleep 0.5
+fX xdotool key --clearmodifiers n 2>/dev/null || true
+fCheck "the file has the minimap on" fWaitMinimap "${shared}" true
+fLaunch d "${shared}"
+fCheck "d: a window came up" test -n "${windows[d]}"
+sleep 5
+## View > Minimap flips what d shows, so the file says off only if d came up with it on
+fX xdotool windowactivate --sync "${windows[d]}" 2>/dev/null || fX xdotool windowfocus --sync "${windows[d]}" 2>/dev/null || true
+fX xdotool key --clearmodifiers alt+v 2>/dev/null || true
+sleep 0.5
+fX xdotool key --clearmodifiers n 2>/dev/null || true
+fCheck "d started with the saved minimap" fWaitMinimap "${shared}" false
+
 if ((failures)); then
 	for said in "${work}"/*.said.txt; do echo "  ${said##*/}:"; tail -n 12 "${said}" | sed 's/^/    /'; done
 	echo "${failures} failed"; exit 1
@@ -238,3 +257,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261013 JC: Created.
+##		- 20261013 JC: B keeps its own minimap; D opens with the saved one.

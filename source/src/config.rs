@@ -870,6 +870,7 @@ pub struct Settings {
 	pub remember_per_monitor: bool, // keep a last size for each monitor (monitor_sizes)
 	pub remember_maximized: bool,   // launch maximized if the last window closed that way
 	pub hide_single_tab: bool,      // hide the tab bar while only one tab is open
+	pub menu_bar: bool,             // a new window shows the menu bar (never on macOS)
 	pub new_tab_beside: bool,       // a new tab opens right of the active one, else at the end
 	pub tab_shows_title: bool,      // let a program's own title name the tab (tabtitle::Parts)
 	pub tab_shows_shell: bool,      // parts a tab's own text is made of
@@ -1108,6 +1109,7 @@ impl Settings {
 			remember_per_monitor: true,
 			remember_maximized: false,
 			hide_single_tab: false,
+			menu_bar: true,
 			new_tab_beside: true,
 			tab_shows_shell: true,
 			tab_shows_program: true,
@@ -1669,6 +1671,28 @@ pub fn keep_window_state(live: &Settings, reloaded: &mut Settings) {
 	if picked {
 		reloaded.wallpaper.clone_from(&live.wallpaper);
 	}
+}
+
+/// The switches a window shows itself by, which another window's save leaves
+/// as they are: copy on select, the minimap, the tab strip and the menu bar.
+/// The save is what windows opened after it start with. Settings opens on
+/// these too, so its rows match the window it was opened from.
+pub fn keep_window_view(live: &Settings, reloaded: &mut Settings) {
+	use crate::ui_spec::Key;
+	for key in [Key::CopyOnSelect, Key::Minimap] {
+		let own = &mut reloaded.model.values.own;
+		match live.model.values.own.get(key.name()) {
+			Some(v) => {
+				own.insert(key.name().to_string(), v.clone());
+			}
+			None => {
+				own.remove(key.name());
+			}
+		}
+	}
+	reloaded.hide_single_tab = live.hide_single_tab;
+	reloaded.menu_bar = live.menu_bar;
+	crate::fields::fill(reloaded, None);
 }
 
 /// A wallpaper named for the session, at launch (`--wallpaper-file`) or while
@@ -2638,6 +2662,9 @@ pub fn persist(orig: &Settings, edited: &Settings) -> bool {
 	if edited.hide_single_tab != orig.hide_single_tab {
 		doc.put_bool("window.hide_single_tab", edited.hide_single_tab);
 	}
+	if edited.menu_bar != orig.menu_bar {
+		doc.put_bool("window.menu_bar", edited.menu_bar);
+	}
 	if edited.word_separators != orig.word_separators {
 		doc.put_string("selection.word_separators", &edited.word_separators);
 	}
@@ -2884,6 +2911,7 @@ struct RawConfig {
 	remember_per_monitor: Option<bool>,
 	remember_maximized: Option<bool>,
 	hide_single_tab: Option<bool>,
+	menu_bar: Option<bool>,
 	new_tab_beside: Option<bool>,
 	tab_shows_shell: Option<bool>,
 	tab_shows_program: Option<bool>,
@@ -3373,6 +3401,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		remember_per_monitor: reader.read_bool("window.remember_per_monitor"),
 		remember_maximized: reader.read_bool("window.remember_maximized"),
 		hide_single_tab: reader.read_bool("window.hide_single_tab"),
+		menu_bar: reader.read_bool("window.menu_bar"),
 		new_tab_beside: reader.read_bool("window.new_tab_next_to_current"),
 		tab_shows_shell: reader.read_bool("window.tab_shows_shell"),
 		tab_shows_program: reader.read_bool("window.tab_shows_program"),
@@ -4019,6 +4048,7 @@ fn resolve(raw: RawConfig) -> Settings {
 		remember_per_monitor: raw.remember_per_monitor.unwrap_or(d.remember_per_monitor),
 		remember_maximized: raw.remember_maximized.unwrap_or(d.remember_maximized),
 		hide_single_tab: raw.hide_single_tab.unwrap_or(d.hide_single_tab),
+		menu_bar: raw.menu_bar.unwrap_or(d.menu_bar),
 		new_tab_beside: raw.new_tab_beside.unwrap_or(d.new_tab_beside),
 		tab_shows_shell: raw.tab_shows_shell.unwrap_or(d.tab_shows_shell),
 		tab_shows_program: raw.tab_shows_program.unwrap_or(d.tab_shows_program),
@@ -7742,6 +7772,11 @@ window:
 	# remember_maximized: false  ## Default
 
 	# hide_single_tab: false  ## Default
+
+	## Show the menu bar in a new window. The View menu and the right-click
+	## menu change it for the window they are in, and for windows opened after.
+	## Not on macOS, which has its own menu bar.
+	# menu_bar: true  ## Default
 
 	## Open a new tab just right of the one in front. Off puts it at the end.
 	# new_tab_next_to_current: true  ## Default
@@ -16026,6 +16061,40 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// The menu bar is on by default and is not a dialog row: the View and
+	// right-click menus save it, and the next window opens with it.
+	// Test ID: Esdy2iX
+	#[test]
+	fn the_menu_bar_is_on_and_survives_a_save() {
+		assert!(Settings::default().menu_bar);
+		let template = setting_lines(default_config())
+			.into_iter()
+			.find_map(|(name, line)| (name == "window.menu_bar").then_some(line));
+		assert_eq!(template.as_deref(), Some("\t# menu_bar: true  ## Default"));
+		let _guard = super::test_config_lock();
+		let _ = settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_menubar_{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("config.shcl");
+		std::fs::write(&path, default_config()).unwrap();
+		set_config_override(path.clone());
+
+		let orig = load();
+		assert!(orig.menu_bar);
+		let mut new = orig.clone();
+		new.menu_bar = false;
+		assert!(persist(&orig, &new));
+		assert!(!load().menu_bar);
+		let back = load();
+		let mut on = back.clone();
+		on.menu_bar = true;
+		assert!(persist(&back, &on));
+		assert!(load().menu_bar);
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// An existing config's commented line names the old empty default, and is
 	// refreshed to the place it meant.
 	// Test ID: Er1vmpP
@@ -17693,5 +17762,34 @@ mod peer_tests {
 		));
 		keep_window_state(&live, &mut named);
 		assert_eq!(named.wallpaper, Some(PathBuf::from("/pics/one.png")));
+	}
+
+	// Another window's save of a view switch is for new windows. This one
+	// keeps what it shows, both ways, and still takes the rest of the save.
+	// Test ID: Esdy2dz
+	#[test]
+	fn another_windows_save_leaves_this_windows_view() {
+		let off = "shell:\n\tcopy_on_select: false\nscroll:\n\tminimap:\n\t\tenabled: false\n\
+			window:\n\thide_single_tab: true\n\tmenu_bar: false\n";
+		let lean = read_text(off);
+		let stock = read_text("");
+		assert!(stock.copy_on_select && stock.minimap && !stock.hide_single_tab && stock.menu_bar);
+
+		let mut fresh = read_text("window:\n\tmargin: 21\n");
+		keep_window_view(&lean, &mut fresh);
+		assert!(!fresh.copy_on_select);
+		assert!(!fresh.minimap);
+		assert!(fresh.hide_single_tab);
+		assert!(!fresh.menu_bar);
+		assert_eq!(fresh.margin, 21.0, "the rest of the save");
+
+		let mut fresh = read_text(&format!("{off}\tmargin: 22\n"));
+		keep_window_view(&stock, &mut fresh);
+		assert!(fresh.copy_on_select);
+		assert!(fresh.minimap);
+		assert!(!fresh.hide_single_tab);
+		assert!(fresh.menu_bar);
+		assert_eq!(own(&fresh, Key::Minimap), own(&stock, Key::Minimap));
+		assert_eq!(fresh.margin, 22.0);
 	}
 }
