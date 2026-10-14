@@ -34,6 +34,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- The minimap inside tmux and less only shows the current screen
+	- ID: 2026101406273722
+	- Type: Bug
+	- Status: Waiting for answers
+	- Severity: High
+	- Opened: 20261014-062737
+	- Opened by: JC
+	- Related IDs: 2026101320095003, 2026101320095004
+	- Test environment: b23
+	- Steps to reproduce:
+		- Turn the minimap on, then run tmux, or less.
+	- Incorrect behavior: The minimap inside tmux and less only shows the current screen. And it shows it instantly, no smooth scroll.
+	- Expected behavior: The minimap works normally there, as it used to.
+	- Notes:
+		- Pre-next-cut.
+		- Regression. It used to work normally.
+		- The 20261014 answer on 2026101320095003 leaves screen keeping the column only if this can be fixed.
+	- Reproduced: 20261014 on b23 in a window, with a real less 668 and tmux 3.6b using the same tmux settings as b23's. The map shows only the screen, in less and in tmux. That part isn't a regression. The dogfood builds from 20260902, 20260930, 20261010 and 20261013-221606 show the same picture as dev.
+		- The smooth scroll didn't reproduce. Arrow keys and the wheel in less, output in tmux, the wheel in tmux, and less inside tmux all slide on every build tried, with the same steps per frame on 20261010 as on dev. No case was found that snaps.
+	- Actual cause: less and tmux draw on their own screen, which has no scroll buffer behind it. The map draws the buffer, so all it has there is the screen. It has been that way since the minimap was added, and the minimap design doc lists it as a non-goal.
+		- A fuller map for less needs virtual history (2026101406242600), which is deferred. For tmux there's one more way: tmux keeps its own history for each pane, and SilkTerm already asks tmux which pane it shows.
+		- For 2026101320095003 this means screen's map will show only the screen too, the same as tmux and less, unless one of the options below is built.
+	- Verified: 20261014 on b23, the scroll scenes passed on dev, 12 of 12, and real less, nano and vim.tiny ran.
+	- Progress log:
+		- 20261014: Waiting for answers. No code changed.
+		- Question: Where did the map last look right? A plain shell, or a program run outside tmux, gets a full map, since its output goes into the real scrollback. If it was less or tmux, which build, and what was on screen?
+		- Question: Which way to go?
+			- Leave it. A listed program keeps a column that shows only its screen.
+			- Take less, tmux and screen off the default list, so the column steps aside for them like for any other full-screen program. A small change.
+			- tmux only: fill the map from tmux's own history for the pane it shows. About 2 to 3 days. less and screen would still show only the screen.
+	- Branch: lessmap
+	- Test case: None, since no code changed. The scroll scenes `less` and `tmux` in `cicd/tests/scroll/run.bash` cover the slide in both.
+
 - Smooth scroll freaked out with a long flatpak update
 	- ID: 2026101310563284
 	- Type: Bug
@@ -334,39 +367,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- The minimap inside tmux and less only shows the current screen
-	- ID: 2026101406273722
-	- Type: Bug
-	- Status: Waiting for answers
-	- Severity: High
-	- Opened: 20261014-062737
-	- Opened by: JC
-	- Related IDs: 2026101320095003, 2026101320095004
-	- Test environment: b23
-	- Steps to reproduce:
-		- Turn the minimap on, then run tmux, or less.
-	- Incorrect behavior: The minimap inside tmux and less only shows the current screen. And it shows it instantly, no smooth scroll.
-	- Expected behavior: The minimap works normally there, as it used to.
-	- Notes:
-		- Pre-next-cut.
-		- Regression. It used to work normally.
-		- The 20261014 answer on 2026101320095003 leaves screen keeping the column only if this can be fixed.
-	- Reproduced: 20261014 on b23 in a window, with a real less 668 and tmux 3.6b using the same tmux settings as b23's. The map shows only the screen, in less and in tmux. That part isn't a regression. The dogfood builds from 20260902, 20260930, 20261010 and 20261013-221606 show the same picture as dev.
-		- The smooth scroll didn't reproduce. Arrow keys and the wheel in less, output in tmux, the wheel in tmux, and less inside tmux all slide on every build tried, with the same steps per frame on 20261010 as on dev. No case was found that snaps.
-	- Actual cause: less and tmux draw on their own screen, which has no scroll buffer behind it. The map draws the buffer, so all it has there is the screen. It has been that way since the minimap was added, and the minimap design doc lists it as a non-goal.
-		- A fuller map for less needs virtual history (2026101406242600), which is deferred. For tmux there's one more way: tmux keeps its own history for each pane, and SilkTerm already asks tmux which pane it shows.
-		- For 2026101320095003 this means screen's map will show only the screen too, the same as tmux and less, unless one of the options below is built.
-	- Verified: 20261014 on b23, the scroll scenes passed on dev, 12 of 12, and real less, nano and vim.tiny ran.
-	- Progress log:
-		- 20261014: Waiting for answers. No code changed.
-		- Question: Where did the map last look right? A plain shell, or a program run outside tmux, gets a full map, since its output goes into the real scrollback. If it was less or tmux, which build, and what was on screen?
-		- Question: Which way to go?
-			- Leave it. A listed program keeps a column that shows only its screen.
-			- Take less, tmux and screen off the default list, so the column steps aside for them like for any other full-screen program. A small change.
-			- tmux only: fill the map from tmux's own history for the pane it shows. About 2 to 3 days. less and screen would still show only the screen.
-	- Branch: lessmap
-	- Test case: None, since no code changed. The scroll scenes `less` and `tmux` in `cicd/tests/scroll/run.bash` cover the slide in both.
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -381,6 +381,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- The minimap window test leaves its size poll running after the window closes
+	- ID: 2026101407524951
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-075249
+	- Opened by: CC
+	- Target OS: Linux
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run `cicd/tests/mapfollow/run.bash`.
+	- Incorrect behavior: The scene's background `poll` loop outlives the window and runs `stty` every 20 ms for good, reparented to init.
+	- Expected behavior: Nothing from the scene is left running after the test.
+	- Reproduced: 20261014 on b23. 13 of them were alive from runs on 10-13 and 10-14, and were killed by PID.
 
 - Windows 11: every pane may count as a full-screen program while a command runs
 	- ID: 2026101321365912
