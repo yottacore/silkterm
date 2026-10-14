@@ -1018,7 +1018,7 @@ fn proc_comm(pid: u32) -> Option<String> {
 // so a `sudo` command went unnamed (measured on pid 1). Like Linux's comm,
 // it is the first 16 bytes of the name.
 #[cfg(target_os = "macos")]
-fn proc_comm(pid: u32) -> Option<String> {
+pub(crate) fn proc_comm(pid: u32) -> Option<String> {
 	// <sys/proc_info.h>; the libc this builds against does not have it yet
 	const PROC_PIDT_SHORTBSDINFO: libc::c_int = 13;
 	let pid = libc::c_int::try_from(pid).ok().filter(|&pid| pid > 0)?;

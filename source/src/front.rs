@@ -12,7 +12,7 @@
 //! program on screen runs under the tmux server, so tmux itself is asked which
 //! pane its client shows and whether that pane is on the alt screen.
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::time::{Duration, Instant};
 
 /// What runs in the pane a multiplexer shows, for the minimap column.
@@ -158,13 +158,13 @@ fn children(pid: u32) -> Vec<u32> {
 
 // How often to ask tmux again while what it shows keeps changing. Each ask
 // starts a tmux client, a few ms of CPU.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const ASK_GAP: Duration = Duration::from_millis(500);
 // how often to look whether an ask has come back
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const ASK_POLL: Duration = Duration::from_millis(15);
 // a server that has stopped answering
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const ASK_GIVE_UP: Duration = Duration::from_secs(2);
 
 /// Asks tmux what the client in this pane shows. The ask runs as a tmux
@@ -172,7 +172,7 @@ const ASK_GIVE_UP: Duration = Duration::from_secs(2);
 /// It is made when the client first shows up, then again only after output
 /// arrived, at most every `ASK_GAP`, since nothing tmux shows changes without
 /// it drawing.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[derive(Debug, Default)]
 pub struct Tmux {
 	// the client pid all of this is for, 0 when there is none
@@ -187,7 +187,7 @@ pub struct Tmux {
 
 // How to reach the server the client talks to: its own binary, its own -L or
 // -S, and its own TMUX and TMUX_TMPDIR, since those pick the socket.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[derive(Debug)]
 struct Query {
 	exe: std::path::PathBuf,
@@ -196,7 +196,7 @@ struct Query {
 }
 
 // The pane a client shows.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Shown {
 	pid: u32,
@@ -204,7 +204,7 @@ struct Shown {
 	mouse: bool,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl Tmux {
 	/// Output arrived or a key went in, so what tmux shows may have changed.
 	pub fn stir(&self) {
@@ -303,7 +303,7 @@ impl Tmux {
 	}
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl Drop for Tmux {
 	fn drop(&mut self) {
 		if let Some((child, _)) = &mut self.asking {
@@ -313,26 +313,27 @@ impl Drop for Tmux {
 	}
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl Query {
 	fn of(client: u32) -> Option<Self> {
+		let (exe, argv, environ) = launched_as(client)?;
+		Self::new(exe, &argv, &environ)
+	}
+
+	// `environ` is NUL-separated NAME=value pairs.
+	fn new(
+		exe: Option<std::path::PathBuf>,
+		argv: &[std::ffi::OsString],
+		environ: &[u8],
+	) -> Option<Self> {
 		use std::os::unix::ffi::OsStrExt;
-		let argv: Vec<std::ffi::OsString> = std::fs::read(format!("/proc/{client}/cmdline"))
-			.ok()?
-			.split(|&b| b == 0)
-			.filter(|arg| !arg.is_empty())
-			.map(|arg| std::ffi::OsStr::from_bytes(arg).to_owned())
-			.collect();
-		let environ = std::fs::read(format!("/proc/{client}/environ")).ok()?;
 		let var = |name: &str| {
 			environ
 				.split(|&b| b == 0)
 				.find_map(|pair| pair.strip_prefix(name.as_bytes())?.strip_prefix(b"="))
 				.map(|value| std::ffi::OsStr::from_bytes(value).to_owned())
 		};
-		// a binary replaced since it started reads "(deleted)"
-		let exe = std::fs::read_link(format!("/proc/{client}/exe"))
-			.ok()
+		let exe = exe
 			.filter(|exe| exe.is_file())
 			.unwrap_or_else(|| "tmux".into());
 		// Something else that calls itself tmux is not handed tmux's arguments.
@@ -344,16 +345,104 @@ impl Query {
 		}
 		Some(Self {
 			exe,
-			socket: socket_args(&argv),
+			socket: socket_args(argv),
 			env: vec![("TMUX", var("TMUX")), ("TMUX_TMPDIR", var("TMUX_TMPDIR"))],
 		})
 	}
 }
 
+// A process's binary, arguments and starting environment.
+#[cfg(target_os = "linux")]
+fn launched_as(pid: u32) -> Option<(Option<std::path::PathBuf>, Vec<std::ffi::OsString>, Vec<u8>)> {
+	use std::os::unix::ffi::OsStrExt;
+	let argv = std::fs::read(format!("/proc/{pid}/cmdline"))
+		.ok()?
+		.split(|&b| b == 0)
+		.filter(|arg| !arg.is_empty())
+		.map(|arg| std::ffi::OsStr::from_bytes(arg).to_owned())
+		.collect();
+	let environ = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
+	// a binary replaced since it started reads "(deleted)", which is_file drops
+	let exe = std::fs::read_link(format!("/proc/{pid}/exe")).ok();
+	Some((exe, argv, environ))
+}
+
+// macOS has no /proc. sysctl hands back the same as one block (KERN_PROCARGS2).
+#[cfg(target_os = "macos")]
+fn launched_as(pid: u32) -> Option<(Option<std::path::PathBuf>, Vec<std::ffi::OsString>, Vec<u8>)> {
+	use std::os::unix::ffi::OsStrExt;
+	let pid = libc::c_int::try_from(pid).ok().filter(|&pid| pid > 0)?;
+	let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
+	let mut size: libc::size_t = 0;
+	let null = std::ptr::null_mut();
+	// SAFETY: a null buffer asks only for the size
+	if unsafe { libc::sysctl(mib.as_mut_ptr(), 3, null, &raw mut size, null, 0) } != 0 {
+		return None;
+	}
+	let mut buf = vec![0u8; size];
+	// SAFETY: the call writes at most `size` bytes and sets it to how many
+	if unsafe {
+		libc::sysctl(
+			mib.as_mut_ptr(),
+			3,
+			buf.as_mut_ptr().cast(),
+			&raw mut size,
+			null,
+			0,
+		)
+	} != 0
+	{
+		return None;
+	}
+	buf.truncate(size);
+	let (argv, environ) = procargs(&buf)?;
+	let mut path = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+	let cap = u32::try_from(path.len()).ok()?;
+	// SAFETY: the call writes at most `cap` bytes and returns the length
+	let got = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), cap) };
+	let exe = usize::try_from(got)
+		.ok()
+		.filter(|&n| n > 0)
+		.map(|n| std::ffi::OsStr::from_bytes(&path[..n]).into());
+	Some((exe, argv, environ.to_vec()))
+}
+
+// KERN_PROCARGS2 is argc as a native int, the exec path, NUL padding, then argc
+// arguments and the environment, all NUL-terminated. The environment ends at
+// an empty string or the end of the block.
+#[cfg(any(target_os = "macos", all(test, target_os = "linux")))]
+fn procargs(buf: &[u8]) -> Option<(Vec<std::ffi::OsString>, &[u8])> {
+	use std::os::unix::ffi::OsStrExt;
+	let argc = i32::from_ne_bytes(buf.get(..4)?.try_into().ok()?);
+	let argc = usize::try_from(argc).ok()?;
+	let mut rest = buf.get(4..)?;
+	// the exec path, then its padding
+	let path_end = rest.iter().position(|&b| b == 0)?;
+	rest = &rest[path_end..];
+	rest = &rest[rest.iter().position(|&b| b != 0).unwrap_or(rest.len())..];
+	let mut argv = Vec::with_capacity(argc);
+	for _ in 0..argc {
+		let end = rest.iter().position(|&b| b == 0)?;
+		argv.push(std::ffi::OsStr::from_bytes(&rest[..end]).to_owned());
+		rest = &rest[end + 1..];
+	}
+	let mut env_end = 0;
+	while let Some(len) = rest
+		.get(env_end..)
+		.and_then(|tail| tail.iter().position(|&b| b == 0))
+	{
+		if len == 0 {
+			break;
+		}
+		env_end += len + 1;
+	}
+	Some((argv, &rest[..env_end]))
+}
+
 // tmux's -L and -S, read the way its getopt reads them. The other options that
 // take a value are skipped with it, and the command starts at the first word
 // that is not an option.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn socket_args(argv: &[std::ffi::OsString]) -> Vec<std::ffi::OsString> {
 	use std::os::unix::ffi::{OsStrExt, OsStringExt};
 	let mut out = Vec::new();
@@ -385,27 +474,23 @@ fn socket_args(argv: &[std::ffi::OsString]) -> Vec<std::ffi::OsString> {
 	out
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl Shown {
 	fn inner(self) -> Inner {
 		// A pane started on a program rather than a shell has that program in
 		// its own group, so it is named whether a command runs or not.
-		let stat = read_stat(self.pid);
-		let tpgid = stat
-			.as_ref()
-			.and_then(|stat| u32::try_from(stat.tpgid).ok())
+		let groups = groups_of(self.pid);
+		let tpgid = groups
+			.and_then(|(_, tpgid)| u32::try_from(tpgid).ok())
 			.filter(|&g| g > 0);
-		let running = stat
-			.as_ref()
-			.zip(tpgid)
-			.is_some_and(|(stat, g)| g != stat.pgrp);
+		let running = groups.zip(tpgid).is_some_and(|((pgrp, _), g)| g != pgrp);
 		let program = tpgid.and_then(|g| {
 			let pid = if running {
 				group_front(self.pid, g).unwrap_or(g)
 			} else {
 				self.pid
 			};
-			crate::term::named(&read_stat(pid)?.comm)
+			comm_of(pid)
 		});
 		Inner {
 			own_screen: self.alt || self.mouse && running,
@@ -414,8 +499,30 @@ impl Shown {
 	}
 }
 
-// The line for our client out of `list-clients`.
+// A process's own group and its terminal's foreground group.
 #[cfg(target_os = "linux")]
+fn groups_of(pid: u32) -> Option<(u32, i32)> {
+	read_stat(pid).map(|stat| (stat.pgrp, stat.tpgid))
+}
+
+#[cfg(target_os = "macos")]
+fn groups_of(pid: u32) -> Option<(u32, i32)> {
+	// no terminal reads 0
+	bsd_info(pid).map(|info| (info.pbi_pgid, info.e_tpgid.cast_signed()))
+}
+
+#[cfg(target_os = "linux")]
+fn comm_of(pid: u32) -> Option<String> {
+	crate::term::named(&read_stat(pid)?.comm)
+}
+
+#[cfg(target_os = "macos")]
+fn comm_of(pid: u32) -> Option<String> {
+	crate::term::proc_comm(pid)
+}
+
+// The line for our client out of `list-clients`.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn shown_by(out: &str, client: u32) -> Option<Shown> {
 	out.lines().find_map(|line| {
 		let mut words = line.split_whitespace();
@@ -432,12 +539,12 @@ fn shown_by(out: &str, client: u32) -> Option<Shown> {
 	})
 }
 
-/// Nothing to ask off Linux yet, so tmux keeps the column as listed.
-#[cfg(not(target_os = "linux"))]
+/// Nothing to ask elsewhere yet, so tmux keeps the column as listed.
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 #[derive(Debug, Default)]
 pub struct Tmux {}
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 #[allow(clippy::unused_self)]
 #[cfg_attr(windows, allow(dead_code))]
 impl Tmux {
@@ -574,5 +681,146 @@ mod tests {
 				mouse: false
 			})
 		);
+	}
+
+	fn procargs_block(argc: i32, strings: &[u8]) -> Vec<u8> {
+		let mut buf = argc.to_ne_bytes().to_vec();
+		buf.extend_from_slice(strings);
+		buf
+	}
+
+	// Test ID: EsgscfK
+	#[test]
+	fn sysctl_process_args_split_into_argv_and_environment() {
+		let buf = procargs_block(
+			3,
+			b"/usr/local/bin/tmux\0\0\0\0tmux\0-L\0work\0HOME=/Users/x\0TMUX_TMPDIR=/tmp/t\0\0ptr_munge=\0",
+		);
+		let (argv, environ) = procargs(&buf).unwrap();
+		assert_eq!(argv, ["tmux", "-L", "work"]);
+		assert_eq!(environ, b"HOME=/Users/x\0TMUX_TMPDIR=/tmp/t\0");
+		// no empty string after the environment
+		let buf = procargs_block(1, b"/bin/tmux\0tmux\0TMUX=/s,1,0\0");
+		assert_eq!(procargs(&buf).unwrap().1, b"TMUX=/s,1,0\0");
+		// an empty argument still counts
+		let buf = procargs_block(2, b"/bin/tmux\0\0tmux\0\0A=1\0");
+		assert_eq!(procargs(&buf).unwrap().0, ["tmux", ""]);
+		assert!(procargs(&procargs_block(4, b"/bin/tmux\0tmux\0-L\0")).is_none());
+		assert!(procargs(&procargs_block(-1, b"/bin/tmux\0")).is_none());
+		assert!(procargs(b"\x01\0").is_none());
+	}
+
+	// Test ID: Esgscji
+	#[test]
+	fn a_client_s_socket_and_tmux_settings_come_from_how_it_was_launched() {
+		let buf = procargs_block(
+			4,
+			b"/nowhere/tmux\0tmux\0-S\0/tmp/sock\0attach\0TMUX_TMPDIR=/tmp/t\0PATH=/bin\0",
+		);
+		let (argv, environ) = procargs(&buf).unwrap();
+		let query = Query::new(Some("/nowhere/tmux".into()), &argv, environ).unwrap();
+		assert_eq!(
+			query.exe,
+			std::path::PathBuf::from("tmux"),
+			"a missing binary is found on PATH"
+		);
+		assert_eq!(query.socket, ["-S", "/tmp/sock"]);
+		assert_eq!(
+			query.env,
+			[("TMUX", None), ("TMUX_TMPDIR", Some("/tmp/t".into()))]
+		);
+		let sh = std::path::PathBuf::from("/bin/sh");
+		assert!(Query::new(Some(sh), &argv, environ).is_none(), "not tmux");
+	}
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod mac_tests {
+	use super::*;
+	use std::process::{Command, Stdio};
+
+	// Polls the real ask until it answers `want`, stirring as output would.
+	fn wait_for(tmux: &mut Tmux, client: u32, want: &Inner) -> Option<Inner> {
+		let deadline = Instant::now() + Duration::from_secs(10);
+		let mut seen = None;
+		while Instant::now() < deadline {
+			tmux.stir();
+			seen = tmux.inner(client, Instant::now());
+			if seen.as_ref() == Some(want) {
+				break;
+			}
+			std::thread::sleep(Duration::from_millis(50));
+		}
+		seen
+	}
+
+	// Test ID: EsgtJUn
+	#[test]
+	#[ignore = "needs tmux; run by hand on a Mac"]
+	fn a_live_tmux_says_what_its_client_shows() {
+		let sock = format!("silk{}", std::process::id());
+		// The server lives under its own TMUX_TMPDIR, which this process lacks,
+		// so the ask finds it only through what the client was started with.
+		let dir = format!("/tmp/{sock}");
+		std::fs::create_dir_all(&dir).unwrap();
+		let tmux = |args: &[&str]| {
+			Command::new("tmux")
+				.env("TMUX_TMPDIR", &dir)
+				.args(["-L", &sock])
+				.args(args)
+				.output()
+				.unwrap()
+		};
+		// macOS sh runs bash under its own name
+		let made = tmux(&["-f", "/dev/null", "new-session", "-d", "/bin/bash --norc"]);
+		assert!(made.status.success(), "{made:?}");
+		// a client needs a terminal; stdin stays open, or script sends ^D
+		let mut script = Command::new("script")
+			.args(["-q", "/dev/null", "tmux", "-L", &sock, "attach"])
+			.env("TMUX_TMPDIR", &dir)
+			.env("TERM", "xterm-256color")
+			.stdin(Stdio::piped())
+			.stdout(Stdio::null())
+			.spawn()
+			.unwrap();
+		let mut client = 0;
+		for _ in 0..100 {
+			let out = tmux(&["list-clients", "-F", "#{client_pid}"]);
+			client = String::from_utf8_lossy(&out.stdout)
+				.trim()
+				.parse()
+				.unwrap_or(0);
+			if client != 0 {
+				break;
+			}
+			std::thread::sleep(Duration::from_millis(50));
+		}
+		let query = Query::of(client);
+		let mut state = Tmux::default();
+		let shell = Inner {
+			program: Some("bash".into()),
+			own_screen: false,
+		};
+		let at_prompt = wait_for(&mut state, client, &shell);
+		tmux(&["send-keys", "seq 100000 | less", "Enter"]);
+		let less = Inner {
+			program: Some("less".into()),
+			own_screen: true,
+		};
+		let in_less = wait_for(&mut state, client, &less);
+		tmux(&["send-keys", "q"]);
+		let back = wait_for(&mut state, client, &shell);
+		tmux(&["kill-server"]);
+		let _ = script.kill();
+		let _ = script.wait();
+		let _ = std::fs::remove_dir_all(&dir);
+		assert_ne!(client, 0, "no client attached");
+		let query = query.unwrap();
+		assert!(query.exe.is_absolute(), "{query:?}");
+		assert_eq!(query.socket, ["-L", sock.as_str()]);
+		assert_eq!(query.env[1], ("TMUX_TMPDIR", Some(dir.clone().into())));
+		assert_eq!(at_prompt, Some(shell.clone()));
+		assert_eq!(in_less, Some(less));
+		assert_eq!(back, Some(shell));
 	}
 }
