@@ -34,39 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- The minimap inside tmux and less only shows the current screen
-	- ID: 2026101406273722
-	- Type: Bug
-	- Status: Waiting for answers
-	- Severity: High
-	- Opened: 20261014-062737
-	- Opened by: JC
-	- Related IDs: 2026101320095003, 2026101320095004
-	- Test environment: b23
-	- Steps to reproduce:
-		- Turn the minimap on, then run tmux, or less.
-	- Incorrect behavior: The minimap inside tmux and less only shows the current screen. And it shows it instantly, no smooth scroll.
-	- Expected behavior: The minimap works normally there, as it used to.
-	- Notes:
-		- Pre-next-cut.
-		- Regression. It used to work normally.
-		- The 20261014 answer on 2026101320095003 leaves screen keeping the column only if this can be fixed.
-	- Reproduced: 20261014 on b23 in a window, with a real less 668 and tmux 3.6b using the same tmux settings as b23's. The map shows only the screen, in less and in tmux. That part isn't a regression. The dogfood builds from 20260902, 20260930, 20261010 and 20261013-221606 show the same picture as dev.
-		- The smooth scroll didn't reproduce. Arrow keys and the wheel in less, output in tmux, the wheel in tmux, and less inside tmux all slide on every build tried, with the same steps per frame on 20261010 as on dev. No case was found that snaps.
-	- Actual cause: less and tmux draw on their own screen, which has no scroll buffer behind it. The map draws the buffer, so all it has there is the screen. It has been that way since the minimap was added, and the minimap design doc lists it as a non-goal.
-		- A fuller map for less needs virtual history (2026101406242600), which is deferred. For tmux there's one more way: tmux keeps its own history for each pane, and SilkTerm already asks tmux which pane it shows.
-		- For 2026101320095003 this means screen's map will show only the screen too, the same as tmux and less, unless one of the options below is built.
-	- Verified: 20261014 on b23, the scroll scenes passed on dev, 12 of 12, and real less, nano and vim.tiny ran.
-	- Progress log:
-		- 20261014: Waiting for answers. No code changed.
-		- Question: Where did the map last look right? A plain shell, or a program run outside tmux, gets a full map, since its output goes into the real scrollback. If it was less or tmux, which build, and what was on screen?
-		- Question: Which way to go?
-			- Leave it. A listed program keeps a column that shows only its screen.
-			- Take less, tmux and screen off the default list, so the column steps aside for them like for any other full-screen program. A small change.
-			- tmux only: fill the map from tmux's own history for the pane it shows. About 2 to 3 days. less and screen would still show only the screen.
-	- Branch: lessmap
-	- Test case: None, since no code changed. The scroll scenes `less` and `tmux` in `cicd/tests/scroll/run.bash` cover the slide in both.
-
 - Smooth scroll freaked out with a long flatpak update
 	- ID: 2026101310563284
 	- Type: Bug
@@ -96,44 +63,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 544b01b
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
-
-- A TUI run inside tmux or screen keeps the minimap column
-	- ID: 2026101320095003
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20261013-200950
-	- Opened by: CC
-	- Parent ID: 2026101310563323
-	- Related IDs: 2026101406273722
-	- Target OS: All
-	- Steps to reproduce:
-		- Turn the minimap on and start tmux or screen.
-		- Run htop or muffer inside it.
-	- Incorrect behavior: The column stays. SilkTerm sees only tmux or screen, which are listed and draw the whole screen themselves.
-	- Expected behavior: tmux and screen keep the column, and a TUI inside them that is not listed loses it, per the 20261013 answer on 2026101310563323.
-	- Reproduced: 20261013 on b23 in a window, htop inside tmux 3.6b and inside screen 4.09.
-	- Notes:
-		- Pre-next-cut.
-		- Telling what runs inside means asking tmux or screen, such as tmux's `pane_current_command` for the active pane. screen has nothing as plain.
-		- tmux reached through ssh loses the column today, since it is on the alt screen under `ssh`, which is not listed. A fix here wants to cover that too.
-	- Actual cause: SilkTerm only sees the tmux or screen client in the pane. Both are listed, since the map can follow what they draw, so what runs inside them never counted.
-	- Actual fix [Bug]: On Linux, tmux is asked which pane its client shows, and whether that pane is on its own screen or wants the mouse. The program running there is read along with each answer. A program there that isn't listed takes the column, the same as one run outside tmux. tmux itself still keeps it.
-		- tmux is asked once as it starts, then again only after the screen changed, at most twice a second. Each ask is a short tmux command of about 4 ms that the window never waits on.
-		- Not covered: screen. It has no plain way to say which window it shows, or whether that window is on its own screen. A program inside screen still keeps the column.
-		- Not covered: tmux over ssh. Nothing on this side can be asked, and the output alone doesn't say what runs inside tmux. It still loses the column with ssh.
-		- Not covered: a program inside tmux that redraws on the main screen and asks only for focus changes, as muffer's default view does. tmux doesn't report that per pane.
-		- macOS is filed as 2026101320425888. Windows has no tmux of its own.
-	- Verified: 20261013 on b23 in a window, tmux 3.6b. The column stays at the prompt inside tmux. htop and `seq 100 | fzf --height 10` inside it take the column and give it back when they exit. `seq 300000 | less` inside it keeps it. The build before kept the column through all three. htop inside screen 4.09 keeps it on both builds.
-		- The gate passed (fmt, clippy, 1300 tests), and clippy for the Windows and macOS targets.
-	- Progress log:
-		- 20261013: Waiting on signoff. On Linux, tmux now matches the 20261013 answer on 2026101310563323. screen, tmux over ssh and macOS don't yet.
-		- Question: is it OK to leave screen as it is? The only route left there is guessing from the window title screen shows.
-		- 20261014: Answer (JC) on screen: OK to leave screen keeping the column if 2026101406273722 can be fixed. If the minimap there is always going to be broken like that, then no.
-	- Branch: tuimap
-	- Commit: 6af6a94
-	- Test case: window test `cicd/tests/mapfollow/run.bash` (EsdlZTW), now with a real tmux. Its 2 checks for a program inside tmux fail on the build before and pass after. A third, for the shell inside tmux after less quits, failed on a first try of the fix that read the program between answers, and passes now.
-	- Swept: `sync_minimap` is the one place the column is decided, for every pane of the shown tab. The tab label still names tmux, since it says what the pane runs.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -406,6 +335,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: 20261014 on b29w. With WezTerm's folder on PATH no focus-report ask came through; with it taken off, the one Windows has sent it.
 	- Notes:
 		- The load is in the engine fork's `tty/windows/conpty.rs`.
+
+- Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
+	- ID: 2026101410442550
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261014-104425
+	- Opened by: JC
+	- Related IDs: 2026100114435600, 2026101409220514
+	- Target OS: All
+	- Requirements:
+		- As part of regular scripted testing, exercise the per-monitor DPI more thoroughly, and quasi-randomly.
+		- It still has many quirks that need ironing out, that can only be caught with fairly random testing.
+		- The expected behavior still has to be predictable, to judge against actual.
+	- Notes:
+		- Pre-next-cut.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -1444,6 +1389,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- A TUI run inside tmux or screen keeps the minimap column
+	- ID: 2026101320095003
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261013-200950
+	- Opened by: CC
+	- Parent ID: 2026101310563323
+	- Related IDs: 2026101406273722
+	- Target OS: All
+	- Steps to reproduce:
+		- Turn the minimap on and start tmux or screen.
+		- Run htop or muffer inside it.
+	- Incorrect behavior: The column stays. SilkTerm sees only tmux or screen, which are listed and draw the whole screen themselves.
+	- Expected behavior: tmux and screen keep the column, and a TUI inside them that is not listed loses it, per the 20261013 answer on 2026101310563323.
+	- Reproduced: 20261013 on b23 in a window, htop inside tmux 3.6b and inside screen 4.09.
+	- Notes:
+		- Pre-next-cut.
+		- Telling what runs inside means asking tmux or screen, such as tmux's `pane_current_command` for the active pane. screen has nothing as plain.
+		- tmux reached through ssh loses the column today, since it is on the alt screen under `ssh`, which is not listed. A fix here wants to cover that too.
+	- Actual cause: SilkTerm only sees the tmux or screen client in the pane. Both are listed, since the map can follow what they draw, so what runs inside them never counted.
+	- Actual fix [Bug]: On Linux, tmux is asked which pane its client shows, and whether that pane is on its own screen or wants the mouse. The program running there is read along with each answer. A program there that isn't listed takes the column, the same as one run outside tmux. tmux itself still keeps it.
+		- tmux is asked once as it starts, then again only after the screen changed, at most twice a second. Each ask is a short tmux command of about 4 ms that the window never waits on.
+		- Not covered: screen. It has no plain way to say which window it shows, or whether that window is on its own screen. A program inside screen still keeps the column.
+		- Not covered: tmux over ssh. Nothing on this side can be asked, and the output alone doesn't say what runs inside tmux. It still loses the column with ssh.
+		- Not covered: a program inside tmux that redraws on the main screen and asks only for focus changes, as muffer's default view does. tmux doesn't report that per pane.
+		- macOS is filed as 2026101320425888. Windows has no tmux of its own.
+	- Verified: 20261013 on b23 in a window, tmux 3.6b. The column stays at the prompt inside tmux. htop and `seq 100 | fzf --height 10` inside it take the column and give it back when they exit. `seq 300000 | less` inside it keeps it. The build before kept the column through all three. htop inside screen 4.09 keeps it on both builds.
+		- The gate passed (fmt, clippy, 1300 tests), and clippy for the Windows and macOS targets.
+	- Progress log:
+		- 20261013: Waiting on signoff. On Linux, tmux now matches the 20261013 answer on 2026101310563323. screen, tmux over ssh and macOS don't yet.
+		- Question: is it OK to leave screen as it is? The only route left there is guessing from the window title screen shows.
+		- 20261014: Answer (JC) on screen: OK to leave screen keeping the column if 2026101406273722 can be fixed. If the minimap there is always going to be broken like that, then no.
+		- 20261014: Done. 2026101406273722 was deferred, and screen and tmux are off the default list, so both take the column like any other full-screen program. The check for a program inside tmux still counts when tmux is put back on the list.
+	- Branch: tuimap
+	- Commit: 6af6a94
+	- Test case: window test `cicd/tests/mapfollow/run.bash` (EsdlZTW), now with a real tmux. Its 2 checks for a program inside tmux fail on the build before and pass after. A third, for the shell inside tmux after less quits, failed on a first try of the fix that read the program between answers, and passes now.
+	- Swept: `sync_minimap` is the one place the column is decided, for every pane of the shown tab. The tab label still names tmux, since it says what the pane runs.
+	- Acceptance signoff: Self-closed, per the 20261014 answer on screen.
 
 - A piped command is not seen as running, so `cat file | less` loses the minimap column
 	- ID: 2026101320095004
@@ -5705,6 +5690,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: mechanical.
 	- Closed: 20261007-184756
 
+- The minimap inside tmux and less only shows the current screen
+	- ID: 2026101406273722
+	- Type: Bug
+	- Status: Deferred
+	- Severity: High
+	- Opened: 20261014-062737
+	- Opened by: JC
+	- Related IDs: 2026101320095003, 2026101320095004
+	- Test environment: b23
+	- Steps to reproduce:
+		- Turn the minimap on, then run tmux, or less.
+	- Incorrect behavior: The minimap inside tmux and less only shows the current screen. And it shows it instantly, no smooth scroll.
+	- Expected behavior: The minimap works normally there, as it used to.
+	- Notes:
+		- Pre-next-cut.
+		- Regression. It used to work normally.
+		- The 20261014 answer on 2026101320095003 leaves screen keeping the column only if this can be fixed.
+	- Reproduced: 20261014 on b23 in a window, with a real less 668 and tmux 3.6b using the same tmux settings as b23's. The map shows only the screen, in less and in tmux. That part isn't a regression. The dogfood builds from 20260902, 20260930, 20261010 and 20261013-221606 show the same picture as dev.
+		- The smooth scroll didn't reproduce. Arrow keys and the wheel in less, output in tmux, the wheel in tmux, and less inside tmux all slide on every build tried, with the same steps per frame on 20261010 as on dev. No case was found that snaps.
+	- Actual cause: less and tmux draw on their own screen, which has no scroll buffer behind it. The map draws the buffer, so all it has there is the screen. It has been that way since the minimap was added, and the minimap design doc lists it as a non-goal.
+		- A fuller map for less needs virtual history (2026101406242600), which is deferred. For tmux there's one more way: tmux keeps its own history for each pane, and SilkTerm already asks tmux which pane it shows.
+		- For 2026101320095003 this means screen's map will show only the screen too, the same as tmux and less, unless one of the options below is built.
+	- Verified: 20261014 on b23, the scroll scenes passed on dev, 12 of 12, and real less, nano and vim.tiny ran.
+	- Progress log:
+		- 20261014: Waiting for answers. No code changed.
+		- Question: Where did the map last look right? A plain shell, or a program run outside tmux, gets a full map, since its output goes into the real scrollback. If it was less or tmux, which build, and what was on screen?
+		- Question: Which way to go?
+			- Leave it. A listed program keeps a column that shows only its screen.
+			- Take less, tmux and screen off the default list, so the column steps aside for them like for any other full-screen program. A small change.
+			- tmux only: fill the map from tmux's own history for the pane it shows. About 2 to 3 days. less and screen would still show only the screen.
+		- 20261014: Answer (JC): less did work with the map at one time, at least outside tmux, maybe weeks or months ago. If there's no easy fix within 5 to 10 minutes, defer it, take such programs off the list, and move on. Move the tmux history option to deferred.
+		- 20261014: Deferred. No easy fix found. On its own screen the map has drawn only that screen since it was first added on 20260831. less, tmux and screen are off the default list now, so the column steps aside for them like any other full-screen program. The tmux history option is 2026101410442556, deferred.
+	- Branch: lessmap, maplist
+	- Test case: `by_default_less_tmux_and_screen_take_the_column_too` (EshLdeY), red on the old default and green on the new one. The scroll scenes `less` and `tmux` in `cicd/tests/scroll/run.bash` cover the slide in both.
+
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082
 	- Type: Bug
@@ -5729,6 +5749,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Unresolved: SilkTerm's own AppData writes stay redirected, and this fix makes that worse. An editor started from a SilkTerm shell would run outside the package and wouldn't find a config the package created. Config saves are atomic, a new file then a rename, so even a config that already exists in the real folder may end up private. This needs its own answer before a packaged release.
 	- Estimated effort: Avg
 	- Closed:
+
+- tmux: fill the minimap from tmux's own history for the pane it shows
+	- ID: 2026101410442556
+	- Type: Enhancement
+	- Status: Deferred
+	- Priority: Avg
+	- Opened: 20261014-104425
+	- Opened by: CC
+	- Related IDs: 2026101406273722, 2026101406242600
+	- Target OS: Linux, macOS
+	- Requirements:
+		- With tmux on the minimap list, the map shows the history tmux keeps for the pane it shows, not only the screen.
+	- Notes:
+		- Split from the options on 2026101406273722, and deferred per the 20261014 answer there.
+		- SilkTerm already asks tmux which pane it shows.
+	- Estimated effort: Avg, about 2 to 3 days.
 
 - Virtual history for full-screen programs
 	- ID: 2026101406242600
