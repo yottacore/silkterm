@@ -313,6 +313,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261003: Done: a window moved to another monitor takes that monitor's size once it has stopped. Left: the font size.
 		- 20261003: Done: the font zoom is kept with the size, both as the last one anywhere and per monitor, and used at launch and after a move. The README line is in. Checked on one monitor only, by changing its resolution under the window. A real two-monitor look is still needed.
 		- 20261007: Two real monitors passed on Windows and on b23 (X11). macOS and Wayland are left.
+		- 20261014: Wayland tried with 3 outputs, 2 at 100% and 1 at 200%. Opening on the second output, then a move or a title bar drag to each of the others and back, all ended at that output's own size and font zoom and stayed there. Held astride 2 outputs, the window kept its size. Nothing was saved.
+		- 20261014: Fails on Wayland: a window dropped mostly on the 200% output, with a sliver still on a 100% one, takes the last size anywhere instead of the 200% output's own. It did so 3 times out of 3. A clean drop onto the 200% output showed that wrong size for 4 s, until the pointer came back, once in 5 runs.
+			- Cause: the monitor's name mixes 2 outputs. The resolution comes from the first output the window entered and still touches, and the scale from the window, which follows the other one. So it reads `1920x1080_200pct`, which no monitor is.
+			- Filed as 2026101409220514. The monwl test goes into the pipeline once that's fixed.
 		- Choices made here, still open:
 			- The font zoom is remembered under Remember last size, with no switch of its own, as px on the font size. Zooming saves the grid too, so the window reopens at the same pixel size.
 			- A monitor with no entry of its own gets the last size anywhere, at launch and after a move, as the requirements say.
@@ -320,13 +324,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The per-monitor sizes are kept only while both switches are on. The last size anywhere is kept either way, as before.
 	- Note: A monitor is told apart by its resolution, its scale percent, and its physical size in mm where the system gives it. X11 reads the size from the X server, Windows from the EDID it keeps in the registry, and macOS from `CGDisplayScreenSize`. Wayland gives no size, so there it is resolution and scale.
 	- Note: Wayland gives a window no position and no move events. It opens at the last size anywhere, and looks for its monitor just after it opens, on a scale change, and when the pointer comes back after a drag. So there a window may resize a moment after it opens.
-	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_has_the_remembered_size_as_live_lines`.
+	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_has_the_remembered_size_as_live_lines`. On Wayland, `cicd/tests/monwl/run.bash` (Esgxleh). It fails at its sliver drop for now, so it isn't in the pipeline yet.
 	- Verified:
 		- The unit tests on Linux, and clippy with warnings as errors for Linux, Windows and macOS.
 		- On one X11 monitor: opening at the monitor's own size and zoom, a move taking the other's, a resize before the move saved for the monitor it left, a resize right after the move kept, and a command-line size held until resized by hand.
 		- The window's own resize after a move is not saved as the user's. With that check taken out, the last size anywhere was overwritten.
-	- Branch: permon
-	- Commit: 684d3a0, 754c9cb, 8624cc2
+	- Branch: permon, wlmon (the Wayland test)
+	- Commit: 684d3a0, 754c9cb, 8624cc2, 953c5a3
 	- Closed:
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
@@ -366,6 +370,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+
+- Wayland: a window dropped across a 100% and a 200% output takes the last size anywhere, not its monitor's own
+	- ID: 2026101409220514
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261014-092205
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway with outputs at 100% and 200%
+	- Steps to reproduce:
+		- Save a size for each output, then drop a window mostly on the 200% output with a sliver still on a 100% one.
+	- Incorrect behavior: The window takes the last size anywhere. Once in 5 runs a clean drop on the 200% output did the same for about 4 s, until the pointer came back.
+	- Expected behavior: It takes the size saved for the output most of it is on.
+	- Reproduced: 20261014, 3 of 3 sliver drops, with `cicd/tests/monwl/run.bash` (Esgxleh).
+	- Possible cause: The monitor's name mixes 2 outputs. In `MonitorId::find` the resolution comes from the first output the window entered and still touches, and the scale from the window, which follows the other one. So it reads `1920x1080_200pct`, which no monitor is.
 
 - Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
 	- ID: 2026101408384488
