@@ -1453,14 +1453,18 @@ impl State {
 	}
 
 	// What Settings opens on: the file as it is now, not what this window loaded,
-	// with this session's own choices folded in the way a reload folds them.
+	// with this session's own choices folded in the way a reload folds them, and
+	// this window's view switches as it shows them.
 	fn settings_for_dialog(&self) -> config::Settings {
-		settings_after_reload(
-			&config::settings(),
+		let live = config::settings();
+		let mut base = settings_after_reload(
+			&live,
 			config::reload_from_disk(),
 			&self.cli_style,
 			self.wp_locked,
-		)
+		);
+		config::keep_window_view(&live, &mut base);
+		base
 	}
 
 	// Re-read config.shcl from disk and live-apply it (the "internal command" for
@@ -1494,9 +1498,9 @@ impl State {
 	}
 
 	/// Another window on this settings file saved it: take what it says now, as
-	/// a reload does, but leave what is this window's own. Its size, what the
-	/// state file holds, and a picture rotation chose all stay, unless the save
-	/// moved the picture or its folder.
+	/// a reload does, but leave what is this window's own. Its size, its view
+	/// switches, what the state file holds, and a picture rotation chose all
+	/// stay, unless the save moved the picture or its folder.
 	pub(super) fn follow_peer(&mut self) {
 		self.tell_peers_if_due();
 		let live = config::settings().as_ref().clone();
@@ -1507,6 +1511,7 @@ impl State {
 			self.wp_locked,
 		);
 		config::keep_window_state(&live, &mut fresh);
+		config::keep_window_view(&live, &mut fresh);
 		self.apply_as(&live, fresh, Applied::Peer);
 		// what the reread itself wrote, a launch step catching up, is not news
 		self.saves_told = config::saves();
@@ -3592,7 +3597,11 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		let cli_win = &self.cli.win;
 		let decorated = !cli_win.hide_frame.unwrap_or(false);
-		let menu_bar = menu_bar_at_launch(cli_win.hide_menu, cfg!(target_os = "macos"));
+		let menu_bar = menu_bar_at_launch(
+			cli_win.hide_menu,
+			config::settings().menu_bar,
+			cfg!(target_os = "macos"),
+		);
 		let win_title = cli_win.title.clone();
 		let win_opacity = cli_win.opacity;
 		// When both pixel dims are given, the window must be BORN at that size, not

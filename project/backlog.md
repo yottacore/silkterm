@@ -133,6 +133,65 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_pipeline_whose_first_stage_exited_is_named_for_the_last` (EsdqcVY), red with the lookup answering the leader, green after. `a_program_s_own_children_are_not_stages` (Esdqcbw). Window test `cicd/tests/mapfollow/run.bash` (EsdlZTW): its 2 pipeline checks fail on the build before and pass after.
 	- Swept: unix names what runs in one place, `running_program`, and the tab and the minimap both read it through `task()`. copy-output's `at_shell_prompt` only asks whether the shell is in front, which a pipeline doesn't change. The tmux check reads a pane's program the same way.
 
+- Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
+	- ID: 2026101313381123
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261013-133811
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100307115829, 2026100907341819
+	- Target OS: All
+	- Requirements:
+		- Copy on select should be a persistent setting that new starts take up, but changes *not* shared between currently running sessions.
+			- Ditto minimap.
+			- Ditto tab strip, menu bar. Other settings that also observe this are OK.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261013: Copy on select, the minimap, the tab strip and the menu bar are saved when changed, and windows opened after start with them. Other running windows on the same settings file keep what they show. The window it was changed in takes it, its existing panes included for copy on select.
+		- 20261013: The menu bar was not saved before. It is now `window.menu_bar`, on by default, and `--hide-menu` still outranks it. It has no Settings row, like the tab strip.
+		- 20261013: Settings opened in a window shows that window's own value for these, so another window's save of one never shows there as changed, and an Apply of something else does not write it back.
+	- Decisions:
+		- 20261013: Best guess, for JC to confirm: the rule holds wherever the change came from, the View menu, the right-click menu, the menu bar's copy box or Settings.
+		- 20261013: Best guess on which settings follow it: the 4 named. Window frame and Bare window were never saved and stay per window. Everything else still shows in every window at once.
+		- 20261013: A new tab in a running window starts with that window's copy on select, not another window's.
+		- 20261013: Reload config in a window takes the file's values for these in that window. The other windows still keep theirs.
+	- Verified:
+		- The unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- The new tests fail with the fix taken out. The window test fails on "b keeps its own" with only the window's keep taken out.
+		- `cicd/tests/livecfg/run.bash` on Linux: a minimap change in one window leaves the other alone, and a window opened after starts with it.
+		- Not verified: copy on select, the tab strip and the menu bar in a real window, which the unit tests cover. Windows and macOS were compiled only.
+	- Swept: every place a window takes another window's save (`follow_peer`, an open Settings following the file, Settings opening, Apply), and every menu that saves one of the 4.
+	- Branch: ownview
+	- Commit: 0a81ab6
+	- Test case: `another_windows_save_leaves_this_windows_view`, `an_open_dialog_shows_this_windows_view_over_another_windows_save`, `the_menu_bar_is_on_and_survives_a_save`, `a_new_window_opens_with_the_saved_menu_bar`, `cicd/tests/livecfg/run.bash` (EsaF4Qe, its "b keeps its own" and "d started with the saved minimap" checks).
+
+- Add "Bare window" back to the right-click menu, under "Menu bar"
+	- ID: 2026101313381124
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261013-133811
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Add "Bare window" back to right-click menu, under "Menu bar".
+	- Notes:
+		- Pre-next-cut.
+	- Against: the old-format Done item "Second pass over the UI/UX style guide, reconciling it against what is built" took it off that menu. The UI/UX style guide's known deviations list it too, and needs the same change.
+	- Progress log:
+		- 20261013: Bare window is back on the right-click menu, right under Menu bar, checked while the window is bare, with B as its letter as on View. The UI/UX style guide's menu rules and its known deviations say so now.
+	- Decisions:
+		- 20261013: This item is the newer call, so it wins over the style guide pass that took the row off.
+		- 20261013: On macOS the row stays, with no Menu bar row above it, since a Mac has no in-window bar.
+	- Verified: unit tests and clippy for Linux, Windows and macOS. Not looked at in a real window.
+	- Branch: ownview
+	- Commit: 0a81ab6
+	- Test case: `bare_window_is_on_the_right_click_menu_under_menu_bar`, plus the Bare window check in `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -450,36 +509,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Question: Why can muffer not have a minimap? A user can scroll up in muffer. I get the technical limitations, but we have the complete ability to observe and pattern-match everything that comes through our buffers. So why can we not build a *virtual* buffer based on pattern matching, with not crazy CPU or GPU use, that allows for scrollback even for TUI apps such as muffer?
 	- Notes:
 		- Pre-next-cut.
-
-- Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
-	- ID: 2026101313381123
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261013-133811
-	- Opened by: JC
-	- Related IDs: 2026100307115829
-	- Target OS: All
-	- Requirements:
-		- Copy on select should be a persistent setting that new starts take up, but changes *not* shared between currently running sessions.
-			- Ditto minimap.
-			- Ditto tab strip, menu bar. Other settings that also observe this are OK.
-	- Notes:
-		- Pre-next-cut.
-
-- Add "Bare window" back to the right-click menu, under "Menu bar"
-	- ID: 2026101313381124
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261013-133811
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Add "Bare window" back to right-click menu, under "Menu bar".
-	- Notes:
-		- Pre-next-cut.
-	- Against: the old-format Done item "Second pass over the UI/UX style guide, reconciling it against what is built" took it off that menu. The UI/UX style guide's known deviations list it too, and needs the same change.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -2430,6 +2459,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
 
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
+	- Status: Done
+	- Priority|Severity: Avg
+	- Opened: 20260930-100803
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
+	- Actual cause: All four are faults in the tests. None is timing.
+		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
+		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Progress log:
+		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
+	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
+	- Branch: wintests
+	- Commit: 731d528
+	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
+	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
+	- Swept:
+		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
+		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
+		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
+		- The Windows run this item came from named only these four. That full suite was not run again.
+	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
+	- Closed: 20260930-125357
+
 - Text colors from wallpaper: Foreground and Cursor follow the automatic settings design
 	- ID: 2026100910295901
 	- Type: Enhancement
@@ -3881,6 +3946,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- Windows: open scripts and folders in SilkTerm
+	- ID: 2026093009280571
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
+	- Priority|Severity: Avg
+	- Opened: 20260930-092805
+	- Opened by: JC
+	- Assigned to: JC
+	- Related IDs: 2026092810510800
+	- Target OS: Windows
+	- Test environment: vm925w, Windows 11 25H2
+	- Requirements:
+		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
+			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
+			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
+			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
+		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
+			- Windows only. Other platforms don't show them.
+		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
+		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
+		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
+		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
+		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
+		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
+	- Branch: winassoc
+	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
+	- Acceptance signoff: 20260930-183819
 
 - An old file with colors over a built-in theme shows the theme's colors after the update, when it has no machine test lines
 	- ID: 2026101304551668
@@ -5336,74 +5433,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: Er2UgY7 (`cicd/tests/engine/run.bash`) now checks for at least 5 in the shipped config and 5 tries when unset. Both checks failed on the old values.
 	- Acceptance signoff: Self-closed: mechanical.
 	- Closed: 20261007-184756
-
-- Four unit tests fail on Windows
-	- ID: 2026093010080316
-	- Type: Bug
-	- Status: Done
-	- Priority|Severity: Avg
-	- Opened: 20260930-100803
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w, `cargo test`
-	- Steps to reproduce: Run `cargo test` on Windows.
-	- Incorrect behavior:
-		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
-		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
-		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
-	- Expected behavior: They pass, as on Linux.
-	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
-	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
-	- Actual cause: All four are faults in the tests. None is timing.
-		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
-		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
-	- Progress log:
-		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
-	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
-	- Branch: wintests
-	- Commit: 731d528
-	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
-	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
-	- Swept:
-		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
-		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
-		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
-		- The Windows run this item came from named only these four. That full suite was not run again.
-	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
-	- Closed: 20260930-125357
-
-- Windows: open scripts and folders in SilkTerm
-	- ID: 2026093009280571
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
-	- Priority|Severity: Avg
-	- Opened: 20260930-092805
-	- Opened by: JC
-	- Assigned to: JC
-	- Related IDs: 2026092810510800
-	- Target OS: Windows
-	- Test environment: vm925w, Windows 11 25H2
-	- Requirements:
-		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
-			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
-			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
-			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
-		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
-			- Windows only. Other platforms don't show them.
-		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
-		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
-	- Estimated effort: Avg
-	- Progress log:
-		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
-		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
-		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
-		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
-		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
-	- Branch: winassoc
-	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
-	- Acceptance signoff: 20260930-183819
 
 - Shells started from an MSIX package inherit its AppData and registry redirection
 	- ID: 2026092617015082

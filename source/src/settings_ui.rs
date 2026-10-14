@@ -11105,6 +11105,61 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	// Settings open in a window that kept its own minimap and copy on select
+	// over another window's save shows the window's, not the file's, and the
+	// next save elsewhere neither moves those rows nor marks them changed. An
+	// Apply of something else leaves the file's alone.
+	// Test ID: Esdy2Z7
+	#[test]
+	fn an_open_dialog_shows_this_windows_view_over_another_windows_save() {
+		let _guard = config::test_config_lock();
+		let _ = config::settings();
+		let dir =
+			crate::testdir::run_dir().join(format!("silkterm_ownview_{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("config.shcl");
+		let _ = std::fs::write(&path, "");
+		config::set_config_override(path.clone());
+		let save = |key: Key, v: knobs::Value| {
+			let disk = config::reload_from_disk();
+			let mut other = disk.clone();
+			crate::fields::set(&mut other, key, &v, None);
+			assert!(config::persist(&disk, &other));
+		};
+		// this window, as it shows itself
+		let live = config::reload_from_disk();
+		let (minimap, copy) = (live.minimap, live.copy_on_select);
+		save(Key::Minimap, knobs::Value::Bool(!minimap));
+		save(Key::CopyOnSelect, knobs::Value::Bool(!copy));
+		let opened_on = || {
+			let mut base = config::reload_from_disk();
+			config::keep_window_view(&live, &mut base);
+			base
+		};
+
+		let mut d = mk_dialog(4000.0);
+		d.start_from(opened_on());
+		assert_eq!(d.edited.minimap, minimap, "the window's minimap");
+		assert_eq!(d.edited.copy_on_select, copy, "the window's copy on select");
+		let margin = d.edited.margin;
+		save(Key::Margin, knobs::Value::Float(f64::from(margin + 3.0)));
+		d.follow_file(opened_on());
+		assert_eq!(d.edited.margin, margin + 3.0, "the other save shows");
+		assert_eq!(d.edited.minimap, minimap);
+		assert_eq!(d.edited.copy_on_select, copy);
+		assert_eq!(d.orig, d.edited, "nothing reads as changed");
+		assert!(!d.take_behind());
+
+		d.set_f32(Key::Margin, margin + 5.0);
+		assert!(config::persist(&d.orig, &d.edited));
+		let back = config::reload_from_disk();
+		assert_eq!(back.margin, margin + 5.0);
+		assert_eq!(back.minimap, !minimap, "the file keeps the other save");
+		assert_eq!(back.copy_on_select, !copy);
+
+		let _ = std::fs::remove_dir_all(&dir);
+	}
+
 	// The outline is drawn by the scrim pass but is not the halo: it takes input
 	// with the scrim off, and the cursor may join it either way.
 	// Test ID: Ep17Tr0

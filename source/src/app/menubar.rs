@@ -14,9 +14,9 @@ use crate::text::TextCtx;
 
 /// macOS has no in-window menu bar, since the system menu bar carries the same
 /// menus and a second bar would break the Mac's own menu contract. `--hide-menu`
-/// is accepted there and does nothing.
-pub(super) fn menu_bar_at_launch(hide_menu: Option<bool>, mac: bool) -> bool {
-	!mac && !hide_menu.unwrap_or(false)
+/// is accepted there and does nothing. Elsewhere it outranks the saved setting.
+pub(super) fn menu_bar_at_launch(hide_menu: Option<bool>, saved: bool, mac: bool) -> bool {
+	!mac && hide_menu.map_or(saved, |hide| !hide)
 }
 
 /// The menu bar's right-side copy-mode cluster: "Copy on [ ] select [ ] output".

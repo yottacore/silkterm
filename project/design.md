@@ -462,6 +462,7 @@ What a window costs while in use is planned in [Reducing resources](design_docs/
 
 - What a window does when it hears. It reads the file the way Reload config does, keeping what belongs to the session (the command line, Remote, a display step), and then keeps what is its own:
 	- Its size. A size set in Settings is the size new windows open at. The window it was set in takes it; the others stay as they are.
+	- Its view switches: copy on select, the minimap, the tab strip and the menu bar. A change to one is saved, from a menu or from Settings, and windows opened after start with it. The window it was changed in takes it, and the others keep what they show. Settings opened in a window shows that window's own, so another window's save of one never shows there as a change.
 	- What the state file holds: remembered sizes, zoom, monitor sizes, the machine test. These follow one window or one machine and are not settings.
 	- The picture rotation chose. A change to another wallpaper setting redraws the same picture. Naming one picture shows that picture in every window. A new folder has each window pick from it on its own, at random when random is on. The window it was changed in picks again too, which it did not before.
 
