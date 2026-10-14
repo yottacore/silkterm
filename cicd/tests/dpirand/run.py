@@ -700,6 +700,7 @@ class Case:
 		self.drag_scales: set[float] = set()
 		self.drag_names: dict[str | None, str] = {}
 		self.font: int | None = None
+		self.stale: str | None = None
 		self.cells: dict[tuple[float, int | None, int], tuple[int, int]] = {}
 
 	def note(self, text: str) -> None:
@@ -855,6 +856,12 @@ class Case:
 			if taken != "-" and int(taken) != zoom:
 				raise CheckError(f"{what}: took font zoom {taken}, want {zoom}")
 		self.allow(allowed[named], named)
+		## A window that wasn't told it moved still counts itself where it was,
+		## and saves there, until it looks again.
+		if named is not None:
+			self.stale = None
+		elif allowed[None] != "requirement":
+			self.stale = allowed[None]
 		model.belief, model.grid, model.zoom = key, grid, zoom
 		self.scale = outs[primary[0]]["scale"] if primary else self.scale
 		self.check_font(what)
@@ -895,11 +902,9 @@ class Case:
 		if key != (model.belief or "-"):
 			raise CheckError(f"{what}: saved for {key}, but counts itself on {model.belief}")
 		if model.belief not in allowed:
-			reason = "a Wayland window is told nothing of a move"
-			if self.plan.arm == "x11":
+			if not self.stale:
 				raise CheckError(f"{what}: saved for {key}, want one of {list(allowed)}")
-			self.limits[reason] += 1
-			self.note(f"      allowed: {reason}")
+			self.allow(self.stale, model.belief)
 		else:
 			self.allow(allowed[model.belief], model.belief)
 		model.save(model.belief, got, zoom)
@@ -949,8 +954,11 @@ class Case:
 
 	## A fullscreen window's size is never saved, and leaving fullscreen puts
 	## back the size it had. Any save at all is the known fault, which keeps a
-	## size for the monitor though nobody set one there.
-	def fullscreen_saves(self, what: str, back_to: Grid | None) -> None:
+	## size for the monitor though nobody set one there. Leaving can bring the
+	## pointer over the window, which is a look; one that keeps the size while
+	## still fullscreen and then saves it is the same fault. True when a size was
+	## taken, for the look's settle to judge.
+	def fullscreen_saves(self, what: str, back_to: Grid | None) -> bool:
 		time.sleep(1.5)
 		trace: list[str] = []
 		deadline = time.monotonic() + 4
@@ -962,18 +970,27 @@ class Case:
 		time.sleep(0.5)
 		trace += self.rig.trace()
 		allowed = {"-"} | ({f"{back_to[0]}x{back_to[1]}"} if back_to else set())
+		_, outs, _, primary = self.where()
+		names = self.names(outs, primary)
+		took = any(t.split()[1] == "take" for t in trace)
+		if took:
+			self.rig.unread += [t for t in trace if t.split()[1] in ("arrive", "stay", "take")]
 		for t in trace:
-			if t.split()[1] in ("take", "arrive"):
-				raise CheckError(f"{what}: looked for its monitor and took a size: {t}")
-			if t.split()[1] != "save":
-				continue
-			if trace_field(t, "grid") not in allowed:
-				raise CheckError(f"{what}: saved {trace_field(t, 'grid')}, want nothing or {back_to}")
-			self.allow(FULLSCREEN_SAVES, trace_field(t, "key"))
-			key = trace_field(t, "key")
-			grid = None if trace_field(t, "grid") == "-" else back_to
-			zoom = None if trace_field(t, "zoom") == "-" else int(trace_field(t, "zoom"))
-			self.model.save(None if key == "-" else key, grid, zoom)
+			event, key = t.split()[1], trace_field(t, "key")
+			if event == "arrive" and not took:
+				if key not in names and not self.stale:
+					raise CheckError(f"{what}: counted itself on {key}, want one of {list(names)}")
+				self.model.belief, self.stale = key, None
+			elif event == "keep":
+				self.allow(FULLSCREEN_SAVES, key)
+			elif event == "save":
+				if trace_field(t, "grid") not in allowed:
+					raise CheckError(f"{what}: saved {trace_field(t, 'grid')}, want nothing or {back_to}")
+				self.allow(FULLSCREEN_SAVES, key)
+				grid = None if trace_field(t, "grid") == "-" else back_to
+				zoom = None if trace_field(t, "zoom") == "-" else int(trace_field(t, "zoom"))
+				self.model.save(None if key == "-" else key, grid, zoom)
+		return took
 
 	def held_still(self, what: str, mark: int, start: Grid) -> None:
 		grids = {(int(c), int(r)) for r, c in (line.split() for line in set(self.rig.grid_lines()[mark:]))}
@@ -1127,8 +1144,11 @@ class Case:
 				rig.msg(f"[pid={pid}] fullscreen enable")
 				self.fullscreen_saves(f"{what} (fullscreen)", None)
 				rig.msg(f"[pid={pid}] fullscreen disable")
-				self.fullscreen_saves(f"{what} (back)", before)
-				self.settle(what, {None: "requirement"}, False)
+				if self.fullscreen_saves(f"{what} (back)", before):
+					_, outs, _, primary = self.where()
+					self.settle(what, self.names(outs, primary), True)
+				else:
+					self.settle(what, {None: "requirement"}, False)
 			elif step.kind == "rescale":
 				rig.msg(f"output HEADLESS-{step.to + 1} scale {step.scale:g}")
 				rig.pointer("extent", *rig.extent())
@@ -1196,6 +1216,7 @@ class Case:
 		self.font = step.font
 		model.belief = None
 		model.entered = []
+		self.stale = None
 		time.sleep(0.5)
 		win, outs, touched, primary = self.where()
 		self.track_entered(touched)

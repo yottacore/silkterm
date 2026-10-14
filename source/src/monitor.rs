@@ -621,6 +621,51 @@ pub fn button_held(_window: &Window) -> bool {
 	false
 }
 
+/// Is the window fullscreen? winit on X11 knows only of a fullscreen the
+/// program asked for itself, so one the window manager set from its own key
+/// or menu had its size saved as the size to open at (2026101413075422).
+pub fn fullscreen(window: &Window) -> bool {
+	window.fullscreen().is_some() || wm_fullscreen(window)
+}
+
+#[cfg(target_os = "linux")]
+fn wm_fullscreen(window: &Window) -> bool {
+	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+	use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
+
+	let xid = match window.window_handle().map(|handle| handle.as_raw()) {
+		Ok(RawWindowHandle::Xlib(h)) => h.window as u32,
+		Ok(RawWindowHandle::Xcb(h)) => h.window.get(),
+		_ => return false,
+	};
+	let Ok((conn, _)) = x11rb::connect(None) else {
+		return false;
+	};
+	let atom = |name: &[u8]| {
+		conn.intern_atom(true, name)
+			.ok()
+			.and_then(|cookie| cookie.reply().ok())
+			.map(|reply| reply.atom)
+	};
+	let (Some(state), Some(full)) = (atom(b"_NET_WM_STATE"), atom(b"_NET_WM_STATE_FULLSCREEN"))
+	else {
+		return false;
+	};
+	conn.get_property(false, xid, state, AtomEnum::ATOM, 0, 64)
+		.ok()
+		.and_then(|cookie| cookie.reply().ok())
+		.is_some_and(|reply| {
+			reply
+				.value32()
+				.is_some_and(|mut atoms| atoms.any(|a| a == full))
+		})
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wm_fullscreen(_window: &Window) -> bool {
+	false
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

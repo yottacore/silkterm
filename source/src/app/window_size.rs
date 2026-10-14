@@ -61,7 +61,7 @@ impl State {
 		self.pending_size = None;
 		// Read once the size has held, not in the resize event: the window
 		// manager may set the maximized state after the resize it caused.
-		let fullscreen = self.window.fullscreen().is_some();
+		let fullscreen = crate::monitor::fullscreen(&self.window);
 		let maximized = self.window.is_maximized();
 		let grid =
 			remember_resize(self.size_tracked, fullscreen, maximized).then_some((cols, rows));
@@ -174,7 +174,7 @@ impl State {
 			mondbg("keep", self.watch.key.as_deref(), None, None);
 			return;
 		}
-		if self.window.fullscreen().is_some() || self.window.is_maximized() {
+		if crate::monitor::fullscreen(&self.window) || self.window.is_maximized() {
 			mondbg("keep", self.watch.key.as_deref(), None, None);
 			return;
 		}
