@@ -2854,13 +2854,13 @@ impl Pane {
 		&self.map
 	}
 
-	/// When a compose the throttle deferred comes due, or the column's hold
-	/// runs out.
+	/// When a compose the throttle deferred comes due, the column's hold runs
+	/// out, or tmux's answer about what it shows wants reading.
 	pub fn map_wake(&self) -> Option<std::time::Instant> {
-		match (self.map.wake(), self.map_hold.wake()) {
-			(Some(a), Some(b)) => Some(a.min(b)),
-			(a, b) => a.or(b),
-		}
+		[self.map.wake(), self.map_hold.wake(), self.term.tmux_wake()]
+			.into_iter()
+			.flatten()
+			.min()
 	}
 
 	/// Start a marker drag, remembering the pointer and what the view sat at.
@@ -3848,12 +3848,21 @@ impl PaneManager {
 				crate::term::Task::Running(name) => Some(name),
 				crate::term::Task::Last(_) | crate::term::Task::Idle => None,
 			};
+			let now = std::time::Instant::now();
 			let own = pane.map_hold.update(
 				minimap::draws_own_screen(mode, running.is_some()),
 				running.as_deref(),
-				std::time::Instant::now(),
+				now,
 			);
-			let want = minimap::wanted(cfg, own, running.as_deref());
+			let mut want = minimap::wanted(cfg, own, running.as_deref());
+			// tmux is listed for what it draws itself, not for what runs in it
+			if want && cfg.minimap && running.as_deref() == Some("tmux") {
+				if let Some(inner) = pane.term.tmux_inner(now) {
+					want = minimap::wanted(cfg, inner.own_screen, inner.program.as_deref());
+				}
+			} else {
+				pane.term.forget_tmux();
+			}
 			if want != pane.map_on {
 				pane.map_on = want;
 				moved = true;

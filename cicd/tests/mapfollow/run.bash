@@ -13,6 +13,10 @@
 ##			  lose it for a moment as it started.
 ##			- A program asking for focus reports on the main screen loses it
 ##			  while it runs, and the shell gets it back.
+##			- A listed program at the end of a pipeline keeps it, whether the
+##			  first stage has exited or still runs.
+##			- Inside a real tmux, a program that is not listed loses it and a
+##			  listed one keeps it. Skipped when tmux is not installed.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, display,
 ##	  dash or xdotool).
@@ -47,6 +51,7 @@ for tool in Xvfb xdotool dash stty; do
 done
 if [[ ! -x "${headless}" ]]; then echo "  skip: no gui-headless.bash"; exit 3; fi
 dash="$(command -v dash)"
+tmuxBin="$(command -v tmux || true)"
 
 # shellcheck source=cicd/tests/_testdir.bash
 source "${meDir}/../_testdir.bash"; fTestDir_Use
@@ -60,6 +65,7 @@ fCleanup(){
 	local -r rc="${1}"
 	if [[ -n "${appPid}" ]]; then fStopOurs "${appPid}"; fi
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
+	if [[ -n "${tmuxBin}" && -S "${work}/sock" ]]; then "${tmuxBin}" -S "${work}/sock" kill-server >/dev/null 2>&1 || true; fi
 	if [[ "${rc}" == 0 ]]; then rm -rf "${work}"; fi
 	fTestDir_End "${rc}"
 }
@@ -96,11 +102,11 @@ printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' 'windo
 ## The programs are dash under other names, since the name is what the column
 ## goes by. The scene runs them under job control, as a shell at a prompt
 ## would, so the terminal can tell what runs.
-for name in tmux chat; do ln -s "${dash}" "${work}/bin/${name}"; done
+for name in tmux chat less feed; do ln -s "${dash}" "${work}/bin/${name}"; done
 ## Each line of sizes.txt is the step the scene was on and the pane's rows and
 ## columns, written when they change.
 cat >"${work}/scene.sh" <<'EOF'
-w=$1
+w=$1 tmux=$2
 echo start >"$w/step"
 poll() { last=; while :; do s=$(stty size </dev/tty); if [ "$s" != "$last" ]; then echo "$(cat "$w/step") $s" >>"$w/sizes.txt"; last=$s; fi; sleep 0.02; done; }
 poll &
@@ -118,16 +124,40 @@ step back; sleep 2
 step chat; printf .
 "$w/bin/chat" -c 'printf "\033[?1004h> "; sleep 3; printf "\033[?1004l"'
 step end; sleep 2
+step pipe; printf .
+true | "$w/bin/less" -c 'printf "\033[?1049h\033[Hpaged"; sleep 3; printf "\033[?1049l"'
+step pipeback; sleep 1
+step pipelive; printf .
+"$w/bin/feed" -c 'sleep 4; :' | "$w/bin/less" -c 'printf "\033[?1049h\033[Hpaged"; sleep 3; printf "\033[?1049l"'
+step pipelater; sleep 2
+if [ "$tmux" != none ]; then
+	step tmuxstart; printf .
+	"$tmux" -S "$w/sock" -f /dev/null new-session "dash $w/inner.sh $w"
+	step tmuxend; sleep 2
+fi
 step done
 sleep 300
 EOF
+## What runs inside tmux, under job control in its pane.
+cat >"${work}/inner.sh" <<'EOF'
+w=$1
+set -m
+step() { echo "$1" >"$w/step"; }
+step tmuxshell; sleep 2
+step tmuxtui
+"$w/bin/chat" -c 'printf "\033[?1049h\033[Hfull"; sleep 3; printf "\033[?1049l"'
+step tmuxback; sleep 2
+step tmuxless
+"$w/bin/less" -c 'printf "\033[?1049h\033[Hpaged"; sleep 3; printf "\033[?1049l"'
+step tmuxquit; sleep 1
+EOF
 
-DISPLAY="${display}" XAUTHORITY="${auth}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME -u SILKTERM_SOCKET \
+DISPLAY="${display}" XAUTHORITY="${auth}" env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u TMUX -u TMUX_PANE -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME -u SILKTERM_SOCKET \
 	LIBGL_ALWAYS_SOFTWARE=1 HOME="${home}" XDG_RUNTIME_DIR="${home}" \
-	"${bin}" --config "${work}/config.shcl" --pixel-width 1000 --pixel-height 600 --shell "${dash} ${work}/scene.sh ${work}" >/dev/null 2>"${work}/said.txt" &
+	"${bin}" --config "${work}/config.shcl" --pixel-width 1000 --pixel-height 600 --shell "${dash} ${work}/scene.sh ${work} ${tmuxBin:-none}" >/dev/null 2>"${work}/said.txt" &
 appPid=$!
 
-giveUp=$((SECONDS + 60))
+giveUp=$((SECONDS + 90))
 while ((SECONDS < giveUp)) && [[ "$(cat "${work}/step" 2>/dev/null || true)" != "done" ]]; do sleep 0.5; done
 fStopOurs "${appPid}"; appPid=""
 ## A line with no size is the poll losing the terminal as the window closed.
@@ -140,6 +170,7 @@ narrow="$(grep '^start ' "${sizes}" 2>/dev/null | tail -n 1 | awk '{print $3}')"
 fWide(){ awk -v step="${1}" -v narrow="${narrow:-0}" '$1 == step && $3 > narrow {found = 1} END {exit !found}' "${sizes}"; }
 fNarrow(){ ! fWide "${1}"; }
 fNone(){ ! grep -q "^${1} " "${sizes}"; }
+fNarrowAgain(){ awk -v step="${1}" -v narrow="${narrow:-0}" '$1 == step && $3 == narrow {found = 1} END {exit !found}' "${sizes}"; }
 fEndsNarrow(){ [[ "$(tail -n 1 "${sizes}" | awk '{print $3}')" == "${narrow}" ]]; }
 fCheck "the column shows at the start" test -n "${narrow}"
 fCheck "a quiet program on the alt screen takes it" fWide quiet
@@ -148,6 +179,19 @@ fCheck "a listed program keeps it as it starts" fNone tmux
 fCheck "and as it exits" fNone back
 fCheck "a program asking for focus reports takes it" fWide chat
 fCheck "and the shell gets it back" fEndsNarrow
+fCheck "a listed program after a stage that exited keeps it" fNone pipe
+fCheck "a listed program after a stage still running keeps it" fNone pipelive
+fCheck "and after it" fNone pipelater
+if [[ -n "${tmuxBin}" ]]; then
+	fCheck "tmux keeps it as it starts" fNone tmuxstart
+	fCheck "and at the prompt inside" fNone tmuxshell
+	fCheck "a program inside tmux that is not listed takes it" fWide tmuxtui
+	fCheck "and the shell inside gets it back" fNarrowAgain tmuxback
+	fCheck "a listed program inside tmux keeps it" fNone tmuxless
+	fCheck "and the shell inside after it keeps it" fNone tmuxquit
+else
+	echo "  skip the tmux checks: no tmux"
+fi
 
 if ((failures)); then
 	echo "  sizes:"; sed 's/^/      /' "${sizes}" 2>/dev/null || true
@@ -157,3 +201,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261013 JC: Created.
+##		- 20261013 JC: Pipelines, and programs inside a real tmux.
