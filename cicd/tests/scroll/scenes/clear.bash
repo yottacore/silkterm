@@ -8,6 +8,7 @@
 ## frame at rest, so the part under test sits between two trips to the alt screen.
 ## Both scroll down, the first a line at a time and the second 9 lines at once,
 ## which tells the start from the end.
+## `clear` under ble.sh with a two-row prompt is in the run too.
 ## POSIX sh (dash).
 
 ##	History: At bottom of file.
@@ -25,6 +26,15 @@ fill(){
 		printf '%s line %d\n' "${1}" "${i}"
 		i=$((i + 1))
 	done
+	sleep "${pause}"
+}
+
+## `clear` under ble.sh with a prompt too long for one row. ble.sh draws it at
+## the top with insert- and delete-line, and the delete at the top row sends 2
+## blank rows up into history.
+ble_clear(){
+	printf '\033[H\033[2J\033[3J\033(B\033[m\0337\033[0;94m[ble: EOF]\033(B\033[m\0338\033[%dC  \r\033[K' "$((cols - 2))"
+	printf '\r\n\033[1L\033[2K\033[1A\033[2K\033[2M\033[2L\033[2K%s/repo$ ' "${long_prompt}"
 	sleep "${pause}"
 }
 
@@ -50,6 +60,9 @@ sz=$(stty size 2>/dev/null) || sz=""
 rows=${sz% *}
 case "${rows}" in ''|*[!0-9]*) rows=30 ;; esac
 [ "${rows}" -ge 10 ] || rows=30
+cols=${sz#* }
+case "${cols}" in ''|*[!0-9]*) cols=100 ;; esac
+long_prompt=$(printf "%${cols}s" "" | tr ' ' p)
 
 seq 1 10200 | sed 's/^/deep line /'
 fill before
@@ -62,6 +75,7 @@ for n in 1 2; do
 	fill "after ctrl-l ${n}"
 	clear
 	fill "after clear ${n}"
+	ble_clear
 	tput clear
 	fill "after tput ${n}"
 	## the scrollback now holds one screen
@@ -76,3 +90,4 @@ while :; do sleep 1; done
 
 ##	History:
 ##		- 20261013 JC: Created.
+##		- 20261013 JC: ble.sh's redraw of a long prompt after a clear.

@@ -1597,9 +1597,15 @@ impl Pane {
 			grew,
 			pushed,
 			since_clear,
+			was_blank: self.last_rows.iter().all(|&row| row == blank),
 		};
-		let (follow, advanced, was_chasing) =
-			ease_output(&mut self.scroll, alt, cut, output, lines, |k| {
+		let (follow, advanced, was_chasing) = ease_output(
+			&mut self.scroll,
+			alt,
+			cut,
+			output,
+			lines,
+			|k| {
 				// a scrollback clear took the rows that would show the old screen moved
 				let shift = repaint_shift(
 					guard.grid(),
@@ -1610,7 +1616,9 @@ impl Pane {
 					blank,
 				);
 				shift.filter(|_| !cleared)
-			});
+			},
+			|k| blank_went_up(guard.grid(), k, cols, blank),
+		);
 		if cut || alt || !self.scroll.chasing_output() {
 			self.out_band = 0;
 		}
@@ -4784,12 +4792,20 @@ fn repaint_shift(
 
 // What went into history since the last build: the depth's growth
 // (`pushed_since`), the engine's count of lines sent off the top, and, when the
-// screen was cleared, how many of those came after the clear.
+// screen was cleared, how many of those came after the clear. `was_blank`: the
+// last frame's screen had no ink.
 #[derive(Debug, Clone, Copy, Default)]
 struct Output {
 	grew: usize,
 	pushed: usize,
 	since_clear: Option<usize>,
+	was_blank: bool,
+}
+
+// Whether the k lines that went up last are all blank. A line the history no
+// longer holds can't say, so it counts as ink.
+fn blank_went_up(grid: &Grid<Cell>, k: usize, cols: usize, blank: u64) -> bool {
+	k <= grid.history_size() && (1..=k).all(|i| row_print(&grid[Line(-(i as i32))], cols) == blank)
 }
 
 // The output ease's share of a build: whether the view follows the bottom, the
@@ -4800,7 +4816,11 @@ struct Output {
 // only the lines that went up after the clear ease, never into the screen it
 // cleared. A repaint (`repaint`, asked with the advance) eases only as far as
 // its picture moved, after a snap to the bottom, so no ease left over from
-// earlier output scrolls through what the repaint pushed.
+// earlier output scrolls through what the repaint pushed. Blank lines that went
+// up from a blank screen (`blank_up`, asked with a count) move nothing anyone
+// saw, so a view at rest stays put. ble.sh draws a prompt that wraps at the top
+// of the screen with insert- and delete-line, and the delete at the top row
+// sends 2 blank lines up, which made `clear` ease (2026101310563297).
 fn ease_output(
 	scroll: &mut Scroll,
 	alt: bool,
@@ -4808,6 +4828,7 @@ fn ease_output(
 	output: Output,
 	lines: usize,
 	repaint: impl FnOnce(usize) -> Option<usize>,
+	blank_up: impl Fn(usize) -> bool,
 ) -> (bool, usize, bool) {
 	let follow = scroll.following();
 	let advanced = output_advance(alt, follow, output.grew, output.pushed);
@@ -4815,10 +4836,15 @@ fn ease_output(
 	let was_chasing = scroll.chasing_output();
 	if let Some(after) = output.since_clear.filter(|_| follow && !cut && !alt) {
 		scroll.snap();
-		if after > 0 {
+		// the screen a clear leaves is blank
+		if after > 0 && !blank_up(after) {
 			scroll.nudge_output_within(after as f32, lines as f32);
 		}
-	} else if advanced > 0 && follow && !cut {
+	} else if advanced > 0
+		&& follow
+		&& !cut
+		&& !(output.was_blank && !was_chasing && blank_up(advanced))
+	{
 		match repaint(advanced).filter(|_| !alt) {
 			Some(shift) => {
 				scroll.snap();
@@ -5202,15 +5228,15 @@ mod tests {
 		CURSOR_ALPHA_LIGHT, CURSOR_MAX_LAG, CursorAnimation, DepthSampler, Dir, GColor, LinkHit,
 		Node, OffStrip, Output, PROMPT_SKEL_MIN, PauseState, Rect, SLIDE_TOP_BAND_APPS, StripCell,
 		Style, Weight, adopt_band, alloc_pane_id, band_row_line, bar_applies_to, bar_pos_to_lines,
-		bar_thumb_span, bar_track, bell_brighten, bracket_reach, capture_grid_text, capture_start,
-		child_areas, cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry, cursor_plate,
-		cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair, divider_at,
-		drop_hold_over, ease_output, edge_scroll_rate, equalize_dir_run, fingerprint_frame,
-		fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged, handle_pos, has_ink,
-		layout, ledger_makes_room, ledger_step, link_at, lock_for_frame, logical_line_bounds,
-		minimap, mono_attrs, move_is_input, next_capture_poll, output_advance, output_band,
-		pair_inside, paste_payload, place_split, prompt_strip, pulse_env, pushed_since,
-		render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
+		bar_thumb_span, bar_track, bell_brighten, blank_went_up, bracket_reach, capture_grid_text,
+		capture_start, child_areas, cursor_alpha, cursor_cycle, cursor_envelope, cursor_geometry,
+		cursor_plate, cursor_slide_step, cursor_wake_after, debold_attrs, distinct_pair,
+		divider_at, drop_hold_over, ease_output, edge_scroll_rate, equalize_dir_run,
+		fingerprint_frame, fnv_row, fnv_row_skel, glide_to_full, grid_point, handle_is_dragged,
+		handle_pos, has_ink, layout, ledger_makes_room, ledger_step, link_at, lock_for_frame,
+		logical_line_bounds, minimap, mono_attrs, move_is_input, next_capture_poll, output_advance,
+		output_band, pair_inside, paste_payload, place_split, prompt_strip, pulse_env,
+		pushed_since, render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
 		scroll_shift_signed, set_buffer_rows, set_ratio, shift_makes_room, shown_cursor_shape,
 		skel_rows, slide_bands, slide_is_visible, snapshot_rows, static_bands, strip_cell,
 		strip_rows, swap_leaves, text_buffer_h, translate_span, vanished_range, weld_region_clip,
@@ -7576,6 +7602,7 @@ mod tests {
 			grew: pushed_since(term.grid().history_size(), baseline),
 			pushed: ledger.pushed(),
 			since_clear: ledger.since_clear(),
+			was_blank: false,
 		}
 	}
 
@@ -7665,7 +7692,15 @@ mod tests {
 			assert_eq!((advanced, step), (4, None), "scrollback {scrollback}");
 			let mut s = crate::scroll::Scroll::new();
 			s.set_max(term.grid().history_size() as f32);
-			ease_output(&mut s, false, false, output_of(&term, h0), lines, |_| None);
+			ease_output(
+				&mut s,
+				false,
+				false,
+				output_of(&term, h0),
+				lines,
+				|_| None,
+				|_| false,
+			);
 			assert!(!s.animating(), "scrollback {scrollback}: the clear eased");
 			// what it eased before
 			//   assert!(s.chasing_output());
@@ -7688,7 +7723,11 @@ mod tests {
 		depth.rebaseline(term.grid().history_size());
 		let mut s = crate::scroll::Scroll::new();
 		s.set_max(term.grid().history_size() as f32);
+		let blank = blank_row(cols);
 		let mut build = |write: &str, s: &mut crate::scroll::Scroll| {
+			let was_blank = band_rows(&term, lines, cols)
+				.iter()
+				.all(|&row| row == blank);
 			feed(&mut term, write);
 			let history = term.grid().history_size();
 			let ledger = term.scroll_ledger();
@@ -7696,9 +7735,18 @@ mod tests {
 				grew: depth.take(history),
 				pushed: ledger.pushed(),
 				since_clear: ledger.since_clear(),
+				was_blank,
 			};
 			s.set_max(history as f32);
-			ease_output(s, false, false, output, lines, |_| None);
+			ease_output(
+				s,
+				false,
+				false,
+				output,
+				lines,
+				|_| None,
+				|k| blank_went_up(term.grid(), k, cols, blank),
+			);
 			term.scroll_ledger_mut().clear();
 		};
 		if chasing {
@@ -7792,6 +7840,87 @@ mod tests {
 		assert!((visual - 1.0).abs() < 1e-3, "eased {visual}");
 	}
 
+	// ble.sh after `clear`, with a prompt too long for one row. It draws the
+	// prompt at the top with insert- and delete-line, and the engine sends the
+	// rows a delete at the top row takes into history, 2 blank ones here. That
+	// eased the new prompt up from 2 rows down, in the same read as the clear
+	// or after it.
+	fn ble_after_clear(cols: usize) -> (String, String, String) {
+		let echo = "\x1b[0;32mclear\x1b(B\x1b[m\x1b[K\x1b(B\x1b[m\r\n".to_string();
+		let clear = "\x1b[?2004l\x1b[>4;1m\x1b[m\x1b[?25h\x1b[H\x1b[2J\x1b[3J".to_string();
+		let redraw = format!(
+			"\x1b(B\x1b[m\x1b7\x1b[0;94m[ble: EOF]\x1b(B\x1b[m\x1b8\x1b[{}C  \r\x1b[K\
+			 \x1b[?2004h\x1b[?25l\x1b(B\x1b[m\r\n\x1b(B\x1b[m\x1b[1L\x1b[2K\x1b(B\x1b[m\x1b[1A\
+			 \x1b[2K\x1b[2M\x1b[2L\x1b[2Kme@box:/a/path/that/is/too/long/for/one/row$ \x1b[?25h",
+			cols - 2
+		);
+		(echo, clear, redraw)
+	}
+
+	// Test ID: EsdYO1M
+	#[test]
+	fn a_prompt_ble_redraws_after_a_clear_shows_at_once() {
+		let _g = config::test_store_lock();
+		config::update(config::Settings::default());
+		let (cols, lines) = (40usize, 10usize);
+		let (echo, clear, redraw) = ble_after_clear(cols);
+
+		// the cause: 2 blank rows go up after the clear
+		let mut term = term_fed(cols, lines, 1000, &"old\r\n".repeat(40));
+		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
+		term.scroll_ledger_mut().clear();
+		feed(&mut term, &format!("{echo}{clear}{redraw}"));
+		assert_eq!(term.scroll_ledger().since_clear(), Some(2));
+		assert!(blank_went_up(term.grid(), 2, cols, blank_row(cols)));
+
+		let splits: [&[&str]; 4] = [
+			&[&format!("{echo}{clear}{redraw}")],
+			&[&echo, &clear, &redraw],
+			&[&format!("{echo}{clear}"), &redraw],
+			&[&echo, &format!("{clear}{redraw}")],
+		];
+		for scrollback in [1000usize, 20] {
+			for chasing in [false, true] {
+				for (n, writes) in splits.iter().enumerate() {
+					assert_eq!(
+						eased_after(writes, scrollback, chasing, lines),
+						(0.0, false),
+						"split {n}, scrollback {scrollback}, chasing {chasing}"
+					);
+				}
+			}
+		}
+	}
+
+	// Blank lines sent up while the screen shows something still move what it
+	// shows, and blank lines sent up from a blank screen while an ease is
+	// under way are part of that ease.
+	// Test ID: EsdYO5h
+	#[test]
+	fn blank_lines_that_move_ink_still_ease() {
+		let _g = config::test_store_lock();
+		config::update(config::Settings::default());
+		let lines = 10usize;
+		// a prompt on screen, then empty lines past the bottom
+		let (visual, moving) = eased_after(&["\r\n".repeat(12).as_str()], 1000, false, lines);
+		assert!(moving && visual > 0.0, "eased {visual}");
+		// a blank screen, then text that goes up
+		let text = (0..14)
+			.map(|i| format!("t{i}\r\n"))
+			.collect::<Vec<_>>()
+			.concat();
+		let (visual, moving) = eased_after(&["\x1b[H\x1b[2J", &text], 1000, false, lines);
+		assert!(moving && visual > 0.0, "eased {visual}");
+		// an ease under way takes blank lines from a screen it already emptied
+		let empty = "\r\n".repeat(12);
+		let (visual, moving) = eased_after(&[&empty, &empty], 1000, false, lines);
+		assert!(moving && visual > 20.0, "eased {visual}");
+		// unknown: more went up than the history holds
+		let cols = 40usize;
+		let term = term_fed(cols, lines, 1000, "\x1b[H\x1b[2J\x1b[3J\n\n");
+		assert!(!blank_went_up(term.grid(), 3, cols, blank_row(cols)));
+	}
+
 	// One tick of `flatpak update` with its table taller than the screen: home,
 	// clear, then the whole table again. The rows that don't fit are printed
 	// with no line breaks between them, so they wrap into about a screenful
@@ -7853,9 +7982,15 @@ mod tests {
 			let mut s = crate::scroll::Scroll::new();
 			s.set_max(term.grid().history_size() as f32);
 			let output = output_of(&term, h0);
-			ease_output(&mut s, false, false, output, lines, |k| {
-				repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank)
-			});
+			ease_output(
+				&mut s,
+				false,
+				false,
+				output,
+				lines,
+				|k| repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
+				|_| false,
+			);
 			assert!(!s.animating(), "scrollback {scrollback}: the tick eased");
 			assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
 
@@ -7876,9 +8011,15 @@ mod tests {
 			);
 			s.set_max(term.grid().history_size() as f32);
 			let output = output_of(&term, h0);
-			ease_output(&mut s, false, false, output, lines, |k| {
-				repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank)
-			});
+			ease_output(
+				&mut s,
+				false,
+				false,
+				output,
+				lines,
+				|k| repaint_shift(term.grid(), &last.0, &last.1, k, cols, blank),
+				|_| false,
+			);
 			assert!(s.chasing_output(), "scrollback {scrollback}");
 			assert!(s.visual_lines() <= 1.0, "{}", s.visual_lines());
 
@@ -8907,14 +9048,16 @@ mod tests {
 		let mut s = crate::scroll::Scroll::new();
 		s.set_max(0.0); // the alt screen has no scrollback
 		s.set_max(500.0);
-		let (follow, advanced, _) = ease_output(&mut s, false, true, grew(500), 24, |_| None);
+		let (follow, advanced, _) =
+			ease_output(&mut s, false, true, grew(500), 24, |_| None, |_| false);
 		assert!(follow);
 		assert_eq!(advanced, 500);
 		assert!(!s.animating(), "the exit is a cut");
 		assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
 
 		s.set_max(503.0);
-		let (_, advanced, was_chasing) = ease_output(&mut s, false, false, grew(3), 24, |_| None);
+		let (_, advanced, was_chasing) =
+			ease_output(&mut s, false, false, grew(3), 24, |_| None, |_| false);
 		assert_eq!(advanced, 3);
 		assert!(!was_chasing);
 		assert!(s.chasing_output(), "three new lines ease in");
@@ -8935,7 +9078,8 @@ mod tests {
 		assert!(s.animating());
 		s.snap();
 		s.set_max(2100.0);
-		let (_, advanced, _) = ease_output(&mut s, false, true, grew(2000), 24, |_| None);
+		let (_, advanced, _) =
+			ease_output(&mut s, false, true, grew(2000), 24, |_| None, |_| false);
 		assert_eq!(advanced, 2000);
 		assert!(!s.animating());
 		assert_eq!((s.desired_offset(), s.frac()), (0, 0.0));
