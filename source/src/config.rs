@@ -1055,7 +1055,7 @@ impl Settings {
 			scrollbar_auto_hide: true,
 			minimap: true,
 			minimap_width: 100.0,
-			minimap_tui_whitelist: "less tmux screen".to_string(),
+			minimap_tui_whitelist: String::new(),
 			margin: 8.0,
 			opacity: 0.95,
 			transparent_background: false,
@@ -7747,7 +7747,7 @@ scroll:
 	minimap:
 		# enabled: true  ## Default
 		# width: 100.0  ## Default
-		# tui_process_whitelist: "less tmux screen"  ## Default
+		# tui_process_whitelist: ""  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Window

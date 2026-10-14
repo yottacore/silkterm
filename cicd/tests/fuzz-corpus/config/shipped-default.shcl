@@ -173,7 +173,7 @@ scroll:
 	minimap:
 		# enabled: false  ## Default
 		# width: 100.0  ## Default
-		# tui_process_whitelist: "less tmux screen"  ## Default
+		# tui_process_whitelist: ""  ## Default
 
 ## ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Theme and colors

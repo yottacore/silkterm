@@ -1934,6 +1934,18 @@ mod tests {
 		assert!(wanted(&s, true, Some("less")));
 	}
 
+	// On their own screen the map has nothing but that screen to show, so by
+	// default nothing keeps the column there.
+	// Test ID: EshLdeY
+	#[test]
+	fn by_default_less_tmux_and_screen_take_the_column_too() {
+		let s = cfg(true, 100.0);
+		for program in ["less", "tmux", "screen"] {
+			assert!(!wanted(&s, true, Some(program)), "{program}");
+			assert!(wanted(&s, false, Some(program)), "{program}");
+		}
+	}
+
 	// Test ID: EscYyBa
 	#[test]
 	fn a_program_redrawing_the_main_screen_takes_the_column_too() {
