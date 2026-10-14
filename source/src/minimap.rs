@@ -141,6 +141,7 @@ pub fn screen_modes(mode: TermMode) -> TermMode {
 	screen_modes_from(PtyHost::HERE, mode)
 }
 
+/// `screen_modes` under a given host, so either can be tested anywhere.
 pub fn screen_modes_from(host: PtyHost, mode: TermMode) -> TermMode {
 	let asked = match host {
 		PtyHost::Plain => TermMode::ALT_SCREEN | TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT,

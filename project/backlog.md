@@ -367,6 +367,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
+	- ID: 2026101408384488
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261014-083844
+	- Opened by: CC
+	- Related IDs: 2026101321365912
+	- Target OS: Windows
+	- Test environment: b29w
+	- Steps to reproduce:
+		- Install WezTerm, which puts its folder with a `conpty.dll` on PATH.
+		- Start SilkTerm.
+	- Incorrect behavior: The engine loads `conpty.dll` by bare name, so the DLL search order finds WezTerm's, or one in the working folder, before falling back to the one Windows has. Each copy behaves a little differently, so SilkTerm does too, from box to box. A planted `conpty.dll` in the working folder or a folder on the user's PATH loads into SilkTerm.
+	- Expected behavior: Only a `conpty.dll` shipped beside the program, if any, or the one Windows has.
+	- Reproduced: 20261014 on b29w. With WezTerm's folder on PATH no focus-report ask came through; with it taken off, the one Windows has sent it.
+	- Notes:
+		- The load is in the engine fork's `tty/windows/conpty.rs`.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -385,17 +404,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Windows 11: every pane may count as a full-screen program while a command runs
 	- ID: 2026101321365912
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261013-213659
 	- Opened by: CC
-	- Related IDs: 2026101315155800, 2026101310563323
+	- Assigned to: CC
+	- Related IDs: 2026101315155800, 2026101310563323, 2026101408384488
 	- Target OS: Windows
+	- Test environment: b29w
 	- Steps to reproduce:
 		- Turn the minimap on in Windows 11 and run a long plain command, such as `ping -t localhost`.
 	- Incorrect behavior: Unconfirmed. ConPTY on Windows 11 is said to send `CSI ? 1004 h` itself at start. The engine would then show focus reports on in every pane, and the minimap rule reads that, while a command runs, as a program that draws its own screen.
 	- Expected behavior: A plain command keeps the column.
 	- Reproduced: No. Read only, from a Cygwin change that strips that sequence from ConPTY output.
+		- 20261014 on b29w: Confirmed. The console host Windows has sends `CSI ? 9001 h` and `CSI ? 1004 h` before anything else, and turns both off at the end. It doesn't pass a program's own `1004` or mouse asks on. In a cmd pane with the minimap on, a plain command read its width as 90 columns, the same as with the minimap off, so the column was gone.
+		- It first passed on b29w, because WezTerm's `conpty.dll` is on that box's PATH and SilkTerm loaded it ahead of the one Windows has. That older host asks for nothing. Filed as 2026101408384488.
+	- Actual cause: The column rule read the focus-report mode as the program's ask. Under the Windows console host it's the host's own ask, on in every pane from start to end.
+	- Actual fix: Under the Windows console host the rule reads only the alt screen and mouse modes. Focus reports still go to the host, which asked for them.
+	- Verified:
+		- New Windows scenario `conmap`: failed on dev (90 columns with the minimap on and off), passes on the branch (76 against 90). Run with no `conpty.dll` on PATH.
+		- `livecfg` and `cmdgui` pass on b29w with the same build. Unit suite, clippy for Linux and Windows, and fmt pass.
+	- Swept: `screen_modes` is the one place the modes are read for the column. `focus_report` reads the mode only to send reports, which is right under either host. tmux's own answer is unix only.
+	- Branch: conpty
+	- Commit: ca25198
+	- Test case: `a_plain_command_keeps_the_column_under_the_windows_console_host` (EsgiG0N), seen failing with the host's ask counted; wingui scenario `conmap` (EsgiFLt), seen failing on dev.
+	- Acceptance signoff: Self-closed: reproduced, red before and green after on b29w.
+	- Closed: 20261014-083844
 
 - macOS: a TUI run inside tmux keeps the minimap column
 	- ID: 2026101320425888
@@ -430,7 +464,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The tab reads `Windows Cmd [silkterm]` after the command is done and cmd is back at its prompt.
 	- Expected behavior: No program in the tab once cmd is back at its prompt.
 	- Reproduced: 20261014 on b29w, in the `livecfg` scenario's shot of window E.
+		- 20261014 on b29w: Confirmed with a small program that sleeps 3 seconds and has no console. Run from cmd, the tab read `[nap]` while it ran and still did 2 seconds after it ended. Clicking the window and pressing a key changed it to `[last: nap]`.
 	- Possible cause: cmd doesn't wait for a GUI program, so `cls` ran while silkterm.exe was still alive. On Windows the program is a live child of the shell, kept until the terminal stirs (G38). Nothing stirs after the `cls`, so the old answer stays. Not confirmed.
+	- Actual cause: As above. The cached answer waits for output or a key, and a program cmd didn't wait for ends after the prompt, with nothing printed.
+	- Actual fix: The child the probe names is watched by the system's thread pool. When it ends the pane is told, and the next frame asks again.
+		- Cost: no polling. One process handle and one wait for each command found, and one event plus one more look at the process list when it ends. That look would have come at the next key anyway.
+	- Note: Once it ends the tab reads `[last: <program>]`, as after any other command.
+	- Verified:
+		- New Windows scenario `cmdgui`: failed on dev, passes on the branch, where the tab read `[last: nap]` with nothing typed. `livecfg`'s window E now reads `Windows Cmd [last: silkterm]`.
+		- `a_watched_command_says_when_it_ends` passes on b29w and fails with the wait's callback emptied. Unit suite, clippy for Linux and Windows, and fmt pass.
+	- Swept: `command_child` is the one probe on Windows. It answers the tab label, the minimap's running program, and copy-output's at-prompt check, so all three get the news. Read only: copy-output stayed armed for such a command until the next key. Unix asks the foreground process group, which a program the shell didn't wait for isn't in.
+	- Branch: conpty
+	- Commit: ca25198
+	- Test case: `a_watched_command_says_when_it_ends` (Esgn52X), seen failing with the callback emptied; wingui scenario `cmdgui` (EsgiFgO), seen failing on dev.
+	- Acceptance signoff: Self-closed: cause confirmed, red before and green after on b29w.
+	- Closed: 20261014-083844
+
+- A tab may not name a quiet command while nothing redraws
+	- ID: 2026101408384489
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-083844
+	- Opened by: CC
+	- Related IDs: 2026101407014142
+	- Target OS: All
+	- Test environment: b29w
+	- Steps to reproduce:
+		- Turn cursor blink off.
+		- Run a command that prints nothing for a few seconds.
+	- Incorrect behavior: The tab doesn't name it while it runs.
+	- Expected behavior: The tab names it.
+	- Reproduced: Seen once on b29w with blink off, with a program cmd didn't wait for. Not checked on Linux.
+	- Possible cause: What a tab says is kept for 250 ms. A frame drawn just before the command starts keeps "nothing running", and with no output and no blink no later frame asks again. Plausible, read only.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
