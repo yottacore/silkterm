@@ -402,6 +402,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `cicd/tests/mapfollow/run.bash` (EsdlZTW), check "nothing from the scene is left running".
 	- Verified: 20261014 on b23 on `:98`. Before the fix the check failed and named the leftover `scene.sh` poll; after it, all 19 checks passed and no process from the run folder was alive.
 	- Branch: pollreap
+	- Commit: 7e42566
 	- Acceptance signoff: Self-closed: test-only fix, red before and green after.
 	- Closed: 20261014-075900
 
