@@ -5151,6 +5151,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None, it is a git host setting. The git host reports no errors in the file.
 	- Closed: 20260929-170546
 
+- The pipeline prints the release binary sizes wrong, such as 1.0K for a 12 MB build
+	- ID: 2026101322381434
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261013-223814
+	- Opened by: CC
+	- Target OS: Linux
+	- Test environment: b23
+	- Steps to reproduce:
+		- Run the full pipeline and read the release stage lines.
+	- Incorrect behavior: `OK: native release: target/release/silkterm (1.0K)`, and the same for each cross build.
+	- Expected behavior: the file's size, 12M here.
+	- Reproduced: 20261013 on b23, in the full pipeline run at 3e8df3f.
+	- Actual cause: the size comes from `du -h`, which on ZFS reads a just-written file as almost nothing until the write is committed, and after that gives the compressed size, 7.0M here.
+	- Actual fix [Bug]: `du -h --apparent-size`, as the gallery thumbnail line already did. Same fix for the wallpaper gallery's "Wrote" line.
+	- Verified: 20261013, `du -h` reads 7.0M and `du -h --apparent-size` 12M on the settled build. shellcheck and the bash style check pass.
+	- Swept: every `du` in `cicd/`, `utility/` and the installers. The 3 lines above were the only ones without `--apparent-size`.
+	- Branch: dusize
+	- Test case: none, since it only changes a printed size. The next pipeline run shows it.
+	- Acceptance signoff: Self-closed: mechanical
+	- Closed: 20261013-223814
+
 - Settings tips end with the current and default values where they differ
 	- ID: 2026100910295905
 	- Type: Enhancement

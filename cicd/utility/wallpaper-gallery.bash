@@ -174,7 +174,7 @@ if ((doSheet)); then
 		-filter_complex "tile=${cols}x${rows}:margin=6:padding=6:color=#14141a" \
 		-frames:v 1 -q:v "${quality}" "$(fNativePath "${out}")"
 
-	fEcho "Wrote $(du -h "${out}" | cut -f1) to ${out}"
+	fEcho "Wrote $(du -h --apparent-size "${out}" | cut -f1) to ${out}"
 	fEcho_Clean
 fi
 
