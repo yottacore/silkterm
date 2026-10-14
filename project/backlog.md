@@ -368,47 +368,44 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- muffer should not get a minimap
-	- ID: 2026101310563323
+- A TUI run inside tmux or screen keeps the minimap column
+	- ID: 2026101320095003
 	- Type: Bug
-	- Status: Started
+	- Status: Queued
 	- Severity: Avg
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Related IDs: 2026101315155800
+	- Opened: 20261013-200950
+	- Opened by: CC
+	- Parent ID: 2026101310563323
 	- Target OS: All
-	- Test environment: b23, muffer 2.1.296
-	- Incorrect behavior: muffer gets a minimap.
-	- Expected behavior: No minimap while muffer runs.
+	- Steps to reproduce:
+		- Turn the minimap on and start tmux or screen.
+		- Run htop or muffer inside it.
+	- Incorrect behavior: The column stays. SilkTerm sees only tmux or screen, which are listed and draw the whole screen themselves.
+	- Expected behavior: tmux and screen keep the column, and a TUI inside them that is not listed loses it, per the 20261013 answer on 2026101310563323.
+	- Reproduced: 20261013 on b23 in a window, htop inside tmux 3.6b and inside screen 4.09.
 	- Notes:
 		- Pre-next-cut.
-		- Consider making the minimap whitelist-only for TUI apps, e.g. `less`, `tail`, etc.
-		- The minimap already steps aside for a full-screen program that is not in `scroll.minimap.tui_process_whitelist`, default `less tmux screen`, per the old-format Done item "Auto-disable the minimap when in a TUI that has no buffer that can be reached via minimap".
-	- Reproduced: 20261013 on b23, real muffer 2.1.296 in a window with the minimap on. Its default view kept the column. Its full-screen view already lost it.
-	- Actual cause:
-		- muffer has 2 views now. The default one draws on the main screen. It redraws its input box in place and its transcript goes into the scrollback. The column only stepped aside for the alt screen, so this view kept it.
-		- The full-screen view (`tui: fullscreen` in muffer's settings, which b23 uses) is on the alt screen with full mouse tracking, and lost the column before this fix too.
-		- Not the process name, since only a listed name keeps the column. Not the timing either.
-		- muffer run inside tmux keeps the column in either view, since SilkTerm only sees tmux, which is on the list. The muffer sessions on b23 run inside tmux.
-	- Actual fix [Bug]: A program that redraws itself in place on the main screen now counts as drawing its own screen, the same as one on the alt screen, and keeps the column only if listed. That is the whitelist-only rule from the notes. It shows itself by asking for mouse reports or focus changes while it runs. A shell turns both off before it runs a command. Once a program stops asking, the column waits a second before it comes back while that program still runs, since muffer turns focus reports off and on again as it starts. Back at the prompt it comes back at once.
-	- Verified: 20261013 on b23, real muffer 2.1.296 in a window. Default view: the build from before kept the column. Now the column goes once as muffer starts and comes back once as it exits. Without the hold it went, came back and went again in the first quarter second. Full-screen view: the column goes on both builds. The gate passed (fmt, clippy, 1291 tests).
-	- Note: Other programs this changes, which is why it waits on signoff:
-		- An inline picker with the mouse on, such as `fzf --height`, loses the column while it is open.
-		- A nested fish 4, or an ssh session to a host whose shell is fish, loses it for as long as it runs, since fish asks for focus changes at its own prompt. Listing `fish` or `ssh` keeps it, but then for everything run under them.
-		- bash, zsh, a Python REPL and a build keep it, as before. fish as the pane's own shell keeps it too, since it turns focus changes off before it runs a command.
-		- A program on the alt screen that leaves it while still running, as vim does for `:!`, gets the column back a second later rather than at once.
-	- Progress log:
-		- 20261013: Waiting on signoff, since it changes which programs get the column beyond muffer.
-		- Question: should tmux stay on the default list? With it there, muffer inside tmux keeps the column whatever this fix does.
-		- Found on the way: SilkTerm never sends focus reports to a program that asks for them. Filed as 2026101315155800.
-		- 20261013: Answer (JC): Fish and ssh (and tmux and `screen`) should smooth-scroll, except for nested TUI apps that aren't whitelisted.
-		- 20261013: So the nested fish and ssh cases in the note above are wrong, and tmux stays on the list. Next: fish, ssh, tmux and screen keep the column and smooth scroll, while a TUI run inside one of them that isn't listed still loses it. Listing them by name doesn't do that, since what runs under them would keep it too.
-	- Decisions:
-		- tmux and screen stay on the default list.
-	- Branch: nomufmap
-	- Commit: f9a2426
-	- Test case: `a_program_redrawing_the_main_screen_takes_the_column_too` (EscYyBa), red before the fix and green after. `a_program_that_toggles_as_it_starts_moves_the_column_once` (Esca2GW), red with the hold taken out.
-	- Swept: `minimap::wanted` has one caller outside tests, `sync_minimap`, which runs every frame for the shown tab's panes on every platform. The marker, the scrollbar and the alt-screen ease key on the alt screen for their own reasons and are unchanged.
+		- Telling what runs inside means asking tmux or screen, such as tmux's `pane_current_command` for the active pane. screen has nothing as plain.
+		- tmux reached through ssh loses the column today, since it is on the alt screen under `ssh`, which is not listed. A fix here wants to cover that too.
+
+- A piped command is not seen as running, so `cat file | less` loses the minimap column
+	- ID: 2026101320095004
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261013-200950
+	- Opened by: CC
+	- Related IDs: 2026101310563323
+	- Target OS: Linux, macOS
+	- Steps to reproduce:
+		- Turn the minimap on.
+		- Run `cat file | less`, then `less file`.
+	- Incorrect behavior: The piped `less` loses the column, and `less file` keeps it. `seq 100 | fzf --height 10` keeps it, though fzf is not listed.
+	- Expected behavior: A pipeline counts as the program on screen, as the same program run alone does.
+	- Reproduced: 20261013 on b23 in a window, both cases.
+	- Possible cause: What runs is named by the terminal's foreground process group, through its first process. In a pipeline that is the first command, which has often exited already, so nothing is named.
+	- Notes:
+		- The tab label reads the same answer, so it likely names nothing for a pipeline either. Not checked.
 
 - Why can muffer not have a minimap?
 	- ID: 2026101318475899
@@ -1457,6 +1454,60 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- muffer should not get a minimap
+	- ID: 2026101310563323
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Related IDs: 2026101315155800, 2026101320095003, 2026101320095004
+	- Target OS: All
+	- Test environment: b23, muffer 2.1.296
+	- Incorrect behavior: muffer gets a minimap.
+	- Expected behavior: No minimap while muffer runs.
+	- Notes:
+		- Pre-next-cut.
+		- Consider making the minimap whitelist-only for TUI apps, e.g. `less`, `tail`, etc.
+		- The minimap already steps aside for a full-screen program that is not in `scroll.minimap.tui_process_whitelist`, default `less tmux screen`, per the old-format Done item "Auto-disable the minimap when in a TUI that has no buffer that can be reached via minimap".
+	- Reproduced: 20261013 on b23, real muffer 2.1.296 in a window with the minimap on. Its default view kept the column. Its full-screen view already lost it.
+	- Actual cause:
+		- muffer has 2 views now. The default one draws on the main screen. It redraws its input box in place and its transcript goes into the scrollback. The column only stepped aside for the alt screen, so this view kept it.
+		- The full-screen view (`tui: fullscreen` in muffer's settings, which b23 uses) is on the alt screen with full mouse tracking, and lost the column before this fix too.
+		- Not the process name, since only a listed name keeps the column. Not the timing either.
+		- muffer run inside tmux keeps the column in either view, since SilkTerm only sees tmux, which is on the list. The muffer sessions on b23 run inside tmux.
+		- 20261013: The column also moved a step late. It read the screen mode from the last frame drawn, so a program that switched screens and then sat still kept the column until something else drew. muffer's startup questions do that, and the change then landed on the shell after it.
+		- It also asked what was running from an answer up to a quarter second old. tmux switches screens as it starts, before that answer names it, so it lost the column for a moment.
+	- Actual fix [Bug]: A program that redraws itself in place on the main screen now counts as drawing its own screen, the same as one on the alt screen, and keeps the column only if listed. That is the whitelist-only rule from the notes. It shows itself by asking for mouse reports or focus changes while it runs. A shell turns both off before it runs a command. Once a program stops asking, the column waits a second before it comes back while that program still runs, since muffer turns focus reports off and on again as it starts. Back at the prompt it comes back at once.
+		- 20261013: The column reads the screen mode as it is now, and a change in it asks again what is running.
+		- fish, ssh, tmux and screen needed nothing else. fish asks for focus changes only inside tmux, and ble.sh asks for neither, so no shell prompt takes the column. A TUI started from fish or through ssh still loses it.
+	- Verified: 20261013 on b23, real muffer 2.1.296 in a window. Default view: the build from before kept the column. Now the column goes once as muffer starts and comes back once as it exits. Without the hold it went, came back and went again in the first quarter second. Full-screen view: the column goes on both builds. The gate passed (fmt, clippy, 1291 tests).
+		- 20261013 on b23, in a window: a nested fish 4.2.1 and `ssh -t localhost fish` keep the column at the prompt and through `ls /`. `fzf --height`, htop and real muffer run from either one lose it and get it back after. tmux 3.6b and screen 4.09 keep it from start to exit, and no longer drop it for a moment as they start.
+		- Output from `seq` eased the same in bash, a nested fish and an ssh to fish, 12 or 13 eased frames each.
+		- The gate passed (fmt, clippy, 1295 tests), and clippy for the Windows target.
+	- Note: Other programs this changes, which is why it waits on signoff:
+		- An inline picker with the mouse on, such as `fzf --height`, loses the column while it is open.
+		- A nested fish 4, or an ssh session to a host whose shell is fish, loses it for as long as it runs, since fish asks for focus changes at its own prompt. Listing `fish` or `ssh` keeps it, but then for everything run under them.
+			- 20261013: Wrong. fish 4.2.1 asks for focus changes at its prompt only inside tmux, so a nested fish and an ssh to fish keep the column. The recording behind this note was made inside tmux.
+		- bash, zsh, a Python REPL and a build keep it, as before. fish as the pane's own shell keeps it too, since it turns focus changes off before it runs a command.
+		- A program on the alt screen that leaves it while still running, as vim does for `:!`, gets the column back a second later rather than at once.
+	- Progress log:
+		- 20261013: Waiting on signoff, since it changes which programs get the column beyond muffer.
+		- Question: should tmux stay on the default list? With it there, muffer inside tmux keeps the column whatever this fix does.
+		- Found on the way: SilkTerm never sends focus reports to a program that asks for them. Filed as 2026101315155800.
+		- 20261013: Answer (JC): Fish and ssh (and tmux and `screen`) should smooth-scroll, except for nested TUI apps that aren't whitelisted.
+		- 20261013: So the nested fish and ssh cases in the note above are wrong, and tmux stays on the list. Next: fish, ssh, tmux and screen keep the column and smooth scroll, while a TUI run inside one of them that isn't listed still loses it. Listing them by name doesn't do that, since what runs under them would keep it too.
+		- 20261013: Recorded what fish 4.2.1 and ble.sh send in this terminal. fish sends prompt marks (OSC 133) and turns focus changes on only inside tmux. ble.sh sends neither. So prompt marks were not needed to tell a shell's prompt from what it runs.
+		- 20261013: A TUI inside tmux or screen keeping the column is split off as 2026101320095003. A piped command not seen as running is filed as 2026101320095004.
+	- Decisions:
+		- tmux and screen stay on the default list.
+	- Branch: nomufmap, fishmap
+	- Commit: f9a2426, 4a71e47
+	- Test case: `a_program_redrawing_the_main_screen_takes_the_column_too` (EscYyBa), red before the fix and green after. `a_program_that_toggles_as_it_starts_moves_the_column_once` (Esca2GW), red with the hold taken out. `a_nested_fish_prompt_keeps_the_column` (EsdlZZz), which passes before and after, since fish needed no change. Window test `cicd/tests/mapfollow/run.bash` (EsdlZTW): 5 of its 7 checks fail on the build before the timing fix, all pass after.
+	- Swept: `minimap::wanted` has one caller outside tests, `sync_minimap`, which runs every frame for the shown tab's panes on every platform. The marker, the scrollbar and the alt-screen ease key on the alt screen for their own reasons and are unchanged. 20261013: only `sync_minimap` reads the mode live. Link hover and the ease still use the last frame's mode, where a frame late does no harm. `retask` has that one caller.
+	- Acceptance signoff: Self-closed: fish and ssh match the 20261013 answer and were checked in a window. The tmux and screen half is 2026101320095003.
+	- Closed: 20261013-201122
 
 - `clear` shouldn't scroll, it should instantly clear
 	- ID: 2026101310563297
