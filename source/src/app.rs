@@ -639,6 +639,8 @@ struct State {
 	// while focused pokes the focused pane's cursor, so a long-idle-parked
 	// animation resumes on any window/tab/pane refocus
 	cursor_focus_sig: Option<(usize, PaneId, bool)>,
+	// the pane whose program was last told it has the keyboard
+	focus_holder: Option<PaneId>,
 	resizing: Option<Vec<bool>>, // split-tree path of the divider being dragged
 	dragging_pane: Option<PaneId>, // pane being drag-reordered (Shift+drag)
 	bar_dragging: Option<PaneId>, // pane whose scrollbar thumb is being dragged
@@ -862,6 +864,21 @@ impl State {
 			y: bar,
 			w: self.surface_px.0 as f32,
 			h: (self.surface_px.1 as f32 - bar).max(1.0),
+		}
+	}
+
+	// Focus reports follow the pane that has the keyboard, so a pane or tab
+	// switch tells both programs as well as the window's focus does. Derived
+	// here once a pass, rather than at each of the places that move focus.
+	fn report_focus(&mut self) {
+		let now = self.focused.then(|| self.tabs.cur().focused);
+		let (lost, gained) = focus_moves(self.focus_holder, now);
+		self.focus_holder = now;
+		if let Some(pane) = lost.and_then(|id| self.tabs.find_pane(id)) {
+			pane.report_focus(false);
+		}
+		if let Some(pane) = gained.and_then(|id| self.tabs.find_pane(id)) {
+			pane.report_focus(true);
 		}
 	}
 
@@ -3549,6 +3566,12 @@ fn scissor(rect: Rect, sw: u32, sh: u32) -> (u32, u32, u32, u32) {
 	(x, y, right.saturating_sub(x), bottom.saturating_sub(y))
 }
 
+// Which pane loses the keyboard and which gains it, as the holder goes from
+// `was` to `now`. None is the window without focus.
+fn focus_moves(was: Option<PaneId>, now: Option<PaneId>) -> (Option<PaneId>, Option<PaneId>) {
+	if was == now { (None, None) } else { (was, now) }
+}
+
 fn focus_ring(rect: Rect, scale: f32) -> [RectInstance; 4] {
 	// the calm one: the ring marks which pane is live, alongside the dialog's own
 	// sliders and revert arrows, rather than the single keyboard-focused control
@@ -3847,6 +3870,7 @@ impl ApplicationHandler<UserEvent> for App {
 			last_click: None,
 			click_count: 0,
 			cursor_focus_sig: None,
+			focus_holder: None,
 			resizing: None,
 			dragging_pane: None,
 			bar_dragging: None,
@@ -5128,6 +5152,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// one telling for however many writes this pass made
 		if let Some(state) = self.state.as_mut() {
 			state.tell_peers_if_due();
+			state.report_focus();
 		}
 		#[cfg(target_os = "macos")]
 		if let Some(state) = self.state.as_ref() {
@@ -5735,8 +5760,8 @@ mod tests {
 	use super::push_back;
 	use super::tabs::tab_close_box;
 	use super::{
-		CloseScope, PaneWakes, SCRIM_PCT_PER_DOUBLING, TAB_CLOSE_M, close_scope, focus_ring,
-		is_copy_chord, key_is_typed, pace_frame, pane_wake, reveal_due, wake_by,
+		CloseScope, PaneWakes, SCRIM_PCT_PER_DOUBLING, TAB_CLOSE_M, close_scope, focus_moves,
+		focus_ring, is_copy_chord, key_is_typed, pace_frame, pane_wake, reveal_due, wake_by,
 	};
 	use crate::config;
 	use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Retry};
@@ -5744,6 +5769,22 @@ mod tests {
 	use std::time::{Duration, Instant};
 	use winit::event::ElementState;
 	use winit::event_loop::ControlFlow;
+
+	// A program is told on a pane or tab switch as well as the window's, as kitty,
+	// wezterm and tmux do, and the one leaving hears first.
+	// Test ID: Ese7iTi
+	#[test]
+	fn focus_goes_out_of_one_pane_and_into_the_next() {
+		assert_eq!(focus_moves(None, Some(1)), (None, Some(1)), "window in");
+		assert_eq!(focus_moves(Some(1), None), (Some(1), None), "window out");
+		assert_eq!(
+			focus_moves(Some(1), Some(2)),
+			(Some(1), Some(2)),
+			"pane or tab switch"
+		);
+		assert_eq!(focus_moves(Some(2), Some(2)), (None, None), "no change");
+		assert_eq!(focus_moves(None, None), (None, None));
+	}
 
 	// Each debug switch keeps its own cached answer. SILK_IDLEDBG used to share
 	// SILK_DLGDBG's, so whichever was read first answered for both. Run in a

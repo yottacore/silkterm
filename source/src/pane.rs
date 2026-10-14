@@ -3601,6 +3601,16 @@ impl Pane {
 		self.term.write(bytes);
 	}
 
+	/// Tell the program its pane gained or lost the keyboard, if it asked to
+	/// know. The mode is read live, since the last frame may be older than the
+	/// request. Read-only keeps it back, as it does a mouse report.
+	pub fn report_focus(&self, gained: bool) {
+		let mode = *self.term.term.lock().mode();
+		if let Some(bytes) = crate::term::focus_report(mode, gained) {
+			self.write_input(bytes);
+		}
+	}
+
 	/// Write pasted text to the PTY (wrapped in bracketed paste when the app
 	/// enabled it, and put through `paste_payload` either way). No-op when the
 	/// pane is read-only.
