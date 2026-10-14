@@ -20,7 +20,7 @@ settle="${SILK_SCENE_SETTLE:-13}"   ## seconds to idle past the GL pipeline warm
 pause="${SILK_SCENE_PAUSE:-0.8}"    ## seconds between clears, past any ease
 
 ## a screenful that fits under a cleared screen without scrolling
-fill(){
+fFill(){
 	i=1
 	while [ "${i}" -lt "${rows}" ]; do
 		printf '%s line %d\n' "${1}" "${i}"
@@ -32,14 +32,14 @@ fill(){
 ## `clear` under ble.sh with a prompt too long for one row. ble.sh draws it at
 ## the top with insert- and delete-line, and the delete at the top row sends 2
 ## blank rows up into history.
-ble_clear(){
+fBleClear(){
 	printf '\033[H\033[2J\033[3J\033(B\033[m\0337\033[0;94m[ble: EOF]\033(B\033[m\0338\033[%dC  \r\033[K' "$((cols - 2))"
 	printf '\r\n\033[1L\033[2K\033[1A\033[2K\033[2M\033[2L\033[2K%s/repo$ ' "${long_prompt}"
 	sleep "${pause}"
 }
 
 ## $1 start or end: how far the alt screen scrolls, which the trace shows as sh
-mark(){
+fMark(){
 	printf '\033[?1049h\033[2J\033[1;1H'
 	i=1
 	while [ "${i}" -lt "${rows}" ]; do
@@ -65,27 +65,27 @@ case "${cols}" in ''|*[!0-9]*) cols=100 ;; esac
 long_prompt=$(printf "%${cols}s" "" | tr ' ' p)
 
 seq 1 10200 | sed 's/^/deep line /'
-fill before
+fFill before
 sleep 3
-mark start
+fMark start
 
 for n in 1 2; do
 	## run 1 starts with the scrollback full; Ctrl+L leaves it that way
 	printf '\033[H\033[2J'
-	fill "after ctrl-l ${n}"
+	fFill "after ctrl-l ${n}"
 	clear
-	fill "after clear ${n}"
-	ble_clear
+	fFill "after clear ${n}"
+	fBleClear
 	tput clear
-	fill "after tput ${n}"
+	fFill "after tput ${n}"
 	## the scrollback now holds one screen
 	printf '\033[H\033[2J'
-	fill "after ctrl-l again ${n}"
+	fFill "after ctrl-l again ${n}"
 	printf '\033c'
-	fill "after ris ${n}"
+	fFill "after ris ${n}"
 done
 
-mark end
+fMark end
 while :; do sleep 1; done
 
 ##	History:
