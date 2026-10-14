@@ -199,8 +199,11 @@ fKillOurs(){
 ## (software pixman compositor + software Vulkan), DISPLAY unset so winit can only pick
 ## the Wayland backend. cage inherits the child's stderr, so the same SILK_SCROLLDBG
 ## trace comes through either way (cage's own stderr lines don't match the trace regex).
+## A scene can read its own trace, and leaves a note beside it when it gave up waiting
+## on something there.
 fSpawnSilk(){
 	local shellcmd="${1}" logf="${2}" tracef="${3}"
+	export SILK_SCENE_TRACE="${tracef}" SILK_SCENE_NOTE="${tracef%.trace}.note"
 	if ((wayland)); then
 		WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
 		XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
@@ -285,7 +288,7 @@ fRunScene(){
 
 	((verbose)) && fEcho_Clean "  ${label}: $(fTraceFrames "${trace}") trace frames"
 	local rc=0
-	python3 "${meDir}/analyze.py" --mode "${mode}" --expect-st "${est}" --expect-sb "${esb}" --label "${label}" --skip-frames "${lead}" <"${trace}" \
+	python3 "${meDir}/analyze.py" --mode "${mode}" --expect-st "${est}" --expect-sb "${esb}" --label "${label}" --skip-frames "${lead}" --note "${work}/${label}.note" <"${trace}" \
 		| sed 's/^/  /' || rc=$?
 	case "${rc}" in
 		0) pass=$((pass + 1)) ;;
@@ -367,4 +370,4 @@ exit "${rc}"
 ##		- 20260706 JC: Created.
 ##		- 20260718 JC: --wayland pass (cage kiosk) alongside the X11 Xvfb pass.
 ##		- 20260918 JC: aptbar scene, --only.
-##		- 20261013 JC: clear scene.
+##		- 20261013 JC: clear scene. A scene can read its trace and leave a note.
