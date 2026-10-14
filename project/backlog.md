@@ -401,38 +401,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- macOS: a TUI run inside tmux keeps the minimap column
-	- ID: 2026101320425888
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261013-204258
-	- Opened by: CC
-	- Related IDs: 2026101320095003
-	- Target OS: macOS
-	- Steps to reproduce:
-		- Turn the minimap on and start tmux.
-		- Run htop inside it.
-	- Incorrect behavior: The column stays.
-	- Expected behavior: htop inside tmux loses the column, as on Linux since 2026101320095003.
-	- Notes:
-		- Asking tmux needs the client's own socket options and its TMUX settings. Linux reads them from /proc. macOS has them through sysctl's process arguments.
-		- Depends on the answer to 2026101406273722. If tmux comes off the default list, the column steps aside for tmux itself and this check is never reached, so the item would be Moot.
-	- Reproduced: Not in a window, since b26 can't open one over ssh. In the code, macOS had no way to ask tmux, so a listed tmux always kept the column.
-	- Actual cause: The tmux ask was Linux only. It reads the client's arguments and its TMUX settings from /proc, and the pane's process groups from there too.
-	- Actual fix [Bug]: macOS asks tmux the same way, with the same code. Only the reads differ: the client's arguments, settings and binary come from sysctl and the system's process info, and the pane's groups and program from the process info calls the pipeline lookup already uses.
-	- Verified: 20261014 on b26, macOS 15.8 with tmux 3.8. The lookup ran against a live tmux with its client attached, the server on a socket only the client's own TMUX_TMPDIR finds. It named bash at the prompt, then less on its own screen for `seq 100000 | less`, then bash again after less quit. Passed 4 runs of 4. With the client's settings dropped it failed, since it couldn't reach the server.
-		- A `tmux list-clients` ask there takes about 10 ms.
-		- The Linux unit suite (1312) and clippy for Linux, macOS and Windows passed here.
-	- Progress log:
-		- 20261014: Done. The minimap code that acts on the answer is shared with Linux and was checked there on 2026101320095003. A look in a real Mac window is left for the next dogfood build.
-	- Branch: mactmux
-	- Commit: 31a8f46
-	- Test case: `sysctl_process_args_split_into_argv_and_environment` (EsgscfK) and `a_client_s_socket_and_tmux_settings_come_from_how_it_was_launched` (Esgscji) run on Linux. The first fails with the padding skip or the end of the environment broken. `a_live_tmux_says_what_its_client_shows` (EsgtJUn) is macOS only and ignored, run by hand on a Mac with tmux through `cargo test front:: -- --include-ignored`.
-	- Swept: `front.rs` is the one place tmux is asked, and `sync_minimap` the one place the answer is used. FreeBSD and other unix still keep the column for tmux. Windows has no tmux of its own.
-	- Acceptance signoff: Self-closed: the lookup was run against a live tmux on a Mac, and the code that uses it is shared with Linux.
-	- Closed: 20261014-085822
-
 - Windows: a tab keeps naming a program started from cmd after it exits
 	- ID: 2026101407014142
 	- Type: Bug
@@ -4077,6 +4045,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- macOS: a TUI run inside tmux keeps the minimap column
+	- ID: 2026101320425888
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261013-204258
+	- Opened by: CC
+	- Related IDs: 2026101320095003
+	- Target OS: macOS
+	- Steps to reproduce:
+		- Turn the minimap on and start tmux.
+		- Run htop inside it.
+	- Incorrect behavior: The column stays.
+	- Expected behavior: htop inside tmux loses the column, as on Linux since 2026101320095003.
+	- Notes:
+		- Asking tmux needs the client's own socket options and its TMUX settings. Linux reads them from /proc. macOS has them through sysctl's process arguments.
+		- Depends on the answer to 2026101406273722. If tmux comes off the default list, the column steps aside for tmux itself and this check is never reached, so the item would be Moot.
+	- Reproduced: Not in a window, since b26 can't open one over ssh. In the code, macOS had no way to ask tmux, so a listed tmux always kept the column.
+	- Actual cause: The tmux ask was Linux only. It reads the client's arguments and its TMUX settings from /proc, and the pane's process groups from there too.
+	- Actual fix [Bug]: macOS asks tmux the same way, with the same code. Only the reads differ: the client's arguments, settings and binary come from sysctl and the system's process info, and the pane's groups and program from the process info calls the pipeline lookup already uses.
+	- Verified: 20261014 on b26, macOS 15.8 with tmux 3.8. The lookup ran against a live tmux with its client attached, the server on a socket only the client's own TMUX_TMPDIR finds. It named bash at the prompt, then less on its own screen for `seq 100000 | less`, then bash again after less quit. Passed 4 runs of 4. With the client's settings dropped it failed, since it couldn't reach the server.
+		- A `tmux list-clients` ask there takes about 10 ms.
+		- The Linux unit suite (1312) and clippy for Linux, macOS and Windows passed here.
+	- Progress log:
+		- 20261014: Done. The minimap code that acts on the answer is shared with Linux and was checked there on 2026101320095003. A look in a real Mac window is left for the next dogfood build.
+	- Branch: mactmux
+	- Commit: 31a8f46
+	- Test case: `sysctl_process_args_split_into_argv_and_environment` (EsgscfK) and `a_client_s_socket_and_tmux_settings_come_from_how_it_was_launched` (Esgscji) run on Linux. The first fails with the padding skip or the end of the environment broken. `a_live_tmux_says_what_its_client_shows` (EsgtJUn) is macOS only and ignored, run by hand on a Mac with tmux through `cargo test front:: -- --include-ignored`.
+	- Swept: `front.rs` is the one place tmux is asked, and `sync_minimap` the one place the answer is used. FreeBSD and other unix still keep the column for tmux. Windows has no tmux of its own.
+	- Acceptance signoff: Self-closed: the lookup was run against a live tmux on a Mac, and the code that uses it is shared with Linux.
+	- Closed: 20261014-085822
 
 - Windows 11: every pane may count as a full-screen program while a command runs
 	- ID: 2026101321365912
