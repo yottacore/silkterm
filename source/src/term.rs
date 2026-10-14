@@ -298,6 +298,7 @@ pub struct TermInstance {
 	notifier: EventProxy,
 	pub cols: usize,
 	pub lines: usize,
+	cell: (u16, u16),
 	sender: EventLoopSender,
 	io: Option<std::thread::JoinHandle<()>>,
 	// where the shell last SAID it is (OSC 7 / OSC 9;9, see cwd.rs) - the only
@@ -428,6 +429,7 @@ impl TermInstance {
 			notifier,
 			cols,
 			lines,
+			cell: (cell_w, cell_h),
 			sender,
 			io: Some(io),
 			reported_cwd,
@@ -695,12 +697,19 @@ impl TermInstance {
 	pub fn resize(&mut self, cols: usize, lines: usize, cell_w: u16, cell_h: u16) {
 		let dims = grid_dims(cols, lines);
 		let (cols, lines) = (dims.columns, dims.screen_lines);
-		if cols == self.cols && lines == self.lines {
+		let (regrid, tell) = resize_changes(
+			(self.cols, self.lines, self.cell),
+			(cols, lines, (cell_w, cell_h)),
+		);
+		if !tell {
 			return;
 		}
 		self.cols = cols;
 		self.lines = lines;
-		self.term.lock_unfair().resize(dims);
+		self.cell = (cell_w, cell_h);
+		if regrid {
+			self.term.lock_unfair().resize(dims);
+		}
 		let win = WindowSize {
 			num_cols: cols as u16,
 			num_lines: lines as u16,
@@ -710,6 +719,15 @@ impl TermInstance {
 		self.notifier.note_size(win);
 		let _ = self.sender.send(Msg::Resize(win));
 	}
+}
+
+// What a resize changes: the engine's grid, and whether the shell is told at
+// all. A new scale or font zoom can keep the grid and change the cell, which
+// the shell is told in pixels too, and it kept the old ones (2026101412025603).
+type Sized = (usize, usize, (u16, u16));
+fn resize_changes(was: Sized, now: Sized) -> (bool, bool) {
+	let regrid = (was.0, was.1) != (now.0, now.1);
+	(regrid, regrid || was.2 != now.2)
 }
 
 impl Drop for TermInstance {
@@ -1627,8 +1645,21 @@ mod tests {
 	use super::{
 		SHELL_PRIVATE_ENV, TITLE_MAX_BYTES, WakeGate, capped_title, env_fixups, expand_refs,
 		grid_dims, is_command_child, join_for, parse_env_block, query_reply, requested_color,
-		usable_cwd, wsl_cd,
+		resize_changes, usable_cwd, wsl_cd,
 	};
+
+	// A window moved to a monitor at another scale, or zoomed, can keep its
+	// grid with a new cell size. The shell is told the size in pixels as well,
+	// and kept the old one.
+	// Test ID: Eshfsvc
+	#[test]
+	fn a_new_cell_size_is_told_to_the_shell_even_on_the_same_grid() {
+		let was = (80, 24, (9, 18));
+		assert_eq!(resize_changes(was, was), (false, false), "nothing new");
+		assert_eq!(resize_changes(was, (80, 24, (18, 36))), (false, true));
+		assert_eq!(resize_changes(was, (81, 24, (9, 18))), (true, true));
+		assert_eq!(resize_changes(was, (80, 25, (18, 36))), (true, true));
+	}
 	#[cfg(unix)]
 	use super::{program_name, status_text};
 

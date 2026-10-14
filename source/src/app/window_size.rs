@@ -5,8 +5,8 @@
 //! monitor checks after a move.
 
 use super::{
-	MONITOR_RECHECK, MONITOR_SETTLE, OWN_RESIZE_GRACE, SAFE_MAX_DIM, SIZE_SAVE_DEBOUNCE, State,
-	save_live,
+	MONITOR_RECHECK, MONITOR_SETTLE, NO_OUTPUT_YET, OWN_RESIZE_GRACE, SAFE_MAX_DIM,
+	SIZE_SAVE_DEBOUNCE, State, save_live,
 };
 use crate::config;
 use std::time::Instant;
@@ -77,6 +77,7 @@ impl State {
 		};
 		// If the file's open elsewhere the write is skipped (retried on the next
 		// resize or at exit); the live size still updates in memory either way.
+		mondbg("save", self.watch.key.as_deref(), grid, zoom);
 		save_live(|live| {
 			let before = kept(live);
 			config::remember_window(live, self.watch.key.as_deref(), grid, zoom);
@@ -126,16 +127,33 @@ impl State {
 		self.watch.check_at = None;
 		let moved_at = self.watch.moved_at.take();
 		let now_on = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key());
+		let on_some = now_on.is_some() || self.window.current_monitor().is_some();
+		if look_again(on_some, self.watch.positionless, moved_at, now) {
+			self.watch.moved_at = moved_at;
+			self.watch.check_at = Some(now + MONITOR_RECHECK);
+			return;
+		}
 		let pending_at = self.pending_size.map(|_| self.pending_size_at);
-		let Settle::Arrive {
-			save_first,
-			take_size,
-		} = settle(
+		let settled = settle(
 			self.watch.key.as_deref(),
 			now_on.as_deref(),
 			moved_at,
 			pending_at,
-		)
+		);
+		mondbg(
+			if settled == Settle::Stay {
+				"stay"
+			} else {
+				"arrive"
+			},
+			now_on.as_deref(),
+			None,
+			None,
+		);
+		let Settle::Arrive {
+			save_first,
+			take_size,
+		} = settled
 		else {
 			return;
 		};
@@ -153,14 +171,22 @@ impl State {
 	fn take_monitor_size(&mut self) {
 		let live = config::settings();
 		if !live.remember_size || !live.remember_per_monitor || self.watch.size_pinned {
+			mondbg("keep", self.watch.key.as_deref(), None, None);
 			return;
 		}
 		if self.window.fullscreen().is_some() || self.window.is_maximized() {
+			mondbg("keep", self.watch.key.as_deref(), None, None);
 			return;
 		}
 		// another window may have kept a size for this monitor since this one loaded
 		config::refresh_window_memory();
 		let kept = config::remembered_window(&config::settings(), self.watch.key.as_deref());
+		mondbg(
+			"take",
+			self.watch.key.as_deref(),
+			Some((kept.columns, kept.rows)),
+			(!self.watch.font_pinned).then_some(kept.font_zoom),
+		);
 		// the zoom first, since the grid's size in pixels depends on it
 		if !self.watch.font_pinned && kept.font_zoom != config::font_zoom_px() {
 			config::set_font_zoom(kept.font_zoom);
@@ -202,6 +228,28 @@ impl State {
 			self.dirty = true;
 		}
 	}
+}
+
+/// `SILK_MONDBG=1`: the monitor the window counts itself on, and each size it
+/// takes or saves there, one line each on stderr.
+pub(super) fn mondbg(
+	event: &str,
+	key: Option<&str>,
+	grid: Option<(usize, usize)>,
+	zoom: Option<i32>,
+) {
+	use std::sync::OnceLock;
+	static T0: OnceLock<Instant> = OnceLock::new();
+	if !super::env_flag(super::EnvFlag::MonDbg) {
+		return;
+	}
+	let t = T0.get_or_init(Instant::now).elapsed().as_secs_f32();
+	let grid = grid.map_or_else(|| "-".to_string(), |(c, r)| format!("{c}x{r}"));
+	let zoom = zoom.map_or_else(|| "-".to_string(), |z| z.to_string());
+	eprintln!(
+		"[mon {t:.2}s] {event} key={} grid={grid} zoom={zoom}",
+		key.unwrap_or("-")
+	);
 }
 
 /// The window a grid asks for: the cells, the margins either side, and the chrome
@@ -289,6 +337,14 @@ fn settle(
 	}
 }
 
+// Look again soon? A Wayland window is told which output it is on only once
+// its first frame is up there, which can come seconds after the window was
+// told its scale. Looking once 0.75 s after the window showed found no output
+// and gave up, so the window never took its monitor's size.
+fn look_again(on_some: bool, positionless: bool, moved_at: Option<Instant>, now: Instant) -> bool {
+	!on_some && positionless && moved_at.is_some_and(|at| now < at + NO_OUTPUT_YET)
+}
+
 // Does a move start the wait to see where the window ended up? Not one in
 // the grace after the window's own resize, which the window manager may move
 // it for, so a window that straddles two monitors does not swap sizes back
@@ -343,8 +399,8 @@ fn size_taken(
 #[cfg(test)]
 mod tests {
 	use super::{
-		Settle, fit_px, launch_maximized, move_counts, remember_resize, resize_is_current, settle,
-		size_taken, window_px,
+		Settle, fit_px, launch_maximized, look_again, move_counts, remember_resize,
+		resize_is_current, settle, size_taken, window_px,
 	};
 	use std::time::{Duration, Instant};
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
@@ -513,6 +569,21 @@ mod tests {
 		);
 		// read to the cm again without a move: the same monitor, so no resize
 		assert_eq!(settle(Some(p_mm), Some(p_cm), at(5000), None), Settle::Stay);
+	}
+
+	// A Wayland window shown with its first frame still being drawn is on no
+	// output yet. It looks again until it is, and only for a while.
+	// Test ID: EshcYxg
+	#[test]
+	fn a_wayland_window_on_no_output_yet_looks_again() {
+		let t0 = Instant::now();
+		let later = |ms| t0 + Duration::from_millis(ms);
+		assert!(look_again(false, true, Some(t0), later(750)));
+		assert!(look_again(false, true, Some(t0), later(9_000)));
+		assert!(!look_again(false, true, Some(t0), later(10_000)), "gave up");
+		assert!(!look_again(true, true, Some(t0), later(750)), "on one");
+		assert!(!look_again(false, false, Some(t0), later(750)), "X11 says");
+		assert!(!look_again(false, true, None, later(750)));
 	}
 
 	// A window left maximized opens maximized, unless the setting is off or the

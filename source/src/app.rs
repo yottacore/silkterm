@@ -363,6 +363,9 @@ const SIZE_SAVE_DEBOUNCE: Duration = Duration::from_millis(500); // remember-siz
 // still this long, and not while a mouse button is still down.
 const MONITOR_SETTLE: Duration = Duration::from_millis(750);
 const MONITOR_RECHECK: Duration = Duration::from_millis(250);
+// A Wayland window is on no output until its first frame is up there, which
+// software rendering can take seconds to draw (2026101411504818).
+const NO_OUTPUT_YET: Duration = Duration::from_secs(10);
 // A resize this soon after one the window asked for, or one the system made
 // for a new scale, is not the user's.
 const OWN_RESIZE_GRACE: Duration = Duration::from_millis(1500);
@@ -444,15 +447,17 @@ pub(crate) enum EnvFlag {
 	KeyDbg,
 	IdleDbg,
 	MemDbg,
+	MonDbg,
 }
 impl EnvFlag {
 	#[cfg(test)]
-	const ALL: [EnvFlag; 5] = [
+	const ALL: [EnvFlag; 6] = [
 		EnvFlag::Dump,
 		EnvFlag::DlgDbg,
 		EnvFlag::KeyDbg,
 		EnvFlag::IdleDbg,
 		EnvFlag::MemDbg,
+		EnvFlag::MonDbg,
 	];
 	fn var(self) -> &'static str {
 		match self {
@@ -461,6 +466,7 @@ impl EnvFlag {
 			EnvFlag::KeyDbg => "SILK_KEYDBG",
 			EnvFlag::IdleDbg => "SILK_IDLEDBG",
 			EnvFlag::MemDbg => "SILK_MEMDBG",
+			EnvFlag::MonDbg => "SILK_MONDBG",
 		}
 	}
 }
@@ -471,12 +477,14 @@ pub(crate) fn env_flag(flag: EnvFlag) -> bool {
 	static KEYDBG: OnceLock<bool> = OnceLock::new();
 	static IDLEDBG: OnceLock<bool> = OnceLock::new();
 	static MEMDBG: OnceLock<bool> = OnceLock::new();
+	static MONDBG: OnceLock<bool> = OnceLock::new();
 	let cell = match flag {
 		EnvFlag::Dump => &DUMP,
 		EnvFlag::DlgDbg => &DLGDBG,
 		EnvFlag::KeyDbg => &KEYDBG,
 		EnvFlag::IdleDbg => &IDLEDBG,
 		EnvFlag::MemDbg => &MEMDBG,
+		EnvFlag::MonDbg => &MONDBG,
 	};
 	*cell.get_or_init(|| std::env::var_os(flag.var()).is_some())
 }
@@ -3786,6 +3794,12 @@ impl ApplicationHandler<UserEvent> for App {
 		let (cols, rows) = crate::fields::grid(&settings, watch.key.as_deref());
 		let cols = cli_win.columns.unwrap_or(cols);
 		let rows = cli_win.rows.unwrap_or(rows);
+		window_size::mondbg(
+			"open",
+			watch.key.as_deref(),
+			Some((cols, rows)),
+			Some(config::font_zoom_px()),
+		);
 		let menu_bar_h = if menu_bar {
 			text.ui_line_h + text.dip(MENU_BAR_VPAD)
 		} else {
@@ -4194,6 +4208,12 @@ impl ApplicationHandler<UserEvent> for App {
 				// The surface follows the window, not the event. macOS sends the
 				// creation size after the real one is in place (2026100517535929).
 				let now = state.window.inner_size();
+				window_size::mondbg(
+					&format!("resized {}x{}", now.width, now.height),
+					state.watch.key.as_deref(),
+					None,
+					None,
+				);
 				state.no_area = now.width == 0 || now.height == 0;
 				state.resize_surface(now.width, now.height);
 				state.note_wallpaper_size();
@@ -4209,6 +4229,12 @@ impl ApplicationHandler<UserEvent> for App {
 			// That resize is the system's, not the user's, and the new scale may
 			// mean another monitor.
 			WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+				window_size::mondbg(
+					&format!("scale {scale_factor}"),
+					state.watch.key.as_deref(),
+					None,
+					None,
+				);
 				state.rebuild_text(config::display_scale(scale_factor));
 				state.dirty = true;
 				let now = Instant::now();

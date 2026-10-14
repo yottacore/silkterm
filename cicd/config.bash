@@ -103,6 +103,12 @@ FUZZ_CMD=(cargo test fuzz::)
 DENY_PROBE=(cargo deny --version)
 DENY_CMD=(cargo deny check)
 
+## Stage 3: per-monitor window size on random layouts and steps
+## (cicd/tests/dpirand/run.py), as seconds of cases. A case is about 30 s on the
+## debug build, and seeds start from the clock, so each run tries new ones. Skipped
+## under --quick; 0 skips it too.
+DPIRAND_SECS=150
+
 ## Stage 3 (last): headless scroll regression harness. Slow (a private Xvfb + GL
 ## per scene), so it is skipped under --quick; non-fatal on an environment miss,
 ## but a measured scroll regression aborts. Empty () to disable.
