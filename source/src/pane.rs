@@ -5250,6 +5250,9 @@ fn band_row_line(screen_row: i32, display_offset: i32, split_row: i32, ob: usize
 }
 
 #[cfg(test)]
+mod vhist_probe;
+
+#[cfg(test)]
 mod tests {
 	use super::{
 		APP_SCROLL_MAX, AttrsList, BAR_MIN_THUMB, BRACKET_REACH_ROWS, CURSOR_ALPHA,

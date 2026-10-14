@@ -34,6 +34,43 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- Why can muffer not have a minimap?
+	- ID: 2026101318475899
+	- Type: Task
+	- Status: Waiting for answers
+	- Priority: Avg
+	- Opened: 20261013-184758
+	- Opened by: JC
+	- Related IDs: 2026101310563323, 2026101320095003
+	- Target OS: All
+	- Requirements:
+		- Question: Why can muffer not have a minimap? A user can scroll up in muffer. I get the technical limitations, but we have the complete ability to observe and pattern-match everything that comes through our buffers. So why can we not build a *virtual* buffer based on pattern matching, with not crazy CPU or GPU use, that allows for scrollback even for TUI apps such as muffer?
+	- Notes:
+		- Pre-next-cut.
+	- Note: Answer. It can be done for a program that scrolls its transcript, within limits. The numbers are in `project/design_docs/20261013-213000_virtual-history.md`.
+		- muffer's default view draws on the main screen, and its transcript already goes into the real scrollback. Putting muffer on the minimap's program list should give it a map there. Not tried.
+		- Its full-screen view draws on the alt screen, which has no scrollback. SilkTerm still sees each scroll it makes, how far, and the rows that leave. Keeping those rows gives a history of SilkTerm's own.
+		- Rows come from scrolls of a region, which the engine already records for the smooth slide, and from repaints shifted 24 rows or less. A frame with no shift is matched against the rows kept, so a program scrolling back through its own history doesn't get kept twice.
+		- What breaks it: a jump of more than 24 rows by repaint leaves a gap, since those rows were never drawn. A popup or overlay is kept as rows until the program scrolls past it again. A resize rewraps everything, so a new stretch starts. A status line inside the scrolled rows has to be held still, as the slide already does. Side-by-side tmux panes give nothing, since tmux repaints them.
+		- Cost: 10,000 rows kept with their colors is about 1 to 2 MB a pane, or nothing past the map's own pixels when only the map is wanted. A frame needs little more than what the slide already works out. No extra GPU work.
+		- The program owns its scroll position. A click on the map could only send it wheel events, which move by its own step and type into a live program. Better: a click or drag opens a read-only view of the kept rows that SilkTerm draws over the pane, closed by typing, Esc or scrolling to the bottom. The program is never touched.
+	- Note: Proposal, about 2 weeks for the map alone and 3 with the view.
+		- First step, about a day: record muffer's full-screen view while it is scrolled with the wheel, and replay it through the probe. Go on if 95% of the rows it shows are kept at 60 frames a second. Stop if it scrolls by repaints of more than 24 rows, or redraws old rows differently.
+		- The engine keeps one record per direction within a frame, rather than starting over when the wheel turns. About a day.
+		- A history per pane, with the rules the probe uses. 3 to 4 days.
+		- The map reads that history while the alt screen is up. 2 to 3 days.
+		- The read-only history view. 4 to 6 days.
+		- Recordings of less, vim, nano and muffer kept as tests. About a day.
+	- Estimated effort: High
+	- Verified: 20261013 on b23. less 668, vim.tiny and nano were scrolled through a numbered file in a private pty and replayed through the probe. At 60 frames a second every row they showed was kept: 259, 176 and 118. less kept 218 of 259 with a frame after every read. htop kept nothing, which is right. A made-up stream in muffer's layout kept all 266 lines it showed, and lost 6 when the wheel turned inside one frame. muffer itself was not run.
+		- fmt, clippy and the unit suite passed.
+	- Progress log:
+		- 20261013: Waiting for answers. Answer and proposal above. The probe is test code only, with a recorder for the programs.
+		- Question: go ahead with the first step? It means running muffer's full-screen view in a private pty with no network and sending it wheel events, the way its 2.1.280 recording was made.
+	- Branch: vhist
+	- Commit: e960a51
+	- Test case: `a_transcript_scrolled_by_region_is_rebuilt_whole` (Ese21WF) and `a_burst_past_a_screenful_between_frames_loses_nothing` (Ese21WG). `recorded_programs_rebuild_what_they_showed` (Ese21WH) is run by hand with the recordings. They pin the probe, not app code.
+
 - Smooth scroll freaked out with a long flatpak update
 	- ID: 2026101310563284
 	- Type: Bug
@@ -495,20 +532,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
-
-- Why can muffer not have a minimap?
-	- ID: 2026101318475899
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261013-184758
-	- Opened by: JC
-	- Related IDs: 2026101310563323
-	- Target OS: All
-	- Requirements:
-		- Question: Why can muffer not have a minimap? A user can scroll up in muffer. I get the technical limitations, but we have the complete ability to observe and pattern-match everything that comes through our buffers. So why can we not build a *virtual* buffer based on pattern matching, with not crazy CPU or GPU use, that allows for scrollback even for TUI apps such as muffer?
-	- Notes:
-		- Pre-next-cut.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720

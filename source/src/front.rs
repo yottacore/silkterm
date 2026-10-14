@@ -55,7 +55,7 @@ pub fn group_front(root: u32, pgid: u32) -> Option<u32> {
 	best.map(|(_, pid)| pid)
 }
 
-// macOS lists a group outright; there is no tree to walk.
+/// macOS lists a group outright; there is no tree to walk.
 #[cfg(target_os = "macos")]
 pub fn group_front(_root: u32, pgid: u32) -> Option<u32> {
 	let pgid_c = libc::pid_t::try_from(pgid).ok().filter(|&p| p > 0)?;
