@@ -454,6 +454,12 @@ impl TermInstance {
 		task
 	}
 
+	/// Makes the next `task()` look again rather than answer from its cache.
+	/// A program has usually just started when the screen changes under it.
+	pub fn retask(&mut self) {
+		self.task_cache = None;
+	}
+
 	// The foreground process group is the shell's own while it sits at its prompt,
 	// and a command's while one runs - so a pgid that is neither answers None.
 	#[cfg(unix)]
