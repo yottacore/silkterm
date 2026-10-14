@@ -1012,11 +1012,11 @@ fn proc_comm(pid: u32) -> Option<String> {
 	named(&comm)
 }
 
-// macOS has no /proc, so a tab there never named the program running in it,
-// and the minimap's per-program switch never saw one either. The short info
-// is asked for rather than `proc_name`, which refuses another user's process,
-// so a `sudo` command went unnamed (measured on pid 1). Like Linux's comm,
-// it is the first 16 bytes of the name.
+/// macOS has no /proc, so a tab there never named the program running in it,
+/// and the minimap's per-program switch never saw one either. The short info
+/// is asked for rather than `proc_name`, which refuses another user's process,
+/// so a `sudo` command went unnamed (measured on pid 1). Like Linux's comm,
+/// it is the first 16 bytes of the name.
 #[cfg(target_os = "macos")]
 pub(crate) fn proc_comm(pid: u32) -> Option<String> {
 	// <sys/proc_info.h>; the libc this builds against does not have it yet
