@@ -64,6 +64,85 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
 
+- Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
+	- ID: 2026101408384488
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20261014-083844
+	- Opened by: CC
+	- Related IDs: 2026101321365912
+	- Target OS: Windows
+	- Test environment: b29w
+	- Steps to reproduce:
+		- Install WezTerm, which puts its folder with a `conpty.dll` on PATH.
+		- Start SilkTerm.
+	- Incorrect behavior: The engine loads `conpty.dll` by bare name, so the DLL search order finds WezTerm's, or one in the working folder, before falling back to the one Windows has. Each copy behaves a little differently, so SilkTerm does too, from box to box. A planted `conpty.dll` in the working folder or a folder on the user's PATH loads into SilkTerm.
+	- Expected behavior: Only a `conpty.dll` shipped beside the program, if any, or the one Windows has.
+	- Reproduced: 20261014 on b29w. With WezTerm's folder on PATH no focus-report ask came through; with it taken off, the one Windows has sent it.
+		- 20261014 on b29w and vm925w, both with WezTerm's folder on the machine PATH: dev loaded WezTerm's copy, and a planted copy on PATH or in the working folder.
+	- Notes:
+		- The load is in the engine fork's `tty/windows/conpty.rs`.
+		- A `dxcompiler.dll` on PATH should no longer be used either, so DX12 would compile its shaders with the compiler Windows has. Read from wgpu's code, not checked on a box.
+	- Actual cause: The engine loaded `conpty.dll` by bare name. Windows has none, so the search went on to the working folder and every folder on PATH, and took the first copy it found.
+	- Actual fix: The engine fork loads `conpty.dll` only from the program's folder or System32. SilkTerm also keeps every later load by bare name to those 2 folders, from the first line of `main`, which covers the libraries it uses too.
+	- Verified:
+		- New Windows scenario `conload`: failed on dev on b29w and vm925w, with WezTerm's copy and both planted copies loaded. Passes on the branch on both, with the one Windows has.
+		- `conmap`, `cmdgui` and `quiettab` pass on both boxes with the same build.
+		- Unit tests on b29w: the engine test failed with the old engine and passes with the new one. The bare-name test failed with the rule taken out and passes with it.
+		- Gate, clippy for Linux and Windows, and the docs check pass.
+	- Swept: The fork has no other load by name, and SilkTerm had none. In the libraries, wgpu's DX12 loads `dxcompiler.dll` by name and looks on PATH for it; the rule in `main` covers it. The other loads by name are DLLs Windows has in System32, which is searched first.
+	- Branch: conload
+	- Commit: af9559d, engine fork 09f24ebe on `scroll-ledger-0.26.0`
+	- Test case: wingui scenario `conload` (EshQpKD), seen failing on dev; `the_engine_takes_no_conpty_dll_from_path_or_the_working_folder` (EshQYPc) and `a_dll_on_path_or_in_the_working_folder_is_not_loaded` (EshQYN6), each seen failing.
+
+- Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
+	- ID: 2026101410442550
+	- Type: Task
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261014-104425
+	- Opened by: JC
+	- Related IDs: 2026100114435600, 2026101409220514
+	- Target OS: All
+	- Requirements:
+		- As part of regular scripted testing, exercise the per-monitor DPI more thoroughly, and quasi-randomly.
+		- It still has many quirks that need ironing out, that can only be caught with fairly random testing.
+		- The expected behavior still has to be predictable, to judge against actual.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261014: Built as `cicd/tests/dpirand/run.py`. It's in the pipeline after monwl, skipped under `--quick`, but off for now (`DPIRAND_SECS=0` in `cicd/config.bash`), since it still fails now and then on 2026101413420431. 150 s there runs about 5 cases. `SILK_DPIRAND_SECS` sets the time, and `--seed` runs one case again.
+		- 20261014: Each case comes from one seed. It has 2 to 4 outputs at their own resolutions and scales, whole and fractional, on native Wayland or X11 through Xwayland, with sizes and font zooms kept for some of them. Then come moves, drags, drops with a sliver left behind, held drags, resizes, font zooms, scale changes, fullscreen and back, and relaunches, some with a size or font size on the command line.
+		- 20261014: A model of the requirements says which monitor the window should count itself on, and which size and font zoom it should take or save. The font zoom is checked by the cell size the shell is told, and the sizes on disk at the end. What a platform can't tell a window is allowed by name and counted, and so are known faults, by their item, until fixed.
+		- 20261014: Filed from it: 2026101411504818, 2026101413075422 and 2026101412025603, fixed, and 2026101411554909, 2026101411555009, 2026101412003308, 2026101412311921, 2026101412392529, 2026101412292756 and 2026101413420431.
+	- Test case: `cicd/tests/dpirand/run.py` (EshVccz).
+	- Verified:
+		- 60 random cases in 3 runs of 10 to 15 minutes, after the test settled. Every failure in them was a filed fault, the X11 fullscreen save fixed here, or a fault in the test, since fixed, except 2026101413420431, which still fails it now and then.
+		- It failed against 3 planted faults: the old monitor lookup, a kept font zoom not taken, and the text not rebuilt after one was.
+	- Branch: dpirand
+	- Commit: c9b40aa, 2f9d4a3, d49f765
+
+- The shell is told the old cell size in pixels after a zoom or scale change that keeps the grid
+	- ID: 2026101412025603
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261014-120256
+	- Opened by: CC
+	- Related IDs: 2026100114435600, 2026101412311921
+	- Target OS: All
+	- Steps to reproduce:
+		- Move a window to a monitor at another scale, or zoom the font, so that the grid stays the same.
+		- Read the window's size in pixels from a program in it, as image viewers do.
+	- Incorrect behavior: The size in pixels is the old one.
+	- Expected behavior: It's the new cell size times the grid.
+	- Reproduced: Only in the code. A pane's resize told the shell nothing whenever the grid was unchanged. In a window today the grid always moves for a moment on a scale change (2026101412311921), and that tells the shell. Once that's fixed, a scale change that keeps the grid would leave the old size.
+	- Actual fix: A new cell size is told to the shell even when the grid is the same.
+	- Test case: `a_new_cell_size_is_told_to_the_shell_even_on_the_same_grid` (Eshfsvc). It can't fail on the old code, which had no function to call.
+	- Branch: dpirand
+	- Commit: c9b40aa
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -301,184 +380,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- Wayland: a window dropped across a 100% and a 200% output takes the last size anywhere, not its monitor's own
-	- ID: 2026101409220514
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20261014-092205
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: Linux
-	- Test environment: b23, headless sway with outputs at 100% and 200%
-	- Steps to reproduce:
-		- Save a size for each output, then drop a window mostly on the 200% output with a sliver still on a 100% one.
-	- Incorrect behavior: The window takes the last size anywhere. Once in 5 runs a clean drop on the 200% output did the same for about 4 s, until the pointer came back.
-	- Expected behavior: It takes the size saved for the output most of it is on.
-	- Reproduced: 20261014, 3 of 3 sliver drops, with `cicd/tests/monwl/run.bash` (Esgxleh).
-	- Possible cause: The monitor's name mixes 2 outputs. In `MonitorId::find` the resolution comes from the first output the window entered and still touches, and the scale from the window, which follows the other one. So it reads `1920x1080_200pct`, which no monitor is.
-	- Actual cause: As guessed, and measured. At the drop the window was drawn at 2 while winit still named HEADLESS-1, the 100% output it entered first.
-	- Actual fix: The monitor named is the one the window is drawn for. That's the first output when its scale matches. Otherwise it's the only other output at the window's scale, or the only one of those that most of a window this size could be on while it still touches the first. When no one output fits, none is named and the window keeps its size, rather than take the size of a monitor that isn't there.
-	- Note: Still mixed: a 125% or 150% output beside another whose scale rounds to the same whole number (2026101411554909).
-	- Swept: The other place a monitor's name is built is X11, which asks the X server which monitor the window overlaps most, so it never mixed 2. On Windows and macOS the monitor winit names and the window's scale come from the same monitor.
-	- Test case: `cicd/tests/monwl/run.bash` (Esgxleh), now in the pipeline. `a_window_astride_two_outputs_is_named_for_the_one_it_is_drawn_for` (EshSMlf), and the fuzz target `a_wayland_window_is_named_for_the_output_its_scale_is_from` (EshXuye) with its generator check (EshXv10).
-	- Verified:
-		- monwl failed its 3 sliver checks before the fix, twice more here, and passed 3 runs of 3 after.
-		- The fuzz target for 20 s, about 4 million cases. With the old lookup put back, the random test failed at the sliver drop in both cases tried.
-		- 60 random cases in 3 runs of 10 to 15 minutes, after the test settled. Every failure in them was a filed fault, the X11 fullscreen save fixed here, or a fault in the test, since fixed, except 2026101413420431, which still fails it now and then.
-	- Branch: dpirand
-	- Commit: c9b40aa
-	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
-	- Closed: 20261014-134300
-
-- Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
-	- ID: 2026101408384488
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20261014-083844
-	- Opened by: CC
-	- Related IDs: 2026101321365912
-	- Target OS: Windows
-	- Test environment: b29w
-	- Steps to reproduce:
-		- Install WezTerm, which puts its folder with a `conpty.dll` on PATH.
-		- Start SilkTerm.
-	- Incorrect behavior: The engine loads `conpty.dll` by bare name, so the DLL search order finds WezTerm's, or one in the working folder, before falling back to the one Windows has. Each copy behaves a little differently, so SilkTerm does too, from box to box. A planted `conpty.dll` in the working folder or a folder on the user's PATH loads into SilkTerm.
-	- Expected behavior: Only a `conpty.dll` shipped beside the program, if any, or the one Windows has.
-	- Reproduced: 20261014 on b29w. With WezTerm's folder on PATH no focus-report ask came through; with it taken off, the one Windows has sent it.
-		- 20261014 on b29w and vm925w, both with WezTerm's folder on the machine PATH: dev loaded WezTerm's copy, and a planted copy on PATH or in the working folder.
-	- Notes:
-		- The load is in the engine fork's `tty/windows/conpty.rs`.
-		- A `dxcompiler.dll` on PATH should no longer be used either, so DX12 would compile its shaders with the compiler Windows has. Read from wgpu's code, not checked on a box.
-	- Actual cause: The engine loaded `conpty.dll` by bare name. Windows has none, so the search went on to the working folder and every folder on PATH, and took the first copy it found.
-	- Actual fix: The engine fork loads `conpty.dll` only from the program's folder or System32. SilkTerm also keeps every later load by bare name to those 2 folders, from the first line of `main`, which covers the libraries it uses too.
-	- Verified:
-		- New Windows scenario `conload`: failed on dev on b29w and vm925w, with WezTerm's copy and both planted copies loaded. Passes on the branch on both, with the one Windows has.
-		- `conmap`, `cmdgui` and `quiettab` pass on both boxes with the same build.
-		- Unit tests on b29w: the engine test failed with the old engine and passes with the new one. The bare-name test failed with the rule taken out and passes with it.
-		- Gate, clippy for Linux and Windows, and the docs check pass.
-	- Swept: The fork has no other load by name, and SilkTerm had none. In the libraries, wgpu's DX12 loads `dxcompiler.dll` by name and looks on PATH for it; the rule in `main` covers it. The other loads by name are DLLs Windows has in System32, which is searched first.
-	- Branch: conload
-	- Commit: af9559d, engine fork 09f24ebe on `scroll-ledger-0.26.0`
-	- Test case: wingui scenario `conload` (EshQpKD), seen failing on dev; `the_engine_takes_no_conpty_dll_from_path_or_the_working_folder` (EshQYPc) and `a_dll_on_path_or_in_the_working_folder_is_not_loaded` (EshQYN6), each seen failing.
-
-- Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
-	- ID: 2026101410442550
-	- Type: Task
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261014-104425
-	- Opened by: JC
-	- Related IDs: 2026100114435600, 2026101409220514
-	- Target OS: All
-	- Requirements:
-		- As part of regular scripted testing, exercise the per-monitor DPI more thoroughly, and quasi-randomly.
-		- It still has many quirks that need ironing out, that can only be caught with fairly random testing.
-		- The expected behavior still has to be predictable, to judge against actual.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261014: Built as `cicd/tests/dpirand/run.py`. It's in the pipeline after monwl, skipped under `--quick`, but off for now (`DPIRAND_SECS=0` in `cicd/config.bash`), since it still fails now and then on 2026101413420431. 150 s there runs about 5 cases. `SILK_DPIRAND_SECS` sets the time, and `--seed` runs one case again.
-		- 20261014: Each case comes from one seed. It has 2 to 4 outputs at their own resolutions and scales, whole and fractional, on native Wayland or X11 through Xwayland, with sizes and font zooms kept for some of them. Then come moves, drags, drops with a sliver left behind, held drags, resizes, font zooms, scale changes, fullscreen and back, and relaunches, some with a size or font size on the command line.
-		- 20261014: A model of the requirements says which monitor the window should count itself on, and which size and font zoom it should take or save. The font zoom is checked by the cell size the shell is told, and the sizes on disk at the end. What a platform can't tell a window is allowed by name and counted, and so are known faults, by their item, until fixed.
-		- 20261014: Filed from it: 2026101411504818, 2026101413075422 and 2026101412025603, fixed, and 2026101411554909, 2026101411555009, 2026101412003308, 2026101412311921, 2026101412392529, 2026101412292756 and 2026101413420431.
-	- Test case: `cicd/tests/dpirand/run.py` (EshVccz).
-	- Verified:
-		- 60 random cases in 3 runs of 10 to 15 minutes, after the test settled. Every failure in them was a filed fault, the X11 fullscreen save fixed here, or a fault in the test, since fixed, except 2026101413420431, which still fails it now and then.
-		- It failed against 3 planted faults: the old monitor lookup, a kept font zoom not taken, and the text not rebuilt after one was.
-	- Branch: dpirand
-	- Commit: c9b40aa, 2f9d4a3, d49f765
-
-- Wayland: a window whose first frame is slow to show never takes its monitor's size
-	- ID: 2026101411504818
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20261014-115048
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: Linux
-	- Test environment: b23, headless sway, the debug build drawing in software
-	- Steps to reproduce:
-		- Keep a size for an output, and open a window there whose first frame takes more than about 0.75 s to show.
-	- Incorrect behavior: The window stays at the last size anywhere. It takes its monitor's size only if something later makes it look again, such as a scale change.
-	- Expected behavior: It takes its monitor's size a moment after it opens.
-	- Reproduced: 20261014, by the random test, in 4 of 7 Wayland launches in one run.
-	- Actual cause: sway tells the window its scale when it maps it, but which output it is on only once its first frame is up there, 1.5 s later here. The look 0.75 s after the window showed found no output, and nothing looked again.
-	- Actual fix: While a Wayland window is on no output yet, it looks again every quarter second, for up to 10 s.
-	- Test case: `a_wayland_window_on_no_output_yet_looks_again` (EshcYxg), and `cicd/tests/dpirand/run.py --seed 6000016`, which fails at its launch with the fix taken out and passes with it.
-	- Branch: dpirand
-	- Commit: c9b40aa
-	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
-	- Closed: 20261014-134300
-
-- X11: a window the window manager makes fullscreen has its fullscreen size saved as the size to open at
-	- ID: 2026101413075422
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20261014-130754
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: Linux
-	- Test environment: b23, X11 through Xwayland under headless sway
-	- Steps to reproduce:
-		- On X11, make the window fullscreen with the window manager's own key or menu, not SilkTerm's.
-		- Wait a second, then leave fullscreen or close the window.
-	- Incorrect behavior: The fullscreen size is saved as the last size anywhere and for the monitor, so the next window opens that big.
-	- Expected behavior: A fullscreen size is never saved, as when SilkTerm's own key makes the window fullscreen.
-	- Reproduced: 20261014, by the random test, 3 of 3 X11 fullscreen steps in one run.
-	- Actual cause: winit on X11 knows only of a fullscreen the program asked for itself, so one the window manager set went unseen.
-	- Actual fix: On X11 fullscreen is also read from the window manager's state on the window.
-	- Swept: Both places the size code asks whether the window is fullscreen, the save and taking a monitor's size, use the new check. Maximized was already read from the window manager's state. The Fullscreen menu item still asks winit, so after the window manager's fullscreen it offers to go fullscreen; left as it is.
-	- Test case: `cicd/tests/dpirand/run.py`, its fullscreen step on X11. Seeds 7504938 and 7504931 failed there before the fix and pass after.
-	- Branch: dpirand
-	- Commit: 2f9d4a3
-	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
-	- Closed: 20261014-134300
-
-- The shell is told the old cell size in pixels after a zoom or scale change that keeps the grid
-	- ID: 2026101412025603
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261014-120256
-	- Opened by: CC
-	- Related IDs: 2026100114435600, 2026101412311921
-	- Target OS: All
-	- Steps to reproduce:
-		- Move a window to a monitor at another scale, or zoom the font, so that the grid stays the same.
-		- Read the window's size in pixels from a program in it, as image viewers do.
-	- Incorrect behavior: The size in pixels is the old one.
-	- Expected behavior: It's the new cell size times the grid.
-	- Reproduced: Only in the code. A pane's resize told the shell nothing whenever the grid was unchanged. In a window today the grid always moves for a moment on a scale change (2026101412311921), and that tells the shell. Once that's fixed, a scale change that keeps the grid would leave the old size.
-	- Actual fix: A new cell size is told to the shell even when the grid is the same.
-	- Test case: `a_new_cell_size_is_told_to_the_shell_even_on_the_same_grid` (Eshfsvc). It can't fail on the old code, which had no function to call.
-	- Branch: dpirand
-	- Commit: c9b40aa
-
-- Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
-	- ID: 2026101411554909
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261014-115549
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101409220514
-	- Target OS: Linux
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- Put a 150% output beside a 200% one, or a 125% one beside a 150% one.
-		- Drag a window from one to the other and drop it with a sliver left behind.
-	- Incorrect behavior: It takes the last size anywhere, as 2026101409220514 did, since it reads one output's resolution at the other's scale. And with a 200% output between two at 100%, a window dropped off the 200% one with a sliver left keeps its size.
-	- Expected behavior: It takes the size kept for the output most of it is on.
-	- Reproduced: 20261014, by the random test, a few times in each run of cases.
-	- Possible cause: winit gives each Wayland output's scale as a whole number, so 125%, 150% and 200% all read 2. The real scale needs each output's size in the layout, which winit keeps to itself, as it does the list of outputs a window is on.
-	- Notes:
-		- The random test allows it by this ID until it's fixed.
-
 - A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
 	- ID: 2026101411555009
 	- Type: Bug
@@ -517,6 +418,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause: A Wayland window opens at 100%, and the compositor tells it its scale after. It keeps its size in the layout, and a font's cells don't grow quite in step with the scale, so the grid comes out a few cells off. A kept size taken right after puts it right, so it shows only when none is taken.
 	- Notes:
 		- Keeping the grid across any scale change would fix it, but that changes how every platform handles one.
+		- The random test allows it by this ID until it's fixed.
+
+- Demo: the cursor goes to 50% width when the cursor size and animation change
+	- ID: 2026092812581720
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20260928-125817
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- When changing the cursor size and animation, change to 50% width.
+	- Decisions:
+		- 20260928: Held for the release, with the other demo recorder change.
+	- Closed:
+
+- Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
+	- ID: 2026101411554909
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-115549
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101409220514
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Put a 150% output beside a 200% one, or a 125% one beside a 150% one.
+		- Drag a window from one to the other and drop it with a sliver left behind.
+	- Incorrect behavior: It takes the last size anywhere, as 2026101409220514 did, since it reads one output's resolution at the other's scale. And with a 200% output between two at 100%, a window dropped off the 200% one with a sliver left keeps its size.
+	- Expected behavior: It takes the size kept for the output most of it is on.
+	- Reproduced: 20261014, by the random test, a few times in each run of cases.
+	- Possible cause: winit gives each Wayland output's scale as a whole number, so 125%, 150% and 200% all read 2. The real scale needs each output's size in the layout, which winit keeps to itself, as it does the list of outputs a window is on.
+	- Notes:
 		- The random test allows it by this ID until it's fixed.
 
 - For a moment after a scale change, programs in the window are told a much smaller or larger grid
@@ -598,21 +535,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
 
-- Demo: the cursor goes to 50% width when the cursor size and animation change
-	- ID: 2026092812581720
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20260928-125817
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- When changing the cursor size and animation, change to 50% width.
-	- Decisions:
-		- 20260928: Held for the release, with the other demo recorder change.
-	- Closed:
-
 - Windows: a tab keeps naming a program started from cmd after it exits
 	- ID: 2026101407014142
 	- Type: Bug
@@ -644,37 +566,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_watched_command_says_when_it_ends` (Esgn52X), seen failing with the callback emptied; wingui scenario `cmdgui` (EsgiFgO), seen failing on dev.
 	- Acceptance signoff: Self-closed: cause confirmed, red before and green after on b29w.
 	- Closed: 20261014-083844
-
-- A tab may not name a quiet command while nothing redraws
-	- ID: 2026101408384489
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261014-083844
-	- Opened by: CC
-	- Related IDs: 2026101407014142
-	- Target OS: All
-	- Test environment: b29w
-	- Steps to reproduce:
-		- Turn cursor blink off.
-		- Run a command that prints nothing for a few seconds.
-	- Incorrect behavior: The tab doesn't name it while it runs.
-	- Expected behavior: The tab names it.
-	- Reproduced: Seen once on b29w with blink off, with a program cmd didn't wait for. Not checked on Linux.
-		- 20261014 on b23 and on b29w and vm925w: Confirmed. On Linux a quiet program started 0.05 to 0.8 s after a frame was never named, 5 of 5. On Windows, ping from PowerShell with its output thrown away was never named, 2 of 2 on each box.
-	- Possible cause: What a tab says is kept for 250 ms. A frame drawn just before the command starts keeps "nothing running", and with no output and no blink no later frame asks again. Plausible, read only.
-	- Actual cause: As above. On Windows the child scan's answer was also kept until the terminal next stirred, so even a later frame got "nothing running".
-	- Actual fix: After a key or output, each pane looks again at what runs 0.3, 1 and 3 seconds later, past both caches, and draws only when the answer moved. Tabs in the back are included.
-	- Verified:
-		- New Linux window test `quiettab`: 5 of 5 failed on dev and with the new look turned off, all pass on the branch, twice.
-		- New Windows scenario `quiettab`: failed on dev on b29w and vm925w, passes on the branch on both.
-		- `cmdgui` and `conmap` pass on both boxes with the same build.
-	- Swept: The tab, the window title and the minimap column all read the one answer, so the one look covers them. Copy-output's at-prompt answer is the same scan on Windows, and is only fresher.
-	- Branch: conload
-	- Commit: af9559d
-	- Test case: `cicd/tests/quiettab/run.bash` (EshV2SF) and wingui scenario `quiettab` (EshXZBZ), both seen failing on dev; `a_quiet_command_is_looked_for_again_after_the_last_stir` (EshVvnf) pins when the looks come.
-	- Acceptance signoff: Self-closed: reproduced, red before and green after on b23, b29w and vm925w.
-	- Closed: 20261014-114500
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
@@ -1648,6 +1539,84 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- Wayland: a window dropped across a 100% and a 200% output takes the last size anywhere, not its monitor's own
+	- ID: 2026101409220514
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261014-092205
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway with outputs at 100% and 200%
+	- Steps to reproduce:
+		- Save a size for each output, then drop a window mostly on the 200% output with a sliver still on a 100% one.
+	- Incorrect behavior: The window takes the last size anywhere. Once in 5 runs a clean drop on the 200% output did the same for about 4 s, until the pointer came back.
+	- Expected behavior: It takes the size saved for the output most of it is on.
+	- Reproduced: 20261014, 3 of 3 sliver drops, with `cicd/tests/monwl/run.bash` (Esgxleh).
+	- Possible cause: The monitor's name mixes 2 outputs. In `MonitorId::find` the resolution comes from the first output the window entered and still touches, and the scale from the window, which follows the other one. So it reads `1920x1080_200pct`, which no monitor is.
+	- Actual cause: As guessed, and measured. At the drop the window was drawn at 2 while winit still named HEADLESS-1, the 100% output it entered first.
+	- Actual fix: The monitor named is the one the window is drawn for. That's the first output when its scale matches. Otherwise it's the only other output at the window's scale, or the only one of those that most of a window this size could be on while it still touches the first. When no one output fits, none is named and the window keeps its size, rather than take the size of a monitor that isn't there.
+	- Note: Still mixed: a 125% or 150% output beside another whose scale rounds to the same whole number (2026101411554909).
+	- Swept: The other place a monitor's name is built is X11, which asks the X server which monitor the window overlaps most, so it never mixed 2. On Windows and macOS the monitor winit names and the window's scale come from the same monitor.
+	- Test case: `cicd/tests/monwl/run.bash` (Esgxleh), now in the pipeline. `a_window_astride_two_outputs_is_named_for_the_one_it_is_drawn_for` (EshSMlf), and the fuzz target `a_wayland_window_is_named_for_the_output_its_scale_is_from` (EshXuye) with its generator check (EshXv10).
+	- Verified:
+		- monwl failed its 3 sliver checks before the fix, twice more here, and passed 3 runs of 3 after.
+		- The fuzz target for 20 s, about 4 million cases. With the old lookup put back, the random test failed at the sliver drop in both cases tried.
+		- 60 random cases in 3 runs of 10 to 15 minutes, after the test settled. Every failure in them was a filed fault, the X11 fullscreen save fixed here, or a fault in the test, since fixed, except 2026101413420431, which still fails it now and then.
+	- Branch: dpirand
+	- Commit: c9b40aa
+	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
+	- Closed: 20261014-134300
+
+- Wayland: a window whose first frame is slow to show never takes its monitor's size
+	- ID: 2026101411504818
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261014-115048
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway, the debug build drawing in software
+	- Steps to reproduce:
+		- Keep a size for an output, and open a window there whose first frame takes more than about 0.75 s to show.
+	- Incorrect behavior: The window stays at the last size anywhere. It takes its monitor's size only if something later makes it look again, such as a scale change.
+	- Expected behavior: It takes its monitor's size a moment after it opens.
+	- Reproduced: 20261014, by the random test, in 4 of 7 Wayland launches in one run.
+	- Actual cause: sway tells the window its scale when it maps it, but which output it is on only once its first frame is up there, 1.5 s later here. The look 0.75 s after the window showed found no output, and nothing looked again.
+	- Actual fix: While a Wayland window is on no output yet, it looks again every quarter second, for up to 10 s.
+	- Test case: `a_wayland_window_on_no_output_yet_looks_again` (EshcYxg), and `cicd/tests/dpirand/run.py --seed 6000016`, which fails at its launch with the fix taken out and passes with it.
+	- Branch: dpirand
+	- Commit: c9b40aa
+	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
+	- Closed: 20261014-134300
+
+- X11: a window the window manager makes fullscreen has its fullscreen size saved as the size to open at
+	- ID: 2026101413075422
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261014-130754
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, X11 through Xwayland under headless sway
+	- Steps to reproduce:
+		- On X11, make the window fullscreen with the window manager's own key or menu, not SilkTerm's.
+		- Wait a second, then leave fullscreen or close the window.
+	- Incorrect behavior: The fullscreen size is saved as the last size anywhere and for the monitor, so the next window opens that big.
+	- Expected behavior: A fullscreen size is never saved, as when SilkTerm's own key makes the window fullscreen.
+	- Reproduced: 20261014, by the random test, 3 of 3 X11 fullscreen steps in one run.
+	- Actual cause: winit on X11 knows only of a fullscreen the program asked for itself, so one the window manager set went unseen.
+	- Actual fix: On X11 fullscreen is also read from the window manager's state on the window.
+	- Swept: Both places the size code asks whether the window is fullscreen, the save and taking a monitor's size, use the new check. Maximized was already read from the window manager's state. The Fullscreen menu item still asks winit, so after the window manager's fullscreen it offers to go fullscreen; left as it is.
+	- Test case: `cicd/tests/dpirand/run.py`, its fullscreen step on X11. Seeds 7504938 and 7504931 failed there before the fix and pass after.
+	- Branch: dpirand
+	- Commit: 2f9d4a3
+	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
+	- Closed: 20261014-134300
 
 - A TUI run inside tmux or screen keeps the minimap column
 	- ID: 2026101320095003
@@ -4310,6 +4279,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- A tab may not name a quiet command while nothing redraws
+	- ID: 2026101408384489
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261014-083844
+	- Opened by: CC
+	- Related IDs: 2026101407014142
+	- Target OS: All
+	- Test environment: b29w
+	- Steps to reproduce:
+		- Turn cursor blink off.
+		- Run a command that prints nothing for a few seconds.
+	- Incorrect behavior: The tab doesn't name it while it runs.
+	- Expected behavior: The tab names it.
+	- Reproduced: Seen once on b29w with blink off, with a program cmd didn't wait for. Not checked on Linux.
+		- 20261014 on b23 and on b29w and vm925w: Confirmed. On Linux a quiet program started 0.05 to 0.8 s after a frame was never named, 5 of 5. On Windows, ping from PowerShell with its output thrown away was never named, 2 of 2 on each box.
+	- Possible cause: What a tab says is kept for 250 ms. A frame drawn just before the command starts keeps "nothing running", and with no output and no blink no later frame asks again. Plausible, read only.
+	- Actual cause: As above. On Windows the child scan's answer was also kept until the terminal next stirred, so even a later frame got "nothing running".
+	- Actual fix: After a key or output, each pane looks again at what runs 0.3, 1 and 3 seconds later, past both caches, and draws only when the answer moved. Tabs in the back are included.
+	- Verified:
+		- New Linux window test `quiettab`: 5 of 5 failed on dev and with the new look turned off, all pass on the branch, twice.
+		- New Windows scenario `quiettab`: failed on dev on b29w and vm925w, passes on the branch on both.
+		- `cmdgui` and `conmap` pass on both boxes with the same build.
+	- Swept: The tab, the window title and the minimap column all read the one answer, so the one look covers them. Copy-output's at-prompt answer is the same scan on Windows, and is only fresher.
+	- Branch: conload
+	- Commit: af9559d
+	- Test case: `cicd/tests/quiettab/run.bash` (EshV2SF) and wingui scenario `quiettab` (EshXZBZ), both seen failing on dev; `a_quiet_command_is_looked_for_again_after_the_last_stir` (EshVvnf) pins when the looks come.
+	- Acceptance signoff: Self-closed: reproduced, red before and green after on b23, b29w and vm925w.
+	- Closed: 20261014-114500
 
 - macOS: a TUI run inside tmux keeps the minimap column
 	- ID: 2026101320425888
