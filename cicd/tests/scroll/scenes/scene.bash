@@ -18,6 +18,10 @@
 ##            input box taking a paste)
 ##   pasteil - the same box grown with insert-line and shrunk with delete-line, so
 ##            the engine records each step as a region scroll
+##   prompt - a shell under ble.sh: a short command's output, then the two-row
+##            prompt drawn with insert- and delete-line under the cursor, and now
+##            and then the prompt redrawn in place the same way, on a half-empty
+##            screen and then a full one
 ## The repaint shapes use explicit cursor positioning (CUP) and never a newline, so
 ## nothing scrolls the real grid - only the drawn content shifts, exactly the way
 ## curses/nano repaint. The tmux shape is the other kind: it sets DECSTBM and lets
@@ -110,6 +114,42 @@ if [ "${shape}" = paste ] || [ "${shape}" = pasteil ]; then
 	done
 fi
 
+if [ "${shape}" = prompt ]; then
+	top='\033[36m12:00:00\033[m user@host:~/repo [ main ]'
+	bottom='-> $ '
+	printf '\033[H\033[2J\033[3J%b\r\r\r\n%s' "${top}" "${bottom}"
+	sleep "${settle}"
+	sz=$(stty size 2>/dev/null) || sz=""
+	cols=${sz#* }
+	case "${cols}" in ''|*[!0-9]*) cols=80 ;; esac
+	n=0
+	while :; do
+		## a clear now and then, so the half-empty case comes round again
+		if [ $((n % 24)) = 0 ]; then
+			printf '\033[H\033[2J\033[3J%b\r\r\r\n%s' "${top}" "${bottom}"
+			sleep "${step}"
+		fi
+		## Enter, as ble.sh rewrites the command line, then the output
+		printf '\033[1A\r%b\r\r\r\n%sseq %d\r\n' "${top}" "${bottom}" "$((n % 4 + 1))"
+		i=1
+		while [ "${i}" -le $((n % 4 + 1)) ]; do
+			printf '%d\r\n' "${i}"
+			i=$((i + 1))
+		done
+		sleep "${step}"
+		## the end-of-output mark put up and wiped, then the prompt
+		printf '\0337[ble: EOF]\0338\033[%dC  \r\033[K\r\n\033[1L\033[2K\033[1A\033[2K\033[2M\033[2L\033[2K%b\r\r\r\n%s' \
+			"$((cols - 2))" "${top}" "${bottom}"
+		sleep "${step}"
+		## the redraw ble.sh does after a resize, or a program that took the screen
+		if [ $((n % 3)) = 2 ]; then
+			printf '\033[1A\r\r\033[J\r\n\033[1A\033[2L\033[2K\033[2K\033[2M\033[2L\033[2K%b\r\r\r\n%s' "${top}" "${bottom}"
+			sleep "${step}"
+		fi
+		n=$((n + 1))
+	done
+fi
+
 printf '\033[?1049h\033[2J'                       ## enter alt screen, clear
 trap 'printf "\033[?1049l"' EXIT INT TERM         ## restore on the way out
 sleep "${settle}"
@@ -199,3 +239,4 @@ done
 
 ##	History:
 ##		- 20260706 JC: Created.
+##		- 20261014 JC: prompt shape.

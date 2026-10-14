@@ -18,6 +18,7 @@
 ##		   chrome       - output easing under a live block redrawn in place holds the block still
 ##		   aptbar       - lines above a pinned status row still ease once the scrollback is full
 ##		   paste/pasteil - an input box growing into blank rows pops in rather than sliding down
+##		   prompt       - a shell prompt drawn with insert- and delete-line shows in place
 ##		   clear        - every way a shell clears the screen shows at once, nothing eases
 ##		Plain shell-output easing is covered by the library tests (cargo test); the
 ##		"jumping / re-listing / bottom-up" symptoms map to those monotonicity checks.
@@ -322,6 +323,10 @@ fRunScene aptbar aptbar pinned -1 1
 ## rows above.
 fRunScene paste   paste   popin -1
 fRunScene pasteil pasteil popin -1
+## A shell under ble.sh: its prompt comes back after each command, drawn with
+## insert- and delete-line under the cursor, and is redrawn in place now and
+## then. It shows where it lands rather than sliding out from under the output.
+fRunScene prompt  prompt  popin -1
 
 ## clear, tput clear, Ctrl+L and a reset over a full screen, with the scrollback
 ## full and then nearly empty: each shows at once, with nothing easing.
@@ -371,3 +376,4 @@ exit "${rc}"
 ##		- 20260718 JC: --wayland pass (cage kiosk) alongside the X11 Xvfb pass.
 ##		- 20260918 JC: aptbar scene, --only.
 ##		- 20261013 JC: clear scene. A scene can read its trace and leave a note.
+##		- 20261014 JC: prompt scene.
