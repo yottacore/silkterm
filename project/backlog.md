@@ -401,36 +401,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Windows 11: every pane may count as a full-screen program while a command runs
-	- ID: 2026101321365912
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261013-213659
-	- Opened by: CC
-	- Assigned to: CC
-	- Related IDs: 2026101315155800, 2026101310563323, 2026101408384488
-	- Target OS: Windows
-	- Test environment: b29w
-	- Steps to reproduce:
-		- Turn the minimap on in Windows 11 and run a long plain command, such as `ping -t localhost`.
-	- Incorrect behavior: Unconfirmed. ConPTY on Windows 11 is said to send `CSI ? 1004 h` itself at start. The engine would then show focus reports on in every pane, and the minimap rule reads that, while a command runs, as a program that draws its own screen.
-	- Expected behavior: A plain command keeps the column.
-	- Reproduced: No. Read only, from a Cygwin change that strips that sequence from ConPTY output.
-		- 20261014 on b29w: Confirmed. The console host Windows has sends `CSI ? 9001 h` and `CSI ? 1004 h` before anything else, and turns both off at the end. It doesn't pass a program's own `1004` or mouse asks on. In a cmd pane with the minimap on, a plain command read its width as 90 columns, the same as with the minimap off, so the column was gone.
-		- It first passed on b29w, because WezTerm's `conpty.dll` is on that box's PATH and SilkTerm loaded it ahead of the one Windows has. That older host asks for nothing. Filed as 2026101408384488.
-	- Actual cause: The column rule read the focus-report mode as the program's ask. Under the Windows console host it's the host's own ask, on in every pane from start to end.
-	- Actual fix: Under the Windows console host the rule reads only the alt screen and mouse modes. Focus reports still go to the host, which asked for them.
-	- Verified:
-		- New Windows scenario `conmap`: failed on dev (90 columns with the minimap on and off), passes on the branch (76 against 90). Run with no `conpty.dll` on PATH.
-		- `livecfg` and `cmdgui` pass on b29w with the same build. Unit suite, clippy for Linux and Windows, and fmt pass.
-	- Swept: `screen_modes` is the one place the modes are read for the column. `focus_report` reads the mode only to send reports, which is right under either host. tmux's own answer is unix only.
-	- Branch: conpty
-	- Commit: ca25198
-	- Test case: `a_plain_command_keeps_the_column_under_the_windows_console_host` (EsgiG0N), seen failing with the host's ask counted; wingui scenario `conmap` (EsgiFLt), seen failing on dev.
-	- Acceptance signoff: Self-closed: reproduced, red before and green after on b29w.
-	- Closed: 20261014-083844
-
 - macOS: a TUI run inside tmux keeps the minimap column
 	- ID: 2026101320425888
 	- Type: Bug
@@ -4092,6 +4062,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Windows 11: every pane may count as a full-screen program while a command runs
+	- ID: 2026101321365912
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261013-213659
+	- Opened by: CC
+	- Assigned to: CC
+	- Related IDs: 2026101315155800, 2026101310563323, 2026101408384488
+	- Target OS: Windows
+	- Test environment: b29w
+	- Steps to reproduce:
+		- Turn the minimap on in Windows 11 and run a long plain command, such as `ping -t localhost`.
+	- Incorrect behavior: Unconfirmed. ConPTY on Windows 11 is said to send `CSI ? 1004 h` itself at start. The engine would then show focus reports on in every pane, and the minimap rule reads that, while a command runs, as a program that draws its own screen.
+	- Expected behavior: A plain command keeps the column.
+	- Reproduced: No. Read only, from a Cygwin change that strips that sequence from ConPTY output.
+		- 20261014 on b29w: Confirmed. The console host Windows has sends `CSI ? 9001 h` and `CSI ? 1004 h` before anything else, and turns both off at the end. It doesn't pass a program's own `1004` or mouse asks on. In a cmd pane with the minimap on, a plain command read its width as 90 columns, the same as with the minimap off, so the column was gone.
+		- It first passed on b29w, because WezTerm's `conpty.dll` is on that box's PATH and SilkTerm loaded it ahead of the one Windows has. That older host asks for nothing. Filed as 2026101408384488.
+	- Actual cause: The column rule read the focus-report mode as the program's ask. Under the Windows console host it's the host's own ask, on in every pane from start to end.
+	- Actual fix: Under the Windows console host the rule reads only the alt screen and mouse modes. Focus reports still go to the host, which asked for them.
+	- Verified:
+		- New Windows scenario `conmap`: failed on dev (90 columns with the minimap on and off), passes on the branch (76 against 90). Run with no `conpty.dll` on PATH.
+		- `livecfg` and `cmdgui` pass on b29w with the same build. Unit suite, clippy for Linux and Windows, and fmt pass.
+	- Swept: `screen_modes` is the one place the modes are read for the column. `focus_report` reads the mode only to send reports, which is right under either host. tmux's own answer is unix only.
+	- Branch: conpty
+	- Commit: ca25198
+	- Test case: `a_plain_command_keeps_the_column_under_the_windows_console_host` (EsgiG0N), seen failing with the host's ask counted; wingui scenario `conmap` (EsgiFLt), seen failing on dev.
+	- Acceptance signoff: Self-closed: reproduced, red before and green after on b29w.
+	- Closed: 20261014-083844
 
 - The minimap window test leaves its size poll running after the window closes
 	- ID: 2026101407524951
