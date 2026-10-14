@@ -66,6 +66,7 @@ fCleanup(){
 	if [[ -n "${appPid}" ]]; then fStopOurs "${appPid}"; fi
 	if ((startedDisplay)); then "${headless}" stop >/dev/null 2>&1 || true; fi
 	if [[ -n "${tmuxBin}" && -S "${work}/sock" ]]; then "${tmuxBin}" -S "${work}/sock" kill-server >/dev/null 2>&1 || true; fi
+	local pid; for pid in $(fLeftovers); do kill "${pid}" 2>/dev/null || true; done
 	if [[ "${rc}" == 0 ]]; then rm -rf "${work}"; fi
 	fTestDir_End "${rc}"
 }
@@ -83,6 +84,21 @@ fStopOurs(){
 	for _ in {1..20}; do kill -0 "${pid}" 2>/dev/null || return 0; sleep 0.1; done
 	kill -9 "${pid}" 2>/dev/null || true
 }
+
+## Anything still running from this run's folder, by the folder in its command
+## line. Builtins only, so no helper of ours turns up in the list.
+fLeftovers(){
+	local dir pid
+	local -a args
+	for dir in /proc/[0-9]*; do
+		pid="${dir#/proc/}"
+		[[ "${pid}" == "$$" || "${pid}" == "${BASHPID}" ]] && continue
+		mapfile -d '' args 2>/dev/null <"${dir}/cmdline" || continue
+		[[ "${args[*]}" == *"${work}/"* ]] && echo "${pid}"
+	done
+	return 0
+}
+fNoneLeft(){ local _; for _ in {1..30}; do [[ -z "$(fLeftovers)" ]] && return 0; sleep 0.1; done; return 1; }
 
 export CICD_HEADLESS_DISPLAY="${CICD_HEADLESS_DISPLAY:-:98}"
 display="${CICD_HEADLESS_DISPLAY}"
@@ -108,7 +124,8 @@ for name in tmux chat less feed; do ln -s "${dash}" "${work}/bin/${name}"; done
 cat >"${work}/scene.sh" <<'EOF'
 w=$1 tmux=$2
 echo start >"$w/step"
-poll() { last=; while :; do s=$(stty size </dev/tty); if [ "$s" != "$last" ]; then echo "$(cat "$w/step") $s" >>"$w/sizes.txt"; last=$s; fi; sleep 0.02; done; }
+## Stops with the window or the scene, or it runs on under init for good.
+poll() { last=; while s=$(stty size 2>/dev/null </dev/tty) && kill -0 $$ 2>/dev/null; do if [ "$s" != "$last" ]; then echo "$(cat "$w/step") $s" >>"$w/sizes.txt"; last=$s; fi; sleep 0.02; done; }
 poll &
 step() { echo "$1" >"$w/step"; }
 sleep 3
@@ -160,10 +177,11 @@ appPid=$!
 giveUp=$((SECONDS + 90))
 while ((SECONDS < giveUp)) && [[ "$(cat "${work}/step" 2>/dev/null || true)" != "done" ]]; do sleep 0.5; done
 fStopOurs "${appPid}"; appPid=""
-## A line with no size is the poll losing the terminal as the window closed.
+## Whole lines only, in case the window closed mid-write.
 sizes="${work}/sized.txt"
 awk 'NF == 3' "${work}/sizes.txt" >"${sizes}" 2>/dev/null || true
 fCheck "the scene ran to the end" grep -qx "done" "${work}/step"
+fCheck "nothing from the scene is left running" fNoneLeft
 
 ## The width the shell had at the start, with the column showing.
 narrow="$(grep '^start ' "${sizes}" 2>/dev/null | tail -n 1 | awk '{print $3}')"
@@ -195,6 +213,7 @@ fi
 
 if ((failures)); then
 	echo "  sizes:"; sed 's/^/      /' "${sizes}" 2>/dev/null || true
+	for pid in $(fLeftovers); do echo "  left running: $(tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null || true)"; done
 	echo "${failures} failed"; exit 1
 fi
 echo "all passed"
@@ -202,3 +221,5 @@ echo "all passed"
 ##	History:
 ##		- 20261013 JC: Created.
 ##		- 20261013 JC: Pipelines, and programs inside a real tmux.
+##		- 20261014 JC: The size poll stops with the window, and nothing from
+##		  the scene may outlive the run.

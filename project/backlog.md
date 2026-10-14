@@ -385,7 +385,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The minimap window test leaves its size poll running after the window closes
 	- ID: 2026101407524951
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261014-075249
 	- Opened by: CC
@@ -396,6 +396,14 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The scene's background `poll` loop outlives the window and runs `stty` every 20 ms for good, reparented to init.
 	- Expected behavior: Nothing from the scene is left running after the test.
 	- Reproduced: 20261014 on b23. 13 of them were alive from runs on 10-13 and 10-14, and were killed by PID.
+	- Actual cause: The poll runs in the background in the scene's own process group, which isn't the foreground one when the window closes, so the hangup never reaches it. Its loop had no way out, and `stty` failing just gave it an empty size.
+	- Actual fix: The poll stops once `stty` fails or the scene is gone. The test now fails when anything with the run folder in its command line is still alive after the window closes, says what it was, and kills those by PID on the way out.
+	- Swept: every test under `cicd/tests/` that starts a window with `--shell` or runs a scene: allocs, config-convert, delcfg, livecfg, monwake, startsize, swnoshm, wakepic, wpkept, wpresize (one foreground command, gets the hangup), the 3 scroll scenes (foreground loops only), demo/run.py (opens no window), and the non-window background jobs in engine, install and swnoshm (each killed by PID in its cleanup). Only mapfollow had a background loop that nothing stopped.
+	- Test case: `cicd/tests/mapfollow/run.bash` (EsdlZTW), check "nothing from the scene is left running".
+	- Verified: 20261014 on b23 on `:98`. Before the fix the check failed and named the leftover `scene.sh` poll; after it, all 19 checks passed and no process from the run folder was alive.
+	- Branch: pollreap
+	- Acceptance signoff: Self-closed: test-only fix, red before and green after.
+	- Closed: 20261014-075900
 
 - Windows 11: every pane may count as a full-screen program while a command runs
 	- ID: 2026101321365912
