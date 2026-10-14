@@ -228,6 +228,26 @@ impl Tabs {
 	pub(super) fn move_active(&mut self, fwd: bool) {
 		self.active = move_tab(&mut self.list, self.active, fwd);
 	}
+	/// Every pane's look at what runs that has come due, in any tab, since a
+	/// tab in the back names its shell's program too. True when an answer moved.
+	pub(super) fn recheck_tasks(&mut self, now: std::time::Instant) -> bool {
+		let mut moved = false;
+		for pane in self.list.iter_mut().flat_map(|pm| pm.panes.values_mut()) {
+			if pane.term.task_wake().is_some_and(|at| now >= at) {
+				moved |= pane.term.recheck_task();
+			}
+		}
+		moved
+	}
+	/// The next of those looks still ahead of `now`.
+	pub(super) fn task_wake(&self, now: std::time::Instant) -> Option<std::time::Instant> {
+		self.list
+			.iter()
+			.flat_map(|pm| pm.panes.values())
+			.filter_map(|pane| pane.term.task_wake())
+			.filter(|&at| at > now)
+			.min()
+	}
 }
 
 // The tab beside `i` of `n`, wrapping at both ends.

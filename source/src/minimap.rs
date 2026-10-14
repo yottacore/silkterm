@@ -122,8 +122,8 @@ pub enum PtyHost {
 	/// A unix PTY passes on what the program asked for.
 	Plain,
 	/// Windows' own console host asks for focus reports as it starts, for
-	/// every pane, and keeps a program's own ask to itself. A conpty.dll found
-	/// on PATH is used ahead of it, and an older one asks for nothing.
+	/// every pane, and keeps a program's own ask to itself. A conpty.dll beside
+	/// the program is used ahead of it, and an older one asks for nothing.
 	ConPty,
 }
 

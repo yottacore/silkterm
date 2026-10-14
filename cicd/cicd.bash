@@ -1011,6 +1011,9 @@ fBuildTestRelease(){
 	## The minimap column comes and goes with what runs, when it starts and not
 	## at the next redraw. Exit 3 is a skip: no binary, display, dash or xdotool.
 	fRunTest_MaySkip cicd/tests/mapfollow/run.bash "minimap column follows what runs"
+	## A tab names a command that prints nothing, with the cursor not blinking.
+	## Exit 3 is a skip: no binary, display, dash, xdotool or xprop.
+	fRunTest_MaySkip cicd/tests/quiettab/run.bash "tab names a quiet command"
 	## Heap allocations per frame at rest and in a drag select, against a limit.
 	## Exit 3 is a skip: no debug binary, display, window manager or xdotool.
 	fRunTest_MaySkip cicd/tests/allocs/run.bash "allocations per frame"

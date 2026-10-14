@@ -21,6 +21,7 @@ mod contrast;
 mod ctl;
 mod cwd;
 mod dialog;
+mod dllsearch;
 mod fields;
 mod fileassoc;
 mod front;
@@ -104,6 +105,7 @@ fn prints_and_exits(cli: &cli::Cli) -> bool {
 	cli_only(cli) || control(cli)
 }
 fn main() -> anyhow::Result<()> {
+	dllsearch::restrict();
 	config::mark_launch();
 	env_logger::init();
 	alacritty_terminal::tty::setup_env();

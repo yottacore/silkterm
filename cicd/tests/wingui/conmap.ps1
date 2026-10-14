@@ -10,8 +10,8 @@
 	as a full-screen program for as long as any command ran. A command reads
 	its own width a few times, once with the minimap off and once with it on,
 	in a window of the same size. With the column there it has fewer columns.
-	A conpty.dll on PATH is used ahead of the one Windows has, and an older
-	one asks for nothing, so PATH goes without one here.
+	Builds before the conload fix took a conpty.dll on PATH ahead of the one
+	Windows has, and an older one asks for nothing, so PATH goes without one.
 .NOTES
 	History: At bottom of file.
 #>

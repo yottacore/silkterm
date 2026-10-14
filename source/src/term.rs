@@ -280,6 +280,27 @@ impl Dimensions for TermDimensions {
 	}
 }
 
+// How long after the terminal last stirred to look again at what runs. A
+// command most often starts within the first, and a slow one by the last.
+const TASK_LOOKS: [std::time::Duration; 3] = [
+	std::time::Duration::from_millis(300),
+	std::time::Duration::from_secs(1),
+	std::time::Duration::from_secs(3),
+];
+
+// The first look after the stir that no probe has taken yet. Only a probe that
+// really looked counts, which is the time on the task cache.
+fn next_task_look(
+	stirred: Option<std::time::Instant>,
+	probed: Option<std::time::Instant>,
+) -> Option<std::time::Instant> {
+	let stirred = stirred?;
+	TASK_LOOKS
+		.iter()
+		.map(|gap| stirred + *gap)
+		.find(|at| probed.is_none_or(|probed| *at > probed))
+}
+
 /// What a pane's shell is doing, as its tab reports it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Task {
@@ -314,6 +335,9 @@ pub struct TermInstance {
 	last_program: Option<String>,
 	// throttles the per-frame task probe (see task())
 	task_cache: Option<(std::time::Instant, Task)>,
+	// when output or input last came through, for the looks again after it
+	// (see task_wake)
+	stirred_at: std::cell::Cell<Option<std::time::Instant>>,
 	// the process the last probe named, which may not lead its group
 	#[cfg(unix)]
 	front_pid: Option<u32>,
@@ -437,6 +461,7 @@ impl TermInstance {
 			shell_pid,
 			last_program: None,
 			task_cache: None,
+			stirred_at: std::cell::Cell::new(None),
 			#[cfg(unix)]
 			front_pid: None,
 			tmux: crate::front::Tmux::default(),
@@ -485,6 +510,29 @@ impl TermInstance {
 	/// A program has usually just started when the screen changes under it.
 	pub fn retask(&mut self) {
 		self.task_cache = None;
+	}
+
+	/// When to look again at what runs, with no frame to ask. A frame drawn
+	/// just before a command starts keeps "nothing running", and a command
+	/// that prints nothing, with the cursor not blinking, brings no later
+	/// frame, so its tab never named it.
+	pub fn task_wake(&self) -> Option<std::time::Instant> {
+		next_task_look(
+			self.stirred_at.get(),
+			self.task_cache.as_ref().map(|(at, _)| *at),
+		)
+	}
+
+	/// Look again past both caches. True when the answer moved, so the tab
+	/// wants drawing.
+	pub fn recheck_task(&mut self) -> bool {
+		let before = self.task_cache.as_ref().map(|(_, task)| task.clone());
+		self.retask();
+		#[cfg(windows)]
+		{
+			*self.child_probe.borrow_mut() = None;
+		}
+		before != Some(self.task())
 	}
 
 	// The foreground process group is the shell's own while it sits at its prompt,
@@ -669,12 +717,14 @@ impl TermInstance {
 	#[cfg(windows)]
 	pub fn note_activity(&self) {
 		*self.child_probe.borrow_mut() = None;
+		self.stirred_at.set(Some(std::time::Instant::now()));
 	}
 
 	/// What a tmux client in front shows may have changed.
 	#[cfg(not(windows))]
 	pub fn note_activity(&self) {
 		self.tmux.stir();
+		self.stirred_at.set(Some(std::time::Instant::now()));
 	}
 
 	pub fn write<B: Into<Vec<u8>>>(&self, bytes: B) {
@@ -1631,6 +1681,52 @@ mod tests {
 	};
 	#[cfg(unix)]
 	use super::{program_name, status_text};
+
+	// A frame drawn just before a quiet command starts kept "nothing running",
+	// and with no output and no blink nothing asked again. The looks after a
+	// stir come whatever the frames did, and stop.
+	// Test ID: EshVvnf
+	#[test]
+	fn a_quiet_command_is_looked_for_again_after_the_last_stir() {
+		use super::{TASK_LOOKS, next_task_look};
+		use std::time::Duration;
+		let stirred = std::time::Instant::now();
+		assert_eq!(
+			next_task_look(None, Some(stirred)),
+			None,
+			"no stir, no look"
+		);
+		let first = stirred + TASK_LOOKS[0];
+		assert_eq!(next_task_look(Some(stirred), None), Some(first));
+		// the probe that saw the shell as the command was about to start
+		let stale = stirred + Duration::from_millis(5);
+		assert_eq!(next_task_look(Some(stirred), Some(stale)), Some(first));
+		assert!(
+			first > stale + Duration::from_millis(250),
+			"past the probe's cache"
+		);
+		for pair in TASK_LOOKS.windows(2) {
+			let took = stirred + pair[0];
+			assert_eq!(
+				next_task_look(Some(stirred), Some(took)),
+				Some(stirred + pair[1])
+			);
+		}
+		let last = stirred + TASK_LOOKS[TASK_LOOKS.len() - 1];
+		assert_eq!(
+			next_task_look(Some(stirred), Some(last)),
+			None,
+			"and then it stops"
+		);
+		// a probe taken from frames late on leaves only what is after it
+		let late = stirred + Duration::from_millis(1500);
+		assert_eq!(next_task_look(Some(stirred), Some(late)), Some(last));
+		// an older probe than the stir doesn't count
+		let before = stirred
+			.checked_sub(Duration::from_secs(1))
+			.unwrap_or(stirred);
+		assert_eq!(next_task_look(Some(stirred), Some(before)), Some(first));
+	}
 
 	// tmux, editors over ssh and muffer's auto-copy all set the clipboard with
 	// OSC 52, and whether the engine passes a store on is its config's call. A

@@ -5405,6 +5405,10 @@ impl ApplicationHandler<UserEvent> for App {
 				}
 			}
 		}
+		// what a tab says about a program that started with nothing to draw
+		if state.tabs.recheck_tasks(wake_now) {
+			state.dirty = true;
+		}
 		// copy-output: catch the focused pane's command finishing (see method)
 		state.poll_output_copy();
 		// wallpaper rotation: swap to the next image when its interval elapses
@@ -5676,6 +5680,7 @@ impl ApplicationHandler<UserEvent> for App {
 		if let Some(wake) = pane_wake(state.tabs.cur().panes.values(), Instant::now()) {
 			cursor_wake = Some(cursor_wake.map_or(wake, |w| w.min(wake)));
 		}
+		let flow = wake_by(flow, state.tabs.task_wake(Instant::now()));
 		let flow = wake_by(
 			flow,
 			(state.dirty && !hidden && state.gpu.is_some()).then(Instant::now),
