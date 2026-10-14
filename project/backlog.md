@@ -344,7 +344,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 		- The bug is back. We need to lock this down with a regression test. Including all similar smooth-scroll-related bugs we've fixed in the past, including nano bounce, nano scroll jumping of static content, muffer's similar bug involving "Jump to bottom" message, etc.
 		- Earlier fixes, all in the old-format Done list: "A prompt coming back after a command slides in oddly", "Repeating a command scrolled its output down out from under the prompt above it", "The dreaded 'Nano Bounce Bug' is back", and "Bug: scrolling back in muffer with the mouse wheel made its '1 new message' indicator smear and bounce".
-	- Test environment: b23, a window on a private display with bash, ble.sh, atuin and the bundled two-row prompt in a git repo.
+	- Test environment: b23, bash with ble.sh, atuin and the bundled two-row prompt in a git repo.
 	- Steps to reproduce:
 		- In a git repo, so the prompt has two rows, `clear`, then run a command whose output leaves the prompt one row above the bottom of the window (`seq 36` in a 43-row window).
 		- Run `nano`, and quit it.
@@ -363,7 +363,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: `slide_is_visible` has one caller in the build. `ledger_makes_room` reads the same snapshot but can only stop a slide. The row-print detector compares against `last_rows`, which a relayout leaves at the old width, so nothing matches there.
 	- Branch: promptslide
 	- Commit: 874af97
-	- Test case: Ep3UXRI gained erased-ink cases. New replay tests over ble.sh's bytes: Esib1t0 (prompt after output, half-empty and full screens), Esib1y3 (in-place redraw at each height), EsiiYQ2 (every split of the prompt and the redraw across two reads), Esiikpm (redraw right after a relayout), Esib22C (a repeated listing), Esib26L (a table redraw snaps while a prompt still eases), Esib2AU (the nano bounce). Scroll harness scene `prompt`. Each was seen to fail against a mutant of the part it guards.
+	- Test case: Ep3UXRI gained erased-ink cases. New replay tests over ble.sh's bytes: Esib1t0 (prompt after output, half-empty and full screens), Esib1y3 (in-place redraw at each height), EsiiYQ2 (every split of the prompt and the redraw across two reads), Esiikpm (redraw right after a relayout), Esib22C (a repeated listing), Esib26L (a table redraw snaps while a prompt still eases), Esib2AU (the nano bounce). Scroll harness scene `prompt`. Each fails with the part it guards broken.
 
 - A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
 	- ID: 2026101411555009
