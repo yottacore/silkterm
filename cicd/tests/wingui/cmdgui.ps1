@@ -9,7 +9,8 @@
 	while the program still runs, and nothing is printed when it ends. The
 	tab kept the program's name until the next key. A small program built
 	here stands in for one, asleep for 3 seconds with no window. PATH goes
-	without a conpty.dll, so the console host is the one Windows has.
+	without a conpty.dll, so even an older build gets the console host
+	Windows has.
 .NOTES
 	History: At bottom of file.
 #>

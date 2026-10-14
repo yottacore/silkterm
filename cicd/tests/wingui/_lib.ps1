@@ -195,9 +195,11 @@ function fFreshConfig([string]$Path, [string[]]$Extra = @()) {
 	Set-Content -Path $path -Value $body -Encoding UTF8
 }
 
-function fStartSilk([string]$Exe, [string[]]$SilkArgs, [hashtable]$EnvVars) {
+function fStartSilk([string]$Exe, [string[]]$SilkArgs, [hashtable]$EnvVars, [string]$WorkDir = "") {
 	foreach ($k in $envVars.Keys) { [Environment]::SetEnvironmentVariable($k, $envVars[$k]) }
-	$p = Start-Process $exe -ArgumentList $silkArgs -PassThru
+	$more = @{}
+	if ($workDir) { $more.WorkingDirectory = $workDir }
+	$p = Start-Process $exe -ArgumentList $silkArgs -PassThru @more
 	foreach ($k in $envVars.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
 	fTrack $p
 	$p
@@ -445,3 +447,4 @@ function fStop([System.Diagnostics.Process]$P) {
 ##	History:
 ##		- 20260908 JC: Created.
 ##		- 20261006 JC: Help block, typed parameters, checks kept in a list.
+##		- 20261014 JC: fStartSilk takes a working folder.

@@ -149,8 +149,9 @@ libc = "0.2"
 # walk the process table for the shell's live child (copy-output's stand-in for a
 # foreground process group - see term.rs at_shell_prompt), ask whether a
 # settings file's name is only waiting for its delete (config.rs delete_pending),
-# read a monitor's EDID and the mouse buttons (monitor.rs), and count a
-# thread's CPU cycles for a timing test (pane.rs).
+# read a monitor's EDID and the mouse buttons (monitor.rs), count a
+# thread's CPU cycles for a timing test (pane.rs), and keep DLLs loaded by
+# name off PATH and the working folder (dllsearch.rs).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Wdk_Foundation",
@@ -165,6 +166,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Environment",
     "Win32_System_IO",
+    "Win32_System_LibraryLoader",
     "Win32_System_Pipes",
     "Win32_System_Registry",
     "Win32_System_SystemInformation",

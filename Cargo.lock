@@ -58,7 +58,7 @@ dependencies = [
 [[package]]
 name = "alacritty_terminal"
 version = "0.26.0"
-source = "git+https://github.com/jim-collier/alacritty?branch=scroll-ledger-0.26.0#0068fddae1e24797d75ebdc02a5856509a59b4c7"
+source = "git+https://github.com/jim-collier/alacritty?branch=scroll-ledger-0.26.0#09f24ebec4c54bdf9d9328e4656288b3d5210dae"
 dependencies = [
  "arrayvec",
  "base64",

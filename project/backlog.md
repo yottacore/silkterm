@@ -320,7 +320,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
 	- ID: 2026101408384488
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Severity: Avg
 	- Opened: 20261014-083844
 	- Opened by: CC
@@ -333,8 +333,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The engine loads `conpty.dll` by bare name, so the DLL search order finds WezTerm's, or one in the working folder, before falling back to the one Windows has. Each copy behaves a little differently, so SilkTerm does too, from box to box. A planted `conpty.dll` in the working folder or a folder on the user's PATH loads into SilkTerm.
 	- Expected behavior: Only a `conpty.dll` shipped beside the program, if any, or the one Windows has.
 	- Reproduced: 20261014 on b29w. With WezTerm's folder on PATH no focus-report ask came through; with it taken off, the one Windows has sent it.
+		- 20261014 on b29w and vm925w, both with WezTerm's folder on the machine PATH: dev loaded WezTerm's copy, and a planted copy on PATH or in the working folder.
 	- Notes:
 		- The load is in the engine fork's `tty/windows/conpty.rs`.
+		- A `dxcompiler.dll` on PATH should no longer be used either, so DX12 would compile its shaders with the compiler Windows has. Read from wgpu's code, not checked on a box.
+	- Actual cause: The engine loaded `conpty.dll` by bare name. Windows has none, so the search went on to the working folder and every folder on PATH, and took the first copy it found.
+	- Actual fix: The engine fork loads `conpty.dll` only from the program's folder or System32. SilkTerm also keeps every later load by bare name to those 2 folders, from the first line of `main`, which covers the libraries it uses too.
+	- Verified:
+		- New Windows scenario `conload`: failed on dev on b29w and vm925w, with WezTerm's copy and both planted copies loaded. Passes on the branch on both, with the one Windows has.
+		- `conmap`, `cmdgui` and `quiettab` pass on both boxes with the same build.
+		- Unit tests on b29w: the engine test failed with the old engine and passes with the new one. The bare-name test failed with the rule taken out and passes with it.
+		- Gate, clippy for Linux and Windows, and the docs check pass.
+	- Swept: The fork has no other load by name, and SilkTerm had none. In the libraries, wgpu's DX12 loads `dxcompiler.dll` by name and looks on PATH for it; the rule in `main` covers it. The other loads by name are DLLs Windows has in System32, which is searched first.
+	- Branch: conload
+	- Commit: af9559d, engine fork 09f24ebe on `scroll-ledger-0.26.0`
+	- Test case: wingui scenario `conload` (EshQpKD), seen failing on dev; `the_engine_takes_no_conpty_dll_from_path_or_the_working_folder` (EshQYPc) and `a_dll_on_path_or_in_the_working_folder_is_not_loaded` (EshQYN6), each seen failing.
 
 - Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
 	- ID: 2026101410442550
@@ -402,7 +415,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - A tab may not name a quiet command while nothing redraws
 	- ID: 2026101408384489
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261014-083844
 	- Opened by: CC
@@ -415,7 +428,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: The tab doesn't name it while it runs.
 	- Expected behavior: The tab names it.
 	- Reproduced: Seen once on b29w with blink off, with a program cmd didn't wait for. Not checked on Linux.
+		- 20261014 on b23 and on b29w and vm925w: Confirmed. On Linux a quiet program started 0.05 to 0.8 s after a frame was never named, 5 of 5. On Windows, ping from PowerShell with its output thrown away was never named, 2 of 2 on each box.
 	- Possible cause: What a tab says is kept for 250 ms. A frame drawn just before the command starts keeps "nothing running", and with no output and no blink no later frame asks again. Plausible, read only.
+	- Actual cause: As above. On Windows the child scan's answer was also kept until the terminal next stirred, so even a later frame got "nothing running".
+	- Actual fix: After a key or output, each pane looks again at what runs 0.3, 1 and 3 seconds later, past both caches, and draws only when the answer moved. Tabs in the back are included.
+	- Verified:
+		- New Linux window test `quiettab`: 5 of 5 failed on dev and with the new look turned off, all pass on the branch, twice.
+		- New Windows scenario `quiettab`: failed on dev on b29w and vm925w, passes on the branch on both.
+		- `cmdgui` and `conmap` pass on both boxes with the same build.
+	- Swept: The tab, the window title and the minimap column all read the one answer, so the one look covers them. Copy-output's at-prompt answer is the same scan on Windows, and is only fresher.
+	- Branch: conload
+	- Commit: af9559d
+	- Test case: `cicd/tests/quiettab/run.bash` (EshV2SF) and wingui scenario `quiettab` (EshXZBZ), both seen failing on dev; `a_quiet_command_is_looked_for_again_after_the_last_stir` (EshVvnf) pins when the looks come.
+	- Acceptance signoff: Self-closed: reproduced, red before and green after on b23, b29w and vm925w.
+	- Closed: 20261014-114500
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
