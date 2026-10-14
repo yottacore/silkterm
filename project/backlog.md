@@ -91,26 +91,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: dpirand
 	- Commit: c9b40aa, 2f9d4a3, d49f765
 
-- The shell is told the old cell size in pixels after a zoom or scale change that keeps the grid
-	- ID: 2026101412025603
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261014-120256
-	- Opened by: CC
-	- Related IDs: 2026100114435600, 2026101412311921
-	- Target OS: All
-	- Steps to reproduce:
-		- Move a window to a monitor at another scale, or zoom the font, so that the grid stays the same.
-		- Read the window's size in pixels from a program in it, as image viewers do.
-	- Incorrect behavior: The size in pixels is the old one.
-	- Expected behavior: It's the new cell size times the grid.
-	- Reproduced: Only in the code. A pane's resize told the shell nothing whenever the grid was unchanged. In a window today the grid always moves for a moment on a scale change (2026101412311921), and that tells the shell. Once that's fixed, a scale change that keeps the grid would leave the old size.
-	- Actual fix: A new cell size is told to the shell even when the grid is the same.
-	- Test case: `a_new_cell_size_is_told_to_the_shell_even_on_the_same_grid` (Eshfsvc). It can't fail on the old code, which had no function to call.
-	- Branch: dpirand
-	- Commit: c9b40aa
-
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -533,38 +513,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: 20261014, by the random test.
 	- Progress log:
 		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
-
-- Windows: a tab keeps naming a program started from cmd after it exits
-	- ID: 2026101407014142
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261014-070141
-	- Opened by: CC
-	- Related IDs: 2026100907341819
-	- Target OS: Windows
-	- Test environment: b29w
-	- Steps to reproduce:
-		- Open a window with cmd as its shell.
-		- Run `silkterm --wallpaper <file> & cls`.
-	- Incorrect behavior: The tab reads `Windows Cmd [silkterm]` after the command is done and cmd is back at its prompt.
-	- Expected behavior: No program in the tab once cmd is back at its prompt.
-	- Reproduced: 20261014 on b29w, in the `livecfg` scenario's shot of window E.
-		- 20261014 on b29w: Confirmed with a small program that sleeps 3 seconds and has no console. Run from cmd, the tab read `[nap]` while it ran and still did 2 seconds after it ended. Clicking the window and pressing a key changed it to `[last: nap]`.
-	- Possible cause: cmd doesn't wait for a GUI program, so `cls` ran while silkterm.exe was still alive. On Windows the program is a live child of the shell, kept until the terminal stirs (G38). Nothing stirs after the `cls`, so the old answer stays. Not confirmed.
-	- Actual cause: As above. The cached answer waits for output or a key, and a program cmd didn't wait for ends after the prompt, with nothing printed.
-	- Actual fix: The child the probe names is watched by the system's thread pool. When it ends the pane is told, and the next frame asks again.
-		- Cost: no polling. One process handle and one wait for each command found, and one event plus one more look at the process list when it ends. That look would have come at the next key anyway.
-	- Note: Once it ends the tab reads `[last: <program>]`, as after any other command.
-	- Verified:
-		- New Windows scenario `cmdgui`: failed on dev, passes on the branch, where the tab read `[last: nap]` with nothing typed. `livecfg`'s window E now reads `Windows Cmd [last: silkterm]`.
-		- `a_watched_command_says_when_it_ends` passes on b29w and fails with the wait's callback emptied. Unit suite, clippy for Linux and Windows, and fmt pass.
-	- Swept: `command_child` is the one probe on Windows. It answers the tab label, the minimap's running program, and copy-output's at-prompt check, so all three get the news. Read only: copy-output stayed armed for such a command until the next key. Unix asks the foreground process group, which a program the shell didn't wait for isn't in.
-	- Branch: conpty
-	- Commit: ca25198
-	- Test case: `a_watched_command_says_when_it_ends` (Esgn52X), seen failing with the callback emptied; wingui scenario `cmdgui` (EsgiFgO), seen failing on dev.
-	- Acceptance signoff: Self-closed: cause confirmed, red before and green after on b29w.
-	- Closed: 20261014-083844
+			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
@@ -5643,6 +5592,60 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: none, since it only changes a printed size. The next pipeline run shows it.
 	- Acceptance signoff: Self-closed: mechanical
 	- Closed: 20261013-223814
+
+- Windows: a tab keeps naming a program started from cmd after it exits
+	- ID: 2026101407014142
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261014-070141
+	- Opened by: CC
+	- Related IDs: 2026100907341819
+	- Target OS: Windows
+	- Test environment: b29w
+	- Steps to reproduce:
+		- Open a window with cmd as its shell.
+		- Run `silkterm --wallpaper <file> & cls`.
+	- Incorrect behavior: The tab reads `Windows Cmd [silkterm]` after the command is done and cmd is back at its prompt.
+	- Expected behavior: No program in the tab once cmd is back at its prompt.
+	- Reproduced: 20261014 on b29w, in the `livecfg` scenario's shot of window E.
+		- 20261014 on b29w: Confirmed with a small program that sleeps 3 seconds and has no console. Run from cmd, the tab read `[nap]` while it ran and still did 2 seconds after it ended. Clicking the window and pressing a key changed it to `[last: nap]`.
+	- Possible cause: cmd doesn't wait for a GUI program, so `cls` ran while silkterm.exe was still alive. On Windows the program is a live child of the shell, kept until the terminal stirs (G38). Nothing stirs after the `cls`, so the old answer stays. Not confirmed.
+	- Actual cause: As above. The cached answer waits for output or a key, and a program cmd didn't wait for ends after the prompt, with nothing printed.
+	- Actual fix: The child the probe names is watched by the system's thread pool. When it ends the pane is told, and the next frame asks again.
+		- Cost: no polling. One process handle and one wait for each command found, and one event plus one more look at the process list when it ends. That look would have come at the next key anyway.
+	- Note: Once it ends the tab reads `[last: <program>]`, as after any other command.
+	- Verified:
+		- New Windows scenario `cmdgui`: failed on dev, passes on the branch, where the tab read `[last: nap]` with nothing typed. `livecfg`'s window E now reads `Windows Cmd [last: silkterm]`.
+		- `a_watched_command_says_when_it_ends` passes on b29w and fails with the wait's callback emptied. Unit suite, clippy for Linux and Windows, and fmt pass.
+	- Swept: `command_child` is the one probe on Windows. It answers the tab label, the minimap's running program, and copy-output's at-prompt check, so all three get the news. Read only: copy-output stayed armed for such a command until the next key. Unix asks the foreground process group, which a program the shell didn't wait for isn't in.
+	- Branch: conpty
+	- Commit: ca25198
+	- Test case: `a_watched_command_says_when_it_ends` (Esgn52X), seen failing with the callback emptied; wingui scenario `cmdgui` (EsgiFgO), seen failing on dev.
+	- Acceptance signoff: Self-closed: cause confirmed, red before and green after on b29w.
+	- Closed: 20261014-083844
+
+- The shell is told the old cell size in pixels after a zoom or scale change that keeps the grid
+	- ID: 2026101412025603
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261014-120256
+	- Opened by: CC
+	- Related IDs: 2026100114435600, 2026101412311921
+	- Target OS: All
+	- Steps to reproduce:
+		- Move a window to a monitor at another scale, or zoom the font, so that the grid stays the same.
+		- Read the window's size in pixels from a program in it, as image viewers do.
+	- Incorrect behavior: The size in pixels is the old one.
+	- Expected behavior: It's the new cell size times the grid.
+	- Reproduced: Only in the code. A pane's resize told the shell nothing whenever the grid was unchanged. In a window today the grid always moves for a moment on a scale change (2026101412311921), and that tells the shell. Once that's fixed, a scale change that keeps the grid would leave the old size.
+	- Actual fix: A new cell size is told to the shell even when the grid is the same.
+	- Test case: `a_new_cell_size_is_told_to_the_shell_even_on_the_same_grid` (Eshfsvc). It can't fail on the old code, which had no function to call.
+	- Branch: dpirand
+	- Commit: c9b40aa
+	- Acceptance signoff: Self-closed: the fix does what the item asks and no more, and its test passes.
+	- Closed: 20261014-152600
 
 - Settings tips end with the current and default values where they differ
 	- ID: 2026100910295905
