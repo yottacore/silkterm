@@ -28,7 +28,9 @@ supposed to hold:
                     (the nano wobble). One frame is enough - a still screen builds
                     only when something changes. The output must be seen easing
                     before the swap, or there was nothing to stop and the check
-                    tested nothing.
+                    tested nothing. The scene waits for that before it swaps, so
+                    no ease is a skip when its --note says the wait ran out, and
+                    a failure otherwise.
   --mode instant  : screen clears on the normal screen, between an alt-screen trip
                     that scrolls down a line at a time and one that scrolls down
                     9 lines at once. A clear shows at
@@ -54,12 +56,22 @@ app_off, so the position stays continuous across steps. Any reversal is a bounce
 import argparse
 import re
 import sys
+from pathlib import Path
 
 TRACE = re.compile(
     r"SCROLLDBG f=(\d+) pane=(\d+) sh=(-?\d+) app_off=(-?[\d.]+) "
     r"slide_sh=(-?[\d.]+) st=(\d+) sb=(\d+) frac=([\d.]+)"
     r"(?: alt=(\d))?(?: ob=(\d+))?"
 )
+
+
+def read_note(path: str) -> str:
+    if not path:
+        return ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
 
 
 def main() -> int:
@@ -71,6 +83,8 @@ def main() -> int:
     ap.add_argument("--eps", type=float, default=0.02)
     # frames traced before the scene's loop began, which the check must not judge
     ap.add_argument("--skip-frames", type=int, default=0)
+    # what the scene wrote when it gave up waiting on its trace
+    ap.add_argument("--note", default="")
     a = ap.parse_args()
 
     frames = []
@@ -143,6 +157,10 @@ def main() -> int:
             return 2
         # the trace only prints a normal-screen frame that carries a fraction
         if not any(f["alt"] == 0 and f["frac"] > a.eps for f in frames[:swap]):
+            note = read_note(a.note)
+            if note:
+                out("SKIP", f"the scene saw {note} (busy box?), so nothing was tested")
+                return 2
             out("FAIL", "no output was easing when the alt screen took over, so nothing was tested")
             return 1
         frames = [f for f in frames if f["alt"] == 1]
@@ -234,3 +252,4 @@ if __name__ == "__main__":
 
 ##	History:
 ##		- 20260706 JC: Created.
+##		- 20261013 JC: --note, so altenter's wait running out is a skip.

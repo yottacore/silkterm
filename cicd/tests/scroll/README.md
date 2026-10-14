@@ -34,7 +34,7 @@ Scenes self-scroll on a timer (no key injection - unreliable here), so the trace
 | paste / pasteil | input box on a half-empty normal screen growing a line a step, repainted / insert-line             | popin: no step down ever slides (app_off never below 0)
 | clear           | `clear`, `tput clear`, Ctrl+L's bytes and a reset over a full screen, scrollback full and then not | instant: no normal-screen frame between the two alt-screen marks carries a fraction
 
-`altenter` is a different check: 400 lines of plain output, a short gap so the ease is mid-flight, then the alt screen. The alt grid has no scrollback, so the view has to be at rest the moment it swaps in; a leftover ease renders as the fraction wrapping through a whole cell once per line of backlog, which is the nano wobble. One frame is enough, since a still screen only builds when something changes. The scene is `scenes/altenter.bash`; a scene with a script of its own under `scenes/` runs that instead of `scene.bash`.
+`altenter` is a different check: 400 lines of plain output, then the alt screen as soon as the trace shows them easing, so the ease is mid-flight. The scene reads its own trace for that, since a fixed gap missed the ease on a busy box. The alt grid has no scrollback, so the view has to be at rest the moment it swaps in; a leftover ease renders as the fraction wrapping through a whole cell once per line of backlog, which is the nano wobble. One frame is enough, since a still screen only builds when something changes. The scene is `scenes/altenter.bash`; a scene with a script of its own under `scenes/` runs that instead of `scene.bash`.
 
 Title-bar apps (nano, muffer) slide again: `SLIDE_TOP_BAND_APPS = true` in `pane.rs`, with the reveal gap filled by the scrolled-off strip (the styled rows each step pushes out of the region), so the fill is exact and nothing repositions. If the toggle is ever turned back off, change the nano/muffer scenes from `slide` back to `hardcut` in `run.bash`.
 
@@ -44,7 +44,7 @@ The repaint scenes exercise the fingerprint detector; the `tmux` scene exercises
 
 `0` all pass, `1` a real regression was measured, `3` nothing ran because something is missing (the binary, `python3`, the display or `cage`). cicd reports a `3` as skipped for that arm, never as OK.
 
-A scene with too little trace or that never scrolled is a **skip** (an environment or timing miss), non-fatal unless `--strict`, but a run where no scene passed fails. A slide scene that scrolled and never slid fails. So does an `altenter` run where no output was easing when the alt screen took over, since it tested nothing.
+A scene with too little trace or that never scrolled is a **skip** (an environment or timing miss), non-fatal unless `--strict`, but a run where no scene passed fails. A slide scene that scrolled and never slid fails. So does an `altenter` run where no output was easing when the alt screen took over, since it tested nothing. The one exception is when the scene waited 10 s for the ease and never saw it. It leaves a note saying so, and the run is a skip.
 
 `clear` checks frames that should never be drawn moving, and a frame at rest prints nothing, so it brackets the clears with two short trips to the alt screen. The first scrolls down a line at a time and the second 9 lines at once, which is how the check tells the start from the end. A burst before the first trip has to be seen easing, or the run tested nothing and fails.
 

@@ -43,9 +43,11 @@ fCase "nothing ran, nothing skipped"  1      0    0    0    0
 fCase "a skip with passes, lenient"   0      3    0    1    0
 fCase "a skip with passes, strict"    1      3    0    1    1
 
-## analyze.py on made-up traces, one frame per line: sh app_off frac alt
+## analyze.py on made-up traces, one frame per line: sh app_off frac alt.
+## Anything after the frames goes to analyze.py as it is.
 fAnalyze(){
 	local -r what="${1}" wantRc="${2}" mode="${3}" frames="${4}"
+	shift 4
 	local out rc=0
 	out="$(
 		n=0
@@ -53,7 +55,7 @@ fAnalyze(){
 			printf 'SCROLLDBG f=%d pane=0 sh=%s app_off=%s slide_sh=0.0000 st=0 sb=1 frac=%s alt=%s ob=0\n' \
 				"${n}" "${sh}" "${app}" "${frac}" "${alt}"
 			n=$((n + 1))
-		done <<<"${frames}" | python3 "${meDir}/analyze.py" --mode "${mode}" --expect-st 0 --expect-sb 1 --label test
+		done <<<"${frames}" | python3 "${meDir}/analyze.py" --mode "${mode}" --expect-st 0 --expect-sb 1 --label test "${@}"
 	)" || rc=$?
 	fExpect "${what}" "${wantRc}" "${rc}" "${out}"
 }
@@ -87,6 +89,18 @@ fAnalyze "an ease left running on the alt screen" 1 still "0 0 0.5 0
 0 0 0.4 1
 0 0 0 1"
 fAnalyze "no alt screen at all" 2 still "0 0 0.5 0"
+## altenter waits for the ease before it swaps, and says so when it gives up
+noteDir="$(mktemp -d)"
+echo "no ease within 10s" >"${noteDir}/gaveup.note"
+fAnalyze "no ease, the scene gave up waiting" 2 still "0 0 0 1
+0 0 0 1" --note "${noteDir}/gaveup.note"
+fAnalyze "no ease, and no note" 1 still "0 0 0 1
+0 0 0 1" --note "${noteDir}/missing.note"
+fAnalyze "an ease, with a note anyway" 0 still "0 0 0.5 0
+0 0 0 1" --note "${noteDir}/gaveup.note"
+fAnalyze "a note does not excuse an ease left running" 1 still "0 0 0.5 0
+0 0 0.4 1" --note "${noteDir}/gaveup.note"
+rm -f "${noteDir}/gaveup.note"; rmdir "${noteDir}"
 
 ## frame counts, for a trace with frames, one with none and no trace at all
 fCount(){
@@ -131,3 +145,4 @@ echo "all passed"
 ##		- 20260908 JC: Created.
 ##		- 20260915 JC: Trace checks and the skips before any scene runs.
 ##		- 20260917 JC: Frame counts.
+##		- 20261013 JC: altenter's note.
