@@ -246,6 +246,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261014: Fails on Wayland: a window dropped mostly on the 200% output, with a sliver still on a 100% one, takes the last size anywhere instead of the 200% output's own. It did so 3 times out of 3. A clean drop onto the 200% output showed that wrong size for 4 s, until the pointer came back, once in 5 runs.
 			- Cause: the monitor's name mixes 2 outputs. The resolution comes from the first output the window entered and still touches, and the scale from the window, which follows the other one. So it reads `1920x1080_200pct`, which no monitor is.
 			- Filed as 2026101409220514. The monwl test goes into the pipeline once that's fixed.
+		- 20261014: The sliver drop is fixed (2026101409220514) and monwl is in the pipeline. A random test of the feature runs there too (2026101410442550). It filed 10 more items, 3 of them fixed.
 		- Choices made here, still open:
 			- The font zoom is remembered under Remember last size, with no switch of its own, as px on the font size. Zooming saves the grid too, so the window reopens at the same pixel size.
 			- A monitor with no entry of its own gets the last size anywhere, at launch and after a move, as the requirements say.
@@ -253,7 +254,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- The per-monitor sizes are kept only while both switches are on. The last size anywhere is kept either way, as before.
 	- Note: A monitor is told apart by its resolution, its scale percent, and its physical size in mm where the system gives it. X11 reads the size from the X server, Windows from the EDID it keeps in the registry, and macOS from `CGDisplayScreenSize`. Wayland gives no size, so there it is resolution and scale.
 	- Note: Wayland gives a window no position and no move events. It opens at the last size anywhere, and looks for its monitor just after it opens, on a scale change, and when the pointer comes back after a drag. So there a window may resize a moment after it opens.
-	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_has_the_remembered_size_as_live_lines`. On Wayland, `cicd/tests/monwl/run.bash` (Esgxleh). It fails at its sliver drop for now, so it isn't in the pipeline yet.
+	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_has_the_remembered_size_as_live_lines`. On Wayland, `cicd/tests/monwl/run.bash` (Esgxleh). On random layouts and steps, `cicd/tests/dpirand/run.py` (EshVccz).
 	- Verified:
 		- The unit tests on Linux, and clippy with warnings as errors for Linux, Windows and macOS.
 		- On one X11 monitor: opening at the monitor's own size and zoom, a move taking the other's, a resize before the move saved for the monitor it left, a resize right after the move kept, and a command-line size held until resized by hand.
@@ -303,7 +304,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wayland: a window dropped across a 100% and a 200% output takes the last size anywhere, not its monitor's own
 	- ID: 2026101409220514
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261014-092205
 	- Opened by: CC
@@ -316,6 +317,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: It takes the size saved for the output most of it is on.
 	- Reproduced: 20261014, 3 of 3 sliver drops, with `cicd/tests/monwl/run.bash` (Esgxleh).
 	- Possible cause: The monitor's name mixes 2 outputs. In `MonitorId::find` the resolution comes from the first output the window entered and still touches, and the scale from the window, which follows the other one. So it reads `1920x1080_200pct`, which no monitor is.
+	- Actual cause: As guessed, and measured. At the drop the window was drawn at 2 while winit still named HEADLESS-1, the 100% output it entered first.
+	- Actual fix: The monitor named is the one the window is drawn for. That's the first output when its scale matches. Otherwise it's the only other output at the window's scale, or the only one of those that most of a window this size could be on while it still touches the first. When no one output fits, none is named and the window keeps its size, rather than take the size of a monitor that isn't there.
+	- Note: Still mixed: a 125% or 150% output beside another whose scale rounds to the same whole number (2026101411554909).
+	- Swept: The other place a monitor's name is built is X11, which asks the X server which monitor the window overlaps most, so it never mixed 2. On Windows and macOS the monitor winit names and the window's scale come from the same monitor.
+	- Test case: `cicd/tests/monwl/run.bash` (Esgxleh), now in the pipeline. `a_window_astride_two_outputs_is_named_for_the_one_it_is_drawn_for` (EshSMlf), and the fuzz target `a_wayland_window_is_named_for_the_output_its_scale_is_from` (EshXuye) with its generator check (EshXv10).
+	- Verified:
+		- monwl failed its 3 sliver checks before the fix, twice more here, and passed 3 runs of 3 after.
+		- The fuzz target for 20 s, about 4 million cases. With the old lookup put back, the random test failed at the sliver drop in both cases tried.
+		- 60 random cases in 3 runs of 10 to 15 minutes, after the test settled. Every failure in them was a filed fault, the X11 fullscreen save fixed here, or a fault in the test, since fixed, except 2026101413420431, which still fails it now and then.
+	- Branch: dpirand
+	- Commit: c9b40aa
+	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
+	- Closed: 20261014-134300
 
 - Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
 	- ID: 2026101408384488
@@ -352,7 +366,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
 	- ID: 2026101410442550
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Priority: Avg
 	- Opened: 20261014-104425
 	- Opened by: JC
@@ -364,6 +378,225 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The expected behavior still has to be predictable, to judge against actual.
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261014: Built as `cicd/tests/dpirand/run.py`. It's in the pipeline after monwl, skipped under `--quick`, but off for now (`DPIRAND_SECS=0` in `cicd/config.bash`), since it still fails now and then on 2026101413420431. 150 s there runs about 5 cases. `SILK_DPIRAND_SECS` sets the time, and `--seed` runs one case again.
+		- 20261014: Each case comes from one seed. It has 2 to 4 outputs at their own resolutions and scales, whole and fractional, on native Wayland or X11 through Xwayland, with sizes and font zooms kept for some of them. Then come moves, drags, drops with a sliver left behind, held drags, resizes, font zooms, scale changes, fullscreen and back, and relaunches, some with a size or font size on the command line.
+		- 20261014: A model of the requirements says which monitor the window should count itself on, and which size and font zoom it should take or save. The font zoom is checked by the cell size the shell is told, and the sizes on disk at the end. What a platform can't tell a window is allowed by name and counted, and so are known faults, by their item, until fixed.
+		- 20261014: Filed from it: 2026101411504818, 2026101413075422 and 2026101412025603, fixed, and 2026101411554909, 2026101411555009, 2026101412003308, 2026101412311921, 2026101412392529, 2026101412292756 and 2026101413420431.
+	- Test case: `cicd/tests/dpirand/run.py` (EshVccz).
+	- Verified:
+		- 60 random cases in 3 runs of 10 to 15 minutes, after the test settled. Every failure in them was a filed fault, the X11 fullscreen save fixed here, or a fault in the test, since fixed, except 2026101413420431, which still fails it now and then.
+		- It failed against 3 planted faults: the old monitor lookup, a kept font zoom not taken, and the text not rebuilt after one was.
+	- Branch: dpirand
+	- Commit: c9b40aa, 2f9d4a3, d49f765
+
+- Wayland: a window whose first frame is slow to show never takes its monitor's size
+	- ID: 2026101411504818
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261014-115048
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway, the debug build drawing in software
+	- Steps to reproduce:
+		- Keep a size for an output, and open a window there whose first frame takes more than about 0.75 s to show.
+	- Incorrect behavior: The window stays at the last size anywhere. It takes its monitor's size only if something later makes it look again, such as a scale change.
+	- Expected behavior: It takes its monitor's size a moment after it opens.
+	- Reproduced: 20261014, by the random test, in 4 of 7 Wayland launches in one run.
+	- Actual cause: sway tells the window its scale when it maps it, but which output it is on only once its first frame is up there, 1.5 s later here. The look 0.75 s after the window showed found no output, and nothing looked again.
+	- Actual fix: While a Wayland window is on no output yet, it looks again every quarter second, for up to 10 s.
+	- Test case: `a_wayland_window_on_no_output_yet_looks_again` (EshcYxg), and `cicd/tests/dpirand/run.py --seed 6000016`, which fails at its launch with the fix taken out and passes with it.
+	- Branch: dpirand
+	- Commit: c9b40aa
+	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
+	- Closed: 20261014-134300
+
+- X11: a window the window manager makes fullscreen has its fullscreen size saved as the size to open at
+	- ID: 2026101413075422
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261014-130754
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, X11 through Xwayland under headless sway
+	- Steps to reproduce:
+		- On X11, make the window fullscreen with the window manager's own key or menu, not SilkTerm's.
+		- Wait a second, then leave fullscreen or close the window.
+	- Incorrect behavior: The fullscreen size is saved as the last size anywhere and for the monitor, so the next window opens that big.
+	- Expected behavior: A fullscreen size is never saved, as when SilkTerm's own key makes the window fullscreen.
+	- Reproduced: 20261014, by the random test, 3 of 3 X11 fullscreen steps in one run.
+	- Actual cause: winit on X11 knows only of a fullscreen the program asked for itself, so one the window manager set went unseen.
+	- Actual fix: On X11 fullscreen is also read from the window manager's state on the window.
+	- Swept: Both places the size code asks whether the window is fullscreen, the save and taking a monitor's size, use the new check. Maximized was already read from the window manager's state. The Fullscreen menu item still asks winit, so after the window manager's fullscreen it offers to go fullscreen; left as it is.
+	- Test case: `cicd/tests/dpirand/run.py`, its fullscreen step on X11. Seeds 7504938 and 7504931 failed there before the fix and pass after.
+	- Branch: dpirand
+	- Commit: 2f9d4a3
+	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
+	- Closed: 20261014-134300
+
+- The shell is told the old cell size in pixels after a zoom or scale change that keeps the grid
+	- ID: 2026101412025603
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261014-120256
+	- Opened by: CC
+	- Related IDs: 2026100114435600, 2026101412311921
+	- Target OS: All
+	- Steps to reproduce:
+		- Move a window to a monitor at another scale, or zoom the font, so that the grid stays the same.
+		- Read the window's size in pixels from a program in it, as image viewers do.
+	- Incorrect behavior: The size in pixels is the old one.
+	- Expected behavior: It's the new cell size times the grid.
+	- Reproduced: Only in the code. A pane's resize told the shell nothing whenever the grid was unchanged. In a window today the grid always moves for a moment on a scale change (2026101412311921), and that tells the shell. Once that's fixed, a scale change that keeps the grid would leave the old size.
+	- Actual fix: A new cell size is told to the shell even when the grid is the same.
+	- Test case: `a_new_cell_size_is_told_to_the_shell_even_on_the_same_grid` (Eshfsvc). It can't fail on the old code, which had no function to call.
+	- Branch: dpirand
+	- Commit: c9b40aa
+
+- Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
+	- ID: 2026101411554909
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-115549
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101409220514
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Put a 150% output beside a 200% one, or a 125% one beside a 150% one.
+		- Drag a window from one to the other and drop it with a sliver left behind.
+	- Incorrect behavior: It takes the last size anywhere, as 2026101409220514 did, since it reads one output's resolution at the other's scale. And with a 200% output between two at 100%, a window dropped off the 200% one with a sliver left keeps its size.
+	- Expected behavior: It takes the size kept for the output most of it is on.
+	- Reproduced: 20261014, by the random test, a few times in each run of cases.
+	- Possible cause: winit gives each Wayland output's scale as a whole number, so 125%, 150% and 200% all read 2. The real scale needs each output's size in the layout, which winit keeps to itself, as it does the list of outputs a window is on.
+	- Notes:
+		- The random test allows it by this ID until it's fixed.
+
+- A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
+	- ID: 2026101411555009
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261014-115550
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway, native Wayland and X11 through Xwayland
+	- Steps to reproduce:
+		- Drag a window by its title bar over a monitor at another scale on Wayland, or over any other monitor under XWayland, and hold it there for a second before letting go.
+	- Incorrect behavior: It takes that monitor's size while still held. Dropped soon after on another monitor, it can keep that size there.
+	- Expected behavior: Nothing changes until it's dropped, then it takes the size for where it was dropped.
+	- Reproduced: 20261014, by the random test, on both, a few times in each run of cases.
+	- Possible cause: A Wayland window gets no sign that a drag is under way, and looks 0.75 s after its scale changes. Under XWayland the X server can't see a button held on the compositor's title bar, so the check for a held button says no. The look after the drop can then fall in the grace after the window's own resize, which ignores moves.
+	- Notes:
+		- The requirements say the size changes once moving has stopped. Waiting longer would slow a keyboard move to another monitor, which gives no sign either.
+		- The random test allows it by this ID until it's fixed.
+
+- Wayland: a window opens a few cells off its size on a monitor whose scale isn't 100%
+	- ID: 2026101412003308
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261014-120033
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- On a 150% output, open SilkTerm with `--columns 80 --rows 24`.
+	- Incorrect behavior: It opens at 78x23. It's the same with Per monitor or Remember last size off, at the size it should open at.
+	- Expected behavior: 80x24.
+	- Reproduced: 20261014 on b23 under headless sway, at 150% and 200%.
+	- Possible cause: A Wayland window opens at 100%, and the compositor tells it its scale after. It keeps its size in the layout, and a font's cells don't grow quite in step with the scale, so the grid comes out a few cells off. A kept size taken right after puts it right, so it shows only when none is taken.
+	- Notes:
+		- Keeping the grid across any scale change would fix it, but that changes how every platform handles one.
+		- The random test allows it by this ID until it's fixed.
+
+- For a moment after a scale change, programs in the window are told a much smaller or larger grid
+	- ID: 2026101412311921
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-123119
+	- Opened by: CC
+	- Related IDs: 2026100114435600, 2026101412025603
+	- Target OS: All
+	- Test environment: b23, headless sway, seen on Wayland
+	- Steps to reproduce:
+		- Move a window from a 100% monitor to a 200% one, with something running that redraws on a resize.
+	- Incorrect behavior: The program is told a grid about half as wide and tall for a moment, then the right one. From 125% to 150% it was 71 columns for 87.
+	- Expected behavior: It's told only the new grid.
+	- Reproduced: 20261014, by the random test, in 2 drags from one run of cases.
+	- Possible cause: On a scale change the text is laid out again with the new cells but the window's old size in pixels, until the resize that follows arrives.
+	- Notes:
+		- The random test allows it by this ID until it's fixed.
+
+- Going fullscreen and back keeps a size for the monitor, though nobody set one there
+	- ID: 2026101412392529
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-123925
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- With Per monitor on, open a window on a monitor with no size kept for it.
+		- Make it fullscreen, then not.
+	- Incorrect behavior: The state file now keeps a size for that monitor, the one the window had. From then on that monitor no longer follows the last size anywhere. A window that wasn't at its monitor's own size when it went fullscreen writes over the size kept there.
+	- Expected behavior: Nothing is saved, since the user set no size.
+	- Reproduced: 20261014 on b23 under headless sway, 1 of 1, and by the random test, which saw a kept 68x37 written over with another monitor's 73x30.
+	- Possible cause: While fullscreen, the save holds back the size but still saves the font zoom, which makes an entry for the monitor. Then the resize back from fullscreen counts as the user's, and is saved there too. Leaving fullscreen can bring the pointer over the window, which on Wayland is a look, and the look skips taking a size while the window still counts as fullscreen. Taken for the user's resize, it also ends a size given on the command line.
+	- Notes:
+		- The random test allows it by this ID until it's fixed.
+
+- Wayland: a resize or zoom after a move the window wasn't told of is saved for the monitor it left, and the next look undoes it
+	- ID: 2026101413420431
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-134204
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101411554909
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- On Wayland, move a window by keyboard to another output at the same scale, so it isn't told.
+		- Resize it by keyboard, or zoom the font.
+		- Move the pointer over it.
+	- Incorrect behavior: The new size is saved for the output it left. When the pointer comes over it, it looks, finds the output it's on, and takes that one's size, undoing the resize. The same happens after it named a monitor that isn't there (2026101411554909).
+	- Expected behavior: The size is saved for the output it's on, and stays.
+	- Reproduced: 20261014, by the random test, 1 case in a run of 17, which still fails on it.
+	- Possible cause: The save goes to the monitor the window last named. On Wayland a look just before saving would name the one it's on now, but would save a resize made just before a move for the new monitor.
+	- Notes:
+		- The random test is off in the pipeline until this is handled, one way or the other.
+
+- A size saved while the font size was given on the command line is used at the normal font next time
+	- ID: 2026101412292756
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-122927
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 11` and resize it.
+		- Close it, and open it without the option.
+	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
+	- Reproduced: 20261014, by the random test.
+	- Progress log:
+		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720

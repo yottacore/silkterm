@@ -42,7 +42,7 @@ impl MonitorId {
 			let (px, mm) = under?;
 			return Self::new(px.0, px.1, scale, mm.map(|mm| upright(mm, px)));
 		}
-		let monitor = window.current_monitor()?;
+		let monitor = drawn_on(window, scale)?;
 		let px = monitor.size();
 		let size_mm = physical_mm(&monitor).map(|mm| upright(mm, (px.width, px.height)));
 		Self::new(px.width, px.height, scale, size_mm)
@@ -145,6 +145,150 @@ pub fn layout(window: &Window) -> Vec<(i64, i64, i64, i64)> {
 			)
 		})
 		.collect()
+}
+
+// The monitor whose scale the window is drawn at. On Wayland winit's current
+// monitor is the first output the window entered and still touches, while the
+// scale is the one of the output most of it is on. Dropped with a sliver left
+// on another output, the two differ, and the key read one output's resolution
+// at the other's scale (2026101409220514). Elsewhere they agree.
+fn drawn_on(window: &Window, scale: f64) -> Option<winit::monitor::MonitorHandle> {
+	let first = window.current_monitor()?;
+	if at_scale(first.scale_factor(), scale) {
+		return Some(first);
+	}
+	// winit lists each Wayland output twice
+	let mut monitors: Vec<winit::monitor::MonitorHandle> = vec![first];
+	for monitor in window.available_monitors() {
+		if !monitors.contains(&monitor) {
+			monitors.push(monitor);
+		}
+	}
+	let placed: Vec<Placed> = monitors
+		.iter()
+		.map(|m| Placed {
+			at: (i64::from(m.position().x), i64::from(m.position().y)),
+			px: (i64::from(m.size().width), i64::from(m.size().height)),
+			scale: m.scale_factor(),
+		})
+		.collect();
+	let px = window.inner_size();
+	let size = (f64::from(px.width) / scale, f64::from(px.height) / scale);
+	let at = other_at_scale(0, &placed, scale, size)?;
+	Some(monitors.swap_remove(at))
+}
+
+// Wayland gives an output's scale in whole numbers, so a 150% one reads as 2
+// while a window on it is drawn at 1.5.
+fn at_scale(monitor: f64, window: f64) -> bool {
+	(monitor - window).abs() < 0.01 || (monitor.fract() == 0.0 && monitor == window.ceil())
+}
+
+type Bounds = (f64, f64, f64, f64);
+
+/// A monitor as winit lists it: its place, its size in its own pixels, and
+/// its scale.
+#[derive(Clone, Copy, Debug)]
+struct Placed {
+	at: (i64, i64),
+	px: (i64, i64),
+	scale: f64,
+}
+
+impl Placed {
+	// Where it is in the layout, at its largest and its smallest. winit gives
+	// a Wayland output's place times its scale in whole numbers, and a 150%
+	// output says 2, so its real scale is anything above 1 up to 2.
+	fn largest(&self) -> Bounds {
+		let k = self.scale.max(1.0);
+		self.sized(if k.fract() == 0.0 && k > 1.0 {
+			k - 1.0
+		} else {
+			k
+		})
+	}
+
+	fn smallest(&self) -> Bounds {
+		self.sized(self.scale.max(1.0))
+	}
+
+	fn sized(&self, by: f64) -> Bounds {
+		let k = self.scale.max(1.0);
+		(
+			self.at.0 as f64 / k,
+			self.at.1 as f64 / k,
+			self.px.0 as f64 / by,
+			self.px.1 as f64 / by,
+		)
+	}
+}
+
+// The monitor a window is drawn for when `first` is at another scale: of the
+// ones at the window's scale, the only one most of a window this size could
+// be on while it still touches `first`. None when that is not one, which
+// keeps the window's size.
+fn other_at_scale(
+	first: usize,
+	monitors: &[Placed],
+	scale: f64,
+	size: (f64, f64),
+) -> Option<usize> {
+	let only = |found: Vec<usize>| (found.len() == 1).then(|| found[0]);
+	let at: Vec<usize> = (0..monitors.len())
+		.filter(|&i| at_scale(monitors[i].scale, scale))
+		.collect();
+	if at.len() < 2 {
+		return only(at);
+	}
+	only(
+		at.into_iter()
+			.filter(|&i| could_be_most_on(i, first, monitors, size))
+			.collect(),
+	)
+}
+
+// Could most of a window this size be on monitor `on`, while it touches
+// `first`? Tried at places a step apart, with `on` and `first` grown by half
+// a step and the rest shrunk by as much, so a place between two tries is never
+// missed. Each monitor is taken at its largest where that helps `on`, and at
+// its smallest where it doesn't.
+fn could_be_most_on(on: usize, first: usize, monitors: &[Placed], size: (f64, f64)) -> bool {
+	let (w, h) = size;
+	if w <= 0.0 || h <= 0.0 {
+		return false;
+	}
+	let first_at = monitors[first].largest();
+	let step = (w.min(h) / 8.0)
+		.max((first_at.2 + w) / 256.0)
+		.max((first_at.3 + h) / 256.0)
+		.max(4.0);
+	let half = step / 2.0;
+	let grown = |r: Bounds, by: f64| (r.0 - by, r.1 - by, r.2 + 2.0 * by, r.3 + 2.0 * by);
+	let touch = grown(first_at, half);
+	let mine = grown(monitors[on].largest(), half);
+	let rest: Vec<Bounds> = (0..monitors.len())
+		.filter(|&i| i != on)
+		.map(|i| grown(monitors[i].smallest(), -half))
+		.collect();
+	let area = |a: Bounds, b: Bounds| {
+		let x = (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0);
+		let y = (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1);
+		x.max(0.0) * y.max(0.0)
+	};
+	let mut y = touch.1 - h;
+	while y <= touch.1 + touch.3 {
+		let mut x = touch.0 - w;
+		while x <= touch.0 + touch.2 {
+			let win = (x, y, w, h);
+			let here = area(win, mine);
+			if here > 0.0 && area(win, touch) > 0.0 && rest.iter().all(|&o| area(win, o) <= here) {
+				return true;
+			}
+			x += step;
+		}
+		y += step;
+	}
+	false
 }
 
 // A rotated monitor reports its pixels turned and its millimeters not.
@@ -477,6 +621,51 @@ pub fn button_held(_window: &Window) -> bool {
 	false
 }
 
+/// Is the window fullscreen? winit on X11 knows only of a fullscreen the
+/// program asked for itself, so one the window manager set from its own key
+/// or menu had its size saved as the size to open at (2026101413075422).
+pub fn fullscreen(window: &Window) -> bool {
+	window.fullscreen().is_some() || wm_fullscreen(window)
+}
+
+#[cfg(target_os = "linux")]
+fn wm_fullscreen(window: &Window) -> bool {
+	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+	use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
+
+	let xid = match window.window_handle().map(|handle| handle.as_raw()) {
+		Ok(RawWindowHandle::Xlib(h)) => h.window as u32,
+		Ok(RawWindowHandle::Xcb(h)) => h.window.get(),
+		_ => return false,
+	};
+	let Ok((conn, _)) = x11rb::connect(None) else {
+		return false;
+	};
+	let atom = |name: &[u8]| {
+		conn.intern_atom(true, name)
+			.ok()
+			.and_then(|cookie| cookie.reply().ok())
+			.map(|reply| reply.atom)
+	};
+	let (Some(state), Some(full)) = (atom(b"_NET_WM_STATE"), atom(b"_NET_WM_STATE_FULLSCREEN"))
+	else {
+		return false;
+	};
+	conn.get_property(false, xid, state, AtomEnum::ATOM, 0, 64)
+		.ok()
+		.and_then(|cookie| cookie.reply().ok())
+		.is_some_and(|reply| {
+			reply
+				.value32()
+				.is_some_and(|mut atoms| atoms.any(|a| a == full))
+		})
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wm_fullscreen(_window: &Window) -> bool {
+	false
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -589,6 +778,58 @@ mod tests {
 		assert_eq!(monitor_under(hidden, Some((2500, 500)), &[]), None);
 	}
 
+	// A Wayland window dropped mostly on a 200% output with a sliver left on a
+	// 100% one is drawn at 2, while winit's current monitor is still the 100%
+	// one it entered first. The key read 1920x1080_200pct, which no monitor is.
+	// Test ID: EshSMlf
+	#[test]
+	fn a_window_astride_two_outputs_is_named_for_the_one_it_is_drawn_for() {
+		let placed = |at, px, scale| Placed { at, px, scale };
+		// winit's numbers for monwl's layout: the place is times the scale
+		let h1 = placed((0, 0), (1920, 1080), 1.0);
+		let h2 = placed((3840, 0), (2560, 1600), 2.0);
+		let h3 = placed((0, 1080), (1280, 1024), 1.0);
+		let all = [h1, h2, h3];
+		let window = (1180.0, 496.0);
+		assert_eq!(
+			other_at_scale(0, &all, 2.0, window),
+			Some(1),
+			"the sliver drop"
+		);
+		// Back the other way, either 100% output could be it, since a 200%
+		// output may be a 150% one and reach further.
+		assert_eq!(other_at_scale(1, &all, 1.0, window), None);
+		// a 150% output says 2, and its window is drawn at 1.5
+		let frac = placed((3840, 0), (2560, 1440), 2.0);
+		assert_eq!(other_at_scale(0, &[h1, frac], 1.5, window), Some(1));
+		assert_eq!(
+			other_at_scale(0, &all, 3.0, window),
+			None,
+			"none at that scale"
+		);
+		// Two at 200% and the first at 100% between them: only the one the
+		// window can reach. The far one is past another 100% output.
+		let left = placed((0, 0), (2560, 1600), 2.0);
+		let mid = placed((1280, 0), (1920, 1080), 1.0);
+		let gap = placed((3200, 0), (1920, 1080), 1.0);
+		let far = placed((10240, 0), (2560, 1600), 2.0);
+		let row = [mid, left, gap, far];
+		assert_eq!(other_at_scale(0, &row, 2.0, (600.0, 400.0)), Some(1));
+		assert_eq!(
+			other_at_scale(0, &row, 2.0, (4000.0, 400.0)),
+			None,
+			"wide enough to reach both"
+		);
+
+		assert!(at_scale(1.0, 1.0));
+		assert!(at_scale(2.0, 1.5), "Wayland's whole number");
+		assert!(at_scale(1.25, 1.25), "Windows and macOS say it as it is");
+		assert!(!at_scale(2.0, 1.0));
+		assert!(!at_scale(1.0, 2.0));
+		assert!(!at_scale(1.0, 1.5));
+		assert!(!at_scale(1.5, 2.0));
+	}
+
 	// Test ID: EsDZDBp
 	#[test]
 	fn a_monitor_read_again_to_the_cm_is_the_same_monitor() {
@@ -657,5 +898,166 @@ mod tests {
 		);
 		assert_eq!(edid_key(r"DISPLAY#DEL40F4#x#{g}"), None);
 		assert_eq!(edid_key(r"\\?\DISPLAY##x#{g}"), None);
+	}
+
+	mod fuzz {
+		use super::super::{Placed, at_scale, other_at_scale, overlap};
+		use crate::fuzz::{self, Rng};
+
+		type Rect = (i64, i64, i64, i64);
+
+		const SIZES: [(i64, i64); 5] = [
+			(1920, 1080),
+			(1280, 800),
+			(1600, 900),
+			(2560, 1440),
+			(1080, 1920),
+		];
+		const SCALES: [f64; 5] = [1.0, 1.25, 1.5, 2.0, 3.0];
+
+		// A Wayland layout as the compositor has it: outputs edge to edge in
+		// its own units, each at a scale that may not be whole.
+		fn layout(rng: &mut Rng) -> Vec<(Rect, f64)> {
+			let mut outs: Vec<(Rect, f64)> = vec![((0, 0, 1920, 1080), *rng.pick(&SCALES))];
+			for _ in 0..=rng.below(4) {
+				let (w, h) = *rng.pick(&SIZES);
+				let scale = *rng.pick(&SCALES);
+				for _ in 0..50 {
+					let a = outs[rng.below(outs.len())].0;
+					let at = match rng.below(4) {
+						0 => (a.0 + a.2, a.1 + slide(rng, a.3, h)),
+						1 => (a.0 - w, a.1 + slide(rng, a.3, h)),
+						2 => (a.0 + slide(rng, a.2, w), a.1 + a.3),
+						_ => (a.0 + slide(rng, a.2, w), a.1 - h),
+					};
+					let r = (at.0, at.1, w, h);
+					if outs.iter().all(|&(o, _)| overlap(o, r) == 0) {
+						outs.push((r, scale));
+						break;
+					}
+				}
+			}
+			outs
+		}
+
+		// Where along a side of `len` something `size` long goes, sharing 100 of it.
+		fn slide(rng: &mut Rng, len: i64, size: i64) -> i64 {
+			let low = 100 - size;
+			low + rng.below((len - 100 - low + 1) as usize) as i64
+		}
+
+		// winit's numbers for an output: its place times its scale rounded up,
+		// its pixels, and that whole number as its scale.
+		fn seen(rect: Rect, scale: f64) -> Placed {
+			let whole = scale.ceil();
+			Placed {
+				at: (rect.0 * whole as i64, rect.1 * whole as i64),
+				px: (
+					(rect.2 as f64 * scale).round() as i64,
+					(rect.3 as f64 * scale).round() as i64,
+				),
+				scale: whole,
+			}
+		}
+
+		#[derive(Debug)]
+		struct Case {
+			outs: Vec<(Rect, f64)>,
+			touched: Vec<usize>,
+			first: usize,
+			primary: usize,
+			named: Option<usize>,
+		}
+
+		// A window somewhere on the layout. The compositor draws it at the
+		// scale of the output most of it is on; winit names the first output
+		// it entered, any of the ones it is on.
+		fn case(seed: u64) -> Case {
+			let mut rng = Rng::new(seed);
+			let outs = layout(&mut rng);
+			let on = outs[rng.below(outs.len())].0;
+			let (w, h) = (300 + rng.below(2200) as i64, 200 + rng.below(1300) as i64);
+			let point = (
+				on.0 + rng.below(on.2 as usize) as i64,
+				on.1 + rng.below(on.3 as usize) as i64,
+			);
+			let window = (
+				point.0 - rng.below(w as usize) as i64,
+				point.1 - rng.below(h as usize) as i64,
+				w,
+				h,
+			);
+			let areas: Vec<i64> = outs.iter().map(|&(o, _)| overlap(window, o)).collect();
+			let touched: Vec<usize> = (0..outs.len()).filter(|&i| areas[i] > 0).collect();
+			let primary = touched
+				.iter()
+				.copied()
+				.max_by_key(|&i| (areas[i], std::cmp::Reverse(i)))
+				.unwrap();
+			let first = touched[rng.below(touched.len())];
+			let scale = outs[primary].1;
+			let all: Vec<Placed> = outs.iter().map(|&(r, s)| seen(r, s)).collect();
+			let named = if at_scale(all[first].scale, scale) {
+				Some(first)
+			} else {
+				other_at_scale(first, &all, scale, (w as f64, h as f64))
+			};
+			Case {
+				outs,
+				touched,
+				first,
+				primary,
+				named,
+			}
+		}
+
+		fn check(seed: u64) {
+			let c = case(seed);
+			let scale = c.outs[c.primary].1;
+			let whole = |i: usize| c.outs[i].1.ceil();
+			if let Some(i) = c.named {
+				assert!(at_scale(whole(i), scale), "another scale: {c:?}");
+				assert!(c.touched.contains(&i), "one it isn't on: {c:?}");
+			}
+			let alike = (0..c.outs.len())
+				.filter(|&i| at_scale(whole(i), scale))
+				.count();
+			if !at_scale(whole(c.first), scale) && alike == 1 {
+				assert_eq!(c.named, Some(c.primary), "the only one at its scale: {c:?}");
+			}
+			if !at_scale(whole(c.first), scale) {
+				assert!(
+					c.named.is_none_or(|i| i == c.primary),
+					"another than the one most of it is on: {c:?}"
+				);
+			}
+		}
+
+		// A window astride outputs at other scales is named for the output most
+		// of it is on, which its scale is from, or for none. Never another one.
+		// Test ID: EshXuye
+		#[test]
+		fn a_wayland_window_is_named_for_the_output_its_scale_is_from() {
+			fuzz::soak("wlpick", check);
+		}
+
+		// The generator still reaches each way of naming one.
+		// Test ID: EshXv10
+		#[test]
+		fn the_layout_generator_reaches_every_branch() {
+			let (mut first, mut found, mut unsure) = (0, 0, 0);
+			for seed in 0..400 {
+				let c = case(seed);
+				match c.named {
+					Some(i) if i == c.first => first += 1,
+					Some(_) => found += 1,
+					None => unsure += 1,
+				}
+			}
+			assert!(
+				first > 0 && found > 0 && unsure > 0,
+				"{first} {found} {unsure}"
+			);
+		}
 	}
 }

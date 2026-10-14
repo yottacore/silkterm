@@ -991,6 +991,16 @@ fBuildTestRelease(){
 	## A window put back on a monitor that went dark and came back takes that
 	## monitor's size again. Exit 3 is a skip: no binary, sway, Xwayland or python3.
 	fRunTest_MaySkip cicd/tests/monwake/run.bash "window size after a monitor wakes"
+	## On native Wayland a window takes each output's own size once moved or
+	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
+	## binary, sway, python3 or software Vulkan.
+	fRunTest_MaySkip cicd/tests/monwl/run.bash "window size per Wayland output"
+	## The same on random layouts, scales and steps, judged against a model of
+	## what the window should do. A failure prints its seed and the line that runs
+	## it again. Exit 3 is a skip: no binary, sway, wtype, xdotool or software Vulkan.
+	if ((! quick)) && [[ "${DPIRAND_SECS:-0}" != 0 ]]; then
+		SILK_DPIRAND_SECS="${DPIRAND_SECS}" fRunTest_MaySkip cicd/tests/dpirand/run.py "window size per monitor, random cases"
+	fi
 	## A save after the config was deleted writes it again, keeping what it had.
 	## Exit 3 is a skip: no binary, display or xdotool.
 	fRunTest_MaySkip cicd/tests/delcfg/run.bash "save after the config was deleted"
