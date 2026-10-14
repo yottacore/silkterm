@@ -564,7 +564,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The scroll harness's altenter scene fails now and then when the box is busy
 	- ID: 2026101307482605
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261013-074826
 	- Opened by: CC
@@ -574,8 +574,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: the X11 arm fails with "no output was easing when the alt screen took over, so nothing was tested", and the pipeline stops there.
 	- Expected behavior: a timing miss is a skip, or the scene waits until the ease is running before it swaps the alt screen in.
 	- Reproduced: 20261013, once in the full pipeline at load 15 to 23. A rerun of the harness alone right after, at the same load, passed every scene.
+		- 20261013: before the fix, 6 of 6 runs of the scene alone failed this way with the harness and 16 busy processes held on the same 8 cores (load 19 to 22). 10 of 10 passed with the same 16 spread over all 32 cores.
 	- Notes:
 		- The harness README calls this case a failure on purpose, since the scene tested nothing. Its short gap before the alt screen is fixed, so a slow frame can let the ease finish first.
+	- Actual cause: the scene waited a fixed 0.25 s after its burst before it swapped the alt screen in. Even on a quiet box only 1 frame drew in that time. On a busy one none did, so the trace showed no ease before the swap.
+	- Actual fix: the scene reads its own trace and swaps as soon as a frame shows the burst easing, waiting up to 10 s. When the wait runs out it leaves a note beside the trace, and the analyzer reports a skip instead of a fail. Without the note, no ease before the swap still fails. A skip beside passes exits 0, and fails under `--strict`.
+	- Branch: altwait
+	- Commit: 58176b7
+	- Test case: scroll harness scene `altenter` (EjIG8ro), red 6 of 6 before the fix and green 10 of 10 after under the same load. 4 new note cases in `cicd/tests/scroll/verdict-test.bash` (EpHUoAK).
+	- Verified: 20261013, under that load the scene passed 10 of 10 on X11 and 5 of 5 on Wayland, and the full X11 harness passed 12 of 12. With the load stopped, the full X11 harness passed 12 of 12 and the scene 6 of 6. With the alt-screen clamp taken out of `Scroll::set_max`, the scene failed 3 of 3 under load with the ease still running on the alt screen, so it still tests what it should after the repaint and clear changes. A 0 s wait gave the skip.
+	- Sweep: the other scenes, for a fixed gap that a busy box can miss.
+	- Swept: Only `altenter` swaps on a fixed gap that has to land mid-ease. `clear` waits 3.8 s after its burst, and `chrome` and `aptbar` mark the frames to skip by the settle time in `run.bash`. Each passed under the same load, before and after.
+	- Acceptance signoff: Self-closed: reproduced, the scene fails before the fix and passes after under the same load, and it still fails with the wobble put back.
+	- Closed: 20261013-171405
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
