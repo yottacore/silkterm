@@ -64,6 +64,75 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
 
+- A TUI run inside tmux or screen keeps the minimap column
+	- ID: 2026101320095003
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20261013-200950
+	- Opened by: CC
+	- Parent ID: 2026101310563323
+	- Target OS: All
+	- Steps to reproduce:
+		- Turn the minimap on and start tmux or screen.
+		- Run htop or muffer inside it.
+	- Incorrect behavior: The column stays. SilkTerm sees only tmux or screen, which are listed and draw the whole screen themselves.
+	- Expected behavior: tmux and screen keep the column, and a TUI inside them that is not listed loses it, per the 20261013 answer on 2026101310563323.
+	- Reproduced: 20261013 on b23 in a window, htop inside tmux 3.6b and inside screen 4.09.
+	- Notes:
+		- Pre-next-cut.
+		- Telling what runs inside means asking tmux or screen, such as tmux's `pane_current_command` for the active pane. screen has nothing as plain.
+		- tmux reached through ssh loses the column today, since it is on the alt screen under `ssh`, which is not listed. A fix here wants to cover that too.
+	- Actual cause: SilkTerm only sees the tmux or screen client in the pane. Both are listed, since the map can follow what they draw, so what runs inside them never counted.
+	- Actual fix [Bug]: On Linux, tmux is asked which pane its client shows, and whether that pane is on its own screen or wants the mouse. The program running there is read along with each answer. A program there that isn't listed takes the column, the same as one run outside tmux. tmux itself still keeps it.
+		- tmux is asked once as it starts, then again only after the screen changed, at most twice a second. Each ask is a short tmux command of about 4 ms that the window never waits on.
+		- Not covered: screen. It has no plain way to say which window it shows, or whether that window is on its own screen. A program inside screen still keeps the column.
+		- Not covered: tmux over ssh. Nothing on this side can be asked, and the output alone doesn't say what runs inside tmux. It still loses the column with ssh.
+		- Not covered: a program inside tmux that redraws on the main screen and asks only for focus changes, as muffer's default view does. tmux doesn't report that per pane.
+		- macOS is filed as 2026101320425888. Windows has no tmux of its own.
+	- Verified: 20261013 on b23 in a window, tmux 3.6b. The column stays at the prompt inside tmux. htop and `seq 100 | fzf --height 10` inside it take the column and give it back when they exit. `seq 300000 | less` inside it keeps it. The build before kept the column through all three. htop inside screen 4.09 keeps it on both builds.
+		- The gate passed (fmt, clippy, 1300 tests), and clippy for the Windows and macOS targets.
+	- Progress log:
+		- 20261013: Waiting on signoff. On Linux, tmux now matches the 20261013 answer on 2026101310563323. screen, tmux over ssh and macOS don't yet.
+		- Question: is it OK to leave screen as it is? The only route left there is guessing from the window title screen shows.
+	- Branch: tuimap
+	- Commit: 6af6a94
+	- Test case: window test `cicd/tests/mapfollow/run.bash` (EsdlZTW), now with a real tmux. Its 2 checks for a program inside tmux fail on the build before and pass after. A third, for the shell inside tmux after less quits, failed on a first try of the fix that read the program between answers, and passes now.
+	- Swept: `sync_minimap` is the one place the column is decided, for every pane of the shown tab. The tab label still names tmux, since it says what the pane runs.
+
+- A piped command is not seen as running, so `cat file | less` loses the minimap column
+	- ID: 2026101320095004
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Avg
+	- Opened: 20261013-200950
+	- Opened by: CC
+	- Related IDs: 2026101310563323
+	- Target OS: Linux, macOS
+	- Steps to reproduce:
+		- Turn the minimap on.
+		- Run `cat file | less`, then `less file`.
+	- Incorrect behavior: The piped `less` loses the column, and `less file` keeps it. `seq 100 | fzf --height 10` keeps it, though fzf is not listed.
+	- Expected behavior: A pipeline counts as the program on screen, as the same program run alone does.
+	- Reproduced: 20261013 on b23 in a window, both cases.
+	- Possible cause: What runs is named by the terminal's foreground process group, through its first process. In a pipeline that is the first command, which has often exited already, so nothing is named.
+	- Notes:
+		- The tab label reads the same answer, so it likely names nothing for a pipeline either. Not checked.
+	- Actual cause: Confirmed. The program was named by the leader of the foreground process group, which is a pipeline's first stage. `cat file | less` lost its name as soon as cat exited, and `seq 300000 | less` was named seq while seq waited to write. The tab reads the same answer. It showed no program for the first and `[seq]` for the second.
+	- Actual fix [Bug]: The program is the last stage of the pipeline still running. A stage is a member of the group whose parent is not in it, so a program's own children don't count, and vim stays vim through `:!make`. Linux finds the stages under the pane's shell and macOS lists the group. The tab shows the same program.
+		- Windows has no process group, and names a live child of the shell as before. Unchanged.
+		- The lookup costs about 15 microseconds, at most 4 times a second per tab.
+	- Note: The tab names the last stage even while the first one runs, so `make | tee log` now reads `[tee]` where it read `[make]`. That choice is why this waits on signoff.
+	- Verified: 20261013 on b23 in a window, with real less and fzf. `cat /etc/services | less` and `seq 300000 | less` keep the column, and the tab reads `[less]` for both. The build before lost the column for both, and its tab showed no program and `[seq]`. `seq 100 | fzf --height 10` now loses the column like fzf alone does. It kept it before.
+		- 20261013 on b26, macOS 15: the group lookup run alone picked the last stage with the first alive and after it exited, and passed over a program's own child.
+		- The gate passed (fmt, clippy, 1300 tests), and clippy for the Windows and macOS targets.
+	- Progress log:
+		- 20261013: Waiting on signoff, for the tab's choice of the last stage.
+	- Branch: tuimap
+	- Commit: 6af6a94
+	- Test case: `a_pipeline_whose_first_stage_exited_is_named_for_the_last` (EsdqcVY), red with the lookup answering the leader, green after. `a_program_s_own_children_are_not_stages` (Esdqcbw). Window test `cicd/tests/mapfollow/run.bash` (EsdlZTW): its 2 pipeline checks fail on the build before and pass after.
+	- Swept: unix names what runs in one place, `running_program`, and the tab and the minimap both read it through `task()`. copy-output's `at_shell_prompt` only asks whether the shell is in front, which a pipeline doesn't change. The tmux check reads a pane's program the same way.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -368,45 +437,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- A TUI run inside tmux or screen keeps the minimap column
-	- ID: 2026101320095003
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261013-200950
-	- Opened by: CC
-	- Parent ID: 2026101310563323
-	- Target OS: All
-	- Steps to reproduce:
-		- Turn the minimap on and start tmux or screen.
-		- Run htop or muffer inside it.
-	- Incorrect behavior: The column stays. SilkTerm sees only tmux or screen, which are listed and draw the whole screen themselves.
-	- Expected behavior: tmux and screen keep the column, and a TUI inside them that is not listed loses it, per the 20261013 answer on 2026101310563323.
-	- Reproduced: 20261013 on b23 in a window, htop inside tmux 3.6b and inside screen 4.09.
-	- Notes:
-		- Pre-next-cut.
-		- Telling what runs inside means asking tmux or screen, such as tmux's `pane_current_command` for the active pane. screen has nothing as plain.
-		- tmux reached through ssh loses the column today, since it is on the alt screen under `ssh`, which is not listed. A fix here wants to cover that too.
-
-- A piped command is not seen as running, so `cat file | less` loses the minimap column
-	- ID: 2026101320095004
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261013-200950
-	- Opened by: CC
-	- Related IDs: 2026101310563323
-	- Target OS: Linux, macOS
-	- Steps to reproduce:
-		- Turn the minimap on.
-		- Run `cat file | less`, then `less file`.
-	- Incorrect behavior: The piped `less` loses the column, and `less file` keeps it. `seq 100 | fzf --height 10` keeps it, though fzf is not listed.
-	- Expected behavior: A pipeline counts as the program on screen, as the same program run alone does.
-	- Reproduced: 20261013 on b23 in a window, both cases.
-	- Possible cause: What runs is named by the terminal's foreground process group, through its first process. In a pipeline that is the first command, which has often exited already, so nothing is named.
-	- Notes:
-		- The tab label reads the same answer, so it likely names nothing for a pipeline either. Not checked.
-
 - Why can muffer not have a minimap?
 	- ID: 2026101318475899
 	- Type: Task
@@ -481,6 +511,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Incorrect behavior: the program gets nothing. The engine notes the mode, but the window's focus change never sends `CSI I` or `CSI O`.
 	- Expected behavior: focus in sends `CSI I` and focus out sends `CSI O` while the mode is on, as xterm does.
 	- Reproduced: 20261013, by reading the code. Nothing reads the mode outside the minimap, and the window's focus handler writes nothing to the shell.
+
+- macOS: a TUI run inside tmux keeps the minimap column
+	- ID: 2026101320425888
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261013-204258
+	- Opened by: CC
+	- Related IDs: 2026101320095003
+	- Target OS: macOS
+	- Steps to reproduce:
+		- Turn the minimap on and start tmux.
+		- Run htop inside it.
+	- Incorrect behavior: The column stays.
+	- Expected behavior: htop inside tmux loses the column, as on Linux since 2026101320095003.
+	- Notes:
+		- Asking tmux needs the client's own socket options and its TMUX settings. Linux reads them from /proc. macOS has them through sysctl's process arguments.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
