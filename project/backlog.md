@@ -328,8 +328,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The unit tests on Linux, and clippy with warnings as errors for Linux, Windows and macOS.
 		- On one X11 monitor: opening at the monitor's own size and zoom, a move taking the other's, a resize before the move saved for the monitor it left, a resize right after the move kept, and a command-line size held until resized by hand.
 		- The window's own resize after a move is not saved as the user's. With that check taken out, the last size anywhere was overwritten.
-	- Branch: permon
-	- Commit: 684d3a0, 754c9cb, 8624cc2
+	- Branch: permon, wlmon (the Wayland test)
+	- Commit: 684d3a0, 754c9cb, 8624cc2, 953c5a3
 	- Closed:
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
