@@ -72,6 +72,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened: 20261013-200950
 	- Opened by: CC
 	- Parent ID: 2026101310563323
+	- Related IDs: 2026101406273722
 	- Target OS: All
 	- Steps to reproduce:
 		- Turn the minimap on and start tmux or screen.
@@ -95,102 +96,11 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261013: Waiting on signoff. On Linux, tmux now matches the 20261013 answer on 2026101310563323. screen, tmux over ssh and macOS don't yet.
 		- Question: is it OK to leave screen as it is? The only route left there is guessing from the window title screen shows.
+		- 20261014: Answer (JC) on screen: OK to leave screen keeping the column if 2026101406273722 can be fixed. If the minimap there is always going to be broken like that, then no.
 	- Branch: tuimap
 	- Commit: 6af6a94
 	- Test case: window test `cicd/tests/mapfollow/run.bash` (EsdlZTW), now with a real tmux. Its 2 checks for a program inside tmux fail on the build before and pass after. A third, for the shell inside tmux after less quits, failed on a first try of the fix that read the program between answers, and passes now.
 	- Swept: `sync_minimap` is the one place the column is decided, for every pane of the shown tab. The tab label still names tmux, since it says what the pane runs.
-
-- A piped command is not seen as running, so `cat file | less` loses the minimap column
-	- ID: 2026101320095004
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Avg
-	- Opened: 20261013-200950
-	- Opened by: CC
-	- Related IDs: 2026101310563323
-	- Target OS: Linux, macOS
-	- Steps to reproduce:
-		- Turn the minimap on.
-		- Run `cat file | less`, then `less file`.
-	- Incorrect behavior: The piped `less` loses the column, and `less file` keeps it. `seq 100 | fzf --height 10` keeps it, though fzf is not listed.
-	- Expected behavior: A pipeline counts as the program on screen, as the same program run alone does.
-	- Reproduced: 20261013 on b23 in a window, both cases.
-	- Possible cause: What runs is named by the terminal's foreground process group, through its first process. In a pipeline that is the first command, which has often exited already, so nothing is named.
-	- Notes:
-		- The tab label reads the same answer, so it likely names nothing for a pipeline either. Not checked.
-	- Actual cause: Confirmed. The program was named by the leader of the foreground process group, which is a pipeline's first stage. `cat file | less` lost its name as soon as cat exited, and `seq 300000 | less` was named seq while seq waited to write. The tab reads the same answer. It showed no program for the first and `[seq]` for the second.
-	- Actual fix [Bug]: The program is the last stage of the pipeline still running. A stage is a member of the group whose parent is not in it, so a program's own children don't count, and vim stays vim through `:!make`. Linux finds the stages under the pane's shell and macOS lists the group. The tab shows the same program.
-		- Windows has no process group, and names a live child of the shell as before. Unchanged.
-		- The lookup costs about 15 microseconds, at most 4 times a second per tab.
-	- Note: The tab names the last stage even while the first one runs, so `make | tee log` now reads `[tee]` where it read `[make]`. That choice is why this waits on signoff.
-	- Verified: 20261013 on b23 in a window, with real less and fzf. `cat /etc/services | less` and `seq 300000 | less` keep the column, and the tab reads `[less]` for both. The build before lost the column for both, and its tab showed no program and `[seq]`. `seq 100 | fzf --height 10` now loses the column like fzf alone does. It kept it before.
-		- 20261013 on b26, macOS 15: the group lookup run alone picked the last stage with the first alive and after it exited, and passed over a program's own child.
-		- The gate passed (fmt, clippy, 1300 tests), and clippy for the Windows and macOS targets.
-	- Progress log:
-		- 20261013: Waiting on signoff, for the tab's choice of the last stage.
-	- Branch: tuimap
-	- Commit: 6af6a94
-	- Test case: `a_pipeline_whose_first_stage_exited_is_named_for_the_last` (EsdqcVY), red with the lookup answering the leader, green after. `a_program_s_own_children_are_not_stages` (Esdqcbw). Window test `cicd/tests/mapfollow/run.bash` (EsdlZTW): its 2 pipeline checks fail on the build before and pass after.
-	- Swept: unix names what runs in one place, `running_program`, and the tab and the minimap both read it through `task()`. copy-output's `at_shell_prompt` only asks whether the shell is in front, which a pipeline doesn't change. The tmux check reads a pane's program the same way.
-
-- Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
-	- ID: 2026101313381123
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261013-133811
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100307115829, 2026100907341819
-	- Target OS: All
-	- Requirements:
-		- Copy on select should be a persistent setting that new starts take up, but changes *not* shared between currently running sessions.
-			- Ditto minimap.
-			- Ditto tab strip, menu bar. Other settings that also observe this are OK.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261013: Copy on select, the minimap, the tab strip and the menu bar are saved when changed, and windows opened after start with them. Other running windows on the same settings file keep what they show. The window it was changed in takes it, its existing panes included for copy on select.
-		- 20261013: The menu bar was not saved before. It is now `window.menu_bar`, on by default, and `--hide-menu` still outranks it. It has no Settings row, like the tab strip.
-		- 20261013: Settings opened in a window shows that window's own value for these, so another window's save of one never shows there as changed, and an Apply of something else does not write it back.
-	- Decisions:
-		- 20261013: Best guess, for JC to confirm: the rule holds wherever the change came from, the View menu, the right-click menu, the menu bar's copy box or Settings.
-		- 20261013: Best guess on which settings follow it: the 4 named. Window frame and Bare window were never saved and stay per window. Everything else still shows in every window at once.
-		- 20261013: A new tab in a running window starts with that window's copy on select, not another window's.
-		- 20261013: Reload config in a window takes the file's values for these in that window. The other windows still keep theirs.
-	- Verified:
-		- The unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
-		- The new tests fail with the fix taken out. The window test fails on "b keeps its own" with only the window's keep taken out.
-		- `cicd/tests/livecfg/run.bash` on Linux: a minimap change in one window leaves the other alone, and a window opened after starts with it.
-		- Not verified: copy on select, the tab strip and the menu bar in a real window, which the unit tests cover. Windows and macOS were compiled only.
-	- Swept: every place a window takes another window's save (`follow_peer`, an open Settings following the file, Settings opening, Apply), and every menu that saves one of the 4.
-	- Branch: ownview
-	- Commit: 0a81ab6
-	- Test case: `another_windows_save_leaves_this_windows_view`, `an_open_dialog_shows_this_windows_view_over_another_windows_save`, `the_menu_bar_is_on_and_survives_a_save`, `a_new_window_opens_with_the_saved_menu_bar`, `cicd/tests/livecfg/run.bash` (EsaF4Qe, its "b keeps its own" and "d started with the saved minimap" checks).
-
-- Add "Bare window" back to the right-click menu, under "Menu bar"
-	- ID: 2026101313381124
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261013-133811
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Add "Bare window" back to right-click menu, under "Menu bar".
-	- Notes:
-		- Pre-next-cut.
-	- Against: the old-format Done item "Second pass over the UI/UX style guide, reconciling it against what is built" took it off that menu. The UI/UX style guide's known deviations list it too, and needs the same change.
-	- Progress log:
-		- 20261013: Bare window is back on the right-click menu, right under Menu bar, checked while the window is bare, with B as its letter as on View. The UI/UX style guide's menu rules and its known deviations say so now.
-	- Decisions:
-		- 20261013: This item is the newer call, so it wins over the style guide pass that took the row off.
-		- 20261013: On macOS the row stays, with no Menu bar row above it, since a Mac has no in-window bar.
-	- Verified: unit tests and clippy for Linux, Windows and macOS. Not looked at in a real window.
-	- Branch: ownview
-	- Commit: 0a81ab6
-	- Test case: `bare_window_is_on_the_right_click_menu_under_menu_bar`, plus the Bare window check in `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -495,6 +405,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+
+- The minimap inside tmux and less only shows the current screen
+	- ID: 2026101406273722
+	- Type: Bug
+	- Status: Queued
+	- Severity: High
+	- Opened: 20261014-062737
+	- Opened by: JC
+	- Related IDs: 2026101320095003, 2026101320095004
+	- Test environment: b23
+	- Steps to reproduce:
+		- Turn the minimap on, then run tmux, or less.
+	- Incorrect behavior: The minimap inside tmux and less only shows the current screen. And it shows it instantly, no smooth scroll.
+	- Expected behavior: The minimap works normally there, as it used to.
+	- Notes:
+		- Pre-next-cut.
+		- Regression. It used to work normally.
+		- The 20261014 answer on 2026101320095003 leaves screen keeping the column only if this can be fixed.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -1516,6 +1444,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- A piped command is not seen as running, so `cat file | less` loses the minimap column
+	- ID: 2026101320095004
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261013-200950
+	- Opened by: CC
+	- Related IDs: 2026101310563323, 2026101406273722
+	- Target OS: Linux, macOS
+	- Steps to reproduce:
+		- Turn the minimap on.
+		- Run `cat file | less`, then `less file`.
+	- Incorrect behavior: The piped `less` loses the column, and `less file` keeps it. `seq 100 | fzf --height 10` keeps it, though fzf is not listed.
+	- Expected behavior: A pipeline counts as the program on screen, as the same program run alone does.
+	- Reproduced: 20261013 on b23 in a window, both cases.
+	- Possible cause: What runs is named by the terminal's foreground process group, through its first process. In a pipeline that is the first command, which has often exited already, so nothing is named.
+	- Notes:
+		- The tab label reads the same answer, so it likely names nothing for a pipeline either. Not checked.
+	- Actual cause: Confirmed. The program was named by the leader of the foreground process group, which is a pipeline's first stage. `cat file | less` lost its name as soon as cat exited, and `seq 300000 | less` was named seq while seq waited to write. The tab reads the same answer. It showed no program for the first and `[seq]` for the second.
+	- Actual fix [Bug]: The program is the last stage of the pipeline still running. A stage is a member of the group whose parent is not in it, so a program's own children don't count, and vim stays vim through `:!make`. Linux finds the stages under the pane's shell and macOS lists the group. The tab shows the same program.
+		- Windows has no process group, and names a live child of the shell as before. Unchanged.
+		- The lookup costs about 15 microseconds, at most 4 times a second per tab.
+	- Note: The tab names the last stage even while the first one runs, so `make | tee log` now reads `[tee]` where it read `[make]`. That choice is why this waits on signoff.
+	- Verified: 20261013 on b23 in a window, with real less and fzf. `cat /etc/services | less` and `seq 300000 | less` keep the column, and the tab reads `[less]` for both. The build before lost the column for both, and its tab showed no program and `[seq]`. `seq 100 | fzf --height 10` now loses the column like fzf alone does. It kept it before.
+		- 20261013 on b26, macOS 15: the group lookup run alone picked the last stage with the first alive and after it exited, and passed over a program's own child.
+		- The gate passed (fmt, clippy, 1300 tests), and clippy for the Windows and macOS targets.
+	- Progress log:
+		- 20261013: Waiting on signoff, for the tab's choice of the last stage.
+		- 20261014: Answer (JC): the last stage seems to make more sense.
+	- Branch: tuimap
+	- Commit: 6af6a94
+	- Test case: `a_pipeline_whose_first_stage_exited_is_named_for_the_last` (EsdqcVY), red with the lookup answering the leader, green after. `a_program_s_own_children_are_not_stages` (Esdqcbw). Window test `cicd/tests/mapfollow/run.bash` (EsdlZTW): its 2 pipeline checks fail on the build before and pass after.
+	- Swept: unix names what runs in one place, `running_program`, and the tab and the minimap both read it through `task()`. copy-output's `at_shell_prompt` only asks whether the shell is in front, which a pipeline doesn't change. The tmux check reads a pane's program the same way.
+	- Acceptance signoff: JC, 20261014.
+	- Closed: 20261014-062737
+
 - muffer should not get a minimap
 	- ID: 2026101310563323
 	- Type: Bug
@@ -2479,6 +2443,70 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The Windows run this item came from named only these four. That full suite was not run again.
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
+
+- Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
+	- ID: 2026101313381123
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261013-133811
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100307115829, 2026100907341819
+	- Target OS: All
+	- Requirements:
+		- Copy on select should be a persistent setting that new starts take up, but changes *not* shared between currently running sessions.
+			- Ditto minimap.
+			- Ditto tab strip, menu bar. Other settings that also observe this are OK.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261013: Copy on select, the minimap, the tab strip and the menu bar are saved when changed, and windows opened after start with them. Other running windows on the same settings file keep what they show. The window it was changed in takes it, its existing panes included for copy on select.
+		- 20261013: The menu bar was not saved before. It is now `window.menu_bar`, on by default, and `--hide-menu` still outranks it. It has no Settings row, like the tab strip.
+		- 20261013: Settings opened in a window shows that window's own value for these, so another window's save of one never shows there as changed, and an Apply of something else does not write it back.
+	- Decisions:
+		- 20261013: Best guess, for JC to confirm: the rule holds wherever the change came from, the View menu, the right-click menu, the menu bar's copy box or Settings.
+		- 20261013: Best guess on which settings follow it: the 4 named. Window frame and Bare window were never saved and stay per window. Everything else still shows in every window at once.
+		- 20261013: A new tab in a running window starts with that window's copy on select, not another window's.
+		- 20261013: Reload config in a window takes the file's values for these in that window. The other windows still keep theirs.
+		- 20261014: JC confirmed both best guesses above, and that a saved hidden menu bar means new windows open without one.
+	- Verified:
+		- The unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- The new tests fail with the fix taken out. The window test fails on "b keeps its own" with only the window's keep taken out.
+		- `cicd/tests/livecfg/run.bash` on Linux: a minimap change in one window leaves the other alone, and a window opened after starts with it.
+		- Not verified: copy on select, the tab strip and the menu bar in a real window, which the unit tests cover. Windows and macOS were compiled only.
+	- Swept: every place a window takes another window's save (`follow_peer`, an open Settings following the file, Settings opening, Apply), and every menu that saves one of the 4.
+	- Branch: ownview
+	- Commit: 0a81ab6
+	- Test case: `another_windows_save_leaves_this_windows_view`, `an_open_dialog_shows_this_windows_view_over_another_windows_save`, `the_menu_bar_is_on_and_survives_a_save`, `a_new_window_opens_with_the_saved_menu_bar`, `cicd/tests/livecfg/run.bash` (EsaF4Qe, its "b keeps its own" and "d started with the saved minimap" checks).
+	- Acceptance signoff: JC, 20261014.
+	- Closed: 20261014-062737
+
+- Add "Bare window" back to the right-click menu, under "Menu bar"
+	- ID: 2026101313381124
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261013-133811
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Add "Bare window" back to right-click menu, under "Menu bar".
+	- Notes:
+		- Pre-next-cut.
+	- Against: the old-format Done item "Second pass over the UI/UX style guide, reconciling it against what is built" took it off that menu. The UI/UX style guide's known deviations list it too, and needs the same change.
+	- Progress log:
+		- 20261013: Bare window is back on the right-click menu, right under Menu bar, checked while the window is bare, with B as its letter as on View. The UI/UX style guide's menu rules and its known deviations say so now.
+	- Decisions:
+		- 20261013: This item is the newer call, so it wins over the style guide pass that took the row off.
+		- 20261013: On macOS the row stays, with no Menu bar row above it, since a Mac has no in-window bar.
+	- Verified: unit tests and clippy for Linux, Windows and macOS. Not looked at in a real window.
+	- Branch: ownview
+	- Commit: 0a81ab6
+	- Test case: `bare_window_is_on_the_right_click_menu_under_menu_bar`, plus the Bare window check in `the_right_click_menu_has_the_pane_actions_and_their_checkmarks`.
+	- Acceptance signoff: JC, 20261014.
+	- Closed: 20261014-062737
 
 - Why can muffer not have a minimap?
 	- ID: 2026101318475899
