@@ -64,6 +64,43 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
 
+- The bash prompt returning after program output slides out downward from under a seam of the higher content, again
+	- ID: 2026101415085143
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness. Unit tests, clippy and all 13 X11 scenes passed.
+	- Severity: High
+	- Opened: 20261014-150851
+	- Opened by: JC
+	- Related IDs: 2026101310563284
+	- Target OS: All
+	- Incorrect behavior: The bash prompt returning after program output slides out downward from under a seam of the higher content.
+	- Expected behavior: The prompt shows up in place.
+	- Notes:
+		- Pre-next-cut.
+		- The bug is back. We need to lock this down with a regression test. Including all similar smooth-scroll-related bugs we've fixed in the past, including nano bounce, nano scroll jumping of static content, muffer's similar bug involving "Jump to bottom" message, etc.
+		- Earlier fixes, all in the old-format Done list: "A prompt coming back after a command slides in oddly", "Repeating a command scrolled its output down out from under the prompt above it", "The dreaded 'Nano Bounce Bug' is back", and "Bug: scrolling back in muffer with the mouse wheel made its '1 new message' indicator smear and bounce".
+	- Test environment: b23, bash with ble.sh, atuin and the bundled two-row prompt in a git repo.
+	- Steps to reproduce:
+		- In a git repo, so the prompt has two rows, `clear`, then run a command whose output leaves the prompt one row above the bottom of the window (`seq 36` in a 43-row window).
+		- Run `nano`, and quit it.
+	- Reproduced: 20261014 on b23, on dev at b754777, about one quit in four. ble.sh draws the prompt again in place once the minimap column comes back, and that redraw slid down from under the rows above.
+	- Actual cause:
+		- When ble.sh redraws a prompt already on screen, it erases the old prompt and then makes room with insert- and delete-line, all in one write. The check that a recorded scroll moved something visible looked at the last frame, where the old prompt still showed, so it read the scroll as visible. With the prompt one row above the bottom, the row under it wasn't blank either, so the "room, not a scroll" check didn't catch it.
+		- A second, rarer path: a relayout drops the frame-old snapshot, and a prompt redraw that reaches a build before a new snapshot slid by default.
+		- The flatpak repaint rule (2026101310563284) isn't involved. It decides the output ease, and this is the region slide.
+	- Progress log:
+		- 20261014: Short and long commands, `clear`, nano, less, `git log`, atuin's Ctrl+R, resizes and programs turning mouse and focus reports on and off were all tried, on half-empty, full and full-scrollback screens. Only the in-place redraw near the bottom slid.
+		- 20261014: The class has opened and closed several times. Every earlier fix is kept, and each is now pinned by a test that goes red when its own part is broken.
+		- 20261014: Already covered and still passing: the muffer pill smear (`pill` scene and its unit tests), nano's static rows (`nano` scene), and `clear` (`clear` scene). Waiting on signoff, since it changes what is seen and the case above isn't confirmed as the one reported.
+		- Question for JC: does this match what's seen, a prompt sliding down after a program that took the whole window exits? If it shows up some other way, the command and roughly where the prompt was on the screen would settle it.
+	- Actual fix: a scroll counts as visible only when a row with text in it is now where the scroll put it, or a row with text left. On the normal screen, a recorded scroll with no snapshot to check against shows in place. The alt screen keeps sliding on the record alone, as before.
+	- Verified: with real ble.sh and nano, the build before the fix slid 2 times in 8 quits. With the first half of the fix it slid once in 41, which fits the relayout path (not confirmed). The final build had none in 8. The new scroll scene failed 3 of 3 on the build before the fix and passed 4 of 4 after.
+	- Swept: `slide_is_visible` has one caller in the build. `ledger_makes_room` reads the same snapshot but can only stop a slide. The row-print detector compares against `last_rows`, which a relayout leaves at the old width, so nothing matches there.
+	- Branch: promptslide
+	- Commit: 874af97
+	- Test case: Ep3UXRI gained erased-ink cases. New replay tests over ble.sh's bytes: Esib1t0 (prompt after output, half-empty and full screens), Esib1y3 (in-place redraw at each height), EsiiYQ2 (every split of the prompt and the redraw across two reads), Esiikpm (redraw right after a relayout), Esib22C (a repeated listing), Esib26L (a table redraw snaps while a prompt still eases), Esib2AU (the nano bounce). Scroll harness scene `prompt`. Each fails with the part it guards broken.
+
 - Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
 	- ID: 2026101410442550
 	- Type: Task
@@ -327,22 +364,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
-
-- The bash prompt returning after program output slides out downward from under a seam of the higher content, again
-	- ID: 2026101415085143
-	- Type: Bug
-	- Status: Queued
-	- Severity: High
-	- Opened: 20261014-150851
-	- Opened by: JC
-	- Related IDs: 2026101310563284
-	- Target OS: All
-	- Incorrect behavior: The bash prompt returning after program output slides out downward from under a seam of the higher content.
-	- Expected behavior: The prompt shows up in place.
-	- Notes:
-		- Pre-next-cut.
-		- The bug is back. We need to lock this down with a regression test. Including all similar smooth-scroll-related bugs we've fixed in the past, including nano bounce, nano scroll jumping of static content, muffer's similar bug involving "Jump to bottom" message, etc.
-		- Earlier fixes, all in the old-format Done list: "A prompt coming back after a command slides in oddly", "Repeating a command scrolled its output down out from under the prompt above it", "The dreaded 'Nano Bounce Bug' is back", and "Bug: scrolling back in muffer with the mouse wheel made its '1 new message' indicator smear and bounce".
 
 - A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
 	- ID: 2026101411555009

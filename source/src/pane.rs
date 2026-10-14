@@ -1712,7 +1712,16 @@ impl Pane {
 				// still traced, so the harness can tell a pop from no scroll at all
 				shift_dbg = step;
 			}
-			slide_is_visible(step, &region, &self.last_cells, chunk) && !room
+			let arrived = |from: usize, to: usize| {
+				self.last_rows.len() == lines
+					&& row_print(&guard.grid()[Line(to as i32)], cols) == self.last_rows[from]
+			};
+			// A relayout drops the snapshot until the next build takes one. A
+			// region scroll on the normal screen that nothing can check against is
+			// most likely a shell redrawing its prompt for the new width, so it
+			// shows in place. The alt screen still slides on the record alone.
+			let unknown = !alt && self.last_cells.len() != lines;
+			!unknown && slide_is_visible(step, &region, &self.last_cells, chunk, arrived) && !room
 		});
 		// The fingerprints also feed the output band, which belongs to the output
 		// ease and so works with app easing off. The styled cells stay app-only.
@@ -4913,18 +4922,22 @@ fn ledger_step(
 }
 
 // A recorded scroll is only worth easing when something visible moved: a row
-// with ink on screen before it (`last`, the previous frame's styled rows), or
-// one that left (`chunk`). ble.sh makes room for its prompt with insert- and
-// delete-line on the blank rows under the cursor; the engine records that as a
-// region scroll, and sliding it drags the prompt drawn right after down from
-// behind the rows above. A turnover past the region's height is a scroll
-// whatever was there (a burst into a fresh tmux pane), and a snapshot of
-// another shape cannot say.
+// with ink on screen before it (`last`, the previous frame's styled rows) that
+// is now where the scroll put it (`arrived(from, to)`), or one that left
+// (`chunk`). ble.sh makes room for its prompt with insert- and delete-line on
+// the blank rows under the cursor; the engine records that as a region scroll,
+// and sliding it drags the prompt drawn right after down from behind the rows
+// above. Redrawing a prompt already on screen, it erases the old one first, in
+// the same write, so those rows had ink last frame and none when they moved
+// (2026101415085143). A turnover past the region's height is a scroll whatever
+// was there (a burst into a fresh tmux pane), and a snapshot of another shape
+// cannot say.
 fn slide_is_visible(
 	step: i32,
 	region: &std::ops::Range<usize>,
 	last: &[Vec<StripCell>],
 	chunk: &[Vec<StripCell>],
+	arrived: impl Fn(usize, usize) -> bool,
 ) -> bool {
 	let height = region.end.saturating_sub(region.start);
 	let moved = step.unsigned_abs() as usize;
@@ -4936,7 +4949,11 @@ fn slide_is_visible(
 	} else {
 		region.start..region.end - moved
 	};
-	chunk.iter().any(|r| has_ink(r)) || last[sources].iter().any(|r| has_ink(r))
+	chunk.iter().any(|r| has_ink(r))
+		|| sources.into_iter().any(|from| {
+			let to = if step > 0 { from - moved } else { from + moved };
+			has_ink(&last[from]) && arrived(from, to)
+		})
 }
 
 fn has_ink(row: &[StripCell]) -> bool {
@@ -5259,6 +5276,8 @@ fn band_row_line(screen_row: i32, display_offset: i32, split_row: i32, ob: usize
 	}
 }
 
+#[cfg(test)]
+mod replay;
 #[cfg(test)]
 mod vhist_probe;
 
@@ -7293,7 +7312,7 @@ mod tests {
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 		let settings = config::Settings::default();
 		let mut last = Vec::new();
-		snapshot_rows(
+		let prints = snapshot_rows(
 			term.grid(),
 			lines,
 			cols,
@@ -7318,7 +7337,9 @@ mod tests {
 		);
 		assert_eq!(ledger_step(false, true, 0, false, -2), Some(-2));
 		assert!(
-			slide_is_visible(-2, &region, &last, &chunk),
+			slide_is_visible(-2, &region, &last, &chunk, |from, to| {
+				row_hash(&term, to as i32) == prints[from]
+			}),
 			"the footer moved, so the old rule slid it"
 		);
 		assert!(ledger_makes_room(-2, &region, lines, &last, &chunk));
@@ -7394,7 +7415,7 @@ mod tests {
 		term.set_scroll_ledger_rows(crate::scroll::SLIDE_ROWS);
 		let settings = config::Settings::default();
 		let mut last = Vec::new();
-		snapshot_rows(
+		let prints = snapshot_rows(
 			term.grid(),
 			lines,
 			cols,
@@ -7424,7 +7445,9 @@ mod tests {
 			!chunk.iter().any(|r| has_ink(r)),
 			"the kept row was blanked"
 		);
-		assert!(slide_is_visible(-1, &region, &last, &chunk));
+		assert!(slide_is_visible(-1, &region, &last, &chunk, |from, to| {
+			row_hash(&term, to as i32) == prints[from]
+		}));
 		assert!(!ledger_makes_room(-1, &region, lines, &last, &chunk));
 	}
 
@@ -8311,7 +8334,7 @@ mod tests {
 			&settings,
 			&mut palette::Readable::default(),
 		);
-		assert!(!slide_is_visible(-3, &region, &last, &chunk));
+		assert!(!slide_is_visible(-3, &region, &last, &chunk, |_, _| true));
 		assert_eq!(
 			ledger_step(false, true, 0, false, -3),
 			Some(-3),
@@ -8321,24 +8344,34 @@ mod tests {
 		// the same shape over rows that hold text is a real scroll, either way round
 		let mut inked = last.clone();
 		inked[4] = cells("stale", cols);
-		assert!(slide_is_visible(-3, &region, &inked, &chunk));
-		assert!(slide_is_visible(3, &(1..8), &inked, &chunk));
+		assert!(slide_is_visible(-3, &region, &inked, &chunk, |_, _| true));
+		assert!(slide_is_visible(3, &(1..8), &inked, &chunk, |_, _| true));
+		// unless that ink was gone before the rows moved, as when ble.sh erases
+		// its prompt and redraws it in place (2026101415085143)
+		assert!(!slide_is_visible(-3, &region, &inked, &chunk, |_, _| false));
+		assert!(!slide_is_visible(3, &(1..8), &inked, &chunk, |_, _| false));
 		assert!(
-			!slide_is_visible(3, &(4..8), &last, &chunk),
+			!slide_is_visible(3, &(4..8), &last, &chunk, |_, _| true),
 			"up: sources are the rows below"
 		);
 		// so is one whose rows that left carried ink
-		assert!(slide_is_visible(-3, &region, &last, &[cells("gone", cols)]));
+		assert!(slide_is_visible(
+			-3,
+			&region,
+			&last,
+			&[cells("gone", cols)],
+			|_, _| true
+		));
 		// a background counts as ink
 		let mut bg = last.clone();
 		bg[4][0].bg = Some([1, 2, 3]);
-		assert!(slide_is_visible(-3, &region, &bg, &chunk));
+		assert!(slide_is_visible(-3, &region, &bg, &chunk, |_, _| true));
 		// a turnover past the region is a scroll whatever was there, one to the
 		// exact height is not (insert-line clamps to the rows it has)
-		assert!(slide_is_visible(5, &region, &last, &chunk));
-		assert!(!slide_is_visible(4, &region, &last, &chunk));
+		assert!(slide_is_visible(5, &region, &last, &chunk, |_, _| true));
+		assert!(!slide_is_visible(4, &region, &last, &chunk, |_, _| true));
 		// no snapshot to read: slide, as before
-		assert!(slide_is_visible(-3, &region, &[], &chunk));
+		assert!(slide_is_visible(-3, &region, &[], &chunk, |_, _| true));
 	}
 
 	// Test ID: Ep3UXRJ
