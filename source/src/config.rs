@@ -17761,7 +17761,12 @@ mod peer_tests {
 			folder("/pics/a")
 		));
 		keep_window_state(&live, &mut named);
-		assert_eq!(named.wallpaper, Some(PathBuf::from("/pics/one.png")));
+		// Windows puts the config dir's drive on a path with none
+		assert_eq!(
+			named.wallpaper,
+			resolve_wallpaper(Some("/pics/one.png".into()))
+		);
+		assert_ne!(named.wallpaper, live.wallpaper);
 	}
 
 	// Another window's save of a view switch is for new windows. This one
