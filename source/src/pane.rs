@@ -1401,6 +1401,8 @@ pub struct Pane {
 	pub map_on: bool,
 	/// Keeps `map_on` from flapping while a program toggles what it asks for.
 	pub map_hold: minimap::Hold,
+	/// The screen modes `sync_minimap` last saw, so a change asks again what runs.
+	pub map_modes: TermMode,
 	/// This pane's PTY produced output since the last successful build. Set by
 	/// the Wakeup(id) event, cleared in `build()` once the term lock is acquired
 	/// (a busy-term frame keeps it, so the rebuild retries next frame). Scopes
@@ -3821,17 +3823,33 @@ impl PaneManager {
 	/// The minimap column comes and goes with what is running, and losing it gives
 	/// the text its columns back - so it is a relayout, not a draw-time choice.
 	/// Answers whether any pane changed its mind, which is the caller's cue to do
-	/// one. Both probes behind it are cheap: the mode is already cached from the
-	/// last build, and the program lookup is throttled inside `task`.
+	/// one. Both probes behind it are cheap: the mode is a try of the term lock,
+	/// falling back to what the last build saw, and the program lookup is
+	/// throttled inside `task`.
 	pub fn sync_minimap(&mut self, cfg: &config::Settings) -> bool {
 		let mut moved = false;
 		for pane in self.panes.values_mut() {
+			// The mode the last build saw is a frame old, and a program that
+			// switches screens and then sits still, as a dialog with the cursor
+			// hidden does, gives no later frame to catch up in.
+			let mode = pane
+				.term
+				.term
+				.try_lock_unfair()
+				.map_or(pane.mode, |term| *term.mode());
+			// and the program behind it may be newer than the cached answer, which
+			// took the column from tmux for a moment as it started
+			let screen = minimap::screen_modes(mode);
+			if screen != pane.map_modes {
+				pane.map_modes = screen;
+				pane.term.retask();
+			}
 			let running = match pane.term.task() {
 				crate::term::Task::Running(name) => Some(name),
 				crate::term::Task::Last(_) | crate::term::Task::Idle => None,
 			};
 			let own = pane.map_hold.update(
-				minimap::draws_own_screen(pane.mode, running.is_some()),
+				minimap::draws_own_screen(mode, running.is_some()),
 				running.as_deref(),
 				std::time::Instant::now(),
 			);
@@ -4094,6 +4112,7 @@ fn spawn_pane(
 		mode: TermMode::empty(),
 		map_on: true,
 		map_hold: minimap::Hold::default(),
+		map_modes: TermMode::empty(),
 		content_dirty: true,
 		copy_select: config::settings().copy_on_select,
 		copy_output: false,

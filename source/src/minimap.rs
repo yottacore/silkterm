@@ -116,6 +116,12 @@ pub fn draws_own_screen(mode: TermMode, running: bool) -> bool {
 		|| running && mode.intersects(TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT)
 }
 
+/// The part of the mode `draws_own_screen` reads. When it moves, the column
+/// may have to as well.
+pub fn screen_modes(mode: TermMode) -> TermMode {
+	mode & (TermMode::ALT_SCREEN | TermMode::MOUSE_MODE | TermMode::FOCUS_IN_OUT)
+}
+
 // How long a program that drew its own screen keeps the column away once it
 // stops saying so. muffer turns focus reports off and on again as it starts,
 // and every change of mind is a resize it has to redraw for.
@@ -1919,7 +1925,7 @@ mod tests {
 		assert!(!wanted(&s, draws_own_screen(chat, true), Some("node")));
 		assert!(wanted(&s, draws_own_screen(chat, true), Some("less")));
 		// the same modes with nothing running are the shell's own; fish asks for
-		// focus changes at its prompt
+		// focus changes at its prompt inside tmux
 		assert!(wanted(&s, draws_own_screen(chat, false), None));
 		// it gets the column back on the way out
 		let gone = after(b"\x1b[?1004h\x1b[?2004h\x1b[?1004l\x1b[?2004l");
@@ -1936,6 +1942,35 @@ mod tests {
 		let pager = after(b"\x1b[?1049h");
 		assert!(!wanted(&s, draws_own_screen(pager, false), None));
 		assert!(wanted(&s, draws_own_screen(pager, true), Some("less")));
+	}
+
+	// A nested fish, or one at the far end of an ssh, is the program running,
+	// and its prompt has to leave the column alone. fish 4.2 asks for focus
+	// reports only inside tmux, where the outer terminal never sees them.
+	// Test ID: EsdlZZz
+	#[test]
+	fn a_nested_fish_prompt_keeps_the_column() {
+		let mut s = cfg(true, 100.0);
+		s.minimap_tui_whitelist = "less tmux screen".to_string();
+		let (mut term, mut parser) = fresh_term(80, 24, 1000);
+		let mut own = |bytes: &[u8]| {
+			parser.advance(&mut term, bytes);
+			draws_own_screen(*term.mode(), true)
+		};
+		// fish 4.2.1's prompt and the start of `ls /`, as sent to this terminal
+		assert!(!own(
+			b"\x1b]0;~\x07\x1b[m\x1b[6n\x1b[0c\x1b[?2004h\x1b[>4;1m\x1b]133;A;click_events=1\x07\
+			  b23 ~ \x1b[K\r\x1b[6C"
+		));
+		assert!(!own(
+			b"\x1b[?2004l\x1b[>4;0m\x1b[4D\x1b[34mls\x1b[m \x1b[36m/\x1b[m\r\n\x1b[m\
+			  \x1b]133;C;cmdline_url=ls%20/\x07"
+		));
+		assert!(!own(b"bin  etc  usr\r\n\x1b]133;D;0\x07\x1b[?25h"));
+		assert!(wanted(&s, own(b""), Some("fish")));
+		assert!(wanted(&s, own(b""), Some("ssh")));
+		// what it runs still counts, through the ssh too
+		assert!(!wanted(&s, own(b"\x1b[?1000h\x1b[?1006h"), Some("ssh")));
 	}
 
 	// Test ID: Esca2GW
