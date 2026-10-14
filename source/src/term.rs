@@ -301,6 +301,11 @@ pub struct TermInstance {
 	last_program: Option<String>,
 	// throttles the per-frame task probe (see task())
 	task_cache: Option<(std::time::Instant, Task)>,
+	// the process the last probe named, which may not lead its group
+	#[cfg(unix)]
+	front_pid: Option<u32>,
+	// what a tmux client in front shows (see front.rs)
+	tmux: crate::front::Tmux,
 	// windows: the shell process, for the child-process probe that stands in
 	// for a foreground process group (see at_shell_prompt) and for the PEB read,
 	// plus that probe's answer for as long as it holds (see note_activity).
@@ -415,6 +420,9 @@ impl TermInstance {
 			shell_pid,
 			last_program: None,
 			task_cache: None,
+			#[cfg(unix)]
+			front_pid: None,
+			tmux: crate::front::Tmux::default(),
 			#[cfg(windows)]
 			shell: ShellProc::new(shell_pid),
 			#[cfg(windows)]
@@ -462,14 +470,44 @@ impl TermInstance {
 
 	// The foreground process group is the shell's own while it sits at its prompt,
 	// and a command's while one runs - so a pgid that is neither answers None.
+	// A pipeline's group is named for a first stage that may have exited, so the
+	// stage on screen is looked for first (see front.rs).
 	#[cfg(unix)]
 	fn running_program(&mut self) -> Option<String> {
 		// SAFETY: takes no pointer, so a closed or reused fd can only answer wrong.
 		let pgid = unsafe { libc::tcgetpgrp(self.master_fd) };
+		self.front_pid = None;
 		if pgid <= 0 || pgid as u32 == self.shell_pid {
 			return None;
 		}
-		proc_comm(pgid as u32)
+		let pid = crate::front::group_front(self.shell_pid, pgid as u32).unwrap_or(pgid as u32);
+		let name = proc_comm(pid)?;
+		self.front_pid = Some(pid);
+		Some(name)
+	}
+
+	/// What runs in the pane tmux shows, when the program in front is a tmux
+	/// client. None until tmux has answered, or where it cannot be asked.
+	#[cfg(unix)]
+	pub fn tmux_inner(&mut self, now: std::time::Instant) -> Option<crate::front::Inner> {
+		let client = self.front_pid?;
+		self.tmux.inner(client, now)
+	}
+
+	#[cfg(not(unix))]
+	#[allow(clippy::unused_self)]
+	pub fn tmux_inner(&mut self, _now: std::time::Instant) -> Option<crate::front::Inner> {
+		None
+	}
+
+	/// No tmux in front any more, or nobody needs the answer.
+	pub fn forget_tmux(&mut self) {
+		self.tmux.forget();
+	}
+
+	/// When an ask of tmux wants looking at again.
+	pub fn tmux_wake(&self) -> Option<std::time::Instant> {
+		self.tmux.wake()
 	}
 
 	#[cfg(windows)]
@@ -589,15 +627,17 @@ impl TermInstance {
 	/// Windows: the cached at-prompt answer holds only until the terminal next
 	/// stirs. Both halves matter - anything typed can start a command, and a
 	/// command that ends always brings the prompt back with it, so its own last
-	/// act is PTY output. Anywhere else this is nothing.
+	/// act is PTY output.
 	#[cfg(windows)]
 	pub fn note_activity(&self) {
 		*self.child_probe.borrow_mut() = None;
 	}
 
+	/// What a tmux client in front shows may have changed.
 	#[cfg(not(windows))]
-	#[allow(clippy::unused_self)]
-	pub fn note_activity(&self) {}
+	pub fn note_activity(&self) {
+		self.tmux.stir();
+	}
 
 	pub fn write<B: Into<Vec<u8>>>(&self, bytes: B) {
 		self.note_activity();
@@ -984,7 +1024,7 @@ struct BsdShortInfo {
 }
 
 #[cfg(unix)]
-fn named(comm: &str) -> Option<String> {
+pub(crate) fn named(comm: &str) -> Option<String> {
 	let comm = program_name(comm.trim());
 	(!comm.is_empty()).then(|| comm.to_string())
 }

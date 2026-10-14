@@ -653,6 +653,8 @@ The window title starts with "Administrator: " on Windows and "Root: " elsewhere
 
 A tab used to say the application's own name on Windows and the shell's process name on unix. It now reports the shell by its FRIENDLY name - the one the Shells list carries, which is the name the user gave it - followed by what that shell is doing: the command in the foreground, or the last one it ran, or, having run nothing, the directory it is in.
 
+- The command in the foreground is the program on screen. In a pipeline that is the last stage still running, so `cat file | less` and `git log | less` both read less. The first stage names the process group, but it has often exited already. A program's own children don't count, so vim stays vim while it runs `:!make`. Windows has no process group and names a live child of the shell, as before.
+
 - The shell a pane runs is resolved once, when the pane is spawned. Leaving it as "whatever the default shell is" let the answer change under a running pane, since the background scan fills the list seconds after launch and the Shells tab reorders it - so a pane could be labeled with a shell it was not running.
 
 - The path is shortened by an ellipsis eating the middle a directory at a time, so what is left keeps its real names. Only when that has run out do the directories above the current one drop to their initials, which on any path deeper than a couple of levels never happens - the ellipsis has already covered more ground than a column of single letters would. Two things survive every step, because they are what distinguish a location from a command - the anchor it starts from and the separator it ends with. Windows keeps its drive letter and gets no `~`, since neither shell there prints one.
