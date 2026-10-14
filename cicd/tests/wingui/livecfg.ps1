@@ -7,12 +7,15 @@
 	first has to show in the second at once, and never in the third.
 .DESCRIPTION
 	The same checks as cicd/tests/livecfg on Linux, over named pipes:
-	- View > Minimap in window A saves. B's minimap comes on, C's does not,
-	  and nobody picks a new wallpaper.
+	- View > Minimap in window A saves. A's minimap comes on, B keeps its
+	  own, C's does not change, and nobody picks a new wallpaper.
 	- A new wallpaper folder written by hand, then --reload-settings sent to A.
 	  A and B both pick from the new folder; C picks nothing.
 	- B ended without warning, the way Task Manager does it. The next save in
 	  A finds it gone and takes its marker away.
+	- A window D opened after a save starts with what was saved.
+	- --wallpaper typed into a shell inside window E changes E's picture
+	  and no other.
 	A locked session takes no keys and draws no frames, so there each save is
 	a hand edit read again in A, and what only the screen or a wallpaper pick
 	would show goes unchecked. Every notice still goes over the pipes, which
@@ -200,7 +203,8 @@ foreach ($name in $names) { $moved[$name] = fDiff $shots0[$name] $shots1[$name] 
 fNote "moved: a $($moved.a), b $($moved.b), c $($moved.c)"
 ##	a is the control: the minimap shows at all
 fSeen "a shows it" ($moved.a -gt 0)
-fSeen "b shows it" ($moved.b -gt 0)
+##	A view switch is for new windows now, and the others keep theirs (2026101313381123).
+fSeen "b keeps its own" ($moved.b -eq 0)
 fSeen "c does not" ($moved.c -eq 0)
 [void](fCheck "c's file is untouched" (-not (fMinimap $other "true")))
 fSeen "nobody picked a new wallpaper" ((fHistory $shared) -eq $histShared)
@@ -234,7 +238,52 @@ Start-Sleep -Seconds 1
 [void](fCheck "a still runs" (-not $procs.a.HasExited))
 [void](fCheck "c still runs" (-not $procs.c.HasExited))
 
+##	A window opened after a save. Only View > Minimap in d can show what it
+##	came up with, so this needs keys.
+if ($typing) {
+	fSave "true"
+	[void](fCheck "the file has the minimap on" (fWaitMinimap $shared "true"))
+	$procs["d"] = fStartSilk -Exe $Exe -SilkArgs @("--config=$shared") -EnvVars @{}
+	$wins["d"] = fWaitWindow $procs.d 40
+	if (fCheck "d: a window came up" ($wins.d -ne [IntPtr]::Zero)) {
+		[void][SilkLive.Win]::MoveWindow($wins.d, $work.x + $w, $work.y, $w, $ht, $true)
+		Start-Sleep -Seconds 5
+		##	It flips what d shows, so the file says off only if d came up with it on
+		[void](fFocus $wins.d)
+		fPress "alt+v"
+		Start-Sleep -Milliseconds 500
+		fPress "n"
+		[void](fCheck "d started with the saved minimap" (fWaitMinimap $shared "false"))
+	}
+} else { fNote "not checked while locked: d started with the saved minimap" }
+
+##	--wallpaper typed into a shell inside e, on a file of its own, reaches e
+##	alone through the pipe name the shell got from it. cmd clears the screen
+##	before each shot, so only the picture can differ.
+if ($typing) {
+	$third = Join-Path $dir "third\config.shcl"
+	fConfig $third
+	$procs["e"] = fStartSilk -Exe $Exe -SilkArgs @("--config=$third", "--shell", "cmd.exe") -EnvVars @{}
+	$wins["e"] = fWaitWindow $procs.e 40
+	if (fCheck "e: a window came up" ($wins.e -ne [IntPtr]::Zero)) {
+		[void][SilkLive.Win]::MoveWindow($wins.e, $work.x + 2 * $w, $work.y, $w, $ht, $true)
+		Start-Sleep -Seconds 5
+		[void](fFocus $wins.e)
+		fSendChars "cls"
+		fPress "enter"
+		$e0 = fSettled $wins.e "e0"; $a0 = fSettled $wins.a "a4"
+		fSendChars "`"$Exe`" --wallpaper `"$(Join-Path $pics2 'two3.png')`" & cls"
+		fPress "enter"
+		Start-Sleep -Seconds 2
+		$e1 = fSettled $wins.e "e1"; $a1 = fSettled $wins.a "a5"
+		fNote "moved: e $(fDiff $e0 $e1), a $(fDiff $a0 $a1)"
+		[void](fCheck "--wallpaper changed e" ((fDiff $e0 $e1) -gt 0.05))
+		[void](fCheck "and not a" ((fDiff $a0 $a1) -eq 0))
+	}
+} else { fNote "not checked while locked: --wallpaper from a shell inside a window" }
+
 foreach ($p in $procs.Values) { fStop $p }
 
 ##	History:
 ##		- 20261013 JC: Created.
+##		- 20261014 JC: B keeps its own minimap; D opens with the saved one; --wallpaper from E's shell.
