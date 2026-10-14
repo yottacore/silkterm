@@ -1132,7 +1132,7 @@ fBuildTestRelease(){
 		"${CARGO_HOME:-${HOME}/.cargo}" "${root}" "${remapTarget}" > "${remapCfg}"
 	fRetryBuild "native release" "${RELEASE_NATIVE_CMD[@]}" --config "${remapCfg}"
 	[[ -f "${RELEASE_NATIVE_BIN}" ]] || fDie "native release binary missing: ${RELEASE_NATIVE_BIN}"
-	fEcho "OK: native release: ${RELEASE_NATIVE_BIN} ($(du -h "${RELEASE_NATIVE_BIN}" | cut -f1))"
+	fEcho "OK: native release: ${RELEASE_NATIVE_BIN} ($(du -h --apparent-size "${RELEASE_NATIVE_BIN}" | cut -f1))"
 	builtArts=("${RELEASE_NATIVE_OSARCH:-native}|${RELEASE_NATIVE_BIN}")
 	if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
 		for t in "${CROSS_TARGETS[@]}"; do
@@ -1140,7 +1140,7 @@ fBuildTestRelease(){
 			fSection "5/8  Release build: ${localLabel}"
 			fRetryBuild "${localLabel}" eval "${cmd} --config $(printf '%q' "${remapCfg}")"
 			[[ -f "${art}" ]] || fDie "missing artifact for ${localLabel}: ${art}"
-			fEcho "OK: ${localLabel}: ${art} ($(du -h "${art}" | cut -f1))"
+			fEcho "OK: ${localLabel}: ${art} ($(du -h --apparent-size "${art}" | cut -f1))"
 			builtArts+=("${osarch}|${art}")
 		done
 	fi
