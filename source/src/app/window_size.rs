@@ -35,11 +35,7 @@ impl State {
 
 	/// The grid the window shows at this size, waiting to be saved.
 	pub(super) fn note_grid(&mut self, w: u32, h: u32) {
-		let px_to_cells = |px: f32, cell: f32, chrome: f32| {
-			(((px - 2.0 * self.text.margin - chrome) / cell).floor() as i64).max(1) as usize
-		};
-		let cols = px_to_cells(w as f32, self.text.cell_w, 0.0);
-		let rows = px_to_cells(h as f32, self.text.cell_h, self.chrome_h());
+		let (cols, rows) = self.grid_at(w, h);
 		// debounce: an interactive drag fires many Resized events; writing
 		// config.shcl on each would be dozens of file writes/sec. Persist in
 		// flush_window_size once the size has held (or on exit).
@@ -169,8 +165,7 @@ impl State {
 	// Size the window for the monitor it has arrived on: that monitor's own
 	// size, else the last size set anywhere, as a launch there would.
 	fn take_monitor_size(&mut self) {
-		let live = config::settings();
-		if !live.remember_size || !live.remember_per_monitor || self.watch.size_pinned {
+		if self.keeps_size() {
 			mondbg("keep", self.watch.key.as_deref(), None, None);
 			return;
 		}
@@ -187,10 +182,12 @@ impl State {
 			Some((kept.columns, kept.rows)),
 			(!self.watch.font_pinned).then_some(kept.font_zoom),
 		);
-		// the zoom first, since the grid's size in pixels depends on it
+		// The zoom first, since the grid's size in pixels depends on it. Laid
+		// out in the new cells only at the new size, by `request_grid`: in the
+		// old size the shell was told a grid well off for a moment.
 		if !self.watch.font_pinned && kept.font_zoom != config::font_zoom_px() {
 			config::set_font_zoom(kept.font_zoom);
-			self.rebuild_text(config::display_scale(self.window.scale_factor()));
+			self.retext(config::display_scale(self.window.scale_factor()));
 			self.dirty = true;
 		}
 		let now = Instant::now();
@@ -200,8 +197,16 @@ impl State {
 		self.request_grid(kept.columns, kept.rows);
 	}
 
-	/// Ask for the window size that shows this grid with the chrome as it is.
-	pub(super) fn request_grid(&mut self, cols: usize, rows: usize) {
+	// The grid a window this size shows, with the cells and chrome as they are.
+	fn grid_at(&self, w: u32, h: u32) -> (usize, usize) {
+		(
+			cells_in(w, self.text.cell_w, self.text.margin, 0.0),
+			cells_in(h, self.text.cell_h, self.text.margin, self.chrome_h()),
+		)
+	}
+
+	// The window size that shows this grid, with the cells and chrome as they are.
+	fn grid_px(&self, cols: usize, rows: usize) -> (u32, u32) {
 		let (w, h) = window_px(
 			cols,
 			rows,
@@ -213,20 +218,73 @@ impl State {
 		let max_dim = self.gpu.as_ref().map_or(SAFE_MAX_DIM, |gpu| {
 			gpu.gfx.device.limits().max_texture_dimension_2d
 		});
-		let (w, h) = fit_px(w, h, max_dim);
-		if (w, h) == self.surface_px {
-			return;
+		fit_px(w, h, max_dim)
+	}
+
+	// No monitor's own size is taken: the switches are off, or the command
+	// line set the size and the user hasn't resized since.
+	fn keeps_size(&self) -> bool {
+		let live = config::settings();
+		!live.remember_size || !live.remember_per_monitor || self.watch.size_pinned
+	}
+
+	/// A new scale keeps the grid where no size kept for a monitor will take
+	/// over. Left to the system, the window keeps its size on the desktop, and
+	/// a font's cells don't grow in step with the scale, so the grid moved a
+	/// few cells. A Wayland window learns its scale after it opens, so it
+	/// opened at 78x23 for 80x24 (2026101412003308). Where a kept size will
+	/// take over, the window is left to the system: on sway a resize of the
+	/// window's own comes back from the compositor late, and undid the take.
+	/// Either way the panes are laid out for the size coming, not the old one,
+	/// or the shell is told a grid half or twice the size until the resize
+	/// arrives (2026101412311921).
+	pub(super) fn rescale(&mut self, scale: f32, writer: &mut winit::event::InnerSizeWriter) {
+		// a launch size still on its way is the grid that was asked for
+		let (w, h) = match self.reveal_want {
+			Some(want) if !self.revealed => (want.width, want.height),
+			_ => self.surface_px,
+		};
+		let ratio = scale / self.text.scale;
+		let free = !self.no_area
+			&& !crate::monitor::fullscreen(&self.window)
+			&& !self.window.is_maximized();
+		let grid = (free && self.keeps_size()).then(|| self.grid_at(w, h));
+		self.retext(scale);
+		let mut asked = None;
+		if let Some((cols, rows)) = grid {
+			let want = self.grid_px(cols, rows);
+			let px = winit::dpi::PhysicalSize::new(want.0, want.1);
+			if writer.request_inner_size(px).is_ok() {
+				asked = Some(want);
+			}
 		}
+		let told = self.window.inner_size();
+		let px = asked.unwrap_or_else(|| coming_px((w, h), (told.width, told.height), ratio, free));
+		mondbg(
+			"rescale",
+			self.watch.key.as_deref(),
+			grid.filter(|_| asked.is_some()),
+			None,
+		);
+		self.relayout_all_in(px);
+	}
+
+	/// Ask for the window size that shows this grid with the chrome as it is,
+	/// and lay the panes out, since the cells may have just changed.
+	pub(super) fn request_grid(&mut self, cols: usize, rows: usize) {
+		let (w, h) = self.grid_px(cols, rows);
 		let want = winit::dpi::PhysicalSize::new(w, h);
 		// A size the window can honor straight away answers here and sends no
 		// `Resized`, so this is the only chance to move everything the window
 		// event moves - the scrim included, which was left at the old size.
-		if let Some(applied) = request_size(&self.window, want) {
+		if (w, h) != self.surface_px
+			&& let Some(applied) = request_size(&self.window, want)
+		{
 			self.resize_surface(applied.width, applied.height);
-			self.relayout_all();
 			self.invalidate_prepared();
-			self.dirty = true;
 		}
+		self.relayout_all();
+		self.dirty = true;
 	}
 }
 
@@ -250,6 +308,28 @@ pub(super) fn mondbg(
 		"[mon {t:.2}s] {event} key={} grid={grid} zoom={zoom}",
 		key.unwrap_or("-")
 	);
+}
+
+// The size a window left to the system has once a scale change is through.
+// Wayland and macOS already answer with it during the change: the same size
+// on the desktop at the new scale. Windows and X11 still answer the old one,
+// and go on to scale it by the change. A maximized or fullscreen window keeps
+// what it's given.
+fn coming_px(was: (u32, u32), told: (u32, u32), ratio: f32, free: bool) -> (u32, u32) {
+	if told.0 == 0 || told.1 == 0 {
+		return was;
+	}
+	if !free || told != was {
+		return told;
+	}
+	let scaled = |px: u32| ((f64::from(px) * f64::from(ratio)).round() as u32).max(1);
+	(scaled(was.0), scaled(was.1))
+}
+
+// Whole cells in a window this many pixels across, after the margins either
+// side and the chrome; one at least. The inverse of `window_px`.
+fn cells_in(px: u32, cell: f32, margin: f32, chrome: f32) -> usize {
+	(((px as f32 - 2.0 * margin - chrome) / cell).floor() as i64).max(1) as usize
 }
 
 /// The window a grid asks for: the cells, the margins either side, and the chrome
@@ -399,8 +479,8 @@ fn size_taken(
 #[cfg(test)]
 mod tests {
 	use super::{
-		Settle, fit_px, launch_maximized, look_again, move_counts, remember_resize,
-		resize_is_current, settle, size_taken, window_px,
+		Settle, cells_in, coming_px, fit_px, launch_maximized, look_again, move_counts,
+		remember_resize, resize_is_current, settle, size_taken, window_px,
 	};
 	use std::time::{Duration, Instant};
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
@@ -425,6 +505,59 @@ mod tests {
 		let hidden = window_px(80, 24, 8.0, 17.0, 4.0, 20.0);
 		assert_eq!(shown.0, hidden.0);
 		assert_eq!(shown.1 - hidden.1, 24);
+	}
+
+	// A scale change keeps the grid by reading it off the window at the old
+	// cells and asking for it in the new ones, so the two have to agree for any
+	// cell size, or the grid drifts a cell per change. Cells here are the odd
+	// fractions a font gives at 125%, 150% and 200%, and a small font with a
+	// margin wider than its cell.
+	// Test ID: Esiq2QP
+	#[test]
+	fn a_grid_reads_back_from_the_window_it_asked_for() {
+		for (cell_w, cell_h, margin, chrome) in [
+			(10.0, 21.0, 4.0, 0.0),
+			(6.0, 13.0, 9.0, 20.0),
+			(12.578_125, 26.25, 5.0, 31.0),
+			(15.09375, 31.5, 6.0, 47.0),
+			(20.125, 42.0, 8.0, 62.5),
+		] {
+			for (cols, rows) in [(1, 1), (80, 24), (111, 37), (300, 90)] {
+				let (w, h) = window_px(cols, rows, cell_w, cell_h, margin, chrome);
+				assert_eq!(
+					(
+						cells_in(w, cell_w, margin, 0.0),
+						cells_in(h, cell_h, margin, chrome)
+					),
+					(cols, rows),
+					"{cell_w}x{cell_h}"
+				);
+			}
+		}
+		assert_eq!(cells_in(0, 10.0, 4.0, 30.0), 1, "never no cells");
+	}
+
+	// Panes laid out for the old size in the new cells told the shell a grid
+	// half or twice the size until the resize came. Laid out for this size, a
+	// window left to the system is told its new grid once.
+	// Test ID: Esisgw4
+	#[test]
+	fn a_scale_change_lays_out_for_the_size_on_its_way() {
+		// Wayland and macOS: the same size on the desktop, already at 1.5
+		assert_eq!(coming_px((860, 578), (1290, 867), 1.5, true), (1290, 867));
+		// Windows and X11 still say the old size, and scale it next
+		assert_eq!(coming_px((860, 578), (860, 578), 1.5, true), (1290, 867));
+		assert_eq!(coming_px((1720, 1156), (1720, 1156), 0.5, true), (860, 578));
+		// maximized keeps what it has
+		assert_eq!(
+			coming_px((1920, 1050), (1920, 1050), 2.0, false),
+			(1920, 1050)
+		);
+		assert_eq!(
+			coming_px((860, 578), (0, 0), 1.5, true),
+			(860, 578),
+			"minimized"
+		);
 	}
 
 	// --fullscreen asks for fullscreen before the first frame, and the window

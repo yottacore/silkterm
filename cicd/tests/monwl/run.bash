@@ -16,8 +16,12 @@
 ##			- Dragged onto HEADLESS-2, held astride the edge on the way.
 ##			- Moved to HEADLESS-1, then dragged onto HEADLESS-2 and dropped
 ##			  with a sliver still on HEADLESS-1.
-##		Each size must hold once taken, and nothing the window did may save
-##		a size.
+##		Each size must hold once taken, and the shell must never be told a
+##		grid well off the ones taken, even for a moment. Then it opens again on HEADLESS-2
+##		with --columns 80 --rows 24, and is moved to HEADLESS-1 and back. The
+##		shell must be told 80x24 and nothing else, not even for a moment, as
+##		the window learns its scale after it opens and on each move. Nothing
+##		the window did may save a size.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
 ##	  python3 or software Vulkan).
@@ -145,12 +149,13 @@ printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' \
 	$'\t\t1280x1024_100pct:' $'\t\t\tcolumns: 60' $'\t\t\trows: 35' $'\t\t\tfont_zoom: 4' \
 	>"${cfgHome}/silkterm/config.shcl"
 
-## The shell writes its own "rows columns" every tenth of a second.
+## The shell writes its own "rows columns" every tenth of a second, and on
+## each resize too, however short.
 grid="${work}/grid.txt"; : >"${grid}"
 "${wl[@]}" LIBGL_ALWAYS_SOFTWARE=1 VK_ICD_FILENAMES="${lvp}" VK_LAYER_MESSAGE_ID_FILTER=VUID-vkCmdCopyBufferToImage-pRegions-00173 \
 	HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" XDG_CACHE_HOME="${work}/home/.cache" \
 	XDG_STATE_HOME="${work}/home/.local/state" \
-	"${bin}" --shell "/bin/dash -c 'while :; do stty size >>${grid}; sleep 0.1; done'" >/dev/null 2>>"${work}/said.txt" &
+	"${bin}" --shell "python3 -I ${meDir}/_winch.py ${grid}" >/dev/null 2>>"${work}/said.txt" &
 appPid=$!
 
 fGrid(){ tail -n 1 "${grid}" 2>/dev/null || true; }
@@ -280,6 +285,53 @@ fNoFallback(){
 	((n == 0)) || { echo "    at 22x70 for ${n} samples, a tenth of a second each"; return 1; }
 }
 fCheck "never at the last size anywhere after it opened" fNoFallback
+
+## Every grid the shell was told after it opened is one a step took, or a few
+## cells off one while a scale change leaves the window to the system. A grid
+## in the new cells but the old pixels, which a scale change or a kept font
+## zoom gave for a moment, is well off any.
+fNoMoment(){
+	local odd
+	odd="$(tail -n +"$((opened + 1))" "${grid}" | sort -u | python3 -I -c '
+import sys
+kept = [(30, 50), (20, 110), (35, 60)]
+def near(r, c):
+	return any(abs(r - kr) <= max(1, -(-kr * 4 // 100)) and abs(c - kc) <= max(1, -(-kc * 4 // 100)) for kr, kc in kept)
+print(",".join(line.strip() for line in sys.stdin if line.strip() and not near(*map(int, line.split()))))' || true)"
+	[[ -z "${odd}" ]] || { echo "    told: ${odd}"; return 1; }
+}
+fCheck "never told a grid well off the ones it took" fNoMoment
+
+## A size from the command line stays through moves. The window opens at
+## scale 1 and learns the output's after, which moved the grid a few cells,
+## and each scale change told the shell a grid in the new cells but the old
+## pixels for a moment.
+fStopOurs "${appPid}"; wait "${appPid}" 2>/dev/null || true; appPid=""
+told="${work}/told.txt"; : >"${told}"
+fPtr move 3100 700
+"${wl[@]}" swaymsg "focus output HEADLESS-2" >/dev/null
+"${wl[@]}" LIBGL_ALWAYS_SOFTWARE=1 VK_ICD_FILENAMES="${lvp}" VK_LAYER_MESSAGE_ID_FILTER=VUID-vkCmdCopyBufferToImage-pRegions-00173 \
+	HOME="${work}/home" XDG_CONFIG_HOME="${cfgHome}" XDG_DATA_HOME="${work}/home/.local/share" XDG_CACHE_HOME="${work}/home/.cache" \
+	XDG_STATE_HOME="${work}/home/.local/state" \
+	"${bin}" --columns 80 --rows 24 --shell "python3 -I ${meDir}/_winch.py ${told} --quiet" >/dev/null 2>>"${work}/said.txt" &
+appPid=$!
+for _ in {1..100}; do [[ -n "$(fWin)" ]] && break; sleep 0.1; done
+fTold(){  ## fTold <want> <tenths>: the shell was told something, and only <want>
+	local i seen
+	for ((i = 0; i < ${2}; i++)); do [[ -s "${told}" ]] && break; sleep 0.1; done
+	seen="$(sort -u "${told}" | paste -sd ',' || true)"
+	[[ "${seen}" == "${1}" ]] || { echo "    told: $(paste -sd ',' "${told}" || true)"; return 1; }
+}
+sleep 4
+fCheck "opened at 80x24 from the command line on the 200% output" test "$(fOutput)" == HEADLESS-2
+fCheck "  and the shell was told 80x24 only" fTold "24 80" 50
+"${wl[@]}" swaymsg "[pid=${appPid}] move container to output HEADLESS-1" >/dev/null
+sleep 3
+fCheck "moved to the 100% output: told 80x24 only" fTold "24 80" 1
+"${wl[@]}" swaymsg "[pid=${appPid}] move container to output HEADLESS-2" >/dev/null
+sleep 3
+fCheck "moved back to the 200% output: told 80x24 only" fTold "24 80" 1
+echo "    window: $(fWin), told $(wc -l <"${told}") times"
 
 ## The launch moved the sizes from the config to the state file.
 fNoSave(){
