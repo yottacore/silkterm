@@ -995,6 +995,10 @@ fBuildTestRelease(){
 	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
 	## binary, sway, python3 or software Vulkan.
 	fRunTest_MaySkip cicd/tests/monwl/run.bash "window size per Wayland output"
+	## On native Wayland the clipboard and the primary are Wayland's, both ways,
+	## and nothing calls an X server. Exit 3 is a skip: no binary, sway, wtype,
+	## python3 or software Vulkan.
+	fRunTest_MaySkip cicd/tests/wlclip/run.bash "clipboard on Wayland"
 	## The same on random layouts, scales and steps, judged against a model of
 	## what the window should do. A failure prints its seed and the line that runs
 	## it again. Exit 3 is a skip: no binary, sway, wtype, xdotool or software Vulkan.

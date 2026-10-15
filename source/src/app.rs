@@ -3887,6 +3887,11 @@ impl ApplicationHandler<UserEvent> for App {
 		let gl = gfx.on_glutin_window();
 		let adapter_info = gfx.adapter_info.clone();
 		let drawn = gfx.drawn;
+		let clipboard = Clipboard::new(
+			raw_window_handle::HasDisplayHandle::display_handle(&*window)
+				.ok()
+				.map(|handle| handle.as_raw()),
+		);
 
 		self.state = Some(State {
 			window,
@@ -3919,7 +3924,7 @@ impl ApplicationHandler<UserEvent> for App {
 			link_arm: None,
 			menu_link: None,
 			cursor_icon: CursorIcon::Default,
-			clipboard: Clipboard::new(),
+			clipboard,
 			last_frame: Instant::now(),
 			rating: crate::profile::Rating::new(),
 			frame_budget,
@@ -5195,6 +5200,7 @@ impl ApplicationHandler<UserEvent> for App {
 		// don't lose a resize done just before quitting
 		if let Some(state) = self.state.as_mut() {
 			state.flush_window_size(true);
+			state.clipboard.release();
 		}
 		// a warm-up still building would be in the loader as the process tears it down
 		self.gpu_warm.release();

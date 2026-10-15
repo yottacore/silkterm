@@ -2,13 +2,14 @@
 
 ##	- Purpose:
 ##		A pointer for a compositor with no input devices, through the
-##		wlr virtual pointer protocol, which sway has. A piece of monwl/run.bash
-##		and dpirand/run.py, not a test of its own. Speaks the Wayland wire
+##		wlr virtual pointer protocol, which sway has. A piece of monwl/run.bash,
+##		dpirand/run.py and wlclip/run.bash, not a test of its own. Speaks the Wayland wire
 ##		format itself, so it needs nothing past python3.
 ##	- Syntax: _vpointer.py <layout width> <layout height>
 ##		Reads commands on stdin, one a line, until EOF:
 ##			move <x> <y>       to a point in layout coordinates
 ##			down | up          the left button
+##			middle             a middle click, down and up
 ##			extent <w> <h>     the layout's size from now on, once it has changed
 ##		Prints "ready" once the pointer exists, and "ok" after each command
 ##		once the compositor has it.
@@ -24,7 +25,7 @@ import sys
 import time
 from pathlib import Path
 
-BTN_LEFT = 0x110
+BTN_LEFT, BTN_MIDDLE = 0x110, 0x112
 DISPLAY, REGISTRY = 1, 2
 
 
@@ -119,6 +120,10 @@ def main() -> int:
 			wire.send(pointer, 1, now, int(words[1]), int(words[2]), width, height)
 		elif words[0] in ("down", "up"):
 			wire.send(pointer, 2, now, BTN_LEFT, 1 if words[0] == "down" else 0)
+		elif words[0] == "middle":
+			wire.send(pointer, 2, now, BTN_MIDDLE, 1)
+			wire.send(pointer, 4)  # frame
+			wire.send(pointer, 2, now + 1, BTN_MIDDLE, 0)
 		elif words[0] == "extent" and len(words) == 3:
 			width, height = int(words[1]), int(words[2])
 			print("ok", flush=True)
@@ -138,3 +143,4 @@ if __name__ == "__main__":
 ##	History:
 ##		- 20261014 JC: Created.
 ##		- 20261014 JC: extent, for a layout that changes size.
+##		- 20261015 JC: middle, for wlclip/run.bash.
