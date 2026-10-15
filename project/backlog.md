@@ -433,6 +433,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
+- Settings dialog: search
+	- ID: 2026101419165501
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261014-191655
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Search bar in an unscrollable top area.
+		- Shows literal label matches first, aliases second, fuzzy matches third.
+		- Matches listed like "<tab title> ⏵[ sub tab title ⏵[ etc. ⏵]] setting", with matched portion in bold, larger, and different theme-aware color.
+	- Notes:
+		- Pre-next-cut.
+
 - README.md: move the long sections out to their own docs
 	- ID: 2026101415085144
 	- Type: Task
