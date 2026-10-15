@@ -40,6 +40,7 @@ use winit::keyboard::ModifiersState;
 
 mod picker;
 mod prompt;
+mod search;
 mod shell_grid;
 mod themes;
 
@@ -661,12 +662,13 @@ fn border(out: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 	out.push(quad(r.x + r.w, r.y, t, r.h, color));
 }
 
-// What holds keyboard focus: one control within a row, or a footer button (index
-// into `buttons()`: 0 = Cancel, 1 = Apply, 2 = OK). `Row(i, part)` names a row and
+// What holds keyboard focus: the search box, one control within a row, or a
+// footer button (index into `buttons()`: 0 = Cancel, 1 = Apply, 2 = OK). `Row(i, part)` names a row and
 // which of its focusable sub-controls (part 0 for a plain control; sliders and the
 // combined cursor row expose two parts). Tab walks parts then buttons.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Focus {
+	Search,
 	Row(usize, u16),
 	Button(usize),
 }
@@ -919,8 +921,8 @@ fn assoc_slot(assoc: Assoc) -> usize {
 	Assoc::ALL.iter().position(|&a| a == assoc).unwrap_or(0)
 }
 
-// The prompt's text field, the shells grid's own fields and the color picker's
-// six value boxes are the dialog's ONE open edit, so every bit of field behavior
+// The prompt's text field, the shells grid's own fields, the color picker's
+// six value boxes and the search box are the dialog's ONE open edit, so every bit of field behavior
 // - selection, word ops, the clipboard, the caret ease, the right-click menu -
 // works in all of them without a second copy. None belongs to a spec row, so
 // each borrows an index no row can have: every `specs[edit.row]` comparison in
@@ -933,6 +935,8 @@ const SHELL_ROW_BASE: usize = usize::MAX - 1;
 // The picker box's six value boxes, counting up from the base. The grid counts
 // down from the other end, so the two ranges cannot meet.
 const PICK_ROW_BASE: usize = PSEUDO_ROW;
+// Past the picker's six, and far below where the grid's could reach.
+const SEARCH_ROW: usize = PSEUDO_ROW + 64;
 
 // Which value box a pseudo row stands for, if it is one of the picker's.
 fn pick_field_of(row: usize) -> Option<pick::Field> {
@@ -946,7 +950,7 @@ fn pick_field_row(f: pick::Field) -> usize {
 
 // Which grid field a pseudo row stands for: (entry index, is-the-command-field).
 fn shell_field_of(row: usize) -> Option<(usize, bool)> {
-	if row < PSEUDO_ROW || row == PROMPT_ROW || pick_field_of(row).is_some() {
+	if row < PSEUDO_ROW || row == PROMPT_ROW || row == SEARCH_ROW || pick_field_of(row).is_some() {
 		return None;
 	}
 	let field = SHELL_ROW_BASE - row;
@@ -975,6 +979,16 @@ pub struct TextItem {
 	pub bold: bool,
 	pub italic: bool, // unused since an automatic value lost its italic (2026100913394950)
 	pub scale: f32,   // 1.0 normal; >1 for the prominent dialog title
+	pub marks: Option<Marks>,
+}
+
+/// Parts of a line drawn bold, a step larger and in another color: what a
+/// search matched, in each result.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Marks {
+	pub spans: Vec<(usize, usize)>, // byte ranges into the text
+	pub color: [u8; 3],
+	pub scale: f32,
 }
 
 impl TextItem {
@@ -989,6 +1003,7 @@ impl TextItem {
 			bold: false,
 			italic: false,
 			scale: 1.0,
+			marks: None,
 		}
 	}
 }
@@ -1069,12 +1084,15 @@ pub struct SettingsDialog {
 	assoc: Box<dyn crate::fileassoc::Store + Send>,
 	assoc_on: [bool; 4],
 	focus: Option<Focus>, // keyboard-focused control/button (None = mouse-only)
-	alt: bool,            // Alt held: underline button accelerators (Cancel/Apply/OK)
-	shift: bool,          // Shift held (Shift+Tab walks focus backwards)
-	ctrl: bool,           // the shortcut key held: Ctrl, or Command on a Mac
-	word: bool,           // the arrows and erase keys go by words
-	line: bool,           // the arrows go to either end, Backspace to the start
-	types: bool,          // a character key types
+	search: search::Search,
+	// a row gone to from the search list, and seconds since, while it is marked
+	flash: Option<(usize, f32)>,
+	alt: bool,   // Alt held: underline button accelerators (Cancel/Apply/OK)
+	shift: bool, // Shift held (Shift+Tab walks focus backwards)
+	ctrl: bool,  // the shortcut key held: Ctrl, or Command on a Mac
+	word: bool,  // the arrows and erase keys go by words
+	line: bool,  // the arrows go to either end, Backspace to the start
+	types: bool, // a character key types
 	// UI-font-driven geometry: rows/title/buttons grow with the desktop font so
 	// a large or wide (e.g. bold serif) interface font never truncates. The
 	// consts above are the floor (the classic look at small sizes).
@@ -1141,9 +1159,10 @@ impl SettingsDialog {
 	// An editable field is taller than a checkbox: the text needs clear space
 	// above and below it, not just left and right.
 	fn field_h(&self) -> f32 {
-		lay()
-			.field_height
-			.max(self.line_h + 2.0 * lay().field_pad_v)
+		Self::field_h_for(self.line_h)
+	}
+	fn field_h_for(line_h: f32) -> f32 {
+		lay().field_height.max(line_h + 2.0 * lay().field_pad_v)
 	}
 	fn btn_h(&self) -> f32 {
 		lay().button_height.max(self.line_h + lay().row_pad)
@@ -1427,6 +1446,8 @@ impl SettingsDialog {
 			assoc: crate::fileassoc::system(),
 			assoc_on: [false; 4],
 			focus: None,
+			search: search::Search::default(),
+			flash: None,
 			alt: false,
 			shift: false,
 			ctrl: false,
@@ -1738,14 +1759,15 @@ impl SettingsDialog {
 		(Self::tab_h_for(line_h) + lay().tab_top) * rows as f32
 	}
 	// What sits above a tab's first row: its strip across the top, or only
-	// the panel's padding beside a list.
+	// the panel's padding beside a list, then the search box.
 	fn above_rows_for(line_h: f32, leaf: usize) -> f32 {
-		match tabs_side() {
+		let strip = match tabs_side() {
 			TabsSide::Top => {
 				Self::gutter_h_for(line_h, path_to(tab_nodes(), leaf).len()) + 1.0 + lay().tabs_gap
 			}
 			TabsSide::Left => lay().pad,
-		}
+		};
+		strip + Self::search_band_h_for(line_h)
 	}
 	// The list's own height, top to bottom, every tab in it.
 	fn side_list_h(line_h: f32, count: usize) -> f32 {
@@ -1967,6 +1989,9 @@ impl SettingsDialog {
 		}
 	}
 	fn content_h(&self) -> f32 {
+		if self.searching() {
+			return self.search_content_h();
+		}
 		Self::tab_content_h(self.specs, self.tab, self.line_h, self.edited.shells.len())
 	}
 	fn max_scroll(&self) -> f32 {
@@ -1981,7 +2006,7 @@ impl SettingsDialog {
 		let above = match tabs_side() {
 			TabsSide::Top => Self::gutter_h_for(line_h, 1) + 1.0 + l.tabs_gap,
 			TabsSide::Left => l.pad,
-		};
+		} + Self::search_band_h_for(line_h);
 		(
 			side_off + l.pad * 2.0 + btn_w.max(l.button_width) * 3.0 + l.button_gap * 2.0,
 			above + row * 2.0 + l.buttons_gap + l.button_height.max(line_h + l.row_pad) + l.pad,
@@ -2294,15 +2319,22 @@ impl SettingsDialog {
 			})
 			.collect()
 	}
+	// The tab's first control, past the search box over it.
 	fn first_focus(&self) -> Option<Focus> {
-		self.focus_ring().first().copied()
+		self.focus_ring().into_iter().find(|&f| f != Focus::Search)
 	}
 	// The full Tab order for the active tab: each enabled sub-control (a slider's
-	// track then its field, a Dual row's two checkboxes, else the single control),
-	// then the three footer buttons (Cancel / Apply / OK), always reachable.
+	// track then its field, a Dual row's two checkboxes, else the single
+	// control), then the three footer buttons (Cancel / Apply / OK), always
+	// reachable. While the search list covers the rows it is the box and the
+	// buttons. Otherwise the box is outside the walk, as the tabs are: Ctrl+F or
+	// a click reaches it, and Tab from it goes on to the first control.
 	fn focus_ring(&self) -> Vec<Focus> {
 		let mut ring = Vec::new();
-		for i in 0..self.specs.len() {
+		if self.searching() {
+			ring.push(Focus::Search);
+		}
+		for i in (0..self.specs.len()).filter(|_| !self.searching()) {
 			if self.specs[i].tab != self.tab || Self::header_is_tab_title(&self.specs[i]) {
 				continue;
 			}
@@ -2315,11 +2347,13 @@ impl SettingsDialog {
 		ring.extend((0..3).map(Focus::Button));
 		ring
 	}
-	// Sort key matching the ring above: rows in spec order, footer buttons last.
-	fn focus_order(f: Focus) -> (usize, u16) {
+	// Sort key matching the ring above: the box, rows in spec order, footer
+	// buttons last.
+	fn focus_order(f: Focus) -> (u8, usize, u16) {
 		match f {
-			Focus::Row(i, p) => (i, p),
-			Focus::Button(b) => (usize::MAX, b as u16),
+			Focus::Search => (0, 0, 0),
+			Focus::Row(i, p) => (1, i, p),
+			Focus::Button(b) => (2, b, 0),
 		}
 	}
 	// Tab / Shift+Tab (and Down / Up off a non-slider row): move focus to the
@@ -2365,6 +2399,10 @@ impl SettingsDialog {
 	// field's do anywhere else: Up / Down keep stepping the value (key_vertical
 	// runs whether the field is open or not), Left / Right move the caret.
 	fn open_focused_field(&mut self) {
+		if self.focus == Some(Focus::Search) {
+			self.open_edit(SEARCH_ROW, true);
+			return;
+		}
 		let Some(Focus::Row(i, part)) = self.focus else {
 			return;
 		};
@@ -2424,6 +2462,9 @@ impl SettingsDialog {
 	// A click on a tab, which takes no focus of its own. One with tabs under it
 	// opens its first, unless the current tab is already one of them.
 	fn go_to_tab(&mut self, node: usize) {
+		if self.searching() {
+			self.search_clear();
+		}
 		let nodes = tab_nodes();
 		let leaf = match nodes[node].leaf {
 			Some(leaf) => leaf,
@@ -2445,6 +2486,9 @@ impl SettingsDialog {
 		self.commit_edit();
 		self.capture_end();
 		self.open = None;
+		if self.searching() {
+			self.search_clear();
+		}
 		let n = tab_titles().len();
 		if n == 0 {
 			return;
@@ -2519,6 +2563,10 @@ impl SettingsDialog {
 				let step = if forward { 1 } else { -1 };
 				self.pending = (self.pending as i32 + step).rem_euclid(n as i32) as usize;
 			}
+			return;
+		}
+		if self.focus == Some(Focus::Search) && self.searching() {
+			self.search_step(forward);
 			return;
 		}
 		if forward && self.alt {
@@ -2654,6 +2702,10 @@ impl SettingsDialog {
 		let (i, part) = match self.focus {
 			Some(Focus::Button(b)) => return self.buttons()[b].0,
 			Some(Focus::Row(i, part)) => (i, part),
+			Some(Focus::Search) => {
+				self.char_input(' ');
+				return Action::None;
+			}
 			None => return Action::None,
 		};
 		let key = self.part_key(i, part);
@@ -2679,6 +2731,9 @@ impl SettingsDialog {
 
 	// Current value of row i's editable field, as text.
 	fn edit_buf(&self, i: usize) -> String {
+		if i == SEARCH_ROW {
+			return self.search.query.clone();
+		}
 		if i == PROMPT_ROW {
 			return self.edit.as_ref().map_or(String::new(), |e| e.buf.clone());
 		}
@@ -3331,7 +3386,8 @@ impl SettingsDialog {
 			}
 		}
 		let vp = self.viewport();
-		if !vp.contains(mx, my) {
+		// the list over the rows says what it is
+		if !vp.contains(mx, my) || self.searching() {
 			return None;
 		}
 		for i in 0..self.specs.len() {
@@ -4130,6 +4186,9 @@ impl SettingsDialog {
 				return Action::None;
 			}
 		}
+		if self.search_mouse_down(x, y, measure) {
+			return Action::None;
+		}
 		// rows: only within the (possibly scrolled) viewport, only the active tab
 		let vp = self.viewport();
 		if y < vp.y || y > vp.y + vp.h {
@@ -4278,6 +4337,9 @@ impl SettingsDialog {
 
 	// The editable text box of row i, by kind (None for non-field rows).
 	fn field_rect(&self, i: usize) -> Option<Rect> {
+		if i == SEARCH_ROW {
+			return Some(self.search_box());
+		}
 		if i == PROMPT_ROW {
 			return self.prompt_field_rect();
 		}
@@ -4537,6 +4599,14 @@ impl SettingsDialog {
 	// caller should schedule: fast while something moves, blink-rate while an
 	// idle edit pulses, None when there's nothing to animate.
 	fn animate_dip(&mut self, dt: f32, measure: &mut impl FnMut(&str) -> f32) -> Option<u64> {
+		let flash = self.flash_step(dt);
+		let edit = self.animate_edit_dip(dt, measure);
+		match (flash, edit) {
+			(Some(a), Some(b)) => Some(a.min(b)),
+			(a, b) => a.or(b),
+		}
+	}
+	fn animate_edit_dip(&mut self, dt: f32, measure: &mut impl FnMut(&str) -> f32) -> Option<u64> {
 		// Edge autoscroll: a drag held past the box keeps selecting while the view
 		// crawls, so the pointer is replayed each frame. Only past the box, though.
 		// Replaying it inside fed the view ease back into the caret: a click near
@@ -4690,6 +4760,9 @@ impl SettingsDialog {
 			self.hscroll = frac * self.max_hscroll();
 			return self.hscroll.to_bits() != was.to_bits();
 		}
+		if self.search_hover(x, y) {
+			return true;
+		}
 		let Some(i) = self.drag else {
 			return false;
 		};
@@ -4775,6 +4848,13 @@ impl SettingsDialog {
 			// the picker's own boxes are open whenever they hold focus, so there
 			// is nothing here for a keystroke to fall through to
 			if self.pick.is_some() {
+				return;
+			}
+			if self.focus == Some(Focus::Search) && self.prompt.is_none() {
+				self.open_edit(SEARCH_ROW, true);
+				if self.insert_char(c) {
+					self.reparse_edit();
+				}
 				return;
 			}
 			let (Some(Focus::Row(i, _)), None) = (self.focus, self.prompt.as_ref()) else {
@@ -4866,6 +4946,9 @@ impl SettingsDialog {
 		// Ctrl+A on a focused-but-closed field opens it first - but not through an
 		// open prompt, whose delete variant leaves no edit for this to find
 		if self.edit.is_none() && self.prompt.is_none() && self.pick.is_none() {
+			if self.focus == Some(Focus::Search) {
+				self.open_edit(SEARCH_ROW, true);
+			}
 			if let Some(Focus::Row(i, _)) = self.focus {
 				if matches!(
 					self.specs[i].kind,
@@ -4987,6 +5070,10 @@ impl SettingsDialog {
 		let Some((i, buf)) = self.edit.as_ref().map(|edit| (edit.row, edit.buf.clone())) else {
 			return;
 		};
+		if i == SEARCH_ROW {
+			self.search_set(&buf);
+			return;
+		}
 		if i == PROMPT_ROW {
 			// nothing to apply yet - but the name just changed, so whatever OK
 			// last objected to may no longer be true
@@ -5059,6 +5146,10 @@ impl SettingsDialog {
 		} else if self.prompt.is_some() {
 			self.prompt_close();
 			Action::None
+		} else if self.searching() {
+			// a list that is up goes first, and the dialog only on the next press
+			self.search_clear();
+			Action::None
 		} else {
 			Action::Cancel
 		}
@@ -5091,6 +5182,12 @@ impl SettingsDialog {
 			} else {
 				self.prompt_accept();
 			}
+			return Action::None;
+		}
+		// in the search box Enter goes to the picked result, or does nothing
+		// when none matched; only an empty box leaves it to mean OK
+		if self.focus == Some(Focus::Search) && self.searching() {
+			self.search_go(self.search.sel);
 			return Action::None;
 		}
 		if self.open.is_some() {
@@ -5243,8 +5340,11 @@ impl SettingsDialog {
 			fixed.push(quad(track.x, track.y, track.w, track.h, colors.track));
 			fixed.push(quad(thumb.x, thumb.y, thumb.w, thumb.h, colors.handle));
 		}
+		self.search_rects(&colors, &mut fixed, &mut out, &mut measure);
 
-		for i in 0..self.specs.len() {
+		// the search list takes the rows' place while it is up
+		let rows_shown = !self.searching();
+		for i in (0..self.specs.len()).filter(|_| rows_shown) {
 			if self.specs[i].tab != self.tab || Self::header_is_tab_title(&self.specs[i]) {
 				continue;
 			}
@@ -5504,7 +5604,7 @@ impl SettingsDialog {
 		}
 		// keyboard-focus ring around the active control row (scrolls + clips with
 		// the rows; a focused button is ringed below, in the fixed chrome).
-		if let Some(Focus::Row(fr, fp)) = self.focus {
+		if let Some(Focus::Row(fr, fp)) = self.focus.filter(|_| rows_shown) {
 			if self.specs[fr].tab == self.tab && !matches!(self.specs[fr].kind, Kind::Header(_)) {
 				let r = self.focus_ctl_rect(fr, fp);
 				let inset = if self.ring_is_the_box(fr, fp) {
@@ -5618,9 +5718,11 @@ impl SettingsDialog {
 				)
 			});
 		}
+		self.search_texts(&colors, &mut out);
 		// row text clips to the scroll viewport so it can't ride over the chrome
 		let vp = self.viewport();
-		for i in 0..self.specs.len() {
+		let rows_shown = !self.searching();
+		for i in (0..self.specs.len()).filter(|_| rows_shown) {
 			if self.specs[i].tab != self.tab || Self::header_is_tab_title(&self.specs[i]) {
 				continue;
 			}
@@ -5989,6 +6091,7 @@ impl SettingsDialog {
 				bold: false,
 				italic: false,
 				scale: 1.0,
+				marks: None,
 			});
 		}
 		(rects, texts)
@@ -11839,6 +11942,7 @@ mod tests {
 			not_macos: false,
 			warning: "",
 			windows_warning: "",
+			aliases: &[],
 		};
 		let specs = [
 			row(Key::PerfCheckHardware, 0),
@@ -13072,7 +13176,10 @@ mod tests {
 			vp.x >= list.x + list.w + 1.0 - 0.01,
 			"rows start past the list and its rule"
 		);
-		assert!((d.rows_y0() - (d.rect.y + lay().pad)).abs() < 0.01);
+		// The search box's band sits over the rows now (2026101419165501).
+		// assert!((d.rows_y0() - (d.rect.y + lay().pad)).abs() < 0.01);
+		let band = SettingsDialog::search_band_h_for(d.line_h);
+		assert!((d.rows_y0() - (d.rect.y + lay().pad + band)).abs() < 0.01);
 		let mut last_bottom = d.rect.y;
 		for (node, n) in tab_nodes().iter().enumerate() {
 			let r = d.tab_rect(node);

@@ -18,7 +18,7 @@ use winit::window::{Window, WindowId};
 use crate::config;
 use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, RectInstance, RectRenderer, Retry};
 use crate::pane::Rect;
-use crate::settings_ui::{Action, EditCmd, SettingsDialog, View, quad};
+use crate::settings_ui::{Action, EditCmd, Marks, SettingsDialog, View, quad};
 use crate::text::{TextCtx, ui_attrs};
 
 // A laid-out line of static dialog text (window-relative coords).
@@ -685,6 +685,10 @@ impl DialogWin {
 					'c' => EditCmd::Copy,
 					'x' => EditCmd::Cut,
 					'v' => EditCmd::Paste,
+					'f' => {
+						dialog.search_focus();
+						return None;
+					}
 					_ => return None,
 				};
 				edit_cmd(dialog, cmd, clip);
@@ -1155,6 +1159,8 @@ struct ShapeKey {
 	attrs: Attrs<'static>,
 	// the buffer's height, as bits, since an f32 has no Hash
 	height: u32,
+	// marked spans, their color and their size as bits
+	marks: Option<(Vec<(usize, usize)>, [u8; 3], u32)>,
 }
 
 impl ShapedText {
@@ -1188,10 +1194,24 @@ impl ShapedText {
 		width: f32,
 		height: f32,
 	) -> usize {
+		self.marked(text, line, attrs, None, width, height)
+	}
+
+	// The same, with some of the line drawn bold, larger and in another color.
+	fn marked(
+		&mut self,
+		text: &mut TextCtx,
+		line: &str,
+		attrs: &Attrs<'static>,
+		marks: Option<&Marks>,
+		width: f32,
+		height: f32,
+	) -> usize {
 		let key = ShapeKey {
 			text: line.to_string(),
 			attrs: attrs.clone(),
 			height: height.to_bits(),
+			marks: marks.map(|m| (m.spans.clone(), m.color, m.scale.to_bits())),
 		};
 		if let Some(&slot) = self.index.get(&key) {
 			return slot;
@@ -1201,7 +1221,10 @@ impl ShapedText {
 				text.resize_buffer(&mut kept, width, height);
 				kept
 			}
-			None => shape(text, line, attrs, width, height),
+			None => match marks {
+				Some(marks) => shape_marked(text, line, attrs, marks, width, height),
+				None => shape(text, line, attrs, width, height),
+			},
 		};
 		self.bufs.push(buf);
 		self.index.insert(key, self.bufs.len() - 1);
@@ -1220,6 +1243,55 @@ fn shape(
 	SHAPED.with(|n| n.set(n.get() + 1));
 	let mut buf = text.new_ui_buffer(width, height);
 	buf.set_text(&mut text.font_system, line, attrs, Shaping::Advanced, None);
+	buf.shape_until_scroll(&mut text.font_system, false);
+	buf
+}
+
+// The marked spans take a bigger size on the same line height, so the line box
+// and where the text sits in its row stay as an unmarked line's.
+fn shape_marked(
+	text: &mut TextCtx,
+	line: &str,
+	attrs: &Attrs,
+	marks: &Marks,
+	width: f32,
+	height: f32,
+) -> glyphon::Buffer {
+	#[cfg(test)]
+	SHAPED.with(|n| n.set(n.get() + 1));
+	let mut buf = text.new_ui_buffer(width, height);
+	let base = buf.metrics();
+	let mut strong = attrs.clone();
+	strong.weight = crate::text::ui_bold_weight();
+	strong.color_opt = Some(GColor::rgb(marks.color[0], marks.color[1], marks.color[2]));
+	let strong = strong.metrics(glyphon::Metrics::new(
+		base.font_size * marks.scale,
+		base.line_height,
+	));
+	let mut spans: Vec<(&str, Attrs)> = Vec::new();
+	let mut at = 0;
+	for &(a, b) in &marks.spans {
+		let (a, b) = (a.clamp(at, line.len()), b.clamp(at, line.len()));
+		if !(line.is_char_boundary(a) && line.is_char_boundary(b)) {
+			continue;
+		}
+		if a > at {
+			spans.push((&line[at..a], attrs.clone()));
+		}
+		if b > a {
+			spans.push((&line[a..b], strong.clone()));
+		}
+		at = b;
+	}
+	if at < line.len() {
+		spans.push((&line[at..], attrs.clone()));
+	}
+	// an empty span can hang the layout (G108)
+	spans.retain(|(t, _)| !t.is_empty());
+	if spans.is_empty() {
+		return shape(text, line, attrs, width, height);
+	}
+	buf.set_rich_text(&mut text.font_system, spans, attrs, Shaping::Advanced, None);
 	buf.shape_until_scroll(&mut text.font_system, false);
 	buf
 }
@@ -1479,7 +1551,14 @@ fn scene(
 					attrs.style = glyphon::Style::Italic;
 				}
 				let tall = item.scale.max(1.0);
-				let buf = shaped.buffer(text, &item.text, &attrs, w as f32, line_h * tall);
+				let buf = shaped.marked(
+					text,
+					&item.text,
+					&attrs,
+					item.marks.as_ref(),
+					w as f32,
+					line_h * tall,
+				);
 				// the offset is the glyphs', so it scales with them either way
 				Placed {
 					x: item.x,

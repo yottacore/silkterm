@@ -108,6 +108,18 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 - A tab holds one subject. Seven is about the ceiling; past that, the subject is probably two subjects.
 
+### Search
+
+- A search box sits between the tabs and the rows, and stays put when the rows scroll. Empty, it shows `Search (Ctrl+F)`.
+
+- With text in it, a list of matches takes the place of the rows. Label matches come first, then matches on a row's aliases, then loose ones such as a typo. An empty list says so in one line.
+
+- A match reads as a path, with ⏵ between the parts: `Appearance ⏵ Text ⏵ Font ⏵ Family`. The heading is left out where it only repeats the tab's title. An alias that found the row follows in parentheses. The matched text is bold, a step larger, and in the highlight color.
+
+- Picking one goes to its row, scrolls it into view, marks it for a moment in the highlight color and puts the keyboard on it. The box empties.
+
+- Aliases are for words people search by that the label doesn't have, such as "typeface" for Family. One already in the label is noise.
+
 - A tab's first heading may repeat the tab's own name, in which case it draws nothing. It stays in the declarations because a heading is also what assigns the rows under it to a tab.
 
 ### Groups and sub-groups
@@ -325,6 +337,7 @@ Rules that go with them:
 	- A tab's sub-tabs are walked before the next tab, and the macOS chords below take the same walk.
 	- A row on the Keys tab waits for a new chord after Enter, Space or a click on its box, and every key goes to it until one comes. Escape leaves the row as it was, and Backspace or Delete on its own turns the hotkey off. A key that would stop typing at the shell is refused, with what it needs held. A chord another hotkey had is said on both rows, the way the launch says it about the file.
 	- On macOS Command+Shift+[ and ] change tab, and so do Command+PgUp/PgDn. Ctrl+Tab moves focus like Tab, since Command+Tab belongs to the system.
+	- Ctrl+F goes to the search box, Command+F on macOS. In it, Up and Down walk the list of matches and Enter goes to the one picked. Escape empties the box first, and is Cancel only once the box is empty. While the box is empty it is outside the Tab walk, as the tabs are.
 	- A text box on macOS takes the Mac's own keys: Command+C, X, V and A, Option to move or erase by words, Command+Left and Right for either end, and Command+Backspace to erase to the start.
 
 - A tab being renamed is a text box too, with the same keys as one in a dialog. Its right-click menu has Cut, Copy, Paste, Delete and Select all. While it is up, Copy, Paste and Paste Selection on any menu act on the name.

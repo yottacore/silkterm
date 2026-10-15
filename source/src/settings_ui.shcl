@@ -42,6 +42,7 @@ layout:
 	pad: 18                    ## margin inside all four panel edges
 	tabs_gap: 10               ## tab strip -> first row
 	buttons_gap: 28            ## last row -> footer buttons
+	search_gap: 12             ## search box -> the rows or results under it
 
 	## Rows
 	row_height: 32             ## floor for an ordinary row
@@ -139,6 +140,7 @@ icons:
 	dropdown_arrow: "▾"   ## in the collapsed box
 	dropdown_check: "✓"   ## marks the current value in the open list
 	revert: "↺"           ## revert-to-default, one per row
+	search_sep: "⏵"       ## between tab, heading and row in a search result
 
 ## •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 ## Rows
@@ -199,6 +201,9 @@ icons:
 ##            that one tip shows over the label, the mark and the control
 ## windows_warning: the same in the Windows build, in place of `warning:`. A
 ##            mark that applies only there has only this one.
+## aliases:   other words the search box finds the row by, after the ones in
+##            its label. Only a row with a label can have them, since that is
+##            what a result shows.
 
 rows:
 
@@ -211,16 +216,19 @@ rows:
 	Performance:
 		kind: heading
 		label: Performance
+		aliases: "speed", "fps"
 		tab: Silk
 
 	PerfAuto:
 		label: Choose automatically
+		aliases: "benchmark", "hardware test"
 		kind: toggle
 		setting: performance.automatic
 		help: "Test how fast this machine draws, and pick the profile it can run smoothly. If the display still falls behind, the profile drops a step until SilkTerm restarts, but never below Low."
 
 	PerfProfile:
 		label: Profile
+		aliases: "quality", "preset", "effects"
 		kind: dropdown
 		setting: performance.profile
 		auto: PerfAuto
@@ -247,10 +255,12 @@ rows:
 	TextReadability:
 		kind: heading
 		label: Text readability
+		aliases: "legibility"
 		tab: Silk
 
 	TextScrim:
 		label: Text scrim
+		aliases: "halo", "glow", "text shadow"
 		kind: toggle
 		setting: text.scrim.enabled
 		group: profile
@@ -320,6 +330,7 @@ rows:
 	## Its own one-row group under the scrim: it works with the halo or without it.
 	Outline:
 		label: Outline px
+		aliases: "stroke"
 		kind: slider
 		range: 0, 4
 		whole: true
@@ -334,6 +345,7 @@ rows:
 
 	SmoothScroll:
 		label: Smooth scrolling
+		aliases: "animation", "easing"
 		kind: toggle
 		setting: scroll.smooth
 		group: profile
@@ -365,6 +377,7 @@ rows:
 
 	SingleScreenTau:
 		label: Single-screen speed %
+		aliases: "scroll speed"
 		kind: slider
 		range: 1, 100
 		whole: true
@@ -400,16 +413,19 @@ rows:
 	Themes:
 		kind: heading
 		label: Themes
+		aliases: "colors", "colours", "palette", "color scheme"
 		tab: Appearance/Themes
 
 	Theme:
 		label: Theme
+		aliases: "colors", "color scheme", "palette"
 		kind: dropdown
 		setting: theme
 		help: "The color scheme the terminal and this dialog follow."
 
 	ThemeMode:
 		label: Mode
+		aliases: "dark mode", "light mode", "night mode"
 		kind: dropdown
 		options: "Dark", "Light", "System"
 		indent: 1
@@ -432,10 +448,12 @@ rows:
 	Colors:
 		kind: heading
 		label: Colors
+		aliases: "colours", "palette"
 		tab: Appearance/Themes
 
 	ColBg:
 		label: Terminal background
+		aliases: "background color", "bg"
 		kind: color
 		setting: colors.background
 		group: theme
@@ -449,6 +467,7 @@ rows:
 
 	ColFg:
 		label: Foreground
+		aliases: "text color", "fg"
 		kind: color
 		setting: colors.foreground
 		auto: ColFromWallpaper
@@ -457,6 +476,7 @@ rows:
 
 	ColCursor:
 		label: Cursor
+		aliases: "cursor color"
 		kind: color
 		setting: colors.cursor
 		auto: ColFromWallpaper
@@ -500,6 +520,7 @@ rows:
 
 	ColHighlight:
 		label: Highlight
+		aliases: "accent"
 		kind: color
 		indent: 1
 		setting: colors.highlight
@@ -508,6 +529,7 @@ rows:
 
 	ColFocus:
 		label: Focus
+		aliases: "accent", "focus ring"
 		kind: color
 		indent: 1
 		setting: colors.focus
@@ -516,12 +538,14 @@ rows:
 
 	ColScrollbarThumb:
 		label: Scrollbar handle
+		aliases: "thumb"
 		kind: color
 		setting: colors.scrollbar_thumb
 		help: "Also colors the minimap marker. Themes don't change this color or Track."
 
 	ColScrollbarTrough:
 		label: Track
+		aliases: "trough", "scrollbar track"
 		kind: color
 		indent: 1
 		setting: colors.scrollbar_trough
@@ -531,16 +555,19 @@ rows:
 	Background:
 		kind: heading
 		label: Background
+		aliases: "image", "picture"
 		tab: Appearance/Background
 
 	BgEnabled:
 		label: Wallpaper
+		aliases: "background image", "picture"
 		kind: toggle
 		setting: wallpaper.enabled
 		group: profile
 
 	BgImage:
 		label: File or folder
+		aliases: "image", "picture", "path"
 		kind: text
 		setting: wallpaper.image
 		gate: BgEnabled
@@ -549,6 +576,7 @@ rows:
 
 	BgFit:
 		label: Fit
+		aliases: "scale", "stretch", "fill"
 		kind: radio
 		options: "Stretch", "Zoom"
 		setting: wallpaper.default_fit
@@ -564,6 +592,7 @@ rows:
 
 	BgRotate:
 		label: Rotate folder
+		aliases: "slideshow", "cycle"
 		kind: toggle
 		setting: wallpaper.rotate.enabled
 		gate: BgEnabled
@@ -571,6 +600,7 @@ rows:
 
 	BgOpacity:
 		label: Visibility %
+		aliases: "wallpaper opacity", "dim", "brightness"
 		kind: slider
 		range: 0, 100
 		whole: true
@@ -634,6 +664,7 @@ rows:
 	## Last on the tab, since it is the one that depends on the desktop.
 	Transparency:
 		label: Transparency
+		aliases: "see-through", "translucent", "transparent"
 		kind: toggle
 		setting: transparency.enabled
 		help: "See through the window to what's behind it. On Windows this takes effect at the next launch."
@@ -642,6 +673,7 @@ rows:
 
 	Opacity:
 		label: Opacity %
+		aliases: "transparency", "translucent"
 		kind: slider
 		range: 0, 100
 		whole: true
@@ -650,6 +682,7 @@ rows:
 
 	BackdropBlur:
 		label: Blur-behind
+		aliases: "frosted glass", "acrylic"
 		kind: toggle
 		setting: transparency.blur_behind
 		gate: Transparency
@@ -660,6 +693,7 @@ rows:
 	Font:
 		kind: heading
 		label: Font
+		aliases: "typeface"
 		tab: Appearance/Text
 
 	## Each box switches its row below to the desktop's own monospace font.
@@ -667,6 +701,7 @@ rows:
 	## the built-in list and 17 are used.
 	SystemFont:
 		label: Use system font
+		aliases: "desktop font"
 		kind: pair
 		options: "Face", "Size"
 		parts: SystemFont, SystemFontSize
@@ -675,6 +710,7 @@ rows:
 
 	FontFamily:
 		label: Family
+		aliases: "font", "typeface", "font name"
 		kind: text
 		setting: font.family
 		auto: SystemFont
@@ -683,6 +719,7 @@ rows:
 
 	FontSize:
 		label: Size
+		aliases: "font size", "text size", "zoom"
 		kind: slider
 		range: 6, 40
 		typed_max: 128
@@ -693,6 +730,7 @@ rows:
 
 	LineHeight:
 		label: Line height
+		aliases: "line spacing", "leading"
 		kind: slider
 		range: 0.8, 2
 		typed_max: 4
@@ -704,10 +742,12 @@ rows:
 	Cursor:
 		kind: heading
 		label: Cursor
+		aliases: "caret"
 		tab: Appearance/Cursor
 
 	CursorHeight:
 		label: Height %
+		aliases: "cursor size", "caret"
 		kind: slider
 		range: 1, 100
 		whole: true
@@ -716,6 +756,7 @@ rows:
 
 	CursorWidth:
 		label: Width %
+		aliases: "cursor size", "caret"
 		kind: slider
 		range: 1, 100
 		whole: true
@@ -726,6 +767,7 @@ rows:
 	## they can be set up first and come back as they were.
 	CursorBlinking:
 		label: Blink
+		aliases: "cursor blink", "flash"
 		kind: toggle
 		setting: cursor.blink
 		group: profile
@@ -733,6 +775,7 @@ rows:
 
 	CursorBlinkRate:
 		label: Rate s
+		aliases: "blink speed"
 		kind: slider
 		range: 0.2, 6
 		typed_max: 20
@@ -742,6 +785,7 @@ rows:
 
 	CursorAnimation:
 		label: Animation
+		aliases: "cursor trail", "smooth cursor"
 		kind: dropdown
 		options: "Phase", "Pulse vertical", "Pulse horizontal", "Pulse both"
 		setting: cursor.animation
@@ -768,6 +812,7 @@ rows:
 
 	CopyOnSelect:
 		label: Copy on select
+		aliases: "clipboard", "auto copy", "selection"
 		kind: toggle
 		setting: shell.copy_on_select
 		help: "Put selected text on the clipboard as soon as it is selected."
@@ -781,6 +826,7 @@ rows:
 
 	WheelLines:
 		label: Wheel lines
+		aliases: "mouse wheel", "scroll speed"
 		kind: slider
 		range: 1, 10
 		typed_max: 100
@@ -790,6 +836,7 @@ rows:
 
 	Scrollbar:
 		label: Scrollbar
+		aliases: "scroll bar", "scrollback", "history"
 		kind: toggle
 		setting: scroll.scrollbar.enabled
 
@@ -803,6 +850,7 @@ rows:
 
 	ScrollbarAutoHide:
 		label: Hide when idle
+		aliases: "auto hide"
 		kind: toggle
 		setting: scroll.scrollbar.auto_hide
 		gate: Scrollbar
@@ -810,6 +858,7 @@ rows:
 
 	Minimap:
 		label: Minimap
+		aliases: "overview", "scrollback", "history"
 		kind: toggle
 		setting: scroll.minimap.enabled
 		help: "A small view of the whole scrollback beside the text. It takes up columns the text would have used."
@@ -833,6 +882,7 @@ rows:
 	## turns it off.
 	RememberSize:
 		label: Remember last size
+		aliases: "window size"
 		kind: toggle
 		setting: window.remember_size
 		help: "Reopen at the size the window was last closed at."
@@ -846,6 +896,7 @@ rows:
 
 	Columns:
 		label: Columns
+		aliases: "width", "window width"
 		kind: slider
 		range: 20, 400
 		typed_max: 1000
@@ -856,6 +907,7 @@ rows:
 
 	Rows:
 		label: Rows
+		aliases: "height", "window height"
 		kind: slider
 		range: 6, 120
 		typed_max: 1000
@@ -888,12 +940,14 @@ rows:
 
 	NewTabNextToCurrent:
 		label: New tabs go next to current
+		aliases: "tab position"
 		kind: toggle
 		setting: window.new_tab_next_to_current
 		help: "Open new tabs right after the current one, instead of at the end."
 
 	Margin:
 		label: Margin px
+		aliases: "padding"
 		kind: slider
 		range: 0, 40
 		typed_max: 200
@@ -904,6 +958,7 @@ rows:
 	TabText:
 		kind: heading
 		label: Tab text
+		aliases: "tab title", "tab label"
 		tab: Window
 
 	## The four share one line and one revert arrow. Each names itself, and each
@@ -938,6 +993,7 @@ rows:
 	WindowTitle:
 		kind: heading
 		label: Window title
+		aliases: "title bar", "caption"
 		tab: Window
 
 	TitleShowsTab:
@@ -949,16 +1005,19 @@ rows:
 	Hyperlinks:
 		kind: heading
 		label: Hyperlinks
+		aliases: "urls", "web addresses"
 		tab: Window
 
 	HyperlinksEnabled:
 		key: Hyperlinks
 		label: Enabled
+		aliases: "hyperlinks", "links", "urls"
 		kind: toggle
 		setting: hyperlinks.enabled
 
 	LinkOpenCommand:
 		label: Open command
+		aliases: "browser", "url handler"
 		kind: text
 		setting: hyperlinks.open_command
 		gate: Hyperlinks
@@ -970,10 +1029,12 @@ rows:
 	ResourceUse:
 		kind: heading
 		label: Resource use
+		aliases: "memory", "power saving"
 		tab: Window
 
 	IdleRelease:
 		label: Free resources when idle
+		aliases: "memory", "sleep", "power saving"
 		kind: toggle
 		setting: window.idle_release
 		help: "Free graphics memory while the window isn't being used, and get it back when it is. Programs in it keep running. Helps most with a lot of windows open, or a card low on memory."
@@ -1003,6 +1064,7 @@ rows:
 
 	SoftwareRendering:
 		label: Always use software rendering
+		aliases: "gpu", "graphics card"
 		kind: toggle
 		setting: window.software_rendering
 		not_macos: true
@@ -1013,6 +1075,7 @@ rows:
 	Shell:
 		kind: heading
 		label: Shell
+		aliases: "shells", "default shell", "command line"
 		tab: Shell
 
 	## The shells the Tabs menu offers under "New tab with shell", in the order it
@@ -1032,10 +1095,12 @@ rows:
 	StartupDir:
 		kind: heading
 		label: "Default startup directory"
+		aliases: "working directory", "start folder"
 		tab: Shell
 
 	StartupDirectory:
 		label: Directory
+		aliases: "working directory", "cwd", "start folder"
 		kind: text
 		setting: shell.startup_directory
 		help: "Where a new shell starts when nothing else says. Accepts ~ and environment variables. --directory, an inherited directory and the launch directory all come first."
@@ -1058,6 +1123,7 @@ rows:
 
 	BashPrompt:
 		label: "Use git-aware Bash prompt"
+		aliases: "ps1", "git prompt"
 		kind: toggle
 		setting: shell.bash_prompt
 		help: "Use the x9ps1-git prompt in new bash panes. It shows the git branch and status, and replaces the .bashrc prompt without changing any file."
@@ -1069,6 +1135,7 @@ rows:
 	OpenWith:
 		kind: heading
 		label: "Open with SilkTerm"
+		aliases: "file types", "file associations"
 		tab: Shell
 		windows: true
 
@@ -1098,6 +1165,7 @@ rows:
 
 	OpenFolder:
 		label: "Folder menu"
+		aliases: "explorer", "right-click menu"
 		kind: buttons
 		options: "Register"
 		windows: true
@@ -1114,6 +1182,7 @@ rows:
 	KeysFile:
 		kind: heading
 		label: File
+		aliases: "shortcuts", "hotkeys", "keyboard", "key bindings"
 		tab: Keys
 
 	HotkeyNewWindow:
@@ -1123,11 +1192,13 @@ rows:
 
 	HotkeySettings:
 		label: "Settings"
+		aliases: "preferences", "options"
 		kind: hotkey
 		setting: keys.settings
 
 	HotkeyQuit:
 		label: "Quit"
+		aliases: "exit"
 		kind: hotkey
 		setting: keys.quit
 
@@ -1138,11 +1209,13 @@ rows:
 
 	HotkeyCopy:
 		label: "Copy"
+		aliases: "clipboard"
 		kind: hotkey
 		setting: keys.copy
 
 	HotkeyPaste:
 		label: "Paste"
+		aliases: "clipboard"
 		kind: hotkey
 		setting: keys.paste
 
@@ -1153,21 +1226,25 @@ rows:
 
 	HotkeyFontBigger:
 		label: "Increase font size"
+		aliases: "zoom in", "larger"
 		kind: hotkey
 		setting: keys.font_bigger
 
 	HotkeyFontSmaller:
 		label: "Decrease font size"
+		aliases: "zoom out", "smaller"
 		kind: hotkey
 		setting: keys.font_smaller
 
 	HotkeyFontReset:
 		label: "Reset font size"
+		aliases: "zoom reset"
 		kind: hotkey
 		setting: keys.font_reset
 
 	HotkeyFullscreen:
 		label: "Fullscreen"
+		aliases: "full screen"
 		kind: hotkey
 		setting: keys.fullscreen
 
@@ -1219,11 +1296,13 @@ rows:
 
 	HotkeySplitRight:
 		label: "Split vertical"
+		aliases: "split right"
 		kind: hotkey
 		setting: keys.split_right
 
 	HotkeySplitDown:
 		label: "Split horizontal"
+		aliases: "split down"
 		kind: hotkey
 		setting: keys.split_down
 
