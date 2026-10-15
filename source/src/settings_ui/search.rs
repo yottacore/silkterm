@@ -459,12 +459,12 @@ impl SettingsDialog {
 		!self.search.query.is_empty()
 	}
 
-	// The search box's band over the rows: the box and the gap under it.
+	/// The search box's band over the rows: the box and the gap under it.
 	pub(super) fn search_band_h_for(line_h: f32) -> f32 {
 		Self::field_h_for(line_h) + lay().search_gap
 	}
 
-	// Window space: it sits over the rows and never scrolls with them.
+	/// Window space: it sits over the rows and never scrolls with them.
 	pub(super) fn search_box(&self) -> Rect {
 		let h = self.field_h();
 		let x = self.rows_x0() + lay().pad;
@@ -511,7 +511,7 @@ impl SettingsDialog {
 		self.open_edit(SEARCH_ROW, true);
 	}
 
-	// What the box holds changed: list again from the top.
+	/// What the box holds changed: list again from the top.
 	pub(super) fn search_set(&mut self, text: &str) {
 		let was = self.searching();
 		self.search.query = text.to_string();
@@ -540,7 +540,7 @@ impl SettingsDialog {
 		self.search_set("");
 	}
 
-	// Up and Down in the box walk the list, which keeps the one picked in view.
+	/// Up and Down in the box walk the list, which keeps the one picked in view.
 	pub(super) fn search_step(&mut self, forward: bool) {
 		let n = self.search.hits.len();
 		if n == 0 {
@@ -627,7 +627,7 @@ impl SettingsDialog {
 		true
 	}
 
-	// The pointer picks the result under it, the way it does in an open list.
+	/// The pointer picks the result under it, the way it does in an open list.
 	pub(super) fn search_hover(&mut self, x: f32, y: f32) -> bool {
 		if !self.searching() {
 			return false;
@@ -641,8 +641,8 @@ impl SettingsDialog {
 		}
 	}
 
-	// The picked row's mark fades out over a second or so. The wake the frame
-	// loop wants while it does.
+	/// The picked row's mark fades out over a second or so. The wake the frame
+	/// loop wants while it does.
 	pub(super) fn flash_step(&mut self, dt: f32) -> Option<u64> {
 		let (_, t) = self.flash.as_mut()?;
 		*t += dt;

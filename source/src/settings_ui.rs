@@ -663,9 +663,10 @@ fn border(out: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
 }
 
 // What holds keyboard focus: the search box, one control within a row, or a
-// footer button (index into `buttons()`: 0 = Cancel, 1 = Apply, 2 = OK). `Row(i, part)` names a row and
-// which of its focusable sub-controls (part 0 for a plain control; sliders and the
-// combined cursor row expose two parts). Tab walks parts then buttons.
+// footer button (index into `buttons()`: 0 = Cancel, 1 = Apply, 2 = OK).
+// `Row(i, part)` names a row and which of its focusable sub-controls (part 0
+// for a plain control; sliders and the combined cursor row expose two parts).
+// Tab walks parts then buttons.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Focus {
 	Search,
@@ -922,12 +923,12 @@ fn assoc_slot(assoc: Assoc) -> usize {
 }
 
 // The prompt's text field, the shells grid's own fields, the color picker's
-// six value boxes and the search box are the dialog's ONE open edit, so every bit of field behavior
-// - selection, word ops, the clipboard, the caret ease, the right-click menu -
-// works in all of them without a second copy. None belongs to a spec row, so
-// each borrows an index no row can have: every `specs[edit.row]` comparison in
-// this module simply never matches one, and the four places that INDEX specs by it
-// each carry their own guard.
+// six value boxes and the search box are the dialog's ONE open edit, so every
+// bit of field behavior - selection, word ops, the clipboard, the caret ease,
+// the right-click menu - works in all of them without a second copy. None
+// belongs to a spec row, so each borrows an index no row can have: every
+// `specs[edit.row]` comparison in this module simply never matches one, and the
+// four places that INDEX specs by it each carry their own guard.
 const PSEUDO_ROW: usize = usize::MAX / 2;
 const PROMPT_ROW: usize = usize::MAX;
 // Two per shell entry, counting down: name, then command.

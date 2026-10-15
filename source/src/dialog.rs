@@ -3107,6 +3107,63 @@ mod tests {
 		);
 	}
 
+	// A search result's matched text is a step larger and in its own color, on
+	// the same line box as an unmarked line, so the row it sits in doesn't move.
+	// Other marks on the same text are another buffer.
+	// Test ID: EsodoYf
+	#[test]
+	fn marked_text_is_larger_and_colored_on_the_same_line_box() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut shaped = super::ShapedText::default();
+		let line_h = text.ui_line_h;
+		let attrs = ui_attrs();
+		let line = "Window \u{23f5} Columns";
+		let at = line.find("Col").unwrap();
+		let marks = crate::settings_ui::Marks {
+			spans: vec![(at, at + 3)],
+			color: [200, 120, 10],
+			scale: 1.15,
+		};
+		shaped.start_frame(&text);
+		let plain = shaped.buffer(&mut text, line, &attrs, 800.0, line_h);
+		let marked = shaped.marked(&mut text, line, &attrs, Some(&marks), 800.0, line_h);
+		assert_ne!(plain, marked);
+		let fewer = crate::settings_ui::Marks {
+			spans: vec![(at, at + 2)],
+			..marks.clone()
+		};
+		let other = shaped.marked(&mut text, line, &attrs, Some(&fewer), 800.0, line_h);
+		assert_ne!(other, marked, "other marks, other buffer");
+		let run = |slot: usize| {
+			let run = shaped.bufs[slot].layout_runs().next().expect("one line");
+			let glyphs: Vec<(usize, f32, Option<glyphon::Color>)> = run
+				.glyphs
+				.iter()
+				.map(|g| (g.start, g.font_size, g.color_opt))
+				.collect();
+			(run.line_top, run.line_height, run.line_y, glyphs)
+		};
+		let (p_top, p_h, p_y, p_glyphs) = run(plain);
+		let (m_top, m_h, m_y, m_glyphs) = run(marked);
+		assert_eq!((p_top, p_h), (m_top, m_h), "the same line box");
+		assert!((m_y - p_y).abs() < line_h * 0.1, "baseline {p_y} -> {m_y}");
+		let size = p_glyphs[0].1;
+		let mut seen = 0;
+		for (start, font_size, color) in m_glyphs {
+			if (at..at + 3).contains(&start) {
+				seen += 1;
+				assert!(
+					(font_size - size * 1.15).abs() < 0.01,
+					"{start}: {font_size}"
+				);
+				assert_eq!(color, Some(glyphon::Color::rgb(200, 120, 10)));
+			} else {
+				assert!((font_size - size).abs() < 0.01, "{start}: {font_size}");
+			}
+		}
+		assert_eq!(seen, 3);
+	}
+
 	// A kept buffer is found by everything shaping reads. A new color, weight,
 	// font or line box shapes again, and so does a new text context, which is
 	// what a font, size or scale change makes. A new width lays the kept shape
