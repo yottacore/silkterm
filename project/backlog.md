@@ -540,7 +540,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261015, best guess: With nothing typed the box is outside the Tab walk, as the tabs are, so Tab from nothing still lands on a tab's first control. While the list is up, Tab walks the box and the footer buttons.
 	- Test case: In `settings_ui/search.rs`: ranking `label_matches_come_before_alias_ones_and_loose_ones_last` (EsoZk3m), `a_whole_label_beats_a_word_start_beats_the_middle_of_one` (EsoZk9K), `a_short_query_matches_only_as_typed` (EsoZkED); the path `a_result_reads_tab_then_heading_then_setting` (EsoZkJ4), `no_two_results_read_the_same` (EsoZkOJ); aliases `every_alias_finds_the_row_it_is_on` (EsoZkTE); the box `enter_goes_to_the_pick_and_escape_empties_the_box_first` (EsoZkY3), `the_list_covers_the_rows_behind_it` (EsoZkdO), `the_search_box_is_no_rows_field` (EsoZneH), `tab_from_the_empty_box_goes_on_to_the_first_control` (Esob8XZ), `the_search_box_sits_over_the_rows_and_clear_of_them` (EsoZkiQ). In `dialog.rs`: `marked_text_is_larger_and_colored_on_the_same_line_box` (EsodoYf).
 	- Verified:
-		- The unit suite, 1352 tests, with clippy and rustfmt clean, and the docs, TOC and table checks.
+		- The unit suite, 1353 tests, with clippy and rustfmt clean, and the docs, TOC and table checks.
 		- The ranking and path tests each failed with the sort or the heading taken out, and the marked text test with the size step taken out. The alias test caught 3 aliases that were already in their labels.
 		- A real window on Linux, dark at 1x and light at 2x: the list, the marks, a pick going to the Keys tab, the mark fading, the empty-list line, and Escape.
 		- Not verified: Windows, macOS.
