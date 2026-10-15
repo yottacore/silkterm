@@ -1582,6 +1582,7 @@ impl State {
 			return;
 		}
 		self.watch.font_pinned = false;
+		self.watch.noted.zoomed = true;
 		let (w, h) = self.surface_px;
 		self.note_grid(w, h);
 	}
@@ -1713,6 +1714,8 @@ impl State {
 		if self.window.fullscreen().is_some() {
 			states.push(b"_NET_WM_STATE_FULLSCREEN");
 		}
+		// the first resize from here can be the way back, at the launch size
+		self.watch.noted.full = !states.is_empty() || self.maximize_on_reveal;
 		preset_wm_state(&self.window, &states);
 		self.window.set_visible(true);
 		if self.maximize_on_reveal && !cfg!(windows) {
@@ -3811,6 +3814,8 @@ impl ApplicationHandler<UserEvent> for App {
 			stirred_at: None,
 			put_off: false,
 			opening: false,
+			noted: window_size::Noted::default(),
+			take_owed: false,
 		};
 		let (cols, rows) = crate::fields::grid(&settings, watch.key.as_deref());
 		let cols = cli_win.columns.unwrap_or(cols);

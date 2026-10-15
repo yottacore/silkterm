@@ -22,6 +22,14 @@ impl State {
 		if !self.size_tracked {
 			return;
 		}
+		// The next resize may be the way back, even when this one is in a
+		// grace: sway sends a scale with fullscreen, and the grace after it
+		// hid going fullscreen. Fullscreen the program asked for is known
+		// now; waiting for the save to see it lost F11 twice in a row. A
+		// window minimized on Windows has no area.
+		if w == 0 || h == 0 || self.window.fullscreen().is_some() || self.window.is_maximized() {
+			self.watch.noted.full = true;
+		}
 		if Instant::now() < self.watch.ignore_resize_until {
 			return;
 		}
@@ -29,7 +37,7 @@ impl State {
 		if !resize_is_current((w, h), (now.width, now.height)) {
 			return;
 		}
-		self.watch.size_pinned = false;
+		self.watch.noted.resized = true;
 		self.note_grid(w, h);
 	}
 
@@ -59,9 +67,17 @@ impl State {
 		// manager may set the maximized state after the resize it caused.
 		let fullscreen = crate::monitor::fullscreen(&self.window);
 		let maximized = self.window.is_maximized();
-		let grid =
-			remember_resize(self.size_tracked, fullscreen, maximized).then_some((cols, rows));
-		let zoom = (!self.watch.font_pinned).then(config::font_zoom_px);
+		let noted = std::mem::take(&mut self.watch.noted);
+		let keep = what_to_keep(
+			noted,
+			remember_resize(self.size_tracked, fullscreen, maximized),
+		);
+		self.watch.noted = keep.carry;
+		if keep.unpin {
+			self.watch.size_pinned = false;
+		}
+		let zoom = (keep.zoom && !self.watch.font_pinned).then(config::font_zoom_px);
+		let grid = keep.grid.then(|| self.grid_to_open_at((cols, rows), zoom));
 		let kept = |s: &config::Settings| {
 			(
 				s.remembered_columns,
@@ -73,7 +89,9 @@ impl State {
 		};
 		// If the file's open elsewhere the write is skipped (retried on the next
 		// resize or at exit); the live size still updates in memory either way.
-		mondbg("save", self.watch.key.as_deref(), grid, zoom);
+		if grid.is_some() || zoom.is_some() {
+			mondbg("save", self.watch.key.as_deref(), grid, zoom);
+		}
 		save_live(|live| {
 			let before = kept(live);
 			config::remember_window(live, self.watch.key.as_deref(), grid, zoom);
@@ -83,6 +101,51 @@ impl State {
 			}
 			kept(live) != before
 		});
+		// Moved while fullscreen or maximized, and now back: a look takes the
+		// size. Taken at once, a slow frame at the size back from fullscreen
+		// came back from sway late and undid it (2026101417045856).
+		if !force && keep.back && self.watch.take_owed {
+			self.watch.check_at = Some(Instant::now() + MONITOR_SETTLE);
+		}
+	}
+
+	/// The grid to save, for the font the window opens at next time. That's
+	/// the font now, unless `--font-size` gave it: then the grid is kept if it
+	/// fits the screen at the font a launch without it has, and else the grid
+	/// that font shows in the window's size now (2026101412292756).
+	fn grid_to_open_at(&mut self, grid: (usize, usize), zoom: Option<i32>) -> (usize, usize) {
+		let zoom = zoom.unwrap_or_else(|| {
+			config::remembered_window(&config::settings(), self.watch.key.as_deref()).font_zoom
+		});
+		let font = config::unheld_font_size(zoom);
+		if (font - config::effective_font_size()).abs() < 0.01 {
+			return grid;
+		}
+		let cell = self.text.cell_at(font);
+		let now = self.grid_px(grid.0, grid.1);
+		// the monitor the size is kept for, which on Wayland
+		// `current_monitor` may not be
+		let screen = self
+			.watch
+			.key
+			.as_deref()
+			.and_then(crate::monitor::MonitorId::from_key)
+			.map(|m| (m.width, m.height))
+			.or_else(|| {
+				let size = self.window.current_monitor()?.size();
+				Some((size.width, size.height))
+			});
+		let frame = self.window.outer_size();
+		let inner = self.window.inner_size();
+		let room = screen.map(|(w, h)| {
+			(
+				w.saturating_sub(frame.width.saturating_sub(inner.width)),
+				h.saturating_sub(frame.height.saturating_sub(inner.height)),
+			)
+		});
+		let kept = grid_in_font(grid, now, cell, self.text.margin, self.chrome_h(), room);
+		mondbg("refont", self.watch.key.as_deref(), Some(kept), Some(zoom));
+		kept
 	}
 
 	/// A move starts the wait for the window to settle.
@@ -188,7 +251,11 @@ impl State {
 			return;
 		}
 		self.watch.opening = false;
-		let pending_at = self.pending_size.map(|_| self.pending_size_at);
+		// the way back from fullscreen is no size the user set on arrival
+		let pending_at = self
+			.pending_size
+			.filter(|_| self.watch.noted.users())
+			.map(|_| self.pending_size_at);
 		let settled = settle(
 			self.watch.key.as_deref(),
 			now_on.as_deref(),
@@ -210,6 +277,9 @@ impl State {
 			take_size,
 		} = settled
 		else {
+			if self.watch.take_owed {
+				self.take_monitor_size();
+			}
 			return;
 		};
 		if save_first {
@@ -228,10 +298,13 @@ impl State {
 			mondbg("keep", self.watch.key.as_deref(), None, None);
 			return;
 		}
+		// taken on the way back, at the window's own size
 		if crate::monitor::fullscreen(&self.window) || self.window.is_maximized() {
-			mondbg("keep", self.watch.key.as_deref(), None, None);
+			mondbg("later", self.watch.key.as_deref(), None, None);
+			self.watch.take_owed = true;
 			return;
 		}
+		self.watch.take_owed = false;
 		// another window may have kept a size for this monitor since this one loaded
 		config::refresh_window_memory();
 		let kept = config::remembered_window(&config::settings(), self.watch.key.as_deref());
@@ -452,6 +525,77 @@ pub(super) struct MonitorWatch {
 	pub(super) stirred_at: Option<Instant>, // the last move or scale change
 	pub(super) put_off: bool,             // a look waits for `note_presence`
 	pub(super) opening: bool,             // the first look, which no drag can be part of
+	pub(super) noted: Noted,              // why a size waits to be saved
+	pub(super) take_owed: bool,           // arrived while fullscreen or maximized
+}
+
+/// What the size waiting to be saved came from, since the last save.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub(super) struct Noted {
+	pub(super) resized: bool,
+	pub(super) zoomed: bool,
+	/// Fullscreen, maximized or minimized at some point, so a resize may be
+	/// the way back.
+	pub(super) full: bool,
+}
+
+impl Noted {
+	fn users(self) -> bool {
+		self.zoomed || (self.resized && !self.full)
+	}
+}
+
+#[derive(Debug, PartialEq)]
+struct Keep {
+	grid: bool,
+	zoom: bool,
+	unpin: bool, // the user's resize ends a size from the command line
+	back: bool,  // back from fullscreen or maximized
+	carry: Noted,
+}
+
+// What a save keeps. Going fullscreen or maximized and back are the window
+// manager's resizes, not the user's. Taken for one, the way back kept the
+// size for the monitor, written over the one kept there, and a zoom saved
+// alone while fullscreen made an entry for a monitor nobody sized
+// (2026101412392529). A zoom while fullscreen is kept, and its grid once the
+// window is back, since the grid shown at the old size has changed.
+fn what_to_keep(noted: Noted, free: bool) -> Keep {
+	let back = free && noted.full;
+	let grid = free && (noted.zoomed || (noted.resized && !back));
+	Keep {
+		grid,
+		zoom: noted.zoomed || grid,
+		unpin: grid && noted.resized && !back,
+		back,
+		carry: Noted {
+			resized: false,
+			zoomed: !free && noted.zoomed,
+			full: !free,
+		},
+	}
+}
+
+// A size set at a font size from the command line is kept in columns and
+// rows if the window would fit the screen at the font it opens at next, else
+// in pixels. The store has only columns and rows, so pixels are the grid that
+// font shows in this window, the way a zoom keeps the size.
+fn grid_in_font(
+	grid: (usize, usize),
+	px: (u32, u32),
+	cell: (f32, f32),
+	margin: f32,
+	chrome: f32,
+	room: Option<(u32, u32)>,
+) -> (usize, usize) {
+	let (w, h) = window_px(grid.0, grid.1, cell.0, cell.1, margin, chrome);
+	if room.is_some_and(|(room_w, room_h)| w <= room_w && h <= room_h) {
+		return grid;
+	}
+	(
+		cells_in(px.0, cell.0, margin, 0.0),
+		cells_in(px.1, cell.1, margin, chrome),
+	)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -871,6 +1015,110 @@ mod tests {
 			"focus says where"
 		);
 		assert_eq!(pointer_moved(Pointer::Over, (5.0, 5.0)), Pointer::Over);
+	}
+
+	// Fullscreen and back, or maximized and back, are the window manager's
+	// resizes. The way back was saved as the user's size, over the one kept
+	// for the monitor, and a zoom saved alone while fullscreen made an entry
+	// for a monitor nobody sized.
+	// Test ID: EsjoVV7
+	#[test]
+	fn fullscreen_and_back_saves_nothing() {
+		use super::{Noted, what_to_keep};
+		let resized = Noted {
+			resized: true,
+			..Noted::default()
+		};
+		let by_hand = what_to_keep(resized, true);
+		assert!(by_hand.grid && by_hand.zoom && by_hand.unpin && !by_hand.back);
+		assert!(resized.users());
+
+		let full = what_to_keep(resized, false);
+		assert!(!full.grid && !full.zoom && !full.unpin, "{full:?}");
+		let way_back = Noted {
+			resized: true,
+			..full.carry
+		};
+		assert!(!way_back.users());
+		let back = what_to_keep(way_back, true);
+		assert!(
+			!back.grid && !back.zoom && !back.unpin && back.back,
+			"{back:?}"
+		);
+		assert_eq!(
+			back.carry,
+			Noted::default(),
+			"the next resize is the user's"
+		);
+
+		// F11 twice before a save
+		let twice = Noted {
+			resized: true,
+			full: true,
+			zoomed: false,
+		};
+		assert!(!what_to_keep(twice, true).grid);
+
+		// a zoom while fullscreen keeps the zoom, and the grid once back
+		let zoomed = what_to_keep(
+			Noted {
+				zoomed: true,
+				..Noted::default()
+			},
+			false,
+		);
+		assert!(!zoomed.grid && zoomed.zoom);
+		let back = what_to_keep(
+			Noted {
+				resized: true,
+				..zoomed.carry
+			},
+			true,
+		);
+		assert!(
+			back.grid && back.zoom && !back.unpin && back.back,
+			"{back:?}"
+		);
+	}
+
+	// A size set with --font-size 11 opened at the normal font next time, in
+	// the same columns and rows, far larger and wider than the monitor. It's
+	// kept in columns and rows when they'd fit the screen at the normal font,
+	// and else as the size the window is now.
+	// Test ID: EsjoVZu
+	#[test]
+	fn a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font() {
+		use super::grid_in_font;
+		let (margin, chrome) = (4.0, 30.0);
+		let (small, normal) = ((8.0, 17.0), (10.0, 21.0));
+		let screen = Some((1920, 1050));
+		let px = |grid: (usize, usize)| window_px(grid.0, grid.1, small.0, small.1, margin, chrome);
+
+		let fits = (100, 30);
+		assert_eq!(
+			grid_in_font(fits, px(fits), normal, margin, chrome, screen),
+			fits
+		);
+		// 1508x1088 at the normal font: the window's 1208x888 instead
+		let too_big = (150, 50);
+		assert_eq!(px(too_big), (1208, 888));
+		let kept = grid_in_font(too_big, px(too_big), normal, margin, chrome, screen);
+		assert_eq!(kept, (120, 40));
+		let (w, h) = window_px(kept.0, kept.1, normal.0, normal.1, margin, chrome);
+		assert!(w <= 1208 && h <= 888);
+		assert_eq!(
+			grid_in_font(fits, px(fits), normal, margin, chrome, None),
+			(80, 24),
+			"no screen to fit"
+		);
+		// a bigger font on the command line comes back smaller, and fits
+		let big = |grid: (usize, usize)| window_px(grid.0, grid.1, 14.0, 29.0, margin, chrome);
+		let wide = (120, 40);
+		assert_eq!(big(wide), (1688, 1198), "past the screen's height");
+		assert_eq!(
+			grid_in_font(wide, big(wide), normal, margin, chrome, screen),
+			wide
+		);
 	}
 
 	// A window left maximized opens maximized, unless the setting is off or the

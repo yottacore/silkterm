@@ -4221,6 +4221,21 @@ fn base_font_size(settings: &Settings) -> f32 {
 	settings.font_size
 }
 
+/// The font size a window opens at with this zoom and no `--font-size`.
+pub fn unheld_font_size(zoom: i32) -> f32 {
+	let live = settings();
+	let name = crate::ui_spec::Key::FontSize.name();
+	let base = if live.model.values.held.contains_key(name) {
+		let mut own = (*live).clone();
+		own.model.release(name);
+		crate::fields::fill(&mut own, None);
+		base_font_size(&own)
+	} else {
+		base_font_size(&live)
+	};
+	(base + zoom_within(zoom, base) as f32).clamp(4.0, 128.0)
+}
+
 /// Resolve the background image: an explicit path (absolute, or a filename
 /// relative to the config dir), else auto-detect backgrounds/background.{png,jpg,jpeg}
 /// under the config dir. The value is text a person edits by hand, so it goes
