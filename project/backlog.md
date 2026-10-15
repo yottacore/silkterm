@@ -67,7 +67,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The bash prompt returning after program output slides out downward from under a seam of the higher content, again
 	- ID: 2026101415085143
 	- Type: Bug
-	- Status: Waiting on signoff
+	- Status: Done
 	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness. Unit tests, clippy and all 13 X11 scenes passed.
 	- Severity: High
 	- Opened: 20261014-150851
@@ -142,7 +142,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
 	- ID: 2026101410442550
 	- Type: Task
-	- Status: Waiting on signoff
+	- Status: Done
 	- Priority: Avg
 	- Opened: 20261014-104425
 	- Opened by: JC
@@ -169,7 +169,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - README.md: move the long sections out to their own docs
 	- ID: 2026101415085144
 	- Type: Task
-	- Status: Waiting on signoff
+	- Status: Reopened
+		- Move the comparison table itself into 'comparison.md' also.
 	- Priority: Avg
 	- Opened: 20261014-150851
 	- Opened by: JC
@@ -195,7 +196,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Going fullscreen and back keeps a size for the monitor, though nobody set one there
 	- ID: 2026101412392529
 	- Type: Bug
-	- Status: Waiting on signoff
+	- Status: Done
 	- Needs external testing: On Windows, with Per monitor on and no size kept for the monitor, maximize and restore, then minimize and restore. Nothing is saved for the monitor. The same for maximize and restore on X11 under a desktop window manager.
 	- Severity: Low
 	- Opened: 20261014-123925
@@ -313,7 +314,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Software rendering crashes on b23 with an X11 BadDrawable error
 	- ID: 2026100614510979
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs local test suite run?: No
 	- Needs external testing: On b23's own desktop, launch with "Always use software rendering" on and open Settings. Then turn it off and on again from Settings and close the dialog. The window draws each time and stays up, with no X error on the command line.
 	- Severity: High
