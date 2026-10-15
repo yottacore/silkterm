@@ -3819,15 +3819,6 @@ impl ApplicationHandler<UserEvent> for App {
 			noted: window_size::Noted::default(),
 			take_owed: false,
 		};
-		let (cols, rows) = crate::fields::grid(&settings, watch.key.as_deref());
-		let cols = cli_win.columns.unwrap_or(cols);
-		let rows = cli_win.rows.unwrap_or(rows);
-		window_size::mondbg(
-			"open",
-			watch.key.as_deref(),
-			Some((cols, rows)),
-			Some(config::font_zoom_px()),
-		);
 		let menu_bar_h = if menu_bar {
 			text.ui_line_h + text.dip(MENU_BAR_VPAD)
 		} else {
@@ -3845,6 +3836,28 @@ impl ApplicationHandler<UserEvent> for App {
 		} else {
 			0.0
 		};
+		let mut grid = crate::fields::grid(&settings, watch.key.as_deref());
+		// A window that can't see its monitor yet takes the size kept there
+		// once it does, and that take fits it to the screen.
+		let looks_first = watch.key.is_none() && settings.remember_per_monitor;
+		if settings.remember_size && !watch.size_pinned && !looks_first {
+			grid = window_size::kept_grid_here(
+				&mut text,
+				&window,
+				watch.key.as_deref(),
+				menu_bar_h + tab_bar_h,
+				grid,
+				kept.font_zoom,
+			);
+		}
+		let cols = cli_win.columns.unwrap_or(grid.0);
+		let rows = cli_win.rows.unwrap_or(grid.1);
+		window_size::mondbg(
+			"open",
+			watch.key.as_deref(),
+			Some((cols, rows)),
+			Some(config::font_zoom_px()),
+		);
 		let (grid_w, grid_h) = window_px(
 			cols,
 			rows,

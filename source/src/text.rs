@@ -363,6 +363,11 @@ fn mono_candidates(os_family: Option<&str>, family: &str) -> Vec<String> {
 // maps to. Validated against the db so a bad name doesn't silently fall back to
 // an unrelated font.
 fn resolve_mono_family(fs: &FontSystem) -> Option<String> {
+	resolve_mono_family_in(fs, &config::settings().font_family)
+}
+
+// The same for a family list other than the one in use.
+fn resolve_mono_family_in(fs: &FontSystem, family: &str) -> Option<String> {
 	use glyphon::cosmic_text::fontdb;
 	let db = fs.db();
 
@@ -380,11 +385,7 @@ fn resolve_mono_family(fs: &FontSystem) -> Option<String> {
 			})
 	};
 
-	let settings = config::settings();
-	for fam in mono_candidates(
-		crate::sysfont::monospace().family.as_deref(),
-		&settings.font_family,
-	) {
+	for fam in mono_candidates(crate::sysfont::monospace().family.as_deref(), family) {
 		if installed(&fam) {
 			return Some(fam);
 		}
@@ -660,12 +661,15 @@ impl TextCtx {
 		}
 	}
 
-	/// The cell a font of this size would have here, in physical px. The same
-	/// sum `new_cpu` does, so for the font in use it's `cell_w` and `cell_h`.
-	pub fn cell_at(&mut self, font_size: f32) -> (f32, f32) {
-		let metrics = cell_metrics(font_size, self.scale);
+	/// The cell a font would have here, in physical px. The same sum
+	/// `new_cpu` does, so for the font in use it's `cell_w` and `cell_h`.
+	pub fn cell_in(&mut self, font: &config::FontPick) -> (f32, f32) {
+		let metrics = cell_metrics(font.size, self.scale);
+		let family = resolve_mono_family_in(&self.font_system, &font.family);
+		let mut attrs = Attrs::new();
+		attrs.family = family.as_deref().map_or(Family::Monospace, Family::Name);
 		(
-			measure_cell(&mut self.font_system, metrics),
+			measure_cell_in(&mut self.font_system, metrics, &attrs),
 			metrics.line_height.max(1.0),
 		)
 	}
@@ -1114,11 +1118,14 @@ fn cell_metrics(font_size: f32, scale: f32) -> Metrics {
 // drift right of the text, worsening with column count. Matching the real pitch
 // keeps the drift sub-pixel (bounded by hinting, not accumulating).
 fn measure_cell(fs: &mut FontSystem, metrics: Metrics) -> f32 {
+	measure_cell_in(fs, metrics, &mono_attrs())
+}
+
+fn measure_cell_in(fs: &mut FontSystem, metrics: Metrics, attrs: &Attrs) -> f32 {
 	const N: usize = 40;
 	let mut buf = Buffer::new(fs, metrics);
 	buf.set_size(fs, None, None);
-	let attrs = mono_attrs();
-	buf.set_text(fs, &"M".repeat(N), &attrs, Shaping::Advanced, None);
+	buf.set_text(fs, &"M".repeat(N), attrs, Shaping::Advanced, None);
 	buf.shape_until_scroll(fs, false);
 	buf.layout_runs()
 		.next()
@@ -1589,9 +1596,10 @@ mod tests {
 	#[test]
 	fn a_cell_measured_for_a_font_size_is_the_cell_that_font_gets() {
 		let mut ctx = TextCtx::new_cpu(1.0);
-		let size = config::effective_font_size();
-		assert_eq!(ctx.cell_at(size), (ctx.cell_w, ctx.cell_h));
-		let (w, h) = ctx.cell_at(size + 6.0);
+		let mut font = config::font_now();
+		assert_eq!(ctx.cell_in(&font), (ctx.cell_w, ctx.cell_h));
+		font.size += 6.0;
+		let (w, h) = ctx.cell_in(&font);
 		assert!(w > ctx.cell_w && h > ctx.cell_h);
 	}
 

@@ -114,39 +114,21 @@ impl State {
 	}
 
 	/// The grid to save, for the font the window opens at next time. That's
-	/// the font now, unless `--font-size` gave it: then the grid is kept if it
-	/// fits the screen at the font a launch without it has, and else the grid
-	/// that font shows in the window's size now (2026101412292756).
+	/// the font now, unless `--font-size` or `--font-name` gave it: then the
+	/// grid is kept if it fits the screen at the font a launch without them
+	/// has, and else the grid that font shows in the window's size now
+	/// (2026101412292756, 2026101422190936).
 	fn grid_to_open_at(&mut self, grid: (usize, usize), zoom: Option<i32>) -> (usize, usize) {
 		let zoom = zoom.unwrap_or_else(|| {
 			config::remembered_window(&config::settings(), self.watch.key.as_deref()).font_zoom
 		});
-		let font = config::unheld_font_size(zoom);
-		if (font - config::effective_font_size()).abs() < 0.01 {
+		let font = config::unheld_font(zoom);
+		if font.same(&config::font_now()) {
 			return grid;
 		}
-		let cell = self.text.cell_at(font);
+		let cell = self.text.cell_in(&font);
 		let now = self.grid_px(grid.0, grid.1);
-		// the monitor the size is kept for, which on Wayland
-		// `current_monitor` may not be
-		let screen = self
-			.watch
-			.key
-			.as_deref()
-			.and_then(crate::monitor::MonitorId::from_key)
-			.map(|m| (m.width, m.height))
-			.or_else(|| {
-				let size = self.window.current_monitor()?.size();
-				Some((size.width, size.height))
-			});
-		let frame = self.window.outer_size();
-		let inner = self.window.inner_size();
-		let room = screen.map(|(w, h)| {
-			(
-				w.saturating_sub(frame.width.saturating_sub(inner.width)),
-				h.saturating_sub(frame.height.saturating_sub(inner.height)),
-			)
-		});
+		let room = room_on(&self.window, self.watch.key.as_deref());
 		let kept = grid_in_font(grid, now, cell, self.text.margin, self.chrome_h(), room);
 		mondbg("refont", self.watch.key.as_deref(), Some(kept), Some(zoom));
 		kept
@@ -355,11 +337,20 @@ impl State {
 			self.retext(config::display_scale(self.window.scale_factor()));
 			self.dirty = true;
 		}
+		let chrome = self.chrome_h();
+		let (cols, rows) = kept_grid_here(
+			&mut self.text,
+			&self.window,
+			self.watch.key.as_deref(),
+			chrome,
+			(kept.columns, kept.rows),
+			kept.font_zoom,
+		);
 		let now = Instant::now();
 		self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
 		self.watch.ignore_moves_until = now + OWN_RESIZE_GRACE;
 		self.watch.layout = crate::monitor::layout(&self.window);
-		self.request_grid(kept.columns, kept.rows);
+		self.request_grid(cols, rows);
 	}
 
 	// The grid a window this size shows, with the cells and chrome as they are.
@@ -610,10 +601,69 @@ fn what_to_keep(noted: Noted, free: bool) -> Keep {
 	}
 }
 
-// A size set at a font size from the command line is kept in columns and
-// rows if the window would fit the screen at the font it opens at next, else
-// in pixels. The store has only columns and rows, so pixels are the grid that
-// font shows in this window, the way a zoom keeps the size.
+/// A size kept at the font a launch without `--font-size` and `--font-name`
+/// has, for a window at another font: the same grid if it fits the screen at
+/// the font the window has, else the grid that keeps the kept window's size
+/// (2026101422190936).
+pub(super) fn kept_grid_here(
+	text: &mut crate::text::TextCtx,
+	window: &Window,
+	key: Option<&str>,
+	chrome: f32,
+	grid: (usize, usize),
+	zoom: i32,
+) -> (usize, usize) {
+	let font = config::unheld_font(zoom);
+	if font.same(&config::font_now()) {
+		return grid;
+	}
+	let here = grid_from_font(
+		grid,
+		text.cell_in(&font),
+		(text.cell_w, text.cell_h),
+		text.margin,
+		chrome,
+		room_on(window, key),
+	);
+	mondbg("atfont", key, Some(here), Some(zoom));
+	here
+}
+
+// A grid kept at the cell `was`, for a window at the cell `cell`.
+fn grid_from_font(
+	grid: (usize, usize),
+	was: (f32, f32),
+	cell: (f32, f32),
+	margin: f32,
+	chrome: f32,
+	room: Option<(u32, u32)>,
+) -> (usize, usize) {
+	let px = window_px(grid.0, grid.1, was.0, was.1, margin, chrome);
+	grid_in_font(grid, px, cell, margin, chrome, room)
+}
+
+// The screen of the monitor a size is kept for, which on Wayland
+// `current_monitor` may not be, less the window's frame.
+fn room_on(window: &Window, key: Option<&str>) -> Option<(u32, u32)> {
+	let (w, h) = key
+		.and_then(crate::monitor::MonitorId::from_key)
+		.map(|m| (m.width, m.height))
+		.or_else(|| {
+			let size = window.current_monitor()?.size();
+			Some((size.width, size.height))
+		})?;
+	let frame = window.outer_size();
+	let inner = window.inner_size();
+	Some((
+		w.saturating_sub(frame.width.saturating_sub(inner.width)),
+		h.saturating_sub(frame.height.saturating_sub(inner.height)),
+	))
+}
+
+// A size set at one font and used at another is kept in columns and rows if
+// the window would fit the screen at the font it opens at, else in pixels.
+// The store has only columns and rows, so pixels are the grid that font
+// shows in this window, the way a zoom keeps the size.
 fn grid_in_font(
 	grid: (usize, usize),
 	px: (u32, u32),
@@ -1161,6 +1211,39 @@ mod tests {
 			grid_in_font(wide, big(wide), normal, margin, chrome, screen),
 			wide
 		);
+	}
+
+	// A size kept at the normal font opened in the same columns and rows at a
+	// font from the command line, much larger or smaller than it was kept,
+	// and could be wider than the monitor. It keeps its columns and rows where
+	// they fit the screen at that font, and else the kept window's size.
+	// Test ID: Eso2weD
+	#[test]
+	fn a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line() {
+		use super::grid_from_font;
+		let (margin, chrome) = (4.0, 30.0);
+		let normal = (9.9, 22.0);
+		let screen = Some((1920, 1050));
+		let kept = (100, 30);
+		assert_eq!(
+			window_px(kept.0, kept.1, normal.0, normal.1, margin, chrome),
+			(998, 698)
+		);
+		let open =
+			|cell: (f32, f32), room| grid_from_font(kept, normal, cell, margin, chrome, room);
+		// --font-size 14 fits as it is, and so does a wider --font-name
+		assert_eq!(open((11.5, 26.0), screen), kept);
+		assert_eq!(open((12.0, 22.0), screen), kept);
+		// --font-size 28 would be 2308 px wide, so it keeps the kept window's size
+		let big = (23.0, 51.0);
+		let got = open(big, screen);
+		assert_eq!(got, (43, 12));
+		let (w, h) = window_px(got.0, got.1, big.0, big.1, margin, chrome);
+		assert!(w <= 998 && h <= 698, "{w}x{h}");
+		// a smaller font fits, and keeps the grid rather than the pixels
+		assert_eq!(open((7.0, 16.0), screen), kept);
+		assert_eq!(open(normal, screen), kept, "the same font");
+		assert_eq!(open(normal, None), kept, "the same font, no screen");
 	}
 
 	// A window left maximized opens maximized, unless the setting is off or the
