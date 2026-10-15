@@ -82,18 +82,14 @@ KINDS = {"move": 3.0, "drag": 4.0, "resize": 2.0, "zoom": 2.0, "relaunch": 1.5, 
 ## is fixed.
 ROUNDED_ALIKE = "a fractional output and a whole one that round to one scale look alike to a Wayland window"
 RESCALED = "a scale change moves the grid a few cells"
-OLD_PIXELS = "for a moment after a scale change, the shell is told the old window size in the new cells"
 FULLSCREEN_SAVES = "fullscreen and back saves the window's size, and keeps one for a monitor nobody set one for"
 CAPPED = "sway holds a floating window to the size of the whole layout"
-OPENS_SHORT = "a Wayland window opens at scale 1, and its size in cells drifts once it learns its real scale"
 HELD_WAYLAND = "Wayland gives no sign of a drag under way"
 HELD_XWAYLAND = "Xwayland can't see a button held on the compositor's title bar"
 KNOWN: dict[str, str] = {
 	ROUNDED_ALIKE: "2026101411554909",
 	HELD_WAYLAND: "2026101411555009",
 	HELD_XWAYLAND: "2026101411555009",
-	OPENS_SHORT: "2026101412003308",
-	OLD_PIXELS: "2026101412311921",
 	FULLSCREEN_SAVES: "2026101412392529",
 }
 
@@ -676,7 +672,8 @@ def key_of(arm: str, out: dict[str, Any], scale: float) -> str:
 	return f"{mode['width']}x{mode['height']}_{round(scale * 100)}pct"
 
 
-## A scale change keeps the window's size in the layout, and the font's cells
+## A scale change keeps the grid, unless a size kept for a monitor is to take
+## over. Then it keeps the window's size in the layout, and the font's cells
 ## don't scale quite in step, so the grid can move a few cells. Measured up to
 ## 3 in 111 columns.
 def around(grid: Grid) -> list[Grid]:
@@ -707,6 +704,11 @@ class Case:
 
 	def note(self, text: str) -> None:
 		self.log.append(text)
+
+	## Whether a scale change leaves the window's size to the system, for a
+	## monitor's own size to take over: the grid may then drift a few cells.
+	def drifts(self) -> bool:
+		return self.plan.remember and self.plan.per_monitor and not self.model.size_pinned
 
 	def outs(self) -> dict[str, dict[str, Any]]:
 		return {o["name"]: o for o in self.rig.outputs()}
@@ -793,6 +795,7 @@ class Case:
 		allowed = {**self.drag_names, **allowed}
 		outcomes = {k: model.after_look(k) for k in allowed}
 		grids = {o[1] for o in outcomes.values()}
+		rescaled = rescaled and self.drifts()
 		if rescaled:
 			grids |= {near for o in outcomes.values() if o[1] == model.grid for near in around(o[1])}
 		time.sleep(2.2)
@@ -999,7 +1002,7 @@ class Case:
 
 	def held_still(self, what: str, mark: int, start: Grid) -> None:
 		grids = {(int(c), int(r)) for r, c in (line.split() for line in set(self.rig.grid_lines()[mark:]))}
-		if len(grids) <= 1:
+		if grids <= {start}:
 			return
 		## the lines go back for the look after the drop
 		trace = self.rig.trace()
@@ -1017,14 +1020,8 @@ class Case:
 			if trace_field(took[-1], "zoom") != "-":
 				model.zoom = int(trace_field(took[-1], "zoom"))
 			return
-		odd = grids - set(around(start))
-		if not odd and len(self.drag_scales) > 1:
+		if grids <= set(around(start)) and len(self.drag_scales) > 1 and self.drifts():
 			self.allow(RESCALED, None)
-			return
-		## the old window size in the new cells, for a moment after a scale change
-		ratios = {a / b for a in self.drag_scales for b in self.drag_scales if a != b}
-		if all(any(abs(g[0] / start[0] - r) < 0.15 for r in ratios) for g in odd):
-			self.allow(OLD_PIXELS, None)
 			return
 		raise CheckError(f"{what}: resized while still held: {sorted(grids)}, trace {trace}")
 
@@ -1287,7 +1284,7 @@ class Case:
 		self.scale = outs[primary[0]]["scale"] if primary else 1.0
 		## A Wayland window opens at 1 and learns its scale after.
 		first_scale = outs[primary[0]]["scale"] if primary and plan.arm == "wayland" else 1.0
-		self.settle(what, self.names(outs, primary), True, first_scale != 1.0, OPENS_SHORT, look_wait=12.0)
+		self.settle(what, self.names(outs, primary), True, first_scale != 1.0, look_wait=12.0)
 
 
 def run_case(seed: int, arm: str | None, binary: Path, folder: Path, keep: bool) -> tuple[bool, Case]:

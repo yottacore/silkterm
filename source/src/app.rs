@@ -864,14 +864,18 @@ impl State {
 	}
 
 	fn area(&self) -> Rect {
+		self.area_in(self.surface_px)
+	}
+
+	fn area_in(&self, (w, h): (u32, u32)) -> Rect {
 		// Panes sit below the menu bar (always when shown) and the tab bar
 		// (when visible), stacked in that order.
 		let bar = self.chrome_h();
 		Rect {
 			x: 0.0,
 			y: bar,
-			w: self.surface_px.0 as f32,
-			h: (self.surface_px.1 as f32 - bar).max(1.0),
+			w: w as f32,
+			h: (h as f32 - bar).max(1.0),
 		}
 	}
 
@@ -1276,7 +1280,13 @@ impl State {
 	// relayout every tab (not just the active one) - needed when the tab bar
 	// appears/disappears (1<->2 tabs) and the pane area changes.
 	fn relayout_all(&mut self) {
-		let area = self.area();
+		self.relayout_all_in(self.surface_px);
+	}
+
+	// For a window size on its way: a scale change knows the size the window
+	// is about to be before the surface gets there.
+	fn relayout_all_in(&mut self, px: (u32, u32)) {
+		let area = self.area_in(px);
 		for pm in &mut self.tabs.list {
 			pm.relayout(&mut self.text, area);
 		}
@@ -1589,6 +1599,12 @@ impl State {
 	// rebuilds and DPI scale-factor changes. The surface itself is reconfigured
 	// separately (a Resized event follows a scale change).
 	fn rebuild_text(&mut self, scale: f32) {
+		self.retext(scale);
+		self.relayout_all();
+	}
+
+	// The text context and pane buffers for a scale or font, laid out by the caller.
+	fn retext(&mut self, scale: f32) {
 		self.text = TextCtx::new_cpu(scale);
 		if let Some(gpu) = &self.gpu {
 			self.text
@@ -1599,7 +1615,6 @@ impl State {
 		for pm in &mut self.tabs.list {
 			pm.rebuild_buffers(&mut self.text);
 		}
-		self.relayout_all();
 	}
 
 	// Swap in `edited` and rebuild whatever changed vs `orig` (text metrics,
@@ -4224,18 +4239,21 @@ impl ApplicationHandler<UserEvent> for App {
 			}
 
 			// DPI/scale changed (monitor move or a live scaling change). Re-scale
-			// cell metrics + chrome for the new factor; winit preserves the logical
-			// size, so a Resized event follows to reconfigure the surface + scrim.
-			// That resize is the system's, not the user's, and the new scale may
-			// mean another monitor.
-			WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+			// cell metrics + chrome for the new factor and keep the grid
+			// (`rescale`); a Resized event follows to reconfigure the surface +
+			// scrim. That resize is the system's, not the user's, and the new
+			// scale may mean another monitor.
+			WindowEvent::ScaleFactorChanged {
+				scale_factor,
+				mut inner_size_writer,
+			} => {
 				window_size::mondbg(
 					&format!("scale {scale_factor}"),
 					state.watch.key.as_deref(),
 					None,
 					None,
 				);
-				state.rebuild_text(config::display_scale(scale_factor));
+				state.rescale(config::display_scale(scale_factor), &mut inner_size_writer);
 				state.dirty = true;
 				let now = Instant::now();
 				state.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;

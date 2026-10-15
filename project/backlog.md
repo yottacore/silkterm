@@ -327,6 +327,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 684d3a0, 754c9cb, 8624cc2, 953c5a3
 	- Closed:
 
+- For a moment after a scale change, programs in the window are told a much smaller or larger grid
+	- ID: 2026101412311921
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On Windows and on macOS, a move between 2 monitors at different scales with a program in the window that logs each resize. It's told one new grid, or with `--columns` and `--rows` the same grid, never one about half or twice the size first.
+	- Severity: Low
+	- Opened: 20261014-123119
+	- Opened by: CC
+	- Related IDs: 2026100114435600, 2026101412025603
+	- Target OS: All
+	- Test environment: b23, headless sway, seen on Wayland
+	- Steps to reproduce:
+		- Move a window from a 100% monitor to a 200% one, with something running that redraws on a resize.
+	- Incorrect behavior: The program is told a grid about half as wide and tall for a moment, then the right one. From 125% to 150% it was 71 columns for 87.
+	- Expected behavior: It's told only the new grid.
+	- Reproduced: 20261014, by the random test, in 2 drags from one run of cases.
+	- Possible cause: On a scale change the text is laid out again with the new cells but the window's old size in pixels, until the resize that follows arrives.
+	- Actual cause: As above. Confirmed on b23 under headless sway with a program that logs each resize: 80x24 went to 51x14 for 5 ms on the way to 150%, and 161x51 on the way back to 100%. The engine's grid was resized each time too, so long lines were rewrapped twice.
+	- Notes:
+		- The random test allows it by this ID until it's fixed.
+	- Decisions:
+		- 20261014: Fixed together with 2026101412003308, and its decision applies. See there for what changed per platform.
+	- Actual fix: The panes are laid out for the size the window is about to be. That's the size asked for to keep the grid, or else the system's own: on Wayland and macOS the window already reports it during the change, and on Windows and X11 it's the old size scaled by the change.
+		- The same moment came when a monitor's kept font zoom was taken: the new cells were laid out in the old size, then the window was resized. 89x16 showed on the way from 110x20 to 60x35. It's laid out once, at the new size, now.
+		- On X11, winit reports the old size once more right after a scale change, so the moment can still come there. Read in winit's code, not seen. X11 changes scale only between monitors of different DPI, with no Xft.dpi set.
+	- Test case: `cicd/tests/monwl/run.bash` (Esgxleh). Its shell now writes every size it's told as well as a sample each tenth of a second. A new check fails on any grid well off the ones the steps took, and the new last part checks a size from the command line. Both seen failing on the old build. The first also failed with the font zoom part of the fix taken back out. `a_scale_change_lays_out_for_the_size_on_its_way` (Esisgw4) for the size worked out. The random test's allowance for this item is gone.
+	- Verified:
+		- On Wayland, with and without a kept size taking over, and with a kept font zoom: one new grid per change, never one well off.
+		- Not verified: Windows, macOS and X11 at a real scale change, which are compiled only.
+	- Swept: everything that rebuilds the text and then resizes. The scale change and a kept font zoom were the 2 that did. A font zoom from the keyboard keeps the window's size by design, so its new grid is the real one. The Settings dialog's own scale change keeps its size in DIP.
+	- Branch: scalegrid
+	- Commit: 22f315d
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -385,26 +418,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- The requirements say the size changes once moving has stopped. Waiting longer would slow a keyboard move to another monitor, which gives no sign either.
 		- The random test allows it by this ID until it's fixed.
 
-- Wayland: a window opens a few cells off its size on a monitor whose scale isn't 100%
-	- ID: 2026101412003308
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261014-120033
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: Linux
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- On a 150% output, open SilkTerm with `--columns 80 --rows 24`.
-	- Incorrect behavior: It opens at 78x23. It's the same with Per monitor or Remember last size off, at the size it should open at.
-	- Expected behavior: 80x24.
-	- Reproduced: 20261014 on b23 under headless sway, at 150% and 200%.
-	- Possible cause: A Wayland window opens at 100%, and the compositor tells it its scale after. It keeps its size in the layout, and a font's cells don't grow quite in step with the scale, so the grid comes out a few cells off. A kept size taken right after puts it right, so it shows only when none is taken.
-	- Notes:
-		- Keeping the grid across any scale change would fix it, but that changes how every platform handles one.
-		- The random test allows it by this ID until it's fixed.
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -456,24 +469,25 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- The random test allows it by this ID until it's fixed.
 
-- For a moment after a scale change, programs in the window are told a much smaller or larger grid
-	- ID: 2026101412311921
+- Wayland: a size the window takes right after another resize of its own goes back a moment later
+	- ID: 2026101417045856
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261014-123119
+	- Opened: 20261014-170458
 	- Opened by: CC
-	- Related IDs: 2026100114435600, 2026101412025603
-	- Target OS: All
-	- Test environment: b23, headless sway, seen on Wayland
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101411555009, 2026101412003308
+	- Target OS: Linux
+	- Test environment: b23, headless sway, the debug build drawing in software
 	- Steps to reproduce:
-		- Move a window from a 100% monitor to a 200% one, with something running that redraws on a resize.
-	- Incorrect behavior: The program is told a grid about half as wide and tall for a moment, then the right one. From 125% to 150% it was 71 columns for 87.
-	- Expected behavior: It's told only the new grid.
-	- Reproduced: 20261014, by the random test, in 2 drags from one run of cases.
-	- Possible cause: On a scale change the text is laid out again with the new cells but the window's old size in pixels, until the resize that follows arrives.
+		- Hold a window in a drag over an output at another scale until it takes that output's size (2026101411555009), then drop it on a third output that has its own size.
+	- Incorrect behavior: It takes the third output's size, then goes back to the size it took while held, within a few tenths of a second.
+	- Expected behavior: It keeps the size it took last.
+	- Reproduced: 20261014, the random test's seed 1000, on dev and with the fix for 2026101412003308 alike. Also 4 of 7 random cases while that fix asked for a size during every scale change.
+	- Possible cause: sway answers a size the window set by itself with a configure for that same size, once it sees a frame drawn at it. A window that draws slowly gets the answer after it has already asked for the next size, and winit takes a configure's size as given. Seen in the Wayland protocol log.
 	- Notes:
-		- The random test allows it by this ID until it's fixed.
+		- With a real GPU a frame is quick, so the answer should come long before the next look. Not seen outside the test rig.
 
 - Going fullscreen and back keeps a size for the monitor, though nobody set one there
 	- ID: 2026101412392529
@@ -1622,6 +1636,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 2f9d4a3
 	- Acceptance signoff: Self-closed: reproduced, the test failed before the fix and passes after.
 	- Closed: 20261014-134300
+
+- Wayland: a window opens a few cells off its size on a monitor whose scale isn't 100%
+	- ID: 2026101412003308
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261014-120033
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- On a 150% output, open SilkTerm with `--columns 80 --rows 24`.
+	- Incorrect behavior: It opens at 78x23. It's the same with Per monitor or Remember last size off, at the size it should open at.
+	- Expected behavior: 80x24.
+	- Reproduced: 20261014 on b23 under headless sway, at 150% and 200%.
+	- Possible cause: A Wayland window opens at 100%, and the compositor tells it its scale after. It keeps its size in the layout, and a font's cells don't grow quite in step with the scale, so the grid comes out a few cells off. A kept size taken right after puts it right, so it shows only when none is taken.
+	- Actual cause: As above. Confirmed on b23 under headless sway: 78x23 at 150% and 77x23 at 200% for 80x24, and the grid kept drifting with each move after.
+	- Notes:
+		- Keeping the grid across any scale change would fix it, but that changes how every platform handles one.
+		- The random test allows it by this ID until it's fixed.
+	- Progress log:
+		- 20261014: The random test on seeds 2000 to 2042, the old build and test beside this fix, under the same load. Old: 3 failed, and this item was hit 10 times and 2026101412311921 once. Fix: 2 failed, the same 2 the old build failed on (an X11 resize then a take, and a held drag), and 2023, which drifted a cell back and forth at 125%, passed. The grid moved a few cells after a scale change 16 times against 32.
+		- 20261014: The same seeds again on the final commit, with the kept font zoom part in: the same 2 failed, and the rest passed. Seeds 1001 to 1006 passed too.
+	- Decisions:
+		- 20261014: A scale change keeps the window's grid wherever no size kept for a monitor is going to take over. That's when Remember last size or Per monitor is off, or the size came from the command line. Reversible.
+			- Where a kept size will take over, the window is left to the system until it does, as before. Keeping the grid there too was tried: the window's own resize came back late from sway and undid the take, in 4 of 7 random cases. Filed as 2026101417045856.
+			- A maximized or fullscreen window is left alone, as before.
+			- What changed per platform, read from winit 0.30, with only Wayland run: Wayland and macOS kept the window's size on the desktop and now keep the grid. Windows took its own suggested size, the same size on the desktop, and now keeps the grid. X11 scaled the size by the change and now keeps the grid. On each, a window that sat a few cells off the grid now snaps to it.
+	- Actual fix: During the scale change the window asks for the size that shows its grid in the new cells. Before it's shown, the size it asked for at launch counts.
+	- Test case: `cicd/tests/monwl/run.bash` (Esgxleh), new last part: it opens with `--columns 80 --rows 24` on a 200% output and is moved to 100% and back, and the shell must be told 80x24 only. Seen failing on the old build (77x23, plus the moments in 2026101412311921) and passing on the fix. `a_grid_reads_back_from_the_window_it_asked_for` (Esiq2QP) holds the sum both ways, seen failing with one margin left out. The random test's allowance for this item is gone, and its rule for a scale change now drifts only where a kept size takes over.
+	- Verified:
+		- monwl and startsize pass. The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- The random test, 25 min beside the old build on the same seeds; results in the progress log.
+		- Not verified: Windows, macOS and X11 at a real scale change. Their code is compiled only.
+	- Swept: every scale change handler. The main window's goes through `rescale`. The Settings and About windows keep their own size in DIP (G23) and have no grid. `take_monitor_size` and `rescale` share one rule for when a kept size takes over (`keeps_size`).
+	- Branch: scalegrid
+	- Commit: 22f315d
+	- Acceptance signoff: Self-closed: reproduced, the window test failed before and passes after, on the platform the item is for.
+	- Closed: 20261014-170458
 
 - A TUI run inside tmux or screen keeps the minimap column
 	- ID: 2026101320095003
