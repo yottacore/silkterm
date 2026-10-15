@@ -165,6 +165,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: dpirand
 	- Commit: c9b40aa, 2f9d4a3, d49f765
 
+- README.md: move the long sections out to their own docs
+	- ID: 2026101415085144
+	- Type: Task
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261014-150851
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Move detailed comparisons to something like a "compared to other terminals" md, and link to it. Keep the brief feature comparison table.
+		- Move installation instructions, including development, to one or more .mds, and link to it/them.
+		- Move CLI usage and other examples to its own .md, and link to it. Leave a small snippet of example shcl contents.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261014: README keeps what it is, why, features, the wallpaper sheet, the showdown table, a short getting-started pointer with a few config lines, support, and legal.
+		- 20261014: New docs at the root. install.md has packages, the install scripts, building it yourself, the dev environment, and fetching the wallpaper pack. usage.md has configuration, shell integration, and opening scripts and folders on Windows. comparison.md has how the showdown is measured, notes 1 to 9, and how to run it. build.md, prerequisites.md and shell-integration.md are linked as before, with nothing folded in.
+		- 20261014: The showdown table stays in the README as the brief comparison table. It's the only comparison table there, and it's what a reader skims. Its method text and long notes are the detailed part, so they moved. The notes keep their small-text form and numbers.
+		- 20261014: The README had no CLI usage section and no config example, so nothing moved for those. The config lines in the README are copied from the shipped template.
+		- Question: should usage.md get a command-line section, written from `--help`?
+	- Branch: readmesplit
+	- Commit: 4cbe138
+	- Test case: `cicd/tests/showdown/run.py` (EqBnA5g) and `cicd/tests/showdown/rigs.py` (ErE7yrA) now read note 9 from comparison.md. Both fail with note 9 broken there, and pass with it back. The docs and tables checks cover the new files.
+	- Verified: docs, tables, showdown and rigs tests pass. Both table writers leave the README byte-identical when run again. The gallery check passes. Every line of the old README is in one of the 4 files, apart from the old TOC and 3 links pointed at the new files.
+	- Swept: termbench.py and showdown-readme.py still write the table in README.md, unchanged. update-showdown.py, cicd.bash, config.bash, demo-video.py, mdtable.py, sizebench-run.bash and termbench-run.bash name only the README table or gif. release.bash and the hooks test read the badge, which stays. The release notes keep "See the README". wallpaper-gallery.bash reads "102 wallpapers", which stays in the README. The gallery page and its template now link install.md for the download. showdown-readme.md names comparison.md for note 9. No README anchors in docs/, the install scripts, contributing.md, FAQ.md, glossary.md, the source, project/ docs, or the private repo. Left alone: config.rs line 10 already pointed at a README section that's gone, ancillary-notes.fods records say "README note 9" as of their dates, and a private backlog note says the wallpaper one-liner is in the README. A doc comment on `APP_NAME` in config.rs pointed at a README section removed on 20260924; the pointer is gone.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -488,32 +514,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Matches listed like "<tab title> ⏵[ sub tab title ⏵[ etc. ⏵]] setting", with matched portion in bold, larger, and different theme-aware color.
 	- Notes:
 		- Pre-next-cut.
-
-- README.md: move the long sections out to their own docs
-	- ID: 2026101415085144
-	- Type: Task
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261014-150851
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Move detailed comparisons to something like a "compared to other terminals" md, and link to it. Keep the brief feature comparison table.
-		- Move installation instructions, including development, to one or more .mds, and link to it/them.
-		- Move CLI usage and other examples to its own .md, and link to it. Leave a small snippet of example shcl contents.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261014: README keeps what it is, why, features, the wallpaper sheet, the showdown table, a short getting-started pointer with a few config lines, support, and legal.
-		- 20261014: New docs at the root. install.md has packages, the install scripts, building it yourself, the dev environment, and fetching the wallpaper pack. usage.md has configuration, shell integration, and opening scripts and folders on Windows. comparison.md has how the showdown is measured, notes 1 to 9, and how to run it. build.md, prerequisites.md and shell-integration.md are linked as before, with nothing folded in.
-		- 20261014: The showdown table stays in the README as the brief comparison table. It's the only comparison table there, and it's what a reader skims. Its method text and long notes are the detailed part, so they moved. The notes keep their small-text form and numbers.
-		- 20261014: The README had no CLI usage section and no config example, so nothing moved for those. The config lines in the README are copied from the shipped template.
-		- Question: should usage.md get a command-line section, written from `--help`?
-	- Branch: readmesplit
-	- Commit: 4cbe138
-	- Test case: `cicd/tests/showdown/run.py` (EqBnA5g) and `cicd/tests/showdown/rigs.py` (ErE7yrA) now read note 9 from comparison.md. Both fail with note 9 broken there, and pass with it back. The docs and tables checks cover the new files.
-	- Verified: docs, tables, showdown and rigs tests pass. Both table writers leave the README byte-identical when run again. The gallery check passes. Every line of the old README is in one of the 4 files, apart from the old TOC and 3 links pointed at the new files.
-	- Swept: termbench.py and showdown-readme.py still write the table in README.md, unchanged. update-showdown.py, cicd.bash, config.bash, demo-video.py, mdtable.py, sizebench-run.bash and termbench-run.bash name only the README table or gif. release.bash and the hooks test read the badge, which stays. The release notes keep "See the README". wallpaper-gallery.bash reads "102 wallpapers", which stays in the README. The gallery page and its template now link install.md for the download. showdown-readme.md names comparison.md for note 9. No README anchors in docs/, the install scripts, contributing.md, FAQ.md, glossary.md, the source, project/ docs, or the private repo. Left alone: config.rs line 10 already pointed at a README section that's gone, ancillary-notes.fods records say "README note 9" as of their dates, and a private backlog note says the wallpaper one-liner is in the README.
 
 - Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
 	- ID: 2026101411554909
