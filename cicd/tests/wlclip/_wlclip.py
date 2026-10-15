@@ -13,7 +13,7 @@
 ##			Prints "ready" once the compositor has it, then hands the text to
 ##			whoever asks, until another program takes the selection.
 ##	- Exit: 0 done, 1 no compositor or no data control there, 2 bad arguments,
-##	  4 nothing is in that selection, 5 the owner never sent the text.
+##	  4 nothing is in that selection, 5 the program holding it never sent the text.
 
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
