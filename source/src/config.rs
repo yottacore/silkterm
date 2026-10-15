@@ -4221,19 +4221,57 @@ fn base_font_size(settings: &Settings) -> f32 {
 	settings.font_size
 }
 
-/// The font size a window opens at with this zoom and no `--font-size`.
-pub fn unheld_font_size(zoom: i32) -> f32 {
-	let live = settings();
-	let name = crate::ui_spec::Key::FontSize.name();
-	let base = if live.model.values.held.contains_key(name) {
-		let mut own = (*live).clone();
-		own.model.release(name);
-		crate::fields::fill(&mut own, None);
-		base_font_size(&own)
-	} else {
-		base_font_size(&live)
+/// A font as the grid is measured in: its size and its family list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FontPick {
+	pub size: f32,
+	pub family: String,
+}
+
+impl FontPick {
+	pub fn same(&self, other: &Self) -> bool {
+		(self.size - other.size).abs() < 0.01 && self.family == other.family
+	}
+}
+
+/// The font the window has now.
+pub fn font_now() -> FontPick {
+	FontPick {
+		size: effective_font_size(),
+		family: settings().font_family.clone(),
+	}
+}
+
+/// The font a window opens at with this zoom and no `--font-size` or
+/// `--font-name`.
+pub fn unheld_font(zoom: i32) -> FontPick {
+	unheld_font_in(&settings(), zoom)
+}
+
+fn unheld_font_in(live: &Settings, zoom: i32) -> FontPick {
+	let held = [
+		crate::ui_spec::Key::FontSize.name(),
+		crate::ui_spec::Key::FontFamily.name(),
+	];
+	let pick = |s: &Settings| {
+		let base = base_font_size(s);
+		FontPick {
+			size: (base + zoom_within(zoom, base) as f32).clamp(4.0, 128.0),
+			family: s.font_family.clone(),
+		}
 	};
-	(base + zoom_within(zoom, base) as f32).clamp(4.0, 128.0)
+	if !held
+		.iter()
+		.any(|name| live.model.values.held.contains_key(*name))
+	{
+		return pick(live);
+	}
+	let mut own = live.clone();
+	for name in held {
+		own.model.release(name);
+	}
+	crate::fields::fill(&mut own, None);
+	pick(&own)
 }
 
 /// Resolve the background image: an explicit path (absolute, or a filename
@@ -16500,6 +16538,33 @@ mod tests {
 				"{no} has no decoder - scanning it picks an unloadable wallpaper"
 			);
 		}
+	}
+
+	// A grid saved under --font-name was kept in that font, and a launch
+	// without it opened the same columns and rows at the normal font. The
+	// font a grid is kept for is the one a launch without the options has.
+	// Test ID: Eso2wHz
+	#[test]
+	fn the_font_a_launch_without_the_font_options_has() {
+		let plain = Settings::default();
+		let mut held = plain.clone();
+		let style = crate::cli::Style {
+			font_name: Some("Iosevka".into()),
+			font_size: Some(30.0),
+			..Default::default()
+		};
+		crate::cli::fold_window_style(&mut held, &style);
+		assert_eq!(held.font_family, "Iosevka");
+		let want = unheld_font_in(&plain, 2);
+		assert_eq!(unheld_font_in(&held, 2), want);
+		assert_eq!(want.family, plain.font_family);
+		assert!((want.size - (plain.font_size + 2.0)).abs() < 0.01);
+		let named_only = FontPick {
+			size: want.size,
+			family: held.font_family.clone(),
+		};
+		assert!(!want.same(&named_only), "another family is another font");
+		assert!(want.same(&unheld_font_in(&plain, 2)));
 	}
 
 	// The config file is the one thing here a person edits by hand, so it arrives

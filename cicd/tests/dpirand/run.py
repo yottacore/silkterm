@@ -723,6 +723,9 @@ class Case:
 		self.owed: list[str] = []
 		## monitors whose size was last set at a font size from the command line
 		self.refonted: set[str] = set()
+		## the monitor a kept size was just taken for, at a font from the
+		## command line
+		self.atfont: str | None = None
 		self.cells: dict[tuple[float, int | None, int], tuple[int, int]] = {}
 
 	def note(self, text: str) -> None:
@@ -829,7 +832,23 @@ class Case:
 			while time.monotonic() < deadline and not any(t.split()[1] in ("arrive", "stay") for t in seen):
 				seen += self.rig.trace()
 				time.sleep(0.2)
+			time.sleep(0.3)
+			seen += self.rig.trace()
 			self.rig.unread = seen + self.rig.unread
+			## At a font from the command line a kept size is taken in its
+			## columns and rows where they fit there, else at the kept
+			## window's size.
+			for t in seen:
+				kind = t.split()[1]
+				named_at = None if trace_field(t, "key") == "-" else trace_field(t, "key")
+				if not model.font_pinned or kind not in ("take", "atfont") or named_at not in outcomes or named_at == model.belief:
+					continue
+				self.atfont = named_at
+				if kind == "atfont":
+					cols, rows = (int(v) for v in trace_field(t, "grid").split("x"))
+					was = outcomes[named_at]
+					outcomes[named_at] = (was[0], (cols, rows), was[2])
+					grids.add((cols, rows))
 		deadline = time.monotonic() + 8
 		while self.rig.grid() not in grids and time.monotonic() < deadline:
 			time.sleep(0.1)
@@ -903,6 +922,32 @@ class Case:
 		model.belief, model.grid, model.zoom = key, grid, zoom
 		self.scale = outs[primary[0]]["scale"] if primary else self.scale
 		self.check_font(what)
+		self.check_atfont(what)
+
+	## A kept size taken at a font from the command line keeps its columns
+	## and rows if the window fits the screen the size is kept for at that
+	## font, else the kept window's size, which is other columns and rows.
+	## Judged from the cell the shell is told, and only where the answer is
+	## clear of what the window's frame and rounding could move.
+	def check_atfont(self, what: str) -> None:
+		key, self.atfont = self.atfont, None
+		cell = self.rig.cell()
+		got = self.rig.grid()
+		if key is None or not cell or not got or not re.fullmatch(r"\d+x\d+_\d+pct", key):
+			return
+		kept = self.model.kept(key)
+		win, outs, _, primary = self.where()
+		scale = outs[primary[0]]["scale"] if primary and self.plan.arm == "wayland" else 1.0
+		frame = (win.rect[2] * scale - got[0] * cell[0], win.rect[3] * scale - got[1] * cell[1])
+		want = (kept.cols * cell[0] + frame[0], kept.rows * cell[1] + frame[1])
+		w, h = (int(v) for v in key.partition("_")[0].split("x"))
+		fits = want[0] <= w * 0.96 and want[1] <= h * 0.96
+		past = want[0] > w * 1.04 or want[1] > h * 1.04
+		self.note(f"      at the font from the command line as {got}, kept {kept}, {want[0]:.0f}x{want[1]:.0f} there on {w}x{h}")
+		if fits and got != (kept.cols, kept.rows):
+			raise CheckError(f"{what}: a kept {kept} fits {key} at the font from the command line, but came out at {got}")
+		if past and got == (kept.cols, kept.rows):
+			raise CheckError(f"{what}: a kept {kept} is {want[0]:.0f}x{want[1]:.0f} at the font from the command line, past {key}, and stayed")
 
 	## Waits out a save the user asked for, and checks it was for the monitor
 	## the window counts itself on, and that this is the one it is on.
@@ -1371,6 +1416,19 @@ class Case:
 				raise CheckError(f"{what}: opened at font zoom {model.zoom}, want {want.zoom}")
 			if not step.cli and model.grid != (want.cols, want.rows):
 				raise CheckError(f"{what}: opened at {model.grid} on {model.belief}, want {want}")
+		atfont = [t for t in trace[:trace.index(opened[0])] if t.split()[1] == "atfont"]
+		expect: Grid | None = None
+		opened_on = model.belief
+		if plan.remember and step.font and not step.cli:
+			want = model.kept(model.belief)
+			expect = (want.cols, want.rows)
+			if atfont:
+				cols, rows = (int(v) for v in trace_field(atfont[-1], "grid").split("x"))
+				expect = (cols, rows)
+			if model.grid != expect:
+				raise CheckError(f"{what}: opened at {model.grid} on {model.belief}, want {expect} from {want}")
+		elif atfont:
+			raise CheckError(f"{what}: opened a kept size for another font with none on the command line or a size: {atfont}")
 		if not plan.remember:
 			model.zoom = 0
 		self.note(f"  {what}: opened at {model.grid} zoom {model.zoom}, counted on {model.belief}")
@@ -1378,6 +1436,10 @@ class Case:
 		## A Wayland window opens at 1 and learns its scale after.
 		first_scale = outs[primary[0]]["scale"] if primary and plan.arm == "wayland" else 1.0
 		self.settle(what, self.names(outs, primary), True, first_scale != 1.0, look_wait=12.0)
+		## or the grid it opened at, where the look kept it
+		if expect and model.grid == expect and opened_on:
+			self.atfont = opened_on
+			self.check_atfont(what)
 		## A size set at a font size from the command line, on this monitor,
 		## fits it at the normal font: in its columns and rows if they fit,
 		## else at the size the window was.
@@ -1508,3 +1570,5 @@ if __name__ == "__main__":
 ##		  size from the command line is kept for the normal font.
 ##		- 20261015 JC: A size set after a move the window wasn't told of is for the
 ##		  output it's on, and a scale change under a resting pointer may look.
+##		- 20261015 JC: A kept size used at a font size from the command line keeps
+##		  its columns and rows where they fit there, else the kept window's size.

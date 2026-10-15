@@ -204,6 +204,46 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: wlstale
 	- Commit: 3cd4c35
 
+- A size kept at one font is used at another when the font comes from the command line
+	- ID: 2026101422190936
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261014-221909
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101412292756
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
+		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
+	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
+	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
+		- Best guess, below under Decisions: the same rule as that answer, used both ways.
+	- Reproduced: 20261015. A 169x20 size kept on a 2560 px output came out 169x20 at `--font-size 17` on a 2880 px one, 3604 px wide. A 218x19 grid set under `--font-name "Ubuntu Mono"` was saved as it was, and opened 1924 px wide on a 1920 px output without the option.
+	- Notes:
+		- A size given on the command line wins over this, as before.
+	- Progress log:
+		- 20261015: Asked how a kept size should be used at another font. No answer in time, so the best guess below was taken. Easy to take back: drop the use at launch and at a take, and the family from the font check.
+	- Decisions:
+		- 20261015, best guess: the rule given on 2026101412292756, both ways. A kept size used at a font other than the one it was kept at keeps its columns and rows if the window fits the screen at the font it opens with, and else opens at the columns and rows that keep the kept window's size in pixels. That's a launch or a take with `--font-size` or `--font-name`, and a grid saved under `--font-name`.
+			- "The screen" is the monitor the size is kept for, less the window's frame, as on that item.
+			- Example: kept 100x30 at 12pt is about 1000x700 px on a 1920x1080 screen. `--font-size 14` opens 100x30, since it fits. `--font-size 28` opens about 43x13.
+			- A size is kept at the font a launch without `--font-size` and `--font-name` has, with the kept zoom on top.
+			- A window that can't tell its monitor at launch, as on Wayland, opens at the kept grid, and the take once it can tell fits it to that screen. Without per monitor sizes there's no take, so it keeps the kept window's size.
+	- Actual cause: Only the save checked the font, and only its size. A launch or a take used the kept grid at whatever font the window had, and a grid saved under `--font-name` was kept in that font.
+	- Actual fix: One rule for the save, the launch and the take. Each measures the cell of the font a launch without the options has, family and size, and the cell the window has, and picks the grid by the rule above.
+	- Branch: clifont
+	- Commit: e27efe5
+	- Test case: `a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line` (Eso2weD) and `the_font_a_launch_without_the_font_options_has` (Eso2wHz), each seen failing with its half of the fix taken out. The random test (EshVccz) now judges a kept size taken at `--font-size` from the cell the shell is told: its columns and rows where they'd clearly fit, other ones where they'd clearly not. Seed 128 fails it with the take's half taken out, and passes on the fix.
+	- Verified:
+		- The Linux unit tests, rustfmt, and clippy with warnings as errors for Linux, Windows and macOS. The Python lint, the docs check and the test ID check.
+		- The random test on seeds 1 to 4, 17, 20, 23, 30, 53, 118, 125, 128, 137, 221, 236, 249, 300, 319, 324 and 368, on Wayland and on X11 through Xwayland. All but 1 to 4 use `--font-size`.
+		- `--font-name "Ubuntu Mono"` on one headless sway output: a 218x19 grid set at 1880 px was saved as 175x19, opened 175x19 at 1865 px without the option, and 175x19 again with it, since that fits.
+	- Swept: every place a kept grid is used or saved. The save (`grid_to_open_at`), the launch in app.rs and the take (`take_monitor_size`) all go through it now. A grid from Settings is the user's own columns and rows, not a kept size, so it's left as it is. The rescale keeps the grid the window shows, at its own font.
+	- Needs external testing: a look on Windows and macOS, where the frame comes into the screen's room.
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -526,25 +566,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261014: Its only known path, a size taken while a drag was held, is gone with the fix for 2026101411555009. Seed 1000 passes now. A font zoom and then a key move to another output right after, 0.3 s and 0.8 s apart on a 200% output, kept the size it took.
 		- 20261014: Handling the echo itself would need winit to say which configure a resize comes from, or a retry on a size the window already left, which hides it rather than fixes it. Left Queued until it shows up another way.
-
-- A size kept at one font is used at another when the font comes from the command line
-	- ID: 2026101422190936
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261014-221909
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101412292756
-	- Target OS: All
-	- Steps to reproduce:
-		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
-		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
-	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
-	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
-	- Reproduced: No. Read from the code.
-	- Notes:
-		- A size given on the command line wins over this, as before.
 
 - Wayland: a size taken that leaves most of the window on an output at another scale shows a grid a few cells off
 	- ID: 2026101513385000
