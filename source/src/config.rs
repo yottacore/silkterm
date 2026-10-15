@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 
 /// Display name (window title, default tab title). The Cargo package / binary
-/// name lives in Cargo.toml; see README "Renaming the project".
+/// name lives in Cargo.toml.
 pub const APP_NAME: &str = "SilkTerm";
 
 /// Where Help -> Support SilkTerm sends the browser. Points at DONATE.md (the

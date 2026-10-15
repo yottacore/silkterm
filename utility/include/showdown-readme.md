@@ -170,7 +170,7 @@ WezTerm links as `usr/bin/wezterm` and Hyper as `hyper`. The size rig finds the 
 
 ## Why the README has no Windows speed rows
 
-The README's footnote 9 is the short form of this.
+Footnote 9 in [comparison.md](../../comparison.md) is the short form of this.
 
 Every speed figure comes from one machine, because the measuring rig is not neutral: rendering through software OpenGL roughly halves SilkTerm's throughput and going through VirtualGL still costs it about 14%, while terminals that draw on the CPU do not move at all. A table built from mixed rigs can therefore rank the wrong terminal first. These figures were taken on a headless Wayland compositor driving a discrete GPU (Linux, Ryzen host, GeForce RTX 3060 Ti), so nothing on the desktop competes for the card.
 
@@ -262,7 +262,7 @@ A fourth pass (20260818) took the 2x apart, by giving the same 32 MiB of output 
 
 - **So the remaining gap is about a second per 32 MiB and it is in the engine's pipe design, not in the terminal.** Closing it means forking that, which is a decision rather than a tweak.
 
-- **The README says this now.** Note 9 used to promise Windows speed rows once they were calibrated; it states the finding instead - no Windows rows, why the numbers reported anywhere cannot be read as a terminal's speed, and the end-to-end 1.3 s against 2.5 s with its parts named. Keep the two in step: a figure changed here has to change there.
+- **comparison.md says this now.** Note 9 used to promise Windows speed rows once they were calibrated; it states the finding instead - no Windows rows, why the numbers reported anywhere cannot be read as a terminal's speed, and the end-to-end 1.3 s against 2.5 s with its parts named. Keep the two in step: a figure changed here has to change there.
 
 What was still worth doing on Windows is the **size and memory half**, which needs no calibration and is untouched by any of this. It is done: both measurable rows are published.
 
