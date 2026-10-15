@@ -64,14 +64,6 @@ SilkTerm™ is a hardware-accelerated terminal for Linux, Windows and macOS that
 - [Wallpaper pack](#wallpaper-pack)
 - [Terminal showdown - speed and size](#terminal-showdown---speed-and-size)
 - [Getting and using](#getting-and-using)
-	- [Installation](#installation)
-		- [Packages and installers](#packages-and-installers)
-		- [Direct stable and dev install scripts](#direct-stable-and-dev-install-scripts)
-		- [Build it yourself](#build-it-yourself)
-	- [Set up development environment](#set-up-development-environment)
-	- [Configuration](#configuration)
-	- [Shell integration](#shell-integration)
-	- [Opening scripts and folders on Windows](#opening-scripts-and-folders-on-windows)
 - [Contributing](#contributing)
 - [Support SilkTerm](#support-silkterm)
 	- [Direct support](#direct-support)
@@ -230,28 +222,11 @@ The 102 wallpapers SilkTerm was built and tuned against are in [`filesystem/home
 [![Wallpaper pack](assets/wallpaper-gallery.jpg)](https://yottacore.github.io/silkterm/wallpapers/)
 
 Click the sheet for the [browsable gallery](https://yottacore.github.io/silkterm/wallpapers/) - any wallpaper opens full size in place, the arrow keys page through them, and each one shows its credit and license underneath.
-
-They come to 58 MiB against an 11 MiB terminal, so no package or installer includes them - fetch the folder on its own. Bash (Linux, macOS, WSL):
-
-~~~bash
-dir="${XDG_CONFIG_HOME:-$HOME/.config}/silkterm" && mkdir -p "$dir" && curl -fsSL https://github.com/yottacore/silkterm/archive/refs/heads/main.tar.gz | tar -xz -C "$dir" --strip-components=5 silkterm-main/filesystem/home/.config/silkterm/wallpaper
-~~~
-
-PowerShell (Windows):
-
-~~~powershell
-$dest = "$env:LOCALAPPDATA\silkterm"; $tgz = "$env:TEMP\silkterm-main.tar.gz"; New-Item -ItemType Directory -Force $dest | Out-Null; curl.exe -fsSL https://github.com/yottacore/silkterm/archive/refs/heads/main.tar.gz -o $tgz; tar -xzf $tgz -C $dest --strip-components=5 silkterm-main/filesystem/home/.config/silkterm/wallpaper; Remove-Item $tgz
-~~~
-
-Either one is a single line, so it survives a paste however your terminal handles one, and puts the images where rotation looks for them - `wallpaper/` beside the config on Linux and macOS, and under `%LOCALAPPDATA%` on Windows (see the table in [Configuration](#configuration)). Both pull the whole repository archive, since GitHub serves no smaller unit - about 67 MiB over the wire.
+To fetch them, see [Wallpaper pack](install.md#wallpaper-pack) in install.md.
 
 ## Terminal showdown - speed and size
 
 Smooth scrolling isn't useful if the terminal falls behind the moment something dumps a lot of text, so throughput is measured and reported below.
-
-In testing, each terminal is fed byte-identical, deterministic streams of one UTF-8 width class at a time - plain ASCII, then 2-byte, 3-byte and 4-byte characters, then a mix - and timed to a device-attributes reply, so the clock stops when the terminal has consumed the stream rather than when the pipe accepted it. Speed is measured at a 160x42 grid.
-
-A terminal is also the program that is always open, usually several times over, so what it costs while doing nothing matters. Size and memory are measured separately, with each terminal at a 100x30 grid and its own defaults.
 
 Sorted by speed. Terminals not yet measured for speed follow, ordered by what it takes to install them.
 
@@ -283,154 +258,25 @@ Sorted by speed. Terminals not yet measured for speed follow, ordered by what it
 
 <!-- termbench:end -->
 
-<sub><sup>1</sup> Throughput in MB/s, higher is better, on a stream made entirely of characters of that UTF-8 width - 1-byte is plain ASCII, 4-byte is emoji. Two more width classes and a mixed stream are measured as well and count toward the score; the tool prints all five. Only rows measured at the same grid size are comparable.</sub>
-
-<sub><sup>2</sup> Millions of cells per second - the weighted geometric mean of all five classes, leaning toward plain ASCII since that is most of what a terminal ever sees, and geometric so no single class can dominate. Counted in cells rather than bytes, because a wide-character stream moves far more bytes for the same amount of screen. It says how fast a terminal swallows output and keeps up, not how fast it rasterizes glyphs - only a screenful is ever visible, so most of a large stream is parsed, stored and scrolled past. The clock stops when the terminal answers a query that it can only answer once it has worked through everything queued, so a terminal that never answers cannot be timed this way and its speed cells stay blank. A slow terminal gets fewer repetitions of the same payloads, which makes its figures noisier but no less comparable.</sub>
-
-<sub><sup>3</sup> This number is near-meaningless alone. A small executable usually means the code sits in shared libraries instead. But they are loaded only once however many programs map them - so anything built on a stack the desktop already loads costs less than its File+deps implies. SilkTerm links nothing beyond the C runtime and what the graphics stack loads at runtime (for maximum portability and long-term stability without "bitrot"), so almost all of it is in the one file.</sub>
-
-<sub><sup>4</sup> File+deps is the executable plus everything else it needs beyond a base OS. Memory is the unique resident footprint of the whole process tree - private pages, plus each shared mapping counted once. Self-contained bundles count their extracted payload plus the system libraries they still borrow. Both columns leave out the graphics stack and what it pulls in, because accelerated terminals share it with the compositor and every other accelerated program: 141 SilkTerm, 105 WezTerm, 73 kitty and Alacritty, 48 Tabby, 1 Hyper. "A base OS" is not the same size on every platform - on Linux it means the C runtime and nothing else, since a desktop library is something you installed, while on Windows the whole of System32 ships with the machine - so a Windows row counts less toward File+deps than a Linux one, on top of everything in note 9. Expect a few MiB of drift between runs, since libraries load on demand.</sub>
-
-<sub><sup>5</sup> SilkTerm as it ships, with the eye candy on: wallpaper, text scrim and outline, animated cursor, smooth application scrolling and color emoji. Every one of them is a setting, and the row below is the same binary with the lot switched off.</sub>
-
-<sub><sup>6</sup> Wallpaper, scrim, outline, cursor animation, smooth app scrolling, transparency and color emoji all off.</sub>
-
-<sub><sup>7</sup> Vendor's released artifact, not measured here, so not comparable with the measured columns. Blank: conhost.exe and Terminal.app ship inside the OS, Warp publishes no size, and the macOS rows have nothing here to run on.</sub>
-
-<sub><sup>8</sup> SilkTerm uses Alacritty's terminal-emulation core, so the two share the parsing and grid work that this benchmark mostly measures - which is why they are within a few percent of each other, and why both sit so far ahead of terminals that parse their own way. It is the lighter of the two to run, which is what the eye candy costs: SilkTerm with everything switched off is 50 MiB above it, and as it ships, 117.</sub>
-
-<sub><sup>9</sup> Every speed figure comes from one machine, because the measuring rig is not neutral: a headless Wayland compositor driving a discrete GPU (Linux, Ryzen host, GeForce RTX 3060 Ti). XTerm draws only on X11, so its row comes from a private X server. Through the compositor's Xwayland it reads about a third slower, 18 MB/s of plain ASCII against 28. <b>There are no Windows rows, and there will not be.</b> On Windows a terminal never receives its output directly. The console host relays it over a pipe, and that pipe sets the pace, so a Windows figure measures the transport rather than the terminal. The size and memory columns are unaffected, which is why Windows rows appear there. They come from a private X server drawing in software, at a 100x30 grid, with the conhost.exe and Windows Terminal rows taken on a Windows machine. Drawn in software, a GPU terminal's window buffers sit in its own memory, so they count toward Mem. The measurements behind all of this are in [showdown-readme.md](utility/include/showdown-readme.md).</sub>
-
-Run it yourself with [`utility/update-showdown.py`](utility/update-showdown.py) (`--quick` for a thirty-second version). It needs only Python 3 and a terminal, works on any emulator on any OS, and refreshes the speed columns above as more terminals are measured.
+How each column is measured, and notes 1 to 9, are in [comparison.md](comparison.md), along with how to run it yourself.
 
 ## Getting and using
 
-### Installation
+[install.md](install.md) covers the packages and installers, the one-line install scripts, building it yourself, and setting up a development environment. [usage.md](usage.md) covers configuration, shell integration, and opening scripts and folders on Windows.
 
-#### Packages and installers
+Settings are in one commented [SHCL](https://github.com/yottacore/shcl) file, written with every default on first run. A few lines of it:
 
-The primary install is a native package from the [releases page](https://github.com/yottacore/silkterm/releases): `.deb` / `.rpm` on Linux, or the NSIS setup `.exe` on Windows. Optional either way: fetch the wallpaper pack, as the [Wallpaper pack](#wallpaper-pack) section shows.
+~~~shcl
+theme: SilkTerm
+theme_mode: dark
 
-On macOS, SilkTerm is a Mac app sold through an app store. A Microsoft Store version is on the way as well. Links go here once the listings are up. The packages on the releases page stay free.
+transparency:
 
-#### Direct stable and dev install scripts
-
-Prefer a plain binary? These one-liners work out your operating system and CPU on their own, download the release built for it, check its sha256, and install it. Once a release is signed, the checksums file has to have a good signature from the release key or nothing is installed. Each prints what it is about to do and asks before touching anything, and does nothing at all when you are already up to date. The defaults suit most people - add `--help` for the handful of things you can change.
-
-Bash, written for 3.2 or newer and tested on 5 (Linux, macOS, WSL):
-
-~~~bash
-bash <(curl -fsSL https://raw.githubusercontent.com/yottacore/silkterm/main/install.bash)
+	# enabled: false  ## Default
+	opacity: 0.95
 ~~~
 
-PowerShell 5.1 or 7+ (Windows, Linux, macOS):
-
-~~~powershell
-irm https://raw.githubusercontent.com/yottacore/silkterm/main/install.ps1 | iex
-~~~
-
-PowerShell needs the script-block form to pass anything, `-Help` included:
-
-~~~powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/yottacore/silkterm/main/install.ps1'))) -Help
-~~~
-
-Install locations:
-
-| OS      | User install (default)              | <- Launcher                                                   | (or) System install          | <- Launcher
-| :------ | :---------------------------------- | :------------------------------------------------------------ | :--------------------------- | :---------------------------------------------------
-| Linux   | `~/.local/bin/silkterm`             | `~/.local/share/applications/silkterm.desktop`                | `/usr/local/bin/silkterm`    | `/usr/local/share/applications/silkterm.desktop`
-| Windows | `%LOCALAPPDATA%\Programs\SilkTerm\` | Start Menu shortcut, and the install dir is added to `%PATH%` | `C:\Program Files\SilkTerm\` | Common Start Menu shortcut (needs an elevated shell)
-
-The releases page has Linux and Windows binaries only, and the Mac app comes from its store listing. On anything else the installer says so and lists what the release does include, so build it yourself - below.
-
-#### Build it yourself
-
-Install the per-platform prerequisites first ([prerequisites.md](prerequisites.md)), then on Linux:
-
-~~~bash
-cargo run --release
-~~~
-
-That's the whole of it for a native build. [build.md](build.md) covers the cross-builds (Windows, and ARM64 for both) which all run from an x86_64 Linux box.
-
-Release builds are reproducible on the same system and toolchain. A commit built in two different folders gives byte-identical binaries for all four published targets, since neither the folder nor the time of the build goes into them. [`cicd/utility/repro-check.bash`](cicd/utility/repro-check.bash) checks that the way the pipeline builds a release. A build on another distribution or with another linker can still differ.
-
-### Set up development environment
-
-[prerequisites.md](prerequisites.md) lists what each platform needs, down to the package names and the one-time toolchain setup. [build.md](build.md) covers the build and cross-build commands, and [contributing.md](contributing.md) covers the branch and review flow.
-
-The toolchain version is pinned in `rust-toolchain.toml`, so rustup picks the right one on its own.
-
-To run everything a change has to pass before it can be pushed - format, lint, regression tests, profiling, the release and cross builds, packaging, then backup and publish:
-
-~~~bash
-cicd/cicd.bash [--quick]
-~~~
-
-`--quick` skips the cross-builds and the slow stages. `--container` runs the build and test stages in a pinned Debian image, so only docker is needed for them (see [build.md](build.md)). A fast subset of it - format check, lint, tests - also runs as a pre-push hook on any push to main (`cicd/cicd.bash --gate`). Turn the hooks on once per clone:
-
-~~~bash
-git config core.hooksPath utility/git-hooks
-~~~
-
-### Configuration
-
-On first run SilkTerm writes a commented config file with all defaults, in the place each platform keeps settings:
-
-| OS      | Config                                            | Wallpaper folder
-| :------ | :------------------------------------------------ | :-----------------------------------
-| Linux   | `$XDG_CONFIG_HOME/silkterm/` (or `~/.config/...`) | beside the config
-| Windows | `%APPDATA%\silkterm\`                             | `%LOCALAPPDATA%\silkterm\wallpaper\`
-| macOS   | `~/Library/Application Support/silkterm/`         | beside the config
-
-Setting `XDG_CONFIG_HOME` overrides the platform default everywhere, and `--config PATH` overrides everything - an alternate config keeps its own wallpaper and history beside itself rather than sharing the defaults.
-
-Windows splits the two because settings are worth roaming between machines and a 60 MiB wallpaper pack is not. A pack already sitting beside the config still works; nothing has to be moved.
-
-If making changes directly (rather than through Settings), you can apply them immediately with the "Reload config" menu item. Settings reads the file each time it opens, so it also shows what another SilkTerm window saved.
-
-Settings names are meant to read plainly, but a few of them - scrim, contrast mask, automask mix - are particular to SilkTerm. [glossary.md](glossary.md) defines those.
-
-To start over from the shipped defaults, run `silkterm --reset-config`. The old file is kept alongside as `config.shcl.bak` rather than deleted.
-
-When an update converts the file to a newer format, the file as it was is kept alongside, named for the local time it was converted and the format it had, such as `config_backup_20261003-142233_format-v2.shcl`. Every older version is kept, and a file named with `--config` keeps its own name in front. A line the new format can't hold stays in the file as written, and SilkTerm puts up a notice saying how many there were and where the old file is. If the file can't be converted where it is, because it isn't UTF-8 text or the new format can't read it, SilkTerm writes a new one from the defaults with every setting it can still read, and the notice says how many it couldn't copy to the new file. A file already in the current format with lines that aren't UTF-8 text is written again without those lines, and kept alongside the same way. A notice names the lines and where the old file is.
-
-Drop a few images into a `wallpaper` folder next to the config and SilkTerm picks one each launch, favoring whatever it hasn't shown lately. Naming a wallpaper in the config, or passing one on the command line, takes precedence. The [wallpaper pack](#wallpaper-pack) is a ready-made folder to start from.
-
-### Shell integration
-
-A new tab, split or window starts in the directory the current pane is in. For most shells that needs nothing set up - SilkTerm reads the shell process's own directory.
-
-PowerShell is the exception: `Set-Location` moves PowerShell's own idea of where it is and leaves the process where it was launched, so there is nothing to read and a new pane would start in the launch directory.
-
-SilkTerm handles that one for you. A few seconds after launch it adds a small directory-reporting block to each PowerShell profile - and it will not touch a profile that already reports (a Windows Terminal setup, oh-my-posh, anything else), will not rewrite what is there (it appends, after saving a copy beside it), will not change your prompt, and will not put the block back if you delete it. A shell whose execution policy would refuse to load the profile is left alone and said so, rather than being handed a file it cannot read. Clear "Update PowerShell profiles" on the Shell tab of Settings, or set `shell.integration: false`, to switch it off before it ever runs.
-
-Same story for a shell running behind `ssh` or in a container - that one is yours to set up, since the shell you are typing at is not the process SilkTerm started.
-
-[shell-integration.md](shell-integration.md) covers all of it, including the snippets for bash, zsh and fish.
-
-### Opening scripts and folders on Windows
-
-The Shell tab of Settings has an "Open with SilkTerm" group, one row per kind of file:
-
-- Batch files: `.bat` and `.cmd`.
-
-- PowerShell scripts: `.ps1`, with PowerShell 7 if it is installed and Windows PowerShell if not.
-
-- VBScript files: `.vbs`, through the console script host, so their messages print in the pane.
-
-- Folder menu: an "Open in SilkTerm" entry for folders and drives. On Windows 11 it is under "Show more options".
-
-Register makes a double-click run that kind of file in SilkTerm. The pane stays open after the script ends, so its output and exit status can be read. It is for your account only and needs no administrator rights. The arrow at the end of the row puts back whatever was there before. Register again after moving SilkTerm.
-
-What it does not cover:
-
-- A console program started any other way, such as `cmd` from the Run box or a double-clicked `.exe`, still opens where it did. SilkTerm is not a replacement for Windows' default terminal setting.
-
-- A file type you picked an app for under "Open with" keeps that app, because Windows keeps that choice out of reach of other programs. Settings says so, and choosing SilkTerm there yourself is what changes it.
-
-- A script run as administrator still opens in the Windows console.
+A setting commented out with `#`, like `enabled` above, is at its default. Remove the `#` to change it.
 
 ## Contributing
 

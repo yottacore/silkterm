@@ -367,9 +367,10 @@ check("the size rig keeps its folder under the temp dir it was given",
 if kept and kept.name.startswith("sizebench.") and kept.parent == work:
 	shutil.rmtree(kept, ignore_errors=True)
 
-## README note 9 names the rig behind each group of columns. Each has to be the
-## rig its script really is.
-note9 = next((ln for ln in original.splitlines() if ln.startswith("<sub><sup>9</sup>")), "")
+## Note 9 in comparison.md names the rig behind each group of columns. Each has
+## to be the rig its script really is. A missing note fails both checks.
+notes = (REPO / "comparison.md").read_text(encoding="utf-8")
+note9 = next((ln for ln in notes.splitlines() if ln.startswith("<sub><sup>9</sup>")), "")
 speed_rig = (UTILITY / "include/termbench-run.bash").read_text(encoding="utf-8")
 size_rig_text = size_rig.read_text(encoding="utf-8")
 check("note 9 says the speed rig is a headless Wayland compositor",
@@ -391,3 +392,4 @@ print("all passed")
 ##		- 20260926 JC: Payloads, scene weights and cell rates.
 ##		- 20260930 JC: The size rig keeps its folder under the temp dir it was given. The fake
 ##		  compositor binds its sockets by name.
+##		- 20261014 JC: Note 9 is read from comparison.md.

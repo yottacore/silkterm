@@ -9,7 +9,7 @@
 ##		bundle once for its own libraries, and taking a version from the command
 ##		that starts a terminal when the terminal itself will not give one. XTerm's
 ##		speed row came from X11, so the speed rig has to run it on an X server of
-##		its own, and README note 9 has to say so.
+##		its own, and note 9 in comparison.md has to say so.
 ##	- Test ID: ErE7yrA
 ##	- History: At bottom of file.
 
@@ -101,8 +101,9 @@ for key, row, rigs in us.TERMS:
 x11_terms = re.search(r'^declare -r x11Terms="([^"]*)"$', speed_rig, re.M)
 check("the speed rig runs xterm on an X server of its own",
 	x11_terms is not None and "xterm" in x11_terms.group(1).split() and "Xvfb" in speed_rig)
-note9 = next((ln for ln in readme.splitlines() if ln.startswith("<sub><sup>9</sup>")), "")
-check("README note 9 says XTerm's row comes from a private X server",
+notes = (REPO / "comparison.md").read_text(encoding="utf-8")
+note9 = next((ln for ln in notes.splitlines() if ln.startswith("<sub><sup>9</sup>")), "")
+check("note 9 says XTerm's row comes from a private X server",
 	"XTerm draws only on X11, so its row comes from a private X server" in note9)
 
 ## Finding the terminal on the throwaway account. The stand-in terminal is a copy of
@@ -238,3 +239,4 @@ print("all passed")
 ##	History:
 ##		- 20260928 JC: Created.
 ##		- 20260929 JC: XTerm's speed row, on an X server of its own.
+##		- 20261014 JC: Note 9 is read from comparison.md.
