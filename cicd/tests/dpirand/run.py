@@ -80,7 +80,6 @@ KINDS = {"move": 3.0, "drag": 4.0, "resize": 2.0, "zoom": 2.0, "relaunch": 1.5, 
 ## Known faults that a step may run into, each with its backlog item. A case
 ## that hits one passes and the run counts it; the entry goes when the item
 ## is fixed.
-ROUNDED_ALIKE = "a fractional output and a whole one that round to one scale look alike to a Wayland window"
 RESCALED = "a scale change moves the grid a few cells"
 CAPPED = "sway holds a floating window to the size of the whole layout"
 TOLD_NOTHING = "a Wayland window is told nothing of a move"
@@ -90,7 +89,6 @@ TOLD_NOTHING = "a Wayland window is told nothing of a move"
 WAITS = "a window that can't see the buttons waits for the person after a move"
 PUSHED = "a take that leaves most of the window on an output at another scale drifts the grid a few cells"
 KNOWN: dict[str, str] = {
-	ROUNDED_ALIKE: "2026101411554909",
 	PUSHED: "2026101513385000",
 }
 
@@ -698,10 +696,6 @@ def around(grid: Grid) -> list[Grid]:
 	return [(c, r) for c in range(grid[0] - dc, grid[0] + dc + 1) for r in range(grid[1] - dr, grid[1] + dr + 1)]
 
 
-def at_scale(whole: int, scale: float) -> bool:
-	return abs(whole - scale) < 0.01 or whole == -(-scale // 1)
-
-
 class Case:
 	def __init__(self, plan: Plan, work: Path, binary: Path) -> None:
 		self.plan = plan
@@ -715,6 +709,8 @@ class Case:
 		self.drag_touched: set[str] = set()
 		self.drag_primaries: set[str] = set()
 		self.drag_names: dict[str | None, str] = {}
+		## the outputs the window was on when last looked for
+		self.touched: list[str] = []
 		self.font: int | None = None
 		self.stale: str | None = None
 		## a look put off until the pointer, a key or focus comes back
@@ -774,6 +770,7 @@ class Case:
 		touched = [n for n, a in areas.items() if a > 0]
 		most = max(areas.values(), default=0)
 		primary = [n for n, a in areas.items() if a == most and a > 0]
+		self.touched = touched
 		return win, outs, touched, primary
 
 	def track_entered(self, touched: list[str]) -> None:
@@ -796,16 +793,14 @@ class Case:
 			return allowed
 		scale = outs[primary[0]]["scale"]
 		first = self.model.entered[0] if self.model.entered else []
-		whole = {n: -(-o["scale"] // 1) for n, o in outs.items()}
+		alike = sum(outs[n]["scale"] == scale for n in self.touched if n in outs)
 		for f in first:
 			if f in primary:
 				continue
 			if outs[f]["scale"] == scale:
 				allowed.setdefault(key_of(arm, outs[f], scale), "same-scale outputs look alike to a Wayland window")
-			elif at_scale(int(whole[f]), scale):
-				allowed.setdefault(key_of(arm, outs[f], scale), ROUNDED_ALIKE)
-			elif sum(at_scale(int(w), scale) for w in whole.values()) > 1:
-				allowed.setdefault(None, "more than one output at the window's scale")
+			elif alike > 1:
+				allowed.setdefault(None, "more than one output the window is on is at its scale")
 		return allowed
 
 	## Waits for the window to settle on one of `allowed`, then checks it
@@ -1179,8 +1174,6 @@ class Case:
 			for f in self.drag_touched & outs.keys() - {p}:
 				if outs[f]["scale"] == scale:
 					self.drag_names.setdefault(key_of("wayland", outs[f], scale), "same-scale outputs look alike to a Wayland window")
-				elif at_scale(int(-(-outs[f]["scale"] // 1)), scale):
-					self.drag_names.setdefault(key_of("wayland", outs[f], scale), ROUNDED_ALIKE)
 
 	## Where the window's top left goes for a drop on output `to`.
 	def drop_point(self, step: Step, win: Win, outs: dict[str, dict[str, Any]]) -> tuple[int, int]:

@@ -3,11 +3,14 @@
 ##	- Purpose:
 ##		Per-monitor window size on native Wayland, where a window is told
 ##		neither where it is nor that it moved. Runs the real program on
-##		headless sway with 3 outputs, each with its own size kept:
+##		headless sway with 5 outputs, each with its own size kept:
 ##			- HEADLESS-1, 1920x1080 at 100%.
 ##			- HEADLESS-2, 2560x1600 at 200%, right of it.
 ##			- HEADLESS-3, 1280x1024 at 100%, under HEADLESS-1, kept with a
 ##			  bigger font.
+##			- HEADLESS-4, 1680x1050 at 100%, right of HEADLESS-2.
+##			- HEADLESS-5, 1920x1200 at 150%, under HEADLESS-2. A window reads
+##			  its scale as 2 there, as on HEADLESS-2.
 ##		The window opens on HEADLESS-2 and must end at its size. Then:
 ##			- Moved to HEADLESS-1 by a key binding. The scale change, then the
 ##			  keys coming up, are the sign.
@@ -18,6 +21,10 @@
 ##			  held over HEADLESS-2. It keeps its size until the drop.
 ##			- Moved to HEADLESS-1 by the key, then dragged onto HEADLESS-2 and
 ##			  dropped with a sliver still on HEADLESS-1.
+##			- Dropped on HEADLESS-5 with a sliver left on HEADLESS-2, then
+##			  taken all the way onto HEADLESS-5 and back up onto HEADLESS-2
+##			  with a sliver left on HEADLESS-5, then dropped on HEADLESS-4 with
+##			  a sliver left on HEADLESS-2, and back onto HEADLESS-2.
 ##			- Moved to HEADLESS-3 unseen, and made fullscreen with the pointer
 ##			  over it, then not. It takes HEADLESS-3's size once back.
 ##		Each size must hold once taken, and the shell must never be told a
@@ -97,21 +104,25 @@ fStopOurs(){
 	kill -9 "${pid}" 2>/dev/null || true
 }
 
-## The layout is 3200x2104, which the pointer's absolute moves are scaled to.
+## The layout is 4880x2104, which the pointer's absolute moves are scaled to.
 cat >"${work}/sway.conf" <<'EOF'
 output HEADLESS-1 resolution 1920x1080 position 0 0 scale 1
 output HEADLESS-2 resolution 2560x1600 position 1920 0 scale 2
 output HEADLESS-3 resolution 1280x1024 position 0 1080 scale 1
+output HEADLESS-4 resolution 1680x1050 position 3200 0 scale 1
+output HEADLESS-5 resolution 1920x1200 position 1920 800 scale 1.5
 workspace 1 output HEADLESS-1
 workspace 2 output HEADLESS-2
 workspace 3 output HEADLESS-3
+workspace 4 output HEADLESS-4
+workspace 5 output HEADLESS-5
 xwayland disable
 default_floating_border normal
 for_window [all] floating enable
 bindsym Mod4+Shift+h move container to output HEADLESS-1
 EOF
 env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u SWAYSOCK XDG_RUNTIME_DIR="${runDir}" \
-	WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=3 WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
+	WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=5 WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
 	sway -c "${work}/sway.conf" >"${work}/sway.log" 2>&1 &
 swayPid=$!
 sock=""
@@ -125,7 +136,7 @@ wl=(env -u DISPLAY XDG_RUNTIME_DIR="${runDir}" WAYLAND_DISPLAY=wayland-1 SWAYSOC
 
 ## A pointer of its own, since the seat has no devices.
 mkfifo "${work}/ptr.in"
-"${wl[@]}" python3 -I "${meDir}/_vpointer.py" 3200 2104 <"${work}/ptr.in" >"${work}/ptr.out" 2>"${work}/ptr.err" &
+"${wl[@]}" python3 -I "${meDir}/_vpointer.py" 4880 2104 <"${work}/ptr.in" >"${work}/ptr.out" 2>"${work}/ptr.err" &
 ptrPid=$!
 exec 7>"${work}/ptr.in"
 for _ in {1..50}; do grep -q '^ready$' "${work}/ptr.out" 2>/dev/null && break; sleep 0.1; done
@@ -152,6 +163,8 @@ printf '%s\n' 'performance:' $'\tautomatic: false' $'\tprofile: "custom"' \
 	$'\t\t1920x1080_100pct:' $'\t\t\tcolumns: 110' $'\t\t\trows: 20' $'\t\t\tfont_zoom: 0' \
 	$'\t\t2560x1600_200pct:' $'\t\t\tcolumns: 50' $'\t\t\trows: 30' $'\t\t\tfont_zoom: 0' \
 	$'\t\t1280x1024_100pct:' $'\t\t\tcolumns: 60' $'\t\t\trows: 35' $'\t\t\tfont_zoom: 4' \
+	$'\t\t1680x1050_100pct:' $'\t\t\tcolumns: 90' $'\t\t\trows: 25' $'\t\t\tfont_zoom: 0' \
+	$'\t\t1920x1200_150pct:' $'\t\t\tcolumns: 64' $'\t\t\trows: 28' $'\t\t\tfont_zoom: 0' \
 	>"${cfgHome}/silkterm/config.shcl"
 
 ## The shell writes its own "rows columns" every tenth of a second, and on
@@ -287,6 +300,39 @@ fDrop
 fPointerBack
 fStep "dropped mostly on the 200% output" HEADLESS-2 "30 50"
 
+## The 150% output and the 200% one both say 2, so only their sizes in the
+## layout tell them apart. Mostly on HEADLESS-5 with a sliver on HEADLESS-2,
+## which it entered first.
+fGrab
+read -r _ _ _ _ winH _ <<<"$(fWin)"
+fDragTo 1960 "$((800 - winH / 5))"
+fDrop
+fPointerBack
+fStep "dropped on the 150% output, a sliver left on the 200% one" HEADLESS-5 "28 64"
+## All the way onto HEADLESS-5 and back up, so it's the first one entered.
+fGrab
+read -r _ _ _ _ winH _ <<<"$(fWin)"
+fDragTo 1960 1000
+sleep 0.5
+fDragTo 1960 "$((800 - winH * 4 / 5))"
+fDrop
+fPointerBack
+fStep "dropped on the 200% output, a sliver left on the 150% one" HEADLESS-2 "30 50"
+## Off HEADLESS-2 onto the 100% output right of it, a sliver left. HEADLESS-1
+## is at 100% too, on the other side.
+fGrab
+read -r _ _ _ winW _ _ <<<"$(fWin)"
+fDragTo "$((3200 - winW / 5))" 20
+fDrop
+fPointerBack
+fStep "dropped off the 200% output between two at 100%, a sliver left" HEADLESS-4 "25 90"
+## Back, so the key move after is a scale change the window sees.
+fGrab
+fDragTo 1960 20
+fDrop
+fPointerBack
+fStep "dragged back to the 200% output" HEADLESS-2 "30 50"
+
 ## Every output here has a size kept, so the last size anywhere, which a
 ## monitor with none gets, is never right once the window has opened.
 fNoFallback(){
@@ -304,7 +350,7 @@ fNoMoment(){
 	local odd
 	odd="$(tail -n +"$((opened + 1))" "${grid}" | sort -u | python3 -I -c '
 import sys
-kept = [(30, 50), (20, 110), (35, 60)]
+kept = [(30, 50), (20, 110), (35, 60), (25, 90), (28, 64)]
 def near(r, c):
 	return any(abs(r - kr) <= max(1, -(-kr * 4 // 100)) and abs(c - kc) <= max(1, -(-kc * 4 // 100)) for kr, kc in kept)
 print(",".join(line.strip() for line in sys.stdin if line.strip() and not near(*map(int, line.split()))))' || true)"
@@ -363,7 +409,7 @@ echo "    window: $(fWin), told $(wc -l <"${told}") times"
 fNoSave(){
 	local got
 	got="$(grep -oE '^(	remembered_(columns|rows)|			(columns|rows|font_zoom)): [0-9]+' "${work}/home/.local/state/silkterm/state.shcl" | tr -d '\t' | paste -sd ' ' || true)"
-	[[ "${got}" == "remembered_columns: 70 remembered_rows: 22 columns: 110 rows: 20 font_zoom: 0 columns: 50 rows: 30 font_zoom: 0 columns: 60 rows: 35 font_zoom: 4" ]] || { echo "    sizes now: ${got}"; return 1; }
+	[[ "${got}" == "remembered_columns: 70 remembered_rows: 22 columns: 110 rows: 20 font_zoom: 0 columns: 50 rows: 30 font_zoom: 0 columns: 60 rows: 35 font_zoom: 4 columns: 90 rows: 25 font_zoom: 0 columns: 64 rows: 28 font_zoom: 0" ]] || { echo "    sizes now: ${got}"; return 1; }
 }
 fCheck "no size was saved" fNoSave
 
@@ -373,3 +419,5 @@ echo "all passed"
 ##	History:
 ##		- 20261014 JC: Created.
 ##		- 20261014 JC: Fullscreen after a move the window wasn't told of.
+##		- 20261015 JC: Outputs at 150% and 200%, and a 200% one between two at
+##		  100%.

@@ -114,6 +114,12 @@ workspace = true
 x11rb = { version = "0.13", features = ["randr", "shm"] }
 # XErrorEvent, for the GLX error hook in gfx.rs. Already in the tree through winit.
 x11-dl = "2.21"
+# The outputs a Wayland window is on and their sizes in the layout, which winit
+# keeps in its toolkit's state and doesn't hand out (monitor.rs). These are the
+# versions winit links; a test fails when its toolkit moves on without us.
+smithay-client-toolkit = { version = "0.19", default-features = false }
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-client = "0.31"
 
 # macOS: the system font sizes (sysfont.rs), the part of the screen a window
 # can use, below the menu bar and clear of the Dock (dialog.rs), and the menu

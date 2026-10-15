@@ -523,27 +523,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 
-- Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
-	- ID: 2026101411554909
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261014-115549
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101409220514
-	- Target OS: Linux
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- Put a 150% output beside a 200% one, or a 125% one beside a 150% one.
-		- Drag a window from one to the other and drop it with a sliver left behind.
-	- Incorrect behavior: It takes the last size anywhere, as 2026101409220514 did, since it reads one output's resolution at the other's scale. And with a 200% output between two at 100%, a window dropped off the 200% one with a sliver left keeps its size.
-	- Expected behavior: It takes the size kept for the output most of it is on.
-	- Reproduced: 20261014, by the random test, a few times in each run of cases.
-	- Possible cause: winit gives each Wayland output's scale as a whole number, so 125%, 150% and 200% all read 2. The real scale needs each output's size in the layout, which winit keeps to itself, as it does the list of outputs a window is on.
-	- Notes:
-		- The random test allows it by this ID until it's fixed.
-
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
 	- Type: Bug
@@ -606,6 +585,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- At zoom -2 a cell is 9x18 at 100% and 19x38 at 200%, about 5 percent over double. An allowance worked out from the cell sizes the shell is told, rather than a flat 4 percent, would fit.
 		- The random test stays off in the pipeline until this is fixed.
+
+- Wayland: a resize right after fullscreen and back saves nothing when the way back comes with a scale event
+	- ID: 2026101516013920
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261015-160139
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101412392529
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed 9163`, on a build with 2026101411554909 fixed. On dev the case fails earlier, at that item.
+	- Incorrect behavior: After fullscreen and back, the next resize the user makes saves no size.
+	- Expected behavior: The size is saved for the output the window is on.
+	- Reproduced: 20261015, 2 of 2 runs of that seed.
+	- Possible cause: sway sent the window its scale again as it left fullscreen, at the scale it already had. The resize back fell in the grace after a scale change, so it wasn't counted, and the user's resize after it was taken for the way back.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
@@ -4564,6 +4561,44 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
+	- ID: 2026101411554909
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261014-115549
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101409220514
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Put a 150% output beside a 200% one, or a 125% one beside a 150% one.
+		- Drag a window from one to the other and drop it with a sliver left behind.
+	- Incorrect behavior: It takes the last size anywhere, as 2026101409220514 did, since it reads one output's resolution at the other's scale. And with a 200% output between two at 100%, a window dropped off the 200% one with a sliver left keeps its size.
+	- Expected behavior: It takes the size kept for the output most of it is on.
+	- Reproduced: 20261014, by the random test, a few times in each run of cases.
+		- 20261015: Every new monwl step failed on dev, and so did its old sliver drop once a second output that reads 2 was in the layout. The random test's seeds 9040 and 9060 failed on dev once its allowance was gone.
+	- Possible cause: winit gives each Wayland output's scale as a whole number, so 125%, 150% and 200% all read 2. The real scale needs each output's size in the layout, which winit keeps to itself, as it does the list of outputs a window is on.
+	- Actual cause: As guessed. winit reads each output's scale off the output itself, a whole number, and names only the first output the window entered. With 2 outputs that both read 2 the first one always matched, so a window drawn at 150% on the other was named for the first one's resolution at 150%. With a 200% output first and 100% ones on either side, every 100% output in the layout could be it, so none was picked and the window kept its size.
+	- Actual fix: On Wayland the monitor is picked from the outputs the window is on, with each one's place and size in the layout. winit's toolkit keeps both, and they're read through winit's own connection. An output's scale is its pixels over its size there. The first output still wins when it's at the window's scale. Else it's the only one of the window's outputs at that scale, else the only one of those most of the window could be on. Where that state can't be read, the old guess from the whole numbers runs.
+	- Decisions:
+		- 20261015: The outputs and their sizes are read from the state winit's toolkit already keeps, rather than asked for again over xdg-output or taken from a patched winit. It adds no crate, since the 3 it names are the versions winit links, and it's about 50 lines. xdg-output on a queue of our own would give the sizes but not which outputs the window is on, so the 200% output between two at 100% would stay unsolved, and it would be a second copy of the output list to keep current. A winit fork is one more fork to move onto each winit release. The fractional scale protocol gives only the window's own scale, which winit already has. The cost is leaning on how winit 0.30 keeps that state: a test fails when winit's toolkit release and the one named here part ways, and if the read fails the old guess still runs.
+	- Notes:
+		- The random test allowed it by this ID. The allowance is gone, and the test now lets a window keep its size only when 2 of the outputs it's on are at its scale.
+		- Checked on sway only. A compositor that draws a window at another output's scale than the one most of it is on would name that one, as before.
+	- Swept: `MonitorId::find` is the one place a monitor's name is built. The other readers of winit's current monitor take its refresh rate or its pixels, never its scale, so the rounding doesn't reach them. X11 under Xwayland asks the X server and wasn't affected.
+	- Test case: `cicd/tests/monwl/run.bash` (Esgxleh), with a 150% output and a 100% one added and 4 new steps. `a_wayland_window_astride_outputs_that_round_alike_is_named_for_its_own` (EsoIP9H), the fuzz target `a_wayland_window_on_outputs_whose_sizes_are_known_is_named_for_its_own` (EsoIPIT) with its generator check (EsoIPMq), and `winit_links_the_wayland_crates_monitor_reads_its_state_with` (EsoIPE8). `cicd/tests/dpirand/run.py` (EshVccz) without the allowance.
+	- Verified:
+		- monwl failed on dev and passed 3 of 3 runs on the branch.
+		- The unit test and the fuzz target failed with the old rounded rule put back. The version test failed with the lock naming another toolkit release for SilkTerm than for winit.
+		- The random test on the branch: 29 Wayland cases with 125%, 150% and 200% outputs, most picked for a sliver drop between outputs that round alike, and 9 X11 cases through Xwayland. Seeds 9040 and 9060 pass. 3 Wayland cases, 9032, 20002 and 40003, fail the same way on dev: a grid that flips back a few cells after a scale change. 9163 got past this item's step and failed at a later one, filed as 2026101516013920.
+		- The whole test suite, clippy for Linux, Windows and macOS, rustfmt, the docs and test ID checks, and the Linux ARM64 build.
+	- Branch: wlscale
+	- Commit: 25e3a14
+	- Acceptance signoff: Self-closed: reproduced, the tests failed on dev and pass on the branch.
+	- Closed: 20261015-160139
 
 - The random test expects no look after a scale change on an output a window has only a sliver on
 	- ID: 2026101422190941

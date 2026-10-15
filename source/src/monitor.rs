@@ -42,6 +42,13 @@ impl MonitorId {
 			let (px, mm) = under?;
 			return Self::new(px.0, px.1, scale, mm.map(|mm| upright(mm, px)));
 		}
+		#[cfg(target_os = "linux")]
+		if let Some(on) = wayland::outputs_on(window) {
+			let laid: Vec<Laid> = on.iter().map(|o| o.laid).collect();
+			let at = laid_drawn_for(&laid, scale, logical_size(window, scale))?;
+			let (w, h) = on[at].mode;
+			return Self::new(w, h, scale, None);
+		}
 		let monitor = drawn_on(window, scale)?;
 		let px = monitor.size();
 		let size_mm = physical_mm(&monitor).map(|mm| upright(mm, (px.width, px.height)));
@@ -147,11 +154,17 @@ pub fn layout(window: &Window) -> Vec<(i64, i64, i64, i64)> {
 		.collect()
 }
 
+fn logical_size(window: &Window, scale: f64) -> (f64, f64) {
+	let px = window.inner_size();
+	(f64::from(px.width) / scale, f64::from(px.height) / scale)
+}
+
 // The monitor whose scale the window is drawn at. On Wayland winit's current
 // monitor is the first output the window entered and still touches, while the
 // scale is the one of the output most of it is on. Dropped with a sliver left
 // on another output, the two differ, and the key read one output's resolution
-// at the other's scale (2026101409220514). Elsewhere they agree.
+// at the other's scale (2026101409220514). Elsewhere they agree. On Wayland
+// this is the fallback, for when winit's own state can't be read.
 fn drawn_on(window: &Window, scale: f64) -> Option<winit::monitor::MonitorHandle> {
 	let first = window.current_monitor()?;
 	if at_scale(first.scale_factor(), scale) {
@@ -172,10 +185,53 @@ fn drawn_on(window: &Window, scale: f64) -> Option<winit::monitor::MonitorHandle
 			scale: m.scale_factor(),
 		})
 		.collect();
-	let px = window.inner_size();
-	let size = (f64::from(px.width) / scale, f64::from(px.height) / scale);
-	let at = other_at_scale(0, &placed, scale, size)?;
+	let at = other_at_scale(0, &placed, scale, logical_size(window, scale))?;
 	Some(monitors.swap_remove(at))
+}
+
+/// An output as the compositor lays it out: its place and size there, in the
+/// layout's own units, and its pixels turned the way it shows them.
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+#[derive(Clone, Copy, Debug)]
+struct Laid {
+	bounds: Bounds,
+	px: (f64, f64),
+}
+
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+impl Laid {
+	// Its size in the layout is its pixels over its scale, give or take the
+	// compositor's rounding, so a 150% output and a 200% one are told apart
+	// where winit reads both as 2.
+	fn at_scale(&self, scale: f64) -> bool {
+		let near = |px: f64, units: f64| (px / scale - units).abs() <= (units / 500.0).max(1.0);
+		near(self.px.0, self.bounds.2) && near(self.px.1, self.bounds.3)
+	}
+}
+
+// Of the outputs a Wayland window is on, first entered first, the one it is
+// drawn for: the first when it is at the window's scale, as on the other
+// path, else the only one at that scale, else the only one of those most of a
+// window this size could be on while it touches the rest. Between two at
+// 100% with a 200% output first, that's the one it's on, which the other path
+// couldn't say.
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+fn laid_drawn_for(on: &[Laid], scale: f64, size: (f64, f64)) -> Option<usize> {
+	if on.first()?.at_scale(scale) {
+		return Some(0);
+	}
+	let only = |found: Vec<usize>| (found.len() == 1).then(|| found[0]);
+	let at: Vec<usize> = (0..on.len()).filter(|&i| on[i].at_scale(scale)).collect();
+	if at.len() < 2 {
+		return only(at);
+	}
+	let bounds: Vec<Bounds> = on.iter().map(|o| o.bounds).collect();
+	let all: Vec<usize> = (0..on.len()).collect();
+	only(
+		at.into_iter()
+			.filter(|&i| could_be_most_on(i, &all, &bounds, &bounds, size))
+			.collect(),
+	)
 }
 
 // Wayland gives an output's scale in whole numbers, so a 150% one reads as 2
@@ -240,48 +296,60 @@ fn other_at_scale(
 	if at.len() < 2 {
 		return only(at);
 	}
+	let largest: Vec<Bounds> = monitors.iter().map(Placed::largest).collect();
+	let smallest: Vec<Bounds> = monitors.iter().map(Placed::smallest).collect();
 	only(
 		at.into_iter()
-			.filter(|&i| could_be_most_on(i, first, monitors, size))
+			.filter(|&i| could_be_most_on(i, &[first], &largest, &smallest, size))
 			.collect(),
 	)
 }
 
-// Could most of a window this size be on monitor `on`, while it touches
-// `first`? Tried at places a step apart, with `on` and `first` grown by half
-// a step and the rest shrunk by as much, so a place between two tries is never
-// missed. Each monitor is taken at its largest where that helps `on`, and at
-// its smallest where it doesn't.
-fn could_be_most_on(on: usize, first: usize, monitors: &[Placed], size: (f64, f64)) -> bool {
+// Could most of a window this size be on monitor `on`, while it touches each
+// of `touch`? Tried at places a step apart, with `on` and `touch` grown by
+// half a step and the rest shrunk by as much, so a place between two tries is
+// never missed. Where a monitor's size is a guess, it is taken at its largest
+// where that helps `on`, and at its smallest where it doesn't.
+fn could_be_most_on(
+	on: usize,
+	touch: &[usize],
+	largest: &[Bounds],
+	smallest: &[Bounds],
+	size: (f64, f64),
+) -> bool {
 	let (w, h) = size;
-	if w <= 0.0 || h <= 0.0 {
+	if w <= 0.0 || h <= 0.0 || touch.is_empty() {
 		return false;
 	}
-	let first_at = monitors[first].largest();
+	let first_at = largest[touch[0]];
 	let step = (w.min(h) / 8.0)
 		.max((first_at.2 + w) / 256.0)
 		.max((first_at.3 + h) / 256.0)
 		.max(4.0);
 	let half = step / 2.0;
 	let grown = |r: Bounds, by: f64| (r.0 - by, r.1 - by, r.2 + 2.0 * by, r.3 + 2.0 * by);
-	let touch = grown(first_at, half);
-	let mine = grown(monitors[on].largest(), half);
-	let rest: Vec<Bounds> = (0..monitors.len())
+	let first_at = grown(first_at, half);
+	let touched: Vec<Bounds> = touch.iter().map(|&i| grown(largest[i], half)).collect();
+	let mine = grown(largest[on], half);
+	let rest: Vec<Bounds> = (0..smallest.len())
 		.filter(|&i| i != on)
-		.map(|i| grown(monitors[i].smallest(), -half))
+		.map(|i| grown(smallest[i], -half))
 		.collect();
 	let area = |a: Bounds, b: Bounds| {
 		let x = (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0);
 		let y = (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1);
 		x.max(0.0) * y.max(0.0)
 	};
-	let mut y = touch.1 - h;
-	while y <= touch.1 + touch.3 {
-		let mut x = touch.0 - w;
-		while x <= touch.0 + touch.2 {
+	let mut y = first_at.1 - h;
+	while y <= first_at.1 + first_at.3 {
+		let mut x = first_at.0 - w;
+		while x <= first_at.0 + first_at.2 {
 			let win = (x, y, w, h);
 			let here = area(win, mine);
-			if here > 0.0 && area(win, touch) > 0.0 && rest.iter().all(|&o| area(win, o) <= here) {
+			if here > 0.0
+				&& touched.iter().all(|&t| area(win, t) > 0.0)
+				&& rest.iter().all(|&o| area(win, o) <= here)
+			{
 				return true;
 			}
 			x += step;
@@ -429,6 +497,76 @@ fn x11_monitor_under(window: &Window, at_pointer: bool) -> Option<Option<PxMm>> 
 		.and_then(|cookie| cookie.reply().ok())
 		.map(|out| (out.mm_width, out.mm_height));
 	Some(Some(((u32::from(crtc.width), u32::from(crtc.height)), mm)))
+}
+
+// The outputs a Wayland window is on and where each is in the layout, read
+// from winit's own toolkit state on its own connection. winit hands out only
+// the first output and each one's scale rounded up to a whole number, so 125%,
+// 150% and 200% all read 2 (2026101411554909). The toolkit keeps the rest, as
+// user data on winit's surface and outputs, which is where winit's own
+// `current_monitor` reads the first from. None when the window isn't a
+// Wayland one or that state can't be read, as when winit moves to another
+// toolkit release; then the rounded numbers are all there is.
+#[cfg(target_os = "linux")]
+mod wayland {
+	use super::Laid;
+	use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
+	use smithay_client_toolkit::compositor::SurfaceData;
+	use smithay_client_toolkit::output::OutputData;
+	use wayland_backend::client::{Backend, ObjectId};
+	use wayland_client::Proxy;
+	use wayland_client::protocol::wl_output::{Transform, WlOutput};
+	use wayland_client::protocol::wl_surface::WlSurface;
+	use winit::window::Window;
+
+	#[derive(Debug)]
+	pub struct Out {
+		/// Its mode, as winit gives it, unturned.
+		pub mode: (u32, u32),
+		pub laid: Laid,
+	}
+
+	pub fn outputs_on(window: &Window) -> Option<Vec<Out>> {
+		let RawWindowHandle::Wayland(surface) = window.window_handle().ok()?.as_raw() else {
+			return None;
+		};
+		let RawDisplayHandle::Wayland(display) = window.display_handle().ok()?.as_raw() else {
+			return None;
+		};
+		// A guest on winit's connection, which it doesn't close. Made for each
+		// read, since kept it could outlive the connection.
+		// SAFETY: winit's display, live while its window is.
+		let backend = unsafe { Backend::from_foreign_display(display.display.as_ptr().cast()) };
+		// SAFETY: winit's surface, live while its window is borrowed here. The
+		// interface is checked by name, and a surface no Rust code made reads
+		// as dead.
+		let id =
+			unsafe { ObjectId::from_ptr(WlSurface::interface(), surface.surface.as_ptr().cast()) }
+				.ok()?;
+		let data = backend.get_data(id).ok()?;
+		let on = data.data_as_any().downcast_ref::<SurfaceData>()?;
+		on.outputs().map(|output| laid(&output)).collect()
+	}
+
+	fn laid(output: &WlOutput) -> Option<Out> {
+		output.data::<OutputData>()?.with_output_info(|info| {
+			let (w, h) = info.modes.iter().find(|m| m.current)?.dimensions;
+			let (x, y) = info.logical_position?;
+			let (lw, lh) = info.logical_size?;
+			let turned = matches!(
+				info.transform,
+				Transform::_90 | Transform::_270 | Transform::Flipped90 | Transform::Flipped270
+			);
+			let px = if turned { (h, w) } else { (w, h) };
+			Some(Out {
+				mode: (u32::try_from(w).ok()?, u32::try_from(h).ok()?),
+				laid: Laid {
+					bounds: (f64::from(x), f64::from(y), f64::from(lw), f64::from(lh)),
+					px: (f64::from(px.0), f64::from(px.1)),
+				},
+			})
+		})
+	}
 }
 
 // Which of the monitors a window is on: the one under the pointer when one
@@ -841,6 +979,104 @@ mod tests {
 		assert!(!at_scale(1.5, 2.0));
 	}
 
+	// winit reads a 125%, a 150% and a 200% output all as 2, so a window
+	// astride two of them was named for one at the other's scale, a monitor
+	// that isn't there (2026101411554909). The outputs it is on, with their
+	// sizes in the layout, tell them apart.
+	// Test ID: EsoIP9H
+	#[test]
+	fn a_wayland_window_astride_outputs_that_round_alike_is_named_for_its_own() {
+		let laid = |at: (f64, f64), px: (f64, f64), scale: f64| Laid {
+			bounds: (at.0, at.1, (px.0 / scale).round(), (px.1 / scale).round()),
+			px,
+		};
+		// monwl's layout
+		let h1 = laid((0.0, 0.0), (1920.0, 1080.0), 1.0);
+		let h2 = laid((1920.0, 0.0), (2560.0, 1600.0), 2.0);
+		let h4 = laid((3200.0, 0.0), (1680.0, 1050.0), 1.0);
+		let h5 = laid((1920.0, 800.0), (1920.0, 1200.0), 1.5);
+		let window = (560.0, 700.0);
+		assert!(h5.at_scale(1.5) && !h5.at_scale(2.0) && !h5.at_scale(1.25));
+		assert!(h2.at_scale(2.0) && !h2.at_scale(1.5));
+		assert_eq!(
+			laid_drawn_for(&[h2, h5], 1.5, window),
+			Some(1),
+			"150% after 200%"
+		);
+		assert_eq!(
+			laid_drawn_for(&[h5, h2], 2.0, window),
+			Some(1),
+			"200% after 150%"
+		);
+		assert_eq!(laid_drawn_for(&[h5, h2], 1.5, window), Some(0), "first");
+		let q = laid((0.0, 0.0), (2560.0, 1600.0), 1.25);
+		let r = laid((2048.0, 0.0), (2400.0, 1350.0), 1.5);
+		assert_eq!(
+			laid_drawn_for(&[q, r], 1.5, window),
+			Some(1),
+			"125% then 150%"
+		);
+		assert_eq!(
+			laid_drawn_for(&[r, q], 1.25, window),
+			Some(1),
+			"150% then 125%"
+		);
+		// The 200% one first, with 100% outputs either side. Only the one the
+		// window is on counts, different than before when every 100% output in
+		// the layout did.
+		assert_eq!(laid_drawn_for(&[h2, h4], 1.0, window), Some(1));
+		// Wide enough to be on both, and either could have most of it.
+		let wide = (2600.0, 400.0);
+		assert_eq!(laid_drawn_for(&[h2, h1, h4], 1.0, wide), None);
+		assert_eq!(
+			laid_drawn_for(&[h2], 1.0, window),
+			None,
+			"none at that scale"
+		);
+		assert_eq!(laid_drawn_for(&[], 1.0, window), None, "on no output");
+		// turned 90 degrees: its pixels are turned with it
+		let turned = Laid {
+			bounds: (0.0, 0.0, 720.0, 1280.0),
+			px: (1080.0, 1920.0),
+		};
+		assert!(turned.at_scale(1.5));
+	}
+
+	// The outputs a Wayland window is on are read from winit's toolkit, which
+	// works only while it is the toolkit release named here.
+	// Test ID: EsoIPE8
+	#[cfg(target_os = "linux")]
+	#[test]
+	fn winit_links_the_wayland_crates_monitor_reads_its_state_with() {
+		let lock = std::fs::read_to_string(
+			std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../Cargo.lock"),
+		)
+		.unwrap();
+		let deps = |package: &str| -> Vec<String> {
+			let block = lock
+				.split("[[package]]")
+				.find(|b| b.contains(&format!("\nname = \"{package}\"\n")))
+				.unwrap_or_else(|| panic!("no {package} in Cargo.lock"));
+			block
+				.lines()
+				.map(|l| l.trim().trim_matches(|c| c == '"' || c == ','))
+				.filter(|l| {
+					[
+						"smithay-client-toolkit",
+						"wayland-backend",
+						"wayland-client",
+					]
+					.iter()
+					.any(|name| l == name || l.starts_with(&format!("{name} ")))
+				})
+				.map(str::to_owned)
+				.collect()
+		};
+		let (ours, winit) = (deps("silkterm"), deps("winit"));
+		assert_eq!(ours.len(), 3, "{ours:?}");
+		assert_eq!(ours, winit);
+	}
+
 	// Test ID: EsDZDBp
 	#[test]
 	fn a_monitor_read_again_to_the_cm_is_the_same_monitor() {
@@ -912,7 +1148,7 @@ mod tests {
 	}
 
 	mod fuzz {
-		use super::super::{Placed, at_scale, other_at_scale, overlap};
+		use super::super::{Laid, Placed, at_scale, laid_drawn_for, other_at_scale, overlap};
 		use crate::fuzz::{self, Rng};
 
 		type Rect = (i64, i64, i64, i64);
@@ -974,6 +1210,8 @@ mod tests {
 		#[derive(Debug)]
 		struct Case {
 			outs: Vec<(Rect, f64)>,
+			size: (i64, i64),
+			areas: Vec<i64>,
 			touched: Vec<usize>,
 			first: usize,
 			primary: usize,
@@ -1015,6 +1253,8 @@ mod tests {
 			};
 			Case {
 				outs,
+				size: (w, h),
+				areas,
 				touched,
 				first,
 				primary,
@@ -1050,6 +1290,94 @@ mod tests {
 		#[test]
 		fn a_wayland_window_is_named_for_the_output_its_scale_is_from() {
 			fuzz::soak("wlpick", check);
+		}
+
+		// The same window as winit's toolkit has it: the outputs it is on, in
+		// the order it entered them, each with its size in the layout.
+		fn laid_case(seed: u64) -> (Case, Vec<usize>) {
+			let mut c = case(seed);
+			let mut rng = Rng::new(seed ^ 0x5eed);
+			let mut order: Vec<usize> = c
+				.touched
+				.iter()
+				.copied()
+				.filter(|&i| i != c.first)
+				.collect();
+			for i in (1..order.len()).rev() {
+				order.swap(i, rng.below(i + 1));
+			}
+			order.insert(0, c.first);
+			let on: Vec<Laid> = order
+				.iter()
+				.map(|&i| {
+					let ((x, y, w, h), scale) = c.outs[i];
+					Laid {
+						bounds: (x as f64, y as f64, w as f64, h as f64),
+						px: ((w as f64 * scale).round(), (h as f64 * scale).round()),
+					}
+				})
+				.collect();
+			let scale = c.outs[c.primary].1;
+			let (w, h) = c.size;
+			c.named = laid_drawn_for(&on, scale, (w as f64, h as f64)).map(|at| order[at]);
+			(c, order)
+		}
+
+		fn laid_check(seed: u64) {
+			let (c, _) = laid_case(seed);
+			let scale = c.outs[c.primary].1;
+			let most = c.touched.iter().map(|&i| c.areas[i]).max().unwrap();
+			let alike: Vec<usize> = c
+				.touched
+				.iter()
+				.copied()
+				.filter(|&i| c.outs[i].1 == scale)
+				.collect();
+			if c.outs[c.first].1 == scale {
+				assert_eq!(c.named, Some(c.first), "the first, at its scale: {c:?}");
+				return;
+			}
+			if let Some(i) = c.named {
+				assert!(
+					c.areas[i] == most,
+					"another than one most of it is on: {c:?}"
+				);
+			}
+			if alike.len() == 1 {
+				assert_eq!(c.named, Some(c.primary), "the only one at its scale: {c:?}");
+			}
+		}
+
+		// Read from the outputs the window is on, a window astride any two is
+		// named for the one most of it is on, or for none when more than one
+		// at its scale could be. Never another.
+		// Test ID: EsoIPIT
+		#[test]
+		fn a_wayland_window_on_outputs_whose_sizes_are_known_is_named_for_its_own() {
+			fuzz::soak("wllaid", laid_check);
+		}
+
+		// Test ID: EsoIPMq
+		#[test]
+		fn the_laid_generator_reaches_every_branch() {
+			let (mut first, mut found, mut unsure, mut rounded) = (0, 0, 0, 0);
+			for seed in 0..600 {
+				let (c, _) = laid_case(seed);
+				let scale = c.outs[c.primary].1;
+				let whole = |i: usize| c.outs[i].1.ceil();
+				if c.outs[c.first].1 != scale && whole(c.first) == scale.ceil() {
+					rounded += 1;
+				}
+				match c.named {
+					Some(i) if i == c.first => first += 1,
+					Some(_) => found += 1,
+					None => unsure += 1,
+				}
+			}
+			assert!(
+				first > 0 && found > 0 && unsure > 0 && rounded > 0,
+				"{first} {found} {unsure} {rounded}"
+			);
 		}
 
 		// The generator still reaches each way of naming one.
