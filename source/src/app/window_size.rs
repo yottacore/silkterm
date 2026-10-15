@@ -223,9 +223,10 @@ impl State {
 			(self.watch.heard_at, self.watch.stirred_at),
 			(Some(heard), Some(stirred)) if heard > stirred
 		);
+		let layout = crate::monitor::layout(&self.window);
 		let drag = drag_state(
 			crate::monitor::button_held(&self.window),
-			self.watch.opening,
+			self.watch.opening || layout != self.watch.layout_looked,
 			self.watch.pointer == Pointer::Over,
 			heard,
 		);
@@ -251,6 +252,7 @@ impl State {
 			return;
 		}
 		self.watch.opening = false;
+		self.watch.layout_looked = layout;
 		// the way back from fullscreen is no size the user set on arrival
 		let pending_at = self
 			.pending_size
@@ -511,6 +513,7 @@ pub(super) struct MonitorWatch {
 	pub(super) ignore_resize_until: Instant,
 	pub(super) ignore_moves_until: Instant, // the window's own resize can move it, too
 	pub(super) layout: Vec<(i64, i64, i64, i64)>, // the monitors when that resize was asked for
+	pub(super) layout_looked: Vec<(i64, i64, i64, i64)>, // the monitors at the last look
 	// The command line set the size, or the font size, and it stays until
 	// the user resizes the window, or zooms the font.
 	pub(super) size_pinned: bool,
@@ -631,12 +634,15 @@ enum Drag {
 // (2026101411555009). There the pointer over the window, or a key or focus
 // since the last move, says the person has let go. A keyboard move ends on a
 // modifier coming up, so it isn't held up. A move nobody touches the window
-// after waits until they do.
-fn drag_state(buttons: Option<bool>, opening: bool, pointer_in: bool, heard: bool) -> Drag {
+// after waits until they do. Except the first look, or one after the monitors
+// changed: that's the window manager herding windows as one goes dark or
+// comes back, and with nobody at the window the wait never ended, so it kept
+// the size of the monitor it left.
+fn drag_state(buttons: Option<bool>, unheld: bool, pointer_in: bool, heard: bool) -> Drag {
 	match buttons {
 		Some(true) => Drag::Held,
 		Some(false) => Drag::Over,
-		None if opening || pointer_in || heard => Drag::Over,
+		None if unheld || pointer_in || heard => Drag::Over,
 		None => Drag::MaybeHeld,
 	}
 }
@@ -977,7 +983,8 @@ mod tests {
 
 	// A window that can't see the buttons took a monitor's size while held
 	// still in a drag over it, before the drop. It waits for the pointer back
-	// over it, a key or focus. One that can see them goes by them.
+	// over it, a key or focus. One that can see them goes by them. A window
+	// herded off a monitor that went dark waited for nobody.
 	// Test ID: EsjYipm
 	#[test]
 	fn a_drag_held_still_is_not_taken_for_a_drop() {
@@ -989,7 +996,11 @@ mod tests {
 			"pointer back"
 		);
 		assert_eq!(drag_state(None, false, false, true), Drag::Over, "key");
-		assert_eq!(drag_state(None, true, false, false), Drag::Over, "opening");
+		assert_eq!(
+			drag_state(None, true, false, false),
+			Drag::Over,
+			"opening or herded"
+		);
 		assert_eq!(drag_state(Some(true), false, true, true), Drag::Held);
 		assert_eq!(drag_state(Some(false), false, false, false), Drag::Over);
 	}
