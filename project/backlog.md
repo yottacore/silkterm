@@ -545,7 +545,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A real window on Linux, dark at 1x and light at 2x: the list, the marks, a pick going to the Keys tab, the mark fading, the empty-list line, and Escape.
 		- Not verified: Windows, macOS.
 	- Branch: setsearch
-	- Commit: ab84e3a
+	- Commit: ab84e3a, 940f3f4
 
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
