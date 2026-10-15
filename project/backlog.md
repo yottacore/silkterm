@@ -453,23 +453,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- The build inputs test fails since a cli.rs test reads usage.md
-	- ID: 2026101513385003
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261015-133850
-	- Opened by: CC
-	- Related IDs: 2026101415085144
-	- Target OS: All
-	- Test environment: b23
-	- Steps to reproduce:
-		- `cargo test the_build_inputs_cover`.
-	- Incorrect behavior: `the_build_inputs_cover_every_included_file_and_the_lock` fails: cli.rs includes usage.md, which no build input covers.
-	- Expected behavior: It passes.
-	- Reproduced: 20261015, on a branch off dev at 7766d41 that changes neither file.
-	- Possible cause: `usage_md_section` in cli.rs's tests reads usage.md with `include_str!` (c0a237d). It's in tests only, so either the test skips includes under `#[cfg(test)]`, or `../usage.md` joins `BUILD_INPUTS`.
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -1692,6 +1675,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- The build inputs test fails since a cli.rs test reads usage.md
+	- ID: 2026101513385003
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261015-133850
+	- Opened by: CC
+	- Related IDs: 2026101415085144
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- `cargo test the_build_inputs_cover`.
+	- Incorrect behavior: `the_build_inputs_cover_every_included_file_and_the_lock` fails: cli.rs includes usage.md, which no build input covers.
+	- Expected behavior: It passes.
+	- Reproduced: 20261015, on a branch off dev at 7766d41 that changes neither file.
+	- Possible cause: `usage_md_section` in cli.rs's tests reads usage.md with `include_str!` (c0a237d). It's in tests only, so either the test skips includes under `#[cfg(test)]`, or `../usage.md` joins `BUILD_INPUTS`.
+	- Actual cause: As above. The README split added the include and ran only the cli tests.
+	- Actual fix: `../usage.md` joins `BUILD_INPUTS`, the same as shell-integration.md, which a test in integration.rs reads the same way.
+	- Test case: `the_build_inputs_cover_every_included_file_and_the_lock` itself. It fails with the new line taken out and passes with it.
+	- Verified: 20261015, the buildnum tests pass, and the one above fails without the fix.
+	- Swept: `include_str!` and `include_bytes!` of files outside `source/` across `source/src`. Only shell-integration.md and usage.md, both covered.
+	- Branch: usageinput
+	- Acceptance signoff: Self-closed: mechanical
+	- Closed: 20261015-140500
 
 - Windows: a conpty.dll on PATH or in the working folder is used in place of the console host Windows has
 	- ID: 2026101408384488

@@ -26,6 +26,7 @@ const BUILD_INPUTS: &[&str] = &[
 	"../Cargo.toml", // the workspace, which owns the profiles and the patches
 	"../Cargo.lock",
 	"../shell-integration.md",
+	"../usage.md",
 ];
 
 // 2000-01-01T00:00:00Z, as unix time.
