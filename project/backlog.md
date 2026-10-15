@@ -64,44 +64,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
 
-- The bash prompt returning after program output slides out downward from under a seam of the higher content, again
-	- ID: 2026101415085143
-	- Type: Bug
-	- Status: Done
-	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness. Unit tests, clippy and all 13 X11 scenes passed.
-	- Severity: High
-	- Opened: 20261014-150851
-	- Opened by: JC
-	- Related IDs: 2026101310563284
-	- Target OS: All
-	- Incorrect behavior: The bash prompt returning after program output slides out downward from under a seam of the higher content.
-	- Expected behavior: The prompt shows up in place.
-	- Notes:
-		- Pre-next-cut.
-		- The bug is back. We need to lock this down with a regression test. Including all similar smooth-scroll-related bugs we've fixed in the past, including nano bounce, nano scroll jumping of static content, muffer's similar bug involving "Jump to bottom" message, etc.
-		- Earlier fixes, all in the old-format Done list: "A prompt coming back after a command slides in oddly", "Repeating a command scrolled its output down out from under the prompt above it", "The dreaded 'Nano Bounce Bug' is back", and "Bug: scrolling back in muffer with the mouse wheel made its '1 new message' indicator smear and bounce".
-	- Test environment: b23, bash with ble.sh, atuin and the bundled two-row prompt in a git repo.
-	- Steps to reproduce:
-		- In a git repo, so the prompt has two rows, `clear`, then run a command whose output leaves the prompt one row above the bottom of the window (`seq 36` in a 43-row window).
-		- Run `nano`, and quit it.
-	- Reproduced: 20261014 on b23, on dev at b754777, about one quit in four. ble.sh draws the prompt again in place once the minimap column comes back, and that redraw slid down from under the rows above.
-	- Actual cause:
-		- When ble.sh redraws a prompt already on screen, it erases the old prompt and then makes room with insert- and delete-line, all in one write. The check that a recorded scroll moved something visible looked at the last frame, where the old prompt still showed, so it read the scroll as visible. With the prompt one row above the bottom, the row under it wasn't blank either, so the "room, not a scroll" check didn't catch it.
-		- A second, rarer path: a relayout drops the frame-old snapshot, and a prompt redraw that reaches a build before a new snapshot slid by default.
-		- The flatpak repaint rule (2026101310563284) isn't involved. It decides the output ease, and this is the region slide.
-	- Progress log:
-		- 20261014: Short and long commands, `clear`, nano, less, `git log`, atuin's Ctrl+R, resizes and programs turning mouse and focus reports on and off were all tried, on half-empty, full and full-scrollback screens. Only the in-place redraw near the bottom slid.
-		- 20261014: The class has opened and closed several times. Every earlier fix is kept, and each is now pinned by a test that goes red when its own part is broken.
-		- 20261014: Already covered and still passing: the muffer pill smear (`pill` scene and its unit tests), nano's static rows (`nano` scene), and `clear` (`clear` scene). Waiting on signoff, since it changes what is seen and the case above isn't confirmed as the one reported.
-		- Question: does this match what's seen, a prompt sliding down after a program that took the whole window exits? If it shows up some other way, the command and roughly where the prompt was on the screen would settle it.
-			- Now I can't reproduce it.
-	- Actual fix: a scroll counts as visible only when a row with text in it is now where the scroll put it, or a row with text left. On the normal screen, a recorded scroll with no snapshot to check against shows in place. The alt screen keeps sliding on the record alone, as before.
-	- Verified: with real ble.sh and nano, the build before the fix slid 2 times in 8 quits. With the first half of the fix it slid once in 41, which fits the relayout path (not confirmed). The final build had none in 8. The new scroll scene failed 3 of 3 on the build before the fix and passed 4 of 4 after.
-	- Swept: `slide_is_visible` has one caller in the build. `ledger_makes_room` reads the same snapshot but can only stop a slide. The row-print detector compares against `last_rows`, which a relayout leaves at the old width, so nothing matches there.
-	- Branch: promptslide
-	- Commit: 874af97
-	- Test case: Ep3UXRI gained erased-ink cases. New replay tests over ble.sh's bytes: Esib1t0 (prompt after output, half-empty and full screens), Esib1y3 (in-place redraw at each height), EsiiYQ2 (every split of the prompt and the redraw across two reads), Esiikpm (redraw right after a relayout), Esib22C (a repeated listing), Esib26L (a table redraw snaps while a prompt still eases), Esib2AU (the nano bounce). Scroll harness scene `prompt`. Each fails with the part it guards broken.
-
 - A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
 	- ID: 2026101411555009
 	- Type: Bug
@@ -138,97 +100,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: `button_held` has one caller. Every start of a look: the reveal, a move, a scale change, and the pointer back on Wayland. The scale change skipped the grace after the window's own resize that a move gets, filed and fixed as 2026101420262300.
 	- Branch: helddrag
 	- Commit: e2e44df
-
-- Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
-	- ID: 2026101410442550
-	- Type: Task
-	- Status: Done
-	- Priority: Avg
-	- Opened: 20261014-104425
-	- Opened by: JC
-	- Related IDs: 2026100114435600, 2026101409220514
-	- Target OS: All
-	- Requirements:
-		- As part of regular scripted testing, exercise the per-monitor DPI more thoroughly, and quasi-randomly.
-		- It still has many quirks that need ironing out, that can only be caught with fairly random testing.
-		- The expected behavior still has to be predictable, to judge against actual.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261014: Built as `cicd/tests/dpirand/run.py`. It's in the pipeline after monwl, skipped under `--quick`, but off for now (`DPIRAND_SECS=0` in `cicd/config.bash`), since it still fails now and then on 2026101413420431. 150 s there runs about 5 cases. `SILK_DPIRAND_SECS` sets the time, and `--seed` runs one case again.
-		- 20261014: Each case comes from one seed. It has 2 to 4 outputs at their own resolutions and scales, whole and fractional, on native Wayland or X11 through Xwayland, with sizes and font zooms kept for some of them. Then come moves, drags, drops with a sliver left behind, held drags, resizes, font zooms, scale changes, fullscreen and back, and relaunches, some with a size or font size on the command line.
-		- 20261014: A model of the requirements says which monitor the window should count itself on, and which size and font zoom it should take or save. The font zoom is checked by the cell size the shell is told, and the sizes on disk at the end. What a platform can't tell a window is allowed by name and counted, and so are known faults, by their item, until fixed.
-		- 20261014: Filed from it: 2026101411504818, 2026101413075422 and 2026101412025603, fixed, and 2026101411554909, 2026101411555009, 2026101412003308, 2026101412311921, 2026101412392529, 2026101412292756 and 2026101413420431.
-	- Test case: `cicd/tests/dpirand/run.py` (EshVccz).
-	- Verified:
-		- 60 random cases in 3 runs of 10 to 15 minutes, after the test settled. Every failure in them was a filed fault, the X11 fullscreen save fixed here, or a fault in the test, since fixed, except 2026101413420431, which still fails it now and then.
-		- It failed against 3 planted faults: the old monitor lookup, a kept font zoom not taken, and the text not rebuilt after one was.
-	- Branch: dpirand
-	- Commit: c9b40aa, 2f9d4a3, d49f765
-
-- README.md: move the long sections out to their own docs
-	- ID: 2026101415085144
-	- Type: Task
-	- Status: Reopened
-		- Move the comparison table itself into 'comparison.md' also.
-	- Priority: Avg
-	- Opened: 20261014-150851
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Move detailed comparisons to something like a "compared to other terminals" md, and link to it. Keep the brief feature comparison table.
-		- Move installation instructions, including development, to one or more .mds, and link to it/them.
-		- Move CLI usage and other examples to its own .md, and link to it. Leave a small snippet of example shcl contents.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261014: README keeps what it is, why, features, the wallpaper sheet, the showdown table, a short getting-started pointer with a few config lines, support, and legal.
-		- 20261014: New docs at the root. install.md has packages, the install scripts, building it yourself, the dev environment, and fetching the wallpaper pack. usage.md has configuration, shell integration, and opening scripts and folders on Windows. comparison.md has how the showdown is measured, notes 1 to 9, and how to run it. build.md, prerequisites.md and shell-integration.md are linked as before, with nothing folded in.
-		- 20261014: The showdown table stays in the README as the brief comparison table. It's the only comparison table there, and it's what a reader skims. Its method text and long notes are the detailed part, so they moved. The notes keep their small-text form and numbers.
-		- 20261014: The README had no CLI usage section and no config example, so nothing moved for those. The config lines in the README are copied from the shipped template.
-		- Question: should usage.md get a command-line section, written from `--help`?
-	- Branch: readmesplit
-	- Commit: 4cbe138
-	- Test case: `cicd/tests/showdown/run.py` (EqBnA5g) and `cicd/tests/showdown/rigs.py` (ErE7yrA) now read note 9 from comparison.md. Both fail with note 9 broken there, and pass with it back. The docs and tables checks cover the new files.
-	- Verified: docs, tables, showdown and rigs tests pass. Both table writers leave the README byte-identical when run again. The gallery check passes. Every line of the old README is in one of the 4 files, apart from the old TOC and 3 links pointed at the new files.
-	- Swept: termbench.py and showdown-readme.py still write the table in README.md, unchanged. update-showdown.py, cicd.bash, config.bash, demo-video.py, mdtable.py, sizebench-run.bash and termbench-run.bash name only the README table or gif. release.bash and the hooks test read the badge, which stays. The release notes keep "See the README". wallpaper-gallery.bash reads "102 wallpapers", which stays in the README. The gallery page and its template now link install.md for the download. showdown-readme.md names comparison.md for note 9. No README anchors in docs/, the install scripts, contributing.md, FAQ.md, glossary.md, the source, project/ docs, or the private repo. Left alone: config.rs line 10 already pointed at a README section that's gone, ancillary-notes.fods records say "README note 9" as of their dates, and a private backlog note says the wallpaper one-liner is in the README. A doc comment on `APP_NAME` in config.rs pointed at a README section removed on 20260924; the pointer is gone.
-
-- Going fullscreen and back keeps a size for the monitor, though nobody set one there
-	- ID: 2026101412392529
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On Windows, with Per monitor on and no size kept for the monitor, maximize and restore, then minimize and restore. Nothing is saved for the monitor. The same for maximize and restore on X11 under a desktop window manager.
-	- Severity: Low
-	- Opened: 20261014-123925
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: All
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- With Per monitor on, open a window on a monitor with no size kept for it.
-		- Make it fullscreen, then not.
-	- Incorrect behavior: The state file now keeps a size for that monitor, the one the window had. From then on that monitor no longer follows the last size anywhere. A window that wasn't at its monitor's own size when it went fullscreen writes over the size kept there.
-	- Expected behavior: Nothing is saved, since the user set no size.
-	- Reproduced: 20261014 on b23 under headless sway, 1 of 1, and by the random test, which saw a kept 68x37 written over with another monitor's 73x30.
-	- Possible cause: While fullscreen, the save holds back the size but still saves the font zoom, which makes an entry for the monitor. Then the resize back from fullscreen counts as the user's, and is saved there too. Leaving fullscreen can bring the pointer over the window, which on Wayland is a look, and the look skips taking a size while the window still counts as fullscreen. Taken for the user's resize, it also ends a size given on the command line.
-	- Actual cause: As above, confirmed on b23 under headless sway on both arms. Also, sway sends the window a scale as it goes fullscreen, and the resize into fullscreen fell in the wait after that, so the resize back wasn't known for what it was.
-	- Notes:
-		- The random test allowed it by this ID until it was fixed.
-	- Progress log:
-		- 20261014: The random test on 14 seeds that go fullscreen or set a font size on the command line, the old build beside the fix. The old build saved a size on all 4 fullscreen seeds tried. The fix passed all 14. Then 3 runs of about 9 min each, seeds 5000 to 5045. They found the scale sway sends with fullscreen, fixed, and one failure the old build has too (2026101422190941).
-		- 20261014: A window moved unseen and then made fullscreen with the pointer over it looks while fullscreen. Old build: it kept its size and saved it for the new monitor. Fix: nothing saved, and it took that monitor's size once back.
-	- Decisions:
-		- 20261014: Fullscreen, maximized and minimized, and back, are the window manager's resizes. None of them saves a size or ends one from the command line. A zoom while fullscreen or maximized saves the zoom, and the grid once the window is back.
-		- 20261014: A window that finds itself on another monitor while fullscreen or maximized takes that monitor's size once back, after the usual wait for a look. Before, it kept the size it had there.
-	- Actual fix: The save keeps track of what a size waiting to be saved came from: a resize, a zoom, or having been fullscreen, maximized or minimized since the last save. The way back is saved as nothing. A look that finds another monitor while fullscreen leaves the take for later.
-	- Test case: `fullscreen_and_back_saves_nothing` (EsjoVV7), seen failing with the old rule put back. `cicd/tests/monwl/run.bash` (Esgxleh), new step: moved unseen to another output, then fullscreen with the pointer over it and back. It failed 3 checks on the old build, the size saved among them, and passes on the fix. The random test (EshVccz) no longer allows this item: its fullscreen step fails on any save, and puts the pointer over a window moved unseen before it goes fullscreen.
-	- Verified:
-		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
-		- monwl, and the random test as in the progress log, on Wayland and on X11 through Xwayland.
-		- Not verified: maximized or minimized and back, read only. The Windows code is compiled only.
-	- Swept: every resize the window doesn't make for the user. A scale change and a take already wait out a grace. Fullscreen, maximized and minimized now count as above. A size changed in Settings is the user's. The save while fullscreen was the only place a zoom was saved without being asked.
-	- Branch: monsave
-	- Commit: cd3f8d4
 
 - A size saved while the font size was given on the command line is used at the normal font next time
 	- ID: 2026101412292756
@@ -310,51 +181,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 8cb6a4d
 	- Test case: `a_refused_frame_is_drawn_again_on_a_backoff` (Erfy7et) and `a_refused_rebuild_stays_pending_and_is_tried_again` (Erfy7yk). The GL swap result has no test, since it needs a real GL context.
 	- Note: 20261003, Free resources when idle was on for some of the windows that went blank and off for others. Which ones is not remembered, so both the frame path and the rebuild path stay suspects.
-
-- Software rendering crashes on b23 with an X11 BadDrawable error
-	- ID: 2026100614510979
-	- Type: Bug
-	- Status: Done
-	- Needs local test suite run?: No
-	- Needs external testing: On b23's own desktop, launch with "Always use software rendering" on and open Settings. Then turn it off and on again from Settings and close the dialog. The window draws each time and stays up, with no X error on the command line.
-	- Severity: High
-	- Opened: 20261006-145109
-	- Opened by: JC
-	- Assigned to: CC
-	- Related IDs: 2026100418225504
-	- Target OS: Linux
-	- Test environment: b23, X11
-	- Steps to reproduce:
-		- Run with software rendering on b23. Exact steps not known yet.
-	- Incorrect behavior: The program panics. Output on the command line:
-		~~~text
-		SilkTerm: renderer = llvmpipe (LLVM 19.1.7, 256 bits) [Vulkan / Cpu] alpha = premultiplied
-		[2026-10-06T20:35:24Z ERROR winit::platform_impl::linux] X11 error: XError {
-		        description: "BadDrawable (invalid Pixmap or Window parameter)",
-		        error_code: 9,
-		        request_code: 149,
-		        minor_code: 4,
-		    }
-		(the same error twice more)
-		thread 'main' (313787) panicked at /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.13/src/platform_impl/linux/x11/window.rs:1276:37:
-		Failed to call XResizeWindow: XError { description: "BadDrawable (invalid Pixmap or Window parameter)", error_code: 9, request_code: 149, minor_code: 4 }
-		~~~
-	- Expected behavior: Software rendering runs like the card does, only slower.
-	- Reproduced: Yes, at launch with the setting on and when it is turned on while running, with the same errors, on an X server that cannot make shared pixmaps as b23's cannot.
-	- Possible cause: Request 149 is DRI3 on b23's X server, and minor 4 is FenceFromFD, which lavapipe's X11 present path sends. So lavapipe presented to a window the server no longer knew. winit only reports a queued X error at its next checked call, so XResizeWindow got the blame. A window swapped or rebuilt under a live surface would fit.
-	- Actual cause: Mesa's software Vulkan presents on X11 through shared memory pixmaps whenever the server has DRI3, without asking whether the server can make them. b23's X server, on the NVIDIA driver, cannot. Each one is refused without a word, the fence made on it then fails, and winit dies at its next X call. Every software window and dialog was hit, so the launch and the switch failed alike.
-	- Actual fix: At launch on such a server, the program turns Mesa's shared memory path off (`MESA_VK_WSI_DEBUG=noshm`), so software frames reach the window as plain images. X11 only, and only when the server says it has no shared pixmaps. Shells started from SilkTerm inherit the variable, which keeps a software Vulkan program run there off the same crash.
-	- Note: The checks on 2026-10-04 passed because those X servers can make shared pixmaps.
-	- Decisions:
-		- 20261006: Shells inheriting the variable is OK as long as it has no major drawbacks. It has none found: only Mesa's software Vulkan reads it, and only on an X server where the shared path fails anyway. Frames there are copied as plain images, a bit slower on a big window.
-	- Sweep: every software device that draws to an X window.
-	- Swept: the main window at launch, after a switch and after an idle rebuild, the dialogs' kept context, and the one a dialog builds without it. All read the one process setting, which is in place before any of them exists. Windows and macOS have no such path.
-	- Branch: swcrash
-	- Commit: 7e50f19
-	- Test case: `cicd/tests/swnoshm/run.bash` (ErxxHzT), which fails on the old build at launch and on the switch and passes with the fix. Unit test `no_shared_pixmaps_turns_mesa_shm_off` (ErxxHvN).
-	- Verified: The window test both ways, the Linux unit tests, and clippy for Linux, Windows and macOS.
-	- Notes:
-		- Before RC1.
 
 - After the monitors wake from power save, a SilkTerm on the portrait monitor returns to the size it uses on the landscape monitor
 	- ID: 2026100907341816
@@ -556,6 +382,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+
+- README.md: move the long sections out to their own docs
+	- ID: 2026101415085144
+	- Type: Task
+	- Status: Reopened
+		- Move the comparison table itself into 'comparison.md' also.
+	- Priority: Avg
+	- Opened: 20261014-150851
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Move detailed comparisons to something like a "compared to other terminals" md, and link to it. Keep the brief feature comparison table.
+		- Move installation instructions, including development, to one or more .mds, and link to it/them.
+		- Move CLI usage and other examples to its own .md, and link to it. Leave a small snippet of example shcl contents.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261014: README keeps what it is, why, features, the wallpaper sheet, the showdown table, a short getting-started pointer with a few config lines, support, and legal.
+		- 20261014: New docs at the root. install.md has packages, the install scripts, building it yourself, the dev environment, and fetching the wallpaper pack. usage.md has configuration, shell integration, and opening scripts and folders on Windows. comparison.md has how the showdown is measured, notes 1 to 9, and how to run it. build.md, prerequisites.md and shell-integration.md are linked as before, with nothing folded in.
+		- 20261014: The showdown table stays in the README as the brief comparison table. It's the only comparison table there, and it's what a reader skims. Its method text and long notes are the detailed part, so they moved. The notes keep their small-text form and numbers.
+		- 20261014: The README had no CLI usage section and no config example, so nothing moved for those. The config lines in the README are copied from the shipped template.
+		- Question: should usage.md get a command-line section, written from `--help`?
+	- Branch: readmesplit
+	- Commit: 4cbe138
+	- Test case: `cicd/tests/showdown/run.py` (EqBnA5g) and `cicd/tests/showdown/rigs.py` (ErE7yrA) now read note 9 from comparison.md. Both fail with note 9 broken there, and pass with it back. The docs and tables checks cover the new files.
+	- Verified: docs, tables, showdown and rigs tests pass. Both table writers leave the README byte-identical when run again. The gallery check passes. Every line of the old README is in one of the 4 files, apart from the old TOC and 3 links pointed at the new files.
+	- Swept: termbench.py and showdown-readme.py still write the table in README.md, unchanged. update-showdown.py, cicd.bash, config.bash, demo-video.py, mdtable.py, sizebench-run.bash and termbench-run.bash name only the README table or gif. release.bash and the hooks test read the badge, which stays. The release notes keep "See the README". wallpaper-gallery.bash reads "102 wallpapers", which stays in the README. The gallery page and its template now link install.md for the download. showdown-readme.md names comparison.md for note 9. No README anchors in docs/, the install scripts, contributing.md, FAQ.md, glossary.md, the source, project/ docs, or the private repo. Left alone: config.rs line 10 already pointed at a README section that's gone, ancillary-notes.fods records say "README note 9" as of their dates, and a private backlog note says the wallpaper one-liner is in the README. A doc comment on `APP_NAME` in config.rs pointed at a README section removed on 20260924; the pointer is gone.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -767,6 +620,89 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- The bash prompt returning after program output slides out downward from under a seam of the higher content, again
+	- ID: 2026101415085143
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness. Unit tests, clippy and all 13 X11 scenes passed.
+	- Severity: High
+	- Opened: 20261014-150851
+	- Opened by: JC
+	- Related IDs: 2026101310563284
+	- Target OS: All
+	- Incorrect behavior: The bash prompt returning after program output slides out downward from under a seam of the higher content.
+	- Expected behavior: The prompt shows up in place.
+	- Notes:
+		- Pre-next-cut.
+		- The bug is back. We need to lock this down with a regression test. Including all similar smooth-scroll-related bugs we've fixed in the past, including nano bounce, nano scroll jumping of static content, muffer's similar bug involving "Jump to bottom" message, etc.
+		- Earlier fixes, all in the old-format Done list: "A prompt coming back after a command slides in oddly", "Repeating a command scrolled its output down out from under the prompt above it", "The dreaded 'Nano Bounce Bug' is back", and "Bug: scrolling back in muffer with the mouse wheel made its '1 new message' indicator smear and bounce".
+	- Test environment: b23, bash with ble.sh, atuin and the bundled two-row prompt in a git repo.
+	- Steps to reproduce:
+		- In a git repo, so the prompt has two rows, `clear`, then run a command whose output leaves the prompt one row above the bottom of the window (`seq 36` in a 43-row window).
+		- Run `nano`, and quit it.
+	- Reproduced: 20261014 on b23, on dev at b754777, about one quit in four. ble.sh draws the prompt again in place once the minimap column comes back, and that redraw slid down from under the rows above.
+	- Actual cause:
+		- When ble.sh redraws a prompt already on screen, it erases the old prompt and then makes room with insert- and delete-line, all in one write. The check that a recorded scroll moved something visible looked at the last frame, where the old prompt still showed, so it read the scroll as visible. With the prompt one row above the bottom, the row under it wasn't blank either, so the "room, not a scroll" check didn't catch it.
+		- A second, rarer path: a relayout drops the frame-old snapshot, and a prompt redraw that reaches a build before a new snapshot slid by default.
+		- The flatpak repaint rule (2026101310563284) isn't involved. It decides the output ease, and this is the region slide.
+	- Progress log:
+		- 20261014: Short and long commands, `clear`, nano, less, `git log`, atuin's Ctrl+R, resizes and programs turning mouse and focus reports on and off were all tried, on half-empty, full and full-scrollback screens. Only the in-place redraw near the bottom slid.
+		- 20261014: The class has opened and closed several times. Every earlier fix is kept, and each is now pinned by a test that goes red when its own part is broken.
+		- 20261014: Already covered and still passing: the muffer pill smear (`pill` scene and its unit tests), nano's static rows (`nano` scene), and `clear` (`clear` scene). Waiting on signoff, since it changes what is seen and the case above isn't confirmed as the one reported.
+		- Question: does this match what's seen, a prompt sliding down after a program that took the whole window exits? If it shows up some other way, the command and roughly where the prompt was on the screen would settle it.
+			- Now I can't reproduce it.
+	- Actual fix: a scroll counts as visible only when a row with text in it is now where the scroll put it, or a row with text left. On the normal screen, a recorded scroll with no snapshot to check against shows in place. The alt screen keeps sliding on the record alone, as before.
+	- Verified: with real ble.sh and nano, the build before the fix slid 2 times in 8 quits. With the first half of the fix it slid once in 41, which fits the relayout path (not confirmed). The final build had none in 8. The new scroll scene failed 3 of 3 on the build before the fix and passed 4 of 4 after.
+	- Swept: `slide_is_visible` has one caller in the build. `ledger_makes_room` reads the same snapshot but can only stop a slide. The row-print detector compares against `last_rows`, which a relayout leaves at the old width, so nothing matches there.
+	- Branch: promptslide
+	- Commit: 874af97
+	- Test case: Ep3UXRI gained erased-ink cases. New replay tests over ble.sh's bytes: Esib1t0 (prompt after output, half-empty and full screens), Esib1y3 (in-place redraw at each height), EsiiYQ2 (every split of the prompt and the redraw across two reads), Esiikpm (redraw right after a relayout), Esib22C (a repeated listing), Esib26L (a table redraw snaps while a prompt still eases), Esib2AU (the nano bounce). Scroll harness scene `prompt`. Each fails with the part it guards broken.
+
+- Software rendering crashes on b23 with an X11 BadDrawable error
+	- ID: 2026100614510979
+	- Type: Bug
+	- Status: Done
+	- Needs local test suite run?: No
+	- Needs external testing: On b23's own desktop, launch with "Always use software rendering" on and open Settings. Then turn it off and on again from Settings and close the dialog. The window draws each time and stays up, with no X error on the command line.
+	- Severity: High
+	- Opened: 20261006-145109
+	- Opened by: JC
+	- Assigned to: CC
+	- Related IDs: 2026100418225504
+	- Target OS: Linux
+	- Test environment: b23, X11
+	- Steps to reproduce:
+		- Run with software rendering on b23. Exact steps not known yet.
+	- Incorrect behavior: The program panics. Output on the command line:
+		~~~text
+		SilkTerm: renderer = llvmpipe (LLVM 19.1.7, 256 bits) [Vulkan / Cpu] alpha = premultiplied
+		[2026-10-06T20:35:24Z ERROR winit::platform_impl::linux] X11 error: XError {
+		        description: "BadDrawable (invalid Pixmap or Window parameter)",
+		        error_code: 9,
+		        request_code: 149,
+		        minor_code: 4,
+		    }
+		(the same error twice more)
+		thread 'main' (313787) panicked at /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/winit-0.30.13/src/platform_impl/linux/x11/window.rs:1276:37:
+		Failed to call XResizeWindow: XError { description: "BadDrawable (invalid Pixmap or Window parameter)", error_code: 9, request_code: 149, minor_code: 4 }
+		~~~
+	- Expected behavior: Software rendering runs like the card does, only slower.
+	- Reproduced: Yes, at launch with the setting on and when it is turned on while running, with the same errors, on an X server that cannot make shared pixmaps as b23's cannot.
+	- Possible cause: Request 149 is DRI3 on b23's X server, and minor 4 is FenceFromFD, which lavapipe's X11 present path sends. So lavapipe presented to a window the server no longer knew. winit only reports a queued X error at its next checked call, so XResizeWindow got the blame. A window swapped or rebuilt under a live surface would fit.
+	- Actual cause: Mesa's software Vulkan presents on X11 through shared memory pixmaps whenever the server has DRI3, without asking whether the server can make them. b23's X server, on the NVIDIA driver, cannot. Each one is refused without a word, the fence made on it then fails, and winit dies at its next X call. Every software window and dialog was hit, so the launch and the switch failed alike.
+	- Actual fix: At launch on such a server, the program turns Mesa's shared memory path off (`MESA_VK_WSI_DEBUG=noshm`), so software frames reach the window as plain images. X11 only, and only when the server says it has no shared pixmaps. Shells started from SilkTerm inherit the variable, which keeps a software Vulkan program run there off the same crash.
+	- Note: The checks on 2026-10-04 passed because those X servers can make shared pixmaps.
+	- Decisions:
+		- 20261006: Shells inheriting the variable is OK as long as it has no major drawbacks. It has none found: only Mesa's software Vulkan reads it, and only on an X server where the shared path fails anyway. Frames there are copied as plain images, a bit slower on a big window.
+	- Sweep: every software device that draws to an X window.
+	- Swept: the main window at launch, after a switch and after an idle rebuild, the dialogs' kept context, and the one a dialog builds without it. All read the one process setting, which is in place before any of them exists. Windows and macOS have no such path.
+	- Branch: swcrash
+	- Commit: 7e50f19
+	- Test case: `cicd/tests/swnoshm/run.bash` (ErxxHzT), which fails on the old build at launch and on the switch and passes with the fix. Unit test `no_shared_pixmaps_turns_mesa_shm_off` (ErxxHvN).
+	- Verified: The window test both ways, the Linux unit tests, and clippy for Linux, Windows and macOS.
+	- Notes:
+		- Before RC1.
 
 - A software rendering launch crashes now and then inside the Vulkan loader
 	- ID: 2026100720280486
@@ -2891,6 +2827,33 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
 	- Closed: 20260930-125357
 
+- Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
+	- ID: 2026101410442550
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261014-104425
+	- Opened by: JC
+	- Related IDs: 2026100114435600, 2026101409220514
+	- Target OS: All
+	- Requirements:
+		- As part of regular scripted testing, exercise the per-monitor DPI more thoroughly, and quasi-randomly.
+		- It still has many quirks that need ironing out, that can only be caught with fairly random testing.
+		- The expected behavior still has to be predictable, to judge against actual.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261014: Built as `cicd/tests/dpirand/run.py`. It's in the pipeline after monwl, skipped under `--quick`, but off for now (`DPIRAND_SECS=0` in `cicd/config.bash`), since it still fails now and then on 2026101413420431. 150 s there runs about 5 cases. `SILK_DPIRAND_SECS` sets the time, and `--seed` runs one case again.
+		- 20261014: Each case comes from one seed. It has 2 to 4 outputs at their own resolutions and scales, whole and fractional, on native Wayland or X11 through Xwayland, with sizes and font zooms kept for some of them. Then come moves, drags, drops with a sliver left behind, held drags, resizes, font zooms, scale changes, fullscreen and back, and relaunches, some with a size or font size on the command line.
+		- 20261014: A model of the requirements says which monitor the window should count itself on, and which size and font zoom it should take or save. The font zoom is checked by the cell size the shell is told, and the sizes on disk at the end. What a platform can't tell a window is allowed by name and counted, and so are known faults, by their item, until fixed.
+		- 20261014: Filed from it: 2026101411504818, 2026101413075422 and 2026101412025603, fixed, and 2026101411554909, 2026101411555009, 2026101412003308, 2026101412311921, 2026101412392529, 2026101412292756 and 2026101413420431.
+	- Test case: `cicd/tests/dpirand/run.py` (EshVccz).
+	- Verified:
+		- 60 random cases in 3 runs of 10 to 15 minutes, after the test settled. Every failure in them was a filed fault, the X11 fullscreen save fixed here, or a fault in the test, since fixed, except 2026101413420431, which still fails it now and then.
+		- It failed against 3 planted faults: the old monitor lookup, a kept font zoom not taken, and the text not rebuilt after one was.
+	- Branch: dpirand
+	- Commit: c9b40aa, 2f9d4a3, d49f765
+
 - Copy on select should be a persistent setting that new starts take up, but changes not shared between running sessions
 	- ID: 2026101313381123
 	- Type: Enhancement
@@ -4512,6 +4475,43 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- Going fullscreen and back keeps a size for the monitor, though nobody set one there
+	- ID: 2026101412392529
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On Windows, with Per monitor on and no size kept for the monitor, maximize and restore, then minimize and restore. Nothing is saved for the monitor. The same for maximize and restore on X11 under a desktop window manager.
+	- Severity: Low
+	- Opened: 20261014-123925
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- With Per monitor on, open a window on a monitor with no size kept for it.
+		- Make it fullscreen, then not.
+	- Incorrect behavior: The state file now keeps a size for that monitor, the one the window had. From then on that monitor no longer follows the last size anywhere. A window that wasn't at its monitor's own size when it went fullscreen writes over the size kept there.
+	- Expected behavior: Nothing is saved, since the user set no size.
+	- Reproduced: 20261014 on b23 under headless sway, 1 of 1, and by the random test, which saw a kept 68x37 written over with another monitor's 73x30.
+	- Possible cause: While fullscreen, the save holds back the size but still saves the font zoom, which makes an entry for the monitor. Then the resize back from fullscreen counts as the user's, and is saved there too. Leaving fullscreen can bring the pointer over the window, which on Wayland is a look, and the look skips taking a size while the window still counts as fullscreen. Taken for the user's resize, it also ends a size given on the command line.
+	- Actual cause: As above, confirmed on b23 under headless sway on both arms. Also, sway sends the window a scale as it goes fullscreen, and the resize into fullscreen fell in the wait after that, so the resize back wasn't known for what it was.
+	- Notes:
+		- The random test allowed it by this ID until it was fixed.
+	- Progress log:
+		- 20261014: The random test on 14 seeds that go fullscreen or set a font size on the command line, the old build beside the fix. The old build saved a size on all 4 fullscreen seeds tried. The fix passed all 14. Then 3 runs of about 9 min each, seeds 5000 to 5045. They found the scale sway sends with fullscreen, fixed, and one failure the old build has too (2026101422190941).
+		- 20261014: A window moved unseen and then made fullscreen with the pointer over it looks while fullscreen. Old build: it kept its size and saved it for the new monitor. Fix: nothing saved, and it took that monitor's size once back.
+	- Decisions:
+		- 20261014: Fullscreen, maximized and minimized, and back, are the window manager's resizes. None of them saves a size or ends one from the command line. A zoom while fullscreen or maximized saves the zoom, and the grid once the window is back.
+		- 20261014: A window that finds itself on another monitor while fullscreen or maximized takes that monitor's size once back, after the usual wait for a look. Before, it kept the size it had there.
+	- Actual fix: The save keeps track of what a size waiting to be saved came from: a resize, a zoom, or having been fullscreen, maximized or minimized since the last save. The way back is saved as nothing. A look that finds another monitor while fullscreen leaves the take for later.
+	- Test case: `fullscreen_and_back_saves_nothing` (EsjoVV7), seen failing with the old rule put back. `cicd/tests/monwl/run.bash` (Esgxleh), new step: moved unseen to another output, then fullscreen with the pointer over it and back. It failed 3 checks on the old build, the size saved among them, and passes on the fix. The random test (EshVccz) no longer allows this item: its fullscreen step fails on any save, and puts the pointer over a window moved unseen before it goes fullscreen.
+	- Verified:
+		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- monwl, and the random test as in the progress log, on Wayland and on X11 through Xwayland.
+		- Not verified: maximized or minimized and back, read only. The Windows code is compiled only.
+	- Swept: every resize the window doesn't make for the user. A scale change and a take already wait out a grace. Fullscreen, maximized and minimized now count as above. A size changed in Settings is the user's. The save while fullscreen was the only place a zoom was saved without being asked.
+	- Branch: monsave
+	- Commit: cd3f8d4
 
 - A tab may not name a quiet command while nothing redraws
 	- ID: 2026101408384489
