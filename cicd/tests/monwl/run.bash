@@ -9,13 +9,15 @@
 ##			- HEADLESS-3, 1280x1024 at 100%, under HEADLESS-1, kept with a
 ##			  bigger font.
 ##		The window opens on HEADLESS-2 and must end at its size. Then:
-##			- Moved to HEADLESS-1, where the scale change is the sign.
+##			- Moved to HEADLESS-1 by a key binding. The scale change, then the
+##			  keys coming up, are the sign.
 ##			- Dragged by its title bar onto HEADLESS-3. It keeps its size while
 ##			  held, and takes that one's once the pointer comes back over it.
 ##			- Moved to HEADLESS-1, with the pointer back over it after.
-##			- Dragged onto HEADLESS-2, held astride the edge on the way.
-##			- Moved to HEADLESS-1, then dragged onto HEADLESS-2 and dropped
-##			  with a sliver still on HEADLESS-1.
+##			- Dragged onto HEADLESS-2, held astride the edge on the way, then
+##			  held over HEADLESS-2. It keeps its size until the drop.
+##			- Moved to HEADLESS-1 by the key, then dragged onto HEADLESS-2 and
+##			  dropped with a sliver still on HEADLESS-1.
 ##		Each size must hold once taken, and the shell must never be told a
 ##		grid well off the ones taken, even for a moment. Then it opens again on HEADLESS-2
 ##		with --columns 80 --rows 24, and is moved to HEADLESS-1 and back. The
@@ -24,7 +26,7 @@
 ##		the window did may save a size.
 ##	- Syntax: run.bash [--bin PATH]   (default: the debug build, then release)
 ##	- Exit: 0 passed, 1 a check failed, 3 nothing ran (no binary, sway,
-##	  python3 or software Vulkan).
+##	  wtype, python3 or software Vulkan).
 ##	- Test ID: Esgxleh
 ##	- History: At bottom of file.
 
@@ -51,7 +53,7 @@ if [[ -z "${bin}" ]]; then
 fi
 if [[ -z "${bin}" || ! -x "${bin}" ]]; then echo "  skip: no SilkTerm binary (build it first, or pass --bin)"; exit 3; fi
 echo "  binary: ${bin}"
-for tool in sway swaymsg python3; do
+for tool in sway swaymsg wtype python3; do
 	if ! command -v "${tool}" >/dev/null 2>&1; then echo "  skip: no ${tool}"; exit 3; fi
 done
 if [[ ! -f "${lvp}" ]]; then echo "  skip: no software Vulkan (${lvp})"; exit 3; fi
@@ -104,6 +106,7 @@ workspace 3 output HEADLESS-3
 xwayland disable
 default_floating_border normal
 for_window [all] floating enable
+bindsym Mod4+Shift+h move container to output HEADLESS-1
 EOF
 env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u SWAYSOCK XDG_RUNTIME_DIR="${runDir}" \
 	WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=3 WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
@@ -175,6 +178,9 @@ def walk(node, output):
 walk(json.load(sys.stdin), None)' "${appPid}"
 }
 fOutput(){ local w; w="$(fWin)"; echo "${w%% *}"; }
+## Super+Shift+H moves it to HEADLESS-1. A virtual keyboard has to be bound
+## by the window before a key counts, hence the lead.
+fKeyMove(){ "${wl[@]}" wtype -s 1500 -M logo -M shift -k h -m shift -m logo -s 500; }
 ## Waits up to <tenths> for the shell to see <rows columns>.
 fWaitGrid(){  ## fWaitGrid <want> <tenths>
 	local i
@@ -209,7 +215,7 @@ fStep "opened on the second output" HEADLESS-2 "30 50"
 echo "    first sizes: $(uniq "${grid}" | head -n 4 | paste -sd ',')"
 opened="$(wc -l <"${grid}")"
 
-"${wl[@]}" swaymsg "[pid=${appPid}] move container to output HEADLESS-1" >/dev/null
+fKeyMove
 fStep "moved to the 100% output" HEADLESS-1 "20 110"
 winW1="$(read -r _ _ _ w _ <<<"$(fWin)"; echo "${w}")"
 
@@ -262,12 +268,14 @@ sleep 2
 echo "    held astride: $(fWin), shell: $(fGrid)"
 fCheck "held astride the 100% and 200% outputs: keeps its size" test "$(fGrid)" == "20 110"
 fDragTo 1960 20
-sleep 1.5
+sleep 2.5
+echo "    held over the 200% output: $(fWin), shell: $(fGrid)"
+fCheck "held over the 200% output: not at its size yet" test "$(fGrid)" != "30 50"
 fDrop
 fPointerBack
 fStep "dragged to the 200% output" HEADLESS-2 "30 50"
 
-"${wl[@]}" swaymsg "[pid=${appPid}] move container to output HEADLESS-1" >/dev/null
+fKeyMove
 fStep "moved to the 100% output again" HEADLESS-1 "20 110"
 
 ## Dropped with a sliver left on HEADLESS-1. It is HEADLESS-2's to size.

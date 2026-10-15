@@ -105,7 +105,47 @@ impl State {
 			return;
 		}
 		self.watch.moved_at.get_or_insert(now);
+		self.watch.stirred_at = Some(now);
+		self.watch.put_off = false;
 		self.watch.check_at = Some(now + MONITOR_SETTLE);
+	}
+
+	/// Signs the person is at the window again, which a window that can't see
+	/// the buttons needs before it looks: the pointer over it, a click, a key,
+	/// or focus.
+	pub(super) fn note_presence(&mut self, event: &winit::event::WindowEvent) {
+		use winit::event::WindowEvent;
+		match event {
+			WindowEvent::CursorLeft { .. } => {
+				self.watch.pointer = Pointer::Away;
+				return;
+			}
+			WindowEvent::CursorEntered { .. } => {
+				// a Wayland compositor knows where its pointer is
+				if !self.watch.positionless {
+					self.watch.pointer = Pointer::Entered(None);
+					return;
+				}
+				self.watch.pointer = Pointer::Over;
+			}
+			WindowEvent::CursorMoved { position, .. } => {
+				self.watch.pointer = pointer_moved(self.watch.pointer, (position.x, position.y));
+				if self.watch.pointer != Pointer::Over {
+					return;
+				}
+			}
+			WindowEvent::KeyboardInput { .. }
+			| WindowEvent::ModifiersChanged(_)
+			| WindowEvent::Focused(true)
+			| WindowEvent::MouseInput { .. }
+			| WindowEvent::MouseWheel { .. } => {}
+			_ => return,
+		}
+		let now = Instant::now();
+		self.watch.heard_at = Some(now);
+		if std::mem::take(&mut self.watch.put_off) {
+			self.watch.check_at = Some(now + MONITOR_SETTLE);
+		}
 	}
 
 	pub(super) fn check_monitor(&mut self) {
@@ -116,11 +156,29 @@ impl State {
 		if now < at {
 			return;
 		}
-		if crate::monitor::button_held(&self.window) {
-			self.watch.check_at = Some(now + MONITOR_RECHECK);
-			return;
-		}
+		let heard = matches!(
+			(self.watch.heard_at, self.watch.stirred_at),
+			(Some(heard), Some(stirred)) if heard > stirred
+		);
+		let drag = drag_state(
+			crate::monitor::button_held(&self.window),
+			self.watch.opening,
+			self.watch.pointer == Pointer::Over,
+			heard,
+		);
 		self.watch.check_at = None;
+		match drag {
+			Drag::Held => {
+				self.watch.check_at = Some(now + MONITOR_RECHECK);
+				return;
+			}
+			Drag::MaybeHeld => {
+				mondbg("wait", self.watch.key.as_deref(), None, None);
+				self.watch.put_off = true;
+				return;
+			}
+			Drag::Over => {}
+		}
 		let moved_at = self.watch.moved_at.take();
 		let now_on = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key());
 		let on_some = now_on.is_some() || self.window.current_monitor().is_some();
@@ -129,6 +187,7 @@ impl State {
 			self.watch.check_at = Some(now + MONITOR_RECHECK);
 			return;
 		}
+		self.watch.opening = false;
 		let pending_at = self.pending_size.map(|_| self.pending_size_at);
 		let settled = settle(
 			self.watch.key.as_deref(),
@@ -386,6 +445,56 @@ pub(super) struct MonitorWatch {
 	/// Wayland tells a window neither where it is nor that it moved, so the
 	/// pointer coming back after a drag is the sign to look.
 	pub(super) positionless: bool,
+	// What tells a drag held still from one that's over, where the buttons
+	// can't be seen (`drag_state`).
+	pub(super) pointer: Pointer,
+	pub(super) heard_at: Option<Instant>, // the last key, focus or pointer over the window
+	pub(super) stirred_at: Option<Instant>, // the last move or scale change
+	pub(super) put_off: bool,             // a look waits for `note_presence`
+	pub(super) opening: bool,             // the first look, which no drag can be part of
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum Pointer {
+	Away,
+	Entered(Option<(f64, f64)>), // where the first move after it said it was
+	Over,
+}
+
+// Xwayland's own idea of where the pointer is goes stale while the compositor
+// has it, and a window raised or moved over that spot is told the pointer
+// entered, mid-drag too, with one move to that spot and none after. So on X11
+// the pointer is over the window once it moves inside it.
+fn pointer_moved(pointer: Pointer, at: (f64, f64)) -> Pointer {
+	match pointer {
+		Pointer::Entered(None) => Pointer::Entered(Some(at)),
+		Pointer::Entered(Some(first)) if first != at => Pointer::Over,
+		other => other,
+	}
+}
+
+#[derive(Debug, PartialEq)]
+enum Drag {
+	Held,
+	MaybeHeld,
+	Over,
+}
+
+// Could the window still be held in a drag? Where the buttons can be seen
+// they say. Wayland and Xwayland show a window none held on the compositor's
+// title bar, and nothing at all comes while a drag is held still, so looking
+// once things went quiet took a monitor's size before the drop
+// (2026101411555009). There the pointer over the window, or a key or focus
+// since the last move, says the person has let go. A keyboard move ends on a
+// modifier coming up, so it isn't held up. A move nobody touches the window
+// after waits until they do.
+fn drag_state(buttons: Option<bool>, opening: bool, pointer_in: bool, heard: bool) -> Drag {
+	match buttons {
+		Some(true) => Drag::Held,
+		Some(false) => Drag::Over,
+		None if opening || pointer_in || heard => Drag::Over,
+		None => Drag::MaybeHeld,
+	}
 }
 
 #[derive(Debug, PartialEq)]
@@ -428,9 +537,12 @@ fn look_again(on_some: bool, positionless: bool, moved_at: Option<Instant>, now:
 // Does a move start the wait to see where the window ended up? Not one in
 // the grace after the window's own resize, which the window manager may move
 // it for, so a window that straddles two monitors does not swap sizes back
-// and forth. Unless the monitors changed in the meantime: then the window
-// manager is herding windows as one goes dark or comes back after a power
-// save, and the window may be back where it started (2026100907341816).
+// and forth. A scale change counts as a move here too. On Wayland it's the
+// only sign of one, and a take there flipped which output most of the window
+// was on, and so its scale, again and again (2026101420262300). Unless the
+// monitors changed in the meantime: then the window manager is herding
+// windows as one goes dark or comes back after a power save, and the window
+// may be back where it started (2026100907341816).
 fn move_counts(
 	in_grace: bool,
 	layout_then: &[(i64, i64, i64, i64)],
@@ -717,6 +829,48 @@ mod tests {
 		assert!(!look_again(true, true, Some(t0), later(750)), "on one");
 		assert!(!look_again(false, false, Some(t0), later(750)), "X11 says");
 		assert!(!look_again(false, true, None, later(750)));
+	}
+
+	// A window that can't see the buttons took a monitor's size while held
+	// still in a drag over it, before the drop. It waits for the pointer back
+	// over it, a key or focus. One that can see them goes by them.
+	// Test ID: EsjYipm
+	#[test]
+	fn a_drag_held_still_is_not_taken_for_a_drop() {
+		use super::{Drag, drag_state};
+		assert_eq!(drag_state(None, false, false, false), Drag::MaybeHeld);
+		assert_eq!(
+			drag_state(None, false, true, false),
+			Drag::Over,
+			"pointer back"
+		);
+		assert_eq!(drag_state(None, false, false, true), Drag::Over, "key");
+		assert_eq!(drag_state(None, true, false, false), Drag::Over, "opening");
+		assert_eq!(drag_state(Some(true), false, true, true), Drag::Held);
+		assert_eq!(drag_state(Some(false), false, false, false), Drag::Over);
+	}
+
+	// Under Xwayland the press on the compositor's title bar told the window
+	// the pointer entered, at a spot it had left long before, so the drag
+	// counted as over. A pointer moved there moves again.
+	// Test ID: Esjcgsw
+	#[test]
+	fn a_stale_enter_is_not_the_pointer_back() {
+		use super::{Pointer, pointer_moved};
+		let entered = pointer_moved(Pointer::Entered(None), (1472.0, 463.0));
+		assert_eq!(entered, Pointer::Entered(Some((1472.0, 463.0))));
+		assert_eq!(
+			pointer_moved(entered, (1472.0, 463.0)),
+			entered,
+			"same spot"
+		);
+		assert_eq!(pointer_moved(entered, (1473.0, 463.0)), Pointer::Over);
+		assert_eq!(
+			pointer_moved(Pointer::Away, (5.0, 5.0)),
+			Pointer::Away,
+			"focus says where"
+		);
+		assert_eq!(pointer_moved(Pointer::Over, (5.0, 5.0)), Pointer::Over);
 	}
 
 	// A window left maximized opens maximized, unless the setting is off or the
