@@ -446,6 +446,7 @@ What a window costs while in use is planned in [Reducing resources](design_docs/
 	- On X11 the server is asked which monitor the window overlaps most, rather than winit, whose list may predate a resolution change. A window that overlaps no monitor, as when its monitor has gone dark, is on none and keeps its size.
 	- A window not shown yet has no place of its own, so the launch takes the monitor under the pointer. That is where xfwm4 opens a window that asks for no position, and where winit takes the window's scale from. Going by where the hidden window sat sized it for the top-left monitor, and it changed size a moment after it showed elsewhere.
 	- Wayland tells a window neither where it is nor that it moved. It looks once just after it opens, on a scale change, and when the pointer comes back after a drag.
+		- A move to an output at the same scale tells it nothing at all. So it also looks as the user resizes it or zooms the font, and the size is kept for the output it's on at that moment, with no take. Looking just before the save instead would give a size set just before a move to the new output (2026-10-15).
 
 - A number given on the command line is held to the range of the setting it stands for, the same range the file's copy of that setting is held to. A count of rows or columns is also held to what the graphics device can draw, since the window is a texture and a refusal there ends the launch rather than the setting.
 

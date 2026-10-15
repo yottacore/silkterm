@@ -37,6 +37,10 @@ impl State {
 		if !resize_is_current((w, h), (now.width, now.height)) {
 			return;
 		}
+		// the way back from fullscreen is no size the user set here
+		if !self.watch.noted.full {
+			self.look_unseen();
+		}
 		self.watch.noted.resized = true;
 		self.note_grid(w, h);
 	}
@@ -146,6 +150,33 @@ impl State {
 		let kept = grid_in_font(grid, now, cell, self.text.margin, self.chrome_h(), room);
 		mondbg("refont", self.watch.key.as_deref(), Some(kept), Some(zoom));
 		kept
+	}
+
+	/// Wayland tells a window nothing of a move between outputs at one scale,
+	/// so it may still count itself on the one it left. A size the user sets
+	/// is for the output the window is on as it's set, so it looks then. Not
+	/// just before saving: a size set just before a move would go to the new
+	/// output. A look already on its way decides as usual (2026101413420431).
+	pub(super) fn look_unseen(&mut self) {
+		if !self.watch.positionless || self.watch.check_at.is_some() || self.watch.put_off {
+			return;
+		}
+		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key())
+		else {
+			return;
+		};
+		if self
+			.watch
+			.key
+			.as_deref()
+			.is_some_and(|kept| crate::monitor::same_monitor(kept, &now_on))
+		{
+			return;
+		}
+		// a size set before the move is for the output it left
+		self.flush_window_size(true);
+		mondbg("found", Some(&now_on), None, None);
+		self.watch.key = Some(now_on);
 	}
 
 	/// A move starts the wait for the window to settle.

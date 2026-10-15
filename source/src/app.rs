@@ -1582,6 +1582,7 @@ impl State {
 			return;
 		}
 		self.watch.font_pinned = false;
+		self.look_unseen();
 		self.watch.noted.zoomed = true;
 		let (w, h) = self.surface_px;
 		self.note_grid(w, h);
