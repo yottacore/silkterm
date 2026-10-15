@@ -608,12 +608,9 @@ impl TextCtx {
 		pin_mono_family(&font_system);
 		pin_ui_family(&font_system);
 
-		let font_size = (config::effective_font_size() * scale).round();
-		let line_height = (font_size * config::settings().line_height_scale).round();
-		let metrics = Metrics::new(font_size, line_height);
-
+		let metrics = cell_metrics(config::effective_font_size(), scale);
 		let cell_w = measure_cell(&mut font_system, metrics);
-		let cell_h = line_height.max(1.0);
+		let cell_h = metrics.line_height.max(1.0);
 		let debold_safe = bold_matches_cell(&mut font_system, metrics, cell_w);
 
 		// Chrome follows the desktop UI font size, converted like the mono path;
@@ -661,6 +658,16 @@ impl TextCtx {
 				NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 			},
 		}
+	}
+
+	/// The cell a font of this size would have here, in physical px. The same
+	/// sum `new_cpu` does, so for the font in use it's `cell_w` and `cell_h`.
+	pub fn cell_at(&mut self, font_size: f32) -> (f32, f32) {
+		let metrics = cell_metrics(font_size, self.scale);
+		(
+			measure_cell(&mut self.font_system, metrics),
+			metrics.line_height.max(1.0),
+		)
 	}
 
 	/// A chrome measurement written in DIP, in physical pixels at this display's
@@ -1087,6 +1094,14 @@ impl TextCtx {
 		gpu.atlas.trim();
 		gpu.scrim_atlas.trim();
 	}
+}
+
+fn cell_metrics(font_size: f32, scale: f32) -> Metrics {
+	let font_px = (font_size * scale).round();
+	Metrics::new(
+		font_px,
+		(font_px * config::settings().line_height_scale).round(),
+	)
 }
 
 // Measure the per-cell advance the *render* buffer actually produces. We shape
@@ -1565,6 +1580,19 @@ mod tests {
 		let cell_w = measure_cell(&mut fs, metrics);
 		assert!(bold_matches_cell(&mut fs, metrics, cell_w));
 		assert!(!bold_matches_cell(&mut fs, metrics, cell_w + 3.0));
+	}
+
+	// A size set at a font from the command line is saved for the font the
+	// next launch has, measured here, so the two must agree for the font in
+	// use or a grid saved at it would drift.
+	// Test ID: EsjoVeF
+	#[test]
+	fn a_cell_measured_for_a_font_size_is_the_cell_that_font_gets() {
+		let mut ctx = TextCtx::new_cpu(1.0);
+		let size = config::effective_font_size();
+		assert_eq!(ctx.cell_at(size), (ctx.cell_w, ctx.cell_h));
+		let (w, h) = ctx.cell_at(size + 6.0);
+		assert!(w > ctx.cell_w && h > ctx.cell_h);
 	}
 
 	// A mono face can carry a double-width char at its ordinary one-cell advance.

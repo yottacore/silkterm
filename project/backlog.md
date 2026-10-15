@@ -191,6 +191,76 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: docs, tables, showdown and rigs tests pass. Both table writers leave the README byte-identical when run again. The gallery check passes. Every line of the old README is in one of the 4 files, apart from the old TOC and 3 links pointed at the new files.
 	- Swept: termbench.py and showdown-readme.py still write the table in README.md, unchanged. update-showdown.py, cicd.bash, config.bash, demo-video.py, mdtable.py, sizebench-run.bash and termbench-run.bash name only the README table or gif. release.bash and the hooks test read the badge, which stays. The release notes keep "See the README". wallpaper-gallery.bash reads "102 wallpapers", which stays in the README. The gallery page and its template now link install.md for the download. showdown-readme.md names comparison.md for note 9. No README anchors in docs/, the install scripts, contributing.md, FAQ.md, glossary.md, the source, project/ docs, or the private repo. Left alone: config.rs line 10 already pointed at a README section that's gone, ancillary-notes.fods records say "README note 9" as of their dates, and a private backlog note says the wallpaper one-liner is in the README. A doc comment on `APP_NAME` in config.rs pointed at a README section removed on 20260924; the pointer is gone.
 
+- Going fullscreen and back keeps a size for the monitor, though nobody set one there
+	- ID: 2026101412392529
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Needs external testing: On Windows, with Per monitor on and no size kept for the monitor, maximize and restore, then minimize and restore. Nothing is saved for the monitor. The same for maximize and restore on X11 under a desktop window manager.
+	- Severity: Low
+	- Opened: 20261014-123925
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- With Per monitor on, open a window on a monitor with no size kept for it.
+		- Make it fullscreen, then not.
+	- Incorrect behavior: The state file now keeps a size for that monitor, the one the window had. From then on that monitor no longer follows the last size anywhere. A window that wasn't at its monitor's own size when it went fullscreen writes over the size kept there.
+	- Expected behavior: Nothing is saved, since the user set no size.
+	- Reproduced: 20261014 on b23 under headless sway, 1 of 1, and by the random test, which saw a kept 68x37 written over with another monitor's 73x30.
+	- Possible cause: While fullscreen, the save holds back the size but still saves the font zoom, which makes an entry for the monitor. Then the resize back from fullscreen counts as the user's, and is saved there too. Leaving fullscreen can bring the pointer over the window, which on Wayland is a look, and the look skips taking a size while the window still counts as fullscreen. Taken for the user's resize, it also ends a size given on the command line.
+	- Actual cause: As above, confirmed on b23 under headless sway on both arms. Also, sway sends the window a scale as it goes fullscreen, and the resize into fullscreen fell in the wait after that, so the resize back wasn't known for what it was.
+	- Notes:
+		- The random test allowed it by this ID until it was fixed.
+	- Progress log:
+		- 20261014: The random test on 14 seeds that go fullscreen or set a font size on the command line, the old build beside the fix. The old build saved a size on all 4 fullscreen seeds tried. The fix passed all 14. Then 3 runs of about 9 min each, seeds 5000 to 5045. They found the scale sway sends with fullscreen, fixed, and one failure the old build has too (2026101422190941).
+		- 20261014: A window moved unseen and then made fullscreen with the pointer over it looks while fullscreen. Old build: it kept its size and saved it for the new monitor. Fix: nothing saved, and it took that monitor's size once back.
+	- Decisions:
+		- 20261014: Fullscreen, maximized and minimized, and back, are the window manager's resizes. None of them saves a size or ends one from the command line. A zoom while fullscreen or maximized saves the zoom, and the grid once the window is back.
+		- 20261014: A window that finds itself on another monitor while fullscreen or maximized takes that monitor's size once back, after the usual wait for a look. Before, it kept the size it had there.
+	- Actual fix: The save keeps track of what a size waiting to be saved came from: a resize, a zoom, or having been fullscreen, maximized or minimized since the last save. The way back is saved as nothing. A look that finds another monitor while fullscreen leaves the take for later.
+	- Test case: `fullscreen_and_back_saves_nothing` (EsjoVV7), seen failing with the old rule put back. `cicd/tests/monwl/run.bash` (Esgxleh), new step: moved unseen to another output, then fullscreen with the pointer over it and back. It failed 3 checks on the old build, the size saved among them, and passes on the fix. The random test (EshVccz) no longer allows this item: its fullscreen step fails on any save, and puts the pointer over a window moved unseen before it goes fullscreen.
+	- Verified:
+		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- monwl, and the random test as in the progress log, on Wayland and on X11 through Xwayland.
+		- Not verified: maximized or minimized and back, read only. The Windows code is compiled only.
+	- Swept: every resize the window doesn't make for the user. A scale change and a take already wait out a grace. Fullscreen, maximized and minimized now count as above. A size changed in Settings is the user's. The save while fullscreen was the only place a zoom was saved without being asked.
+	- Branch: monsave
+	- Commit: cd3f8d4
+
+- A size saved while the font size was given on the command line is used at the normal font next time
+	- ID: 2026101412292756
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261014-122927
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 11` and resize it.
+		- Close it, and open it without the option.
+	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
+	- Reproduced: 20261014, by the random test.
+	- Progress log:
+		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
+			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
+		- 20261014: Done as answered. How it maps onto the store:
+			- The store keeps columns, rows and a font zoom, and no pixels. So "in pixels" is saved as the columns and rows the default font shows in the window's size now. It's what a zoom does already, so the window reopens at the same size.
+			- "The default font size" is the one a launch without the option opens at on that monitor: the font size from the config, plus the zoom kept there.
+			- "The screen" is the monitor the size is kept for, less the window's frame.
+			- A zoom after a launch with `--font-size` keeps the option's size under the zoom, so the same rule applies.
+	- Actual cause: The size is saved as the columns and rows of the font the window has. A launch without the option opens at them in the default font.
+	- Actual fix: As answered above. A size set at another font than the one the next launch has is checked against the screen at that font. It's kept in columns and rows if it fits, and else as the default font's columns and rows for the window's size now.
+	- Test case: `a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font` (EsjoVZu), seen failing with the old rule put back, and `a_cell_measured_for_a_font_size_is_the_cell_that_font_gets` (EsjoVeF). The random test (EshVccz) now checks a window opened at the default font fits the monitor its size was set on. Seed 2710 failed it on the old build, 1481 px wide on a 1440 px output, and passes on the fix.
+	- Verified:
+		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- The random test on seeds 23, 889, 1321, 2114, 2710 and 3999, on Wayland and on X11 through Xwayland.
+	- Swept: the other ways a grid kept for one font is used at another. A launch or a take with `--font-size` uses a grid kept at the default font, and `--font-name` saves the grid in its own font. Both are outside this answer; filed as 2026101422190936.
+	- Branch: monsave
+	- Commit: cd3f8d4
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -559,26 +629,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261014: Its only known path, a size taken while a drag was held, is gone with the fix for 2026101411555009. Seed 1000 passes now. A font zoom and then a key move to another output right after, 0.3 s and 0.8 s apart on a 200% output, kept the size it took.
 		- 20261014: Handling the echo itself would need winit to say which configure a resize comes from, or a retry on a size the window already left, which hides it rather than fixes it. Left Queued until it shows up another way.
 
-- Going fullscreen and back keeps a size for the monitor, though nobody set one there
-	- ID: 2026101412392529
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261014-123925
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: All
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- With Per monitor on, open a window on a monitor with no size kept for it.
-		- Make it fullscreen, then not.
-	- Incorrect behavior: The state file now keeps a size for that monitor, the one the window had. From then on that monitor no longer follows the last size anywhere. A window that wasn't at its monitor's own size when it went fullscreen writes over the size kept there.
-	- Expected behavior: Nothing is saved, since the user set no size.
-	- Reproduced: 20261014 on b23 under headless sway, 1 of 1, and by the random test, which saw a kept 68x37 written over with another monitor's 73x30.
-	- Possible cause: While fullscreen, the save holds back the size but still saves the font zoom, which makes an entry for the monitor. Then the resize back from fullscreen counts as the user's, and is saved there too. Leaving fullscreen can bring the pointer over the window, which on Wayland is a look, and the look skips taking a size while the window still counts as fullscreen. Taken for the user's resize, it also ends a size given on the command line.
-	- Notes:
-		- The random test allows it by this ID until it's fixed.
-
 - Wayland: a resize or zoom after a move the window wasn't told of is saved for the monitor it left, and the next look undoes it
 	- ID: 2026101413420431
 	- Type: Bug
@@ -601,24 +651,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- The random test is off in the pipeline until this is handled, one way or the other.
 
-- A size saved while the font size was given on the command line is used at the normal font next time
-	- ID: 2026101412292756
+- A size kept at one font is used at another when the font comes from the command line
+	- ID: 2026101422190936
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261014-122927
+	- Opened: 20261014-221909
 	- Opened by: CC
 	- Parent ID: 2026100114435600
+	- Related IDs: 2026101412292756
 	- Target OS: All
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
+		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
+	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
+	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
+	- Reproduced: No. Read from the code.
+	- Notes:
+		- A size given on the command line wins over this, as before.
+
+- The random test expects no look after a scale change on an output a window has only a sliver on
+	- ID: 2026101422190941
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261014-221909
+	- Opened by: CC
+	- Parent ID: 2026101410442550
+	- Target OS: Linux
 	- Test environment: b23, headless sway
 	- Steps to reproduce:
-		- Open SilkTerm with `--font-size 11` and resize it.
-		- Close it, and open it without the option.
-	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
-	- Reproduced: 20261014, by the random test.
-	- Progress log:
-		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
-			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
+		- `cicd/tests/dpirand/run.py --seed 5028`.
+	- Incorrect behavior: After a drop with a sliver left behind, the scale of the output with the sliver changes. The window looks again and names the output it's on, and the test fails it, since it expected the window to be told nothing.
+	- Expected behavior: The test allows the look, or the window doesn't look.
+	- Reproduced: 20261014, on dev and with the fix for 2026101412392529 alike.
+	- Notes:
+		- The window's answer is the right output, so this looks like a gap in the test's model. Not checked what made the window look.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827

@@ -18,6 +18,8 @@
 ##			  held over HEADLESS-2. It keeps its size until the drop.
 ##			- Moved to HEADLESS-1 by the key, then dragged onto HEADLESS-2 and
 ##			  dropped with a sliver still on HEADLESS-1.
+##			- Moved to HEADLESS-3 unseen, and made fullscreen with the pointer
+##			  over it, then not. It takes HEADLESS-3's size once back.
 ##		Each size must hold once taken, and the shell must never be told a
 ##		grid well off the ones taken, even for a moment. Then it opens again on HEADLESS-2
 ##		with --columns 80 --rows 24, and is moved to HEADLESS-1 and back. The
@@ -310,6 +312,22 @@ print(",".join(line.strip() for line in sys.stdin if line.strip() and not near(*
 }
 fCheck "never told a grid well off the ones it took" fNoMoment
 
+## Moved to HEADLESS-3 at the same scale, so not told, then the pointer over
+## it and straight to fullscreen: it looks while fullscreen. It saves nothing,
+## and takes HEADLESS-3's size once back.
+fKeyMove
+fStep "moved to the 100% output once more" HEADLESS-1 "20 110"
+fPtr move 3100 700
+"${wl[@]}" swaymsg "[pid=${appPid}] move container to output HEADLESS-3" >/dev/null
+sleep 1.5
+fCheck "moved to the 1280x1024 output unseen: keeps its size" test "$(fGrid)" == "20 110"
+read -r _ x y w h _ <<<"$(fWin)"
+fPtr move "$((x + w / 2))" "$((y + h / 2))"
+"${wl[@]}" swaymsg "[pid=${appPid}] fullscreen enable" >/dev/null
+sleep 3
+"${wl[@]}" swaymsg "[pid=${appPid}] fullscreen disable" >/dev/null
+fStep "fullscreen there and back" HEADLESS-3 "35 60"
+
 ## A size from the command line stays through moves. The window opens at
 ## scale 1 and learns the output's after, which moved the grid a few cells,
 ## and each scale change told the shell a grid in the new cells but the old
@@ -354,3 +372,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261014 JC: Created.
+##		- 20261014 JC: Fullscreen after a move the window wasn't told of.

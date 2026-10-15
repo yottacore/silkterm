@@ -82,7 +82,6 @@ KINDS = {"move": 3.0, "drag": 4.0, "resize": 2.0, "zoom": 2.0, "relaunch": 1.5, 
 ## is fixed.
 ROUNDED_ALIKE = "a fractional output and a whole one that round to one scale look alike to a Wayland window"
 RESCALED = "a scale change moves the grid a few cells"
-FULLSCREEN_SAVES = "fullscreen and back saves the window's size, and keeps one for a monitor nobody set one for"
 CAPPED = "sway holds a floating window to the size of the whole layout"
 TOLD_NOTHING = "a Wayland window is told nothing of a move"
 ## Wayland and Xwayland show a window no button held on the compositor's title
@@ -91,7 +90,6 @@ TOLD_NOTHING = "a Wayland window is told nothing of a move"
 WAITS = "a window that can't see the buttons waits for the person after a move"
 KNOWN: dict[str, str] = {
 	ROUNDED_ALIKE: "2026101411554909",
-	FULLSCREEN_SAVES: "2026101412392529",
 }
 
 
@@ -715,6 +713,10 @@ class Case:
 		self.stale: str | None = None
 		## a look put off until the pointer, a key or focus comes back
 		self.waiting = False
+		## a look while fullscreen, whose size is taken once back
+		self.owed: list[str] = []
+		## monitors whose size was last set at a font size from the command line
+		self.refonted: set[str] = set()
 		self.cells: dict[tuple[float, int | None, int], tuple[int, int]] = {}
 
 	def note(self, text: str) -> None:
@@ -913,7 +915,18 @@ class Case:
 		if not saves or not got or len({trace_field(t, "key") for t in saves}) > 1:
 			raise CheckError(f"{what}: want saves for one monitor, got {saves}")
 		key = trace_field(saves[-1], "key")
-		if trace_field(saves[-1], "grid") != f"{got[0]}x{got[1]}":
+		saved = got
+		## At a font size from the command line the grid is kept for the font
+		## the next launch has: the same when it fits the screen there, else
+		## the grid that font shows in the window now.
+		refont = [t for t in trace if t.split()[1] == "refont"]
+		if self.font is not None and refont:
+			cols, rows = (int(v) for v in trace_field(refont[-1], "grid").split("x"))
+			saved = (cols, rows)
+			self.note(f"      kept for the normal font as {saved}")
+		elif refont:
+			raise CheckError(f"{what}: kept a grid for another font with none on the command line: {refont}")
+		if trace_field(saves[-1], "grid") != f"{saved[0]}x{saved[1]}":
 			raise CheckError(f"{what}: saved {trace_field(saves[-1], 'grid')} at {got}")
 		if trace_field(saves[-1], "zoom") != ("-" if zoom is None else str(zoom)):
 			raise CheckError(f"{what}: saved font zoom {trace_field(saves[-1], 'zoom')}, want {zoom}")
@@ -927,7 +940,12 @@ class Case:
 			self.allow(self.stale, model.belief)
 		else:
 			self.allow(allowed[model.belief], model.belief)
-		model.save(model.belief, got, zoom)
+		model.save(model.belief, saved, zoom)
+		if model.belief:
+			if self.font is not None:
+				self.refonted.add(model.belief)
+			else:
+				self.refonted.discard(model.belief)
 		model.grid = got
 		if zoom is not None:
 			model.zoom = zoom
@@ -981,12 +999,11 @@ class Case:
 		self.waiting = False
 
 	## A fullscreen window's size is never saved, and leaving fullscreen puts
-	## back the size it had. Any save at all is the known fault, which keeps a
-	## size for the monitor though nobody set one there. Leaving can bring the
-	## pointer over the window, which is a look; one that keeps the size while
-	## still fullscreen and then saves it is the same fault. True when a size was
-	## taken, for the look's settle to judge.
-	def fullscreen_saves(self, what: str, back_to: Grid | None) -> bool:
+	## back the size it had. Leaving can bring the pointer over the window,
+	## which is a look. A look that finds another monitor while fullscreen
+	## takes its size once back. True when a size was taken, for the look's
+	## settle to judge.
+	def fullscreen_saves(self, what: str) -> bool:
 		time.sleep(1.5)
 		trace: list[str] = []
 		deadline = time.monotonic() + 4
@@ -997,30 +1014,25 @@ class Case:
 			time.sleep(0.2)
 		time.sleep(0.5)
 		trace += self.rig.trace()
-		allowed = {"-"} | ({f"{back_to[0]}x{back_to[1]}"} if back_to else set())
 		_, outs, _, primary = self.where()
 		names = self.names(outs, primary)
 		took = any(t.split()[1] == "take" for t in trace)
+		if any(t.split()[1] == "later" for t in trace):
+			self.owed = [t for t in trace if t.split()[1] == "arrive"][-1:]
+			self.note(f"      looked while fullscreen, to take a size once back: {self.owed}")
 		if took:
-			self.rig.unread += [t for t in trace if t.split()[1] in ("arrive", "stay", "take")]
+			self.rig.unread += self.owed + [t for t in trace if t.split()[1] in ("arrive", "stay", "take")]
+			self.owed = []
 		for t in trace:
 			event, key = t.split()[1], trace_field(t, "key")
-			if event == "arrive" and not took:
+			if event == "arrive" and not took and not self.owed:
 				if key not in names and not self.stale:
 					raise CheckError(f"{what}: counted itself on {key}, want one of {list(names)}")
 				self.model.belief, self.stale = key, None
-			elif event == "keep":
-				self.allow(FULLSCREEN_SAVES, key)
+			elif event == "keep" and self.drifts():
+				raise CheckError(f"{what}: kept its size on {key} where a monitor's own size takes over")
 			elif event == "save":
-				if trace_field(t, "grid") not in allowed:
-					raise CheckError(f"{what}: saved {trace_field(t, 'grid')}, want nothing or {back_to}")
-				self.allow(FULLSCREEN_SAVES, key)
-				grid = None if trace_field(t, "grid") == "-" else back_to
-				zoom = None if trace_field(t, "zoom") == "-" else int(trace_field(t, "zoom"))
-				self.model.save(None if key == "-" else key, grid, zoom)
-				## taken for the user's, it ends a size from the command line too
-				if grid:
-					self.model.size_pinned = False
+				raise CheckError(f"{what}: saved a size nobody set: {t}")
 		return took
 
 	def held_still(self, what: str, mark: int, start: Grid) -> None:
@@ -1187,15 +1199,23 @@ class Case:
 				if self.waiting:
 					self.before_user(what, step)
 				pid = rig.app.pid if rig.app else 0
-				before = model.grid
+				## A Wayland window moved without being told finds out where it
+				## is from the pointer coming over it, here just before it goes
+				## fullscreen, so it looks while fullscreen.
+				hovered = plan.arm == "wayland" and self.stale is not None
+				if hovered:
+					over, _, _, _ = self.where()
+					rig.pointer("move", over.rect[0] + over.rect[2] // 2, over.rect[1] + over.rect[3] // 2)
 				rig.msg(f"[pid={pid}] fullscreen enable")
-				self.fullscreen_saves(f"{what} (fullscreen)", None)
+				took = self.fullscreen_saves(f"{what} (fullscreen)")
 				rig.msg(f"[pid={pid}] fullscreen disable")
-				if self.fullscreen_saves(f"{what} (back)", before):
+				if self.fullscreen_saves(f"{what} (back)") or took:
 					_, outs, _, primary = self.where()
 					self.settle(what, self.names(outs, primary), True)
 				else:
 					self.settle(what, {None: "requirement"}, False)
+				if hovered:
+					self.park_pointer()
 			elif step.kind == "rescale":
 				rig.msg(f"output HEADLESS-{step.to + 1} scale {step.scale:g}")
 				rig.pointer("extent", *rig.extent())
@@ -1276,6 +1296,7 @@ class Case:
 		model.entered = []
 		self.stale = None
 		self.waiting = False
+		self.owed = []
 		time.sleep(0.5)
 		win, outs, touched, primary = self.where()
 		self.track_entered(touched)
@@ -1309,6 +1330,15 @@ class Case:
 		## A Wayland window opens at 1 and learns its scale after.
 		first_scale = outs[primary[0]]["scale"] if primary and plan.arm == "wayland" else 1.0
 		self.settle(what, self.names(outs, primary), True, first_scale != 1.0, look_wait=12.0)
+		## A size set at a font size from the command line, on this monitor,
+		## fits it at the normal font: in its columns and rows if they fit,
+		## else at the size the window was.
+		if not step.font and model.belief in self.refonted and plan.per_monitor:
+			win, outs, _, primary = self.where()
+			out = outs[primary[0]]["rect"] if primary else outs[win.output]["rect"]
+			if win.rect[2] > out["width"] or win.rect[3] > out["height"]:
+				raise CheckError(f"{what}: a size set at a font size from the command line opened at {win.rect[2]}x{win.rect[3]}, "
+					f"past the {out['width']}x{out['height']} output")
 
 
 def run_case(seed: int, arm: str | None, binary: Path, folder: Path, keep: bool) -> tuple[bool, Case]:
@@ -1426,3 +1456,5 @@ if __name__ == "__main__":
 
 ##	History:
 ##		- 20261014 JC: Created.
+##		- 20261014 JC: Fullscreen and back saves nothing, and a size set at a font
+##		  size from the command line is kept for the normal font.
