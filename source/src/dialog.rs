@@ -18,7 +18,7 @@ use winit::window::{Window, WindowId};
 use crate::config;
 use crate::gfx::{FRAME_RETRY_FIRST, FRAME_RETRY_MAX, Gfx, RectInstance, RectRenderer, Retry};
 use crate::pane::Rect;
-use crate::settings_ui::{Action, EditCmd, SettingsDialog, View, quad};
+use crate::settings_ui::{Action, EditCmd, Marks, SettingsDialog, View, quad};
 use crate::text::{TextCtx, ui_attrs};
 
 // A laid-out line of static dialog text (window-relative coords).
@@ -685,6 +685,10 @@ impl DialogWin {
 					'c' => EditCmd::Copy,
 					'x' => EditCmd::Cut,
 					'v' => EditCmd::Paste,
+					'f' => {
+						dialog.search_focus();
+						return None;
+					}
 					_ => return None,
 				};
 				edit_cmd(dialog, cmd, clip);
@@ -1155,6 +1159,8 @@ struct ShapeKey {
 	attrs: Attrs<'static>,
 	// the buffer's height, as bits, since an f32 has no Hash
 	height: u32,
+	// marked spans, their color and their size as bits
+	marks: Option<(Vec<(usize, usize)>, [u8; 3], u32)>,
 }
 
 impl ShapedText {
@@ -1188,10 +1194,24 @@ impl ShapedText {
 		width: f32,
 		height: f32,
 	) -> usize {
+		self.marked(text, line, attrs, None, width, height)
+	}
+
+	// The same, with some of the line drawn bold, larger and in another color.
+	fn marked(
+		&mut self,
+		text: &mut TextCtx,
+		line: &str,
+		attrs: &Attrs<'static>,
+		marks: Option<&Marks>,
+		width: f32,
+		height: f32,
+	) -> usize {
 		let key = ShapeKey {
 			text: line.to_string(),
 			attrs: attrs.clone(),
 			height: height.to_bits(),
+			marks: marks.map(|m| (m.spans.clone(), m.color, m.scale.to_bits())),
 		};
 		if let Some(&slot) = self.index.get(&key) {
 			return slot;
@@ -1201,7 +1221,10 @@ impl ShapedText {
 				text.resize_buffer(&mut kept, width, height);
 				kept
 			}
-			None => shape(text, line, attrs, width, height),
+			None => match marks {
+				Some(marks) => shape_marked(text, line, attrs, marks, width, height),
+				None => shape(text, line, attrs, width, height),
+			},
 		};
 		self.bufs.push(buf);
 		self.index.insert(key, self.bufs.len() - 1);
@@ -1220,6 +1243,55 @@ fn shape(
 	SHAPED.with(|n| n.set(n.get() + 1));
 	let mut buf = text.new_ui_buffer(width, height);
 	buf.set_text(&mut text.font_system, line, attrs, Shaping::Advanced, None);
+	buf.shape_until_scroll(&mut text.font_system, false);
+	buf
+}
+
+// The marked spans take a bigger size on the same line height, so the line box
+// and where the text sits in its row stay as an unmarked line's.
+fn shape_marked(
+	text: &mut TextCtx,
+	line: &str,
+	attrs: &Attrs,
+	marks: &Marks,
+	width: f32,
+	height: f32,
+) -> glyphon::Buffer {
+	#[cfg(test)]
+	SHAPED.with(|n| n.set(n.get() + 1));
+	let mut buf = text.new_ui_buffer(width, height);
+	let base = buf.metrics();
+	let mut strong = attrs.clone();
+	strong.weight = crate::text::ui_bold_weight();
+	strong.color_opt = Some(GColor::rgb(marks.color[0], marks.color[1], marks.color[2]));
+	let strong = strong.metrics(glyphon::Metrics::new(
+		base.font_size * marks.scale,
+		base.line_height,
+	));
+	let mut spans: Vec<(&str, Attrs)> = Vec::new();
+	let mut at = 0;
+	for &(a, b) in &marks.spans {
+		let (a, b) = (a.clamp(at, line.len()), b.clamp(at, line.len()));
+		if !(line.is_char_boundary(a) && line.is_char_boundary(b)) {
+			continue;
+		}
+		if a > at {
+			spans.push((&line[at..a], attrs.clone()));
+		}
+		if b > a {
+			spans.push((&line[a..b], strong.clone()));
+		}
+		at = b;
+	}
+	if at < line.len() {
+		spans.push((&line[at..], attrs.clone()));
+	}
+	// an empty span can hang the layout (G108)
+	spans.retain(|(t, _)| !t.is_empty());
+	if spans.is_empty() {
+		return shape(text, line, attrs, width, height);
+	}
+	buf.set_rich_text(&mut text.font_system, spans, attrs, Shaping::Advanced, None);
 	buf.shape_until_scroll(&mut text.font_system, false);
 	buf
 }
@@ -1479,7 +1551,14 @@ fn scene(
 					attrs.style = glyphon::Style::Italic;
 				}
 				let tall = item.scale.max(1.0);
-				let buf = shaped.buffer(text, &item.text, &attrs, w as f32, line_h * tall);
+				let buf = shaped.marked(
+					text,
+					&item.text,
+					&attrs,
+					item.marks.as_ref(),
+					w as f32,
+					line_h * tall,
+				);
 				// the offset is the glyphs', so it scales with them either way
 				Placed {
 					x: item.x,
@@ -3026,6 +3105,63 @@ mod tests {
 			reshaped > 0 && kept > 0,
 			"{reshaped} steps shaped and {kept} did not"
 		);
+	}
+
+	// A search result's matched text is a step larger and in its own color, on
+	// the same line box as an unmarked line, so the row it sits in doesn't move.
+	// Other marks on the same text are another buffer.
+	// Test ID: EsodoYf
+	#[test]
+	fn marked_text_is_larger_and_colored_on_the_same_line_box() {
+		let mut text = TextCtx::new_cpu(1.0);
+		let mut shaped = super::ShapedText::default();
+		let line_h = text.ui_line_h;
+		let attrs = ui_attrs();
+		let line = "Window \u{23f5} Columns";
+		let at = line.find("Col").unwrap();
+		let marks = crate::settings_ui::Marks {
+			spans: vec![(at, at + 3)],
+			color: [200, 120, 10],
+			scale: 1.15,
+		};
+		shaped.start_frame(&text);
+		let plain = shaped.buffer(&mut text, line, &attrs, 800.0, line_h);
+		let marked = shaped.marked(&mut text, line, &attrs, Some(&marks), 800.0, line_h);
+		assert_ne!(plain, marked);
+		let fewer = crate::settings_ui::Marks {
+			spans: vec![(at, at + 2)],
+			..marks.clone()
+		};
+		let other = shaped.marked(&mut text, line, &attrs, Some(&fewer), 800.0, line_h);
+		assert_ne!(other, marked, "other marks, other buffer");
+		let run = |slot: usize| {
+			let run = shaped.bufs[slot].layout_runs().next().expect("one line");
+			let glyphs: Vec<(usize, f32, Option<glyphon::Color>)> = run
+				.glyphs
+				.iter()
+				.map(|g| (g.start, g.font_size, g.color_opt))
+				.collect();
+			(run.line_top, run.line_height, run.line_y, glyphs)
+		};
+		let (p_top, p_h, p_y, p_glyphs) = run(plain);
+		let (m_top, m_h, m_y, m_glyphs) = run(marked);
+		assert_eq!((p_top, p_h), (m_top, m_h), "the same line box");
+		assert!((m_y - p_y).abs() < line_h * 0.1, "baseline {p_y} -> {m_y}");
+		let size = p_glyphs[0].1;
+		let mut seen = 0;
+		for (start, font_size, color) in m_glyphs {
+			if (at..at + 3).contains(&start) {
+				seen += 1;
+				assert!(
+					(font_size - size * 1.15).abs() < 0.01,
+					"{start}: {font_size}"
+				);
+				assert_eq!(color, Some(glyphon::Color::rgb(200, 120, 10)));
+			} else {
+				assert!((font_size - size).abs() < 0.01, "{start}: {font_size}");
+			}
+		}
+		assert_eq!(seen, 3);
 	}
 
 	// A kept buffer is found by everything shaping reads. A new color, weight,

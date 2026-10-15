@@ -149,6 +149,8 @@ pub struct Spec {
 	/// The mark's text in the Windows build, in place of `warning`. Moved
 	/// over by `pick_warnings`, so the dialog only ever reads `warning`.
 	pub windows_warning: &'static str,
+	/// Other words someone might search for this row by.
+	pub aliases: &'static [&'static str],
 }
 
 /// How a setting relates to the others, for knobs. See the automatic settings
@@ -326,6 +328,7 @@ pub struct Layout {
 	pub pick_field_width: f32,
 	pub pick_min_square: f32,
 	pub pick_marker: f32,
+	pub search_gap: f32,
 }
 
 /// Flyover text for the footer buttons, which are chrome rather than settings and
@@ -342,6 +345,7 @@ pub struct Icons {
 	pub dropdown_arrow: &'static str,
 	pub dropdown_check: &'static str,
 	pub revert: &'static str,
+	pub search_sep: &'static str,
 }
 
 #[derive(Debug)]
@@ -512,6 +516,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		pick_field_width: float("layout.pick_field_width", &mut problems),
 		pick_min_square: float("layout.pick_min_square", &mut problems),
 		pick_marker: float("layout.pick_marker", &mut problems),
+		search_gap: float("layout.search_gap", &mut problems),
 	};
 	let glyph = |path: &str, problems: &mut Vec<String>| -> &'static str {
 		match doc.get_string(path) {
@@ -531,6 +536,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		dropdown_arrow: glyph("icons.dropdown_arrow", &mut problems),
 		dropdown_check: glyph("icons.dropdown_check", &mut problems),
 		revert: glyph("icons.revert", &mut problems),
+		search_sep: glyph("icons.search_sep", &mut problems),
 	};
 
 	let paths = doc.get_string_array("tabs").unwrap_or_default();
@@ -737,6 +743,16 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 		{
 			problems.push(format!("rows.{name}: a warning needs a label of its own"));
 		}
+		let aliases = doc.get_string_array(&at("aliases")).unwrap_or_default();
+		// a search lists a row by its label, so one with none can't be listed
+		if !aliases.is_empty() && label.is_empty() {
+			problems.push(format!(
+				"rows.{name}: aliases need a label to list the row by"
+			));
+		}
+		if aliases.iter().any(|a| a.trim().is_empty()) {
+			problems.push(format!("rows.{name}: an alias is blank"));
+		}
 		let windows = doc.get_bool(&at("windows")).unwrap_or(false);
 		if matches!(kind, Kind::Header(_)) {
 			group_windows = windows;
@@ -760,6 +776,7 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			not_macos: doc.get_bool(&at("not_macos")).unwrap_or(false),
 			warning: keep(warning),
 			windows_warning: keep(windows_warning),
+			aliases: keep_all(aliases),
 		});
 	}
 
@@ -770,6 +787,9 @@ fn parse(text: &str) -> Result<Ui, Vec<String>> {
 			continue;
 		};
 		let at = |field: &str| format!("values.{name}.{field}");
+		if doc.get_string_array(&at("aliases")).is_ok() {
+			problems.push(format!("values.{name}: has no row for an alias to find"));
+		}
 		match doc.get_string(&at("setting")) {
 			Ok(path) => settings.push((key, keep_all(vec![path]))),
 			Err(_) => problems.push(format!("values.{name}: needs a setting path")),
