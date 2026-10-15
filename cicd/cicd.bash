@@ -1060,7 +1060,7 @@ fBuildTestRelease(){
 	## Every table of contents, which no markdown linter regenerates. design.md had
 	## been missing eight of its headings.
 	fRunTest cicd/tests/toc/run.py "tables of contents" "a table of contents is out of date - run cicd/tests/toc/run.py --fix"
-	## Every markdown table, laid out as the README's generated one is. Hand-written
+	## Every markdown table, laid out as comparison.md's generated one is. Hand-written
 	## ones had drifted to trailing pipes and ragged columns.
 	fRunTest cicd/tests/tables/run.py "markdown tables" "a markdown table is not canonical - run cicd/tests/tables/run.py --fix"
 	## Blank lines between top-level bullets and around headings, which no markdown

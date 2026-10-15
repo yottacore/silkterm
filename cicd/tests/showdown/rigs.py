@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 ##	- Purpose:
-##		Every row of the README's showdown table that was measured on the Linux rigs
+##		Every row of the showdown table in comparison.md that was measured on the Linux rigs
 ##		has to be measurable again, by the entry point and by the rig that owns each
 ##		of its columns. This holds that list against the table. It also checks what
 ##		the GNOME Terminal, WezTerm, Tabby and Hyper entries rely on: finding the
@@ -61,7 +61,7 @@ WINDOWS_ROWS = {"conhost.exe", "Windows Terminal"}
 us = load("update_showdown", UTILITY / "update-showdown.py")
 sr = load("showdown_readme", INCLUDE / "showdown-readme.py")
 mdtable = load("mdtable", INCLUDE / "mdtable.py")
-readme = (REPO / "README.md").read_text(encoding="utf-8")
+readme = (REPO / "comparison.md").read_text(encoding="utf-8")
 block = readme.split(sr.BEGIN, 1)[1].split(sr.END, 1)[0]
 table = [mdtable.split_row(ln) for ln in block.splitlines() if ln.startswith("|")]
 header = table[0]
@@ -240,3 +240,4 @@ print("all passed")
 ##		- 20260928 JC: Created.
 ##		- 20260929 JC: XTerm's speed row, on an X server of its own.
 ##		- 20261014 JC: Note 9 is read from comparison.md.
+##		- 20261015 JC: The table is read from comparison.md.

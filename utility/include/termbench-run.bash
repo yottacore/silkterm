@@ -8,7 +8,7 @@
 #  shellcheck disable=1091  ## 'Not following.' bench-common.bash is beside this script.
 
 ##	- Purpose:
-##		Repeatable rig for the README terminal shootout. Brings up a private headless
+##		Repeatable rig for the terminal shootout in comparison.md. Brings up a private headless
 ##		Wayland compositor on the real GPU, launches one terminal as its only client,
 ##		fits every terminal to the same grid, and runs termbench.py inside it. A terminal
 ##		that draws only on X11 gets a private X server instead (x11Terms).
@@ -23,10 +23,10 @@
 ##		   --reps N        runs per scene (default 6; --reps is the only safe way to
 ##		                   shorten a run - see the note below)
 ##		   --grid CxR      grid every terminal is fitted to (default 160x42)
-##		   --label TEXT    row name for the README table (default: autodetected)
+##		   --label TEXT    row name for the table (default: autodetected)
 ##		   --scene NAME    one width class only (ascii|latin|cjk|emoji|mixed)
 ##		   --display :N    private X server for an X11-only terminal (default :98)
-##		   --no-save       measure without recording or touching README.md
+##		   --no-save       measure without recording or touching comparison.md
 ##		   --keep          leave the compositor up afterwards
 ##		   --list          list the known terminal keys and exit
 ##
