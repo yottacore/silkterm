@@ -49,7 +49,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: Smooth scroll stays steady through the whole update.
 	- Notes:
 		- Pre-next-cut.
-		- Regression, I thought we had this fixed.
+		- Regression.
 		- The old-format Done item "Severe bug: `flatpak update` output bounces wildly" fixed it before, closed 20260728.
 	- Reproduced: 20261013 on b23, with a real `flatpak update` of 60 small apps. Every redraw of the update table eased about a screenful, both before and after the scrollback was full.
 	- Actual cause:
@@ -93,7 +93,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261014: Short and long commands, `clear`, nano, less, `git log`, atuin's Ctrl+R, resizes and programs turning mouse and focus reports on and off were all tried, on half-empty, full and full-scrollback screens. Only the in-place redraw near the bottom slid.
 		- 20261014: The class has opened and closed several times. Every earlier fix is kept, and each is now pinned by a test that goes red when its own part is broken.
 		- 20261014: Already covered and still passing: the muffer pill smear (`pill` scene and its unit tests), nano's static rows (`nano` scene), and `clear` (`clear` scene). Waiting on signoff, since it changes what is seen and the case above isn't confirmed as the one reported.
-		- Question for JC: does this match what's seen, a prompt sliding down after a program that took the whole window exits? If it shows up some other way, the command and roughly where the prompt was on the screen would settle it.
+		- Question: does this match what's seen, a prompt sliding down after a program that took the whole window exits? If it shows up some other way, the command and roughly where the prompt was on the screen would settle it.
+			- Now I can't reproduce it.
 	- Actual fix: a scroll counts as visible only when a row with text in it is now where the scroll put it, or a row with text left. On the normal screen, a recorded scroll with no snapshot to check against shows in place. The alt screen keeps sliding on the record alone, as before.
 	- Verified: with real ble.sh and nano, the build before the fix slid 2 times in 8 quits. With the first half of the fix it slid once in 41, which fits the relayout path (not confirmed). The final build had none in 8. The new scroll scene failed 3 of 3 on the build before the fix and passed 4 of 4 after.
 	- Swept: `slide_is_visible` has one caller in the build. `ledger_makes_room` reads the same snapshot but can only stop a slide. The row-print detector compares against `last_rows`, which a relayout leaves at the old width, so nothing matches there.
