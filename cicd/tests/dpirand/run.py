@@ -84,12 +84,13 @@ ROUNDED_ALIKE = "a fractional output and a whole one that round to one scale loo
 RESCALED = "a scale change moves the grid a few cells"
 FULLSCREEN_SAVES = "fullscreen and back saves the window's size, and keeps one for a monitor nobody set one for"
 CAPPED = "sway holds a floating window to the size of the whole layout"
-HELD_WAYLAND = "Wayland gives no sign of a drag under way"
-HELD_XWAYLAND = "Xwayland can't see a button held on the compositor's title bar"
+TOLD_NOTHING = "a Wayland window is told nothing of a move"
+## Wayland and Xwayland show a window no button held on the compositor's title
+## bar, so a move with the pointer away could be a drag held still. The look
+## waits for the pointer back over the window, a key or focus.
+WAITS = "a window that can't see the buttons waits for the person after a move"
 KNOWN: dict[str, str] = {
 	ROUNDED_ALIKE: "2026101411554909",
-	HELD_WAYLAND: "2026101411555009",
-	HELD_XWAYLAND: "2026101411555009",
 	FULLSCREEN_SAVES: "2026101412392529",
 }
 
@@ -540,6 +541,18 @@ class Rig:
 		if typed.returncode:
 			raise CheckError(f"wtype failed: {typed.stderr.strip()}")
 
+	## The window's focus and a Shift tap: a person back at it by keyboard.
+	def nudge(self) -> None:
+		self.msg(f"[pid={self.app.pid if self.app else 0}] focus")
+		time.sleep(0.5)
+		if self.plan.arm == "x11":
+			subprocess.run(["xdotool", "key", "shift"], env=dict(self.base, DISPLAY=self.xdisplay), capture_output=True, check=False)
+			return
+		typed = subprocess.run(["wtype", "-s", "1500", "-M", "shift", "-m", "shift", "-s", "500"], env=self.wl,
+			capture_output=True, text=True, check=False)
+		if typed.returncode:
+			raise CheckError(f"wtype failed: {typed.stderr.strip()}")
+
 	def launch(self, cli: Grid | None, font: int | None) -> None:
 		args = [str(self.binary), "--shell", f"python3 -I {HERE / '_size.py'} {self.grid_file}"]
 		if cli:
@@ -700,6 +713,8 @@ class Case:
 		self.drag_names: dict[str | None, str] = {}
 		self.font: int | None = None
 		self.stale: str | None = None
+		## a look put off until the pointer, a key or focus comes back
+		self.waiting = False
 		self.cells: dict[tuple[float, int | None, int], tuple[int, int]] = {}
 
 	def note(self, text: str) -> None:
@@ -785,13 +800,13 @@ class Case:
 	## Waits for the window to settle on one of `allowed`, then checks it
 	## stays there and matches the model.
 	def settle(
-		self, what: str, allowed: dict[str | None, str], looks: bool, rescaled: bool = False, rounding: str = RESCALED, look_wait: float = 3.0
+		self, what: str, allowed: dict[str | None, str], looks: bool, rescaled: bool = False, rounding: str = RESCALED, look_wait: float = 3.0,
+		unseen: str = TOLD_NOTHING,
 	) -> None:
 		model = self.model
 		if not looks:
-			allowed = {None: allowed.get(None, "a Wayland window is told nothing of a move")}
-		## a window can't tell when a drag ends, so a look anywhere on the way
-		## counts as that, by the reason it had there
+			allowed = {None: allowed.get(None, unseen)}
+		## outputs touched on the way, which a look after the drop may mix in
 		allowed = {**self.drag_names, **allowed}
 		outcomes = {k: model.after_look(k) for k in allowed}
 		grids = {o[1] for o in outcomes.values()}
@@ -949,13 +964,21 @@ class Case:
 		self.note(f"      allowed: {reason}, named {named}")
 
 	## The pointer over the window first, as a hand on the mouse would be. On
-	## Wayland that is a look, settled before the user's own change.
+	## Wayland that is a look, settled before the user's own change. A look put
+	## off after a move goes ahead on the pointer, or on a key.
 	def before_user(self, what: str, step: Step) -> None:
-		if self.plan.arm == "x11" or not step.pointer:
+		if self.waiting and not step.pointer:
+			_, outs, _, primary = self.where()
+			self.rig.nudge()
+			self.settle(f"{what} (a key first)", self.names(outs, primary), True)
+			self.waiting = False
+			return
+		if not step.pointer or (self.plan.arm == "x11" and not self.waiting):
 			return
 		_, outs, _, primary = self.where()
 		self.pointer_back()
 		self.settle(f"{what} (pointer over it)", self.names(outs, primary), True)
+		self.waiting = False
 
 	## A fullscreen window's size is never saved, and leaving fullscreen puts
 	## back the size it had. Any save at all is the known fault, which keeps a
@@ -1009,17 +1032,7 @@ class Case:
 		self.rig.unread = trace
 		took = [t for t in trace if t.split()[1] == "take"]
 		if took:
-			reason = HELD_WAYLAND if self.plan.arm == "wayland" else HELD_XWAYLAND
-			self.allow(reason, trace_field(took[-1], "key"))
-			## and the drop may come inside the grace after that resize, unseen
-			self.drag_names[None] = reason
-			model = self.model
-			model.belief = trace_field(took[-1], "key")
-			cols, rows = trace_field(took[-1], "grid").split("x")
-			model.grid = (int(cols), int(rows))
-			if trace_field(took[-1], "zoom") != "-":
-				model.zoom = int(trace_field(took[-1], "zoom"))
-			return
+			raise CheckError(f"{what}: took a size while still held: {took}")
 		if grids <= set(around(start)) and len(self.drag_scales) > 1 and self.drifts():
 			self.allow(RESCALED, None)
 			return
@@ -1047,9 +1060,11 @@ class Case:
 		time.sleep(0.3)
 		x, y, cw, ch = win.rect
 		self.rig.pointer("move", x + cw // 2, y + ch // 2)
+		## a hand moves on, and only that tells an X11 window the pointer is back
+		self.rig.pointer("move", x + cw // 2 + 4, y + ch // 2 + 2)
 
-	## The window follows the pointer. What a look could name at each place on
-	## the way is kept, since a window can't tell when a drag has ended.
+	## The window follows the pointer. Where it has been is kept, for the
+	## outputs a look after the drop may mix in.
 	def glide(self, frm: tuple[int, int], to: tuple[int, int]) -> None:
 		for i in range(1, 11):
 			self.rig.pointer("move", frm[0] + (to[0] - frm[0]) * i // 10, frm[1] + (to[1] - frm[1]) * i // 10)
@@ -1060,9 +1075,6 @@ class Case:
 				self.drag_scales.add(outs[primary[0]]["scale"])
 			self.drag_touched |= set(touched)
 			self.drag_primaries |= set(primary)
-			reason = HELD_WAYLAND if self.plan.arm == "wayland" else HELD_XWAYLAND
-			for key, why in self.names(outs, primary).items():
-				self.drag_names.setdefault(key, reason if why == "requirement" else why)
 
 	## A look may come between two places the glide was seen at, so any output
 	## the window touched on the way may have been its first, against any it
@@ -1138,10 +1150,9 @@ class Case:
 				_, outs, touched, primary = self.where()
 				self.track_entered(touched)
 				after_scale = outs[primary[0]]["scale"] if primary else before_scale
-				looks = plan.arm == "x11" or step.pointer or after_scale != before_scale
-				if step.pointer and plan.arm == "wayland":
+				if step.pointer:
 					self.pointer_back()
-				self.settle(what, self.names(outs, primary), looks, after_scale != before_scale or len(self.drag_scales) > 1)
+				self.after_move(what, outs, primary, step.pointer, after_scale != before_scale)
 			elif step.kind == "drag":
 				self.drag(what, step, before_scale)
 			elif step.kind == "resize":
@@ -1173,6 +1184,8 @@ class Case:
 			elif step.kind == "relaunch":
 				self.relaunch(step)
 			elif step.kind == "fullscreen":
+				if self.waiting:
+					self.before_user(what, step)
 				pid = rig.app.pid if rig.app else 0
 				before = model.grid
 				rig.msg(f"[pid={pid}] fullscreen enable")
@@ -1191,6 +1204,9 @@ class Case:
 				self.track_entered(touched)
 				after_scale = outs[primary[0]]["scale"] if primary else before_scale
 				looks = plan.arm == "wayland" and after_scale != before_scale
+				if looks:
+					self.pointer_back()
+					self.waiting = False
 				allowed = self.names(outs, primary)
 				if not looks and plan.arm == "x11":
 					allowed = {None: "an X11 window is told nothing when the layout shifts under it"}
@@ -1205,7 +1221,7 @@ class Case:
 			raise CheckError(f"the sizes on disk are {monitors}, want {model.store}")
 
 	def drag(self, what: str, step: Step, before_scale: float) -> None:
-		rig, plan = self.rig, self.plan
+		rig = self.rig
 		win, outs, _, _ = self.where()
 		grab = (win.rect[0] + win.rect[2] // 2, win.rect[1] - win.deco // 2)
 		dx, dy = grab[0] - win.rect[0], grab[1] - win.rect[1]
@@ -1231,11 +1247,18 @@ class Case:
 		self.drag_mixes(outs)
 		self.track_entered(touched)
 		after_scale = outs[primary[0]]["scale"] if primary else before_scale
-		looks = plan.arm == "x11" or step.pointer or after_scale != before_scale
-		if step.pointer and plan.arm == "wayland":
+		if step.pointer:
 			time.sleep(1.0)
 			self.pointer_back()
-		self.settle(what, self.names(outs, primary), looks, after_scale != before_scale or len(self.drag_scales) > 1)
+		self.after_move(what, outs, primary, step.pointer, after_scale != before_scale or len(self.drag_scales) > 1)
+
+	## A move looks once the pointer is back over the window. With the pointer
+	## away it doesn't: an X11 window was told it moved and puts the look off
+	## until the person is back, as does a Wayland one whose scale changed.
+	def after_move(self, what: str, outs: dict[str, dict[str, Any]], primary: list[str], back: bool, rescaled: bool) -> None:
+		waits = self.waiting or self.plan.arm == "x11" or rescaled
+		self.settle(what, self.names(outs, primary), back, rescaled, unseen=WAITS if waits else TOLD_NOTHING)
+		self.waiting = waits and not back
 
 	def relaunch(self, step: Step, first: bool = False) -> None:
 		rig, model, plan = self.rig, self.model, self.plan
@@ -1252,6 +1275,7 @@ class Case:
 		model.belief = None
 		model.entered = []
 		self.stale = None
+		self.waiting = False
 		time.sleep(0.5)
 		win, outs, touched, primary = self.where()
 		self.track_entered(touched)

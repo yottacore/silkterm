@@ -101,6 +101,43 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 874af97
 	- Test case: Ep3UXRI gained erased-ink cases. New replay tests over ble.sh's bytes: Esib1t0 (prompt after output, half-empty and full screens), Esib1y3 (in-place redraw at each height), EsiiYQ2 (every split of the prompt and the redraw across two reads), Esiikpm (redraw right after a relayout), Esib22C (a repeated listing), Esib26L (a table redraw snaps while a prompt still eases), Esib2AU (the nano bounce). Scroll harness scene `prompt`. Each fails with the part it guards broken.
 
+- A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
+	- ID: 2026101411555009
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Needs local test suite run?: The full pipeline. monwl changed and now needs wtype. The random test is still off there until 2026101413420431.
+	- Needs external testing: A drag held over a monitor at another scale on a real Wayland desktop, once with the compositor's title bar (KDE, sway) and once with the window's own (GNOME). It keeps its size until dropped, then takes the new monitor's once the pointer is back over it.
+	- Severity: Avg
+	- Opened: 20261014-115550
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: Linux
+	- Test environment: b23, headless sway, native Wayland and X11 through Xwayland
+	- Steps to reproduce:
+		- Drag a window by its title bar over a monitor at another scale on Wayland, or over any other monitor under XWayland, and hold it there for a second before letting go.
+	- Incorrect behavior: It takes that monitor's size while still held. Dropped soon after on another monitor, it can keep that size there.
+	- Expected behavior: Nothing changes until it's dropped, then it takes the size for where it was dropped.
+	- Reproduced: 20261014, by the random test, on both, a few times in each run of cases.
+	- Possible cause: A Wayland window gets no sign that a drag is under way, and looks 0.75 s after its scale changes. Under XWayland the X server can't see a button held on the compositor's title bar, so the check for a held button says no. The look after the drop can then fall in the grace after the window's own resize, which ignores moves.
+	- Notes:
+		- The requirements say the size changes once moving has stopped. Waiting longer would slow a keyboard move to another monitor, which gives no sign either.
+		- The random test allows it by this ID until it's fixed.
+	- Actual cause: A window that can't see the mouse buttons looked for its monitor 0.75 s after its last move or scale change. Held still, a drag sends nothing more, so that look came before the drop. Under XWayland a press on the compositor's title bar can also tell the window the pointer entered, at a spot it left long before, so the pointer looked like it was back.
+	- Actual fix: On Wayland and under XWayland, the look after a move waits until the pointer is over the window, or a key, click or focus came after the last move. Under X11 the pointer counts as over once it moves inside the window, not when the window is told it entered. Elsewhere the held button still decides.
+	- Progress log:
+		- 20261014: Fixed. A move by a key binding still takes the size at once, since its keys come up after the move. Checked on sway with the binding both leaving focus behind and taking it along.
+		- 20261014: Choice made here, still open: a move nobody touches the window after, like one from a script, keeps the old size until the pointer, a key, a click or focus comes back. A timer can't tell it from a drag held still, which sends nothing either. The same goes for an output's scale changed under the window.
+		- 20261014: The random test's allowance for this item is gone. A take while a drag is held now fails a case.
+	- Test case: `a_drag_held_still_is_not_taken_for_a_drop` (EsjYipm), `a_stale_enter_is_not_the_pointer_back` (Esjcgsw), the "held over the 200% output" check in `cicd/tests/monwl/run.bash` (Esgxleh), and `cicd/tests/dpirand/run.py` (EshVccz).
+	- Verified:
+		- The random test on the build before the fix took a size while held on both Wayland (seed 2027) and XWayland (2001, 2006, 2047). With the fix those, seed 1000 and 7 more held-drag seeds pass, and so do 24 fresh seeds from 5000, on both.
+		- monwl's new check failed on the build before the fix and passes with it, with the moves now made by a key binding.
+		- The gate (1330 tests), and clippy with warnings as errors for Linux, Windows, macOS and FreeBSD.
+		- Not verified: a real Wayland desktop. The XWayland stale enter was seen on headless sway only.
+	- Swept: `button_held` has one caller. Every start of a look: the reveal, a move, a scale change, and the pointer back on Wayland. The scale change skipped the grace after the window's own resize that a move gets, filed and fixed as 2026101420262300.
+	- Branch: helddrag
+	- Commit: e2e44df
+
 - Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
 	- ID: 2026101410442550
 	- Type: Task
@@ -263,6 +300,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Not verified: a real wake on b23, and the Windows and macOS code paths, which were compiled only.
 	- Swept: every place a monitor key is compared or a monitor is picked: `settle`, `remembered_window`, `remember_window` and `monitor_under`. `write_monitor_sizes` compares an entry with its own earlier copy, so it stays exact.
 
+- Wayland: a window dropped astride two outputs swaps between their sizes again and again
+	- ID: 2026101420262300
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs external testing: On Windows and macOS, 2 monitors at different scales. A window dragged across still takes the size of the one it's dropped on, and one dropped astride both keeps one size.
+	- Severity: Avg
+	- Opened: 20261014-202623
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101411555009
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- On Wayland, drop a window mostly on one output wiht a third of it left on another at a different scale, where the first output's size would leave most of the window on the other.
+	- Incorrect behavior: It takes the first output's size, which puts most of it on the other output and changes its scale, so it takes that one's, and so on, about once a second.
+	- Expected behavior: It takes one size and keeps it, as on X11.
+	- Reproduced: 20261014, the random test's seed 2036, on the build before 2026101411555009's fix too.
+	- Actual cause: A move in the 1.5 s after the window's own resize doesn't start a look, so a window astride two monitors doesn't swap sizes. A scale change did start one, and on Wayland a scale change is the only sign of a move.
+	- Actual fix: A scale change goes through the same check as a move.
+	- Test case: `cicd/tests/dpirand/run.py --seed 2036` (EshVccz). It failed before the fix and passes after.
+	- Verified: seed 2036 both ways, and the runs listed on 2026101411555009. Windows and macOS were linted, not run.
+	- Branch: helddrag
+	- Commit: e2e44df
+
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
@@ -317,7 +378,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- A size or font size from the command line stays through moves until the user resizes or zooms.
 			- The per-monitor sizes are kept only while both switches are on. The last size anywhere is kept either way, as before.
 	- Note: A monitor is told apart by its resolution, its scale percent, and its physical size in mm where the system gives it. X11 reads the size from the X server, Windows from the EDID it keeps in the registry, and macOS from `CGDisplayScreenSize`. Wayland gives no size, so there it is resolution and scale.
-	- Note: Wayland gives a window no position and no move events. It opens at the last size anywhere, and looks for its monitor just after it opens, on a scale change, and when the pointer comes back after a drag. So there a window may resize a moment after it opens.
+	- Note: Wayland gives a window no position and no move events. It opens at the last size anywhere, and looks for its monitor just after it opens. After a scale change or a drag it looks once the pointer, a key, a click or focus shows the person is back (2026101411555009). So there a window may resize a moment after it opens.
 	- Test case: `a_size_set_by_hand_is_kept_for_its_monitor_and_found_again_there` (EreYcuQ), `monitor_sizes_round_trip_and_leave_another_windows_alone` (EreYcuR), `a_window_reads_back_the_sizes_another_window_kept` (EreYcuT), `a_move_takes_the_new_monitors_size_but_never_undoes_the_user` (EreYcuU), `an_older_file_gets_the_per_monitor_switch_beside_the_size_it_follows` (EreYcuS), the monitor naming and size tests in monitor.rs (EreYcuM to EreYcuP, EreYcuV), and new cases in `a_config_says_what_is_wrong_with_it` and `the_template_has_the_remembered_size_as_live_lines`. On Wayland, `cicd/tests/monwl/run.bash` (Esgxleh). On random layouts and steps, `cicd/tests/dpirand/run.py` (EshVccz).
 	- Verified:
 		- The unit tests on Linux, and clippy with warnings as errors for Linux, Windows and macOS.
@@ -397,26 +458,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
-
-- A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
-	- ID: 2026101411555009
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261014-115550
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: Linux
-	- Test environment: b23, headless sway, native Wayland and X11 through Xwayland
-	- Steps to reproduce:
-		- Drag a window by its title bar over a monitor at another scale on Wayland, or over any other monitor under XWayland, and hold it there for a second before letting go.
-	- Incorrect behavior: It takes that monitor's size while still held. Dropped soon after on another monitor, it can keep that size there.
-	- Expected behavior: Nothing changes until it's dropped, then it takes the size for where it was dropped.
-	- Reproduced: 20261014, by the random test, on both, a few times in each run of cases.
-	- Possible cause: A Wayland window gets no sign that a drag is under way, and looks 0.75 s after its scale changes. Under XWayland the X server can't see a button held on the compositor's title bar, so the check for a held button says no. The look after the drop can then fall in the grace after the window's own resize, which ignores moves.
-	- Notes:
-		- The requirements say the size changes once moving has stopped. Waiting longer would slow a keyboard move to another monitor, which gives no sign either.
-		- The random test allows it by this ID until it's fixed.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
@@ -503,6 +544,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Possible cause: sway answers a size the window set by itself with a configure for that same size, once it sees a frame drawn at it. A window that draws slowly gets the answer after it has already asked for the next size, and winit takes a configure's size as given. Seen in the Wayland protocol log.
 	- Notes:
 		- With a real GPU a frame is quick, so the answer should come long before the next look. Not seen outside the test rig.
+	- Progress log:
+		- 20261014: Its only known path, a size taken while a drag was held, is gone with the fix for 2026101411555009. Seed 1000 passes now. A font zoom and then a key move to another output right after, 0.3 s and 0.8 s apart on a 200% output, kept the size it took.
+		- 20261014: Handling the echo itself would need winit to say which configure a resize comes from, or a retry on a size the window already left, which hides it rather than fixes it. Left Queued until it shows up another way.
 
 - Going fullscreen and back keeps a size for the monitor, though nobody set one there
 	- ID: 2026101412392529

@@ -1721,6 +1721,7 @@ impl State {
 		// The window manager places the window as it maps, and may put it on
 		// another monitor than the one it was sized for. On Wayland this is
 		// the first the window hears of which monitor it is on at all.
+		self.watch.opening = true;
 		self.note_moved();
 		self.shell_scan_at = Some(Instant::now() + SHELL_SCAN_DELAY);
 		self.shell_scan_cap = Some(Instant::now() + SHELL_SCAN_MAX_WAIT);
@@ -3805,6 +3806,11 @@ impl ApplicationHandler<UserEvent> for App {
 				|| cli_win.pixel_height.is_some(),
 			font_pinned,
 			positionless: window.outer_position().is_err(),
+			pointer: window_size::Pointer::Away,
+			heard_at: None,
+			stirred_at: None,
+			put_off: false,
+			opening: false,
 		};
 		let (cols, rows) = crate::fields::grid(&settings, watch.key.as_deref());
 		let cols = cli_win.columns.unwrap_or(cols);
@@ -4216,6 +4222,7 @@ impl ApplicationHandler<UserEvent> for App {
 		) {
 			state.note_active("input or focus");
 		}
+		state.note_presence(&event);
 		match event {
 			WindowEvent::CloseRequested => event_loop.exit(),
 
@@ -4255,9 +4262,9 @@ impl ApplicationHandler<UserEvent> for App {
 				);
 				state.rescale(config::display_scale(scale_factor), &mut inner_size_writer);
 				state.dirty = true;
-				let now = Instant::now();
-				state.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
-				state.start_settle(now);
+				state.watch.ignore_resize_until = Instant::now() + OWN_RESIZE_GRACE;
+				// as a move: one the window's own resize caused doesn't count
+				state.note_moved();
 			}
 
 			WindowEvent::Moved(_) => state.note_moved(),

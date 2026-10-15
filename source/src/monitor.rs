@@ -570,9 +570,11 @@ fn physical_mm(_monitor: &winit::monitor::MonitorHandle) -> Option<(u32, u32)> {
 
 /// Is a mouse button down anywhere on the screen? A window being dragged by
 /// its title bar sees no button events of its own, and a pause in the drag
-/// looks the same as the drop.
+/// looks the same as the drop. None where nobody can say: Wayland shows a
+/// window no buttons but its own, and Xwayland can't see one held on the
+/// compositor's title bar.
 #[cfg(target_os = "linux")]
-pub fn button_held(window: &Window) -> bool {
+pub fn button_held(window: &Window) -> Option<bool> {
 	use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 	use x11rb::connection::Connection;
 	use x11rb::protocol::xproto::{ConnectionExt as _, KeyButMask};
@@ -584,41 +586,50 @@ pub fn button_held(window: &Window) -> bool {
 		)
 	});
 	if !x11 {
-		return false;
+		return None;
 	}
-	let Ok((conn, screen)) = x11rb::connect(None) else {
-		return false;
-	};
-	let root = conn.setup().roots[screen].root;
-	conn.query_pointer(root)
+	let (conn, screen) = x11rb::connect(None).ok()?;
+	let xwayland = conn
+		.query_extension(b"XWAYLAND")
 		.ok()
 		.and_then(|cookie| cookie.reply().ok())
-		.is_some_and(|reply| {
-			reply
-				.mask
-				.intersects(KeyButMask::BUTTON1 | KeyButMask::BUTTON2 | KeyButMask::BUTTON3)
-		})
+		.is_some_and(|reply| reply.present);
+	if xwayland {
+		return None;
+	}
+	let root = conn.setup().roots[screen].root;
+	let reply = conn.query_pointer(root).ok()?.reply().ok()?;
+	Some(
+		reply
+			.mask
+			.intersects(KeyButMask::BUTTON1 | KeyButMask::BUTTON2 | KeyButMask::BUTTON3),
+	)
 }
 
 #[cfg(windows)]
-pub fn button_held(_window: &Window) -> bool {
+#[allow(clippy::unnecessary_wraps)] // Linux answers None
+pub fn button_held(_window: &Window) -> Option<bool> {
 	use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 		GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON,
 	};
 	// SAFETY: a plain query; the high bit means down now.
-	[VK_LBUTTON, VK_RBUTTON]
-		.into_iter()
-		.any(|key| unsafe { GetAsyncKeyState(i32::from(key)) } < 0)
+	Some(
+		[VK_LBUTTON, VK_RBUTTON]
+			.into_iter()
+			.any(|key| unsafe { GetAsyncKeyState(i32::from(key)) } < 0),
+	)
 }
 
 #[cfg(target_os = "macos")]
-pub fn button_held(_window: &Window) -> bool {
-	objc2_app_kit::NSEvent::pressedMouseButtons() != 0
+#[allow(clippy::unnecessary_wraps)] // Linux answers None
+pub fn button_held(_window: &Window) -> Option<bool> {
+	Some(objc2_app_kit::NSEvent::pressedMouseButtons() != 0)
 }
 
 #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
-pub fn button_held(_window: &Window) -> bool {
-	false
+#[allow(clippy::unnecessary_wraps)] // Linux answers None
+pub fn button_held(_window: &Window) -> Option<bool> {
+	Some(false)
 }
 
 /// Is the window fullscreen? winit on X11 knows only of a fullscreen the
