@@ -132,6 +132,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: docs, tables, toc, showdown and rigs tests pass, the cli unit tests pass, clippy is clean, and the test-ID check passes. Both writers run on a copy of comparison.md leave it byte-identical.
 	- Swept: termbench.py, showdown-readme.py, update-showdown.py and both rigs' headers now name comparison.md, and so do mdtable.py, showdown-readme.md, the tables test, a cicd.bash comment, design.md and the speed design doc. Unchanged on purpose: release.bash, the pre-push hook and the hooks test read the badge, which stays in the README. wallpaper-gallery.bash reads "102 wallpapers" from the README, still there. The release notes keep "See the README". demo-video.py and script.txt name the README gif only. The gallery page links install.md. ancillary-notes.fods records and the speed doc's quoted backlog title stay as written for their dates. Nothing links the README's showdown anchor, which stays.
 
+- Settings dialog: search
+	- ID: 2026101419165501
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Needs external testing: A look on Windows, and the wingui `settingsdlg` scenario there. Command+F on macOS is compiled only.
+	- Priority: Avg
+	- Opened: 20261014-191655
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Search bar in an unscrollable top area.
+		- Shows literal label matches first, aliases second, fuzzy matches third.
+		- Matches listed like "<tab title> ⏵[ sub tab title ⏵[ etc. ⏵]] setting", with matched portion in bold, larger, and different theme-aware color.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261015: Built. Best guesses below, since the round's questions went unanswered. All of them are easy to change.
+	- Decisions:
+		- 20261015, best guess: With text in the box, a list of matches takes the page's place under it. A click, or Enter on the picked one, goes to that row on its tab, scrolls it into view, marks it for about a second and a half, and empties the box. Up and Down move through the list. No match says so in one line.
+		- 20261015, best guess: Escape empties the box first, and closes Settings only when it's already empty. Enter with nothing matched does nothing, and with the box empty it's OK as before.
+		- 20261015, best guess: Aliases are declared per row in `settings_ui.shcl` as `aliases:`. There's a starting set of 148 on 74 rows. An alias already in its row's label is refused by a test.
+		- 20261015, best guess: The matched part is bold, 15% larger and in the Highlight color, since it marks several things at once. Focus stays for the one control the keyboard is on. The picked line gets the current tab's gray, so the Highlight text on it stays readable.
+		- 20261015, best guess: Ctrl+F, Command+F on macOS, goes to the box. Nothing in the dialog used it.
+		- 20261015, best guess: The box sits over the rows' column, between the tab list and the rows, rather than across the whole top. The tab list keeps its place.
+		- 20261015, best guess: Tabs and headings are matches too. A heading that only repeats its tab's title is listed as the tab, and lends it its aliases.
+		- 20261015, best guess: The path adds the heading where it isn't the tab's title, since a path of tabs alone gives "Window ⏵ Enabled". Two rows that would still read the same add the row they sit under: "Movement ⏵ Scrollbar ⏵ Width px".
+		- 20261015, best guess: An alias match shows the alias in parentheses after the label, with the alias marked, since the label has nothing to mark.
+		- 20261015, best guess: Fuzzy means the letters in order from the start of a word, such as "lnhght", or a word one typo off, two for 8 letters or more. It takes 3 letters at least.
+		- 20261015, best guess: With nothing typed the box is outside the Tab walk, as the tabs are, so Tab from nothing still lands on a tab's first control. While the list is up, Tab walks the box and the footer buttons.
+	- Test case: In `settings_ui/search.rs`: ranking `label_matches_come_before_alias_ones_and_loose_ones_last` (EsoZk3m), `a_whole_label_beats_a_word_start_beats_the_middle_of_one` (EsoZk9K), `a_short_query_matches_only_as_typed` (EsoZkED); the path `a_result_reads_tab_then_heading_then_setting` (EsoZkJ4), `no_two_results_read_the_same` (EsoZkOJ); aliases `every_alias_finds_the_row_it_is_on` (EsoZkTE); the box `enter_goes_to_the_pick_and_escape_empties_the_box_first` (EsoZkY3), `the_list_covers_the_rows_behind_it` (EsoZkdO), `the_search_box_is_no_rows_field` (EsoZneH), `tab_from_the_empty_box_goes_on_to_the_first_control` (Esob8XZ), `the_search_box_sits_over_the_rows_and_clear_of_them` (EsoZkiQ). In `dialog.rs`: `marked_text_is_larger_and_colored_on_the_same_line_box` (EsodoYf).
+	- Verified:
+		- The unit suite, 1353 tests, with clippy and rustfmt clean, and the docs, TOC and table checks.
+		- The ranking and path tests each failed with the sort or the heading taken out, and the marked text test with the size step taken out. The alias test caught 3 aliases that were already in their labels.
+		- A real window on Linux, dark at 1x and light at 2x: the list, the marks, a pick going to the Keys tab, the mark fading, the empty-list line, and Escape.
+		- Not verified: Windows, macOS.
+	- Branch: setsearch
+	- Commit: ab84e3a, 940f3f4
+
 - A size saved while the font size was given on the command line is used at the normal font next time
 	- ID: 2026101412292756
 	- Type: Bug
@@ -507,45 +546,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
-
-- Settings dialog: search
-	- ID: 2026101419165501
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing: A look on Windows, and the wingui `settingsdlg` scenario there. Command+F on macOS is compiled only.
-	- Priority: Avg
-	- Opened: 20261014-191655
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Search bar in an unscrollable top area.
-		- Shows literal label matches first, aliases second, fuzzy matches third.
-		- Matches listed like "<tab title> ⏵[ sub tab title ⏵[ etc. ⏵]] setting", with matched portion in bold, larger, and different theme-aware color.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261015: Built. Best guesses below, since the round's questions went unanswered. All of them are easy to change.
-	- Decisions:
-		- 20261015, best guess: With text in the box, a list of matches takes the page's place under it. A click, or Enter on the picked one, goes to that row on its tab, scrolls it into view, marks it for about a second and a half, and empties the box. Up and Down move through the list. No match says so in one line.
-		- 20261015, best guess: Escape empties the box first, and closes Settings only when it's already empty. Enter with nothing matched does nothing, and with the box empty it's OK as before.
-		- 20261015, best guess: Aliases are declared per row in `settings_ui.shcl` as `aliases:`. There's a starting set of 148 on 74 rows. An alias already in its row's label is refused by a test.
-		- 20261015, best guess: The matched part is bold, 15% larger and in the Highlight color, since it marks several things at once. Focus stays for the one control the keyboard is on. The picked line gets the current tab's gray, so the Highlight text on it stays readable.
-		- 20261015, best guess: Ctrl+F, Command+F on macOS, goes to the box. Nothing in the dialog used it.
-		- 20261015, best guess: The box sits over the rows' column, between the tab list and the rows, rather than across the whole top. The tab list keeps its place.
-		- 20261015, best guess: Tabs and headings are matches too. A heading that only repeats its tab's title is listed as the tab, and lends it its aliases.
-		- 20261015, best guess: The path adds the heading where it isn't the tab's title, since a path of tabs alone gives "Window ⏵ Enabled". Two rows that would still read the same add the row they sit under: "Movement ⏵ Scrollbar ⏵ Width px".
-		- 20261015, best guess: An alias match shows the alias in parentheses after the label, with the alias marked, since the label has nothing to mark.
-		- 20261015, best guess: Fuzzy means the letters in order from the start of a word, such as "lnhght", or a word one typo off, two for 8 letters or more. It takes 3 letters at least.
-		- 20261015, best guess: With nothing typed the box is outside the Tab walk, as the tabs are, so Tab from nothing still lands on a tab's first control. While the list is up, Tab walks the box and the footer buttons.
-	- Test case: In `settings_ui/search.rs`: ranking `label_matches_come_before_alias_ones_and_loose_ones_last` (EsoZk3m), `a_whole_label_beats_a_word_start_beats_the_middle_of_one` (EsoZk9K), `a_short_query_matches_only_as_typed` (EsoZkED); the path `a_result_reads_tab_then_heading_then_setting` (EsoZkJ4), `no_two_results_read_the_same` (EsoZkOJ); aliases `every_alias_finds_the_row_it_is_on` (EsoZkTE); the box `enter_goes_to_the_pick_and_escape_empties_the_box_first` (EsoZkY3), `the_list_covers_the_rows_behind_it` (EsoZkdO), `the_search_box_is_no_rows_field` (EsoZneH), `tab_from_the_empty_box_goes_on_to_the_first_control` (Esob8XZ), `the_search_box_sits_over_the_rows_and_clear_of_them` (EsoZkiQ). In `dialog.rs`: `marked_text_is_larger_and_colored_on_the_same_line_box` (EsodoYf).
-	- Verified:
-		- The unit suite, 1353 tests, with clippy and rustfmt clean, and the docs, TOC and table checks.
-		- The ranking and path tests each failed with the sort or the heading taken out, and the marked text test with the size step taken out. The alias test caught 3 aliases that were already in their labels.
-		- A real window on Linux, dark at 1x and light at 2x: the list, the marks, a pick going to the Keys tab, the mark fading, the empty-list line, and Escape.
-		- Not verified: Windows, macOS.
-	- Branch: setsearch
-	- Commit: ab84e3a, 940f3f4
 
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
