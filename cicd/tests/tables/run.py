@@ -4,7 +4,7 @@
 ##		Check every markdown table is written the way the docs write them: a leading
 ##		pipe and no trailing one, cells padded so the columns line up, and a rule row
 ##		that spells out each column's alignment. mdtable.py does the rendering, so the
-##		README's generated table and the hand-written ones cannot drift apart.
+##		generated showdown table and the hand-written ones cannot drift apart.
 ##	Syntax:
 ##		run.py [--fix] [--root DIR] [FILE ...]
 ##		  --fix       rewrite a table that differs instead of reporting it

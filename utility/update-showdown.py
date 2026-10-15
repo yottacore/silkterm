@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 ##	Purpose:
-##		Refresh the README "Terminal showdown" table. One entry point over everything
+##		Refresh the "Terminal showdown" table in comparison.md. One entry point over everything
 ##		that feeds it, because the parts are easy to run inconsistently: they measure
 ##		different things, at different grid sizes, on different displays.
 ##
@@ -57,9 +57,9 @@ from typing import NoReturn
 HERE = Path(__file__).absolute().parent
 INCLUDE = HERE / "include"
 REPO = HERE.parent
-README = REPO / "README.md"
+TABLE_DOC = REPO / "comparison.md"
 
-#	key: README row name, then which rigs can drive it here. A terminal the size rig has
+#	key: table row name, then which rigs can drive it here. A terminal the size rig has
 #	no recipe for still gets its speed row; the size columns are left as they were.
 TERMS = [
 	("silkterm",   "SilkTerm +candy", "both"),
@@ -225,7 +225,7 @@ def read_result(lines: list[str]) -> dict[str, float] | None:
 
 def write_size_row(row: str, file_deps: float, mem: float) -> bool:
 	wrote = run_plain([sys.executable, str(INCLUDE / "showdown-readme.py"),
-	                   "--readme", str(README), "--terminal", row,
+	                   "--doc", str(TABLE_DOC), "--terminal", row,
 	                   "--file-deps", f"{file_deps:.1f}", "--mem", f"{mem:.1f}"])
 	if not wrote:
 		echo(f"WARNING: could not write the {row} row")
@@ -250,7 +250,7 @@ def size_here(label: str, publish: bool, any_size: bool) -> bool:
 	if not publish:
 		return True
 	if not label:
-		echo("NOTE: pass --label with the table's row name to write these into the README")
+		echo("NOTE: pass --label with the table's row name to write these into comparison.md")
 		return True
 	return write_size_row(label, got["filedeps"], got["mem"])
 
@@ -298,7 +298,7 @@ def header_text() -> str:
 
 
 def show_list() -> None:
-	echo_clean("  key          README row                rigs")
+	echo_clean("  key          table row                 rigs")
 	for key, row, rigs in TERMS:
 		echo_clean(f"  {key:<12} {row:<25} {rigs}")
 
@@ -366,9 +366,9 @@ def main(argv: list[str]) -> int:
 			ok = size_here(args.label, publish, args.any_size) and ok
 		echo_clean()
 		if publish and ok:
-			echo("README updated - check the diff before committing")
+			echo(f"{TABLE_DOC.name} updated - check the diff before committing")
 		elif write_readme and not publish:
-			echo(f"README not touched - a {'quick' if args.quick else '--any-size'} run is not comparable with the table")
+			echo(f"{TABLE_DOC.name} not touched - a {'quick' if args.quick else '--any-size'} run is not comparable with the table")
 		else:
 			echo("nothing written")
 		echo_clean()
@@ -402,7 +402,7 @@ def main(argv: list[str]) -> int:
 			echo_clean(f"  {row:<25} {file_deps:10.1f} {mem:10.1f}")
 
 	echo_clean()
-	echo("README updated - check the diff before committing" if write_readme
+	echo(f"{TABLE_DOC.name} updated - check the diff before committing" if write_readme
 	     else "nothing written (--no-readme)")
 	echo_clean()
 	return 0
@@ -418,3 +418,4 @@ if __name__ == "__main__":
 ##		20260928 Both rigs for GNOME Terminal, WezTerm and Tabby; size for Hyper.
 ##		20260929 Both rigs for XTerm; its speed runs on a private X server.
 ##		20261005 Type hints, pathlib, f-strings.
+##		20261015 The table moved from README.md to comparison.md.

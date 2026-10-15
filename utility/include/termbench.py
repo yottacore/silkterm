@@ -58,8 +58,8 @@
 ##		Results append to a data file under the user's data directory and build a
 ##		history table: every terminal that has ever been benchmarked here, by name
 ##		and version, newest five builds each. Where the tool sits in a SilkTerm
-##		checkout it also refreshes the speed columns of the shootout table in the
-##		README, latest build per terminal only, leaving the size and memory
+##		checkout it also refreshes the speed columns of the shootout table in
+##		comparison.md, latest build per terminal only, leaving the size and memory
 ##		columns beside them untouched.
 ##
 ##		Deliberately not tested: combining marks, ZWJ emoji sequences, variation
@@ -107,6 +107,8 @@ APP = "silkterm-bench"
 PAYLOAD_VERSION = 1
 DATA_FILE = "results.jsonl"
 
+# The table lives in comparison.md now; the names stayed.
+TABLE_DOC = "comparison.md"
 README_BEGIN = "<!-- termbench:begin -->"
 README_END = "<!-- termbench:end -->"
 # The table's rows were all taken this way, and a figure taken any other way
@@ -883,7 +885,7 @@ def aggregate(records: list[dict[str, Any]], mode: str, line_cells: int) -> tupl
 
 
 def unpublishable(mode: str | None, scale: float, grid: str, line_cells: int | None) -> str:
-	"""Why a run at these settings may not reach the README, or "" if it may."""
+	"""Why a run at these settings may not reach the table, or "" if it may."""
 	if mode != "full":
 		return f"a {mode} run"
 	if scale != 1.0:
@@ -964,18 +966,18 @@ def report(term: str, build: str, grid: str, mode: str, scale: float, per: dict[
 
 
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-#	README
+#	The published table
 #•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
 
 def readme_path() -> str:
-	"""The checkout's README, if this is running from inside one.
+	"""The checkout's comparison.md, if this is running from inside one.
 
 	Walks up rather than assuming a depth: the tool has lived at utility/ and now at
 	utility/include/, and a fixed one-level guess silently stops refreshing the table
 	the moment it moves - no error, just a column that quietly goes stale.
 	"""
 	for here in list(Path(__file__).absolute().parent.parents)[:4]:
-		guess = here / "README.md"
+		guess = here / TABLE_DOC
 		if guess.is_file():
 			return str(guess)
 	return ""
@@ -1040,7 +1042,7 @@ def _score_of(cells: list[str], at: int) -> float | None:
 
 def readme_table(existing: str, rows: list[dict[str, Any]]) -> str:
 	"""
-	Refresh the speed columns of the table already in the README, leaving every
+	Refresh the speed columns of the table already in comparison.md, leaving every
 	other column - platform, sizes, memory - exactly as written there. Newest
 	build per terminal only; the history stays in the tool.
 
@@ -1145,7 +1147,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 	ap.add_argument("--out", default="",
 	                help="also write the report to this file (stdout is the tty)")
 	ap.add_argument("--no-save", action="store_true", help="do not record the result")
-	ap.add_argument("--no-readme", action="store_true", help="do not touch README.md")
+	ap.add_argument("--no-readme", action="store_true", help="do not touch comparison.md")
 	ap.add_argument("--json", action="store_true", help="emit this run as JSON too")
 	return ap.parse_args(argv)
 
@@ -1164,7 +1166,7 @@ def main(argv: list[str]) -> int:
 		readme = readme_path()
 		table_rows = readme_rows(load())
 		if not args.no_readme and readme and table_rows and update_readme(readme, table_rows):
-			print("\nREADME.md results table updated")
+			print(f"\n{TABLE_DOC} results table updated")
 		return 0
 
 	if not sys.stdout.isatty() or not sys.stdin.isatty():
@@ -1245,9 +1247,9 @@ def main(argv: list[str]) -> int:
 		why = unpublishable(mode, scale, grid, args.line_cells)
 		readme = readme_path()
 		if why:
-			out.append(f"\nREADME.md not touched: {why}")
+			out.append(f"\n{TABLE_DOC} not touched: {why}")
 		elif readme and rows and update_readme(readme, readme_rows(load())):
-			out.append("\nREADME.md results table updated")
+			out.append(f"\n{TABLE_DOC} results table updated")
 
 	if not synced_all:
 		out.append("\nWARNING: this terminal never answered the device-attributes "
@@ -1283,3 +1285,4 @@ if __name__ == "__main__":
 ##		20260928 WezTerm's and GNOME Terminal's versions come from their launchers.
 ##		20261005 Type hints, pathlib, f-strings.
 ##		20261005 Each except names what it expects.
+##		20261015 The table moved from README.md to comparison.md.

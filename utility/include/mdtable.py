@@ -9,7 +9,7 @@
 
 A leading pipe and no trailing one, cells padded so the columns line up, and every
 column's alignment spelled out, so a plain dash row comes back as left. Shared by the
-two tools that write the README's showdown table, so they cannot drift apart.
+two tools that write the showdown table in comparison.md, so they cannot drift apart.
 """
 
 from collections.abc import Iterable, Sequence

@@ -4,7 +4,7 @@
 
 # Terminal showdown rigs
 
-Everything behind the README's "Terminal showdown" table. One entry point, `utility/update-showdown.py`, over two rigs that measure different things:
+Everything behind the "Terminal showdown" table in [comparison.md](../../comparison.md). One entry point, `utility/update-showdown.py`, over two rigs that measure different things:
 
 ~~~sh
 utility/update-showdown.py                               # measure this terminal, any OS
@@ -25,7 +25,7 @@ Naming no terminal takes the third path, which needs no rig at all: measure what
 
 **The two grids differ deliberately and must not be unified.** Speed wants a realistic working grid. Memory scales with the surface - the same SilkTerm binary reads 38 MiB heavier at its default geometry than at 100x30 - so the size rows are taken small and identical.
 
-Neither rig is wired into cicd. They take minutes, need a GPU, and republishing numbers on every build would churn the README. Run them by hand when a row needs adding or refreshing.
+Neither rig is wired into cicd. They take minutes, need a GPU, and republishing numbers on every build would churn the table. Run them by hand when a row needs adding or refreshing.
 
 The two writers own disjoint columns and key on the terminal name, so they never fight: `termbench.py` refreshes the speed cells, `showdown-readme.py` the size cells, and everything else in the table stays exactly as written by hand.
 
@@ -168,7 +168,7 @@ ln -s ~/.local/opt/tabby/tabby ~/.local/bin/tabby
 
 WezTerm links as `usr/bin/wezterm` and Hyper as `hyper`. The size rig finds the extracted folder again through the link, since it bills the whole of it.
 
-## Why the README has no Windows speed rows
+## Why the table has no Windows speed rows
 
 Footnote 9 in [comparison.md](../../comparison.md) is the short form of this.
 

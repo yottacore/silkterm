@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 ##	- Purpose:
-##		The README's showdown table only holds figures measured the same way as the
+##		The showdown table in comparison.md only holds figures measured the same way as the
 ##		rows beside them. A quick run, a scaled run and a run at another grid each
 ##		used to rewrite their row anyway. This drives both table writers with the
-##		terminal and the measuring faked out, against a scratch README. It also
+##		terminal and the measuring faked out, against a scratch copy. It also
 ##		checks the rigs find the build where CARGO_TARGET_DIR puts it, and that
 ##		the payloads repeat and the score counts weighted cells.
 ##	- Test ID: EqBnA5g
@@ -53,8 +53,8 @@ def load(name: str, path: Path) -> Any:
 	return mod
 
 scratch = Path(tempfile.mkdtemp(prefix="silk-showdown-"))
-readme = scratch / "README.md"
-shutil.copyfile(REPO / "README.md", readme)
+readme = scratch / "comparison.md"
+shutil.copyfile(REPO / "comparison.md", readme)
 original = readme.read_text(encoding="utf-8")
 
 ## The measuring core, untouched: two terminals are only comparable on the same
@@ -106,6 +106,12 @@ def fake_save(records: list[dict[str, Any]]) -> str:
 	return "memory"
 tb.save = fake_save
 tb.load = lambda: list(saved)
+## The table moved out of the README. A writer still aimed there finds no markers
+## and quietly writes nothing, so check where each one points.
+check("termbench writes the table in comparison.md",
+	Path(tb.readme_path()) == REPO / "comparison.md", tb.readme_path())
+check("and the README holds no second copy of it",
+	tb.README_BEGIN not in (REPO / "README.md").read_text(encoding="utf-8"))
 tb.readme_path = lambda: str(readme)
 
 def bench(*args: str) -> str:
@@ -200,6 +206,11 @@ check("an --any-size size run writes no size figure",
 us.terminal_grid = lambda: us.SIZE_GRID
 check("a size run at the size grid still writes its figure",
 	wrote_size(showdown("--size-only", "--label", "XTerm")))
+size_cmd = next((c for c in calls if c[1].endswith("showdown-readme.py")), [])
+check("and writes it into comparison.md",
+	"--doc" in size_cmd and Path(size_cmd[size_cmd.index("--doc") + 1]) == REPO / "comparison.md", str(size_cmd))
+check("the size writer on its own defaults to comparison.md",
+	'default="comparison.md"' in (UTILITY / "include/showdown-readme.py").read_text(encoding="utf-8"))
 
 ## The rigs and the wine launcher find the build under CARGO_TARGET_DIR. Nothing
 ## here may start a display: sway, Xvfb and xdpyinfo are stubs that fail.
@@ -393,3 +404,4 @@ print("all passed")
 ##		- 20260930 JC: The size rig keeps its folder under the temp dir it was given. The fake
 ##		  compositor binds its sockets by name.
 ##		- 20261014 JC: Note 9 is read from comparison.md.
+##		- 20261015 JC: The table itself is in comparison.md, and each writer has to point there.

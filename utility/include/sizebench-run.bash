@@ -5,7 +5,7 @@
 #  shellcheck disable=1091  ## 'Not following.' bench-common.bash is beside this script.
 
 ##	- Purpose:
-##		Measure one terminal's install size and resident memory for the README shootout
+##		Measure one terminal's install size and resident memory for the shootout
 ##		table. Sizes it to the same grid as every other row on a private display, lets it
 ##		settle, then hands the whole process tree to sizebench-classify.py.
 ##

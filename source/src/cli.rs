@@ -1060,6 +1060,80 @@ mod tests {
 		}
 	}
 
+	/// usage.md's "Command line" section, up to the next section.
+	fn usage_md_section() -> String {
+		let doc = include_str!("../../usage.md").replace("\r\n", "\n");
+		let from = doc
+			.find("\n## Command line\n")
+			.expect("usage.md has no Command line section");
+		let rest = &doc[from + 1..];
+		let to = rest[1..].find("\n## ").map_or(rest.len(), |i| i + 1);
+		rest[..to].to_string()
+	}
+
+	/// Every flag `--help` lists, aliases included.
+	fn usage_flags() -> Vec<String> {
+		let is_flag_char = |c: char| c.is_ascii_alphanumeric() || c == '-';
+		let mut flags = Vec::new();
+		for line in usage().lines().filter(|l| l.starts_with("  -")) {
+			let line = line.trim_start();
+			let (opts, said) = line.split_once("  ").unwrap_or((line, ""));
+			let aliases = said
+				.split("alias ")
+				.skip(1)
+				.filter_map(|s| s.split(|c: char| !is_flag_char(c)).next());
+			for word in opts.split(|c: char| !is_flag_char(c)).chain(aliases) {
+				if word.len() > 1 && word.starts_with('-') && !flags.iter().any(|f| f == word) {
+					flags.push(word.to_string());
+				}
+			}
+		}
+		flags
+	}
+
+	// usage.md is where a person reads about the options, so one added to
+	// --help has to be written up there too.
+	// Test ID: EsnhIUe
+	#[test]
+	fn usage_md_names_every_option_in_help() {
+		let section = usage_md_section();
+		let flags = usage_flags();
+		assert!(flags.len() > 40, "only found {flags:?} in usage()");
+		let edge = |c: Option<char>| c.is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '-'));
+		let missing: Vec<&String> = flags
+			.iter()
+			.filter(|flag| {
+				!section.match_indices(flag.as_str()).any(|(at, _)| {
+					edge(section[..at].chars().next_back())
+						&& edge(section[at + flag.len()..].chars().next())
+				})
+			})
+			.collect();
+		assert!(
+			missing.is_empty(),
+			"usage.md's Command line section never names {missing:?}"
+		);
+	}
+
+	// Test ID: EsnhIy1
+	#[test]
+	fn usage_md_examples_parse() {
+		let section = usage_md_section();
+		let examples: Vec<&str> = section
+			.lines()
+			.filter_map(|l| l.trim_start().strip_prefix("silkterm "))
+			.collect();
+		assert!(!examples.is_empty(), "no examples found in usage.md");
+		for line in examples {
+			let got = parse(line.split_whitespace().map(String::from));
+			assert!(
+				got.is_ok(),
+				"usage.md example `silkterm {line}`: {:#}",
+				got.unwrap_err()
+			);
+		}
+	}
+
 	// Test ID: Ei9SyM5
 	#[test]
 	fn window_opt_after_tab_errors() {

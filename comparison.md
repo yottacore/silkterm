@@ -1,9 +1,40 @@
 <!-- markdownlint-disable MD033 -- No inline html -->
+<!-- markdownlint-disable MD055 -- Table pipe style [Expected: leading_and_trailing; Actual: leading_only; Missing trailing pipe] -->
 <!-- markdownlint-disable MD041 -- First line in a file should be a top-level heading -->
 
 # Compared to other terminals
 
-How the [Terminal showdown](README.md#terminal-showdown---speed-and-size) table in the README is measured, and its notes.
+Smooth scrolling isn't useful if the terminal falls behind the moment something dumps a lot of text, so throughput is measured and reported here.
+
+Sorted by speed. Terminals not yet measured for speed follow, ordered by what it takes to install them.
+
+<!-- termbench:begin -->
+
+| OS<sup>9</sup> | Terminal                                             | Ver         | 1-byte<sup>1</sup> | 4-byte<sup>1</sup> | Speed score<sup>2</sup> | File size<sup>3</sup> (MiB) | File+ deps<sup>4</sup> (MiB) | Mem<sup>4</sup> (MiB)
+| :------------- | :--------------------------------------------------- | :---------- | -----------------: | -----------------: | ----------------------: | --------------------------: | ---------------------------: | --------------------:
+| \[multi\]      | $\textcolor{limegreen}{SilkTerm}$ plain<sup>6</sup>  | 1.0.0-beta2 |               86.9 |              129.3 |                **71.1** |                        10.5 |                         14.1 |                 100.1
+| \[multi\]      | Alacritty<sup>8</sup>                                | 0.15.1      |               79.8 |              129.1 |                **68.4** |                         8.5 |                         12.7 |                  50.4
+| \[multi\]      | $\textcolor{limegreen}{SilkTerm}$ +candy<sup>5</sup> | 1.0.0-beta2 |               77.4 |              135.1 |                **67.6** |                        10.5 |                         14.1 |                 167.7
+| Linux          | GNOME Terminal                                       | 3.58.1      |              100.2 |               62.6 |                **55.3** |                         0.4 |                         84.0 |                  53.6
+| Linux          | XFCE4 Terminal                                       | 1.2.0       |               94.2 |               65.0 |                **54.0** |                         0.3 |                         84.1 |                  48.6
+| Linux          | Terminator                                           | 3.13.5      |               87.8 |               67.3 |                **51.8** |                      script |                         92.6 |                  82.2
+| Linux          | XTerm                                                | 407         |               28.3 |               48.5 |                **23.9** |                         0.9 |                          6.0 |                   9.4
+| \[multi\]      | kitty                                                | 0.48.1      |               24.2 |               59.6 |                **22.6** |                         0.2 |                        115.0 |                 140.8
+| \[multi\]      | WezTerm                                              | 20240203    |               15.6 |               22.2 |                **10.4** |                        70.5 |                        129.9 |                  84.8
+| \[multi\]      | Tabby                                                | 1.0.235     |                8.5 |                9.0 |                 **5.7** |                       192.1 |                        454.2 |                 473.4
+| Win            | conhost.exe                                          | -           |                  - |                  - |                       - |                         1.0 |                          1.0 |                  21.1
+| Win            | PuTTY                                                | -           |                  - |                  - |                       - |             1.6<sup>7</sup> |                            - |                     -
+| Linux          | Guake                                                | -           |                  - |                  - |                       - |             1.7<sup>7</sup> |                            - |                     -
+| Linux          | Konsole                                              | -           |                  - |                  - |                       - |             7.3<sup>7</sup> |                            - |                     -
+| \[multi\]      | Windows Terminal                                     | -           |                  - |                  - |                       - |            11.1<sup>7</sup> |                         14.2 |                  93.0
+| \[multi\]      | Ghostty                                              | -           |                  - |                  - |                       - |            32.0<sup>7</sup> |                            - |                     -
+| macOS          | iTerm2                                               | -           |                  - |                  - |                       - |            43.0<sup>7</sup> |                            - |                     -
+| Win            | MobaXterm                                            | -           |                  - |                  - |                       - |            43.4<sup>7</sup> |                            - |                     -
+| \[multi\]      | Hyper                                                | -           |                  - |                  - |                       - |                       147.8 |                        300.9 |                 309.4
+| macOS          | Terminal.app                                         | -           |                  - |                  - |                       - |                           - |                            - |                     -
+| macOS          | Warp                                                 | -           |                  - |                  - |                       - |                           - |                            - |                     -
+
+<!-- termbench:end -->
 
 In testing, each terminal is fed byte-identical, deterministic streams of one UTF-8 width class at a time - plain ASCII, then 2-byte, 3-byte and 4-byte characters, then a mix - and timed to a device-attributes reply, so the clock stops when the terminal has consumed the stream rather than when the pipe accepted it. Speed is measured at a 160x42 grid.
 
@@ -27,4 +58,4 @@ A terminal is also the program that is always open, usually several times over, 
 
 <sub><sup>9</sup> Every speed figure comes from one machine, because the measuring rig is not neutral: a headless Wayland compositor driving a discrete GPU (Linux, Ryzen host, GeForce RTX 3060 Ti). XTerm draws only on X11, so its row comes from a private X server. Through the compositor's Xwayland it reads about a third slower, 18 MB/s of plain ASCII against 28. <b>There are no Windows rows, and there will not be.</b> On Windows a terminal never receives its output directly. The console host relays it over a pipe, and that pipe sets the pace, so a Windows figure measures the transport rather than the terminal. The size and memory columns are unaffected, which is why Windows rows appear there. They come from a private X server drawing in software, at a 100x30 grid, with the conhost.exe and Windows Terminal rows taken on a Windows machine. Drawn in software, a GPU terminal's window buffers sit in its own memory, so they count toward Mem. The measurements behind all of this are in [showdown-readme.md](utility/include/showdown-readme.md).</sub>
 
-Run it yourself with [`utility/update-showdown.py`](utility/update-showdown.py) (`--quick` for a thirty-second version). It needs only Python 3 and a terminal, works on any emulator on any OS, and refreshes the speed columns in the README as more terminals are measured.
+Run it yourself with [`utility/update-showdown.py`](utility/update-showdown.py) (`--quick` for a thirty-second version). It needs only Python 3 and a terminal, works on any emulator on any OS, and refreshes the speed columns in the table above as more terminals are measured.

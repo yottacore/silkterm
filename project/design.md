@@ -321,7 +321,7 @@ A setting the program can work out for itself is stored as a value set by hand o
 
 ### Speed
 
-Output reaches the window as one notice at a time, drawing never blocks reading, and a frame whose text did not change does no text work. Throughput is measured by a benchmark anyone can run, and published in the README. Full design: [Speed](design_docs/20260930-150643_speed.md).
+Output reaches the window as one notice at a time, drawing never blocks reading, and a frame whose text did not change does no text work. Throughput is measured by a benchmark anyone can run, and published in [comparison.md](../comparison.md). Full design: [Speed](design_docs/20260930-150643_speed.md).
 
 ### The About box says how long the session has been up (2026-09-20)
 

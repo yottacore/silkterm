@@ -5,7 +5,7 @@
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
-"""Write one terminal's size and memory cells into the README shootout table.
+"""Write one terminal's size and memory cells into the shootout table in comparison.md.
 
 The speed columns are owned by utility/termbench.py, which refreshes only its own and
 leaves everything else exactly as written. This owns the other two, keyed the same way -
@@ -33,10 +33,10 @@ def norm(cell: str) -> str:
 	return re.sub(r"[^a-z0-9]", "", cell.lower())
 
 
-def update(readme: Path, terminal: str, file_deps: float, mem: float) -> tuple[str | None, str | None]:
+def update(doc: Path, terminal: str, file_deps: float, mem: float) -> tuple[str | None, str | None]:
 	#	Spelled out, because the default is the locale codec: on Windows that is cp1252,
 	#	which cannot read the table's own characters and fails the run before it starts.
-	text = readme.read_text(encoding="utf-8")
+	text = doc.read_text(encoding="utf-8")
 	if BEGIN not in text or END not in text:
 		return None, "table markers not found"
 
@@ -85,22 +85,23 @@ def update(readme: Path, terminal: str, file_deps: float, mem: float) -> tuple[s
 
 def main() -> int:
 	ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
-	ap.add_argument("--readme", default="README.md", type=Path)
+	#	--readme is the old name, from when the table was in README.md.
+	ap.add_argument("--doc", "--readme", dest="doc", default="comparison.md", type=Path)
 	ap.add_argument("--terminal", required=True, help="row name, as it appears in the table")
 	ap.add_argument("--file-deps", required=True, type=float)
 	ap.add_argument("--mem", required=True, type=float)
 	ap.add_argument("--dry-run", action="store_true")
 	args = ap.parse_args()
 
-	out, err = update(args.readme, args.terminal, args.file_deps, args.mem)
+	out, err = update(args.doc, args.terminal, args.file_deps, args.mem)
 	if out is None:
 		print(f"showdown-readme: {err}", file=sys.stderr)
 		return 1
 	if args.dry_run:
 		print(f"would set {args.terminal}: File+deps {args.file_deps:.1f}, Mem {args.mem:.1f}")
 		return 0
-	args.readme.write_text(out, encoding="utf-8")
-	print(f"README: {args.terminal} -> File+deps {args.file_deps:.1f}, Mem {args.mem:.1f}")
+	args.doc.write_text(out, encoding="utf-8")
+	print(f"{args.doc.name}: {args.terminal} -> File+deps {args.file_deps:.1f}, Mem {args.mem:.1f}")
 	return 0
 
 
@@ -109,3 +110,4 @@ if __name__ == "__main__":
 
 ##	History:
 ##		- 20260730 JC: Created.
+##		- 20261015 JC: Writes comparison.md, where the table moved.
