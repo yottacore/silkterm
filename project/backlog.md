@@ -556,6 +556,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- Wayland: must use the Wayland clipboard, and minimize other X11 features
+	- ID: 2026101509024607
+	- Type: Bug
+	- Status: Queued
+	- Severity: Critical
+	- Opened: 20261015-090246
+	- Opened by: JC
+	- Target OS: Linux
+	- Expected behavior: When running on Wayland, must use Wayland clipboard. And also minimize other X11 features in that case.
+	- Notes:
+		- Pre-next-cut.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
