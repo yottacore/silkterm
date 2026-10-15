@@ -557,18 +557,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- Wayland: must use the Wayland clipboard, and minimize other X11 features
-	- ID: 2026101509024607
-	- Type: Bug
-	- Status: Queued
-	- Severity: Critical
-	- Opened: 20261015-090246
-	- Opened by: JC
-	- Target OS: Linux
-	- Expected behavior: When running on Wayland, must use Wayland clipboard. And also minimize other X11 features in that case.
-	- Notes:
-		- Pre-next-cut.
-
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -717,6 +705,40 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Seen in the allocations test: a compose frame and a drag frame both cost about 335 allocations against 166 for a cursor frame, since both panes are shaped again. The minimap half is what let 2026101007274798 go on for good.
 		- After RC1 unless a profile shows compose frames.
+
+- Wayland: must use the Wayland clipboard, and minimize other X11 features
+	- ID: 2026101509024607
+	- Type: Bug
+	- Status: Done
+	- Severity: Critical
+	- Opened: 20261015-090246
+	- Opened by: JC
+	- Target OS: Linux
+	- Test environment: Headless sway on b23, with no DISPLAY and with DISPLAY set.
+	- Expected behavior: When running on Wayland, must use Wayland clipboard. And also minimize other X11 features in that case.
+	- Reproduced: 20261015 on b23, headless sway. With no DISPLAY, nothing a copy or OSC 52 sent reached `wl-paste`, and Ctrl+Shift+V and a middle click pasted nothing from `wl-copy`. With DISPLAY set, SilkTerm opened 2 X connections, one per selection.
+	- Actual cause:
+		- The clipboard and the primary selection were always the X11 ones on Linux, whatever the window was. A Wayland window had no clipboard at all without an X server, and with Xwayland it reached Wayland programs only by way of the compositor's bridge.
+	- Actual fix: A Wayland window takes the Wayland clipboard and primary on the window's own connection, and makes no X11 context. An X11 window, Xwayland included, keeps the X11 path unchanged. The Wayland contexts are let go when the event loop exits, while the connection is still up. No new crates; copypasta's Wayland side was already built in.
+	- Progress log:
+		- 20261015: Read "minimize other X11 features" as: on a native Wayland session, SilkTerm opens no X connection unless something has no Wayland equivalent. The clipboard was the only one left. Everything else already checks the window's handle first.
+		- 20261015: Wayland only lets a client set a selection while it has the keyboard. So on Wayland a program's OSC 52 store made while no SilkTerm window has focus is dropped. X11 has no such rule. design.md says so.
+		- 20261015: Mesa's Vulkan device select layer can still ask an X server which card is the default, when Wayland can't tell it. That's the driver's own call at device setup, not SilkTerm's, and wgpu turns on the X11 surface extensions with no way to opt out. Seen on headless sway with software rendering; not checked on a real Wayland desktop.
+	- Swept:
+		- Clipboard: every `Clipboard` user takes the one built in `resumed`, so menus, hotkeys, OSC 52, middle click, copy on select, the tab rename box and the dialogs all follow it.
+		- Already gated on an X11 window handle before connecting: the KDE blur hint and the initial window state (app.rs), transient-for and restack (dialog.rs), the work area (dialog.rs), RandR monitor reads, button held and fullscreen (monitor.rs).
+		- Already gated on an X11 event loop: the glutin transparency path and its GLX error hook (gfx.rs), and the MIT-SHM check (main.rs).
+		- No connection: `profile.rs` only reads DISPLAY to spot a forwarded display, and `sysfont.rs` asks xfconf over D-Bus.
+		- Left: Mesa's device select layer, above. Nothing else connects, per a trace of every connect call with DISPLAY naming a missing display.
+	- Test case: `cicd/tests/wlclip/run.bash` (EsnbWa2), in the pipeline. Copy and paste both ways for the clipboard and the primary, with no DISPLAY and with one, plus no X calls. Failed 11 of 13 checks on the old build, passes 13 of 13 on the fix, also with the cores loaded.
+	- Verified:
+		- 20261015: Real `wl-copy` and `wl-paste` on headless sway, with no DISPLAY and with a bogus one: OSC 52 to both, `wl-copy` text pasted by Ctrl+Shift+V.
+		- 20261015: X11 unchanged, same results before and after: OSC 52 to both, then `xclip -o` and a Ctrl+Shift+V paste, on Xvfb; OSC 52 on sway's Xwayland with WAYLAND_DISPLAY unset.
+		- 20261015: Gate passed (1333 tests); clippy on Linux, Windows and macOS targets.
+	- Branch: wlclip
+	- Commit: 7add2d9
+	- Acceptance signoff: Self-closed: reproduced, the test fails before and passes after, and the X11 path was checked unchanged.
+	- Closed: 20261015-123753
 
 - macOS: the first launch hangs with no window, using more and more memory
 	- ID: 2026100114274893
