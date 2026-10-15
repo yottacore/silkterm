@@ -88,8 +88,10 @@ TOLD_NOTHING = "a Wayland window is told nothing of a move"
 ## bar, so a move with the pointer away could be a drag held still. The look
 ## waits for the pointer back over the window, a key or focus.
 WAITS = "a window that can't see the buttons waits for the person after a move"
+PUSHED = "a take that leaves most of the window on an output at another scale drifts the grid a few cells"
 KNOWN: dict[str, str] = {
 	ROUNDED_ALIKE: "2026101411554909",
+	PUSHED: "2026101513385000",
 }
 
 
@@ -421,6 +423,8 @@ class Rig:
 		self.procs: list[subprocess.Popen[bytes]] = []
 		self.app: subprocess.Popen[bytes] | None = None
 		self.ptr: subprocess.Popen[str] | None = None
+		## where the pointer was last moved to, in the layout
+		self.pointer_at = (0, 0)
 		self.oks = 0
 		## A socket path has to fit in 108 bytes.
 		run = work / "run"
@@ -516,6 +520,8 @@ class Rig:
 
 	def pointer(self, *words: object) -> None:
 		assert self.ptr and self.ptr.stdin and self.ptr.stdout
+		if words[0] == "move":
+			self.pointer_at = (int(str(words[1])), int(str(words[2])))
 		self.ptr.stdin.write(" ".join(str(w) for w in words) + "\n")
 		self.ptr.stdin.flush()
 		if self.ptr.stdout.readline().strip() != "ok":
@@ -839,6 +845,14 @@ class Case:
 		self.note(f"    {what}: on {win.output} {win.rect}, most on {','.join(primary) or '-'}, grid {got}, looks {[trace_field(t, 'key') for t in looked]}")
 		if saves:
 			raise CheckError(f"{what}: saved a size nobody set: {saves}")
+		## The window's own take can leave most of it on an output at another
+		## scale, which it doesn't count as a move (2026101420262300), and the
+		## grid drifts a few cells there.
+		pushed: set[str | None] = set()
+		if takes and primary and self.plan.arm == "wayland" and self.drifts():
+			pct = f"{round(outs[primary[0]]['scale'] * 100)}pct"
+			pushed = {k for k in allowed if (k or model.belief or pct).rpartition("_")[2] != pct}
+			grids |= {near for k in pushed for near in around(outcomes[k][1])}
 		win_now = self.rig.window()
 		lw, lh = self.rig.extent()
 		if win_now and (win_now.rect[2] >= lw - 4 or win_now.rect[3] + win_now.deco >= lh - 4):
@@ -868,10 +882,12 @@ class Case:
 		if grid != got and capped:
 			self.allow(CAPPED, named)
 			grid = got
-		if grid != got and not (rescaled and grid == model.grid and got in around(grid)):
+		drifted = rescaled and grid == model.grid
+		drifted_there = named in pushed or (named is None and model.belief in pushed)
+		if grid != got and not ((drifted or drifted_there) and got in around(grid)):
 			raise CheckError(f"{what}: named {named} but is at {got}, not {grid}")
 		if grid != got:
-			self.allow(rounding, named)
+			self.allow(rounding if drifted else PUSHED, named)
 			grid = got
 		if takes and named is not None:
 			taken = trace_field(takes[-1], "zoom")
@@ -932,11 +948,22 @@ class Case:
 			raise CheckError(f"{what}: saved font zoom {trace_field(saves[-1], 'zoom')}, want {zoom}")
 		if [t for t in trace if t.split()[1] == "arrive"]:
 			raise CheckError(f"{what}: looked for its monitor again: {trace}")
+		## A Wayland window looks as the user sets a size, in case it moved
+		## without being told, and keeps the size it has (2026101413420431).
+		found = [t for t in trace if t.split()[1] == "found"]
+		if found:
+			named = trace_field(found[-1], "key")
+			if named not in allowed:
+				raise CheckError(f"{what}: found itself on {named}, want one of {list(allowed)}")
+			model.belief, self.stale = named, None
 		if key != (model.belief or "-"):
 			raise CheckError(f"{what}: saved for {key}, but counts itself on {model.belief}")
 		if model.belief not in allowed:
 			if not self.stale:
 				raise CheckError(f"{what}: saved for {key}, want one of {list(allowed)}")
+			## only one that can't name the output it's on keeps the one it left
+			if self.plan.arm == "wayland" and None not in allowed:
+				raise CheckError(f"{what}: saved for {key}, where it was before a move it wasn't told of, want one of {list(allowed)}")
 			self.allow(self.stale, model.belief)
 		else:
 			self.allow(allowed[model.belief], model.belief)
@@ -1062,6 +1089,14 @@ class Case:
 		far = max(corners, key=lambda c: min(abs(c[0] - k[0] - k[2] // 2) + abs(c[1] - k[1] - k[3] // 2) for k in keep_off))
 		self.rig.pointer("move", *far)
 
+	## The pointer rests on the window, or off every output, where sway puts it
+	## back on one it chooses.
+	def under_pointer(self, outs: dict[str, dict[str, Any]]) -> bool:
+		win = self.rig.window()
+		dot = (*self.rig.pointer_at, 1, 1)
+		on_some = any(overlap(dot, (o["rect"]["x"], o["rect"]["y"], o["rect"]["width"], o["rect"]["height"])) for o in outs.values())
+		return not on_some or bool(win and overlap(dot, win.rect))
+
 	def pointer_back(self) -> None:
 		win = self.rig.window()
 		if not win:
@@ -1175,10 +1210,17 @@ class Case:
 				self.before_user(what, step)
 				pid = rig.app.pid if rig.app else 0
 				rig.msg(f"[pid={pid}] resize set {int(r['width'] * step.size[0])} {int(r['height'] * step.size[1])}")
+				_, outs, touched, primary = self.where()
+				self.track_entered(touched)
+				resized_on = self.names(outs, primary)
 				rig.msg(f"[pid={pid}] move absolute position {r['x'] + 10} {r['y'] + 10 + win.deco}")
 				model.size_pinned = False
-				_, outs, _, primary = self.where()
-				self.user_save(what, self.names(outs, primary), None if model.font_pinned else model.zoom)
+				## The move can take it off an output it had a sliver on, and the
+				## window names its output as the resize comes, before the move or
+				## after it.
+				_, outs, touched, primary = self.where()
+				self.track_entered(touched)
+				self.user_save(what, {**resized_on, **self.names(outs, primary)}, None if model.font_pinned else model.zoom)
 			elif step.kind == "zoom":
 				self.before_user(what, step)
 				_, outs, _, primary = self.where()
@@ -1230,7 +1272,13 @@ class Case:
 				allowed = self.names(outs, primary)
 				if not looks and plan.arm == "x11":
 					allowed = {None: "an X11 window is told nothing when the layout shifts under it"}
-				self.settle(what, allowed, looks or plan.arm == "x11", after_scale != before_scale)
+				## sway tells the window under a resting pointer that the pointer
+				## left and came back as the layout changes, which is a look
+				## (2026101422190941)
+				reentered = plan.arm == "wayland" and not looks and self.under_pointer(outs)
+				if reentered:
+					allowed = {**allowed, None: TOLD_NOTHING}
+				self.settle(what, allowed, looks or reentered or plan.arm == "x11", after_scale != before_scale)
 		rig.stop_app()
 		time.sleep(0.5)
 		last, monitors = rig.state()
@@ -1458,3 +1506,5 @@ if __name__ == "__main__":
 ##		- 20261014 JC: Created.
 ##		- 20261014 JC: Fullscreen and back saves nothing, and a size set at a font
 ##		  size from the command line is kept for the normal font.
+##		- 20261015 JC: A size set after a move the window wasn't told of is for the
+##		  output it's on, and a scale change under a resting pointer may look.

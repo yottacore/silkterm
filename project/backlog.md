@@ -165,6 +165,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: monsave
 	- Commit: cd3f8d4
 
+- Wayland: a resize or zoom after a move the window wasn't told of is saved for the monitor it left, and the next look undoes it
+	- ID: 2026101413420431
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261014-134204
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101411554909
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- On Wayland, move a window by keyboard to another output at the same scale, so it isn't told.
+		- Resize it by keyboard, or zoom the font.
+		- Move the pointer over it.
+	- Incorrect behavior: The new size is saved for the output it left. When the pointer comes over it, it looks, finds the output it's on, and takes that one's size, undoing the resize. The same happens after it named a monitor that isn't there (2026101411554909).
+	- Expected behavior: The size is saved for the output it's on, and stays.
+	- Reproduced: 20261014, by the random test, 1 case in a run of 17, which still fails on it.
+	- Possible cause: The save goes to the monitor the window last named. On Wayland a look just before saving would name the one it's on now, but would save a resize made just before a move for the new monitor.
+	- Notes:
+		- The random test is off in the pipeline until this is handled, one way or the other.
+	- Actual cause: As the possible cause says. Confirmed on b23 under headless sway, by the random test's seeds 1089, 1630, 2292, 4895, 5137 and 5429 on the build before the fix: each saved a resize or a zoom for the output the window had left.
+	- Decisions:
+		- 20261015: The window looks as the user resizes it or zooms the font, and the size is kept for the output it's on at that moment. That's neither of the two in the possible cause. A look just before saving would give a size set just before a move to the new output, and waiting for the next look undoes the user's size. Looking as the size is set gets both right. The requirements keep the user's size for the monitor it was set on, and a move takes a monitor's size only where the user didn't just set one.
+		- 20261015: Not for the way back from fullscreen or maximized, which is the window manager's (2026101412392529). Not while a look is already on its way or waiting for the person either; that look decides, as before.
+	- Actual fix: On Wayland a resize or zoom by the user first checks which output the window is on. If it's another one than the window counts itself on, a size still waiting from before is saved for the old one, and the window then counts itself on the new one, with no take. The next look stays.
+	- Progress log:
+		- 20261015: Handled. The random test wants the save for the output the window is on after a move it wasn't told of, unless the window can't tell which. It's still off in the pipeline, since fresh runs found a drift too big for its allowance at a small font zoom (2026101513385002).
+	- Test case: `cicd/tests/dpirand/run.py --wayland --seed 1089` for a resize and `--seed 4895` for a zoom (EshVccz). Both failed on the build before the fix and pass on it.
+	- Verified:
+		- Seeds 1089, 1630, 2292, 4895, 5137 and 5429 fail on the old build and pass on the fix. 1572 and 3312, which move unseen to outputs that look alike, pass on both.
+		- monwl passes, its unseen move and fullscreen step included.
+		- About 40 fresh random cases in 7 runs of 2.5 to 4 minutes, on Wayland and on X11 through Xwayland. The 3 failures fail on the old build too: 2 faults in the test, 2026101513385001 (fixed) and 2026101513385002, and 2026101513385000 in the window, now allowed by its ID.
+		- Unit tests: all but one pass, and that one fails without this change too (2026101513385003). Clippy with warnings as errors for Linux, Windows and macOS.
+		- Not verified: a real Wayland desktop.
+	- Swept: every place a size is noted as the user's, which is a resize (`save_window_size`) and a font zoom (`note_zoom`, for zooming in, out, and the reset). Other platforms and X11 through Xwayland are told of moves, so only Wayland looks. An X11 window the layout shifts under is still told nothing, as before.
+	- Branch: wlstale
+	- Commit: 3cd4c35
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -414,6 +453,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- The build inputs test fails since a cli.rs test reads usage.md
+	- ID: 2026101513385003
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261015-133850
+	- Opened by: CC
+	- Related IDs: 2026101415085144
+	- Target OS: All
+	- Test environment: b23
+	- Steps to reproduce:
+		- `cargo test the_build_inputs_cover`.
+	- Incorrect behavior: `the_build_inputs_cover_every_included_file_and_the_lock` fails: cli.rs includes usage.md, which no build input covers.
+	- Expected behavior: It passes.
+	- Reproduced: 20261015, on a branch off dev at 7766d41 that changes neither file.
+	- Possible cause: `usage_md_section` in cli.rs's tests reads usage.md with `include_str!` (c0a237d). It's in tests only, so either the test skips includes under `#[cfg(test)]`, or `../usage.md` joins `BUILD_INPUTS`.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -488,28 +544,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261014: Its only known path, a size taken while a drag was held, is gone with the fix for 2026101411555009. Seed 1000 passes now. A font zoom and then a key move to another output right after, 0.3 s and 0.8 s apart on a 200% output, kept the size it took.
 		- 20261014: Handling the echo itself would need winit to say which configure a resize comes from, or a retry on a size the window already left, which hides it rather than fixes it. Left Queued until it shows up another way.
 
-- Wayland: a resize or zoom after a move the window wasn't told of is saved for the monitor it left, and the next look undoes it
-	- ID: 2026101413420431
-	- Type: Bug
-	- Status: Queued
-	- Severity: Low
-	- Opened: 20261014-134204
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101411554909
-	- Target OS: Linux
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- On Wayland, move a window by keyboard to another output at the same scale, so it isn't told.
-		- Resize it by keyboard, or zoom the font.
-		- Move the pointer over it.
-	- Incorrect behavior: The new size is saved for the output it left. When the pointer comes over it, it looks, finds the output it's on, and takes that one's size, undoing the resize. The same happens after it named a monitor that isn't there (2026101411554909).
-	- Expected behavior: The size is saved for the output it's on, and stays.
-	- Reproduced: 20261014, by the random test, 1 case in a run of 17, which still fails on it.
-	- Possible cause: The save goes to the monitor the window last named. On Wayland a look just before saving would name the one it's on now, but would save a resize made just before a move for the new monitor.
-	- Notes:
-		- The random test is off in the pipeline until this is handled, one way or the other.
-
 - A size kept at one font is used at another when the font comes from the command line
 	- ID: 2026101422190936
 	- Type: Bug
@@ -529,23 +563,45 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- A size given on the command line wins over this, as before.
 
-- The random test expects no look after a scale change on an output a window has only a sliver on
-	- ID: 2026101422190941
+- Wayland: a size taken that leaves most of the window on an output at another scale shows a grid a few cells off
+	- ID: 2026101513385000
 	- Type: Bug
 	- Status: Queued
 	- Severity: Low
-	- Opened: 20261014-221909
+	- Opened: 20261015-133850
 	- Opened by: CC
-	- Parent ID: 2026101410442550
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101420262300, 2026101412003308
 	- Target OS: Linux
 	- Test environment: b23, headless sway
 	- Steps to reproduce:
-		- `cicd/tests/dpirand/run.py --seed 5028`.
-	- Incorrect behavior: After a drop with a sliver left behind, the scale of the output with the sliver changes. The window looks again and names the output it's on, and the test fails it, since it expected the window to be told nothing.
-	- Expected behavior: The test allows the look, or the window doesn't look.
-	- Reproduced: 20261014, on dev and with the fix for 2026101412392529 alike.
+		- On Wayland, drop a window on an output with a third of it left on one at another scale, where the kept size is big enough to put most of the window on the other output.
+	- Incorrect behavior: It takes the kept grid, then the other output's scale, and the grid moves a few cells. 69x33 became 67x32.
+	- Expected behavior: It shows the kept grid.
+	- Reproduced: 20261015, the random test's seed 96313774, on dev and on the fix for 2026101413420431 alike.
+	- Possible cause: The scale change comes in the wait after the window's own resize, so it isn't a move (2026101420262300) and no size is taken after it. But a scale change still leaves the window to the system wherever a kept size could take over (2026101412003308), so nothing keeps the grid.
 	- Notes:
-		- The window's answer is the right output, so this looks like a gap in the test's model. Not checked what made the window look.
+		- The random test allows it by this ID until it's fixed.
+
+- The random test's allowance for a grid that moves with a scale change is too small at a small font zoom
+	- ID: 2026101513385002
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261015-133850
+	- Opened by: CC
+	- Parent ID: 2026101410442550
+	- Related IDs: 2026101413420431
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --seed 97305882`.
+	- Incorrect behavior: At font zoom -2, a drag held over a 200% output from a 100% one moves the grid from 41x24 to 39x22 while held. The test allows about 4 percent, one row here, and fails the case as resized while held.
+	- Expected behavior: The test allows the move the cells really make.
+	- Reproduced: 20261015, on dev and on the fix for 2026101413420431 alike.
+	- Notes:
+		- At zoom -2 a cell is 9x18 at 100% and 19x38 at 200%, about 5 percent over double. An allowance worked out from the cell sizes the shell is told, rather than a flat 4 percent, would fit.
+		- The random test stays off in the pipeline until this is fixed.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
@@ -4479,6 +4535,55 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: winassoc
 	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
 	- Acceptance signoff: 20260930-183819
+
+- The random test expects no look after a scale change on an output a window has only a sliver on
+	- ID: 2026101422190941
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261014-221909
+	- Opened by: CC
+	- Parent ID: 2026101410442550
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --seed 5028`.
+	- Incorrect behavior: After a drop with a sliver left behind, the scale of the output with the sliver changes. The window looks again and names the output it's on, and the test fails it, since it expected the window to be told nothing.
+	- Expected behavior: The test allows the look, or the window doesn't look.
+	- Reproduced: 20261014, on dev and with the fix for 2026101412392529 alike.
+	- Notes:
+		- The window's answer is the right output, so this looks like a gap in the test's model. Not checked what made the window look.
+	- Actual cause: A gap in the test. The pointer rested on the window, and sway tells the window under the pointer that it left and came back as the layout changes. On Wayland that's a sign to look, and the look named the output most of the window is on. The test expected no look, since the window's own scale stayed the same. Seen in the Wayland protocol log: a pointer leave, the output's new scale, and an enter at the same spot.
+	- Actual fix: The test keeps where it last put the pointer. On Wayland, a scale change that leaves the window's scale alone may look when the pointer rests on the window, or off every output. The look has to name an output the requirements allow. No look still passes, as a window told nothing.
+	- Test case: `cicd/tests/dpirand/run.py --seed 5028` (EshVccz). It failed twice before the change to the test and passes after, on the same build.
+	- Verified: seed 5028 both ways, and the runs listed on 2026101413420431.
+	- Swept: the rescale step is the only one that changes the layout under a resting pointer. Moves and drags already count the pointer.
+	- Branch: wlstale
+	- Commit: 3cd4c35
+	- Acceptance signoff: Self-closed: test only, red before and green after on the same build, and the look it now allows names the output the requirements want.
+	- Closed: 20261015-140500
+
+- The random test loses track of the outputs a window is on after its resize step moves it
+	- ID: 2026101513385001
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261015-133850
+	- Opened by: CC
+	- Parent ID: 2026101410442550
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --seed 95848519`.
+	- Incorrect behavior: The resize step moves the window to its output's top left, which can take it off an output it had a sliver on. The test still counted that output as the first the window entered, and failed a later look that named one the window can't tell apart from it. It also judged the save by where the window was after the move only, though the window names its output as the resize comes.
+	- Expected behavior: The test follows the outputs the window is on through the resize and the move.
+	- Reproduced: 20261015, on dev and on the fix for 2026101413420431 alike.
+	- Actual fix: The test notes the outputs after the resize and again after the move, and a save may name one allowed at either.
+	- Test case: `cicd/tests/dpirand/run.py --seed 95848519` (EshVccz). Failed before the change to the test and passes after, on the same build.
+	- Branch: wlstale
+	- Commit: 3cd4c35
+	- Acceptance signoff: Self-closed: test only, red before and green after.
+	- Closed: 20261015-140500
 
 - Going fullscreen and back keeps a size for the monitor, though nobody set one there
 	- ID: 2026101412392529
