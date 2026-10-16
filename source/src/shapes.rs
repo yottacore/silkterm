@@ -40,9 +40,29 @@ fn is_sep(c: char) -> bool {
 
 // Characters a path may carry. Whitespace ends a run (crossing one is decided
 // separately) and the rest are the ones Windows forbids in a name outright plus
-// the double quote a shell would have wrapped the path in.
+// the double quote a shell would have wrapped the path in. Past ASCII only
+// letters, digits and combining marks count, from any script. A prompt puts its
+// status marks (the git prompt's check and x) right after a path, and symbols,
+// emoji and box drawing are far more often that than part of a name.
 fn is_path_char(c: char) -> bool {
-	!c.is_whitespace() && !c.is_control() && !matches!(c, '"' | '<' | '>' | '|' | '*' | '?')
+	if c.is_ascii() {
+		return !c.is_ascii_whitespace()
+			&& !c.is_ascii_control()
+			&& !matches!(c, '"' | '<' | '>' | '|' | '*' | '?');
+	}
+	c.is_alphanumeric() || is_combining_mark(c)
+}
+
+// The combining blocks. A grid cell never holds one of these on its own - the
+// engine hangs them on the cell before - so this is for text from anywhere else.
+// Most marks in other scripts are alphabetic already.
+fn is_combining_mark(c: char) -> bool {
+	matches!(c,
+		'\u{0300}'..='\u{036f}'
+			| '\u{1ab0}'..='\u{1aff}'
+			| '\u{1dc0}'..='\u{1dff}'
+			| '\u{20d0}'..='\u{20ff}'
+			| '\u{fe20}'..='\u{fe2f}')
 }
 
 // A shape cannot start mid-word: "xC:\a" is not a drive path and "and/or" is not
@@ -124,7 +144,7 @@ fn remote_len(text: &[char], at: usize) -> Option<usize> {
 		i += 1;
 	}
 	let segment = &text[colon + 1..i];
-	if !segment.is_empty() && !segment.iter().any(char::is_ascii_alphabetic) {
+	if !segment.is_empty() && !segment.iter().any(|c| c.is_alphabetic()) {
 		return None;
 	}
 	// a separator with something after it - a host and a bare name is not a target
@@ -233,7 +253,7 @@ fn ends_at_extension(run: &[char]) -> Option<usize> {
 			continue;
 		}
 		let mut j = i + 1;
-		while j < run.len() && run[j].is_ascii_alphanumeric() {
+		while j < run.len() && run[j].is_alphanumeric() {
 			j += 1;
 		}
 		let ext = j - i - 1;
@@ -432,6 +452,62 @@ mod tests {
 		assert_eq!(at("build:release/x here", "release"), None);
 		assert_eq!(at("e.g.:foo/bar", "foo"), None);
 		assert_eq!(at("host.com:noslash here", "noslash"), None);
+	}
+
+	// Test ID: EstXrUS
+	#[test]
+	fn a_path_may_have_letters_from_any_script() {
+		assert_eq!(
+			at("ls /home/jürgen/Документы/отчёт.txt now", "Документы").as_deref(),
+			Some("/home/jürgen/Документы/отчёт.txt")
+		);
+		assert_eq!(
+			at("cd ~/文档/2026年 ok", "文档").as_deref(),
+			Some("~/文档/2026年")
+		);
+		assert_eq!(
+			at("C:\\Users\\José\\Música\\canción.mp3", "Música").as_deref(),
+			Some("C:\\Users\\José\\Música\\canción.mp3")
+		);
+		// a decomposed accent, as a macOS file name has it
+		assert_eq!(
+			at("/tmp/cafe\u{301}/menu", "menu").as_deref(),
+			Some("/tmp/cafe\u{301}/menu")
+		);
+		// the extension and the remote's first segment count letters past ASCII too
+		assert_eq!(
+			at("/tmp/x/файл.тхт:12:5", "файл").as_deref(),
+			Some("/tmp/x/файл.тхт")
+		);
+		assert_eq!(
+			at("nas.example:Проекты/silk.git x", "silk").as_deref(),
+			Some("nas.example:Проекты/silk.git")
+		);
+	}
+
+	// A prompt writes its status marks right after the path, sometimes with no
+	// space between.
+	// Test ID: EstXrbq
+	#[test]
+	fn symbols_after_a_path_are_left_out() {
+		assert_eq!(
+			at("[ github.com:jim-collier/silkterm.git:dev✘✔ ]", "dev").as_deref(),
+			Some("github.com:jim-collier/silkterm.git:dev")
+		);
+		assert_eq!(
+			at(
+				"[ github.com:jim-collier/silkterm.git:dev ✘✔ ↑2 ]",
+				"collier"
+			)
+			.as_deref(),
+			Some("github.com:jim-collier/silkterm.git:dev")
+		);
+		assert_eq!(at("/srv/data→/tmp", "data").as_deref(), Some("/srv/data"));
+		assert_eq!(at("│ /home/u/src│", "src").as_deref(), Some("/home/u/src"));
+		assert_eq!(
+			at("/home/u/notes😀 done", "notes").as_deref(),
+			Some("/home/u/notes")
+		);
 	}
 
 	// Test ID: Eo6l7ke
