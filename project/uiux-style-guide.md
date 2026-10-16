@@ -100,7 +100,7 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 
 ### Tabs
 
-- Tabs run down the left side, on the gutter strip, each as wide as the list, with a line along its right dividing it from the rows. SilkTerm's are Silk, Appearance, Movement, Window, Shell and Keys, with Themes, Background, Text and Cursor under Appearance. The dialog code can put them left to right along the top instead, standing on the line that divides the strip from the rows below.
+- Tabs run down the left side, on the gutter strip, each as wide as the list, with a line along its right dividing it from the rows. SilkTerm's are Silk, Appearance, Movement, Window, Program, Shell and Keys, with Themes, Background, Text and Cursor under Appearance. The dialog code can put them left to right along the top instead, standing on the line that divides the strip from the rows below.
 
 - A tab may hold tabs. Down the side they are always listed, stepped in under it. Across the top its sub-tabs show in a row under the strip only while it is current. The current tab and the tab it sits under both read as current. A click on the parent opens its first sub-tab, and does nothing while one of them is already open. Any depth works, though more than two levels is poor design.
 
@@ -262,6 +262,7 @@ There are four of them: a Settings row, a menu item, a link or button in the Abo
 - It can be resized. A resize that passes within a few pixels of the default size settles on it, and the size it is left at is used again for the rest of the session. Nothing about it is written to the config: a new run opens at the default size again.
 
 - Too short and the rows scroll; too narrow and they scroll sideways. The tab strip and the footer buttons stay out of the vertical scroll, so there is always a way out of the dialog and always a way to another tab.
+	- The search box's band and the footer are a shade toward `gutter`, with a 1 DIP line along the rows, so they don't read as rows. They look the same on every tab, whether it scrolls or not, since a look that came and went from tab to tab would only be noise.
 
 - Controls in the middle of a row are variable width and take whatever the window's width leaves them. What is fixed is what lines up: labels and the left edge of every control align on the left, and the revert control, a slider's number field and a text control's own right edge align on the right.
 
@@ -280,6 +281,7 @@ Chrome:
 - `menu_background`, `menu_foreground`: the menu bar and its dropdowns.
 
 - `gutter`: chrome that holds no interactive element, such as the strip the dialog's tabs sit on. Recessed against the panel in both modes.
+	- Halfway between it and `dialog_background` is the shade of the dialog's still bands, the search box's and the footer's. It isn't editable on its own.
 
 Attention:
 
@@ -371,6 +373,8 @@ Things the built interface does differently from the rules above. Each is a smal
 - The Silk tab made eight, one past the ceiling above, before Appearance took in 4 tabs and left 6 at the top level. Its subject is what the look costs, which is a stretch over three sections: the profile, text readability and the scrolling feel. It was put first because the profile governs most of what is under it. Emptying those sections out left the Text tab holding only the font, and the Movement tab holding only the wheel, the scrollbar and the minimap.
 
 - The Keys tab makes nine. No other tab's subject takes in the hotkeys. Down the left, the list adds its own width to the panel, set by its widest entry.
+
+- Program makes ten, and 7 at the top level, which is the ceiling. It holds what the program does as a whole rather than how a window looks: Resource use for now, and running in tmux next.
 
 ## Copyright and license
 

@@ -19,7 +19,7 @@
 
 ## In order. "A/B" is tab B under tab A; a tab with tabs under it holds no
 ## rows of its own, and a heading below names the tab it is on by that path.
-tabs: "Silk", "Appearance", "Appearance/Themes", "Appearance/Background", "Appearance/Text", "Appearance/Cursor", "Movement", "Window", "Shell", "Keys"
+tabs: "Silk", "Appearance", "Appearance/Themes", "Appearance/Background", "Appearance/Text", "Appearance/Cursor", "Movement", "Window", "Program", "Shell", "Keys"
 
 ## top: a row of tabs across the top, where a tab's sub-tabs show in a second
 ## row only while it is the current one. left: a list down the left side with
@@ -41,8 +41,9 @@ layout:
 	width: 540                 ## floor; the widest label, button row or top tab strip wins
 	pad: 18                    ## margin inside all four panel edges
 	tabs_gap: 10               ## tab strip -> first row
-	buttons_gap: 28            ## last row -> footer buttons
-	search_gap: 12             ## search box -> the rows or results under it
+	buttons_gap: 18            ## the footer's top line -> footer buttons
+	search_gap: 18             ## search box -> the line under it
+	rows_pad: 10               ## inside the scrolling rows, over the first and under the last
 
 	## Rows
 	row_height: 32             ## floor for an ordinary row
@@ -1024,13 +1025,15 @@ rows:
 		rule: desktop_opener
 		help: "The command that opens a clicked link."
 
+	## ------------------------------------------------------------------- Program
+
 	## What a window costs the machine. Last on the tab, since it is the part
 	## that depends on the graphics driver.
 	ResourceUse:
 		kind: heading
 		label: Resource use
 		aliases: "memory", "power saving"
-		tab: Window
+		tab: Program
 
 	IdleRelease:
 		label: Free resources when idle

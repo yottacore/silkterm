@@ -459,9 +459,10 @@ impl SettingsDialog {
 		!self.search.query.is_empty()
 	}
 
-	/// The search box's band over the rows: the box and the gap under it.
+	/// The search box's band over the rows: the box, the gap under it and the
+	/// line the rows scroll under.
 	pub(super) fn search_band_h_for(line_h: f32) -> f32 {
-		Self::field_h_for(line_h) + lay().search_gap
+		Self::field_h_for(line_h) + lay().search_gap + 1.0
 	}
 
 	/// Window space: it sits over the rows and never scrolls with them.
@@ -470,7 +471,7 @@ impl SettingsDialog {
 		let x = self.rows_x0() + lay().pad;
 		Rect {
 			x,
-			y: self.rows_y0() - lay().search_gap - h,
+			y: self.rows_y0() - 1.0 - lay().search_gap - h,
 			w: (self.rect.x + self.rect.w - lay().pad - x).max(0.0),
 			h,
 		}
@@ -486,7 +487,7 @@ impl SettingsDialog {
 		let h = self.line_row_h();
 		Rect {
 			x: vp.x + lay().pad / 2.0,
-			y: vp.y - self.scroll + k as f32 * h,
+			y: vp.y + lay().rows_pad - self.scroll + k as f32 * h,
 			w: (vp.w - lay().pad * 1.5).max(0.0),
 			h,
 		}
