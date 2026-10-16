@@ -4676,6 +4676,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
 
+- The script header test fails on dev: `utility/fake-flatpak-update.bash` has no History block
+	- ID: 2026101612595000
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261016-125950
+	- Opened by: CC
+	- Target OS: All
+	- Incorrect behavior: `every_script_has_the_license_header_with_history_at_the_bottom` fails on dev since e56595f, which added the script without one.
+	- Actual fix [Bug]: Added the History block.
+	- Test case: `every_script_has_the_license_header_with_history_at_the_bottom` itself, which failed on dev and passes with the block.
+	- Acceptance signoff: Self-closed: mechanical.
+	- Branch: tmuxclear
+	- Closed: 20261016-125950
+
 - Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
 	- ID: 2026101411554909
 	- Type: Bug
