@@ -467,16 +467,35 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The `clear` scroll bug still happens inside tmux
 	- ID: 2026101611321631
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
 	- Severity: Avg
 	- Opened: 20261016-113216
 	- Opened by: JC
+	- Target OS: All
+	- Test environment: b23, tmux 3.6b
 	- Related IDs: 2026101310563297
 	- Incorrect behavior: `clear` inside tmux scrolls.
 	- Expected behavior: It clears instantly, as it does outside tmux, and smooth-scrolling inside tmux stays.
 	- Notes:
 		- Pre-next-cut.
 		- I'd rather live with it than lose smooth-scrolling inside tmux, but it seems like it's fixable.
+	- Reproduced: 20261016 on b23, with real tmux in a window. `clear`, Ctrl+L, `tput clear` and a reset each slid the old screen up and away, a whole pane's height.
+	- Actual cause:
+		- tmux never passes a clear on. It keeps the terminal on the alt screen and draws the pane itself. With its status line on the bottom row it can't erase to the bottom, so it scrolls the pane's rows away instead. SilkTerm took that as the pane scrolling and slid it.
+		- Output inside tmux comes the same way. A burst scrolls the whole pane away and then draws the new rows, so the scroll alone can't tell the two apart.
+	- Actual fix [Bug]: A pane scrolled away whole that's left mostly blank is a clear. It shows at once, and the Enter that ran it stops sliding. A burst fills the pane, so it still slides. The rule only applies while the slide still running is a line or two, since a burst's draw can be cut by a frame early on during a flood.
+	- Not covered:
+		- A clear that comes while a big slide is still running, such as `seq 100; clear` on one line, still slides.
+		- With ble.sh, when the clear and ble.sh's prompt redraw land in one frame, the Enter's one-row slide runs out over the cleared screen. It did that before too.
+	- Verified:
+		- 20261016 on b23, real tmux running plain bash in a window, driven from outside. Before: slides of 47, 46, 47 and 48 rows for `clear`, Ctrl+L, `tput clear` and a reset. After: none. Output of 300 lines slid on both builds, and output a line at a time slid one row per line on both.
+		- The new replay tests failed on the build from before and pass now. The flood check failed against a first version that went by "no slide at all" rather than "a line or two". The new scroll scene failed on the build from before (43 frames slid) and passes now. All 14 X11 scroll scenes pass.
+		- The unit suite passes but for `every_script_has_the_license_header_with_history_at_the_bottom`, which fails on dev too: `utility/fake-flatpak-update.bash` has no History block. Clippy, rustfmt and the docs checks are clean.
+	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness.
+	- Swept: the slide decision has 2 copies, `Pane::build` and its mirror in `pane/replay.rs`, and both have the rule. The output ease on the normal screen is a separate path and already snaps on a clear.
+	- Branch: tmuxclear
+	- Commit: 1e01433
+	- Test case: `a_clear_inside_tmux_shows_at_once` (EstO7ww) and `output_inside_tmux_still_slides` (EstO8Ff) in `pane/replay.rs`, on bytes tmux 3.6b sent. Scroll scene `tmuxclear` (`cicd/tests/scroll/run.bash`). Each was red before the fix and green after.
 
 - Always run in new tmux session
 	- ID: 2026101611321632
