@@ -366,6 +366,9 @@ const MONITOR_RECHECK: Duration = Duration::from_millis(250);
 // A Wayland window is on no output until its first frame is up there, which
 // software rendering can take seconds to draw (2026101411504818).
 const NO_OUTPUT_YET: Duration = Duration::from_secs(10);
+// The scale a window's own take brings comes once a frame at the new size is
+// up, which software rendering took over 4 s to get there (2026101614100002).
+const TAKE_SCALE_WAIT: Duration = Duration::from_secs(10);
 // A resize this soon after one the window asked for, or one the system made
 // for a new scale, is not the user's.
 const OWN_RESIZE_GRACE: Duration = Duration::from_millis(1500);
@@ -3823,6 +3826,8 @@ impl ApplicationHandler<UserEvent> for App {
 			opening: false,
 			noted: window_size::Noted::default(),
 			take_owed: false,
+			set_on: None,
+			took_at: None,
 		};
 		let menu_bar_h = if menu_bar {
 			text.ui_line_h + text.dip(MENU_BAR_VPAD)
@@ -4295,7 +4300,7 @@ impl ApplicationHandler<UserEvent> for App {
 				state.dirty = true;
 				state.watch.ignore_resize_until = Instant::now() + OWN_RESIZE_GRACE;
 				// as a move: one the window's own resize caused doesn't count
-				state.note_moved();
+				state.note_rescaled();
 			}
 
 			WindowEvent::Moved(_) => state.note_moved(),

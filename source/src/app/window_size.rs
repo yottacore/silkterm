@@ -6,7 +6,7 @@
 
 use super::{
 	MONITOR_RECHECK, MONITOR_SETTLE, NO_OUTPUT_YET, OWN_RESIZE_GRACE, SAFE_MAX_DIM,
-	SIZE_SAVE_DEBOUNCE, State, save_live,
+	SIZE_SAVE_DEBOUNCE, State, TAKE_SCALE_WAIT, save_live,
 };
 use crate::config;
 use std::time::Instant;
@@ -65,6 +65,11 @@ impl State {
 		// which monitor the size is for is not known until a move settles
 		if !force && self.watch.check_at.is_some() {
 			return;
+		}
+		if force {
+			self.watch.set_on = None;
+		} else {
+			self.look_after_resize();
 		}
 		self.pending_size = None;
 		// Read once the size has held, not in the resize event: the window
@@ -156,6 +161,45 @@ impl State {
 		if !self.watch.positionless || self.watch.check_at.is_some() || self.watch.put_off {
 			return;
 		}
+		let set_on = crate::monitor::outputs_under(&self.window);
+		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key())
+		else {
+			return;
+		};
+		if !self
+			.watch
+			.key
+			.as_deref()
+			.is_some_and(|kept| crate::monitor::same_monitor(kept, &now_on))
+		{
+			// a size set before the move is for the output it left
+			self.flush_window_size(true);
+			mondbg("found", Some(&now_on), None, None);
+			self.watch.key = Some(now_on);
+		}
+		self.watch.set_on = set_on;
+	}
+
+	/// The user's own resize can take a Wayland window off an output, but the
+	/// window is told so only once a frame at the new size is up. Between two
+	/// outputs at one scale it named the first one entered as the size was
+	/// set, though the resize left it wholly on the other (2026101614100001).
+	/// So once the size has held, a window that has only left outputs since
+	/// counts itself on what's left. One that entered another has moved, and
+	/// keeps the one it named.
+	fn look_after_resize(&mut self) {
+		let Some(set_on) = self.watch.set_on.take() else {
+			return;
+		};
+		if !self.watch.positionless || self.watch.check_at.is_some() || self.watch.put_off {
+			return;
+		}
+		let Some(now) = crate::monitor::outputs_under(&self.window) else {
+			return;
+		};
+		if !only_left(&set_on, &now) {
+			return;
+		}
 		let Some(now_on) = crate::monitor::MonitorId::of_window(&self.window).map(|m| m.key())
 		else {
 			return;
@@ -168,8 +212,6 @@ impl State {
 		{
 			return;
 		}
-		// a size set before the move is for the output it left
-		self.flush_window_size(true);
 		mondbg("found", Some(&now_on), None, None);
 		self.watch.key = Some(now_on);
 	}
@@ -179,6 +221,26 @@ impl State {
 		let now = Instant::now();
 		if !move_counts(
 			now < self.watch.ignore_moves_until,
+			&self.watch.layout,
+			|| crate::monitor::layout(&self.window),
+		) {
+			return;
+		}
+		self.start_settle(now);
+	}
+
+	/// A scale change, as a move. The window's own take brings one when it
+	/// leaves most of the window on an output at another scale, but only once
+	/// a frame at the new size is up. Drawn in software that took over 4 s,
+	/// well past the grace, so it counted as a move, the look took the other
+	/// output's size, and that moved the window back (2026101614100002). So
+	/// the first scale change after a take is the take's, unless the person
+	/// was back at the window in between.
+	pub(super) fn note_rescaled(&mut self) {
+		let now = Instant::now();
+		let own = takes_scale(self.watch.took_at.take(), self.watch.heard_at, now);
+		if !move_counts(
+			own || now < self.watch.ignore_moves_until,
 			&self.watch.layout,
 			|| crate::monitor::layout(&self.window),
 		) {
@@ -362,6 +424,7 @@ impl State {
 		let now = Instant::now();
 		self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
 		self.watch.ignore_moves_until = now + OWN_RESIZE_GRACE;
+		self.watch.took_at = Some(now);
 		self.watch.layout = crate::monitor::layout(&self.window);
 		self.request_grid(cols, rows);
 	}
@@ -624,6 +687,10 @@ pub(super) struct MonitorWatch {
 	pub(super) opening: bool,             // the first look, which no drag can be part of
 	pub(super) noted: Noted,              // why a size waits to be saved
 	pub(super) take_owed: bool,           // arrived while fullscreen or maximized
+	// The outputs a Wayland window was on as the user set the size waiting
+	// to be saved (`look_unseen`).
+	pub(super) set_on: Option<Vec<(i64, i64, i64, i64)>>,
+	pub(super) took_at: Option<Instant>, // a take whose scale change hasn't come (`note_rescaled`)
 }
 
 /// What the size waiting to be saved came from, since the last save.
@@ -829,6 +896,11 @@ fn settle(
 	}
 }
 
+// Has the window only left outputs since, and is it still on one?
+fn only_left(was: &[(i64, i64, i64, i64)], now: &[(i64, i64, i64, i64)]) -> bool {
+	!now.is_empty() && now.len() < was.len() && now.iter().all(|out| was.contains(out))
+}
+
 // Look again soon? A Wayland window is told which output it is on only once
 // its first frame is up there, which can come seconds after the window was
 // told its scale. Looking once 0.75 s after the window showed found no output
@@ -852,6 +924,14 @@ fn move_counts(
 	layout_now: impl FnOnce() -> Vec<(i64, i64, i64, i64)>,
 ) -> bool {
 	!in_grace || layout_now() != layout_then
+}
+
+// Is a scale change the one a take brought? The first after it, while nobody
+// has been at the window since, and not so long after that it can't be.
+fn takes_scale(took_at: Option<Instant>, heard_at: Option<Instant>, now: Instant) -> bool {
+	took_at.is_some_and(|took| {
+		now < took + TAKE_SCALE_WAIT && heard_at.is_none_or(|heard| heard <= took)
+	})
 }
 
 // Is this resize the size to launch at next time? Only once a frame has been
@@ -894,8 +974,8 @@ fn size_taken(
 #[cfg(test)]
 mod tests {
 	use super::{
-		Settle, cells_in, coming_px, fit_px, launch_maximized, look_again, move_counts,
-		remember_resize, resize_is_current, settle, size_taken, window_px,
+		Settle, cells_in, coming_px, fit_px, launch_maximized, look_again, move_counts, only_left,
+		remember_resize, resize_is_current, settle, size_taken, takes_scale, window_px,
 	};
 	use std::time::{Duration, Instant};
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
@@ -950,6 +1030,50 @@ mod tests {
 			}
 		}
 		assert_eq!(cells_in(0, 10.0, 4.0, 30.0), 1, "never no cells");
+	}
+
+	// A resize that leaves a Wayland window wholly on one of the two outputs
+	// it straddled is saved for that one, not for the one it entered first.
+	// A window that entered another output since has moved, and keeps the
+	// output it named as the size was set.
+	// Test ID: Estwjm9
+	#[test]
+	fn a_resize_off_one_of_two_outputs_counts_the_one_left() {
+		let tall = (740, 0, 1080, 1920);
+		let wide = (0, 1920, 2560, 1080);
+		let third = (320, 3000, 1920, 1080);
+		assert!(only_left(&[tall, wide], &[wide]));
+		assert!(only_left(&[tall, wide, third], &[wide, third]));
+		assert!(!only_left(&[tall, wide], &[tall, wide]), "still on both");
+		assert!(!only_left(&[tall, wide], &[wide, third]), "moved on");
+		assert!(!only_left(&[tall], &[third]), "moved");
+		assert!(!only_left(&[tall, wide], &[]), "on none yet");
+	}
+
+	// The scale a take brings came 4.6 s after it in software, past the
+	// grace, and counted as a move: the look took the other output's size,
+	// which moved the window back. The first scale change after a take is the
+	// take's, unless the person was back at the window in between.
+	// Test ID: EsuGv93
+	#[test]
+	fn the_scale_a_take_brings_is_no_move() {
+		let heard = Instant::now();
+		let took = heard + Duration::from_secs(1);
+		let later = took + Duration::from_millis(4600);
+		assert!(takes_scale(Some(took), None, later));
+		assert!(
+			takes_scale(Some(took), Some(heard), later),
+			"the sign before the take"
+		);
+		assert!(
+			!takes_scale(Some(took), Some(took + Duration::from_secs(1)), later),
+			"back at the window since"
+		);
+		assert!(!takes_scale(None, None, later), "no take");
+		assert!(
+			!takes_scale(Some(took), None, took + Duration::from_secs(30)),
+			"long after"
+		);
 	}
 
 	// Panes laid out for the old size in the new cells told the shell a grid

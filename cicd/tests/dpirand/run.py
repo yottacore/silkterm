@@ -92,6 +92,10 @@ TOLD_NOTHING = "a Wayland window is told nothing of a move"
 ## waits for the pointer back over the window, a key or focus.
 WAITS = "a window that can't see the buttons waits for the person after a move"
 PUSHED = "a take that leaves most of the window on an output at another scale drifts the grid a few cells"
+## A resize that takes a Wayland window off an output is told to it once a
+## frame at the new size is up, which in software can come after the size is
+## saved, so it may still count the output it was on as the size was set.
+LEFT_LATE = "a Wayland window is told it left an output once a frame at its new size is up"
 KNOWN: dict[str, str] = {
 	PUSHED: "2026101513385000",
 }
@@ -782,6 +786,20 @@ class Case:
 			return False
 		return any(got in drift_band(grid, (was, self.was[1]), (now, self.drawn_at(s))) for s in scales)
 
+	## Where a take of `grid` at one scale can drift to once the window is at
+	## another (2026101513385000): by the cell the shell was told at the take's
+	## grid and the one it's told now, as for a scale change, since a flat
+	## share was too little at a small font zoom. That share alone where the
+	## take's grid never reached the shell.
+	def pushed_band(self, grid: Grid, scale_was: float, scale: float) -> set[Grid]:
+		lines = self.rig.size_lines()[max(self.was[0], 0):]
+		at = [line for line in lines if (line[1], line[0]) == grid and all(line)]
+		now = self.rig.cell()
+		if not at or not now:
+			return set(around(grid))
+		rows, cols, width, height = at[-1]
+		return set(around(grid)) | drift_band(grid, ((width // cols, height // rows), scale_was), (now, scale))
+
 	def outs(self) -> dict[str, dict[str, Any]]:
 		return {o["name"]: o for o in self.rig.outputs()}
 
@@ -903,27 +921,43 @@ class Case:
 		got = self.rig.grid()
 		mark = len(self.rig.grid_lines())
 		time.sleep(2.0)
-		later = {line for line in self.rig.grid_lines()[mark:]}
+		later_lines = self.rig.grid_lines()[mark:]
+		later = set(later_lines)
 		trace = self.rig.trace()
 		looked = [t for t in trace if t.split()[1] in ("arrive", "stay")]
 		takes = [t for t in trace if t.split()[1] == "take"]
 		saves = [t for t in trace if t.split()[1] == "save"]
 		win, outs, touched, primary = self.where()
-		self.note(f"    {what}: on {win.output} {win.rect}, most on {','.join(primary) or '-'}, grid {got}, looks {[trace_field(t, 'key') for t in looked]}")
 		if saves:
 			raise CheckError(f"{what}: saved a size nobody set: {saves}")
 		## The window's own take can leave most of it on an output at another
 		## scale, which it doesn't count as a move (2026101420262300), and the
 		## grid drifts a few cells there.
-		pushed: set[str | None] = set()
+		pushed: dict[str | None, set[Grid]] = {}
 		if takes and primary and self.plan.arm == "wayland" and self.drifts():
-			pct = f"{round(outs[primary[0]]['scale'] * 100)}pct"
-			pushed = {k for k in allowed if (k or model.belief or pct).rpartition("_")[2] != pct}
-			grids |= {near for k in pushed for near in around(outcomes[k][1])}
+			scale = outs[primary[0]]["scale"]
+			pct = f"{round(scale * 100)}pct"
+			for k in allowed:
+				was_pct = (k or model.belief or pct).rpartition("_")[2]
+				if was_pct != pct:
+					pushed[k] = self.pushed_band(outcomes[k][1], int(was_pct.removesuffix("pct")) / 100, scale)
+			grids |= {near for band in pushed.values() for near in band}
 		win_now = self.rig.window()
 		lw, lh = self.rig.extent()
 		if win_now and (win_now.rect[2] >= lw - 4 or win_now.rect[3] + win_now.deco >= lh - 4):
 			grids |= {(c, r) for c in range(1, max(g[0] for g in grids) + 1) for r in range(1, max(g[1] for g in grids) + 1)}
+		## A window drawing in software can be seconds late with a frame, and
+		## what waits on one comes late with it: the scale after a take, and so
+		## the drift (2026101614100002), or the look after a scale change, and
+		## so the take after the drift. One more step to a grid it may end at
+		## is that, and it has to hold.
+		if got is not None and later_lines:
+			seen = [f"{got[1]} {got[0]}", *later_lines]
+			rows, cols = (int(v) for v in seen[-1].split())
+			if sum(a != b for a, b in zip(seen, seen[1:], strict=False)) == 1 and ((cols, rows) in grids or drift((cols, rows))):
+				self.note(f"      went on from {got} to {(cols, rows)}")
+				got, later = (cols, rows), {seen[-1]}
+		self.note(f"    {what}: on {win.output} {win.rect}, most on {','.join(primary) or '-'}, grid {got}, looks {[trace_field(t, 'key') for t in looked]}")
 		if got is None or (got not in grids and not drift(got)):
 			raise CheckError(f"{what}: at {got}, want one of {sorted(grids)} ({', '.join(f'{k}: {v}' for k, v in allowed.items())})")
 		if len(later) > 1 or (later and later != {f"{got[1]} {got[0]}"}):
@@ -950,8 +984,9 @@ class Case:
 			self.allow(CAPPED, named)
 			grid = got
 		drifted = rescaled and grid == model.grid
-		drifted_there = named in pushed or (named is None and model.belief in pushed)
-		if grid != got and not ((drifted and drift(got)) or (drifted_there and got in around(grid))):
+		band = pushed.get(named, pushed.get(model.belief, set()) if named is None else set())
+		drifted_there = bool(band)
+		if grid != got and not ((drifted and drift(got)) or (drifted_there and got in band)):
 			raise CheckError(f"{what}: named {named} but is at {got}, not {grid}")
 		if grid != got:
 			self.allow(rounding if drifted else PUSHED, named)
@@ -1349,6 +1384,8 @@ class Case:
 				win, outs, _, primary = self.where()
 				r = outs[primary[0]]["rect"] if primary else outs[win.output]["rect"]
 				self.before_user(what, step)
+				_, outs, _, primary = self.where()
+				before = {k: LEFT_LATE for k in self.names(outs, primary)} if plan.arm == "wayland" else {}
 				pid = rig.app.pid if rig.app else 0
 				rig.msg(f"[pid={pid}] resize set {int(r['width'] * step.size[0])} {int(r['height'] * step.size[1])}")
 				_, outs, touched, primary = self.where()
@@ -1361,7 +1398,7 @@ class Case:
 				## after it.
 				_, outs, touched, primary = self.where()
 				self.track_entered(touched)
-				self.user_save(what, {**resized_on, **self.names(outs, primary)}, None if model.font_pinned else model.zoom)
+				self.user_save(what, {**before, **resized_on, **self.names(outs, primary)}, None if model.font_pinned else model.zoom)
 			elif step.kind == "zoom":
 				self.before_user(what, step)
 				_, outs, _, primary = self.where()
@@ -1420,6 +1457,7 @@ class Case:
 				if reentered:
 					allowed = {**allowed, None: TOLD_NOTHING}
 				self.settle(what, allowed, looks or reentered or plan.arm == "x11", after_scale != before_scale)
+				self.within_reach(what)
 		rig.stop_app()
 		time.sleep(0.5)
 		last, monitors = rig.state()
@@ -1428,6 +1466,32 @@ class Case:
 			raise CheckError(f"the last size on disk is {last}, want {want_last}")
 		if monitors != model.store:
 			raise CheckError(f"the sizes on disk are {monitors}, want {model.store}")
+
+	## An output that shrinks with a scale change can leave the window's title
+	## bar or middle over a gap, where no pointer can go, so a drag would grab
+	## nothing (2026101614100000). A person would move it back by key, so the
+	## window goes to the middle of its output, with the pointer away. The
+	## monitors changed since the window last looked, so it may look at once
+	## rather than wait for the person.
+	def within_reach(self, what: str) -> None:
+		win, outs, _, primary = self.where()
+		spots = [(win.rect[0] + win.rect[2] // 2, win.rect[1] - win.deco // 2), (win.rect[0] + win.rect[2] // 2, win.rect[1] + win.rect[3] // 2)]
+		rects = [(o["rect"]["x"], o["rect"]["y"], o["rect"]["width"], o["rect"]["height"]) for o in outs.values()]
+		if all(any(overlap((*spot, 1, 1), r) for r in rects) for spot in spots):
+			return
+		before_scale = outs[primary[0]]["scale"] if primary else self.scale
+		what = f"{what}, then moved back in reach by key"
+		self.note(f"  {what}")
+		self.was = (len(self.rig.size_lines()) - 1, self.drawn_at(before_scale))
+		self.park_pointer()
+		self.rig.msg(f"[pid={self.rig.app.pid if self.rig.app else 0}] move position center")
+		time.sleep(0.3)
+		_, outs, touched, primary = self.where()
+		self.track_entered(touched)
+		rescaled = (outs[primary[0]]["scale"] if primary else before_scale) != before_scale
+		waits = self.waiting or self.plan.arm == "x11" or rescaled
+		self.settle(what, {**self.names(outs, primary), None: WAITS if waits else TOLD_NOTHING}, True, rescaled)
+		self.waiting = waits
 
 	def drag(self, what: str, step: Step, before_scale: float) -> None:
 		rig = self.rig
@@ -1674,3 +1738,6 @@ if __name__ == "__main__":
 ##		- 20261016 JC: A window with a size or a font size from the command line
 ##		  saves nothing unless --remember-size comes with it, and a grid moved by
 ##		  a scale change is judged from the cells the shell is told.
+##		- 20261016 JC: A window a scale change leaves out of reach is moved back by
+##		  key, a grid may take one late step to where it ends, and a take's drift
+##		  is judged from the cells.
