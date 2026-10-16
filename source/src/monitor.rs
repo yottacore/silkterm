@@ -154,6 +154,25 @@ pub fn layout(window: &Window) -> Vec<(i64, i64, i64, i64)> {
 		.collect()
 }
 
+/// Where in the layout each output a Wayland window is on sits, first entered
+/// first. None off Wayland, or where winit's state can't be read.
+pub fn outputs_under(window: &Window) -> Option<Vec<(i64, i64, i64, i64)>> {
+	#[cfg(target_os = "linux")]
+	return wayland::outputs_on(window).map(|on| {
+		on.iter()
+			.map(|o| {
+				let (x, y, w, h) = o.laid.bounds;
+				(x as i64, y as i64, w as i64, h as i64)
+			})
+			.collect()
+	});
+	#[cfg(not(target_os = "linux"))]
+	{
+		let _ = window;
+		None
+	}
+}
+
 fn logical_size(window: &Window, scale: f64) -> (f64, f64) {
 	let px = window.inner_size();
 	(f64::from(px.width) / scale, f64::from(px.height) / scale)
