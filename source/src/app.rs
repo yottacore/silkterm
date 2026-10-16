@@ -779,6 +779,7 @@ struct State {
 	// The window options the command line gave at launch, folded in again after a
 	// reload so a reread file does not drop them.
 	cli_style: crate::cli::Style,
+	cli_size: window_size::CliSize, // the rest of what it gave that sets the size
 	// Request stamp, shared with the workers: a result with an older one is
 	// stale, and a worker whose stamp is no longer the newest stops early.
 	wp_seq: Arc<std::sync::atomic::AtomicU64>,
@@ -1479,6 +1480,10 @@ impl State {
 		// opened, so a change to either since then must survive the Apply.
 		config::keep_session_on_apply(&live, &orig, &mut edited);
 		config::keep_wallpaper_on_apply(&live, self.wp_locked, &mut orig, &mut edited);
+		// a size or font from the command line, changed here, is the user's now
+		if window_size::hand_back(&mut self.cli_size, &mut self.cli_style, &orig, &edited) {
+			self.watch.font_pinned = false;
+		}
 		// The dialog opened on the file, so the file gets only what was edited,
 		// while this window takes everything that differs from what it runs -
 		// including what another window saved since this one loaded.
@@ -4007,6 +4012,7 @@ impl ApplicationHandler<UserEvent> for App {
 			saves_told: config::saves(),
 			reread_untold: false,
 			cli_style: self.cli.win.style.clone(),
+			cli_size: window_size::CliSize::of(&self.cli.win),
 			wp_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
 			wp_pacing: crate::wallpaper::Pacing::default(),
 			wp_resize_at: None,

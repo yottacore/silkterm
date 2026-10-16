@@ -11,12 +11,15 @@
 ##			  monitor that isn't there.
 ##			- Native Wayland, or X11 through Xwayland.
 ##			- A launch on one output, maybe with a size or a font size on the
-##			  command line, then moves, drags, drops with a sliver left on
-##			  another output, resizes, font zooms, scale changes and relaunches.
+##			  command line, and maybe --remember-size with it, then moves,
+##			  drags, drops with a sliver left on another output, resizes, font
+##			  zooms, scale changes and relaunches.
 ##		After each step the model says which monitor the window should count
 ##		itself on, and which size and font zoom it should take there, and the
 ##		shell inside says what it got. Nothing may change while a drag is held.
-##		At the end the sizes on disk have to be exactly the ones the user set.
+##		At the end the sizes on disk have to be exactly the ones the user set,
+##		less any set in a window with a size or a font size from the command
+##		line and no --remember-size, which saves nothing.
 ##		Where a platform can't tell a window what the model knows, the model
 ##		names that limit and allows for it, and the run counts each one.
 ##	- Syntax: run.py [--bin PATH] [--seed N | --from N] [--secs S] [--wayland|--x11]
@@ -38,6 +41,7 @@
 
 import argparse
 import json
+import math
 import os
 import random
 import re
@@ -139,6 +143,7 @@ class Step:
 	zoom: int = 0
 	cli: Grid | None = None
 	font: int | None = None
+	persist: bool = False
 	scale: float = 1.0
 
 	def __str__(self) -> str:
@@ -155,8 +160,7 @@ class Step:
 			case "zoom":
 				return f"font zoom {'reset' if self.zoom == 0 else f'{self.zoom:+d}'}{back}"
 			case "relaunch":
-				pins = (f", --columns {self.cli[0]} --rows {self.cli[1]}" if self.cli else "") + (f", --font-size {self.font}" if self.font else "")
-				return f"relaunch on output {self.to + 1}{pins}"
+				return f"relaunch on output {self.to + 1}{pins(self.cli, self.font, self.persist)}"
 			case "rescale":
 				return f"output {self.to + 1} to scale {self.scale:g}"
 			case "fullscreen":
@@ -178,6 +182,7 @@ class Plan:
 	start: int
 	cli: Grid | None
 	font: int | None
+	persist: bool
 	steps: list[Step]
 
 	def describe(self) -> list[str]:
@@ -187,10 +192,14 @@ class Plan:
 			lines.append(f"  output {i + 1}: {out.mode[0]}x{out.mode[1]} at {out.scale:g}, at {out.at[0]},{out.at[1]}, " + (f"kept {kept}" if kept else "nothing kept"))
 		if self.stale:
 			lines.append(f"  kept for a monitor that isn't there: {self.stale}")
-		pins = (f", --columns {self.cli[0]} --rows {self.cli[1]}" if self.cli else "") + (f", --font-size {self.font}" if self.font else "")
-		lines.append(f"  opens on output {self.start + 1}{pins}")
+		lines.append(f"  opens on output {self.start + 1}{pins(self.cli, self.font, self.persist)}")
 		lines += [f"  {n + 1}. {step}" for n, step in enumerate(self.steps)]
 		return lines
+
+
+def pins(cli: Grid | None, font: int | None, persist: bool) -> str:
+	return ((f", --columns {cli[0]} --rows {cli[1]}" if cli else "") + (f", --font-size {font}" if font else "")
+		+ (", --remember-size" if persist else ""))
 
 
 def overlap(a: Rect, b: Rect) -> int:
@@ -326,7 +335,13 @@ def make_plan(seed: int, arm: str | None = None) -> Plan:
 			continue
 		if kind in ("move", "drag", "relaunch"):
 			here = steps[-1].to
-	return Plan(seed, arm, outs, remember, per_monitor, last, fixed, kept, stale, start, cli, font, steps)
+	## Drawn apart, so a seed from before it was added makes the same case,
+	## but for this.
+	more = random.Random(f"{seed}/remember-size")
+	persist = bool(cli or font) and more.random() < 0.5
+	for step in steps:
+		step.persist = bool(step.cli or step.font) and more.random() < 0.5
+	return Plan(seed, arm, outs, remember, per_monitor, last, fixed, kept, stale, start, cli, font, persist, steps)
 
 
 ## The generator still makes every kind of case. Runs before any case, and
@@ -345,6 +360,7 @@ def generator_holes() -> list[str]:
 		seen["per monitor off"] += not plan.per_monitor
 		seen["size pinned"] += plan.cli is not None or any(s.cli for s in plan.steps)
 		seen["font pinned"] += plan.font is not None or any(s.font for s in plan.steps)
+		seen["remember size"] += plan.persist or any(s.persist for s in plan.steps)
 		for step in plan.steps:
 			seen[step.kind] += 1
 			seen[f"drag {step.style}"] += step.kind == "drag"
@@ -352,7 +368,7 @@ def generator_holes() -> list[str]:
 			seen["pointer stays away"] += not step.pointer
 			seen["zoom reset"] += step.kind == "zoom" and step.zoom == 0
 	want = ["wayland", "x11", "fractional", "mixed scales", "twins", "4 outputs", "stale entry", "remember off", "per monitor off",
-		"size pinned", "font pinned", *KINDS, "drag clean", "drag sliver", "held astride", "pointer stays away", "zoom reset"]
+		"size pinned", "font pinned", "remember size", *KINDS, "drag clean", "drag sliver", "held astride", "pointer stays away", "zoom reset"]
 	return [w for w in want if seen[w] == 0]
 
 
@@ -555,12 +571,14 @@ class Rig:
 		if typed.returncode:
 			raise CheckError(f"wtype failed: {typed.stderr.strip()}")
 
-	def launch(self, cli: Grid | None, font: int | None) -> None:
+	def launch(self, cli: Grid | None, font: int | None, persist: bool) -> None:
 		args = [str(self.binary), "--shell", f"python3 -I {HERE / '_size.py'} {self.grid_file}"]
 		if cli:
 			args += ["--columns", str(cli[0]), "--rows", str(cli[1])]
 		if font:
 			args += ["--font-size", str(font)]
+		if persist:
+			args += ["--remember-size"]
 		env = dict(self.wl if self.plan.arm == "wayland" else self.base, LIBGL_ALWAYS_SOFTWARE="1", VK_ICD_FILENAMES=str(LVP),
 			VK_LAYER_MESSAGE_ID_FILTER="VUID-vkCmdCopyBufferToImage-pRegions-00173", LP_NUM_THREADS="2",
 			HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / ".config"), XDG_DATA_HOME=str(self.home / ".local/share"),
@@ -627,12 +645,13 @@ class Rig:
 		lines = self.size_lines()
 		return (lines[-1][1], lines[-1][0]) if lines else None
 
-	## The size of a cell in pixels, as the terminal tells the shell.
-	def cell(self) -> tuple[int, int] | None:
+	## The size of a cell in pixels, as the terminal tells the shell, on the
+	## last line or on line `at`.
+	def cell(self, at: int = -1) -> tuple[int, int] | None:
 		lines = self.size_lines()
-		if not lines or not all(lines[-1]):
+		if not -len(lines) <= at < len(lines) or not all(lines[at]):
 			return None
-		rows, cols, width, height = lines[-1]
+		rows, cols, width, height = lines[at]
 		return width // cols, height // rows
 
 	def trace(self) -> list[str]:
@@ -687,13 +706,26 @@ def key_of(arm: str, out: dict[str, Any], scale: float) -> str:
 	return f"{mode['width']}x{mode['height']}_{round(scale * 100)}pct"
 
 
-## A scale change keeps the grid, unless a size kept for a monitor is to take
-## over. Then it keeps the window's size in the layout, and the font's cells
-## don't scale quite in step, so the grid can move a few cells. Measured up to
-## 3 in 111 columns.
+## A take that leaves most of the window on an output at another scale moves
+## the grid a few cells (2026101513385000). Measured up to 3 in 111 columns.
 def around(grid: Grid) -> list[Grid]:
 	dc, dr = max(1, -(-grid[0] * 4 // 100)), max(1, -(-grid[1] * 4 // 100))
 	return [(c, r) for c in range(grid[0] - dc, grid[0] + dc + 1) for r in range(grid[1] - dr, grid[1] + dr + 1)]
+
+
+## The grids a scale change can leave a window at that keeps its size on the
+## desktop, from a cell and scale to another. A font's cell doesn't grow in
+## step with the scale, so the grid goes by how far the cell grew against
+## the scale: at font zoom -2 a cell is 9x18 at 100% and 19x38 at 200%, and
+## 24 rows became 22 (2026101513385002). One more either way for the margins,
+## the chrome and the part of a cell the window had over.
+def drift_band(grid: Grid, was: tuple[tuple[int, int], float], now: tuple[tuple[int, int], float]) -> set[Grid]:
+	(cell_was, scale_was), (cell, scale) = was, now
+	spans = []
+	for n, c0, c1 in zip(grid, cell_was, cell, strict=True):
+		lo, hi = sorted((n, n * c0 * scale / (scale_was * c1)))
+		spans.append(range(max(1, math.floor(lo) - 1), math.ceil(hi) + 2))
+	return {(c, r) for c in spans[0] for r in spans[1]}
 
 
 class Case:
@@ -723,6 +755,11 @@ class Case:
 		## command line
 		self.atfont: str | None = None
 		self.cells: dict[tuple[float, int | None, int], tuple[int, int]] = {}
+		## the window saves the sizes the user sets: not with a size or a font
+		## size from the command line, unless with --remember-size as well
+		self.saves = True
+		## the line of the shell's sizes, and the scale, a step began at
+		self.was: tuple[int, float] = (-1, 1.0)
 
 	def note(self, text: str) -> None:
 		self.log.append(text)
@@ -731,6 +768,19 @@ class Case:
 	## monitor's own size to take over: the grid may then drift a few cells.
 	def drifts(self) -> bool:
 		return self.plan.remember and self.plan.per_monitor and not self.model.size_pinned
+
+	## The scale a cell the shell is told was drawn at: an X11 window's is 1.
+	def drawn_at(self, scale: float) -> float:
+		return scale if self.plan.arm == "wayland" else 1.0
+
+	## Whether `got` is where a scale change can have moved `grid` to since
+	## the step began, by the cell the shell is told now.
+	def drifted_to(self, got: Grid | None, grid: Grid, scales: set[float]) -> bool:
+		was = self.rig.cell(self.was[0])
+		now = self.rig.cell()
+		if not got or not was or not now:
+			return False
+		return any(got in drift_band(grid, (was, self.was[1]), (now, self.drawn_at(s))) for s in scales)
 
 	def outs(self) -> dict[str, dict[str, Any]]:
 		return {o["name"]: o for o in self.rig.outputs()}
@@ -816,9 +866,12 @@ class Case:
 		allowed = {**self.drag_names, **allowed}
 		outcomes = {k: model.after_look(k) for k in allowed}
 		grids = {o[1] for o in outcomes.values()}
-		rescaled = rescaled and self.drifts()
-		if rescaled:
-			grids |= {near for o in outcomes.values() if o[1] == model.grid for near in around(o[1])}
+		rescaled = rescaled and self.drifts() and model.grid in grids
+		scales = {o["scale"] for o in self.rig.outputs()}
+
+		def drift(g: Grid | None) -> bool:
+			return rescaled and self.drifted_to(g, model.grid, scales)
+
 		time.sleep(2.2)
 		## A window on no output yet keeps looking, for up to 10 s after it opens.
 		if looks:
@@ -845,7 +898,7 @@ class Case:
 					outcomes[named_at] = (was[0], (cols, rows), was[2])
 					grids.add((cols, rows))
 		deadline = time.monotonic() + 8
-		while self.rig.grid() not in grids and time.monotonic() < deadline:
+		while self.rig.grid() not in grids and not drift(self.rig.grid()) and time.monotonic() < deadline:
 			time.sleep(0.1)
 		got = self.rig.grid()
 		mark = len(self.rig.grid_lines())
@@ -871,7 +924,7 @@ class Case:
 		lw, lh = self.rig.extent()
 		if win_now and (win_now.rect[2] >= lw - 4 or win_now.rect[3] + win_now.deco >= lh - 4):
 			grids |= {(c, r) for c in range(1, max(g[0] for g in grids) + 1) for r in range(1, max(g[1] for g in grids) + 1)}
-		if got not in grids:
+		if got is None or (got not in grids and not drift(got)):
 			raise CheckError(f"{what}: at {got}, want one of {sorted(grids)} ({', '.join(f'{k}: {v}' for k, v in allowed.items())})")
 		if len(later) > 1 or (later and later != {f"{got[1]} {got[0]}"}):
 			raise CheckError(f"{what}: did not hold at {got}: {sorted(later)}")
@@ -898,7 +951,7 @@ class Case:
 			grid = got
 		drifted = rescaled and grid == model.grid
 		drifted_there = named in pushed or (named is None and model.belief in pushed)
-		if grid != got and not ((drifted or drifted_there) and got in around(grid)):
+		if grid != got and not ((drifted and drift(got)) or (drifted_there and got in around(grid))):
 			raise CheckError(f"{what}: named {named} but is at {got}, not {grid}")
 		if grid != got:
 			self.allow(rounding if drifted else PUSHED, named)
@@ -947,6 +1000,9 @@ class Case:
 	## Waits out a save the user asked for, and checks it was for the monitor
 	## the window counts itself on, and that this is the one it is on.
 	def user_save(self, what: str, allowed: dict[str | None, str], zoom: int | None) -> None:
+		if not self.saves:
+			self.user_unsaved(what, allowed, zoom)
+			return
 		model = self.model
 		deadline = time.monotonic() + 8
 		saves: list[str] = []
@@ -1013,6 +1069,42 @@ class Case:
 				self.refonted.add(model.belief)
 			else:
 				self.refonted.discard(model.belief)
+		model.grid = got
+		if zoom is not None:
+			model.zoom = zoom
+		self.check_font(what)
+
+	## A window opened with a size or a font size from the command line saves
+	## nothing the user sets, unless --remember-size came with it
+	## (2026101422190936). It still looks for its output as a save would.
+	def user_unsaved(self, what: str, allowed: dict[str | None, str], zoom: int | None) -> None:
+		model = self.model
+		trace: list[str] = []
+		deadline = time.monotonic() + 8
+		time.sleep(1.5)
+		while time.monotonic() < deadline and not any(t.split()[1] == "unsaved" for t in trace):
+			trace += self.rig.trace()
+			time.sleep(0.2)
+		time.sleep(1.0)
+		trace += self.rig.trace()
+		got = self.rig.grid()
+		win, _, _, _ = self.where()
+		unsaved = [t for t in trace if t.split()[1] == "unsaved"]
+		self.note(f"    {what}: on {win.output} {win.rect}, grid {got}, not saved {[(trace_field(t, 'key'), trace_field(t, 'grid')) for t in unsaved]}")
+		for event, why in (("save", "saved it"), ("take", "took a kept size over it"), ("arrive", "looked for its monitor again")):
+			hit = [t for t in trace if t.split()[1] == event]
+			if hit:
+				raise CheckError(f"{what}: a size set with options from the command line, and the window {why}: {hit}")
+		if not unsaved or not got:
+			raise CheckError(f"{what}: no sign of the size the user set: {trace}")
+		found = [t for t in trace if t.split()[1] == "found"]
+		if found:
+			named = trace_field(found[-1], "key")
+			if named not in allowed:
+				raise CheckError(f"{what}: found itself on {named}, want one of {list(allowed)}")
+			model.belief, self.stale = named, None
+		if trace_field(unsaved[-1], "key") != (model.belief or "-"):
+			raise CheckError(f"{what}: kept for {trace_field(unsaved[-1], 'key')}, but counts itself on {model.belief}")
 		model.grid = got
 		if zoom is not None:
 			model.zoom = zoom
@@ -1103,7 +1195,8 @@ class Case:
 		return took
 
 	def held_still(self, what: str, mark: int, start: Grid) -> None:
-		grids = {(int(c), int(r)) for r, c in (line.split() for line in set(self.rig.grid_lines()[mark:]))}
+		lines = self.rig.size_lines()
+		grids = {(c, r) for r, c, _, _ in lines[mark:]}
 		if grids <= {start}:
 			return
 		## the lines go back for the look after the drop
@@ -1112,7 +1205,16 @@ class Case:
 		took = [t for t in trace if t.split()[1] == "take"]
 		if took:
 			raise CheckError(f"{what}: took a size while still held: {took}")
-		if grids <= set(around(start)) and len(self.drag_scales) > 1 and self.drifts():
+		was = self.rig.cell(self.was[0])
+
+		def drifted(at: int) -> bool:
+			rows, cols, _, _ = lines[at]
+			cell = self.rig.cell(at)
+			if not was or not cell:
+				return False
+			return any((cols, rows) in drift_band(start, (was, self.was[1]), (cell, self.drawn_at(s))) for s in self.drag_scales)
+
+		if len(self.drag_scales) > 1 and self.drifts() and all(drifted(at) for at in range(mark, len(lines))):
 			self.allow(RESCALED, None)
 			return
 		raise CheckError(f"{what}: resized while still held: {sorted(grids)}, trace {trace}")
@@ -1218,11 +1320,12 @@ class Case:
 		plan, rig, model = self.plan, self.rig, self.model
 		rig.start()
 		self.write_config()
-		self.relaunch(Step("relaunch", to=plan.start, cli=plan.cli, font=plan.font), first=True)
+		self.relaunch(Step("relaunch", to=plan.start, cli=plan.cli, font=plan.font, persist=plan.persist), first=True)
 		for n, step in enumerate(plan.steps):
 			what = f"step {n + 1}, {step}"
 			self.note(f"  {what}")
 			before_scale = self.scale
+			self.was = (len(rig.size_lines()) - 1, self.drawn_at(before_scale))
 			self.drag_names = {}
 			self.drag_scales = set()
 			self.drag_touched = set()
@@ -1374,10 +1477,13 @@ class Case:
 		if saved:
 			raise CheckError(f"{what}: the window saved a size nobody set as it closed: {saved}")
 		rig.msg(f"focus output HEADLESS-{step.to + 1}")
-		rig.launch(step.cli, step.font)
+		## a Wayland window opens at scale 1 and learns its own after
+		self.was = (len(rig.size_lines()), 1.0)
+		rig.launch(step.cli, step.font, step.persist)
 		model.size_pinned = step.cli is not None
 		model.font_pinned = step.font is not None
 		self.font = step.font
+		self.saves = step.persist or not (step.cli or step.font)
 		model.belief = None
 		model.entered = []
 		self.stale = None
@@ -1565,3 +1671,6 @@ if __name__ == "__main__":
 ##		  output it's on, and a scale change under a resting pointer may look.
 ##		- 20261015 JC: A kept size used at a font size from the command line keeps
 ##		  its columns and rows where they fit there, else the kept window's size.
+##		- 20261016 JC: A window with a size or a font size from the command line
+##		  saves nothing unless --remember-size comes with it, and a grid moved by
+##		  a scale change is judged from the cells the shell is told.
