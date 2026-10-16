@@ -508,6 +508,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 		- Goes on the new "Program" Settings tab, 2026101611321634.
+	- Progress log:
+		- 20261016: Closing a tab with a pane in tmux asks what to do, with a "Don't ask me next time" check box that stores the answer. New setting for it: Detach, End or Prompt, as a horizontal radio.
+		- 20261016: Only splits get tmux. A split starts in a new tmux session. A new tab's first pane starts the plain shell, unless opened with "New tab in tmux".
 
 - Double-click selection of a path: allow unicode characters
 	- ID: 2026101611321633
@@ -556,6 +559,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Non-space whitespace is ignored.
 	- Notes:
 		- Pre-next-cut.
+	- Progress log:
+		- 20261016: The default gives exactly what the 4 check boxes give now. The dash shows only when no program is named. A group whose macros all come out empty drops with its literal text. `[ ]` prints its brackets, `{ }` doesn't.
 
 - README.md, "Terminal showdown" section: the line on memory
 	- ID: 2026101611321635
