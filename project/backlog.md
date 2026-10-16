@@ -537,6 +537,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- A size given on the command line wins over this, as before.
 	- Progress log:
 		- 20261015: Asked how a kept size should be used at another font. No answer in time, so the best guess below was taken. Easy to take back: drop the use at launch and at a take, and the family from the font check.
+		- 20261016: The options that count as affecting the terminal's size are `--font-size`, `--font-name`, and any columns or rows option. Agreed.
+		- 20261016, best guess: A window opened with one of them still opens at a kept size by the fit rule below, but saves nothing.
 	- Decisions:
 		- 20261015, best guess: the rule given on 2026101412292756, both ways. A kept size used at a font other than the one it was kept at keeps its columns and rows if the window fits the screen at the font it opens with, and else opens at the columns and rows that keep the kept window's size in pixels. That's a launch or a take with `--font-size` or `--font-name`, and a grid saved under `--font-name`.
 			- "The screen" is the monitor the size is kept for, less the window's frame, as on that item.
@@ -635,6 +637,21 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The size is saved for the output the window is on.
 	- Reproduced: 20261015, 2 of 2 runs of that seed.
 	- Possible cause: sway sent the window its scale again as it left fullscreen, at the scale it already had. The resize back fell in the grace after a scale change, so it wasn't counted, and the user's resize after it was taken for the way back.
+
+- Wayland: a copy a program sends while no SilkTerm window has focus is dropped
+	- ID: 2026101607585700
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261016-075857
+	- Opened by: JC
+	- Related IDs: 2026101509024607
+	- Target OS: Linux
+	- Requirements:
+		- Hold the copy, and set the clipboard when that SilkTerm window gets the focus again.
+		- A line in usage.md saying a copy made from a window without focus on Wayland waits for it to get focus.
+	- Notes:
+		- Wayland lets a window set the clipboard only while it has the keyboard. X11 doesn't have that limit, and stays as it is.
 
 - A minimap compose or a selection drag reshapes every pane's text through the global dirty flag
 	- ID: 2026101007285827
