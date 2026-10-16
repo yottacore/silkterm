@@ -334,6 +334,69 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261016: every write of the remembered size, zoom and maximized state. They all go through `flush_window_size`, the one caller of `remember_window` and the one place the maximized state is written: the save after a resize or zoom, the one before a move is taken, and the one at quit.
 	- Needs external testing: a look on Windows and macOS, where the frame comes into the screen's room.
 
+- Wayland: a size set after a drop with a sliver left on another output at the same scale is saved for that other output
+	- ID: 2026101614100001
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261016-141000
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101413420431
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed 1003`.
+	- Incorrect behavior: After a drop onto a 100% output with 31% left on another 100% output, a resize that ends with the window wholly on the first saves its size for the other.
+	- Expected behavior: The size is saved for the output the window is on.
+	- Reproduced: 20261016, 2 of 2 runs, and the same with the test from before 2026101422190936's change.
+	- Possible cause: The window looks as the resize comes, while it's still on both outputs, and they look alike. The move that takes it off the other one comes after. Not checked whether that's the window or the test's model.
+	- Actual cause: Both. The resize itself takes the window off output 2, but Wayland tells a window it left an output only once a frame at the new size is up. As the resize came the window was still on both outputs, both at 100%, so it named the first one it entered, output 2. By the time the size was saved it was on output 1 alone. Seen in a trace of the outputs the window was on, at the resize and at the save.
+	- Actual fix:
+		- Once the size has held, a window that has only left outputs since the size was set counts itself on what's left, and the size is saved there. One that entered another output in between has moved, and keeps the one it named.
+		- In software a frame can come after the save. Seed 110000 was still on both outputs 1.3 s after its resize. So the test allows a save for an output the window was on as the size was set, as a named limit, not a fault.
+	- Note: This leans on the decision on 2026101413420431, that a size is kept for the output the window is on as it's set. The window was on both outputs then, and now the one it's left on wins.
+	- Test case: `a_resize_off_one_of_two_outputs_counts_the_one_left` (Estwjm9), a new rule with no red run of its own. `cicd/tests/dpirand/run.py --seed 1003` (EshVccz) failed on the build before and passes on the fix, with the test from before, saving for output 1.
+	- Verified: seed 1003, 3 runs. Seed 110000 traced. Unit suite, clippy for Linux, Windows and macOS. The test on the rule was seen to fail with the rule broken.
+	- Swept: the size the user sets is noted in two places, a resize and a font zoom, and both go through `look_unseen` and the same save.
+	- Branch: randfix
+	- Commit: ec9096e
+
+- Wayland: a size taken across outputs at different scales moves the grid, then moves it back
+	- ID: 2026101614100002
+	- Type: Bug
+	- Status: Waiting on signoff
+	- Severity: Low
+	- Opened: 20261016-141000
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101513385000
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed 184066139`.
+	- Incorrect behavior: A drop on a 150% output with 30% left on a 200% one takes the 150% output's 140x25. The window grows to be mostly on the 200% output, and the shell is told 138x24 and then 140x25 again a moment later.
+	- Expected behavior: The shell is told the kept grid once.
+	- Reproduced: 20261016, 2 of 2 runs, and the same with the test from before 2026101422190936's change. Seeds 9032, 20002 and 40003 failed the same way on dev on 20261015.
+	- Notes:
+		- The random test allows the drift itself by 2026101513385000, but not the grid moving back after it.
+	- Actual cause:
+		- On this seed the grid doesn't move back. The shell is told the take's 140x25, then 138x24, which is 2026101513385000's drift. The failure lists the two grids sorted, which read as the other order. The scale change comes once a frame at the new size is up, which in software took 2 s, so the drift came after the test had seen the take's grid, and its allowance didn't cover that.
+		- Seeds 9032 and 40003 are the same lag: a look or a scale change seconds late, after a grid the test had already accepted.
+		- In the window: a scale change after its own take that comes past the 1.5 s grace counts as a move. On seed 20002 one came 1.5 s after a take, a look took the other output's size, and that moved the window back: 59x22, then 60x23, then 61x42. Traced late ones at 2 s, 2.9 s and 4.6 s after a take.
+		- Seed 72046 drifted 40 rows to 37 at font zoom -2, past the test's flat 4 percent for 2026101513385000.
+	- Actual fix:
+		- The first scale change after the window's own take is the take's and no move, unless the person was back at the window in between, or 10 s went by.
+		- The test lets a grid take one late step to a grid it may end at, if it then stays there, and works out 2026101513385000's drift from the cells the shell is told.
+		- 2026101513385000 itself stays Queued and allowed by its ID.
+	- Note: This changes when a scale change counts as a move, which 2026101420262300 set up.
+	- Test case: `the_scale_a_take_brings_is_no_move` (EsuGv93). `cicd/tests/dpirand/run.py --wayland --seed 184066139`, `--seed 20002`, `--seed 9032`, `--seed 40003` and `--seed 72046` (EshVccz), each red with the test from before and green now.
+	- Verified: those seeds on the fix. Seed 20002 traced with and without the new rule: without it, the late scale after a take was taken as a move (a look waited), and with it not. The fail on 20002 came 1 run in 2 on the build before and wasn't caught again in 3 runs without the rule, so that red is from the trace, not a fresh fail. Unit suite, clippy for Linux, Windows and macOS. The unit test was seen to fail with the rule broken.
+	- Needs external testing: On Windows and macOS, a take that puts most of the window on a monitor at another scale.
+	- Swept: a scale change is the only event that goes through this. Moves on X11, Windows and macOS keep the time grace as before.
+	- Branch: randfix
+	- Commit: ec9096e
+
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
 	- Type: Bug
@@ -746,95 +809,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The size is saved for the output the window is on.
 	- Reproduced: 20261015, 2 of 2 runs of that seed.
 	- Possible cause: sway sent the window its scale again as it left fullscreen, at the scale it already had. The resize back fell in the grace after a scale change, so it wasn't counted, and the user's resize after it was taken for the way back.
-
-- The random test's drag misses a window that a scale change left over a gap between outputs
-	- ID: 2026101614100000
-	- Type: Bug
-	- Status: Done
-	- Severity: Low
-	- Opened: 20261016-141000
-	- Opened by: CC
-	- Parent ID: 2026101410442550
-	- Target OS: Linux
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- `cicd/tests/dpirand/run.py --seed 37`.
-	- Incorrect behavior: After output 2 goes to scale 2, the drag in step 5 leaves the window where it was, and the case fails as still counting itself on output 2.
-	- Expected behavior: The window is dragged to output 3, or the test makes no layout it can't drag in.
-	- Reproduced: 20261016, 2 of 2 runs, and the same with the test from before 2026101422190936's change.
-	- Possible cause: The scale change halves output 2 in the layout and leaves a gap below it, with the window's title bar over the gap. The pointer can't go there, so the grab misses. Read from the log, not checked.
-	- Actual cause: A fault in the test. At scale 2 output 2 shrinks to 1280x800 in the layout, and the window, at x 1308, is left over no output but for its bottom 136 rows on output 3. Its title bar and its middle are both over the gap, where no pointer can go, so the drag's press misses the title bar and the window stays put.
-	- Actual fix: After a scale change, a window left with its title bar or middle over no output is moved back to the middle of its output by key, with the pointer away, as a person would. The monitors changed since the window last looked, so it may look at once there, and the test allows either.
-	- Swept: only a scale change shrinks an output. Moves, drops, resizes and launches all leave the window on an output.
-	- Test case: `cicd/tests/dpirand/run.py --seed 37` (EshVccz). It failed with the test from before and passes now, on the same build.
-	- Verified: seed 37, 3 runs. Seed 70006 moves a window back in reach on both arms and passes. The random test runs listed on 2026101513385002.
-	- Branch: randfix
-	- Commit: ec9096e
-	- Acceptance signoff: Self-closed: a fault in the test, fixed, red before and green after on its seed.
-	- Closed: 20261016-161947
-
-- Wayland: a size set after a drop with a sliver left on another output at the same scale is saved for that other output
-	- ID: 2026101614100001
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261016-141000
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101413420431
-	- Target OS: Linux
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- `cicd/tests/dpirand/run.py --wayland --seed 1003`.
-	- Incorrect behavior: After a drop onto a 100% output with 31% left on another 100% output, a resize that ends with the window wholly on the first saves its size for the other.
-	- Expected behavior: The size is saved for the output the window is on.
-	- Reproduced: 20261016, 2 of 2 runs, and the same with the test from before 2026101422190936's change.
-	- Possible cause: The window looks as the resize comes, while it's still on both outputs, and they look alike. The move that takes it off the other one comes after. Not checked whether that's the window or the test's model.
-	- Actual cause: Both. The resize itself takes the window off output 2, but Wayland tells a window it left an output only once a frame at the new size is up. As the resize came the window was still on both outputs, both at 100%, so it named the first one it entered, output 2. By the time the size was saved it was on output 1 alone. Seen in a trace of the outputs the window was on, at the resize and at the save.
-	- Actual fix:
-		- Once the size has held, a window that has only left outputs since the size was set counts itself on what's left, and the size is saved there. One that entered another output in between has moved, and keeps the one it named.
-		- In software a frame can come after the save. Seed 110000 was still on both outputs 1.3 s after its resize. So the test allows a save for an output the window was on as the size was set, as a named limit, not a fault.
-	- Note: This leans on the decision on 2026101413420431, that a size is kept for the output the window is on as it's set. The window was on both outputs then, and now the one it's left on wins.
-	- Test case: `a_resize_off_one_of_two_outputs_counts_the_one_left` (Estwjm9), a new rule with no red run of its own. `cicd/tests/dpirand/run.py --seed 1003` (EshVccz) failed on the build before and passes on the fix, with the test from before, saving for output 1.
-	- Verified: seed 1003, 3 runs. Seed 110000 traced. Unit suite, clippy for Linux, Windows and macOS. The test on the rule was seen to fail with the rule broken.
-	- Swept: the size the user sets is noted in two places, a resize and a font zoom, and both go through `look_unseen` and the same save.
-	- Branch: randfix
-	- Commit: ec9096e
-
-- Wayland: a size taken across outputs at different scales moves the grid, then moves it back
-	- ID: 2026101614100002
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261016-141000
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101513385000
-	- Target OS: Linux
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- `cicd/tests/dpirand/run.py --wayland --seed 184066139`.
-	- Incorrect behavior: A drop on a 150% output with 30% left on a 200% one takes the 150% output's 140x25. The window grows to be mostly on the 200% output, and the shell is told 138x24 and then 140x25 again a moment later.
-	- Expected behavior: The shell is told the kept grid once.
-	- Reproduced: 20261016, 2 of 2 runs, and the same with the test from before 2026101422190936's change. Seeds 9032, 20002 and 40003 failed the same way on dev on 20261015.
-	- Notes:
-		- The random test allows the drift itself by 2026101513385000, but not the grid moving back after it.
-	- Actual cause:
-		- On this seed the grid doesn't move back. The shell is told the take's 140x25, then 138x24, which is 2026101513385000's drift. The failure lists the two grids sorted, which read as the other order. The scale change comes once a frame at the new size is up, which in software took 2 s, so the drift came after the test had seen the take's grid, and its allowance didn't cover that.
-		- Seeds 9032 and 40003 are the same lag: a look or a scale change seconds late, after a grid the test had already accepted.
-		- In the window: a scale change after its own take that comes past the 1.5 s grace counts as a move. On seed 20002 one came 1.5 s after a take, a look took the other output's size, and that moved the window back: 59x22, then 60x23, then 61x42. Traced late ones at 2 s, 2.9 s and 4.6 s after a take.
-		- Seed 72046 drifted 40 rows to 37 at font zoom -2, past the test's flat 4 percent for 2026101513385000.
-	- Actual fix:
-		- The first scale change after the window's own take is the take's and no move, unless the person was back at the window in between, or 10 s went by.
-		- The test lets a grid take one late step to a grid it may end at, if it then stays there, and works out 2026101513385000's drift from the cells the shell is told.
-		- 2026101513385000 itself stays Queued and allowed by its ID.
-	- Note: This changes when a scale change counts as a move, which 2026101420262300 set up.
-	- Test case: `the_scale_a_take_brings_is_no_move` (EsuGv93). `cicd/tests/dpirand/run.py --wayland --seed 184066139`, `--seed 20002`, `--seed 9032`, `--seed 40003` and `--seed 72046` (EshVccz), each red with the test from before and green now.
-	- Verified: those seeds on the fix. Seed 20002 traced with and without the new rule: without it, the late scale after a take was taken as a move (a look waited), and with it not. The fail on 20002 came 1 run in 2 on the build before and wasn't caught again in 3 runs without the rule, so that red is from the trace, not a fresh fail. Unit suite, clippy for Linux, Windows and macOS. The unit test was seen to fail with the rule broken.
-	- Needs external testing: On Windows and macOS, a take that puts most of the window on a monitor at another scale.
-	- Swept: a scale change is the only event that goes through this. Moves on X11, Windows and macOS keep the time grace as before.
-	- Branch: randfix
-	- Commit: ec9096e
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -4803,6 +4777,32 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- The random test's drag misses a window that a scale change left over a gap between outputs
+	- ID: 2026101614100000
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261016-141000
+	- Opened by: CC
+	- Parent ID: 2026101410442550
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --seed 37`.
+	- Incorrect behavior: After output 2 goes to scale 2, the drag in step 5 leaves the window where it was, and the case fails as still counting itself on output 2.
+	- Expected behavior: The window is dragged to output 3, or the test makes no layout it can't drag in.
+	- Reproduced: 20261016, 2 of 2 runs, and the same with the test from before 2026101422190936's change.
+	- Possible cause: The scale change halves output 2 in the layout and leaves a gap below it, with the window's title bar over the gap. The pointer can't go there, so the grab misses. Read from the log, not checked.
+	- Actual cause: A fault in the test. At scale 2 output 2 shrinks to 1280x800 in the layout, and the window, at x 1308, is left over no output but for its bottom 136 rows on output 3. Its title bar and its middle are both over the gap, where no pointer can go, so the drag's press misses the title bar and the window stays put.
+	- Actual fix: After a scale change, a window left with its title bar or middle over no output is moved back to the middle of its output by key, with the pointer away, as a person would. The monitors changed since the window last looked, so it may look at once there, and the test allows either.
+	- Swept: only a scale change shrinks an output. Moves, drops, resizes and launches all leave the window on an output.
+	- Test case: `cicd/tests/dpirand/run.py --seed 37` (EshVccz). It failed with the test from before and passes now, on the same build.
+	- Verified: seed 37, 3 runs. Seed 70006 moves a window back in reach on both arms and passes. The random test runs listed on 2026101513385002.
+	- Branch: randfix
+	- Commit: ec9096e
+	- Acceptance signoff: Self-closed: a fault in the test, fixed, red before and green after on its seed.
+	- Closed: 20261016-161947
 
 - The random test's allowance for a grid that moves with a scale change is too small at a small font zoom
 	- ID: 2026101513385002
