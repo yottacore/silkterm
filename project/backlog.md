@@ -37,7 +37,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Smooth scroll freaked out with a long flatpak update
 	- ID: 2026101310563284
 	- Type: Bug
-	- Status: Waiting on signoff
+	- Status: Done
 	- Severity: High
 	- Opened: 20261013-105632
 	- Opened by: JC
@@ -61,6 +61,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261013: Waiting on signoff for a look at a real update with downloads in a real window. Still eases once: the first redraw, when the table gets its progress column.
 	- Branch: fpaksnap
 	- Commit: 544b01b
+	- Acceptance signoff: JC, 20261016.
+	- Closed: 20261016-110914
 	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
 	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
 
@@ -104,7 +106,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - README.md: move the long sections out to their own docs
 	- ID: 2026101415085144
 	- Type: Task
-	- Status: Waiting on signoff
+	- Status: Done
 		- Move the comparison table itself into 'comparison.md' also.
 	- Priority: Avg
 	- Opened: 20261014-150851
