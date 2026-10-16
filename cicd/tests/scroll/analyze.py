@@ -37,6 +37,12 @@ supposed to hold:
                     once, so no normal-screen frame between them carries a
                     fraction. Output must be seen easing before the first trip,
                     or the check tested nothing.
+  --mode wipe     : clears inside tmux, which tmux draws on the alt screen as
+                    its pane scrolled away whole, between a region scroll of 3
+                    and one of 5. A burst before them scrolls the pane away
+                    whole too and has to slide, or the check tested nothing.
+                    Between the marks no frame takes a step that big, and no
+                    slide goes past the 3 rows of the first mark.
   --mode popin    : content growing down into blank rows on a half-empty screen
                     (an input box taking a paste). That is room, not a scroll, so
                     a step down must never slide: app_off never goes below 0.
@@ -76,7 +82,7 @@ def read_note(path: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", required=True, choices=["slide", "hardcut", "still", "pinned", "popin", "instant"])
+    ap.add_argument("--mode", required=True, choices=["slide", "hardcut", "still", "pinned", "popin", "instant", "wipe"])
     ap.add_argument("--expect-st", type=int, default=-1)
     ap.add_argument("--expect-sb", type=int, default=-1)
     ap.add_argument("--label", default="scene")
@@ -148,6 +154,28 @@ def main() -> int:
             out("FAIL", f"a clear eased: {len(moving)} frame(s) carry a fraction (max {worst:.3f})")
             return 1
         out("PASS", "every clear showed at once")
+        return 0
+
+    if a.mode == "wipe":
+        alt = [f for f in frames if f["alt"] == 1]
+        start = next((i for i, f in enumerate(alt) if f["sh"] == 3), None)
+        if start is None:
+            out("SKIP", "the opening mark never showed (GL warmup / timing?)")
+            return 2
+        end = next((i for i in range(start, len(alt)) if alt[i]["sh"] == 5), None)
+        if end is None:
+            out("SKIP", "the closing mark never showed (timing?)")
+            return 2
+        if not any(f["sh"] >= 8 and f["app_off"] > 4 for f in alt[:start]):
+            out("FAIL", "no burst slid before the clears, so nothing was tested")
+            return 1
+        slid = [f for f in alt[start + 1:end] if f["sh"] >= 8 or f["app_off"] > 4]
+        if slid:
+            worst = max(f["app_off"] for f in slid)
+            out("FAIL", f"a clear slid: {len(slid)} frame(s), sh up to "
+                       f"{max(f['sh'] for f in slid)} (app_off up to {worst:.3f})")
+            return 1
+        out("PASS", "every clear showed at once, and the bursts slid")
         return 0
 
     if a.mode == "still":
@@ -253,3 +281,4 @@ if __name__ == "__main__":
 ##	History:
 ##		- 20260706 JC: Created.
 ##		- 20261013 JC: --note, so altenter's wait running out is a skip.
+##		- 20261016 JC: wipe mode, for a clear inside tmux.
