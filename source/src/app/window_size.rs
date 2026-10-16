@@ -80,8 +80,27 @@ impl State {
 		if keep.unpin {
 			self.watch.size_pinned = false;
 		}
+		if saves_size(self.cli_size, &self.cli_style) {
+			self.save_size((cols, rows), &keep, fullscreen, maximized);
+		} else if keep.grid || keep.zoom {
+			mondbg(
+				"unsaved",
+				self.watch.key.as_deref(),
+				Some((cols, rows)),
+				None,
+			);
+		}
+		// Moved while fullscreen or maximized, and now back: a look takes the
+		// size. Taken at once, a slow frame at the size back from fullscreen
+		// came back from sway late and undid it (2026101417045856).
+		if !force && keep.back && self.watch.take_owed {
+			self.watch.check_at = Some(Instant::now() + MONITOR_SETTLE);
+		}
+	}
+
+	fn save_size(&mut self, grid: (usize, usize), keep: &Keep, fullscreen: bool, maximized: bool) {
 		let zoom = (keep.zoom && !self.watch.font_pinned).then(config::font_zoom_px);
-		let grid = keep.grid.then(|| self.grid_to_open_at((cols, rows), zoom));
+		let grid = keep.grid.then(|| self.grid_to_open_at(grid, zoom));
 		let kept = |s: &config::Settings| {
 			(
 				s.remembered_columns,
@@ -105,12 +124,6 @@ impl State {
 			}
 			kept(live) != before
 		});
-		// Moved while fullscreen or maximized, and now back: a look takes the
-		// size. Taken at once, a slow frame at the size back from fullscreen
-		// came back from sway late and undid it (2026101417045856).
-		if !force && keep.back && self.watch.take_owed {
-			self.watch.check_at = Some(Instant::now() + MONITOR_SETTLE);
-		}
 	}
 
 	/// The grid to save, for the font the window opens at next time. That's
@@ -523,6 +536,65 @@ pub(super) fn launch_maximized(settings: &config::Settings, cli: &crate::cli::Wi
 		&& cli.pixel_width.is_none()
 		&& cli.pixel_height.is_none()
 		&& !cli.fullscreen.unwrap_or(false)
+}
+
+/// What the command line gave that sets the window's size, but for the font
+/// options, which `State::cli_style` has. While any of them is left, the
+/// window saves nothing of its size: not the size, the font zoom or
+/// maximized, for a monitor or as the last size anywhere (2026101422190936).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(super) struct CliSize {
+	pub(super) columns: bool,  // --columns or --pixel-width
+	pub(super) rows: bool,     // --rows or --pixel-height
+	pub(super) remember: bool, // --remember-size saves as usual anyway
+}
+
+impl CliSize {
+	pub(super) fn of(cli: &crate::cli::WindowOpts) -> Self {
+		Self {
+			columns: cli.columns.is_some() || cli.pixel_width.is_some(),
+			rows: cli.rows.is_some() || cli.pixel_height.is_some(),
+			remember: cli.remember_size.unwrap_or(false),
+		}
+	}
+}
+
+/// Whether a size the user sets is saved.
+pub(super) fn saves_size(size: CliSize, style: &crate::cli::Style) -> bool {
+	size.remember
+		|| !(size.columns || size.rows || style.font_size.is_some() || style.font_name.is_some())
+}
+
+/// A Settings change to a value the command line gave hands that value back,
+/// and the window goes on as if it was never given. The font family and size
+/// go back once Settings no longer holds them, by a change or the reset
+/// arrow, and columns and rows once either is changed. True when the font
+/// size went back.
+pub(super) fn hand_back(
+	size: &mut CliSize,
+	style: &mut crate::cli::Style,
+	orig: &config::Settings,
+	edited: &config::Settings,
+) -> bool {
+	use crate::ui_spec::Key;
+	let let_go = |key: Key| {
+		orig.model.values.held.contains_key(key.name())
+			&& !edited.model.values.held.contains_key(key.name())
+	};
+	if style.font_name.is_some() && let_go(Key::FontFamily) {
+		style.font_name = None;
+	}
+	let font_size = style.font_size.is_some() && let_go(Key::FontSize);
+	if font_size {
+		style.font_size = None;
+	}
+	// One size in Settings. Columns and rows are set by hand once Remember
+	// last size is off, and turning it off keeps the size it showed.
+	if !edited.remember_size && (edited.columns, edited.rows) != (orig.columns, orig.rows) {
+		size.columns = false;
+		size.rows = false;
+	}
+	font_size
 }
 
 /// Which monitor the window's size is kept for, and the wait for a move to
@@ -1244,6 +1316,86 @@ mod tests {
 		assert_eq!(open((7.0, 16.0), screen), kept);
 		assert_eq!(open(normal, screen), kept, "the same font");
 		assert_eq!(open(normal, None), kept, "the same font, no screen");
+	}
+
+	// A window opened with a size or a font from the command line saved the
+	// size the user set, and a launch without them opened at it in another
+	// font. Such a window saves nothing until each of those is changed in
+	// Settings, unless --remember-size asks for the usual saves.
+	// Test ID: EsthbIT
+	#[test]
+	fn a_size_or_font_from_the_command_line_saves_nothing_until_changed_in_settings() {
+		use super::{CliSize, hand_back, saves_size};
+		use crate::config::Settings;
+		use crate::fields;
+		use crate::ui_spec::Key;
+		use knobs::Value;
+		let cli = |line: &str| {
+			crate::cli::parse(line.split_whitespace().map(String::from))
+				.unwrap()
+				.win
+		};
+		let saves = |line: &str| {
+			let win = cli(line);
+			saves_size(CliSize::of(&win), &win.style)
+		};
+		for line in [
+			"--columns 90",
+			"--rows 30",
+			"--pixel-width 800",
+			"--pixel-height 600",
+			"--font-size 14",
+			"--font-name Mono",
+		] {
+			assert!(!saves(line), "{line}");
+			assert!(saves(&format!("{line} --remember-size")), "{line}");
+			assert!(!saves(&format!("{line} --remember-size=no")), "{line}");
+		}
+		assert!(saves(""));
+		assert!(saves("--fullscreen --background-color #102030 --title T"));
+		assert!(saves("--new-tab --font-size 14"), "a tab's font isn't used");
+
+		let win = cli("--font-size 14 --font-name Mono --columns 90 --rows 30");
+		let (mut size, mut style) = (CliSize::of(&win), win.style.clone());
+		let mut opened = Settings::default();
+		crate::cli::fold_window_style(&mut opened, &style);
+		let set = |key: Key, v: Value| {
+			let mut edited = opened.clone();
+			fields::set(&mut edited, key, &v, None);
+			edited
+		};
+		macro_rules! back {
+			($edited:expr) => {
+				hand_back(&mut size, &mut style, &opened, &$edited)
+			};
+		}
+		assert!(
+			!back!(set(Key::Margin, Value::Float(7.0))),
+			"another setting"
+		);
+		assert!(!back!(opened), "nothing changed");
+		assert!(back!(set(Key::FontSize, Value::Float(16.0))));
+		let mut reset = opened.clone();
+		fields::reset(&mut reset, Key::FontFamily, None);
+		assert!(!back!(reset), "the arrow, on the family");
+		assert_eq!((style.font_size, style.font_name.as_deref()), (None, None));
+		assert!(!back!(set(Key::RememberSize, Value::Bool(false))));
+		assert!(
+			!saves_size(size, &style),
+			"the switch over the size isn't it"
+		);
+		assert!(!back!(set(Key::Rows, Value::Int(40))));
+		assert!(saves_size(size, &style), "{size:?} {style:?}");
+		size = CliSize::of(&cli("--columns 90"));
+		assert!(!back!(set(Key::Columns, Value::Int(100))));
+		assert!(saves_size(size, &style), "{size:?}");
+		size = CliSize::of(&cli("--rows 20"));
+		let by_hand = set(Key::Rows, Value::Int(25));
+		assert!(!by_hand.remember_size);
+		let mut on = by_hand.clone();
+		fields::set(&mut on, Key::RememberSize, &Value::Bool(true), None);
+		assert!(!hand_back(&mut size, &mut style, &by_hand, &on));
+		assert!(!saves_size(size, &style), "nor turning it back on");
 	}
 
 	// A window left maximized opens maximized, unless the setting is off or the
