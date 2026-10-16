@@ -950,7 +950,7 @@ class Case:
 		## what waits on one comes late with it: the scale after a take, and so
 		## the drift (2026101614100002), or the look after a scale change, and
 		## so the take after the drift. One more step to a grid it may end at
-		## is that, and it has to hold.
+		## is that, and it has to stay there.
 		if got is not None and later_lines:
 			seen = [f"{got[1]} {got[0]}", *later_lines]
 			rows, cols = (int(v) for v in seen[-1].split())
