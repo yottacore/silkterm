@@ -508,12 +508,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 		- Goes on the new "Program" Settings tab, 2026101611321634.
-		- Suggested for the 2 "(Anything else?)" lines. Not agreed yet.
-			- Pro: closing SilkTerm by mistake doesn't end what's running.
-			- Con: a detached session keeps running and using memory until it's killed.
-			- Con: tmux's prefix key, Ctrl+B by default, no longer reaches programs inside it.
-			- Con: the tab title and the folder a new tab starts in may follow tmux rather than the shell inside it.
-			- Con: a mouse selection goes to tmux when its mouse mode is on.
 
 - Double-click selection of a path: allow unicode characters
 	- ID: 2026101611321633
@@ -544,7 +538,24 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Always run in new tmux session, 2026101611321632.
 	- Notes:
 		- Pre-next-cut.
-		- The Tab text group already has a toggle named "Program".
+
+- Tab text: a text field with predefined macros in place of the check boxes
+	- ID: 2026101611405210
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261016-114052
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Instead of check boxes, use a text field with predefined macros, with flyover tip text defining options.
+		- Default to something like: `%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% [{ %PROGRAM% || %LAST_PROGRAM% }] - %CURRENT_DIRECTORY% }`
+			- That line should give the same result as current settings (everything selected), and also move some code logic into this declaration.
+			- {} braces help disambiguate grouping, and don't print.
+			- Leading and trailing whitespace is ignored.
+			- Non-space whitespace is ignored.
+	- Notes:
+		- Pre-next-cut.
 
 - README.md, "Terminal showdown" section: the line on memory
 	- ID: 2026101611321635
