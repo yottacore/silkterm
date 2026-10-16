@@ -18,10 +18,10 @@ use alacritty_terminal::term::{Config as TermConfig, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
 
 use super::{
-	APP_SCROLL_MAX, DepthSampler, Output, SLIDE_DOWN_INTO_ROOM, StripCell, blank_went_up,
-	ease_output, fingerprint_frame, fnv_row, ledger_makes_room, ledger_step, repaint_shift,
-	row_print, scroll_shift_signed, shift_makes_room, skel_rows, slide_is_visible, snapshot_rows,
-	strip_rows,
+	APP_SCROLL_MAX, DepthSampler, Output, SLIDE_DOWN_INTO_ROOM, StripCell, WIPE_MAX_SLIDE,
+	blank_went_up, ease_output, fingerprint_frame, fnv_row, ledger_makes_room, ledger_step,
+	region_wiped, repaint_shift, row_print, scroll_shift_signed, shift_makes_room, skel_rows,
+	slide_is_visible, snapshot_rows, strip_rows,
 };
 use crate::scroll::Scroll;
 use crate::{config, palette};
@@ -153,7 +153,16 @@ impl Replay {
 				&mut palette::Readable::default(),
 			)
 		});
-		if !cut && (gesture_active || step.is_some()) {
+		let wiped = self.scroll.app_offset().abs() < WIPE_MAX_SLIDE
+			&& step.is_some_and(|step| {
+				region_wiped(step, &region, |i| {
+					row_print(&self.term.grid()[Line(i as i32)], cols) != blank
+				})
+			});
+		if wiped {
+			self.scroll.cancel_app_scroll();
+		}
+		if !cut && !wiped && (gesture_active || step.is_some()) {
 			self.term.scroll_ledger_mut().drain();
 		} else {
 			self.term.scroll_ledger_mut().clear();
@@ -167,7 +176,9 @@ impl Replay {
 					&& row_print(&self.term.grid()[Line(to as i32)], cols) == self.last_rows[from]
 			};
 			let unknown = !alt && self.last_cells.len() != lines;
-			!unknown && slide_is_visible(step, &region, &self.last_cells, kept, arrived) && !room
+			!unknown
+				&& !wiped && slide_is_visible(step, &region, &self.last_cells, kept, arrived)
+				&& !room
 		});
 		let mut cells = Vec::new();
 		let rows = snapshot_rows(
@@ -515,6 +526,154 @@ fn a_prompt_redrawn_right_after_a_resize_pops_in() {
 		r.frame(&redraw());
 		r.settle();
 		assert!(r.slides.is_empty(), "{filled} rows: slid {:?}", r.slides);
+	}
+}
+
+// tmux on the outer terminal, as tmux 3.6b writes it with its status line on:
+// the alt screen, the status line on the last row, and the pane above it as
+// the scroll region. `pane` is the pane's height, a row less than the screen.
+fn tmux_open(lines: usize) -> String {
+	let pane = lines - 1;
+	format!(
+		"\x1b[?1049h\x1b[H\x1b[2J\x1b[1;{lines}r\x1b[{lines};1H\x1b[30m\x1b[42m[0] 0:bash*\x1b(B\x1b[m\x1b[1;{pane}r\x1b[1;{lines}r\x1b[1;1H"
+	)
+}
+
+// A burst the way tmux passes it on: the pane scrolled away whole, then drawn.
+fn tmux_burst(lines: usize, from: usize) -> String {
+	let pane = lines - 1;
+	let rows = (from..from + pane)
+		.map(|i| format!("{i}\x1b[K"))
+		.collect::<Vec<_>>()
+		.join("\r\n");
+	format!("\x1b[1;{pane}r\x1b[1;1H\x1b[{pane}S{rows}\x1b[1;{lines}r\x1b[{pane};1H")
+}
+
+// Enter on the pane's last row: tmux scrolls the pane a line and writes the
+// command line again on the row above.
+fn tmux_enter(lines: usize, cmd: &str) -> String {
+	let pane = lines - 1;
+	format!(
+		"\x1b[1;{pane}r\x1b[{pane};1H\n\x1b[{};3H{cmd}\r\n\x1b[K\x1b[1;{lines}r\x1b[{pane};1H",
+		pane - 1
+	)
+}
+
+// What tmux sends for a clear inside the pane, by how the shell clears and
+// what it draws next. tmux never passes the clear on. It scrolls away the
+// rows under the prompt's first line, which the status line keeps it from
+// erasing to the bottom, and erases that line.
+fn tmux_clear(lines: usize, how: &str) -> String {
+	let pane = lines - 1;
+	let wipe = format!(
+		"\x1b[1;{pane}r\x1b[1;1H\x1b[2;{pane}r\x1b[{}S\x1b[1;1H\x1b[K",
+		pane - 1
+	);
+	let ble = format!("\x1b[1;1H\x1b[2M\x1b[1;1H\x1b[2L\x1b[1;1H{TOP}\r\n{BOTTOM}");
+	match how {
+		"clear" => format!("{wipe}\x1b[1;{lines}r\x1b[1;1H$ "),
+		"ctrl-l" => format!("{wipe}$ \x1b[1;{lines}r\x1b[1;3H"),
+		"ble clear" => format!(
+			"{wipe}\x1b[1;{lines}r\x1b[1;1H\x1b[K\x1b[1;{pane}r\x1b[2;1H\x1b[1L{ble}\x1b[1;{lines}r\x1b[2;6H"
+		),
+		"ble ctrl-l" => format!("{wipe}\x1b[1;{pane}r{ble}\x1b[1;{lines}r\x1b[2;6H"),
+		// a reset makes tmux scroll the whole pane away and redraw every row
+		"reset" => format!(
+			"\x1b[1;{pane}r\x1b[{pane}S\x1b[1;1H\x1b[1;{lines}r\x1b[1;1H$ {}\x1b[K\x1b[1;3H",
+			"\x1b[K\r\n".repeat(pane - 1)
+		),
+		_ => unreachable!("{how}"),
+	}
+}
+
+// Test ID: EstO7ww
+#[test]
+fn a_clear_inside_tmux_shows_at_once() {
+	// 2026101611321631. tmux keeps the outer terminal on the alt screen and
+	// redraws its pane itself, so the clear arrives as a region scrolled away
+	// whole. The shell's next draw can fall in the same frame or the next. The
+	// Enter that ran the clear is usually still sliding when it comes.
+	let _g = config::test_store_lock();
+	config::update(config::Settings::default());
+	let (cols, lines) = (100usize, 30usize);
+	for how in ["clear", "ctrl-l", "ble clear", "ble ctrl-l", "reset"] {
+		let bytes = tmux_clear(lines, how);
+		for rested in [false, true] {
+			for cut in std::iter::once(bytes.len()).chain(1..bytes.len()) {
+				let mut r = Replay::new(cols, lines, 10_000);
+				r.frame(&tmux_open(lines));
+				r.frame(&tmux_burst(lines, 1));
+				r.frame(&tmux_burst(lines, 30));
+				r.settle();
+				if !how.ends_with("ctrl-l") {
+					r.frame(&tmux_enter(lines, how));
+					if rested {
+						r.settle();
+					} else {
+						assert!(r.scroll.app_offset() != 0.0, "the Enter slides");
+					}
+				}
+				// the Enter's own slide may run out, never grow
+				let left = r.scroll.app_offset();
+				r.feed(&bytes.as_bytes()[..cut]);
+				let first = r.build();
+				let moved = r.scroll.app_offset();
+				r.feed(&bytes.as_bytes()[cut..]);
+				let second = r.build();
+				assert!(first.alt, "tmux keeps the alt screen");
+				assert!(
+					(first.slid, second.slid) == (0, 0)
+						&& moved <= left && r.scroll.app_offset() <= left,
+					"{how}, rested {rested}, split at {cut} {:?}: slid {} then {}",
+					String::from_utf8_lossy(&bytes.as_bytes()[..cut]),
+					first.slid,
+					second.slid
+				);
+			}
+		}
+	}
+}
+
+// Test ID: EstO8Ff
+#[test]
+fn output_inside_tmux_still_slides() {
+	// What 2026101611321631 had to keep: a burst scrolls the pane away whole
+	// too, and a line at a time scrolls it by one.
+	let _g = config::test_store_lock();
+	config::update(config::Settings::default());
+	let (cols, lines) = (100usize, 30usize);
+	let pane = lines - 1;
+	let mut r = Replay::new(cols, lines, 10_000);
+	r.frame(&tmux_open(lines));
+	r.frame(&tmux_burst(lines, 1));
+	r.settle();
+	let f = r.frame(&tmux_burst(lines, 30));
+	assert_eq!(f.slid, pane as i32, "a burst slides");
+	assert!(r.scroll.app_offset() != 0.0);
+	r.settle();
+	let f = r.frame(&tmux_enter(lines, "ls"));
+	assert_eq!(f.slid, 1, "Enter slides a line");
+	r.settle();
+	// a frame that falls part way through drawing a burst still slides
+	let burst = tmux_burst(lines, 60);
+	let half = burst.find("75").expect("row 75");
+	r.feed(&burst.as_bytes()[..half]);
+	let f = r.build();
+	assert_eq!(f.slid, pane as i32, "half drawn");
+	r.feed(&burst.as_bytes()[half..]);
+	r.build();
+	assert!(r.scroll.app_offset() != 0.0);
+	// a flood, with each frame falling just after a burst's scroll, while the
+	// last one is still easing
+	let mut next = 90;
+	for _ in 0..6 {
+		let burst = tmux_burst(lines, next);
+		let early = burst.find(&format!("{}\x1b", next + 2)).expect("third row");
+		r.feed(&burst.as_bytes()[..early]);
+		let f = r.build();
+		assert_eq!(f.slid, pane as i32, "flood from {next}");
+		r.feed(&burst.as_bytes()[early..]);
+		next += pane;
 	}
 }
 

@@ -93,6 +93,11 @@ const SLIDE_TOP_BAND_APPS: bool = true;
 // the new lines out from behind the rows above, last line first. A terminal
 // just shows them, so they pop in. True brings the slide back.
 const SLIDE_DOWN_INTO_ROOM: bool = false;
+// The most a slide may still have to go when a region scrolled away whole
+// reads as a clear (`region_wiped`): the line or two of the Enter that ran it.
+// A flood's frames fall anywhere in tmux's draws, but its slide is far behind
+// by then.
+const WIPE_MAX_SLIDE: f32 = 3.0;
 
 const PROMPT_ABOVE_MAX: usize = 4; // rows above the prompt considered for multi-line-prompt learning
 // Skeleton segments a row must carry before it can be learned as a prompt row.
@@ -1696,10 +1701,23 @@ impl Pane {
 				&mut self.readable,
 			)
 		});
+		// A clear inside tmux shows at once, like one outside it, and takes the
+		// Enter that ran it with it.
+		let wiped = self.scroll.app_offset().abs() < WIPE_MAX_SLIDE
+			&& step.is_some_and(|step| {
+				region_wiped(step, &region, |i| {
+					row_print(&guard.grid()[Line(i as i32)], cols) != blank
+				})
+			});
+		if wiped {
+			self.scroll.cancel_app_scroll();
+			// the rows above the clear are gone, so no later slide may show them
+			self.strip.clear();
+		}
 		// While a slide is in flight the ledger keeps its region and direction, so
 		// a scroll of an overlapping region next frame carries on from it rather
 		// than starting the strip over (nano's odd status-row step).
-		if !cut && (gesture_active || step.is_some()) {
+		if !cut && !wiped && (gesture_active || step.is_some()) {
 			guard.scroll_ledger_mut().drain();
 		} else {
 			guard.scroll_ledger_mut().clear();
@@ -1721,7 +1739,9 @@ impl Pane {
 			// most likely a shell redrawing its prompt for the new width, so it
 			// shows in place. The alt screen still slides on the record alone.
 			let unknown = !alt && self.last_cells.len() != lines;
-			!unknown && slide_is_visible(step, &region, &self.last_cells, chunk, arrived) && !room
+			!unknown
+				&& !wiped && slide_is_visible(step, &region, &self.last_cells, chunk, arrived)
+				&& !room
 		});
 		// The fingerprints also feed the output band, which belongs to the output
 		// ease and so works with app easing off. The styled cells stay app-only.
@@ -4954,6 +4974,21 @@ fn slide_is_visible(
 			let to = if step > 0 { from - moved } else { from + moved };
 			has_ink(&last[from]) && arrived(from, to)
 		})
+}
+
+// A region scrolled up whole and left all but blank is a clear. tmux never
+// passes a clear on: it scrolls away the rows of its pane under the prompt's
+// line, since its status line keeps it from erasing to the bottom
+// (2026101611321631). A burst scrolls the pane away whole as well, then fills
+// it, so the region has to be mostly blank. The shell's prompt may already be
+// back at its top. A frame that falls in the first few rows of a burst's draw
+// reads as a clear too, and shows that screenful at once.
+fn region_wiped(step: i32, region: &std::ops::Range<usize>, inked: impl Fn(usize) -> bool) -> bool {
+	let height = region.len();
+	if height == 0 || step <= 0 || (step as usize) < height {
+		return false;
+	}
+	region.clone().filter(|&i| inked(i)).count() * 4 <= height.max(8)
 }
 
 fn has_ink(row: &[StripCell]) -> bool {
