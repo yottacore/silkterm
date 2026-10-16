@@ -1485,7 +1485,6 @@ impl SettingsDialog {
 		} = *chrome;
 		let (tab_ws, label_ws) = (&chrome.tab_ws, &chrome.label_ws);
 		let specs: &'static [Spec] = &ui().specs;
-		let btn_h = lay().button_height.max(line_h + lay().row_pad);
 		// A tab whose height moves with the data, the shell list's, scrolls
 		// instead. Otherwise a long list of shells makes every tab tall.
 		// Across the top the strip is a row deeper for a tab under another, so
@@ -1495,7 +1494,7 @@ impl SettingsDialog {
 		let tallest = Self::fixed_tabs(specs)
 			.map(|t| Self::above_rows_for(line_h, t) + Self::tab_content_h(specs, t, line_h, 0))
 			.fold(0.0f32, f32::max);
-		let natural_h = (tallest + lay().buttons_gap + btn_h + lay().pad)
+		let natural_h = (tallest + lay().rows_pad * 2.0 + Self::footer_h_for(line_h))
 			.max(Self::side_list_h(line_h, nodes.len()) + 1.0);
 		let (tabs_w, side_off) = match tabs_side() {
 			TabsSide::Top => (Self::strip_w_for(tab_ws), 0.0),
@@ -1971,13 +1970,42 @@ impl SettingsDialog {
 			x: self.rows_x0(),
 			y: y0,
 			w: (self.rect.w - self.side_off()).max(0.0),
-			h: (self.rect.y + self.rect.h
-				- lay().pad - self.btn_h()
-				- lay().buttons_gap
-				- self.hbar_h()
-				- y0)
+			h: (self.rect.y + self.rect.h - Self::footer_h_for(self.line_h) - self.hbar_h() - y0)
 				.max(0.0),
 		}
+	}
+	// The footer under the rows: its line, the clear space and the buttons.
+	fn footer_h_for(line_h: f32) -> f32 {
+		1.0 + lay().buttons_gap + lay().button_height.max(line_h + lay().row_pad) + lay().pad
+	}
+	// The bands over and under the rows that hold still while the rows scroll:
+	// the search box's and the footer's, each with its line along the rows.
+	fn fixed_bands(&self) -> [Rect; 2] {
+		let top = match tabs_side() {
+			TabsSide::Top => {
+				let gut = self.gutter_rect();
+				gut.y + gut.h + 1.0
+			}
+			TabsSide::Left => self.rect.y + 1.0,
+		};
+		let x = self.rows_x0();
+		let w = (self.rect.x + self.rect.w - 1.0 - x).max(0.0);
+		let vp = self.viewport();
+		let foot = vp.y + vp.h + self.hbar_h();
+		[
+			Rect {
+				x,
+				y: top,
+				w,
+				h: (vp.y - top).max(0.0),
+			},
+			Rect {
+				x,
+				y: foot,
+				w,
+				h: (self.rect.y + self.rect.h - 1.0 - foot).max(0.0),
+			},
+		]
 	}
 	// The strip the sideways bar takes off the bottom of the rows, when there is
 	// one. It goes above the footer's clear space rather than in it: that space is
@@ -1990,10 +2018,12 @@ impl SettingsDialog {
 		}
 	}
 	fn content_h(&self) -> f32 {
-		if self.searching() {
-			return self.search_content_h();
-		}
-		Self::tab_content_h(self.specs, self.tab, self.line_h, self.edited.shells.len())
+		lay().rows_pad * 2.0
+			+ if self.searching() {
+				self.search_content_h()
+			} else {
+				Self::tab_content_h(self.specs, self.tab, self.line_h, self.edited.shells.len())
+			}
 	}
 	fn max_scroll(&self) -> f32 {
 		(self.content_h() - self.viewport().h).max(0.0)
@@ -2010,7 +2040,7 @@ impl SettingsDialog {
 		} + Self::search_band_h_for(line_h);
 		(
 			side_off + l.pad * 2.0 + btn_w.max(l.button_width) * 3.0 + l.button_gap * 2.0,
-			above + row * 2.0 + l.buttons_gap + l.button_height.max(line_h + l.row_pad) + l.pad,
+			above + l.rows_pad * 2.0 + row * 2.0 + Self::footer_h_for(line_h),
 		)
 	}
 	// Rows are laid out at the natural width or the window's, whichever is
@@ -2800,7 +2830,7 @@ impl SettingsDialog {
 	// Top of row `i` on the active tab (scrolled). Walks visible rows the same
 	// way tab_content_h does so heights and header gaps stay in sync.
 	fn row_y(&self, i: usize) -> f32 {
-		let first = self.rows_y0() - self.scroll;
+		let first = self.rows_y0() + lay().rows_pad - self.scroll;
 		let shells = self.edited.shells.len();
 		let walk = (self.tab, first.to_bits(), self.line_h.to_bits(), shells);
 		let mut cache = self.row_tops.borrow_mut();
@@ -5299,6 +5329,20 @@ impl SettingsDialog {
 			colors.panel_bg,
 		));
 		border(&mut fixed, self.rect, 1.0, colors.panel_border);
+		// What holds still while the rows scroll is a shade toward the gutter,
+		// with a line along the rows, on every tab whether it scrolls or not.
+		let still = mix3(colors.panel_bg, colors.gutter, 0.5);
+		let [top, foot] = self.fixed_bands();
+		fixed.push(quad(top.x, top.y, top.w, top.h, still));
+		fixed.push(quad(
+			top.x,
+			top.y + top.h - 1.0,
+			top.w,
+			1.0,
+			colors.panel_border,
+		));
+		fixed.push(quad(foot.x, foot.y, foot.w, foot.h, still));
+		fixed.push(quad(foot.x, foot.y, foot.w, 1.0, colors.panel_border));
 		// The tab strip: a recessed gutter closed off by a rule, with the tabs
 		// standing on that rule. The current one is a lighter gray rather than an
 		// accent - it says "you are here", which is not the same job as the
@@ -9112,14 +9156,17 @@ mod tests {
 			if redundant.is_none() {
 				continue;
 			}
-			// the first row that IS drawn starts hard against the top of the
-			// viewport, so the heading left no gap behind it
+			// the first row that IS drawn starts at the top of the viewport,
+			// past only the rows' own padding, so the heading left no gap
 			let first = (0..d.specs.len())
 				.find(|&j| {
 					d.specs[j].tab == tab && !SettingsDialog::header_is_tab_title(&d.specs[j])
 				})
 				.expect("a tab with rows");
-			assert!((d.row_y(first) - (d.rows_y0() - d.scroll)).abs() < 0.01);
+			// Changed 20261016: the rows have padding inside the viewport now
+			// (2026101419165501).
+			// assert!((d.row_y(first) - (d.rows_y0() - d.scroll)).abs() < 0.01);
+			assert!((d.row_y(first) - (d.rows_y0() + lay().rows_pad - d.scroll)).abs() < 0.01);
 			// and the tab's height accounts for the rows it draws and nothing
 			// more: the surplus over them is header gaps, which are far smaller
 			// than the heading row that was dropped
@@ -12625,7 +12672,9 @@ mod tests {
 			}
 		}
 		assert_eq!(tab_titles()[marked[0]], "Background");
-		assert_eq!(tab_titles()[marked[1]], "Window");
+		// Changed 20261016: Resource use moved to the Program tab (2026101611321634).
+		// assert_eq!(tab_titles()[marked[1]], "Window");
+		assert_eq!(tab_titles()[marked[1]], "Program");
 		let at = |key: Key| d.specs.iter().find(|s| s.key == key).unwrap().warning;
 		assert!(at(Key::Transparency).contains("compositor"));
 		assert!(at(Key::IdleRelease).contains("driver"));
@@ -12646,17 +12695,49 @@ mod tests {
 		}
 	}
 
-	// "Resource use" is the last group on the Window tab: the idle switch with
-	// its two waits under it, then software rendering at the switch's depth.
-	// Test ID: EryD9rp
+	// Commented out 20261016: Resource use moved to the Program tab
+	// (2026101611321634). Replaced by
+	// `the_resource_use_group_ends_the_program_tab` (EstcAuW).
+	// // "Resource use" is the last group on the Window tab: the idle switch with
+	// // its two waits under it, then software rendering at the switch's depth.
+	// // Test ID: EryD9rp
+	// #[test]
+	// fn the_resource_use_group_ends_the_window_tab() {
+	// 	let specs = &super::ui().specs;
+	// 	let head = specs
+	// 		.iter()
+	// 		.position(|s| matches!(s.kind, Kind::Header(label) if label == "Resource use"))
+	// 		.expect("a Resource use heading");
+	// 	assert_eq!(tab_titles()[specs[head].tab], "Window");
+	// 	let rest: Vec<(Key, u8)> = specs[head + 1..]
+	// 		.iter()
+	// 		.take_while(|s| s.tab == specs[head].tab)
+	// 		.map(|s| (s.key, s.indent))
+	// 		.collect();
+	// 	assert_eq!(
+	// 		rest,
+	// 		[
+	// 			(Key::IdleRelease, 0),
+	// 			(Key::IdleHiddenMin, 1),
+	// 			(Key::IdleMin, 1),
+	// 			(Key::SoftwareRendering, 0),
+	// 		],
+	// 		"nothing else in the group, and nothing after it on the tab"
+	// 	);
+	// }
+
+	// "Resource use" is the last group on the Program tab: the idle switch
+	// with its two waits under it, then software rendering at the switch's
+	// depth. Anything else on the tab goes above it.
+	// Test ID: EstcAuW
 	#[test]
-	fn the_resource_use_group_ends_the_window_tab() {
+	fn the_resource_use_group_ends_the_program_tab() {
 		let specs = &super::ui().specs;
 		let head = specs
 			.iter()
 			.position(|s| matches!(s.kind, Kind::Header(label) if label == "Resource use"))
 			.expect("a Resource use heading");
-		assert_eq!(tab_titles()[specs[head].tab], "Window");
+		assert_eq!(tab_titles()[specs[head].tab], "Program");
 		let rest: Vec<(Key, u8)> = specs[head + 1..]
 			.iter()
 			.take_while(|s| s.tab == specs[head].tab)
@@ -13064,6 +13145,7 @@ mod tests {
 		"Look/Cursor",
 		"Movement",
 		"Window",
+		"Program",
 		"More",
 		"More/Shell",
 		"More/Keys",
@@ -13086,6 +13168,14 @@ mod tests {
 			super::TABS_SIDE.with(|t| t.set(None));
 		}
 	}
+	// A node in whichever tree is up, by its title, so moving a tab moves no
+	// number in a test.
+	fn node_named(title: &str) -> usize {
+		tab_nodes()
+			.iter()
+			.position(|n| n.title == title)
+			.unwrap_or_else(|| panic!("no {title} node"))
+	}
 	fn tap(d: &mut SettingsDialog, node: usize) {
 		let r = d.tab_rect(node);
 		let mut measure = |s: &str| s.len() as f32;
@@ -13102,16 +13192,23 @@ mod tests {
 		let mut d = mk_dialog(2000.0);
 		let one_row = SettingsDialog::gutter_h_for(d.line_h, 1);
 		assert!((d.gutter_rect().h - one_row).abs() < 0.01);
-		for node in [2, 3, 4, 5, 9, 10] {
-			assert_eq!(d.tab_rect(node).w, 0.0, "sub-tab {node} is not on show");
+		for title in ["Themes", "Background", "Text", "Cursor", "Shell", "Keys"] {
+			assert_eq!(
+				d.tab_rect(node_named(title)).w,
+				0.0,
+				"sub-tab {title} is not on show"
+			);
 		}
-		let look = d.tab_rect(1);
+		let look = d.tab_rect(node_named("Look"));
 		assert!(look.w > 0.0, "its parent is");
-		tap(&mut d, 1);
-		assert_eq!(d.tab, 1, "Look opens Themes, its first");
-		assert_eq!(d.active_path(), vec![1, 2]);
+		tap(&mut d, node_named("Look"));
+		assert_eq!(d.tab, tab_named("Themes"), "Look opens Themes, its first");
+		assert_eq!(
+			d.active_path(),
+			vec![node_named("Look"), node_named("Themes")]
+		);
 		assert!((d.gutter_rect().h - SettingsDialog::gutter_h_for(d.line_h, 2)).abs() < 0.01);
-		let themes = d.tab_rect(2);
+		let themes = d.tab_rect(node_named("Themes"));
 		assert!(
 			themes.w > 0.0 && themes.y > look.y + look.h - 0.01,
 			"the sub-tabs sit in a row under the first"
@@ -13120,18 +13217,27 @@ mod tests {
 			d.rows_y0() > themes.y + themes.h,
 			"and the rows begin below them"
 		);
-		assert_eq!(d.tab_rect(9).w, 0.0, "another tab's sub-tabs stay hidden");
-		tap(&mut d, 1);
 		assert_eq!(
-			d.tab, 1,
+			d.tab_rect(node_named("Shell")).w,
+			0.0,
+			"another tab's sub-tabs stay hidden"
+		);
+		tap(&mut d, node_named("Look"));
+		assert_eq!(
+			d.tab,
+			tab_named("Themes"),
 			"a click on the parent already open changes nothing"
 		);
-		d.tab = 8;
-		tap(&mut d, 8);
-		assert_eq!(d.tab, 8, "Keys stays when More is clicked from under it");
+		d.tab = tab_named("Keys");
+		tap(&mut d, node_named("More"));
+		assert_eq!(
+			d.tab,
+			tab_named("Keys"),
+			"Keys stays when More is clicked from under it"
+		);
 		d.tab = 0;
-		tap(&mut d, 8);
-		assert_eq!(d.tab, 7, "from outside, More opens Shell");
+		tap(&mut d, node_named("More"));
+		assert_eq!(d.tab, tab_named("Shell"), "from outside, More opens Shell");
 		assert_eq!(d.focus, None, "a tab takes no focus");
 	}
 
@@ -13143,21 +13249,25 @@ mod tests {
 		let _tabs = stand_in_tabs(NESTED, TabsSide::Top);
 		let mut d = mk_dialog(2000.0);
 		d.set_mods(false, false, true);
-		d.tab = 4; // Cursor, the last under Look
+		d.tab = tab_named("Cursor"); // the last under Look
 		d.key_tab();
-		assert_eq!(d.tab, 5, "on to Movement");
+		assert_eq!(d.tab, tab_named("Movement"), "on to Movement");
 		d.set_mods(false, true, true);
 		d.key_tab();
-		assert_eq!(d.tab, 4, "and back to Cursor");
-		d.tab = 0;
+		assert_eq!(d.tab, tab_named("Cursor"), "and back to Cursor");
+		d.tab = tab_named("Silk");
 		d.set_mods(false, false, true);
 		d.key_page(true);
-		assert_eq!(d.tab, 1, "Silk steps into Look at Themes");
-		d.tab = 8;
+		assert_eq!(d.tab, tab_named("Themes"), "Silk steps into Look at Themes");
+		d.tab = tab_named("Keys");
 		d.switch_tab(true);
-		assert_eq!(d.tab, 0, "Keys, the last under More, wraps to Silk");
+		assert_eq!(
+			d.tab,
+			tab_named("Silk"),
+			"Keys, the last under More, wraps to Silk"
+		);
 		d.switch_tab(false);
-		assert_eq!(d.tab, 8);
+		assert_eq!(d.tab, tab_named("Keys"));
 	}
 
 	// Down the side every tab is listed, sub-tabs stepped in under their
@@ -13203,17 +13313,17 @@ mod tests {
 		for (i, _) in SettingsDialog::visible(d.specs, 0) {
 			assert!(d.label_x(i) >= vp.x, "row {i} is clear of the list");
 		}
-		d.tab = 2;
+		d.tab = tab_named("Background");
 		assert_eq!(
 			d.active_path(),
-			vec![1, 3],
+			vec![node_named("Look"), node_named("Background")],
 			"Background and Look both read as current"
 		);
 		// a short window slides the list only far enough to keep the current tab in it
-		d.tab = 8;
+		d.tab = tab_named("Keys");
 		d.set_size(d.size().0, 200.0);
 		assert!(d.side_scroll() > 0.0);
-		let r = d.tab_rect(10);
+		let r = d.tab_rect(node_named("Keys"));
 		assert!(r.y >= d.rect.y && r.y + r.h <= d.rect.y + d.rect.h + 0.01);
 	}
 
@@ -13257,6 +13367,8 @@ mod tests {
 				("Cursor", 1),
 				("Movement", 0),
 				("Window", 0),
+				// Added 20261016 (2026101611321634).
+				("Program", 0),
 				("Shell", 0),
 				("Keys", 0),
 			]
@@ -13270,6 +13382,88 @@ mod tests {
 		d.tab = tab_named("Cursor");
 		tap(&mut d, 1);
 		assert_eq!(d.tab, tab_named("Cursor"));
-		assert_eq!(d.active_path(), vec![1, 5]);
+		assert_eq!(
+			d.active_path(),
+			vec![node_named("Appearance"), node_named("Cursor")]
+		);
+	}
+
+	// The search box's band and the footer's hold still while the rows scroll,
+	// and each is a shade off the rows with a line along them. That holds on a
+	// tab that scrolls and on one that doesn't, so no tab looks different for
+	// it (2026101419165501).
+	// Test ID: Estbmzs
+	#[test]
+	fn the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows() {
+		let near = |a: f32, b: f32| (a - b).abs() < 0.01;
+		for (max_h, scrolls) in [(2000.0, false), (300.0, true)] {
+			let mut d = mk_dialog(max_h);
+			d.tab = tab_named("Silk");
+			assert_eq!(d.max_scroll() > 0.0, scrolls, "at {max_h}");
+			let vp = d.viewport();
+			let [top, foot] = d.fixed_bands();
+			assert!(
+				near(top.y + top.h, vp.y),
+				"the top band ends where the rows start"
+			);
+			assert!(
+				foot.y >= vp.y + vp.h - 0.01,
+				"the footer's starts under them"
+			);
+			assert!(
+				near(top.x, vp.x) && near(foot.x, vp.x),
+				"both clear of the tab list"
+			);
+			let field = d.search_box();
+			assert!(field.y >= top.y, "the box is in the top band");
+			assert!(field.y + field.h + lay().search_gap + 1.0 <= vp.y + 0.01);
+			for (_, b, _) in d.buttons() {
+				assert!(
+					b.y >= foot.y + 1.0 + lay().buttons_gap - 0.01,
+					"a button is in the footer's"
+				);
+				assert!(b.y + b.h <= foot.y + foot.h + 0.01);
+			}
+			let (fixed, _) = d.rects_dip(d.line_h, |s: &str| s.len() as f32 * 7.0);
+			let at = |r: super::Rect| {
+				fixed
+					.iter()
+					.find(|q| {
+						near(q.pos[0], r.x)
+							&& near(q.pos[1], r.y)
+							&& near(q.size[0], r.w)
+							&& near(q.size[1], r.h)
+					})
+					.map(|q| q.color)
+			};
+			let panel = fixed[0].color;
+			let shade = at(top).expect("the top band is drawn");
+			assert_ne!(shade, panel, "and set off from the rows");
+			assert_eq!(at(foot), Some(shade), "the footer's is the same shade");
+			let line = |y: f32| {
+				at(super::Rect {
+					x: top.x,
+					y,
+					w: top.w,
+					h: 1.0,
+				})
+			};
+			let top_line = line(vp.y - 1.0).expect("a line over the rows");
+			let foot_line = line(foot.y).expect("and one under them");
+			assert!(top_line != shade && foot_line == top_line);
+			// the rows start clear of the line, and end clear of the other one
+			let rows: Vec<usize> = SettingsDialog::visible(d.specs, d.tab)
+				.map(|(i, _)| i)
+				.collect();
+			assert!(near(d.row_y(rows[0]), vp.y + lay().rows_pad));
+			d.wheel(0.0, -1e9);
+			let last = *rows.last().unwrap();
+			let bottom = d.row_y(last) + d.row_screen_h(last);
+			if scrolls {
+				assert!(near(bottom + lay().rows_pad, vp.y + vp.h));
+			} else {
+				assert!(bottom + lay().rows_pad <= vp.y + vp.h + 0.01);
+			}
+		}
 	}
 }
