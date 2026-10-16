@@ -441,7 +441,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings dialog: search
 	- ID: 2026101419165501
 	- Type: Enhancement
-	- Status: Reopened
+	- Status: Waiting on signoff
 		- The way it is in the screenshots looks good. However:
 			- There should be more vertical space between the bottom of the search bar, and the top of the content
 			- And some kind of visual indication both for the search bar, and the buttons at the bottom, that they aren't included in the scroll region, if needed. Maybe a slightly lighter (or darker?) color for the unscrollable area, with a 1 virtual pixel line for extra separation.
@@ -459,6 +459,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 	- Progress log:
 		- 20261015: Built. Best guesses below, since the round's questions went unanswered. All of them are easy to change.
+		- 20261016: Reopen note done. The search box's band and the footer are a shade darker than the rows, with a 1 DIP line along them. The box has more room under it, and the rows a little padding inside the scrolling part, top and bottom.
 	- Decisions:
 		- 20261015, best guess: With text in the box, a list of matches takes the page's place under it. A click, or Enter on the picked one, goes to that row on its tab, scrolls it into view, marks it for about a second and a half, and empties the box. Up and Down move through the list. No match says so in one line.
 		- 20261015, best guess: Escape empties the box first, and closes Settings only when it's already empty. Enter with nothing matched does nothing, and with the box empty it's OK as before.
@@ -471,14 +472,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261015, best guess: An alias match shows the alias in parentheses after the label, with the alias marked, since the label has nothing to mark.
 		- 20261015, best guess: Fuzzy means the letters in order from the start of a word, such as "lnhght", or a word one typo off, two for 8 letters or more. It takes 3 letters at least.
 		- 20261015, best guess: With nothing typed the box is outside the Tab walk, as the tabs are, so Tab from nothing still lands on a tab's first control. While the list is up, Tab walks the box and the footer buttons.
-	- Test case: In `settings_ui/search.rs`: ranking `label_matches_come_before_alias_ones_and_loose_ones_last` (EsoZk3m), `a_whole_label_beats_a_word_start_beats_the_middle_of_one` (EsoZk9K), `a_short_query_matches_only_as_typed` (EsoZkED); the path `a_result_reads_tab_then_heading_then_setting` (EsoZkJ4), `no_two_results_read_the_same` (EsoZkOJ); aliases `every_alias_finds_the_row_it_is_on` (EsoZkTE); the box `enter_goes_to_the_pick_and_escape_empties_the_box_first` (EsoZkY3), `the_list_covers_the_rows_behind_it` (EsoZkdO), `the_search_box_is_no_rows_field` (EsoZneH), `tab_from_the_empty_box_goes_on_to_the_first_control` (Esob8XZ), `the_search_box_sits_over_the_rows_and_clear_of_them` (EsoZkiQ). In `dialog.rs`: `marked_text_is_larger_and_colored_on_the_same_line_box` (EsodoYf).
+		- 20261016, best guess: The shade and line show on every tab, whether it scrolls or not. Showing them only while a page can scroll would change the look from tab to tab.
+		- 20261016, best guess: The shade is halfway between the dialog background and the gutter color, so it follows both modes and any theme. Darker in both modes, since the gutter is. The line is the panel border color, the same as the tab list's.
+		- 20261016, best guess: The box sits 18 DIP below the panel edge and 18 DIP above its line, and the footer buttons 18 DIP below theirs. The rows get 10 DIP inside the line. That puts the last row about as far from the buttons as before.
+	- Test case: In `settings_ui/search.rs`: ranking `label_matches_come_before_alias_ones_and_loose_ones_last` (EsoZk3m), `a_whole_label_beats_a_word_start_beats_the_middle_of_one` (EsoZk9K), `a_short_query_matches_only_as_typed` (EsoZkED); the path `a_result_reads_tab_then_heading_then_setting` (EsoZkJ4), `no_two_results_read_the_same` (EsoZkOJ); aliases `every_alias_finds_the_row_it_is_on` (EsoZkTE); the box `enter_goes_to_the_pick_and_escape_empties_the_box_first` (EsoZkY3), `the_list_covers_the_rows_behind_it` (EsoZkdO), `the_search_box_is_no_rows_field` (EsoZneH), `tab_from_the_empty_box_goes_on_to_the_first_control` (Esob8XZ), `the_search_box_sits_over_the_rows_and_clear_of_them` (EsoZkiQ). In `dialog.rs`: `marked_text_is_larger_and_colored_on_the_same_line_box` (EsodoYf). The bands: `the_search_box_and_the_buttons_sit_on_still_bands_lined_off_from_the_rows` (Estbmzs), seen failing with the bands' drawing taken out.
 	- Verified:
 		- The unit suite, 1353 tests, with clippy and rustfmt clean, and the docs, TOC and table checks.
 		- The ranking and path tests each failed with the sort or the heading taken out, and the marked text test with the size step taken out. The alias test caught 3 aliases that were already in their labels.
 		- A real window on Linux, dark at 1x and light at 2x: the list, the marks, a pick going to the Keys tab, the mark fading, the empty-list line, and Escape.
 		- Not verified: Windows, macOS.
-	- Branch: setsearch
-	- Commit: ab84e3a, 940f3f4
+		- 20261016: the unit suite (1359 tests), clippy, rustfmt, the docs, table and test ID checks. A real window on Linux, dark at 1x and light at 2x: the bands and lines on a tab that fits, on Keys scrolled partway and to the end, and with the matches list up.
+	- Branch: setsearch, progtab
+	- Commit: ab84e3a, 940f3f4, 2bd35ba
 
 - A size saved while the font size was given on the command line is used at the normal font next time
 	- ID: 2026101412292756
@@ -597,7 +602,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Settings: a new "Program" tab
 	- ID: 2026101611321634
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
 	- Priority: Avg
 	- Opened: 20261016-113216
 	- Opened by: JC
@@ -610,6 +615,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 			- Always run in new tmux session, 2026101611321632.
 	- Notes:
 		- Pre-next-cut.
+		- Moves Resource use off the Window tab, where 2026100418225506 put it as the last group.
+	- Progress log:
+		- 20261016: Built. Program comes after Window. Resource use is on it with its rows, flyovers, warning mark and search aliases, and still ends the tab, so the tmux setting can go above it under a heading of its own. The config keys stay under `window:`.
+	- Decisions:
+		- 20261016, best guess: Program sits between Window and Shell. Its one group came from Window, and tmux is next to the shell in subject. That makes 7 tabs at the top level, the ceiling in the style guide.
+		- 20261016, best guess: No heading named Program. Its first heading is Resource use, which shows, as Silk and Keys start with a heading of their own.
+	- Test case: `the_resource_use_group_ends_the_program_tab` (EstcAuW), seen failing with the group put back on Window. `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv) pins the tab list. It replaces `the_resource_use_group_ends_the_window_tab` (EryD9rp), commented out. The nested tab tests now find tabs by name.
+	- Verified:
+		- The unit suite (1359 tests), clippy, rustfmt, the docs, table and test ID checks.
+		- A real window on Linux, dark at 1x and light at 2x: the Program tab with its rows and mark, the Window tab without them, and a search for "memory" listing "Program > Resource use".
+		- Not verified: Windows, macOS.
+	- Swept: tests that picked a tab by number, in settings_ui.rs and its files. The nested tab tests took leaf and node numbers that the move shifted; they now look tabs up by title. The rest used tabs 0 to 2, which the move doesn't touch. The style guide, the settings dialog design doc, and the wingui `settingsdlg` scenario, which only checks that Ctrl+Tab changes the page.
+	- Branch: progtab
+	- Commit: 2bd35ba
 
 - Tab text: a text field with predefined macros in place of the check boxes
 	- ID: 2026101611405210
