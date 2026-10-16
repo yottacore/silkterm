@@ -132,78 +132,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: docs, tables, toc, showdown and rigs tests pass, the cli unit tests pass, clippy is clean, and the test-ID check passes. Both writers run on a copy of comparison.md leave it byte-identical.
 	- Swept: termbench.py, showdown-readme.py, update-showdown.py and both rigs' headers now name comparison.md, and so do mdtable.py, showdown-readme.md, the tables test, a cicd.bash comment, design.md and the speed design doc. Unchanged on purpose: release.bash, the pre-push hook and the hooks test read the badge, which stays in the README. wallpaper-gallery.bash reads "102 wallpapers" from the README, still there. The release notes keep "See the README". demo-video.py and script.txt name the README gif only. The gallery page links install.md. ancillary-notes.fods records and the speed doc's quoted backlog title stay as written for their dates. Nothing links the README's showdown anchor, which stays.
 
-- Settings dialog: search
-	- ID: 2026101419165501
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Needs external testing: A look on Windows, and the wingui `settingsdlg` scenario there. Command+F on macOS is compiled only.
-	- Priority: Avg
-	- Opened: 20261014-191655
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: All
-	- Requirements:
-		- Search bar in an unscrollable top area.
-		- Shows literal label matches first, aliases second, fuzzy matches third.
-		- Matches listed like "<tab title> ⏵[ sub tab title ⏵[ etc. ⏵]] setting", with matched portion in bold, larger, and different theme-aware color.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261015: Built. Best guesses below, since the round's questions went unanswered. All of them are easy to change.
-	- Decisions:
-		- 20261015, best guess: With text in the box, a list of matches takes the page's place under it. A click, or Enter on the picked one, goes to that row on its tab, scrolls it into view, marks it for about a second and a half, and empties the box. Up and Down move through the list. No match says so in one line.
-		- 20261015, best guess: Escape empties the box first, and closes Settings only when it's already empty. Enter with nothing matched does nothing, and with the box empty it's OK as before.
-		- 20261015, best guess: Aliases are declared per row in `settings_ui.shcl` as `aliases:`. There's a starting set of 148 on 74 rows. An alias already in its row's label is refused by a test.
-		- 20261015, best guess: The matched part is bold, 15% larger and in the Highlight color, since it marks several things at once. Focus stays for the one control the keyboard is on. The picked line gets the current tab's gray, so the Highlight text on it stays readable.
-		- 20261015, best guess: Ctrl+F, Command+F on macOS, goes to the box. Nothing in the dialog used it.
-		- 20261015, best guess: The box sits over the rows' column, between the tab list and the rows, rather than across the whole top. The tab list keeps its place.
-		- 20261015, best guess: Tabs and headings are matches too. A heading that only repeats its tab's title is listed as the tab, and lends it its aliases.
-		- 20261015, best guess: The path adds the heading where it isn't the tab's title, since a path of tabs alone gives "Window ⏵ Enabled". Two rows that would still read the same add the row they sit under: "Movement ⏵ Scrollbar ⏵ Width px".
-		- 20261015, best guess: An alias match shows the alias in parentheses after the label, with the alias marked, since the label has nothing to mark.
-		- 20261015, best guess: Fuzzy means the letters in order from the start of a word, such as "lnhght", or a word one typo off, two for 8 letters or more. It takes 3 letters at least.
-		- 20261015, best guess: With nothing typed the box is outside the Tab walk, as the tabs are, so Tab from nothing still lands on a tab's first control. While the list is up, Tab walks the box and the footer buttons.
-	- Test case: In `settings_ui/search.rs`: ranking `label_matches_come_before_alias_ones_and_loose_ones_last` (EsoZk3m), `a_whole_label_beats_a_word_start_beats_the_middle_of_one` (EsoZk9K), `a_short_query_matches_only_as_typed` (EsoZkED); the path `a_result_reads_tab_then_heading_then_setting` (EsoZkJ4), `no_two_results_read_the_same` (EsoZkOJ); aliases `every_alias_finds_the_row_it_is_on` (EsoZkTE); the box `enter_goes_to_the_pick_and_escape_empties_the_box_first` (EsoZkY3), `the_list_covers_the_rows_behind_it` (EsoZkdO), `the_search_box_is_no_rows_field` (EsoZneH), `tab_from_the_empty_box_goes_on_to_the_first_control` (Esob8XZ), `the_search_box_sits_over_the_rows_and_clear_of_them` (EsoZkiQ). In `dialog.rs`: `marked_text_is_larger_and_colored_on_the_same_line_box` (EsodoYf).
-	- Verified:
-		- The unit suite, 1353 tests, with clippy and rustfmt clean, and the docs, TOC and table checks.
-		- The ranking and path tests each failed with the sort or the heading taken out, and the marked text test with the size step taken out. The alias test caught 3 aliases that were already in their labels.
-		- A real window on Linux, dark at 1x and light at 2x: the list, the marks, a pick going to the Keys tab, the mark fading, the empty-list line, and Escape.
-		- Not verified: Windows, macOS.
-	- Branch: setsearch
-	- Commit: ab84e3a, 940f3f4
-
-- A size saved while the font size was given on the command line is used at the normal font next time
-	- ID: 2026101412292756
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261014-122927
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: All
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- Open SilkTerm with `--font-size 11` and resize it.
-		- Close it, and open it without the option.
-	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
-	- Reproduced: 20261014, by the random test.
-	- Progress log:
-		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
-			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
-		- 20261014: Done as answered. How it maps onto the store:
-			- The store keeps columns, rows and a font zoom, and no pixels. So "in pixels" is saved as the columns and rows the default font shows in the window's size now. It's what a zoom does already, so the window reopens at the same size.
-			- "The default font size" is the one a launch without the option opens at on that monitor: the font size from the config, plus the zoom kept there.
-			- "The screen" is the monitor the size is kept for, less the window's frame.
-			- A zoom after a launch with `--font-size` keeps the option's size under the zoom, so the same rule applies.
-	- Actual cause: The size is saved as the columns and rows of the font the window has. A launch without the option opens at them in the default font.
-	- Actual fix: As answered above. A size set at another font than the one the next launch has is checked against the screen at that font. It's kept in columns and rows if it fits, and else as the default font's columns and rows for the window's size now.
-	- Test case: `a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font` (EsjoVZu), seen failing with the old rule put back, and `a_cell_measured_for_a_font_size_is_the_cell_that_font_gets` (EsjoVeF). The random test (EshVccz) now checks a window opened at the default font fits the monitor its size was set on. Seed 2710 failed it on the old build, 1481 px wide on a 1440 px output, and passes on the fix.
-	- Verified:
-		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
-		- The random test on seeds 23, 889, 1321, 2114, 2710 and 3999, on Wayland and on X11 through Xwayland.
-	- Swept: the other ways a grid kept for one font is used at another. A launch or a take with `--font-size` uses a grid kept at the default font, and `--font-name` saves the grid in its own font. Both are outside this answer; filed as 2026101422190936.
-	- Branch: monsave
-	- Commit: cd3f8d4
-
 - Wayland: a resize or zoom after a move the window wasn't told of is saved for the monitor it left, and the next look undoes it
 	- ID: 2026101413420431
 	- Type: Bug
@@ -242,46 +170,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every place a size is noted as the user's, which is a resize (`save_window_size`) and a font zoom (`note_zoom`, for zooming in, out, and the reset). Other platforms and X11 through Xwayland are told of moves, so only Wayland looks. An X11 window the layout shifts under is still told nothing, as before.
 	- Branch: wlstale
 	- Commit: 3cd4c35
-
-- A size kept at one font is used at another when the font comes from the command line
-	- ID: 2026101422190936
-	- Type: Bug
-	- Status: Waiting on signoff
-	- Severity: Low
-	- Opened: 20261014-221909
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101412292756
-	- Target OS: All
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
-		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
-	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
-	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
-		- Best guess, below under Decisions: the same rule as that answer, used both ways.
-	- Reproduced: 20261015. A 169x20 size kept on a 2560 px output came out 169x20 at `--font-size 17` on a 2880 px one, 3604 px wide. A 218x19 grid set under `--font-name "Ubuntu Mono"` was saved as it was, and opened 1924 px wide on a 1920 px output without the option.
-	- Notes:
-		- A size given on the command line wins over this, as before.
-	- Progress log:
-		- 20261015: Asked how a kept size should be used at another font. No answer in time, so the best guess below was taken. Easy to take back: drop the use at launch and at a take, and the family from the font check.
-	- Decisions:
-		- 20261015, best guess: the rule given on 2026101412292756, both ways. A kept size used at a font other than the one it was kept at keeps its columns and rows if the window fits the screen at the font it opens with, and else opens at the columns and rows that keep the kept window's size in pixels. That's a launch or a take with `--font-size` or `--font-name`, and a grid saved under `--font-name`.
-			- "The screen" is the monitor the size is kept for, less the window's frame, as on that item.
-			- Example: kept 100x30 at 12pt is about 1000x700 px on a 1920x1080 screen. `--font-size 14` opens 100x30, since it fits. `--font-size 28` opens about 43x13.
-			- A size is kept at the font a launch without `--font-size` and `--font-name` has, with the kept zoom on top.
-			- A window that can't tell its monitor at launch, as on Wayland, opens at the kept grid, and the take once it can tell fits it to that screen. Without per monitor sizes there's no take, so it keeps the kept window's size.
-	- Actual cause: Only the save checked the font, and only its size. A launch or a take used the kept grid at whatever font the window had, and a grid saved under `--font-name` was kept in that font.
-	- Actual fix: One rule for the save, the launch and the take. Each measures the cell of the font a launch without the options has, family and size, and the cell the window has, and picks the grid by the rule above.
-	- Branch: clifont
-	- Commit: e27efe5
-	- Test case: `a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line` (Eso2weD) and `the_font_a_launch_without_the_font_options_has` (Eso2wHz), each seen failing with its half of the fix taken out. The random test (EshVccz) now judges a kept size taken at `--font-size` from the cell the shell is told: its columns and rows where they'd clearly fit, other ones where they'd clearly not. Seed 128 fails it with the take's half taken out, and passes on the fix.
-	- Verified:
-		- The Linux unit tests, rustfmt, and clippy with warnings as errors for Linux, Windows and macOS. The Python lint, the docs check and the test ID check.
-		- The random test on seeds 1 to 4, 17, 20, 23, 30, 53, 118, 125, 128, 137, 221, 236, 249, 300, 319, 324 and 368, on Wayland and on X11 through Xwayland. All but 1 to 4 use `--font-size`.
-		- `--font-name "Ubuntu Mono"` on one headless sway output: a 218x19 grid set at 1880 px was saved as 175x19, opened 175x19 at 1865 px without the option, and 175x19 again with it, since that fits.
-	- Swept: every place a kept grid is used or saved. The save (`grid_to_open_at`), the launch in app.rs and the take (`take_monitor_size`) all go through it now. A grid from Settings is the user's own columns and rows, not a kept size, so it's left as it is. The rescale keeps the grid the window shows, at its own font.
-	- Needs external testing: a look on Windows and macOS, where the frame comes into the screen's room.
 
 - The window doesn't paint while the GPU is busy or short on memory, and stays blank after the load ends
 	- ID: 2026100312470535
@@ -532,6 +420,48 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
+- Settings dialog: search
+	- ID: 2026101419165501
+	- Type: Enhancement
+	- Status: Reopened
+		- The way it is in the screenshots looks good. However:
+			- There should be more vertical space between the bottom of the search bar, and the top of the content
+			- And some kind of visual indication both for the search bar, and the buttons at the bottom, that they aren't included in the scroll region, if needed. Maybe a slightly lighter (or darker?) color for the unscrollable area, with a 1 virtual pixel line for extra separation.
+	- Needs external testing: A look on Windows, and the wingui `settingsdlg` scenario there. Command+F on macOS is compiled only.
+	- Priority: Avg
+	- Opened: 20261014-191655
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Search bar in an unscrollable top area.
+		- Shows literal label matches first, aliases second, fuzzy matches third.
+		- Matches listed like "<tab title> ⏵[ sub tab title ⏵[ etc. ⏵]] setting", with matched portion in bold, larger, and different theme-aware color.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261015: Built. Best guesses below, since the round's questions went unanswered. All of them are easy to change.
+	- Decisions:
+		- 20261015, best guess: With text in the box, a list of matches takes the page's place under it. A click, or Enter on the picked one, goes to that row on its tab, scrolls it into view, marks it for about a second and a half, and empties the box. Up and Down move through the list. No match says so in one line.
+		- 20261015, best guess: Escape empties the box first, and closes Settings only when it's already empty. Enter with nothing matched does nothing, and with the box empty it's OK as before.
+		- 20261015, best guess: Aliases are declared per row in `settings_ui.shcl` as `aliases:`. There's a starting set of 148 on 74 rows. An alias already in its row's label is refused by a test.
+		- 20261015, best guess: The matched part is bold, 15% larger and in the Highlight color, since it marks several things at once. Focus stays for the one control the keyboard is on. The picked line gets the current tab's gray, so the Highlight text on it stays readable.
+		- 20261015, best guess: Ctrl+F, Command+F on macOS, goes to the box. Nothing in the dialog used it.
+		- 20261015, best guess: The box sits over the rows' column, between the tab list and the rows, rather than across the whole top. The tab list keeps its place.
+		- 20261015, best guess: Tabs and headings are matches too. A heading that only repeats its tab's title is listed as the tab, and lends it its aliases.
+		- 20261015, best guess: The path adds the heading where it isn't the tab's title, since a path of tabs alone gives "Window ⏵ Enabled". Two rows that would still read the same add the row they sit under: "Movement ⏵ Scrollbar ⏵ Width px".
+		- 20261015, best guess: An alias match shows the alias in parentheses after the label, with the alias marked, since the label has nothing to mark.
+		- 20261015, best guess: Fuzzy means the letters in order from the start of a word, such as "lnhght", or a word one typo off, two for 8 letters or more. It takes 3 letters at least.
+		- 20261015, best guess: With nothing typed the box is outside the Tab walk, as the tabs are, so Tab from nothing still lands on a tab's first control. While the list is up, Tab walks the box and the footer buttons.
+	- Test case: In `settings_ui/search.rs`: ranking `label_matches_come_before_alias_ones_and_loose_ones_last` (EsoZk3m), `a_whole_label_beats_a_word_start_beats_the_middle_of_one` (EsoZk9K), `a_short_query_matches_only_as_typed` (EsoZkED); the path `a_result_reads_tab_then_heading_then_setting` (EsoZkJ4), `no_two_results_read_the_same` (EsoZkOJ); aliases `every_alias_finds_the_row_it_is_on` (EsoZkTE); the box `enter_goes_to_the_pick_and_escape_empties_the_box_first` (EsoZkY3), `the_list_covers_the_rows_behind_it` (EsoZkdO), `the_search_box_is_no_rows_field` (EsoZneH), `tab_from_the_empty_box_goes_on_to_the_first_control` (Esob8XZ), `the_search_box_sits_over_the_rows_and_clear_of_them` (EsoZkiQ). In `dialog.rs`: `marked_text_is_larger_and_colored_on_the_same_line_box` (EsodoYf).
+	- Verified:
+		- The unit suite, 1353 tests, with clippy and rustfmt clean, and the docs, TOC and table checks.
+		- The ranking and path tests each failed with the sort or the heading taken out, and the marked text test with the size step taken out. The alias test caught 3 aliases that were already in their labels.
+		- A real window on Linux, dark at 1x and light at 2x: the list, the marks, a pick going to the Keys tab, the mark fading, the empty-list line, and Escape.
+		- Not verified: Windows, macOS.
+	- Branch: setsearch
+	- Commit: ab84e3a, 940f3f4
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
@@ -546,6 +476,84 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
+
+- A size saved while the font size was given on the command line is used at the normal font next time
+	- ID: 2026101412292756
+	- Type: Bug
+	- Status: Reopened
+		- 20261016: The save rule here is replaced by the answer on 2026101422190936. Worked together with that item.
+	- Severity: Low
+	- Opened: 20261014-122927
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 11` and resize it.
+		- Close it, and open it without the option.
+	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
+	- Reproduced: 20261014, by the random test.
+	- Progress log:
+		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
+			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
+		- 20261014: Done as answered. How it maps onto the store:
+			- The store keeps columns, rows and a font zoom, and no pixels. So "in pixels" is saved as the columns and rows the default font shows in the window's size now. It's what a zoom does already, so the window reopens at the same size.
+			- "The default font size" is the one a launch without the option opens at on that monitor: the font size from the config, plus the zoom kept there.
+			- "The screen" is the monitor the size is kept for, less the window's frame.
+			- A zoom after a launch with `--font-size` keeps the option's size under the zoom, so the same rule applies.
+	- Actual cause: The size is saved as the columns and rows of the font the window has. A launch without the option opens at them in the default font.
+	- Actual fix: As answered above. A size set at another font than the one the next launch has is checked against the screen at that font. It's kept in columns and rows if it fits, and else as the default font's columns and rows for the window's size now.
+	- Test case: `a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font` (EsjoVZu), seen failing with the old rule put back, and `a_cell_measured_for_a_font_size_is_the_cell_that_font_gets` (EsjoVeF). The random test (EshVccz) now checks a window opened at the default font fits the monitor its size was set on. Seed 2710 failed it on the old build, 1481 px wide on a 1440 px output, and passes on the fix.
+	- Verified:
+		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- The random test on seeds 23, 889, 1321, 2114, 2710 and 3999, on Wayland and on X11 through Xwayland.
+	- Swept: the other ways a grid kept for one font is used at another. A launch or a take with `--font-size` uses a grid kept at the default font, and `--font-name` saves the grid in its own font. Both are outside this answer; filed as 2026101422190936.
+	- Branch: monsave
+	- Commit: cd3f8d4
+
+- A size kept at one font is used at another when the font comes from the command line
+	- ID: 2026101422190936
+	- Type: Bug
+	- Status: Reopened
+		- I think the more logical way to handle resizing when anything that affects terminal size is passed by command line:
+			- Normally, *nothing* is remembered, even if user resizes the window. Except:
+				- If user changes the same value(s) passed on the command-line, in settings.
+				- If a new flag is also passed, something like `--persist`
+	- Severity: Low
+	- Opened: 20261014-221909
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101412292756
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
+		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
+	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
+	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
+		- Best guess, below under Decisions: the same rule as that answer, used both ways.
+	- Reproduced: 20261015. A 169x20 size kept on a 2560 px output came out 169x20 at `--font-size 17` on a 2880 px one, 3604 px wide. A 218x19 grid set under `--font-name "Ubuntu Mono"` was saved as it was, and opened 1924 px wide on a 1920 px output without the option.
+	- Notes:
+		- A size given on the command line wins over this, as before.
+	- Progress log:
+		- 20261015: Asked how a kept size should be used at another font. No answer in time, so the best guess below was taken. Easy to take back: drop the use at launch and at a take, and the family from the font check.
+	- Decisions:
+		- 20261015, best guess: the rule given on 2026101412292756, both ways. A kept size used at a font other than the one it was kept at keeps its columns and rows if the window fits the screen at the font it opens with, and else opens at the columns and rows that keep the kept window's size in pixels. That's a launch or a take with `--font-size` or `--font-name`, and a grid saved under `--font-name`.
+			- "The screen" is the monitor the size is kept for, less the window's frame, as on that item.
+			- Example: kept 100x30 at 12pt is about 1000x700 px on a 1920x1080 screen. `--font-size 14` opens 100x30, since it fits. `--font-size 28` opens about 43x13.
+			- A size is kept at the font a launch without `--font-size` and `--font-name` has, with the kept zoom on top.
+			- A window that can't tell its monitor at launch, as on Wayland, opens at the kept grid, and the take once it can tell fits it to that screen. Without per monitor sizes there's no take, so it keeps the kept window's size.
+	- Actual cause: Only the save checked the font, and only its size. A launch or a take used the kept grid at whatever font the window had, and a grid saved under `--font-name` was kept in that font.
+	- Actual fix: One rule for the save, the launch and the take. Each measures the cell of the font a launch without the options has, family and size, and the cell the window has, and picks the grid by the rule above.
+	- Branch: clifont
+	- Commit: e27efe5
+	- Test case: `a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line` (Eso2weD) and `the_font_a_launch_without_the_font_options_has` (Eso2wHz), each seen failing with its half of the fix taken out. The random test (EshVccz) now judges a kept size taken at `--font-size` from the cell the shell is told: its columns and rows where they'd clearly fit, other ones where they'd clearly not. Seed 128 fails it with the take's half taken out, and passes on the fix.
+	- Verified:
+		- The Linux unit tests, rustfmt, and clippy with warnings as errors for Linux, Windows and macOS. The Python lint, the docs check and the test ID check.
+		- The random test on seeds 1 to 4, 17, 20, 23, 30, 53, 118, 125, 128, 137, 221, 236, 249, 300, 319, 324 and 368, on Wayland and on X11 through Xwayland. All but 1 to 4 use `--font-size`.
+		- `--font-name "Ubuntu Mono"` on one headless sway output: a 218x19 grid set at 1880 px was saved as 175x19, opened 175x19 at 1865 px without the option, and 175x19 again with it, since that fits.
+	- Swept: every place a kept grid is used or saved. The save (`grid_to_open_at`), the launch in app.rs and the take (`take_monitor_size`) all go through it now. A grid from Settings is the user's own columns and rows, not a kept size, so it's left as it is. The rescale keeps the grid the window shows, at its own font.
+	- Needs external testing: a look on Windows and macOS, where the frame comes into the screen's room.
 
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
