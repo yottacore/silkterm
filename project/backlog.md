@@ -464,6 +464,102 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: setsearch
 	- Commit: ab84e3a, 940f3f4
 
+- The `clear` scroll bug still happens inside tmux
+	- ID: 2026101611321631
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Related IDs: 2026101310563297
+	- Incorrect behavior: `clear` inside tmux scrolls.
+	- Expected behavior: It clears instantly, as it does outside tmux, and smooth-scrolling inside tmux stays.
+	- Notes:
+		- Pre-next-cut.
+		- I'd rather live with it than lose smooth-scrolling inside tmux, but it seems like it's fixable.
+
+- Always run in new tmux session
+	- ID: 2026101611321632
+	- Type: Feature
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Related IDs: 2026101611321634
+	- Requirements:
+		- Boolean: "Always run in new tmux session".
+			- Disabled if tmux isn't installed, with tip text explaining that.
+			- With a warning icon.
+			- Underneath the setting as sub-section heading:
+				- Tmux session name template: (Default `%YYYYmmDD%-%HHMMSSNN%`)
+			- Tip text:
+				- Pros:
+					- If your desktop crashes, your CLI sessions survive.
+					- You can connect to existing CLI sessions remotely.
+					- You can reconnect from any other installed terminal.
+					- (Anything else?)
+				- Cons:
+					- Can't launch GUI programs without extra parameters.
+					- The SilkTerm Minimap is not available.
+					- SilkTerm can't adjust itself based on programs inside tmux, so you may see occasional weirdness with smooth-scrolling.
+					- (Anything else?)
+		- Tab menu, between 'New tab' and 'New tab with shell':
+			- New tab in tmux
+	- Notes:
+		- Pre-next-cut.
+		- Goes on the new "Program" Settings tab, 2026101611321634.
+		- Suggested for the 2 "(Anything else?)" lines. Not agreed yet.
+			- Pro: closing SilkTerm by mistake doesn't end what's running.
+			- Con: a detached session keeps running and using memory until it's killed.
+			- Con: tmux's prefix key, Ctrl+B by default, no longer reaches programs inside it.
+			- Con: the tab title and the folder a new tab starts in may follow tmux rather than the shell inside it.
+			- Con: a mouse selection goes to tmux when its mouse mode is on.
+
+- Double-click selection of a path: allow unicode characters
+	- ID: 2026101611321633
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Allow unicode characters in consideration for double-click selection of a path.
+	- Notes:
+		- Pre-next-cut.
+
+- Settings: a new "Program" tab
+	- ID: 2026101611321634
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Related IDs: 2026101611321632
+	- Requirements:
+		- New tab, "Program".
+		- Move to it:
+			- Window|Resource use
+		- New features in it:
+			- Always run in new tmux session, 2026101611321632.
+	- Notes:
+		- Pre-next-cut.
+		- The Tab text group already has a toggle named "Program".
+
+- README.md, "Terminal showdown" section: the line on memory
+	- ID: 2026101611321635
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- "SilkTerm is near the top for speed, and uses more memory than most." -> "SilkTerm is near the top for speed, and doesn't use more memory once static vs dynamic libraries are counted."
+	- Notes:
+		- Pre-next-cut.
+		- Check that the table in comparison.md bears it out before changing the line.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
