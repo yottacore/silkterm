@@ -3515,36 +3515,8 @@ impl Pane {
 	/// (first, last) cells. Spans a soft-wrapped line the way a hyperlink does,
 	/// since a long path is exactly the thing that wraps.
 	pub fn shape_span(&self, point: Point) -> Option<(Point, Point)> {
-		let cols = self.term.cols;
-		if cols == 0 || point.column.0 >= cols {
-			return None;
-		}
 		let guard = self.term.term.lock_unfair();
-		let grid = guard.grid();
-		let (top, bot) = (-(grid.history_size() as i32), self.term.lines as i32 - 1);
-		let line = point.line.0;
-		if line < top || line > bot {
-			return None;
-		}
-		let end_col = Column(cols - 1);
-		let wraps = |l: i32| grid[Line(l)][end_col].flags.contains(Flags::WRAPLINE);
-		let mut first = line;
-		while first > top && line - first < LINK_WRAP_ROWS && wraps(first - 1) {
-			first -= 1;
-		}
-		let mut last = line;
-		while last < bot && last - line < LINK_WRAP_ROWS && wraps(last) {
-			last += 1;
-		}
-		let mut text = Vec::with_capacity((last - first + 1) as usize * cols);
-		for l in first..=last {
-			let row = &grid[Line(l)];
-			text.extend((0..cols).map(|c| render_char(row[Column(c)].c)));
-		}
-		let hit = (line - first) as usize * cols + point.column.0;
-		let (start, end) = crate::shapes::span_at(&text, hit)?;
-		let point_of = |i: usize| Point::new(Line(first + (i / cols) as i32), Column(i % cols));
-		Some((point_of(start), point_of(end - 1)))
+		shape_reach(guard.grid(), point)
 	}
 
 	/// The whole logical line containing `point`, spanning soft-wrapped rows, as
@@ -4296,6 +4268,69 @@ fn paste_payload(text: &str, bracket: bool) -> String {
 	} else {
 		text.replace("\r\n", "\r").replace('\n', "\r")
 	}
+}
+
+// The shape (URL, path, scp target) under `point`, as (first, last) cells. The
+// text handed to `shapes` is one char per character, not per cell: the second
+// half of a wide character holds a space, and a CJK folder name read that way
+// came apart at its first character. Each char keeps the first and last cell it
+// covers, so a selection ending on a wide character takes both halves.
+fn shape_reach(grid: &Grid<Cell>, point: Point) -> Option<(Point, Point)> {
+	let cols = grid.columns();
+	if cols == 0 || point.column.0 >= cols {
+		return None;
+	}
+	let (top, bot) = (
+		-(grid.history_size() as i32),
+		grid.screen_lines() as i32 - 1,
+	);
+	let line = point.line.0;
+	if line < top || line > bot {
+		return None;
+	}
+	let end_col = Column(cols - 1);
+	let wraps = |l: i32| grid[Line(l)][end_col].flags.contains(Flags::WRAPLINE);
+	let mut first = line;
+	while first > top && line - first < LINK_WRAP_ROWS && wraps(first - 1) {
+		first -= 1;
+	}
+	let mut last = line;
+	while last < bot && last - line < LINK_WRAP_ROWS && wraps(last) {
+		last += 1;
+	}
+	let room = (last - first + 1) as usize * cols;
+	let mut text = Vec::with_capacity(room);
+	let mut cells: Vec<(Point, Point)> = Vec::with_capacity(room);
+	let mut hit = None;
+	for l in first..=last {
+		let row = &grid[Line(l)];
+		for c in 0..cols {
+			let at = Point::new(Line(l), Column(c));
+			let flags = row[Column(c)].flags;
+			if flags.contains(Flags::WIDE_CHAR_SPACER) {
+				if let Some(prev) = cells.last_mut() {
+					prev.1 = at;
+				}
+				if at == point {
+					hit = text.len().checked_sub(1);
+				}
+				continue;
+			}
+			if at == point {
+				hit = Some(text.len());
+			}
+			// a wide character that didn't fit at the end of a row leaves a pad
+			// there and starts the next one; a click on the pad means it
+			if flags.contains(Flags::LEADING_WIDE_CHAR_SPACER) {
+				continue;
+			}
+			text.push(render_char(row[Column(c)].c));
+			cells.push((at, at));
+		}
+	}
+	let hit = hit.filter(|&h| h < text.len())?;
+	let (start, end) = crate::shapes::span_at(&text, hit)?;
+	Some((cells[start].0, cells[end - 1].1))
 }
 
 // How far a double-click on a bracket looks for its partner, in rows.
@@ -5332,14 +5367,16 @@ mod tests {
 		logical_line_bounds, minimap, mono_attrs, move_is_input, next_capture_poll, output_advance,
 		output_band, pair_inside, paste_payload, place_split, prompt_strip, pulse_env,
 		pushed_since, render_char, repaint_shift, repainted_edge, resume_delay, same_char_pair,
-		scroll_shift_signed, set_buffer_rows, set_ratio, shift_makes_room, shown_cursor_shape,
-		skel_rows, slide_bands, slide_is_visible, snapshot_rows, static_bands, strip_cell,
-		strip_rows, swap_leaves, text_buffer_h, translate_span, vanished_range, weld_region_clip,
+		scroll_shift_signed, set_buffer_rows, set_ratio, shape_reach, shift_makes_room,
+		shown_cursor_shape, skel_rows, slide_bands, slide_is_visible, snapshot_rows, static_bands,
+		strip_cell, strip_rows, swap_leaves, text_buffer_h, translate_span, vanished_range,
+		weld_region_clip,
 	};
 	use crate::{config, palette};
 	use alacritty_terminal::event::{Event, EventListener};
 	use alacritty_terminal::grid::Dimensions;
 	use alacritty_terminal::index::{Column, Line, Point, Side};
+	use alacritty_terminal::term::cell::Flags;
 	use alacritty_terminal::term::{Config as TermConfig, Term};
 	use alacritty_terminal::vte::ansi::{CursorShape, Processor};
 
@@ -5613,6 +5650,52 @@ mod tests {
 		assert!(
 			term.bracket_search(close).is_some(),
 			"the engine would have found it"
+		);
+	}
+
+	// The second half of a wide character holds a space in the grid, so a path
+	// with CJK in it stopped at its first wide character, or crossed it only when
+	// another separator came soon after.
+	// Test ID: EstXrin
+	#[test]
+	fn a_path_with_wide_characters_is_taken_whole() {
+		let term = term_fed(40, 3, 0, "ls ~/文档/报告.txt end\r\n");
+		let grid = term.grid();
+		let at = |col: usize| Point::new(Line(0), Column(col));
+		let picked = |click: usize| {
+			let (a, b) = shape_reach(grid, at(click))?;
+			Some((a.column.0, b.column.0))
+		};
+		// "ls " is 3 cells, then ~/ is 2, then 4 wide characters at 2 cells each,
+		// "/" between, ".txt" after: the path is cells 3..=17
+		assert_eq!(grid[at(5)].c, '文');
+		assert!(grid[at(6)].flags.contains(Flags::WIDE_CHAR_SPACER));
+		assert_eq!(picked(5), Some((3, 17)), "on a wide character");
+		assert_eq!(picked(6), Some((3, 17)), "on its second half");
+		assert_eq!(picked(16), Some((3, 17)), "on the extension");
+		assert_eq!(picked(20), None, "the word after");
+
+		// a folder name with nothing after it, which had no separator to reach for
+		let term = term_fed(40, 3, 0, "cd /srv/数据 ok\r\n");
+		let grid = term.grid();
+		let (a, b) = shape_reach(grid, Point::new(Line(0), Column(4))).unwrap();
+		assert_eq!((a.column.0, b.column.0), (3, 11), "ends on the last spacer");
+
+		// one that wraps, with the wide character pushed to the next row
+		let term = term_fed(10, 3, 0, "ab /srv/x数据/y\r\n");
+		let grid = term.grid();
+		assert!(
+			grid[Point::new(Line(0), Column(9))]
+				.flags
+				.contains(Flags::LEADING_WIDE_CHAR_SPACER)
+		);
+		let (a, b) = shape_reach(grid, Point::new(Line(0), Column(4))).unwrap();
+		assert_eq!(
+			(a, b),
+			(
+				Point::new(Line(0), Column(3)),
+				Point::new(Line(1), Column(5))
+			)
 		);
 	}
 

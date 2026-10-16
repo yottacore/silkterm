@@ -34,6 +34,28 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
+- README.md, "Terminal showdown" section: the line on memory
+	- ID: 2026101611321635
+	- Type: Task
+	- Status: Waiting for answers
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- "SilkTerm is near the top for speed, and uses more memory than most." -> "SilkTerm is near the top for speed, and doesn't use more memory once static vs dynamic libraries are counted."
+	- Notes:
+		- Pre-next-cut.
+		- Check that the table in comparison.md bears it out before changing the line.
+	- Progress log:
+		- 20261016: The table doesn't bear it out, so README.md is unchanged.
+			- The Mem column already counts shared libraries. Per note 4 and showdown-readme.md, it's private pages plus each shared mapping counted once. So a terminal on GTK already has GTK's resident pages in its figure. Only the graphics stack is left out, for every row, and SilkTerm's is the biggest of those (141 MiB).
+			- Mem in MiB: SilkTerm plain 100.1, as it ships 167.7. Others: XTerm 9.4, conhost 21.1, XFCE4 Terminal 48.6, Alacritty 50.4, GNOME Terminal 53.6, Terminator 82.2, WezTerm 84.8, Windows Terminal 93.0, kitty 140.8, Hyper 309.4, Tabby 473.4. Plain is above 8 of those 11, and as it ships above 9.
+			- Alacritty is linked the same way as SilkTerm and reads 50 MiB lower plain, 117 as it ships. Note 8 puts that down to the eye candy, not linking.
+			- Taking SilkTerm's whole 10.5 MiB file out of its figure still leaves plain at about 90, above all but Windows Terminal, kitty, Hyper and Tabby.
+			- The static vs dynamic point does hold for File+deps, which is disk: SilkTerm 14.1 against 84 for GNOME Terminal and XFCE4 Terminal.
+		- 20261016: Question: keep the current line, or reword it some other way, for example to say the disk cost is small once libraries are counted?
+
 - A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
 	- ID: 2026101411555009
 	- Type: Bug
@@ -70,6 +92,30 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: `button_held` has one caller. Every start of a look: the reveal, a move, a scale change, and the pointer back on Wayland. The scale change skipped the grace after the window's own resize that a move gets, filed and fixed as 2026101420262300.
 	- Branch: helddrag
 	- Commit: e2e44df
+
+- Double-click selection of a path: allow unicode characters
+	- ID: 2026101611321633
+	- Type: Enhancement
+	- Status: Waiting on signoff
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Allow unicode characters in consideration for double-click selection of a path.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261016: Found: letters from scripts like Cyrillic or accented Latin already counted. A wide character such as Chinese or Japanese didn't, since its second cell reads as a space, so `/srv/数据` came back as `/srv/数`. Any symbol counted too, so `repo.git:dev✘✔` with no space took the marks along.
+		- 20261016: Done: past ASCII, letters, digits and combining marks from any script count as path characters. Symbols, arrows, box drawing, emoji and non-ASCII punctuation end a path. ASCII punctuation keeps the rules it had. A wide character is one character, and the selection covers both its cells.
+		- 20261016: Also counts letters past ASCII in a file extension (so `:12` after one is still left off) and in a git remote's first path segment.
+	- Decisions:
+		- 20261016: The line between "letter" and "symbol" was a best guess. A folder named with an emoji or a symbol like `★` is now cut there. Left as they were: the short list of what may sit just before a path (a full-width colon or a CJK bracket doesn't start one), and a remote's host and user name, which stay ASCII.
+	- Swept: The other double-click rules. The pair rule and the bracket rule read cells the old way, but neither looks at what a path is; word selection is the engine's and already handles wide characters. Link hover uses ASCII-only URLs, so a wide character can't be inside one.
+	- Verified: 20261016 on b23. The 3 new tests failed on the code before the change and pass after it. The full unit suite (1358), rustfmt and clippy with warnings as errors passed.
+	- Branch: pathuni
+	- Commit: a74705e
+	- Test case: `a_path_may_have_letters_from_any_script` (EstXrUS), `symbols_after_a_path_are_left_out` (EstXrbq), `a_path_with_wide_characters_is_taken_whole` (EstXrin).
 
 - Wayland: a resize or zoom after a move the window wasn't told of is saved for the monitor it left, and the next look undoes it
 	- ID: 2026101413420431
@@ -548,19 +594,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261016: Closing a tab with a pane in tmux asks what to do, with a "Don't ask me next time" check box that stores the answer. New setting for it: Detach, End or Prompt, as a horizontal radio.
 		- 20261016: Only splits get tmux. A split starts in a new tmux session. A new tab's first pane starts the plain shell, unless opened with "New tab in tmux".
 
-- Double-click selection of a path: allow unicode characters
-	- ID: 2026101611321633
-	- Type: Enhancement
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261016-113216
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Allow unicode characters in consideration for double-click selection of a path.
-	- Notes:
-		- Pre-next-cut.
-
 - Settings: a new "Program" tab
 	- ID: 2026101611321634
 	- Type: Enhancement
@@ -597,20 +630,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 	- Progress log:
 		- 20261016: The default gives exactly what the 4 check boxes give now. The dash shows only when no program is named. A group whose macros all come out empty drops with its literal text. `[ ]` prints its brackets, `{ }` doesn't.
-
-- README.md, "Terminal showdown" section: the line on memory
-	- ID: 2026101611321635
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261016-113216
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- "SilkTerm is near the top for speed, and uses more memory than most." -> "SilkTerm is near the top for speed, and doesn't use more memory once static vs dynamic libraries are counted."
-	- Notes:
-		- Pre-next-cut.
-		- Check that the table in comparison.md bears it out before changing the line.
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
