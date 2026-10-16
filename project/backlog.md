@@ -34,38 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- Smooth scroll freaked out with a long flatpak update
-	- ID: 2026101310563284
-	- Type: Bug
-	- Status: Done
-	- Severity: High
-	- Opened: 20261013-105632
-	- Opened by: JC
-	- Target OS: Linux
-	- Test environment: b23, flatpak 1.16.6
-	- Steps to reproduce:
-		- Run a long `flatpak update`.
-	- Incorrect behavior: Smooth scroll freaked out.
-	- Expected behavior: Smooth scroll stays steady through the whole update.
-	- Notes:
-		- Pre-next-cut.
-		- Regression.
-		- The old-format Done item "Severe bug: `flatpak update` output bounces wildly" fixed it before, closed 20260728.
-	- Reproduced: 20261013 on b23, with a real `flatpak update` of 60 small apps. Every redraw of the update table eased about a screenful, both before and after the scrollback was full.
-	- Actual cause:
-		- Once flatpak's table is taller than the screen, each redraw goes to the top row, clears, and prints the whole table again. The rows that don't fit are printed with no line breaks between them, so they wrap into about a screenful that scrolls up into history. The screen ends up looking the same, but SilkTerm eased through the whole screenful on every redraw.
-		- Before 20260903, at a full scrollback the advance was read off the screen rows, and those showed nothing moving. The tmux scrolling change (c5374c3) switched that to the engine's own count of lines pushed into history, which counts flatpak's. That's the regression. Before the scrollback fills it eased on every redraw back then too.
-	- Actual fix [Bug]: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint does not ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out here. Since 2026101310563297 a clear does not ease at all.
-	- Verified: 20261013 on b23, a real `flatpak update` of 60 apps. The frames that eased during the update went from 55 to 8 with the scrollback not full, and from 50 to 12 with it full. What is left is the first table and its first redraw. The same output fed straight into the terminal eased the first table and 1 of its 242 redraws, against all of them before. The gate and the 11 scroll scenes pass.
-	- Progress log:
-		- 20261013: Waiting on signoff for a look at a real update with downloads in a real window. Still eases once: the first redraw, when the table gets its progress column.
-	- Branch: fpaksnap
-	- Commit: 544b01b
-	- Acceptance signoff: JC, 20261016.
-	- Closed: 20261016-110914
-	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
-	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
-
 - A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
 	- ID: 2026101411555009
 	- Type: Bug
@@ -102,37 +70,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: `button_held` has one caller. Every start of a look: the reveal, a move, a scale change, and the pointer back on Wayland. The scale change skipped the grace after the window's own resize that a move gets, filed and fixed as 2026101420262300.
 	- Branch: helddrag
 	- Commit: e2e44df
-
-- README.md: move the long sections out to their own docs
-	- ID: 2026101415085144
-	- Type: Task
-	- Status: Done
-		- Move the comparison table itself into 'comparison.md' also.
-	- Priority: Avg
-	- Opened: 20261014-150851
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Move detailed comparisons to something like a "compared to other terminals" md, and link to it. Keep the brief feature comparison table.
-		- Move installation instructions, including development, to one or more .mds, and link to it/them.
-		- Move CLI usage and other examples to its own .md, and link to it. Leave a small snippet of example shcl contents.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261014: README keeps what it is, why, features, the wallpaper sheet, the showdown table, a short getting-started pointer with a few config lines, support, and legal.
-		- 20261014: New docs at the root. install.md has packages, the install scripts, building it yourself, the dev environment, and fetching the wallpaper pack. usage.md has configuration, shell integration, and opening scripts and folders on Windows. comparison.md has how the showdown is measured, notes 1 to 9, and how to run it. build.md, prerequisites.md and shell-integration.md are linked as before, with nothing folded in.
-		- 20261014: The showdown table stays in the README as the brief comparison table. It's the only comparison table there, and it's what a reader skims. Its method text and long notes are the detailed part, so they moved. The notes keep their small-text form and numbers.
-		- 20261014: The README had no CLI usage section and no config example, so nothing moved for those. The config lines in the README are copied from the shipped template.
-		- Question: should usage.md get a command-line section, written from `--help`?
-			- 20261015: No answer in time, so the best guess was yes. Easy to take back: drop the section and its 2 tests.
-		- 20261015: Reopened to move the table itself as well, which replaces the call above to keep it in the README. The README had no other comparison table, so it keeps only a short pointer under the same heading, with one line on where SilkTerm stands.
-		- 20261015: comparison.md now has the table above its notes. termbench.py, showdown-readme.py and update-showdown.py write it there. `--no-readme` keeps its name; showdown-readme.py takes `--doc`, with `--readme` still accepted.
-		- 20261015: usage.md has a Command line section: every option `--help` lists, grouped the same way, and 3 examples.
-	- Branch: readmesplit, then cmptable
-	- Commit: 4cbe138, c0a237d
-	- Test case: `cicd/tests/showdown/run.py` (EqBnA5g) checks each writer points at comparison.md and the README has no copy of the table; each check failed with its writer pointed back at README.md. `cicd/tests/showdown/rigs.py` (ErE7yrA) reads the table and note 9 from comparison.md. `usage_md_names_every_option_in_help` (EsnhIUe) and `usage_md_examples_parse` (EsnhIy1) in cli.rs; both failed with an option and an alias taken out of usage.md and a bad example.
-	- Verified: docs, tables, toc, showdown and rigs tests pass, the cli unit tests pass, clippy is clean, and the test-ID check passes. Both writers run on a copy of comparison.md leave it byte-identical.
-	- Swept: termbench.py, showdown-readme.py, update-showdown.py and both rigs' headers now name comparison.md, and so do mdtable.py, showdown-readme.md, the tables test, a cicd.bash comment, design.md and the speed design doc. Unchanged on purpose: release.bash, the pre-push hook and the hooks test read the badge, which stays in the README. wallpaper-gallery.bash reads "102 wallpapers" from the README, still there. The release notes keep "See the README". demo-video.py and script.txt name the README gif only. The gallery page links install.md. ancillary-notes.fods records and the speed doc's quoted backlog title stay as written for their dates. Nothing links the README's showdown anchor, which stays.
 
 - Wayland: a resize or zoom after a move the window wasn't told of is saved for the monitor it left, and the next look undoes it
 	- ID: 2026101413420431
@@ -286,6 +223,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 2036 both ways, and the runs listed on 2026101411555009. Windows and macOS were linted, not run.
 	- Branch: helddrag
 	- Commit: e2e44df
+
+- The `clear` scroll bug still happens inside tmux
+	- ID: 2026101611321631
+	- Type: Bug
+	- Status: Waiting for testing
+	- Severity: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Target OS: All
+	- Test environment: b23, tmux 3.6b
+	- Related IDs: 2026101310563297
+	- Incorrect behavior: `clear` inside tmux scrolls.
+	- Expected behavior: It clears instantly, as it does outside tmux, and smooth-scrolling inside tmux stays.
+	- Notes:
+		- Pre-next-cut.
+		- I'd rather live with it than lose smooth-scrolling inside tmux, but it seems like it's fixable.
+	- Reproduced: 20261016 on b23, with real tmux in a window. `clear`, Ctrl+L, `tput clear` and a reset each slid the old screen up and away, a whole pane's height.
+	- Actual cause:
+		- tmux never passes a clear on. It keeps the terminal on the alt screen and draws the pane itself. With its status line on the bottom row it can't erase to the bottom, so it scrolls the pane's rows away instead. SilkTerm took that as the pane scrolling and slid it.
+		- Output inside tmux comes the same way. A burst scrolls the whole pane away and then draws the new rows, so the scroll alone can't tell the two apart.
+	- Actual fix [Bug]: A pane scrolled away whole that's left mostly blank is a clear. It shows at once, and the Enter that ran it stops sliding. A burst fills the pane, so it still slides. The rule only applies while the slide still running is a line or two, since a burst's draw can be cut by a frame early on during a flood.
+	- Not covered:
+		- A clear that comes while a big slide is still running, such as `seq 100; clear` on one line, still slides.
+		- With ble.sh, when the clear and ble.sh's prompt redraw land in one frame, the Enter's one-row slide runs out over the cleared screen. It did that before too.
+	- Verified:
+		- 20261016 on b23, real tmux running plain bash in a window, driven from outside. Before: slides of 47, 46, 47 and 48 rows for `clear`, Ctrl+L, `tput clear` and a reset. After: none. Output of 300 lines slid on both builds, and output a line at a time slid one row per line on both.
+		- The new replay tests failed on the build from before and pass now. The flood check failed against a first version that went by "no slide at all" rather than "a line or two". The new scroll scene failed on the build from before (43 frames slid) and passes now. All 14 X11 scroll scenes pass.
+		- The unit suite passes but for `every_script_has_the_license_header_with_history_at_the_bottom`, which fails on dev too: `utility/fake-flatpak-update.bash` has no History block. Clippy, rustfmt and the docs checks are clean.
+	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness.
+	- Swept: the slide decision has 2 copies, `Pane::build` and its mirror in `pane/replay.rs`, and both have the rule. The output ease on the normal screen is a separate path and already snaps on a clear.
+	- Branch: tmuxclear
+	- Commit: 1e01433
+	- Test case: `a_clear_inside_tmux_shows_at_once` (EstO7ww) and `output_inside_tmux_still_slides` (EstO8Ff) in `pane/replay.rs`, on bytes tmux 3.6b sent. Scroll scene `tmuxclear` (`cicd/tests/scroll/run.bash`). Each was red before the fix and green after.
 
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
@@ -464,38 +434,85 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: setsearch
 	- Commit: ab84e3a, 940f3f4
 
-- The `clear` scroll bug still happens inside tmux
-	- ID: 2026101611321631
+- A size saved while the font size was given on the command line is used at the normal font next time
+	- ID: 2026101412292756
 	- Type: Bug
-	- Status: Waiting for testing
-	- Severity: Avg
-	- Opened: 20261016-113216
-	- Opened by: JC
+	- Status: Reopened
+		- 20261016: The save rule here is replaced by the answer on 2026101422190936. Worked together with that item.
+	- Severity: Low
+	- Opened: 20261014-122927
+	- Opened by: CC
+	- Parent ID: 2026100114435600
 	- Target OS: All
-	- Test environment: b23, tmux 3.6b
-	- Related IDs: 2026101310563297
-	- Incorrect behavior: `clear` inside tmux scrolls.
-	- Expected behavior: It clears instantly, as it does outside tmux, and smooth-scrolling inside tmux stays.
-	- Notes:
-		- Pre-next-cut.
-		- I'd rather live with it than lose smooth-scrolling inside tmux, but it seems like it's fixable.
-	- Reproduced: 20261016 on b23, with real tmux in a window. `clear`, Ctrl+L, `tput clear` and a reset each slid the old screen up and away, a whole pane's height.
-	- Actual cause:
-		- tmux never passes a clear on. It keeps the terminal on the alt screen and draws the pane itself. With its status line on the bottom row it can't erase to the bottom, so it scrolls the pane's rows away instead. SilkTerm took that as the pane scrolling and slid it.
-		- Output inside tmux comes the same way. A burst scrolls the whole pane away and then draws the new rows, so the scroll alone can't tell the two apart.
-	- Actual fix [Bug]: A pane scrolled away whole that's left mostly blank is a clear. It shows at once, and the Enter that ran it stops sliding. A burst fills the pane, so it still slides. The rule only applies while the slide still running is a line or two, since a burst's draw can be cut by a frame early on during a flood.
-	- Not covered:
-		- A clear that comes while a big slide is still running, such as `seq 100; clear` on one line, still slides.
-		- With ble.sh, when the clear and ble.sh's prompt redraw land in one frame, the Enter's one-row slide runs out over the cleared screen. It did that before too.
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 11` and resize it.
+		- Close it, and open it without the option.
+	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
+	- Reproduced: 20261014, by the random test.
+	- Progress log:
+		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
+			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
+		- 20261014: Done as answered. How it maps onto the store:
+			- The store keeps columns, rows and a font zoom, and no pixels. So "in pixels" is saved as the columns and rows the default font shows in the window's size now. It's what a zoom does already, so the window reopens at the same size.
+			- "The default font size" is the one a launch without the option opens at on that monitor: the font size from the config, plus the zoom kept there.
+			- "The screen" is the monitor the size is kept for, less the window's frame.
+			- A zoom after a launch with `--font-size` keeps the option's size under the zoom, so the same rule applies.
+	- Actual cause: The size is saved as the columns and rows of the font the window has. A launch without the option opens at them in the default font.
+	- Actual fix: As answered above. A size set at another font than the one the next launch has is checked against the screen at that font. It's kept in columns and rows if it fits, and else as the default font's columns and rows for the window's size now.
+	- Test case: `a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font` (EsjoVZu), seen failing with the old rule put back, and `a_cell_measured_for_a_font_size_is_the_cell_that_font_gets` (EsjoVeF). The random test (EshVccz) now checks a window opened at the default font fits the monitor its size was set on. Seed 2710 failed it on the old build, 1481 px wide on a 1440 px output, and passes on the fix.
 	- Verified:
-		- 20261016 on b23, real tmux running plain bash in a window, driven from outside. Before: slides of 47, 46, 47 and 48 rows for `clear`, Ctrl+L, `tput clear` and a reset. After: none. Output of 300 lines slid on both builds, and output a line at a time slid one row per line on both.
-		- The new replay tests failed on the build from before and pass now. The flood check failed against a first version that went by "no slide at all" rather than "a line or two". The new scroll scene failed on the build from before (43 frames slid) and passes now. All 14 X11 scroll scenes pass.
-		- The unit suite passes but for `every_script_has_the_license_header_with_history_at_the_bottom`, which fails on dev too: `utility/fake-flatpak-update.bash` has no History block. Clippy, rustfmt and the docs checks are clean.
-	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness.
-	- Swept: the slide decision has 2 copies, `Pane::build` and its mirror in `pane/replay.rs`, and both have the rule. The output ease on the normal screen is a separate path and already snaps on a clear.
-	- Branch: tmuxclear
-	- Commit: 1e01433
-	- Test case: `a_clear_inside_tmux_shows_at_once` (EstO7ww) and `output_inside_tmux_still_slides` (EstO8Ff) in `pane/replay.rs`, on bytes tmux 3.6b sent. Scroll scene `tmuxclear` (`cicd/tests/scroll/run.bash`). Each was red before the fix and green after.
+		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- The random test on seeds 23, 889, 1321, 2114, 2710 and 3999, on Wayland and on X11 through Xwayland.
+	- Swept: the other ways a grid kept for one font is used at another. A launch or a take with `--font-size` uses a grid kept at the default font, and `--font-name` saves the grid in its own font. Both are outside this answer; filed as 2026101422190936.
+	- Branch: monsave
+	- Commit: cd3f8d4
+
+- A size kept at one font is used at another when the font comes from the command line
+	- ID: 2026101422190936
+	- Type: Bug
+	- Status: Reopened
+		- I think the more logical way to handle resizing when anything that affects terminal size is passed by command line:
+			- Normally, *nothing* is remembered, even if user resizes the window. Except:
+				- If user changes the same value(s) passed on the command-line, in settings.
+				- If a new flag is also passed, something like `--persist`
+	- Severity: Low
+	- Opened: 20261014-221909
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101412292756
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
+		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
+	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
+	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
+		- Best guess, below under Decisions: the same rule as that answer, used both ways.
+	- Reproduced: 20261015. A 169x20 size kept on a 2560 px output came out 169x20 at `--font-size 17` on a 2880 px one, 3604 px wide. A 218x19 grid set under `--font-name "Ubuntu Mono"` was saved as it was, and opened 1924 px wide on a 1920 px output without the option.
+	- Notes:
+		- A size given on the command line wins over this, as before.
+	- Progress log:
+		- 20261015: Asked how a kept size should be used at another font. No answer in time, so the best guess below was taken. Easy to take back: drop the use at launch and at a take, and the family from the font check.
+		- 20261016: The options that count as affecting the terminal's size are `--font-size`, `--font-name`, and any columns or rows option. Agreed.
+		- 20261016, best guess: A window opened with one of them still opens at a kept size by the fit rule below, but saves nothing.
+	- Decisions:
+		- 20261015, best guess: the rule given on 2026101412292756, both ways. A kept size used at a font other than the one it was kept at keeps its columns and rows if the window fits the screen at the font it opens with, and else opens at the columns and rows that keep the kept window's size in pixels. That's a launch or a take with `--font-size` or `--font-name`, and a grid saved under `--font-name`.
+			- "The screen" is the monitor the size is kept for, less the window's frame, as on that item.
+			- Example: kept 100x30 at 12pt is about 1000x700 px on a 1920x1080 screen. `--font-size 14` opens 100x30, since it fits. `--font-size 28` opens about 43x13.
+			- A size is kept at the font a launch without `--font-size` and `--font-name` has, with the kept zoom on top.
+			- A window that can't tell its monitor at launch, as on Wayland, opens at the kept grid, and the take once it can tell fits it to that screen. Without per monitor sizes there's no take, so it keeps the kept window's size.
+	- Actual cause: Only the save checked the font, and only its size. A launch or a take used the kept grid at whatever font the window had, and a grid saved under `--font-name` was kept in that font.
+	- Actual fix: One rule for the save, the launch and the take. Each measures the cell of the font a launch without the options has, family and size, and the cell the window has, and picks the grid by the rule above.
+	- Branch: clifont
+	- Commit: e27efe5
+	- Test case: `a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line` (Eso2weD) and `the_font_a_launch_without_the_font_options_has` (Eso2wHz), each seen failing with its half of the fix taken out. The random test (EshVccz) now judges a kept size taken at `--font-size` from the cell the shell is told: its columns and rows where they'd clearly fit, other ones where they'd clearly not. Seed 128 fails it with the take's half taken out, and passes on the fix.
+	- Verified:
+		- The Linux unit tests, rustfmt, and clippy with warnings as errors for Linux, Windows and macOS. The Python lint, the docs check and the test ID check.
+		- The random test on seeds 1 to 4, 17, 20, 23, 30, 53, 118, 125, 128, 137, 221, 236, 249, 300, 319, 324 and 368, on Wayland and on X11 through Xwayland. All but 1 to 4 use `--font-size`.
+		- `--font-name "Ubuntu Mono"` on one headless sway output: a 218x19 grid set at 1880 px was saved as 175x19, opened 175x19 at 1865 px without the option, and 175x19 again with it, since that fits.
+	- Swept: every place a kept grid is used or saved. The save (`grid_to_open_at`), the launch in app.rs and the take (`take_monitor_size`) all go through it now. A grid from Settings is the user's own columns and rows, not a kept size, so it's left as it is. The rescale keeps the grid the window shows, at its own font.
+	- Needs external testing: a look on Windows and macOS, where the frame comes into the screen's room.
 
 - Always run in new tmux session
 	- ID: 2026101611321632
@@ -609,86 +626,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Decisions:
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
-
-- A size saved while the font size was given on the command line is used at the normal font next time
-	- ID: 2026101412292756
-	- Type: Bug
-	- Status: Reopened
-		- 20261016: The save rule here is replaced by the answer on 2026101422190936. Worked together with that item.
-	- Severity: Low
-	- Opened: 20261014-122927
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: All
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- Open SilkTerm with `--font-size 11` and resize it.
-		- Close it, and open it without the option.
-	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
-	- Reproduced: 20261014, by the random test.
-	- Progress log:
-		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
-			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
-		- 20261014: Done as answered. How it maps onto the store:
-			- The store keeps columns, rows and a font zoom, and no pixels. So "in pixels" is saved as the columns and rows the default font shows in the window's size now. It's what a zoom does already, so the window reopens at the same size.
-			- "The default font size" is the one a launch without the option opens at on that monitor: the font size from the config, plus the zoom kept there.
-			- "The screen" is the monitor the size is kept for, less the window's frame.
-			- A zoom after a launch with `--font-size` keeps the option's size under the zoom, so the same rule applies.
-	- Actual cause: The size is saved as the columns and rows of the font the window has. A launch without the option opens at them in the default font.
-	- Actual fix: As answered above. A size set at another font than the one the next launch has is checked against the screen at that font. It's kept in columns and rows if it fits, and else as the default font's columns and rows for the window's size now.
-	- Test case: `a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font` (EsjoVZu), seen failing with the old rule put back, and `a_cell_measured_for_a_font_size_is_the_cell_that_font_gets` (EsjoVeF). The random test (EshVccz) now checks a window opened at the default font fits the monitor its size was set on. Seed 2710 failed it on the old build, 1481 px wide on a 1440 px output, and passes on the fix.
-	- Verified:
-		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
-		- The random test on seeds 23, 889, 1321, 2114, 2710 and 3999, on Wayland and on X11 through Xwayland.
-	- Swept: the other ways a grid kept for one font is used at another. A launch or a take with `--font-size` uses a grid kept at the default font, and `--font-name` saves the grid in its own font. Both are outside this answer; filed as 2026101422190936.
-	- Branch: monsave
-	- Commit: cd3f8d4
-
-- A size kept at one font is used at another when the font comes from the command line
-	- ID: 2026101422190936
-	- Type: Bug
-	- Status: Reopened
-		- I think the more logical way to handle resizing when anything that affects terminal size is passed by command line:
-			- Normally, *nothing* is remembered, even if user resizes the window. Except:
-				- If user changes the same value(s) passed on the command-line, in settings.
-				- If a new flag is also passed, something like `--persist`
-	- Severity: Low
-	- Opened: 20261014-221909
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101412292756
-	- Target OS: All
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
-		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
-	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
-	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
-		- Best guess, below under Decisions: the same rule as that answer, used both ways.
-	- Reproduced: 20261015. A 169x20 size kept on a 2560 px output came out 169x20 at `--font-size 17` on a 2880 px one, 3604 px wide. A 218x19 grid set under `--font-name "Ubuntu Mono"` was saved as it was, and opened 1924 px wide on a 1920 px output without the option.
-	- Notes:
-		- A size given on the command line wins over this, as before.
-	- Progress log:
-		- 20261015: Asked how a kept size should be used at another font. No answer in time, so the best guess below was taken. Easy to take back: drop the use at launch and at a take, and the family from the font check.
-		- 20261016: The options that count as affecting the terminal's size are `--font-size`, `--font-name`, and any columns or rows option. Agreed.
-		- 20261016, best guess: A window opened with one of them still opens at a kept size by the fit rule below, but saves nothing.
-	- Decisions:
-		- 20261015, best guess: the rule given on 2026101412292756, both ways. A kept size used at a font other than the one it was kept at keeps its columns and rows if the window fits the screen at the font it opens with, and else opens at the columns and rows that keep the kept window's size in pixels. That's a launch or a take with `--font-size` or `--font-name`, and a grid saved under `--font-name`.
-			- "The screen" is the monitor the size is kept for, less the window's frame, as on that item.
-			- Example: kept 100x30 at 12pt is about 1000x700 px on a 1920x1080 screen. `--font-size 14` opens 100x30, since it fits. `--font-size 28` opens about 43x13.
-			- A size is kept at the font a launch without `--font-size` and `--font-name` has, with the kept zoom on top.
-			- A window that can't tell its monitor at launch, as on Wayland, opens at the kept grid, and the take once it can tell fits it to that screen. Without per monitor sizes there's no take, so it keeps the kept window's size.
-	- Actual cause: Only the save checked the font, and only its size. A launch or a take used the kept grid at whatever font the window had, and a grid saved under `--font-name` was kept in that font.
-	- Actual fix: One rule for the save, the launch and the take. Each measures the cell of the font a launch without the options has, family and size, and the cell the window has, and picks the grid by the rule above.
-	- Branch: clifont
-	- Commit: e27efe5
-	- Test case: `a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line` (Eso2weD) and `the_font_a_launch_without_the_font_options_has` (Eso2wHz), each seen failing with its half of the fix taken out. The random test (EshVccz) now judges a kept size taken at `--font-size` from the cell the shell is told: its columns and rows where they'd clearly fit, other ones where they'd clearly not. Seed 128 fails it with the take's half taken out, and passes on the fix.
-	- Verified:
-		- The Linux unit tests, rustfmt, and clippy with warnings as errors for Linux, Windows and macOS. The Python lint, the docs check and the test ID check.
-		- The random test on seeds 1 to 4, 17, 20, 23, 30, 53, 118, 125, 128, 137, 221, 236, 249, 300, 319, 324 and 368, on Wayland and on X11 through Xwayland. All but 1 to 4 use `--font-size`.
-		- `--font-name "Ubuntu Mono"` on one headless sway output: a 218x19 grid set at 1880 px was saved as 175x19, opened 175x19 at 1865 px without the option, and 175x19 again with it, since that fits.
-	- Swept: every place a kept grid is used or saved. The save (`grid_to_open_at`), the launch in app.rs and the take (`take_monitor_size`) all go through it now. A grid from Settings is the user's own columns and rows, not a kept size, so it's left as it is. The rescale keeps the grid the window shows, at its own font.
-	- Needs external testing: a look on Windows and macOS, where the frame comes into the screen's room.
 
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
@@ -863,6 +800,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: machang
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
+
+- Smooth scroll freaked out with a long flatpak update
+	- ID: 2026101310563284
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261013-105632
+	- Opened by: JC
+	- Target OS: Linux
+	- Test environment: b23, flatpak 1.16.6
+	- Steps to reproduce:
+		- Run a long `flatpak update`.
+	- Incorrect behavior: Smooth scroll freaked out.
+	- Expected behavior: Smooth scroll stays steady through the whole update.
+	- Notes:
+		- Pre-next-cut.
+		- Regression.
+		- The old-format Done item "Severe bug: `flatpak update` output bounces wildly" fixed it before, closed 20260728.
+	- Reproduced: 20261013 on b23, with a real `flatpak update` of 60 small apps. Every redraw of the update table eased about a screenful, both before and after the scrollback was full.
+	- Actual cause:
+		- Once flatpak's table is taller than the screen, each redraw goes to the top row, clears, and prints the whole table again. The rows that don't fit are printed with no line breaks between them, so they wrap into about a screenful that scrolls up into history. The screen ends up looking the same, but SilkTerm eased through the whole screenful on every redraw.
+		- Before 20260903, at a full scrollback the advance was read off the screen rows, and those showed nothing moving. The tmux scrolling change (c5374c3) switched that to the engine's own count of lines pushed into history, which counts flatpak's. That's the regression. Before the scrollback fills it eased on every redraw back then too.
+	- Actual fix [Bug]: Output is a repaint when the screen comes back mostly as it was and almost none of the rows it showed went up with the new lines. A repaint does not ease. The view goes to the bottom, or eases only the row or so the picture itself moved. Rows that only got respaced, when a column grows wider, still count as the same. A scrollback clear is left out here. Since 2026101310563297 a clear does not ease at all.
+	- Verified: 20261013 on b23, a real `flatpak update` of 60 apps. The frames that eased during the update went from 55 to 8 with the scrollback not full, and from 50 to 12 with it full. What is left is the first table and its first redraw. The same output fed straight into the terminal eased the first table and 1 of its 242 redraws, against all of them before. The gate and the 11 scroll scenes pass.
+	- Progress log:
+		- 20261013: Waiting on signoff for a look at a real update with downloads in a real window. Still eases once: the first redraw, when the table gets its progress column.
+	- Branch: fpaksnap
+	- Commit: 544b01b
+	- Acceptance signoff: JC, 20261016.
+	- Closed: 20261016-110914
+	- Test case: `a_flatpak_table_taller_than_the_screen_is_not_eased` (EscGnYG), red before the fix and green after. `output_that_moved_the_old_screen_up_is_not_a_repaint` (EscGnmw) and `the_depth_sampler_says_when_a_clear_fell_in_its_span` (EscGnqt) pin what still eases.
+	- Swept: the output ease has one caller outside tests, the pane build, which covers both scrollback states and every platform. The alt screen eases through its own slide path and is unchanged.
 
 - The bash prompt returning after program output slides out downward from under a seam of the higher content, again
 	- ID: 2026101415085143
@@ -3059,41 +3028,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
 
-- Four unit tests fail on Windows
-	- ID: 2026093010080316
-	- Type: Bug
+- README.md: move the long sections out to their own docs
+	- ID: 2026101415085144
+	- Type: Task
 	- Status: Done
-	- Priority|Severity: Avg
-	- Opened: 20260930-100803
+		- Move the comparison table itself into 'comparison.md' also.
+	- Priority: Avg
+	- Opened: 20261014-150851
 	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w, `cargo test`
-	- Steps to reproduce: Run `cargo test` on Windows.
-	- Incorrect behavior:
-		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
-		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
-		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
-	- Expected behavior: They pass, as on Linux.
-	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
-	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
-	- Actual cause: All four are faults in the tests. None is timing.
-		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
-		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Target OS: All
+	- Requirements:
+		- Move detailed comparisons to something like a "compared to other terminals" md, and link to it. Keep the brief feature comparison table.
+		- Move installation instructions, including development, to one or more .mds, and link to it/them.
+		- Move CLI usage and other examples to its own .md, and link to it. Leave a small snippet of example shcl contents.
+	- Notes:
+		- Pre-next-cut.
 	- Progress log:
-		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
-	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
-	- Branch: wintests
-	- Commit: 731d528
-	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
-	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
-	- Swept:
-		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
-		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
-		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
-		- The Windows run this item came from named only these four. That full suite was not run again.
-	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
-	- Closed: 20260930-125357
+		- 20261014: README keeps what it is, why, features, the wallpaper sheet, the showdown table, a short getting-started pointer with a few config lines, support, and legal.
+		- 20261014: New docs at the root. install.md has packages, the install scripts, building it yourself, the dev environment, and fetching the wallpaper pack. usage.md has configuration, shell integration, and opening scripts and folders on Windows. comparison.md has how the showdown is measured, notes 1 to 9, and how to run it. build.md, prerequisites.md and shell-integration.md are linked as before, with nothing folded in.
+		- 20261014: The showdown table stays in the README as the brief comparison table. It's the only comparison table there, and it's what a reader skims. Its method text and long notes are the detailed part, so they moved. The notes keep their small-text form and numbers.
+		- 20261014: The README had no CLI usage section and no config example, so nothing moved for those. The config lines in the README are copied from the shipped template.
+		- Question: should usage.md get a command-line section, written from `--help`?
+			- 20261015: No answer in time, so the best guess was yes. Easy to take back: drop the section and its 2 tests.
+		- 20261015: Reopened to move the table itself as well, which replaces the call above to keep it in the README. The README had no other comparison table, so it keeps only a short pointer under the same heading, with one line on where SilkTerm stands.
+		- 20261015: comparison.md now has the table above its notes. termbench.py, showdown-readme.py and update-showdown.py write it there. `--no-readme` keeps its name; showdown-readme.py takes `--doc`, with `--readme` still accepted.
+		- 20261015: usage.md has a Command line section: every option `--help` lists, grouped the same way, and 3 examples.
+	- Branch: readmesplit, then cmptable
+	- Commit: 4cbe138, c0a237d
+	- Test case: `cicd/tests/showdown/run.py` (EqBnA5g) checks each writer points at comparison.md and the README has no copy of the table; each check failed with its writer pointed back at README.md. `cicd/tests/showdown/rigs.py` (ErE7yrA) reads the table and note 9 from comparison.md. `usage_md_names_every_option_in_help` (EsnhIUe) and `usage_md_examples_parse` (EsnhIy1) in cli.rs; both failed with an option and an alias taken out of usage.md and a bad example.
+	- Verified: docs, tables, toc, showdown and rigs tests pass, the cli unit tests pass, clippy is clean, and the test-ID check passes. Both writers run on a copy of comparison.md leave it byte-identical.
+	- Swept: termbench.py, showdown-readme.py, update-showdown.py and both rigs' headers now name comparison.md, and so do mdtable.py, showdown-readme.md, the tables test, a cicd.bash comment, design.md and the speed design doc. Unchanged on purpose: release.bash, the pre-push hook and the hooks test read the badge, which stays in the README. wallpaper-gallery.bash reads "102 wallpapers" from the README, still there. The release notes keep "See the README". demo-video.py and script.txt name the README gif only. The gallery page links install.md. ancillary-notes.fods records and the speed doc's quoted backlog title stay as written for their dates. Nothing links the README's showdown anchor, which stays.
 
 - Exercise the per-monitor DPI more thoroughly, and quasi-randomly, in scripted testing
 	- ID: 2026101410442550
@@ -4711,38 +4675,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
-
-- Windows: open scripts and folders in SilkTerm
-	- ID: 2026093009280571
-	- Type: Feature
-	- Status: Done
-	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
-	- Priority|Severity: Avg
-	- Opened: 20260930-092805
-	- Opened by: JC
-	- Assigned to: JC
-	- Related IDs: 2026092810510800
-	- Target OS: Windows
-	- Test environment: vm925w, Windows 11 25H2
-	- Requirements:
-		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
-			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
-			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
-			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
-		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
-			- Windows only. Other platforms don't show them.
-		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
-		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
-	- Estimated effort: Avg
-	- Progress log:
-		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
-		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
-		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
-		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
-		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
-	- Branch: winassoc
-	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
-	- Acceptance signoff: 20260930-183819
 
 - Wayland: a window astride two outputs whose scales round to one whole number counts itself on a monitor that isn't there
 	- ID: 2026101411554909
@@ -6590,6 +6522,74 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: Er2UgY7 (`cicd/tests/engine/run.bash`) now checks for at least 5 in the shipped config and 5 tries when unset. Both checks failed on the old values.
 	- Acceptance signoff: Self-closed: mechanical.
 	- Closed: 20261007-184756
+
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
+	- Status: Done
+	- Priority|Severity: Avg
+	- Opened: 20260930-100803
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
+	- Actual cause: All four are faults in the tests. None is timing.
+		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
+		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Progress log:
+		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
+	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
+	- Branch: wintests
+	- Commit: 731d528
+	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
+	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
+	- Swept:
+		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
+		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
+		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
+		- The Windows run this item came from named only these four. That full suite was not run again.
+	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
+	- Closed: 20260930-125357
+
+- Windows: open scripts and folders in SilkTerm
+	- ID: 2026093009280571
+	- Type: Feature
+	- Status: Done
+	- Needs external testing: A dogfood look on Windows: Register on each row, a double-click on each file type, then each revert arrow.
+	- Priority|Severity: Avg
+	- Opened: 20260930-092805
+	- Opened by: JC
+	- Assigned to: JC
+	- Related IDs: 2026092810510800
+	- Target OS: Windows
+	- Test environment: vm925w, Windows 11 25H2
+	- Requirements:
+		- Make SilkTerm the default through the per-user file associations, not the default terminal setting.
+			- Double-clicking a `.bat` or `.cmd` runs it in SilkTerm.
+			- A folder's right-click menu gets an "Open in SilkTerm" entry, on the folder and on its background.
+			- Note: On Windows 11 that entry is under "Show more options". Only packaged apps get into the short menu.
+		- Settings has a button to register SilkTerm as the default, which also re-registers it, and another to put back whatever was set before.
+			- Windows only. Other platforms don't show them.
+		- The same for `.ps1` and `.vbs` scripts: a way to register SilkTerm as their launch handler, and one to revert them to what they were. Buttons to register, and the existing revert icon as revert to previous, each with flyover text saying what it does.
+		- Console programs started other ways still open where they did, such as Win+R `cmd` or a double-clicked console program. The README says so.
+	- Estimated effort: Avg
+	- Progress log:
+		- 20260930: Built. The Shell tab has an "Open with SilkTerm" group, in Windows builds only, with a row each for batch files, PowerShell scripts, VBScript files and the folder menu. Each has a Register button, and its revert arrow puts back what was there. Both act at once.
+		- 20260930: A double-click runs `silkterm --keep-open --open <file>`. The new `--open` option picks the host by type and starts in the file's folder. A `.ps1` runs through PowerShell 7 if it is installed, and a `.vbs` through the console script host.
+		- 20260930: A type the user picked an app for under "Open with" keeps that app, since Windows guards the choice. Register then says so, and SilkTerm is listed under Open with for that type. The test account on vm925w is set up that way for `.ps1`.
+		- 20260930: The earlier note that `.ps1` would keep opening in Notepad no longer applies. It has its own row.
+		- 20260930: Checked on vm925w: a batch file in a folder with a space, with an argument, a `.vbs`, and the folder entry, each opened through the shell. The Shell tab was looked at there too.
+	- Branch: winassoc
+	- Test case: The `fileassoc.rs` tests, `open_takes_the_rest_of_the_line`, the file-type tests in `settings_ui.rs`, and the `openwith` Windows GUI scenario.
+	- Acceptance signoff: 20260930-183819
 
 - The minimap inside tmux and less only shows the current screen
 	- ID: 2026101406273722

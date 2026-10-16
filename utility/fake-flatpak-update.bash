@@ -71,3 +71,6 @@ for ((t = 0; t < ticks; t++)); do
 	printf '%s' "${out}"
 	sleep "${delay}"
 done
+
+##	History:
+##		- 20261016: First commit.
