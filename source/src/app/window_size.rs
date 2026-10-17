@@ -30,7 +30,10 @@ impl State {
 		if w == 0 || h == 0 || self.window.fullscreen().is_some() || self.window.is_maximized() {
 			self.watch.noted.full = true;
 		}
-		if Instant::now() < self.watch.ignore_resize_until {
+		if !resize_counts(
+			Instant::now() < self.watch.ignore_resize_until,
+			self.watch.noted,
+		) {
 			return;
 		}
 		let now = self.window.inner_size();
@@ -238,15 +241,21 @@ impl State {
 	/// was back at the window in between.
 	pub(super) fn note_rescaled(&mut self) {
 		let now = Instant::now();
-		let own = takes_scale(self.watch.took_at.take(), self.watch.heard_at, now);
-		if !move_counts(
+		let moved = self.rescale_moves(now);
+		self.watch.took_at = None;
+		if moved {
+			self.start_settle(now);
+		}
+	}
+
+	// Whether a scale change now counts as a move (`note_rescaled`).
+	fn rescale_moves(&self, now: Instant) -> bool {
+		let own = takes_scale(self.watch.took_at, self.watch.heard_at, now);
+		move_counts(
 			own || now < self.watch.ignore_moves_until,
 			&self.watch.layout,
 			|| crate::monitor::layout(&self.window),
-		) {
-			return;
-		}
-		self.start_settle(now);
+		)
 	}
 
 	/// Nothing before the window is shown: a resize then would hold up the
@@ -467,6 +476,12 @@ impl State {
 	/// opened at 78x23 for 80x24 (2026101412003308). Where a kept size will
 	/// take over, the window is left to the system: on sway a resize of the
 	/// window's own comes back from the compositor late, and undid the take.
+	/// A scale change right after a take that isn't a move is the take's own,
+	/// so no other size takes over after it, and the take's grid is kept too.
+	/// Left to the system it went 69x33 to 67x32 (2026101513385000). Not when
+	/// the monitors changed, as an output's own scale does: that counts as a
+	/// move, and the take after it was undone by sway's late answer to this
+	/// resize.
 	/// Either way the panes are laid out for the size coming, not the old one,
 	/// or the shell is told a grid half or twice the size until the resize
 	/// arrives (2026101412311921).
@@ -480,7 +495,9 @@ impl State {
 		let free = !self.no_area
 			&& !crate::monitor::fullscreen(&self.window)
 			&& !self.window.is_maximized();
-		let grid = (free && self.keeps_size()).then(|| self.grid_at(w, h));
+		// not a move means a take just happened, since only a take sets that grace
+		let took = !self.rescale_moves(Instant::now());
+		let grid = (free && (took || self.keeps_size())).then(|| self.grid_at(w, h));
 		self.retext(scale);
 		let mut asked = None;
 		if let Some((cols, rows)) = grid {
@@ -934,6 +951,15 @@ fn takes_scale(took_at: Option<Instant>, heard_at: Option<Instant>, now: Instant
 	})
 }
 
+// Is a resize one to note? Not in the grace after a scale change or the
+// window's own take, which is the system's. But a window that was fullscreen
+// or maximized notes the way back in it too: that saves nothing, and sway
+// sends a scale as a window leaves fullscreen, so the grace hid the way back
+// and the user's next resize was taken for it (2026101516013920).
+fn resize_counts(in_grace: bool, noted: Noted) -> bool {
+	!in_grace || noted.full
+}
+
 // Is this resize the size to launch at next time? Only once a frame has been
 // drawn - before that it is the launch size arriving back - and never a
 // fullscreen or maximized one, which is not a window to come back to.
@@ -1367,6 +1393,26 @@ mod tests {
 			back.grid && back.zoom && !back.unpin && back.back,
 			"{back:?}"
 		);
+	}
+
+	// sway sends a scale as a window leaves fullscreen. The way back fell in
+	// the grace after it, wasn't noted, and the user's next resize was taken
+	// for the way back and saved nothing.
+	// Test ID: EsuVDs3
+	#[test]
+	fn the_way_back_from_fullscreen_counts_in_a_grace() {
+		use super::{Noted, resize_counts};
+		let full = Noted {
+			full: true,
+			..Noted::default()
+		};
+		assert!(resize_counts(true, full), "the way back");
+		assert!(resize_counts(false, full));
+		assert!(
+			!resize_counts(true, Noted::default()),
+			"the system's resize"
+		);
+		assert!(resize_counts(false, Noted::default()));
 	}
 
 	// A size set with --font-size 11 opened at the normal font next time, in

@@ -91,14 +91,11 @@ TOLD_NOTHING = "a Wayland window is told nothing of a move"
 ## bar, so a move with the pointer away could be a drag held still. The look
 ## waits for the pointer back over the window, a key or focus.
 WAITS = "a window that can't see the buttons waits for the person after a move"
-PUSHED = "a take that leaves most of the window on an output at another scale drifts the grid a few cells"
 ## A resize that takes a Wayland window off an output is told to it once a
 ## frame at the new size is up, which in software can come after the size is
 ## saved, so it may still count the output it was on as the size was set.
 LEFT_LATE = "a Wayland window is told it left an output once a frame at its new size is up"
-KNOWN: dict[str, str] = {
-	PUSHED: "2026101513385000",
-}
+KNOWN: dict[str, str] = {}
 
 
 def whole_size(mode: tuple[int, int], scale: float) -> tuple[int, int] | None:
@@ -710,13 +707,6 @@ def key_of(arm: str, out: dict[str, Any], scale: float) -> str:
 	return f"{mode['width']}x{mode['height']}_{round(scale * 100)}pct"
 
 
-## A take that leaves most of the window on an output at another scale moves
-## the grid a few cells (2026101513385000). Measured up to 3 in 111 columns.
-def around(grid: Grid) -> list[Grid]:
-	dc, dr = max(1, -(-grid[0] * 4 // 100)), max(1, -(-grid[1] * 4 // 100))
-	return [(c, r) for c in range(grid[0] - dc, grid[0] + dc + 1) for r in range(grid[1] - dr, grid[1] + dr + 1)]
-
-
 ## The grids a scale change can leave a window at that keeps its size on the
 ## desktop, from a cell and scale to another. A font's cell doesn't grow in
 ## step with the scale, so the grid goes by how far the cell grew against
@@ -785,20 +775,6 @@ class Case:
 		if not got or not was or not now:
 			return False
 		return any(got in drift_band(grid, (was, self.was[1]), (now, self.drawn_at(s))) for s in scales)
-
-	## Where a take of `grid` at one scale can drift to once the window is at
-	## another (2026101513385000): by the cell the shell was told at the take's
-	## grid and the one it's told now, as for a scale change, since a flat
-	## share was too little at a small font zoom. That share alone where the
-	## take's grid never reached the shell.
-	def pushed_band(self, grid: Grid, scale_was: float, scale: float) -> set[Grid]:
-		lines = self.rig.size_lines()[max(self.was[0], 0):]
-		at = [line for line in lines if (line[1], line[0]) == grid and all(line)]
-		now = self.rig.cell()
-		if not at or not now:
-			return set(around(grid))
-		rows, cols, width, height = at[-1]
-		return set(around(grid)) | drift_band(grid, ((width // cols, height // rows), scale_was), (now, scale))
 
 	def outs(self) -> dict[str, dict[str, Any]]:
 		return {o["name"]: o for o in self.rig.outputs()}
@@ -930,27 +906,14 @@ class Case:
 		win, outs, touched, primary = self.where()
 		if saves:
 			raise CheckError(f"{what}: saved a size nobody set: {saves}")
-		## The window's own take can leave most of it on an output at another
-		## scale, which it doesn't count as a move (2026101420262300), and the
-		## grid drifts a few cells there.
-		pushed: dict[str | None, set[Grid]] = {}
-		if takes and primary and self.plan.arm == "wayland" and self.drifts():
-			scale = outs[primary[0]]["scale"]
-			pct = f"{round(scale * 100)}pct"
-			for k in allowed:
-				was_pct = (k or model.belief or pct).rpartition("_")[2]
-				if was_pct != pct:
-					pushed[k] = self.pushed_band(outcomes[k][1], int(was_pct.removesuffix("pct")) / 100, scale)
-			grids |= {near for band in pushed.values() for near in band}
 		win_now = self.rig.window()
 		lw, lh = self.rig.extent()
 		if win_now and (win_now.rect[2] >= lw - 4 or win_now.rect[3] + win_now.deco >= lh - 4):
 			grids |= {(c, r) for c in range(1, max(g[0] for g in grids) + 1) for r in range(1, max(g[1] for g in grids) + 1)}
 		## A window drawing in software can be seconds late with a frame, and
-		## what waits on one comes late with it: the scale after a take, and so
-		## the drift (2026101614100002), or the look after a scale change, and
-		## so the take after the drift. One more step to a grid it may end at
-		## is that, and it has to stay there.
+		## what waits on one comes late with it: the look after a scale change,
+		## and so the take after the drift (2026101614100002). One more step to
+		## a grid it may end at is that, and it has to stay there.
 		if got is not None and later_lines:
 			seen = [f"{got[1]} {got[0]}", *later_lines]
 			rows, cols = (int(v) for v in seen[-1].split())
@@ -984,12 +947,10 @@ class Case:
 			self.allow(CAPPED, named)
 			grid = got
 		drifted = rescaled and grid == model.grid
-		band = pushed.get(named, pushed.get(model.belief, set()) if named is None else set())
-		drifted_there = bool(band)
-		if grid != got and not ((drifted and drift(got)) or (drifted_there and got in band)):
+		if grid != got and not (drifted and drift(got)):
 			raise CheckError(f"{what}: named {named} but is at {got}, not {grid}")
 		if grid != got:
-			self.allow(rounding if drifted else PUSHED, named)
+			self.allow(rounding, named)
 			grid = got
 		if takes and named is not None:
 			taken = trace_field(takes[-1], "zoom")
@@ -1282,10 +1243,25 @@ class Case:
 		corner = (w - 5, h - 5) if overlap(win.rect, (w - 10, h - 10, 10, 10)) == 0 else (5, 5)
 		self.rig.pointer("move", *corner)
 		time.sleep(0.3)
-		x, y, cw, ch = win.rect
-		self.rig.pointer("move", x + cw // 2, y + ch // 2)
+		x, y = self.reachable(win.rect)
+		self.rig.pointer("move", x, y)
 		## a hand moves on, and only that tells an X11 window the pointer is back
-		self.rig.pointer("move", x + cw // 2 + 4, y + ch // 2 + 2)
+		self.rig.pointer("move", x + 4, y + 2)
+
+	## The middle of the part of a window on the output most of it is on. A
+	## window can hang off the layout, and a point off it sent the pointer
+	## somewhere else, so the window never saw it come back (seed 400012).
+	def reachable(self, rect: Rect) -> tuple[int, int]:
+		best, area = None, 0
+		for o in self.outs().values():
+			r = (o["rect"]["x"], o["rect"]["y"], o["rect"]["width"], o["rect"]["height"])
+			if overlap(rect, r) > area:
+				best, area = r, overlap(rect, r)
+		if best is None:
+			return rect[0] + rect[2] // 2, rect[1] + rect[3] // 2
+		x0, y0 = max(rect[0], best[0]), max(rect[1], best[1])
+		x1, y1 = min(rect[0] + rect[2], best[0] + best[2]), min(rect[1] + rect[3], best[1] + best[3])
+		return (x0 + x1) // 2, (y0 + y1) // 2
 
 	## The window follows the pointer. Where it has been is kept, for the
 	## outputs a look after the drop may mix in.
@@ -1425,7 +1401,7 @@ class Case:
 				hovered = plan.arm == "wayland" and self.stale is not None
 				if hovered:
 					over, _, _, _ = self.where()
-					rig.pointer("move", over.rect[0] + over.rect[2] // 2, over.rect[1] + over.rect[3] // 2)
+					rig.pointer("move", *self.reachable(over.rect))
 				rig.msg(f"[pid={pid}] fullscreen enable")
 				took = self.fullscreen_saves(f"{what} (fullscreen)")
 				rig.msg(f"[pid={pid}] fullscreen disable")
@@ -1741,3 +1717,4 @@ if __name__ == "__main__":
 ##		- 20261016 JC: A window a scale change leaves out of reach is moved back by
 ##		  key, a grid may take one late step to where it ends, and a take's drift
 ##		  is judged from the cells.
+##		- 20261016 JC: A take's grid has to hold through the scale it brings.
