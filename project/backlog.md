@@ -679,6 +679,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix:
 		- In the random test only. A look a step needs is waited for up to 15 s. A window put back from fullscreen mostly on another output is judged as moved. A window moved by key is moved back in reach, as after a scale change. The first look after the monitors changed may come at once or wait.
 	- Branch: seeds6
+	- Commit: 7a29137
 	- Test case: `cicd/tests/dpirand/run.py` (EshVccz) on the 6 seeds. With the old test 2036, 600200, 600201, 700303 and 400055 failed alone and 9032 side by side. With the new one 2036, 600200, 600201, 400055 and 9032 pass, 9032 also 3 of 3 side by side at load 18 to 22.
 	- Verified: 9 picked cases that go through the new paths (fullscreen after a sliver drop, X11 and Wayland drags after a scale change) and 5 fresh cases passed. Unit suite (1364), fmt, clippy, Python lint and the docs check passed.
 	- Note: 700303 still fails. Past the look, the take of 197x65 at 200% is undone by a configure for the size before it, which arrived after a 3.6 s frame. That's 2026101417045856's race, seen in the protocol log.
