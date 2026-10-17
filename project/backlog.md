@@ -569,10 +569,10 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- For all:
 			- The checks cover first-party and third-party code. Vendored code is included.
-				- On third-party code, run the leak, memory, and correctness checks named here, not style lints. Style findings in someone else's crate or module aren't ours to fix.
+				- Third-party code gets every leak, memory, and correctness check named here, and what they find gets fixed. Only our code gets linted.
 				- CodeQL reports only on source inside the database's root. For its run, vendor the dependencies into the tree first (`cargo vendor`, unpacked sdists for Python).
 			- Any report fails the test that made it.
-			- Suppressions list third-party code only, matched by crate, module, or package name. A leak in our code is fixed. If the fix has to wait, it gets a backlog item, and the test that shows it turns the check off with that item's ID beside it.
+			- Any leak is fixed, in our code or third-party code. If the fix has to wait, it gets a backlog item, and the test that shows it turns the check off with that item's ID beside it.
 			- A `--leakcheck` flag adds the slow checks:
 				- CodeQL, from a pinned CLI run locally. No hosted service.
 				- A soak test. It loops through the program's main actions headless, and fails if the heap at round 2N is larger than at round N by more than a set margin. The heap report is kept as a pipeline artifact.
