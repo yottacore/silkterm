@@ -288,6 +288,31 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 684d3a0, 754c9cb, 8624cc2, 953c5a3
 	- Closed:
 
+- Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
+	- ID: 2026101714445001
+	- Type: Task
+	- Status: Waiting for testing
+	- Needs local test suite run?: A full pipeline run, plain and with `--container`, to see the new advisory scan step pass in stage 3.
+	- Needs external testing: A `cicd-win.ps1` run on a Windows box, where the scan gates when cargo-deny is installed.
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101715240000
+	- Requirements:
+		- Scoped to third-party code end users run, per the parent's 20261017 decision. Filed as 2026101714445007 after this item's fix went in.
+		- The parent's advisory scan, clippy and `// SAFETY:` rows.
+	- Progress log:
+		- 20261017: clippy already ran with `-D warnings` and `undocumented_unsafe_blocks` for Linux and Windows. Added `mem_forget` to the workspace lints. The 2 forgets in our code are in tests and leak on purpose, so each has an allow with the reason.
+		- 20261017: `cargo deny check advisories -D warnings` now fails every full run on a report, a warning too, such as a yanked crate or an ignore that no longer matches. The rest of cargo-deny still only warns. No cargo-deny fails the Linux run. On Windows it warns, like the other lints there.
+		- 20261017: The one standing advisory, ttf-parser unmaintained, has no fix yet. Its ignore names 2026101715240000.
+		- 20261017: 2 unsafe sites in the macOS menu code had no SAFETY line. Both are inside an objc2 macro, which clippy doesn't look into. Added. A scan of every `unsafe` in our code finds no other.
+		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
+	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
+	- Test case: The gates themselves, each seen to fail on a planted fault and pass once it was removed. An unsafe block with no SAFETY line in Windows-only and in macOS-only code failed clippy for those targets, and a `mem::forget` failed it on all 3. The advisory scan failed with the ttf-parser ignore taken out, and with an ignore for an advisory not in the tree. The cicd step failed with cargo-deny missing.
+	- Branch: safelint
+	- Commit: adee468
+
 - Wayland: a size taken that leaves most of the window on an output at another scale shows a grid a few cells off
 	- ID: 2026101513385000
 	- Type: Bug
@@ -566,33 +591,12 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- Miri doesn't count memory reachable from a `static` as a leak, so a cache in a static that grows forever passes. The soak test catches that.
 				- heaptrack and dhat both see only the global allocator. A crate that maps memory itself, or a custom allocator, hides it.
 				- ASan and TSan can't share a build, and heaptrack can't share one with either. The soak test uses a plain build.
+	- Decisions:
+		- 20261017: JC: CI/CD leak tests, and all tests, include third-party and vendored code, but only code that gets run by end users. Anything wrong goes on the backlog for a fix.
+			- Read as: crates built into a release binary for a release target. Build scripts, proc macros, dev-dependencies and test-only tools are left out.
 	- Progress log:
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
-
-- Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
-	- ID: 2026101714445001
-	- Type: Task
-	- Status: Waiting for testing
-	- Needs local test suite run?: A full pipeline run, plain and with `--container`, to see the new advisory scan step pass in stage 3.
-	- Needs external testing: A `cicd-win.ps1` run on a Windows box, where the scan gates when cargo-deny is installed.
-	- Priority: Avg
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101715240000
-	- Requirements:
-		- The parent's advisory scan, clippy and `// SAFETY:` rows.
-	- Progress log:
-		- 20261017: clippy already ran with `-D warnings` and `undocumented_unsafe_blocks` for Linux and Windows. Added `mem_forget` to the workspace lints. The 2 forgets in our code are in tests and leak on purpose, so each has an allow with the reason.
-		- 20261017: `cargo deny check advisories -D warnings` now fails every full run on a report, a warning too, such as a yanked crate or an ignore that no longer matches. The rest of cargo-deny still only warns. No cargo-deny fails the Linux run. On Windows it warns, like the other lints there.
-		- 20261017: The one standing advisory, ttf-parser unmaintained, has no fix yet. Its ignore names 2026101715240000.
-		- 20261017: 2 unsafe sites in the macOS menu code had no SAFETY line. Both are inside an objc2 macro, which clippy doesn't look into. Added. A scan of every `unsafe` in our code finds no other.
-		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
-	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
-	- Test case: The gates themselves, each seen to fail on a planted fault and pass once it was removed. An unsafe block with no SAFETY line in Windows-only and in macOS-only code failed clippy for those targets, and a `mem::forget` failed it on all 3. The advisory scan failed with the ttf-parser ignore taken out, and with an ignore for an advisory not in the tree. The cicd step failed with cargo-deny missing.
-	- Branch: safelint
-	- Commit: adee468
 
 - Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
 	- ID: 2026101714445002
@@ -603,6 +607,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened by: CC
 	- Parent ID: 2026101714015789
 	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's ASan and LSan rows, with the pinned nightly beside the stable toolchain, and any leak it finds fixed or filed.
 
 - Leak checks: the test suite under ThreadSanitizer on every full run
@@ -615,6 +620,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Parent ID: 2026101714015789
 	- Prereq IDs: 2026101714445002
 	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's TSan row.
 
 - Leak checks: the test suite under Miri on every full run
@@ -627,6 +633,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Parent ID: 2026101714015789
 	- Prereq IDs: 2026101714445002
 	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's Miri rows, including the ignore-with-reason rule and the move behind `--leakcheck` if a full run measures too slow.
 
 - Leak checks: `--leakcheck` with CodeQL, the headless soak test and the dhat heap-growth test
@@ -638,6 +645,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Opened by: CC
 	- Parent ID: 2026101714015789
 	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
 
 - Wayland: several random test seeds fail on dev under load
@@ -682,6 +690,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261014: Its only known path, a size taken while a drag was held, is gone with the fix for 2026101411555009. Seed 1000 passes now. A font zoom and then a key move to another output right after, 0.3 s and 0.8 s apart on a 200% output, kept the size it took.
 		- 20261014: Handling the echo itself would need winit to say which configure a resize comes from, or a retry on a size the window already left, which hides it rather than fixes it. Left Queued until it shows up another way.
+
+- Leak checks: the advisory scan covers dev and build dependencies, beyond what end users run
+	- ID: 2026101714445007
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261017-155500
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101714445001
+	- Requirements:
+		- The advisory scan covers only crates built into a release binary for a release target, per the parent's 20261017 decision.
+	- Notes:
+		- `deny.toml` has no `exclude-dev` and no `targets`, so an advisory in a dev-only or other-platform crate fails a full run today.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
