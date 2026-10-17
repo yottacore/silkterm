@@ -560,7 +560,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
-- Implement leak and static checks of the Rust code run as part of CI/CD
+- Implement leak and static checks of the Rust and Python code run as part of CI/CD
 	- ID: 2026101714015789
 	- Type: Task
 	- Status: Queued
@@ -570,7 +570,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- For all:
 			- The checks cover first-party and third-party code. Vendored code is included.
 				- On third-party code, run the leak, memory, and correctness checks named here, not style lints. Style findings in someone else's crate or module aren't ours to fix.
-				- CodeQL reports only on source inside the database's root. For its run, vendor the dependencies into the tree first (`cargo vendor`, `go mod vendor`, unpacked sdists for Python).
+				- CodeQL reports only on source inside the database's root. For its run, vendor the dependencies into the tree first (`cargo vendor`, unpacked sdists for Python).
 			- Any report fails the test that made it.
 			- Suppressions list third-party code only, matched by crate, module, or package name. A leak in our code is fixed. If the fix has to wait, it gets a backlog item, and the test that shows it turns the check off with that item's ID beside it.
 			- A `--leakcheck` flag adds the slow checks:
@@ -578,7 +578,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- A soak test. It loops through the program's main actions headless, and fails if the heap at round 2N is larger than at round N by more than a set margin. The heap report is kept as a pipeline artifact.
 			- Every tool is pinned and runs in the build container or lint image, never installed on the host.
 			- Each new gate is watched to fail before it's trusted, by planting the leak it's meant to catch and seeing it go red.
-			- Known-advisory scans run on every full run: `cargo deny check advisories` or `cargo audit`, `govulncheck`, and `pip-audit`. They cover third-party code only, which is the point.
+			- Known-advisory scans run on every full run: `cargo deny check advisories` or `cargo audit`, and `pip-audit`. They cover third-party code only, which is the point.
 		- For Rust:
 			- Safe Rust leaks only through `Rc` or `Arc` cycles, `mem::forget`, `Box::leak`, and collections that grow forever. Real leaks and memory errors come from `unsafe` and FFI, in our crates or in dependencies.
 			- Every full run builds the whole test suite with AddressSanitizer and LeakSanitizer, in a build dir of its own.
@@ -599,6 +599,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- Miri doesn't count memory reachable from a `static` as a leak, so a cache in a static that grows forever passes. The soak test catches that.
 				- heaptrack and dhat both see only the global allocator. A crate that maps memory itself, or a custom allocator, hides it.
 				- ASan and TSan can't share a build, and heaptrack can't share one with either. The soak test uses a plain build.
+		- For Python:
+			- Python leaks are references held too long: module-level caches, `functools.lru_cache` on a method, closures kept in a global list, and C extensions that drop a reference count.
+			- Every full run runs the tests with `-X dev` and `-W error::ResourceWarning`, so an unclosed file or socket fails the test.
+			- Every full run runs the tests under `pytest-memray`. Each test that loops gets `@pytest.mark.limit_leaks(...)` with a margin. memray sees native allocations, so leaks in C extensions show up, third-party ones included.
+			- After the tests, `gc.collect()` runs, and `gc.garbage` must be empty.
+			- The soak test takes `tracemalloc` snapshots at round N and 2N and fails on growth past the margin. The top lines of `snapshot.compare_to()` are kept as the artifact.
+			- ruff runs `B019` (`lru_cache` on a method), `SIM115` (`open` with no context manager), and `B006` (mutable default argument).
+			- `--leakcheck` also runs the tests on a CPython built with `--with-address-sanitizer`, under `PYTHONMALLOC=malloc`, for C extensions.
+				- The interpreter's own reports are suppressed by library name, `libpython` only.
+			- Traps:
+				- Start `tracemalloc` before importing the code under test, or allocations made at import aren't traced.
+				- The first rounds fill caches: the regex cache, interned strings, freelists, and lazy imports. That's why it's round N against 2N, never 0 against N.
+				- `tracemalloc` sees only allocations made through Python's allocator. A C extension calling `malloc` directly is invisible to it. memray covers that.
+				- memray runs on Linux and macOS only. On Windows, the test exits as skipped, not passed.
+				- pytest keeps the traceback of a failed test, which keeps its frames alive. A leak count from a run with failures means nothing.
+				- `ResourceWarning` shows only in dev mode or with `-W`. A plain run hides it.
+				- Without `PYTHONMALLOC=malloc`, ASan can't see inside pymalloc's pools.
 	- Closed:
 
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
