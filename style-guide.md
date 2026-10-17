@@ -18,6 +18,7 @@ The style reference for SilkTerm's code, scripts and commit messages. Where it c
 - [Rust](#rust)
 	- [Errors](#errors)
 	- [Ownership and borrowing](#ownership-and-borrowing)
+	- [Unsafe code](#unsafe-code)
 	- [Control flow](#control-flow)
 	- [Types and abstraction](#types-and-abstraction)
 	- [Iterators](#iterators)
@@ -81,6 +82,12 @@ Edition 2024. Code should look the same from one file to the next, with one way 
 - Avoid gratuitous `Rc<RefCell<...>>`.
 
 - Prefer `&str` over `String` and slices over `Vec` in arguments. Return owned types.
+
+### Unsafe code
+
+- Every `unsafe` block and `unsafe impl` has a `// SAFETY:` comment right above it. It says why the block is sound here: what the call needs, and why that holds. Clippy refuses an unsafe block without one.
+
+- No `mem::forget` on a value that owns something, since what it owns is never freed. Clippy refuses it. Where the leak is the point, such as a test leaving a file behind the way a crash would, allow the lint at that line and give the reason.
 
 ### Control flow
 

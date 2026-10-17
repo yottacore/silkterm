@@ -24,8 +24,8 @@
 ##	   0. remote sync (fetch; fast-forward if safely behind; abort if diverged)
 ##	   1. format (cargo fmt)
 ##	   2. debug build (this is what the tests + profiler run against)
-##	   3. regression tests + lints + fuzz soak (clippy gating, cargo-deny advisory,
-##	      scroll harness)
+##	   3. regression tests + lints + fuzz soak (clippy and the advisory scan gating,
+##	      the rest of cargo-deny not; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
@@ -940,6 +940,11 @@ fBuildTestRelease(){
 		fEcho "Fuzzing, ${FUZZ_SECS}s per target ..."
 		fTestLines env "SILK_FUZZ_SECS=${FUZZ_SECS}" "${FUZZ_CMD[@]}" || fDie "fuzz found something"
 		fEcho "OK: fuzz clean"
+	fi
+	if [[ -n "${ADVISORY_CMD+x}" ]] && ((${#ADVISORY_CMD[@]})); then
+		"${DENY_PROBE[@]}" >/dev/null 2>&1 || fDie "advisory scan can't run: ${DENY_PROBE[*]} failed (see cicd/tool-pins.txt)"
+		"${ADVISORY_CMD[@]}" || fDie "known advisories against the dependencies (above)"
+		fEcho "OK: no known advisories"
 	fi
 	if [[ -n "${DENY_CMD+x}" ]] && ((${#DENY_CMD[@]})); then
 		if "${DENY_PROBE[@]}" >/dev/null 2>&1; then

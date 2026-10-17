@@ -2262,6 +2262,7 @@ mod tests {
 		let shell = pty.child_watcher().raw_handle();
 		// SAFETY: the handle is the pty's own and still open
 		unsafe { windows_sys::Win32::System::Threading::TerminateProcess(shell, 0) };
+		#[allow(clippy::mem_forget, reason = "a drop here can block, see above")]
 		std::mem::forget(pty);
 	}
 

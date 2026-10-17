@@ -98,10 +98,16 @@ XLINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}
 FUZZ_SECS=20
 FUZZ_CMD=(cargo test fuzz::)
 
-## Stage 3 (after lints): dependency police (licenses/advisories/duplicates,
+## Stage 3 (after lints): dependency police (licenses/duplicates/sources,
 ## policy in deny.toml). Non-gating for now; tighten once the report is tuned.
 DENY_PROBE=(cargo deny --version)
-DENY_CMD=(cargo deny check)
+DENY_CMD=(cargo deny check licenses bans sources)
+## Known advisories against the locked dependencies, on every full run. Gating:
+## any report fails it, a warning too (a yanked crate, an ignore that no longer
+## matches anything). A fix that has to wait goes in deny.toml's ignore list with
+## its backlog item's ID. No cargo-deny fails the run as well, since a scan that
+## can't run has found nothing.
+ADVISORY_CMD=(cargo deny check advisories -D warnings)
 
 ## Stage 3: per-monitor window size on random layouts and steps
 ## (cicd/tests/dpirand/run.py), as seconds of cases. A case is about 30 s on the
