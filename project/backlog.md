@@ -560,6 +560,47 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20260928: Held for the release, with the other demo recorder change.
 	- Closed:
 
+- Implement leak and static checks of the Rust code run as part of CI/CD
+	- ID: 2026101714015789
+	- Type: Task
+	- Status: Queued
+	- Opened: 20261017-140157
+	- Opened by: JC
+	- Requirements:
+		- For all:
+			- The checks cover first-party and third-party code. Vendored code is included.
+				- On third-party code, run the leak, memory, and correctness checks named here, not style lints. Style findings in someone else's crate or module aren't ours to fix.
+				- CodeQL reports only on source inside the database's root. For its run, vendor the dependencies into the tree first (`cargo vendor`, `go mod vendor`, unpacked sdists for Python).
+			- Any report fails the test that made it.
+			- Suppressions list third-party code only, matched by crate, module, or package name. A leak in our code is fixed. If the fix has to wait, it gets a backlog item, and the test that shows it turns the check off with that item's ID beside it.
+			- A `--leakcheck` flag adds the slow checks:
+				- CodeQL, from a pinned CLI run locally. No hosted service.
+				- A soak test. It loops through the program's main actions headless, and fails if the heap at round 2N is larger than at round N by more than a set margin. The heap report is kept as a pipeline artifact.
+			- Every tool is pinned and runs in the build container or lint image, never installed on the host.
+			- Each new gate is watched to fail before it's trusted, by planting the leak it's meant to catch and seeing it go red.
+			- Known-advisory scans run on every full run: `cargo deny check advisories` or `cargo audit`, `govulncheck`, and `pip-audit`. They cover third-party code only, which is the point.
+		- For Rust:
+			- Safe Rust leaks only through `Rc` or `Arc` cycles, `mem::forget`, `Box::leak`, and collections that grow forever. Real leaks and memory errors come from `unsafe` and FFI, in our crates or in dependencies.
+			- Every full run builds the whole test suite with AddressSanitizer and LeakSanitizer, in a build dir of its own.
+				- `RUSTFLAGS=-Zsanitizer=address cargo +NIGHTLY test -Zbuild-std --target x86_64-unknown-linux-gnu`.
+				- That needs a dated nightly, pinned beside the stable toolchain. Sanitizers aren't stable.
+				- Every crate built from source is instrumented, dependencies included.
+			- If the code starts threads, every full run also builds the tests with ThreadSanitizer (`-Zsanitizer=thread`), in another build dir.
+			- Every full run runs the test suite under Miri: `cargo +NIGHTLY miri test`. It catches undefined behavior in `unsafe` code, ours and dependencies', and fails on memory still allocated at exit.
+				- It moves behind `--leakcheck` only if a full run measures too slow.
+			- A heap-growth test with `dhat` in testing mode reads `dhat::HeapStats` at round N and 2N in-process. It's the soak test for a library with no main program.
+			- clippy runs with `-D warnings`, plus `clippy::mem_forget` and `clippy::undocumented_unsafe_blocks`.
+			- Every `unsafe` block has a `// SAFETY:` comment.
+			- Traps:
+				- Without `-Zbuild-std`, std isn't instrumented. ASan mostly copes, but TSan gives false reports.
+				- Without an explicit `--target`, the sanitizer flags reach build scripts and proc macros, and the build fails in odd places.
+				- LSan reports at process exit, so a leak fails the whole test binary, not one test. Rerun with `--test-threads=1` and a test-name filter to find which.
+				- Miri can't call FFI and has limited file and network access. A test that needs them gets `#[cfg_attr(miri, ignore)]` with a one-line reason. It's not silently left out.
+				- Miri doesn't count memory reachable from a `static` as a leak, so a cache in a static that grows forever passes. The soak test catches that.
+				- heaptrack and dhat both see only the global allocator. A crate that maps memory itself, or a custom allocator, hides it.
+				- ASan and TSan can't share a build, and heaptrack can't share one with either. The soak test uses a plain build.
+	- Closed:
+
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
 	- Type: Bug
