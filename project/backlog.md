@@ -774,7 +774,9 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wayland: a size taken that leaves most of the window on an output at another scale shows a grid a few cells off
 	- ID: 2026101513385000
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs local test suite run?: The full pipeline, with the random test in it.
+	- Needs external testing: On Windows and macOS, a take that puts most of the window on a monitor at another scale. The grid it took should stay.
 	- Severity: Low
 	- Opened: 20261015-133850
 	- Opened by: CC
@@ -791,11 +793,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- The random test allows it by this ID until it's fixed.
 		- 20261016: 2026101614100002 was this drift coming late, seeds 184066139, 20002 and 72046. At font zoom -2 it moved 40 rows to 37, so the test now works it out from the cells the shell is told.
+	- Actual cause: As above. Since 2026101614100002 the first scale change after a take isn't a move, so no other size takes over after it, and the window was still left to the system there.
+	- Actual fix: A scale change right after a take that doesn't count as a move keeps the take's grid, the same way a scale change keeps the grid where no kept size takes over (2026101412003308). One that does count, such as an output's own scale changing, is left to the system as before, since a take follows it.
+	- Note: A first try kept the grid on every first scale change after a take. On seed 400055 the user changed an output's scale 4 s after a take, which counts as a move, and sway's late answer to the grid's resize undid the take that followed (2026101417045856's race).
+	- Test case: `cicd/tests/dpirand/run.py` (EshVccz) no longer allows this item. Seeds 96313774, 184066139 and 72046 fail on the build before (69x33 to 67x32, 140x25 to 138x24, 85x40 to 82x37) and pass on the fix.
+	- Verified: those seeds plus 20002, 9032, 40003 and 400012 on the final build. The random test runs listed on 2026101516013920. monwl, unit suite and clippy for Linux.
+	- Swept: the scale change is the one place a window is left to the system. Its move rule and its grid rule now share one check (`rescale_moves`).
+	- Branch: wldrift
 
 - Wayland: a resize right after fullscreen and back saves nothing when the way back comes with a scale event
 	- ID: 2026101516013920
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
 	- Severity: Low
 	- Opened: 20261015-160139
 	- Opened by: CC
@@ -809,8 +818,57 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Expected behavior: The size is saved for the output the window is on.
 	- Reproduced: 20261015, 2 of 2 runs of that seed.
 	- Possible cause: sway sent the window its scale again as it left fullscreen, at the scale it already had. The resize back fell in the grace after a scale change, so it wasn't counted, and the user's resize after it was taken for the way back.
+	- Actual cause: As above. Reproduced on dev 20261016: sway sent the same scale while fullscreen and again on the way out, the way back came 0.13 s after the second, and the user's resize 14 s later saved nothing.
+	- Actual fix: A window that was fullscreen, maximized or minimized notes a resize in that grace too. The way back saves nothing, as before (2026101412392529), but it's seen, so the next resize is the user's.
+	- Test case: `the_way_back_from_fullscreen_counts_in_a_grace` (EsuVDs3), seen failing with the rule broken. `cicd/tests/dpirand/run.py --wayland --seed 9163` (EshVccz) failed on the build before and passes on the fix.
+	- Verified: seed 9163, 3 runs with the fix. Seeds 400028, 400145, 400146, 400249, 400272, 400328 and 400398, which resize right after fullscreen and back, pass. The random test on the branch: 4 runs of about 150 s with fresh seeds (1 Wayland, 1 X11, 2 with both arms) and 26 picked seeds with a sliver drop or fullscreen. The final build ran 11 seeds named here and one of the fresh runs, all passing. The one fail left, 400049, fails on dev too, filed as 2026101617573401. Unit suite and clippy for Linux.
+	- Swept: the grace is read in one place for a resize, `save_window_size`. A move's grace is separate and unchanged.
+	- Branch: wldrift
+	- Acceptance signoff: Self-closed: reproduced, red before and green after, and the way back still saves nothing.
+	- Closed: 20261016-175734
 
-- Wayland: a copy a program sends while no SilkTerm window has focus is dropped
+- The random test aims the pointer off the layout at a window that hangs off it
+	- ID: 2026101617573400
+	- Type: Bug
+	- Status: Done
+	- Severity: Low
+	- Opened: 20261016-175734
+	- Opened by: CC
+	- Parent ID: 2026101410442550
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed 400012`.
+	- Incorrect behavior: After a move to output 1, the window doesn't look, and the case fails at the kept size of the output it left.
+	- Expected behavior: The pointer comes back over the window, and it looks.
+	- Reproduced: 20261016, 2 of 2 runs on dev with the test from before this branch.
+	- Actual cause: A fault in the test. The move left the window at x -325, hanging off the layout, so the middle of it was off every output. The test's pointer sends layout points as unsigned numbers, so a negative one put the pointer somewhere else, and the window got no pointer event at all.
+	- Actual fix: The pointer goes to the middle of the part of the window on the output most of it is on, both when it comes back and before fullscreen.
+	- Swept: every pointer move to a window's middle in the test. The drag grabs the title bar, which `within_reach` already keeps on an output.
+	- Test case: `cicd/tests/dpirand/run.py --wayland --seed 400012` (EshVccz). It failed with the test from before and passes now, on the same build.
+	- Verified: seed 400012, 3 runs.
+	- Branch: wldrift
+	- Acceptance signoff: Self-closed: a fault in the test, fixed, red before and green after on its seed.
+	- Closed: 20261016-175734
+
+- Wayland: after the random test moves a window back in reach, a key doesn't bring a look
+	- ID: 2026101617573401
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261016-175734
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101614100000
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed 400049`.
+	- Incorrect behavior: Output 1 goes to scale 2 and the window is moved back in reach by key, to x -99 on output 1. The font zoom step's key brings no look, and the window keeps output 2's 147x17.
+	- Expected behavior: It looks and takes output 1's size at 200%, the last size anywhere, 95x22.
+	- Reproduced: 20261016, on dev with the test from before this branch (142x16) and on the fix alike.
+	- Notes:
+		- Not checked whether it's the window or the test's model.
 	- ID: 2026101607585700
 	- Type: Enhancement
 	- Status: Queued
