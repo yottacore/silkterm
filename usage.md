@@ -85,13 +85,13 @@ These go before any tab or pane.
 | `--hide-windowframe[=BOOL]`           | Start without the window manager's frame.
 | `--hide-menu[=BOOL]`                  | Start with the menu bar hidden. Ignored on macOS.
 | `--fullscreen[=BOOL]`                 | Start fullscreen.
-| `--remember-size[=BOOL]`              | Remember the size as usual, with a size or font option given.
+| `--persist[=BOOL]`                    | Remember the size as usual, with a size or font option given.
 | `--config PATH`                       | Use another config file.
 | `--reset-config`                      | Move the config aside and start from the defaults.
 
 A BOOL can be `yes` or `no`, `true` or `false`, or `1` or `0`. Leaving it off means yes.
 
-A window opened with `--columns`, `--rows`, `--pixel-width`, `--pixel-height`, `--font-size` or `--font-name` doesn't remember its size, font zoom or maximized state, even after a resize. It does again once each of those is changed in Settings, where the pixel sizes count as Columns and Rows. With `--remember-size` it remembers them as usual from the start.
+A window opened with `--columns`, `--rows`, `--pixel-width`, `--pixel-height`, `--font-size` or `--font-name` doesn't remember its size, font zoom or maximized state, even after a resize. It does again once each of those is changed in Settings, where the pixel sizes count as Columns and Rows. With `--persist` it remembers them as usual from the start.
 
 ### Control
 

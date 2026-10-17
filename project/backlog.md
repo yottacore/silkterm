@@ -34,28 +34,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 
 ## Issues
 
-- README.md, "Terminal showdown" section: the line on memory
-	- ID: 2026101611321635
-	- Type: Task
-	- Status: Waiting for answers
-	- Priority: Avg
-	- Opened: 20261016-113216
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- "SilkTerm is near the top for speed, and uses more memory than most." -> "SilkTerm is near the top for speed, and doesn't use more memory once static vs dynamic libraries are counted."
-	- Notes:
-		- Pre-next-cut.
-		- Check that the table in comparison.md bears it out before changing the line.
-	- Progress log:
-		- 20261016: The table doesn't bear it out, so README.md is unchanged.
-			- The Mem column already counts shared libraries. Per note 4 and showdown-readme.md, it's private pages plus each shared mapping counted once. So a terminal on GTK already has GTK's resident pages in its figure. Only the graphics stack is left out, for every row, and SilkTerm's is the biggest of those (141 MiB).
-			- Mem in MiB: SilkTerm plain 100.1, as it ships 167.7. Others: XTerm 9.4, conhost 21.1, XFCE4 Terminal 48.6, Alacritty 50.4, GNOME Terminal 53.6, Terminator 82.2, WezTerm 84.8, Windows Terminal 93.0, kitty 140.8, Hyper 309.4, Tabby 473.4. Plain is above 8 of those 11, and as it ships above 9.
-			- Alacritty is linked the same way as SilkTerm and reads 50 MiB lower plain, 117 as it ships. Note 8 puts that down to the eye candy, not linking.
-			- Taking SilkTerm's whole 10.5 MiB file out of its figure still leaves plain at about 90, above all but Windows Terminal, kitty, Hyper and Tabby.
-			- The static vs dynamic point does hold for File+deps, which is disk: SilkTerm 14.1 against 84 for GNOME Terminal and XFCE4 Terminal.
-		- 20261016: Question: keep the current line, or reword it some other way, for example to say the disk cost is small once libraries are counted?
-
 - A window held still in a drag over another monitor takes that monitor's size before it's dropped, on Wayland and under XWayland
 	- ID: 2026101411555009
 	- Type: Bug
@@ -92,30 +70,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: `button_held` has one caller. Every start of a look: the reveal, a move, a scale change, and the pointer back on Wayland. The scale change skipped the grace after the window's own resize that a move gets, filed and fixed as 2026101420262300.
 	- Branch: helddrag
 	- Commit: e2e44df
-
-- Double-click selection of a path: allow unicode characters
-	- ID: 2026101611321633
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261016-113216
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Allow unicode characters in consideration for double-click selection of a path.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261016: Found: letters from scripts like Cyrillic or accented Latin already counted. A wide character such as Chinese or Japanese didn't, since its second cell reads as a space, so `/srv/数据` came back as `/srv/数`. Any symbol counted too, so `repo.git:dev✘✔` with no space took the marks along.
-		- 20261016: Done: past ASCII, letters, digits and combining marks from any script count as path characters. Symbols, arrows, box drawing, emoji and non-ASCII punctuation end a path. ASCII punctuation keeps the rules it had. A wide character is one character, and the selection covers both its cells.
-		- 20261016: Also counts letters past ASCII in a file extension (so `:12` after one is still left off) and in a git remote's first path segment.
-	- Decisions:
-		- 20261016: The line between "letter" and "symbol" was a best guess. A folder named with an emoji or a symbol like `★` is now cut there. Left as they were: the short list of what may sit just before a path (a full-width colon or a CJK bracket doesn't start one), and a remote's host and user name, which stay ASCII.
-	- Swept: The other double-click rules. The pair rule and the bracket rule read cells the old way, but neither looks at what a path is; word selection is the engine's and already handles wide characters. Link hover uses ASCII-only URLs, so a wide character can't be inside one.
-	- Verified: 20261016 on b23. The 3 new tests failed on the code before the change and pass after it. The full unit suite (1358), rustfmt and clippy with warnings as errors passed.
-	- Branch: pathuni
-	- Commit: a74705e
-	- Test case: `a_path_may_have_letters_from_any_script` (EstXrUS), `symbols_after_a_path_are_left_out` (EstXrbq), `a_path_with_wide_characters_is_taken_whole` (EstXrin).
 
 - Settings dialog: search
 	- ID: 2026101419165501
@@ -164,37 +118,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: setsearch, progtab
 	- Commit: ab84e3a, 940f3f4, 2bd35ba
 
-- Settings: a new "Program" tab
-	- ID: 2026101611321634
-	- Type: Enhancement
-	- Status: Waiting on signoff
-	- Priority: Avg
-	- Opened: 20261016-113216
-	- Opened by: JC
-	- Related IDs: 2026101611321632
-	- Requirements:
-		- New tab, "Program".
-		- Move to it:
-			- Window|Resource use
-		- New features in it:
-			- Always run in new tmux session, 2026101611321632.
-	- Notes:
-		- Pre-next-cut.
-		- Moves Resource use off the Window tab, where 2026100418225506 put it as the last group.
-	- Progress log:
-		- 20261016: Built. Program comes after Window. Resource use is on it with its rows, flyovers, warning mark and search aliases, and still ends the tab, so the tmux setting can go above it under a heading of its own. The config keys stay under `window:`.
-	- Decisions:
-		- 20261016, best guess: Program sits between Window and Shell. Its one group came from Window, and tmux is next to the shell in subject. That makes 7 tabs at the top level, the ceiling in the style guide.
-		- 20261016, best guess: No heading named Program. Its first heading is Resource use, which shows, as Silk and Keys start with a heading of their own.
-	- Test case: `the_resource_use_group_ends_the_program_tab` (EstcAuW), seen failing with the group put back on Window. `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv) pins the tab list. It replaces `the_resource_use_group_ends_the_window_tab` (EryD9rp), commented out. The nested tab tests now find tabs by name.
-	- Verified:
-		- The unit suite (1359 tests), clippy, rustfmt, the docs, table and test ID checks.
-		- A real window on Linux, dark at 1x and light at 2x: the Program tab with its rows and mark, the Window tab without them, and a search for "memory" listing "Program > Resource use".
-		- Not verified: Windows, macOS.
-	- Swept: tests that picked a tab by number, in settings_ui.rs and its files. The nested tab tests took leaf and node numbers that the move shifted; they now look tabs up by title. The rest used tabs 0 to 2, which the move doesn't touch. The style guide, the settings dialog design doc, and the wingui `settingsdlg` scenario, which only checks that Ctrl+Tab changes the page.
-	- Branch: progtab
-	- Commit: 2bd35ba
-
 - Wayland: a resize or zoom after a move the window wasn't told of is saved for the monitor it left, and the next look undoes it
 	- ID: 2026101413420431
 	- Type: Bug
@@ -233,106 +156,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every place a size is noted as the user's, which is a resize (`save_window_size`) and a font zoom (`note_zoom`, for zooming in, out, and the reset). Other platforms and X11 through Xwayland are told of moves, so only Wayland looks. An X11 window the layout shifts under is still told nothing, as before.
 	- Branch: wlstale
 	- Commit: 3cd4c35
-
-- A size saved while the font size was given on the command line is used at the normal font next time
-	- ID: 2026101412292756
-	- Type: Bug
-	- Status: Waiting on signoff
-		- 20261016: The save rule here is replaced by the answer on 2026101422190936. Worked together with that item.
-		- 20261016: Done through that item. It changes what a window writes to the state file, so it waits on a look.
-	- Needs local test suite run?: The full pipeline, with the random test back in it. Then a release build in the dogfood pool, since this changes what a window writes to the state file.
-	- Severity: Low
-	- Opened: 20261014-122927
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Target OS: All
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- Open SilkTerm with `--font-size 11` and resize it.
-		- Close it, and open it without the option.
-	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
-	- Reproduced: 20261014, by the random test.
-	- Progress log:
-		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
-			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
-		- 20261014: Done as answered. How it maps onto the store:
-			- The store keeps columns, rows and a font zoom, and no pixels. So "in pixels" is saved as the columns and rows the default font shows in the window's size now. It's what a zoom does already, so the window reopens at the same size.
-			- "The default font size" is the one a launch without the option opens at on that monitor: the font size from the config, plus the zoom kept there.
-			- "The screen" is the monitor the size is kept for, less the window's frame.
-			- A zoom after a launch with `--font-size` keeps the option's size under the zoom, so the same rule applies.
-		- 20261016: Replaced by the rule on 2026101422190936. A size set while the font size came from the command line isn't saved, so the next launch opens at the size kept before it. With `--remember-size` as well, it's saved by the rule answered above.
-	- Actual cause: The size is saved as the columns and rows of the font the window has. A launch without the option opens at them in the default font.
-	- Actual fix: As answered above. A size set at another font than the one the next launch has is checked against the screen at that font. It's kept in columns and rows if it fits, and else as the default font's columns and rows for the window's size now.
-		- 20261016: Such a window saves nothing now, unless `--remember-size` is given too (2026101422190936).
-	- Test case: `a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font` (EsjoVZu), seen failing with the old rule put back, and `a_cell_measured_for_a_font_size_is_the_cell_that_font_gets` (EsjoVeF). The random test (EshVccz) now checks a window opened at the default font fits the monitor its size was set on. Seed 2710 failed it on the old build, 1481 px wide on a 1440 px output, and passes on the fix.
-		- 20261016: `a_size_or_font_from_the_command_line_saves_nothing_until_changed_in_settings` (EsthbIT), and the random test's check that such a window saves nothing, both on 2026101422190936.
-	- Verified:
-		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
-		- The random test on seeds 23, 889, 1321, 2114, 2710 and 3999, on Wayland and on X11 through Xwayland.
-		- 20261016: The runs listed on 2026101422190936.
-	- Swept: the other ways a grid kept for one font is used at another. A launch or a take with `--font-size` uses a grid kept at the default font, and `--font-name` saves the grid in its own font. Both are outside this answer; filed as 2026101422190936.
-	- Branch: monsave, clipersist
-	- Commit: cd3f8d4, 9e390ac
-
-- A size kept at one font is used at another when the font comes from the command line
-	- ID: 2026101422190936
-	- Type: Bug
-	- Status: Waiting on signoff
-		- I think the more logical way to handle resizing when anything that affects terminal size is passed by command line:
-			- Normally, *nothing* is remembered, even if user resizes the window. Except:
-				- If user changes the same value(s) passed on the command-line, in settings.
-				- If a new flag is also passed, something like `--persist`
-		- 20261016: Done as above, with the best guesses in the log. It changes what a window writes to the state file and adds an option, so it waits on a look.
-	- Needs local test suite run?: The full pipeline, with the random test back in it. Then a release build in the dogfood pool, since this changes what a window writes to the state file.
-	- Severity: Low
-	- Opened: 20261014-221909
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101412292756
-	- Target OS: All
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
-		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
-	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
-	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
-		- Best guess, below under Decisions: the same rule as that answer, used both ways.
-	- Reproduced: 20261015. A 169x20 size kept on a 2560 px output came out 169x20 at `--font-size 17` on a 2880 px one, 3604 px wide. A 218x19 grid set under `--font-name "Ubuntu Mono"` was saved as it was, and opened 1924 px wide on a 1920 px output without the option.
-	- Notes:
-		- A size given on the command line wins over this, as before.
-	- Progress log:
-		- 20261015: Asked how a kept size should be used at another font. No answer in time, so the best guess below was taken. Easy to take back: drop the use at launch and at a take, and the family from the font check.
-		- 20261016: The options that count as affecting the terminal's size are `--font-size`, `--font-name`, and any columns or rows option. Agreed.
-		- 20261016, best guess: A window opened with one of them still opens at a kept size by the fit rule below, but saves nothing.
-		- 20261016, best guess: "Nothing" is the remembered size, the font zoom and the maximized state, for each monitor and as the last size anywhere. Changes in Settings to anything else save as usual.
-		- 20261016, best guess: `--pixel-width` and `--pixel-height` count as columns and rows options. Only the window's own `--font-size` and `--font-name` count, since a tab's or pane's font isn't used yet. The config's `command_line` setting is a command line too, so it goes the same way.
-		- 20261016, best guess: With more than one given, the window saves again once each has been changed in Settings. A font counts as changed by a new value or its reset arrow. Columns and rows are one size in Settings, so changing either hands back both, and the pixel options with them. Turning Remember last size off or on doesn't count by itself.
-		- 20261016, best guess: The flag is `--remember-size[=BOOL]`, named after "Remember last size" in Settings, since a bare `--persist` doesn't say what it keeps. With it the window saves as it did before, by the fit rule.
-		- 20261016: Once Settings changes the command line's font, a reload or another window's save no longer puts the command line's font back over it. Read in the code, not run.
-	- Decisions:
-		- 20261015, best guess: the rule given on 2026101412292756, both ways. A kept size used at a font other than the one it was kept at keeps its columns and rows if the window fits the screen at the font it opens with, and else opens at the columns and rows that keep the kept window's size in pixels. That's a launch or a take with `--font-size` or `--font-name`, and a grid saved under `--font-name`.
-			- "The screen" is the monitor the size is kept for, less the window's frame, as on that item.
-			- Example: kept 100x30 at 12pt is about 1000x700 px on a 1920x1080 screen. `--font-size 14` opens 100x30, since it fits. `--font-size 28` opens about 43x13.
-			- A size is kept at the font a launch without `--font-size` and `--font-name` has, with the kept zoom on top.
-			- A window that can't tell its monitor at launch, as on Wayland, opens at the kept grid, and the take once it can tell fits it to that screen. Without per monitor sizes there's no take, so it keeps the kept window's size.
-		- 20261016, JC's note under Status: with one of those options nothing is remembered, unless the same value is changed in Settings or a new flag is given. The fit rule above stays for the launch and the take, and for the save under `--remember-size`.
-	- Actual cause: Only the save checked the font, and only its size. A launch or a take used the kept grid at whatever font the window had, and a grid saved under `--font-name` was kept in that font.
-	- Actual fix: One rule for the save, the launch and the take. Each measures the cell of the font a launch without the options has, family and size, and the cell the window has, and picks the grid by the rule above.
-		- 20261016: A window opened with one of the options saves nothing of its size until each is changed in Settings, or from the start with `--remember-size`. `--help`, usage.md and design.md say so.
-	- Branch: clifont, clipersist
-	- Commit: e27efe5, 9e390ac
-	- Test case: `a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line` (Eso2weD) and `the_font_a_launch_without_the_font_options_has` (Eso2wHz), each seen failing with its half of the fix taken out. The random test (EshVccz) now judges a kept size taken at `--font-size` from the cell the shell is told: its columns and rows where they'd clearly fit, other ones where they'd clearly not. Seed 128 fails it with the take's half taken out, and passes on the fix.
-		- 20261016: `a_size_or_font_from_the_command_line_saves_nothing_until_changed_in_settings` (EsthbIT), seen failing with the window saving every time, and `window_opts` (Ei9SyM4) for the flag. The random test (EshVccz) now wants no save from a window with a size or a font size from the command line and no `--remember-size`, and gives some of them that flag. Seed 58 fails it on a build that saves every time, and passes on the fix.
-	- Verified:
-		- The Linux unit tests, rustfmt, and clippy with warnings as errors for Linux, Windows and macOS. The Python lint, the docs check and the test ID check.
-		- 20261016: The unit tests (1360 and knobs' 28), rustfmt, clippy with warnings as errors for Linux, the Python lint, the docs check and the test ID check.
-		- 20261016: The random test on seeds 3, 20, 23, 58 and 76 (a size or font size from the command line, nothing saved), 5, 8, 31, 32 and 37 (with `--remember-size`), 125, 128, 137, 221 and 2710 (the font seeds from before), 1000 to 1004, 96313772 to 96313775 and 184066136 to 184066139 on Wayland, and 2000 to 2004 and 184367469 to 184367473 on X11 through Xwayland. All passed but 37, 1003 and 184066139, which fail the same way with the test from before this branch on this build with the save rule taken out. Filed as 2026101614100000, 2026101614100001 and 2026101614100002.
-		- Not verified: a Settings change handing a value back in a real window, which has the unit test only. Clippy for Windows and macOS, since no platform code changed.
-		- The random test on seeds 1 to 4, 17, 20, 23, 30, 53, 118, 125, 128, 137, 221, 236, 249, 300, 319, 324 and 368, on Wayland and on X11 through Xwayland. All but 1 to 4 use `--font-size`.
-		- `--font-name "Ubuntu Mono"` on one headless sway output: a 218x19 grid set at 1880 px was saved as 175x19, opened 175x19 at 1865 px without the option, and 175x19 again with it, since that fits.
-	- Swept: every place a kept grid is used or saved. The save (`grid_to_open_at`), the launch in app.rs and the take (`take_monitor_size`) all go through it now. A grid from Settings is the user's own columns and rows, not a kept size, so it's left as it is. The rescale keeps the grid the window shows, at its own font.
-		- 20261016: every write of the remembered size, zoom and maximized state. They all go through `flush_window_size`, the one caller of `remember_window` and the one place the maximized state is written: the save after a resize or zoom, the one before a move is taken, and the one at quit.
-	- Needs external testing: a look on Windows and macOS, where the frame comes into the screen's room.
 
 - Wayland: a size set after a drop with a sliver left on another output at the same scale is saved for that other output
 	- ID: 2026101614100001
@@ -3139,6 +2962,94 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
 
+- Settings: a new "Program" tab
+	- ID: 2026101611321634
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Related IDs: 2026101611321632
+	- Requirements:
+		- New tab, "Program".
+		- Move to it:
+			- Window|Resource use
+		- New features in it:
+			- Always run in new tmux session, 2026101611321632.
+	- Notes:
+		- Pre-next-cut.
+		- Moves Resource use off the Window tab, where 2026100418225506 put it as the last group.
+	- Progress log:
+		- 20261016: Built. Program comes after Window. Resource use is on it with its rows, flyovers, warning mark and search aliases, and still ends the tab, so the tmux setting can go above it under a heading of its own. The config keys stay under `window:`.
+		- 20261017: Signed off.
+	- Decisions:
+		- 20261016, best guess: Program sits between Window and Shell. Its one group came from Window, and tmux is next to the shell in subject. That makes 7 tabs at the top level, the ceiling in the style guide.
+		- 20261016, best guess: No heading named Program. Its first heading is Resource use, which shows, as Silk and Keys start with a heading of their own.
+	- Test case: `the_resource_use_group_ends_the_program_tab` (EstcAuW), seen failing with the group put back on Window. `silkterms_tabs_go_down_the_left_with_appearance_over_four` (EsZuaQv) pins the tab list. It replaces `the_resource_use_group_ends_the_window_tab` (EryD9rp), commented out. The nested tab tests now find tabs by name.
+	- Verified:
+		- The unit suite (1359 tests), clippy, rustfmt, the docs, table and test ID checks.
+		- A real window on Linux, dark at 1x and light at 2x: the Program tab with its rows and mark, the Window tab without them, and a search for "memory" listing "Program > Resource use".
+		- Not verified: Windows, macOS.
+	- Swept: tests that picked a tab by number, in settings_ui.rs and its files. The nested tab tests took leaf and node numbers that the move shifted; they now look tabs up by title. The rest used tabs 0 to 2, which the move doesn't touch. The style guide, the settings dialog design doc, and the wingui `settingsdlg` scenario, which only checks that Ctrl+Tab changes the page.
+	- Branch: progtab
+	- Commit: 2bd35ba
+	- Acceptance signoff: JC, 20261017.
+	- Closed: 20261017-081034
+
+- Double-click selection of a path: allow unicode characters
+	- ID: 2026101611321633
+	- Type: Enhancement
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Allow unicode characters in consideration for double-click selection of a path.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261016: Found: letters from scripts like Cyrillic or accented Latin already counted. A wide character such as Chinese or Japanese didn't, since its second cell reads as a space, so `/srv/数据` came back as `/srv/数`. Any symbol counted too, so `repo.git:dev✘✔` with no space took the marks along.
+		- 20261016: Done: past ASCII, letters, digits and combining marks from any script count as path characters. Symbols, arrows, box drawing, emoji and non-ASCII punctuation end a path. ASCII punctuation keeps the rules it had. A wide character is one character, and the selection covers both its cells.
+		- 20261016: Also counts letters past ASCII in a file extension (so `:12` after one is still left off) and in a git remote's first path segment.
+		- 20261017: Signed off.
+	- Decisions:
+		- 20261016: The line between "letter" and "symbol" was a best guess. A folder named with an emoji or a symbol like `★` is now cut there. Left as they were: the short list of what may sit just before a path (a full-width colon or a CJK bracket doesn't start one), and a remote's host and user name, which stay ASCII.
+	- Swept: The other double-click rules. The pair rule and the bracket rule read cells the old way, but neither looks at what a path is; word selection is the engine's and already handles wide characters. Link hover uses ASCII-only URLs, so a wide character can't be inside one.
+	- Verified: 20261016 on b23. The 3 new tests failed on the code before the change and pass after it. The full unit suite (1358), rustfmt and clippy with warnings as errors passed.
+	- Branch: pathuni
+	- Commit: a74705e
+	- Test case: `a_path_may_have_letters_from_any_script` (EstXrUS), `symbols_after_a_path_are_left_out` (EstXrbq), `a_path_with_wide_characters_is_taken_whole` (EstXrin).
+	- Acceptance signoff: JC, 20261017.
+	- Closed: 20261017-081034
+
+- README.md, "Terminal showdown" section: the line on memory
+	- ID: 2026101611321635
+	- Type: Task
+	- Status: Done
+	- Priority: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- "SilkTerm is near the top for speed, and uses more memory than most." -> "SilkTerm is near the top for speed, and doesn't use more memory once static vs dynamic libraries are counted."
+	- Notes:
+		- Pre-next-cut.
+		- Check that the table in comparison.md bears it out before changing the line.
+	- Progress log:
+		- 20261016: The table doesn't bear it out, so README.md is unchanged.
+			- The Mem column already counts shared libraries. Per note 4 and showdown-readme.md, it's private pages plus each shared mapping counted once. So a terminal on GTK already has GTK's resident pages in its figure. Only the graphics stack is left out, for every row, and SilkTerm's is the biggest of those (141 MiB).
+			- Mem in MiB: SilkTerm plain 100.1, as it ships 167.7. Others: XTerm 9.4, conhost 21.1, XFCE4 Terminal 48.6, Alacritty 50.4, GNOME Terminal 53.6, Terminator 82.2, WezTerm 84.8, Windows Terminal 93.0, kitty 140.8, Hyper 309.4, Tabby 473.4. Plain is above 8 of those 11, and as it ships above 9.
+			- Alacritty is linked the same way as SilkTerm and reads 50 MiB lower plain, 117 as it ships. Note 8 puts that down to the eye candy, not linking.
+			- Taking SilkTerm's whole 10.5 MiB file out of its figure still leaves plain at about 90, above all but Windows Terminal, kitty, Hyper and Tabby.
+			- The static vs dynamic point does hold for File+deps, which is disk: SilkTerm 14.1 against 84 for GNOME Terminal and XFCE4 Terminal.
+		- 20261016: Question: keep the current line, or reword it some other way, for example to say the disk cost is small once libraries are counted?
+		- 20261017: Answer (JC): remove the claim about memory. The README line now ends at the speed.
+	- Branch: persist
+	- Commit: 4745671
+	- Acceptance signoff: JC, 20261017.
+	- Closed: 20261017-081034
+
 - README.md: move the long sections out to their own docs
 	- ID: 2026101415085144
 	- Type: Task
@@ -4786,6 +4697,112 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- A size kept at one font is used at another when the font comes from the command line
+	- ID: 2026101422190936
+	- Type: Bug
+	- Status: Done
+		- I think the more logical way to handle resizing when anything that affects terminal size is passed by command line:
+			- Normally, *nothing* is remembered, even if user resizes the window. Except:
+				- If user changes the same value(s) passed on the command-line, in settings.
+				- If a new flag is also passed, something like `--persist`
+		- 20261016: Done as above, with the best guesses in the log. It changes what a window writes to the state file and adds an option, so it waits on a look.
+	- Needs local test suite run?: The full pipeline, with the random test back in it. Then a release build in the dogfood pool, since this changes what a window writes to the state file.
+	- Severity: Low
+	- Opened: 20261014-221909
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101412292756
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 22` on a monitor with a size kept, or move it to one.
+		- Or open it with `--font-name` set to a wider font and resize it, then open it without the option.
+	- Incorrect behavior: The kept columns and rows are used at the other font, so the window comes out much larger or smaller than the size that was kept, and can be wider than the monitor.
+	- Expected behavior: Unclear. The answer on 2026101412292756 covers a size saved at a font size from the command line only.
+		- Best guess, below under Decisions: the same rule as that answer, used both ways.
+	- Reproduced: 20261015. A 169x20 size kept on a 2560 px output came out 169x20 at `--font-size 17` on a 2880 px one, 3604 px wide. A 218x19 grid set under `--font-name "Ubuntu Mono"` was saved as it was, and opened 1924 px wide on a 1920 px output without the option.
+	- Notes:
+		- A size given on the command line wins over this, as before.
+	- Progress log:
+		- 20261015: Asked how a kept size should be used at another font. No answer in time, so the best guess below was taken. Easy to take back: drop the use at launch and at a take, and the family from the font check.
+		- 20261016: The options that count as affecting the terminal's size are `--font-size`, `--font-name`, and any columns or rows option. Agreed.
+		- 20261016, best guess: A window opened with one of them still opens at a kept size by the fit rule below, but saves nothing.
+		- 20261016, best guess: "Nothing" is the remembered size, the font zoom and the maximized state, for each monitor and as the last size anywhere. Changes in Settings to anything else save as usual.
+		- 20261016, best guess: `--pixel-width` and `--pixel-height` count as columns and rows options. Only the window's own `--font-size` and `--font-name` count, since a tab's or pane's font isn't used yet. The config's `command_line` setting is a command line too, so it goes the same way.
+		- 20261016, best guess: With more than one given, the window saves again once each has been changed in Settings. A font counts as changed by a new value or its reset arrow. Columns and rows are one size in Settings, so changing either hands back both, and the pixel options with them. Turning Remember last size off or on doesn't count by itself.
+		- 20261016, best guess: The flag is `--remember-size[=BOOL]`, named after "Remember last size" in Settings, since a bare `--persist` doesn't say what it keeps. With it the window saves as it did before, by the fit rule.
+		- 20261016: Once Settings changes the command line's font, a reload or another window's save no longer puts the command line's font back over it. Read in the code, not run.
+		- 20261017: The flag is now `--persist`, as asked, in `--help`, usage.md, design.md and the random test. The cli and window size unit tests, the full unit suite and the random test on seeds 5 and 8 pass.
+	- Decisions:
+		- 20261015, best guess: the rule given on 2026101412292756, both ways. A kept size used at a font other than the one it was kept at keeps its columns and rows if the window fits the screen at the font it opens with, and else opens at the columns and rows that keep the kept window's size in pixels. That's a launch or a take with `--font-size` or `--font-name`, and a grid saved under `--font-name`.
+			- "The screen" is the monitor the size is kept for, less the window's frame, as on that item.
+			- Example: kept 100x30 at 12pt is about 1000x700 px on a 1920x1080 screen. `--font-size 14` opens 100x30, since it fits. `--font-size 28` opens about 43x13.
+			- A size is kept at the font a launch without `--font-size` and `--font-name` has, with the kept zoom on top.
+			- A window that can't tell its monitor at launch, as on Wayland, opens at the kept grid, and the take once it can tell fits it to that screen. Without per monitor sizes there's no take, so it keeps the kept window's size.
+		- 20261016, JC's note under Status: with one of those options nothing is remembered, unless the same value is changed in Settings or a new flag is given. The fit rule above stays for the launch and the take, and for the save under `--remember-size`.
+	- Actual cause: Only the save checked the font, and only its size. A launch or a take used the kept grid at whatever font the window had, and a grid saved under `--font-name` was kept in that font.
+	- Actual fix: One rule for the save, the launch and the take. Each measures the cell of the font a launch without the options has, family and size, and the cell the window has, and picks the grid by the rule above.
+		- 20261016: A window opened with one of the options saves nothing of its size until each is changed in Settings, or from the start with `--persist`. `--help`, usage.md and design.md say so.
+	- Branch: clifont, clipersist, persist
+	- Commit: e27efe5, 9e390ac, 4745671
+	- Test case: `a_size_kept_at_the_normal_font_fits_at_a_font_from_the_command_line` (Eso2weD) and `the_font_a_launch_without_the_font_options_has` (Eso2wHz), each seen failing with its half of the fix taken out. The random test (EshVccz) now judges a kept size taken at `--font-size` from the cell the shell is told: its columns and rows where they'd clearly fit, other ones where they'd clearly not. Seed 128 fails it with the take's half taken out, and passes on the fix.
+		- 20261016: `a_size_or_font_from_the_command_line_saves_nothing_until_changed_in_settings` (EsthbIT), seen failing with the window saving every time, and `window_opts` (Ei9SyM4) for the flag. The random test (EshVccz) now wants no save from a window with a size or a font size from the command line and no `--remember-size`, and gives some of them that flag. Seed 58 fails it on a build that saves every time, and passes on the fix.
+	- Verified:
+		- The Linux unit tests, rustfmt, and clippy with warnings as errors for Linux, Windows and macOS. The Python lint, the docs check and the test ID check.
+		- 20261016: The unit tests (1360 and knobs' 28), rustfmt, clippy with warnings as errors for Linux, the Python lint, the docs check and the test ID check.
+		- 20261016: The random test on seeds 3, 20, 23, 58 and 76 (a size or font size from the command line, nothing saved), 5, 8, 31, 32 and 37 (with `--remember-size`), 125, 128, 137, 221 and 2710 (the font seeds from before), 1000 to 1004, 96313772 to 96313775 and 184066136 to 184066139 on Wayland, and 2000 to 2004 and 184367469 to 184367473 on X11 through Xwayland. All passed but 37, 1003 and 184066139, which fail the same way with the test from before this branch on this build with the save rule taken out. Filed as 2026101614100000, 2026101614100001 and 2026101614100002.
+		- Not verified: a Settings change handing a value back in a real window, which has the unit test only. Clippy for Windows and macOS, since no platform code changed.
+		- The random test on seeds 1 to 4, 17, 20, 23, 30, 53, 118, 125, 128, 137, 221, 236, 249, 300, 319, 324 and 368, on Wayland and on X11 through Xwayland. All but 1 to 4 use `--font-size`.
+		- `--font-name "Ubuntu Mono"` on one headless sway output: a 218x19 grid set at 1880 px was saved as 175x19, opened 175x19 at 1865 px without the option, and 175x19 again with it, since that fits.
+	- Swept: every place a kept grid is used or saved. The save (`grid_to_open_at`), the launch in app.rs and the take (`take_monitor_size`) all go through it now. A grid from Settings is the user's own columns and rows, not a kept size, so it's left as it is. The rescale keeps the grid the window shows, at its own font.
+		- 20261016: every write of the remembered size, zoom and maximized state. They all go through `flush_window_size`, the one caller of `remember_window` and the one place the maximized state is written: the save after a resize or zoom, the one before a move is taken, and the one at quit.
+	- Needs external testing: a look on Windows and macOS, where the frame comes into the screen's room.
+	- Acceptance signoff: JC, 20261017.
+	- Closed: 20261017-081034
+
+- A size saved while the font size was given on the command line is used at the normal font next time
+	- ID: 2026101412292756
+	- Type: Bug
+	- Status: Done
+		- 20261016: The save rule here is replaced by the answer on 2026101422190936. Worked together with that item.
+		- 20261016: Done through that item. It changes what a window writes to the state file, so it waits on a look.
+	- Needs local test suite run?: The full pipeline, with the random test back in it. Then a release build in the dogfood pool, since this changes what a window writes to the state file.
+	- Severity: Low
+	- Opened: 20261014-122927
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Target OS: All
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- Open SilkTerm with `--font-size 11` and resize it.
+		- Close it, and open it without the option.
+	- Incorrect behavior: It opens at the same columns and rows at the normal font, much larger, and can be wider than the monitor.
+	- Reproduced: 20261014, by the random test.
+	- Progress log:
+		- 20261014: Question: should a size set while the font size came from the command line not be saved, or be saved in pixels, or kept as it is? The requirements cover a size from the command line, not a font size.
+			- For this specific scenario only: Saved in columns*rows the window is expected to fit in the screen at the default font size, otherwise in pixels.
+		- 20261014: Done as answered. How it maps onto the store:
+			- The store keeps columns, rows and a font zoom, and no pixels. So "in pixels" is saved as the columns and rows the default font shows in the window's size now. It's what a zoom does already, so the window reopens at the same size.
+			- "The default font size" is the one a launch without the option opens at on that monitor: the font size from the config, plus the zoom kept there.
+			- "The screen" is the monitor the size is kept for, less the window's frame.
+			- A zoom after a launch with `--font-size` keeps the option's size under the zoom, so the same rule applies.
+		- 20261016: Replaced by the rule on 2026101422190936. A size set while the font size came from the command line isn't saved, so the next launch opens at the size kept before it. With `--remember-size` as well, it's saved by the rule answered above.
+		- 20261017: Signed off with 2026101422190936. The flag is now `--persist`.
+	- Actual cause: The size is saved as the columns and rows of the font the window has. A launch without the option opens at them in the default font.
+	- Actual fix: As answered above. A size set at another font than the one the next launch has is checked against the screen at that font. It's kept in columns and rows if it fits, and else as the default font's columns and rows for the window's size now.
+		- 20261016: Such a window saves nothing now, unless `--persist` is given too (2026101422190936).
+	- Test case: `a_size_set_at_a_font_from_the_command_line_fits_at_the_normal_font` (EsjoVZu), seen failing with the old rule put back, and `a_cell_measured_for_a_font_size_is_the_cell_that_font_gets` (EsjoVeF). The random test (EshVccz) now checks a window opened at the default font fits the monitor its size was set on. Seed 2710 failed it on the old build, 1481 px wide on a 1440 px output, and passes on the fix.
+		- 20261016: `a_size_or_font_from_the_command_line_saves_nothing_until_changed_in_settings` (EsthbIT), and the random test's check that such a window saves nothing, both on 2026101422190936.
+	- Verified:
+		- The Linux unit tests, and clippy with warnings as errors for Linux, Windows and macOS.
+		- The random test on seeds 23, 889, 1321, 2114, 2710 and 3999, on Wayland and on X11 through Xwayland.
+		- 20261016: The runs listed on 2026101422190936.
+	- Swept: the other ways a grid kept for one font is used at another. A launch or a take with `--font-size` uses a grid kept at the default font, and `--font-name` saves the grid in its own font. Both are outside this answer; filed as 2026101422190936.
+	- Branch: monsave, clipersist
+	- Commit: cd3f8d4, 9e390ac
+	- Acceptance signoff: JC, 20261017.
+	- Closed: 20261017-081034
 
 - Wayland: a resize right after fullscreen and back saves nothing when the way back comes with a scale event
 	- ID: 2026101516013920
