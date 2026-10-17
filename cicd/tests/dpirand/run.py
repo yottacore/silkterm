@@ -11,7 +11,7 @@
 ##			  monitor that isn't there.
 ##			- Native Wayland, or X11 through Xwayland.
 ##			- A launch on one output, maybe with a size or a font size on the
-##			  command line, and maybe --remember-size with it, then moves,
+##			  command line, and maybe --persist with it, then moves,
 ##			  drags, drops with a sliver left on another output, resizes, font
 ##			  zooms, scale changes and relaunches.
 ##		After each step the model says which monitor the window should count
@@ -19,7 +19,7 @@
 ##		shell inside says what it got. Nothing may change while a drag is held.
 ##		At the end the sizes on disk have to be exactly the ones the user set,
 ##		less any set in a window with a size or a font size from the command
-##		line and no --remember-size, which saves nothing.
+##		line and no --persist, which saves nothing.
 ##		Where a platform can't tell a window what the model knows, the model
 ##		names that limit and allows for it, and the run counts each one.
 ##	- Syntax: run.py [--bin PATH] [--seed N | --from N] [--secs S] [--wayland|--x11]
@@ -200,7 +200,7 @@ class Plan:
 
 def pins(cli: Grid | None, font: int | None, persist: bool) -> str:
 	return ((f", --columns {cli[0]} --rows {cli[1]}" if cli else "") + (f", --font-size {font}" if font else "")
-		+ (", --remember-size" if persist else ""))
+		+ (", --persist" if persist else ""))
 
 
 def overlap(a: Rect, b: Rect) -> int:
@@ -579,7 +579,7 @@ class Rig:
 		if font:
 			args += ["--font-size", str(font)]
 		if persist:
-			args += ["--remember-size"]
+			args += ["--persist"]
 		env = dict(self.wl if self.plan.arm == "wayland" else self.base, LIBGL_ALWAYS_SOFTWARE="1", VK_ICD_FILENAMES=str(LVP),
 			VK_LAYER_MESSAGE_ID_FILTER="VUID-vkCmdCopyBufferToImage-pRegions-00173", LP_NUM_THREADS="2",
 			HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / ".config"), XDG_DATA_HOME=str(self.home / ".local/share"),
@@ -750,7 +750,7 @@ class Case:
 		self.atfont: str | None = None
 		self.cells: dict[tuple[float, int | None, int], tuple[int, int]] = {}
 		## the window saves the sizes the user sets: not with a size or a font
-		## size from the command line, unless with --remember-size as well
+		## size from the command line, unless with --persist as well
 		self.saves = True
 		## the line of the shell's sizes, and the scale, a step began at
 		self.was: tuple[int, float] = (-1, 1.0)
@@ -1071,7 +1071,7 @@ class Case:
 		self.check_font(what)
 
 	## A window opened with a size or a font size from the command line saves
-	## nothing the user sets, unless --remember-size came with it
+	## nothing the user sets, unless --persist came with it
 	## (2026101422190936). It still looks for its output as a save would.
 	def user_unsaved(self, what: str, allowed: dict[str | None, str], zoom: int | None) -> None:
 		model = self.model
@@ -1712,7 +1712,7 @@ if __name__ == "__main__":
 ##		- 20261015 JC: A kept size used at a font size from the command line keeps
 ##		  its columns and rows where they fit there, else the kept window's size.
 ##		- 20261016 JC: A window with a size or a font size from the command line
-##		  saves nothing unless --remember-size comes with it, and a grid moved by
+##		  saves nothing unless --persist comes with it, and a grid moved by
 ##		  a scale change is judged from the cells the shell is told.
 ##		- 20261016 JC: A window a scale change leaves out of reach is moved back by
 ##		  key, a grid may take one late step to where it ends, and a take's drift

@@ -626,7 +626,7 @@ pub(super) fn launch_maximized(settings: &config::Settings, cli: &crate::cli::Wi
 pub(super) struct CliSize {
 	pub(super) columns: bool,  // --columns or --pixel-width
 	pub(super) rows: bool,     // --rows or --pixel-height
-	pub(super) remember: bool, // --remember-size saves as usual anyway
+	pub(super) remember: bool, // --persist saves as usual anyway
 }
 
 impl CliSize {
@@ -634,7 +634,7 @@ impl CliSize {
 		Self {
 			columns: cli.columns.is_some() || cli.pixel_width.is_some(),
 			rows: cli.rows.is_some() || cli.pixel_height.is_some(),
-			remember: cli.remember_size.unwrap_or(false),
+			remember: cli.persist.unwrap_or(false),
 		}
 	}
 }
@@ -1491,7 +1491,7 @@ mod tests {
 	// A window opened with a size or a font from the command line saved the
 	// size the user set, and a launch without them opened at it in another
 	// font. Such a window saves nothing until each of those is changed in
-	// Settings, unless --remember-size asks for the usual saves.
+	// Settings, unless --persist asks for the usual saves.
 	// Test ID: EsthbIT
 	#[test]
 	fn a_size_or_font_from_the_command_line_saves_nothing_until_changed_in_settings() {
@@ -1518,8 +1518,8 @@ mod tests {
 			"--font-name Mono",
 		] {
 			assert!(!saves(line), "{line}");
-			assert!(saves(&format!("{line} --remember-size")), "{line}");
-			assert!(!saves(&format!("{line} --remember-size=no")), "{line}");
+			assert!(saves(&format!("{line} --persist")), "{line}");
+			assert!(!saves(&format!("{line} --persist=no")), "{line}");
 		}
 		assert!(saves(""));
 		assert!(saves("--fullscreen --background-color #102030 --title T"));

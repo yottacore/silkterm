@@ -226,7 +226,7 @@ To fetch them, see [Wallpaper pack](install.md#wallpaper-pack) in install.md.
 
 ## Terminal showdown - speed and size
 
-Smooth scrolling isn't useful if the terminal falls behind the moment something dumps a lot of text, so throughput is measured against other terminals, along with file size and memory. SilkTerm is near the top for speed, and uses more memory than most. [comparison.md](comparison.md) has the table, how each column is measured, and how to run it yourself.
+Smooth scrolling isn't useful if the terminal falls behind the moment something dumps a lot of text, so throughput is measured against other terminals, along with file size and memory. SilkTerm is near the top for speed. [comparison.md](comparison.md) has the table, how each column is measured, and how to run it yourself.
 
 ## Getting and using
 

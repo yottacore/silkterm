@@ -57,7 +57,7 @@ pub struct WindowOpts {
 	pub hide_menu: Option<bool>,
 	pub fullscreen: Option<bool>,
 	/// save the size as usual, though the size or the font came from here
-	pub remember_size: Option<bool>,
+	pub persist: Option<bool>,
 	pub title: Option<String>,
 	pub style: Style,
 }
@@ -435,8 +435,8 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 				| "hide-windowframe"
 				| "hide-menu"
 				| "fullscreen"
-				| "remember-size"
-				| "config" | "reset-config"
+				| "persist" | "config"
+				| "reset-config"
 		);
 		if window_only {
 			if cur_tab.is_some() {
@@ -484,7 +484,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> anyhow::Result<Cli> {
 				"hide-windowframe" => cli.win.hide_frame = Some(tokens.bool_value(name, inline)?),
 				"hide-menu" => cli.win.hide_menu = Some(tokens.bool_value(name, inline)?),
 				"fullscreen" => cli.win.fullscreen = Some(tokens.bool_value(name, inline)?),
-				"remember-size" => cli.win.remember_size = Some(tokens.bool_value(name, inline)?),
+				"persist" => cli.win.persist = Some(tokens.bool_value(name, inline)?),
 				"config" => cli.config = Some(PathBuf::from(tokens.value(name, inline)?)),
 				"reset-config" => cli.reset_config = true,
 				_ => unreachable!("name in the matches! set above"),
@@ -833,7 +833,7 @@ Window options (must precede any tab/pane):
   --hide-windowframe[=BOOL]   start without WM decorations
   --hide-menu[=BOOL]          start with the menu bar hidden (ignored on macOS)
   --fullscreen[=BOOL]         start fullscreen
-  --remember-size[=BOOL]      remember size changes despite a size or font option
+  --persist[=BOOL]            remember size changes despite a size or font option
   --config PATH               use an alternate config file
   --reset-config              rename the config aside and start from defaults
 
@@ -883,10 +883,10 @@ mod tests {
 		assert_eq!(c.win.fullscreen, Some(true));
 		assert_eq!(c.win.hide_menu, Some(false));
 		assert!(!c.hierarchical());
-		assert_eq!(c.win.remember_size, None);
-		assert_eq!(p("--remember-size").win.remember_size, Some(true));
-		assert_eq!(p("--remember-size=no").win.remember_size, Some(false));
-		assert!(parse(["--new-tab".into(), "--remember-size".into()]).is_err());
+		assert_eq!(c.win.persist, None);
+		assert_eq!(p("--persist").win.persist, Some(true));
+		assert_eq!(p("--persist=no").win.persist, Some(false));
+		assert!(parse(["--new-tab".into(), "--persist".into()]).is_err());
 	}
 
 	// Test ID: EoSKhlo
