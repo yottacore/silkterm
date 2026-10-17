@@ -710,6 +710,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Actual fix:
 		- A scale change counts as a take's own only while the window is still on the output it took the size of. Off it, it's a move, and the look waits for the person as after any move.
 	- Branch: seed400
+	- Commit: d07e125
 	- Test case: `cicd/tests/dpirand/run.py --wayland --seed 400049` (EshVccz), red on dev 2 runs of 2, green with the fix 3 of 3. `a_scale_off_the_output_taken_for_is_a_move` (Esztfvw) for the rule, seen to fail with the check taken out.
 	- Verified: seeds 96313774, 184066139, 72046, 20002 and 40003 (a take's own scale), 1003, 5028, 110000 and 400012 pass. 13 fresh cases, 10 passed, and the 3 that failed fail the same on dev. monwl passed. Unit suite, clippy for Linux, Windows and macOS.
 	- Swept: `rescale_moves` is the only place that reads the take's time, and both the scale change and the resize it asks for go through it. Off Wayland the outputs can't be read, so nothing changes there.
