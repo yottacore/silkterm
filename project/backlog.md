@@ -444,6 +444,43 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seeds 96313774, 184066139, 72046, 20002 and 40003 (a take's own scale), 1003, 5028, 110000 and 400012 pass. 13 fresh cases, 10 passed, and the 3 that failed fail the same on dev. monwl passed. Unit suite, clippy for Linux, Windows and macOS.
 	- Swept: `rescale_moves` is the only place that reads the take's time, and both the scale change and the resize it asks for go through it. Off Wayland the outputs can't be read, so nothing changes there.
 
+- Wayland: several random test seeds fail on dev under load
+	- ID: 2026101714445006
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs local test suite run?: The full pipeline, with the random test in it.
+	- Severity: Low
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101614100002, 2026101617573401, 2026101417045856
+	- Target OS: Linux
+	- Test environment: b23, headless sway, load near 15, 3 to 4 random test cases side by side.
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed <n>` for 9032, 2036, 600200, 600201 and 700303, and seed 400055 on its X11 arm.
+	- Incorrect behavior: Each fails, on dev and on the fix for 2026101617573401 alike. 9032 failed 4 of 4. 2036 and 600200 end fullscreen and back one cell off.
+	- Expected behavior: Each passes.
+	- Reproduced: 20261017, while working 2026101617573401.
+	- Notes:
+		- Not checked at low load. 9032 is in 2026101614100002's test case and passed there on 20261016.
+		- With `DPIRAND_SECS=150` the pipeline's random test stage may go red often until these are sorted.
+	- Progress log:
+		- 20261017: Each seed run alone at load 11 to 15. 9032 passed alone and failed 3 of 3 with 3 cases side by side at load 18. The other 5 failed alone, the same way each time.
+	- Actual cause:
+		- The test's model or timing, for all 6. 2036 began failing with 2026101513385000's fix, which moved its one-cell drift from the take to the way back from fullscreen. That drift is filed as 2026101716374842.
+		- 9032 and 700303: a window of about 4000x2000 at 200%, drawn in software by the debug build, takes about 3 s a frame at load 13. The look comes after a frame, 6 to 8 s after the scale change, and the test stopped waiting for it after 5 s.
+		- 2036 and 600200: sway puts a floating window back from fullscreen in the middle of the output it went fullscreen on. Both were mostly on another output first, so coming back was a move to another scale, and the grid moved a cell. The test expected nothing to change.
+		- 600201: `move container to output` kept the window's place relative to the output, which left its title bar over a gap. The drag grabbed the window's text instead, and the pointer over it brought a look.
+		- 400055 (X11): the first look after the monitors changed doesn't wait for the person, by design (herded windows). Output 3's scale had changed with no look since, so the drag's look came at once.
+	- Actual fix:
+		- In the random test only. A look a step needs is waited for up to 15 s. A window put back from fullscreen mostly on another output is judged as moved. A window moved by key is moved back in reach, as after a scale change. The first look after the monitors changed may come at once or wait.
+	- Branch: seeds6
+	- Commit: 7a29137
+	- Test case: `cicd/tests/dpirand/run.py` (EshVccz) on the 6 seeds. With the old test 2036, 600200, 600201, 700303 and 400055 failed alone and 9032 side by side. With the new one 2036, 600200, 600201, 400055 and 9032 pass, 9032 also 3 of 3 side by side at load 18 to 22.
+	- Verified: 9 picked cases that go through the new paths (fullscreen after a sliver drop, X11 and Wayland drags after a scale change) and 5 fresh cases passed. Unit suite (1364), fmt, clippy, Python lint and the docs check passed.
+	- Note: 700303 still fails. Past the look, the take of 197x65 at 200% is undone by a configure for the size before it, which arrived after a 3.6 s frame. That's 2026101417045856's race, seen in the protocol log.
+	- Note: Filed from this: 2026101716374842 (2036's grid stays a cell off, a window fault the test now allows) and 2026101716374843 (seed 810060, fails on the old test and 416c81c too).
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -647,43 +684,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
-
-- Wayland: several random test seeds fail on dev under load
-	- ID: 2026101714445006
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs local test suite run?: The full pipeline, with the random test in it.
-	- Severity: Low
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101614100002, 2026101617573401, 2026101417045856
-	- Target OS: Linux
-	- Test environment: b23, headless sway, load near 15, 3 to 4 random test cases side by side.
-	- Steps to reproduce:
-		- `cicd/tests/dpirand/run.py --wayland --seed <n>` for 9032, 2036, 600200, 600201 and 700303, and seed 400055 on its X11 arm.
-	- Incorrect behavior: Each fails, on dev and on the fix for 2026101617573401 alike. 9032 failed 4 of 4. 2036 and 600200 end fullscreen and back one cell off.
-	- Expected behavior: Each passes.
-	- Reproduced: 20261017, while working 2026101617573401.
-	- Notes:
-		- Not checked at low load. 9032 is in 2026101614100002's test case and passed there on 20261016.
-		- With `DPIRAND_SECS=150` the pipeline's random test stage may go red often until these are sorted.
-	- Progress log:
-		- 20261017: Each seed run alone at load 11 to 15. 9032 passed alone and failed 3 of 3 with 3 cases side by side at load 18. The other 5 failed alone, the same way each time.
-	- Actual cause:
-		- The test's model or timing, for all 6. 2036 began failing with 2026101513385000's fix, which moved its one-cell drift from the take to the way back from fullscreen. That drift is filed as 2026101716374842.
-		- 9032 and 700303: a window of about 4000x2000 at 200%, drawn in software by the debug build, takes about 3 s a frame at load 13. The look comes after a frame, 6 to 8 s after the scale change, and the test stopped waiting for it after 5 s.
-		- 2036 and 600200: sway puts a floating window back from fullscreen in the middle of the output it went fullscreen on. Both were mostly on another output first, so coming back was a move to another scale, and the grid moved a cell. The test expected nothing to change.
-		- 600201: `move container to output` kept the window's place relative to the output, which left its title bar over a gap. The drag grabbed the window's text instead, and the pointer over it brought a look.
-		- 400055 (X11): the first look after the monitors changed doesn't wait for the person, by design (herded windows). Output 3's scale had changed with no look since, so the drag's look came at once.
-	- Actual fix:
-		- In the random test only. A look a step needs is waited for up to 15 s. A window put back from fullscreen mostly on another output is judged as moved. A window moved by key is moved back in reach, as after a scale change. The first look after the monitors changed may come at once or wait.
-	- Branch: seeds6
-	- Commit: 7a29137
-	- Test case: `cicd/tests/dpirand/run.py` (EshVccz) on the 6 seeds. With the old test 2036, 600200, 600201, 700303 and 400055 failed alone and 9032 side by side. With the new one 2036, 600200, 600201, 400055 and 9032 pass, 9032 also 3 of 3 side by side at load 18 to 22.
-	- Verified: 9 picked cases that go through the new paths (fullscreen after a sliver drop, X11 and Wayland drags after a scale change) and 5 fresh cases passed. Unit suite (1364), fmt, clippy, Python lint and the docs check passed.
-	- Note: 700303 still fails. Past the look, the take of 197x65 at 200% is undone by a configure for the size before it, which arrived after a 3.6 s frame. That's 2026101417045856's race, seen in the protocol log.
-	- Note: Filed from this: 2026101716374842 (2036's grid stays a cell off, a window fault the test now allows) and 2026101716374843 (seed 810060, fails on the old test and 416c81c too).
 
 - Wayland: a scale change that a look then finds was no move to another monitor leaves the grid a cell off
 	- ID: 2026101716374842
