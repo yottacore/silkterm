@@ -564,6 +564,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- ID: 2026101714015789
 	- Type: Task
 	- Status: Queued
+	- Priority: Avg
 	- Opened: 20261017-140157
 	- Opened by: JC
 	- Requirements:
@@ -599,7 +600,66 @@ Going forward, new issues in the new template at the bottom of this file, will g
 				- Miri doesn't count memory reachable from a `static` as a leak, so a cache in a static that grows forever passes. The soak test catches that.
 				- heaptrack and dhat both see only the global allocator. A crate that maps memory itself, or a custom allocator, hides it.
 				- ASan and TSan can't share a build, and heaptrack can't share one with either. The soak test uses a plain build.
+	- Progress log:
+		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
+
+- Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
+	- ID: 2026101714445001
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Requirements:
+		- The parent's advisory scan, clippy and `// SAFETY:` rows.
+
+- Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
+	- ID: 2026101714445002
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Requirements:
+		- The parent's ASan and LSan rows, with the pinned nightly beside the stable toolchain, and any leak it finds fixed or filed.
+
+- Leak checks: the test suite under ThreadSanitizer on every full run
+	- ID: 2026101714445003
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Prereq IDs: 2026101714445002
+	- Requirements:
+		- The parent's TSan row.
+
+- Leak checks: the test suite under Miri on every full run
+	- ID: 2026101714445004
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Prereq IDs: 2026101714445002
+	- Requirements:
+		- The parent's Miri rows, including the ignore-with-reason rule and the move behind `--leakcheck` if a full run measures too slow.
+
+- Leak checks: `--leakcheck` with CodeQL, the headless soak test and the dhat heap-growth test
+	- ID: 2026101714445005
+	- Type: Task
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Requirements:
+		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
 
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
@@ -642,6 +702,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: 20261016, on dev with the test from before this branch (142x16) and on the fix alike.
 	- Notes:
 		- Not checked whether it's the window or the test's model.
+
+- Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
 	- Type: Enhancement
 	- Status: Queued
