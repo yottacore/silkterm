@@ -126,6 +126,9 @@ unwrap_used = "warn"
 expect_used = "warn"
 # Every unsafe block says what it relies on, in a `// SAFETY:` line above it.
 undocumented_unsafe_blocks = "warn"
+# A forgotten value never drops, so whatever it owns leaks. Where that's the
+# point, an allow at the site gives the reason.
+mem_forget = "warn"
 
 # Profiles only take effect in the workspace root manifest, so they live here,
 # not in source/Cargo.toml.

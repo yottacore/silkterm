@@ -296,6 +296,8 @@ mod native {
 		impl MenuTarget {
 			// Hand the pick to the event loop, which runs it the way a click in
 			// the in-window menu runs it.
+			// SAFETY: the signature is an action's, one optional sender and no
+			// return value, which is how AppKit sends `pick:`.
 			#[unsafe(method(pick:))]
 			fn pick(&self, sender: Option<&NSMenuItem>) {
 				let Some(sender) = sender else {
@@ -310,6 +312,7 @@ mod native {
 			}
 		}
 
+		// SAFETY: a subclass of NSObject conforms to the NSObject protocol already.
 		unsafe impl NSObjectProtocol for MenuTarget {}
 	);
 

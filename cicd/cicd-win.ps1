@@ -16,7 +16,8 @@
 	 0. remote sync    (fetch; fast-forward if safely behind; abort if diverged)
 	 1. format         (cargo fmt)
 	 2. debug build    (cargo build)
-	 3. tests + lints  (cargo test; clippy + cargo-deny are ADVISORY here)
+	 3. tests + lints  (cargo test; clippy + cargo-deny are ADVISORY here, but
+	                    the advisory scan gates)
 	 4. release builds  x86_64 msvc AND gnu (always both), + ARM64 when its
 	                    toolchain is present (auto-detected, else warn-skip)
 	 5. packages       (NSIS installer .exe per built arch, if makensis found)
@@ -650,7 +651,7 @@ function fLintAdvisory {
 	} else { fNote "clippy skipped (component not installed)" }
 
 	if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
-		& cargo deny check
+		& cargo deny check licenses bans sources
 		## The OK line also keeps the next section's spacing right: raw deny output
 		## bypasses the blank counter, so end the stage with our own line.
 		if ($LASTEXITCODE -ne 0) { fWarn "cargo-deny reported findings (advisory)" }
@@ -658,6 +659,16 @@ function fLintAdvisory {
 	} else { fNote "cargo-deny skipped (not installed)" }
 
 	fLintPowerShell
+}
+
+## Known advisories against the locked dependencies. Unlike the lints above this
+## one gates, as in cicd.bash: any report fails the run, a warning too.
+function fAdvisoryScan {
+	if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
+		& cargo deny check advisories -D warnings
+		if ($LASTEXITCODE -ne 0) { fDie "known advisories against the dependencies (above)" }
+		fEcho "OK: no known advisories"
+	} else { fWarn "advisory scan skipped (cargo-deny not installed, see cicd\tool-pins.txt)" }
 }
 
 ## PowerShell scripts, through the same script cicd.bash runs. Advisory like the
@@ -893,6 +904,7 @@ function fMain {
 	fExec -What "launcher wrapper" -File "pwsh" -CmdArgs @("-NoProfile", "-NonInteractive", "-File", (Join-Path $Root "cicd\tests\launcher\wrapper.ps1"))
 	fEcho "OK: launcher wrapper"
 	fLintAdvisory
+	fAdvisoryScan
 
 	## Stage 4: release builds (x86_64 msvc + gnu always; ARM64 when ready).
 	## (No profiler stage here: pprof's SIGPROF sampler is Unix-only - the

@@ -1,6 +1,7 @@
-# cargo-deny policy (cicd runs `cargo deny check` in the tests stage, advisory-
-# only for now). Project license is GPL-2.0-or-later; the graph contains
-# Apache-2.0-only crates (winit, glutin, alacritty_terminal, ...), which are
+# cargo-deny policy. cicd runs it in the tests stage: the advisories check
+# fails the run on any report, the other checks only warn for now. Project
+# license is GPL-2.0-or-later; the graph contains Apache-2.0-only crates
+# (winit, glutin, alacritty_terminal, ...), which are
 # GPLv2-incompatible but GPLv3-compatible - so distributed binaries effectively
 # convey under GPL-3.0 terms. That is fine; never tighten the crate license to
 # GPL-2.0-only. The dev-only `profiling` feature pulls inferno (CDDL-1.0,
@@ -35,10 +36,12 @@ allow = [
 multiple-versions = "warn"
 
 [advisories]
-yanked = "warn"
+# A report here fails the pipeline. An ignore is for a fix that has to wait, and
+# names the backlog item that tracks it.
+yanked = "deny"
 ignore = [
 	# ttf-parser is declared unmaintained; it reaches us only transitively
 	# (cosmic-text/fontdb and winit/sctk-adwaita). Nothing actionable until
 	# upstream migrates to skrifa - re-check on glyphon/winit bumps.
-	{ id = "RUSTSEC-2026-0192", reason = "transitive, no safe upgrade; upstream's migration" },
+	{ id = "RUSTSEC-2026-0192", reason = "transitive, no safe upgrade; upstream's migration; backlog 2026101715240000" },
 ]
