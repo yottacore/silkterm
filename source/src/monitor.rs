@@ -173,6 +173,24 @@ pub fn outputs_under(window: &Window) -> Option<Vec<(i64, i64, i64, i64)>> {
 	}
 }
 
+/// Where in the layout the Wayland output `MonitorId::of_window` names sits.
+/// None off Wayland, or where it can't name one.
+pub fn output_drawn_for(window: &Window) -> Option<(i64, i64, i64, i64)> {
+	#[cfg(target_os = "linux")]
+	{
+		let on = wayland::outputs_on(window)?;
+		let scale = window.scale_factor();
+		let laid: Vec<Laid> = on.iter().map(|o| o.laid).collect();
+		let (x, y, w, h) = laid[laid_drawn_for(&laid, scale, logical_size(window, scale))?].bounds;
+		Some((x as i64, y as i64, w as i64, h as i64))
+	}
+	#[cfg(not(target_os = "linux"))]
+	{
+		let _ = window;
+		None
+	}
+}
+
 fn logical_size(window: &Window, scale: f64) -> (f64, f64) {
 	let px = window.inner_size();
 	(f64::from(px.width) / scale, f64::from(px.height) / scale)

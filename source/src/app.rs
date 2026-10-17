@@ -3827,7 +3827,7 @@ impl ApplicationHandler<UserEvent> for App {
 			noted: window_size::Noted::default(),
 			take_owed: false,
 			set_on: None,
-			took_at: None,
+			took: None,
 		};
 		let menu_bar_h = if menu_bar {
 			text.ui_line_h + text.dip(MENU_BAR_VPAD)
