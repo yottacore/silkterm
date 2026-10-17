@@ -800,6 +800,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: those seeds plus 20002, 9032, 40003 and 400012 on the final build. The random test runs listed on 2026101516013920. monwl, unit suite and clippy for Linux.
 	- Swept: the scale change is the one place a window is left to the system. Its move rule and its grid rule now share one check (`rescale_moves`).
 	- Branch: wldrift
+	- Commit: 4fa626f
 
 - Wayland: a resize right after fullscreen and back saves nothing when the way back comes with a scale event
 	- ID: 2026101516013920
@@ -824,6 +825,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: seed 9163, 3 runs with the fix. Seeds 400028, 400145, 400146, 400249, 400272, 400328 and 400398, which resize right after fullscreen and back, pass. The random test on the branch: 4 runs of about 150 s with fresh seeds (1 Wayland, 1 X11, 2 with both arms) and 26 picked seeds with a sliver drop or fullscreen. The final build ran 11 seeds named here and one of the fresh runs, all passing. The one fail left, 400049, fails on dev too, filed as 2026101617573401. Unit suite and clippy for Linux.
 	- Swept: the grace is read in one place for a resize, `save_window_size`. A move's grace is separate and unchanged.
 	- Branch: wldrift
+	- Commit: 4fa626f
 	- Acceptance signoff: Self-closed: reproduced, red before and green after, and the way back still saves nothing.
 	- Closed: 20261016-175734
 
@@ -848,6 +850,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `cicd/tests/dpirand/run.py --wayland --seed 400012` (EshVccz). It failed with the test from before and passes now, on the same build.
 	- Verified: seed 400012, 3 runs.
 	- Branch: wldrift
+	- Commit: 4fa626f
 	- Acceptance signoff: Self-closed: a fault in the test, fixed, red before and green after on its seed.
 	- Closed: 20261016-175734
 
