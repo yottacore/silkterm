@@ -353,6 +353,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: a scale change is the only event that goes through this. Moves on X11, Windows and macOS keep the time grace as before.
 	- Progress log:
 		- 20261017: JC: Won't be able to test this right away.
+		- 20261017: Seed 9032 failed 4 of 4 on dev at a load near 15, 3 to 4 cases side by side. Filed with other seeds as 2026101714445006. Rerun it when the queued tests run.
 	- Branch: randfix
 	- Commit: ec9096e
 
@@ -625,6 +626,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Parent ID: 2026101714015789
 	- Requirements:
 		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
+
+- Wayland: several random test seeds fail on dev under load
+	- ID: 2026101714445006
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101614100002, 2026101617573401, 2026101417045856
+	- Target OS: Linux
+	- Test environment: b23, headless sway, load near 15, 3 to 4 random test cases side by side.
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed <n>` for 9032, 2036, 600200, 600201 and 700303, and seed 400055 on its X11 arm.
+	- Incorrect behavior: Each fails, on dev and on the fix for 2026101617573401 alike. 9032 failed 4 of 4. 2036 and 600200 end fullscreen and back one cell off.
+	- Expected behavior: Each passes.
+	- Reproduced: 20261017, while working 2026101617573401.
+	- Notes:
+		- Not checked at low load. 9032 is in 2026101614100002's test case and passed there on 20261016.
+		- With `DPIRAND_SECS=150` the pipeline's random test stage may go red often until these are sorted.
 
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
