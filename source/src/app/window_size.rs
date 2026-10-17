@@ -242,7 +242,7 @@ impl State {
 	pub(super) fn note_rescaled(&mut self) {
 		let now = Instant::now();
 		let moved = self.rescale_moves(now);
-		self.watch.took_at = None;
+		self.watch.took = None;
 		if moved {
 			self.start_settle(now);
 		}
@@ -250,7 +250,11 @@ impl State {
 
 	// Whether a scale change now counts as a move (`note_rescaled`).
 	fn rescale_moves(&self, now: Instant) -> bool {
-		let own = takes_scale(self.watch.took_at, self.watch.heard_at, now);
+		let took = self.watch.took;
+		let own = takes_scale(took.map(|t| t.at), self.watch.heard_at, now)
+			&& still_on(took.and_then(|t| t.on), || {
+				crate::monitor::outputs_under(&self.window)
+			});
 		move_counts(
 			own || now < self.watch.ignore_moves_until,
 			&self.watch.layout,
@@ -433,7 +437,10 @@ impl State {
 		let now = Instant::now();
 		self.watch.ignore_resize_until = now + OWN_RESIZE_GRACE;
 		self.watch.ignore_moves_until = now + OWN_RESIZE_GRACE;
-		self.watch.took_at = Some(now);
+		self.watch.took = Some(Took {
+			at: now,
+			on: crate::monitor::output_drawn_for(&self.window),
+		});
 		self.watch.layout = crate::monitor::layout(&self.window);
 		self.request_grid(cols, rows);
 	}
@@ -707,7 +714,13 @@ pub(super) struct MonitorWatch {
 	// The outputs a Wayland window was on as the user set the size waiting
 	// to be saved (`look_unseen`).
 	pub(super) set_on: Option<Vec<(i64, i64, i64, i64)>>,
-	pub(super) took_at: Option<Instant>, // a take whose scale change hasn't come (`note_rescaled`)
+	pub(super) took: Option<Took>, // a take whose scale change hasn't come (`note_rescaled`)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Took {
+	at: Instant,
+	on: Option<(i64, i64, i64, i64)>, // the Wayland output it took the size of
 }
 
 /// What the size waiting to be saved came from, since the last save.
@@ -951,6 +964,22 @@ fn takes_scale(took_at: Option<Instant>, heard_at: Option<Instant>, now: Instant
 	})
 }
 
+// Is a Wayland window still on the output a take was for? The take's resize
+// can leave most of it on an output at another scale, which is the scale it
+// brings. Off that output altogether, it was moved, or the size it took is
+// for somewhere it isn't. A key move onto an output at another scale, 4 s
+// after a take, was taken for the take's scale and brought no look
+// (2026101617573401). Where the outputs can't be read, it is.
+fn still_on(
+	took_on: Option<(i64, i64, i64, i64)>,
+	now_on: impl FnOnce() -> Option<Vec<(i64, i64, i64, i64)>>,
+) -> bool {
+	let Some(took_on) = took_on else {
+		return true;
+	};
+	now_on().is_none_or(|on| on.contains(&took_on))
+}
+
 // Is a resize one to note? Not in the grace after a scale change or the
 // window's own take, which is the system's. But a window that was fullscreen
 // or maximized notes the way back in it too: that saves nothing, and sway
@@ -1001,7 +1030,7 @@ fn size_taken(
 mod tests {
 	use super::{
 		Settle, cells_in, coming_px, fit_px, launch_maximized, look_again, move_counts, only_left,
-		remember_resize, resize_is_current, settle, size_taken, takes_scale, window_px,
+		remember_resize, resize_is_current, settle, size_taken, still_on, takes_scale, window_px,
 	};
 	use std::time::{Duration, Instant};
 	// `window.rows: 1000` in the config, or --rows 1000, asked for a window taller
@@ -1100,6 +1129,22 @@ mod tests {
 			!takes_scale(Some(took), None, took + Duration::from_secs(30)),
 			"long after"
 		);
+	}
+
+	// A key move onto an output at another scale, 4 s after a take, counted
+	// as the take's own scale and brought no look. The take's scale leaves
+	// the window on the output it took for; a move can take it off.
+	// Test ID: Esztfvw
+	#[test]
+	fn a_scale_off_the_output_taken_for_is_a_move() {
+		let left = (0, 0, 1280, 800);
+		let right = (2048, 100, 1920, 1080);
+		assert!(still_on(Some(right), || Some(vec![left, right])));
+		assert!(still_on(Some(right), || Some(vec![right])));
+		assert!(!still_on(Some(right), || Some(vec![left])), "moved off it");
+		assert!(!still_on(Some(right), || Some(vec![])), "on none");
+		assert!(still_on(Some(right), || None), "outputs can't be read");
+		assert!(still_on(None, || Some(vec![left])), "not known at the take");
 	}
 
 	// Panes laid out for the old size in the new cells told the shell a grid

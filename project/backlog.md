@@ -687,7 +687,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wayland: after the random test moves a window back in reach, a key doesn't bring a look
 	- ID: 2026101617573401
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs local test suite run?: The full pipeline, with the random test in it.
 	- Severity: Low
 	- Opened: 20261016-175734
 	- Opened by: CC
@@ -702,6 +703,16 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Reproduced: 20261016, on dev with the test from before this branch (142x16) and on the fix alike.
 	- Notes:
 		- Not checked whether it's the window or the test's model.
+		- The same rule covers a drag right after a take that takes the window off that output.
+		- Seen while checking this, and failing the same way on dev: seeds 9032, 2036, 600200, 600201 and 700303 on Wayland, and 400055 on X11. Not looked into.
+	- Actual cause:
+		- The window, not the test. Its take on output 2 brought no scale change, since it was at output 2's scale already. The move back in reach came 4 s later, onto a 200% output, and the window counted that scale change as the take's own (2026101614100002). So it was no move, and nothing waited for a key.
+	- Actual fix:
+		- A scale change counts as a take's own only while the window is still on the output it took the size of. Off it, it's a move, and the look waits for the person as after any move.
+	- Branch: seed400
+	- Test case: `cicd/tests/dpirand/run.py --wayland --seed 400049` (EshVccz), red on dev 2 runs of 2, green with the fix 3 of 3. `a_scale_off_the_output_taken_for_is_a_move` (Esztfvw) for the rule, seen to fail with the check taken out.
+	- Verified: seeds 96313774, 184066139, 72046, 20002 and 40003 (a take's own scale), 1003, 5028, 110000 and 400012 pass. 13 fresh cases, 10 passed, and the 3 that failed fail the same on dev. monwl passed. Unit suite, clippy for Linux, Windows and macOS.
+	- Swept: `rescale_moves` is the only place that reads the take's time, and both the scale change and the resize it asks for go through it. Off Wayland the outputs can't be read, so nothing changes there.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
