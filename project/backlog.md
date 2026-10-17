@@ -224,39 +224,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: helddrag
 	- Commit: e2e44df
 
-- The `clear` scroll bug still happens inside tmux
-	- ID: 2026101611321631
-	- Type: Bug
-	- Status: Done
-	- Severity: Avg
-	- Opened: 20261016-113216
-	- Opened by: JC
-	- Target OS: All
-	- Test environment: b23, tmux 3.6b
-	- Related IDs: 2026101310563297
-	- Incorrect behavior: `clear` inside tmux scrolls.
-	- Expected behavior: It clears instantly, as it does outside tmux, and smooth-scrolling inside tmux stays.
-	- Notes:
-		- Pre-next-cut.
-		- I'd rather live with it than lose smooth-scrolling inside tmux, but it seems like it's fixable.
-	- Reproduced: 20261016 on b23, with real tmux in a window. `clear`, Ctrl+L, `tput clear` and a reset each slid the old screen up and away, a whole pane's height.
-	- Actual cause:
-		- tmux never passes a clear on. It keeps the terminal on the alt screen and draws the pane itself. With its status line on the bottom row it can't erase to the bottom, so it scrolls the pane's rows away instead. SilkTerm took that as the pane scrolling and slid it.
-		- Output inside tmux comes the same way. A burst scrolls the whole pane away and then draws the new rows, so the scroll alone can't tell the two apart.
-	- Actual fix [Bug]: A pane scrolled away whole that's left mostly blank is a clear. It shows at once, and the Enter that ran it stops sliding. A burst fills the pane, so it still slides. The rule only applies while the slide still running is a line or two, since a burst's draw can be cut by a frame early on during a flood.
-	- Not covered:
-		- A clear that comes while a big slide is still running, such as `seq 100; clear` on one line, still slides.
-		- With ble.sh, when the clear and ble.sh's prompt redraw land in one frame, the Enter's one-row slide runs out over the cleared screen. It did that before too.
-	- Verified:
-		- 20261016 on b23, real tmux running plain bash in a window, driven from outside. Before: slides of 47, 46, 47 and 48 rows for `clear`, Ctrl+L, `tput clear` and a reset. After: none. Output of 300 lines slid on both builds, and output a line at a time slid one row per line on both.
-		- The new replay tests failed on the build from before and pass now. The flood check failed against a first version that went by "no slide at all" rather than "a line or two". The new scroll scene failed on the build from before (43 frames slid) and passes now. All 14 X11 scroll scenes pass.
-		- The unit suite passes but for `every_script_has_the_license_header_with_history_at_the_bottom`, which fails on dev too: `utility/fake-flatpak-update.bash` has no History block. Clippy, rustfmt and the docs checks are clean.
-	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness.
-	- Swept: the slide decision has 2 copies, `Pane::build` and its mirror in `pane/replay.rs`, and both have the rule. The output ease on the normal screen is a separate path and already snaps on a clear.
-	- Branch: tmuxclear
-	- Commit: 1e01433
-	- Test case: `a_clear_inside_tmux_shows_at_once` (EstO7ww) and `output_inside_tmux_still_slides` (EstO8Ff) in `pane/replay.rs`, on bytes tmux 3.6b sent. Scroll scene `tmuxclear` (`cicd/tests/scroll/run.bash`). Each was red before the fix and green after.
-
 - Remember window and font size for each unique `[monitor size+]<OS-specific DPI/zoom setting>+<resolution>`.
 	- ID: 2026100114435600
 	- Type: Feature
@@ -320,39 +287,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Branch: permon, wlmon (the Wayland test)
 	- Commit: 684d3a0, 754c9cb, 8624cc2, 953c5a3
 	- Closed:
-
-- For a moment after a scale change, programs in the window are told a much smaller or larger grid
-	- ID: 2026101412311921
-	- Type: Bug
-	- Status: Done
-	- Needs external testing: On Windows and on macOS, a move between 2 monitors at different scales with a program in the window that logs each resize. It's told one new grid, or with `--columns` and `--rows` the same grid, never one about half or twice the size first.
-	- Severity: Low
-	- Opened: 20261014-123119
-	- Opened by: CC
-	- Related IDs: 2026100114435600, 2026101412025603
-	- Target OS: All
-	- Test environment: b23, headless sway, seen on Wayland
-	- Steps to reproduce:
-		- Move a window from a 100% monitor to a 200% one, with something running that redraws on a resize.
-	- Incorrect behavior: The program is told a grid about half as wide and tall for a moment, then the right one. From 125% to 150% it was 71 columns for 87.
-	- Expected behavior: It's told only the new grid.
-	- Reproduced: 20261014, by the random test, in 2 drags from one run of cases.
-	- Possible cause: On a scale change the text is laid out again with the new cells but the window's old size in pixels, until the resize that follows arrives.
-	- Actual cause: As above. Confirmed on b23 under headless sway with a program that logs each resize: 80x24 went to 51x14 for 5 ms on the way to 150%, and 161x51 on the way back to 100%. The engine's grid was resized each time too, so long lines were rewrapped twice.
-	- Notes:
-		- The random test allows it by this ID until it's fixed.
-	- Decisions:
-		- 20261014: Fixed together with 2026101412003308, and its decision applies. See there for what changed per platform.
-	- Actual fix: The panes are laid out for the size the window is about to be. That's the size asked for to keep the grid, or else the system's own: on Wayland and macOS the window already reports it during the change, and on Windows and X11 it's the old size scaled by the change.
-		- The same moment came when a monitor's kept font zoom was taken: the new cells were laid out in the old size, then the window was resized. 89x16 showed on the way from 110x20 to 60x35. It's laid out once, at the new size, now.
-		- On X11, winit reports the old size once more right after a scale change, so the moment can still come there. Read in winit's code, not seen. X11 changes scale only between monitors of different DPI, with no Xft.dpi set.
-	- Test case: `cicd/tests/monwl/run.bash` (Esgxleh). Its shell now writes every size it's told as well as a sample each tenth of a second. A new check fails on any grid well off the ones the steps took, and the new last part checks a size from the command line. Both seen failing on the old build. The first also failed with the font zoom part of the fix taken back out. `a_scale_change_lays_out_for_the_size_on_its_way` (Esisgw4) for the size worked out. The random test's allowance for this item is gone.
-	- Verified:
-		- On Wayland, with and without a kept size taking over, and with a kept font zoom: one new grid per change, never one well off.
-		- Not verified: Windows, macOS and X11 at a real scale change, which are compiled only.
-	- Swept: everything that rebuilds the text and then resizes. The scale change and a kept font zoom were the 2 that did. A font zoom from the keyboard keeps the window's size by design, so its new grid is the real one. The Settings dialog's own scale change keeps its size in DIP.
-	- Branch: scalegrid
-	- Commit: 22f315d
 
 - Wayland: a size taken that leaves most of the window on an output at another scale shows a grid a few cells off
 	- ID: 2026101513385000
@@ -452,6 +386,37 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: JC: Won't be able to test this right away.
 	- Branch: randfix
 	- Commit: ec9096e
+
+- Wayland: after the random test moves a window back in reach, a key doesn't bring a look
+	- ID: 2026101617573401
+	- Type: Bug
+	- Status: Waiting for testing
+	- Needs local test suite run?: The full pipeline, with the random test in it.
+	- Severity: Low
+	- Opened: 20261016-175734
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101614100000
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed 400049`.
+	- Incorrect behavior: Output 1 goes to scale 2 and the window is moved back in reach by key, to x -99 on output 1. The font zoom step's key brings no look, and the window keeps output 2's 147x17.
+	- Expected behavior: It looks and takes output 1's size at 200%, the last size anywhere, 95x22.
+	- Reproduced: 20261016, on dev with the test from before this branch (142x16) and on the fix alike.
+	- Notes:
+		- Not checked whether it's the window or the test's model.
+		- The same rule covers a drag right after a take that takes the window off that output.
+		- Seen while checking this, and failing the same way on dev: seeds 9032, 2036, 600200, 600201 and 700303 on Wayland, and 400055 on X11. Not looked into.
+	- Actual cause:
+		- The window, not the test. Its take on output 2 brought no scale change, since it was at output 2's scale already. The move back in reach came 4 s later, onto a 200% output, and the window counted that scale change as the take's own (2026101614100002). So it was no move, and nothing waited for a key.
+	- Actual fix:
+		- A scale change counts as a take's own only while the window is still on the output it took the size of. Off it, it's a move, and the look waits for the person as after any move.
+	- Branch: seed400
+	- Commit: d07e125
+	- Test case: `cicd/tests/dpirand/run.py --wayland --seed 400049` (EshVccz), red on dev 2 runs of 2, green with the fix 3 of 3. `a_scale_off_the_output_taken_for_is_a_move` (Esztfvw) for the rule, seen to fail with the check taken out.
+	- Verified: seeds 96313774, 184066139, 72046, 20002 and 40003 (a take's own scale), 1003, 5028, 110000 and 400012 pass. 13 fresh cases, 10 passed, and the 3 that failed fail the same on dev. monwl passed. Unit suite, clippy for Linux, Windows and macOS.
+	- Swept: `rescale_moves` is the only place that reads the take's time, and both the scale change and the resize it asks for go through it. Off Wayland the outputs can't be read, so nothing changes there.
 
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
@@ -683,37 +648,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261014: Its only known path, a size taken while a drag was held, is gone with the fix for 2026101411555009. Seed 1000 passes now. A font zoom and then a key move to another output right after, 0.3 s and 0.8 s apart on a 200% output, kept the size it took.
 		- 20261014: Handling the echo itself would need winit to say which configure a resize comes from, or a retry on a size the window already left, which hides it rather than fixes it. Left Queued until it shows up another way.
-
-- Wayland: after the random test moves a window back in reach, a key doesn't bring a look
-	- ID: 2026101617573401
-	- Type: Bug
-	- Status: Waiting for testing
-	- Needs local test suite run?: The full pipeline, with the random test in it.
-	- Severity: Low
-	- Opened: 20261016-175734
-	- Opened by: CC
-	- Parent ID: 2026100114435600
-	- Related IDs: 2026101614100000
-	- Target OS: Linux
-	- Test environment: b23, headless sway
-	- Steps to reproduce:
-		- `cicd/tests/dpirand/run.py --wayland --seed 400049`.
-	- Incorrect behavior: Output 1 goes to scale 2 and the window is moved back in reach by key, to x -99 on output 1. The font zoom step's key brings no look, and the window keeps output 2's 147x17.
-	- Expected behavior: It looks and takes output 1's size at 200%, the last size anywhere, 95x22.
-	- Reproduced: 20261016, on dev with the test from before this branch (142x16) and on the fix alike.
-	- Notes:
-		- Not checked whether it's the window or the test's model.
-		- The same rule covers a drag right after a take that takes the window off that output.
-		- Seen while checking this, and failing the same way on dev: seeds 9032, 2036, 600200, 600201 and 700303 on Wayland, and 400055 on X11. Not looked into.
-	- Actual cause:
-		- The window, not the test. Its take on output 2 brought no scale change, since it was at output 2's scale already. The move back in reach came 4 s later, onto a 200% output, and the window counted that scale change as the take's own (2026101614100002). So it was no move, and nothing waited for a key.
-	- Actual fix:
-		- A scale change counts as a take's own only while the window is still on the output it took the size of. Off it, it's a move, and the look waits for the person as after any move.
-	- Branch: seed400
-	- Commit: d07e125
-	- Test case: `cicd/tests/dpirand/run.py --wayland --seed 400049` (EshVccz), red on dev 2 runs of 2, green with the fix 3 of 3. `a_scale_off_the_output_taken_for_is_a_move` (Esztfvw) for the rule, seen to fail with the check taken out.
-	- Verified: seeds 96313774, 184066139, 72046, 20002 and 40003 (a take's own scale), 1003, 5028, 110000 and 400012 pass. 13 fresh cases, 10 passed, and the 3 that failed fail the same on dev. monwl passed. Unit suite, clippy for Linux, Windows and macOS.
-	- Swept: `rescale_moves` is the only place that reads the take's time, and both the scale change and the resize it asks for go through it. Off Wayland the outputs can't be read, so nothing changes there.
 
 - Wayland: a copy a program sends while no SilkTerm window has focus is dropped
 	- ID: 2026101607585700
@@ -1851,6 +1785,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: None for the figures, which are a measurement. `SILK_MEMDBG` is covered by `each_debug_switch_reads_its_own_variable` (Erg4k2j). Its minimap count is pinned by `the_memory_count_covers_every_stored_row` (Ern2oTz), seen to fail with the stored rows left out.
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
+
+- The `clear` scroll bug still happens inside tmux
+	- ID: 2026101611321631
+	- Type: Bug
+	- Status: Done
+	- Severity: Avg
+	- Opened: 20261016-113216
+	- Opened by: JC
+	- Target OS: All
+	- Test environment: b23, tmux 3.6b
+	- Related IDs: 2026101310563297
+	- Incorrect behavior: `clear` inside tmux scrolls.
+	- Expected behavior: It clears instantly, as it does outside tmux, and smooth-scrolling inside tmux stays.
+	- Notes:
+		- Pre-next-cut.
+		- I'd rather live with it than lose smooth-scrolling inside tmux, but it seems like it's fixable.
+	- Reproduced: 20261016 on b23, with real tmux in a window. `clear`, Ctrl+L, `tput clear` and a reset each slid the old screen up and away, a whole pane's height.
+	- Actual cause:
+		- tmux never passes a clear on. It keeps the terminal on the alt screen and draws the pane itself. With its status line on the bottom row it can't erase to the bottom, so it scrolls the pane's rows away instead. SilkTerm took that as the pane scrolling and slid it.
+		- Output inside tmux comes the same way. A burst scrolls the whole pane away and then draws the new rows, so the scroll alone can't tell the two apart.
+	- Actual fix [Bug]: A pane scrolled away whole that's left mostly blank is a clear. It shows at once, and the Enter that ran it stops sliding. A burst fills the pane, so it still slides. The rule only applies while the slide still running is a line or two, since a burst's draw can be cut by a frame early on during a flood.
+	- Not covered:
+		- A clear that comes while a big slide is still running, such as `seq 100; clear` on one line, still slides.
+		- With ble.sh, when the clear and ble.sh's prompt redraw land in one frame, the Enter's one-row slide runs out over the cleared screen. It did that before too.
+	- Verified:
+		- 20261016 on b23, real tmux running plain bash in a window, driven from outside. Before: slides of 47, 46, 47 and 48 rows for `clear`, Ctrl+L, `tput clear` and a reset. After: none. Output of 300 lines slid on both builds, and output a line at a time slid one row per line on both.
+		- The new replay tests failed on the build from before and pass now. The flood check failed against a first version that went by "no slide at all" rather than "a line or two". The new scroll scene failed on the build from before (43 frames slid) and passes now. All 14 X11 scroll scenes pass.
+		- The unit suite passes but for `every_script_has_the_license_header_with_history_at_the_bottom`, which fails on dev too: `utility/fake-flatpak-update.bash` has no History block. Clippy, rustfmt and the docs checks are clean.
+	- Needs local test suite run?: The full pipeline, for the Wayland arm of the scroll harness.
+	- Swept: the slide decision has 2 copies, `Pane::build` and its mirror in `pane/replay.rs`, and both have the rule. The output ease on the normal screen is a separate path and already snaps on a clear.
+	- Branch: tmuxclear
+	- Commit: 1e01433
+	- Test case: `a_clear_inside_tmux_shows_at_once` (EstO7ww) and `output_inside_tmux_still_slides` (EstO8Ff) in `pane/replay.rs`, on bytes tmux 3.6b sent. Scroll scene `tmuxclear` (`cicd/tests/scroll/run.bash`). Each was red before the fix and green after.
 
 - The build inputs test fails since a cli.rs test reads usage.md
 	- ID: 2026101513385003
@@ -4820,6 +4787,39 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: d24bb6e
 	- Test case: `the_default_wallpaper_folder_is_this_platforms_usual_place`, `each_platform_keeps_its_wallpaper_where_it_keeps_bulk_data`, `the_default_wallpaper_folder_is_found_in_the_usual_place`, `an_existing_config_learns_where_the_wallpaper_folder_is`, `the_wallpaper_box_follows_the_rotate_switch`.
 	- Closed: 20260928-112023
+
+- For a moment after a scale change, programs in the window are told a much smaller or larger grid
+	- ID: 2026101412311921
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: On Windows and on macOS, a move between 2 monitors at different scales with a program in the window that logs each resize. It's told one new grid, or with `--columns` and `--rows` the same grid, never one about half or twice the size first.
+	- Severity: Low
+	- Opened: 20261014-123119
+	- Opened by: CC
+	- Related IDs: 2026100114435600, 2026101412025603
+	- Target OS: All
+	- Test environment: b23, headless sway, seen on Wayland
+	- Steps to reproduce:
+		- Move a window from a 100% monitor to a 200% one, with something running that redraws on a resize.
+	- Incorrect behavior: The program is told a grid about half as wide and tall for a moment, then the right one. From 125% to 150% it was 71 columns for 87.
+	- Expected behavior: It's told only the new grid.
+	- Reproduced: 20261014, by the random test, in 2 drags from one run of cases.
+	- Possible cause: On a scale change the text is laid out again with the new cells but the window's old size in pixels, until the resize that follows arrives.
+	- Actual cause: As above. Confirmed on b23 under headless sway with a program that logs each resize: 80x24 went to 51x14 for 5 ms on the way to 150%, and 161x51 on the way back to 100%. The engine's grid was resized each time too, so long lines were rewrapped twice.
+	- Notes:
+		- The random test allows it by this ID until it's fixed.
+	- Decisions:
+		- 20261014: Fixed together with 2026101412003308, and its decision applies. See there for what changed per platform.
+	- Actual fix: The panes are laid out for the size the window is about to be. That's the size asked for to keep the grid, or else the system's own: on Wayland and macOS the window already reports it during the change, and on Windows and X11 it's the old size scaled by the change.
+		- The same moment came when a monitor's kept font zoom was taken: the new cells were laid out in the old size, then the window was resized. 89x16 showed on the way from 110x20 to 60x35. It's laid out once, at the new size, now.
+		- On X11, winit reports the old size once more right after a scale change, so the moment can still come there. Read in winit's code, not seen. X11 changes scale only between monitors of different DPI, with no Xft.dpi set.
+	- Test case: `cicd/tests/monwl/run.bash` (Esgxleh). Its shell now writes every size it's told as well as a sample each tenth of a second. A new check fails on any grid well off the ones the steps took, and the new last part checks a size from the command line. Both seen failing on the old build. The first also failed with the font zoom part of the fix taken back out. `a_scale_change_lays_out_for_the_size_on_its_way` (Esisgw4) for the size worked out. The random test's allowance for this item is gone.
+	- Verified:
+		- On Wayland, with and without a kept size taking over, and with a kept font zoom: one new grid per change, never one well off.
+		- Not verified: Windows, macOS and X11 at a real scale change, which are compiled only.
+	- Swept: everything that rebuilds the text and then resizes. The scale change and a kept font zoom were the 2 that did. A font zoom from the keyboard keeps the window's size by design, so its new grid is the real one. The Settings dialog's own scale change keeps its size in DIP.
+	- Branch: scalegrid
+	- Commit: 22f315d
 
 - A size kept at one font is used at another when the font comes from the command line
 	- ID: 2026101422190936
