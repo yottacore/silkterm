@@ -227,7 +227,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - The `clear` scroll bug still happens inside tmux
 	- ID: 2026101611321631
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Severity: Avg
 	- Opened: 20261016-113216
 	- Opened by: JC
@@ -324,7 +324,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - For a moment after a scale change, programs in the window are told a much smaller or larger grid
 	- ID: 2026101412311921
 	- Type: Bug
-	- Status: Waiting for testing
+	- Status: Done
 	- Needs external testing: On Windows and on macOS, a move between 2 monitors at different scales with a program in the window that logs each resize. It's told one new grid, or with `--columns` and `--rows` the same grid, never one about half or twice the size first.
 	- Severity: Low
 	- Opened: 20261014-123119
