@@ -573,13 +573,26 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
 	- ID: 2026101714445001
 	- Type: Task
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs local test suite run?: A full pipeline run, plain and with `--container`, to see the new advisory scan step pass in stage 3.
+	- Needs external testing: A `cicd-win.ps1` run on a Windows box, where the scan gates when cargo-deny is installed.
 	- Priority: Avg
 	- Opened: 20261017-144450
 	- Opened by: CC
 	- Parent ID: 2026101714015789
+	- Related IDs: 2026101715240000
 	- Requirements:
 		- The parent's advisory scan, clippy and `// SAFETY:` rows.
+	- Progress log:
+		- 20261017: clippy already ran with `-D warnings` and `undocumented_unsafe_blocks` for Linux and Windows. Added `mem_forget` to the workspace lints. The 2 forgets in our code are in tests and leak on purpose, so each has an allow with the reason.
+		- 20261017: `cargo deny check advisories -D warnings` now fails every full run on a report, a warning too, such as a yanked crate or an ignore that no longer matches. The rest of cargo-deny still only warns. No cargo-deny fails the Linux run. On Windows it warns, like the other lints there.
+		- 20261017: The one standing advisory, ttf-parser unmaintained, has no fix yet. Its ignore names 2026101715240000.
+		- 20261017: 2 unsafe sites in the macOS menu code had no SAFETY line. Both are inside an objc2 macro, which clippy doesn't look into. Added. A scan of every `unsafe` in our code finds no other.
+		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
+	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
+	- Test case: The gates themselves, each seen to fail on a planted fault and pass once it was removed. An unsafe block with no SAFETY line in Windows-only and in macOS-only code failed clippy for those targets, and a `mem::forget` failed it on all 3. The advisory scan failed with the ttf-parser ignore taken out, and with an ignore for an advisory not in the tree. The cicd step failed with cargo-deny missing.
+	- Branch: safelint
+	- Commit: adee468
 
 - Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
 	- ID: 2026101714445002
@@ -700,6 +713,18 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Seen in the allocations test: a compose frame and a drag frame both cost about 335 allocations against 166 for a cursor frame, since both panes are shaped again. The minimap half is what let 2026101007274798 go on for good.
 		- After RC1 unless a profile shows compose frames.
+
+- ttf-parser is unmaintained, and the advisory scan ignores that until the crates that pull it in move off it
+	- ID: 2026101715240000
+	- Type: Task
+	- Status: Queued
+	- Priority: Low
+	- Opened: 20261017-152400
+	- Opened by: CC
+	- Related IDs: 2026101714445001
+	- Requirements:
+		- RUSTSEC-2026-0192 says ttf-parser is unmaintained. It comes in through fontdb under glyphon's cosmic-text, and through winit's sctk-adwaita. No release of either drops it yet.
+		- `deny.toml` ignores the advisory with this ID beside it. On a glyphon, cosmic-text or winit bump, check whether ttf-parser is still in the tree, and take the ignore out once it's gone. The scan fails on an ignore that matches nothing, so a stale one shows up by itself.
 
 - Wayland: must use the Wayland clipboard, and minimize other X11 features
 	- ID: 2026101509024607
