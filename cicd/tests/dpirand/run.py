@@ -754,6 +754,8 @@ class Case:
 		self.saves = True
 		## the line of the shell's sizes, and the scale, a step began at
 		self.was: tuple[int, float] = (-1, 1.0)
+		## the monitors when the window last looked
+		self.layout_looked: list[tuple[int, int, int, int]] = []
 
 	def note(self, text: str) -> None:
 		self.log.append(text)
@@ -850,9 +852,9 @@ class Case:
 	## Waits for the window to settle on one of `allowed`, then checks it
 	## stays there and matches the model.
 	def settle(
-		self, what: str, allowed: dict[str | None, str], looks: bool, rescaled: bool = False, rounding: str = RESCALED, look_wait: float = 3.0,
-		unseen: str = TOLD_NOTHING,
-	) -> None:
+		self, what: str, allowed: dict[str | None, str], looks: bool, rescaled: bool = False, rounding: str = RESCALED,
+		look_wait: float | None = None, unseen: str = TOLD_NOTHING,
+	) -> bool:
 		model = self.model
 		if not looks:
 			allowed = {None: allowed.get(None, unseen)}
@@ -868,7 +870,12 @@ class Case:
 
 		time.sleep(2.2)
 		## A window on no output yet keeps looking, for up to 10 s after it opens.
+		## A big window drawn in software at 200% takes seconds a frame, and the
+		## look waits for the frame, so one the step needs gets long
+		## (2026101714445006).
 		if looks:
+			if look_wait is None:
+				look_wait = 3.0 if None in allowed else 15.0
 			seen: list[str] = []
 			deadline = time.monotonic() + look_wait
 			while time.monotonic() < deadline and not any(t.split()[1] in ("arrive", "stay") for t in seen):
@@ -901,6 +908,8 @@ class Case:
 		later = set(later_lines)
 		trace = self.rig.trace()
 		looked = [t for t in trace if t.split()[1] in ("arrive", "stay")]
+		if looked:
+			self.layout_looked = self.layout_sig()
 		takes = [t for t in trace if t.split()[1] == "take"]
 		saves = [t for t in trace if t.split()[1] == "save"]
 		win, outs, touched, primary = self.where()
@@ -967,6 +976,17 @@ class Case:
 		self.scale = outs[primary[0]]["scale"] if primary else self.scale
 		self.check_font(what)
 		self.check_atfont(what)
+		return bool(looked)
+
+	## The monitors as the window compares them to see if they changed since it
+	## last looked: X11 has the outputs' places in the layout, Wayland each
+	## one's place times its scale rounded up, and its mode.
+	def layout_sig(self) -> list[tuple[int, int, int, int]]:
+		outs = self.rig.outputs()
+		if self.plan.arm == "x11":
+			return sorted((o["rect"]["x"], o["rect"]["y"], o["rect"]["width"], o["rect"]["height"]) for o in outs)
+		return sorted((o["rect"]["x"] * math.ceil(o["scale"]), o["rect"]["y"] * math.ceil(o["scale"]), o["current_mode"]["width"],
+			o["current_mode"]["height"]) for o in outs)
 
 	## A kept size taken at a font from the command line keeps its columns
 	## and rows if the window fits the screen the size is kept for at that
@@ -1172,6 +1192,8 @@ class Case:
 		_, outs, _, primary = self.where()
 		names = self.names(outs, primary)
 		took = any(t.split()[1] == "take" for t in trace)
+		if any(t.split()[1] in ("arrive", "stay") for t in trace):
+			self.layout_looked = self.layout_sig()
 		if any(t.split()[1] == "later" for t in trace):
 			self.owed = [t for t in trace if t.split()[1] == "arrive"][-1:]
 			self.note(f"      looked while fullscreen, to take a size once back: {self.owed}")
@@ -1352,6 +1374,9 @@ class Case:
 				if step.pointer:
 					self.pointer_back()
 				self.after_move(what, outs, primary, step.pointer, after_scale != before_scale)
+				## sway keeps the window's place relative to the output, so its
+				## title bar can end up over a gap (seed 600201)
+				self.within_reach(what)
 			elif step.kind == "drag":
 				self.drag(what, step, before_scale)
 			elif step.kind == "resize":
@@ -1402,6 +1427,7 @@ class Case:
 				if hovered:
 					over, _, _, _ = self.where()
 					rig.pointer("move", *self.reachable(over.rect))
+				_, _, _, was_on = self.where()
 				rig.msg(f"[pid={pid}] fullscreen enable")
 				took = self.fullscreen_saves(f"{what} (fullscreen)")
 				rig.msg(f"[pid={pid}] fullscreen disable")
@@ -1409,7 +1435,18 @@ class Case:
 					_, outs, _, primary = self.where()
 					self.settle(what, self.names(outs, primary), True)
 				else:
-					self.settle(what, {None: "requirement"}, False)
+					## sway puts a floating window back in the middle of the
+					## output it went fullscreen on, so one that was mostly on
+					## another has moved, maybe to another scale (seeds 2036
+					## and 600200)
+					_, outs, touched, primary = self.where()
+					if set(primary) == set(was_on):
+						self.settle(what, {None: "requirement"}, False)
+					else:
+						self.note(f"    {what}: put back on {','.join(primary) or '-'}, was mostly on {','.join(was_on) or '-'}")
+						self.track_entered(touched)
+						after_scale = outs[primary[0]]["scale"] if primary else before_scale
+						self.after_move(what, outs, primary, False, after_scale != before_scale)
 				if hovered:
 					self.park_pointer()
 			elif step.kind == "rescale":
@@ -1504,8 +1541,16 @@ class Case:
 	## A move looks once the pointer is back over the window. With the pointer
 	## away it doesn't: an X11 window was told it moved and puts the look off
 	## until the person is back, as does a Wayland one whose scale changed.
+	## Not the first look after the monitors changed, which the window takes
+	## for the window manager herding windows, so it may come at once (seed
+	## 400055).
 	def after_move(self, what: str, outs: dict[str, dict[str, Any]], primary: list[str], back: bool, rescaled: bool) -> None:
-		waits = self.waiting or self.plan.arm == "x11" or rescaled
+		told = self.plan.arm == "x11" or rescaled
+		waits = self.waiting or told
+		if told and not back and self.layout_sig() != self.layout_looked:
+			looked = self.settle(what, {**self.names(outs, primary), None: WAITS}, True, rescaled)
+			self.waiting = not looked
+			return
 		self.settle(what, self.names(outs, primary), back, rescaled, unseen=WAITS if waits else TOLD_NOTHING)
 		self.waiting = waits and not back
 
@@ -1718,3 +1763,7 @@ if __name__ == "__main__":
 ##		  key, a grid may take one late step to where it ends, and a take's drift
 ##		  is judged from the cells.
 ##		- 20261016 JC: A take's grid has to hold through the scale it brings.
+##		- 20261017 JC: A look a step needs is waited for longer, a window put
+##		  back from fullscreen onto another output or moved by key out of reach
+##		  is judged as moved, and the first look after the monitors changed may
+##		  come at once.

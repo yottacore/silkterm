@@ -651,7 +651,8 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Wayland: several random test seeds fail on dev under load
 	- ID: 2026101714445006
 	- Type: Bug
-	- Status: Queued
+	- Status: Waiting for testing
+	- Needs local test suite run?: The full pipeline, with the random test in it.
 	- Severity: Low
 	- Opened: 20261017-144450
 	- Opened by: CC
@@ -667,6 +668,61 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Not checked at low load. 9032 is in 2026101614100002's test case and passed there on 20261016.
 		- With `DPIRAND_SECS=150` the pipeline's random test stage may go red often until these are sorted.
+	- Progress log:
+		- 20261017: Each seed run alone at load 11 to 15. 9032 passed alone and failed 3 of 3 with 3 cases side by side at load 18. The other 5 failed alone, the same way each time.
+	- Actual cause:
+		- The test's model or timing, for all 6. 2036 began failing with 2026101513385000's fix, which moved its one-cell drift from the take to the way back from fullscreen. That drift is filed as 2026101716374842.
+		- 9032 and 700303: a window of about 4000x2000 at 200%, drawn in software by the debug build, takes about 3 s a frame at load 13. The look comes after a frame, 6 to 8 s after the scale change, and the test stopped waiting for it after 5 s.
+		- 2036 and 600200: sway puts a floating window back from fullscreen in the middle of the output it went fullscreen on. Both were mostly on another output first, so coming back was a move to another scale, and the grid moved a cell. The test expected nothing to change.
+		- 600201: `move container to output` kept the window's place relative to the output, which left its title bar over a gap. The drag grabbed the window's text instead, and the pointer over it brought a look.
+		- 400055 (X11): the first look after the monitors changed doesn't wait for the person, by design (herded windows). Output 3's scale had changed with no look since, so the drag's look came at once.
+	- Actual fix:
+		- In the random test only. A look a step needs is waited for up to 15 s. A window put back from fullscreen mostly on another output is judged as moved. A window moved by key is moved back in reach, as after a scale change. The first look after the monitors changed may come at once or wait.
+	- Branch: seeds6
+	- Commit: 7a29137
+	- Test case: `cicd/tests/dpirand/run.py` (EshVccz) on the 6 seeds. With the old test 2036, 600200, 600201, 700303 and 400055 failed alone and 9032 side by side. With the new one 2036, 600200, 600201, 400055 and 9032 pass, 9032 also 3 of 3 side by side at load 18 to 22.
+	- Verified: 9 picked cases that go through the new paths (fullscreen after a sliver drop, X11 and Wayland drags after a scale change) and 5 fresh cases passed. Unit suite (1364), fmt, clippy, Python lint and the docs check passed.
+	- Note: 700303 still fails. Past the look, the take of 197x65 at 200% is undone by a configure for the size before it, which arrived after a 3.6 s frame. That's 2026101417045856's race, seen in the protocol log.
+	- Note: Filed from this: 2026101716374842 (2036's grid stays a cell off, a window fault the test now allows) and 2026101716374843 (seed 810060, fails on the old test and 416c81c too).
+
+- Wayland: a scale change that a look then finds was no move to another monitor leaves the grid a cell off
+	- ID: 2026101716374842
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261017-163748
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101513385000, 2026101412003308, 2026101714445006
+	- Target OS: Linux
+	- Test environment: b23, headless sway
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --wayland --seed 2036`, step 3.
+	- Incorrect behavior: A take on output 3 (125%) leaves most of the window on output 1 (200%), and the take's own scale keeps its 65x22. Fullscreen and back puts it wholly on output 3 at 125%. That scale change is a move, so the size is left to the system, which gives 64x21. The look finds output 3 again and takes nothing, so it stays 64x21.
+	- Expected behavior: It ends at 65x22, the size kept for output 3.
+	- Reproduced: 20261017. Passes on 416c81c, where the cell moved at the take's scale and back here. Fails on e75e671 and dev.
+	- Notes:
+		- The random test allows the drift since 2026101714445006, so it doesn't catch this.
+		- A scale change keeps the grid where no kept size will take over (2026101412003308), but it can't know yet whether the look will find another monitor.
+
+- Wayland: a scale change while a drag is held can leave fewer columns than the window has room for
+	- ID: 2026101716374843
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261017-163748
+	- Opened by: CC
+	- Parent ID: 2026100114435600
+	- Related IDs: 2026101714445006
+	- Target OS: Linux
+	- Test environment: b23, headless sway, load near 30
+	- Steps to reproduce:
+		- `cicd/tests/dpirand/run.py --seed 810060`, step 6, a drag from output 2 (150%) to output 3 (125%).
+	- Incorrect behavior: While still held the grid goes from 133x20 to 130x19. At 125% the window is 1806 px wide and the shell is told 130 columns of 13 px, so 116 px are beside the text, against 45 px at 150%.
+	- Expected behavior: About 136 columns, what a window that keeps its size on the desktop has room for at 125%. The test allows 132 to 138.
+	- Reproduced: 20261017, 2 runs of 3 on dev, 1 of 2 on 416c81c. Passed once on e75e671. It fails only when the scale change comes while the drag is held.
+	- Notes:
+		- Not looked into. It may be the window's layout or the test's allowance.
 
 - Wayland: a size the window takes right after another resize of its own goes back a moment later
 	- ID: 2026101417045856
