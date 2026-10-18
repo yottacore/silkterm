@@ -80,7 +80,7 @@ To run everything a change has to pass before it can be pushed - format, lint, r
 cicd/cicd.bash [--quick]
 ~~~
 
-`--quick` skips the cross-builds and the slow stages. `--container` runs the build and test stages in a pinned Debian image, so only docker is needed for them (see [build.md](build.md)). A fast subset of it - format check, lint, tests - also runs as a pre-push hook on any push to main (`cicd/cicd.bash --gate`). Turn the hooks on once per clone:
+`--quick` runs only the quick lints and tests, builds for x86_64 only, and skips the slow stages and anything that needs another machine. `--container` runs the build and test stages in a pinned Debian image, so only docker is needed for them (see [build.md](build.md)). A fast subset of it - format check, lint, tests - also runs as a pre-push hook on any push to main (`cicd/cicd.bash --gate`). Turn the hooks on once per clone:
 
 ~~~bash
 git config core.hooksPath utility/git-hooks

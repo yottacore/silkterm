@@ -80,19 +80,24 @@ hostName="Plan9"
 fCheck "an unknown host gets no tag" fTag linux-x86_64 ""
 unset -f uname
 
-## --quick turns off every slow stage, and is an option the parser knows.
+## --quick turns off every slow stage, and is an option the parser knows. It
+## keeps the x86_64 cross build and drops the ARM64 ones.
 parse="$(fLift '^assumeYes=0; ' '^esac; done$')"
 fParse(){  ## fParse <args...>: prints the settings the parser leaves, or exits as it does
 	BUILD_CROSS=1; PROFILE_ENABLE=1; PACKAGE_ENABLE=1; FUZZ_SECS=60
-	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=0
+	FMT_CMD=(cargo fmt); DOGFOOD_DESTS=(x); GIT_PUBLISH=(x); DEMO_ENABLE=1
 	set -- "${@}"
 	eval "${parse}"
-	echo "quick=${quick} cross=${BUILD_CROSS} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assumeYes} sync=${sync}"
+	echo "quick=${quick} cross=${BUILD_CROSS} arm=$((! noArm)) demo=${DEMO_ENABLE} gate=${gate} profile=${PROFILE_ENABLE} package=${PACKAGE_ENABLE} fuzz=${FUZZ_SECS} yes=${assumeYes} sync=${sync}"
 }
 rc=0; out="$(fParse --quick 2>&1)" || rc=$?
 fCheck "--quick is accepted" test "${rc}" -eq 0
-fCheck "and turns off cross builds, profiling, packages and fuzzing" \
-	test "${out}" = "quick=1 cross=0 profile=0 package=0 fuzz=0 yes=0 sync=1"
+fCheck "and turns off the ARM64 builds, profiling, packages and fuzzing" \
+	test "${out}" = "quick=1 cross=1 arm=0 demo=1 gate=0 profile=0 package=0 fuzz=0 yes=0 sync=1"
+fCheck "with no options every stage is on" \
+	test "$(fParse)" = "quick=0 cross=1 arm=1 demo=1 gate=0 profile=1 package=1 fuzz=60 yes=0 sync=1"
+fCheck "--no-demo turns the demo off" bash -c '[[ "$1" == *" demo=0 "* ]]' _ "$(fParse --no-demo)"
+fCheck "--gate is the merge gate" bash -c '[[ "$1" == *" gate=1 "* ]]' _ "$(fParse --gate)"
 rc=0; out="$(fParse -y --no-such-thing 2>&1)" || rc=$?
 fCheck "an unknown option still stops the run" test "${rc}" -eq 2
 
