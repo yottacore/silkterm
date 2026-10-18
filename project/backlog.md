@@ -558,11 +558,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Always run in new tmux session
 	- ID: 2026101611321632
 	- Type: Feature
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs external testing: macOS with Homebrew tmux, started from the Dock. A dogfood look with the usual shell and tmux.conf.
 	- Priority: Avg
 	- Opened: 20261016-113216
 	- Opened by: JC
-	- Related IDs: 2026101611321634
+	- Related IDs: 2026101611321634, 2026101611405210
+	- Target OS: Linux, macOS
 	- Requirements:
 		- Boolean: "Always run in new tmux session".
 			- Disabled if tmux isn't installed, with tip text explaining that.
@@ -588,6 +590,23 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261016: Closing a tab with a pane in tmux asks what to do, with a "Don't ask me next time" check box that stores the answer. New setting for it: Detach, End or Prompt, as a horizontal radio.
 		- 20261016: Only splits get tmux. A split starts in a new tmux session. A new tab's first pane starts the plain shell, unless opened with "New tab in tmux".
+		- 20261017: Done. A Tmux group opens the Program tab, above Resource use. "Always run in new tmux session" has the warning mark, with the pros in its flyover and the cons as the mark's text. Under it are "Session name template" and "When closed" (Detach, End, Prompt). "New tab in tmux" sits between New tab and New tab with shell on the Tabs menu. Closing a pane, tab or window with a session SilkTerm started does what When closed says, and Prompt asks with Cancel, End and Detach and a "Don't ask me next time" box.
+		- 20261017: Best guess: the settings are `shell.tmux.always_new_session` (off), `shell.tmux.session_name` and `shell.tmux.on_close` (prompt).
+		- 20261017: Best guess: the name row is "Session name template", since it sits under the Tmux heading. It and When closed are indented under the switch but not gated by it, because New tab in tmux uses both with the switch off.
+		- 20261017: Best guess: where tmux can't be found, all three rows are grayed and the flyover says why. On Windows that's always. tmux is looked for on PATH, then in the Homebrew and MacPorts folders, which a Mac app started from the Dock doesn't have on its PATH.
+		- 20261017: Best guess: where tmux can't be found, New tab in tmux is left off the menu rather than grayed. Its accelerator is M.
+		- 20261017: Best guess: a split from the menu or a hotkey gets tmux. One the command line lays out doesn't, and neither does a window's first pane.
+		- 20261017: Best guess: the name macros are `%YYYYmmDD%`, `%HHMMSS%` and `%HHMMSSNN%`, in local time. tmux turns `.` and `:` into `_` and reads `#` as one of its formats, so all three become `_` first, and control characters are dropped. A name tmux already has gets `-2`, `-3` and so on. A template that can't be read, or comes out empty, gives the default's name.
+		- 20261017: Best guess: End kills the session by the exact name SilkTerm gave it. If it was renamed, nothing is killed. A session the user switched to inside the pane is left alone.
+		- 20261017: Best guess: the question comes up for any close somebody asks for: Close pane, Close tab, the tab's close button, Quit and the window's close button. A pane where tmux was started by hand closes as before. A pane whose tmux leaves on its own, by a detach inside it or its session ending, closes without asking.
+		- 20261017: Best guess: Detach is the question's default button, since it loses nothing. The order is Cancel, End, Detach. Tab walks the box and the buttons, Space presses, Enter presses the button with the focus, or Detach. The box stores the answer given as When closed.
+		- 20261017: Best guess: the tab names tmux as the running program, "Bash [tmux] ~/src/", the way it does for tmux started from a shell. The minimap steps aside for it the same way. A split, new tab or new window made from a pane in tmux starts where tmux says that pane is now.
+		- 20261017: The pros and cons are used as listed, without the "(Anything else?)" lines. The flyover runs past three sentences, logged under the style guide's known deviations. The bash prompt's variable goes to the session with `-e`, which needs tmux 3.2 or later.
+	- Verified: 20261017. Unit suite (1391 passed), fmt, clippy on Linux, Windows and macOS, test IDs, docs and table checks. A real tmux 3.6b in a window on Linux, on a tmux server of its own: a split made a session named by the template, with its dot turned to `_`. Detach left it running. End killed it and left the session the pane had been switched to inside. New tab in tmux made a session, and the box stored Detach, then End, each closing with no question after. Quit asked about the sessions in the window, Escape kept the window open, and End killed all three. A split from a pane in tmux started in the directory that pane had moved to. A detach inside the pane closed it with no question. With no tmux on PATH the rows were grayed with the reason, the menu row was gone, and a split ran the plain shell.
+	- Swept: every close a person asks for (the tab's close button, Close tab from the menu and hotkey, Close pane from the menu and hotkey, Quit from the menu and hotkey, the window's close button), and every place a pane is spawned (new tab, new tab with shell, split, split with shell, command-line layout, the first pane). The three places that pass a directory on (split, new tab, new window).
+	- Test case: the 8 tests in `tmux.rs` (`ending_kills_the_session_started_and_no_other` against a real tmux), the 3 in `app/closing.rs`, `new_tab_in_tmux_sits_between_new_tab_and_the_shells_where_tmux_runs`, `the_tmux_settings_read_from_the_file_and_default_off`, `the_tmux_group_opens_the_program_tab_with_its_two_rows_under_the_switch`, `the_tmux_rows_gray_and_say_why_where_there_is_no_tmux`, `two_rows_warn_and_each_mark_shows_the_rows_tip` (now 3 rows), the completeness test, and `every_row_survives_a_save_and_a_relaunch`. Dropping the exact-name `=` and dropping `#` from the name rule each fail a test.
+	- Branch: tmuxnew
+	- Commit: 80f7069
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
