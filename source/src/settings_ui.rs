@@ -207,6 +207,15 @@ pub fn dialog_btn_hl() -> [u8; 3] {
 pub fn dialog_border() -> [u8; 3] {
 	dlg().panel_border
 }
+pub fn dialog_field() -> [u8; 3] {
+	dlg().field_bg
+}
+pub fn dialog_handle() -> [u8; 3] {
+	dlg().handle
+}
+pub fn dialog_focus() -> [u8; 3] {
+	dlg().focus_out
+}
 
 // The Scrolling tab's time constants are all shown as a friendly 1..100 but
 // stored as milliseconds. Logarithmic: a time constant is felt by ratio, and a
@@ -335,6 +344,7 @@ macro_rules! keys_of {
 			| Key::TitleShowsTab
 			| Key::IdleRelease
 			| Key::SoftwareRendering
+			| Key::TmuxNewSession
 			| Key::CopyOnSelect
 			| Key::ShellIntegration
 			| Key::BashPrompt
@@ -361,6 +371,7 @@ macro_rules! keys_of {
 			| Key::CursorAnimation
 			| Key::Theme
 			| Key::ThemeMode
+			| Key::TmuxOnClose
 		] $($rest)*)
 	};
 	(@ [$($acc:tt)*] color $($rest:ident)*) => {
@@ -386,6 +397,7 @@ macro_rules! keys_of {
 			| Key::LinkOpenCommand
 			| Key::StartupDirectory
 			| Key::TabTemplate
+			| Key::TmuxSessionName
 		] $($rest)*)
 	};
 	// read and written through `Bindings`
@@ -491,6 +503,17 @@ const fn hidden_wait_tip(sees_hidden: bool) -> Option<&'static str> {
 	}
 }
 
+// Why the tmux rows are grayed where there's no tmux to run.
+const fn no_tmux_tip(found: bool) -> Option<&'static str> {
+	if found {
+		None
+	} else if cfg!(windows) {
+		Some("tmux doesn't run on Windows, so SilkTerm can't start sessions in it.")
+	} else {
+		Some("tmux isn't installed, or isn't on the PATH, so SilkTerm can't start sessions in it.")
+	}
+}
+
 // A switch's state in `settings`, for the shown value, the default and the revert.
 fn toggle_of(settings: &Settings, key: Key) -> bool {
 	match key {
@@ -513,6 +536,7 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::TitleShowsTab => settings.title_shows_tab,
 		Key::IdleRelease => settings.idle_release,
 		Key::SoftwareRendering => settings.software_rendering,
+		Key::TmuxNewSession => settings.tmux_new_session,
 		Key::CopyOnSelect => settings.copy_on_select,
 		Key::ShellIntegration => settings.shell_integration,
 		Key::BashPrompt => settings.bash_prompt,
@@ -564,6 +588,7 @@ fn radio_of(settings: &Settings, key: Key) -> usize {
 		Key::ScrimRamp => settings.text_scrim_ramp.index(),
 		Key::CursorAnimation => settings.cursor_animation.index(),
 		Key::ThemeMode => settings.theme_mode.index(),
+		Key::TmuxOnClose => settings.tmux_on_close.index(),
 		Key::Theme => crate::theme::all_names(&settings.user_themes)
 			.iter()
 			.position(|n| n.eq_ignore_ascii_case(settings.theme.trim()))
@@ -1071,6 +1096,9 @@ pub struct SettingsDialog {
 	// Whether the desktop says when a window is minimized or covered. Wayland
 	// does not, so the hidden wait never applies there.
 	sees_hidden: bool,
+	// Whether tmux can be run here, for the tmux rows. Read when the dialog
+	// opens, since the rows ask on every frame.
+	tmux_found: bool,
 	// Where the Windows file-type rows write, and whether each of
 	// `fileassoc::Assoc::ALL` is registered. A map stands in for the registry in
 	// tests. The answer is read when the dialog opens and after each change, not
@@ -1437,6 +1465,7 @@ impl SettingsDialog {
 			row_tops: std::cell::RefCell::default(),
 			monitor: None,
 			sees_hidden: true,
+			tmux_found: true,
 			assoc: crate::fileassoc::system(),
 			assoc_on: [false; 4],
 			focus: None,
@@ -2187,6 +2216,9 @@ impl SettingsDialog {
 	/// Whether the desktop says when a window is minimized or covered.
 	pub fn set_sees_hidden(&mut self, sees: bool) {
 		self.sees_hidden = sees;
+	}
+	pub fn set_tmux_found(&mut self, found: bool) {
+		self.tmux_found = found;
 	}
 	/// The main window's monitor and the size it was last given, which the
 	/// automatic size shows. Both copies take the size, as a shell scan is
@@ -3265,6 +3297,9 @@ impl SettingsDialog {
 	fn disabled_tip(&self, key: Key) -> Option<&'static str> {
 		match key {
 			Key::IdleHiddenMin => hidden_wait_tip(self.sees_hidden),
+			Key::TmuxNewSession | Key::TmuxSessionName | Key::TmuxOnClose => {
+				no_tmux_tip(self.tmux_found)
+			}
 			_ => None,
 		}
 	}
@@ -3814,6 +3849,7 @@ impl SettingsDialog {
 			Key::LinkOpenCommand => s.hyperlink_open_command.clone(),
 			Key::StartupDirectory => s.startup_directory.clone(),
 			Key::TabTemplate => s.tab_text.clone(),
+			Key::TmuxSessionName => s.tmux_session_name.clone(),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => String::new(),
 		}
 	}
@@ -3826,9 +3862,11 @@ impl SettingsDialog {
 				Key::BgFolder,
 				trimmed.is_empty() || trimmed == config::WALLPAPER_DIR_TOKEN,
 			),
-			Key::BgImage | Key::FontFamily | Key::LinkOpenCommand | Key::TabTemplate => {
-				(key, trimmed.is_empty())
-			}
+			Key::BgImage
+			| Key::FontFamily
+			| Key::LinkOpenCommand
+			| Key::TabTemplate
+			| Key::TmuxSessionName => (key, trimmed.is_empty()),
 			Key::StartupDirectory => (key, false),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => return,
 		};
@@ -3871,6 +3909,7 @@ impl SettingsDialog {
 			Key::TitleShowsTab => self.edited.title_shows_tab = on,
 			Key::IdleRelease => self.edited.idle_release = on,
 			Key::SoftwareRendering => self.edited.software_rendering = on,
+			Key::TmuxNewSession => self.edited.tmux_new_session = on,
 			Key::CopyOnSelect => self.edited.copy_on_select = on,
 			Key::ShellIntegration => self.edited.shell_integration = on,
 			Key::BashPrompt => self.edited.bash_prompt = on,
@@ -3966,6 +4005,11 @@ impl SettingsDialog {
 			Key::ThemeMode => {
 				if let Some(mode) = Choice::from_index(idx) {
 					self.edited.theme_mode = mode;
+				}
+			}
+			Key::TmuxOnClose => {
+				if let Some(choice) = Choice::from_index(idx) {
+					self.edited.tmux_on_close = choice;
 				}
 			}
 			keys_of!(slider | toggle | color | text | hotkey | valueless | assoc) => {}
@@ -12664,6 +12708,14 @@ mod tests {
 	// its label, clear of its checkbox. The mark's text ends the row's one tip,
 	// which shows over the label, the mark and the checkbox. No other tab draws
 	// a mark.
+	// How many rows on `tab` draw a warning mark.
+	fn warned_on(d: &SettingsDialog, tab: usize) -> usize {
+		d.specs
+			.iter()
+			.filter(|s| s.tab == tab && !s.warning.is_empty())
+			.count()
+	}
+
 	// Test ID: Es9VucS
 	#[test]
 	fn two_rows_warn_and_each_mark_shows_the_rows_tip() {
@@ -12705,7 +12757,13 @@ mod tests {
 			.filter(|s| !s.warning.is_empty())
 			.map(|s| s.key)
 			.collect();
-		assert_eq!(warned, [Key::Transparency, Key::IdleRelease]);
+		// Changed 20261017: the tmux switch warns too, above Resource use on the
+		// Program tab, so that tab has 2 marks (2026101611321632).
+		// assert_eq!(warned, [Key::Transparency, Key::IdleRelease]);
+		assert_eq!(
+			warned,
+			[Key::Transparency, Key::TmuxNewSession, Key::IdleRelease]
+		);
 		let mut marked = Vec::new();
 		for key in warned {
 			let i = d.specs.iter().position(|s| s.key == key).unwrap();
@@ -12723,8 +12781,20 @@ mod tests {
 				.iter()
 				.filter(|r| r.mode() == QuadMode::Triangle)
 				.collect();
-			assert_eq!(triangles.len(), 1, "one mark on {}'s tab", key.name());
-			assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
+			// assert_eq!(triangles.len(), 1, "one mark on {}'s tab", key.name());
+			// assert!((triangles[0].pos[0] - mark.x).abs() < 0.01);
+			let on_tab = warned_on(&d, d.tab);
+			assert_eq!(
+				triangles.len(),
+				on_tab,
+				"a mark per warned row on {}'s tab",
+				key.name()
+			);
+			assert!(
+				triangles.iter().any(|t| (t.pos[0] - mark.x).abs() < 0.01),
+				"{}'s mark",
+				key.name()
+			);
 			let help = d.specs[i].help;
 			assert!(
 				help.ends_with(d.specs[i].warning) && help.len() > d.specs[i].warning.len(),
@@ -12825,6 +12895,91 @@ mod tests {
 				(Key::SoftwareRendering, 0),
 			],
 			"nothing else in the group, and nothing after it on the tab"
+		);
+	}
+
+	// The tmux group opens the Program tab, above Resource use: the switch, then
+	// the name and the close choice indented under it, neither gated by it,
+	// since "New tab in tmux" uses both with the switch off.
+	// Test ID: Et0dqjg
+	#[test]
+	fn the_tmux_group_opens_the_program_tab_with_its_two_rows_under_the_switch() {
+		let specs = &super::ui().specs;
+		let head = specs
+			.iter()
+			.position(|s| matches!(s.kind, Kind::Header(label) if label == "Tmux"))
+			.expect("a Tmux heading");
+		assert_eq!(tab_titles()[specs[head].tab], "Program");
+		let first = specs.iter().position(|s| s.tab == specs[head].tab).unwrap();
+		assert_eq!(first, head, "the first group on the tab");
+		let rows: Vec<(Key, u8)> = specs[head + 1..head + 4]
+			.iter()
+			.map(|s| (s.key, s.indent))
+			.collect();
+		assert_eq!(
+			rows,
+			[
+				(Key::TmuxNewSession, 0),
+				(Key::TmuxSessionName, 1),
+				(Key::TmuxOnClose, 1),
+			]
+		);
+		assert!(matches!(specs[head + 4].kind, Kind::Header(label) if label == "Resource use"));
+		for spec in &specs[head + 2..head + 4] {
+			assert!(super::ui().rel(spec.key).gate.is_none(), "{:?}", spec.key);
+		}
+		let close = &specs[head + 3];
+		assert!(
+			matches!(&close.kind, Kind::Radio(options) if options[..] == ["Detach", "End", "Prompt"])
+		);
+		assert!(
+			!specs[head + 1].warning.is_empty(),
+			"the switch has a warning mark"
+		);
+	}
+
+	// Where tmux can't be run, all three rows gray and say why, and the
+	// switch can't be turned on.
+	// Test ID: Et0dqjh
+	#[test]
+	fn the_tmux_rows_gray_and_say_why_where_there_is_no_tmux() {
+		assert_eq!(super::no_tmux_tip(true), None);
+		assert!(super::no_tmux_tip(false).is_some_and(|tip| tip.starts_with("tmux ")));
+		let mut d = mk_dialog(4000.0);
+		let i = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::TmuxNewSession)
+			.unwrap();
+		d.tab = d.specs[i].tab;
+		let keys = [Key::TmuxNewSession, Key::TmuxSessionName, Key::TmuxOnClose];
+		assert!(keys.iter().all(|&key| !d.disabled(key)));
+		let bx = d.checkbox(i);
+		let y = bx.y + bx.h / 2.0;
+		let tip = |d: &SettingsDialog| {
+			d.hover_tip_dip(d.label_x(i) + 2.0, y)
+				.map(|(tip, _)| tip_text(tip).to_string())
+		};
+		assert!(tip(&d).is_some_and(|t| t.contains("Pros:") && t.contains("Cons:")));
+		let mut measure = |s: &str| s.len() as f32;
+		let before = d.get_toggle(Key::TmuxNewSession);
+		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
+		assert_ne!(
+			d.get_toggle(Key::TmuxNewSession),
+			before,
+			"a click switches it"
+		);
+		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
+		assert_eq!(d.get_toggle(Key::TmuxNewSession), before);
+		d.set_tmux_found(false);
+		assert!(keys.iter().all(|&key| d.disabled(key)));
+		assert!(!d.disabled(Key::IdleRelease));
+		assert_eq!(tip(&d).as_deref(), super::no_tmux_tip(false));
+		d.mouse_down(bx.x + 2.0, bx.y + 2.0, &mut measure);
+		assert_eq!(
+			d.get_toggle(Key::TmuxNewSession),
+			before,
+			"a grayed one doesn't"
 		);
 	}
 

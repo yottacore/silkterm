@@ -291,15 +291,16 @@ impl App {
 		self.dialog = None;
 	}
 
-	/// Events for the notice window. It has one button, so everything that means
-	/// OK or close closes it.
+	/// Events for the notice window. A notice has one button, so everything
+	/// that means OK or close closes it. The tmux question has three, and a box.
 	pub(super) fn handle_notice_event(&mut self, event: WindowEvent) {
+		use crate::dialog::DialogAction as DA;
 		let Some(n) = self.notice.as_mut() else {
 			return;
 		};
-		let mut close = false;
+		let mut act: Option<DA> = None;
 		match event {
-			WindowEvent::CloseRequested => close = true,
+			WindowEvent::CloseRequested => act = Some(DA::Close),
 			WindowEvent::Resized(_) => {
 				let now = n.window.inner_size();
 				n.resize(now.width, now.height);
@@ -324,23 +325,40 @@ impl App {
 				state: ElementState::Pressed,
 				button: MouseButton::Left,
 				..
-			} => close = n.mouse_down(None).is_some(),
+			} => {
+				act = n.mouse_down(None);
+				self.notice_dirty = true;
+			}
+			WindowEvent::ModifiersChanged(mods) => n.set_mods(mods.state()),
 			WindowEvent::KeyboardInput {
 				event: key_event,
 				is_synthetic,
 				..
 			} if key_is_typed(key_event.state, is_synthetic) => {
-				close = match &input::name_typed(key_event).logical_key {
-					Key::Named(NamedKey::Escape) => n.key_escape().is_some(),
-					Key::Named(NamedKey::Enter) => n.key_enter(None).is_some(),
-					Key::Named(NamedKey::Space) => n.key_space().is_some(),
-					_ => false,
+				act = match &input::name_typed(key_event).logical_key {
+					Key::Named(NamedKey::Escape) => n.key_escape(),
+					Key::Named(NamedKey::Enter) => n.key_enter(None),
+					Key::Named(NamedKey::Space) => n.key_space(),
+					Key::Named(NamedKey::Tab) => {
+						n.key_tab();
+						None
+					}
+					_ => None,
 				};
+				self.notice_dirty = true;
 			}
 			_ => {}
 		}
-		if close {
-			self.notice = None;
+		let Some(act) = act else {
+			return;
+		};
+		self.notice = None;
+		// a notice's OK, or the question answered or put away
+		let Some(closing) = self.asking.take() else {
+			return;
+		};
+		if let (DA::Tmux { end, remember }, Some(state)) = (act, self.state.as_mut()) {
+			state.answer_close(closing, end, remember);
 		}
 	}
 
@@ -424,6 +442,8 @@ impl App {
 		match action {
 			DA::OpenUrl(u) => open_url(&u),
 			DA::Close => self.close_dialog(),
+			// only the tmux question answers this way, and it is never Settings
+			DA::Tmux { .. } => {}
 			DA::Apply => {
 				self.apply_dialog_settings();
 			}

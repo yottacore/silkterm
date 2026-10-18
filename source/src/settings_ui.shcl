@@ -1007,6 +1007,41 @@ rows:
 
 	## ------------------------------------------------------------------- Program
 
+	## A split, or a tab from the Tabs menu's "New tab in tmux", in a tmux
+	## session of its own. Grayed where tmux can't be found, which is always
+	## on Windows. The two rows under the switch count for that menu row too,
+	## so they aren't gated by it.
+	Tmux:
+		kind: heading
+		label: Tmux
+		aliases: "multiplexer", "persistent sessions"
+		tab: Program
+
+	TmuxNewSession:
+		label: Always run in new tmux session
+		aliases: "multiplexer", "detach", "persistent sessions"
+		kind: toggle
+		setting: shell.tmux.always_new_session
+		help: "Start each split in a new tmux session. New tab in tmux on the Tabs menu does it for a whole tab.\n\nPros:\n- If your desktop crashes, your CLI sessions survive.\n- You can connect to existing CLI sessions remotely.\n- You can reconnect from any other installed terminal."
+		warning: "\n\nCons:\n- Can't launch GUI programs without extra parameters.\n- The SilkTerm Minimap is not available.\n- SilkTerm can't adjust itself based on programs inside tmux, so you may see occasional weirdness with smooth-scrolling."
+
+	TmuxSessionName:
+		label: Session name template
+		aliases: "tmux"
+		kind: text
+		indent: 1
+		setting: shell.tmux.session_name
+		help: "What a new tmux session is called. A macro between percent signs is replaced by its value:\n%YYYYmmDD%: the date\n%HHMMSS%: the time\n%HHMMSSNN%: the time, to a hundredth of a second\n\nA name tmux already has gets a number on the end. Dots, colons and # become underscores, since tmux won't keep them."
+
+	TmuxOnClose:
+		label: When closed
+		aliases: "detach", "kill session"
+		kind: radio
+		options: "Detach", "End", "Prompt"
+		indent: 1
+		setting: shell.tmux.on_close
+		help: "What closing a tab or pane does to a tmux session SilkTerm started in it. Detach leaves it running, so it can be attached to again. End closes it and everything running in it."
+
 	## What a window costs the machine. Last on the tab, since it is the part
 	## that depends on the graphics driver.
 	ResourceUse:

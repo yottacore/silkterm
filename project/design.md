@@ -53,6 +53,7 @@
 	- [Tabs report what they are running, and where (2026-08-21)](#tabs-report-what-they-are-running-and-where-2026-08-21)
 	- [A tab is as wide as its own label needs (2026-08-23)](#a-tab-is-as-wide-as-its-own-label-needs-2026-08-23)
 	- [PowerShell gets the same prompt bash does (2026-08-21, reworked 2026-08-30)](#powershell-gets-the-same-prompt-bash-does-2026-08-21-reworked-2026-08-30)
+	- [A split can start in a tmux session of its own (2026-10-17)](#a-split-can-start-in-a-tmux-session-of-its-own-2026-10-17)
 - [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
@@ -730,6 +731,22 @@ Two decisions came out of the port.
 Cost was the other thing the port had to answer, since three `git` calls per prompt is invisible on unix and not on Windows. The search for the working tree is done in the shell rather than by asking git, so a directory outside a repository costs no process at all, and inside one a single `git status --porcelain=v2 --branch` answers branch, clean and upstream together. The remote URL is read once per repository and remembered.
 
 The block is also kept up to date in place from then on, between its two markers. It gains things over time, and an install that only ever appended would leave everyone who already had it on the first version forever. That edit is safe only because the region is delimited by markers we wrote - which is exactly the signal the stored shell list lacks, and why that list may still only ever be added to.
+
+### A split can start in a tmux session of its own (2026-10-17)
+
+With `shell.tmux.always_new_session` on, a split runs tmux in place of the shell, starting a new session that runs the shell. "New tab in tmux" on the Tabs menu does the same for a tab. A plain new tab and a window's first pane don't, so a window always has a pane outside tmux. [usage.md](../usage.md#panes-in-tmux) says how it works for the user, and the split panes design doc has the detail.
+
+- The pane keeps the shell as its command, not tmux, so the tab names the shell, and a split or new tab made from it runs that shell too. The tab names tmux as the program running, the way it does for tmux started from a shell, and the minimap steps aside for it the same way.
+
+- The session's name is a template, read by the same parser the tab text uses. The name kept is the one tmux will have, so `.`, `:` and `#` become `_` here first, since tmux changes the first two and reads `#` as a format.
+
+- Ending goes by that name, matched exactly, and never by what the pane shows. A user can switch the pane's client to another session, and End must not take that one with it. A renamed session is left alone too, which errs on the side of not killing anything.
+
+- Only a close somebody asked for decides anything. A client that leaves on its own, by a detach inside it or its session ending, closes the pane as any exiting program does.
+
+- The question is a small window in the notice's place, with Detach as the default since it loses nothing. Its "Don't ask me next time" box writes the answer given into the same setting the Settings row edits.
+
+- tmux is looked for on PATH, then in the Homebrew and MacPorts folders, which an app started from the macOS Dock doesn't have on its PATH. The answer is kept for 10 seconds, so a menu can ask each time it opens. Windows has no tmux, so the rows are grayed there and the menu row is left out.
 
 ## Copyright and license
 

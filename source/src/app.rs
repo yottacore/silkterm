@@ -51,6 +51,7 @@ use vt::{VtHeal, spawn_vt_watch, vramdbg};
 pub(crate) use window_size::request_size;
 use window_size::{MonitorWatch, fit_px, launch_maximized, window_px};
 
+mod closing;
 mod cmdline;
 mod dialogs;
 mod idle;
@@ -92,6 +93,8 @@ pub struct App {
 	notice: Option<crate::dialog::DialogWin>,
 	notice_dirty: bool,
 	notice_owed: Option<config::Refusal>,
+	// the close the tmux question in `notice` is about
+	asking: Option<closing::Closing>,
 	// settings a conversion of the file could not keep, said the same way
 	loss_owed: Option<config::ConversionLoss>,
 	// files already reported this session (see notice_due)
@@ -143,6 +146,7 @@ impl App {
 			notice: None,
 			notice_dirty: false,
 			notice_owed: None,
+			asking: None,
 			loss_owed: None,
 			told: Vec::new(),
 			settings_view: None,
@@ -730,9 +734,11 @@ struct State {
 	bare_saved: (bool, bool), // (decorated, menu_bar) from before bare, to put back
 	bar_open: Option<usize>, // which top-level menu's dropdown is open, if any
 	quit: bool, // set by File->Quit; the event handler exits after applying
+	// a close waiting on the tmux question, which App puts up (closing.rs)
+	close_ask: Option<closing::Closing>,
 	win_opacity: Option<f32>, // CLI --background-opacity override (this window only)
 	win_title: Option<String>, // CLI --title override (else "AppName - <tab title>")
-	last_win_title: String, // last string set on the window (skip redundant set_title)
+	last_win_title: String,   // last string set on the window (skip redundant set_title)
 	focused: bool, // window has keyboard focus (gates copy-output: never copy from a background window)
 	pending_about: bool, // request to open the About window (App acts on it; needs the event loop)
 	pending_settings: Option<Instant>, // request to open the Settings window, and when
@@ -1306,7 +1312,7 @@ impl State {
 			.cur()
 			.panes
 			.get(&self.tabs.cur().focused)
-			.and_then(|p| p.term.cwd());
+			.and_then(crate::pane::Pane::inherit_cwd);
 		let exe = match std::env::current_exe() {
 			Ok(p) => p,
 			Err(e) => {
@@ -3991,6 +3997,7 @@ impl ApplicationHandler<UserEvent> for App {
 			bare_saved: (false, false),
 			bar_open: None,
 			quit: false,
+			close_ask: None,
 			win_opacity,
 			win_title,
 			last_win_title: String::new(),
@@ -4260,7 +4267,11 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		state.note_presence(&event);
 		match event {
-			WindowEvent::CloseRequested => event_loop.exit(),
+			WindowEvent::CloseRequested => {
+				if state.may_close(closing::Closing::Window) {
+					event_loop.exit();
+				}
+			}
 
 			WindowEvent::Resized(size) => {
 				// The surface follows the window, not the event. macOS sends the
@@ -4810,7 +4821,7 @@ impl ApplicationHandler<UserEvent> for App {
 						.flatten()
 						.map(|cb| cb.x);
 					if input::close_on_release(i, x, in_bar, close_x, state.tab_at(x)) {
-						state.close_tab_at(i);
+						state.request_close_tab(i);
 					}
 					state.dirty = true;
 				}
@@ -5144,7 +5155,7 @@ impl ApplicationHandler<UserEvent> for App {
 						return;
 					}
 					Some(Hotkey::Quit) => {
-						state.quit = true;
+						state.request_quit();
 						return;
 					}
 					// the same as the Panes menu's rows, on the focused pane
@@ -5425,6 +5436,13 @@ impl ApplicationHandler<UserEvent> for App {
 		}
 		if self.notice_owed.is_some() || self.loss_owed.is_some() {
 			self.show_notice(event_loop);
+		}
+		if self
+			.state
+			.as_ref()
+			.is_some_and(|state| state.close_ask.is_some())
+		{
+			self.show_close_ask(event_loop);
 		}
 		if self
 			.notice

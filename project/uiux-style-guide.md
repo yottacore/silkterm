@@ -93,6 +93,7 @@ For prose, comments, naming and Rust conventions, see [`style-guide.md`](../styl
 - Accelerator letters are unique within one menu, and the first match wins, so a letter spent early is spent. A row that cannot get a distinct letter goes without one rather than stealing one.
 
 - Nothing in a menu is disabled and left visible unless its absence would be more confusing than its being gray.
+	- "New tab in tmux" is left out where tmux can't be found, which is always on Windows.
 
 ## Settings dialog
 
@@ -205,6 +206,8 @@ The dialog is declared in `settings_ui.shcl`, which is the file to edit when add
 - A confirmation names what is about to happen and quotes the thing by name: `Really delete theme "Matrix"?`
 
 - OK is the default in every prompt, including a confirmation to delete. Nothing SilkTerm deletes is unrecoverable enough to justify making the reader reach for the other button every time.
+
+- A question with more than one answer names each answer on its own button, with Cancel first and the default last, at the bottom right. Closing a pane SilkTerm started in tmux asks Cancel, End or Detach, and Detach is the default, since it loses nothing. A "Don't ask me next time" box above the buttons stores the answer given in the setting the question stands for.
 
 - A red mark is only for removal. Nothing else in the interface is red.
 
@@ -376,7 +379,9 @@ Things the built interface does differently from the rules above. Each is a smal
 
 - The Tab text template's flyover runs well past three sentences. It's the one place the dialog lists the macros, and a list of them can't be cut down to prose.
 
-- Program makes ten, and 7 at the top level, which is the ceiling. It holds what the program does as a whole rather than how a window looks: Resource use for now, and running in tmux next.
+- Program makes ten, and 7 at the top level, which is the ceiling. It holds what the program does as a whole rather than how a window looks: running in tmux, then Resource use.
+
+- The tmux switch's flyover runs well past three sentences. It lists the pros and the cons of running in tmux, and the cons are what its warning mark is for.
 
 ## Copyright and license
 

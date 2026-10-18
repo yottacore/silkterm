@@ -42,6 +42,8 @@ struct AboutLink {
 	url: Option<String>,
 	tooltip: Option<String>,
 	button: bool,
+	// what it is in the tmux question, which answers in place of a url
+	pick: Option<AskPart>,
 }
 
 enum Content {
@@ -62,6 +64,9 @@ enum AboutSource {
 	// Windows says a notice with MessageBoxW, so it has no dialog window of its own
 	#[cfg(not(target_os = "windows"))]
 	Notice(Vec<String>),
+	// Windows has no tmux, so nothing there ever asks
+	#[cfg(not(target_os = "windows"))]
+	Ask(Ask),
 }
 
 impl AboutSource {
@@ -70,16 +75,101 @@ impl AboutSource {
 			AboutSource::About(_) => false,
 			#[cfg(not(target_os = "windows"))]
 			AboutSource::Notice(_) => true,
+			#[cfg(not(target_os = "windows"))]
+			AboutSource::Ask(_) => false,
+		}
+	}
+
+	fn ask(&self) -> Option<&Ask> {
+		match self {
+			#[cfg(not(target_os = "windows"))]
+			AboutSource::Ask(ask) => Some(ask),
+			_ => None,
+		}
+	}
+
+	fn ask_mut(&mut self) -> Option<&mut Ask> {
+		match self {
+			#[cfg(not(target_os = "windows"))]
+			AboutSource::Ask(ask) => Some(ask),
+			_ => None,
 		}
 	}
 }
 
+/// What closing a pane in tmux asks (app/closing.rs): its paragraphs, the
+/// "Don't ask me next time" box, and which part the keyboard is on.
 #[derive(Debug)]
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+struct Ask {
+	paras: Vec<String>,
+	remember: bool,
+	focus: AskPart,
+}
+
+// The parts of the question, in Tab order. Detach is the default button.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AskPart {
+	Remember,
+	Cancel,
+	End,
+	Detach,
+}
+
+const ASK_WALK: [AskPart; 4] = [
+	AskPart::Remember,
+	AskPart::Cancel,
+	AskPart::End,
+	AskPart::Detach,
+];
+
+impl Ask {
+	// Tab and Shift+Tab, round the end
+	fn step(&mut self, back: bool) {
+		let at = ASK_WALK.iter().position(|p| *p == self.focus).unwrap_or(0);
+		let n = ASK_WALK.len();
+		self.focus = ASK_WALK[if back { (at + n - 1) % n } else { (at + 1) % n }];
+	}
+
+	// A click, or Space on the part with the focus. The box only changes
+	// state; each button answers.
+	fn press(&mut self, part: AskPart) -> Option<DialogAction> {
+		self.focus = part;
+		let remember = self.remember;
+		match part {
+			AskPart::Remember => {
+				self.remember = !self.remember;
+				None
+			}
+			AskPart::Cancel => Some(DialogAction::Close),
+			AskPart::End => Some(DialogAction::Tmux {
+				end: true,
+				remember,
+			}),
+			AskPart::Detach => Some(DialogAction::Tmux {
+				end: false,
+				remember,
+			}),
+		}
+	}
+
+	// Enter is the default button, unless the keyboard is on another one.
+	fn enter(&mut self) -> Option<DialogAction> {
+		match self.focus {
+			AskPart::Remember => self.press(AskPart::Detach),
+			part => self.press(part),
+		}
+	}
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum DialogAction {
 	OpenUrl(String),
 	Apply,         // apply settings, keep the dialog open (live preview)
 	ApplyAndClose, // OK
 	Close,         // Cancel / Esc / window close
+	// the tmux question's Detach or End, and whether to stop asking
+	Tmux { end: bool, remember: bool },
 }
 
 pub struct DialogWin {
@@ -149,6 +239,7 @@ impl DialogWin {
 	fn kind(&self) -> &'static str {
 		match &self.content {
 			Content::About { source, .. } if source.is_notice() => "Notice",
+			Content::About { source, .. } if source.ask().is_some() => "Ask",
 			Content::About { .. } => "About",
 			Content::Settings(_) => "Settings",
 		}
@@ -326,6 +417,56 @@ impl DialogWin {
 		})
 	}
 
+	/// The question closing a tab, pane or window with a pane in tmux asks:
+	/// detach from the sessions, end them, or don't close.
+	#[cfg(not(target_os = "windows"))]
+	pub fn new_ask(
+		el: &ActiveEventLoop,
+		title: String,
+		paras: &[String],
+		parent: Option<RawWindowHandle>,
+		warm: Option<&crate::gfx::DialogGpu>,
+	) -> anyhow::Result<Self> {
+		let (window, mut gfx, mut text, rects) =
+			Self::make(el, title, 480.0, 200.0, false, parent, warm)?;
+		let ask = Ask {
+			paras: paras.to_vec(),
+			remember: false,
+			focus: AskPart::Detach,
+		};
+		let (lines, links, size) = layout_ask(&mut text, &ask);
+		let requested_size =
+			winit::dpi::PhysicalSize::new(size.0.ceil() as u32, size.1.ceil() as u32);
+		if let Some(applied) = crate::app::request_size(&window, requested_size) {
+			gfx.resize(applied.width, applied.height);
+		}
+		#[cfg(target_os = "linux")]
+		window.set_visible(true);
+		Ok(Self {
+			window,
+			gfx,
+			text,
+			rects,
+			content: Content::About {
+				lines,
+				links,
+				source: AboutSource::Ask(ask),
+			},
+			mouse: (0.0, 0.0),
+			last_frame: std::time::Instant::now(),
+			anim_wake: None,
+			refused: Retry::default(),
+			tip: crate::tip::Dwell::default(),
+			tip_drawn: None,
+			focus: crate::tip::Focus::default(),
+			shaped: ShapedText::default(),
+			parent,
+			snapped: false,
+			caps: (f32::MAX, f32::MAX),
+			mods: ModifiersState::empty(),
+		})
+	}
+
 	/// `resume` is the view a recently closed Settings window was left on (see
 	/// `App::settings_view`); None opens at the top of the first tab. `sized` is a
 	/// size the user dragged it to earlier this session, which outlives the view
@@ -354,6 +495,7 @@ impl DialogWin {
 		let mut dialog = SettingsDialog::new(0.0, 0.0, text.ui_line_h, chrome, max_w, max_h, scale);
 		dialog.start_from(base);
 		dialog.set_sees_hidden(!on_wayland(el));
+		dialog.set_tmux_found(crate::tmux::program().is_some());
 		if let Some(view) = resume {
 			dialog.restore(view);
 		}
@@ -518,14 +660,17 @@ impl DialogWin {
 	) -> Option<DialogAction> {
 		let (mx, my) = self.mouse;
 		match &mut self.content {
-			Content::About { links, .. } => links
-				.iter()
-				.find(|link| link.rect.contains(mx, my))
-				.map(|link| {
+			Content::About { links, source, .. } => {
+				let link = links.iter().find(|link| link.rect.contains(mx, my))?;
+				if let Some(part) = link.pick {
+					return source.ask_mut().and_then(|ask| ask.press(part));
+				}
+				Some(
 					link.url
 						.clone()
-						.map_or(DialogAction::Close, DialogAction::OpenUrl)
-				}),
+						.map_or(DialogAction::Close, DialogAction::OpenUrl),
+				)
+			}
 			Content::Settings(dialog) => {
 				let (w, h) = dialog.size();
 				// ignore clicks outside the panel (would otherwise Cancel)
@@ -636,8 +781,14 @@ impl DialogWin {
 
 	/// Tab key: walk control focus (Ctrl = switch tabs, Shift = backwards).
 	pub fn key_tab(&mut self) {
-		if let Content::Settings(dialog) = &mut self.content {
-			dialog.key_tab();
+		let back = self.mods.shift_key();
+		match &mut self.content {
+			Content::Settings(dialog) => dialog.key_tab(),
+			Content::About { source, .. } => {
+				if let Some(ask) = source.ask_mut() {
+					ask.step(back);
+				}
+			}
 		}
 	}
 	/// Ctrl+PageUp / Ctrl+PageDown: cycle tabs (PageDown = next).
@@ -663,8 +814,11 @@ impl DialogWin {
 	pub fn key_space(&mut self) -> Option<DialogAction> {
 		match &mut self.content {
 			Content::Settings(dialog) => map_action(dialog.key_space()),
-			// a notice's one button has the focus
-			Content::About { source, .. } => source.is_notice().then_some(DialogAction::Close),
+			Content::About { source, .. } => match source.ask_mut() {
+				Some(ask) => ask.press(ask.focus),
+				// a notice's one button has the focus
+				None => source.is_notice().then_some(DialogAction::Close),
+			},
 		}
 	}
 
@@ -765,7 +919,10 @@ impl DialogWin {
 				}
 				map_action(action)
 			}
-			Content::About { source, .. } => source.is_notice().then_some(DialogAction::Close),
+			Content::About { source, .. } => match source.ask_mut() {
+				Some(ask) => ask.enter(),
+				None => source.is_notice().then_some(DialogAction::Close),
+			},
 		}
 	}
 
@@ -1449,12 +1606,12 @@ fn scene(
 			links,
 			source,
 		} => {
+			let ask = source.ask();
 			// a notice's OK is the default button, outlined the way Settings
-			// outlines its own
-			let btn_border = if source.is_notice() {
-				crate::settings_ui::dialog_btn_hl()
-			} else {
-				border_col
+			// outlines its own, and so is the question's Detach
+			let default_button = |link: &AboutLink| match ask {
+				Some(_) => link.pick == Some(AskPart::Detach),
+				None => source.is_notice(),
 			};
 			// filled boxes behind button-style links (the Support button),
 			// brightened while hovered
@@ -1463,6 +1620,11 @@ fn scene(
 					crate::settings_ui::dialog_btn_hl()
 				} else {
 					crate::settings_ui::dialog_btn()
+				};
+				let btn_border = if default_button(link) {
+					crate::settings_ui::dialog_btn_hl()
+				} else {
+					border_col
 				};
 				let r = link.rect;
 				let b = text.dip(ABOUT_BORDER);
@@ -1474,6 +1636,9 @@ fn scene(
 					btn_border,
 				));
 				rects.push(quad(r.x, r.y, r.w, r.h, fill));
+			}
+			if let Some(ask) = ask {
+				ask_quads(ask, links, text, &mut rects);
 			}
 			for line in lines {
 				let mut attrs = ui_attrs();
@@ -1640,6 +1805,61 @@ fn scene(
 			}
 		}
 	}
+}
+
+// The question's check box, and the ring round whatever the keyboard is on. A
+// ring hugs a button's own outline and stands a little off the box and label.
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+fn ask_quads(ask: &Ask, links: &[AboutLink], text: &TextCtx, rects: &mut Vec<RectInstance>) {
+	let b = text.dip(ABOUT_BORDER);
+	for link in links {
+		let r = link.rect;
+		if link.pick == Some(AskPart::Remember) {
+			let size = ask_box(r.h);
+			let (x, y) = (r.x, r.y + (r.h - size) / 2.0);
+			rects.push(quad(x, y, size, size, crate::settings_ui::dialog_border()));
+			rects.push(quad(
+				x + b,
+				y + b,
+				size - 2.0 * b,
+				size - 2.0 * b,
+				crate::settings_ui::dialog_field(),
+			));
+			if ask.remember {
+				let inset = (size * 0.22).round();
+				rects.push(quad(
+					x + inset,
+					y + inset,
+					size - 2.0 * inset,
+					size - 2.0 * inset,
+					crate::settings_ui::dialog_handle(),
+				));
+			}
+		}
+		if link.pick == Some(ask.focus) {
+			let off = if link.button { b } else { text.dip(4.0) };
+			ring(
+				rects,
+				Rect {
+					x: r.x - off,
+					y: r.y - off,
+					w: r.w + 2.0 * off,
+					h: r.h + 2.0 * off,
+				},
+				text.dip(2.0),
+				crate::settings_ui::dialog_focus(),
+			);
+		}
+	}
+}
+
+// Four quads round `r`, `t` thick, drawn inside it.
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+fn ring(rects: &mut Vec<RectInstance>, r: Rect, t: f32, color: [u8; 3]) {
+	rects.push(quad(r.x, r.y, r.w, t, color));
+	rects.push(quad(r.x, r.y + r.h - t, r.w, t, color));
+	rects.push(quad(r.x, r.y, t, r.h, color));
+	rects.push(quad(r.x + r.w - t, r.y, t, r.h, color));
 }
 
 // X11: make the dialog a proper transient modal of the terminal via WM hints -
@@ -1958,6 +2178,7 @@ fn layout_about(
 				url: Some(repo_url.clone()),
 				tooltip: None,
 				button: false,
+				pick: None,
 			});
 		}
 		lines.push(Line {
@@ -1984,6 +2205,7 @@ fn layout_about(
 		url: Some(config::DONATE_URL.to_string()),
 		tooltip: Some(config::DONATE_URL.to_string()),
 		button: true,
+		pick: None,
 	});
 	lines.push(Line {
 		text: btn_label.into(),
@@ -2008,6 +2230,8 @@ fn layout_source(
 		AboutSource::About(info) => layout_about(text, info),
 		#[cfg(not(target_os = "windows"))]
 		AboutSource::Notice(paras) => layout_notice(text, paras),
+		#[cfg(not(target_os = "windows"))]
+		AboutSource::Ask(ask) => layout_ask(text, ask),
 	}
 }
 
@@ -2131,30 +2355,35 @@ const NOTICE_WRAP: f32 = 440.0; // widest a paragraph runs before it wraps
 const NOTICE_PARA_GAP: f32 = 10.0;
 #[cfg(not(target_os = "windows"))]
 const NOTICE_BTN_MIN_W: f32 = 88.0;
-
-// A notice laid out at the window origin: its paragraphs wrapped at word
-// breaks, and an OK button at the bottom right. Physical px, like layout_about.
 #[cfg(not(target_os = "windows"))]
-fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
+const ASK_BOX_GAP: f32 = 8.0; // check box -> its label
+#[cfg(not(target_os = "windows"))]
+const ASK_BTN_GAP: f32 = 10.0; // between the question's buttons
+
+// Paragraphs wrapped at word breaks to NOTICE_WRAP: each row's text, its color
+// and the gap above it. The paragraph at `path` is a path, which sits right
+// under the sentence before it, breaks after a separator and shows dimmed.
+#[cfg(not(target_os = "windows"))]
+fn wrap_paras(
+	text: &mut TextCtx,
+	paras: &[String],
+	path: Option<usize>,
+) -> Vec<(String, [u8; 3], f32)> {
 	let fg = crate::settings_ui::dialog_text();
 	let dim = crate::settings_ui::dialog_dim();
 	let attrs = ui_attrs();
-	let pad = text.dip(ABOUT_PAD);
-	let line_h = text.ui_line_h;
 	let wrap = text.dip(NOTICE_WRAP);
 	let para_gap = text.dip(NOTICE_PARA_GAP);
-
 	let mut rows: Vec<(String, [u8; 3], f32)> = Vec::new();
 	for (i, para) in paras.iter().enumerate() {
-		// the path sits right under the sentence that introduces it
+		let is_path = path == Some(i);
 		let gap = match i {
 			0 => 0.0,
-			1 => text.dip(ABOUT_TIGHT_GAP),
+			_ if is_path => text.dip(ABOUT_TIGHT_GAP),
 			_ => para_gap,
 		};
-		let color = if i == 1 { dim } else { fg };
-		// a path breaks after a separator, where the rest break at a space
-		let (words, joiner): (Vec<&str>, &str) = if i == 1 {
+		let color = if is_path { dim } else { fg };
+		let (words, joiner): (Vec<&str>, &str) = if is_path {
 			(para.split_inclusive(['/', '\\']).collect(), "")
 		} else {
 			(para.split(' ').collect(), " ")
@@ -2181,6 +2410,122 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 		}
 		rows.push((row, color, if first { gap } else { 0.0 }));
 	}
+	rows
+}
+
+// The tmux question laid out at the window origin: its paragraphs, the "Don't
+// ask me next time" box, and Cancel, End and Detach at the bottom right with
+// Detach the default. Physical px, like the notice.
+#[cfg(not(target_os = "windows"))]
+fn layout_ask(text: &mut TextCtx, ask: &Ask) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
+	let fg = crate::settings_ui::dialog_text();
+	let attrs = ui_attrs();
+	let pad = text.dip(ABOUT_PAD);
+	let line_h = text.ui_line_h;
+	let rows = wrap_paras(text, &ask.paras, None);
+	let box_sz = ask_box(line_h);
+	let box_gap = text.dip(ASK_BOX_GAP);
+	let remember_label = "Don't ask me next time";
+	let remember_w = box_sz + box_gap + text.measure_ui_text(remember_label, &attrs);
+
+	let (btn_pad_x, btn_pad_y) = (text.dip(ABOUT_BTN_PAD_X), text.dip(ABOUT_BTN_PAD_Y));
+	let btn_h = line_h + btn_pad_y * 2.0;
+	let btn_gap = text.dip(ASK_BTN_GAP);
+	let buttons: Vec<(&str, AskPart, f32, f32)> = [
+		("Cancel", AskPart::Cancel),
+		("End", AskPart::End),
+		("Detach", AskPart::Detach),
+	]
+	.into_iter()
+	.map(|(label, part)| {
+		let label_w = text.measure_ui_text(label, &attrs);
+		let w = (label_w + btn_pad_x * 2.0).max(text.dip(NOTICE_BTN_MIN_W));
+		(label, part, label_w, w)
+	})
+	.collect();
+	let run_w = buttons.iter().map(|b| b.3).sum::<f32>() + btn_gap * 2.0;
+
+	let mut content_w = run_w.max(remember_w);
+	for (row, _, _) in &rows {
+		content_w = content_w.max(text.measure_ui_text(row, &attrs));
+	}
+	let mut lines = Vec::with_capacity(rows.len() + 4);
+	let mut links = Vec::with_capacity(4);
+	let mut y = pad;
+	for (row, color, gap) in rows {
+		y += gap;
+		lines.push(Line {
+			text: row,
+			x: pad,
+			y,
+			color,
+			bold: false,
+			scale: 1.0,
+		});
+		y += line_h;
+	}
+	y += text.dip(NOTICE_PARA_GAP) * 1.5;
+	// the box and its label are one target, the way a toggle's are in Settings
+	links.push(AboutLink {
+		rect: Rect {
+			x: pad,
+			y,
+			w: remember_w,
+			h: line_h,
+		},
+		url: None,
+		tooltip: None,
+		button: false,
+		pick: Some(AskPart::Remember),
+	});
+	lines.push(Line {
+		text: remember_label.into(),
+		x: pad + box_sz + box_gap,
+		y,
+		color: fg,
+		bold: false,
+		scale: 1.0,
+	});
+	y += line_h;
+	y += text.dip(config::MENU_SEP_H) * 2.0;
+	let mut x = pad + content_w - run_w;
+	for (label, part, label_w, w) in buttons {
+		links.push(AboutLink {
+			rect: Rect { x, y, w, h: btn_h },
+			url: None,
+			tooltip: None,
+			button: true,
+			pick: Some(part),
+		});
+		lines.push(Line {
+			text: label.into(),
+			x: x + (w - label_w) * 0.5,
+			y: y + btn_pad_y,
+			color: fg,
+			bold: false,
+			scale: 1.0,
+		});
+		x += w + btn_gap;
+	}
+	y += btn_h;
+	(lines, links, (content_w + pad * 2.0, y + pad))
+}
+
+// Side of the question's check box, for a UI line `line_h` tall.
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+fn ask_box(line_h: f32) -> f32 {
+	(line_h * 0.8).round()
+}
+
+// A notice laid out at the window origin: its paragraphs wrapped at word
+// breaks, and an OK button at the bottom right. Physical px, like layout_about.
+#[cfg(not(target_os = "windows"))]
+fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutLink>, (f32, f32)) {
+	let fg = crate::settings_ui::dialog_text();
+	let attrs = ui_attrs();
+	let pad = text.dip(ABOUT_PAD);
+	let line_h = text.ui_line_h;
+	let rows = wrap_paras(text, paras, Some(1));
 
 	let label = "OK";
 	let (btn_pad_x, btn_pad_y) = (text.dip(ABOUT_BTN_PAD_X), text.dip(ABOUT_BTN_PAD_Y));
@@ -2219,6 +2564,7 @@ fn layout_notice(text: &mut TextCtx, paras: &[String]) -> (Vec<Line>, Vec<AboutL
 		url: None,
 		tooltip: None,
 		button: true,
+		pick: None,
 	}];
 	lines.push(Line {
 		text: label.into(),
