@@ -377,31 +377,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: 684d3a0, 754c9cb, 8624cc2, 953c5a3
 	- Closed:
 
-- Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
-	- ID: 2026101714445001
-	- Type: Task
-	- Status: Waiting for testing
-	- Needs local test suite run?: A full pipeline run, plain and with `--container`, to see the new advisory scan step pass in stage 3.
-	- Needs external testing: A `cicd-win.ps1` run on a Windows box, where the scan gates when cargo-deny is installed.
-	- Priority: Avg
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Related IDs: 2026101715240000
-	- Requirements:
-		- Scoped to third-party code end users run, per the parent's 20261017 decision. Filed as 2026101714445007 after this item's fix went in.
-		- The parent's advisory scan, clippy and `// SAFETY:` rows.
-	- Progress log:
-		- 20261017: clippy already ran with `-D warnings` and `undocumented_unsafe_blocks` for Linux and Windows. Added `mem_forget` to the workspace lints. The 2 forgets in our code are in tests and leak on purpose, so each has an allow with the reason.
-		- 20261017: `cargo deny check advisories -D warnings` now fails every full run on a report, a warning too, such as a yanked crate or an ignore that no longer matches. The rest of cargo-deny still only warns. No cargo-deny fails the Linux run. On Windows it warns, like the other lints there.
-		- 20261017: The one standing advisory, ttf-parser unmaintained, has no fix yet. Its ignore names 2026101715240000.
-		- 20261017: 2 unsafe sites in the macOS menu code had no SAFETY line. Both are inside an objc2 macro, which clippy doesn't look into. Added. A scan of every `unsafe` in our code finds no other.
-		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
-	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
-	- Test case: The gates themselves, each seen to fail on a planted fault and pass once it was removed. An unsafe block with no SAFETY line in Windows-only and in macOS-only code failed clippy for those targets, and a `mem::forget` failed it on all 3. The advisory scan failed with the ttf-parser ignore taken out, and with an ignore for an advisory not in the tree. The cicd step failed with cargo-deny missing.
-	- Branch: safelint
-	- Commit: adee468
-
 - Wayland: a size taken that leaves most of the window on an output at another scale shows a grid a few cells off
 	- ID: 2026101513385000
 	- Type: Bug
@@ -607,6 +582,74 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
+
+- Windows version doesn't remember "wallpaper" being enabled.
+	- ID: 2026101816103600
+	- Type: Bug
+	- Status: Queued
+	- Severity: Avg
+	- Opened: 20261018-161036
+	- Opened by: JC
+	- Target OS: Windows
+	- Notes:
+		- Pre-next-cut.
+
+- Updates to CICD script flags
+	- ID: 2026101816103601
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261018-161036
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- `--ci`: Rename `--gate`.
+		- `--quick`:
+			- Should run whatever linting, validation, and testing steps are very quick.
+			- Cross-compile whatever is fast; e.g. maybe skip slow arm64.
+			- Skip anything requiring an external host.
+		- No flags by default should do everything.
+		- The other existing flags can stay.
+	- Notes:
+		- Pre-next-cut. Do next.
+
+- Settings|Window: New option, disabled by default: "On text zoom change window size too".
+	- ID: 2026101816103602
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261018-161036
+	- Opened by: JC
+	- Target OS: All
+	- Notes:
+		- Pre-next-cut.
+
+- Leak checks: advisory scan on every full run, the extra clippy lints, and a SAFETY comment on every unsafe block
+	- ID: 2026101714445001
+	- Type: Task
+	- Status: Queued
+	- Needs local test suite run?: A full pipeline run, plain and with `--container`, to see the new advisory scan step pass in stage 3.
+	- Needs external testing: A `cicd-win.ps1` run on a Windows box, where the scan gates when cargo-deny is installed.
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101715240000
+	- Requirements:
+		- Scoped to third-party code end users run, per the parent's 20261017 decision. Filed as 2026101714445007 after this item's fix went in.
+		- The parent's advisory scan, clippy and `// SAFETY:` rows.
+	- Progress log:
+		- 20261017: clippy already ran with `-D warnings` and `undocumented_unsafe_blocks` for Linux and Windows. Added `mem_forget` to the workspace lints. The 2 forgets in our code are in tests and leak on purpose, so each has an allow with the reason.
+		- 20261017: `cargo deny check advisories -D warnings` now fails every full run on a report, a warning too, such as a yanked crate or an ignore that no longer matches. The rest of cargo-deny still only warns. No cargo-deny fails the Linux run. On Windows it warns, like the other lints there.
+		- 20261017: The one standing advisory, ttf-parser unmaintained, has no fix yet. Its ignore names 2026101715240000.
+		- 20261017: 2 unsafe sites in the macOS menu code had no SAFETY line. Both are inside an objc2 macro, which clippy doesn't look into. Added. A scan of every `unsafe` in our code finds no other.
+		- Note: The pipeline lints Linux and Windows only. macOS code is linted here by hand, with `--target x86_64-apple-darwin`.
+	- Decisions:
+		- 20261018: Add a macOS clippy step that fails the pipeline. It adds the x86_64-apple-darwin target to rust-toolchain.toml, so every box and the container image download it.
+	- Verified: clippy `-D warnings` clean for Linux, `x86_64-pc-windows-gnu` and `x86_64-apple-darwin`, and with the profiling feature. Unit suite (1364 + 28), fmt check, docs check.
+	- Test case: The gates themselves, each seen to fail on a planted fault and pass once it was removed. An unsafe block with no SAFETY line in Windows-only and in macOS-only code failed clippy for those targets, and a `mem::forget` failed it on all 3. The advisory scan failed with the ttf-parser ignore taken out, and with an ignore for an advisory not in the tree. The cicd step failed with cargo-deny missing.
+	- Branch: safelint
+	- Commit: adee468
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
