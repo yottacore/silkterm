@@ -556,11 +556,13 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Tab text: a text field with predefined macros in place of the check boxes
 	- ID: 2026101611405210
 	- Type: Enhancement
-	- Status: Queued
+	- Status: Waiting on signoff
+	- Needs external testing: A look at the row and its flyover on Windows. A dogfood launch on a real config that has the old check boxes.
 	- Priority: Avg
 	- Opened: 20261016-114052
 	- Opened by: JC
 	- Target OS: All
+	- Related IDs: 2026101611321632 (its session name template can use the same parser)
 	- Requirements:
 		- Instead of check boxes, use a text field with predefined macros, with flyover tip text defining options.
 		- Default to something like: `%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% [{ %PROGRAM% || %LAST_PROGRAM% }] - %CURRENT_DIRECTORY% }`
@@ -572,6 +574,20 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Pre-next-cut.
 	- Progress log:
 		- 20261016: The default gives exactly what the 4 check boxes give now. The dash shows only when no program is named. A group whose macros all come out empty drops with its literal text. `[ ]` prints its brackets, `{ }` doesn't.
+		- 20261017: Done. Tab text on the Window tab is one text row, "Template", and `window.tab_text` in the file. The flyover lists the macros and the rules. The four check boxes are gone.
+		- 20261017: Best guess: the dash needed one more rule. Text between two parts shows only when both sides show something, and a `||` choice with no macro in it counts as text. The default is `%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% {[{ %PROGRAM% || last: %LAST_PROGRAM% }] || -} %CURRENT_DIRECTORY% }`. It differs from the sketch above in the `|| -` and the `last: `, which today's tab shows.
+		- 20261017: Best guess: on a narrow tab the parts still give way in the old order. A program's own title goes first, then the shell's name shortens, the program's name is cut, the directory shortens, the program goes, then the directory. A typed name never shortens. A template with nothing to show names the shell.
+		- 20261017: Best guess: a template that can't be read, such as an unclosed `{` or an unknown macro, is kept as typed. Tabs use the default until it's fixed, and the row's flyover and the launch say what's wrong. An emptied box goes back to the default.
+		- 20261017: Best guess: an unknown macro is a mistake, not text, so a typo shows up. A backslash makes the next character plain text. A single `|` is text. Tabs and line breaks are ignored, runs of spaces show as one, and spaces just inside `[ ]` don't print.
+		- 20261017: Best guess: `%USER_DEFINED%` is a name typed on the tab or given with `--title`. A blank one still makes a blank tab, where the template names it.
+		- 20261017: Best guess: a config with the old check boxes gets a template that says the same at its first launch, and the old lines go. Where they were all on, nothing is written. The old comment paragraph over them gives way to the new one.
+		- 20261017: The one change from today's tabs: a directory that reads as nothing, such as `/` under Windows rules, used to leave a dash hanging off the end. It doesn't now.
+		- 20261017: The flyover runs past three sentences, against the style guide, since it's the only place the macros are listed. Logged under the guide's known deviations.
+	- Verified: 20261017. Unit suite (1376 passed), fmt, clippy on Linux, Windows and macOS, test IDs, docs and table checks. The shipped template and the template for each mix of old check boxes match the old code's tab text over 33,600 cases, and a planted change to the dash rule fails that check. Settings looked at in a window, dark at 1x and light at 2x: the row, its flyover with and without a mistake, a custom template applied to the tab, and a broken one in the file leaving the default look.
+	- Swept: everything that builds or reads a tab's text (the strip, the rename, the window title, the tab flyover), and every reader of the four old settings (config, the dialog, its tests). usage.md, glossary.md, design.md and the style guide.
+	- Test case: `the_template_says_what_the_check_boxes_said`, `a_template_says_what_the_tab_says_and_the_ladder_how_short`, `a_malformed_or_blank_tab_text_reads_as_the_shipped_one`, `the_shipped_tab_text_reads`, the 8 tests in `template.rs`, `the_old_tab_check_boxes_become_a_template_that_says_the_same`, `a_config_from_before_the_tab_text_template_upgrades_to_the_current_one`, `a_tab_text_that_cannot_be_read_is_kept_and_said`, `the_tab_text_row_keeps_what_is_typed_and_its_tip_names_a_mistake`, and the completeness test.
+	- Branch: tabtext
+	- Commit: 0b19ad6
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
