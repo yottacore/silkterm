@@ -3,16 +3,20 @@
 
 //! What a tab says, and how it is shortened to fit.
 //!
-//! A tab reads `<shell> [<task>] <path>`: the shell's friendly name, the command
-//! it is running (or `[last: cmd]` for the one it just finished), and where it
-//! is. A shell that has never run anything drops the brackets and reads
-//! `<shell> - <path>` instead.
+//! What a tab says comes from a template the user can edit (`window.tab_text`,
+//! see `template`). The shipped one reads `<shell> [<task>] <path>`: the shell's
+//! friendly name, the command it is running (or `[last: cmd]` for the one it
+//! just finished), and where it is. A shell that has never run anything drops
+//! the brackets and reads `<shell> - <path>` instead.
 //!
 //! When that does not fit, the parts give way in a fixed order, each rung
-//! strictly narrower than the one above it: the shell's name shortens first,
-//! then the task's name is truncated, then the path abbreviates, then the task
-//! goes altogether, then the path does, and the last rung is the shortest form
-//! of the shell's name on its own. The caller measures the rungs in order and
+//! strictly narrower than the one above it: a program's own title goes first,
+//! then the shell's name shortens, then the task's name is truncated, then the
+//! path abbreviates, then the task goes altogether, then the path does, and the
+//! last rung is the shortest form of the shell's name on its own. A name typed
+//! on the tab never shortens. Each rung is the template filled in with the
+//! parts at that rung's length, so the template decides what is said and the
+//! ladder decides how short it gets. The caller measures the rungs in order and
 //! takes the first that fits (`label_forms`).
 //!
 //! The path is shortened the way `PyCmd`'s prompt does it: every directory above
@@ -28,6 +32,8 @@
 //!
 //! The window title is decided here too (`window_suffix`), because it is built
 //! from the same parts and falls back to the tab's own label.
+
+use crate::template::{self, Template};
 
 // Three dots rather than U+2026: a tab is drawn in the desktop interface font,
 // and not every one of those carries the single-glyph ellipsis.
@@ -178,19 +184,15 @@ fn initials(core: &str, words: usize) -> String {
 	}
 }
 
-/// What the tab says about the command, longest first: the program's name, then
-/// truncations of it. WHICH command it is matters more than the tail of its
-/// name, so `last:` stays put and the name is what gets cut.
-pub fn task_forms(task: Option<Task>) -> Vec<String> {
-	let (marker, program) = match task {
-		Some(Task::Running(program)) => ("", program.trim()),
-		Some(Task::Last(program)) => ("last: ", program.trim()),
-		None => return Vec::new(),
-	};
+/// A program's name, longest first: as it is, then cut from its tail. WHICH
+/// command it is matters more than the end of its name, so the head is what
+/// stays. The template puts any `last:` or brackets round it.
+fn task_name_forms(program: &str) -> Vec<String> {
+	let program = program.trim();
 	if program.is_empty() {
 		return Vec::new();
 	}
-	let mut forms = vec![format!("[{marker}{program}]")];
+	let mut forms = vec![program.to_string()];
 	let mut keep = program.chars().count();
 	// Halve until what is kept says nothing. An ellipsis costs three columns, so
 	// the first cuts of a short name are no shorter than the name itself -
@@ -198,7 +200,7 @@ pub fn task_forms(task: Option<Task>) -> Vec<String> {
 	while keep > 3 {
 		keep /= 2;
 		let head: String = program.chars().take(keep).collect();
-		push_shorter(&mut forms, format!("[{marker}{head}{ELLIPSIS}]"));
+		push_shorter(&mut forms, format!("{head}{ELLIPSIS}"));
 	}
 	forms
 }
@@ -433,12 +435,45 @@ pub fn with_note(title: String, note: Option<&str>) -> String {
 	}
 }
 
-/// Which sources a tab's text is allowed to name. All of them on is the shipped
-/// answer; a tab with every source off falls back to the shell, since a tab with
-/// no text cannot be told from the one beside it.
-///
-/// `title` is the title the running program asked for, which is not a part of
-/// the tab's own text but a replacement for it.
+/// The macros a tab's text knows, in the order `label_forms` fills them in.
+pub const TAB_MACROS: [&str; 6] = [
+	"USER_DEFINED",
+	"PROGRAM_DEFINED",
+	"SHELL",
+	"PROGRAM",
+	"LAST_PROGRAM",
+	"CURRENT_DIRECTORY",
+];
+const TYPED: usize = 0;
+const TITLE: usize = 1;
+const SHELL: usize = 2;
+const RUNNING: usize = 3;
+const LAST: usize = 4;
+const DIRECTORY: usize = 5;
+
+/// What a tab says unless told otherwise. It reads the same as the four check
+/// boxes it replaced did with all of them on (`tab_text_for`).
+pub const DEFAULT_TAB_TEXT: &str = "%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% {[{ %PROGRAM% || last: %LAST_PROGRAM% }] || -} %CURRENT_DIRECTORY% }";
+
+/// A tab text template, read against the tab's macros.
+pub fn tab_template(text: &str) -> Result<Template, template::Error> {
+	Template::parse(text, &TAB_MACROS)
+}
+
+/// The template tabs use: `text`, or the shipped one where `text` is blank or
+/// can't be read. A tab that says something normal is better than one that
+/// shows the mistake; the Settings row says what is wrong with it.
+pub fn tab_template_or_default(text: &str) -> Template {
+	// `the_shipped_tab_text_reads` parses it, so this can't fail in a tested build
+	let shipped = || tab_template(DEFAULT_TAB_TEXT).unwrap_or_else(|_| unreachable!());
+	if text.trim().is_empty() {
+		return shipped();
+	}
+	tab_template(text).unwrap_or_else(|_| shipped())
+}
+
+/// The check boxes the tab text replaced, as an older config has them. All on
+/// is what shipped.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Parts {
 	pub title: bool,
@@ -458,59 +493,84 @@ impl Default for Parts {
 	}
 }
 
+/// The template that says what `parts` did. A name typed on the tab came first
+/// whatever they said, and the dash only ever stood between a shell's name and
+/// a path with nothing running, so each mix needs its own spelling.
+pub fn tab_text_for(parts: Parts) -> String {
+	const TASK: &str = "[{ %PROGRAM% || last: %LAST_PROGRAM% }]";
+	let worked_out = match (parts.shell, parts.program, parts.directory) {
+		(true, true, true) => {
+			format!("{{ %SHELL% {{{TASK} || -}} %CURRENT_DIRECTORY% }}")
+		}
+		(true, true, false) => format!("{{ %SHELL% {TASK} }}"),
+		(true, false, true) => "{ %SHELL% - %CURRENT_DIRECTORY% }".to_string(),
+		(false, true, true) => format!("{{ {TASK} %CURRENT_DIRECTORY% }}"),
+		(true, false, false) => "%SHELL%".to_string(),
+		(false, true, false) => TASK.to_string(),
+		(false, false, true) => "%CURRENT_DIRECTORY%".to_string(),
+		(false, false, false) => String::new(),
+	};
+	let mut choices = vec!["%USER_DEFINED%".to_string()];
+	if parts.title {
+		choices.push("%PROGRAM_DEFINED%".to_string());
+	}
+	if !worked_out.is_empty() {
+		choices.push(worked_out);
+	}
+	choices.join(" || ")
+}
+
+/// What a tab's text is made from.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Facts<'a> {
+	/// A name typed on the tab, or given it on the command line.
+	pub typed: Option<&'a str>,
+	/// The shell's friendly name.
+	pub shell: &'a str,
+	/// The title the running program asked for, already through
+	/// `program_title`.
+	pub title: Option<&'a str>,
+	pub task: Option<Task<'a>>,
+	pub cwd: Option<&'a str>,
+	pub home: Option<&'a str>,
+}
+
 /// The tab's text, most preferred form first. The caller measures each against
 /// the space it has and takes the first that fits; the last rung is the least
 /// that still names the pane, so there is always something to draw.
 ///
-/// `program` is the title the running program asked for, already filtered by
-/// `program_title`. It heads the list when there is one. Everything under it is
-/// what the tab works out for itself, and that part does shorten rung by rung.
-pub fn label_forms(
-	friendly: &str,
-	program: Option<&str>,
-	task: Option<Task>,
-	cwd: Option<&str>,
-	home: Option<&str>,
-	style: Style,
-	parts: Parts,
-) -> Vec<String> {
+/// A program's own title, where the template names one, heads the list.
+/// Everything under it is the template filled in without it, and that part
+/// shortens rung by rung.
+pub fn label_forms(template: &Template, facts: Facts, style: Style) -> Vec<String> {
+	// A name typed blank on purpose makes a blank tab, wherever the template has
+	// a place for a typed name.
+	if let Some(typed) = facts.typed.filter(|typed| typed.trim().is_empty())
+		&& template.uses(TYPED)
+	{
+		return vec![typed.to_string()];
+	}
 	// Every part of a label is a program's own text: a process can rename itself
 	// and a directory name arrives in an archive or a checkout. None of it has
 	// been through `plain` on the way here, and a label is drawn by the tab
 	// strip and stands in for the window title, so it is held to the same rule a
 	// title is. Cleaned on the way in rather than on the way out, so the rungs
-	// below are measured against what will actually be drawn.
-	let friendly = plain(friendly);
-	// A part the user turned off is dropped here rather than at each rung, so
-	// the ladder below is built out of what will actually be drawn.
-	let program = parts
-		.title
-		.then_some(program)
-		.flatten()
-		.map(plain)
-		.filter(|title| !title.is_empty());
-	let task = parts.program.then_some(task).flatten();
-	let cwd = parts.directory.then_some(cwd).flatten();
-	let (running, task_name) = match task {
+	// below are measured against what will actually be drawn. A typed name is
+	// shown as typed.
+	let friendly = plain(facts.shell);
+	let title = facts.title.map(plain).filter(|title| !title.is_empty());
+	let (running, task_name) = match facts.task {
 		Some(Task::Running(name)) => (true, Some(plain(name))),
 		Some(Task::Last(name)) => (false, Some(plain(name))),
 		None => (false, None),
 	};
-	let task = task_name.as_deref().map(|name| {
-		if running {
-			Task::Running(name)
-		} else {
-			Task::Last(name)
-		}
-	});
-	let cwd = cwd.map(plain);
-	let home = home.map(plain);
-	let shells = if parts.shell {
-		shell_forms(&friendly)
-	} else {
-		Vec::new()
-	};
-	let tasks = task_forms(task);
+	let cwd = facts.cwd.map(plain);
+	let home = facts.home.map(plain);
+	let shells = shell_forms(&friendly);
+	let tasks = task_name
+		.as_deref()
+		.map(task_name_forms)
+		.unwrap_or_default();
 	let paths = cwd
 		.as_deref()
 		.filter(|dir| !dir.trim().is_empty())
@@ -519,7 +579,7 @@ pub fn label_forms(
 	let full_name = shells.first().map_or("", String::as_str);
 	// The last form is always the shortest; the middle rung only exists when
 	// there are three of them, and a name with no middle rung keeps its own.
-	let tiny_name = (shells.len() > 1).then(|| shells[shells.len() - 1].clone());
+	let tiny_name = (shells.len() > 1).then(|| shells[shells.len() - 1].as_str());
 	let short_name = if shells.len() >= 3 {
 		shells[1].as_str()
 	} else {
@@ -529,64 +589,50 @@ pub fn label_forms(
 	let last_task = tasks.last().map(String::as_str);
 	let first_path = paths.first().map(String::as_str);
 	let last_path = paths.last().map(String::as_str);
+	let typed = facts.typed.unwrap_or("");
+	let fill = |title: Option<&str>, shell: &str, task: Option<&str>, path: Option<&str>| {
+		let mut values = [""; TAB_MACROS.len()];
+		values[TYPED] = typed;
+		values[TITLE] = title.unwrap_or("");
+		values[SHELL] = shell;
+		values[if running { RUNNING } else { LAST }] = task.unwrap_or("");
+		values[DIRECTORY] = path.unwrap_or("");
+		template.expand(&values)
+	};
 
 	// The order the parts give way in. Each is only a candidate: push_shorter
 	// keeps the ones that actually buy width, so a part with nothing left to
 	// give (a one-directory path, a short program name) costs no rungs at all.
-	let mut forms = vec![join(full_name, first_task, first_path)];
-	push_shorter(&mut forms, join(short_name, first_task, first_path));
+	let mut forms = vec![fill(None, full_name, first_task, first_path)];
+	push_shorter(&mut forms, fill(None, short_name, first_task, first_path));
 	for form in tasks.iter().skip(1) {
-		push_shorter(&mut forms, join(short_name, Some(form), first_path));
+		push_shorter(&mut forms, fill(None, short_name, Some(form), first_path));
 	}
 	for form in paths.iter().skip(1) {
-		push_shorter(&mut forms, join(short_name, last_task, Some(form)));
+		push_shorter(&mut forms, fill(None, short_name, last_task, Some(form)));
 	}
-	push_shorter(&mut forms, join(short_name, None, last_path));
-	push_shorter(&mut forms, join(short_name, None, None));
+	push_shorter(&mut forms, fill(None, short_name, None, last_path));
+	push_shorter(&mut forms, fill(None, short_name, None, None));
 	if let Some(tiny) = tiny_name {
-		push_shorter(&mut forms, tiny);
+		push_shorter(&mut forms, fill(None, tiny, None, None));
 	}
 	forms.retain(|form| !form.is_empty());
 	if forms.is_empty() {
-		// Nothing left to say: either the pane offered nothing, or every part is
-		// switched off. The shell's name is the floor either way.
+		// Nothing left to say: either the pane offered nothing, or the template
+		// names nothing it has. The shell's name is the floor either way.
 		forms.push(friendly.trim().to_string());
 	}
-	// A title the program asked for goes on top, outranked only by a name typed
-	// on the tab - the order the window title already uses. It sits above the
-	// ladder rather than inside it: its length says nothing about how much the
-	// tab can give up, and a tab too narrow for it should still fall through the
-	// forms the tab works out for itself.
-	if let Some(title) = program {
-		if forms.first() != Some(&title) {
-			forms.insert(0, title);
+	// A title the program asked for goes on top. It sits above the ladder rather
+	// than inside it: its length says nothing about how much the tab can give
+	// up, and a tab too narrow for it should still fall through the forms the
+	// tab works out for itself.
+	if title.is_some() {
+		let top = fill(title.as_deref(), full_name, first_task, first_path);
+		if !top.is_empty() && forms.first() != Some(&top) {
+			forms.insert(0, top);
 		}
 	}
 	forms
-}
-
-// The parts, spelled the one way. The brackets already set a task apart from
-// the path after it, so only a tab with nothing running needs the dash.
-fn join(shell: &str, task: Option<&str>, path: Option<&str>) -> String {
-	let mut out = shell.to_string();
-	if let Some(task) = task {
-		if !out.is_empty() {
-			out.push(' ');
-		}
-		out.push_str(task);
-	}
-	if let Some(path) = path {
-		if out.is_empty() {
-			out.push_str(path);
-		} else if task.is_some() {
-			out.push(' ');
-			out.push_str(path);
-		} else {
-			out.push_str(" - ");
-			out.push_str(path);
-		}
-	}
-	out
 }
 
 /// Every shortening of `raw`, longest first and each strictly shorter than the
@@ -949,10 +995,47 @@ pub fn elapsed(secs: u64) -> String {
 #[cfg(test)]
 mod tests {
 	use super::{
-		Demand, Parts, Rights, Style, Task, clamp_page, elapsed, label_forms, page_for, path_forms,
-		plain, program_says, program_title, shell_forms, slot_at_x, slot_x, tabs_that_fit,
-		task_forms, tip_lines, tip_value, widths, window_suffix, window_title, with_note,
+		DEFAULT_TAB_TEXT, Demand, Facts, Parts, Rights, Style, Task, clamp_page, elapsed, page_for,
+		path_forms, plain, program_says, program_title, shell_forms, slot_at_x, slot_x,
+		tab_template, tab_template_or_default, tab_text_for, tabs_that_fit, task_name_forms,
+		tip_lines, tip_value, widths, window_suffix, window_title, with_note,
 	};
+
+	// The tests below were written against the four check boxes, so they ask in
+	// those terms and get the template that says the same.
+	pub(super) fn label_forms(
+		friendly: &str,
+		program: Option<&str>,
+		task: Option<Task>,
+		cwd: Option<&str>,
+		home: Option<&str>,
+		style: Style,
+		parts: Parts,
+	) -> Vec<String> {
+		let template =
+			tab_template(&tab_text_for(parts)).expect("the template for the check boxes");
+		let facts = Facts {
+			typed: None,
+			shell: friendly,
+			title: program,
+			task,
+			cwd,
+			home,
+		};
+		super::label_forms(&template, facts, style)
+	}
+
+	fn task_forms(task: Option<Task>) -> Vec<String> {
+		let (marker, program) = match task {
+			Some(Task::Running(program)) => ("", program),
+			Some(Task::Last(program)) => ("last: ", program),
+			None => return Vec::new(),
+		};
+		task_name_forms(program)
+			.into_iter()
+			.map(|form| format!("[{marker}{form}]"))
+			.collect()
+	}
 
 	// Most of what follows is the same question either way, so it is asked with
 	// nothing to take off the front.
@@ -2213,14 +2296,343 @@ mod tests {
 		);
 	}
 
+	// Test ID: Et0TY7u
+	#[test]
+	fn the_shipped_tab_text_reads() {
+		assert!(tab_template(DEFAULT_TAB_TEXT).is_ok());
+		assert_eq!(tab_text_for(Parts::default()), DEFAULT_TAB_TEXT);
+		for bits in 0..16u8 {
+			let parts = Parts {
+				title: bits & 1 != 0,
+				shell: bits & 2 != 0,
+				program: bits & 4 != 0,
+				directory: bits & 8 != 0,
+			};
+			let text = tab_text_for(parts);
+			assert!(tab_template(&text).is_ok(), "{parts:?} gave {text:?}");
+		}
+	}
+
+	// The shipped template says exactly what the four check boxes said with all
+	// of them on, and the template an older config's boxes become says what
+	// those boxes said, over every mix of them and every kind of tab.
+	// Test ID: Et0TY7v
+	#[test]
+	fn the_template_says_what_the_check_boxes_said() {
+		const SHELLS: [&str; 5] = [
+			"PowerShell 7",
+			"bash",
+			"Bash (MSYS2's full)",
+			"",
+			"Zsh (no rc)",
+		];
+		const TITLES: [Option<&str>; 4] =
+			[None, Some("build - release"), Some(""), Some("vi\u{1b}m")];
+		const TASKS: [Option<Task>; 5] = [
+			None,
+			Some(Task::Running("cargo")),
+			Some(Task::Last("docker-compose")),
+			Some(Task::Running(" ")),
+			Some(Task::Last("py\u{1b}[2Jx")),
+		];
+		const CWDS: [Option<&str>; 7] = [
+			None,
+			Some(""),
+			Some("/home/jim/data/prs/dev/silkterm"),
+			Some("/"),
+			Some("/tmp/a\u{1b}[31mb"),
+			Some(r"C:\Users\jim\dev"),
+			Some("~"),
+		];
+		let mut cases = 0;
+		for bits in 0..16u8 {
+			let parts = Parts {
+				title: bits & 1 != 0,
+				shell: bits & 2 != 0,
+				program: bits & 4 != 0,
+				directory: bits & 8 != 0,
+			};
+			for shell in SHELLS {
+				for title in TITLES {
+					for task in TASKS {
+						for cwd in CWDS {
+							for (home, style) in [
+								(None, Style::Posix),
+								(Some("/home/jim"), Style::Posix),
+								(None, Style::Windows),
+							] {
+								let mut was =
+									old::label_forms(shell, title, task, cwd, home, style, parts);
+								let now = label_forms(shell, title, task, cwd, home, style, parts);
+								// A path that reads as nothing, such as a bare / under
+								// Windows rules, used to leave a dash or a space hanging
+								// off the end. The template leaves it off.
+								if cwd.is_some_and(|dir| path_forms(dir, home, style) == [""]) {
+									for form in &mut was {
+										*form = form.trim_end_matches(" - ").trim_end().to_string();
+									}
+									was.dedup();
+								}
+								assert_eq!(
+									now, was,
+									"{parts:?} {shell:?} {title:?} {task:?} {cwd:?} {home:?} {style:?}"
+								);
+								cases += 1;
+							}
+						}
+					}
+				}
+			}
+		}
+		assert_eq!(cases, 16 * 5 * 4 * 5 * 7 * 3);
+		// A name typed on the tab was the whole answer, as typed, whatever the
+		// boxes said. One typed blank made a blank tab.
+		let template = tab_template(DEFAULT_TAB_TEXT).expect("shipped");
+		for typed in ["my tab", "  spaced  out ", "", "  "] {
+			let facts = Facts {
+				typed: Some(typed),
+				shell: "bash",
+				title: Some("build"),
+				task: Some(Task::Running("cargo")),
+				cwd: Some("/srv/x/y"),
+				home: None,
+			};
+			assert_eq!(super::label_forms(&template, facts, Style::Posix), [typed]);
+		}
+	}
+
+	fn forms_of(text: &str, facts: Facts) -> Vec<String> {
+		let template = tab_template(text).expect("a template that reads");
+		super::label_forms(&template, facts, Style::Posix)
+	}
+
+	// The template says what goes on the tab, and the ladder still decides how
+	// short each part gets when there is no room.
+	// Test ID: Et0TY7w
+	#[test]
+	fn a_template_says_what_the_tab_says_and_the_ladder_how_short() {
+		let facts = Facts {
+			typed: None,
+			shell: "PowerShell 7",
+			title: Some("notes.md - vim"),
+			task: Some(Task::Running("cargo")),
+			cwd: Some("/srv/work/project/src"),
+			home: None,
+		};
+		assert_eq!(
+			forms_of("%SHELL% at %CURRENT_DIRECTORY%", facts),
+			[
+				"PowerShell 7 at /srv/work/project/src/",
+				"PS 7 at /srv/work/project/src/",
+				"PS 7 at /srv/work/.../src/",
+				"PS 7 at /srv/.../src/",
+				"PS 7 at /.../src/",
+				"PS 7 at /.../",
+				"PS 7",
+				"P7",
+			]
+		);
+		// a program's own title gives way first, to the rest of the template
+		let titled = forms_of("%PROGRAM_DEFINED% {(%SHELL%)}", facts);
+		assert_eq!(titled[0], "notes.md - vim (PowerShell 7)");
+		assert_eq!(titled[1], "(PowerShell 7)");
+		// a name typed on the tab never shortens, and wherever it is put
+		let typed = Facts {
+			typed: Some("build box"),
+			..facts
+		};
+		assert_eq!(
+			forms_of("%USER_DEFINED%: %PROGRAM%", typed),
+			["build box: cargo", "build box"]
+		);
+		// a template with no room for a typed name leaves it off
+		assert_eq!(forms_of("%SHELL%", typed), ["PowerShell 7", "PS 7", "P7"]);
+		// a template naming nothing the tab has still names the shell
+		assert_eq!(forms_of("%LAST_PROGRAM%", facts), ["PowerShell 7"]);
+	}
+
+	// A template that can't be read is not shown as the mistake. The tab says
+	// what the shipped one says, and so does a blank one.
+	// Test ID: Et0TY7x
+	#[test]
+	fn a_malformed_or_blank_tab_text_reads_as_the_shipped_one() {
+		let shipped = tab_template(DEFAULT_TAB_TEXT).expect("shipped");
+		for text in ["", "   ", "{ %SHELL%", "%SHELL", "%DIRECTORY%", "%SHELL% ]"] {
+			assert!(
+				text.trim().is_empty() || tab_template(text).is_err(),
+				"{text:?}"
+			);
+			assert_eq!(tab_template_or_default(text), shipped, "{text:?}");
+		}
+		// macro names are words of ours, so their case doesn't matter
+		assert_eq!(
+			tab_template_or_default("%shell% %Current_Directory%"),
+			tab_template("%SHELL% %CURRENT_DIRECTORY%").expect("reads")
+		);
+	}
+
+	// What a tab said before the template, kept as it was so the shipped
+	// template and the one written for an older config's check boxes can be held
+	// against it (`the_template_says_what_the_check_boxes_said`).
+	mod old {
+		use super::super::{
+			ELLIPSIS, Parts, Style, Task, path_forms, plain, push_shorter, shell_forms,
+		};
+
+		fn task_forms(task: Option<Task>) -> Vec<String> {
+			let (marker, program) = match task {
+				Some(Task::Running(program)) => ("", program.trim()),
+				Some(Task::Last(program)) => ("last: ", program.trim()),
+				None => return Vec::new(),
+			};
+			if program.is_empty() {
+				return Vec::new();
+			}
+			let mut forms = vec![format!("[{marker}{program}]")];
+			let mut keep = program.chars().count();
+			// Halve until what is kept says nothing. An ellipsis costs three columns, so
+			// the first cuts of a short name are no shorter than the name itself -
+			// push_shorter drops those, and a name too short to cut yields no rung.
+			while keep > 3 {
+				keep /= 2;
+				let head: String = program.chars().take(keep).collect();
+				push_shorter(&mut forms, format!("[{marker}{head}{ELLIPSIS}]"));
+			}
+			forms
+		}
+
+		pub fn label_forms(
+			friendly: &str,
+			program: Option<&str>,
+			task: Option<Task>,
+			cwd: Option<&str>,
+			home: Option<&str>,
+			style: Style,
+			parts: Parts,
+		) -> Vec<String> {
+			// Every part of a label is a program's own text: a process can rename itself
+			// and a directory name arrives in an archive or a checkout. None of it has
+			// been through `plain` on the way here, and a label is drawn by the tab
+			// strip and stands in for the window title, so it is held to the same rule a
+			// title is. Cleaned on the way in rather than on the way out, so the rungs
+			// below are measured against what will actually be drawn.
+			let friendly = plain(friendly);
+			// A part the user turned off is dropped here rather than at each rung, so
+			// the ladder below is built out of what will actually be drawn.
+			let program = parts
+				.title
+				.then_some(program)
+				.flatten()
+				.map(plain)
+				.filter(|title| !title.is_empty());
+			let task = parts.program.then_some(task).flatten();
+			let cwd = parts.directory.then_some(cwd).flatten();
+			let (running, task_name) = match task {
+				Some(Task::Running(name)) => (true, Some(plain(name))),
+				Some(Task::Last(name)) => (false, Some(plain(name))),
+				None => (false, None),
+			};
+			let task = task_name.as_deref().map(|name| {
+				if running {
+					Task::Running(name)
+				} else {
+					Task::Last(name)
+				}
+			});
+			let cwd = cwd.map(plain);
+			let home = home.map(plain);
+			let shells = if parts.shell {
+				shell_forms(&friendly)
+			} else {
+				Vec::new()
+			};
+			let tasks = task_forms(task);
+			let paths = cwd
+				.as_deref()
+				.filter(|dir| !dir.trim().is_empty())
+				.map(|dir| path_forms(dir, home.as_deref(), style))
+				.unwrap_or_default();
+			let full_name = shells.first().map_or("", String::as_str);
+			// The last form is always the shortest; the middle rung only exists when
+			// there are three of them, and a name with no middle rung keeps its own.
+			let tiny_name = (shells.len() > 1).then(|| shells[shells.len() - 1].clone());
+			let short_name = if shells.len() >= 3 {
+				shells[1].as_str()
+			} else {
+				full_name
+			};
+			let first_task = tasks.first().map(String::as_str);
+			let last_task = tasks.last().map(String::as_str);
+			let first_path = paths.first().map(String::as_str);
+			let last_path = paths.last().map(String::as_str);
+
+			// The order the parts give way in. Each is only a candidate: push_shorter
+			// keeps the ones that actually buy width, so a part with nothing left to
+			// give (a one-directory path, a short program name) costs no rungs at all.
+			let mut forms = vec![join(full_name, first_task, first_path)];
+			push_shorter(&mut forms, join(short_name, first_task, first_path));
+			for form in tasks.iter().skip(1) {
+				push_shorter(&mut forms, join(short_name, Some(form), first_path));
+			}
+			for form in paths.iter().skip(1) {
+				push_shorter(&mut forms, join(short_name, last_task, Some(form)));
+			}
+			push_shorter(&mut forms, join(short_name, None, last_path));
+			push_shorter(&mut forms, join(short_name, None, None));
+			if let Some(tiny) = tiny_name {
+				push_shorter(&mut forms, tiny);
+			}
+			forms.retain(|form| !form.is_empty());
+			if forms.is_empty() {
+				// Nothing left to say: either the pane offered nothing, or every part is
+				// switched off. The shell's name is the floor either way.
+				forms.push(friendly.trim().to_string());
+			}
+			// A title the program asked for goes on top, outranked only by a name typed
+			// on the tab - the order the window title already uses. It sits above the
+			// ladder rather than inside it: its length says nothing about how much the
+			// tab can give up, and a tab too narrow for it should still fall through the
+			// forms the tab works out for itself.
+			if let Some(title) = program {
+				if forms.first() != Some(&title) {
+					forms.insert(0, title);
+				}
+			}
+			forms
+		}
+
+		// The parts, spelled the one way. The brackets already set a task apart from
+		// the path after it, so only a tab with nothing running needs the dash.
+		fn join(shell: &str, task: Option<&str>, path: Option<&str>) -> String {
+			let mut out = shell.to_string();
+			if let Some(task) = task {
+				if !out.is_empty() {
+					out.push(' ');
+				}
+				out.push_str(task);
+			}
+			if let Some(path) = path {
+				if out.is_empty() {
+					out.push_str(path);
+				} else if task.is_some() {
+					out.push(' ');
+					out.push_str(path);
+				} else {
+					out.push_str(" - ");
+					out.push_str(path);
+				}
+			}
+			out
+		}
+	}
+
 	// A window title is the one piece of a program's output that leaves the
 	// terminal: the desktop puts it on a task bar, a window list and an alt-tab
 	// switcher, all of which draw it as text they trust. So whatever a program
 	// asks for has to come out as plain text, and the tab label beside it too.
 	mod fuzz {
-		use super::super::{
-			Parts, Rights, Style, Task, label_forms, plain, window_suffix, window_title,
-		};
+		use super::super::{Parts, Rights, Style, Task, plain, window_suffix, window_title};
+		use super::label_forms;
 		use crate::fuzz;
 
 		fn nasty(rng: &mut fuzz::Rng) -> Vec<u8> {

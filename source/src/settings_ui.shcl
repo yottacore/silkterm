@@ -962,34 +962,14 @@ rows:
 		aliases: "tab title", "tab label"
 		tab: Window
 
-	## The four share one line and one revert arrow. Each names itself, and each
-	## keeps its own flyover.
-	TabShowsTitle:
-		label: Program-defined
-		kind: toggle
-		setting: window.tab_shows_title
-		help: "Use the title the running program sets. A name typed on the tab still comes first."
-
-	TabShowsShell:
-		label: Shell
-		kind: toggle
-		beside: true
-		setting: window.tab_shows_shell
-		help: "Show the shell's name. The tab's tip shows all of these either way."
-
-	TabShowsProgram:
-		label: Program
-		kind: toggle
-		beside: true
-		setting: window.tab_shows_program
-		help: "Show the program the shell is running, or last ran."
-
-	TabShowsDirectory:
-		label: Directory
-		kind: toggle
-		beside: true
-		setting: window.tab_shows_directory
-		help: "Show the shell's current directory. It gets cut short on a narrow tab."
+	## The flyover is the only place the macros are listed, so it runs longer
+	## than a row's usually does.
+	TabTemplate:
+		label: Template
+		aliases: "macros", "tab name"
+		kind: text
+		setting: window.tab_text
+		help: "What each tab says. A macro between percent signs is replaced by its value:\n%USER_DEFINED%: a name typed on the tab\n%PROGRAM_DEFINED%: the title the running program sets\n%SHELL%: the shell's name\n%PROGRAM%: the program the shell is running\n%LAST_PROGRAM%: the program it ran last\n%CURRENT_DIRECTORY%: the shell's current directory\n\na || b shows a, or b when a comes out empty. { } groups without printing, and [ ] prints its brackets. A group whose macros all come out empty is left out with its text, and so is text between two parts unless both of them show. On a narrow tab the parts get shorter in a set order."
 
 	WindowTitle:
 		kind: heading

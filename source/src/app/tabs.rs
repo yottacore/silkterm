@@ -150,20 +150,18 @@ impl TabLabels {
 	}
 }
 
-// Everything a tab could say, longest form first (see tabtitle). A `--title`
-// override is the whole answer; otherwise it is the shell's FRIENDLY name -
-// what the Shells list calls it, which is the name the user themselves gave
-// it - plus whatever that shell has to report: the command it is running,
-// the last one it ran, or, having run nothing at all, where it is.
+// Everything a tab could say, longest form first (see tabtitle): the tab text
+// template filled in with the name typed on the tab or given by `--title`, the
+// program's own title, and the shell's FRIENDLY name - what the Shells list
+// calls it, which is the name the user themselves gave it - plus whatever that
+// shell has to report: the command it is running, the last one it ran, or,
+// having run nothing at all, where it is.
 fn label_forms_from(facts: &LabelFacts, settings: &config::Settings) -> Vec<String> {
 	// A rename in progress is what the tab says, so what is typed is what is
 	// seen - and it is one form, never shortened, or the caret would sit off
 	// the end of an abbreviated label.
 	if let Some(text) = &facts.edit {
 		return vec![text.clone()];
-	}
-	if let Some(title) = &facts.title_override {
-		return vec![title.clone()];
 	}
 	let command_line = tab_command_line(facts.command.as_deref());
 	let friendly = crate::shells::friendly(&command_line, &settings.shells);
@@ -177,19 +175,22 @@ fn label_forms_from(facts: &LabelFacts, settings: &config::Settings) -> Vec<Stri
 		crate::term::Task::Last(program) => Some(crate::tabtitle::Task::Last(program)),
 		crate::term::Task::Idle => None,
 	};
+	let template = crate::tabtitle::tab_template_or_default(&settings.tab_text);
 	crate::tabtitle::label_forms(
-		&friendly,
-		crate::tabtitle::program_title(config::rights(), &facts.said, facts.launched.as_deref()),
-		task,
-		cwd.as_deref(),
-		home.as_deref(),
-		crate::tabtitle::Style::native(),
-		crate::tabtitle::Parts {
-			title: settings.tab_shows_title,
-			shell: settings.tab_shows_shell,
-			program: settings.tab_shows_program,
-			directory: settings.tab_shows_directory,
+		&template,
+		crate::tabtitle::Facts {
+			typed: facts.title_override.as_deref(),
+			shell: &friendly,
+			title: crate::tabtitle::program_title(
+				config::rights(),
+				&facts.said,
+				facts.launched.as_deref(),
+			),
+			task,
+			cwd: cwd.as_deref(),
+			home: home.as_deref(),
 		},
+		crate::tabtitle::Style::native(),
 	)
 }
 
@@ -560,7 +561,8 @@ impl State {
 	}
 
 	// What tab `index`'s label is made from, or None for no such tab. A rename
-	// or a title of its own is the whole label, so the shell is not asked.
+	// in progress is the whole label, so the shell is not asked. A title of the
+	// tab's own is only one of the parts, since the template says where it goes.
 	fn label_facts(&mut self, index: usize) -> Option<LabelFacts> {
 		let edit = self
 			.tab_edit
@@ -568,10 +570,9 @@ impl State {
 			.filter(|edit| edit.tab == index)
 			.map(|edit| edit.text.clone());
 		let pm = self.tabs.list.get_mut(index)?;
-		if edit.is_some() || pm.title_override.is_some() {
+		if edit.is_some() {
 			return Some(LabelFacts {
 				edit,
-				title_override: pm.title_override.clone(),
 				..LabelFacts::default()
 			});
 		}
@@ -586,7 +587,7 @@ impl State {
 		let (command, task, cwd) = pm.tab_facts();
 		Some(LabelFacts {
 			edit: None,
-			title_override: None,
+			title_override: pm.title_override.clone(),
 			said,
 			launched,
 			command,
@@ -895,10 +896,7 @@ mod tests {
 
 	fn label_settings(shell_title: &str) -> std::sync::Arc<config::Settings> {
 		std::sync::Arc::new(config::Settings {
-			tab_shows_title: true,
-			tab_shows_shell: true,
-			tab_shows_program: true,
-			tab_shows_directory: true,
+			tab_text: crate::tabtitle::DEFAULT_TAB_TEXT.to_string(),
 			shells: vec![ShellEntry {
 				slug: "silk-test-sh".into(),
 				title: shell_title.into(),

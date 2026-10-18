@@ -59,6 +59,7 @@ Terminal jargon that any terminal shares is left out unless SilkTerm gives it a 
 - [Softness](#softness)
 - [Sub-group](#sub-group)
 - [Tab strip](#tab-strip)
+- [Tab text](#tab-text)
 - [Text colors from the wallpaper](#text-colors-from-the-wallpaper)
 - [Text outline](#text-outline)
 - [Theme and mode](#theme-and-mode)
@@ -240,6 +241,10 @@ A run of Settings rows that belong to the row above them, shown by indenting the
 ## Tab strip
 
 The row of tabs under the menu bar. Each tab is as wide as its own label needs, and the tab in front takes whatever the row can spare, so it spells its label out while the others fall back to a shorter form. When they no longer fit, the strip pages rather than shrinking them to nothing.
+
+## Tab text
+
+What each tab says, written as a template under Tab text on the Window tab. Macros in percent signs stand for the parts a tab can name: a name typed on it, the title the running program sets, the shell, the program it's running or ran last, and its directory. `||` picks the first part that has something to say, `{ }` groups and `[ ]` groups with brackets that show. On a narrow tab the parts shorten in a set order. [usage.md](usage.md#tab-text) has the whole list.
 
 ## Text colors from the wallpaper
 

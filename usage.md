@@ -4,7 +4,7 @@
 <!-- TOC ignore:true -->
 # Using SilkTerm
 
-Where the config lives, the command line, shell integration, and opening scripts and folders on Windows.
+Where the config lives, what a tab says, the command line, shell integration, and opening scripts and folders on Windows.
 
 <!-- TOC ignore:true -->
 ## Table of contents
@@ -12,6 +12,7 @@ Where the config lives, the command line, shell integration, and opening scripts
 <!-- TOC -->
 
 - [Configuration](#configuration)
+- [Tab text](#tab-text)
 - [Command line](#command-line)
 	- [Information](#information)
 	- [Window options](#window-options)
@@ -46,6 +47,47 @@ To start over from the shipped defaults, run `silkterm --reset-config`. The old 
 When an update converts the file to a newer format, the file as it was is kept alongside, named for the local time it was converted and the format it had, such as `config_backup_20261003-142233_format-v2.shcl`. Every older version is kept, and a file named with `--config` keeps its own name in front. A line the new format can't hold stays in the file as written, and SilkTerm puts up a notice saying how many there were and where the old file is. If the file can't be converted where it is, because it isn't UTF-8 text or the new format can't read it, SilkTerm writes a new one from the defaults with every setting it can still read, and the notice says how many it couldn't copy to the new file. A file already in the current format with lines that aren't UTF-8 text is written again without those lines, and kept alongside the same way. A notice names the lines and where the old file is.
 
 Drop a few images into a `wallpaper` folder next to the config and SilkTerm picks one each launch, favoring whatever it hasn't shown lately. Naming a wallpaper in the config, or passing one on the command line, takes precedence. The [wallpaper pack](install.md#wallpaper-pack) is a ready-made folder to start from.
+
+## Tab text
+
+What each tab says comes from a template. Edit it under Tab text on the Window tab of Settings, or as `window.tab_text` in the config. A macro between percent signs is replaced by its value:
+
+| Macro                 | Value
+| :-------------------- | :----------------------------------------------------
+| `%USER_DEFINED%`      | A name typed on the tab, or set with `--title`
+| `%PROGRAM_DEFINED%`   | The title the running program sets
+| `%SHELL%`             | The shell's name, as the Shell tab lists it
+| `%PROGRAM%`           | The program the shell is running
+| `%LAST_PROGRAM%`      | The program it ran last, once it's back at its prompt
+| `%CURRENT_DIRECTORY%` | The shell's current directory
+
+The rest of it:
+
+- `a || b` shows `a`, or `b` when `a` comes out empty.
+
+- `{ }` groups without printing, and `[ ]` prints its brackets.
+
+- A group whose macros all come out empty is left out, with its text.
+
+- Text between two parts shows only when both sides show something, so a separator doesn't hang off the end when the part after it is missing. A choice with no macro in it, such as the `-` in `{[%PROGRAM%] || -}`, counts as text here. To keep text with one macro, put the two in a group: `{(%SHELL%)}`.
+
+- Spaces at either end of the template, a group or a choice don't count, and a run of spaces shows as one. Tabs and line breaks are ignored.
+
+- A backslash makes the next character plain text, such as `\%` or `\{`.
+
+- Macro names don't care about case.
+
+The default reads `Bash [vim] ~/src/` while vim runs, `Bash [last: vim] ~/src/` once it's done, and `Bash - ~/src/` before anything has run:
+
+~~~text
+%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% {[{ %PROGRAM% || last: %LAST_PROGRAM% }] || -} %CURRENT_DIRECTORY% }
+~~~
+
+On a narrow tab the parts give way in a set order. A program's own title goes first, then the shell's name gets shorter, the program's name is cut, the directory is shortened, the program goes, then the directory, and what is left is the shortest form of the shell's name. A name typed on the tab never shortens. A tab with nothing to say names its shell.
+
+A template that can't be read, such as one with a `{` and no `}`, is kept as typed, and tabs use the default until it's fixed. The row's flyover in Settings says what is wrong, and so does the launch.
+
+A config from before the template had four check boxes for this (`window.tab_shows_title`, `tab_shows_shell`, `tab_shows_program` and `tab_shows_directory`). The first launch of a newer SilkTerm swaps them for a template that says the same.
 
 ## Command line
 
