@@ -90,6 +90,11 @@ LINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/
 ## box to find, and both are answered from here in under a minute. Empty () to
 ## disable.
 XLINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/lint" cargo clippy --workspace --all-targets --target x86_64-pc-windows-gnu -- -D warnings)
+## Stage 3: and for macOS, which nothing here builds. The Mac build is on another
+## box and only runs on a full run, so macOS-only unsafe code went unlinted unless
+## somebody ran this by hand. Needs the x86_64-apple-darwin target in
+## rust-toolchain.toml. Empty () to disable.
+MACLINT_CMD=(env "PATH=${HOME}/.cargo/bin:${PATH}" "CARGO_TARGET_DIR=${TARGET_DIR}/lint" cargo clippy --workspace --all-targets --target x86_64-apple-darwin -- -D warnings)
 
 ## Stage 3 (after tests): the fuzz soak. The targets are ordinary tests, so the
 ## run above already exercised them at a fraction of a second each; this gives
@@ -199,11 +204,11 @@ PROFILE_WORKLOAD_ARGS="600 0"          # <duration_s> <delay_s>; duration >> PRO
 PROFILE_OUT_DIR="cicd/artifacts/profiling"  # relative to repo root; created if missing (gitignored)
 PROFILE_STRICT=0                        # 1 = any profiler failure aborts the pipeline
 
-## Demo video re-record (cicd/utility/demo-video/demo-video.py). Off by default -
-## only worth re-recording after major visual/feature changes; flip to 1 or pass
-## --demo for one run. Also skipped under --quick. Video GFS-rotates into
-## ../private/demo-video/; the README highlight gif goes in assets/demo.gif.
-DEMO_ENABLE=0
+## Demo video re-record (cicd/utility/demo-video/demo-video.py). On by default, so
+## a run with no options does everything. --no-demo skips it, and so does --quick
+## unless --demo is given too. Video GFS-rotates into ../private/demo-video/; the
+## README highlight gif goes in assets/demo.gif.
+DEMO_ENABLE=1
 
 ## Full run output is tee'd here (gitignored) so warnings from any stage can be
 ## reviewed after the fact. Kept rotated like the flamegraphs.

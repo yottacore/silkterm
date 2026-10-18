@@ -24,8 +24,8 @@
 ##	   0. remote sync (fetch; fast-forward if safely behind; abort if diverged)
 ##	   1. format (cargo fmt)
 ##	   2. debug build (this is what the tests + profiler run against)
-##	   3. regression tests + lints + fuzz soak (clippy and the advisory scan gating,
-##	      the rest of cargo-deny not; scroll harness)
+##	   3. regression tests + lints + fuzz soak (clippy for Linux, Windows and macOS
+##	      and the advisory scan gating, the rest of cargo-deny not; scroll harness)
 ##	   4. profiler (flamegraph SVG; non-gating artifact - see failure policy)
 ##	   5. release build (native + cross targets; optimized, for packaging + dogfood),
 ##	      then a check that every Windows binary carries its icon and version block
@@ -52,14 +52,18 @@
 ##	   --no-dogfood        skip the dogfood install
 ##	   --no-publish        skip the git backup + publish stage
 ##	   --no-sync           skip the remote sync check (stage 0)
-##	   --demo              re-record the demo video (off by default)
-##	   --quick             skip the slow stages (cross-builds + packages + profiling)
+##	   --no-demo           skip the demo video re-record
+##	   --demo              re-record the demo video, under --quick too
+##	   --quick             only the quick lints and tests, and the x86_64 release builds;
+##	                       skips the ARM64 builds, packages, profiling, the fuzz soak,
+##	                       the slow window tests and anything that needs another box
 ##	   --gate              merge gate only: fmt --check + clippy + tests, then exit
 ##	                       (fast local stand-in for hosted CI; the pre-push hook runs it)
 ##	   --container         stages 1-6 in the pinned image from cicd/container/Dockerfile,
 ##	                       with its own target dir (target/container); sync, the private
 ##	                       runner, dogfood, the demo and publish stay here. With --gate,
 ##	                       the gate runs there.
+##	  With no options every stage runs.
 ## - Reuse: copy the cicd/ directory into another project and edit config.bash.
 
 ##	History: At bottom of script.
@@ -104,7 +108,7 @@ cd "${root}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 ## Parse options.
-assumeYes=0; quiet=0; quick=0; gate=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container=0; innerArgs=()
+assumeYes=0; quiet=0; quick=0; gate=0; demoAsked=0; noArm=0; noWindows=0; sync=1; cliMessage=""; container=0; innerArgs=()
 while (($#)); do case "${1}" in
 	-y|--yes)                 assumeYes=1; shift ;;
 	-q|--quiet)               quiet=1; assumeYes=1; shift ;;   ## quiet + unattended; publish runs quiet too
@@ -120,8 +124,9 @@ while (($#)); do case "${1}" in
 	--no-dogfood)             DOGFOOD_DESTS=(); shift ;;
 	--no-publish)             GIT_PUBLISH=(); shift ;;
 	--no-sync)                sync=0; shift ;;
-	--demo)                   DEMO_ENABLE=1; shift ;;
-	--quick)                  quick=1; BUILD_CROSS=0; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
+	--demo)                   DEMO_ENABLE=1; demoAsked=1; shift ;;
+	--no-demo)                DEMO_ENABLE=0; shift ;;
+	--quick)                  quick=1; noArm=1; PROFILE_ENABLE=0; PACKAGE_ENABLE=0; FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;   ## skip the slow stages
 	--no-fuzz)                FUZZ_SECS=0; innerArgs+=("${1}"); shift ;;
 	--message=*|--msg=*|-m=*) cliMessage="${1#*=}"; shift ;;
 	-m|--message|--msg)       cliMessage="${2-}"; shift; (($#)) && shift ;;
@@ -539,7 +544,7 @@ else
 fi
 fEcho_Clean "Release (native) ....: ${RELEASE_NATIVE_CMD[*]} -> ${RELEASE_NATIVE_BIN}"
 if ((BUILD_CROSS)) && ((${#CROSS_TARGETS[@]})); then
-	fEcho_Clean "Release (cross) .....:$( ((noArm)) && echo ' (x86_64 only, --no-arm)')$( ((noWindows)) && echo ' (Linux only, --no-windows)')"
+	fEcho_Clean "Release (cross) .....:$( ((noArm)) && echo ' (x86_64 only)')$( ((noWindows)) && echo ' (Linux only, --no-windows)')"
 	for t in "${CROSS_TARGETS[@]}"; do fEcho_Clean "    - ${t%%|*}"; done
 else
 	fEcho_Clean "Release (cross) .....: (skipped)"
@@ -573,6 +578,13 @@ if ((${#DOGFOOD_DESTS[@]})); then
 	done
 else
 	fEcho_Clean "Dogfood .............: (disabled)"
+fi
+if ((! ${DEMO_ENABLE:-0})); then
+	fEcho_Clean "Demo video ..........: (disabled)"
+elif ((quick && ! demoAsked)); then
+	fEcho_Clean "Demo video ..........: (skipped --quick)"
+else
+	fEcho_Clean "Demo video ..........: re-record, README gif to assets/demo.gif"
 fi
 if ((${#GIT_PUBLISH[@]} == 0)); then
 	fEcho_Clean "Publish (last) ......: (disabled)"
@@ -902,6 +914,10 @@ fBuildTestRelease(){
 		"${XLINT_CMD[@]}" || fDie "windows lints failed"
 		fEcho "OK: windows lints clean"
 	fi
+	if [[ -n "${MACLINT_CMD+x}" ]] && ((${#MACLINT_CMD[@]})) && "${LINT_PROBE[@]}" >/dev/null 2>&1; then
+		"${MACLINT_CMD[@]}" || fDie "macOS lints failed"
+		fEcho "OK: macOS lints clean"
+	fi
 	## First-party shell scripts, at warning level.
 	if command -v shellcheck >/dev/null 2>&1; then
 		mapfile -t shellFiles < <(git -C "${root}" ls-files '*.bash' '*.sh' cicd/utility/n8git_backup-and-publish utility/git-hooks/pre-commit utility/git-hooks/pre-push utility/runterm)
@@ -990,6 +1006,8 @@ fBuildTestRelease(){
 	## can migrate them, written new where it cannot, the old file kept either way.
 	## Exit 3 means there was no binary to run, which is a skip and never an OK.
 	fRunTest_MaySkip cicd/tests/config-convert/run.bash "config conversion" "config conversion skipped, no binary to run"
+	## --quick skips the window tests below that take 30 s to 2 min each. The
+	## rest take 25 s or less.
 	## The window shows at the size it keeps, maximized and fullscreen too, with
 	## no jump after. Exit 3 is a skip: no binary, display, window manager or python-xlib.
 	fRunTest_MaySkip cicd/tests/startsize/run.bash "window size at launch"
@@ -999,7 +1017,7 @@ fBuildTestRelease(){
 	## On native Wayland a window takes each output's own size once moved or
 	## dropped there, a sliver left on another output too. Exit 3 is a skip: no
 	## binary, sway, python3 or software Vulkan.
-	fRunTest_MaySkip cicd/tests/monwl/run.bash "window size per Wayland output"
+	((quick)) || fRunTest_MaySkip cicd/tests/monwl/run.bash "window size per Wayland output"
 	## On native Wayland the clipboard and the primary are Wayland's, both ways,
 	## and nothing calls an X server. Exit 3 is a skip: no binary, sway, wtype,
 	## python3 or software Vulkan.
@@ -1015,21 +1033,21 @@ fBuildTestRelease(){
 	fRunTest_MaySkip cicd/tests/delcfg/run.bash "save after the config was deleted"
 	## The wallpaper is held at the size it is drawn at, and again after a resize.
 	## Exit 3 is a skip: no binary, display or xdotool.
-	fRunTest_MaySkip cicd/tests/wpresize/run.bash "wallpaper held at window size"
+	((quick)) || fRunTest_MaySkip cicd/tests/wpresize/run.bash "wallpaper held at window size"
 	## A window waking from the idle release shows a small copy of its wallpaper
 	## until the real one is prepared again. Exit 3 is a skip: no binary, display,
 	## window manager or tools.
 	fRunTest_MaySkip cicd/tests/wakepic/run.bash "wallpaper kept through an idle wake"
 	## A prepared wallpaper is kept on disk and the next launch reads it back.
 	## Exit 3 is a skip: no binary, display or xdotool.
-	fRunTest_MaySkip cicd/tests/wpkept/run.bash "prepared wallpaper kept on disk"
+	((quick)) || fRunTest_MaySkip cicd/tests/wpkept/run.bash "prepared wallpaper kept on disk"
 	## A save in one window shows in another on the same settings file, and in
 	## no window on another file. Exit 3 is a skip: no binary, display, xdotool,
 	## xwd or ImageMagick.
-	fRunTest_MaySkip cicd/tests/livecfg/run.bash "settings shared between windows"
+	((quick)) || fRunTest_MaySkip cicd/tests/livecfg/run.bash "settings shared between windows"
 	## The minimap column comes and goes with what runs, when it starts and not
 	## at the next redraw. Exit 3 is a skip: no binary, display, dash or xdotool.
-	fRunTest_MaySkip cicd/tests/mapfollow/run.bash "minimap column follows what runs"
+	((quick)) || fRunTest_MaySkip cicd/tests/mapfollow/run.bash "minimap column follows what runs"
 	## A tab names a command that prints nothing, with the cursor not blinking.
 	## Exit 3 is a skip: no binary, display, dash, xdotool or xprop.
 	fRunTest_MaySkip cicd/tests/quiettab/run.bash "tab names a quiet command"
@@ -1302,13 +1320,13 @@ done
 
 if ((! dfDid)); then fEcho_Clean "dogfood disabled"; fi
 
-## Re-record the demo video (off by default, skipped under --quick, never
-## aborts). The video GFS-rotates into
+## Re-record the demo video (on by default, skipped under --quick unless --demo
+## asks for it, never aborts). The video GFS-rotates into
 ## ../private/demo-video/; the README highlight gif goes in assets/demo.gif.
 demoHook="${root}/cicd/utility/demo-video/demo-video.py"
 if ((! ${DEMO_ENABLE:-0})); then
 	fEcho_Clean "demo video disabled"
-elif ((quick)); then
+elif ((quick && ! demoAsked)); then
 	fEcho_Clean "demo video skipped (--quick)"
 elif [[ -f "${demoHook}" ]]; then
 	fEcho_Clean "recording demo video ..."
@@ -1344,6 +1362,8 @@ fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-18: --quick keeps the x86_64 cross build and skips the slow window
+##		              tests. The demo is on by default, and macOS is linted too.
 ##		- 2026-10-13: The run in the container takes this box's time zone.
 ##		- 2026-10-10: --container runs stages 1-6 in a pinned image.
 ##		- 2026-10-08: A failed test script's output goes to the log, and stays in

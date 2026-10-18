@@ -100,7 +100,7 @@ fParse(){  ## fParse <args...>: prints what the parser leaves for the run inside
 	echo "container=${container} inner=${innerArgs[*]:-}"
 }
 fCheck "--container is an option, and the stage options go in with it" \
-	test "$(fParse --container --quick --no-arm --no-fuzz -y --no-sync --no-dogfood --no-publish --no-private -m msg --demo)" = "container=1 inner=--quick --no-arm --no-fuzz"
+	test "$(fParse --container --quick --no-arm --no-fuzz -y --no-sync --no-dogfood --no-publish --no-private -m msg --demo --no-demo)" = "container=1 inner=--quick --no-arm --no-fuzz"
 fCheck "the host options stay out" test "$(fParse -y --no-sync --no-dogfood --no-publish --no-private --demo -m x)" = "container=0 inner="
 fCheck "and so does --container itself" test "$(fParse --container)" = "container=1 inner="
 
@@ -142,13 +142,15 @@ fake="${work}/bin"; mkdir -p "${fake}"
 cat >"${fake}/docker" <<'EOF'
 #!/usr/bin/env bash
 ## A stand-in: records every call on one line, says whether the image is there, and
-## on 'run' makes the native binary where the engine inside would have.
+## on 'run' makes the binaries a --quick run builds, where the engine inside would
+## have: the native one and the Windows x86_64 one.
 printf '%s\n' "${*//$'\n'/ }" >>"${FAKE_LOG}"
 case "${1}" in
 	image) if [[ "${2}" == inspect ]]; then exit "${FAKE_IMAGE_MISSING:-0}"; fi; exit 0 ;;
 	run)
 		target=""; for a in "${@}"; do [[ "${a}" == CARGO_TARGET_DIR=* ]] && target="${a#*=}"; done
-		mkdir -p "${target}/release" && touch "${target}/release/silkterm"
+		mkdir -p "${target}/release" "${target}/x86_64-pc-windows-gnu/release"
+		touch "${target}/release/silkterm" "${target}/x86_64-pc-windows-gnu/release/silkterm.exe"
 		exit "${FAKE_RUN_RC:-0}" ;;
 esac
 exit 0
@@ -188,7 +190,7 @@ buildLine="$(grep '^build ' "${work}/build.log" || true)"
 fCheck "with no image, one is built first" test -n "${buildLine}"
 fCheck "from the recipe folder" bash -c '[[ "$1" == *" $2/cicd/container" ]]' _ "${buildLine}" "${repo}"
 fCheck "tagged as the plan named it" bash -c '[[ "$1" == "build -t silkterm-cicd:"* ]]' _ "${buildLine}"
-fCheck "with the toolchain and its targets" bash -c '[[ "$1" == *" --build-arg VER_rust=1.96.0 "* && "$1" == *" --build-arg RUST_TARGETS=x86_64-pc-windows-gnu aarch64-unknown-linux-gnu aarch64-pc-windows-gnullvm "* ]]' _ "${buildLine}"
+fCheck "with the toolchain and its targets" bash -c '[[ "$1" == *" --build-arg VER_rust=1.96.0 "* && "$1" == *" --build-arg RUST_TARGETS=x86_64-pc-windows-gnu aarch64-unknown-linux-gnu aarch64-pc-windows-gnullvm x86_64-apple-darwin "* ]]' _ "${buildLine}"
 fCheck "the pins" bash -c '[[ "$1" == *" --build-arg VER_zig=0.16.0 "* && "$1" == *" --build-arg VER_cargo_deny="* ]]' _ "${buildLine}"
 fCheck "and the job cap" bash -c '[[ "$1" == *" --build-arg JOBS="[0-9]* ]]' _ "${buildLine}"
 
