@@ -332,10 +332,6 @@ macro_rules! keys_of {
 			| Key::RememberPerMonitor
 			| Key::RememberMaximized
 			| Key::NewTabNextToCurrent
-			| Key::TabShowsTitle
-			| Key::TabShowsShell
-			| Key::TabShowsProgram
-			| Key::TabShowsDirectory
 			| Key::TitleShowsTab
 			| Key::IdleRelease
 			| Key::SoftwareRendering
@@ -389,6 +385,7 @@ macro_rules! keys_of {
 			| Key::FontFamily
 			| Key::LinkOpenCommand
 			| Key::StartupDirectory
+			| Key::TabTemplate
 		] $($rest)*)
 	};
 	// read and written through `Bindings`
@@ -513,10 +510,6 @@ fn toggle_of(settings: &Settings, key: Key) -> bool {
 		Key::RememberPerMonitor => settings.remember_per_monitor,
 		Key::RememberMaximized => settings.remember_maximized,
 		Key::NewTabNextToCurrent => settings.new_tab_beside,
-		Key::TabShowsTitle => settings.tab_shows_title,
-		Key::TabShowsShell => settings.tab_shows_shell,
-		Key::TabShowsProgram => settings.tab_shows_program,
-		Key::TabShowsDirectory => settings.tab_shows_directory,
 		Key::TitleShowsTab => settings.title_shows_tab,
 		Key::IdleRelease => settings.idle_release,
 		Key::SoftwareRendering => settings.software_rendering,
@@ -3287,7 +3280,7 @@ impl SettingsDialog {
 			fields::source(&self.edited, key, monitor),
 			None | Some(knobs::Source::Own | knobs::Source::Default)
 		) && fields::changed(&self.edited, key).is_empty();
-		let line = if plain {
+		let mut line = if plain {
 			match self
 				.value_pair(i, key)
 				.filter(|(now, default)| now != default)
@@ -3298,6 +3291,19 @@ impl SettingsDialog {
 		} else {
 			fields::state_line(&self.edited, key, monitor, &|k, v| self.shown(i, k, v))
 		};
+		// A template that can't be read is kept as typed, and this is the one
+		// place that says why the tabs don't follow it.
+		if key == Key::TabTemplate
+			&& !self.edited.tab_text.trim().is_empty()
+			&& let Err(e) = crate::tabtitle::tab_template(&self.edited.tab_text)
+		{
+			let problem = format!("{e} Tabs use the default text until it's fixed.");
+			line = if line.is_empty() {
+				problem
+			} else {
+				format!("{problem}\n\n{line}")
+			};
+		}
 		if line.is_empty() {
 			return text;
 		}
@@ -3807,6 +3813,7 @@ impl SettingsDialog {
 			Key::FontFamily => s.font_family.clone(),
 			Key::LinkOpenCommand => s.hyperlink_open_command.clone(),
 			Key::StartupDirectory => s.startup_directory.clone(),
+			Key::TabTemplate => s.tab_text.clone(),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => String::new(),
 		}
 	}
@@ -3819,7 +3826,9 @@ impl SettingsDialog {
 				Key::BgFolder,
 				trimmed.is_empty() || trimmed == config::WALLPAPER_DIR_TOKEN,
 			),
-			Key::BgImage | Key::FontFamily | Key::LinkOpenCommand => (key, trimmed.is_empty()),
+			Key::BgImage | Key::FontFamily | Key::LinkOpenCommand | Key::TabTemplate => {
+				(key, trimmed.is_empty())
+			}
 			Key::StartupDirectory => (key, false),
 			keys_of!(slider | toggle | radio | color | hotkey | valueless | assoc) => return,
 		};
@@ -3859,10 +3868,6 @@ impl SettingsDialog {
 			Key::RememberPerMonitor => self.edited.remember_per_monitor = on,
 			Key::RememberMaximized => self.edited.remember_maximized = on,
 			Key::NewTabNextToCurrent => self.edited.new_tab_beside = on,
-			Key::TabShowsTitle => self.edited.tab_shows_title = on,
-			Key::TabShowsShell => self.edited.tab_shows_shell = on,
-			Key::TabShowsProgram => self.edited.tab_shows_program = on,
-			Key::TabShowsDirectory => self.edited.tab_shows_directory = on,
 			Key::TitleShowsTab => self.edited.title_shows_tab = on,
 			Key::IdleRelease => self.edited.idle_release = on,
 			Key::SoftwareRendering => self.edited.software_rendering = on,
@@ -6848,145 +6853,202 @@ mod tests {
 				);
 			}
 		}
-		assert!(lines >= 3, "expected shared lines, saw {lines}");
-		assert!(widest >= 4, "the tab text line has four parts");
+		// Commented out 20261017: the tab text line, the one with four parts, is
+		// one template row now (2026101611405210).
+		// assert!(lines >= 3, "expected shared lines, saw {lines}");
+		// assert!(widest >= 4, "the tab text line has four parts");
+		assert!(lines >= 2, "expected shared lines, saw {lines}");
+		assert!(widest >= 2, "a line has two parts at least");
 	}
 
-	// Where the tab text line is, on whatever tab it is on.
-	fn tab_text_line(d: &mut SettingsDialog) -> [usize; 4] {
-		let at = |key: Key| d.specs.iter().position(|s| s.key == key).unwrap();
-		let line = [
-			at(Key::TabShowsTitle),
-			at(Key::TabShowsShell),
-			at(Key::TabShowsProgram),
-			at(Key::TabShowsDirectory),
-		];
-		d.tab = d.specs[line[0]].tab;
-		line
-	}
-
-	// The four tab text toggles are one line with one revert arrow, and the
-	// arrow puts all four back - whichever of them moved.
-	// Test ID: Ery4g1k
+	// The tab text is one text row. What is typed is kept as typed, even a
+	// template that can't be read, whose tip then says what is wrong with it. An
+	// emptied box goes back to the shipped template, and the tip names every
+	// macro the tab knows.
+	// Test ID: Et0TY7t
 	#[test]
-	fn one_revert_puts_back_all_four_tab_text_toggles() {
+	fn the_tab_text_row_keeps_what_is_typed_and_its_tip_names_a_mistake() {
 		let mut d = mk_dialog(4000.0);
-		let line = tab_text_line(&mut d);
-		let lead = line[0];
-		assert_eq!(SettingsDialog::line_of(d.specs, lead), (lead, 4, 0));
-		for i in line {
-			assert_eq!(d.row_y(i), d.row_y(lead));
-			assert_eq!(d.has_revert(i), i == lead);
-		}
-		let keys = line.map(|i| d.specs[i].key);
-		assert_eq!(d.row_keys(lead), keys.to_vec());
-
-		// each one alone lights the arrow
-		for key in keys {
-			for k in keys {
-				let at = super::toggle_of(&d.defaults, k);
-				d.set_toggle(k, at);
-			}
-			assert!(d.row_is_default(lead));
-			let at = super::toggle_of(&d.defaults, key);
-			d.set_toggle(key, !at);
-			assert!(!d.row_is_default(lead), "{key:?} off its default");
-		}
-
-		// all four off their defaults, then one click on the arrow
-		for k in keys {
-			let at = super::toggle_of(&d.defaults, k);
-			d.set_toggle(k, !at);
-		}
-		let arrow = d.revert_box(lead);
-		d.mouse_down_dip(
-			arrow.x + arrow.w / 2.0,
-			arrow.y + arrow.h / 2.0,
-			&mut chars7,
-		);
-		for k in keys {
-			assert!(d.is_default(k), "{k:?} was not put back");
-		}
-		assert!(d.row_is_default(lead));
-		// and the save at Apply has no line for any of the four
-		let lines = crate::fields::lines_of(&d.edited);
-		for path in [
-			"window.tab_shows_title",
-			"window.tab_shows_shell",
-			"window.tab_shows_program",
-			"window.tab_shows_directory",
-		] {
+		let i = d
+			.specs
+			.iter()
+			.position(|s| s.key == Key::TabTemplate)
+			.expect("the tab text row");
+		assert!(matches!(d.specs[i].kind, Kind::Text));
+		let help = d.specs[i].help;
+		for name in crate::tabtitle::TAB_MACROS {
 			assert!(
-				!lines.iter().any(|(p, _)| p == path),
-				"{path} stays in force: {lines:?}"
+				help.contains(&format!("%{name}%")),
+				"the tip leaves out {name}"
 			);
 		}
+		let tip = |d: &SettingsDialog| d.row_tip(i, Key::TabTemplate).map_or("", tip_text);
+
+		d.set_text(Key::TabTemplate, "  %SHELL% [%PROGRAM%]  ");
+		assert_eq!(d.get_text(Key::TabTemplate), "%SHELL% [%PROGRAM%]");
+		assert!(!d.is_default(Key::TabTemplate));
+		assert!(!tip(&d).contains("Tabs use the default"), "{}", tip(&d));
+
+		d.set_text(Key::TabTemplate, "{ %SHELL%");
+		assert_eq!(d.get_text(Key::TabTemplate), "{ %SHELL%");
+		assert!(
+			tip(&d).contains(
+				"The { at character 1 has no closing }. Tabs use the default text until it's fixed."
+			),
+			"{}",
+			tip(&d)
+		);
+		assert!(tip(&d).starts_with(help), "the help still comes first");
+
+		d.set_text(Key::TabTemplate, "   ");
+		assert!(d.is_default(Key::TabTemplate));
+		assert_eq!(
+			d.get_text(Key::TabTemplate),
+			crate::tabtitle::DEFAULT_TAB_TEXT
+		);
+		assert_eq!(tip(&d), help);
 	}
 
-	// A click on one of the four boxes, or Space with focus on it, flips that
-	// setting and leaves the other three alone. Tab and the arrows reach each.
-	// Test ID: Ery4g6B
-	#[test]
-	fn each_tab_text_toggle_flips_only_its_own_setting() {
-		let mut d = mk_dialog(4000.0);
-		let line = tab_text_line(&mut d);
-		let keys = line.map(|i| d.specs[i].key);
-		let values = |d: &SettingsDialog| keys.map(|k| d.get_toggle(k));
-		for (n, &i) in line.iter().enumerate() {
-			let before = values(&d);
-			let bx = d.checkbox(i);
-			d.mouse_down_dip(bx.x + bx.w / 2.0, bx.y + bx.h / 2.0, &mut chars7);
-			let mut want = before;
-			want[n] = !want[n];
-			assert_eq!(values(&d), want, "a click on {:?}", keys[n]);
-			assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
-		}
+	// Commented out 20261017: the four Tab text toggles are gone, replaced by the
+	// one template row (2026101611405210). What these held the toggles to is
+	// still checked for the packed line that is left, by
+	// `a_shared_line_puts_its_parts_side_by_side` and
+	// `a_line_of_toggles_packs_each_label_against_its_box_off_the_column`.
+	// // Where the tab text line is, on whatever tab it is on.
+	// fn tab_text_line(d: &mut SettingsDialog) -> [usize; 4] {
+	// 	let at = |key: Key| d.specs.iter().position(|s| s.key == key).unwrap();
+	// 	let line = [
+	// 		at(Key::TabShowsTitle),
+	// 		at(Key::TabShowsShell),
+	// 		at(Key::TabShowsProgram),
+	// 		at(Key::TabShowsDirectory),
+	// 	];
+	// 	d.tab = d.specs[line[0]].tab;
+	// 	line
+	// }
 
-		// the keyboard: Down walks onto each box in turn, Space flips only it
-		d.focus = Some(super::Focus::Row(line[0], 0));
-		for (n, &i) in line.iter().enumerate() {
-			assert_eq!(
-				d.focus,
-				Some(super::Focus::Row(i, 0)),
-				"Down reaches {:?}",
-				keys[n]
-			);
-			let before = values(&d);
-			d.key_space();
-			let mut want = before;
-			want[n] = !want[n];
-			assert_eq!(values(&d), want, "Space on {:?}", keys[n]);
-			d.key_vertical(true);
-		}
-		// and Shift+Tab walks back over the same four
-		d.focus = Some(super::Focus::Row(line[3], 0));
-		d.shift = true;
-		for &i in line.iter().rev().skip(1) {
-			d.key_tab();
-			assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
-		}
-	}
+	// // The four tab text toggles are one line with one revert arrow, and the
+	// // arrow puts all four back - whichever of them moved.
+	// // Test ID: Ery4g1k
+	// #[test]
+	// fn one_revert_puts_back_all_four_tab_text_toggles() {
+	// 	let mut d = mk_dialog(4000.0);
+	// 	let line = tab_text_line(&mut d);
+	// 	let lead = line[0];
+	// 	assert_eq!(SettingsDialog::line_of(d.specs, lead), (lead, 4, 0));
+	// 	for i in line {
+	// 		assert_eq!(d.row_y(i), d.row_y(lead));
+	// 		assert_eq!(d.has_revert(i), i == lead);
+	// 	}
+	// 	let keys = line.map(|i| d.specs[i].key);
+	// 	assert_eq!(d.row_keys(lead), keys.to_vec());
 
-	// Each toggle keeps its own flyover, over its box and over its label.
-	// Test ID: Ery4gAt
-	#[test]
-	fn each_tab_text_toggle_has_its_own_tip_over_box_and_label() {
-		let mut d = mk_dialog(4000.0);
-		let line = tab_text_line(&mut d);
-		for i in line {
-			// at its default, so the tip is the help alone with no value lines,
-			// whatever this box's own config holds (G6)
-			d.revert(d.specs[i].key);
-			let help = d.specs[i].help;
-			assert!(!help.is_empty(), "{:?} has a tip", d.specs[i].key);
-			let bx = d.checkbox(i);
-			let mid = bx.y + bx.h / 2.0;
-			for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
-				let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip));
-				assert_eq!(tip, Some(help), "{:?} at x {x}", d.specs[i].key);
-			}
-		}
-	}
+	// 	// each one alone lights the arrow
+	// 	for key in keys {
+	// 		for k in keys {
+	// 			let at = super::toggle_of(&d.defaults, k);
+	// 			d.set_toggle(k, at);
+	// 		}
+	// 		assert!(d.row_is_default(lead));
+	// 		let at = super::toggle_of(&d.defaults, key);
+	// 		d.set_toggle(key, !at);
+	// 		assert!(!d.row_is_default(lead), "{key:?} off its default");
+	// 	}
+
+	// 	// all four off their defaults, then one click on the arrow
+	// 	for k in keys {
+	// 		let at = super::toggle_of(&d.defaults, k);
+	// 		d.set_toggle(k, !at);
+	// 	}
+	// 	let arrow = d.revert_box(lead);
+	// 	d.mouse_down_dip(
+	// 		arrow.x + arrow.w / 2.0,
+	// 		arrow.y + arrow.h / 2.0,
+	// 		&mut chars7,
+	// 	);
+	// 	for k in keys {
+	// 		assert!(d.is_default(k), "{k:?} was not put back");
+	// 	}
+	// 	assert!(d.row_is_default(lead));
+	// 	// and the save at Apply has no line for any of the four
+	// 	let lines = crate::fields::lines_of(&d.edited);
+	// 	for path in [
+	// 		"window.tab_shows_title",
+	// 		"window.tab_shows_shell",
+	// 		"window.tab_shows_program",
+	// 		"window.tab_shows_directory",
+	// 	] {
+	// 		assert!(
+	// 			!lines.iter().any(|(p, _)| p == path),
+	// 			"{path} stays in force: {lines:?}"
+	// 		);
+	// 	}
+	// }
+
+	// // A click on one of the four boxes, or Space with focus on it, flips that
+	// // setting and leaves the other three alone. Tab and the arrows reach each.
+	// // Test ID: Ery4g6B
+	// #[test]
+	// fn each_tab_text_toggle_flips_only_its_own_setting() {
+	// 	let mut d = mk_dialog(4000.0);
+	// 	let line = tab_text_line(&mut d);
+	// 	let keys = line.map(|i| d.specs[i].key);
+	// 	let values = |d: &SettingsDialog| keys.map(|k| d.get_toggle(k));
+	// 	for (n, &i) in line.iter().enumerate() {
+	// 		let before = values(&d);
+	// 		let bx = d.checkbox(i);
+	// 		d.mouse_down_dip(bx.x + bx.w / 2.0, bx.y + bx.h / 2.0, &mut chars7);
+	// 		let mut want = before;
+	// 		want[n] = !want[n];
+	// 		assert_eq!(values(&d), want, "a click on {:?}", keys[n]);
+	// 		assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
+	// 	}
+
+	// 	// the keyboard: Down walks onto each box in turn, Space flips only it
+	// 	d.focus = Some(super::Focus::Row(line[0], 0));
+	// 	for (n, &i) in line.iter().enumerate() {
+	// 		assert_eq!(
+	// 			d.focus,
+	// 			Some(super::Focus::Row(i, 0)),
+	// 			"Down reaches {:?}",
+	// 			keys[n]
+	// 		);
+	// 		let before = values(&d);
+	// 		d.key_space();
+	// 		let mut want = before;
+	// 		want[n] = !want[n];
+	// 		assert_eq!(values(&d), want, "Space on {:?}", keys[n]);
+	// 		d.key_vertical(true);
+	// 	}
+	// 	// and Shift+Tab walks back over the same four
+	// 	d.focus = Some(super::Focus::Row(line[3], 0));
+	// 	d.shift = true;
+	// 	for &i in line.iter().rev().skip(1) {
+	// 		d.key_tab();
+	// 		assert_eq!(d.focus, Some(super::Focus::Row(i, 0)));
+	// 	}
+	// }
+
+	// // Each toggle keeps its own flyover, over its box and over its label.
+	// // Test ID: Ery4gAt
+	// #[test]
+	// fn each_tab_text_toggle_has_its_own_tip_over_box_and_label() {
+	// 	let mut d = mk_dialog(4000.0);
+	// 	let line = tab_text_line(&mut d);
+	// 	for i in line {
+	// 		// at its default, so the tip is the help alone with no value lines,
+	// 		// whatever this box's own config holds (G6)
+	// 		d.revert(d.specs[i].key);
+	// 		let help = d.specs[i].help;
+	// 		assert!(!help.is_empty(), "{:?} has a tip", d.specs[i].key);
+	// 		let bx = d.checkbox(i);
+	// 		let mid = bx.y + bx.h / 2.0;
+	// 		for x in [bx.x + bx.w / 2.0, d.label_x(i) + 2.0] {
+	// 			let tip = d.hover_tip_dip(x, mid).map(|(tip, _)| tip_text(tip));
+	// 			assert_eq!(tip, Some(help), "{:?} at x {x}", d.specs[i].key);
+	// 		}
+	// 	}
+	// }
 
 	// One setting, one tip, wherever on its row the pointer rests: its label, a
 	// warning mark, each option's label and every part of its control. A pair
@@ -7063,61 +7125,64 @@ mod tests {
 		}
 	}
 
-	// At its natural width the panel fits the whole line: each label ends before
-	// its own box, each box inside its part, and the last before the arrow. Also
-	// with labels long enough that the line, not the tab strip, sets the width.
-	// Test ID: Ery4gFO
-	#[test]
-	fn the_tab_text_line_fits_the_panel() {
-		for per_char in [7.0f32, 16.0] {
-			for line_h in [18.0f32, 38.0] {
-				let k = line_h / 18.0;
-				let labels = super::ui()
-					.specs
-					.iter()
-					.map(|s| s.label.chars().count() as f32 * per_char * k)
-					.collect();
-				let mut d = SettingsDialog::new(
-					0.0,
-					0.0,
-					line_h,
-					Chrome {
-						label_w: 170.0 * k,
-						btn_w: 80.0 * k,
-						row_btn_w: 90.0 * k,
-						value_w: 0.0,
-						tab_ws: vec![90.0 * k; tab_nodes().len()],
-						label_ws: labels,
-						..Chrome::default()
-					},
-					f32::MAX,
-					4000.0,
-					1.0,
-				);
-				let (w, h) = d.natural;
-				d.set_size(w, h);
-				let line = tab_text_line(&mut d);
-				for &i in &line[1..] {
-					let label_end =
-						d.label_x(i) + d.specs[i].label.chars().count() as f32 * per_char * k;
-					let bx = d.checkbox(i);
-					assert!(
-						label_end < bx.x,
-						"{:?}: label runs into its box ({per_char}, {line_h})",
-						d.specs[i].key
-					);
-					assert!(
-						bx.x + bx.w <= d.ctl_right(i),
-						"{:?}: box past its part ({per_char}, {line_h})",
-						d.specs[i].key
-					);
-				}
-				let last = d.checkbox(line[3]);
-				assert!(last.x + last.w < d.revert_box(line[0]).x);
-				assert!(d.revert_box(line[0]).x + d.revert_box(line[0]).w <= d.rect.x + d.rect.w);
-			}
-		}
-	}
+	// Commented out 20261017: the tab text line of four toggles is one template
+	// row now (2026101611405210), and a text row's box is held to the panel by
+	// the generic layout tests.
+	// // At its natural width the panel fits the whole line: each label ends before
+	// // its own box, each box inside its part, and the last before the arrow. Also
+	// // with labels long enough that the line, not the tab strip, sets the width.
+	// // Test ID: Ery4gFO
+	// #[test]
+	// fn the_tab_text_line_fits_the_panel() {
+	// 	for per_char in [7.0f32, 16.0] {
+	// 		for line_h in [18.0f32, 38.0] {
+	// 			let k = line_h / 18.0;
+	// 			let labels = super::ui()
+	// 				.specs
+	// 				.iter()
+	// 				.map(|s| s.label.chars().count() as f32 * per_char * k)
+	// 				.collect();
+	// 			let mut d = SettingsDialog::new(
+	// 				0.0,
+	// 				0.0,
+	// 				line_h,
+	// 				Chrome {
+	// 					label_w: 170.0 * k,
+	// 					btn_w: 80.0 * k,
+	// 					row_btn_w: 90.0 * k,
+	// 					value_w: 0.0,
+	// 					tab_ws: vec![90.0 * k; tab_nodes().len()],
+	// 					label_ws: labels,
+	// 					..Chrome::default()
+	// 				},
+	// 				f32::MAX,
+	// 				4000.0,
+	// 				1.0,
+	// 			);
+	// 			let (w, h) = d.natural;
+	// 			d.set_size(w, h);
+	// 			let line = tab_text_line(&mut d);
+	// 			for &i in &line[1..] {
+	// 				let label_end =
+	// 					d.label_x(i) + d.specs[i].label.chars().count() as f32 * per_char * k;
+	// 				let bx = d.checkbox(i);
+	// 				assert!(
+	// 					label_end < bx.x,
+	// 					"{:?}: label runs into its box ({per_char}, {line_h})",
+	// 					d.specs[i].key
+	// 				);
+	// 				assert!(
+	// 					bx.x + bx.w <= d.ctl_right(i),
+	// 					"{:?}: box past its part ({per_char}, {line_h})",
+	// 					d.specs[i].key
+	// 				);
+	// 			}
+	// 			let last = d.checkbox(line[3]);
+	// 			assert!(last.x + last.w < d.revert_box(line[0]).x);
+	// 			assert!(d.revert_box(line[0]).x + d.revert_box(line[0]).w <= d.rect.x + d.rect.w);
+	// 		}
+	// 	}
+	// }
 
 	// Commented out 20261008: a packed line in a group with other rows keeps its
 	// first box in the control column (2026100812334385), so that box no longer
@@ -7277,7 +7342,10 @@ mod tests {
 					"runs into the arrow"
 				);
 			}
-			assert!(packed >= 2, "the tab text and re-test lines, saw {packed}");
+			// Commented out 20261017: the tab text toggles became one template row
+			// (2026101611405210), so the re-test line is the one packed line left.
+			// assert!(packed >= 2, "the tab text and re-test lines, saw {packed}");
+			assert!(packed >= 1, "the re-test line, saw {packed}");
 			assert!(split >= 1, "the scrim dropdown pair, saw {split}");
 			// by name, so a reshuffle of the spec cannot quietly flip either one
 			assert_eq!(kept, [Key::PerfCheckHardware], "{scale}");
@@ -7291,7 +7359,9 @@ mod tests {
 			// and only a label in the column is measured for it
 			let in_column = |key: Key| SettingsDialog::in_label_column(d.specs, row(key));
 			assert!(in_column(Key::PerfCheckHardware) && in_column(Key::PerfAuto));
-			assert!(!in_column(Key::PerfCheckNext) && !in_column(Key::TabShowsTitle));
+			// Commented out 20261017: the tab text toggles are gone (2026101611405210).
+			// assert!(!in_column(Key::PerfCheckNext) && !in_column(Key::TabShowsTitle));
+			assert!(!in_column(Key::PerfCheckNext));
 		}
 	}
 
@@ -7359,10 +7429,13 @@ mod tests {
 						near(d.label_x(i) - (prev.x + prev.w), pack_gap, d.specs[i].label);
 					}
 				}
-				assert!(
-					packed >= 4,
-					"the Tab text line and Re-test, saw {packed} at {at}"
-				);
+				// Commented out 20261017: the Tab text toggles became one template row
+				// (2026101611405210), so only Re-test packs now.
+				// assert!(
+				// 	packed >= 4,
+				// 	"the Tab text line and Re-test, saw {packed} at {at}"
+				// );
+				assert!(packed >= 1, "Re-test, saw {packed} at {at}");
 				// a label after its box, where it is drawn
 				let mut after = 0;
 				for i in 0..d.specs.len() {

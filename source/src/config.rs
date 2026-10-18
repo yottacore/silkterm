@@ -872,18 +872,15 @@ pub struct Settings {
 	pub hide_single_tab: bool,      // hide the tab bar while only one tab is open
 	pub menu_bar: bool,             // a new window shows the menu bar (never on macOS)
 	pub new_tab_beside: bool,       // a new tab opens right of the active one, else at the end
-	pub tab_shows_title: bool,      // let a program's own title name the tab (tabtitle::Parts)
-	pub tab_shows_shell: bool,      // parts a tab's own text is made of
-	pub tab_shows_program: bool,
-	pub tab_shows_directory: bool,
-	pub title_shows_tab: bool, // let the window title fall back to what the tab says
-	pub idle_release: bool,    // let the GPU device go after a long idle (app/idle.rs, release_gpu)
+	pub tab_text: String,           // what a tab says, as a template (tabtitle, template)
+	pub title_shows_tab: bool,      // let the window title fall back to what the tab says
+	pub idle_release: bool, // let the GPU device go after a long idle (app/idle.rs, release_gpu)
 	pub idle_release_hidden_min: usize, // ...after this long minimized or covered
 	pub idle_release_min: usize, // ...or this long merely unfocused and quiet
 	pub software_rendering: bool, // draw on the CPU even with a graphics card (gfx::wanted)
-	pub tab_regular_pct: f32,  // a tab's ordinary width, as a % of the window's width
-	pub tab_max_pct: f32,      // widest a tab may be, as a % of the window's width
-	pub tab_tip_max_s: f32,    // longest a tab's tip stays up; 0 = until the pointer leaves
+	pub tab_regular_pct: f32, // a tab's ordinary width, as a % of the window's width
+	pub tab_max_pct: f32,   // widest a tab may be, as a % of the window's width
+	pub tab_tip_max_s: f32, // longest a tab's tip stays up; 0 = until the pointer leaves
 	pub remembered_columns: usize, // last actual window size (not shown in the dialog)
 	pub remembered_rows: usize,
 	pub remembered_maximized: bool, // was the window last left maximized
@@ -1111,10 +1108,7 @@ impl Settings {
 			hide_single_tab: false,
 			menu_bar: true,
 			new_tab_beside: true,
-			tab_shows_shell: true,
-			tab_shows_program: true,
-			tab_shows_title: true,
-			tab_shows_directory: true,
+			tab_text: crate::tabtitle::DEFAULT_TAB_TEXT.to_string(),
 			title_shows_tab: true,
 			idle_release: true,
 			idle_release_hidden_min: 1,
@@ -2913,10 +2907,7 @@ struct RawConfig {
 	hide_single_tab: Option<bool>,
 	menu_bar: Option<bool>,
 	new_tab_beside: Option<bool>,
-	tab_shows_shell: Option<bool>,
-	tab_shows_program: Option<bool>,
-	tab_shows_title: Option<bool>,
-	tab_shows_directory: Option<bool>,
+	tab_text: Option<String>,
 	title_shows_tab: Option<bool>,
 	idle_release: Option<bool>,
 	idle_release_hidden_min: Option<usize>,
@@ -3293,6 +3284,22 @@ impl Reader<'_> {
 	fn read_string(&self, key: &str) -> Option<String> {
 		self.note(key, self.doc.get_string(key))
 	}
+	// A template that can't be read is kept, so the file still says what was
+	// typed, and tabs use the shipped one until it is fixed.
+	fn read_tab_text(&self) -> Option<String> {
+		const KEY: &str = "window.tab_text";
+		let text = self.read_string(KEY)?;
+		if let Err(e) = crate::tabtitle::tab_template(&text)
+			&& !text.trim().is_empty()
+		{
+			self.said.borrow_mut().push(format!(
+				"{APP_NAME}: {}{}: tabs use the default text, since `{KEY}` can't be used: {e}",
+				self.path.display(),
+				line_list(&self.doc.lines(KEY))
+			));
+		}
+		Some(text)
+	}
 }
 
 // Parse the config and pull out every key we know. The parser is forgiving by
@@ -3403,10 +3410,7 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		hide_single_tab: reader.read_bool("window.hide_single_tab"),
 		menu_bar: reader.read_bool("window.menu_bar"),
 		new_tab_beside: reader.read_bool("window.new_tab_next_to_current"),
-		tab_shows_shell: reader.read_bool("window.tab_shows_shell"),
-		tab_shows_program: reader.read_bool("window.tab_shows_program"),
-		tab_shows_title: reader.read_bool("window.tab_shows_title"),
-		tab_shows_directory: reader.read_bool("window.tab_shows_directory"),
+		tab_text: reader.read_tab_text(),
 		title_shows_tab: reader.read_bool("window.title_shows_tab"),
 		idle_release: reader.read_bool("window.idle_release"),
 		idle_release_hidden_min: reader.read_usize("window.idle_release_hidden_min"),
@@ -4050,10 +4054,7 @@ fn resolve(raw: RawConfig) -> Settings {
 		hide_single_tab: raw.hide_single_tab.unwrap_or(d.hide_single_tab),
 		menu_bar: raw.menu_bar.unwrap_or(d.menu_bar),
 		new_tab_beside: raw.new_tab_beside.unwrap_or(d.new_tab_beside),
-		tab_shows_shell: raw.tab_shows_shell.unwrap_or(d.tab_shows_shell),
-		tab_shows_program: raw.tab_shows_program.unwrap_or(d.tab_shows_program),
-		tab_shows_title: raw.tab_shows_title.unwrap_or(d.tab_shows_title),
-		tab_shows_directory: raw.tab_shows_directory.unwrap_or(d.tab_shows_directory),
+		tab_text: raw.tab_text.unwrap_or(d.tab_text),
 		title_shows_tab: raw.title_shows_tab.unwrap_or(d.title_shows_tab),
 		idle_release: raw.idle_release.unwrap_or(d.idle_release),
 		idle_release_hidden_min: numi(
@@ -4630,6 +4631,12 @@ const CONFIG_REMOVED: &[&str] = &[
 	"shell.default",
 	"text.dark_on_light_gamma",
 	"window.idle_release_minimized_min",
+	// the four check boxes the tab text template replaced; what they said moves
+	// into `window.tab_text` first (`tab_text_line`)
+	"window.tab_shows_title",
+	"window.tab_shows_shell",
+	"window.tab_shows_program",
+	"window.tab_shows_directory",
 	// in state.shcl since the automatic settings design
 	"window.remembered_columns",
 	"window.remembered_rows",
@@ -5364,6 +5371,8 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 	let mut keep: std::collections::HashSet<usize> = std::collections::HashSet::new();
 	let mut active_old_name = false;
 	let mut active_blink = false;
+	let mut first_tab_part: Option<usize> = None;
+	let mut active_tab_text = false;
 	for w in walk_settings(text) {
 		if let WalkLine::Setting {
 			index,
@@ -5375,6 +5384,10 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 			if keep_default_shell && active && !header && path == "shell.default" {
 				keep.insert(index);
 			}
+			if active && !header && OLD_TAB_PARTS.contains(&path.as_str()) {
+				first_tab_part.get_or_insert(index);
+			}
+			active_tab_text |= active && !header && path == "window.tab_text";
 			active_old_name |= active
 				&& (CONFIG_RENAMES.iter().any(|(old, _)| *old == path)
 					|| CONFIG_CONVERTS.iter().any(|(old, ..)| *old == path));
@@ -5392,13 +5405,40 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 		raw_paths()
 	};
 
+	// The old check boxes become one template line where the first of them was,
+	// unless the file already has a template of its own.
+	let tab_text = first_tab_part
+		.filter(|_| !active_tab_text)
+		.and_then(|index| tab_text_line(text, lines[index]).map(|line| (index, line)));
+	let old_comment = old_tab_comment_at(&lines);
+
 	let mut changed = false;
 	let mut out: Vec<String> = Vec::new();
+	let mut skip = 0;
 	for (index, line) in lines.iter().enumerate() {
+		if skip > 0 {
+			skip -= 1;
+			continue;
+		}
+		if let Some((at, len, new)) = &old_comment
+			&& *at == index
+		{
+			out.extend(new.iter().cloned());
+			skip = len - 1;
+			changed = true;
+			continue;
+		}
 		let Some(path) = path_of.get(&index) else {
 			out.push((*line).to_string());
 			continue;
 		};
+		if let Some((at, new)) = &tab_text
+			&& *at == index
+		{
+			out.push(new.clone());
+			changed = true;
+			continue;
+		}
 		let gone = CONFIG_REMOVED.iter().any(|removed| {
 			path == removed
 				|| path
@@ -5485,6 +5525,88 @@ fn migrated_text(text: &str, keep_default_shell: bool) -> Option<String> {
 		joined.push('\n');
 		joined
 	})
+}
+
+// The four check boxes `window.tab_text` replaced.
+const OLD_TAB_PARTS: [&str; 4] = [
+	"window.tab_shows_title",
+	"window.tab_shows_shell",
+	"window.tab_shows_program",
+	"window.tab_shows_directory",
+];
+
+// The template line that says what the old check boxes in `text` said, in the
+// place and spelling of `line`, the first of them set. None where they said
+// what the shipped template says, since then the commented default is enough.
+// Read as the old build read them: a value that isn't a yes or no, or one set
+// twice, is on.
+fn tab_text_line(text: &str, line: &str) -> Option<String> {
+	let doc = parse_kept(text);
+	let on = |leaf: &str| {
+		doc.get_bool(&format!("window.tab_shows_{leaf}"))
+			.unwrap_or(true)
+	};
+	let parts = crate::tabtitle::Parts {
+		title: on("title"),
+		shell: on("shell"),
+		program: on("program"),
+		directory: on("directory"),
+	};
+	if parts == crate::tabtitle::Parts::default() {
+		return None;
+	}
+	let template = crate::tabtitle::tab_text_for(parts);
+	let mut one = shcl::Document::new();
+	if !one.set_string("window.tab_text", &template) {
+		return None;
+	}
+	let value = one.to_canonical().lines().find_map(|l| {
+		let key = line_setting_key(l)?;
+		(key.rsplit('.').next() == Some("tab_text"))
+			.then(|| line_setting_value(l).map(str::to_string))
+			.flatten()
+	})?;
+	let indent = &line[..line.len() - line.trim_start().len()];
+	let dotted = line_setting_key(line).is_some_and(|key| key.contains('.'));
+	let key = if dotted {
+		"window.tab_text"
+	} else {
+		"tab_text"
+	};
+	Some(format!("{indent}{key}: {value}"))
+}
+
+// The paragraph the template had over the four check boxes, as every config
+// written since has it. It describes settings that are gone, so where it is
+// found word for word it gives way to the template's paragraph for the text.
+const OLD_TAB_COMMENT: [&str; 7] = [
+	"## What a tab says, and whether the window title falls back to it. The",
+	"## first line lets a title the running program asked for name the tab,",
+	"## outranked only by a name typed on the tab itself. The three after it",
+	"## are what the tab works out on its own; turning them all off leaves a",
+	"## tab naming its shell, since a tab with no text cannot be told from the",
+	"## one beside it. The tab's flyover always names the lot, whatever these",
+	"## say.",
+];
+
+// Where the old paragraph starts, how many lines it is, and what replaces it,
+// at its indent.
+fn old_tab_comment_at(lines: &[&str]) -> Option<(usize, usize, Vec<String>)> {
+	let at = lines.windows(OLD_TAB_COMMENT.len()).position(|run| {
+		run.iter()
+			.zip(OLD_TAB_COMMENT)
+			.all(|(l, old)| l.trim() == old)
+	})?;
+	let indent = &lines[at][..lines[at].len() - lines[at].trim_start().len()];
+	let new: Vec<String> = setting_groups(default_config())
+		.into_iter()
+		.find(|(path, ..)| path == "window.tab_text")?
+		.1
+		.iter()
+		.filter(|l| l.trim_start().starts_with("##"))
+		.map(|l| format!("{indent}{}", l.trim_start()))
+		.collect();
+	Some((at, OLD_TAB_COMMENT.len(), new))
 }
 
 // What a launch parses when its rewrites were put off because the file looked
@@ -7835,16 +7957,17 @@ window:
 	# new_tab_next_to_current: true  ## Default
 
 	## What a tab says, and whether the window title falls back to it. The
-	## first line lets a title the running program asked for name the tab,
-	## outranked only by a name typed on the tab itself. The three after it
-	## are what the tab works out on its own; turning them all off leaves a
-	## tab naming its shell, since a tab with no text cannot be told from the
-	## one beside it. The tab's flyover always names the lot, whatever these
-	## say.
-	# tab_shows_title: true  ## Default
-	# tab_shows_shell: true  ## Default
-	# tab_shows_program: true  ## Default
-	# tab_shows_directory: true  ## Default
+	## text is a template, where a macro in percent signs is replaced by its
+	## value: USER_DEFINED is a name typed on the tab, PROGRAM_DEFINED the
+	## title the running program asks for, SHELL the shell's name, PROGRAM what
+	## it is running, LAST_PROGRAM what it ran last, and CURRENT_DIRECTORY
+	## where it is. "a || b" shows a, or b when a comes out empty. { } groups
+	## without printing, and [ ] prints its brackets. A group whose macros all
+	## come out empty is left out with its text, and so is text between two
+	## parts unless both of them show. On a narrow tab the parts shorten in a
+	## set order, and a tab with nothing to say names its shell. The tab's
+	## flyover always names the lot, whatever this says.
+	# tab_text: "%USER_DEFINED% || %PROGRAM_DEFINED% || { %SHELL% {[{ %PROGRAM% || last: %LAST_PROGRAM% }] || -} %CURRENT_DIRECTORY% }"  ## Default
 	# title_shows_tab: true  ## Default
 
 	## Let the graphics card's memory go after the window has sat unused, and
@@ -13757,6 +13880,144 @@ mod tests {
 		assert!(!read("cursor:\n\tblink: true\n\tanimation: none\n").cursor_blink);
 		assert!(read("cursor:\n\tanimation: phase\n").cursor_blink);
 		assert!(!read("cursor:\n\tblink: false\n").cursor_blink);
+	}
+
+	// The four check boxes a tab's text used to be made of become one template
+	// that says the same, at the first box's line, and the rest of them go. A
+	// file whose boxes said what shipped gets no line, only the commented one.
+	// Test ID: Et0TY7q
+	#[test]
+	fn the_old_tab_check_boxes_become_a_template_that_says_the_same() {
+		use crate::tabtitle::{DEFAULT_TAB_TEXT, Parts, tab_text_for};
+		let template = |parts: Parts| tab_text_for(parts);
+		let no_dir = Parts {
+			directory: false,
+			..Parts::default()
+		};
+		let migrated = migrate_config_text(
+			"window:\n\tmargin: 8.0\n\t# tab_shows_title: true  ## Default\n\ttab_shows_directory: false\n\t# tab_shows_shell: true  ## Default\n",
+		)
+		.expect("a change");
+		assert!(!migrated.contains("tab_shows"), "{migrated}");
+		assert_eq!(
+			migrated.lines().filter(|l| l.contains("tab_text")).count(),
+			1
+		);
+		assert!(
+			migrated.starts_with("window:\n\tmargin: 8.0\n\ttab_text: "),
+			"{migrated}"
+		);
+		assert_eq!(read_text(&migrated).tab_text, template(no_dir));
+		assert_eq!(migrate_config_text(&migrated), None, "settles in one pass");
+
+		// every mix of them, nested or dotted, says what it did
+		for bits in 0..16u8 {
+			let parts = Parts {
+				title: bits & 1 != 0,
+				shell: bits & 2 != 0,
+				program: bits & 4 != 0,
+				directory: bits & 8 != 0,
+			};
+			let lines = [
+				("title", parts.title),
+				("shell", parts.shell),
+				("program", parts.program),
+				("directory", parts.directory),
+			];
+			let nested: String = std::iter::once("window:\n".to_string())
+				.chain(
+					lines
+						.iter()
+						.map(|(leaf, on)| format!("\ttab_shows_{leaf}: {on}\n")),
+				)
+				.collect();
+			let dotted = lines
+				.iter()
+				.map(|(leaf, on)| format!("window.tab_shows_{leaf}: {on}\n"))
+				.collect::<Vec<_>>()
+				.concat();
+			for text in [nested, dotted] {
+				let migrated = migrate_config_text(&text).expect("a change");
+				assert!(!migrated.contains("tab_shows"), "{migrated}");
+				let want = if parts == Parts::default() {
+					DEFAULT_TAB_TEXT.to_string()
+				} else {
+					template(parts)
+				};
+				assert_eq!(read_text(&migrated).tab_text, want, "{text}");
+				assert_eq!(
+					migrated.contains("tab_text"),
+					parts != Parts::default(),
+					"{migrated}"
+				);
+				assert_eq!(migrate_config_text(&migrated), None, "{text}");
+			}
+		}
+
+		// a template the file already has wins, and the old boxes just go
+		let own = "window:\n\ttab_text: \"%SHELL%\"\n\ttab_shows_shell: false\n";
+		let migrated = migrate_config_text(own).expect("a change");
+		assert_eq!(migrated, "window:\n\ttab_text: \"%SHELL%\"\n");
+		// read the way the old build read them: a value that is no yes or no was on
+		let odd = "window:\n\ttab_shows_shell: maybe\n";
+		let migrated = migrate_config_text(odd).expect("a change");
+		assert!(!migrated.contains("tab_text"), "{migrated}");
+		// a commented box is not a setting
+		assert_eq!(
+			migrate_config_text("window:\n\t# tab_shows_shell: false\n").as_deref(),
+			Some("window:\n")
+		);
+	}
+
+	// A config written by a build with the check boxes, untouched since, becomes
+	// the one this build writes: the paragraph over the boxes gives way to the
+	// one for the template, and the template's commented line comes in.
+	// Test ID: Et0TY7r
+	#[test]
+	fn a_config_from_before_the_tab_text_template_upgrades_to_the_current_one() {
+		let new_block = setting_groups(default_config())
+			.into_iter()
+			.find(|(path, ..)| path == "window.tab_text")
+			.expect("the template's line")
+			.1
+			.join("\n");
+		let old_block = OLD_TAB_COMMENT
+			.iter()
+			.map(|l| format!("\t{l}"))
+			.chain(OLD_TAB_PARTS.iter().map(|path| {
+				let leaf = path.rsplit('.').next().unwrap_or(path);
+				format!("\t# {leaf}: true  ## Default")
+			}))
+			.collect::<Vec<_>>()
+			.join("\n");
+		assert!(default_config().contains(&new_block));
+		let old = default_config().replacen(&new_block, &old_block, 1);
+		assert_ne!(old, default_config());
+		let migrated = migrate_config_text(&old).expect("a change");
+		let filled = backfilled_text(&migrated)
+			.expect("nothing buried")
+			.unwrap_or(migrated);
+		assert_eq!(filled, default_config());
+		assert_eq!(migrate_config_text(&filled), None);
+	}
+
+	// A template that can't be read is kept, so what was typed is still there to
+	// fix, and the launch says why the tabs don't follow it.
+	// Test ID: Et0TY7s
+	#[test]
+	fn a_tab_text_that_cannot_be_read_is_kept_and_said() {
+		let p = std::path::Path::new("test.shcl");
+		let text = "window:\n\ttab_text: \"{ %SHELL%\"\n";
+		let (raw, said) = read_raw(text, p);
+		assert_eq!(resolve(raw).tab_text, "{ %SHELL%");
+		assert!(
+			said.iter()
+				.any(|line| line.contains("window.tab_text") && line.contains("no closing }")),
+			"{said:?}"
+		);
+		assert_eq!(read_text(text).tab_text, "{ %SHELL%");
+		let (_, said) = read_raw("window:\n\ttab_text: \"%SHELL%\"\n", p);
+		assert!(said.is_empty(), "{said:?}");
 	}
 
 	// Turning the blink on in Settings has to clear a "none" the file still has,

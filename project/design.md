@@ -644,6 +644,18 @@ A title the running program asks for can name the tab too (2026-09-20), which is
 
 - The tab's flyover carries a "Program title" line when there is one, whatever the switch says, the same as the parts above.
 
+What a tab says is a template now (2026-10-17), in place of the four switches. One text row under Tab text, and `window.tab_text` in the file. The macros are the parts the switches chose between, plus a name typed on the tab: `%USER_DEFINED%`, `%PROGRAM_DEFINED%`, `%SHELL%`, `%PROGRAM%`, `%LAST_PROGRAM%` and `%CURRENT_DIRECTORY%`. [usage.md](../usage.md#tab-text) has the grammar.
+
+- The shipped template reads exactly as the four switches did with all of them on, and an older file's switches become the template that reads as they did. A test holds both against the old code over every mix of switches.
+
+- Text between two parts shows only when both sides show something. The switches' dash, between a shell and a path with nothing running, needs that rule: in `{ %SHELL% {[...] || -} %CURRENT_DIRECTORY% }` the `-` is a fallback with no macro, which counts as text, so it goes when either neighbor is missing. Text before the first part or after the last goes with its group.
+
+- The template says what is on the tab, and the ladder of shortenings still decides how short it gets. Each rung is the template filled in with the parts at that rung's length, so the order the parts give way in is the same whatever the template says. A program's own title goes first, as it did, and a typed name never shortens.
+
+- A template that can't be read is kept as typed, so there is something to fix, and tabs use the default meanwhile. Showing the broken text on every tab would make every tab unreadable over one typo. The Settings row's flyover and the launch both say what is wrong.
+
+- The parser knows nothing about tabs. It takes its list of macro names from the caller, so another template, such as a session name, can use it.
+
 ### A terminal running with administrator or root rights says so (2026-09-09)
 
 The window title starts with "Administrator: " on Windows and "Root: " elsewhere. Windows already spells its own elevated console title bars that way, so that word is kept rather than invented.

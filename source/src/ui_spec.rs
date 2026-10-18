@@ -60,7 +60,7 @@ keys![
 	SystemFont, SystemFontSize, FontFamily, FontSize, LineHeight,
 	Columns, Rows, RememberSize, RememberPerMonitor, RememberMaximized, Margin, TabRegularWidth, TabMaxWidth,
 	NewTabNextToCurrent, IdleRelease, IdleHiddenMin, IdleMin, SoftwareRendering,
-	TabShowsTitle, TabShowsShell, TabShowsProgram, TabShowsDirectory, TitleShowsTab,
+	TabTemplate, TitleShowsTab,
 	Shells, StartupDirectory, ShellIntegration, BashPrompt, CopyOnSelect, Hyperlinks, LinkOpenCommand,
 	SmoothScroll, ScrollEaseIn, ScrollRampUp, SingleScreenTau, ScrollRampDown,
 	ScrollEaseOut, SmoothApps, WheelLines, BgFolder,
