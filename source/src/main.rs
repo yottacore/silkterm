@@ -63,6 +63,7 @@ mod text;
 mod textedit;
 mod theme;
 mod tip;
+mod tmux;
 mod ui_spec;
 mod visibility;
 mod wallpaper;

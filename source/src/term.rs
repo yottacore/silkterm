@@ -344,6 +344,10 @@ pub struct TermInstance {
 	front_pid: Option<u32>,
 	// what a tmux client in front shows (see front.rs)
 	tmux: crate::front::Tmux,
+	// the pane runs a tmux client itself, started for a session of its own
+	// (tmux.rs), rather than a shell
+	#[cfg_attr(not(unix), allow(dead_code))]
+	tmux_client: bool,
 	// windows: the shell process, for the child-process probe that stands in
 	// for a foreground process group (see at_shell_prompt) and for the PEB read,
 	// plus that probe's answer for as long as it holds (see note_activity).
@@ -389,6 +393,7 @@ impl TermInstance {
 		proxy: EventLoopProxy<UserEvent>,
 		command: Option<Vec<String>>,
 		cwd: Option<std::path::PathBuf>,
+		tmux_client: bool,
 	) -> anyhow::Result<Self> {
 		let dims = grid_dims(cols, lines);
 		let (cols, lines) = (dims.columns, dims.screen_lines);
@@ -416,7 +421,7 @@ impl TermInstance {
 			cell_height: cell_h,
 		};
 
-		let pty = tty::new(&pane_options(command.as_deref(), cwd), win, id)?;
+		let pty = tty::new(&pane_options(command.as_deref(), cwd, tmux_client), win, id)?;
 		// Capture the master fd + shell pid before the event loop takes the pty;
 		// they drive the tab title (foreground program). The fd stays valid for
 		// the pane's life (the loop owns the pty until close).
@@ -467,6 +472,7 @@ impl TermInstance {
 			#[cfg(unix)]
 			front_pid: None,
 			tmux: crate::front::Tmux::default(),
+			tmux_client,
 			#[cfg(windows)]
 			shell: ShellProc::new(shell_pid),
 			#[cfg(windows)]
@@ -546,8 +552,18 @@ impl TermInstance {
 		// SAFETY: takes no pointer, so a closed or reused fd can only answer wrong.
 		let pgid = unsafe { libc::tcgetpgrp(self.master_fd) };
 		self.front_pid = None;
-		if pgid <= 0 || pgid as u32 == self.shell_pid {
+		if pgid <= 0 {
 			return None;
+		}
+		// A pane started in tmux runs the client in place of a shell. It is named
+		// as tmux run from a shell is, and asked what it shows the same way.
+		if pgid as u32 == self.shell_pid {
+			if !self.tmux_client {
+				return None;
+			}
+			let name = proc_comm(self.shell_pid)?;
+			self.front_pid = Some(self.shell_pid);
+			return Some(name);
 		}
 		let pid = crate::front::group_front(self.shell_pid, pgid as u32).unwrap_or(pgid as u32);
 		let name = proc_comm(pid)?;
@@ -1638,7 +1654,11 @@ fn usable_cwd(dir: Option<std::path::PathBuf>) -> Option<std::path::PathBuf> {
 	dir.filter(|dir| dir.is_absolute())
 }
 
-fn pane_options(command: Option<&[String]>, cwd: Option<std::path::PathBuf>) -> tty::Options {
+fn pane_options(
+	command: Option<&[String]>,
+	cwd: Option<std::path::PathBuf>,
+	tmux_client: bool,
+) -> tty::Options {
 	// a CLI/menu-supplied command runs as argv[0] + args; else the default shell
 	let mut opts = tty::Options::default();
 	// The argv is split already, so Windows has to get it back whole: a spaced
@@ -1659,6 +1679,11 @@ fn pane_options(command: Option<&[String]>, cwd: Option<std::path::PathBuf>) -> 
 	// start in an inherited directory (new tab/split follows the source pane)
 	opts.working_directory = usable_cwd(cwd);
 	opts.env.extend(crate::integration::pane_env(command));
+	// A SilkTerm started inside tmux hands TMUX down, and tmux won't start a
+	// session under it. Empty counts as unset to tmux.
+	if tmux_client {
+		opts.env.insert("TMUX".to_string(), String::new());
+	}
 	opts
 }
 
@@ -2201,7 +2226,11 @@ mod tests {
 	#[test]
 	fn a_pane_hands_its_program_and_arguments_down_whole() {
 		let wsl = ["wsl.exe".to_string()];
-		let opts = super::pane_options(Some(&wsl), Some(crate::testdir::run_dir().to_path_buf()));
+		let opts = super::pane_options(
+			Some(&wsl),
+			Some(crate::testdir::run_dir().to_path_buf()),
+			false,
+		);
 		assert!(
 			opts.escape_args,
 			"a split argv has to be joined back with quotes"

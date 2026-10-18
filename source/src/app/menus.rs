@@ -6,10 +6,7 @@
 
 #[cfg(any(test, target_os = "macos"))]
 use super::MENU_BAR;
-use super::{
-	CloseScope, MENU_TIP_GAP, MENU_TIP_MAX_W, MENU_TIP_PAD, State, close_scope, open_link,
-	save_live, shell_argv,
-};
+use super::{MENU_TIP_GAP, MENU_TIP_MAX_W, MENU_TIP_PAD, State, open_link, save_live, shell_argv};
 use crate::config;
 use crate::input::Hotkey;
 use crate::pane::{CopyKind, Dir, Rect};
@@ -42,6 +39,8 @@ pub(crate) enum MenuAction {
 	// New tab running the shell at this index in the stored list (config
 	// `shells.*`; see the Tabs menu's "New tab with shell").
 	NewTabShell(usize),
+	// a new tab whose pane starts in a tmux session of its own
+	NewTabTmux,
 	CloseTab,
 	SplitVertical,
 	SplitHorizontal,
@@ -371,8 +370,16 @@ fn edit_menu_items(copy_select: bool, copy_output: bool) -> Vec<Entry> {
 	]
 }
 
-fn tabs_menu_items(shells: &[ShellEntry]) -> Vec<Entry> {
+// "New tab in tmux" shows only where tmux can run, which is never on Windows.
+fn tabs_menu_items(shells: &[ShellEntry], tmux: bool) -> Vec<Entry> {
 	let mut items = vec![entry_item_accel('N', "New tab", MenuAction::NewTab)];
+	if tmux {
+		items.push(entry_item_accel(
+			'M',
+			"New tab in tmux",
+			MenuAction::NewTabTmux,
+		));
+	}
 	items.extend(new_tab_shells(shells, Some('S')));
 	items.extend([
 		Entry::Sep,
@@ -410,7 +417,7 @@ fn bar_menu(
 		0 => file_menu_items(),
 		1 => edit_menu_items(copy_select, copy_output),
 		2 => view_menu_items(view),
-		3 => tabs_menu_items(shells),
+		3 => tabs_menu_items(shells, crate::tmux::program().is_some()),
 		4 => panes_menu_items(shells),
 		_ => help_menu_items(),
 	}
@@ -505,6 +512,7 @@ pub(crate) fn menu_hotkey(action: MenuAction) -> Option<Hotkey> {
 		| MenuAction::ToggleCopySelect
 		| MenuAction::ToggleCopyOutput
 		| MenuAction::NewTabShell(_)
+		| MenuAction::NewTabTmux
 		| MenuAction::SplitShell(..)
 		| MenuAction::ToggleFrame
 		| MenuAction::ToggleMenuBar
@@ -1253,30 +1261,17 @@ impl State {
 				}
 			}
 			MenuAction::Close => {
-				let scope = {
-					let cur = self.tabs.cur();
-					close_scope(
-						cur.panes.contains_key(&target),
-						cur.panes.len(),
-						self.tabs.len(),
-					)
-				};
-				match scope {
-					CloseScope::Pane => {
-						self.tabs.cur_mut().close(&mut self.text, target, area);
-					}
-					// last pane in this tab -> the tab; last pane of the last tab
-					// -> the window
-					CloseScope::Tab => self.close_tab(),
-					CloseScope::Window => self.quit = true,
-					CloseScope::Nothing => {}
+				let here = self.tabs.cur().panes.contains_key(&target);
+				if here && self.may_close(super::closing::Closing::Pane(target)) {
+					self.close_pane_now(target);
 				}
 			}
 			MenuAction::NewTab => self.new_tab(proxy),
 			MenuAction::NewWindow => self.new_window(),
 			MenuAction::PrevTab => self.step_tab(false),
 			MenuAction::NextTab => self.step_tab(true),
-			MenuAction::NewTabShell(index) => self.new_tab_with(proxy, shell_argv(index)),
+			MenuAction::NewTabShell(index) => self.new_tab_with(proxy, shell_argv(index), false),
+			MenuAction::NewTabTmux => self.new_tab_with(proxy, None, true),
 			MenuAction::CloseTab => self.close_tab(),
 			MenuAction::FontBigger => self.font_zoom(1),
 			MenuAction::FontSmaller => self.font_zoom(-1),
@@ -1320,7 +1315,7 @@ impl State {
 			MenuAction::ReloadConfig => self.reload_config(),
 			MenuAction::Settings => self.open_settings(),
 			MenuAction::About => self.open_about(),
-			MenuAction::Quit => self.quit = true,
+			MenuAction::Quit => self.request_quit(),
 		}
 		self.update_title();
 	}
@@ -1702,7 +1697,7 @@ mod tests {
 			("File", file_menu_items()),
 			("Edit", edit_menu_items(true, true)),
 			("View", view_menu_items(view)),
-			("Tabs", tabs_menu_items(shells)),
+			("Tabs", tabs_menu_items(shells, true)),
 			("Panes", panes_menu_items(shells)),
 			("Help", help_menu_items()),
 			("right-click", context_menu_items(ctx, shells)),
@@ -2024,7 +2019,7 @@ mod tests {
 				(Hotkey::SplitRight, Vec::new()),
 			],
 		);
-		let tabs = with_shortcuts(tabs_menu_items(&shells), &moved, false);
+		let tabs = with_shortcuts(tabs_menu_items(&shells, true), &moved, false);
 		assert_eq!(
 			label(&tabs, MenuAction::CloseTab).as_deref(),
 			Some("Close tab (Ctrl+F4)")
@@ -2178,7 +2173,7 @@ mod tests {
 		};
 		let shells = three_shells();
 		for (name, items) in [
-			("Tabs", tabs_menu_items(&shells)),
+			("Tabs", tabs_menu_items(&shells, false)),
 			("right-click", context_menu_items(ctx, &shells)),
 		] {
 			let below = position_of(&items, |a| matches!(a, MenuAction::NewTab)).unwrap() + 1;
@@ -2195,10 +2190,37 @@ mod tests {
 			));
 		}
 		for shells in [Vec::new(), vec![shell("fish", false)]] {
-			for items in [tabs_menu_items(&shells), context_menu_items(ctx, &shells)] {
+			for items in [
+				tabs_menu_items(&shells, false),
+				context_menu_items(ctx, &shells),
+			] {
 				assert!(!items.iter().any(|entry| matches!(entry, Entry::Sub { .. })));
 			}
 		}
+	}
+
+	// Test ID: Et0Zjs5
+	#[test]
+	fn new_tab_in_tmux_sits_between_new_tab_and_the_shells_where_tmux_runs() {
+		let shells = three_shells();
+		let items = tabs_menu_items(&shells, true);
+		let new_tab = position_of(&items, |a| matches!(a, MenuAction::NewTab)).unwrap();
+		assert_eq!(
+			items.get(new_tab + 1).and_then(entry_label),
+			Some("New tab in tmux")
+		);
+		assert!(matches!(
+			items[new_tab + 1],
+			Entry::Item {
+				action: MenuAction::NewTabTmux,
+				..
+			}
+		));
+		assert!(
+			matches!(&items[new_tab + 2], Entry::Sub { label, .. } if label == "New tab with shell")
+		);
+		let without = tabs_menu_items(&shells, false);
+		assert!(position_of(&without, |a| matches!(a, MenuAction::NewTabTmux)).is_none());
 	}
 
 	// Test ID: Er2UvPs

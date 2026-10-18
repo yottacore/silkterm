@@ -58,7 +58,7 @@ pub(super) fn build_layout(
 	let win_dir = cli.win.style.directory.as_deref().and_then(config::cli_dir);
 	let spawn = |text: &mut TextCtx, shell: Option<Vec<String>>, dir: Option<PathBuf>| {
 		let dir = dir.or_else(|| start.clone());
-		PaneManager::new(text, proxy, area, shell, dir).unwrap_or_else(|e| {
+		PaneManager::new(text, proxy, area, shell, dir, false).unwrap_or_else(|e| {
 			eprintln!("{}: failed to start shell: {e}", config::APP_NAME);
 			std::process::exit(2);
 		})
@@ -196,6 +196,7 @@ pub(super) fn build_layout(
 				shell.clone(),
 				pane_dir.clone().or_else(|| start.clone()),
 				area,
+				false,
 			) {
 				if let Some(handle) = &pane_spec.id {
 					handles.insert(handle.clone(), new_id);

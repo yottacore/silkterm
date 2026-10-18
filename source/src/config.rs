@@ -893,6 +893,9 @@ pub struct Settings {
 	pub copy_on_select: bool,       // panes start with copy-on-select enabled
 	pub shell_integration: bool,    // put the directory-reporting block in PowerShell profiles
 	pub bash_prompt: bool,          // give bash panes the x9ps1-git prompt (see integration.rs)
+	pub tmux_new_session: bool,     // a split starts in a tmux session of its own (tmux.rs)
+	pub tmux_session_name: String,  // that session's name, as a template
+	pub tmux_on_close: crate::tmux::OnClose, // what closing such a pane does to its session
 	pub hyperlinks: bool,           // underline URLs in output on hover; Ctrl+click opens them
 	pub hyperlink_open_command: String, // opener for a clicked link; its default is the desktop's own
 	pub bg: [u8; 3],
@@ -1135,6 +1138,9 @@ impl Settings {
 			copy_on_select: true,
 			shell_integration: true,
 			bash_prompt: false,
+			tmux_new_session: false,
+			tmux_session_name: crate::tmux::DEFAULT_SESSION_NAME.to_string(),
+			tmux_on_close: crate::tmux::OnClose::Prompt,
 			hyperlinks: true,
 			hyperlink_open_command: String::new(),
 			bg: pal.bg,
@@ -2928,6 +2934,9 @@ struct RawConfig {
 	copy_on_select: Option<bool>,
 	shell_integration: Option<bool>,
 	bash_prompt: Option<bool>,
+	tmux_new_session: Option<bool>,
+	tmux_session_name: Option<String>,
+	tmux_on_close: Option<String>,
 	hyperlinks: Option<bool>,
 	hyperlink_open_command: Option<String>,
 	performance_automatic: Option<bool>,
@@ -3431,6 +3440,9 @@ fn read_raw(text: &str, path: &std::path::Path) -> (RawConfig, Vec<String>) {
 		copy_on_select: reader.read_bool("shell.copy_on_select"),
 		shell_integration: reader.read_bool("shell.integration"),
 		bash_prompt: reader.read_bool("shell.bash_prompt"),
+		tmux_new_session: reader.read_bool("shell.tmux.always_new_session"),
+		tmux_session_name: reader.read_string("shell.tmux.session_name"),
+		tmux_on_close: reader.read_string("shell.tmux.on_close"),
 		hyperlinks: reader.read_bool("hyperlinks.enabled"),
 		hyperlink_open_command: reader.read_string("hyperlinks.open_command"),
 		colors: RawColors {
@@ -4085,6 +4097,13 @@ fn resolve(raw: RawConfig) -> Settings {
 		copy_on_select: raw.copy_on_select.unwrap_or(d.copy_on_select),
 		shell_integration: raw.shell_integration.unwrap_or(d.shell_integration),
 		bash_prompt: raw.bash_prompt.unwrap_or(d.bash_prompt),
+		tmux_new_session: raw.tmux_new_session.unwrap_or(d.tmux_new_session),
+		// blank is the default, as the tab text's is
+		tmux_session_name: raw
+			.tmux_session_name
+			.filter(|name| !name.trim().is_empty())
+			.unwrap_or(d.tmux_session_name),
+		tmux_on_close: choice_or(raw.tmux_on_close.as_deref(), d.tmux_on_close),
 		hyperlinks: raw.hyperlinks.unwrap_or(d.hyperlinks),
 		hyperlink_open_command: raw.hyperlink_open_command.unwrap_or_default(),
 		bg: color(raw.colors.background, pal.bg),
@@ -8047,6 +8066,19 @@ shell:
 	# bash_prompt: false  ## Default
 
 	# copy_on_select: true  ## Default
+
+	## Start each split in a new tmux session of its own, so what runs in it
+	## survives the window closing and can be attached to again from anywhere.
+	## The Tabs menu's "New tab in tmux" does the same for a whole tab. The
+	## name is a template, where YYYYmmDD is the date and HHMMSS or HHMMSSNN
+	## the time, the second one to a hundredth of a second, each in percent
+	## signs. on_close is what closing such a pane does to its session:
+	## detach leaves it running, end ends it, and prompt asks each time.
+	## Needs tmux, so not on Windows.
+	tmux:
+		# always_new_session: false  ## Default
+		# session_name: "%YYYYmmDD%-%HHMMSSNN%"  ## Default
+		# on_close: prompt  ## Default
 
 ##
 ## This config file format is SHCL.
@@ -14542,6 +14574,61 @@ mod tests {
 			Some("\t# idle_release: true  ## Default")
 		);
 		assert!(!resolve(read_raw("window.idle_release: false\n", p).0).idle_release);
+	}
+
+	// The tmux settings, off and asking by default, read nested or dotted. A
+	// word or name the file can't use reads as the default.
+	// Test ID: Et0dflx
+	#[test]
+	fn the_tmux_settings_read_from_the_file_and_default_off() {
+		use crate::tmux::OnClose;
+		let p = std::path::Path::new("test.shcl");
+		let d = Settings::default();
+		assert!(!d.tmux_new_session);
+		assert_eq!(d.tmux_session_name, "%YYYYmmDD%-%HHMMSSNN%");
+		assert_eq!(d.tmux_on_close, OnClose::Prompt);
+		let lines: Vec<(String, String)> = setting_lines(default_config())
+			.into_iter()
+			.filter(|(name, _)| name.starts_with("shell.tmux."))
+			.collect();
+		assert_eq!(
+			lines,
+			[
+				(
+					"shell.tmux.always_new_session".to_string(),
+					"\t\t# always_new_session: false  ## Default".to_string()
+				),
+				(
+					"shell.tmux.session_name".to_string(),
+					"\t\t# session_name: \"%YYYYmmDD%-%HHMMSSNN%\"  ## Default".to_string()
+				),
+				(
+					"shell.tmux.on_close".to_string(),
+					"\t\t# on_close: prompt  ## Default".to_string()
+				),
+			]
+		);
+		let nested = "shell:\n\ttmux:\n\t\talways_new_session: true\n\t\tsession_name: \"work %HHMMSS%\"\n\t\ton_close: end\n";
+		for text in [
+			nested,
+			"shell.tmux.always_new_session: true\nshell.tmux.session_name: \"work %HHMMSS%\"\nshell.tmux.on_close: END\n",
+		] {
+			let s = resolve(read_raw(text, p).0);
+			assert!(s.tmux_new_session, "{text}");
+			assert_eq!(s.tmux_session_name, "work %HHMMSS%");
+			assert_eq!(s.tmux_on_close, OnClose::End);
+		}
+		// and through the model, the way a launch reads it
+		assert_eq!(read_text(nested).tmux_on_close, OnClose::End);
+		let odd = resolve(
+			read_raw(
+				"shell.tmux.on_close: kill\nshell.tmux.session_name: \"  \"\n",
+				p,
+			)
+			.0,
+		);
+		assert_eq!(odd.tmux_on_close, OnClose::Prompt);
+		assert_eq!(odd.tmux_session_name, d.tmux_session_name);
 	}
 
 	// Test ID: ErnMaKh

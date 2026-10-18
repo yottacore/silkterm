@@ -1283,8 +1283,12 @@ pub struct Pane {
 	pub keep_open: bool,
 	pub held: bool,
 	// launch argv (None = default shell); a split inherits this so a new pane
-	// runs the same shell as the one it forked off (see design.md).
+	// runs the same shell as the one it forked off (see design.md). A pane in
+	// tmux keeps the shell here, not tmux, so it is named and inherited alike.
 	command: Option<Vec<String>>,
+	/// The tmux session SilkTerm started this pane in, which is the one closing
+	/// it may end (tmux.rs).
+	pub tmux: Option<crate::tmux::Session>,
 	last_draw: PaneDraw,
 	// Frames in a row that reused last_draw because the terminal was busy.
 	lock_misses: u32,
@@ -1459,6 +1463,15 @@ impl std::fmt::Debug for Pane {
 }
 
 impl Pane {
+	/// Where a split, new tab or new window made from this pane starts. A pane
+	/// in tmux asks tmux, since the client it runs stays where it started.
+	pub fn inherit_cwd(&self) -> Option<std::path::PathBuf> {
+		self.tmux
+			.as_ref()
+			.and_then(crate::tmux::current_path)
+			.or_else(|| self.term.cwd())
+	}
+
 	/// `SILK_MEMDBG`: the grid's cells (screen plus scrollback, both screens) and
 	/// the minimap's cache. The grid figure leaves out per-row headers and the
 	/// rows the engine allocates ahead of use, up to a thousand.
@@ -3663,9 +3676,10 @@ impl PaneManager {
 		area: Rect,
 		command: Option<Vec<String>>,
 		cwd: Option<std::path::PathBuf>,
+		in_tmux: bool,
 	) -> anyhow::Result<Self> {
 		let id = alloc_pane_id();
-		let pane = spawn_pane(ctx, proxy, id, area, command, cwd)?;
+		let pane = spawn_pane(ctx, proxy, id, area, command, cwd, in_tmux)?;
 		let mut panes = HashMap::new();
 		panes.insert(id, pane);
 		Ok(Self {
@@ -3716,10 +3730,14 @@ impl PaneManager {
 		command: Option<Vec<String>>,
 		area: Rect,
 	) {
-		let cwd = self.panes.get(&id).and_then(|p| p.term.cwd());
+		let cwd = self.panes.get(&id).and_then(Pane::inherit_cwd);
+		// only a split made here gets tmux, never one the command line lays out
+		let in_tmux = config::settings().tmux_new_session;
 		// interactive splits even-distribute the same-direction run (unless a divider
 		// in it was hand-dragged)
-		self.split_at(ctx, proxy, id, dir, false, None, command, cwd, area);
+		self.split_at(
+			ctx, proxy, id, dir, false, None, command, cwd, area, in_tmux,
+		);
 	}
 
 	/// What the tab has to say about itself: the command its focused pane was
@@ -3743,9 +3761,14 @@ impl PaneManager {
 	/// What a new tab/window spawned "from" the focused pane should inherit:
 	/// its launch command (None = default shell) and the shell's current dir.
 	pub fn inherit_spawn(&self) -> (Option<Vec<String>>, Option<std::path::PathBuf>) {
-		self.panes
-			.get(&self.focused)
-			.map_or((None, None), |pane| (pane.command.clone(), pane.term.cwd()))
+		self.panes.get(&self.focused).map_or((None, None), |pane| {
+			(pane.command.clone(), pane.inherit_cwd())
+		})
+	}
+
+	/// The tmux sessions SilkTerm started in this tab's panes.
+	pub fn tmux_sessions(&self) -> Vec<crate::tmux::Session> {
+		self.panes.values().filter_map(|p| p.tmux.clone()).collect()
 	}
 
 	/// General split used by the CLI: split `id` along `dir`, the new pane on the
@@ -3763,6 +3786,7 @@ impl PaneManager {
 		command: Option<Vec<String>>,
 		cwd: Option<std::path::PathBuf>,
 		area: Rect,
+		in_tmux: bool,
 	) -> Option<PaneId> {
 		// leaves mirror `panes`, so this is also "is id a leaf" - checked up
 		// front so a doomed insert can't spawn (then kill) a shell
@@ -3779,7 +3803,7 @@ impl PaneManager {
 			.map_or((false, false), |src| (src.copy_select, src.copy_output));
 		// spawn BEFORE touching the tree: a failed spawn must not leave a
 		// phantom leaf that reserves layout space with no pane behind it
-		let mut pane = match spawn_pane(ctx, proxy, new_id, area, command, cwd) {
+		let mut pane = match spawn_pane(ctx, proxy, new_id, area, command, cwd, in_tmux) {
 			Ok(p) => p,
 			Err(e) => {
 				eprintln!("split: failed to spawn shell: {e}");
@@ -4036,6 +4060,7 @@ fn spawn_pane(
 	rect: Rect,
 	command: Option<Vec<String>>,
 	cwd: Option<std::path::PathBuf>,
+	in_tmux: bool,
 ) -> anyhow::Result<Pane> {
 	// A pane with no command of its own runs the default shell - resolved HERE
 	// and then remembered, rather than left as "whatever the default is". The
@@ -4046,6 +4071,22 @@ fn spawn_pane(
 	// It stays None only when nothing is switched on at all, where the engine
 	// picks its own default and there is genuinely nothing to report.
 	let command = command.or_else(config::default_shell_argv);
+	// With no tmux to be had the pane gets the plain shell, as it would anyway.
+	let started = if in_tmux {
+		let env = crate::integration::pane_env(command.as_deref());
+		crate::tmux::start(
+			&config::settings().tmux_session_name,
+			command.as_deref(),
+			cwd.as_deref(),
+			&env,
+		)
+	} else {
+		None
+	};
+	let (tmux, argv) = match started {
+		Some((session, argv)) => (Some(session), Some(argv)),
+		None => (None, command.clone()),
+	};
 	let text = minimap::text_rect(rect, &config::settings(), ctx.scale, true);
 	let (cw, ch, cols, lines) = content_dims(text, ctx);
 	let term = TermInstance::spawn(
@@ -4055,8 +4096,9 @@ fn spawn_pane(
 		ctx.cell_w as u16,
 		ctx.cell_h as u16,
 		proxy.clone(),
-		command.clone(),
+		argv,
 		cwd,
+		tmux.is_some(),
 	)?;
 	let buffer = ctx.new_buffer(cw, text_buffer_h(ch, ctx.cell_h));
 	let strip_buf = ctx.new_buffer(cw, ctx.cell_h);
@@ -4079,6 +4121,7 @@ fn spawn_pane(
 		keep_open: false,
 		held: false,
 		command,
+		tmux,
 		last_draw: PaneDraw {
 			top: rect.y,
 			bg: Vec::new(),

@@ -763,16 +763,19 @@ impl State {
 	}
 
 	pub(super) fn new_tab(&mut self, proxy: &EventLoopProxy<UserEvent>) {
-		self.new_tab_with(proxy, None);
+		self.new_tab_with(proxy, None, false);
 	}
 
 	/// `shell` is a shell picked by name from the Tabs menu; None inherits from
 	/// the pane that was active, as a plain new tab does. The directory is
 	/// inherited either way - picking a shell says nothing about where to start.
+	/// `in_tmux` starts the tab's pane in a tmux session of its own, which only
+	/// "New tab in tmux" asks for.
 	pub(super) fn new_tab_with(
 		&mut self,
 		proxy: &EventLoopProxy<UserEvent>,
 		shell: Option<Vec<String>>,
+		in_tmux: bool,
 	) {
 		self.commit_tab_edit();
 		// area with the bar shown (we're about to have >1 tab); relayout_all fixes
@@ -792,7 +795,7 @@ impl State {
 			.get(self.tabs.active)
 			.map_or((None, None), PaneManager::inherit_spawn);
 		let cmd = shell.or(cmd).or_else(config::default_shell_argv);
-		if let Ok(pm) = PaneManager::new(&mut self.text, proxy, area, cmd, cwd) {
+		if let Ok(pm) = PaneManager::new(&mut self.text, proxy, area, cmd, cwd, in_tmux) {
 			let beside = config::settings().new_tab_beside;
 			let made = pm.focused;
 			self.tab_opener = self
@@ -821,8 +824,10 @@ impl State {
 		self.tab_tip = None;
 	}
 
+	/// Close tab from a menu or hotkey. A tab with a pane in tmux may ask
+	/// first (closing.rs).
 	pub(super) fn close_tab(&mut self) {
-		self.close_tab_at(self.tabs.active);
+		self.request_close_tab(self.tabs.active);
 	}
 
 	/// the tab to the left or right, round the end
