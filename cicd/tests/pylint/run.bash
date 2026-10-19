@@ -99,6 +99,9 @@ if ((haveMypy)); then
 	fCheck "two scripts named run.py, and a name with a dash, pass together" test "${rc}" -eq 0 -a -z "${out}"
 	fLint "${work}/clean.py" "${work}/one/run.py" "${work}/typeerror.py" "${work}/two/run.py"
 	fCheck "and a type error among them still fails" grep -qF "typeerror.py:2: error:" <<<"${out}"
+	## The container's mypy can crash on a cache this box's wrote.
+	CARGO_TARGET_DIR="${work}/target" fLint "${work}/clean.py"
+	fCheck "the mypy cache follows the target dir" test "${rc}" -eq 0 -a -d "${work}/target/mypy"
 else
 	echo "  skip mypy cases (no mypy)"
 fi
@@ -110,3 +113,4 @@ echo "all passed"
 ##		- 20261004 JC: Created.
 ##		- 20261005 JC: The style guide's Python rules, and mypy.
 ##		- 20261005 JC: except Exception.
+##		- 20261019 JC: mypy cache per target dir.
