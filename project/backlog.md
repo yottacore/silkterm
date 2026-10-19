@@ -199,13 +199,38 @@ Going forward, new issues in the new template at the bottom of this file, will g
 - Windows version doesn't remember "wallpaper" being enabled.
 	- ID: 2026101816103600
 	- Type: Bug
-	- Status: Queued
+	- Status: Done
+	- Needs external testing: Confirmation only, in the next Windows round: the full Windows suite, and the `wpremote` scenario on b29w.
 	- Severity: Avg
 	- Opened: 20261018-161036
 	- Opened by: JC
 	- Target OS: Windows
 	- Notes:
 		- Pre-next-cut.
+	- Steps to reproduce:
+		- Log on over RDP, then move the session to the console, as the Looking Glass wrapper does after an RDP visit.
+		- Launch SilkTerm from the taskbar. There's no wallpaper.
+		- Turn it on, then relaunch.
+	- Reproduced: 20261019 on vm925w, in the session described above.
+		- Turned on in Settings, then relaunched: fails, it's off again.
+		- Turned on by unchecking View > Temporary remote display mode, then relaunched: fails.
+		- On in one window: a new tab keeps it, but a new window (Ctrl+Shift+N) opens without it.
+	- Actual cause:
+		- Windows sets SESSIONNAME once, at logon. After an RDP logon is moved to the console, Explorer still has `RDP-Tcp#0` and hands it to everything it starts.
+		- SilkTerm read that as a remote screen and put on the Remote profile, which has no wallpaper. Turning the wallpaper on ended Remote for that window only. Nothing in the file changed, since the stored profile already has it on, so every launch and new window went back to Remote.
+	- Progress log:
+		- 20261019: The other leads didn't hold up. The real config on vm925w is High with automatic off, no wallpaper line, and a correctly escaped rotation folder. A step down wasn't involved, and no save wrote the wallpaper off.
+	- Actual fix: The remote check asks Windows for the session's current station name, in place of SESSIONNAME. A real RDP session still gets Remote.
+	- Verified:
+		- `wpremote` on vm925w: 4 checks failed on the old build, all pass on the fix.
+		- Inside a real RDP session, both builds still start with no wallpaper.
+		- The full Linux suite passes.
+	- Swept: SESSIONNAME was the only session variable read for this on Windows. Linux reads DISPLAY and the VNC and xrdp variables, which a session can't take to a local screen.
+	- Branch: wpremote
+	- Commit: 77e2f62
+	- Test case: `a_stale_rdp_session_name_is_not_a_remote_screen` (EtAPzMB) failed on the old code on vm925w, in session 0 and on the console, and passes now. `only_an_rdp_station_reads_as_remote` (EtAPzex). Windows scenario `wpremote` (EtAMTlf), now in the pipeline's list.
+	- Acceptance signoff: Self-closed: reproduced on vm925w, failing before the fix and passing after, with real RDP unchanged.
+	- Closed: 20261019-102355
 
 - Settings|Window: New option, disabled by default: "On text zoom change window size too".
 	- ID: 2026101816103602
