@@ -135,21 +135,17 @@ Text can be particularly hard to read, for example when using light text on a no
 
 	- A contrast floor and a text outline are separate settings that do the same job in other ways.
 
-- **Scroll buffer Minimap**. A column beside the text shows the whole scrollback in miniature. Click or drag it to jump. Switch it off to get more space back.
-
 - **Cursor size and animation options**. Phased blinking, or smoothly pulsing in size. (Or just regular.) Adjustable rate.
 
 - **Background transparency**. The background (with adjustable %) becomes see-through, but not the text.
 
 - **Background transparency blur**. If using background transparency and this is enabled, everything behind the terminal is blurred. Currently supported on X11 with KWin or picom. (But limited to the compositor's options. SilkTerm just talks to the WM to enable it.)
 
-- **User-selectable background image**. One is built in. A pack of >100 more carefully created or curated wallpapers is a separate download, or point it at a folder of your own. All with open licenses.
+- **User-selectable background image**. One is built in. A pack of >100 more carefully created or curated wallpapers is a separate download, or use your own. All with open licenses.
 
 	- The background image can be dimmed with adjustable %, relative to the background color - and independent of main background transparency.
 
 	- `silkterm --wallpaper PATH` switches the running window's wallpaper from inside a pane.
-
-- **Automatic text colors based on the wallpaper**. The text and cursor take a hue that suits the picture based on color theory, and stays readable on it.
 
 - **Background image blur**. With an optional Gaussian blur radius (without altering the source image), also independent of transparency blur.
 
@@ -171,7 +167,7 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Window decorations and/or the menu can be disabled**, for "nothing but terminal". Fullscreen can also be toggled.
 
-- **Window size and font zoom are remembered per monitor**, by its resolution and DPI. A window moved to another monitor takes that monitor's size once it stops moving. On Wayland a window only learns which monitor it is on once it is showing, so there it may resize just after it opens.
+- **Window size is remembered** between launches.
 
 - **Robust Unicode and emoji support**. With internal Unicode fallback rendering for the glyphs that the chosen display font can't display.
 
@@ -201,7 +197,7 @@ Text can be particularly hard to read, for example when using light text on a no
 
 - **Written in Rust as a single self-contained binary**. No runtime dependencies. Fast. The one binary bundles the entire GPU and text-rendering stack, which is why it's about 11 MiB; [the FAQ explains how that *actually* compares to a GTK terminal's few-hundred-KiB launcher](FAQ.md).
 
-- **One codebase for Linux + Windows + macOS, all with x86_64 and ARM builds**. The Windows and ARM versions all build in one pass on x86_64 Linux. *macOS builds from the same codebase on a Mac, as one app for both Intel and Apple silicon*.
+- **One codebase for Linux + Windows + macOS, all with x86_64 and ARM builds**. The Windows and ARM versions all build in one pass on x86_64 Linux. *macOS builds from the same codebase on a Mac*.
 
 - **Native X11 and Wayland on Linux** from one binary. The display backend is chosen at runtime, with no separate build or wrapper.
 
@@ -217,12 +213,24 @@ SilkTerm for Linux and Windows is free from the releases page, and one person bu
 
 ## Wallpaper pack
 
-The 102 wallpapers SilkTerm was built and tuned against are in [`filesystem/home/.config/silkterm/wallpaper/`](filesystem/home/.config/silkterm/wallpaper/). Put them next to your config and rotation picks one each launch, favoring whatever it hasn't shown lately. Next wallpaper, on the View menu and the right-click menu, moves on without waiting. Each image has its own fit and anchor in its metadata, so a photo is cropped rather than squashed - while a gradient stretches edge to edge. Provenance for every one of them is in [wallpaper-attribution.md](filesystem/home/.config/silkterm/wallpaper-attribution.md).
+The 102 wallpapers SilkTerm was built and tuned against are in [`filesystem/home/.config/silkterm/wallpaper/`](filesystem/home/.config/silkterm/wallpaper/). Pick one in Settings. Each image has its own fit and anchor in its metadata, so a photo is cropped rather than squashed - while a gradient stretches edge to edge. Provenance for every one of them is in [wallpaper-attribution.md](filesystem/home/.config/silkterm/wallpaper-attribution.md).
 
 [![Wallpaper pack](assets/wallpaper-gallery.jpg)](https://yottacore.github.io/silkterm/wallpapers/)
 
 Click the sheet for the [browsable gallery](https://yottacore.github.io/silkterm/wallpapers/) - any wallpaper opens full size in place, the arrow keys page through them, and each one shows its credit and license underneath.
 To fetch them, see [Wallpaper pack](install.md#wallpaper-pack) in install.md.
+
+SilkTerm Pro can rotate through them on its own. The free version can too, with a wrapper that picks one at random each launch:
+
+~~~bash
+silkterm --wallpaper-file "$(shuf -n1 -e ~/.config/silkterm/wallpaper/*.jpg)"
+~~~
+
+Or on Windows, in PowerShell:
+
+~~~powershell
+silkterm --wallpaper-file (Get-ChildItem "$env:LOCALAPPDATA\silkterm\wallpaper\*.jpg" | Get-Random).FullName
+~~~
 
 ## Terminal showdown - speed and size
 
@@ -248,7 +256,7 @@ A setting commented out with `#`, like `enabled` above, is at its default. Remov
 
 ## Contributing
 
-Bug reports, feature ideas, and pull requests are welcome. See [contributing.md](contributing.md) for how to get started, the [style guide](style-guide.md) for naming, comments, Rust conventions, and formatting, and the [UI/UX style guide](project/uiux-style-guide.md) for anything that changes what the program shows on screen. [glossary.md](glossary.md) defines the terms the settings and the design docs lean on.
+Bug reports, feature ideas, and pull requests are welcome. Pull requests need a signed [CLA](CLA.md). See [contributing.md](contributing.md) for how to get started, the [style guide](style-guide.md) for naming, comments, Rust conventions, and formatting, and the [UI/UX style guide](project/uiux-style-guide.md) for anything that changes what the program shows on screen. [glossary.md](glossary.md) defines the terms the settings and the design docs lean on.
 
 ## Support SilkTerm
 
@@ -283,8 +291,6 @@ Tell other terminal nerds on various socials how this has changed your life!
 ## Legal stuff
 
 SilkTerm is built on the basic plumbing of [Alacritty](https://github.com/alacritty/alacritty), which is dual-licensed under the [Apache License, Version 2.0](https://github.com/alacritty/alacritty/blob/master/LICENSE-APACHE) and [MIT License](https://github.com/alacritty/alacritty/blob/master/LICENSE-MIT).
-
-It also includes a copy of [x9ps1-git](https://github.com/jim-collier/x9ps1-git), the git-aware bash prompt it can give new bash panes, under the [MIT License](https://opensource.org/licenses/MIT).
 
 SilkTerm's license is specifically compatible with Alacritty's:
 

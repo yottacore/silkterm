@@ -19,7 +19,6 @@
 	- [Logical code organization](#logical-code-organization)
 	- [API (alacritty_terminal)](#api-alacritty_terminal)
 	- [Smooth scrolling](#smooth-scrolling)
-	- [Minimap](#minimap)
 	- [Text readability scrim](#text-readability-scrim)
 	- [Themes and text color](#themes-and-text-color)
 	- [Wallpaper](#wallpaper)
@@ -31,8 +30,6 @@
 	- [The Settings dialog](#the-settings-dialog)
 	- [The shell list and how it is filled](#the-shell-list-and-how-it-is-filled)
 	- [What a pane's shell inherits](#what-a-panes-shell-inherits)
-	- [A prompt is offered to bash, never installed (2026-08-30)](#a-prompt-is-offered-to-bash-never-installed-2026-08-30)
-	- [Opening files from Explorer on Windows (2026-09-30)](#opening-files-from-explorer-on-windows-2026-09-30)
 	- [One tip system, four places that draw it (2026-08-30)](#one-tip-system-four-places-that-draw-it-2026-08-30)
 	- [Render Loop Sketch](#render-loop-sketch)
 	- [Speed](#speed)
@@ -44,7 +41,7 @@
 	- [Startup and slow external resources](#startup-and-slow-external-resources)
 	- [Releasing resources](#releasing-resources)
 	- [Configuration format](#configuration-format)
-	- [Settings across windows (2026-10-13)](#settings-across-windows-2026-10-13)
+	- [Windows find each other (2026-10-13)](#windows-find-each-other-2026-10-13)
 	- [Variables in a setting (2026-08-30)](#variables-in-a-setting-2026-08-30)
 	- [Command-line options](#command-line-options)
 - [Delivery (CI/CD, branches, releases)](#delivery-cicd-branches-releases)
@@ -52,8 +49,6 @@
 	- [A terminal running with administrator or root rights says so (2026-09-09)](#a-terminal-running-with-administrator-or-root-rights-says-so-2026-09-09)
 	- [Tabs report what they are running, and where (2026-08-21)](#tabs-report-what-they-are-running-and-where-2026-08-21)
 	- [A tab is as wide as its own label needs (2026-08-23)](#a-tab-is-as-wide-as-its-own-label-needs-2026-08-23)
-	- [PowerShell gets the same prompt bash does (2026-08-21, reworked 2026-08-30)](#powershell-gets-the-same-prompt-bash-does-2026-08-21-reworked-2026-08-30)
-	- [A split can start in a tmux session of its own (2026-10-17)](#a-split-can-start-in-a-tmux-session-of-its-own-2026-10-17)
 - [Copyright and license](#copyright-and-license)
 
 <!-- /TOC -->
@@ -81,8 +76,6 @@ Each of these has its own design doc, which is the source of truth for that feat
 - [Settings dialog](design_docs/20260930-145721_settings-dialog.md)
 
 - [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md)
-
-- [Minimap](design_docs/20260930-150325_minimap.md)
 
 - [Themes and text color](design_docs/20260930-150458_themes.md)
 
@@ -139,7 +132,7 @@ App  (winit ApplicationHandler)
 
 So a window is a list of tabs, a tab is a split tree of panes, a pane wraps one terminal; pop-out dialogs are independent sibling windows.
 
-Frame loop: a PTY read or a user event marks the app dirty or starts an animation. `about_to_wait` renders when something is dirty or animating, and otherwise waits. A render advances the scroll easing, snaps the grid to the nearest whole line, and redraws each pane from current model state. Frames are driven from `about_to_wait` rather than redraw requests, because `request_redraw` is unreliable under X11/Compiz here. Timed wakes, such as a parked cursor's resume or a minimap compose that owes another, are read after the frame, since drawing is what sets them.
+Frame loop: a PTY read or a user event marks the app dirty or starts an animation. `about_to_wait` renders when something is dirty or animating, and otherwise waits. A render advances the scroll easing, snaps the grid to the nearest whole line, and redraws each pane from current model state. Frames are driven from `about_to_wait` rather than redraw requests, because `request_redraw` is unreliable under X11/Compiz here. Timed wakes, such as a parked cursor's resume, are read after the frame, since drawing is what sets them.
 
 ### API (alacritty_terminal)
 
@@ -150,10 +143,6 @@ The engine knows only whole lines (`display_offset`), so smooth scrolling lives 
 The engine keeps whole lines, and the renderer draws a fractional offset over them. The wheel, the scrollbar, new output and full-screen programs all ease by moving that offset. New output runs through the output chase, a speed curve made of five named segments, one per setting. Full-screen programs are read from a scroll ledger in the engine fork, with row fingerprints as the fallback.
 
 Full design: [Smooth scrolling](design_docs/20260930-144720_smooth-scrolling.md).
-
-### Minimap
-
-A column beside each pane showing the whole scroll buffer in miniature. The buffer always maps linearly onto the column and never slides, and the map stops where the eased text has reached. Lines are colored strokes weighted by how much each character inks. Full design: [Minimap](design_docs/20260930-150325_minimap.md).
 
 ### Text readability scrim
 
@@ -167,7 +156,7 @@ Four built-in themes, each a dark and a light palette, plus saved themes stored 
 
 ### Wallpaper
 
-A faint, blurred picture behind the text, from a named image, a rotating folder or the built-in one, prepared on a worker so it never delays the window. Visibility means the same amount of the picture's contrast in dark and light mode, and the text colors can come from the picture. The see-through window is covered there too. Full design: [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md).
+A faint, blurred picture behind the text, from a named image or the built-in one, prepared on a worker so it never delays the window. Visibility means the same amount of the picture's contrast in dark and light mode. The see-through window is covered there too. Full design: [Wallpaper and see-through windows](design_docs/20260930-150052_wallpaper.md).
 
 ### Performance profiles
 
@@ -259,40 +248,6 @@ A setting the program can work out for itself is stored as a value set by hand o
 - The list is not split by platform. PowerShell runs on Linux and macOS too and mutates the same variable there, so two installs side by side collide the same way; and the launching shell's `cd -` target is stale on every platform, since a pane opens somewhere else. What is deliberately left out is the class people reach for first - an activated virtualenv or conda environment - which a user wants a pane to keep, and which could not be removed honestly in any case, because the matching PATH edits would stay behind and leave the pane half-activated.
 
 - Unix constrains the list in a way Windows does not. There is no call that says what a freshly launched program would see - that answer is composed by PAM, the session manager and the login shell between them and is never recorded - so the unix arm can only DROP a variable, never restore it. A name may therefore join the list only if a desktop session never sets it. That holds for all three today, and it is the rule to check before adding a fourth.
-
-### A prompt is offered to bash, never installed (2026-08-30)
-
-- SilkTerm includes x9ps1-git, a git-aware bash prompt, and hands it to the bash panes it starts. It shows the branch, whether the tree is clean, and how far ahead or behind its tracking branch it is. It was on by default until 2026-09-16, and is off now.
-
-- Among the ways to deliver it, it was decided to set `PROMPT_COMMAND` in the pane's environment. bash picks that up as a shell variable, and the user's own rc files run afterwards. Nothing is written into anyone's `.bashrc`, there is nothing to uninstall, and it cannot follow the user into a shell SilkTerm did not start.
-
-- It was meant to give way to a prompt set in `.bashrc`, and never did. `PROMPT_COMMAND` sets `PS1` before every prompt, so it replaces one from the rc files. Only a `PROMPT_COMMAND` of the user's own wins.
-	- Yielding to any `PS1` was decided against. Debian's `/etc/bash.bashrc` and its default `.bashrc` both set one, so the prompt would never show there.
-	- Instead, when it is on it always wins, and it is off by default. The Settings row names it and says where it comes from, so turning it on is a choice made knowing it replaces the rc's prompt.
-
-- The alternative considered was the PowerShell approach: append a block to the rc file. That was rejected here because the PowerShell case has no other option - PowerShell cannot report its directory any other way - while bash has one that touches nothing. A prompt is also a matter of taste in a way a directory report is not, so the reversible answer wins.
-
-- The script is written beside the config the first time a bash pane opens, and rewritten whenever it differs from the compiled-in copy, so an updated SilkTerm carries an updated prompt. The pane's `PROMPT_COMMAND` sources it once per shell and then calls `fX9ps1Git_SetPs1` before each prompt. So outside a git working tree a prompt starts no process, and inside one it runs git twice. Until 2026-10-06 the pane ran it through `$BASH` at every prompt, a new bash each time. Sourcing needs no execute bit and nothing on `PATH`. A shell already open keeps the copy it sourced.
-
-- x9ps1-git is a separate MIT project of the same author. The in-repo copy is a vendored copy of its `bin/x9ps1-git`, and will go stale on its own if nobody looks - the version it carries is in its own header.
-
-- PowerShell gets the same prompt, ported rather than shared, and delivered the other way. See below for why the two halves cannot use one mechanism.
-
-### Opening files from Explorer on Windows (2026-09-30)
-
-- SilkTerm opens `.bat`, `.cmd`, `.ps1` and `.vbs` files, and folders, through per-user file associations. It is not Windows' default terminal.
-
-- Being the default terminal is ruled out for good. Windows starts the console program first and then hands its live session to the terminal through COM, and only Windows Terminal's console host can do the handing. So it needs Windows Terminal installed, a COM server inside SilkTerm, and a second way into the pty backend. Associations cover what a person actually double-clicks, for a small part of the work.
-
-- Registering overrides only the `open` verb of each type's program ID, its label and its command, in `HKCU\Software\Classes`. Windows reads HKCU over HKLM a value at a time, so the type keeps its icon, its other verbs and its description. It also adds a `SilkTerm.<ext>` entry under Open with, which is the only way in when the user picked an app for the type there.
-
-- What each value held before is saved under `HKCU\Software\SilkTerm\Associations`, with the value we wrote. Putting back restores only a value still holding ours, so a change somebody made since is left alone. Registering again puts back and saves over, so the path follows the build.
-
-- The command is `silkterm --keep-open --open "%1" %*`. `--open` picks the host from the file type and takes the rest of the line as the file's arguments. A batch file is started as itself, since CreateProcess hands it to `cmd.exe` quoted the way cmd wants. A `.ps1` uses the same execution-policy step as Windows' own "Run with PowerShell".
-
-- A dogfood build registers the launcher's link beside its versions folder rather than the versioned copy, which gets renamed.
-
-- The Settings rows act at once and hold no config value, since the registry is the state. They exist only in the Windows build.
 
 ### One tip system, four places that draw it (2026-08-30)
 
@@ -457,31 +412,19 @@ What a window costs while in use is planned in [Reducing resources](design_docs/
 
 - A number given on the command line is held to the range of the setting it stands for, the same range the file's copy of that setting is held to. A count of rows or columns is also held to what the graphics device can draw, since the window is a texture and a refusal there ends the launch rather than the setting.
 
-### Settings across windows (2026-10-13)
+### Windows find each other (2026-10-13)
 
-- Every window is its own process with its own copy of the settings. A save in one window shows in every other window on the same settings file at once. A window on another file, such as one started with `--config` for a test, never hears of it.
+- Every window is its own process. The windows on one settings file can find each other and send each other a message.
 
-- The file itself is not watched, so a hand edit shows nowhere until Reload config. Reload config in one window tells the other windows on that file to read it too.
+- A settings file gets a key, a hash of its real path, lowercased on Windows. The windows on one file meet in a folder named `silkterm-<key>` in the runtime folder (`XDG_RUNTIME_DIR`, else the temp folder). Each leaves an empty file there named by its pid.
+	- A message names the key, and a window on another key ignores it. A recycled pid can sit behind an old marker until that is cleared.
+	- A window that crashed leaves its marker. The next message that finds nothing listening behind one deletes it.
+	- On a shared `/tmp` the folder has to be this user's own, and private, or the window listens alone.
 
-- Finding each other. A settings file gets a key, a hash of its real path, lowercased on Windows. The windows on one file meet in a folder named `silkterm-<key>` in the runtime folder (`XDG_RUNTIME_DIR`, else the temp folder). Each leaves an empty file there named by its pid. A window that writes the settings file tells every other pid in the folder, through the endpoint it already listens on for `--reload-settings`.
-	- The message names the key, and a window on another key ignores it. A recycled pid can sit behind an old marker until that is cleared.
-	- A window that crashed leaves its marker. The next save that finds nothing listening behind one deletes it.
-	- With one window open this costs a folder read per save, and nothing at all otherwise.
-	- On a shared `/tmp` the folder has to be this user's own, and private, or the window saves and listens alone.
-
-- The endpoint is a Unix socket on Linux and macOS, and a named pipe on Windows.
+- The endpoint is a Unix socket on Linux and macOS, and a named pipe on Windows. It's the one `--reload-settings` and `--wallpaper` already use.
 	- Why a pipe and not AF_UNIX on Windows: both come with the system and need nothing linked beyond the `windows-sys` bindings already in use, but a pipe has no file to leave behind. It goes with its process, so a pipe that is not there always means a window that is gone. One instance is always waiting, made before the last one is served, so the name never vanishes between two clients.
-	- That also makes `--reload-settings` and `--wallpaper` work on Windows, which they did not before.
 
-- What a window does when it hears. It reads the file the way Reload config does, keeping what belongs to the session (the command line, Remote, a display step), and then keeps what is its own:
-	- Its size. A size set in Settings is the size new windows open at. The window it was set in takes it; the others stay as they are.
-	- Its view switches: copy on select, the minimap, the tab strip and the menu bar. A change to one is saved, from a menu or from Settings, and windows opened after start with it. The window it was changed in takes it, and the others keep what they show. Settings opened in a window shows that window's own, so another window's save of one never shows there as a change.
-	- What the state file holds: remembered sizes, zoom, monitor sizes, the machine test. These follow one window or one machine and are not settings.
-	- The picture rotation chose. A change to another wallpaper setting redraws the same picture. Naming one picture shows that picture in every window. A new folder has each window pick from it on its own, at random when random is on. The window it was changed in picks again too, which it did not before.
-
-- Two windows saving at the same moment. A save only ever writes what it changed, over the file as it is at that moment, never over what the window loaded, which is how the shell list was already saved. Every read and write of the settings or state file holds a lock file in the meeting folder (`std::fs::File::lock`), so two saves cannot interleave. A save waits up to 2 seconds for the lock and then goes ahead without it, rather than freeze the window behind one stopped in a debugger.
-
-- An open Settings dialog. With nothing changed in it, it shows the other window's save at once. With changes in hand it keeps them, and the other window's value shows after Apply: the Apply writes only its own changes, then reads the file back, so the window and the dialog both end up with both.
+- Every read and write of the settings or state file holds a lock file in the meeting folder (`std::fs::File::lock`), so 2 saves can't interleave. A save waits up to 2 seconds for the lock and then goes ahead without it, rather than freeze the window behind one stopped in a debugger.
 
 ### Variables in a setting (2026-08-30)
 
@@ -709,44 +652,6 @@ Tabs used to divide the bar evenly between a minimum and a maximum percentage of
 - What a tab says now gives way in a fixed order, rather than only the path shortening: the shell's name shortens first, then the running command's name is truncated, then the path abbreviates, then the command goes, then the path, and what is left is the shortest form of the shell's name. The path is shown alongside the command now, where before a tab running something said only what it was running.
 
 - Short shell names are hand-picked for the shells we ship ("Windows Cmd" reads "Cmd", "PowerShell 7" reads "PS 7") and derived for anything renamed, since nothing mechanical arrives at "Cmd" from "Windows Cmd". A derived name keeps its distribution rather than its family ("WSL2; Ubuntu" reads "Ubuntu") and marks a variant with a star, so "Zsh" and "Zsh*" at least say that one of them is not the ordinary one.
-
-### PowerShell gets the same prompt bash does (2026-08-21, reworked 2026-08-30)
-
-The integration block sets a prompt, but only where the prompt is still the one PowerShell comes with, identified by the help link its own definition carries. Anything anybody else installed is left alone.
-
-It began as a prompt that named the version, because two PowerShells look alike at a prompt. It now reads the same as the bash prompt described above: version, time, user, host, path, and in a git working tree the remote, the branch, and two marks for committed and level with the upstream. A PowerShell pane and a bash pane should look like the same terminal.
-
-Two decisions came out of the port.
-
-- It lives in the block rather than in a script beside the config, which is where the bash prompt lives. A prompt is drawn after every command, and a script would mean a process per prompt - cheap on unix, not on Windows. The block is already kept up to date in place, so it carries updates just as well as a file would.
-
-- The block stays plain ASCII, and the check, cross and arrow are written as code points. A file with no byte-order mark is read as ANSI by Windows PowerShell 5.1, which would mangle a literal glyph on the one version that cannot be told otherwise.
-
-- The console is put on UTF-8 at load. That is not what lets the prompt draw its glyphs, since PowerShell writes the prompt as wide characters and the code page has no say in it. What it buys is the decoding of output from `git` itself, where a branch name outside ASCII would otherwise arrive wrong.
-
-- The second line is bare where the bash prompt puts an arrow. The `>` already says where the typing goes, and the arrow the bash version uses is a code point few fonts carry.
-
-- The check is U+2713 rather than the U+2714 the bash prompt uses. U+2714 has an emoji presentation, so it is drawn by a color font in its own color and ignores the reverse-video the mark is set in. U+2713 is not an emoji code point at all, so it takes the color the way the cross beside it does.
-
-Cost was the other thing the port had to answer, since three `git` calls per prompt is invisible on unix and not on Windows. The search for the working tree is done in the shell rather than by asking git, so a directory outside a repository costs no process at all, and inside one a single `git status --porcelain=v2 --branch` answers branch, clean and upstream together. The remote URL is read once per repository and remembered.
-
-The block is also kept up to date in place from then on, between its two markers. It gains things over time, and an install that only ever appended would leave everyone who already had it on the first version forever. That edit is safe only because the region is delimited by markers we wrote - which is exactly the signal the stored shell list lacks, and why that list may still only ever be added to.
-
-### A split can start in a tmux session of its own (2026-10-17)
-
-With `shell.tmux.always_new_session` on, a split runs tmux in place of the shell, starting a new session that runs the shell. "New tab in tmux" on the Tabs menu does the same for a tab. A plain new tab and a window's first pane don't, so a window always has a pane outside tmux. [usage.md](../usage.md#panes-in-tmux) says how it works for the user, and the split panes design doc has the detail.
-
-- The pane keeps the shell as its command, not tmux, so the tab names the shell, and a split or new tab made from it runs that shell too. The tab names tmux as the program running, the way it does for tmux started from a shell, and the minimap steps aside for it the same way.
-
-- The session's name is a template, read by the same parser the tab text uses. The name kept is the one tmux will have, so `.`, `:` and `#` become `_` here first, since tmux changes the first two and reads `#` as a format.
-
-- Ending goes by that name, matched exactly, and never by what the pane shows. A user can switch the pane's client to another session, and End must not take that one with it. A renamed session is left alone too, which errs on the side of not killing anything.
-
-- Only a close somebody asked for decides anything. A client that leaves on its own, by a detach inside it or its session ending, closes the pane as any exiting program does.
-
-- The question is a small window in the notice's place, with Detach as the default since it loses nothing. Its "Don't ask me next time" box writes the answer given into the same setting the Settings row edits.
-
-- tmux is looked for on PATH, then in the Homebrew and MacPorts folders, which an app started from the macOS Dock doesn't have on its PATH. The answer is kept for 10 seconds, so a menu can ask each time it opens. Windows has no tmux, so the rows are grayed there and the menu row is left out.
 
 ## Copyright and license
 

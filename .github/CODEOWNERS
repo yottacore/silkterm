@@ -9,3 +9,7 @@
 # Help > About, with its support button. The addresses it opens are constants in
 # source/src/config.rs, which is left open since it holds every setting.
 /source/src/dialog.rs  @jim-collier
+
+# Legal. The CLA and the bot that collects it.
+/CLA.md  @jim-collier
+/.github/workflows/cla.yml  @jim-collier
