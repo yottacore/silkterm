@@ -810,7 +810,13 @@ mod mac_tests {
 		let in_less = wait_for(&mut state, client, &less);
 		tmux(&["send-keys", "q"]);
 		let back = wait_for(&mut state, client, &shell);
-		tmux(&["kill-server"]);
+		// only a server under the test's own folder, never the user's
+		let said = tmux(&["display-message", "-p", "#{socket_path}"]);
+		let said = std::path::PathBuf::from(String::from_utf8_lossy(&said.stdout).trim_end());
+		let mine = std::fs::canonicalize(&dir).unwrap();
+		if said.starts_with(&mine) || said.starts_with(&dir) {
+			tmux(&["kill-server"]);
+		}
 		let _ = script.kill();
 		let _ = script.wait();
 		let _ = std::fs::remove_dir_all(&dir);
