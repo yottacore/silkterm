@@ -260,10 +260,16 @@ fn command(tmux: &Path) -> Command {
 		.stdin(Stdio::null())
 		.stdout(Stdio::piped())
 		.stderr(Stdio::null());
+	// A test always goes by -S. With a socket path too long to fit, -S fails,
+	// where TMUX_TMPDIR falls back to the user's own server and a test's
+	// kill-server once took every session on it. A test that set no socket
+	// gets one that can't exist.
 	#[cfg(test)]
-	if let Some(dir) = TEST_SOCKET_DIR.with(|dir| dir.borrow().clone()) {
-		cmd.env("TMUX_TMPDIR", dir);
-	}
+	cmd.arg("-S").arg(
+		TEST_SOCKET
+			.with(|sock| sock.borrow().clone())
+			.unwrap_or_else(|| PathBuf::from(NO_SOCKET)),
+	);
 	cmd
 }
 
@@ -287,8 +293,11 @@ fn run(mut cmd: Command) -> Option<std::process::Output> {
 // A test's own tmux server, so the user's sessions are never touched.
 #[cfg(test)]
 thread_local! {
-	static TEST_SOCKET_DIR: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+	static TEST_SOCKET: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
 }
+
+#[cfg(test)]
+const NO_SOCKET: &str = "/dev/null/no-tmux";
 
 #[cfg(test)]
 mod tests {
@@ -408,15 +417,60 @@ mod tests {
 		);
 	}
 
+	// Without -S it would ask the user's own server, which has sessions.
+	// Test ID: Et9OGdk
+	#[cfg(unix)]
+	#[test]
+	fn a_test_with_no_socket_of_its_own_reaches_no_server() {
+		TEST_SOCKET.with(|sock| *sock.borrow_mut() = None);
+		let cmd = command(Path::new("tmux"));
+		assert_eq!(cmd.get_args().collect::<Vec<_>>(), ["-S", NO_SOCKET]);
+		let Some(tmux) = program() else {
+			return;
+		};
+		let mut cmd = command(&tmux);
+		cmd.arg("list-sessions");
+		assert!(!run(cmd).is_some_and(|out| out.status.success()));
+	}
+
+	// A socket path has to fit in 104 bytes on a Mac, so under a long TMPDIR
+	// the test takes a folder of its own in /tmp.
+	#[cfg(unix)]
+	fn test_socket() -> PathBuf {
+		const FITS: usize = 100;
+		let mut dir = crate::testdir::run_dir().join("tmuxend");
+		if dir.join("sock").as_os_str().len() >= FITS {
+			dir = PathBuf::from(format!("/tmp/silktmux-{}", std::process::id()));
+		}
+		std::fs::create_dir_all(&dir).expect("socket folder");
+		dir.join("sock")
+	}
+
 	// The test's tmux server goes when the test ends, even when an assert fails.
+	// It's killed only when it says it's on the test's socket.
 	#[cfg(unix)]
 	struct Server<'a>(&'a dyn Fn(&[&str]) -> Option<std::process::Output>);
 
 	#[cfg(unix)]
 	impl Drop for Server<'_> {
 		fn drop(&mut self) {
-			let _ = (self.0)(&["kill-server"]);
-			TEST_SOCKET_DIR.with(|d| *d.borrow_mut() = None);
+			let ours = TEST_SOCKET.with(|sock| sock.borrow().clone());
+			let said = (self.0)(&["display-message", "-p", "#{socket_path}"])
+				.filter(|out| out.status.success())
+				.map(|out| PathBuf::from(String::from_utf8_lossy(&out.stdout).trim_end()));
+			let real = |path: &Path| std::fs::canonicalize(path).ok();
+			if let (Some(ours), Some(said)) = (&ours, &said)
+				&& real(ours).is_some_and(|ours| real(said) == Some(ours))
+			{
+				let _ = (self.0)(&["kill-server"]);
+			}
+			if let Some(sock) = &ours {
+				let _ = std::fs::remove_file(sock);
+				if let Some(dir) = sock.parent() {
+					let _ = std::fs::remove_dir(dir);
+				}
+			}
+			TEST_SOCKET.with(|sock| *sock.borrow_mut() = None);
 		}
 	}
 
@@ -431,9 +485,8 @@ mod tests {
 			eprintln!("no tmux here; skipped");
 			return;
 		};
-		let dir = crate::testdir::run_dir().join("tmuxend");
-		std::fs::create_dir_all(&dir).expect("socket folder");
-		TEST_SOCKET_DIR.with(|d| *d.borrow_mut() = Some(dir));
+		let sock = test_socket();
+		TEST_SOCKET.with(|d| *d.borrow_mut() = Some(sock));
 		let tmux_cmd = |args: &[&str]| {
 			let mut cmd = command(&tmux);
 			cmd.args(args);
