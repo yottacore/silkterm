@@ -167,16 +167,16 @@ pub fn software_adapter(info: &wgpu::AdapterInfo) -> bool {
 pub fn remote_session() -> bool {
 	#[cfg(windows)]
 	{
-		// SM_REMOTESESSION. The environment check is the backstop for a session
-		// the metric misses, a service-hosted one in particular.
+		// SM_REMOTESESSION. The station name is the backstop for a session the
+		// metric misses, a service-hosted one in particular. It's asked of the
+		// session as it is now: SESSIONNAME is fixed at logon, so after an RDP
+		// logon moved to the console, Explorer still hands down RDP-Tcp#N.
 		const SM_REMOTESESSION: i32 = 0x1000;
 		// SAFETY: takes an index and no pointer, and answers 0 for one it does not know.
 		let metric = unsafe {
 			windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(SM_REMOTESESSION)
 		};
-		metric != 0
-			|| std::env::var("SESSIONNAME")
-				.is_ok_and(|name| name.to_ascii_uppercase().starts_with("RDP-"))
+		metric != 0 || station_name().is_some_and(|name| rdp_station(&name))
 	}
 	#[cfg(not(windows))]
 	{
@@ -187,6 +187,44 @@ pub fn remote_session() -> bool {
 			.iter()
 			.any(|key| std::env::var_os(key).is_some())
 			|| std::env::var("DISPLAY").is_ok_and(|d| forwarded_display(&d))
+	}
+}
+
+// "RDP-Tcp#3" while connected over RDP; "Console", "Services" or nothing
+// otherwise.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn rdp_station(name: &str) -> bool {
+	name.to_ascii_uppercase().starts_with("RDP-")
+}
+
+// The window station this session is on right now, which follows a session
+// moved between RDP and the console.
+#[cfg(windows)]
+fn station_name() -> Option<String> {
+	use windows_sys::Win32::System::RemoteDesktop::{
+		WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSFreeMemory, WTSQuerySessionInformationW,
+		WTSWinStationName,
+	};
+	let mut buf: windows_sys::core::PWSTR = std::ptr::null_mut();
+	let mut bytes: u32 = 0;
+	// SAFETY: both out pointers are locals. On success the buffer holds `bytes`
+	// bytes of UTF-16 and is freed below, the way the call asks.
+	unsafe {
+		if WTSQuerySessionInformationW(
+			WTS_CURRENT_SERVER_HANDLE,
+			WTS_CURRENT_SESSION,
+			WTSWinStationName,
+			&raw mut buf,
+			&raw mut bytes,
+		) == 0 || buf.is_null()
+		{
+			return None;
+		}
+		let wide = std::slice::from_raw_parts(buf, bytes as usize / 2);
+		let end = wide.iter().position(|c| *c == 0).unwrap_or(wide.len());
+		let name = String::from_utf16_lossy(&wide[..end]);
+		WTSFreeMemory(buf.cast());
+		Some(name)
 	}
 }
 
@@ -625,6 +663,44 @@ mod tests {
 		] {
 			assert!(forwarded_display(away), "{away} is somewhere else");
 		}
+	}
+
+	// Test ID: EtAPzex
+	#[test]
+	fn only_an_rdp_station_reads_as_remote() {
+		for name in ["RDP-Tcp#0", "rdp-tcp#12"] {
+			assert!(super::rdp_station(name), "{name}");
+		}
+		for name in ["Console", "Services", ""] {
+			assert!(!super::rdp_station(name), "{name}");
+		}
+	}
+
+	// An RDP logon moved to the console keeps the Explorer it started with, and
+	// that Explorer hands RDP-Tcp#N down to everything launched from it. Read as
+	// a remote screen, that took the wallpaper off every launch.
+	// Test ID: EtAPzMB
+	#[cfg(windows)]
+	#[test]
+	fn a_stale_rdp_session_name_is_not_a_remote_screen() {
+		// SAFETY: takes an index and no pointer.
+		let metric =
+			unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(0x1000) };
+		if metric != 0 || super::station_name().is_some_and(|n| super::rdp_station(&n)) {
+			return; // a real remote session, where Remote is right
+		}
+		let was = std::env::var_os("SESSIONNAME");
+		// SAFETY: setting the environment is always safe on Windows, threads or not.
+		unsafe { std::env::set_var("SESSIONNAME", "RDP-Tcp#0") };
+		let remote = super::remote_session();
+		// SAFETY: as above.
+		unsafe {
+			match was {
+				Some(v) => std::env::set_var("SESSIONNAME", v),
+				None => std::env::remove_var("SESSIONNAME"),
+			}
+		}
+		assert!(!remote, "a console session read as remote from SESSIONNAME");
 	}
 
 	// Frames at `period` ms until the run answers, so a whole run can be walked
