@@ -137,8 +137,13 @@ $AppName = "SilkTerm"
 $ExeName = "silkterm"
 
 ## One folder for every file the tests write, shared by both cargo test runs and
-## the installer tests. TEMP and TMP stay put, so builds keep the system temp dir.
-. (Join-Path $Root "cicd\tests\_testdir.ps1"); fTestDir_Make
+## the installer tests, made once the run is past its prompt. TEMP and TMP stay
+## put, so builds keep the system temp dir.
+. (Join-Path $Root "cicd\tests\_testdir.ps1")
+
+## Test folders that failed runs kept, past the newest this many, go at the start
+## of the next run. Only ones a run here wrote down, with its token.
+$TestFolderKeep = 5
 
 ## The single version source (first `version = "..."` line).
 $VersionManifest = Join-Path $Root "source\Cargo.toml"
@@ -861,6 +866,14 @@ function fMain {
 	fRotateLogs $LogDir $LogKeep
 	try { Start-Transcript -LiteralPath (Join-Path $LogDir "run_$stamp.log") | Out-Null } catch {}
 
+	## The test run folder, then the ones earlier runs kept, past the newest
+	## few. This run's own goes on the list after the sweep.
+	fTestDir_Make
+	$testLedger = Join-Path (fTargetDir) ".cicd-test-folders"
+	$gone = fTestDir_Sweep -Ledger $testLedger -Keep $TestFolderKeep
+	fTestDir_Record -Ledger $testLedger
+	if ($gone) { fNote "cleanup: removed $gone old test run folder(s)" }
+
 	## Stage 0: remote sync.
 	fSection "0  Remote sync"
 	if ($NoSync) { fNote "remote sync skipped" }
@@ -952,6 +965,8 @@ try {
 
 
 ##	History:
+##		- 2026-10-19 JC: The test run folder is made after the prompt, and the
+##		  ones failed runs kept go once past the newest few.
 ##		- 2026-10-06 JC: Stage 3 runs the launcher's Start menu test.
 ##		- 2026-10-06 JC: Help block, read by -Help; named arguments to fExec; no
 ##		  array growth in loops.

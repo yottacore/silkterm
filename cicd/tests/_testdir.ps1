@@ -7,7 +7,8 @@
 	PowerShell tests and cicd-win.ps1.
 .DESCRIPTION
 	Dot-sourced; it defines fTestDir_Make, fTestDir_Use, fTestDir_Keep,
-	fTestDir_End and fTestDir_Remove and runs nothing. Same contract as
+	fTestDir_End, fTestDir_Remove, fTestDir_Record and fTestDir_Sweep and runs
+	nothing. Same contract as
 	_testdir.bash: SILKTERM_TEST_DIR set and not empty is the folder, made if
 	missing, and never removed; otherwise a fresh one is made, 0700 off Windows,
 	and exported, so every test the caller starts shares it. A script that made
@@ -141,6 +142,41 @@ function fTestDir_Delete([System.IO.DirectoryInfo]$Folder) {
 	$Folder.Delete()
 }
 
+function fTestDir_Record {
+	##	Writes the folder fTestDir_Make made, and its token, at the end of
+	##	$Ledger, so a later run can remove it if this one fails and keeps it.
+	[CmdletBinding()]
+	param([Parameter(Mandatory)][string]$Ledger)
+	if (-not $script:TestDirOwned) { return }
+	$null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Ledger)
+	[System.IO.File]::AppendAllText($Ledger, "$($script:TestDirOwned)`t$($script:TestDirToken)`n")
+}
+
+function fTestDir_Sweep {
+	##	Removes the run folders $Ledger names, past the newest $Keep still there,
+	##	each only through fTestDir_Remove's checks against its own token. One
+	##	that is gone, or turns out not to be ours, comes off the ledger. Returns
+	##	how many went.
+	[CmdletBinding()]
+	param([Parameter(Mandatory)][string]$Ledger, [int]$Keep = 5)
+	if (-not [System.IO.File]::Exists($Ledger)) { return 0 }
+	$lines = @([System.IO.File]::ReadAllLines($Ledger))
+	$kept = [System.Collections.Generic.List[string]]::new()
+	$held = 0
+	$gone = 0
+	for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+		$dir, $token = $lines[$i] -split "`t", 2
+		if (-not $dir) { continue }
+		if (-not ([System.IO.Directory]::Exists($dir) -or [System.IO.File]::Exists($dir))) { continue }
+		if ($held -lt $Keep) { $kept.Insert(0, $lines[$i]); $held++; continue }
+		$reason = fTestDir_NotOurs $dir "$token"
+		if ($reason) { Write-Warning "test run folder: left $dir in place: $reason"; continue }
+		if (fTestDir_Remove -Dir $dir -Token "$token") { $gone++ } else { $kept.Insert(0, $lines[$i]) }
+	}
+	[System.IO.File]::WriteAllLines($Ledger, $kept)
+	return $gone
+}
+
 function fTestDir_End {
 	##	Removes the folder fTestDir_Make made, when $Status is 0. Never throws, so
 	##	it never changes how a script exits.
@@ -156,3 +192,5 @@ function fTestDir_End {
 ##	History:
 ##		- 20260930 JC: Created.
 ##		- 20261002 JC: A run removes the folder it made when it passes.
+##		- 20261019 JC: fTestDir_Record and fTestDir_Sweep, so a pipeline removes
+##		  the folders its failed runs kept.

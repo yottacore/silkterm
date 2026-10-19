@@ -15,6 +15,10 @@
 ##		the result is for this commit and not whatever was last built on the box.
 ##		WINGUI_EXE names a binary to send instead. WINGUI_EXTRA lists more files,
 ##		space separated, that go into the run's folder under their own names.
+##		The run's folder on the box and the scripts it sends go once it is over,
+##		unless --keep. Each box's are written down in WINGUI_RUNS until then
+##		(cicd/artifacts/wingui/runs.txt), so the next run there takes away what a
+##		run killed part way left.
 ##	- Exit: 0 pass or skipped, 1 a scenario failed.
 ##	- History: At bottom of file.
 
@@ -26,6 +30,7 @@ meDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "${meDir}/../../.." && pwd)"
 winRemote="${WINGUI_WIN_REMOTE:-${root}/cicd/utility/win-remote.bash}"
 shotDir="${root}/cicd/artifacts/wingui"
+runs="${WINGUI_RUNS:-${shotDir}/runs.txt}"
 
 origArgs=("${@}")
 host=(); keep=0
@@ -50,10 +55,13 @@ source "${meDir}/../_testdir.bash"; fTestDir_Use
 ##	pinned to origin/dev - otherwise every edit here would need a push before it
 ##	could be run once.
 bundle="$(mktemp --suffix=.tgz)"
-launcher=""; sweep=""; stage=""
+##	Every script sent lands in the box's jobs folder under its own name, so each
+##	is named for this run, and the sweep takes them all by that name.
+runId="$(date +%Y%m%d%H%M%S)-$$"
+scripts="$(mktemp -d)"
 ##	install.ps1 goes along for the scenario that checks its PATH change.
 tar czf "${bundle}" -C "${meDir}" --exclude=run.bash --exclude=harness-test.bash --exclude=_stage.ps1 . -C "${root}" install.ps1
-fEnd(){ local -r rc=$?; rm -f "${bundle}" "${launcher}" "${sweep}" "${stage}"; fTestDir_End "${rc}"; }
+fEnd(){ local -r rc=$?; rm -f "${bundle}"; rm -rf "${scripts}"; fTestDir_End "${rc}"; }
 trap fEnd EXIT
 
 ##	Nothing to build for when every box is off.
@@ -82,9 +90,74 @@ echo "wingui: testing ${commit}, $(basename "${exe}") $(stat -c %s "${exe}") byt
 ##	PowerShell single quotes, so a path is taken as written.
 fQuote(){ local -r text="${1//\'/\'\'}"; printf "'%s'" "${text}" ;}
 
+##	fRunsAdd <box> [<run dir> <token>]: writes this run down for the box. Not
+##	under --keep, which keeps everything.
+fRunsAdd(){
+	((keep)) && return 0
+	mkdir -p "$(dirname "${runs}")"
+	printf '%s\t%s\t%s\t%s\n' "${1}" "${runId}" "${2:-}" "${3:-}" >>"${runs}"
+}
+##	fRunsDrop <box> <run id...>: takes those runs off the list once swept.
+fRunsDrop(){
+	[[ -f "${runs}" ]] || return 0
+	local -r box="${1}"; shift
+	awk -F'\t' -v box="${box}" -v ids=" ${*} " '!($1 == box && index(ids, " " $2 " "))' "${runs}" >"${runs}.part" && mv -f "${runs}.part" "${runs}"
+}
+##	fSweepLines <run dir> <token> <run id>: the PowerShell that removes a run's
+##	folder, only through the helper's checks against the stage's token, and the
+##	scripts it sent, by the name they were sent under. The sweep is one of them.
+fSweepLines(){
+	if [[ -n "${1}" ]]; then
+		printf "if (fTestDir_Remove -Dir %s -Token %s) { 'REMOVED' } else { 'NOT REMOVED' }\n" "$(fQuote "${1}")" "$(fQuote "${2}")"
+	fi
+	printf 'Get-ChildItem -LiteralPath $PSScriptRoot -File -Filter %s | Remove-Item -Force -ErrorAction SilentlyContinue\n' "$(fQuote "silkrig_${3}_*.ps1")"
+}
+##	fSweepOld <box>: what earlier runs on the box left, if any was killed before
+##	its own sweep. Off the list once the box has run the sweep.
+fSweepOld(){
+	local -r box="${1}" old="${scripts}/silkrig_${runId}_old.ps1"
+	local b id dir token said
+	local -a ids=()
+	[[ -f "${runs}" ]] || return 0
+	{
+		cat "${meDir}/../_testdir.ps1"; echo
+		while IFS=$'\t' read -r b id dir token; do
+			[[ "${b}" == "${box}" && -n "${id}" && "${id}" != "${runId}" ]] || continue
+			ids+=("${id}")
+			fSweepLines "${dir}" "${token}" "${id}"
+		done <"${runs}"
+		echo "'SWEPT'"
+	} >"${old}"
+	((${#ids[@]})) || return 0
+	said="$("${winRemote}" --host "${box}" --optional run "${old}" 2>&1 | tr -d '\r' || true)"
+	if grep -qx 'SWEPT' <<< "${said}"; then
+		fRunsDrop "${box}" "${ids[@]}"
+		echo "wingui: ${box}: swept what an earlier run left"
+	else
+		echo "wingui: ${box}: what an earlier run left is still there"
+	fi
+}
+##	fSweepOwn <box>: this run's folder, if the stage made one, and its scripts.
+fSweepOwn(){
+	local -r box="${1}" sweep="${scripts}/silkrig_${runId}_sweep.ps1"
+	local said
+	((keep)) && return 0
+	{
+		cat "${meDir}/../_testdir.ps1"; echo
+		fSweepLines "${runDir}" "${runToken}" "${runId}"
+		echo "'SWEPT'"
+	} > "${sweep}"
+	said="$("${winRemote}" --host "${box}" --optional run "${sweep}" 2>&1 | tr -d '\r' || true)"
+	if [[ -n "${runDir}" ]] && ! grep -qx 'REMOVED' <<< "${said}"; then
+		echo "wingui: ${box}: run folder not removed:"
+		sed 's/^/  /' <<< "${said}"
+	fi
+	if grep -qx 'SWEPT' <<< "${said}"; then fRunsDrop "${box}" "${runId}"; fi
+}
+
 fRun() {
 	local box="${1}" scenario="${2}"
-	launcher="$(mktemp --suffix=.ps1)"
+	local -r launcher="${scripts}/silkrig_${runId}_${scenario}.ps1"
 	{
 		printf '$ErrorActionPreference = "Stop"\n'
 		printf '. "$PSScriptRoot\\_env.ps1"\n'
@@ -165,11 +238,13 @@ PS
 ##	One box at a time, since each run folder is in its own box's console user's
 ##	temp folder, made there by _stage.ps1 and read back.
 fBox(){
-	local -r box="${1}"
+	local -r box="${1}" stage="${scripts}/silkrig_${runId}_stage.ps1"
 	local said scenario
 	local -i boxFailed=0
-	stage="$(mktemp --suffix=.ps1)"
+	runDir=""; runFor=""; runToken=""
+	fSweepOld "${box}"
 	cat "${meDir}/../_testdir.ps1" "${meDir}/_stage.ps1" > "${stage}"
+	fRunsAdd "${box}"
 	said="$("${winRemote}" --host "${box}" --optional run "${stage}" 2>&1 | tr -d '\r' || true)"
 	runDir="$(sed -n 's/^RUNDIR //p' <<< "${said}")"
 	runFor="$(sed -n 's/^RUNFOR //p' <<< "${said}")"
@@ -178,8 +253,11 @@ fBox(){
 		if grep -q 'skipped' <<< "${said}"; then echo "wingui: ${box} went away, skipped"; return 0; fi
 		sed 's/^/  /' <<< "${said}"
 		echo "wingui: ${box}: no run folder was made"
+		runDir=""; runToken=""
+		fSweepOwn "${box}"
 		return 1
 	fi
+	fRunsAdd "${box}" "${runDir}" "${runToken}"
 	echo "wingui: ${box}: ${runDir}"
 	##	Checked here, since errexit is off inside a function called with ||. A
 	##	scenario with no binary would only skip.
@@ -201,20 +279,9 @@ fBox(){
 			"${winRemote}" --host "${box}" --optional pull "${runDir}\\out\\shots" "${shotDir}" >/dev/null 2>&1 || true
 		fi
 	fi
-	##	Take the run's folder away, pass or fail, so a shared box does not pile
-	##	them up. Only the folder the stage made and marked.
-	if ((! keep)); then
-		sweep="$(mktemp --suffix=.ps1)"
-		{
-			cat "${meDir}/../_testdir.ps1"
-			printf "\nif (fTestDir_Remove -Dir %s -Token %s) { 'REMOVED' } else { 'NOT REMOVED' }\n" "$(fQuote "${runDir}")" "$(fQuote "${runToken}")"
-		} > "${sweep}"
-		said="$("${winRemote}" --host "${box}" --optional run "${sweep}" 2>&1 | tr -d '\r' || true)"
-		if ! grep -qx 'REMOVED' <<< "${said}"; then
-			echo "wingui: ${box}: run folder not removed:"
-			sed 's/^/  /' <<< "${said}"
-		fi
-	fi
+	##	Take the run's folder and scripts away, pass or fail, so a shared box does
+	##	not pile them up. Only the folder the stage made and marked.
+	fSweepOwn "${box}"
 	return "${boxFailed}"
 }
 
@@ -234,3 +301,5 @@ if ((! keep)); then find "${shotDir}" -name '*.png' -printf '  shot %P\n' 2>/dev
 ##		- 20261002: stages in the console user's temp folder, one box at a time.
 ##		- 20261002: removes the run folder on the box only when it has the run's mark, also after a failed send.
 ##		- 20261003: WINGUI_EXTRA.
+##		- 20261019: the scripts it sends are named for the run and swept with its
+##		  folder, and a killed run's are swept by the next run on that box.
