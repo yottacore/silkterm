@@ -12,6 +12,7 @@
 ##	Copyright © 2026 Jim Collier [ID: 2უNაɘ«҂թȹɤξπ๙¿ձϖ]
 ##	SPDX-License-Identifier: GPL-2.0-or-later
 
+import os
 import shutil
 import subprocess
 import sys
@@ -77,11 +78,19 @@ def mypy_groups(paths: list[Path]) -> list[list[Path]]:
 	return groups
 
 
+## The container's mypy has another librt than this box's, and a cache one wrote
+## can crash the other with the same mypy version. So the cache follows the
+## target dir, as cargo's output does.
+def mypy_cache() -> Path:
+	target = os.environ.get("CARGO_TARGET_DIR")
+	return (Path(target) if target else ROOT / "target") / "mypy"
+
+
 def mypy_findings(mypy: str, paths: list[Path]) -> list[str]:
 	out: list[str] = []
 	for group in mypy_groups(paths):
 		checked = subprocess.run(
-			[mypy, "--config-file", str(ROOT / "mypy.ini"), "--no-error-summary", "--no-pretty", *map(str, group)],
+			[mypy, "--config-file", str(ROOT / "mypy.ini"), "--cache-dir", str(mypy_cache()), "--no-error-summary", "--no-pretty", *map(str, group)],
 			cwd=ROOT, capture_output=True, text=True, check=False)
 		if checked.returncode not in (0, 1):
 			out.append(checked.stderr.strip() or checked.stdout.strip() or f"mypy exited {checked.returncode}")
@@ -137,3 +146,4 @@ if __name__ == "__main__":
 ##	History:
 ##		- 20261004 JC: Created.
 ##		- 20261005 JC: mypy, after ruff.
+##		- 20261019 JC: mypy cache per target dir.
