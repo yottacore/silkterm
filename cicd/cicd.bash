@@ -516,14 +516,12 @@ if ((container)); then
 	command -v "${docker}" >/dev/null 2>&1 || fDie "--container needs docker, or SILK_DOCKER naming a stand-in"
 fi
 ## The ASan run needs the nightly, which only the image has, so a full run on this
-## box does that one step in the image. Without docker the run stops here, since a
-## check that can't run has found nothing. The Linux half of a Windows run has no
-## way to pass --no-asan, so there it warns at the step instead.
+## box does that one step in the image. Without docker it's skipped with a warning,
+## like the other steps missing a tool, so a plain run needs no extra flags.
 asanInImage=0; asanSkipped=""
 if ((! container && ! gate && ! quick)) && ((${#ASAN_CMD[@]})) && [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
 	if command -v "${docker}" >/dev/null 2>&1; then asanInImage=1
-	elif [[ -n "${CICD_LINUX_HALF:-}" ]]; then asanSkipped="no docker here for the image with the nightly"
-	else fDie "the ASan run needs docker, since its nightly is only in the container image (--no-asan skips it)"; fi
+	else asanSkipped="no docker here for the image with the nightly"; fi
 fi
 if ((container || asanInImage)); then
 	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
