@@ -448,6 +448,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Swept: every cargo-deny call, in config.bash and cicd-win.ps1. All read the root `deny.toml`. design.md's pinning line and config.bash's comment now say what the scan covers.
 	- Verified: 20261019. The real scan passes. Against a copy of the advisory db with made-up advisories, the scan fails on unicode-width, windows-core, objc2-app-kit and embed-resource, and passes with them only on dhat, web-sys and android-activity. Scanned for one target at a time, Windows ARM64, Mac ARM64 and Linux ARM64 each caught only their own platform's crate. The old `deny.toml` failed on all 7. shellcheck, test IDs.
 	- Branch: advscope
+	- Commit: ae484d0
 	- Test case: EtBK7tB, `cicd/tests/advscope/run.bash`, run by stage 3 after the scan. It failed with the old `deny.toml` put back and passes now.
 	- Acceptance signoff: Self-closed: does what the parent's decision asks within what cargo-deny allows, and the test failed before and passes after.
 	- Closed: 20261019-134800
