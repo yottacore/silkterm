@@ -218,6 +218,19 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Notes:
 		- Pre-next-cut.
 
+- Verify or ensure that builds clean up *stale* artifacts and side-effects after they're done
+	- ID: 2026101909222600
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261019-092226
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Caches, container cruft, tmp files, etc.
+	- Notes:
+		- Pre-next-cut.
+
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
 	- Type: Enhancement
