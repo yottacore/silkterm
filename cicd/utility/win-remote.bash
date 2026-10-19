@@ -70,11 +70,11 @@ conf="${WINRIG_CONF:-${XDG_CONFIG_HOME:-${HOME}/.config}/silkterm/winrig.conf}"
 sshUser="${WINRIG_USER:-$(id -un)}"
 
 ##	The remote work tree. 'wintest' is a role account, not anyone's login.
-winBase='C:\Users\wintest\0-0\data\prs\dev_clone\github.com\jim-collier\silkterm'
+winBase='C:\Users\wintest\0-0\data\prs\dev_clone\ai-no\github.com\jim-collier\silkterm'
 winRepo="${winBase}\\github"
 winPriv="${winBase}\\private"
 winJobs="${winPriv}\\winrig"
-scpBase="C:/Users/wintest/0-0/data/prs/dev_clone/github.com/jim-collier/silkterm"
+scpBase="C:/Users/wintest/0-0/data/prs/dev_clone/ai-no/github.com/jim-collier/silkterm"
 scpJobs="${scpBase}/private/winrig"
 
 sshOpts=(-o BatchMode=yes -o ConnectTimeout=6 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR)
