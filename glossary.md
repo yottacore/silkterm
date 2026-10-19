@@ -43,7 +43,6 @@ Terminal jargon that any terminal shares is left out unless SilkTerm gives it a 
 - [Layout tags](#layout-tags)
 - [Look tags](#look-tags)
 - [Max silk](#max-silk)
-- [Minimap](#minimap)
 - [Minimum contrast](#minimum-contrast)
 - [Output easing](#output-easing)
 - [Pane](#pane)
@@ -177,10 +176,6 @@ Opacity and Blur stored inside a wallpaper image file. When SilkTerm is set to h
 ## Max silk
 
 The performance profile with every effect at its shipped setting: smooth scrolling at the default feel, the wallpaper, the scrim, the cursor animation. The other profiles take things away from it. See *performance profile*.
-
-## Minimap
-
-A column beside the text showing the whole scrollback in miniature, as colored strokes rather than readable characters. The lit band marks what is on screen; drag it to scroll, or click elsewhere in the column to go there. It takes the space it uses, so switching it off gives those columns back to the terminal.
 
 ## Minimum contrast
 

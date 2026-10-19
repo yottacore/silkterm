@@ -41,7 +41,7 @@
 
 </div>
 
-SilkTerm™ is a hardware-accelerated terminal for Linux, Windows and macOS that scrolls new output smoothly, a pixel at a time, instead of jumping whole lines. Fast output isn't held back; the scroll speeds up to keep pace. It also has an animated cursor, a text halo that keeps text readable over a wallpaper or a see-through window, a scrollback minimap, tabs and split panes. One executable, written in Rust.
+SilkTerm™ is a hardware-accelerated terminal for Linux, Windows and macOS that scrolls new output smoothly, a pixel at a time, instead of jumping whole lines. Fast output isn't held back; the scroll speeds up to keep pace. It also has an animated cursor, a text halo that keeps text readable over a wallpaper or a see-through window, tabs and split panes. One executable, written in Rust.
 
 <!--
 <table style="border: none; border-collapse: collapse;">
@@ -220,10 +220,16 @@ The 102 wallpapers SilkTerm was built and tuned against are in [`filesystem/home
 Click the sheet for the [browsable gallery](https://yottacore.github.io/silkterm/wallpapers/) - any wallpaper opens full size in place, the arrow keys page through them, and each one shows its credit and license underneath.
 To fetch them, see [Wallpaper pack](install.md#wallpaper-pack) in install.md.
 
-SilkTerm Pro can rotate through them on its own. The free version can too, with a wrapper that picks one at random each launch:
+SilkTerm Pro (coming soon) can rotate through them on its own. The free version can too, with a wrapper that picks one at random each launch:
 
 ~~~bash
 silkterm --wallpaper-file "$(shuf -n1 -e ~/.config/silkterm/wallpaper/*.jpg)"
+~~~
+
+To get a new one every time it's started from a shell, put this in `~/.bashrc`:
+
+~~~bash
+silkterm() { local f=(~/.config/silkterm/wallpaper/*.jpg); command silkterm --wallpaper-file "${f[RANDOM % ${#f[@]}]}" "$@"; }
 ~~~
 
 Or on Windows, in PowerShell:
