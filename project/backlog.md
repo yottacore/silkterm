@@ -460,6 +460,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- With the line gone, the test stand-in `stand_in_tabs` in settings_ui.rs shows a leak of its own too, since it builds its tree through ui_spec.
 		- The heap-growth test in heap_growth.rs has a `known:` line with this ID too. Take it out with the fix.
 
+- Builds clean up stale artifacts and side effects when done
+	- ID: 2026101916054001
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261019-160540
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- Verify or insure that builds clean up stale artifacts and side effects after they're done: caches, container cruft, tmp files, etc.
+	- Notes:
+		- Before the next cut.
+
+- CI/CD: `--leakcheck` and `--no-leakcheck`
+	- ID: 2026101916054002
+	- Type: Enhancement
+	- Status: Queued
+	- Priority: Avg
+	- Opened: 20261019-160540
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: All
+	- Requirements:
+		- CI/CD has both `--leakcheck` and `--no-leakcheck`.
+		- `--leakcheck` is useful to add back in for `--quick`.
+		- `--no-leakcheck` is useful to exclude it from a default run, or with `--quiet`.
+	- Notes:
+		- Before the next cut.
+
 - Put tmux in the container image, so the tmux tests run under ASan and in `--container`
 	- ID: 2026101914251765
 	- Type: Task
