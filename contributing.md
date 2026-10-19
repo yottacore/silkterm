@@ -21,6 +21,7 @@ All types of contributions are encouraged and valued. See the [Table of Contents
 <!-- TOC -->
 
 - [Code of conduct](#code-of-conduct)
+- [Contributor license agreement](#contributor-license-agreement)
 - [I have a question](#i-have-a-question)
 - [I want to contribute](#i-want-to-contribute)
 	- [Reporting bugs](#reporting-bugs)
@@ -33,6 +34,12 @@ All types of contributions are encouraged and valued. See the [Table of Contents
 ## Code of conduct
 
 This project and everyone in it is governed by the [Code of Conduct](code_of_conduct.md). By participating, you are expected to uphold it. Report unacceptable behavior to silktermⒶyottacore.com.
+
+## Contributor license agreement
+
+SilkTerm is open source under the GPLv2+. Every contribution also needs a signed [Contributor License Agreement](CLA.md), so the project can be offered under other licenses too, such as a commercial one. You keep all rights to your own work, and only grant the licenses described in the CLA.
+
+Signing is automated. On your first pull request a bot posts the CLA and asks you to sign with a one-line comment. It's recorded once and covers all your later contributions. A pull request can't be merged until its author has signed.
 
 ## I have a question
 
@@ -49,7 +56,7 @@ If you still need clarification:
 ## I want to contribute
 
 > ### Legal notice
-> When contributing to this project, you must agree that you have the necessary rights to the content, and that it may be provided under the project license. Work done with AI tools is covered by the [AI policy](ai_policy.md).
+> When contributing to this project, you must agree that you have the necessary rights to the content, and that it may be provided under the project license and under the terms of the [CLA](CLA.md). Work done with AI tools is covered by the [AI policy](ai_policy.md).
 
 ### Reporting bugs
 
