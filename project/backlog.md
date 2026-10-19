@@ -975,6 +975,29 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: `a_hidden_window_that_cannot_draw_is_shown_anyway` (ErUBJ18), seen failing without the fix. The memory side has no unit test, since it needs a GPU.
 	- Closed: 20261001-155746
 
+- The tmux unit test can kill the user's own tmux server
+	- ID: 2026101905534865
+	- Type: Bug
+	- Status: Done
+	- Severity: High
+	- Opened: 20261019-055348
+	- Opened by: CC
+	- Related IDs: 2026101611321632
+	- Target OS: Linux, macOS
+	- Test environment: b23, tmux 3.6b
+	- Steps to reproduce:
+		- Run the unit tests with a long TMPDIR, while a tmux server has other sessions on it.
+	- Incorrect behavior: Every session on the usual tmux server is gone. On 20261018 that took 6 to 8 terminal sessions.
+	- Expected behavior: The test only ever touches a server of its own.
+	- Reproduced: 20261018, by accident, during a test run.
+	- Actual cause: `ending_kills_the_session_started_and_no_other` picked its server with TMUX_TMPDIR, and ended it with a bare `kill-server`. When the socket path is too long to fit, tmux quietly falls back to the usual server in /tmp. The test then made its sessions there and killed the whole server at the end.
+	- Actual fix [Bug]: Every tmux command a test makes goes by `-S`, which fails on a path that's too long instead of falling back. A test that never set a socket gets one that can't exist. Under a long TMPDIR the test puts its socket in a folder of its own in /tmp. The server is only killed after it says it's on the test's socket. The Mac-only test in `front.rs` makes the same check before its `kill-server`.
+	- Verified: Under a 144-byte TMPDIR every tmux call the test made used the short socket, and the usual server kept all 8 of its sessions. The new test fails with the default socket taken out. The gate (1392 tests), clippy, and rustfmt pass. Not verified: the Mac-only test, which wasn't run.
+	- Branch: tmuxsock
+	- Commit: 203272b
+	- Test case: `a_test_with_no_socket_of_its_own_reaches_no_server` (Et9OGdk), seen failing without the default socket.
+	- Closed: 20261019-055348
+
 - Smooth scroll freaked out with a long flatpak update
 	- ID: 2026101310563284
 	- Type: Bug
