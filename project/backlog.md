@@ -219,6 +219,7 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Verified: On X11 with xfwm4, a window at 80x24 with the minimap: each zoom in kept the shell at 70x24 (71 at some steps) up to the screen edge, then the grid shrank. A zoom back and a reset gave back the first size, and the saved size went back to 80x24. With the setting off the window kept its size. A maximized window kept its size, and a split pane kept its grid. The row and its tip at a 24 pt interface font. The unit tests, and clippy for Linux, Windows and macOS.
 	- Swept: Every way to zoom, the keys, the View menu and the macOS menu, goes through the 2 changed functions. The setting is in the config template, its reader, the dialog spec and every key list, and the dialog's completeness tests pass.
 	- Branch: zoomsize
+	- Commit: e5f8a69
 	- Test case: EtAYf9n `a_zoom_grows_the_window_only_to_the_work_area_edge`, EtAYfEC `a_zoom_keeps_to_its_own_monitor_and_its_grid`, EtAYfIz `a_zoom_resizes_the_window_only_when_turned_on`.
 	- Acceptance signoff: Self-closed: the change does what the item asked, read as recorded under Decisions, and its tests and the X11 checks pass.
 	- Closed: 20261019-105453
