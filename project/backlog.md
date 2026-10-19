@@ -196,17 +196,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
 
-- Windows version doesn't remember "wallpaper" being enabled.
-	- ID: 2026101816103600
-	- Type: Bug
-	- Status: Queued
-	- Severity: Avg
-	- Opened: 20261018-161036
-	- Opened by: JC
-	- Target OS: Windows
-	- Notes:
-		- Pre-next-cut.
-
 - Settings|Window: New option, disabled by default: "On text zoom change window size too".
 	- ID: 2026101816103602
 	- Type: Enhancement
@@ -1458,6 +1447,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Acceptance signoff: Self-closed: the numbers are in the design doc and nothing is left to judge.
 	- Closed: 20261004-194634
 
+- Windows version doesn't remember "wallpaper" being enabled.
+	- ID: 2026101816103600
+	- Type: Bug
+	- Status: Done
+	- Needs external testing: Confirmation only, in the next Windows round: the full Windows suite, and the `wpremote` scenario on b29w.
+	- Severity: Avg
+	- Opened: 20261018-161036
+	- Opened by: JC
+	- Target OS: Windows
+	- Notes:
+		- Pre-next-cut.
+	- Steps to reproduce:
+		- Log on over RDP, then move the session to the console, as the Looking Glass wrapper does after an RDP visit.
+		- Launch SilkTerm from the taskbar. There's no wallpaper.
+		- Turn it on, then relaunch.
+	- Reproduced: 20261019 on vm925w, in the session described above.
+		- Turned on in Settings, then relaunched: fails, it's off again.
+		- Turned on by unchecking View > Temporary remote display mode, then relaunched: fails.
+		- On in one window: a new tab keeps it, but a new window (Ctrl+Shift+N) opens without it.
+	- Actual cause:
+		- Windows sets SESSIONNAME once, at logon. After an RDP logon is moved to the console, Explorer still has `RDP-Tcp#0` and hands it to everything it starts.
+		- SilkTerm read that as a remote screen and put on the Remote profile, which has no wallpaper. Turning the wallpaper on ended Remote for that window only. Nothing in the file changed, since the stored profile already has it on, so every launch and new window went back to Remote.
+	- Progress log:
+		- 20261019: The other leads didn't hold up. The real config on vm925w is High with automatic off, no wallpaper line, and a correctly escaped rotation folder. A step down wasn't involved, and no save wrote the wallpaper off.
+	- Actual fix: The remote check asks Windows for the session's current station name, in place of SESSIONNAME. A real RDP session still gets Remote.
+	- Verified:
+		- `wpremote` on vm925w: 4 checks failed on the old build, all pass on the fix.
+		- Inside a real RDP session, both builds still start with no wallpaper.
+		- The full Linux suite passes.
+	- Swept: SESSIONNAME was the only session variable read for this on Windows. Linux reads DISPLAY and the VNC and xrdp variables, which a session can't take to a local screen.
+	- Branch: wpremote
+	- Commit: 77e2f62
+	- Test case: `a_stale_rdp_session_name_is_not_a_remote_screen` (EtAPzMB) failed on the old code on vm925w, in session 0 and on the console, and passes now. `only_an_rdp_station_reads_as_remote` (EtAPzex). Windows scenario `wpremote` (EtAMTlf), now in the pipeline's list.
+	- Acceptance signoff: Self-closed: reproduced on vm925w, failing before the fix and passing after, with real RDP unchanged.
+	- Closed: 20261019-102355
+
 - The `clear` scroll bug still happens inside tmux
 	- ID: 2026101611321631
 	- Type: Bug
@@ -2374,6 +2399,42 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: The scenario itself, `cicd/tests/wingui/savenotice.ps1`. It passes on vm925w and failed there before.
 	- Acceptance signoff: Self-closed: a test fixture fix, and the scenario passes on vm925w.
 	- Closed: 20260930-073126
+
+- Four unit tests fail on Windows
+	- ID: 2026093010080316
+	- Type: Bug
+	- Status: Done
+	- Priority|Severity: Avg
+	- Opened: 20260930-100803
+	- Opened by: JC
+	- Assigned to: CC
+	- Target OS: Windows
+	- Test environment: vm925w, `cargo test`
+	- Steps to reproduce: Run `cargo test` on Windows.
+	- Incorrect behavior:
+		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
+		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
+		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
+	- Expected behavior: They pass, as on Linux.
+	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
+	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
+	- Actual cause: All four are faults in the tests. None is timing.
+		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
+		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
+	- Progress log:
+		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
+	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
+	- Branch: wintests
+	- Commit: 731d528
+	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
+	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
+	- Swept:
+		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
+		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
+		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
+		- The Windows run this item came from named only these four. That full suite was not run again.
+	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
+	- Closed: 20260930-125357
 
 - Settings dialog: search
 	- ID: 2026101419165501
@@ -5468,42 +5529,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Test case: Er2UgY7 (`cicd/tests/engine/run.bash`) now checks for at least 5 in the shipped config and 5 tries when unset. Both checks failed on the old values.
 	- Acceptance signoff: Self-closed: mechanical.
 	- Closed: 20261007-184756
-
-- Four unit tests fail on Windows
-	- ID: 2026093010080316
-	- Type: Bug
-	- Status: Done
-	- Priority|Severity: Avg
-	- Opened: 20260930-100803
-	- Opened by: JC
-	- Assigned to: CC
-	- Target OS: Windows
-	- Test environment: vm925w, `cargo test`
-	- Steps to reproduce: Run `cargo test` on Windows.
-	- Incorrect behavior:
-		- `the_wallpaper_box_follows_the_rotate_switch` and `the_default_wallpaper_folder_is_found_in_the_usual_place` compare `C:/pics` against `/pics`.
-		- `a_second_apply_diffs_against_the_first` looks for a Unix line ending in `app.rs`, and a Windows checkout has CRLF.
-		- `arming_a_copy_waits_for_the_term_instead_of_giving_up` failed with "a try can lose the race".
-	- Expected behavior: They pass, as on Linux.
-	- Reproduced: 20260930 on vm925w. The tests date from 09-26, and Windows was only cross-built since 09-19, so they had never run there.
-	- Possible cause: The first three are faults in the tests, not the product. The last may be timing on a slower box.
-	- Actual cause: All four are faults in the tests. None is timing.
-		- `/pics` and `/elsewhere` have a root but no drive, so Windows does not count them as absolute. The folder resolves against the config dir's drive, which gives `C:/pics`. That is the right answer on Windows.
-		- The `app.rs` and `pane.rs` checks cut a function body at an LF-only `}` line. On a CRLF checkout nothing matched. The `app.rs` one found no end. The `pane.rs` one ran on to the end of the file, into code that does call `try_lock`, which is where "a try can lose the race" came from.
-	- Progress log:
-		- 20260930: All four seen failing on vm925w at d9adce8, and passing there on the branch.
-	- Actual fix: The two wallpaper tests use a folder that is absolute on the platform they run on, `C:/pics` or `C:/elsewhere` on Windows. They still check that a named folder is used as given and outranks the image. The two source checks turn CRLF into LF before cutting, as the shell-integration doc check already did. `.gitattributes` is unchanged.
-	- Branch: wintests
-	- Commit: 731d528
-	- Test case: The four tests named above. Seen to fail on vm925w before the fix and pass after.
-	- Verified: The four tests on vm925w, before and after. The same four on Linux. Clippy with warnings as errors, native and for the Windows target.
-	- Swept:
-		- Source files read by tests: every `include_str!` of a `.rs` file. The other five split at `"\nmod tests {"`, read by `.lines()`, or already cut at `"\n}"`, so a CRLF checkout does not change them. The build-inputs test only matches include names.
-		- Rooted paths: every `PathBuf::from("/` and `Path::new("/` in the tests. The rest go into pure functions or are compared as given, never through an absolute check.
-		- Sleeps in tests: the tip dwell, the uptime check, the lock-for-frame test, the busy-file polls and the shell-exit waits. Each sleeps at least as long as it checks, or polls with a cap.
-		- The Windows run this item came from named only these four. That full suite was not run again.
-	- Acceptance signoff: Self-closed: test fixes only, and all four failed before the fix and pass after on Windows.
-	- Closed: 20260930-125357
 
 - Performance profile: the Profile dropdown is a presets group read off the rows it sets
 	- ID: 2026100910295902
