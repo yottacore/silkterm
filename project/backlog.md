@@ -158,6 +158,41 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Progress log:
 		- 20261019: `CLA.md`, a section in contributing.md, and `.github/workflows/cla.yml`, the same as nano-git-db's. Owner review on both files. The check still needs a first pull request from someone else to prove it.
 
+- Verify or ensure that builds clean up *stale* artifacts and side-effects after they're done
+	- ID: 2026101909222600
+	- Type: Enhancement
+	- Status: Waiting for testing
+	- Needs local test suite run?: A full run, plain and `--container`. Each shows the Cleanup line in the plan and ends with a `cleanup:` line. The first writes `.cicd-toolchain` and `.cicd-build-dirs` in its target dir and removes no build dir. The `--container` one builds the new image, removes `silkterm-cicd:2c814fabc2c7`, reports the build cache and leaves no `target/container/tmp/run_*` after a pass. Then kill a run part way, run twice more, and check that nothing new piles up in the temp dir, `target/container/tmp` or `docker ps -a`.
+	- Needs external testing: On a Windows box, a `cicd-win.ps1` run that fails keeps its test folder and writes it down, and later runs keep only the newest 5. A wingui run on each box leaves no `silkrig_*` script in `private\winrig` and no run folder; one killed part way is swept by the next run on that box.
+	- Priority: Avg
+	- Opened: 20261019-092226
+	- Opened by: JC
+	- Target OS: All
+	- Requirements:
+		- Caches, container cruft, tmp files, etc.
+	- Notes:
+		- Pre-next-cut.
+	- Progress log:
+		- 20261019: What runs left behind on 10-19, and what removes it now. A full run sweeps at its start, after the prompt; the gate sweeps nothing. Only what a run wrote down with a token, or cargo's own dirs on the config's list.
+
+			| Left behind                                | Found 10-19                                                                                               | Now
+			| :----------------------------------------- | :-------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------
+			| Test run folders that failed runs kept     | 343 in b23's test temp dir (19 GB, most from hand runs), 49 of them empty from runs stopped at the prompt | Kept failed ones past the newest 5 go. The folder is made after the prompt
+			| The container's /tmp                       | One folder shared by every run, so a killed run's X locks and sockets met the next                        | A new one per run, gone on a pass; failed ones past the newest 5 go
+			| Docker                                     | A stale `silkterm-cicd` image; no stopped containers; 56 GB of build cache, shared box-wide               | Old tags go every run, untagged and stopped ones by the pipeline's label; build cache only reported
+			| Cargo build dirs                           | 3.5 GB, nothing stale yet; incremental caches for old build setups pile up                                | Wiped on a toolchain change; a dir no longer built goes; incremental caches unused a week before the newest go
+			| Scripts sent to the Windows boxes          | 636 on vm925w and 616 on b29w in `private\winrig`, 23 MB each, one per scenario since 09-08               | Named per run and swept with its run folder; a killed run's are swept by the next run there
+			| Test folders on the boxes and in `%TEMP%`  | None on vm925w; 1 per account on b29w, from 10-14                                                         | `cicd-win.ps1` sweeps its own the same way as Linux
+			| Xvfb, sway, tmux                           | None left by a pipeline run. 7 `dash scene.sh` from a hand test folder of 10-13 still running             | Not touched
+			| Run logs, flamegraphs, release dirs, shots | Rotated or replaced each run                                                                              | Unchanged
+
+		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
+		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
+		- Question: should a run that built a new image also run `docker builder prune -f`? It's box-wide, so it would drop other projects' cache too. For now the size is only printed.
+	- Branch: sweep
+	- Commit: e2c4556
+	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -195,41 +230,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- Stalled until a shcl beta has it.
 		- 20261007: Still present. Run against shcl dev d7903b73, not inferred: the step above still returns `current: false`, `ambiguous: 0`, `lost: 0`, and the stamped `migrate` still shows it only by leaving the Format line off. `Migration` has no new field. shcl's CLI `migrate` now refuses such a file with exit 7, by the same Format line check. No 3.0 beta is published; crates.io still has 2.0.0.
 		- API at the swap: shcl dev now has `upgrade()` and `upgrade_file()`, which convert a whole file with a timestamped backup, and close the open raw block and stamp it. The CLI backup is now `config_backup_<time>_format-v2.shcl`, not `config_old_v2.shcl`.
-
-- Verify or ensure that builds clean up *stale* artifacts and side-effects after they're done
-	- ID: 2026101909222600
-	- Type: Enhancement
-	- Status: Waiting for testing
-	- Needs local test suite run?: A full run, plain and `--container`. Each shows the Cleanup line in the plan and ends with a `cleanup:` line. The first writes `.cicd-toolchain` and `.cicd-build-dirs` in its target dir and removes no build dir. The `--container` one builds the new image, removes `silkterm-cicd:2c814fabc2c7`, reports the build cache and leaves no `target/container/tmp/run_*` after a pass. Then kill a run part way, run twice more, and check that nothing new piles up in the temp dir, `target/container/tmp` or `docker ps -a`.
-	- Needs external testing: On a Windows box, a `cicd-win.ps1` run that fails keeps its test folder and writes it down, and later runs keep only the newest 5. A wingui run on each box leaves no `silkrig_*` script in `private\winrig` and no run folder; one killed part way is swept by the next run on that box.
-	- Priority: Avg
-	- Opened: 20261019-092226
-	- Opened by: JC
-	- Target OS: All
-	- Requirements:
-		- Caches, container cruft, tmp files, etc.
-	- Notes:
-		- Pre-next-cut.
-	- Progress log:
-		- 20261019: What runs left behind on 10-19, and what removes it now. A full run sweeps at its start, after the prompt; the gate sweeps nothing. Only what a run wrote down with a token, or cargo's own dirs on the config's list.
-
-			| Left behind                                | Found 10-19                                                                                               | Now
-			| :----------------------------------------- | :-------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------
-			| Test run folders that failed runs kept     | 343 in b23's test temp dir (19 GB, most from hand runs), 49 of them empty from runs stopped at the prompt | Kept failed ones past the newest 5 go. The folder is made after the prompt
-			| The container's /tmp                       | One folder shared by every run, so a killed run's X locks and sockets met the next                        | A new one per run, gone on a pass; failed ones past the newest 5 go
-			| Docker                                     | A stale `silkterm-cicd` image; no stopped containers; 56 GB of build cache, shared box-wide               | Old tags go every run, untagged and stopped ones by the pipeline's label; build cache only reported
-			| Cargo build dirs                           | 3.5 GB, nothing stale yet; incremental caches for old build setups pile up                                | Wiped on a toolchain change; a dir no longer built goes; incremental caches unused a week before the newest go
-			| Scripts sent to the Windows boxes          | 636 on vm925w and 616 on b29w in `private\winrig`, 23 MB each, one per scenario since 09-08               | Named per run and swept with its run folder; a killed run's are swept by the next run there
-			| Test folders on the boxes and in `%TEMP%`  | None on vm925w; 1 per account on b29w, from 10-14                                                         | `cicd-win.ps1` sweeps its own the same way as Linux
-			| Xvfb, sway, tmux                           | None left by a pipeline run. 7 `dash scene.sh` from a hand test folder of 10-13 still running             | Not touched
-			| Run logs, flamegraphs, release dirs, shots | Rotated or replaced each run                                                                              | Unchanged
-
-		- Left as found: the 343 local and 4 `/tmp` test folders, which no run wrote down; the `tmp.*.ps1` scripts and the b29w test folders on the boxes; the 7 `dash` processes; the remote clones' target dirs, built by hand jobs. The Windows pipeline's own target dir isn't swept yet.
-		- Verified: the four tests below pass, and their new checks failed against the pipeline as it was before.
-		- Question: should a run that built a new image also run `docker builder prune -f`? It's box-wide, so it would drop other projects' cache too. For now the size is only printed.
-	- Branch: sweep
-	- Commit: e2c4556
-	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
 
 - Demo: the cursor goes to 50% width when the cursor size and animation change
 	- ID: 2026092812581720
