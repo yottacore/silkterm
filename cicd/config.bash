@@ -214,6 +214,22 @@ DEMO_ENABLE=1
 ## reviewed after the fact. Kept rotated like the flamegraphs.
 LINT_LOG_DIR="cicd/artifacts/lint"      # relative to repo root; created if missing (gitignored)
 
+## Cleanup at the start of a full run (cicd/utility/include/sweep.bash). The gate
+## does none of it. Only what a run made and wrote down, or what cargo made in the
+## dirs named here, goes:
+##  - the test run folders failed runs kept, and the container's /tmp, past the
+##    newest CLEANUP_KEEP_RUNS of each
+##  - the build dirs below once the toolchain changes, since cargo rebuilds all of
+##    it then anyway, and one a run built into that the list no longer names
+##  - an incremental cache not used for CLEANUP_INCREMENTAL_DAYS before the newest
+##    one in its profile
+## The build dirs are under TARGET_DIR, and each cross target's release dir is
+## added from CROSS_TARGETS. Scratch dirs made by hand under target/ are never on
+## the list.
+CLEANUP_KEEP_RUNS=5
+CLEANUP_INCREMENTAL_DAYS=7
+CLEANUP_BUILD_DIRS=(debug release "${PROFILE_PROFILE}" lint)
+
 ## Old SVGs are pruned by gfs_rotate (cicd/utility/include/gfs-rotate.bash): keeps
 ## ~30 - first + newest-per-hour/day/week/month/year + last 10. Tune with the
 ## GFS_KEEP_* env vars (GFS_KEEP_FREQUENT, GFS_KEEP_DAILY, ...) if needed.

@@ -143,10 +143,18 @@ cat >"${fake}/docker" <<'EOF'
 #!/usr/bin/env bash
 ## A stand-in: records every call on one line, says whether the image is there, and
 ## on 'run' makes the binaries a --quick run builds, where the engine inside would
-## have: the native one and the Windows x86_64 one.
+## have: the native one and the Windows x86_64 one. It lists the tags, untagged
+## images and stopped containers it is given, and a build cache size.
 printf '%s\n' "${*//$'\n'/ }" >>"${FAKE_LOG}"
 case "${1}" in
-	image) if [[ "${2}" == inspect ]]; then exit "${FAKE_IMAGE_MISSING:-0}"; fi; exit 0 ;;
+	image)
+		case "${2}" in
+			inspect) exit "${FAKE_IMAGE_MISSING:-0}" ;;
+			ls) if [[ " ${*} " == *" -q "* ]]; then printf '%s\n' ${FAKE_UNTAGGED:-}; else printf '%s\n' ${FAKE_TAGS:-}; fi ;;
+		esac
+		exit 0 ;;
+	ps) printf '%s\n' ${FAKE_STOPPED:-}; exit 0 ;;
+	system) if [[ -n "${FAKE_CACHE:-}" ]]; then printf 'Images|1GB\nBuild Cache|%s\n' "${FAKE_CACHE}"; fi; exit 0 ;;
 	run)
 		target=""; for a in "${@}"; do [[ "${a}" == CARGO_TARGET_DIR=* ]] && target="${a#*=}"; done
 		mkdir -p "${target}/release" "${target}/x86_64-pc-windows-gnu/release"
@@ -170,7 +178,13 @@ fCheck "it started one container" test "$(grep -c '^run ' "${work}/full.log")" -
 fCheck "dropping to this user once it has a passwd entry" bash -c '[[ "$1" == *"/etc/passwd"* && "$1" == *"exec setpriv --reuid="* && "$1" == *" _ $(id -u) $(id -g) "* ]]' _ "${runLine}"
 fCheck "with the tree at its own path" bash -c '[[ "$1" == *" -v $2:$2 "* && "$1" == *" -w $2 "* ]]' _ "${runLine}" "${repo}"
 fCheck "the cache volume" bash -c '[[ "$1" == *" -v silkterm-cicd-cache:/cache "* ]]' _ "${runLine}"
-fCheck "its /tmp under the target dir" bash -c '[[ "$1" == *" -v $2/target/container/tmp:/tmp "* ]]' _ "${runLine}" "${repo}"
+## Commented out 20261019: /tmp is now a new folder under target/container/tmp each
+## run, so a killed run's locks and sockets are never the next one's. Checked below.
+# fCheck "its /tmp under the target dir" bash -c '[[ "$1" == *" -v $2/target/container/tmp:/tmp "* ]]' _ "${runLine}" "${repo}"
+fCheck "its /tmp a new folder under the target dir" bash -c '[[ "$1" =~ \ -v\ $2/target/container/tmp/run_[0-9]{8}-[0-9]{8}:/tmp\  ]]' _ "${runLine}" "${repo}"
+fCheck "which goes once the run passes" test -z "$(find "${repo}/target/container/tmp" -mindepth 1 -maxdepth 1 2>/dev/null)"
+fCheck "and is written down, for a run that does not get that far" grep -qE "^${repo}/target/container/tmp/run_[0-9]{8}-[0-9]{8}"$'\t'"[0-9]+-[0-9]+$" "${repo}/target/container/.cicd-container-tmp"
+fCheck "the container is named for the run and labeled as the pipeline's" bash -c '[[ "$1" == *" --name silkterm-cicd-"* && "$1" == *" --label silkterm-cicd=run "* ]]' _ "${runLine}"
 fCheck "the target dir for both sides" bash -c '[[ "$1" == *" CARGO_TARGET_DIR=$2/target/container "* ]]' _ "${runLine}" "${repo}"
 fCheck "the build number pinned here" bash -c '[[ "$1" == *" SILK_BUILD_MINUTES="[0-9]* ]]' _ "${runLine}"
 fCheck "the engine inside gets the stage options and the host stages off" \
@@ -193,6 +207,23 @@ fCheck "tagged as the plan named it" bash -c '[[ "$1" == "build -t silkterm-cicd
 fCheck "with the toolchain and its targets" bash -c '[[ "$1" == *" --build-arg VER_rust=1.96.0 "* && "$1" == *" --build-arg RUST_TARGETS=x86_64-pc-windows-gnu aarch64-unknown-linux-gnu aarch64-pc-windows-gnullvm x86_64-apple-darwin "* ]]' _ "${buildLine}"
 fCheck "the pins" bash -c '[[ "$1" == *" --build-arg VER_zig=0.16.0 "* && "$1" == *" --build-arg VER_cargo_deny="* ]]' _ "${buildLine}"
 fCheck "and the job cap" bash -c '[[ "$1" == *" --build-arg JOBS="[0-9]* ]]' _ "${buildLine}"
+fCheck "labeled as the pipeline's" bash -c '[[ "$1" == *" --label silkterm-cicd=image "* ]]' _ "${buildLine}"
+
+## What earlier runs and builds left in docker. The older tags go on every run,
+## not only after a build, since one a container held then stayed. Untagged images
+## go by the pipeline's label, stopped containers too. Never by force, and the build
+## cache, which every project's builds share, is only reported.
+FAKE_TAGS="silkterm-cicd:000000000000" FAKE_UNTAGGED="sha256:feedface" FAKE_STOPPED="c0ffee" FAKE_CACHE="7.5GB" \
+	FAKE_IMAGE_MISSING=1 fRun tidy.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+fCheck "after a build the older tag goes" grep -qx 'image rm silkterm-cicd:000000000000' "${work}/tidy.log"
+fCheck "and so does an untagged image the pipeline labeled" bash -c 'grep -qx "image ls -q --filter dangling=true --filter label=silkterm-cicd=image" "$1" && grep -qx "image rm sha256:feedface" "$1"' _ "${work}/tidy.log"
+fCheck "a stopped container the pipeline labeled goes" bash -c 'grep -qx "ps -aq --filter label=silkterm-cicd=run --filter status=exited --filter status=created --filter status=dead" "$1" && grep -qx "rm c0ffee" "$1"' _ "${work}/tidy.log"
+fCheck "nothing is removed by force" fNot grep -qE '^(rm|rmi|image rm|container rm) .*(^| )-f( |$)' "${work}/tidy.log"
+fCheck "the build cache is not pruned" fNot grep -qE '^(builder|buildx|system) prune' "${work}/tidy.log"
+fCheck "only reported" grep -qF 'docker build cache: 7.5GB reclaimable, shared with other projects, not pruned here' <<<"${out}"
+fCheck "and the run says what went" grep -qE '^cleanup: removed 1 stopped containers, 2 old container images; ' <<<"${out}"
+FAKE_TAGS="silkterm-cicd:000000000000" fRun tags.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+fCheck "with the image there, the older tag still goes" grep -qx 'image rm silkterm-cicd:000000000000' "${work}/tags.log"
 
 fRun gate.log --gate --container
 fCheck "--gate --container runs the gate inside" bash -c '[[ "$(grep "^run " "$1")" == *" $2/cicd/cicd.bash --gate" ]]' _ "${work}/gate.log" "${repo}"
@@ -202,6 +233,27 @@ fCheck "with no log tee or plan" fNot grep -q 'Fail-fast' <<<"${out}"
 FAKE_RUN_RC=7 fRun fail.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
 fCheck "a run inside that fails stops the run here" test "${rc}" -ne 0
 fCheck "and says where" grep -q 'the run in the container failed' <<<"${out}"
+failTmp="$(sed -n 's/^the container.s \/tmp is kept in //p' <<<"${out}")"
+fCheck "keeping its /tmp, and saying where" test -n "${failTmp}" -a -f "${failTmp}/.test_silkterm_owner"
+
+## Later runs keep the newest few kept /tmp folders, five by the config, and
+## remove the rest. Six written down after the failed one, and one nobody wrote
+## down.
+# shellcheck source=cicd/utility/include/sweep.bash
+source "${root}/cicd/utility/include/sweep.bash"
+declare -a planted=()
+for _ in 1 2 3 4 5 6; do
+	fSweep_MakeDir "${repo}/target/container/tmp" run made token
+	fSweep_Record "${repo}/target/container/.cicd-container-tmp" "${made}" "${token}"
+	planted+=("${made}")
+done
+mkdir "${repo}/target/container/tmp/run_nobody"
+fRun sweep.log --container -y --no-sync --no-dogfood --no-publish --no-private --quick
+fCheck "a later run removes the failed run's /tmp past the newest five" test -n "${failTmp}" -a ! -e "${failTmp}"
+fCheck "and the oldest planted one" test ! -e "${planted[0]}"
+fCheck "and keeps the newest five" bash -c 'for d in "${@}"; do [[ -d "${d}" ]] || exit 1; done' _ "${planted[@]:1}"
+fCheck "and one nobody wrote down" test -d "${repo}/target/container/tmp/run_nobody"
+fCheck "and says what went" grep -qE '^cleanup: removed 2 old container /tmp folders' <<<"${out}"
 
 rc=0; out="$(cd "${repo}" && SILK_CICD_IN_CONTAINER=1 FAKE_LOG="${work}/nested.log" bash cicd/cicd.bash --container -y 2>&1)" || rc=$?
 fCheck "inside the container, --container is refused" test "${rc}" -ne 0
@@ -224,3 +276,4 @@ echo "all passed"
 ##	History:
 ##		- 20261010 JC: Created.
 ##		- 20261013 JC: The time zone goes in.
+##		- 20261019 JC: A new /tmp per run, and what earlier runs left in docker.

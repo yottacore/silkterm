@@ -7,7 +7,7 @@
 ##		It ran whatever binary the box last built, so a result could be for an
 ##		older commit. Its cleanup stopped every process named silkterm, on
 ##		boxes other people use. It kept its files outside the temp folder. And it
-##		left run folders behind, here and on the box.
+##		left run folders behind, here and on the box, and every script it sent.
 ##	- Test ID: EqH4isr
 ##	- History: At bottom of file.
 
@@ -22,8 +22,11 @@ root="$(cd "${meDir}/../../.." && pwd)"
 
 failures=0
 fCheck(){ local -r what="${1}"; shift; if "${@}"; then echo "  ok   ${what}"; else echo "  FAIL ${what}"; failures=$((failures + 1)); fi; }
+fNot(){ ! "${@}"; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/silk-wingui.XXXXXX")"
+## The list of runs not yet swept, here rather than in this tree's artifacts.
+export WINGUI_RUNS="${work}/runs.txt"
 declare -a started=()
 fEnd(){ local -r rc=$?; local p; for p in "${started[@]}"; do kill "${p}" 2>/dev/null || true; done; rm -rf "${work}"; fTestDir_End "${rc}"; }
 trap fEnd EXIT
@@ -45,8 +48,10 @@ case "${1:-}" in
 			echo "RUNFOR wintest"
 			printf 'RUNDIR %s\r\n' 'C:\Users\wintest\AppData\Local\Temp\test_silkterm_20260101-00000000'
 			printf 'RUNTOKEN %s\r\n' '4242-1234567890'
-		elif grep -qE '^if \(fTestDir_Remove -Dir' "$2"; then
-			cp "$2" "${STUB_DIR}/sweep-$(date +%s%N).ps1"; echo "${STUB_SWEPT:-REMOVED}"
+		elif grep -qE "^'SWEPT'" "$2"; then
+			kind=sweep; [[ "$2" == *_old.ps1 ]] && kind=old
+			cp "$2" "${STUB_DIR}/${kind}-$(date +%s%N).ps1"
+			[[ -n "${STUB_SILENT:-}" ]] || { echo "${STUB_SWEPT:-REMOVED}"; echo SWEPT; }
 		else
 			cp "$2" "${STUB_DIR}/launcher-$(date +%s%N).ps1"; echo "VERDICT pass"
 		fi ;;
@@ -107,12 +112,55 @@ out="$(STUB_SWEPT=$'WARNING: test run folder: left it in place: no owner mark\nN
 	"${meDir}/run.bash" smoke 2>&1)" || true
 fCheck "a sweep that removed nothing says so, and why" bash -c 'grep -qFx "wingui: box: run folder not removed:" <<< "$1" && grep -qF "no owner mark" <<< "$1"' _ "${out}"
 
+## What the run sends lands in the box's jobs folder under its own name, so each
+## script is named for the run, and the sweep takes them by that name, itself too.
+runId="$(sed -n 's/^run .*silkrig_\([0-9]*-[0-9]*\)_stage\.ps1$/\1/p' "${work}/swept/calls" | head -1)"
+fNamed(){ grep -qE "^run .*/silkrig_${runId}_stage\.ps1$" "${1}" && grep -qE "^run .*/silkrig_${runId}_smoke\.ps1$" "${1}" && grep -qE "^run .*/silkrig_${runId}_sweep\.ps1$" "${1}" ;}
+fCheck "the scripts sent are named for the run" bash -c '[[ -n "$1" ]]' _ "${runId}"
+fCheck "the stage, each scenario and the sweep" fNamed "${work}/swept/calls"
+fCheck "the sweep takes them from its own folder by that name" grep -qFx "Get-ChildItem -LiteralPath \$PSScriptRoot -File -Filter 'silkrig_${runId}_*.ps1' | Remove-Item -Force -ErrorAction SilentlyContinue" "${sweep:-/dev/null}"
+fCheck "and the run, once swept, is off the list" bash -c '! grep -qF "$1" "$2" 2>/dev/null' _ "${runId}" "${WINGUI_RUNS}"
+
+## A run killed before its sweep: the next run on that box sweeps it first, its
+## folder through the token it was given and its scripts by name, and takes it
+## off the list. Another box's stays.
+killedDir='C:\Users\wintest\AppData\Local\Temp\test_silkterm_20251231-00000000'
+mkdir "${work}/killed"
+printf 'box\t20251231000000-1\t\t\nbox\t20251231000000-1\t%s\t77-88\nother\t20251231000000-2\t\t\n' "${killedDir}" >"${work}/killed/runs.txt"
+rc=0
+out="$(WINGUI_RUNS="${work}/killed/runs.txt" STUB_LOG="${work}/killed/calls" STUB_DIR="${work}/killed" WINRIG_HELD=1 \
+	WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
+old="$(find "${work}/killed" -name 'old-*.ps1' | head -1)"
+fCheck "the next run on the box sweeps a killed run's leftovers first" bash -c '[[ "$(grep "^run " "$1" | head -1)" == *_old.ps1 ]]' _ "${work}/killed/calls"
+fCheck "its folder only through the token it was given" grep -qFx "if (fTestDir_Remove -Dir '${killedDir}' -Token '77-88') { 'REMOVED' } else { 'NOT REMOVED' }" "${old:-/dev/null}"
+fCheck "and its scripts by their name" grep -qF -- "-Filter 'silkrig_20251231000000-1_*.ps1'" "${old:-/dev/null}"
+fCheck "not another box's" fNot grep -qF '20251231000000-2' "${old:-/dev/null}"
+fCheck "then it is off the list, and the other box's run is not" test "$(cat "${work}/killed/runs.txt")" = $'other\t20251231000000-2\t\t'
+fCheck "and the run went on" test "${rc}" -eq 0
+
+## A box that never answers the sweep keeps the run on the list for next time.
+mkdir "${work}/silent"
+rc=0
+out="$(WINGUI_RUNS="${work}/silent/runs.txt" STUB_SILENT=1 STUB_LOG="${work}/silent/calls" STUB_DIR="${work}/silent" WINRIG_HELD=1 \
+	WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || rc=$?
+fCheck "a sweep the box never answered leaves the run on the list" grep -qF "${runDir}" "${work}/silent/runs.txt"
+## --keep keeps everything, so nothing is written down to sweep later.
+mkdir "${work}/kept"
+out="$(WINGUI_RUNS="${work}/kept/runs.txt" STUB_LOG="${work}/kept/calls" STUB_DIR="${work}/kept" WINRIG_HELD=1 \
+	WINGUI_WIN_REMOTE="${work}/win-remote" WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" --keep smoke 2>&1)" || true
+fCheck "--keep writes nothing down" test ! -e "${work}/kept/runs.txt"
+
 rc=0
 : > "${work}/calls-nostage"
 out="$(STUB_NOSTAGE=1 STUB_LOG="${work}/calls-nostage" STUB_DIR="${work}" WINRIG_HELD=1 WINGUI_WIN_REMOTE="${work}/win-remote" \
 	WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" --keep smoke 2>&1)" || rc=$?
 fCheck "a box that makes no run folder fails the run" test "${rc}" -ne 0
 fCheck "without sending or running a scenario" bash -c '! grep -qE "^push |^run .*launcher" "$1"' _ "${work}/calls-nostage"
+mkdir "${work}/nostage"
+out="$(STUB_NOSTAGE=1 STUB_LOG="${work}/nostage/calls" STUB_DIR="${work}/nostage" WINRIG_HELD=1 WINGUI_WIN_REMOTE="${work}/win-remote" \
+	WINGUI_EXE="${work}/silkterm.exe" "${meDir}/run.bash" smoke 2>&1)" || true
+nsweep="$(find "${work}/nostage" -name 'sweep-*.ps1' | head -1)"
+fCheck "and still has the stage script swept, with no folder to remove" bash -c '[[ -n "$1" ]] && grep -qF -- "-Filter '"'"'silkrig_" "$1" && ! grep -q "^if (fTestDir_Remove" "$1"' _ "${nsweep}"
 
 ## A box that is off is a skip: the run passes, and nothing is sent or run.
 rc=0
@@ -213,3 +261,4 @@ echo "all passed"
 ##		- 20260926: A box that is down is a skip.
 ##		- 20261002: The run folder is in the console user's temp folder.
 ##		- 20261002: Run folders are removed, here and on the box.
+##		- 20261019: So are the scripts it sends, and a killed run's, by the next run.

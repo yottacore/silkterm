@@ -87,11 +87,16 @@ case " ${*} " in *" --container "*) export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:
 source "${here}/config.bash"
 source "${here}/utility/include/gfs-rotate.bash"                  ## gfs_rotate() for the profiler artifacts
 source "${here}/utility/include/remote-git.bash"                  ## fRemoteGit / fRemoteGh, as the folder's own account
+##  shellcheck source=cicd/utility/include/sweep.bash
+source "${here}/utility/include/sweep.bash"                       ## what earlier runs left, once it is stale
 ##  shellcheck source=cicd/utility/include/echo.bash
 source "${here}/utility/include/echo.bash"                        ## fEcho, fEcho_Clean, fSection, fDie
 ##  shellcheck source=cicd/utility/built-from.bash
 source "${here}/utility/built-from.bash"                          ## the artifacts' provenance note
 declare -p FMT_CMD &>/dev/null || FMT_CMD=()                      ## tolerate a config without the fmt stage
+## Every cross target the config has, before --no-arm or --no-windows drop some,
+## since a run that skips one still keeps its build dir for the next.
+allCrossTargets=(); declare -p CROSS_TARGETS &>/dev/null && allCrossTargets=("${CROSS_TARGETS[@]}")
 
 ## Cap compile/test parallelism to at most half the cores so a pipeline run
 ## doesn't peg every CPU and leaves the machine usable. cargo's jobserver bounds
@@ -377,6 +382,9 @@ trap 'rc=$?; printf "\n[ CICD ABORTED (exit %s) at line %s: %s ]\n\n" "$rc" "$LI
 ## sees this tree at its own path, the target dir CARGO_TARGET_DIR named before the
 ## config loaded, and a named volume for its home and the crate cache.
 docker="${SILK_DOCKER:-docker}"
+## What the pipeline labels, so its own containers and images can be told from
+## everybody else's on a shared docker.
+containerLabel="${EXE_NAME}-cicd"
 containerRecipe="${here}/container/Dockerfile"
 ## The build args: the toolchain and its targets, then VER_<pin> for each pin the
 ## recipe takes, so a pin the image does not install changes nothing.
@@ -390,47 +398,89 @@ fContainerArgs(){
 	done
 }
 fContainerImage(){ printf '%s-cicd:%s' "${EXE_NAME}" "$({ cat "${containerRecipe}"; fContainerArgs; } | sha256sum | cut -c1-12)"; }
-## fContainerBuild <image>: builds it when it is not there, then drops the older
-## images of the same name, since a new tag means the old recipe is gone.
+## fContainerBuild <image>: builds it when it is not there, then fContainerTidy.
 fContainerBuild(){
 	local -r image="${1}"
-	local arg old
+	local arg cache=""
 	local -a args=()
-	if "${docker}" image inspect "${image}" >/dev/null 2>&1; then fEcho_Clean "image ${image}"; return 0; fi
+	if "${docker}" image inspect "${image}" >/dev/null 2>&1; then fEcho_Clean "image ${image}"; fContainerTidy "${image}"; return 0; fi
 	fEcho_Clean "building ${image} (the recipe or a pin changed; this takes a while)"
 	while IFS= read -r arg; do args+=(--build-arg "${arg}"); done < <(fContainerArgs)
-	"${docker}" build -t "${image}" "${args[@]}" --build-arg "JOBS=${CICD_MAX_JOBS}" "${here}/container" || fDie "image build failed"
+	"${docker}" build -t "${image}" --label "${containerLabel}=image" "${args[@]}" --build-arg "JOBS=${CICD_MAX_JOBS}" "${here}/container" || fDie "image build failed"
+	fContainerTidy "${image}"
+	## The build cache is shared with every other project's builds, so it is
+	## left alone and only reported.
+	cache="$("${docker}" system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null | sed -n 's/^Build Cache|//p' || true)"
+	[[ -z "${cache}" ]] || fEcho_Clean "docker build cache: ${cache} reclaimable, shared with other projects, not pruned here"
+}
+## fContainerTidy <image>: the older images of the same name go, since a new tag
+## means the old recipe is gone, and so do untagged ones a build of ours left.
+## Plain image rm, so one a container still uses stays, and goes on a later run.
+fContainerTidy(){
+	local -r image="${1}"
+	local old
+	local -i gone=0
 	while IFS= read -r old; do
 		[[ -n "${old}" && "${old}" != "${image}" ]] || continue
-		if "${docker}" image rm "${old}" >/dev/null 2>&1; then fEcho_Clean "removed ${old}"; fi
+		if "${docker}" image rm "${old}" >/dev/null 2>&1; then fEcho_Clean "removed ${old}"; gone+=1; fi
 	done < <("${docker}" image ls "${image%%:*}" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null || true)
+	while IFS= read -r old; do
+		[[ -n "${old}" ]] || continue
+		if "${docker}" image rm "${old}" >/dev/null 2>&1; then gone+=1; fi
+	done < <("${docker}" image ls -q --filter dangling=true --filter "label=${containerLabel}=image" 2>/dev/null || true)
+	fSweep_Count "old container images" "${gone}"
+}
+## A container of ours that stopped without going, as one does when the docker
+## daemon restarts under --rm. A running one is left, since it can be another
+## run's.
+fContainerStopped(){
+	local id
+	local -i gone=0
+	while IFS= read -r id; do
+		[[ -n "${id}" ]] || continue
+		if "${docker}" rm "${id}" >/dev/null 2>&1; then gone+=1; fi
+	done < <("${docker}" ps -aq --filter "label=${containerLabel}=run" --filter status=exited --filter status=created --filter status=dead 2>/dev/null || true)
+	fSweep_Count "stopped containers" "${gone}"
 }
 ## fContainerRun <image> <cicd.bash options...>: the engine in the container, against
-## this tree. Its /tmp is a folder under the target dir, so a failed test's files are
-## still there afterward, and the X sockets inside never meet this box's. The
+## this tree. Its /tmp is a new folder under the target dir each run, so a failed
+## test's files are still there afterward, the X sockets inside never meet this
+## box's, and no lock or socket a killed run left is there for the next. A run
+## that passes removes it; a later run removes the ones failed runs kept. The
 ## container starts as root only long enough to give this uid a passwd entry, since
 ## the terminal looks its user up (a bare --user has none), and the X socket folder,
 ## then drops to it. The run gets a session bus of its own, which xfwm4 needs, and
 ## this box's time zone, so a name stamped inside sorts with the ones made here.
 fContainerRun(){
 	local -r image="${1}"; shift
-	local gitCommon zone="${TZ:-}"
-	local -a mounts=(-v "${root}:${root}" -v "${EXE_NAME}-cicd-cache:/cache" -v "${containerTarget}/tmp:/tmp") zoneArgs=()
+	local gitCommon zone="${TZ:-}" runTmp="" runToken="" why=""
+	local -i rc=0
+	fSweep_MakeDir "${containerTarget}/tmp" run runTmp runToken || return 1
+	fSweep_Record "${containerTmpLedger}" "${runTmp}" "${runToken}" || true
+	local -a mounts=(-v "${root}:${root}" -v "${EXE_NAME}-cicd-cache:/cache" -v "${runTmp}:/tmp") zoneArgs=()
 	if [[ -z "${zone}" ]]; then
 		zone="$(realpath -e /etc/localtime 2>/dev/null || true)"
 		if [[ "${zone}" == */zoneinfo/* ]]; then zone="${zone#*/zoneinfo/}"; else zone=""; fi
 	fi
 	if [[ -n "${zone}" ]]; then zoneArgs=(-e "TZ=${zone}"); fi
-	mkdir -p "${containerTarget}/tmp"
 	[[ "${containerTarget}" == "${root}/"* ]] || mounts+=(-v "${containerTarget}:${containerTarget}")
 	gitCommon="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 	[[ -z "${gitCommon}" || "${gitCommon}" == "${root}/"* ]] || mounts+=(-v "${gitCommon}:${gitCommon}")
-	"${docker}" run --rm --init --shm-size 1g "${mounts[@]}" -w "${root}" \
+	"${docker}" run --rm --init --shm-size 1g --name "${containerLabel}-${stamp}-$$" --label "${containerLabel}=run" "${mounts[@]}" -w "${root}" \
 		-e "USER=${USER:-$(id -un)}" -e "CARGO_TARGET_DIR=${containerTarget}" -e "SILK_BUILD_MINUTES=${SILK_BUILD_MINUTES:-}" \
 		-e "CICD_MAX_JOBS=${CICD_MAX_JOBS}" -e XDG_RUNTIME_DIR=/tmp/xdg-runtime "${zoneArgs[@]}" \
 		"${image}" bash -c 'echo "${USER}:x:${1}:${2}:${USER}:${HOME}:/bin/bash" >>/etc/passwd && echo "${USER}:x:${2}:" >>/etc/group \
 			&& mkdir -m 700 -p "${XDG_RUNTIME_DIR}" && chown "${1}:${2}" "${XDG_RUNTIME_DIR}" && mkdir -m 1777 -p /tmp/.X11-unix \
-			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:3}"' _ "$(id -u)" "$(id -g)" "${root}/cicd/cicd.bash" "${@}"
+			&& exec setpriv --reuid="${1}" --regid="${2}" --init-groups -- dbus-run-session -- bash "${@:3}"' _ "$(id -u)" "$(id -g)" "${root}/cicd/cicd.bash" "${@}" \
+		|| rc=$?
+	if ((rc)); then
+		echo "the container's /tmp is kept in ${runTmp}" >&2
+	else
+		why="$(fSweep_NotOurs "${runTmp}" "${runToken}")"
+		if [[ -z "${why}" ]]; then rm -rf -- "${runTmp}" || true
+		else echo "cleanup: left ${runTmp} in place: ${why}" >&2; fi
+	fi
+	return "${rc}"
 }
 ## What the run in the container made, named as stage 5 names them, for the stages
 ## here. Every binary this configuration builds has to be there: the run inside made
@@ -449,31 +499,33 @@ fContainerArtifacts(){
 	ver="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "${root}/${VERSION_MANIFEST}" | head -1)"
 	artDir="${root}/${RELEASE_ARTIFACT_DIR:-cicd/artifacts/release}"
 }
-containerImage=""; containerTarget=""
+containerImage=""; containerTarget=""; containerTmpLedger=""
 if ((container)); then
 	[[ -z "${SILK_CICD_IN_CONTAINER:-}" ]] || fDie "already in the container; --container would start another"
 	command -v "${docker}" >/dev/null 2>&1 || fDie "--container needs docker, or SILK_DOCKER naming a stand-in"
 	[[ -f "${containerRecipe}" ]] || fDie "missing ${containerRecipe}"
 	containerImage="$(fContainerImage)"
 	containerTarget="$(mkdir -p "${TARGET_DIR}" && cd "${TARGET_DIR}" && pwd)"
+	containerTmpLedger="${containerTarget}/.cicd-container-tmp"
 	## The engine inside takes this run's stage options and none of the stages that
 	## need this box: sync, the private runner, dogfood, the demo and publish.
 	innerArgs=(-y --no-sync --no-dogfood --no-publish --no-private "${innerArgs[@]}")
 	((quiet)) && innerArgs[0]=-q
 fi
 
-## One folder for every file the tests write, made before the gate or any test
-## stage so they all share it. TMPDIR stays put, so builds and packaging keep the
-## system temp dir.
+## One folder for every file the tests write, made before the gate, or once a full
+## run is past its prompt, so every test shares it. Not before the prompt: a run
+## stopped there would keep an empty one. TMPDIR stays put, so builds and packaging
+## keep the system temp dir.
 # shellcheck source=cicd/tests/_testdir.bash
 source "${root}/cicd/tests/_testdir.bash"
-fTestDir_Make || fDie "could not make the test run folder"
 
 ## Gate mode: the local merge gate (what a bare-bones hosted CI would run).
 ## fmt --check + clippy -D warnings + tests, fail-fast, nothing mutated, no
 ## artifacts/log-tee/publish. Wired as the pre-push hook for main, so nothing
 ## reaches the release branch unverified even outside a full run.
 if ((gate)); then
+	fTestDir_Make || fDie "could not make the test run folder"
 	if ((container)); then
 		fSection "Gate in ${containerImage}"
 		fContainerBuild "${containerImage}"
@@ -586,6 +638,9 @@ elif ((quick && ! demoAsked)); then
 else
 	fEcho_Clean "Demo video ..........: re-record, README gif to assets/demo.gif"
 fi
+if declare -p CLEANUP_BUILD_DIRS &>/dev/null; then
+	fEcho_Clean "Cleanup .............: test folders$( ((container)) && echo ' and container /tmp') past the newest ${CLEANUP_KEEP_RUNS:-5}, stale build dirs$( ((container)) && echo ', stopped containers and old images')"
+fi
 if ((${#GIT_PUBLISH[@]} == 0)); then
 	fEcho_Clean "Publish (last) ......: (disabled)"
 elif [[ -n "${publishMsg}" ]]; then
@@ -607,6 +662,8 @@ if ((! assumeYes)); then
 		publishMsg="$(fPublishMessage "" "" "${m}")"
 	fi
 fi
+
+fTestDir_Make || fDie "could not make the test run folder"
 
 ## Tee the rest of the run (all stages) to a gitignored log so warnings from any
 ## stage can be reviewed after the fact. Rotate the prior (closed) logs first.
@@ -644,6 +701,21 @@ if [[ -n "${LINT_LOG_DIR:-}" && -z "${SILK_CICD_IN_CONTAINER:-}" ]] && mkdir -p 
 	lintTee=$!
 	## fTestDir_End before fFinishLog, so its line reaches the log.
 	trap 'rc=$?; fTestDir_End "${rc}"; fFinishLog; exit $rc' EXIT
+fi
+
+## What earlier runs left: the test run folders failed runs kept, past the newest
+## few, then this run's own goes on the list. Inside the container /tmp is new
+## each run, and the run outside sees to it. The build dirs are swept where the
+## builds run, at the start of fBuildTestRelease.
+if [[ -z "${SILK_CICD_IN_CONTAINER:-}" ]]; then
+	testLedger="${TARGET_DIR}/.cicd-test-folders"
+	fSweep_Ledger "${testLedger}" "${CLEANUP_KEEP_RUNS:-5}" "old test run folders"
+	ownedLine="$(fTestDir_Owned)"
+	if [[ -n "${ownedLine}" ]]; then fSweep_Record "${testLedger}" "${ownedLine%%$'\t'*}" "${ownedLine#*$'\t'}" || true; fi
+	if ((container)); then
+		fSweep_Ledger "${containerTmpLedger}" "${CLEANUP_KEEP_RUNS:-5}" "old container /tmp folders"
+		fContainerStopped
+	fi
 fi
 
 ## Stage 0: remote sync. Make sure the local branch can be safely refreshed from
@@ -879,10 +951,34 @@ fWinGuiScenarios(){
 	fi
 }
 
+## The build dirs this config builds into: CLEANUP_BUILD_DIRS under the target
+## dir, and each cross target's release dir.
+fBuildDirs(){
+	local dir t art
+	for dir in "${CLEANUP_BUILD_DIRS[@]}"; do printf '%s/%s\n' "${TARGET_DIR}" "${dir}"; done
+	for t in "${allCrossTargets[@]}"; do
+		art="${t#*|}"; art="${art#*|}"; art="${art%%|*}"
+		printf '%s\n' "${art%/*}"
+	done
+}
+## Stale build output in the target dir, swept where the builds run, so a container
+## run sweeps its own target dir with its own toolchain.
+fSweepBuilds(){
+	local key="" ver=""
+	local -a dirs=()
+	declare -p CLEANUP_BUILD_DIRS &>/dev/null || return 0
+	mapfile -t dirs < <(fBuildDirs)
+	if ver="$(rustc -vV 2>/dev/null)"; then key="$(sha256sum <<<"${ver}" | cut -c1-16)"; fi
+	fSweep_Toolchain "${TARGET_DIR}" "${key}" "${dirs[@]}"
+	fSweep_OldBuildDirs "${TARGET_DIR}" "${dirs[@]}"
+	fSweep_Incremental "${CLEANUP_INCREMENTAL_DAYS:-7}" "${dirs[@]}"
+}
+
 ## Stages 1 to 6: format, debug build, tests and lints, profiler, release builds and
 ## packages. One function, so --container can run them in the image instead, with this
 ## box picking up at the private runner.
 fBuildTestRelease(){
+	fSweepBuilds
 	## Stage 1: format.
 	fSection "1/8  Format"
 	if ((${#FMT_CMD[@]} == 0)); then
@@ -1064,6 +1160,8 @@ fBuildTestRelease(){
 	## --container: the image tag, the recipe's pins, what goes in with the run and
 	## what the run here picks up after it.
 	fRunTest cicd/tests/container/run.bash "container run" "container run test failed"
+	## What a run removes of what earlier runs left, and what it never touches.
+	fRunTest cicd/tests/cleanup/run.bash "stale run cleanup"
 	## A failed test's output, which once went nowhere and left only its name.
 	fRunTest cicd/tests/testout/run.bash "failed test output"
 	## Stage 0, which has to stop a diverged tree before anything is built.
@@ -1357,11 +1455,19 @@ else
 	fEcho "OK: published"
 fi
 
+fEcho_Clean
+fEcho_Clean "$(fSweep_Summary)"
+
 fSection "${APP_NAME} CI/CD: done."
 fEcho_Clean
 
 
 ##	History:
+##		- 2026-10-19: A full run removes what earlier runs left once it is stale:
+##		              kept test folders and container /tmp past the newest few,
+##		              build dirs from an older toolchain or no longer built,
+##		              unused incremental caches, and its stopped containers and
+##		              old images. The test folder is made after the prompt.
 ##		- 2026-10-18: --quick keeps the x86_64 cross build and skips the slow window
 ##		              tests. The demo is on by default, and macOS is linted too.
 ##		- 2026-10-13: The run in the container takes this box's time zone.

@@ -3,7 +3,7 @@
 ##	- Purpose:
 ##		The run's test folder, <temp>/test_silkterm_YYYYmmDD-HHMMSSNN, that every
 ##		file a test writes goes under. Sourced; it defines fTestDir_Make,
-##		fTestDir_Use and fTestDir_End and runs nothing. The Rust tests
+##		fTestDir_Use, fTestDir_Owned and fTestDir_End and runs nothing. The Rust tests
 ##		(source/src/testdir.rs), _testdir.py and _testdir.ps1 keep the same contract:
 ##			- SILKTERM_TEST_DIR set and not empty: that is the folder, made if missing,
 ##			  and never removed.
@@ -72,6 +72,14 @@ fTestDir_End(){
 	return 0
 }
 
+fTestDir_Owned(){
+	##	Prints the folder and its token, tab between, when this process made the
+	##	folder; nothing for one it was handed. The pipeline writes it down, so a
+	##	later run can remove it if this one fails and keeps it.
+	[[ -n "${__testDirOwned:-}" ]] || return 0
+	printf '%s\t%s\n' "${__testDirOwned}" "${__testDirToken}"
+}
+
 fTestDir_Use(){
 	##	fTestDir_Make, then points TMPDIR at the folder, so the script's own mktemp
 	##	calls and every program it starts write there.
@@ -82,3 +90,4 @@ fTestDir_Use(){
 ##	History:
 ##		- 20260930 JC: Created.
 ##		- 20261002 JC: A run removes the folder it made when it passes.
+##		- 20261019 JC: fTestDir_Owned, for the pipeline's record of its folders.
