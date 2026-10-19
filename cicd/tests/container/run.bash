@@ -58,6 +58,12 @@ fCheck "one it does not take leaves it" test "$(fWith fContainerImage)" = "${tag
 TOOL_PINS[2]="makensis|3.12|makensis -VERSION"
 echo '# a comment' >>"${stand}/Dockerfile"
 fCheck "an edit to the recipe changes the tag" test "$(fWith fContainerImage)" != "${tag1}"
+SANITIZER_TOOLCHAIN=nightly-2026-01-01
+fCheck "the sanitizer nightly is a build arg" grep -qx 'RUST_NIGHTLY=nightly-2026-01-01' <<<"$(fWith fContainerArgs)"
+tagNightly="$(fWith fContainerImage)"
+SANITIZER_TOOLCHAIN=nightly-2026-01-02
+fCheck "and a nightly bump changes the tag" test "$(fWith fContainerImage)" != "${tagNightly}"
+unset SANITIZER_TOOLCHAIN
 
 ## The real recipe: every version it takes is pinned, every download is checked.
 fRecipeArgsPinned(){
@@ -74,7 +80,7 @@ fRecipeArgsHanded(){
 	real="$(source "${root}/cicd/config.bash" >/dev/null 2>&1; containerRecipe="${recipe}"; fContainerArgs)"
 	while read -r arg; do
 		grep -q "^${arg}=." <<<"${real}" || { echo "    the engine hands the recipe no ${arg}"; bad=1; }
-	done < <(grep -oE '^ARG (VER_[A-Za-z_]+|RUST_TARGETS)' "${recipe}" | cut -d' ' -f2)
+	done < <(grep -oE '^ARG (VER_[A-Za-z_]+|RUST_TARGETS|RUST_NIGHTLY)' "${recipe}" | cut -d' ' -f2)
 	return "${bad}"
 }
 fDownloadsChecked(){
@@ -85,7 +91,9 @@ fDownloadsChecked(){
 	return "${bad}"
 }
 fCheck "every version the recipe takes is a pin" fRecipeArgsPinned
-fCheck "and the engine hands it each one, with the toolchain and its targets" fRecipeArgsHanded
+fCheck "and the engine hands it each one, with the toolchain, its targets and the nightly" fRecipeArgsHanded
+fCheck "the nightly is a dated one, from rust-toolchain.toml" bash -c 'source "$1" && [[ "${SANITIZER_TOOLCHAIN}" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]' _ "${root}/cicd/config.bash"
+fCheck "and the recipe installs it with the std source" grep -qE 'rustup toolchain install "\$\{RUST_NIGHTLY\}" .*-c rust-src' "${recipe}"
 fCheck "every download in the recipe is checked" fDownloadsChecked
 fCheck "the base image is pinned by digest" grep -qE '^FROM debian:[a-z-]+@sha256:[0-9a-f]{64} AS base$' "${recipe}"
 fCheck "the image marks itself, so a run inside cannot start another" grep -qE '^[[:space:]]*SILK_CICD_IN_CONTAINER=1' "${recipe}"
@@ -103,6 +111,7 @@ fCheck "--container is an option, and the stage options go in with it" \
 	test "$(fParse --container --quick --no-arm --no-fuzz -y --no-sync --no-dogfood --no-publish --no-private -m msg --demo --no-demo)" = "container=1 inner=--quick --no-arm --no-fuzz"
 fCheck "the host options stay out" test "$(fParse -y --no-sync --no-dogfood --no-publish --no-private --demo -m x)" = "container=0 inner="
 fCheck "and so does --container itself" test "$(fParse --container)" = "container=1 inner="
+fCheck "--no-asan is a stage option" test "$(fParse --container --no-asan)" = "container=1 inner=--no-asan"
 
 ## What the run inside made: stage 5's list, from the target dir the two share.
 eval "$(fLift '^fContainerArtifacts(){' '^}')"
@@ -270,6 +279,56 @@ fCheck "and the run here calls them after the container" bash -c 'sed -n "/^if (
 fCheck "the content scrub too" bash -c 'sed -n "/^if ((container)); then$/,/^fi$/p" "$1" | grep -q "^[[:space:]]fContentScrub$"' _ "${engine}"
 fCheck "the run inside writes no second log" grep -q 'LINT_LOG_DIR:-}" && -z "${SILK_CICD_IN_CONTAINER:-}"' "${engine}"
 
+## The ASan run: in the image from a run on this box, as is inside the container.
+eval "$(fLift '^fRunAsan(){' '^}')"
+asanStand="${work}/asan"; mkdir -p "${asanStand}/utility"
+printf '#!/bin/sh\necho "asan ran here"\nexit "${FAKE_RC:-0}"\n' >"${asanStand}/utility/asan.bash"; chmod +x "${asanStand}/utility/asan.bash"
+fContainerBuild(){ echo "build ${1}"; }
+fContainerRun(){ echo "run ${*}"; return "${FAKE_RC:-0}"; }
+fAsan(){ (ASAN_CMD=(cargo test); quick=0; asanSkipped=""; containerImage=img:1; root=/r; here="${asanStand}"; unset SILK_CICD_IN_CONTAINER FAKE_RC; "${@}"; fRunAsan) 2>&1; }
+fNothing(){ :; }
+fReport(){ export FAKE_RC=1; }
+fInside(){ export SILK_CICD_IN_CONTAINER=1; }
+out="$(fAsan fNothing)"
+fCheck "a run here does the ASan step in the image" bash -c '[[ "$1" == *"build img:1"* && "$1" == *"run img:1 /r/cicd/utility/asan.bash"* ]]' _ "${out}"
+rc=0; out="$(fAsan fReport)" || rc=$?
+fCheck "a report there stops the run" test "${rc}" -ne 0
+fCheck "and says so" grep -q '^DIE: the test suite under ASan and LSan failed' <<<"${out}"
+out="$(fAsan fInside)"
+fCheck "inside the container it runs the script as is" bash -c '[[ "$1" == *"asan ran here"* && "$1" != *"run img"* ]]' _ "${out}"
+fQuick(){ quick=1; }
+fCheck "--quick skips it" grep -q 'ASan run skipped (--quick)' <<<"$(fAsan fQuick)"
+fNoCmd(){ ASAN_CMD=(); }
+fCheck "--no-asan does" grep -q 'ASan run skipped$' <<<"$(fAsan fNoCmd)"
+fNoDocker(){ asanSkipped="no docker"; }
+fCheck "and the Linux half of a Windows run with no docker warns" grep -qF 'WARNING: ASan run skipped: no docker' <<<"$(fAsan fNoDocker)"
+
+## Before anything is built: a full run here needs docker for that step.
+fPlan(){ rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR -u CICD_LINUX_HALF "${@}" bash cicd/cicd.bash --no-sync </dev/null 2>&1)" || rc=$?; }
+fPlan
+fCheck "a full run plans the ASan step in the image" grep -qE '^ASan \+ LSan \.+: the tests again on nightly-[0-9-]+, in silkterm-cicd:[0-9a-f]{12}$' <<<"${out}"
+fPlan SILK_DOCKER="${work}/no-such-docker"
+fCheck "with no docker a full run stops before it starts" bash -c '(($1)) && [[ "$2" == *"the ASan run needs docker"* && "$2" != *"Fail-fast"* ]]' _ "${rc}" "${out}"
+fPlan SILK_DOCKER="${work}/no-such-docker" CICD_LINUX_HALF=1
+fCheck "the Linux half of a Windows run plans it skipped instead" grep -qE '^ASan \+ LSan \.+: \(skipped, no docker' <<<"${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --no-asan </dev/null 2>&1)" || rc=$?
+fCheck "--no-asan needs no docker" bash -c '[[ "$1" != *"needs docker"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped\)$" <<<"$1"' _ "${out}"
+rc=0; out="$(cd "${repo}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR SILK_DOCKER="${work}/no-such-docker" bash cicd/cicd.bash --no-sync --quick </dev/null 2>&1)" || rc=$?
+fCheck "and nor does --quick" bash -c '[[ "$1" != *"needs docker"* ]] && grep -qE "^ASan \+ LSan \.+: \(skipped --quick\)$" <<<"$1"' _ "${out}"
+
+## A target dir linked to another disk would dangle inside, so it goes in at its
+## real path.
+linked="${work}/linked"; mkdir -p "${linked}" "${work}/real-target"
+tar -C "${repo}" --exclude=./target -cf - . | tar -xf - -C "${linked}"
+ln -s "${work}/real-target" "${linked}/target"
+realTarget="$(cd -P "${work}/real-target" && pwd -P)"
+export FAKE_LOG="${work}/linked.log"
+rc=0; out="$(cd "${linked}" && env -u SILK_CICD_IN_CONTAINER -u CARGO_TARGET_DIR bash cicd/cicd.bash --container -y --no-sync --no-dogfood --no-publish --no-private --quick --no-fuzz 2>&1)" || rc=$?
+runLine="$(grep '^run ' "${work}/linked.log" || true)"
+fCheck "a linked target dir: the run passes" test "${rc}" -eq 0
+fCheck "with the target dir mounted at its real path" bash -c '[[ "$1" == *" -v $2/container:$2/container "* ]]' _ "${runLine}" "${realTarget}"
+fCheck "and named by it" bash -c '[[ "$1" == *" CARGO_TARGET_DIR=$2/container "* ]]' _ "${runLine}" "${realTarget}"
+
 if ((failures)); then echo "${failures} failed"; exit 1; fi
 echo "all passed"
 
@@ -277,3 +336,4 @@ echo "all passed"
 ##		- 20261010 JC: Created.
 ##		- 20261013 JC: The time zone goes in.
 ##		- 20261019 JC: A new /tmp per run, and what earlier runs left in docker.
+##		- 20261019 JC: The sanitizer nightly, the ASan step, and a linked target dir.

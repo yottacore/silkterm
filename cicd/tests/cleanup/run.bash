@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#  shellcheck disable=2034  ## 'variable appears unused.' The lifted code reads them, and shellcheck cannot see into an eval.
 
 ##	- Purpose:
 ##		What a run removes of what earlier runs left, and what it never touches.
@@ -133,6 +134,27 @@ fCheck "the build dirs are swept first thing where the builds run" bash -c 'sed 
 fCheck "the run says what went before it is done" bash -c 'grep -B3 "^fSection \"\${APP_NAME} CI/CD: done.\"" "$1" | grep -qF "fSweep_Summary"' _ "${engine}"
 fCheck "the config names its build dirs" bash -c 'source "$1" && ((${#CLEANUP_BUILD_DIRS[@]} >= 4))' _ "${root}/cicd/config.bash"
 
+## H: the nightly's build dirs, as the pipeline sweeps them. A change of the stable
+## toolchain leaves them, and a nightly bump takes the old one as no longer built.
+eval "$(sed -n '/^fBuildDirs(){/,/^}/p' "${engine}")"
+eval "$(sed -n '/^fSweepBuilds(){/,/^}/p' "${engine}")"
+rustc(){ echo "${FAKE_RUSTC}"; }
+TARGET_DIR="${work}/h"; allCrossTargets=(); CLEANUP_BUILD_DIRS=(debug lint)
+fCargo "${TARGET_DIR}/debug"; fTag "${TARGET_DIR}/lint"
+fTag "${TARGET_DIR}/asan-2026-01-01"; fCargo "${TARGET_DIR}/asan-2026-01-01/x86_64-unknown-linux-gnu/debug"
+CLEANUP_NIGHTLY_DIRS=(asan-2026-01-01); FAKE_RUSTC="rustc 1.0"
+fSweepBuilds
+FAKE_RUSTC="rustc 1.1"
+fSweepBuilds
+fCheck "a new stable toolchain takes its own build dirs" test ! -e "${TARGET_DIR}/debug" -a ! -e "${TARGET_DIR}/lint"
+fCheck "and leaves the nightly's" test -d "${TARGET_DIR}/asan-2026-01-01/x86_64-unknown-linux-gnu/debug/.fingerprint"
+fTag "${TARGET_DIR}/asan-2026-02-02"; CLEANUP_NIGHTLY_DIRS=(asan-2026-02-02)
+fSweepBuilds
+fCheck "a nightly bump takes the old nightly's dir" test ! -e "${TARGET_DIR}/asan-2026-01-01"
+fCheck "and keeps the new one" test -f "${TARGET_DIR}/asan-2026-02-02/CACHEDIR.TAG"
+fCheck "the config names the ASan dir for the nightly" bash -c 'source "$1" && [[ " ${CLEANUP_NIGHTLY_DIRS[*]} " == *" ${ASAN_DIR} "* && "${ASAN_DIR}" == asan-* ]]' _ "${root}/cicd/config.bash"
+unset -f rustc
+
 ## G: the PowerShell side, for cicd-win.ps1's test folders on Windows.
 if command -v pwsh >/dev/null 2>&1; then
 	rc=0; pwsh -NoProfile -NonInteractive -File "${meDir}/win.ps1" || rc=$?
@@ -146,3 +168,4 @@ echo "all passed"
 
 ##	History:
 ##		- 20261019 JC: Created.
+##		- 20261019 JC: The nightly's build dirs.

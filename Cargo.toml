@@ -4,9 +4,10 @@
 members = ["source", "knobs"]
 # Crates that live here but are not part of the build. `forks/` holds working
 # clones of the patched dependencies, and the clipboard reproducer is run by
-# hand. Without this, cargo takes any package under this directory for a member
-# it was not told about and refuses to build it on its own.
-exclude = ["forks", "cicd/tests/clipboard-race", "cicd/utility/gpu-stress", "knobs/demo"]
+# hand. The sanitizer canary leaks on purpose, so it's built only by the
+# sanitizer step. Without this, cargo takes any package under this directory for
+# a member it was not told about and refuses to build it on its own.
+exclude = ["forks", "cicd/tests/clipboard-race", "cicd/tests/sanitizer-canary", "cicd/utility/gpu-stress", "knobs/demo"]
 resolver = "3"
 
 # Five changes over the released 0.26.0, on one branch. At each new release,
@@ -74,6 +75,11 @@ glyphon = { git = "https://github.com/jim-collier/glyphon", branch = "text-srgb-
 # shcl 3.0 ahead of its release. Its dev branch still says 2.0.0. Drop this once
 # 3.0.0-beta.1 is on crates.io.
 shcl = { git = "https://github.com/yottacore/shcl", branch = "dev" }
+
+# silk_asan is set by the ASan run (cicd/config.bash), for the few tests that
+# can't mean anything under it.
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(silk_asan)"] }
 
 # Clippy gate (cicd lints stage runs -D warnings). pedantic is on; the allows
 # below are deliberate house style, not suppressed problems.

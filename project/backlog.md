@@ -193,6 +193,36 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Commit: e2c4556
 	- Test case: `cicd/tests/cleanup/run.bash` (EtAiwUl) and `cicd/tests/cleanup/win.ps1` (EtAiwnM) plant stale folders and build dirs beside fresh ones, other runs' and unlisted ones. Added to `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/wingui/harness-test.bash` (EqH4isr).
 
+- Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
+	- ID: 2026101714445002
+	- Type: Task
+	- Status: Waiting for testing
+	- Needs local test suite run?: A full pipeline run, plain and with `--container`. Each builds the new image with the nightly, and stage 3 should show the canary caught and no ASan or LSan reports. The plain run does that one step in the image.
+	- Needs external testing: A `cicd-win.ps1 -Wsl` run. A distro with no docker should only warn at the ASan step.
+	- Priority: Avg
+	- Opened: 20261017-144450
+	- Opened by: CC
+	- Parent ID: 2026101714015789
+	- Related IDs: 2026101912070933
+	- Requirements:
+		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
+		- The parent's ASan and LSan rows, with the pinned nightly beside the stable toolchain, and any leak it finds fixed or filed.
+	- Progress log:
+		- 20261019: Stage 3 runs the test suite again under ASan and LSan, on nightly-2026-10-15 with `-Zbuild-std` and `--target x86_64-unknown-linux-gnu`, in `target/asan-<date>`. The nightly is dated in a comment in rust-toolchain.toml, and only the container image installs it, so a plain run does this one step in the image. `--no-asan` and `--quick` skip it.
+		- 20261019: A plain full run with no docker stops before it starts, since a check that can't run has found nothing. The Linux half of a Windows run only warns, since cicd-win.ps1 has no way to pass `--no-asan`.
+		- 20261019: A canary crate that leaks on purpose runs first, under the same flags and suppressions. The step stops unless LSan names its leak, so the planted leak goes red on every run.
+		- 20261019: The first pass found leaks in our code only. The font family names were leaked again on every font change and new window, and are interned now. The Settings spec's leaked strings are filed as 2026101912070933, and the suppression names it. Two tests that leaked on purpose don't anymore.
+		- 20261019: Two tests are ignored under ASan, each with its reason: the peak memory of a huge image, and the scroll record's cost ratio. Four tests that run a child copy of the binary failed only because the child leaked, and pass now.
+		- 20261019: `--container` mounted a target dir that links to another disk at its link, so it dangled inside and the build failed. This box's `target` is such a link since 10-16. It goes in at its real path now.
+		- 20261019: A test that names the foreground program read the child's name before its exec had renamed it, once in 4 ASan runs. Linux lets the parent go on before the rename, so the test now waits for it, up to 5 s. Not reproduced on demand.
+		- 20261019: The step took 13 to 16 minutes in 4 runs here, at a load of 25 to 45, against under 2 for the plain suite. The first ASan build of std and every crate was about 2 minutes of that.
+		- Note: No third-party leak turned up, and nothing in Mesa, X or the other system libraries either.
+		- Note: The image has no tmux, so the tmux tests pass as skipped there, as they do in a `--container` run. The GPU tests run on software Vulkan and GL.
+	- Swept: every `Box::leak`, `String::leak`, `Vec::leak` and `mem::forget` in the tree. The 3 in text.rs are interned, the 2 in tests are gone, ui_spec's are 2026101912070933, a test stand-in's goes through ui_spec too, and term.rs's is a Windows test.
+	- Verified: 20261019. The step in the image: canary caught, no ASan or LSan reports, 1423 passed and 4 ignored. A leak planted in a knobs test failed the step, with the report naming the test, and a suppression wide enough to hide everything failed it at the canary. The new container and cleanup checks, each watched to fail. The plain unit suite (1397 + 28), clippy for Linux and Windows, fmt, shellcheck, house style, docs check.
+	- Test case: The canary EtAocf6, run by the step itself. New cases in `cicd/tests/container/run.bash` (EsJg9EF) and `cicd/tests/cleanup/run.bash` (EtAiwUl). `a_name_resolved_again_is_kept_once` (EtAv8Lw) for the interned names.
+	- Branch: asan
+
 - shcl: a keep-lines save adds a set value as a new line, beside its commented default
 	- ID: 2026100219054510
 	- Type: Task
@@ -293,18 +323,6 @@ Going forward, new issues in the new template at the bottom of this file, will g
 		- 20261017: Priority Avg is a best guess, since none was given. Split into 5 child items, worked one at a time, the cheap static checks first. This item closes when they do.
 	- Closed:
 
-- Leak checks: the test suite under AddressSanitizer and LeakSanitizer on every full run
-	- ID: 2026101714445002
-	- Type: Task
-	- Status: Queued
-	- Priority: Avg
-	- Opened: 20261017-144450
-	- Opened by: CC
-	- Parent ID: 2026101714015789
-	- Requirements:
-		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
-		- The parent's ASan and LSan rows, with the pinned nightly beside the stable toolchain, and any leak it finds fixed or filed.
-
 - Leak checks: the test suite under ThreadSanitizer on every full run
 	- ID: 2026101714445003
 	- Type: Task
@@ -342,6 +360,22 @@ Going forward, new issues in the new template at the bottom of this file, will g
 	- Requirements:
 		- Third-party and vendored code end users run is covered, per the parent's 20261017 decision. What it finds goes on the backlog.
 		- The parent's `--leakcheck`, CodeQL, soak test and dhat rows.
+
+- The Settings dialog's spec leaks the strings of rows it drops, and each test that parses it leaks a whole copy
+	- ID: 2026101912070933
+	- Type: Bug
+	- Status: Queued
+	- Severity: Low
+	- Opened: 20261019-120709
+	- Opened by: CC
+	- Related IDs: 2026101714445002
+	- Incorrect behavior: `ui_spec` keeps the strings of `settings_ui.shcl` by leaking them for a `'static` lifetime. The rows dropped for the platform, and each tip replaced by its warning, leak for good, once per process. Every test that parses the spec leaks all of it.
+	- Expected behavior: Nothing the parse made becomes unreachable.
+	- Reproduced: 20261019, by the test suite under LSan.
+	- Possible cause: `keep` and `keep_all` in ui_spec.rs leak each string, and `keep_platform` and `pick_warnings` then drop some of them.
+	- Notes:
+		- `cicd/lsan-suppressions.txt` lets `silkterm::ui_spec::` through with this ID beside it. Take that line out with the fix.
+		- With the line gone, the test stand-in `stand_in_tabs` in settings_ui.rs shows a leak of its own too, since it builds its tree through ui_spec.
 
 - Leak checks: the advisory scan covers dev and build dependencies, beyond what end users run
 	- ID: 2026101714445007
