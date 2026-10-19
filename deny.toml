@@ -10,6 +10,21 @@
 
 [graph]
 all-features = false
+# Only what goes into a release binary (backlog 2026101714015789): our own
+# dev-dependencies are out, dhat with them, and so is anything only another
+# platform pulls in. Keep the list in step with the release targets in
+# cicd/config.bash plus the Mac pair the private runner builds. cargo-deny has
+# no graph switch for build-dependencies, so build scripts and proc macros are
+# still scanned; that can only fail a run, never hide something we ship.
+exclude-dev = true
+targets = [
+	"x86_64-unknown-linux-gnu",
+	"aarch64-unknown-linux-gnu",
+	"x86_64-pc-windows-gnu",
+	"aarch64-pc-windows-gnullvm",
+	"x86_64-apple-darwin",
+	"aarch64-apple-darwin",
+]
 
 [licenses]
 allow = [

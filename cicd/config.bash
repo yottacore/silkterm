@@ -107,7 +107,8 @@ FUZZ_CMD=(cargo test fuzz::)
 ## policy in deny.toml). Non-gating for now; tighten once the report is tuned.
 DENY_PROBE=(cargo deny --version)
 DENY_CMD=(cargo deny check licenses bans sources)
-## Known advisories against the locked dependencies, on every full run. Gating:
+## Known advisories against the locked dependencies a release binary is built
+## from (deny.toml's [graph] has the targets), on every full run. Gating:
 ## any report fails it, a warning too (a yanked crate, an ignore that no longer
 ## matches anything). A fix that has to wait goes in deny.toml's ignore list with
 ## its backlog item's ID. No cargo-deny fails the run as well, since a scan that
